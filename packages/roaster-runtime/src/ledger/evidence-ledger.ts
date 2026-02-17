@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import type { EvidenceLedgerRow, EvidenceRecord, EvidenceQuery } from "../types.js";
 import { ensureDirForFile, writeFileAtomic } from "../utils/fs.js";
 import { sha256 } from "../utils/hash.js";
+import { redactSecrets, redactUnknown } from "../security/redact.js";
 
 interface AppendInput extends Omit<EvidenceRecord, "id" | "timestamp" | "outputHash"> {
   sessionId: string;
@@ -20,40 +21,6 @@ export interface CompactSessionResult {
   compacted: number;
   kept: number;
   checkpointId: string;
-}
-
-const SECRET_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
-  { pattern: /\bsk-(?:proj-)?[A-Za-z0-9]{20,}\b/g, replacement: "sk-[redacted]" },
-  { pattern: /\bghp_[A-Za-z0-9]{30,}\b/g, replacement: "ghp_[redacted]" },
-  { pattern: /\bgithub_pat_[A-Za-z0-9_]{30,}\b/g, replacement: "github_pat_[redacted]" },
-  { pattern: /\bAKIA[0-9A-Z]{16}\b/g, replacement: "AKIA[redacted]" },
-  { pattern: /\bxox[baprs]-[0-9A-Za-z-]{10,}\b/g, replacement: "xox-[redacted]" },
-  { pattern: /\bBearer\s+[A-Za-z0-9._-]{20,}\b/g, replacement: "Bearer [redacted]" },
-  {
-    pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
-    replacement: "-----BEGIN [REDACTED PRIVATE KEY]-----\n...[redacted]...\n-----END [REDACTED PRIVATE KEY]-----",
-  },
-];
-
-function redactSecrets(text: string): string {
-  let output = text;
-  for (const { pattern, replacement } of SECRET_PATTERNS) {
-    output = output.replace(pattern, replacement);
-  }
-  return output;
-}
-
-function redactUnknown(value: unknown): unknown {
-  if (typeof value === "string") return redactSecrets(value);
-  if (Array.isArray(value)) return value.map((item) => redactUnknown(item));
-  if (value && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [key, item] of Object.entries(value)) {
-      out[key] = redactUnknown(item);
-    }
-    return out;
-  }
-  return value;
 }
 
 function summarizeText(input: string, maxLen = 200): string {

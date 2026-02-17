@@ -1856,7 +1856,7 @@ patching`,
         "message_update",
         {
           message: { role: "assistant", content: [{ type: "text", text: "a" }] },
-          assistantMessageEvent: { type: "text_delta" },
+          assistantMessageEvent: { type: "text_delta", delta: "a" },
         },
         ctx,
       );
@@ -1866,7 +1866,7 @@ patching`,
         "message_update",
         {
           message: { role: "assistant", content: [{ type: "text", text: "ab" }] },
-          assistantMessageEvent: { type: "text_delta" },
+          assistantMessageEvent: { type: "text_delta", delta: "b" },
         },
         ctx,
       );
@@ -1876,7 +1876,7 @@ patching`,
         "message_update",
         {
           message: { role: "assistant", content: [{ type: "text", text: "abc" }] },
-          assistantMessageEvent: { type: "text_delta" },
+          assistantMessageEvent: { type: "text_delta", delta: "c" },
         },
         ctx,
       );
@@ -1886,5 +1886,9 @@ patching`,
 
     const updates = runtime.queryEvents(sessionId, { type: "message_update" });
     expect(updates.length).toBe(2);
+    const payload = updates[0]?.payload as any;
+    expect(payload.deltaChars).toBe(1);
+    expect(payload.health).toBeTruthy();
+    expect(typeof payload.health.score).toBe("number");
   });
 });

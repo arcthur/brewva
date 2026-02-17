@@ -289,6 +289,29 @@ describe("Gap remediation: event stream and context budget", () => {
     expect(events[0]?.type).toBe("session_start");
   });
 
+  test("secret values are redacted before event persistence", () => {
+    const workspace = createWorkspace("events-redact");
+    writeConfig(workspace, createConfig({}));
+
+    const runtime = new RoasterRuntime({ cwd: workspace, configPath: ".pi/roaster.json" });
+    const sessionId = "events-redact-1";
+    runtime.recordEvent({
+      sessionId,
+      type: "custom_event",
+      payload: {
+        token: "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789",
+        auth: "Bearer ghp_abcdefghijklmnopqrstuvwxyz0123456789",
+        nested: { key: "AKIA1234567890ABCDEF" },
+      },
+    });
+
+    const eventsPath = join(workspace, runtime.config.infrastructure.events.dir, `${sessionId}.jsonl`);
+    const raw = readFileSync(eventsPath, "utf8");
+    expect(raw.includes("sk-proj-abcdefghijklmnopqrstuvwxyz0123456789")).toBe(false);
+    expect(raw.includes("ghp_abcdefghijklmnopqrstuvwxyz0123456789")).toBe(false);
+    expect(raw.includes("AKIA1234567890ABCDEF")).toBe(false);
+  });
+
   test("drops context injection when usage exceeds hard limit", () => {
     const workspace = createWorkspace("context-budget");
     writeConfig(workspace, createConfig({}));

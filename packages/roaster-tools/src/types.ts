@@ -36,7 +36,7 @@ export interface RoasterToolRuntime {
   ): { ok: boolean; error?: string };
   recordTaskBlocker(
     sessionId: string,
-    input: { id?: string; message: string; source?: string },
+    input: { id?: string; message: string; source?: string; truthFactId?: string },
   ): { ok: boolean; blockerId?: string; error?: string };
   resolveTaskBlocker(sessionId: string, blockerId: string): { ok: boolean; error?: string };
 }

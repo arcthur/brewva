@@ -1,9 +1,9 @@
-import { resolve } from "node:path";
-	import type {
-	  ContextBudgetUsage,
-	  EvidenceQuery,
-	  ParallelAcquireResult,
-	  RollbackResult,
+import { relative, resolve } from "node:path";
+import type {
+  ContextBudgetUsage,
+  EvidenceQuery,
+  ParallelAcquireResult,
+  RollbackResult,
   RoasterEventCategory,
   RoasterEventQuery,
   RoasterEventRecord,
@@ -14,56 +14,109 @@ import { resolve } from "node:path";
   RuntimeSessionSnapshot,
   SkillDocument,
   SkillOutputRecord,
-	  SkillSelection,
-	  SessionCostSummary,
-	  TaskSpec,
-		  TaskState,
-		  VerificationLevel,
-		  VerificationReport,
-		  VerificationCheckRun,
-		  WorkerMergeReport,
-		  WorkerResult,
-		} from "./types.js";
+  SkillSelection,
+  SessionCostSummary,
+  TaskSpec,
+  TaskState,
+  VerificationLevel,
+  VerificationReport,
+  VerificationCheckRun,
+  WorkerMergeReport,
+  WorkerResult,
+} from "./types.js";
 import type { TaskItemStatus } from "./types.js";
+import type { TaskHealth, TaskPhase, TaskStatus } from "./types.js";
+import type {
+  TruthFact,
+  TruthFactSeverity,
+  TruthFactStatus,
+  TruthState,
+} from "./types.js";
 import { loadRoasterConfig } from "./config/loader.js";
 import { SkillRegistry } from "./skills/registry.js";
 import { selectTopKSkills } from "./skills/selector.js";
 import { EvidenceLedger } from "./ledger/evidence-ledger.js";
 import { buildLedgerDigest } from "./ledger/digest.js";
 import { formatLedgerRows } from "./ledger/query.js";
+import {
+  extractEvidenceArtifacts,
+  type EvidenceArtifact,
+} from "./evidence/artifacts.js";
+import { parseTscDiagnostics } from "./evidence/tsc.js";
 import { classifyEvidence, isMutationTool } from "./verification/classifier.js";
 import { VerificationGate } from "./verification/gate.js";
 import { ParallelBudgetManager } from "./parallel/budget.js";
 import { ParallelResultStore } from "./parallel/results.js";
 import { sanitizeContextText } from "./security/sanitize.js";
+import { redactSecrets } from "./security/redact.js";
 import { checkToolAccess } from "./security/tool-policy.js";
-	import { runShellCommand } from "./utils/exec.js";
-	import { ContextBudgetManager } from "./context/budget.js";
-	import { ContextInjectionCollector, type ContextInjectionPriority } from "./context/injection.js";
-	import { buildViewportContext } from "./context/viewport.js";
-	import { buildTruthLedgerBlock } from "./context/truth.js";
-	import { RoasterEventStore } from "./events/store.js";
+import { runShellCommand } from "./utils/exec.js";
+import { ContextBudgetManager } from "./context/budget.js";
+import {
+  ContextInjectionCollector,
+  type ContextInjectionPriority,
+} from "./context/injection.js";
+import {
+  buildViewportContext,
+  type ViewportContextResult,
+  type ViewportMetrics,
+} from "./context/viewport.js";
+import { buildTruthLedgerBlock } from "./context/truth.js";
+import { buildTruthFactsBlock } from "./context/truth-facts.js";
+import {
+  classifyViewportQuality,
+  computeViewportSignalScore,
+  shouldSkipViewportInjection,
+  type ViewportQuality,
+} from "./policy/viewport-policy.js";
+import { RoasterEventStore } from "./events/store.js";
 import { SessionSnapshotStore } from "./state/snapshot-store.js";
 import { FileChangeTracker } from "./state/file-change-tracker.js";
-import { createTaskLedgerSnapshotStore, type TaskLedgerSnapshotStore } from "./state/task-ledger-snapshot-store.js";
-	import { SessionCostTracker } from "./cost/tracker.js";
-	import { sha256 } from "./utils/hash.js";
-	import { estimateTokenCount, truncateTextToTokenBudget } from "./utils/token.js";
-	import {
-	  TASK_EVENT_TYPE,
-	  buildBlockerRecordedEvent,
-	  buildBlockerResolvedEvent,
-	  buildItemAddedEvent,
-	  buildItemUpdatedEvent,
-	  coerceTaskLedgerPayload,
-	  createEmptyTaskState,
-	  foldTaskLedgerEvents,
-	  reduceTaskState,
-	} from "./task/ledger.js";
-	import { normalizeTaskSpec } from "./task/spec.js";
+import {
+  createTaskLedgerSnapshotStore,
+  type TaskLedgerSnapshotStore,
+} from "./state/task-ledger-snapshot-store.js";
+import { SessionCostTracker } from "./cost/tracker.js";
+import { sha256 } from "./utils/hash.js";
+import { normalizeJsonRecord } from "./utils/json.js";
+import {
+  estimateTokenCount,
+  truncateTextToTokenBudget,
+} from "./utils/token.js";
+import {
+  TASK_EVENT_TYPE,
+  buildBlockerRecordedEvent,
+  buildBlockerResolvedEvent,
+  buildStatusSetEvent,
+  buildItemAddedEvent,
+  buildItemUpdatedEvent,
+  coerceTaskLedgerPayload,
+  createEmptyTaskState,
+  foldTaskLedgerEvents,
+  formatTaskStateBlock,
+  reduceTaskState,
+} from "./task/ledger.js";
+import {
+  TRUTH_EVENT_TYPE,
+  buildTruthFactResolvedEvent,
+  buildTruthFactUpsertedEvent,
+  coerceTruthLedgerPayload,
+  createEmptyTruthState,
+  foldTruthLedgerEvents,
+  reduceTruthState,
+} from "./truth/ledger.js";
+import { normalizeTaskSpec } from "./task/spec.js";
 
-const ALWAYS_ALLOWED_TOOLS = ["skill_complete", "skill_load", "ledger_query", "cost_view", "rollback_last_patch"];
+const ALWAYS_ALLOWED_TOOLS = [
+  "skill_complete",
+  "skill_load",
+  "ledger_query",
+  "cost_view",
+  "rollback_last_patch",
+];
 const ALWAYS_ALLOWED_TOOL_SET = new Set(ALWAYS_ALLOWED_TOOLS);
+const OUTPUT_HEALTH_GUARD_LOOKBACK_EVENTS = 32;
+const OUTPUT_HEALTH_GUARD_SCORE_THRESHOLD = 0.4;
 
 function normalizeToolName(name: string): string {
   return name.trim().toLowerCase();
@@ -79,28 +132,24 @@ function normalizeVerifierCheckForId(name: string): string {
 
 function buildVerifierBlockerMessage(input: {
   checkName: string;
-  evidence?: string;
+  truthFactId: string;
   run?: VerificationCheckRun;
 }): string {
-  const lines: string[] = [`verification failed: ${input.checkName}`];
-  if (input.run) {
-    if (input.run.ledgerId) {
-      lines.push(`ledgerId: ${input.run.ledgerId}`);
-    }
-    lines.push(`command: ${input.run.command}`);
-    lines.push(`exitCode: ${input.run.exitCode ?? "null"}`);
-    const output = typeof input.run.outputSummary === "string" && input.run.outputSummary.length > 0 ? input.run.outputSummary : "(no output)";
-    const capped = output.length > 1800 ? `${output.slice(0, 1797)}...` : output;
-    lines.push("output:");
-    lines.push(capped);
-    return lines.join("\n");
+  const parts: string[] = [
+    `verification failed: ${input.checkName}`,
+    `truth=${input.truthFactId}`,
+  ];
+  if (input.run?.ledgerId) {
+    parts.push(`evidence=${input.run.ledgerId}`);
   }
-
-  if (input.evidence) {
-    lines.push("evidence:");
-    lines.push(input.evidence);
+  if (
+    input.run &&
+    input.run.exitCode !== null &&
+    input.run.exitCode !== undefined
+  ) {
+    parts.push(`exitCode=${input.run.exitCode}`);
   }
-  return lines.join("\n");
+  return parts.join(" ");
 }
 
 export interface RoasterRuntimeOptions {
@@ -115,107 +164,61 @@ export interface VerifyCompletionOptions {
 }
 
 function inferEventCategory(type: string): RoasterEventCategory {
-  if (type.startsWith("session_") || type === "session_start" || type === "session_shutdown") return "session";
+  if (
+    type.startsWith("session_") ||
+    type === "session_start" ||
+    type === "session_shutdown"
+  )
+    return "session";
   if (type.startsWith("turn_")) return "turn";
-  if (type.includes("tool") || type.startsWith("patch_") || type === "rollback") return "tool";
+  if (type.includes("tool") || type.startsWith("patch_") || type === "rollback")
+    return "tool";
   if (type.startsWith("context_")) return "context";
   if (type.startsWith("cost_") || type.startsWith("budget_")) return "cost";
   if (type.startsWith("verification_")) return "verification";
-  if (type.includes("snapshot") || type.includes("resumed") || type.includes("interrupted")) return "state";
+  if (
+    type.includes("snapshot") ||
+    type.includes("resumed") ||
+    type.includes("interrupted")
+  )
+    return "state";
   return "other";
 }
 
 function buildSkillCandidateBlock(selected: SkillSelection[]): string {
   const skillLines =
     selected.length > 0
-      ? selected.map((entry) => `- ${entry.name} (score=${entry.score}, reason=${entry.reason})`)
+      ? selected.map(
+          (entry) =>
+            `- ${entry.name} (score=${entry.score}, reason=${entry.reason})`,
+        )
       : ["- (none)"];
-  return ["[Roaster Context]", "Top-K Skill Candidates:", ...skillLines].join("\n");
+  return ["[Roaster Context]", "Top-K Skill Candidates:", ...skillLines].join(
+    "\n",
+  );
 }
 
 function buildTaskStateBlock(state: TaskState): string {
-  const hasAny =
-    Boolean(state.spec) || (state.items?.length ?? 0) > 0 || (state.blockers?.length ?? 0) > 0;
-  if (!hasAny) return "";
-
-  const spec = state.spec;
-  const lines: string[] = ["[TaskLedger]"];
-  if (spec) {
-    lines.push(`goal=${spec.goal}`);
-    if (spec.expectedBehavior) {
-      lines.push(`expectedBehavior=${spec.expectedBehavior}`);
-    }
-
-    const files = spec.targets?.files ?? [];
-    const symbols = spec.targets?.symbols ?? [];
-    if (files.length > 0) {
-      lines.push("targets.files:");
-      for (const file of files.slice(0, 8)) {
-        lines.push(`- ${file}`);
-      }
-    }
-    if (symbols.length > 0) {
-      lines.push("targets.symbols:");
-      for (const symbol of symbols.slice(0, 8)) {
-        lines.push(`- ${symbol}`);
-      }
-    }
-
-    const constraints = spec.constraints ?? [];
-    if (constraints.length > 0) {
-      lines.push("constraints:");
-      for (const constraint of constraints.slice(0, 8)) {
-        lines.push(`- ${constraint}`);
-      }
-    }
-  }
-
-  const blockers = state.blockers ?? [];
-  if (blockers.length > 0) {
-    lines.push("blockers:");
-    for (const blocker of blockers.slice(0, 4)) {
-      const source = blocker.source ? ` source=${blocker.source}` : "";
-      const messageLines = blocker.message.split("\n");
-      const firstLine = messageLines[0] ?? "";
-      lines.push(`- [${blocker.id}] ${firstLine}${source}`.trim());
-      for (const line of messageLines.slice(1)) {
-        lines.push(`  ${line}`);
-      }
-    }
-  }
-
-  const items = state.items ?? [];
-  const open = items.filter((item) => item.status !== "done").slice(0, 6);
-  if (open.length > 0) {
-    lines.push("openItems:");
-    for (const item of open) {
-      lines.push(`- [${item.status}] ${item.text}`);
-    }
-  }
-
-  const verification = spec?.verification;
-  if (verification?.level) {
-    lines.push(`verification.level=${verification.level}`);
-  }
-  if (verification?.commands && verification.commands.length > 0) {
-    lines.push("verification.commands:");
-    for (const command of verification.commands.slice(0, 4)) {
-      lines.push(`- ${command}`);
-    }
-  }
-
-  return lines.join("\n");
+  return formatTaskStateBlock(state);
 }
 
-function buildContextSourceTokenLimits(maxInjectionTokens: number): Record<string, number> {
+function buildContextSourceTokenLimits(
+  maxInjectionTokens: number,
+): Record<string, number> {
   const budget = Math.max(64, Math.floor(maxInjectionTokens));
-  const fromRatio = (ratio: number, minimum: number, maximum = budget): number => {
+  const fromRatio = (
+    ratio: number,
+    minimum: number,
+    maximum = budget,
+  ): number => {
     const scaled = Math.floor(budget * ratio);
     return Math.max(minimum, Math.min(maximum, scaled));
   };
 
   return {
     "roaster.truth": fromRatio(0.05, 48, 200),
+    "roaster.truth-facts": fromRatio(0.12, 72, 320),
+    "roaster.viewport-policy": fromRatio(0.12, 96, 320),
     "roaster.task-state": fromRatio(0.15, 96, 360),
     "roaster.viewport": fromRatio(0.7, 240, budget),
     "roaster.skill-candidates": fromRatio(0.28, 64, 320),
@@ -245,20 +248,39 @@ export class RoasterRuntime {
   private turnsBySession = new Map<string, number>();
   private toolCallsBySession = new Map<string, number>();
   private resumeHintsBySession = new Map<string, string>();
-  private latestCompactionSummaryBySession = new Map<string, { entryId?: string; summary: string }>();
+  private latestCompactionSummaryBySession = new Map<
+    string,
+    { entryId?: string; summary: string }
+  >();
   private lastInjectedContextFingerprintBySession = new Map<string, string>();
   private reservedContextInjectionTokensByScope = new Map<string, number>();
   private lastLedgerCompactionTurnBySession = new Map<string, number>();
-	  private toolContractWarningsBySession = new Map<string, Set<string>>();
-	  private skillBudgetWarningsBySession = new Map<string, Set<string>>();
-	  private skillParallelWarningsBySession = new Map<string, Set<string>>();
-	  private skillOutputsBySession = new Map<string, Map<string, SkillOutputRecord>>();
-	  private taskStateBySession = new Map<string, TaskState>();
-	  private eventListeners = new Set<(event: RoasterStructuredEvent) => void>();
+  private toolContractWarningsBySession = new Map<string, Set<string>>();
+  private skillBudgetWarningsBySession = new Map<string, Set<string>>();
+  private skillParallelWarningsBySession = new Map<string, Set<string>>();
+  private skillOutputsBySession = new Map<
+    string,
+    Map<string, SkillOutputRecord>
+  >();
+  private taskStateBySession = new Map<string, TaskState>();
+  private truthStateBySession = new Map<string, TruthState>();
+  private viewportPolicyBySession = new Map<
+    string,
+    {
+      quality: ViewportQuality;
+      score: number | null;
+      variant: string;
+      updatedAt: number;
+    }
+  >();
+  private pendingTaskSnapshotSessions = new Set<string>();
+  private eventListeners = new Set<(event: RoasterStructuredEvent) => void>();
 
   constructor(options: RoasterRuntimeOptions = {}) {
     this.cwd = resolve(options.cwd ?? process.cwd());
-    this.config = options.config ?? loadRoasterConfig({ cwd: this.cwd, configPath: options.configPath });
+    this.config =
+      options.config ??
+      loadRoasterConfig({ cwd: this.cwd, configPath: options.configPath });
 
     this.skills = new SkillRegistry({
       rootDir: this.cwd,
@@ -272,18 +294,34 @@ export class RoasterRuntime {
     this.verification = new VerificationGate(this.config);
     this.parallel = new ParallelBudgetManager(this.config.parallel);
     this.parallelResults = new ParallelResultStore();
-    this.events = new RoasterEventStore(this.config.infrastructure.events, this.cwd);
-    this.contextBudget = new ContextBudgetManager(this.config.infrastructure.contextBudget);
+    this.events = new RoasterEventStore(
+      this.config.infrastructure.events,
+      this.cwd,
+    );
+    this.contextBudget = new ContextBudgetManager(
+      this.config.infrastructure.contextBudget,
+    );
     this.contextInjection = new ContextInjectionCollector({
       sourceTokenLimits: this.isContextBudgetEnabled()
-        ? buildContextSourceTokenLimits(this.config.infrastructure.contextBudget.maxInjectionTokens)
+        ? buildContextSourceTokenLimits(
+            this.config.infrastructure.contextBudget.maxInjectionTokens,
+          )
         : {},
-      truncationStrategy: this.config.infrastructure.contextBudget.truncationStrategy,
+      truncationStrategy:
+        this.config.infrastructure.contextBudget.truncationStrategy,
     });
-    this.snapshots = new SessionSnapshotStore(this.config.infrastructure.interruptRecovery, this.cwd);
-    this.taskLedgerSnapshots = createTaskLedgerSnapshotStore(this.config, this.cwd);
+    this.snapshots = new SessionSnapshotStore(
+      this.config.infrastructure.interruptRecovery,
+      this.cwd,
+    );
+    this.taskLedgerSnapshots = createTaskLedgerSnapshotStore(
+      this.config,
+      this.cwd,
+    );
     this.fileChanges = new FileChangeTracker(this.cwd);
-    this.costTracker = new SessionCostTracker(this.config.infrastructure.costTracking);
+    this.costTracker = new SessionCostTracker(
+      this.config.infrastructure.costTracking,
+    );
   }
 
   refreshSkills(): void {
@@ -300,11 +338,18 @@ export class RoasterRuntime {
   }
 
   selectSkills(message: string): SkillSelection[] {
-    const input = this.config.security.sanitizeContext ? sanitizeContextText(message) : message;
-    return selectTopKSkills(input, this.skills.buildIndex(), this.config.skills.selector.k);
+    const input = this.config.security.sanitizeContext
+      ? sanitizeContextText(message)
+      : message;
+    return selectTopKSkills(
+      input,
+      this.skills.buildIndex(),
+      this.config.skills.selector.k,
+    );
   }
 
   onTurnStart(sessionId: string, turnIndex: number): void {
+    this.flushPendingTaskSnapshots();
     const current = this.turnsBySession.get(sessionId) ?? 0;
     const effectiveTurn = Math.max(current, turnIndex);
     this.turnsBySession.set(sessionId, effectiveTurn);
@@ -313,7 +358,10 @@ export class RoasterRuntime {
     this.clearReservedInjectionTokensForSession(sessionId);
   }
 
-  observeContextUsage(sessionId: string, usage: ContextBudgetUsage | undefined): void {
+  observeContextUsage(
+    sessionId: string,
+    usage: ContextBudgetUsage | undefined,
+  ): void {
     this.contextBudget.observeUsage(sessionId, usage);
     if (!usage) return;
     this.recordEvent({
@@ -327,12 +375,464 @@ export class RoasterRuntime {
     });
   }
 
+  private isSameTaskStatus(
+    left: TaskStatus | undefined,
+    right: TaskStatus,
+  ): boolean {
+    if (!left) return false;
+    if (left.phase !== right.phase) return false;
+    if (left.health !== right.health) return false;
+    if ((left.reason ?? "") !== (right.reason ?? "")) return false;
+
+    const leftTruth = left.truthFactIds ?? [];
+    const rightTruth = right.truthFactIds ?? [];
+    if (leftTruth.length !== rightTruth.length) return false;
+    for (let i = 0; i < leftTruth.length; i += 1) {
+      if (leftTruth[i] !== rightTruth[i]) return false;
+    }
+    return true;
+  }
+
+  private normalizePercent(value: number | null | undefined): number | null {
+    if (value === null || value === undefined) return null;
+    if (!Number.isFinite(value)) return null;
+    const ratio = value > 1 ? value / 100 : value;
+    return Math.max(0, Math.min(ratio, 1));
+  }
+
+  private computeTaskStatus(input: {
+    sessionId: string;
+    promptText: string;
+    truthState: TruthState;
+    usage?: ContextBudgetUsage;
+  }): TaskStatus {
+    const state = this.getTaskState(input.sessionId);
+    const hasSpec = Boolean(state.spec);
+    const blockers = state.blockers ?? [];
+    const items = state.items ?? [];
+    const openItems = items.filter((item) => item.status !== "done");
+
+    const activeTruthFacts = input.truthState.facts.filter(
+      (fact) => fact.status === "active",
+    );
+    const severityRank = (severity: string): number => {
+      if (severity === "error") return 3;
+      if (severity === "warn") return 2;
+      return 1;
+    };
+    const truthFactIds = activeTruthFacts
+      .slice()
+      .sort((left, right) => {
+        const severity =
+          severityRank(right.severity) - severityRank(left.severity);
+        if (severity !== 0) return severity;
+        return right.lastSeenAt - left.lastSeenAt;
+      })
+      .slice(0, 6)
+      .map((fact) => fact.id);
+
+    let phase: TaskPhase = "align";
+    let health: TaskHealth = "unknown";
+    let reason: string | undefined;
+
+    if (!hasSpec) {
+      phase = "align";
+      health = "needs_spec";
+      reason = "task_spec_missing";
+    } else if (blockers.length > 0) {
+      phase = "blocked";
+      const hasVerifier = blockers.some((blocker) =>
+        blocker.id.startsWith(VERIFIER_BLOCKER_PREFIX),
+      );
+      health = hasVerifier ? "verification_failed" : "blocked";
+      reason = hasVerifier
+        ? "verification_blockers_present"
+        : "blockers_present";
+    } else if (items.length === 0) {
+      phase = "investigate";
+      health = "ok";
+      reason = "no_task_items";
+    } else if (openItems.length > 0) {
+      phase = "execute";
+      health = "ok";
+      reason = `open_items=${openItems.length}`;
+    } else {
+      const desiredLevel =
+        state.spec?.verification?.level ??
+        this.config.verification.defaultLevel;
+      const report = this.evaluateCompletion(input.sessionId, desiredLevel);
+      phase = report.passed ? "done" : "verify";
+      health = report.passed ? "ok" : "verification_failed";
+      reason = report.passed
+        ? "verification_passed"
+        : report.missingEvidence.length > 0
+          ? `missing_evidence=${report.missingEvidence.join(",")}`
+          : "verification_missing";
+    }
+
+    if (health === "ok") {
+      const ratio = this.normalizePercent(input.usage?.percent);
+      if (ratio !== null && this.isContextBudgetEnabled()) {
+        const threshold =
+          this.normalizePercent(
+            this.config.infrastructure.contextBudget.compactionThresholdPercent,
+          ) ?? 1;
+        const hardLimit =
+          this.normalizePercent(
+            this.config.infrastructure.contextBudget.hardLimitPercent,
+          ) ?? 1;
+        if (ratio >= hardLimit || ratio >= threshold) {
+          health = "budget_pressure";
+          reason =
+            ratio >= hardLimit
+              ? "context_hard_limit_pressure"
+              : "context_usage_pressure";
+        }
+      }
+    }
+
+    return {
+      phase,
+      health,
+      reason,
+      updatedAt: Date.now(),
+      truthFactIds: truthFactIds.length > 0 ? truthFactIds : undefined,
+    };
+  }
+
+  private maybeAlignTaskStatus(input: {
+    sessionId: string;
+    promptText: string;
+    truthState: TruthState;
+    usage?: ContextBudgetUsage;
+  }): void {
+    const state = this.getTaskState(input.sessionId);
+    const next = this.computeTaskStatus(input);
+    if (this.isSameTaskStatus(state.status, next)) {
+      return;
+    }
+
+    this.recordEvent({
+      sessionId: input.sessionId,
+      type: TASK_EVENT_TYPE,
+      payload: buildStatusSetEvent(next) as unknown as Record<string, unknown>,
+    });
+  }
+
+  private getLatestOutputHealth(
+    sessionId: string,
+  ): { score: number; drunk: boolean; flags: string[] } | null {
+    const recent = this.queryEvents(sessionId, {
+      type: "message_update",
+      last: OUTPUT_HEALTH_GUARD_LOOKBACK_EVENTS,
+    });
+    for (let i = recent.length - 1; i >= 0; i -= 1) {
+      const event = recent[i];
+      const payload = event?.payload;
+      if (!payload || typeof payload !== "object") continue;
+      const health = (payload as { health?: unknown }).health;
+      if (!health || typeof health !== "object") continue;
+      const score = (health as { score?: unknown }).score;
+      if (typeof score !== "number" || !Number.isFinite(score)) continue;
+      const drunk = (health as { drunk?: unknown }).drunk === true;
+      const flagsRaw = (health as { flags?: unknown }).flags;
+      const flags = Array.isArray(flagsRaw)
+        ? flagsRaw
+            .filter(
+              (item): item is string =>
+                typeof item === "string" && item.trim().length > 0,
+            )
+            .slice(0, 8)
+        : [];
+      return { score, drunk, flags };
+    }
+    return null;
+  }
+
+  private buildOutputHealthGuardBlock(health: {
+    score: number;
+    flags: string[];
+  }): string {
+    const score = Math.max(0, Math.min(1, health.score));
+    const flags = health.flags.length > 0 ? health.flags.join(",") : "none";
+    return [
+      "[OutputHealthGuard]",
+      `score=${score.toFixed(2)} flags=${flags}`,
+      "- Keep sentences short and concrete.",
+      "- Do not repeat the same reasoning. If stuck, stop and verify or ask for missing info.",
+      "- Prefer tool-based verification over speculation.",
+    ].join("\n");
+  }
+
+  private buildViewportPolicyGuardBlock(input: {
+    quality: ViewportQuality;
+    variant: string;
+    score: number | null;
+    snr: number | null;
+    effectiveSnr: number | null;
+    reason: string;
+    metrics: ViewportMetrics;
+  }): string {
+    const format = (value: number | null): string =>
+      value === null ? "null" : value.toFixed(2);
+    const included =
+      input.metrics.includedFiles.length > 0
+        ? input.metrics.includedFiles.join(", ")
+        : "(none)";
+    const unavailable =
+      input.metrics.unavailableFiles.length > 0
+        ? input.metrics.unavailableFiles
+            .slice(0, 3)
+            .map((entry) => `${entry.file}:${entry.reason}`)
+            .join(", ")
+        : "none";
+
+    return [
+      "[ViewportPolicy]",
+      `quality=${input.quality} variant=${input.variant} reason=${input.reason}`,
+      `score=${format(input.score)} snr=${format(input.snr)} effectiveSnr=${format(input.effectiveSnr)}`,
+      `includedFiles=${included}`,
+      `unavailableFiles=${unavailable}`,
+      "",
+      "Policy:",
+      "- Treat low-signal viewport as unreliable; do not start editing yet.",
+      "- Refine TaskSpec targets.files/targets.symbols, or gather evidence (lsp_symbols, lsp_diagnostics).",
+      "- Re-run diagnostics/verification before applying patches.",
+    ].join("\n");
+  }
+
+  private decideViewportPolicy(input: {
+    sessionId: string;
+    goal: string;
+    targetFiles: string[];
+    targetSymbols: string[];
+  }): {
+    selected: ViewportContextResult;
+    injected: boolean;
+    variant: "full" | "no_neighborhood" | "minimal" | "skipped";
+    quality: ViewportQuality;
+    score: number | null;
+    snr: number | null;
+    effectiveSnr: number | null;
+    reason: string;
+    guardBlock?: string;
+    evaluated: Array<{
+      variant: string;
+      metrics: ViewportMetrics;
+      score: number | null;
+      snr: number | null;
+      effectiveSnr: number | null;
+    }>;
+  } {
+    const build = (
+      options: Partial<Parameters<typeof buildViewportContext>[0]>,
+    ): ViewportContextResult => {
+      return buildViewportContext({
+        cwd: this.cwd,
+        goal: input.goal,
+        targetFiles: input.targetFiles,
+        targetSymbols: input.targetSymbols,
+        ...options,
+      });
+    };
+
+    const evaluated: Array<{
+      variant: string;
+      result: ViewportContextResult;
+      metrics: ViewportMetrics;
+      score: ReturnType<typeof computeViewportSignalScore>;
+    }> = [];
+
+    const full = build({});
+    const fullScore = computeViewportSignalScore(full.metrics);
+    evaluated.push({
+      variant: "full",
+      result: full,
+      metrics: full.metrics,
+      score: fullScore,
+    });
+
+    const skipDecision = shouldSkipViewportInjection({
+      metrics: full.metrics,
+      score: fullScore,
+    });
+
+    if (skipDecision.skip) {
+      const reason = skipDecision.reason ?? "viewport_policy_skip";
+      const guardBlock = this.buildViewportPolicyGuardBlock({
+        quality: "low",
+        variant: "skipped",
+        score: fullScore.score,
+        snr: fullScore.snr,
+        effectiveSnr: fullScore.effectiveSnr,
+        reason,
+        metrics: full.metrics,
+      });
+      return {
+        selected: full,
+        injected: false,
+        variant: "skipped",
+        quality: "low",
+        score: fullScore.score,
+        snr: fullScore.snr,
+        effectiveSnr: fullScore.effectiveSnr,
+        reason,
+        guardBlock,
+        evaluated: evaluated.map((entry) => ({
+          variant: entry.variant,
+          metrics: entry.metrics,
+          score: entry.score.score,
+          snr: entry.score.snr,
+          effectiveSnr: entry.score.effectiveSnr,
+        })),
+      };
+    }
+
+    const isBetter = (
+      current: {
+        result: ViewportContextResult;
+        score: ReturnType<typeof computeViewportSignalScore>;
+      },
+      candidate: {
+        result: ViewportContextResult;
+        score: ReturnType<typeof computeViewportSignalScore>;
+      },
+    ): boolean => {
+      const currentScore = current.score.score ?? -1;
+      const candidateScore = candidate.score.score ?? -1;
+      const improvement = candidateScore - currentScore;
+      if (improvement > 0.04) return true;
+
+      if (
+        current.result.metrics.truncated &&
+        !candidate.result.metrics.truncated
+      ) {
+        if (improvement >= -0.01) return true;
+      }
+
+      if (improvement > 0.01) {
+        const candidateChars = candidate.result.metrics.totalChars;
+        const currentChars = current.result.metrics.totalChars;
+        if (candidateChars <= currentChars) return true;
+      }
+
+      return false;
+    };
+
+    let selectedVariant: "full" | "no_neighborhood" | "minimal" = "full";
+    let selectedResult = full;
+    let selectedScore = fullScore;
+    let selectedQuality = classifyViewportQuality(selectedScore.score);
+
+    const shouldTryNoNeighborhood =
+      selectedQuality === "low" ||
+      selectedResult.metrics.truncated ||
+      ((selectedScore.score ?? 1) < 0.16 &&
+        selectedResult.metrics.neighborhoodLines > 12);
+
+    if (shouldTryNoNeighborhood) {
+      const noNeighborhood = build({ maxNeighborImports: 0 });
+      const score = computeViewportSignalScore(noNeighborhood.metrics);
+      evaluated.push({
+        variant: "no_neighborhood",
+        result: noNeighborhood,
+        metrics: noNeighborhood.metrics,
+        score,
+      });
+
+      if (
+        isBetter(
+          { result: selectedResult, score: selectedScore },
+          { result: noNeighborhood, score },
+        )
+      ) {
+        selectedVariant = "no_neighborhood";
+        selectedResult = noNeighborhood;
+        selectedScore = score;
+        selectedQuality = classifyViewportQuality(selectedScore.score);
+      }
+    }
+
+    const shouldTryMinimal =
+      selectedQuality === "low" || selectedResult.metrics.truncated;
+    if (shouldTryMinimal) {
+      const minimal = build({
+        maxNeighborImports: 0,
+        maxImportsPerFile: 0,
+      });
+      const score = computeViewportSignalScore(minimal.metrics);
+      evaluated.push({
+        variant: "minimal",
+        result: minimal,
+        metrics: minimal.metrics,
+        score,
+      });
+
+      if (
+        isBetter(
+          { result: selectedResult, score: selectedScore },
+          { result: minimal, score },
+        )
+      ) {
+        selectedVariant = "minimal";
+        selectedResult = minimal;
+        selectedScore = score;
+        selectedQuality = classifyViewportQuality(selectedScore.score);
+      }
+    }
+
+    const reason =
+      selectedVariant !== "full"
+        ? "viewport_policy_variant_selected"
+        : selectedQuality === "low"
+          ? "viewport_policy_low_quality"
+          : "viewport_policy_ok";
+
+    const guardBlock =
+      selectedQuality === "low"
+        ? this.buildViewportPolicyGuardBlock({
+            quality: selectedQuality,
+            variant: selectedVariant,
+            score: selectedScore.score,
+            snr: selectedScore.snr,
+            effectiveSnr: selectedScore.effectiveSnr,
+            reason,
+            metrics: selectedResult.metrics,
+          })
+        : undefined;
+
+    return {
+      selected: selectedResult,
+      injected: Boolean(selectedResult.text),
+      variant: selectedVariant,
+      quality: selectedQuality,
+      score: selectedScore.score,
+      snr: selectedScore.snr,
+      effectiveSnr: selectedScore.effectiveSnr,
+      reason,
+      guardBlock,
+      evaluated: evaluated.map((entry) => ({
+        variant: entry.variant,
+        metrics: entry.metrics,
+        score: entry.score.score,
+        snr: entry.score.snr,
+        effectiveSnr: entry.score.effectiveSnr,
+      })),
+    };
+  }
+
   buildContextInjection(
     sessionId: string,
     prompt: string,
     usage?: ContextBudgetUsage,
     injectionScopeId?: string,
-  ): { text: string; accepted: boolean; originalTokens: number; finalTokens: number; truncated: boolean } {
+  ): {
+    text: string;
+    accepted: boolean;
+    originalTokens: number;
+    finalTokens: number;
+    truncated: boolean;
+  } {
     const promptText = this.sanitizeInput(prompt);
     const truthBlock = buildTruthLedgerBlock({ cwd: this.cwd });
     if (truthBlock) {
@@ -344,6 +844,31 @@ export class RoasterRuntime {
         content: truthBlock,
       });
     }
+    const truthState = this.getTruthState(sessionId);
+    if (truthState.facts.some((fact) => fact.status === "active")) {
+      this.registerContextInjection(sessionId, {
+        source: "roaster.truth-facts",
+        id: "truth-facts",
+        priority: "critical",
+        content: buildTruthFactsBlock({ state: truthState }),
+      });
+    }
+    this.maybeAlignTaskStatus({ sessionId, promptText, truthState, usage });
+
+    const outputHealth = this.getLatestOutputHealth(sessionId);
+    if (
+      outputHealth &&
+      (outputHealth.drunk ||
+        outputHealth.score < OUTPUT_HEALTH_GUARD_SCORE_THRESHOLD)
+    ) {
+      this.registerContextInjection(sessionId, {
+        source: "roaster.output-guard",
+        id: "output-health",
+        priority: "high",
+        content: this.buildOutputHealthGuardBlock(outputHealth),
+      });
+    }
+
     const selected = this.selectSkills(promptText);
     const digest = this.getLedgerDigest(sessionId);
     const resumeHint = this.getResumeHint(sessionId);
@@ -369,63 +894,157 @@ export class RoasterRuntime {
       });
     }
 
-	    const latestCompaction = this.latestCompactionSummaryBySession.get(sessionId);
-	    if (latestCompaction?.summary) {
-	      this.registerContextInjection(sessionId, {
-	        source: "roaster.compaction-summary",
-	        id: latestCompaction.entryId ?? "latest",
-	        priority: "high",
-	        oncePerSession: true,
-	        content: `[CompactionSummary]\n${latestCompaction.summary}`,
-	      });
-		    }
+    const latestCompaction =
+      this.latestCompactionSummaryBySession.get(sessionId);
+    if (latestCompaction?.summary) {
+      this.registerContextInjection(sessionId, {
+        source: "roaster.compaction-summary",
+        id: latestCompaction.entryId ?? "latest",
+        priority: "high",
+        oncePerSession: true,
+        content: `[CompactionSummary]\n${latestCompaction.summary}`,
+      });
+    }
 
-		    const taskState = this.taskStateBySession.get(sessionId);
-		    if (taskState && (taskState.spec || taskState.items.length > 0 || taskState.blockers.length > 0)) {
-		      const taskBlock = buildTaskStateBlock(taskState);
-		      if (taskBlock) {
-		        this.registerContextInjection(sessionId, {
-		          source: "roaster.task-state",
-	          id: "task-state",
-	          priority: "critical",
-	          content: taskBlock,
-	        });
-	      }
-	    }
+    const taskState = this.getTaskState(sessionId);
+    if (
+      taskState.spec ||
+      taskState.status ||
+      taskState.items.length > 0 ||
+      taskState.blockers.length > 0
+    ) {
+      const taskBlock = buildTaskStateBlock(taskState);
+      if (taskBlock) {
+        this.registerContextInjection(sessionId, {
+          source: "roaster.task-state",
+          id: "task-state",
+          priority: "critical",
+          content: taskBlock,
+        });
+      }
+    }
 
-	    const taskSpec = taskState?.spec;
-	    const explicitFiles = taskSpec?.targets?.files ?? [];
-	    const fallbackFiles = explicitFiles.length === 0 ? this.fileChanges.recentFiles(sessionId, 3) : [];
-	    const viewportFiles = explicitFiles.length > 0 ? explicitFiles : fallbackFiles;
-	    const viewportSymbols = taskSpec?.targets?.symbols ?? [];
-	    if (viewportFiles.length > 0) {
-	      const viewport = buildViewportContext({
-	        cwd: this.cwd,
-	        goal: taskSpec?.goal || promptText,
-	        targetFiles: viewportFiles,
-	        targetSymbols: viewportSymbols,
-	      });
-	      if (viewport) {
-	        this.registerContextInjection(sessionId, {
-	          source: "roaster.viewport",
-	          id: "viewport",
-	          priority: "high",
-	          content: viewport,
-	        });
-	      }
-	    }
+    const taskSpec = taskState?.spec;
+    const explicitFiles = taskSpec?.targets?.files ?? [];
+    const fallbackFiles =
+      explicitFiles.length === 0
+        ? this.fileChanges.recentFiles(sessionId, 3)
+        : [];
+    const viewportFiles =
+      explicitFiles.length > 0 ? explicitFiles : fallbackFiles;
+    const viewportSymbols = taskSpec?.targets?.symbols ?? [];
+    if (viewportFiles.length > 0) {
+      const viewportPolicy = this.decideViewportPolicy({
+        sessionId,
+        goal: taskSpec?.goal || promptText,
+        targetFiles: viewportFiles,
+        targetSymbols: viewportSymbols,
+      });
 
-	    const merged = this.contextInjection.plan(
-	      sessionId,
-	      this.isContextBudgetEnabled() ? this.config.infrastructure.contextBudget.maxInjectionTokens : Number.MAX_SAFE_INTEGER,
-	    );
+      this.viewportPolicyBySession.set(sessionId, {
+        quality: viewportPolicy.quality,
+        score: viewportPolicy.score,
+        variant: viewportPolicy.variant,
+        updatedAt: Date.now(),
+      });
+
+      if (viewportPolicy.guardBlock) {
+        this.registerContextInjection(sessionId, {
+          source: "roaster.viewport-policy",
+          id: "viewport-policy",
+          priority: viewportPolicy.variant === "skipped" ? "critical" : "high",
+          content: viewportPolicy.guardBlock,
+        });
+      }
+
+      if (viewportPolicy.selected.text) {
+        this.recordEvent({
+          sessionId,
+          type: "viewport_built",
+          turn: this.getCurrentTurn(sessionId),
+          payload: {
+            goal: taskSpec?.goal || promptText,
+            variant: viewportPolicy.variant,
+            quality: viewportPolicy.quality,
+            score: viewportPolicy.score,
+            snr: viewportPolicy.snr,
+            effectiveSnr: viewportPolicy.effectiveSnr,
+            policyReason: viewportPolicy.reason,
+            injected: viewportPolicy.variant !== "skipped",
+            requestedFiles: viewportPolicy.selected.metrics.requestedFiles,
+            includedFiles: viewportPolicy.selected.metrics.includedFiles,
+            unavailableFiles: viewportPolicy.selected.metrics.unavailableFiles,
+            importsExportsLines:
+              viewportPolicy.selected.metrics.importsExportsLines,
+            relevantTotalLines:
+              viewportPolicy.selected.metrics.relevantTotalLines,
+            relevantHitLines: viewportPolicy.selected.metrics.relevantHitLines,
+            symbolLines: viewportPolicy.selected.metrics.symbolLines,
+            neighborhoodLines:
+              viewportPolicy.selected.metrics.neighborhoodLines,
+            totalChars: viewportPolicy.selected.metrics.totalChars,
+            truncated: viewportPolicy.selected.metrics.truncated,
+          },
+        });
+
+        if (viewportPolicy.variant !== "skipped") {
+          this.registerContextInjection(sessionId, {
+            source: "roaster.viewport",
+            id: "viewport",
+            priority: "high",
+            content: viewportPolicy.selected.text,
+          });
+        }
+      }
+
+      if (
+        viewportPolicy.variant !== "full" ||
+        viewportPolicy.quality === "low"
+      ) {
+        this.recordEvent({
+          sessionId,
+          type: "viewport_policy_evaluated",
+          turn: this.getCurrentTurn(sessionId),
+          payload: {
+            goal: taskSpec?.goal || promptText,
+            variant: viewportPolicy.variant,
+            quality: viewportPolicy.quality,
+            score: viewportPolicy.score,
+            snr: viewportPolicy.snr,
+            effectiveSnr: viewportPolicy.effectiveSnr,
+            reason: viewportPolicy.reason,
+            evaluated: viewportPolicy.evaluated.map((entry) => ({
+              variant: entry.variant,
+              score: entry.score,
+              snr: entry.snr,
+              effectiveSnr: entry.effectiveSnr,
+              truncated: entry.metrics.truncated,
+              totalChars: entry.metrics.totalChars,
+              importsExportsLines: entry.metrics.importsExportsLines,
+              relevantTotalLines: entry.metrics.relevantTotalLines,
+              relevantHitLines: entry.metrics.relevantHitLines,
+              symbolLines: entry.metrics.symbolLines,
+              neighborhoodLines: entry.metrics.neighborhoodLines,
+            })),
+          },
+        });
+      }
+    }
+
+    const merged = this.contextInjection.plan(
+      sessionId,
+      this.isContextBudgetEnabled()
+        ? this.config.infrastructure.contextBudget.maxInjectionTokens
+        : Number.MAX_SAFE_INTEGER,
+    );
     const raw = merged.text;
     const decision = this.contextBudget.planInjection(sessionId, raw, usage);
     const wasTruncated = decision.truncated || merged.truncated;
     if (decision.accepted) {
       const fingerprint = sha256(decision.finalText);
       const scopeKey = this.buildInjectionScopeKey(sessionId, injectionScopeId);
-      const previous = this.lastInjectedContextFingerprintBySession.get(scopeKey);
+      const previous =
+        this.lastInjectedContextFingerprintBySession.get(scopeKey);
       if (previous === fingerprint) {
         this.reservedContextInjectionTokensByScope.set(scopeKey, 0);
         this.contextInjection.commit(sessionId, merged.consumedKeys);
@@ -453,7 +1072,10 @@ export class RoasterRuntime {
       if (resumeHint) {
         this.clearResumeHint(sessionId);
       }
-      this.reservedContextInjectionTokensByScope.set(scopeKey, this.isContextBudgetEnabled() ? decision.finalTokens : 0);
+      this.reservedContextInjectionTokensByScope.set(
+        scopeKey,
+        this.isContextBudgetEnabled() ? decision.finalTokens : 0,
+      );
       this.lastInjectedContextFingerprintBySession.set(scopeKey, fingerprint);
       this.recordEvent({
         sessionId,
@@ -476,7 +1098,10 @@ export class RoasterRuntime {
       };
     }
 
-    const rejectedScopeKey = this.buildInjectionScopeKey(sessionId, injectionScopeId);
+    const rejectedScopeKey = this.buildInjectionScopeKey(
+      sessionId,
+      injectionScopeId,
+    );
     this.reservedContextInjectionTokensByScope.set(rejectedScopeKey, 0);
     this.recordEvent({
       sessionId,
@@ -508,7 +1133,11 @@ export class RoasterRuntime {
     truncated: boolean;
     droppedReason?: "hard_limit" | "budget_exhausted";
   } {
-    const decision = this.contextBudget.planInjection(sessionId, inputText, usage);
+    const decision = this.contextBudget.planInjection(
+      sessionId,
+      inputText,
+      usage,
+    );
     if (!decision.accepted) {
       return {
         accepted: false,
@@ -531,8 +1160,12 @@ export class RoasterRuntime {
     }
 
     const scopeKey = this.buildInjectionScopeKey(sessionId, injectionScopeId);
-    const usedTokens = this.reservedContextInjectionTokensByScope.get(scopeKey) ?? 0;
-    const maxTokens = Math.max(0, Math.floor(this.config.infrastructure.contextBudget.maxInjectionTokens));
+    const usedTokens =
+      this.reservedContextInjectionTokensByScope.get(scopeKey) ?? 0;
+    const maxTokens = Math.max(
+      0,
+      Math.floor(this.config.infrastructure.contextBudget.maxInjectionTokens),
+    );
     const remainingTokens = Math.max(0, maxTokens - usedTokens);
     if (remainingTokens <= 0) {
       return {
@@ -574,7 +1207,11 @@ export class RoasterRuntime {
     };
   }
 
-  commitSupplementalContextInjection(sessionId: string, finalTokens: number, injectionScopeId?: string): void {
+  commitSupplementalContextInjection(
+    sessionId: string,
+    finalTokens: number,
+    injectionScopeId?: string,
+  ): void {
     if (!this.isContextBudgetEnabled()) {
       return;
     }
@@ -583,13 +1220,26 @@ export class RoasterRuntime {
     if (normalizedTokens <= 0) return;
 
     const scopeKey = this.buildInjectionScopeKey(sessionId, injectionScopeId);
-    const usedTokens = this.reservedContextInjectionTokensByScope.get(scopeKey) ?? 0;
-    const maxTokens = Math.max(0, Math.floor(this.config.infrastructure.contextBudget.maxInjectionTokens));
-    this.reservedContextInjectionTokensByScope.set(scopeKey, Math.min(maxTokens, usedTokens + normalizedTokens));
+    const usedTokens =
+      this.reservedContextInjectionTokensByScope.get(scopeKey) ?? 0;
+    const maxTokens = Math.max(
+      0,
+      Math.floor(this.config.infrastructure.contextBudget.maxInjectionTokens),
+    );
+    this.reservedContextInjectionTokensByScope.set(
+      scopeKey,
+      Math.min(maxTokens, usedTokens + normalizedTokens),
+    );
   }
 
-  shouldRequestCompaction(sessionId: string, usage: ContextBudgetUsage | undefined): boolean {
-    const decision = this.contextBudget.shouldRequestCompaction(sessionId, usage);
+  shouldRequestCompaction(
+    sessionId: string,
+    usage: ContextBudgetUsage | undefined,
+  ): boolean {
+    const decision = this.contextBudget.shouldRequestCompaction(
+      sessionId,
+      usage,
+    );
     if (!decision.shouldCompact) return false;
     this.recordEvent({
       sessionId,
@@ -605,7 +1255,12 @@ export class RoasterRuntime {
 
   markContextCompacted(
     sessionId: string,
-    input: { fromTokens?: number | null; toTokens?: number | null; summary?: string; entryId?: string },
+    input: {
+      fromTokens?: number | null;
+      toTokens?: number | null;
+      summary?: string;
+      entryId?: string;
+    },
   ): void {
     this.contextBudget.markCompacted(sessionId);
     this.contextInjection.resetOncePerSession(sessionId);
@@ -615,7 +1270,10 @@ export class RoasterRuntime {
     const summary = input.summary?.trim();
     const entryId = input.entryId?.trim();
     if (summary) {
-      this.latestCompactionSummaryBySession.set(sessionId, { entryId, summary });
+      this.latestCompactionSummaryBySession.set(sessionId, {
+        entryId,
+        summary,
+      });
     } else {
       this.latestCompactionSummaryBySession.delete(sessionId);
     }
@@ -667,7 +1325,10 @@ export class RoasterRuntime {
     this.contextInjection.register(sessionId, input);
   }
 
-  activateSkill(sessionId: string, name: string): { ok: boolean; reason?: string; skill?: SkillDocument } {
+  activateSkill(
+    sessionId: string,
+    name: string,
+  ): { ok: boolean; reason?: string; skill?: SkillDocument } {
     const skill = this.skills.get(name);
     if (!skill) {
       return { ok: false, reason: `Skill '${name}' not found.` };
@@ -676,8 +1337,10 @@ export class RoasterRuntime {
     const activeName = this.activeSkillsBySession.get(sessionId);
     if (activeName && activeName !== name) {
       const activeSkill = this.skills.get(activeName);
-      const activeAllows = activeSkill?.contract.composableWith?.includes(name) ?? false;
-      const nextAllows = skill.contract.composableWith?.includes(activeName) ?? false;
+      const activeAllows =
+        activeSkill?.contract.composableWith?.includes(name) ?? false;
+      const nextAllows =
+        skill.contract.composableWith?.includes(activeName) ?? false;
       if (!activeAllows && !nextAllows) {
         return {
           ok: false,
@@ -697,7 +1360,10 @@ export class RoasterRuntime {
     return this.skills.get(active);
   }
 
-  validateSkillOutputs(sessionId: string, outputs: Record<string, unknown>): { ok: boolean; missing: string[] } {
+  validateSkillOutputs(
+    sessionId: string,
+    outputs: Record<string, unknown>,
+  ): { ok: boolean; missing: string[] } {
     const skill = this.getActiveSkill(sessionId);
     if (!skill) {
       return { ok: true, missing: [] };
@@ -709,7 +1375,8 @@ export class RoasterRuntime {
       if (Array.isArray(value)) return value.length > 0;
       if (typeof value === "number") return Number.isFinite(value);
       if (typeof value === "boolean") return true;
-      if (typeof value === "object") return Object.keys(value as Record<string, unknown>).length > 0;
+      if (typeof value === "object")
+        return Object.keys(value as Record<string, unknown>).length > 0;
       return true;
     };
 
@@ -731,7 +1398,9 @@ export class RoasterRuntime {
     for (const [i, step] of plan.steps.entries()) {
       const skill = this.skills.get(step.skill);
       if (!skill) {
-        errors.push(`Step ${i + 1}: skill '${step.skill}' not found in registry.`);
+        errors.push(
+          `Step ${i + 1}: skill '${step.skill}' not found in registry.`,
+        );
         continue;
       }
 
@@ -751,7 +1420,10 @@ export class RoasterRuntime {
     return { valid: errors.length === 0, errors, warnings };
   }
 
-  completeSkill(sessionId: string, outputs: Record<string, unknown>): { ok: boolean; missing: string[] } {
+  completeSkill(
+    sessionId: string,
+    outputs: Record<string, unknown>,
+  ): { ok: boolean; missing: string[] } {
     const validation = this.validateSkillOutputs(sessionId, outputs);
     if (!validation.ok) {
       return validation;
@@ -776,11 +1448,17 @@ export class RoasterRuntime {
     return validation;
   }
 
-  getSkillOutputs(sessionId: string, skillName: string): Record<string, unknown> | undefined {
+  getSkillOutputs(
+    sessionId: string,
+    skillName: string,
+  ): Record<string, unknown> | undefined {
     return this.skillOutputsBySession.get(sessionId)?.get(skillName)?.outputs;
   }
 
-  getAvailableConsumedOutputs(sessionId: string, targetSkillName: string): Record<string, unknown> {
+  getAvailableConsumedOutputs(
+    sessionId: string,
+    targetSkillName: string,
+  ): Record<string, unknown> {
     const targetSkill = this.skills.get(targetSkillName);
     if (!targetSkill) return {};
     const consumes = targetSkill.contract.consumes ?? [];
@@ -801,7 +1479,10 @@ export class RoasterRuntime {
     return result;
   }
 
-  checkToolAccess(sessionId: string, toolName: string): { allowed: boolean; reason?: string } {
+  checkToolAccess(
+    sessionId: string,
+    toolName: string,
+  ): { allowed: boolean; reason?: string } {
     const skill = this.getActiveSkill(sessionId);
     const normalizedToolName = normalizeToolName(toolName);
     const access = checkToolAccess(skill?.contract, toolName, {
@@ -812,7 +1493,8 @@ export class RoasterRuntime {
 
     if (access.warning && skill) {
       const key = `${skill.name}:${normalizedToolName}`;
-      const seen = this.toolContractWarningsBySession.get(sessionId) ?? new Set<string>();
+      const seen =
+        this.toolContractWarningsBySession.get(sessionId) ?? new Set<string>();
       if (!seen.has(key)) {
         seen.add(key);
         this.toolContractWarningsBySession.set(sessionId, seen);
@@ -866,14 +1548,22 @@ export class RoasterRuntime {
       return access;
     }
 
-    if (this.config.security.skillMaxTokensMode !== "off" && !ALWAYS_ALLOWED_TOOL_SET.has(normalizedToolName)) {
+    if (
+      this.config.security.skillMaxTokensMode !== "off" &&
+      !ALWAYS_ALLOWED_TOOL_SET.has(normalizedToolName)
+    ) {
       const maxTokens = skill.contract.budget.maxTokens;
-      const usedTokens = this.costTracker.getSkillTotalTokens(sessionId, skill.name);
+      const usedTokens = this.costTracker.getSkillTotalTokens(
+        sessionId,
+        skill.name,
+      );
       if (usedTokens >= maxTokens) {
         const reason = `Skill '${skill.name}' exceeded maxTokens=${maxTokens} (used=${usedTokens}).`;
         if (this.config.security.skillMaxTokensMode === "warn") {
           const key = `maxTokens:${skill.name}`;
-          const seen = this.skillBudgetWarningsBySession.get(sessionId) ?? new Set<string>();
+          const seen =
+            this.skillBudgetWarningsBySession.get(sessionId) ??
+            new Set<string>();
           if (!seen.has(key)) {
             seen.add(key);
             this.skillBudgetWarningsBySession.set(sessionId, seen);
@@ -936,12 +1626,15 @@ export class RoasterRuntime {
       maxParallel > 0 &&
       this.config.security.skillMaxParallelMode !== "off"
     ) {
-      const activeRuns = this.parallel.snapshotSession(sessionId)?.activeRunIds.length ?? 0;
+      const activeRuns =
+        this.parallel.snapshotSession(sessionId)?.activeRunIds.length ?? 0;
       if (activeRuns >= maxParallel) {
         const mode = this.config.security.skillMaxParallelMode;
         if (mode === "warn") {
           const key = `maxParallel:${skill.name}`;
-          const seen = this.skillParallelWarningsBySession.get(sessionId) ?? new Set<string>();
+          const seen =
+            this.skillParallelWarningsBySession.get(sessionId) ??
+            new Set<string>();
           if (!seen.has(key)) {
             seen.add(key);
             this.skillParallelWarningsBySession.set(sessionId, seen);
@@ -1127,6 +1820,438 @@ export class RoasterRuntime {
     return this.fileChanges.latestSessionWithHistory();
   }
 
+  private extractShellCommandFromArgs(
+    args: Record<string, unknown>,
+  ): string | undefined {
+    const candidate = args.command ?? args.cmd ?? args.script;
+    if (typeof candidate !== "string") return undefined;
+    const trimmed = candidate.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  private truthFactIdForCommand(command: string): string {
+    const normalized = redactSecrets(command).trim().toLowerCase();
+    const digest = sha256(normalized).slice(0, 16);
+    return `truth:command:${digest}`;
+  }
+
+  private normalizeTruthFilePath(filePath: string): string {
+    return resolve(this.cwd, filePath).replace(/\\/g, "/");
+  }
+
+  private displayFilePath(filePath: string): string {
+    const normalized = resolve(this.cwd, filePath);
+    const rel = relative(this.cwd, normalized);
+    if (!rel || rel.startsWith("..")) return filePath;
+    return rel;
+  }
+
+  private truthFactPrefixForDiagnosticFile(filePath: string): string {
+    const digest = sha256(this.normalizeTruthFilePath(filePath)).slice(0, 16);
+    return `truth:diagnostic:${digest}:`;
+  }
+
+  private truthFactIdForDiagnostic(filePath: string, code: string): string {
+    const prefix = this.truthFactPrefixForDiagnosticFile(filePath);
+    const normalizedCode = code
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "");
+    return `${prefix}${normalizedCode || "unknown"}`;
+  }
+
+  private redactAndClamp(text: string, maxChars: number): string {
+    const redacted = redactSecrets(text);
+    const trimmed = redacted.trim();
+    if (trimmed.length <= maxChars) return trimmed;
+    const keep = Math.max(0, Math.floor(maxChars) - 3);
+    return `${trimmed.slice(0, keep)}...`;
+  }
+
+  private coerceEvidenceArtifacts(raw: unknown): EvidenceArtifact[] {
+    if (!Array.isArray(raw)) return [];
+    const out: EvidenceArtifact[] = [];
+    for (const entry of raw.slice(0, 24)) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+      const kind = (entry as { kind?: unknown }).kind;
+      if (typeof kind !== "string" || kind.trim().length === 0) continue;
+      out.push(entry as EvidenceArtifact);
+    }
+    return out;
+  }
+
+  private dedupeArtifacts(artifacts: EvidenceArtifact[]): EvidenceArtifact[] {
+    const out: EvidenceArtifact[] = [];
+    const seen = new Set<string>();
+    for (const artifact of artifacts) {
+      let key = "";
+      try {
+        key = sha256(JSON.stringify(artifact)).slice(0, 16);
+      } catch {
+        key = `fallback_${Math.random().toString(36).slice(2, 10)}`;
+      }
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(artifact);
+    }
+    return out;
+  }
+
+  private recordTruthBackedBlocker(
+    sessionId: string,
+    input: {
+      blockerId: string;
+      truthFactId: string;
+      message: string;
+      source: string;
+    },
+  ): void {
+    const current = this.getTaskState(sessionId);
+    const existing = current.blockers.find(
+      (blocker) => blocker.id === input.blockerId,
+    );
+    if (
+      existing &&
+      existing.message === input.message &&
+      (existing.source ?? "") === input.source &&
+      (existing.truthFactId ?? "") === input.truthFactId
+    ) {
+      return;
+    }
+    this.recordTaskBlocker(sessionId, {
+      id: input.blockerId,
+      message: input.message,
+      source: input.source,
+      truthFactId: input.truthFactId,
+    });
+  }
+
+  private resolveTruthBackedBlocker(
+    sessionId: string,
+    blockerId: string,
+  ): void {
+    const current = this.getTaskState(sessionId);
+    if (!current.blockers.some((blocker) => blocker.id === blockerId)) {
+      return;
+    }
+    this.resolveTaskBlocker(sessionId, blockerId);
+  }
+
+  private syncTruthFromToolResult(input: {
+    sessionId: string;
+    toolName: string;
+    args: Record<string, unknown>;
+    outputText: string;
+    success: boolean;
+    ledgerRow: {
+      id: string;
+      outputHash: string;
+      argsSummary: string;
+      outputSummary: string;
+    };
+    metadata?: Record<string, unknown>;
+  }): void {
+    const normalizedToolName = normalizeToolName(input.toolName);
+
+    const metadataArtifacts = this.coerceEvidenceArtifacts(
+      input.metadata?.artifacts,
+    );
+    const extractedArtifacts = extractEvidenceArtifacts({
+      toolName: input.toolName,
+      args: input.args,
+      outputText: input.outputText,
+      isError: !input.success,
+      details: input.metadata?.details,
+    });
+    const artifacts = this.dedupeArtifacts([
+      ...metadataArtifacts,
+      ...extractedArtifacts,
+    ]);
+
+    if (normalizedToolName === "bash" || normalizedToolName === "shell") {
+      const commandFromArgs = this.extractShellCommandFromArgs(input.args);
+      const commandFromArtifact = artifacts.find(
+        (artifact) => artifact.kind === "command_failure",
+      )?.command;
+      const command =
+        typeof commandFromArtifact === "string" &&
+        commandFromArtifact.trim().length > 0
+          ? commandFromArtifact.trim()
+          : commandFromArgs;
+      if (!command) return;
+
+      const commandSummary = this.redactAndClamp(command, 160);
+      const commandDetail = this.redactAndClamp(command, 480);
+      const truthFactId = this.truthFactIdForCommand(command);
+
+      if (input.success) {
+        const truthState = this.getTruthState(input.sessionId);
+        const active = truthState.facts.find(
+          (fact) => fact.id === truthFactId && fact.status === "active",
+        );
+        if (active) {
+          this.resolveTruthFact(input.sessionId, truthFactId);
+        }
+        this.resolveTruthBackedBlocker(input.sessionId, truthFactId);
+        return;
+      }
+
+      const failure = artifacts.find(
+        (artifact) => artifact.kind === "command_failure",
+      );
+      const exitCodeRaw = failure?.exitCode;
+      const exitCode =
+        typeof exitCodeRaw === "number" && Number.isFinite(exitCodeRaw)
+          ? exitCodeRaw
+          : null;
+      const summary =
+        exitCode === null
+          ? `command failed: ${commandSummary}`
+          : `command failed: ${commandSummary} (exitCode=${exitCode})`;
+
+      this.upsertTruthFact(input.sessionId, {
+        id: truthFactId,
+        kind: "command_failure",
+        severity: "error",
+        summary,
+        evidenceIds: [input.ledgerRow.id],
+        details: {
+          tool: input.toolName,
+          command: commandDetail,
+          exitCode,
+          outputHash: input.ledgerRow.outputHash,
+          argsSummary: input.ledgerRow.argsSummary,
+          outputSummary: input.ledgerRow.outputSummary,
+          failingTests: Array.isArray(failure?.failingTests)
+            ? failure?.failingTests
+            : [],
+          failedAssertions: Array.isArray(failure?.failedAssertions)
+            ? failure?.failedAssertions
+            : [],
+          stackTrace: Array.isArray(failure?.stackTrace)
+            ? failure?.stackTrace
+            : [],
+        },
+      });
+
+      this.recordTruthBackedBlocker(input.sessionId, {
+        blockerId: truthFactId,
+        truthFactId,
+        message: summary,
+        source: "truth_extractor",
+      });
+    }
+
+    if (normalizedToolName === "lsp_diagnostics") {
+      const rawSeverity = input.args.severity;
+      const severityFilter =
+        typeof rawSeverity === "string" ? rawSeverity.trim() : "";
+      const unfiltered =
+        severityFilter === "" || severityFilter.toLowerCase() === "all";
+
+      const rawFilePath = input.args.filePath;
+      const targetFilePath =
+        typeof rawFilePath === "string" ? rawFilePath.trim() : "";
+      if (!targetFilePath) return;
+      const targetFileKey = this.normalizeTruthFilePath(targetFilePath);
+      const targetPrefix = this.truthFactPrefixForDiagnosticFile(targetFileKey);
+
+      const trimmedOutput = input.outputText.trim();
+      const outputLower = trimmedOutput.toLowerCase();
+
+      if (unfiltered && outputLower.includes("no diagnostics found")) {
+        const truthState = this.getTruthState(input.sessionId);
+        for (const fact of truthState.facts) {
+          if (fact.status !== "active") continue;
+          if (!fact.id.startsWith(targetPrefix)) continue;
+          this.resolveTruthFact(input.sessionId, fact.id);
+          this.resolveTruthBackedBlocker(input.sessionId, fact.id);
+        }
+        return;
+      }
+
+      if (outputLower.startsWith("error:") || trimmedOutput.length === 0) {
+        return;
+      }
+
+      type ToolDiagnostic = {
+        file: string;
+        line: number;
+        column: number;
+        severity: string;
+        code: string;
+        message: string;
+      };
+
+      const detailsDiagnostics = (() => {
+        const details = input.metadata?.details;
+        if (!details || typeof details !== "object" || Array.isArray(details)) {
+          return null;
+        }
+        const record = details as Record<string, unknown>;
+        if (!Array.isArray(record.diagnostics)) return null;
+
+        const out: ToolDiagnostic[] = [];
+
+        for (const entry of record.diagnostics.slice(0, 240)) {
+          if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+            continue;
+          }
+          const diag = entry as Record<string, unknown>;
+          const file = typeof diag.file === "string" ? diag.file.trim() : "";
+          const line = typeof diag.line === "number" ? diag.line : NaN;
+          const column = typeof diag.column === "number" ? diag.column : NaN;
+          const severity =
+            typeof diag.severity === "string" ? diag.severity.trim() : "";
+          const code = typeof diag.code === "string" ? diag.code.trim() : "";
+          const message =
+            typeof diag.message === "string" ? diag.message.trim() : "";
+
+          if (
+            !file ||
+            !Number.isFinite(line) ||
+            !Number.isFinite(column) ||
+            !code ||
+            !message
+          ) {
+            continue;
+          }
+          out.push({
+            file,
+            line,
+            column,
+            severity: severity || "unknown",
+            code,
+            message,
+          });
+        }
+
+        return {
+          diagnostics: out,
+          truncated: Boolean(record.truncated),
+        };
+      })();
+
+      let diagnostics: ToolDiagnostic[] = [];
+      let diagnosticsTruncated = false;
+      if (detailsDiagnostics) {
+        diagnostics = detailsDiagnostics.diagnostics;
+        diagnosticsTruncated = detailsDiagnostics.truncated;
+      } else {
+        const parsed = parseTscDiagnostics(input.outputText, 240);
+        diagnostics = parsed.diagnostics;
+        diagnosticsTruncated = parsed.truncated;
+      }
+
+      diagnostics = diagnostics.filter(
+        (diagnostic) =>
+          this.normalizeTruthFilePath(diagnostic.file) === targetFileKey,
+      );
+      if (diagnostics.length === 0) {
+        return;
+      }
+
+      type TruthDiagnosticSample = {
+        line: number;
+        column: number;
+        message: string;
+      };
+      type CodeAggregate = {
+        count: number;
+        severity: TruthFactSeverity;
+        samples: TruthDiagnosticSample[];
+      };
+
+      const aggregates = new Map<string, CodeAggregate>();
+      for (const diagnostic of diagnostics) {
+        const code = diagnostic.code.trim();
+        if (!code) continue;
+
+        const truthSeverity: TruthFactSeverity =
+          diagnostic.severity === "error"
+            ? "error"
+            : diagnostic.severity === "warning"
+              ? "warn"
+              : "info";
+
+        const bucket = aggregates.get(code) ?? {
+          count: 0,
+          severity: truthSeverity,
+          samples: [],
+        };
+
+        bucket.count += 1;
+        if (bucket.severity !== "error" && truthSeverity === "error") {
+          bucket.severity = "error";
+        }
+        if (bucket.severity === "info" && truthSeverity === "warn") {
+          bucket.severity = "warn";
+        }
+
+        if (bucket.samples.length < 3) {
+          bucket.samples.push({
+            line: diagnostic.line,
+            column: diagnostic.column,
+            message: diagnostic.message,
+          });
+        }
+
+        aggregates.set(code, bucket);
+      }
+
+      if (aggregates.size === 0) return;
+
+      const fileDisplay = this.displayFilePath(targetFileKey);
+      const currentFactIds = new Set<string>();
+
+      for (const [code, aggregate] of aggregates.entries()) {
+        const truthFactId = this.truthFactIdForDiagnostic(targetFileKey, code);
+        currentFactIds.add(truthFactId);
+
+        const summary = `diagnostic: ${fileDisplay} ${code} x${aggregate.count}`;
+
+        this.upsertTruthFact(input.sessionId, {
+          id: truthFactId,
+          kind: "diagnostic",
+          severity: aggregate.severity,
+          summary,
+          evidenceIds: [input.ledgerRow.id],
+          details: {
+            tool: input.toolName,
+            compiler: "tsc",
+            severityFilter: severityFilter || null,
+            file: fileDisplay,
+            code,
+            count: aggregate.count,
+            samples: aggregate.samples,
+            outputHash: input.ledgerRow.outputHash,
+            argsSummary: input.ledgerRow.argsSummary,
+            outputSummary: input.ledgerRow.outputSummary,
+            truncated: diagnosticsTruncated,
+          },
+        });
+
+        this.recordTruthBackedBlocker(input.sessionId, {
+          blockerId: truthFactId,
+          truthFactId,
+          message: summary,
+          source: "truth_extractor",
+        });
+      }
+
+      if (unfiltered) {
+        const truthState = this.getTruthState(input.sessionId);
+        for (const fact of truthState.facts) {
+          if (fact.status !== "active") continue;
+          if (!fact.id.startsWith(targetPrefix)) continue;
+          if (currentFactIds.has(fact.id)) continue;
+          this.resolveTruthFact(input.sessionId, fact.id);
+          this.resolveTruthBackedBlocker(input.sessionId, fact.id);
+        }
+      }
+    }
+  }
+
   recordToolResult(input: {
     sessionId: string;
     toolName: string;
@@ -1149,6 +2274,21 @@ export class RoasterRuntime {
       outputSummary: input.outputText.slice(0, 500),
       fullOutput: input.outputText,
       verdict,
+      metadata: input.metadata,
+    });
+
+    this.syncTruthFromToolResult({
+      sessionId: input.sessionId,
+      toolName: input.toolName,
+      args: input.args,
+      outputText: input.outputText,
+      success: input.success,
+      ledgerRow: {
+        id: ledgerRow.id,
+        outputHash: ledgerRow.outputHash,
+        argsSummary: ledgerRow.argsSummary,
+        outputSummary: ledgerRow.outputSummary,
+      },
       metadata: input.metadata,
     });
 
@@ -1262,7 +2402,12 @@ export class RoasterRuntime {
 
   recordTaskBlocker(
     sessionId: string,
-    input: { id?: string; message: string; source?: string },
+    input: {
+      id?: string;
+      message: string;
+      source?: string;
+      truthFactId?: string;
+    },
   ): { ok: boolean; blockerId?: string; error?: string } {
     const message = input.message?.trim();
     if (!message) {
@@ -1273,6 +2418,7 @@ export class RoasterRuntime {
       id: input.id?.trim() || undefined,
       message,
       source: input.source?.trim() || undefined,
+      truthFactId: input.truthFactId?.trim() || undefined,
     });
     this.recordEvent({
       sessionId,
@@ -1282,7 +2428,10 @@ export class RoasterRuntime {
     return { ok: true, blockerId: payload.blocker.id };
   }
 
-  resolveTaskBlocker(sessionId: string, blockerId: string): { ok: boolean; error?: string } {
+  resolveTaskBlocker(
+    sessionId: string,
+    blockerId: string,
+  ): { ok: boolean; error?: string } {
     const id = blockerId?.trim();
     if (!id) return { ok: false, error: "missing_id" };
 
@@ -1300,6 +2449,14 @@ export class RoasterRuntime {
     if (cached) {
       return {
         spec: cached.spec,
+        status: cached.status
+          ? {
+              ...cached.status,
+              truthFactIds: cached.status.truthFactIds
+                ? [...cached.status.truthFactIds]
+                : undefined,
+            }
+          : undefined,
         items: [...cached.items],
         blockers: [...cached.blockers],
         updatedAt: cached.updatedAt,
@@ -1311,6 +2468,14 @@ export class RoasterRuntime {
       this.taskStateBySession.set(sessionId, hydrated);
       return {
         spec: hydrated.spec,
+        status: hydrated.status
+          ? {
+              ...hydrated.status,
+              truthFactIds: hydrated.status.truthFactIds
+                ? [...hydrated.status.truthFactIds]
+                : undefined,
+            }
+          : undefined,
         items: [...hydrated.items],
         blockers: [...hydrated.blockers],
         updatedAt: hydrated.updatedAt,
@@ -1322,15 +2487,130 @@ export class RoasterRuntime {
     this.taskStateBySession.set(sessionId, state);
     try {
       this.taskLedgerSnapshots.save(sessionId, state);
-    } catch {
-      // ignore snapshot IO failures
+    } catch (error) {
+      this.recordEvent({
+        sessionId,
+        type: "task_ledger_snapshot_failed",
+        payload: {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
     }
     return {
       spec: state.spec,
+      status: state.status
+        ? {
+            ...state.status,
+            truthFactIds: state.status.truthFactIds
+              ? [...state.status.truthFactIds]
+              : undefined,
+          }
+        : undefined,
       items: [...state.items],
       blockers: [...state.blockers],
       updatedAt: state.updatedAt,
     };
+  }
+
+  getTruthState(sessionId: string): TruthState {
+    const cached = this.truthStateBySession.get(sessionId);
+    if (cached) {
+      return {
+        facts: cached.facts.map((fact) => ({
+          ...fact,
+          evidenceIds: [...fact.evidenceIds],
+          details: fact.details ? { ...fact.details } : undefined,
+        })),
+        updatedAt: cached.updatedAt,
+      };
+    }
+
+    const events = this.queryEvents(sessionId, { type: TRUTH_EVENT_TYPE });
+    const state = foldTruthLedgerEvents(events);
+    this.truthStateBySession.set(sessionId, state);
+    return {
+      facts: state.facts.map((fact) => ({
+        ...fact,
+        evidenceIds: [...fact.evidenceIds],
+        details: fact.details ? { ...fact.details } : undefined,
+      })),
+      updatedAt: state.updatedAt,
+    };
+  }
+
+  upsertTruthFact(
+    sessionId: string,
+    input: {
+      id: string;
+      kind: string;
+      severity: TruthFactSeverity;
+      summary: string;
+      details?: Record<string, unknown>;
+      evidenceIds?: string[];
+      status?: TruthFactStatus;
+    },
+  ): { ok: boolean; fact?: TruthFact; error?: string } {
+    const id = input.id?.trim();
+    if (!id) return { ok: false, error: "missing_id" };
+
+    const kind = input.kind?.trim();
+    if (!kind) return { ok: false, error: "missing_kind" };
+
+    const summary = input.summary?.trim();
+    if (!summary) return { ok: false, error: "missing_summary" };
+
+    const now = Date.now();
+    const state = this.getTruthState(sessionId);
+    const existing = state.facts.find((fact) => fact.id === id);
+    const status: TruthFactStatus = input.status ?? "active";
+    const evidenceIds = [
+      ...new Set([
+        ...(existing?.evidenceIds ?? []),
+        ...(input.evidenceIds ?? []),
+      ]),
+    ];
+
+    const fact: TruthFact = {
+      id,
+      kind,
+      status,
+      severity: input.severity,
+      summary,
+      details: normalizeJsonRecord(input.details),
+      evidenceIds,
+      firstSeenAt: existing?.firstSeenAt ?? now,
+      lastSeenAt: now,
+      resolvedAt:
+        status === "resolved" ? (existing?.resolvedAt ?? now) : undefined,
+    };
+
+    this.recordEvent({
+      sessionId,
+      type: TRUTH_EVENT_TYPE,
+      payload: buildTruthFactUpsertedEvent(fact) as unknown as Record<
+        string,
+        unknown
+      >,
+    });
+    return { ok: true, fact };
+  }
+
+  resolveTruthFact(
+    sessionId: string,
+    truthFactId: string,
+  ): { ok: boolean; error?: string } {
+    const id = truthFactId?.trim();
+    if (!id) return { ok: false, error: "missing_id" };
+
+    this.recordEvent({
+      sessionId,
+      type: TRUTH_EVENT_TYPE,
+      payload: buildTruthFactResolvedEvent({
+        factId: id,
+        resolvedAt: Date.now(),
+      }) as unknown as Record<string, unknown>,
+    });
+    return { ok: true };
   }
 
   recordEvent(input: {
@@ -1350,6 +2630,7 @@ export class RoasterRuntime {
     if (!row) return undefined;
 
     this.tryApplyTaskEvent(row);
+    this.tryApplyTruthEvent(row);
 
     const structured = this.toStructuredEvent(row);
     for (const listener of this.eventListeners.values()) {
@@ -1358,12 +2639,20 @@ export class RoasterRuntime {
     return row;
   }
 
-  queryEvents(sessionId: string, query: RoasterEventQuery = {}): RoasterEventRecord[] {
+  queryEvents(
+    sessionId: string,
+    query: RoasterEventQuery = {},
+  ): RoasterEventRecord[] {
     return this.events.list(sessionId, query);
   }
 
-  queryStructuredEvents(sessionId: string, query: RoasterEventQuery = {}): RoasterStructuredEvent[] {
-    return this.events.list(sessionId, query).map((event) => this.toStructuredEvent(event));
+  queryStructuredEvents(
+    sessionId: string,
+    query: RoasterEventQuery = {},
+  ): RoasterStructuredEvent[] {
+    return this.events
+      .list(sessionId, query)
+      .map((event) => this.toStructuredEvent(event));
   }
 
   listReplaySessions(limit = 20): RoasterReplaySession[] {
@@ -1384,7 +2673,9 @@ export class RoasterRuntime {
     return rows;
   }
 
-  subscribeEvents(listener: (event: RoasterStructuredEvent) => void): () => void {
+  subscribeEvents(
+    listener: (event: RoasterStructuredEvent) => void,
+  ): () => void {
     this.eventListeners.add(listener);
     return () => {
       this.eventListeners.delete(listener);
@@ -1520,7 +2811,10 @@ export class RoasterRuntime {
     return this.costTracker.getSummary(sessionId);
   }
 
-  evaluateCompletion(sessionId: string, level?: VerificationLevel): VerificationReport {
+  evaluateCompletion(
+    sessionId: string,
+    level?: VerificationLevel,
+  ): VerificationReport {
     return this.verification.evaluate(sessionId, level);
   }
 
@@ -1598,23 +2892,38 @@ export class RoasterRuntime {
     }
     this.turnsBySession.set(targetSessionId, snapshot.turnCounter);
     this.toolCallsBySession.set(targetSessionId, snapshot.toolCalls);
-	    this.verification.stateStore.restore(targetSessionId, snapshot.verification);
-	    const droppedActiveRuns = this.parallel.restoreSession(targetSessionId, snapshot.parallel);
-	    this.contextBudget.restoreSession(targetSessionId, snapshot.contextBudget);
-	    this.costTracker.restore(targetSessionId, snapshot.cost);
-	    if (snapshot.task?.state) {
-	      this.taskStateBySession.set(targetSessionId, snapshot.task.state);
-	      try {
-	        this.taskLedgerSnapshots.save(targetSessionId, snapshot.task.state);
-	      } catch {
-	        // ignore snapshot IO failures
-	      }
-	    } else {
-	      this.taskStateBySession.delete(targetSessionId);
-	    }
-	    const importedPatchSets = input.imported
-	      ? this.fileChanges.importSessionHistory(input.sourceSessionId, targetSessionId).importedPatchSets
-	      : 0;
+    this.verification.stateStore.restore(
+      targetSessionId,
+      snapshot.verification,
+    );
+    const droppedActiveRuns = this.parallel.restoreSession(
+      targetSessionId,
+      snapshot.parallel,
+    );
+    this.contextBudget.restoreSession(targetSessionId, snapshot.contextBudget);
+    this.costTracker.restore(targetSessionId, snapshot.cost);
+    if (snapshot.task?.state) {
+      this.taskStateBySession.set(targetSessionId, snapshot.task.state);
+      try {
+        this.taskLedgerSnapshots.save(targetSessionId, snapshot.task.state);
+      } catch (error) {
+        this.recordEvent({
+          sessionId: targetSessionId,
+          type: "task_ledger_snapshot_failed",
+          payload: {
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      }
+    } else {
+      this.taskStateBySession.delete(targetSessionId);
+    }
+    const importedPatchSets = input.imported
+      ? this.fileChanges.importSessionHistory(
+          input.sourceSessionId,
+          targetSessionId,
+        ).importedPatchSets
+      : 0;
 
     if (snapshot.interrupted && this.shouldInjectResumeHint()) {
       const hint = [
@@ -1622,7 +2931,9 @@ export class RoasterRuntime {
         `Last active skill: ${snapshot.activeSkill ?? "(none)"}.`,
         `Tool calls used: ${snapshot.toolCalls}.`,
         `Turn counter: ${snapshot.turnCounter}.`,
-        input.imported ? `Recovered from previous session ${input.sourceSessionId}.` : "",
+        input.imported
+          ? `Recovered from previous session ${input.sourceSessionId}.`
+          : "",
       ].join(" ");
       this.resumeHintsBySession.set(targetSessionId, hint);
     }
@@ -1647,12 +2958,19 @@ export class RoasterRuntime {
 
   persistSessionSnapshot(
     sessionId: string,
-    options: { reason: "signal" | "shutdown" | "manual"; interrupted?: boolean } = { reason: "manual" },
+    options: {
+      reason: "signal" | "shutdown" | "manual";
+      interrupted?: boolean;
+    } = { reason: "manual" },
   ): void {
+    this.flushPendingTaskSnapshots();
     const lastEvent = this.events.latest(sessionId);
     const taskState = this.taskStateBySession.get(sessionId);
     const taskSnapshot =
-      taskState && (taskState.spec || taskState.items.length > 0 || taskState.blockers.length > 0)
+      taskState &&
+      (taskState.spec ||
+        taskState.items.length > 0 ||
+        taskState.blockers.length > 0)
         ? {
             schema: "roaster.task.snapshot.v1" as const,
             state: taskState,
@@ -1681,9 +2999,17 @@ export class RoasterRuntime {
         : undefined,
     };
     this.snapshots.save(snapshot);
-    if (taskState && (taskState.spec || taskState.items.length > 0 || taskState.blockers.length > 0)) {
+    if (
+      taskState &&
+      (taskState.spec ||
+        taskState.items.length > 0 ||
+        taskState.blockers.length > 0)
+    ) {
       try {
-        const compaction = this.taskLedgerSnapshots.maybeCompact(sessionId, taskState);
+        const compaction = this.taskLedgerSnapshots.maybeCompact(
+          sessionId,
+          taskState,
+        );
         if (compaction) {
           this.recordEvent({
             sessionId,
@@ -1714,17 +3040,20 @@ export class RoasterRuntime {
     });
   }
 
-	  clearSessionSnapshot(sessionId: string): void {
-	    this.snapshots.remove(sessionId);
-	    this.taskLedgerSnapshots.remove(sessionId);
-	    this.fileChanges.clearSession(sessionId);
-	    this.lastLedgerCompactionTurnBySession.delete(sessionId);
-	    this.contextInjection.clearSession(sessionId);
-	    this.latestCompactionSummaryBySession.delete(sessionId);
-	    this.clearInjectionFingerprintsForSession(sessionId);
-	    this.clearReservedInjectionTokensForSession(sessionId);
-	    this.taskStateBySession.delete(sessionId);
-	  }
+  clearSessionSnapshot(sessionId: string): void {
+    this.snapshots.remove(sessionId);
+    this.taskLedgerSnapshots.remove(sessionId);
+    this.pendingTaskSnapshotSessions.delete(sessionId);
+    this.fileChanges.clearSession(sessionId);
+    this.lastLedgerCompactionTurnBySession.delete(sessionId);
+    this.contextInjection.clearSession(sessionId);
+    this.latestCompactionSummaryBySession.delete(sessionId);
+    this.clearInjectionFingerprintsForSession(sessionId);
+    this.clearReservedInjectionTokensForSession(sessionId);
+    this.taskStateBySession.delete(sessionId);
+    this.truthStateBySession.delete(sessionId);
+    this.viewportPolicyBySession.delete(sessionId);
+  }
 
   async verifyCompletion(
     sessionId: string,
@@ -1734,60 +3063,106 @@ export class RoasterRuntime {
     const effectiveLevel = level ?? this.config.verification.defaultLevel;
     const executeCommands = options.executeCommands !== false;
 
-	    if (executeCommands && effectiveLevel !== "quick") {
-	      await this.runVerificationCommands(sessionId, effectiveLevel, {
-	        timeoutMs: options.timeoutMs ?? 10 * 60 * 1000,
-	      });
-	    }
+    if (executeCommands && effectiveLevel !== "quick") {
+      await this.runVerificationCommands(sessionId, effectiveLevel, {
+        timeoutMs: options.timeoutMs ?? 10 * 60 * 1000,
+      });
+    }
 
-	    const report = this.verification.evaluate(sessionId, effectiveLevel, { requireCommands: executeCommands });
-	    this.syncVerificationBlockers(sessionId, report);
-	    return report;
-	  }
+    const report = this.verification.evaluate(sessionId, effectiveLevel, {
+      requireCommands: executeCommands,
+    });
+    this.syncVerificationBlockers(sessionId, report);
+    return report;
+  }
 
-	  private syncVerificationBlockers(sessionId: string, report: VerificationReport): void {
-	    const verificationState = this.verification.stateStore.get(sessionId);
-	    if (!verificationState.lastWriteAt) return;
+  private syncVerificationBlockers(
+    sessionId: string,
+    report: VerificationReport,
+  ): void {
+    const verificationState = this.verification.stateStore.get(sessionId);
+    if (!verificationState.lastWriteAt) return;
 
-	    const lastWriteAt = verificationState.lastWriteAt ?? 0;
-	    const current = this.getTaskState(sessionId);
-	    const existingById = new Map(current.blockers.map((blocker) => [blocker.id, blocker]));
-	    const failingIds = new Set<string>();
+    const lastWriteAt = verificationState.lastWriteAt ?? 0;
+    const current = this.getTaskState(sessionId);
+    const existingById = new Map(
+      current.blockers.map((blocker) => [blocker.id, blocker]),
+    );
+    const failingIds = new Set<string>();
+    const truthFactIdForCheck = (checkName: string): string =>
+      `truth:verifier:${normalizeVerifierCheckForId(checkName)}`;
 
-	    for (const check of report.checks) {
-	      if (check.status !== "fail") continue;
+    for (const check of report.checks) {
+      if (check.status !== "fail") continue;
 
-	      const blockerId = `${VERIFIER_BLOCKER_PREFIX}${normalizeVerifierCheckForId(check.name)}`;
-	      failingIds.add(blockerId);
+      const blockerId = `${VERIFIER_BLOCKER_PREFIX}${normalizeVerifierCheckForId(check.name)}`;
+      const truthFactId = truthFactIdForCheck(check.name);
+      failingIds.add(blockerId);
 
-	      const run = verificationState.checkRuns[check.name];
-	      const freshRun = run && run.timestamp >= lastWriteAt ? run : undefined;
-	      const message = buildVerifierBlockerMessage({ checkName: check.name, evidence: check.evidence, run: freshRun });
-	      const source = "verification_gate";
+      const run = verificationState.checkRuns[check.name];
+      const freshRun = run && run.timestamp >= lastWriteAt ? run : undefined;
+      const message = buildVerifierBlockerMessage({
+        checkName: check.name,
+        truthFactId,
+        run: freshRun,
+      });
+      const source = "verification_gate";
 
-	      const existing = existingById.get(blockerId);
-	      if (existing && existing.message === message && (existing.source ?? "") === source) {
-	        continue;
-	      }
-	      this.recordTaskBlocker(sessionId, {
-	        id: blockerId,
-	        message,
-	        source,
-	      });
-	    }
+      const existing = existingById.get(blockerId);
+      if (
+        existing &&
+        existing.message === message &&
+        (existing.source ?? "") === source &&
+        (existing.truthFactId ?? "") === truthFactId
+      ) {
+        continue;
+      }
 
-	    for (const blocker of current.blockers) {
-	      if (!blocker.id.startsWith(VERIFIER_BLOCKER_PREFIX)) continue;
-	      if (failingIds.has(blocker.id)) continue;
-	      this.resolveTaskBlocker(sessionId, blocker.id);
-	    }
-	  }
+      const evidenceIds = freshRun?.ledgerId ? [freshRun.ledgerId] : [];
+      this.upsertTruthFact(sessionId, {
+        id: truthFactId,
+        kind: "verification_check_failed",
+        severity: "error",
+        summary: `verification failed: ${check.name}`,
+        evidenceIds,
+        details: {
+          check: check.name,
+          command: freshRun?.command ?? null,
+          exitCode: freshRun?.exitCode ?? null,
+          ledgerId: freshRun?.ledgerId ?? null,
+          evidence: check.evidence ?? null,
+        },
+      });
+      this.recordTaskBlocker(sessionId, {
+        id: blockerId,
+        message,
+        source,
+        truthFactId,
+      });
+    }
 
-	  sanitizeInput(text: string): string {
-	    if (!this.config.security.sanitizeContext) {
-	      return text;
-	    }
-	    return sanitizeContextText(text);
+    const truthState = this.getTruthState(sessionId);
+    for (const blocker of current.blockers) {
+      if (!blocker.id.startsWith(VERIFIER_BLOCKER_PREFIX)) continue;
+      if (failingIds.has(blocker.id)) continue;
+      this.resolveTaskBlocker(sessionId, blocker.id);
+      const truthFactId =
+        blocker.truthFactId ??
+        `truth:verifier:${blocker.id.slice(VERIFIER_BLOCKER_PREFIX.length)}`;
+      const active = truthState.facts.find(
+        (fact) => fact.id === truthFactId && fact.status === "active",
+      );
+      if (active) {
+        this.resolveTruthFact(sessionId, truthFactId);
+      }
+    }
+  }
+
+  sanitizeInput(text: string): string {
+    if (!this.config.security.sanitizeContext) {
+      return text;
+    }
+    return sanitizeContextText(text);
   }
 
   private getCurrentTurn(sessionId: string): number {
@@ -1809,7 +3184,8 @@ export class RoasterRuntime {
       if (checkName === "diff-review") continue;
 
       const existing = state.checkRuns[checkName];
-      const isFresh = existing && existing.ok && existing.timestamp >= state.lastWriteAt;
+      const isFresh =
+        existing && existing.ok && existing.timestamp >= state.lastWriteAt;
       if (isFresh) continue;
 
       const result = await runShellCommand(command, {
@@ -1818,42 +3194,50 @@ export class RoasterRuntime {
         maxOutputChars: 200_000,
       });
 
-	      const ok = result.exitCode === 0 && !result.timedOut;
-	      const outputText = `${result.stdout}\n${result.stderr}`.trim();
-	      const outputSummary = outputText.length > 0 ? outputText.slice(0, 2000) : ok ? "(no output)" : "(no output)";
+      const ok = result.exitCode === 0 && !result.timedOut;
+      const outputText = `${result.stdout}\n${result.stderr}`.trim();
+      const outputSummary =
+        outputText.length > 0
+          ? outputText.slice(0, 2000)
+          : ok
+            ? "(no output)"
+            : "(no output)";
 
-	      const timestamp = Date.now();
-	      const ledgerId = this.recordToolResult({
-	        sessionId,
-	        toolName: "roaster_verify",
-	        args: { check: checkName, command },
-	        outputText: outputSummary,
-	        success: ok,
-	        verdict: ok ? "pass" : "fail",
-	        metadata: {
-	          source: "verification_gate",
-	          check: checkName,
-	          command,
-	          exitCode: result.exitCode,
-	          durationMs: result.durationMs,
-	          timedOut: result.timedOut,
-	        },
-	      });
+      const timestamp = Date.now();
+      const ledgerId = this.recordToolResult({
+        sessionId,
+        toolName: "roaster_verify",
+        args: { check: checkName, command },
+        outputText: outputSummary,
+        success: ok,
+        verdict: ok ? "pass" : "fail",
+        metadata: {
+          source: "verification_gate",
+          check: checkName,
+          command,
+          exitCode: result.exitCode,
+          durationMs: result.durationMs,
+          timedOut: result.timedOut,
+        },
+      });
 
-	      this.verification.stateStore.setCheckRun(sessionId, checkName, {
-	        timestamp,
-	        ok,
-	        command,
-	        exitCode: result.exitCode,
-	        durationMs: result.durationMs,
-	        ledgerId,
-	        outputSummary,
-	      });
-	    }
-	  }
+      this.verification.stateStore.setCheckRun(sessionId, checkName, {
+        timestamp,
+        ok,
+        command,
+        exitCode: result.exitCode,
+        durationMs: result.durationMs,
+        ledgerId,
+        outputSummary,
+      });
+    }
+  }
 
   private maybeCompactLedger(sessionId: string, turn: number): void {
-    const every = Math.max(0, Math.trunc(this.config.ledger.checkpointEveryTurns));
+    const every = Math.max(
+      0,
+      Math.trunc(this.config.ledger.checkpointEveryTurns),
+    );
     if (every <= 0) return;
     if (turn <= 0) return;
     if (turn % every !== 0) return;
@@ -1861,7 +3245,10 @@ export class RoasterRuntime {
       return;
     }
 
-    const keepLast = Math.max(2, Math.min(this.config.ledger.digestWindow, every - 1));
+    const keepLast = Math.max(
+      2,
+      Math.min(this.config.ledger.digestWindow, every - 1),
+    );
     const result = this.ledger.compactSession(sessionId, {
       keepLast,
       reason: `turn-${turn}`,
@@ -1894,14 +3281,48 @@ export class RoasterRuntime {
       return;
     }
 
-    const current = this.taskStateBySession.get(event.sessionId) ?? createEmptyTaskState();
+    const current =
+      this.taskStateBySession.get(event.sessionId) ?? createEmptyTaskState();
     const next = reduceTaskState(current, payload, event.timestamp);
     this.taskStateBySession.set(event.sessionId, next);
-    try {
-      this.taskLedgerSnapshots.save(event.sessionId, next);
-    } catch {
-      // ignore snapshot IO failures
+    this.pendingTaskSnapshotSessions.add(event.sessionId);
+  }
+
+  flushPendingTaskSnapshots(): void {
+    if (this.pendingTaskSnapshotSessions.size === 0) return;
+    const sessions = [...this.pendingTaskSnapshotSessions];
+    this.pendingTaskSnapshotSessions.clear();
+    for (const sessionId of sessions) {
+      const state = this.taskStateBySession.get(sessionId);
+      if (!state) continue;
+      try {
+        this.taskLedgerSnapshots.save(sessionId, state);
+      } catch (error) {
+        this.recordEvent({
+          sessionId,
+          type: "task_ledger_snapshot_failed",
+          payload: {
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      }
     }
+  }
+
+  private tryApplyTruthEvent(event: RoasterEventRecord): void {
+    if (event.type !== TRUTH_EVENT_TYPE) {
+      return;
+    }
+
+    const payload = coerceTruthLedgerPayload(event.payload);
+    if (!payload) {
+      return;
+    }
+
+    const current =
+      this.truthStateBySession.get(event.sessionId) ?? createEmptyTruthState();
+    const next = reduceTruthState(current, payload, event.timestamp);
+    this.truthStateBySession.set(event.sessionId, next);
   }
 
   private clearResumeHint(sessionId: string): void {
@@ -1909,9 +3330,11 @@ export class RoasterRuntime {
   }
 
   private shouldInjectResumeHint(): boolean {
-    const setting = this.config.infrastructure.interruptRecovery.resumeHintInjectionEnabled;
+    const setting =
+      this.config.infrastructure.interruptRecovery.resumeHintInjectionEnabled;
     if (typeof setting === "boolean") return setting;
-    const legacy = this.config.infrastructure.interruptRecovery.resumeHintInSystemPrompt;
+    const legacy =
+      this.config.infrastructure.interruptRecovery.resumeHintInSystemPrompt;
     return typeof legacy === "boolean" ? legacy : true;
   }
 

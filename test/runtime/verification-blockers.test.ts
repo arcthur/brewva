@@ -87,8 +87,15 @@ describe("Verification blockers", () => {
     const blocker1 = state1.blockers.find((blocker) => blocker.id === "verifier:tests");
     expect(blocker1).not.toBeUndefined();
     expect(blocker1?.message.includes("verification failed: tests")).toBe(true);
-    expect(blocker1?.message.includes("ledgerId: ev_")).toBe(true);
-    expect(blocker1?.message.includes("exitCode:")).toBe(true);
+    expect(blocker1?.message.includes("truth=truth:verifier:tests")).toBe(true);
+    expect(blocker1?.message.includes("evidence=ev_")).toBe(true);
+    expect(blocker1?.message.includes("exitCode=")).toBe(true);
+    expect(blocker1?.truthFactId).toBe("truth:verifier:tests");
+
+    const truth1 = runtime.getTruthState(sessionId);
+    const truthFact1 = truth1.facts.find((fact) => fact.id === "truth:verifier:tests");
+    expect(truthFact1).not.toBeUndefined();
+    expect(truthFact1?.status).toBe("active");
 
     const injection1 = runtime.buildContextInjection(sessionId, "why failed?");
     expect(injection1.text.includes("[TaskLedger]")).toBe(true);
@@ -102,5 +109,10 @@ describe("Verification blockers", () => {
 
     const state2 = runtime.getTaskState(sessionId);
     expect(state2.blockers.some((blocker) => blocker.id === "verifier:tests")).toBe(false);
+
+    const truth2 = runtime.getTruthState(sessionId);
+    const truthFact2 = truth2.facts.find((fact) => fact.id === "truth:verifier:tests");
+    expect(truthFact2).not.toBeUndefined();
+    expect(truthFact2?.status).toBe("resolved");
   });
 });

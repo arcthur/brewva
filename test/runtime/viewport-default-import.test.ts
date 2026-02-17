@@ -39,6 +39,12 @@ describe("Viewport neighborhood probe", () => {
     expect(injection.text.includes("File: src/foo.ts")).toBe(true);
     expect(injection.text.includes("./bar default:")).toBe(true);
     expect(injection.text.includes("export default")).toBe(true);
+
+    const viewportEvents = runtime.queryEvents(sessionId, { type: "viewport_built" });
+    expect(viewportEvents.length).toBe(1);
+    const payload = viewportEvents[0]?.payload ?? {};
+    expect(payload.totalChars).not.toBeNull();
+    expect(payload.snr).not.toBeNull();
+    expect(payload.truncated).toBe(false);
   });
 });
-

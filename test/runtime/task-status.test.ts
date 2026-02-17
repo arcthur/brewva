@@ -1,0 +1,33 @@
+import { mkdirSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
+import { RoasterRuntime } from "@pi-roaster/roaster-runtime";
+
+function createWorkspace(name: string): string {
+  const workspace = mkdtempSync(join(tmpdir(), `roaster-${name}-`));
+  mkdirSync(join(workspace, ".pi"), { recursive: true });
+  return workspace;
+}
+
+describe("Task status alignment", () => {
+  test("computes phase/health before agent start", () => {
+    const workspace = createWorkspace("task-status");
+    const runtime = new RoasterRuntime({ cwd: workspace });
+    const sessionId = "task-status-1";
+
+    const injection1 = runtime.buildContextInjection(sessionId, "hello");
+    expect(injection1.text.includes("[TaskLedger]")).toBe(true);
+    expect(injection1.text.includes("status.phase=align")).toBe(true);
+    expect(injection1.text.includes("status.health=needs_spec")).toBe(true);
+
+    runtime.setTaskSpec(sessionId, { schema: "roaster.task.v1", goal: "Do a thing" });
+    const injection2 = runtime.buildContextInjection(sessionId, "next");
+    expect(injection2.text.includes("status.phase=investigate")).toBe(true);
+
+    runtime.addTaskItem(sessionId, { text: "Implement the fix" });
+    const injection3 = runtime.buildContextInjection(sessionId, "next");
+    expect(injection3.text.includes("status.phase=execute")).toBe(true);
+  });
+});
+

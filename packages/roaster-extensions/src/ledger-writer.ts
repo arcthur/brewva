@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import type { RoasterRuntime } from "@pi-roaster/roaster-runtime";
+import { extractEvidenceArtifacts, type RoasterRuntime } from "@pi-roaster/roaster-runtime";
 
 function extractTextContent(content: Array<{ type: string; text?: string }>): string {
   return content
@@ -12,6 +12,13 @@ export function registerLedgerWriter(pi: ExtensionAPI, runtime: RoasterRuntime):
   pi.on("tool_result", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
     const outputText = extractTextContent(event.content as Array<{ type: string; text?: string }>);
+    const artifacts = extractEvidenceArtifacts({
+      toolName: event.toolName,
+      args: event.input as Record<string, unknown> | undefined,
+      outputText,
+      isError: event.isError,
+      details: event.details,
+    });
 
     runtime.recordToolResult({
       sessionId,
@@ -23,6 +30,7 @@ export function registerLedgerWriter(pi: ExtensionAPI, runtime: RoasterRuntime):
       metadata: {
         toolCallId: event.toolCallId,
         details: event.details as Record<string, unknown> | undefined,
+        artifacts: artifacts.length > 0 ? artifacts : undefined,
       },
     });
     runtime.trackToolCallEnd({

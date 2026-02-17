@@ -1,5 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import { formatTaskStateBlock } from "@pi-roaster/roaster-runtime";
 import type { RoasterToolOptions } from "./types.js";
 import { textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
@@ -107,6 +108,7 @@ export function createTaskLedgerTools(options: RoasterToolOptions): ToolDefiniti
       id: Type.Optional(Type.String()),
       message: Type.String(),
       source: Type.Optional(Type.String()),
+      truthFactId: Type.Optional(Type.String()),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
@@ -114,6 +116,7 @@ export function createTaskLedgerTools(options: RoasterToolOptions): ToolDefiniti
         id: params.id,
         message: params.message,
         source: params.source,
+        truthFactId: params.truthFactId,
       });
       if (!result.ok) {
         return textResult(`Blocker rejected (${result.error ?? "unknown_error"}).`, result);
@@ -147,56 +150,10 @@ export function createTaskLedgerTools(options: RoasterToolOptions): ToolDefiniti
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
       const state = options.runtime.getTaskState(sessionId);
-
-      const lines: string[] = ["[TaskLedgerState]"];
-      const spec = state.spec;
-      if (spec) {
-        lines.push(`goal=${spec.goal}`);
-        if (spec.expectedBehavior) lines.push(`expectedBehavior=${spec.expectedBehavior}`);
-        const files = spec.targets?.files ?? [];
-        const symbols = spec.targets?.symbols ?? [];
-        if (files.length > 0) {
-          lines.push("targets.files:");
-          for (const file of files.slice(0, 8)) lines.push(`- ${file}`);
-        }
-        if (symbols.length > 0) {
-          lines.push("targets.symbols:");
-          for (const symbol of symbols.slice(0, 8)) lines.push(`- ${symbol}`);
-        }
-        const constraints = spec.constraints ?? [];
-        if (constraints.length > 0) {
-          lines.push("constraints:");
-          for (const constraint of constraints.slice(0, 8)) lines.push(`- ${constraint}`);
-        }
-      } else {
-        lines.push("spec=(none)");
-      }
-
-      const blockers = state.blockers ?? [];
-      lines.push("blockers:");
-      if (blockers.length === 0) {
-        lines.push("- (none)");
-      } else {
-        for (const blocker of blockers.slice(0, 8)) {
-          const source = blocker.source ? ` source=${blocker.source}` : "";
-          lines.push(`- ${blocker.id}: ${blocker.message}${source}`);
-        }
-      }
-
-      const items = state.items ?? [];
-      lines.push("items:");
-      if (items.length === 0) {
-        lines.push("- (none)");
-      } else {
-        for (const item of items.slice(0, 12)) {
-          lines.push(`- ${item.id} [${item.status}] ${item.text}`);
-        }
-      }
-
-      return textResult(lines.join("\n"), { ok: true });
+      const block = formatTaskStateBlock(state);
+      return textResult(block || "[TaskLedger]\n(empty)", { ok: true });
     },
   };
 
   return [taskSetSpec, taskAddItem, taskUpdateItem, taskRecordBlocker, taskResolveBlocker, taskViewState];
 }
-

@@ -91,6 +91,18 @@ export interface TaskSpec {
 
 export type TaskItemStatus = "todo" | "doing" | "done" | "blocked";
 
+export type TaskPhase = "align" | "investigate" | "execute" | "verify" | "blocked" | "done";
+
+export type TaskHealth = "ok" | "needs_spec" | "blocked" | "verification_failed" | "budget_pressure" | "unknown";
+
+export interface TaskStatus {
+  phase: TaskPhase;
+  health: TaskHealth;
+  reason?: string;
+  updatedAt: number;
+  truthFactIds?: string[];
+}
+
 export interface TaskItem {
   id: string;
   text: string;
@@ -104,10 +116,12 @@ export interface TaskBlocker {
   message: string;
   createdAt: number;
   source?: string;
+  truthFactId?: string;
 }
 
 export interface TaskState {
   spec?: TaskSpec;
+  status?: TaskStatus;
   items: TaskItem[];
   blockers: TaskBlocker[];
   updatedAt: number | null;
@@ -123,6 +137,11 @@ export type TaskLedgerEventPayload =
       schema: "roaster.task.ledger.v1";
       kind: "checkpoint_set";
       state: TaskState;
+    }
+  | {
+      schema: "roaster.task.ledger.v1";
+      kind: "status_set";
+      status: TaskStatus;
     }
   | {
       schema: "roaster.task.ledger.v1";
@@ -149,6 +168,7 @@ export type TaskLedgerEventPayload =
         id: string;
         message: string;
         source?: string;
+        truthFactId?: string;
       };
     }
   | {
@@ -301,6 +321,41 @@ export interface EvidenceQuery {
   tool?: string;
   last?: number;
 }
+
+export type TruthFactStatus = "active" | "resolved";
+
+export type TruthFactSeverity = "info" | "warn" | "error";
+
+export interface TruthFact {
+  id: string;
+  kind: string;
+  status: TruthFactStatus;
+  severity: TruthFactSeverity;
+  summary: string;
+  details?: Record<string, JsonValue>;
+  evidenceIds: string[];
+  firstSeenAt: number;
+  lastSeenAt: number;
+  resolvedAt?: number;
+}
+
+export interface TruthState {
+  facts: TruthFact[];
+  updatedAt: number | null;
+}
+
+export type TruthLedgerEventPayload =
+  | {
+      schema: "roaster.truth.ledger.v1";
+      kind: "fact_upserted";
+      fact: TruthFact;
+    }
+  | {
+      schema: "roaster.truth.ledger.v1";
+      kind: "fact_resolved";
+      factId: string;
+      resolvedAt?: number;
+    };
 
 export interface LedgerDigest {
   generatedAt: number;

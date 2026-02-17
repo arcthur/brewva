@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { normalizeJsonRecord } from "../utils/json.js";
 import type { RoasterConfig, RoasterEventQuery, RoasterEventRecord } from "../types.js";
 import { ensureDir } from "../utils/fs.js";
+import { redactUnknown } from "../security/redact.js";
 
 type EventAppendInput = {
   sessionId: string;
@@ -61,7 +62,9 @@ export class RoasterEventStore {
       type: input.type,
       timestamp,
       turn: input.turn,
-      payload: normalizeJsonRecord(input.payload),
+      payload: normalizeJsonRecord(
+        input.payload ? (redactUnknown(input.payload) as Record<string, unknown>) : undefined,
+      ),
     };
 
     const filePath = this.filePathForSession(row.sessionId);

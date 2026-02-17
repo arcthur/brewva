@@ -9,6 +9,7 @@ Primary class: `packages/roaster-runtime/src/runtime.ts`.
 - `getSkill`
 - `selectSkills`
 - `onTurnStart`
+- `flushPendingTaskSnapshots`
 - `observeContextUsage`
 - `buildContextInjection`
 - `planSupplementalContextInjection`
@@ -33,10 +34,13 @@ Primary class: `packages/roaster-runtime/src/runtime.ts`.
 - `queryLedger`
 - `setTaskSpec`
 - `getTaskState`
+- `getTruthState`
 - `addTaskItem`
 - `updateTaskItem`
 - `recordTaskBlocker`
 - `resolveTaskBlocker`
+- `upsertTruthFact`
+- `resolveTruthFact`
 - `recordEvent`
 - `queryEvents`
 - `queryStructuredEvents`
@@ -61,3 +65,10 @@ Primary class: `packages/roaster-runtime/src/runtime.ts`.
 ## Type Contract
 
 All public runtime data contracts are defined in `packages/roaster-runtime/src/types.ts`.
+
+## Viewport Policy
+
+`buildContextInjection()` may build and inject a viewport context (`roaster.viewport`) to ground the model in a small set of relevant source lines.
+When the viewport signal is low (or the context is truncated), the runtime can downshift the viewport variant or skip injecting it entirely.
+
+When policy decisions trigger, the runtime emits `viewport_built` / `viewport_policy_evaluated` events and may inject a `roaster.viewport-policy` guard block to enforce a verification-first posture.

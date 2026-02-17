@@ -16,7 +16,10 @@ function isLikelyText(content: Buffer): boolean {
   return nonText / Math.max(1, sample.length) < 0.2;
 }
 
-function safeReadTextFile(path: string, maxBytes: number): { ok: true; text: string } | { ok: false; reason: string } {
+function safeReadTextFile(
+  path: string,
+  maxBytes: number,
+): { ok: true; text: string } | { ok: false; reason: string } {
   if (!existsSync(path)) return { ok: false, reason: "missing" };
   const st = statSync(path);
   if (!st.isFile()) return { ok: false, reason: "not_file" };
@@ -42,11 +45,32 @@ function scoreLine(line: string, keywords: string[]): number {
   return score;
 }
 
-function extractRelevantLines(text: string, goal: string, limit: number): string[] {
+type RelevantExtractionMode = "keyword" | "fallback";
+
+type RelevantExtraction = {
+  mode: RelevantExtractionMode;
+  hitLines: number;
+  totalLines: number;
+  lines: string[];
+};
+
+function extractRelevantLines(
+  text: string,
+  goal: string,
+  limit: number,
+): RelevantExtraction {
   const lines = text.split("\n");
   const keywords = tokenizeGoalTerms(goal);
   if (keywords.length === 0) {
-    return lines.slice(0, Math.min(lines.length, 80)).map((line, index) => `L${index + 1}: ${line}`);
+    const extracted = lines
+      .slice(0, Math.min(lines.length, 80))
+      .map((line, index) => `L${index + 1}: ${line}`);
+    return {
+      mode: "fallback",
+      hitLines: 0,
+      totalLines: extracted.length,
+      lines: extracted,
+    };
   }
 
   const ranked = lines
@@ -57,10 +81,24 @@ function extractRelevantLines(text: string, goal: string, limit: number): string
     .sort((a, b) => a.index - b.index);
 
   if (ranked.length === 0) {
-    return lines.slice(0, Math.min(lines.length, 80)).map((line, index) => `L${index + 1}: ${line}`);
+    const extracted = lines
+      .slice(0, Math.min(lines.length, 80))
+      .map((line, index) => `L${index + 1}: ${line}`);
+    return {
+      mode: "fallback",
+      hitLines: 0,
+      totalLines: extracted.length,
+      lines: extracted,
+    };
   }
 
-  return ranked.map((row) => `L${row.index + 1}: ${row.line}`);
+  const extracted = ranked.map((row) => `L${row.index + 1}: ${row.line}`);
+  return {
+    mode: "keyword",
+    hitLines: extracted.length,
+    totalLines: extracted.length,
+    lines: extracted,
+  };
 }
 
 type ModuleEntry = {
@@ -72,14 +110,22 @@ type ModuleEntry = {
 
 /** Extract import/export entries from the first N lines of source text.
  *  NOTE: Uses line-by-line regex matching — does not handle multi-line imports. */
-function extractModuleEntries(text: string, maxLines: number, maxEntries: number): ModuleEntry[] {
+function extractModuleEntries(
+  text: string,
+  maxLines: number,
+  maxEntries: number,
+): ModuleEntry[] {
+  const entryLimit = Math.max(0, Math.floor(maxEntries));
+  if (entryLimit === 0) return [];
+
   const lines = text.split("\n").slice(0, Math.max(1, maxLines));
   const out: ModuleEntry[] = [];
 
   for (const line of lines) {
     const trimmed = line.trimEnd();
     const statement = trimmed.trimStart();
-    if (!(statement.startsWith("import ") || statement.startsWith("export "))) continue;
+    if (!(statement.startsWith("import ") || statement.startsWith("export ")))
+      continue;
     const sourceMatch = /\bfrom\s+["']([^"']+)["']/.exec(statement);
     if (!sourceMatch) continue;
     const source = sourceMatch[1]?.trim() ?? "";
@@ -89,7 +135,10 @@ function extractModuleEntries(text: string, maxLines: number, maxEntries: number
     let defaultImport: string | undefined;
 
     if (statement.startsWith("import ")) {
-      const defaultMatch = /^\s*import\s+(?:type\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:,|\s+from\b)/.exec(statement);
+      const defaultMatch =
+        /^\s*import\s+(?:type\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:,|\s+from\b)/.exec(
+          statement,
+        );
       if (defaultMatch?.[1]) {
         defaultImport = defaultMatch[1];
       }
@@ -108,7 +157,7 @@ function extractModuleEntries(text: string, maxLines: number, maxEntries: number
     }
 
     out.push({ raw: statement, source, names, defaultImport });
-    if (out.length >= maxEntries) break;
+    if (out.length >= entryLimit) break;
   }
 
   return out;
@@ -116,7 +165,10 @@ function extractModuleEntries(text: string, maxLines: number, maxEntries: number
 
 const MODULE_EXTS = [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts"];
 
-function resolveModulePath(baseFile: string, specifier: string): string | undefined {
+function resolveModulePath(
+  baseFile: string,
+  specifier: string,
+): string | undefined {
   const baseDir = dirname(baseFile);
   const base = resolve(baseDir, specifier);
 
@@ -141,7 +193,11 @@ function resolveModulePath(baseFile: string, specifier: string): string | undefi
   return undefined;
 }
 
-function findDefinitionLines(text: string, symbol: string, limit: number): string[] {
+function findDefinitionLines(
+  text: string,
+  symbol: string,
+  limit: number,
+): string[] {
   const lines = text.split("\n");
   const escaped = escapeRegExp(symbol);
   const patterns = [
@@ -149,7 +205,9 @@ function findDefinitionLines(text: string, symbol: string, limit: number): strin
       `\\bexport\\s+(?:default\\s+)?(?:declare\\s+)?(?:type|interface|class|function|const|let|var|enum)\\s+${escaped}\\b`,
     ),
     new RegExp(`\\bexport\\s+default\\s+${escaped}\\b`),
-    new RegExp(`\\b(?:type|interface|class|function|const|let|var|enum)\\s+${escaped}\\b`),
+    new RegExp(
+      `\\b(?:type|interface|class|function|const|let|var|enum)\\s+${escaped}\\b`,
+    ),
   ];
 
   const matches: string[] = [];
@@ -175,6 +233,25 @@ function findDefaultExportLines(text: string, limit: number): string[] {
   return matches;
 }
 
+export interface ViewportMetrics {
+  requestedFiles: string[];
+  includedFiles: string[];
+  unavailableFiles: Array<{ file: string; reason: string }>;
+  importsExportsLines: number;
+  relevantTotalLines: number;
+  relevantHitLines: number;
+  symbolLines: number;
+  neighborhoodLines: number;
+  snr: number | null;
+  totalChars: number;
+  truncated: boolean;
+}
+
+export interface ViewportContextResult {
+  text: string;
+  metrics: ViewportMetrics;
+}
+
 export function buildViewportContext(input: {
   cwd: string;
   goal: string;
@@ -189,7 +266,7 @@ export function buildViewportContext(input: {
   maxSymbolsPerImport?: number;
   maxDefinitionLines?: number;
   maxTotalChars?: number;
-}): string {
+}): ViewportContextResult {
   const maxFiles = input.maxFiles ?? 3;
   const maxBytesPerFile = input.maxBytesPerFile ?? 120_000;
   const maxImportsPerFile = input.maxImportsPerFile ?? 12;
@@ -201,10 +278,35 @@ export function buildViewportContext(input: {
   const maxTotalChars = input.maxTotalChars ?? 8_000;
 
   const cwd = resolve(input.cwd);
-  const files = input.targetFiles.map((file) => file.trim()).filter(Boolean).slice(0, maxFiles);
-  if (files.length === 0) return "";
+  const files = input.targetFiles
+    .map((file) => file.trim())
+    .filter(Boolean)
+    .slice(0, maxFiles);
+  const metrics: ViewportMetrics = {
+    requestedFiles: files,
+    includedFiles: [],
+    unavailableFiles: [],
+    importsExportsLines: 0,
+    relevantTotalLines: 0,
+    relevantHitLines: 0,
+    symbolLines: 0,
+    neighborhoodLines: 0,
+    snr: null,
+    totalChars: 0,
+    truncated: false,
+  };
 
-  const targetSymbols = (input.targetSymbols ?? []).map((symbol) => symbol.trim()).filter(Boolean).slice(0, 8);
+  if (files.length === 0) {
+    return {
+      text: "",
+      metrics,
+    };
+  }
+
+  const targetSymbols = (input.targetSymbols ?? [])
+    .map((symbol) => symbol.trim())
+    .filter(Boolean)
+    .slice(0, 8);
 
   const blocks: string[] = ["[Viewport]", `goal=${input.goal}`];
 
@@ -215,11 +317,24 @@ export function buildViewportContext(input: {
       blocks.push("");
       blocks.push(`File: ${relative}`);
       blocks.push(`status=unavailable reason=${content.reason}`);
+      metrics.unavailableFiles.push({ file: relative, reason: content.reason });
       continue;
     }
 
-    const moduleEntries = extractModuleEntries(content.text, maxImportLines, maxImportsPerFile);
-    const relevant = extractRelevantLines(content.text, input.goal, maxRelevantLines);
+    const moduleEntries = extractModuleEntries(
+      content.text,
+      maxImportLines,
+      maxImportsPerFile,
+    );
+    const relevant = extractRelevantLines(
+      content.text,
+      input.goal,
+      maxRelevantLines,
+    );
+    metrics.includedFiles.push(relative);
+    metrics.importsExportsLines += moduleEntries.length;
+    metrics.relevantTotalLines += relevant.totalLines;
+    metrics.relevantHitLines += relevant.hitLines;
 
     blocks.push("");
     blocks.push(`File: ${relative}`);
@@ -231,20 +346,25 @@ export function buildViewportContext(input: {
     }
 
     blocks.push("relevant:");
-    for (const line of relevant) {
+    for (const line of relevant.lines) {
       blocks.push(`- ${line}`);
     }
 
     const symbolLines: string[] = [];
     if (targetSymbols.length > 0) {
       for (const symbol of targetSymbols) {
-        const defs = findDefinitionLines(content.text, symbol, maxDefinitionLines);
+        const defs = findDefinitionLines(
+          content.text,
+          symbol,
+          maxDefinitionLines,
+        );
         for (const def of defs) {
           symbolLines.push(`- ${symbol}: ${def}`);
         }
       }
     }
     if (symbolLines.length > 0) {
+      metrics.symbolLines += symbolLines.length;
       blocks.push("symbols:");
       blocks.push(...symbolLines);
     }
@@ -266,22 +386,31 @@ export function buildViewportContext(input: {
           const defs = findDefaultExportLines(neighborContent.text, 1);
           for (const def of defs) {
             blocks.push(`- ${entry.source} default: ${def}`);
+            metrics.neighborhoodLines += 1;
             wroteAny = true;
           }
         }
 
         const names = entry.names.slice(0, maxSymbolsPerImport);
         for (const name of names) {
-          const defs = findDefinitionLines(neighborContent.text, name, maxDefinitionLines);
+          const defs = findDefinitionLines(
+            neighborContent.text,
+            name,
+            maxDefinitionLines,
+          );
           if (defs.length === 0) continue;
           for (const def of defs) {
             blocks.push(`- ${entry.source} ${name}: ${def}`);
+            metrics.neighborhoodLines += 1;
             wroteAny = true;
           }
         }
 
         if (!wroteAny && names.length > 0) {
-          blocks.push(`- ${entry.source}: (no definitions found for ${names.join(", ")})`);
+          blocks.push(
+            `- ${entry.source}: (no definitions found for ${names.join(", ")})`,
+          );
+          metrics.neighborhoodLines += 1;
         }
       }
     }
@@ -292,5 +421,24 @@ export function buildViewportContext(input: {
   }
 
   const combined = blocks.join("\n").trim();
-  return combined.length > maxTotalChars ? `${combined.slice(0, maxTotalChars - 3)}...` : combined;
+  const truncated = combined.length > maxTotalChars;
+  const text = truncated
+    ? `${combined.slice(0, maxTotalChars - 3)}...`
+    : combined;
+
+  const signal = metrics.relevantHitLines;
+  const noise =
+    metrics.relevantTotalLines -
+    metrics.relevantHitLines +
+    metrics.importsExportsLines +
+    metrics.symbolLines +
+    metrics.neighborhoodLines;
+  metrics.snr = signal + noise > 0 ? signal / (signal + noise) : null;
+  metrics.totalChars = text.length;
+  metrics.truncated = truncated;
+
+  return {
+    text,
+    metrics,
+  };
 }

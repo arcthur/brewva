@@ -1,5 +1,6 @@
-import { closeSync, existsSync, openSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { closeSync, existsSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import type { RoasterEventRecord, RoasterConfig, TaskState } from "../types.js";
 import { ensureDir, writeFileAtomic } from "../utils/fs.js";
 import { normalizeJsonRecord } from "../utils/json.js";
@@ -14,7 +15,7 @@ import {
 
 const COMPACT_COOLDOWN_MS = 60_000;
 const COMPACT_MIN_BYTES = 64_000;
-const COMPACT_MAX_BYTES = 50 * 1024 * 1024;
+const COMPACT_MAX_BYTES = 10 * 1024 * 1024;
 const COMPACT_KEEP_LAST_TASK_EVENTS = 80;
 const COMPACT_MIN_TASK_EVENTS = 220;
 
@@ -72,6 +73,104 @@ function buildEventId(prefix: string, timestamp: number): string {
   return `${prefix}_${timestamp}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function forEachParsedEvent(filePath: string, handler: (event: RoasterEventRecord) => void): void {
+  const fd = openSync(filePath, "r");
+  try {
+    const buffer = Buffer.alloc(64 * 1024);
+    const decoder = new StringDecoder("utf8");
+    let position = 0;
+    let carry = "";
+
+    while (true) {
+      const bytesRead = readSync(fd, buffer, 0, buffer.length, position);
+      if (bytesRead <= 0) break;
+      position += bytesRead;
+
+      const chunk = carry + decoder.write(buffer.subarray(0, bytesRead));
+      const lines = chunk.split("\n");
+      carry = lines.pop() ?? "";
+
+      for (const rawLine of lines) {
+        const trimmed = rawLine.trim();
+        if (!trimmed) continue;
+        const event = parseEventLine(trimmed);
+        if (!event) continue;
+        handler(event);
+      }
+    }
+
+    const remaining = decoder.end();
+    const tail = (carry + remaining).trim();
+    if (tail.length > 0) {
+      const event = parseEventLine(tail);
+      if (event) {
+        handler(event);
+      }
+    }
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function writeJsonlLine(fd: number, state: { first: boolean }, line: string): void {
+  if (!state.first) {
+    writeSync(fd, "\n", undefined, "utf8");
+  } else {
+    state.first = false;
+  }
+  writeSync(fd, line, undefined, "utf8");
+}
+
+function writeJsonlAtomic(filePath: string, writer: (writeLine: (line: string) => void) => void): void {
+  const resolvedPath = resolve(filePath);
+  const parent = dirname(resolvedPath);
+  ensureDir(parent);
+  const tempPath = join(
+    parent,
+    `.${Math.random().toString(36).slice(2, 10)}.${Date.now().toString(36)}.tmp`,
+  );
+
+  const fd = openSync(tempPath, "w");
+  const state = { first: true };
+  try {
+    writer((line) => writeJsonlLine(fd, state, line));
+  } catch (error) {
+    try {
+      closeSync(fd);
+    } catch {
+      // ignore
+    }
+    try {
+      rmSync(tempPath, { force: true });
+    } catch {
+      // ignore
+    }
+    throw error;
+  }
+
+  try {
+    closeSync(fd);
+  } catch (error) {
+    try {
+      rmSync(tempPath, { force: true });
+    } catch {
+      // ignore
+    }
+    throw error;
+  }
+
+  try {
+    renameSync(tempPath, resolvedPath);
+  } catch (error) {
+    try {
+      rmSync(tempPath, { force: true });
+    } catch {
+      // ignore
+    }
+    throw error;
+  }
+}
+
 function applyTaskEventsFromOffset(input: {
   filePath: string;
   sessionId: string;
@@ -97,6 +196,7 @@ function applyTaskEventsFromOffset(input: {
   const fd = openSync(input.filePath, "r");
   try {
     const buffer = Buffer.alloc(64 * 1024);
+    const decoder = new StringDecoder("utf8");
     let position = start;
     let carry = "";
     let state = input.baseState;
@@ -107,7 +207,7 @@ function applyTaskEventsFromOffset(input: {
       if (bytesRead <= 0) break;
       position += bytesRead;
 
-      const chunk = carry + buffer.subarray(0, bytesRead).toString("utf8");
+      const chunk = carry + decoder.write(buffer.subarray(0, bytesRead));
       const lines = chunk.split("\n");
       carry = lines.pop() ?? "";
 
@@ -125,7 +225,8 @@ function applyTaskEventsFromOffset(input: {
       }
     }
 
-    const tail = carry.trim();
+    const remaining = decoder.end();
+    const tail = (carry + remaining).trim();
     if (tail.length > 0) {
       const event = parseEventLine(tail);
       if (event && event.sessionId === input.sessionId && event.type === TASK_EVENT_TYPE) {
@@ -283,44 +384,31 @@ export class TaskLedgerSnapshotStore {
     if (size > COMPACT_MAX_BYTES) return undefined;
     const bytesBefore = size;
 
-    const raw = readFileSync(eventsPath, "utf8");
-    const lines = raw
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    const events: RoasterEventRecord[] = [];
-    const taskPositions: number[] = [];
-    for (const line of lines) {
-      const event = parseEventLine(line);
-      if (!event) continue;
-      events.push(event);
-      if (event.type === TASK_EVENT_TYPE) {
-        taskPositions.push(events.length - 1);
-      }
-    }
-
-    if (taskPositions.length < COMPACT_MIN_TASK_EVENTS) return undefined;
-
     const keepLast = Math.max(1, COMPACT_KEEP_LAST_TASK_EVENTS);
-    if (taskPositions.length <= keepLast) return undefined;
-
-    const compactCount = taskPositions.length - keepLast;
-    const lastCompactedIndex = taskPositions[compactCount - 1];
-    if (lastCompactedIndex === undefined) return undefined;
-    const lastCompactedEvent = events[lastCompactedIndex];
-    if (!lastCompactedEvent) return undefined;
-
+    const tailTasks: RoasterEventRecord[] = [];
+    let taskCount = 0;
+    let compactedCount = 0;
+    let lastCompactedEvent: RoasterEventRecord | undefined;
     let checkpointState = createEmptyTaskState();
-    const compactedTaskEvents: RoasterEventRecord[] = [];
-    for (const position of taskPositions.slice(0, compactCount)) {
-      const event = events[position];
-      if (!event) continue;
-      compactedTaskEvents.push(event);
-      const payload = coerceTaskLedgerPayload(event.payload);
-      if (!payload) continue;
-      checkpointState = reduceTaskState(checkpointState, payload, event.timestamp);
-    }
+
+    forEachParsedEvent(eventsPath, (event) => {
+      if (event.type !== TASK_EVENT_TYPE) return;
+      taskCount += 1;
+      tailTasks.push(event);
+      if (tailTasks.length <= keepLast) return;
+      const compacted = tailTasks.shift();
+      if (!compacted) return;
+      compactedCount += 1;
+      lastCompactedEvent = compacted;
+      const payload = coerceTaskLedgerPayload(compacted.payload);
+      if (!payload) return;
+      checkpointState = reduceTaskState(checkpointState, payload, compacted.timestamp);
+    });
+
+    if (taskCount < COMPACT_MIN_TASK_EVENTS) return undefined;
+    if (taskCount <= keepLast) return undefined;
+    if (compactedCount <= 0) return undefined;
+    if (!lastCompactedEvent) return undefined;
 
     const checkpointPayload = normalizeJsonRecord(buildCheckpointSetEvent(checkpointState) as unknown as Record<string, unknown>);
     if (!checkpointPayload) return undefined;
@@ -334,40 +422,46 @@ export class TaskLedgerSnapshotStore {
       payload: checkpointPayload,
     };
 
-    const compactedPositions = new Set(taskPositions.slice(0, compactCount));
-    const rebuilt: RoasterEventRecord[] = [];
-    for (let i = 0; i < events.length; i += 1) {
-      if (i === lastCompactedIndex) {
-        rebuilt.push(checkpointEvent);
-        continue;
-      }
-      if (compactedPositions.has(i)) {
-        continue;
-      }
-      rebuilt.push(events[i]!);
-    }
-
     const archivePath = resolve(this.archiveDir, `${normalizedSession}.jsonl`);
-    const archiveLines: string[] = [];
-    archiveLines.push(
-      JSON.stringify({
-        schema: "roaster.task.ledger.archive.v1",
-        kind: "compacted",
-        sessionId,
-        createdAt: startMs,
-        checkpointEventId: checkpointEvent.id,
-        compacted: compactedTaskEvents.length,
-        kept: keepLast,
-        schemaVersion: TASK_LEDGER_SCHEMA,
-      }),
-    );
-    for (const event of compactedTaskEvents) {
-      archiveLines.push(JSON.stringify(event));
-    }
-    const archivePrefix = existsSync(archivePath) && statSync(archivePath).size > 0 ? "\n" : "";
-    writeFileSync(archivePath, `${archivePrefix}${archiveLines.join("\n")}`, { flag: "a" });
+    const archiveHasContent = existsSync(archivePath) && statSync(archivePath).size > 0;
+    const archiveFd = openSync(archivePath, "a");
+    try {
+      const archiveState = { first: !archiveHasContent };
+      const appendArchive = (line: string) => writeJsonlLine(archiveFd, archiveState, line);
 
-    writeFileAtomic(eventsPath, rebuilt.map((event) => JSON.stringify(event)).join("\n"));
+      appendArchive(
+        JSON.stringify({
+          schema: "roaster.task.ledger.archive.v1",
+          kind: "compacted",
+          sessionId,
+          createdAt: startMs,
+          checkpointEventId: checkpointEvent.id,
+          compacted: compactedCount,
+          kept: keepLast,
+          schemaVersion: TASK_LEDGER_SCHEMA,
+        }),
+      );
+
+      writeJsonlAtomic(eventsPath, (writeLine) => {
+        let seenTask = 0;
+        forEachParsedEvent(eventsPath, (event) => {
+          if (event.type === TASK_EVENT_TYPE) {
+            seenTask += 1;
+            if (seenTask <= compactedCount) {
+              appendArchive(JSON.stringify(event));
+              if (seenTask === compactedCount) {
+                writeLine(JSON.stringify(checkpointEvent));
+              }
+              return;
+            }
+          }
+          writeLine(JSON.stringify(event));
+        });
+      });
+    } finally {
+      closeSync(archiveFd);
+    }
+
     this.save(sessionId, state);
     this.lastCompactionAtBySession.set(sessionId, startMs);
 
@@ -380,7 +474,7 @@ export class TaskLedgerSnapshotStore {
 
     return {
       sessionId,
-      compacted: compactedTaskEvents.length,
+      compacted: compactedCount,
       kept: keepLast,
       bytesBefore,
       bytesAfter,

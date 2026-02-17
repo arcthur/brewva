@@ -35,6 +35,7 @@ describe("Task ledger snapshots", () => {
     };
     runtime.setTaskSpec(sessionId, spec);
     runtime.addTaskItem(sessionId, { text: "Add snapshot store", status: "doing" });
+    runtime.flushPendingTaskSnapshots();
 
     const snapPath = snapshotPath(workspace, sessionId);
     expect(existsSync(snapPath)).toBe(true);
@@ -63,6 +64,7 @@ describe("Task ledger snapshots", () => {
       schema: "roaster.task.v1",
       goal: "Catch up task snapshot",
     });
+    runtime1.flushPendingTaskSnapshots();
 
     const snapPath = snapshotPath(workspace, sessionId);
     const initialSnap = JSON.parse(readFileSync(snapPath, "utf8")) as { logOffsetBytes: number };
@@ -90,4 +92,3 @@ describe("Task ledger snapshots", () => {
     expect(updatedSnap.state.items.some((item) => item.text === "manual tail item")).toBe(true);
   });
 });
-
