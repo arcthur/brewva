@@ -176,6 +176,7 @@ describe("Extension gaps: context transform", () => {
     registerContextTransform(api, runtime);
     expect(handlers.has("context")).toBe(true);
     expect(handlers.has("turn_start")).toBe(true);
+    expect(handlers.has("turn_end")).toBe(true);
     expect(handlers.has("session_compact")).toBe(true);
 
     const result = invokeHandler<{
@@ -340,25 +341,412 @@ describe("Extension gaps: context transform", () => {
       },
     };
 
+    invokeHandler(
+      handlers,
+      "before_agent_start",
+      { type: "before_agent_start", prompt: "round-1", systemPrompt: "base" },
+      { sessionManager: contextCtx.sessionManager, getContextUsage: () => undefined },
+    );
     invokeHandler(handlers, "turn_start", { turnIndex: 1 }, { sessionManager: contextCtx.sessionManager });
     invokeHandler(handlers, "context", {}, contextCtx);
+    expect(compactCalls).toBe(0);
+    invokeHandler(
+      handlers,
+      "turn_end",
+      { turnIndex: 1, message: { stopReason: "stop" }, toolResults: [] },
+      contextCtx,
+    );
+    invokeHandler(handlers, "agent_end", { type: "agent_end" }, contextCtx);
     expect(compactCalls).toBe(1);
 
+    invokeHandler(
+      handlers,
+      "before_agent_start",
+      { type: "before_agent_start", prompt: "round-2", systemPrompt: "base" },
+      { sessionManager: contextCtx.sessionManager, getContextUsage: () => undefined },
+    );
     invokeHandler(handlers, "turn_start", { turnIndex: 2 }, { sessionManager: contextCtx.sessionManager });
     invokeHandler(handlers, "context", {}, contextCtx);
+    invokeHandler(
+      handlers,
+      "turn_end",
+      { turnIndex: 2, message: { stopReason: "stop" }, toolResults: [] },
+      contextCtx,
+    );
+    invokeHandler(handlers, "agent_end", { type: "agent_end" }, contextCtx);
     expect(compactCalls).toBe(1);
 
+    invokeHandler(
+      handlers,
+      "before_agent_start",
+      { type: "before_agent_start", prompt: "round-3", systemPrompt: "base" },
+      { sessionManager: contextCtx.sessionManager, getContextUsage: () => undefined },
+    );
     invokeHandler(handlers, "turn_start", { turnIndex: 3 }, { sessionManager: contextCtx.sessionManager });
     invokeHandler(handlers, "context", {}, contextCtx);
+    invokeHandler(
+      handlers,
+      "turn_end",
+      { turnIndex: 3, message: { stopReason: "stop" }, toolResults: [] },
+      contextCtx,
+    );
+    invokeHandler(handlers, "agent_end", { type: "agent_end" }, contextCtx);
     expect(compactCalls).toBe(1);
 
+    invokeHandler(
+      handlers,
+      "before_agent_start",
+      { type: "before_agent_start", prompt: "round-4", systemPrompt: "base" },
+      { sessionManager: contextCtx.sessionManager, getContextUsage: () => undefined },
+    );
     invokeHandler(handlers, "turn_start", { turnIndex: 4 }, { sessionManager: contextCtx.sessionManager });
     invokeHandler(handlers, "context", {}, contextCtx);
+    invokeHandler(
+      handlers,
+      "turn_end",
+      { turnIndex: 4, message: { stopReason: "stop" }, toolResults: [] },
+      contextCtx,
+    );
+    invokeHandler(handlers, "agent_end", { type: "agent_end" }, contextCtx);
     expect(compactCalls).toBe(2);
 
     expect(eventTypes.includes("context_compaction_breaker_opened")).toBe(true);
     expect(eventTypes.includes("context_compaction_skipped")).toBe(true);
     expect(eventTypes.includes("context_compaction_breaker_closed")).toBe(true);
+  });
+
+  test("detects missing compaction even when turnIndex does not advance", () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const skippedReasons: string[] = [];
+    const eventTypes: string[] = [];
+    let compactCalls = 0;
+    const runtime = withRuntimeConfig({
+      config: {
+        infrastructure: {
+          contextBudget: {
+            compactionCircuitBreaker: {
+              enabled: true,
+              maxConsecutiveFailures: 1,
+              cooldownTurns: 1,
+            },
+          },
+        },
+      },
+      onTurnStart: () => undefined,
+      observeContextUsage: () => undefined,
+      shouldRequestCompaction: () => true,
+      markContextCompacted: () => undefined,
+      recordEvent: (input: { type: string; payload?: { reason?: string } }) => {
+        eventTypes.push(input.type);
+        if (input.type === "context_compaction_skipped" && input.payload?.reason) {
+          skippedReasons.push(input.payload.reason);
+        }
+      },
+      contextBudget: {
+        getCompactionInstructions: () => "compact stale context",
+      },
+      buildContextInjection: () => ({
+        text: "",
+        accepted: false,
+        originalTokens: 0,
+        finalTokens: 0,
+        truncated: false,
+      }),
+    } as any);
+
+    registerContextTransform(api, runtime);
+
+    const contextCtx = {
+      sessionManager: {
+        getSessionId: () => "s-flat-turn-index",
+      },
+      getContextUsage: () => ({ tokens: 980, contextWindow: 1000, percent: 0.98 }),
+      compact: () => {
+        compactCalls += 1;
+      },
+    };
+
+    invokeHandler(
+      handlers,
+      "before_agent_start",
+      { type: "before_agent_start", prompt: "round-1", systemPrompt: "base" },
+      { sessionManager: contextCtx.sessionManager, getContextUsage: () => undefined },
+    );
+    invokeHandler(handlers, "context", {}, contextCtx);
+    invokeHandler(handlers, "turn_start", { turnIndex: 0 }, { sessionManager: contextCtx.sessionManager });
+    invokeHandler(
+      handlers,
+      "turn_end",
+      { turnIndex: 0, message: { stopReason: "stop" }, toolResults: [] },
+      contextCtx,
+    );
+    invokeHandler(handlers, "agent_end", { type: "agent_end" }, contextCtx);
+    expect(compactCalls).toBe(1);
+
+    invokeHandler(
+      handlers,
+      "before_agent_start",
+      { type: "before_agent_start", prompt: "round-2", systemPrompt: "base" },
+      { sessionManager: contextCtx.sessionManager, getContextUsage: () => undefined },
+    );
+    invokeHandler(handlers, "context", {}, contextCtx);
+    invokeHandler(handlers, "turn_start", { turnIndex: 0 }, { sessionManager: contextCtx.sessionManager });
+    invokeHandler(
+      handlers,
+      "turn_end",
+      { turnIndex: 0, message: { stopReason: "stop" }, toolResults: [] },
+      contextCtx,
+    );
+    invokeHandler(handlers, "agent_end", { type: "agent_end" }, contextCtx);
+
+    expect(compactCalls).toBe(1);
+    expect(eventTypes.includes("context_compaction_breaker_opened")).toBe(true);
+    expect(skippedReasons).toContain("circuit_open");
+  });
+
+  test("skips compaction in non-interactive mode", () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const skippedReasons: string[] = [];
+    let compactCalls = 0;
+    const runtime = withRuntimeConfig({
+      onTurnStart: () => undefined,
+      observeContextUsage: () => undefined,
+      shouldRequestCompaction: () => true,
+      markContextCompacted: () => undefined,
+      recordEvent: (input: { type: string; payload?: { reason?: string } }) => {
+        if (input.type === "context_compaction_skipped" && input.payload?.reason) {
+          skippedReasons.push(input.payload.reason);
+        }
+      },
+      contextBudget: {
+        getCompactionInstructions: () => "compact stale context",
+      },
+      buildContextInjection: () => ({
+        text: "",
+        accepted: false,
+        originalTokens: 0,
+        finalTokens: 0,
+        truncated: false,
+      }),
+    } as any);
+
+    registerContextTransform(api, runtime);
+
+    invokeHandler(handlers, "turn_start", { turnIndex: 1 }, { sessionManager: { getSessionId: () => "s-print" } });
+    invokeHandler(
+      handlers,
+      "context",
+      {},
+      {
+        hasUI: false,
+        sessionManager: {
+          getSessionId: () => "s-print",
+        },
+        getContextUsage: () => ({ tokens: 990, contextWindow: 1000, percent: 0.99 }),
+        compact: () => {
+          compactCalls += 1;
+        },
+      },
+    );
+
+    expect(compactCalls).toBe(0);
+    expect(skippedReasons).toContain("non_interactive_mode");
+  });
+
+  test("preserves compaction request across toolUse turns until agent_end", () => {
+    const { api, handlers } = createMockExtensionAPI();
+    let compactCalls = 0;
+    const runtime = withRuntimeConfig({
+      onTurnStart: () => undefined,
+      observeContextUsage: () => undefined,
+      shouldRequestCompaction: () => true,
+      markContextCompacted: () => undefined,
+      contextBudget: {
+        getCompactionInstructions: () => "compact stale context",
+      },
+      buildContextInjection: () => ({
+        text: "",
+        accepted: false,
+        originalTokens: 0,
+        finalTokens: 0,
+        truncated: false,
+      }),
+    } as any);
+
+    registerContextTransform(api, runtime);
+
+    const sessionManager = { getSessionId: () => "s-tool-use" };
+    const contextCtx = {
+      sessionManager,
+      getContextUsage: () => ({ tokens: 900, contextWindow: 1000, percent: 0.9 }),
+      compact: () => {
+        compactCalls += 1;
+      },
+    };
+
+    invokeHandler(
+      handlers,
+      "before_agent_start",
+      { type: "before_agent_start", prompt: "tool loop", systemPrompt: "base" },
+      { sessionManager, getContextUsage: () => undefined },
+    );
+    invokeHandler(handlers, "turn_start", { turnIndex: 1 }, { sessionManager });
+    invokeHandler(handlers, "context", {}, contextCtx);
+    invokeHandler(
+      handlers,
+      "turn_end",
+      { turnIndex: 1, message: { role: "assistant", stopReason: "toolUse" }, toolResults: [{}] },
+      contextCtx,
+    );
+    expect(compactCalls).toBe(0);
+
+    invokeHandler(handlers, "turn_start", { turnIndex: 2 }, { sessionManager });
+    invokeHandler(
+      handlers,
+      "turn_end",
+      { turnIndex: 2, message: { role: "assistant", stopReason: "stop" }, toolResults: [] },
+      contextCtx,
+    );
+    invokeHandler(handlers, "agent_end", { type: "agent_end" }, contextCtx);
+    expect(compactCalls).toBe(1);
+  });
+
+  test("clears queued request on aborted turn via before_agent_start", () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const skippedReasons: string[] = [];
+    let compactCalls = 0;
+    const runtime = withRuntimeConfig({
+      onTurnStart: () => undefined,
+      observeContextUsage: () => undefined,
+      shouldRequestCompaction: () => true,
+      markContextCompacted: () => undefined,
+      recordEvent: (input: { type: string; payload?: { reason?: string } }) => {
+        if (input.type === "context_compaction_skipped" && input.payload?.reason) {
+          skippedReasons.push(input.payload.reason);
+        }
+      },
+      contextBudget: {
+        getCompactionInstructions: () => "compact stale context",
+      },
+      buildContextInjection: () => ({
+        text: "",
+        accepted: false,
+        originalTokens: 0,
+        finalTokens: 0,
+        truncated: false,
+      }),
+    } as any);
+
+    registerContextTransform(api, runtime);
+
+    const sessionManager = { getSessionId: () => "s-aborted" };
+    const contextCtx = {
+      sessionManager,
+      getContextUsage: () => ({ tokens: 900, contextWindow: 1000, percent: 0.9 }),
+      compact: () => {
+        compactCalls += 1;
+      },
+    };
+
+    // Agent round 1: turn_start + context queues compaction, but no turn_end fires (aborted)
+    invokeHandler(
+      handlers,
+      "before_agent_start",
+      { type: "before_agent_start", prompt: "round-1", systemPrompt: "base" },
+      { sessionManager, getContextUsage: () => undefined },
+    );
+    invokeHandler(handlers, "turn_start", { turnIndex: 1 }, { sessionManager });
+    invokeHandler(handlers, "context", {}, contextCtx);
+    // No turn_end, no agent_end — simulating an aborted turn
+
+    // Agent round 2: before_agent_start should clear the dangling queued request
+    invokeHandler(
+      handlers,
+      "before_agent_start",
+      { type: "before_agent_start", prompt: "round-2", systemPrompt: "base" },
+      { sessionManager, getContextUsage: () => undefined },
+    );
+
+    expect(compactCalls).toBe(0);
+    expect(skippedReasons).toContain("queued_request_expired");
+  });
+
+  test("handles async compact onError callback and opens breaker", () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const skippedReasons: string[] = [];
+    const eventTypes: string[] = [];
+    let capturedOnError: ((error: unknown) => void) | null = null;
+    const runtime = withRuntimeConfig({
+      config: {
+        infrastructure: {
+          contextBudget: {
+            compactionCircuitBreaker: {
+              enabled: true,
+              maxConsecutiveFailures: 1,
+              cooldownTurns: 2,
+            },
+          },
+        },
+      },
+      onTurnStart: () => undefined,
+      observeContextUsage: () => undefined,
+      shouldRequestCompaction: () => true,
+      markContextCompacted: () => undefined,
+      recordEvent: (input: { type: string; payload?: { reason?: string } }) => {
+        eventTypes.push(input.type);
+        if (input.type === "context_compaction_skipped" && input.payload?.reason) {
+          skippedReasons.push(input.payload.reason);
+        }
+      },
+      contextBudget: {
+        getCompactionInstructions: () => "compact stale context",
+      },
+      buildContextInjection: () => ({
+        text: "",
+        accepted: false,
+        originalTokens: 0,
+        finalTokens: 0,
+        truncated: false,
+      }),
+    } as any);
+
+    registerContextTransform(api, runtime);
+
+    const sessionManager = { getSessionId: () => "s-async-error" };
+    const contextCtx = {
+      sessionManager,
+      getContextUsage: () => ({ tokens: 950, contextWindow: 1000, percent: 0.95 }),
+      compact: (opts: { onError?: (error: unknown) => void }) => {
+        // Capture the onError callback instead of calling it immediately
+        capturedOnError = opts.onError ?? null;
+      },
+    };
+
+    invokeHandler(
+      handlers,
+      "before_agent_start",
+      { type: "before_agent_start", prompt: "go", systemPrompt: "base" },
+      { sessionManager, getContextUsage: () => undefined },
+    );
+    invokeHandler(handlers, "turn_start", { turnIndex: 1 }, { sessionManager });
+    invokeHandler(handlers, "context", {}, contextCtx);
+    invokeHandler(
+      handlers,
+      "turn_end",
+      { turnIndex: 1, message: { stopReason: "stop" }, toolResults: [] },
+      contextCtx,
+    );
+    invokeHandler(handlers, "agent_end", { type: "agent_end" }, contextCtx);
+
+    // compact was called but didn't throw — onError was captured
+    expect(capturedOnError).not.toBeNull();
+    expect(skippedReasons).not.toContain("compact_call_failed");
+
+    // Now simulate async error callback
+    capturedOnError!(new Error("async compaction failed"));
+
+    expect(skippedReasons).toContain("compact_call_failed");
+    expect(eventTypes).toContain("context_compaction_breaker_opened");
   });
 
   test("clears compaction circuit state on session shutdown", () => {
@@ -407,12 +795,26 @@ describe("Extension gaps: context transform", () => {
 
     invokeHandler(handlers, "turn_start", { turnIndex: 1 }, { sessionManager });
     invokeHandler(handlers, "context", {}, contextCtx);
+    invokeHandler(
+      handlers,
+      "turn_end",
+      { turnIndex: 1, message: { stopReason: "stop" }, toolResults: [] },
+      contextCtx,
+    );
+    invokeHandler(handlers, "agent_end", { type: "agent_end" }, contextCtx);
     expect(compactCalls).toBe(1);
 
     invokeHandler(handlers, "session_shutdown", { type: "session_shutdown" }, { sessionManager });
 
     invokeHandler(handlers, "turn_start", { turnIndex: 2 }, { sessionManager });
     invokeHandler(handlers, "context", {}, contextCtx);
+    invokeHandler(
+      handlers,
+      "turn_end",
+      { turnIndex: 2, message: { stopReason: "stop" }, toolResults: [] },
+      contextCtx,
+    );
+    invokeHandler(handlers, "agent_end", { type: "agent_end" }, contextCtx);
     expect(compactCalls).toBe(2);
   });
 
@@ -464,6 +866,32 @@ describe("Extension gaps: context transform", () => {
           getSessionId: () => "s-throw",
         },
         getContextUsage: () => ({ tokens: 900, contextWindow: 1000, percent: 0.9 }),
+        compact: () => {
+          throw new Error("compact failed");
+        },
+      },
+    );
+    invokeHandler(
+      handlers,
+      "turn_end",
+      { turnIndex: 1, message: { stopReason: "stop" }, toolResults: [] },
+      {
+        sessionManager: {
+          getSessionId: () => "s-throw",
+        },
+        compact: () => {
+          throw new Error("compact failed");
+        },
+      },
+    );
+    invokeHandler(
+      handlers,
+      "agent_end",
+      { type: "agent_end" },
+      {
+        sessionManager: {
+          getSessionId: () => "s-throw",
+        },
         compact: () => {
           throw new Error("compact failed");
         },

@@ -466,6 +466,7 @@ async function run(): Promise<void> {
 
   process.on("SIGINT", handleSignal);
   process.on("SIGTERM", handleSignal);
+  let emitJsonBundle = false;
 
   try {
     if (mode === "interactive") {
@@ -484,16 +485,7 @@ async function run(): Promise<void> {
     });
 
     if (mode === "print-json") {
-      const replayEvents = runtime.queryStructuredEvents(sessionId);
-      console.log(
-        JSON.stringify({
-          schema: "roaster.stream.v1",
-          type: "roaster_event_bundle",
-          sessionId,
-          events: replayEvents,
-          costSummary: runtime.getCostSummary(sessionId),
-        }),
-      );
+      emitJsonBundle = true;
     } else {
       printCostSummary(sessionId, runtime);
     }
@@ -507,6 +499,18 @@ async function run(): Promise<void> {
       reason: "shutdown",
       interrupted: false,
     });
+    if (emitJsonBundle) {
+      const replayEvents = runtime.queryStructuredEvents(sessionId);
+      console.log(
+        JSON.stringify({
+          schema: "roaster.stream.v1",
+          type: "roaster_event_bundle",
+          sessionId,
+          events: replayEvents,
+          costSummary: runtime.getCostSummary(sessionId),
+        }),
+      );
+    }
     session.dispose();
   }
 }

@@ -129,6 +129,14 @@ describe("Context budget manager", () => {
     });
     expect(lowUsage.shouldCompact).toBe(false);
 
+    const subOnePercentUsage = manager.shouldRequestCompaction(sessionId, {
+      tokens: 2_689,
+      contextWindow: 272_000,
+      // 0.9886% from upstream telemetry (percentage points below 1)
+      percent: 0.9886029411764706,
+    });
+    expect(subOnePercentUsage.shouldCompact).toBe(false);
+
     const injection = manager.planInjection(sessionId, "hello", {
       tokens: 3_597,
       contextWindow: 272_000,

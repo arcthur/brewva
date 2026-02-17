@@ -48,6 +48,7 @@ import { VerificationGate } from "./verification/gate.js";
 import { ParallelBudgetManager } from "./parallel/budget.js";
 import { ParallelResultStore } from "./parallel/results.js";
 import { sanitizeContextText } from "./security/sanitize.js";
+import { normalizePercent } from "./utils/token.js";
 import { redactSecrets } from "./security/redact.js";
 import { checkToolAccess } from "./security/tool-policy.js";
 import { runShellCommand } from "./utils/exec.js";
@@ -393,13 +394,6 @@ export class RoasterRuntime {
     return true;
   }
 
-  private normalizePercent(value: number | null | undefined): number | null {
-    if (value === null || value === undefined) return null;
-    if (!Number.isFinite(value)) return null;
-    const ratio = value > 1 ? value / 100 : value;
-    return Math.max(0, Math.min(ratio, 1));
-  }
-
   private computeTaskStatus(input: {
     sessionId: string;
     promptText: string;
@@ -471,14 +465,17 @@ export class RoasterRuntime {
     }
 
     if (health === "ok") {
-      const ratio = this.normalizePercent(input.usage?.percent);
+      const ratio = normalizePercent(input.usage?.percent, {
+        tokens: input.usage?.tokens,
+        contextWindow: input.usage?.contextWindow,
+      });
       if (ratio !== null && this.isContextBudgetEnabled()) {
         const threshold =
-          this.normalizePercent(
+          normalizePercent(
             this.config.infrastructure.contextBudget.compactionThresholdPercent,
           ) ?? 1;
         const hardLimit =
-          this.normalizePercent(
+          normalizePercent(
             this.config.infrastructure.contextBudget.hardLimitPercent,
           ) ?? 1;
         if (ratio >= hardLimit || ratio >= threshold) {

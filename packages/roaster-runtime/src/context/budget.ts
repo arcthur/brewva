@@ -5,16 +5,7 @@ import type {
   ContextInjectionDecision,
   RoasterConfig,
 } from "../types.js";
-import { estimateTokenCount, truncateTextToTokenBudget } from "../utils/token.js";
-
-function normalizePercent(value: number | null | undefined): number | null {
-  if (value === null || value === undefined) return null;
-  if (!Number.isFinite(value)) return null;
-  // Upstream context telemetry may report percent either as a ratio (0..1)
-  // or as percentage points (0..100). Normalize to ratio for internal logic.
-  const normalized = value > 1 ? value / 100 : value;
-  return Math.max(0, Math.min(normalized, 1));
-}
+import { estimateTokenCount, normalizePercent, truncateTextToTokenBudget } from "../utils/token.js";
 
 interface SessionBudgetState {
   turnIndex: number;
@@ -47,7 +38,10 @@ export class ContextBudgetManager {
     state.lastContextUsage = {
       tokens: usage.tokens,
       contextWindow: usage.contextWindow,
-      percent: normalizePercent(usage.percent),
+      percent: normalizePercent(usage.percent, {
+        tokens: usage.tokens,
+        contextWindow: usage.contextWindow,
+      }),
     };
   }
 
@@ -65,7 +59,12 @@ export class ContextBudgetManager {
 
     this.observeUsage(sessionId, usage);
     const state = this.getOrCreate(sessionId);
-    const usagePercent = normalizePercent(usage?.percent ?? state.lastContextUsage?.percent);
+    const usagePercent = usage
+      ? normalizePercent(usage.percent, {
+          tokens: usage.tokens,
+          contextWindow: usage.contextWindow,
+        })
+      : normalizePercent(state.lastContextUsage?.percent);
     const originalTokens = estimateTokenCount(inputText);
 
     if (usagePercent !== null && usagePercent >= this.config.hardLimitPercent) {
@@ -99,7 +98,12 @@ export class ContextBudgetManager {
     this.observeUsage(sessionId, usage);
     const state = this.getOrCreate(sessionId);
     const current = usage ?? state.lastContextUsage;
-    const usagePercent = normalizePercent(current?.percent);
+    const usagePercent = usage
+      ? normalizePercent(usage.percent, {
+          tokens: usage.tokens,
+          contextWindow: usage.contextWindow,
+        })
+      : normalizePercent(current?.percent);
     if (usagePercent === null) {
       return { shouldCompact: false, usage: current };
     }
