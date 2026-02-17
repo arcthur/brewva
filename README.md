@@ -46,6 +46,11 @@ bun run start -- "Fix failing tests in runtime"
 bun run start -- --print "Refactor this function"
 ```
 
+Interactive mode uses quiet startup by default to suppress version/update noise during initialization.
+
+- Use `--verbose` to force full startup output (banner, key hints, changelog).
+- To temporarily re-enable upstream version-check notifications, run: `PI_SKIP_VERSION_CHECK= bun run start`.
+
 ## Binary Distribution
 
 Platform binaries are built with Bun compile and emitted into per-platform workspace packages:

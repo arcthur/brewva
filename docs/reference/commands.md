@@ -27,3 +27,9 @@ Implementation source: `packages/roaster-cli/src/index.ts`.
 - `--session`
 - `--verbose`
 - `--help`
+
+## Startup Defaults
+
+- Interactive mode defaults to quiet startup (reducing banner/changelog/version-check output).
+- Use `--verbose` to explicitly enable detailed startup output.
+- To temporarily restore version-check notifications, run: `PI_SKIP_VERSION_CHECK= bun run start`.

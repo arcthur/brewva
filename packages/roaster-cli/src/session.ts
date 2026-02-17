@@ -28,6 +28,13 @@ function resolveModel(modelText: string | undefined, registry: ModelRegistry): R
   return registry.find(provider, modelId);
 }
 
+function applyDefaultStartupSilence(settingsManager: SettingsManager): void {
+  settingsManager.applyOverrides({
+    quietStartup: true,
+    collapseChangelog: true,
+  });
+}
+
 export async function createRoasterSession(options: CreateRoasterSessionOptions = {}): Promise<RoasterSessionResult> {
   const cwd = resolve(options.cwd ?? process.cwd());
   const agentDir = getAgentDir();
@@ -48,6 +55,7 @@ export async function createRoasterSession(options: CreateRoasterSessionOptions 
   }
 
   const settingsManager = SettingsManager.create(cwd, agentDir);
+  applyDefaultStartupSilence(settingsManager);
 
   const extensionsEnabled = options.enableExtensions !== false;
   const resourceLoader = new DefaultResourceLoader({

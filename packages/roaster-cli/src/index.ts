@@ -304,6 +304,13 @@ function resolveEffectiveMode(parsed: CliArgs): CliMode | null {
   return "print-text";
 }
 
+function applyDefaultInteractiveEnv(mode: CliMode): void {
+  if (mode !== "interactive") return;
+  if (process.env.PI_SKIP_VERSION_CHECK === undefined) {
+    process.env.PI_SKIP_VERSION_CHECK = "1";
+  }
+}
+
 function printReplayText(events: Array<{ timestamp: number; turn?: number; type: string; payload?: Record<string, unknown> }>): void {
   for (const event of events) {
     const iso = new Date(event.timestamp).toISOString();
@@ -356,6 +363,7 @@ async function run(): Promise<void> {
   }
   const mode = resolveEffectiveMode(parsed);
   if (!mode) return;
+  applyDefaultInteractiveEnv(mode);
 
   if (!parsed.undo && !parsed.replay && mode !== "interactive" && !initialMessage) {
     printHelp();

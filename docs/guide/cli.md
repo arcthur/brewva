@@ -10,6 +10,11 @@ CLI implementation: `packages/roaster-cli/src/index.ts`.
 - Undo mode (`--undo`)
 - Replay mode (`--replay`)
 
+## Startup Behavior
+
+- Interactive mode defaults to quiet startup, reducing banner/changelog/version-check noise during initialization.
+- This behavior is enforced by `roaster-cli` and does not depend on local `pi` configuration files.
+
 ## Flags
 
 - `--cwd`
@@ -27,6 +32,14 @@ CLI implementation: `packages/roaster-cli/src/index.ts`.
 - `--session`
 - `--verbose`
 - `--help`
+
+`--verbose` overrides quiet startup and emits the full startup output.
+
+To temporarily restore upstream version-check notifications, launch with an empty override:
+
+```bash
+PI_SKIP_VERSION_CHECK= bun run start
+```
 
 ## Typical Commands
 
