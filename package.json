@@ -16,6 +16,11 @@
     "typecheck:test": "tsc -b test/tsconfig.json",
     "test:dist": "bun run typecheck && bun run script/verify-dist.ts",
     "test:docs": "bun test test/docs",
+    "test:e2e": "bun test test/e2e --timeout 600000",
+    "test:e2e:live": "bun run test:e2e:live:all",
+    "test:e2e:live:core": "PI_ROASTER_E2E_LIVE=1 bun test test/e2e/replay-and-persistence.live.test.ts test/e2e/tool-call-proof.live.test.ts test/e2e/task-spec.live.test.ts test/e2e/signal-handling.live.test.ts test/e2e/undo.live.test.ts test/e2e/print-and-json-modes.live.test.ts test/e2e/cost-tracking.live.test.ts --timeout 600000",
+    "test:e2e:live:interactive": "PI_ROASTER_E2E_LIVE=1 bun test test/e2e/interactive-multi-turn.live.test.ts --timeout 600000",
+    "test:e2e:live:all": "bun run test:e2e:live:core && bun run test:e2e:live:interactive",
     "test": "bun test",
     "start": "bun run packages/roaster-cli/src/index.ts"
   },
