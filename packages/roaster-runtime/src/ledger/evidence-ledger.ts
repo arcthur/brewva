@@ -207,6 +207,10 @@ export class EvidenceLedger {
     return rows.filter((row) => row.sessionId === sessionId);
   }
 
+  clearSessionCache(sessionId: string): void {
+    this.lastHashBySession.delete(sessionId);
+  }
+
   query(sessionId: string, query: EvidenceQuery): EvidenceLedgerRow[] {
     let rows = this.list(sessionId);
 

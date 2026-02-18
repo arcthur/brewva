@@ -51,5 +51,11 @@ export function registerCompletionGuard(pi: ExtensionAPI, runtime: RoasterRuntim
 
     return undefined;
   });
+
+  pi.on("session_shutdown", (_event, ctx) => {
+    const sessionId = ctx.sessionManager.getSessionId();
+    nudgeCounts.delete(sessionId);
+    return undefined;
+  });
 }
 

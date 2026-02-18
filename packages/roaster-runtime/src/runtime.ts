@@ -3040,16 +3040,39 @@ export class RoasterRuntime {
   clearSessionSnapshot(sessionId: string): void {
     this.snapshots.remove(sessionId);
     this.taskLedgerSnapshots.remove(sessionId);
+    this.clearSessionState(sessionId);
+  }
+
+  clearSessionState(sessionId: string): void {
     this.pendingTaskSnapshotSessions.delete(sessionId);
-    this.fileChanges.clearSession(sessionId);
+    this.activeSkillsBySession.delete(sessionId);
+    this.turnsBySession.delete(sessionId);
+    this.toolCallsBySession.delete(sessionId);
+    this.resumeHintsBySession.delete(sessionId);
     this.lastLedgerCompactionTurnBySession.delete(sessionId);
+    this.toolContractWarningsBySession.delete(sessionId);
+    this.skillBudgetWarningsBySession.delete(sessionId);
+    this.skillParallelWarningsBySession.delete(sessionId);
+    this.skillOutputsBySession.delete(sessionId);
+
+    this.fileChanges.clearSession(sessionId);
+    this.verification.stateStore.clear(sessionId);
+    this.parallel.clear(sessionId);
+    this.parallelResults.clear(sessionId);
+    this.contextBudget.clear(sessionId);
+    this.costTracker.clear(sessionId);
+
     this.contextInjection.clearSession(sessionId);
     this.latestCompactionSummaryBySession.delete(sessionId);
     this.clearInjectionFingerprintsForSession(sessionId);
     this.clearReservedInjectionTokensForSession(sessionId);
+
     this.taskStateBySession.delete(sessionId);
     this.truthStateBySession.delete(sessionId);
     this.viewportPolicyBySession.delete(sessionId);
+
+    this.events.clearSessionCache(sessionId);
+    this.ledger.clearSessionCache(sessionId);
   }
 
   async verifyCompletion(

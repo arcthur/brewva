@@ -345,3 +345,96 @@ describe("compose plan validation", () => {
     expect(result.warnings).toHaveLength(0);
   });
 });
+
+describe("session state cleanup", () => {
+  test("clearSessionState releases in-memory per-session caches", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "roaster-session-clean-"));
+    const runtime = new RoasterRuntime({ cwd: workspace });
+    const sessionId = "cleanup-state-1";
+
+    runtime.onTurnStart(sessionId, 1);
+    runtime.markToolCall(sessionId, "edit");
+    runtime.observeContextUsage(sessionId, {
+      tokens: 128,
+      contextWindow: 4096,
+      percent: 0.03125,
+    });
+    runtime.acquireParallelSlot(sessionId, "run-1");
+    runtime.recordWorkerResult(sessionId, {
+      workerId: "run-1",
+      status: "ok",
+      summary: "done",
+      patches: {
+        id: "ps-1",
+        createdAt: Date.now(),
+        changes: [{ path: "src/a.ts", action: "modify", diffText: "diff" }],
+      },
+    });
+    runtime.recordToolResult({
+      sessionId,
+      toolName: "bash",
+      args: { command: "echo ok" },
+      outputText: "ok",
+      success: true,
+    });
+    runtime.getTaskState(sessionId);
+    runtime.getTruthState(sessionId);
+    runtime.recordAssistantUsage({
+      sessionId,
+      model: "test-model",
+      inputTokens: 10,
+      outputTokens: 5,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 15,
+      costUsd: 0.0001,
+    });
+
+    expect((runtime as any).turnsBySession.has(sessionId)).toBe(true);
+    expect((runtime as any).toolCallsBySession.has(sessionId)).toBe(true);
+    expect(((runtime as any).contextBudget.sessions as Map<string, unknown>).has(sessionId)).toBe(true);
+    expect(((runtime as any).costTracker.sessions as Map<string, unknown>).has(sessionId)).toBe(true);
+    expect(((runtime as any).verification.stateStore.sessions as Map<string, unknown>).has(sessionId)).toBe(true);
+    expect(((runtime as any).events.fileHasContent as Map<string, boolean>).size).toBe(1);
+    expect(((runtime as any).ledger.lastHashBySession.has(sessionId)) as boolean).toBe(true);
+
+    runtime.clearSessionState(sessionId);
+
+    expect((runtime as any).turnsBySession.has(sessionId)).toBe(false);
+    expect((runtime as any).toolCallsBySession.has(sessionId)).toBe(false);
+    expect((runtime as any).taskStateBySession.has(sessionId)).toBe(false);
+    expect((runtime as any).truthStateBySession.has(sessionId)).toBe(false);
+    expect(((runtime as any).contextBudget.sessions as Map<string, unknown>).has(sessionId)).toBe(false);
+    expect(((runtime as any).costTracker.sessions as Map<string, unknown>).has(sessionId)).toBe(false);
+    expect(((runtime as any).verification.stateStore.sessions as Map<string, unknown>).has(sessionId)).toBe(false);
+    expect(((runtime as any).parallel.sessions as Map<string, unknown>).has(sessionId)).toBe(false);
+    expect(((runtime as any).parallelResults.sessions as Map<string, unknown>).has(sessionId)).toBe(false);
+    expect(((runtime as any).events.fileHasContent as Map<string, boolean>).size).toBe(0);
+    expect(((runtime as any).ledger.lastHashBySession.has(sessionId)) as boolean).toBe(false);
+  });
+
+  test("clearSessionSnapshot removes persisted snapshot and in-memory session state", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "roaster-session-snapshot-clean-"));
+    const runtime = new RoasterRuntime({ cwd: workspace });
+    const sessionId = "cleanup-snapshot-1";
+
+    runtime.onTurnStart(sessionId, 1);
+    runtime.markToolCall(sessionId, "edit");
+    runtime.persistSessionSnapshot(sessionId, {
+      reason: "manual",
+      interrupted: false,
+    });
+
+    expect(runtime.snapshots.load(sessionId)).toBeDefined();
+    expect((runtime as any).turnsBySession.has(sessionId)).toBe(true);
+    expect((runtime as any).toolCallsBySession.has(sessionId)).toBe(true);
+
+    runtime.clearSessionSnapshot(sessionId);
+
+    expect(runtime.snapshots.load(sessionId)).toBeUndefined();
+    expect((runtime as any).turnsBySession.has(sessionId)).toBe(false);
+    expect((runtime as any).toolCallsBySession.has(sessionId)).toBe(false);
+    expect(((runtime as any).verification.stateStore.sessions as Map<string, unknown>).has(sessionId)).toBe(false);
+    expect(((runtime as any).costTracker.sessions as Map<string, unknown>).has(sessionId)).toBe(false);
+  });
+});

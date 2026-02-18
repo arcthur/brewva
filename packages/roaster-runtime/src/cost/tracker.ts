@@ -20,7 +20,8 @@ type CostAlert = SessionCostSummary["alerts"][number];
 interface SkillCostState {
   totals: SessionCostTotals;
   usageCount: number;
-  turns: Set<number>;
+  turnCount: number;
+  lastTurnSeen: number;
 }
 
 interface ToolCostState {
@@ -139,12 +140,14 @@ export class SessionCostTracker {
     const skillState = state.skills[skillName] ?? {
       totals: emptyTotals(),
       usageCount: 0,
-      turns: new Set<number>(),
+      turnCount: 0,
+      lastTurnSeen: -1,
     };
     addTotals(skillState.totals, usage);
     skillState.usageCount += 1;
-    if (turn > 0) {
-      skillState.turns.add(turn);
+    if (turn > 0 && turn !== skillState.lastTurnSeen) {
+      skillState.turnCount += 1;
+      skillState.lastTurnSeen = turn;
     }
     state.skills[skillName] = skillState;
 
@@ -212,15 +215,11 @@ export class SessionCostTracker {
 
     const restoredSkills: SessionCostState["skills"] = {};
     for (const [skillName, skill] of Object.entries(snapshot.skills)) {
-      const turns = new Set<number>();
-      const turnCount = Math.max(0, Math.trunc(skill.turns));
-      for (let index = 1; index <= turnCount; index += 1) {
-        turns.add(index);
-      }
       restoredSkills[skillName] = {
         totals: cloneTotals(skill),
         usageCount: Math.max(0, Math.trunc(skill.usageCount)),
-        turns,
+        turnCount: Math.max(0, Math.trunc(skill.turns)),
+        lastTurnSeen: -1,
       };
     }
 
@@ -351,7 +350,7 @@ export class SessionCostTracker {
           {
             ...skillState.totals,
             usageCount: skillState.usageCount,
-            turns: skillState.turns.size,
+            turns: skillState.turnCount,
           },
         ]),
       ),

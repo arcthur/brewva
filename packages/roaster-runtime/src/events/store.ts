@@ -87,6 +87,10 @@ export class RoasterEventStore {
     return this.list(sessionId, { last: 1 })[0];
   }
 
+  clearSessionCache(sessionId: string): void {
+    this.fileHasContent.delete(this.filePathForSession(sessionId));
+  }
+
   listSessionIds(): string[] {
     if (!this.enabled) return [];
     if (!existsSync(this.dir)) return [];

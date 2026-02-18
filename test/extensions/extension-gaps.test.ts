@@ -137,6 +137,7 @@ function withRuntimeConfig<T extends Record<string, unknown>>(
   const runtimePatch = (runtime as { config?: DeepPartial<RoasterConfig> }).config;
   const defaults = {
     recordEvent: () => undefined,
+    clearSessionState: () => undefined,
     planSupplementalContextInjection: (_sessionId: string, inputText: string) => ({
       accepted: true,
       text: inputText,
@@ -2199,6 +2200,47 @@ describe("Extension integration: observability", () => {
     const reloaded = new RoasterRuntime({ cwd: workspace });
     expect(reloaded.queryEvents(sessionId).length).toBeGreaterThan(0);
     expect(reloaded.ledger.list(sessionId)).toHaveLength(1);
+  });
+
+  test("session_shutdown clears runtime in-memory session state", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "roaster-ext-shutdown-clean-"));
+    const runtime = new RoasterRuntime({ cwd: workspace });
+    const sessionId = "ext-shutdown-clean-1";
+
+    runtime.onTurnStart(sessionId, 1);
+    runtime.markToolCall(sessionId, "edit");
+    runtime.observeContextUsage(sessionId, {
+      tokens: 128,
+      contextWindow: 4096,
+      percent: 0.03125,
+    });
+    runtime.recordToolResult({
+      sessionId,
+      toolName: "bash",
+      args: { command: "echo ok" },
+      outputText: "ok",
+      success: true,
+    });
+
+    const { api, handlers } = createMockExtensionAPI();
+    registerEventStream(api, runtime);
+
+    invokeHandlers(
+      handlers,
+      "session_shutdown",
+      {},
+      {
+        cwd: workspace,
+        sessionManager: {
+          getSessionId: () => sessionId,
+        },
+      },
+    );
+
+    expect((runtime as any).turnsBySession.has(sessionId)).toBe(false);
+    expect((runtime as any).toolCallsBySession.has(sessionId)).toBe(false);
+    expect(((runtime as any).contextBudget.sessions as Map<string, unknown>).has(sessionId)).toBe(false);
+    expect(((runtime as any).costTracker.sessions as Map<string, unknown>).has(sessionId)).toBe(false);
   });
 
   test("blocked tool call is still observable as tool_call but not tool_call_marked", () => {

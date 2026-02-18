@@ -31,6 +31,9 @@ export class VerificationStateStore {
   get(sessionId: string): VerificationSessionState {
     const state = this.getOrCreate(sessionId);
     this.prune(state);
+    if (this.isEmpty(state)) {
+      this.sessions.delete(sessionId);
+    }
     return {
       lastWriteAt: state.lastWriteAt,
       evidence: [...state.evidence],
@@ -58,6 +61,10 @@ export class VerificationStateStore {
     const state = this.sessions.get(sessionId);
     if (!state) return undefined;
     this.prune(state);
+    if (this.isEmpty(state)) {
+      this.sessions.delete(sessionId);
+      return undefined;
+    }
     return {
       lastWriteAt: state.lastWriteAt,
       evidence: [...state.evidence],
@@ -95,6 +102,15 @@ export class VerificationStateStore {
     state.evidence = state.evidence.filter((entry) => now - entry.timestamp <= this.ttlMs);
     state.checkRuns = Object.fromEntries(
       Object.entries(state.checkRuns).filter(([, run]) => now - run.timestamp <= this.ttlMs),
+    );
+  }
+
+  private isEmpty(state: VerificationSessionState): boolean {
+    return (
+      state.evidence.length === 0 &&
+      Object.keys(state.checkRuns).length === 0 &&
+      state.denialCount === 0 &&
+      (state.lastWriteAt === undefined || Date.now() - state.lastWriteAt > this.ttlMs)
     );
   }
 }

@@ -60,6 +60,7 @@ Primary class: `packages/roaster-runtime/src/runtime.ts`.
 - `restoreStartupSession`
 - `persistSessionSnapshot`
 - `clearSessionSnapshot`
+- `clearSessionState`
 - `sanitizeInput`
 
 ## Type Contract

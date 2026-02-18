@@ -257,6 +257,10 @@ export function registerEventStream(pi: ExtensionAPI, runtime: RoasterRuntime): 
       sessionId,
       type: "session_shutdown",
     });
+    lastMessageUpdateAtBySession.delete(sessionId);
+    lastAssistantTextBySession.delete(sessionId);
+    assistantWindowBySession.delete(sessionId);
+    runtime.clearSessionState(sessionId);
     return undefined;
   });
 
