@@ -16,7 +16,7 @@ export interface BuildBrewvaToolsOptions {
   runtime: BrewvaToolRuntime;
 }
 
-export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefinition<any>[] {
+export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefinition[] {
   return [
     ...createLspTools({ runtime: options.runtime }),
     ...createAstGrepTools({ runtime: options.runtime }),

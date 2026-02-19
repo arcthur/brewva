@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Bun `1.3.9+`
-- Node-compatible environment for CLI execution
+- Node `^20.19.0 || >=22.12.0` for CLI execution and tooling
 - Model/provider setup supported by `@mariozechner/pi-coding-agent`
 
 ## Local Setup

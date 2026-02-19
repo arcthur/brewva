@@ -48,7 +48,8 @@ function extractLinks(markdown: string, sourceFile: string): MarkdownLink[] {
 
 function normalizeLinkTarget(rawTarget: string): string {
   const trimmed = rawTarget.trim();
-  const unwrapped = trimmed.startsWith("<") && trimmed.endsWith(">") ? trimmed.slice(1, -1) : trimmed;
+  const unwrapped =
+    trimmed.startsWith("<") && trimmed.endsWith(">") ? trimmed.slice(1, -1) : trimmed;
   return unwrapped.split(/\s+/)[0] ?? "";
 }
 
@@ -81,7 +82,9 @@ describe("README markdown links", () => {
       const resolvedPath = resolve(dirname(readmePath), decodedPath);
 
       if (!existsSync(resolvedPath)) {
-        errors.push(`${readmePath}:${link.lineNumber} missing link target "${target}" (resolved: ${resolvedPath})`);
+        errors.push(
+          `${readmePath}:${link.lineNumber} missing link target "${target}" (resolved: ${resolvedPath})`,
+        );
       }
     }
 

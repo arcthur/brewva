@@ -2,12 +2,12 @@
 
 ## Choose Search Method
 
-| Question Type | Command Family | Why |
-| --- | --- | --- |
-| "When was this string added or removed?" | `git log -S` | Tracks exact string count changes |
-| "When did code matching this pattern change?" | `git log -G` | Regex-based history search |
-| "Who touched this line?" | `git blame` | Line ownership and origin commit |
-| "Which commit introduced this regression?" | `git bisect` | Binary search on history |
+| Question Type                                 | Command Family | Why                               |
+| --------------------------------------------- | -------------- | --------------------------------- |
+| "When was this string added or removed?"      | `git log -S`   | Tracks exact string count changes |
+| "When did code matching this pattern change?" | `git log -G`   | Regex-based history search        |
+| "Who touched this line?"                      | `git blame`    | Line ownership and origin commit  |
+| "Which commit introduced this regression?"    | `git bisect`   | Binary search on history          |
 
 ## Pickaxe (`-S`) Examples
 
@@ -18,6 +18,7 @@ git log -S "API_KEY" --patch -- src/config.ts
 ```
 
 Tips:
+
 - Add `--patch` when you need the actual diff context.
 - Scope with `-- <path>` to reduce noise.
 
@@ -30,6 +31,7 @@ git log -G "try\\s*\\{" --patch -- src/runtime.ts
 ```
 
 Tips:
+
 - Use escaped regex patterns to avoid shell interpretation issues.
 - Pair with `--patch` for evidence output.
 
@@ -42,6 +44,7 @@ git blame -w src/runtime.ts
 ```
 
 Useful flags:
+
 - `-L start,end`: limit line range.
 - `-w`: ignore whitespace-only edits.
 
@@ -58,6 +61,7 @@ git bisect reset
 ```
 
 Use bisect only when:
+
 - You have one known good commit.
 - You have one reproducible bad state.
 - You can evaluate each step quickly.

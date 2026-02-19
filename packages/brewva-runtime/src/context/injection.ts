@@ -49,8 +49,13 @@ export class ContextInjectionCollector {
   private readonly entriesBySession = new Map<string, Map<string, ContextInjectionEntry>>();
   private readonly onceKeysBySession = new Map<string, Set<string>>();
 
-  constructor(options: { sourceTokenLimits?: Record<string, number>; truncationStrategy?: ContextInjectionTruncationStrategy } = {}) {
-    this.sourceTokenLimits = { ...(options.sourceTokenLimits ?? {}) };
+  constructor(
+    options: {
+      sourceTokenLimits?: Record<string, number>;
+      truncationStrategy?: ContextInjectionTruncationStrategy;
+    } = {},
+  ) {
+    this.sourceTokenLimits = options.sourceTokenLimits ? { ...options.sourceTokenLimits } : {};
     this.truncationStrategy = options.truncationStrategy ?? "summarize";
   }
 
@@ -102,14 +107,13 @@ export class ContextInjectionCollector {
       return { text: "", entries: [], estimatedTokens: 0, truncated: false, consumedKeys: [] };
     }
 
-    const sorted = [...sessionEntries.entries()]
-      .sort((left, right) => {
-        const leftEntry = left[1];
-        const rightEntry = right[1];
-        const byPriority = PRIORITY_ORDER[leftEntry.priority] - PRIORITY_ORDER[rightEntry.priority];
-        if (byPriority !== 0) return byPriority;
-        return leftEntry.timestamp - rightEntry.timestamp;
-      });
+    const sorted = [...sessionEntries.entries()].toSorted((left, right) => {
+      const leftEntry = left[1];
+      const rightEntry = right[1];
+      const byPriority = PRIORITY_ORDER[leftEntry.priority] - PRIORITY_ORDER[rightEntry.priority];
+      if (byPriority !== 0) return byPriority;
+      return leftEntry.timestamp - rightEntry.timestamp;
+    });
 
     const consumedKeys: string[] = [];
     const accepted: ContextInjectionEntry[] = [];
@@ -205,7 +209,10 @@ export class ContextInjectionCollector {
     this.onceKeysBySession.delete(sessionId);
   }
 
-  private fitEntryToBudget(entry: ContextInjectionEntry, tokenBudget: number): ContextInjectionEntry | null {
+  private fitEntryToBudget(
+    entry: ContextInjectionEntry,
+    tokenBudget: number,
+  ): ContextInjectionEntry | null {
     const budget = Math.max(0, Math.floor(tokenBudget));
     if (budget <= 0) return null;
     if (entry.estimatedTokens <= budget) return entry;

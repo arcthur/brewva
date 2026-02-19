@@ -1,7 +1,7 @@
+import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { TaskSpec } from "@brewva/brewva-runtime";
 
@@ -61,11 +61,7 @@ describe("Viewport LoopPolicy (SNR-driven)", () => {
     const writeModule = (name: string, symbols: string[]): void => {
       writeFileSync(
         join(workspace, `src/${name}.ts`),
-        symbols
-          .map(
-            (symbol) => `export const ${symbol} = "${symbol.toLowerCase()}";`,
-          )
-          .join("\n"),
+        symbols.map((symbol) => `export const ${symbol} = "${symbol.toLowerCase()}";`).join("\n"),
         "utf8",
       );
     };

@@ -43,7 +43,8 @@ export function classifyEvidence(input: {
 
   if (LSP_DIAG_TOOLS.has(toolName)) {
     const severity = input.args?.severity;
-    const unfiltered = severity === undefined || severity === null || severity === "all" || severity === "";
+    const unfiltered =
+      severity === undefined || severity === null || severity === "all" || severity === "";
     if (unfiltered && outputText.includes("no diagnostics found")) {
       evidence.push({
         kind: "lsp_clean",

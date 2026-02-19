@@ -126,7 +126,11 @@ export class SessionCostTracker {
     }
   }
 
-  recordUsage(sessionId: string, usage: ModelUsageInput, context: UsageContextInput): RecordUsageResult {
+  recordUsage(
+    sessionId: string,
+    usage: ModelUsageInput,
+    context: UsageContextInput,
+  ): RecordUsageResult {
     const state = this.getOrCreate(sessionId);
     const newAlerts: CostAlert[] = [];
 
@@ -179,7 +183,9 @@ export class SessionCostTracker {
     const sessionExceeded = maxSession > 0 && state.totals.totalCostUsd >= maxSession;
     const exceededSkills = this.getExceededSkillNames(state);
     const normalizedSkill = skillName?.trim();
-    const skillExceeded = normalizedSkill ? exceededSkills.includes(normalizedSkill) : exceededSkills.length > 0;
+    const skillExceeded = normalizedSkill
+      ? exceededSkills.includes(normalizedSkill)
+      : exceededSkills.length > 0;
     const blocked = action === "block_tools" && (sessionExceeded || skillExceeded);
 
     let reason: string | undefined;
@@ -229,7 +235,8 @@ export class SessionCostTracker {
       (threshold > 0 && snapshot.totalCostUsd >= threshold);
     const sessionCapAlerted =
       snapshot.alerts.some((alert) => alert.kind === "session_cap") ||
-      (this.config.maxCostUsdPerSession > 0 && snapshot.totalCostUsd >= this.config.maxCostUsdPerSession);
+      (this.config.maxCostUsdPerSession > 0 &&
+        snapshot.totalCostUsd >= this.config.maxCostUsdPerSession);
 
     const skillCapAlerted = new Set<string>(
       snapshot.alerts
@@ -246,7 +253,9 @@ export class SessionCostTracker {
 
     const restored: SessionCostState = {
       totals: cloneTotals(snapshot),
-      models: Object.fromEntries(Object.entries(snapshot.models).map(([name, totals]) => [name, cloneTotals(totals)])),
+      models: Object.fromEntries(
+        Object.entries(snapshot.models).map(([name, totals]) => [name, cloneTotals(totals)]),
+      ),
       skills: restoredSkills,
       tools: Object.fromEntries(
         Object.entries(snapshot.tools).map(([name, tool]) => [
@@ -271,9 +280,14 @@ export class SessionCostTracker {
     this.sessions.delete(sessionId);
   }
 
-  private allocateUsageToTools(state: SessionCostState, turn: number, usage: ModelUsageInput): void {
+  private allocateUsageToTools(
+    state: SessionCostState,
+    turn: number,
+    usage: ModelUsageInput,
+  ): void {
     const callsForTurn = state.turnToolCalls.get(turn);
-    const weightedTools = callsForTurn && callsForTurn.size > 0 ? callsForTurn : new Map<string, number>([["llm", 1]]);
+    const weightedTools =
+      callsForTurn && callsForTurn.size > 0 ? callsForTurn : new Map<string, number>([["llm", 1]]);
     const totalWeight = [...weightedTools.values()].reduce((sum, value) => sum + value, 0);
     if (totalWeight <= 0) return;
 
@@ -295,7 +309,11 @@ export class SessionCostTracker {
     const maxSession = this.config.maxCostUsdPerSession;
     if (maxSession > 0) {
       const threshold = maxSession * this.config.alertThresholdRatio;
-      if (!state.sessionThresholdAlerted && threshold > 0 && state.totals.totalCostUsd >= threshold) {
+      if (
+        !state.sessionThresholdAlerted &&
+        threshold > 0 &&
+        state.totals.totalCostUsd >= threshold
+      ) {
         const alert: CostAlert = {
           timestamp: now,
           kind: "session_threshold",
@@ -343,7 +361,9 @@ export class SessionCostTracker {
     const budgetStatus = this.getBudgetStatusFromState(state);
     return {
       ...state.totals,
-      models: Object.fromEntries(Object.entries(state.models).map(([name, totals]) => [name, { ...totals }])),
+      models: Object.fromEntries(
+        Object.entries(state.models).map(([name, totals]) => [name, { ...totals }]),
+      ),
       skills: Object.fromEntries(
         Object.entries(state.skills).map(([name, skillState]) => [
           name,
@@ -370,9 +390,12 @@ export class SessionCostTracker {
   }
 
   private getBudgetStatusFromState(state: SessionCostState): SessionCostSummary["budget"] {
-    const sessionExceeded = this.config.maxCostUsdPerSession > 0 && state.totals.totalCostUsd >= this.config.maxCostUsdPerSession;
+    const sessionExceeded =
+      this.config.maxCostUsdPerSession > 0 &&
+      state.totals.totalCostUsd >= this.config.maxCostUsdPerSession;
     const skillExceeded = this.getExceededSkillNames(state).length > 0;
-    const blocked = this.config.actionOnExceed === "block_tools" && (sessionExceeded || skillExceeded);
+    const blocked =
+      this.config.actionOnExceed === "block_tools" && (sessionExceeded || skillExceeded);
     return {
       action: this.config.actionOnExceed,
       sessionExceeded,

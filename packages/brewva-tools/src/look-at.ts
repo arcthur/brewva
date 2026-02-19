@@ -3,6 +3,7 @@ import { extname, resolve } from "node:path";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { textResult } from "./utils/result.js";
+import { defineTool } from "./utils/tool.js";
 
 function isLikelyText(content: Buffer): boolean {
   const sample = content.subarray(0, Math.min(content.length, 1024));
@@ -27,13 +28,16 @@ function scoreLine(line: string, keywords: string[]): number {
 
 function extractRelevantText(text: string, goal: string): string {
   const lines = text.split("\n");
-  const keywords = goal.toLowerCase().split(/[^a-z0-9_]+/).filter(Boolean);
+  const keywords = goal
+    .toLowerCase()
+    .split(/[^a-z0-9_]+/)
+    .filter(Boolean);
   const ranked = lines
     .map((line, index) => ({ line, index, score: scoreLine(line, keywords) }))
     .filter((row) => row.score > 0)
-    .sort((a, b) => b.score - a.score)
+    .toSorted((a, b) => b.score - a.score)
     .slice(0, 12)
-    .sort((a, b) => a.index - b.index);
+    .toSorted((a, b) => a.index - b.index);
 
   if (ranked.length === 0) {
     return lines.slice(0, 80).join("\n");
@@ -46,8 +50,8 @@ function extractRelevantText(text: string, goal: string): string {
   return out.join("\n");
 }
 
-export function createLookAtTool(): ToolDefinition<any> {
-  return {
+export function createLookAtTool(): ToolDefinition {
+  return defineTool({
     name: "look_at",
     label: "Look At",
     description: "Analyze file content and extract goal-focused findings.",
@@ -86,14 +90,9 @@ export function createLookAtTool(): ToolDefinition<any> {
       const excerpt = extractRelevantText(text, params.goal);
 
       return textResult(
-        [
-          `Analysis goal: ${params.goal}`,
-          `File: ${absolute}`,
-          "",
-          excerpt,
-        ].join("\n"),
+        [`Analysis goal: ${params.goal}`, `File: ${absolute}`, "", excerpt].join("\n"),
         { binary: false, size: stats.size },
       );
     },
-  };
+  });
 }

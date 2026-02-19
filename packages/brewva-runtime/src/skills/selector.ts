@@ -12,14 +12,20 @@ function costWeight(costHint: SkillsIndexEntry["costHint"]): number {
   return 0;
 }
 
-export function selectTopKSkills(message: string, index: SkillsIndexEntry[], k: number): SkillSelection[] {
+export function selectTopKSkills(
+  message: string,
+  index: SkillsIndexEntry[],
+  k: number,
+): SkillSelection[] {
   const text = message.toLowerCase();
   const tokens = new Set(tokenize(message));
 
   const scored: SkillSelection[] = [];
 
   for (const entry of index) {
-    const anti = entry.antiTags.some((tag) => tokens.has(tag.toLowerCase()) || text.includes(tag.toLowerCase()));
+    const anti = entry.antiTags.some(
+      (tag) => tokens.has(tag.toLowerCase()) || text.includes(tag.toLowerCase()),
+    );
     if (anti) {
       continue;
     }
@@ -59,10 +65,10 @@ export function selectTopKSkills(message: string, index: SkillsIndexEntry[], k: 
     });
   }
 
-  scored.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    return a.name.localeCompare(b.name);
-  });
-
-  return scored.slice(0, Math.max(1, k));
+  return scored
+    .toSorted((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.name.localeCompare(b.name);
+    })
+    .slice(0, Math.max(1, k));
 }

@@ -20,6 +20,9 @@ describe("docs/reference extensions coverage", () => {
 
     const missing = EXPECTED_SYMBOLS.filter((name) => !markdown.includes(`\`${name}\``));
 
-    expect(missing, `Missing extension symbols in docs/reference/extensions.md: ${missing.join(", ")}`).toEqual([]);
+    expect(
+      missing,
+      `Missing extension symbols in docs/reference/extensions.md: ${missing.join(", ")}`,
+    ).toEqual([]);
   });
 });

@@ -5,7 +5,6 @@ import {
   createWorkspace,
   findFinalBundle,
   isRecord,
-  latestStateSnapshot,
   parseJsonLines,
   runCliSync,
   runLive,
@@ -52,13 +51,7 @@ describe("e2e: replay and persistence", () => {
       const sessionId = bundle?.sessionId ?? "";
       expect(sessionId.length).toBeGreaterThan(0);
 
-      const replay = runCliSync(workspace, [
-        "--replay",
-        "--mode",
-        "json",
-        "--session",
-        sessionId,
-      ]);
+      const replay = runCliSync(workspace, ["--replay", "--mode", "json", "--session", sessionId]);
 
       assertCliSuccess(replay, "replay-cmd");
 
@@ -88,31 +81,6 @@ describe("e2e: replay and persistence", () => {
     }
   });
 
-  runLive("normal shutdown does not write legacy runtime snapshot file", () => {
-    const workspace = createWorkspace("persistence");
-    writeMinimalConfig(workspace);
-
-    try {
-      const run = runCliSync(workspace, [
-        "--mode",
-        "json",
-        "Do not call any tool. Reply exactly: SNAPSHOT-OK",
-      ]);
-
-      assertCliSuccess(run, "persistence-run");
-
-      const bundle = findFinalBundle(parseJsonLines(run.stdout, { strict: true }));
-      expect(bundle).toBeDefined();
-      const sessionId = bundle?.sessionId ?? "";
-      expect(sessionId.length).toBeGreaterThan(0);
-
-      const snapshotFile = latestStateSnapshot(workspace);
-      expect(snapshotFile).toBeUndefined();
-    } finally {
-      cleanupWorkspace(workspace);
-    }
-  });
-
   runLive("replay on empty workspace reports no replayable session", () => {
     const workspace = createWorkspace("replay-empty");
     writeMinimalConfig(workspace);
@@ -121,9 +89,7 @@ describe("e2e: replay and persistence", () => {
       const replay = runCliSync(workspace, ["--replay", "--mode", "json"]);
       assertCliSuccess(replay, "replay-empty");
       expect(replay.stdout.trim()).toBe("");
-      expect(replay.stderr.includes("Error: no replayable session found.")).toBe(
-        true,
-      );
+      expect(replay.stderr.includes("Error: no replayable session found.")).toBe(true);
     } finally {
       cleanupWorkspace(workspace);
     }

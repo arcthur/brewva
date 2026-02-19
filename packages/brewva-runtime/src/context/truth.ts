@@ -1,7 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-function findSectionLines(lines: string[], headerPattern: RegExp): { start: number; end: number } | null {
+function findSectionLines(
+  lines: string[],
+  headerPattern: RegExp,
+): { start: number; end: number } | null {
   const startIndex = lines.findIndex((line) => headerPattern.test(line.trim()));
   if (startIndex < 0) return null;
 
@@ -30,10 +33,7 @@ function trimToCharBudget(lines: string[], maxChars: number): string[] {
   return out;
 }
 
-export function buildTruthLedgerBlock(input: {
-  cwd: string;
-  maxChars?: number;
-}): string {
+export function buildTruthLedgerBlock(input: { cwd: string; maxChars?: number }): string {
   const agentsPath = resolve(input.cwd, "AGENTS.md");
   if (!existsSync(agentsPath)) return "";
 
@@ -52,7 +52,9 @@ export function buildTruthLedgerBlock(input: {
   const cliNameMatch = /User-facing command name is\s+`([^`]+)`/i.exec(sectionText);
   const cliName = cliNameMatch?.[1]?.trim();
 
-  const scopeMatches = [...sectionText.matchAll(/`(@[^`/]+)\/[^`]+`/g)].map((match) => match[1]).filter(Boolean);
+  const scopeMatches = [...sectionText.matchAll(/`(@[^`/]+)\/[^`]+`/g)]
+    .map((match) => match[1])
+    .filter(Boolean);
   const scope = scopeMatches.length > 0 ? scopeMatches[0] : undefined;
 
   const bunVersionMatch = /Bun\s+`([^`]+)`/i.exec(sectionText);
@@ -73,7 +75,10 @@ export function buildTruthLedgerBlock(input: {
     const importsBase = scope ? `${scope}/* only` : "workspace package imports";
     const hasNoAlias = sectionText.includes("`@/...`") || sectionText.includes("alias schemes");
     const hasNoSrcDistMix = sectionText.includes("src") && sectionText.includes("dist");
-    const suffixParts = [hasNoAlias ? "no @/..." : null, hasNoSrcDistMix ? "no src/dist mix" : null].filter(Boolean);
+    const suffixParts = [
+      hasNoAlias ? "no @/..." : null,
+      hasNoSrcDistMix ? "no src/dist mix" : null,
+    ].filter(Boolean);
     const suffix = suffixParts.length > 0 ? `; ${suffixParts.join("; ")}.` : ".";
     out.push(`- Imports: ${importsBase}${suffix}`);
   }
@@ -82,9 +87,15 @@ export function buildTruthLedgerBlock(input: {
     out.push("- Release gate: bun run test:dist for exports/CLI/dist changes.");
   }
 
-  const hasBunHints = Boolean(bunVersion) || sectionText.includes("Use Bun") || sectionText.includes("bun run") || sectionText.includes("bun test");
+  const hasBunHints =
+    Boolean(bunVersion) ||
+    sectionText.includes("Use Bun") ||
+    sectionText.includes("bun run") ||
+    sectionText.includes("bun test");
   if (hasBunHints) {
-    const bunLine = bunVersion ? `- Bun: bun run/test; CI bun@${bunVersion}.` : "- Bun: bun run/test.";
+    const bunLine = bunVersion
+      ? `- Bun: bun run/test; CI bun@${bunVersion}.`
+      : "- Bun: bun run/test.";
     out.push(bunLine);
   }
 

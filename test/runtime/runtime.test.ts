@@ -1,7 +1,7 @@
+import { describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_BREWVA_CONFIG,
   ParallelBudgetManager,
@@ -300,7 +300,11 @@ describe("compose plan validation", () => {
       steps: [
         { skill: "exploration", produces: ["tree_summary"] },
         { skill: "planning", consumes: ["tree_summary"], produces: ["execution_steps"] },
-        { skill: "patching", consumes: ["execution_steps"], produces: ["fix_description", "verification"] },
+        {
+          skill: "patching",
+          consumes: ["execution_steps"],
+          produces: ["fix_description", "verification"],
+        },
       ],
     };
 
@@ -313,9 +317,7 @@ describe("compose plan validation", () => {
     const runtime = new BrewvaRuntime({ cwd: repoRoot() });
 
     const invalidPlan = {
-      steps: [
-        { skill: "nonexistent_skill", produces: ["foo"] },
-      ],
+      steps: [{ skill: "nonexistent_skill", produces: ["foo"] }],
     };
 
     const result = runtime.validateComposePlan(invalidPlan);
@@ -327,9 +329,7 @@ describe("compose plan validation", () => {
     const runtime = new BrewvaRuntime({ cwd: repoRoot() });
 
     const plan = {
-      steps: [
-        { skill: "patching", consumes: ["execution_steps"], produces: ["fix_description"] },
-      ],
+      steps: [{ skill: "patching", consumes: ["execution_steps"], produces: ["fix_description"] }],
     };
 
     const result = runtime.validateComposePlan(plan);
@@ -398,24 +398,38 @@ describe("session state cleanup", () => {
 
     expect((runtime as any).turnsBySession.has(sessionId)).toBe(true);
     expect((runtime as any).toolCallsBySession.has(sessionId)).toBe(true);
-    expect(((runtime as any).contextBudget.sessions as Map<string, unknown>).has(sessionId)).toBe(true);
-    expect(((runtime as any).costTracker.sessions as Map<string, unknown>).has(sessionId)).toBe(true);
-    expect(((runtime as any).verification.stateStore.sessions as Map<string, unknown>).has(sessionId)).toBe(true);
+    expect(((runtime as any).contextBudget.sessions as Map<string, unknown>).has(sessionId)).toBe(
+      true,
+    );
+    expect(((runtime as any).costTracker.sessions as Map<string, unknown>).has(sessionId)).toBe(
+      true,
+    );
+    expect(
+      ((runtime as any).verification.stateStore.sessions as Map<string, unknown>).has(sessionId),
+    ).toBe(true);
     expect(((runtime as any).events.fileHasContent as Map<string, boolean>).size).toBe(1);
-    expect(((runtime as any).ledger.lastHashBySession.has(sessionId)) as boolean).toBe(true);
+    expect((runtime as any).ledger.lastHashBySession.has(sessionId) as boolean).toBe(true);
 
     runtime.clearSessionState(sessionId);
 
     expect((runtime as any).turnsBySession.has(sessionId)).toBe(false);
     expect((runtime as any).toolCallsBySession.has(sessionId)).toBe(false);
     expect((runtime as any).turnReplay.hasSession(sessionId)).toBe(false);
-    expect(((runtime as any).contextBudget.sessions as Map<string, unknown>).has(sessionId)).toBe(false);
-    expect(((runtime as any).costTracker.sessions as Map<string, unknown>).has(sessionId)).toBe(false);
-    expect(((runtime as any).verification.stateStore.sessions as Map<string, unknown>).has(sessionId)).toBe(false);
+    expect(((runtime as any).contextBudget.sessions as Map<string, unknown>).has(sessionId)).toBe(
+      false,
+    );
+    expect(((runtime as any).costTracker.sessions as Map<string, unknown>).has(sessionId)).toBe(
+      false,
+    );
+    expect(
+      ((runtime as any).verification.stateStore.sessions as Map<string, unknown>).has(sessionId),
+    ).toBe(false);
     expect(((runtime as any).parallel.sessions as Map<string, unknown>).has(sessionId)).toBe(false);
-    expect(((runtime as any).parallelResults.sessions as Map<string, unknown>).has(sessionId)).toBe(false);
+    expect(((runtime as any).parallelResults.sessions as Map<string, unknown>).has(sessionId)).toBe(
+      false,
+    );
     expect(((runtime as any).events.fileHasContent as Map<string, boolean>).size).toBe(0);
-    expect(((runtime as any).ledger.lastHashBySession.has(sessionId)) as boolean).toBe(false);
+    expect((runtime as any).ledger.lastHashBySession.has(sessionId) as boolean).toBe(false);
   });
 
   test("invalidates replay cache on task events and rebuilds from tape", () => {
@@ -442,7 +456,6 @@ describe("session state cleanup", () => {
     expect(updated.items[0]?.text).toBe("item-1");
     expect(turnReplay.hasSession(sessionId)).toBe(true);
   });
-
 });
 
 describe("tape checkpoint automation", () => {
@@ -478,12 +491,8 @@ describe("tape checkpoint automation", () => {
       };
     };
     expect(checkpointPayload.schema).toBe("brewva.tape.checkpoint.v1");
-    expect(
-      checkpointPayload.state?.task?.items?.some((item) => item.text === "item-1"),
-    ).toBe(true);
-    expect(
-      checkpointPayload.state?.truth?.facts?.some((fact) => fact.id === "truth-1"),
-    ).toBe(true);
+    expect(checkpointPayload.state?.task?.items?.some((item) => item.text === "item-1")).toBe(true);
+    expect(checkpointPayload.state?.truth?.facts?.some((fact) => fact.id === "truth-1")).toBe(true);
 
     runtime.upsertTruthFact(sessionId, {
       id: "truth-2",
@@ -496,11 +505,7 @@ describe("tape checkpoint automation", () => {
     const reloaded = new BrewvaRuntime({ cwd: workspace, config });
     const taskState = reloaded.getTaskState(sessionId);
     const truthState = reloaded.getTruthState(sessionId);
-    expect(taskState.items.map((item) => item.text)).toEqual([
-      "item-1",
-      "item-2",
-      "item-3",
-    ]);
+    expect(taskState.items.map((item) => item.text)).toEqual(["item-1", "item-2", "item-3"]);
     expect(truthState.facts.some((fact) => fact.id === "truth-1")).toBe(true);
     expect(truthState.facts.some((fact) => fact.id === "truth-2")).toBe(true);
   });

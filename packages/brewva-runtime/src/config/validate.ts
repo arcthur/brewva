@@ -1,23 +1,29 @@
 import { Ajv, type ErrorObject, type ValidateFunction } from "ajv";
 import { loadBrewvaConfigSchema } from "./schema.js";
 
-let cachedValidator: { validate: ValidateFunction<unknown>; schemaPath: string } | null = null;
+let cachedValidator: { validate: ValidateFunction; schemaPath: string } | null = null;
 let cachedError: Error | null = null;
 
 function formatError(error: ErrorObject): string {
-  const instancePath = error.instancePath && error.instancePath.length > 0 ? error.instancePath : "/";
+  const instancePath =
+    error.instancePath && error.instancePath.length > 0 ? error.instancePath : "/";
   if (error.keyword === "additionalProperties") {
-    const additionalProperty = (error.params as { additionalProperty?: unknown } | undefined)?.additionalProperty;
+    const additionalProperty = (error.params as { additionalProperty?: unknown } | undefined)
+      ?.additionalProperty;
     if (typeof additionalProperty === "string" && additionalProperty.length > 0) {
       return `${instancePath}: unknown property "${additionalProperty}"`;
     }
   }
-  const message = typeof error.message === "string" && error.message.length > 0 ? error.message : "invalid value";
+  const message =
+    typeof error.message === "string" && error.message.length > 0 ? error.message : "invalid value";
   return `${instancePath}: ${message}`;
 }
 
-function getValidator(): { ok: true; validate: ValidateFunction<unknown>; schemaPath: string } | { ok: false; error: Error } {
-  if (cachedValidator) return { ok: true, validate: cachedValidator.validate, schemaPath: cachedValidator.schemaPath };
+function getValidator():
+  | { ok: true; validate: ValidateFunction; schemaPath: string }
+  | { ok: false; error: Error } {
+  if (cachedValidator)
+    return { ok: true, validate: cachedValidator.validate, schemaPath: cachedValidator.schemaPath };
   if (cachedError) return { ok: false, error: cachedError };
 
   const schemaLoad = loadBrewvaConfigSchema();

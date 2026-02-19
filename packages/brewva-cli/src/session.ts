@@ -1,4 +1,11 @@
 import { join, resolve } from "node:path";
+import { createBrewvaExtension } from "@brewva/brewva-extensions";
+import {
+  BrewvaRuntime,
+  resolveBrewvaAgentDir,
+  type CreateBrewvaSessionOptions,
+} from "@brewva/brewva-runtime";
+import { buildBrewvaTools } from "@brewva/brewva-tools";
 import {
   AuthStorage,
   createAgentSession,
@@ -7,20 +14,16 @@ import {
   SettingsManager,
   type CreateAgentSessionResult,
 } from "@mariozechner/pi-coding-agent";
-import {
-  BrewvaRuntime,
-  resolveBrewvaAgentDir,
-  type CreateBrewvaSessionOptions,
-} from "@brewva/brewva-runtime";
-import { buildBrewvaTools } from "@brewva/brewva-tools";
-import { createBrewvaExtension } from "@brewva/brewva-extensions";
 import { registerRuntimeCoreEventBridge } from "./session-event-bridge.js";
 
 export interface BrewvaSessionResult extends CreateAgentSessionResult {
   runtime: BrewvaRuntime;
 }
 
-function resolveModel(modelText: string | undefined, registry: ModelRegistry): ReturnType<ModelRegistry["find"]> {
+function resolveModel(
+  modelText: string | undefined,
+  registry: ModelRegistry,
+): ReturnType<ModelRegistry["find"]> {
   if (!modelText) return undefined;
   const parts = modelText.split("/");
   if (parts.length !== 2) return undefined;
@@ -42,12 +45,11 @@ function applyRuntimeUiSettings(
   });
 }
 
-export async function createBrewvaSession(options: CreateBrewvaSessionOptions = {}): Promise<BrewvaSessionResult> {
+export async function createBrewvaSession(
+  options: CreateBrewvaSessionOptions = {},
+): Promise<BrewvaSessionResult> {
   const cwd = resolve(options.cwd ?? process.cwd());
   const agentDir = resolveBrewvaAgentDir();
-  // legacy compat: upstream pi-coding-agent reads PI_CODING_AGENT_DIR
-  process.env.PI_CODING_AGENT_DIR = agentDir;
-  process.env["BREWVA_CODING_AGENT_DIR"] = agentDir;
 
   const authStorage = AuthStorage.create(join(agentDir, "auth.json"));
   const modelRegistry = new ModelRegistry(authStorage, join(agentDir, "models.json"));
@@ -72,7 +74,9 @@ export async function createBrewvaSession(options: CreateBrewvaSessionOptions = 
     cwd,
     agentDir,
     settingsManager,
-    extensionFactories: extensionsEnabled ? [createBrewvaExtension({ runtime, registerTools: true })] : [],
+    extensionFactories: extensionsEnabled
+      ? [createBrewvaExtension({ runtime, registerTools: true })]
+      : [],
   });
   await resourceLoader.reload();
 

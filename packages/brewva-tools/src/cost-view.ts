@@ -1,8 +1,9 @@
-import { Type } from "@sinclair/typebox";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
+import { defineTool } from "./utils/tool.js";
 
 function formatTopRows<T>(
   rows: Array<[string, T]>,
@@ -14,8 +15,8 @@ function formatTopRows<T>(
   return rows.slice(0, options.limit).map(([name, value]) => options.line(name, value));
 }
 
-export function createCostViewTool(options: BrewvaToolOptions): ToolDefinition<any> {
-  return {
+export function createCostViewTool(options: BrewvaToolOptions): ToolDefinition {
+  return defineTool({
     name: "cost_view",
     label: "Cost View",
     description: "Show session, skill, and tool cost breakdown with budget status.",
@@ -27,8 +28,12 @@ export function createCostViewTool(options: BrewvaToolOptions): ToolDefinition<a
       const top = typeof params.top === "number" ? Math.max(1, Math.trunc(params.top)) : 5;
       const summary = options.runtime.getCostSummary(sessionId);
 
-      const skillRows = Object.entries(summary.skills).sort((a, b) => b[1].totalCostUsd - a[1].totalCostUsd);
-      const toolRows = Object.entries(summary.tools).sort((a, b) => b[1].allocatedCostUsd - a[1].allocatedCostUsd);
+      const skillRows = Object.entries(summary.skills).toSorted(
+        (a, b) => b[1].totalCostUsd - a[1].totalCostUsd,
+      );
+      const toolRows = Object.entries(summary.tools).toSorted(
+        (a, b) => b[1].allocatedCostUsd - a[1].allocatedCostUsd,
+      );
 
       const lines = [
         "# Cost View",
@@ -66,5 +71,5 @@ export function createCostViewTool(options: BrewvaToolOptions): ToolDefinition<a
         summary,
       });
     },
-  };
+  });
 }

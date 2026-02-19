@@ -1,14 +1,8 @@
 export type JsonLineWritable = {
-  write(
-    chunk: string,
-    callback?: (error?: Error | null) => void,
-  ): boolean;
+  write(chunk: string, callback?: (error?: Error | null) => void): boolean;
 };
 
-function writeChunk(
-  output: JsonLineWritable,
-  chunk: string,
-): Promise<void> {
+function writeChunk(output: JsonLineWritable, chunk: string): Promise<void> {
   return new Promise<void>((resolveWrite, rejectWrite) => {
     output.write(chunk, (error?: Error | null) => {
       if (error) {
@@ -23,9 +17,7 @@ function writeChunk(
 export class JsonLineWriter {
   private queue: Promise<void> = Promise.resolve();
 
-  constructor(
-    private readonly output: JsonLineWritable = process.stdout,
-  ) {}
+  constructor(private readonly output: JsonLineWritable = process.stdout) {}
 
   writeLine(line: string): void {
     this.queue = this.queue.then(() => writeChunk(this.output, `${line}\n`));
@@ -44,4 +36,3 @@ export async function writeJsonLine(
   if (encoded === undefined) return;
   await writeChunk(output, `${encoded}\n`);
 }
-

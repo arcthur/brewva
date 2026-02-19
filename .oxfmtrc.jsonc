@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "experimentalSortImports": {
+    "newlinesBetween": false,
+  },
+  "experimentalSortPackageJson": {
+    "sortScripts": true,
+  },
+  "ignorePatterns": [
+    "distribution/brewva-*/",
+    "node_modules/",
+    "packages/**/dist/",
+    "packages/**/node_modules/",
+    "bun.lock",
+  ],
+}

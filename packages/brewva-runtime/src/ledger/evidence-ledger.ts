@@ -1,9 +1,9 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { redactSecrets, redactUnknown } from "../security/redact.js";
 import type { EvidenceLedgerRow, EvidenceRecord, EvidenceQuery } from "../types.js";
 import { ensureDirForFile, writeFileAtomic } from "../utils/fs.js";
 import { sha256 } from "../utils/hash.js";
-import { redactSecrets, redactUnknown } from "../security/redact.js";
 
 interface AppendInput extends Omit<EvidenceRecord, "id" | "timestamp" | "outputHash"> {
   sessionId: string;
@@ -76,7 +76,9 @@ export class EvidenceLedger {
 
     const argsSummary = redactSecrets(input.argsSummary);
     const outputSummary = redactSecrets(input.outputSummary);
-    const metadata = input.metadata ? (redactUnknown(input.metadata) as EvidenceLedgerRow["metadata"]) : undefined;
+    const metadata = input.metadata
+      ? (redactUnknown(input.metadata) as EvidenceLedgerRow["metadata"])
+      : undefined;
 
     const recordBody: Omit<EvidenceLedgerRow, "hash"> = {
       id,
@@ -107,7 +109,10 @@ export class EvidenceLedger {
     return row;
   }
 
-  compactSession(sessionId: string, options: CompactSessionOptions): CompactSessionResult | undefined {
+  compactSession(
+    sessionId: string,
+    options: CompactSessionOptions,
+  ): CompactSessionResult | undefined {
     const keepLast = Math.max(1, Math.trunc(options.keepLast));
     const allRows = parseRows(this.filePath);
     if (allRows.length === 0) return undefined;
@@ -157,10 +162,12 @@ export class EvidenceLedger {
       },
     };
 
-    const keptBodies: Array<Omit<EvidenceLedgerRow, "hash" | "previousHash">> = keptRows.map((row) => {
-      const { hash: _hash, previousHash: _previousHash, ...body } = row;
-      return body;
-    });
+    const keptBodies: Array<Omit<EvidenceLedgerRow, "hash" | "previousHash">> = keptRows.map(
+      (row) => {
+        const { hash: _hash, previousHash: _previousHash, ...body } = row;
+        return body;
+      },
+    );
 
     const rebuiltSessionRows = this.rehashSessionRows([checkpointBody, ...keptBodies]);
     const checkpointInsertAt = sessionPositions[compactedRows.length - 1];
@@ -216,7 +223,9 @@ export class EvidenceLedger {
 
     if (query.file) {
       const file = query.file;
-      rows = rows.filter((row) => row.argsSummary.includes(file) || row.outputSummary.includes(file));
+      rows = rows.filter(
+        (row) => row.argsSummary.includes(file) || row.outputSummary.includes(file),
+      );
     }
     if (query.skill) {
       rows = rows.filter((row) => row.skill === query.skill);
@@ -251,7 +260,9 @@ export class EvidenceLedger {
     return { valid: true };
   }
 
-  private rehashSessionRows(rows: Array<Omit<EvidenceLedgerRow, "hash" | "previousHash">>): EvidenceLedgerRow[] {
+  private rehashSessionRows(
+    rows: Array<Omit<EvidenceLedgerRow, "hash" | "previousHash">>,
+  ): EvidenceLedgerRow[] {
     let previousHash = "root";
     const out: EvidenceLedgerRow[] = [];
 

@@ -1,11 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveGlobalBrewvaRootDir, resolveProjectBrewvaRootDir } from "../config/paths.js";
 import type { BrewvaConfig, SkillDocument, SkillTier, SkillsIndexEntry } from "../types.js";
-import {
-  resolveGlobalBrewvaRootDir,
-  resolveProjectBrewvaRootDir,
-} from "../config/paths.js";
 import { parseSkillDocument, tightenContract } from "./contract.js";
 
 const TIER_PRIORITY: Record<SkillTier, number> = {
@@ -36,9 +33,11 @@ function isDirectory(path: string): boolean {
 }
 
 function hasTierDirectories(skillDir: string): boolean {
-  return isDirectory(join(skillDir, "base"))
-    || isDirectory(join(skillDir, "packs"))
-    || isDirectory(join(skillDir, "project"));
+  return (
+    isDirectory(join(skillDir, "base")) ||
+    isDirectory(join(skillDir, "packs")) ||
+    isDirectory(join(skillDir, "project"))
+  );
 }
 
 function resolveSkillDirectory(rootDir: string): string | undefined {
@@ -121,7 +120,7 @@ export function discoverSkillRegistryRoots(input: {
     modulePath = undefined;
   }
   if (modulePath) {
-    const moduleAncestors = collectBoundedAncestors(dirname(modulePath)).reverse();
+    const moduleAncestors = collectBoundedAncestors(dirname(modulePath)).toReversed();
     for (const ancestor of moduleAncestors) {
       appendDiscoveredRoot(roots, rootIndexBySkillDir, ancestor, "module_ancestor");
     }
@@ -129,7 +128,7 @@ export function discoverSkillRegistryRoots(input: {
 
   const execPath = input.execPath ?? process.execPath;
   if (typeof execPath === "string" && execPath.trim().length > 0) {
-    const execAncestors = collectBoundedAncestors(dirname(resolve(execPath))).reverse();
+    const execAncestors = collectBoundedAncestors(dirname(resolve(execPath))).toReversed();
     for (const ancestor of execAncestors) {
       appendDiscoveredRoot(roots, rootIndexBySkillDir, ancestor, "exec_ancestor");
     }
@@ -145,12 +144,7 @@ export function discoverSkillRegistryRoots(input: {
     if (typeof configured !== "string") continue;
     const trimmed = configured.trim();
     if (!trimmed) continue;
-    appendDiscoveredRoot(
-      roots,
-      rootIndexBySkillDir,
-      resolve(input.cwd, trimmed),
-      "config_root",
-    );
+    appendDiscoveredRoot(roots, rootIndexBySkillDir, resolve(input.cwd, trimmed), "config_root");
   }
 
   return roots;
@@ -230,10 +224,12 @@ export class SkillRegistry {
   load(): void {
     this.skills.clear();
 
-    const discoveredRoots = this.rootsOverride ?? discoverSkillRegistryRoots({
-      cwd: this.rootDir,
-      configuredRoots: this.config.skills.roots ?? [],
-    });
+    const discoveredRoots =
+      this.rootsOverride ??
+      discoverSkillRegistryRoots({
+        cwd: this.rootDir,
+        configuredRoots: this.config.skills.roots ?? [],
+      });
     this.loadedRoots = discoveredRoots.map((entry) => ({ ...entry }));
 
     const activePacks = new Set(this.config.skills.packs);
@@ -253,7 +249,7 @@ export class SkillRegistry {
   }
 
   list(): SkillDocument[] {
-    return [...this.skills.values()].sort((a, b) => a.name.localeCompare(b.name));
+    return [...this.skills.values()].toSorted((a, b) => a.name.localeCompare(b.name));
   }
 
   get(name: string): SkillDocument | undefined {
@@ -279,7 +275,9 @@ export class SkillRegistry {
     }));
   }
 
-  writeIndex(filePath = join(resolveProjectBrewvaRootDir(this.rootDir), "skills_index.json")): string {
+  writeIndex(
+    filePath = join(resolveProjectBrewvaRootDir(this.rootDir), "skills_index.json"),
+  ): string {
     const parent = dirname(filePath);
     if (parent && !existsSync(parent)) {
       mkdirSync(parent, { recursive: true });
@@ -293,11 +291,7 @@ export class SkillRegistry {
     return filePath;
   }
 
-  private loadRoot(
-    skillDir: string,
-    source: SkillRootSource,
-    activePacks: Set<string>,
-  ): void {
+  private loadRoot(skillDir: string, source: SkillRootSource, activePacks: Set<string>): void {
     this.loadTier("base", join(skillDir, "base"));
 
     const packsDir = join(skillDir, "packs");
@@ -308,8 +302,7 @@ export class SkillRegistry {
       } catch {
         entries = [];
       }
-      const includeAllPacks =
-        source === "project_root" || source === "config_root";
+      const includeAllPacks = source === "project_root" || source === "config_root";
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
         if (!includeAllPacks && !activePacks.has(entry.name)) continue;

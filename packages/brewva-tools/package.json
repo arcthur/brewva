@@ -16,5 +16,8 @@
     "@brewva/brewva-runtime": "workspace:*",
     "@mariozechner/pi-coding-agent": "^0.53.0",
     "@sinclair/typebox": "^0.34.48"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   }
 }

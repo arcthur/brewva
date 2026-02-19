@@ -8,10 +8,7 @@ import {
   buildTapeCheckpointPayload,
   buildTruthFactUpsertedEvent,
 } from "@brewva/brewva-runtime";
-import type {
-  BrewvaEventRecord,
-  TaskState,
-} from "@brewva/brewva-runtime";
+import type { BrewvaEventRecord, TaskState } from "@brewva/brewva-runtime";
 
 function taskEvent(input: {
   sessionId: string;
@@ -281,12 +278,7 @@ describe("TurnReplayEngine", () => {
       "checkpoint-item",
       "fresh-item",
     ]);
-    expect(view.taskState.items.some((item) => item.text === "stale-item")).toBe(
-      false,
-    );
-    expect(view.truthState.facts.map((fact) => fact.id)).toEqual([
-      "fact-checkpoint",
-      "fact-new",
-    ]);
+    expect(view.taskState.items.some((item) => item.text === "stale-item")).toBe(false);
+    expect(view.truthState.facts.map((fact) => fact.id)).toEqual(["fact-checkpoint", "fact-new"]);
   });
 });

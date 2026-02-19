@@ -1,8 +1,9 @@
-import { Type } from "@sinclair/typebox";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
+import { defineTool } from "./utils/tool.js";
 
 function formatRollbackMessage(input: {
   ok: boolean;
@@ -29,8 +30,8 @@ function formatRollbackMessage(input: {
   return lines.join("\n");
 }
 
-export function createRollbackLastPatchTool(options: BrewvaToolOptions): ToolDefinition<any> {
-  return {
+export function createRollbackLastPatchTool(options: BrewvaToolOptions): ToolDefinition {
+  return defineTool({
     name: "rollback_last_patch",
     label: "Rollback Last Patch",
     description: "Roll back the most recently tracked file mutation patch set for this session.",
@@ -46,5 +47,5 @@ export function createRollbackLastPatchTool(options: BrewvaToolOptions): ToolDef
         reason: rollback.reason,
       });
     },
-  };
+  });
 }

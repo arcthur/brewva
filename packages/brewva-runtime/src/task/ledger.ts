@@ -62,7 +62,10 @@ function coerceTaskStatus(value: unknown): TaskStatus | null {
   if (!isRecord(value)) return null;
   const phase = normalizePhase(value.phase);
   const health = normalizeHealth(value.health);
-  const updatedAt = typeof value.updatedAt === "number" && Number.isFinite(value.updatedAt) ? value.updatedAt : null;
+  const updatedAt =
+    typeof value.updatedAt === "number" && Number.isFinite(value.updatedAt)
+      ? value.updatedAt
+      : null;
   if (!phase || !health || updatedAt === null) return null;
 
   const truthFactIds = normalizeStringArray(value.truthFactIds);
@@ -91,7 +94,11 @@ export function isTaskLedgerPayload(value: unknown): value is TaskLedgerEventPay
   return true;
 }
 
-export function reduceTaskState(state: TaskState, payload: TaskLedgerEventPayload, timestamp: number): TaskState {
+export function reduceTaskState(
+  state: TaskState,
+  payload: TaskLedgerEventPayload,
+  timestamp: number,
+): TaskState {
   const updatedAt = Math.max(state.updatedAt ?? 0, timestamp);
 
   if (payload.kind === "spec_set") {
@@ -169,7 +176,10 @@ export function reduceTaskState(state: TaskState, payload: TaskLedgerEventPayloa
       const nextMessage = payload.blocker.message;
       const nextSource = payload.blocker.source ?? existing.source;
       const nextTruth = payload.blocker.truthFactId ?? existing.truthFactId;
-      const changed = existing.message !== nextMessage || existing.source !== nextSource || existing.truthFactId !== nextTruth;
+      const changed =
+        existing.message !== nextMessage ||
+        existing.source !== nextSource ||
+        existing.truthFactId !== nextTruth;
       return {
         ...state,
         blockers: changed
@@ -255,7 +265,11 @@ export function buildStatusSetEvent(status: TaskStatus): StatusSetEvent {
   };
 }
 
-export function buildItemAddedEvent(input: { id?: string; text: string; status?: TaskItemStatus }): ItemAddedEvent {
+export function buildItemAddedEvent(input: {
+  id?: string;
+  text: string;
+  status?: TaskItemStatus;
+}): ItemAddedEvent {
   return {
     schema: TASK_LEDGER_SCHEMA,
     kind: "item_added",
@@ -267,7 +281,11 @@ export function buildItemAddedEvent(input: { id?: string; text: string; status?:
   };
 }
 
-export function buildItemUpdatedEvent(input: { id: string; text?: string; status?: TaskItemStatus }): ItemUpdatedEvent {
+export function buildItemUpdatedEvent(input: {
+  id: string;
+  text?: string;
+  status?: TaskItemStatus;
+}): ItemUpdatedEvent {
   return {
     schema: TASK_LEDGER_SCHEMA,
     kind: "item_updated",
@@ -310,7 +328,7 @@ export function coerceTaskLedgerPayload(value: unknown): TaskLedgerEventPayload 
   if (value.schema !== TASK_LEDGER_SCHEMA) return null;
   const kind = value.kind;
   if (kind === "spec_set") {
-    const spec = value.spec as unknown;
+    const spec = value.spec;
     if (!isRecord(spec) || spec.schema !== "brewva.task.v1" || typeof spec.goal !== "string") {
       return null;
     }
@@ -318,7 +336,7 @@ export function coerceTaskLedgerPayload(value: unknown): TaskLedgerEventPayload 
   }
 
   if (kind === "checkpoint_set") {
-    const state = coerceTaskState(value.state as unknown);
+    const state = coerceTaskState(value.state);
     if (!state) return null;
     return {
       schema: TASK_LEDGER_SCHEMA,
@@ -328,7 +346,7 @@ export function coerceTaskLedgerPayload(value: unknown): TaskLedgerEventPayload 
   }
 
   if (kind === "status_set") {
-    const status = coerceTaskStatus(value.status as unknown);
+    const status = coerceTaskStatus(value.status);
     if (!status) return null;
     return {
       schema: TASK_LEDGER_SCHEMA,
@@ -338,7 +356,7 @@ export function coerceTaskLedgerPayload(value: unknown): TaskLedgerEventPayload 
   }
 
   if (kind === "item_added" || kind === "item_updated") {
-    const item = value.item as unknown;
+    const item = value.item;
     if (!isRecord(item)) return null;
     const id = normalizeNonEmptyString(item.id);
     if (!id) return null;
@@ -371,7 +389,7 @@ export function coerceTaskLedgerPayload(value: unknown): TaskLedgerEventPayload 
   }
 
   if (kind === "blocker_recorded") {
-    const blocker = value.blocker as unknown;
+    const blocker = value.blocker;
     if (!isRecord(blocker)) return null;
     const id = normalizeNonEmptyString(blocker.id);
     const message = normalizeNonEmptyString(blocker.message);
@@ -405,7 +423,10 @@ export function coerceTaskLedgerPayload(value: unknown): TaskLedgerEventPayload 
 
 export function formatTaskStateBlock(state: TaskState): string {
   const hasAny =
-    Boolean(state.spec) || Boolean(state.status) || (state.items?.length ?? 0) > 0 || (state.blockers?.length ?? 0) > 0;
+    Boolean(state.spec) ||
+    Boolean(state.status) ||
+    (state.items?.length ?? 0) > 0 ||
+    (state.blockers?.length ?? 0) > 0;
   if (!hasAny) return "";
 
   const spec = state.spec;
@@ -497,18 +518,22 @@ export function formatTaskStateBlock(state: TaskState): string {
 function coerceTaskState(value: unknown): TaskState | null {
   if (!isRecord(value)) return null;
 
-  const specValue = value.spec as unknown;
+  const specValue = value.spec;
   let spec: TaskSpec | undefined;
-  if (isRecord(specValue) && specValue.schema === "brewva.task.v1" && typeof specValue.goal === "string") {
+  if (
+    isRecord(specValue) &&
+    specValue.schema === "brewva.task.v1" &&
+    typeof specValue.goal === "string"
+  ) {
     spec = specValue as unknown as TaskSpec;
   }
 
-  const statusValue = value.status as unknown;
-  const status = statusValue ? coerceTaskStatus(statusValue) ?? undefined : undefined;
+  const statusValue = value.status;
+  const status = statusValue ? (coerceTaskStatus(statusValue) ?? undefined) : undefined;
 
-  const itemsValue = value.items as unknown;
+  const itemsValue = value.items;
   if (!Array.isArray(itemsValue)) return null;
-  const blockersValue = value.blockers as unknown;
+  const blockersValue = value.blockers;
   if (!Array.isArray(blockersValue)) return null;
 
   const items: TaskState["items"] = [];
@@ -516,12 +541,12 @@ function coerceTaskState(value: unknown): TaskState | null {
     if (!isRecord(raw)) continue;
     const id = normalizeNonEmptyString(raw.id);
     const text = normalizeNonEmptyString(raw.text);
-    const status = normalizeStatus(raw.status) ?? "todo";
+    const itemStatus = normalizeStatus(raw.status) ?? "todo";
     const createdAt = typeof raw.createdAt === "number" ? raw.createdAt : null;
     const updatedAt = typeof raw.updatedAt === "number" ? raw.updatedAt : null;
     if (!id || !text) continue;
     if (createdAt === null || updatedAt === null) continue;
-    items.push({ id, text, status, createdAt, updatedAt });
+    items.push({ id, text, status: itemStatus, createdAt, updatedAt });
   }
 
   const blockers: TaskState["blockers"] = [];
@@ -537,8 +562,9 @@ function coerceTaskState(value: unknown): TaskState | null {
     blockers.push({ id, message, createdAt, source, truthFactId });
   }
 
-  const updatedAtValue = value.updatedAt as unknown;
-  const updatedAt = typeof updatedAtValue === "number" ? updatedAtValue : updatedAtValue === null ? null : null;
+  const updatedAtValue = value.updatedAt;
+  const updatedAt =
+    typeof updatedAtValue === "number" ? updatedAtValue : updatedAtValue === null ? null : null;
 
   return {
     spec,

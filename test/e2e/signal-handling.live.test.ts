@@ -108,7 +108,7 @@ describe("e2e: signal handling", () => {
         "[signal.live] stderr:",
         stderr.trim(),
       ].join("\n");
-      throw new Error(message);
+      throw new Error(message, { cause: error });
     } finally {
       if (child.exitCode === null && !child.killed) {
         child.kill("SIGKILL");
@@ -158,8 +158,8 @@ describe("e2e: signal handling", () => {
       const exit = await waitForExit(child, 60_000);
       expect(exit.code).toBe(130);
 
-      expect(stdout.includes("\"type\":\"brewva_event_bundle\"")).toBe(false);
-      expect(stdout.includes("\"schema\":\"brewva.stream.v1\"")).toBe(false);
+      expect(stdout.includes('"type":"brewva_event_bundle"')).toBe(false);
+      expect(stdout.includes('"schema":"brewva.stream.v1"')).toBe(false);
 
       const eventFile = latestEventFile(workspace);
       expect(eventFile).toBeDefined();
@@ -173,7 +173,7 @@ describe("e2e: signal handling", () => {
         "[signal-json.live] stderr:",
         stderr.trim(),
       ].join("\n");
-      throw new Error(message);
+      throw new Error(message, { cause: error });
     } finally {
       if (child.exitCode === null && !child.killed) {
         child.kill("SIGKILL");

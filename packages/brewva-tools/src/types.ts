@@ -18,9 +18,18 @@ import type {
 
 export interface BrewvaToolRuntime {
   readonly config?: Pick<BrewvaConfig, "parallel" | "infrastructure">;
-  activateSkill(sessionId: string, name: string): { ok: boolean; reason?: string; skill?: SkillDocument };
-  validateSkillOutputs(sessionId: string, outputs: Record<string, unknown>): { ok: boolean; missing: string[] };
-  completeSkill(sessionId: string, outputs: Record<string, unknown>): { ok: boolean; missing: string[] };
+  activateSkill(
+    sessionId: string,
+    name: string,
+  ): { ok: boolean; reason?: string; skill?: SkillDocument };
+  validateSkillOutputs(
+    sessionId: string,
+    outputs: Record<string, unknown>,
+  ): { ok: boolean; missing: string[] };
+  completeSkill(
+    sessionId: string,
+    outputs: Record<string, unknown>,
+  ): { ok: boolean; missing: string[] };
   verifyCompletion(
     sessionId: string,
     level?: VerificationLevel,
@@ -32,10 +41,7 @@ export interface BrewvaToolRuntime {
   getAvailableConsumedOutputs(sessionId: string, targetSkillName: string): Record<string, unknown>;
   getCompactionInstructions?(): string;
   getContextUsage(sessionId: string): ContextBudgetUsage | undefined;
-  getContextPressureStatus(
-    sessionId: string,
-    usage?: ContextBudgetUsage,
-  ): ContextPressureStatus;
+  getContextPressureStatus(sessionId: string, usage?: ContextBudgetUsage): ContextPressureStatus;
   getTapeStatus(sessionId: string): TapeStatusState;
   recordTapeHandoff(
     sessionId: string,

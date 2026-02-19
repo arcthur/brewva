@@ -20,7 +20,10 @@ function truncate(text: string, maxChars: number): string {
   return `${text.slice(0, Math.max(0, maxChars - 30))}\n...[truncated ${text.length - maxChars} chars]`;
 }
 
-export function runShellCommand(command: string, options: RunShellCommandOptions): Promise<ShellRunResult> {
+export function runShellCommand(
+  command: string,
+  options: RunShellCommandOptions,
+): Promise<ShellRunResult> {
   const maxOutputChars = options.maxOutputChars ?? 200_000;
   const startedAt = Date.now();
 
@@ -48,12 +51,15 @@ export function runShellCommand(command: string, options: RunShellCommandOptions
     child.stdout?.on("data", (chunk) => onData(chunk as Buffer, "stdout"));
     child.stderr?.on("data", (chunk) => onData(chunk as Buffer, "stderr"));
 
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGTERM");
-      // If SIGTERM doesn't work quickly, SIGKILL.
-      setTimeout(() => child.kill("SIGKILL"), 1500).unref();
-    }, Math.max(0, options.timeoutMs));
+    const timeout = setTimeout(
+      () => {
+        timedOut = true;
+        child.kill("SIGTERM");
+        // If SIGTERM doesn't work quickly, SIGKILL.
+        setTimeout(() => child.kill("SIGKILL"), 1500).unref();
+      },
+      Math.max(0, options.timeoutMs),
+    );
     timeout.unref();
 
     const finish = (exitCode: number | null): void => {
@@ -78,4 +84,3 @@ export function runShellCommand(command: string, options: RunShellCommandOptions
     });
   });
 }
-

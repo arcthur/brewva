@@ -1,7 +1,7 @@
+import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { DEFAULT_BREWVA_CONFIG, BrewvaRuntime } from "@brewva/brewva-runtime";
 
@@ -80,7 +80,10 @@ describe("Verification blockers", () => {
 
     runtime.markToolCall(sessionId, "edit");
 
-    const report1 = await runtime.verifyCompletion(sessionId, "standard", { executeCommands: true, timeoutMs: 5_000 });
+    const report1 = await runtime.verifyCompletion(sessionId, "standard", {
+      executeCommands: true,
+      timeoutMs: 5_000,
+    });
     expect(report1.passed).toBe(false);
 
     const state1 = runtime.getTaskState(sessionId);
@@ -104,7 +107,10 @@ describe("Verification blockers", () => {
     runtime.config.verification.commands.tests = "true";
     runtime.markToolCall(sessionId, "edit");
 
-    const report2 = await runtime.verifyCompletion(sessionId, "standard", { executeCommands: true, timeoutMs: 5_000 });
+    const report2 = await runtime.verifyCompletion(sessionId, "standard", {
+      executeCommands: true,
+      timeoutMs: 5_000,
+    });
     expect(report2.passed).toBe(true);
 
     const state2 = runtime.getTaskState(sessionId);

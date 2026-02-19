@@ -1,8 +1,9 @@
-import { Type } from "@sinclair/typebox";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
+import { defineTool } from "./utils/tool.js";
 
 function normalizeReason(input: unknown): string | undefined {
   if (typeof input !== "string") return undefined;
@@ -16,8 +17,8 @@ function normalizeErrorMessage(error: unknown): string {
   return "unknown_error";
 }
 
-export function createSessionCompactTool(options: BrewvaToolOptions): ToolDefinition<any> {
-  return {
+export function createSessionCompactTool(options: BrewvaToolOptions): ToolDefinition {
+  return defineTool({
     name: "session_compact",
     label: "Session Compact",
     description: "Compact LLM message history for the current session.",
@@ -66,5 +67,5 @@ export function createSessionCompactTool(options: BrewvaToolOptions): ToolDefini
         usagePercent: usage?.percent ?? null,
       });
     },
-  };
+  });
 }

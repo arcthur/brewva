@@ -21,7 +21,7 @@ export function redactSecrets(text: string): string {
 }
 
 export function redactUnknown(value: unknown): unknown {
-  const seen = new WeakSet<object>();
+  const seen = new WeakSet();
 
   const visit = (input: unknown): unknown => {
     if (typeof input === "string") return redactSecrets(input);
@@ -38,4 +38,3 @@ export function redactUnknown(value: unknown): unknown {
 
   return visit(value);
 }
-

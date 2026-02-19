@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 
-import { $ } from "bun";
 import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import { $ } from "bun";
 
 interface PlatformTarget {
   dir: string;
@@ -27,25 +27,68 @@ interface RuntimePackageJson {
 const brewvaCliRequire = createRequire(join(process.cwd(), "packages/brewva-cli/package.json"));
 
 export const PLATFORMS: PlatformTarget[] = [
-  { dir: "brewva-darwin-arm64", target: "bun-darwin-arm64", binary: "brewva", description: "macOS ARM64" },
-  { dir: "brewva-darwin-x64", target: "bun-darwin-x64", binary: "brewva", description: "macOS x64" },
-  { dir: "brewva-linux-x64", target: "bun-linux-x64", binary: "brewva", description: "Linux x64 (glibc)" },
-  { dir: "brewva-linux-arm64", target: "bun-linux-arm64", binary: "brewva", description: "Linux ARM64 (glibc)" },
-  { dir: "brewva-linux-x64-musl", target: "bun-linux-x64-musl", binary: "brewva", description: "Linux x64 (musl)" },
-  { dir: "brewva-linux-arm64-musl", target: "bun-linux-arm64-musl", binary: "brewva", description: "Linux ARM64 (musl)" },
-  { dir: "brewva-windows-x64", target: "bun-windows-x64", binary: "brewva.exe", description: "Windows x64" },
+  {
+    dir: "brewva-darwin-arm64",
+    target: "bun-darwin-arm64",
+    binary: "brewva",
+    description: "macOS ARM64",
+  },
+  {
+    dir: "brewva-darwin-x64",
+    target: "bun-darwin-x64",
+    binary: "brewva",
+    description: "macOS x64",
+  },
+  {
+    dir: "brewva-linux-x64",
+    target: "bun-linux-x64",
+    binary: "brewva",
+    description: "Linux x64 (glibc)",
+  },
+  {
+    dir: "brewva-linux-arm64",
+    target: "bun-linux-arm64",
+    binary: "brewva",
+    description: "Linux ARM64 (glibc)",
+  },
+  {
+    dir: "brewva-linux-x64-musl",
+    target: "bun-linux-x64-musl",
+    binary: "brewva",
+    description: "Linux x64 (musl)",
+  },
+  {
+    dir: "brewva-linux-arm64-musl",
+    target: "bun-linux-arm64-musl",
+    binary: "brewva",
+    description: "Linux ARM64 (musl)",
+  },
+  {
+    dir: "brewva-windows-x64",
+    target: "bun-windows-x64",
+    binary: "brewva.exe",
+    description: "Windows x64",
+  },
 ];
 
 const ENTRY_POINT = "packages/brewva-cli/src/index.ts";
 const WRAPPER_PACKAGE_JSON = "distribution/brewva/package.json";
 
-const PI_CODING_AGENT_DIR = dirname(brewvaCliRequire.resolve("@mariozechner/pi-coding-agent/package.json"));
-const piCodingAgentRequire = createRequire(join(PI_CODING_AGENT_DIR, "package.json"));
+const PI_CODING_AGENT_PACKAGE_DIR = dirname(
+  brewvaCliRequire.resolve("@mariozechner/pi-coding-agent/package.json"),
+);
+const piCodingAgentRequire = createRequire(join(PI_CODING_AGENT_PACKAGE_DIR, "package.json"));
 const PHOTON_WASM_PATH = join(
   dirname(piCodingAgentRequire.resolve("@silvia-odwyer/photon-node/package.json")),
   "photon_rs_bg.wasm",
 );
-const BREWVA_CONFIG_SCHEMA_PATH = join(process.cwd(), "packages", "brewva-runtime", "schema", "brewva.schema.json");
+const BREWVA_CONFIG_SCHEMA_PATH = join(
+  process.cwd(),
+  "packages",
+  "brewva-runtime",
+  "schema",
+  "brewva.schema.json",
+);
 
 function copyDirectory(source: string, target: string): void {
   if (!existsSync(source)) return;
@@ -59,7 +102,9 @@ function copyFile(source: string, target: string): void {
 }
 
 function copyRuntimeAssets(outDir: string): void {
-  const wrapperPackage = JSON.parse(readFileSync(WRAPPER_PACKAGE_JSON, "utf8")) as RuntimePackageJson;
+  const wrapperPackage = JSON.parse(
+    readFileSync(WRAPPER_PACKAGE_JSON, "utf8"),
+  ) as RuntimePackageJson;
   const runtimePackage: RuntimePackageJson = {
     name: wrapperPackage.name,
     version: wrapperPackage.version,
@@ -74,15 +119,21 @@ function copyRuntimeAssets(outDir: string): void {
 
   writeFileSync(join(outDir, "package.json"), `${JSON.stringify(runtimePackage, null, 2)}\n`);
 
-  copyFile(join(PI_CODING_AGENT_DIR, "README.md"), join(outDir, "README.md"));
-  copyFile(join(PI_CODING_AGENT_DIR, "CHANGELOG.md"), join(outDir, "CHANGELOG.md"));
+  copyFile(join(PI_CODING_AGENT_PACKAGE_DIR, "README.md"), join(outDir, "README.md"));
+  copyFile(join(PI_CODING_AGENT_PACKAGE_DIR, "CHANGELOG.md"), join(outDir, "CHANGELOG.md"));
   copyFile(PHOTON_WASM_PATH, join(outDir, "photon_rs_bg.wasm"));
   copyFile(BREWVA_CONFIG_SCHEMA_PATH, join(outDir, "brewva.schema.json"));
 
-  copyDirectory(join(PI_CODING_AGENT_DIR, "docs"), join(outDir, "docs"));
-  copyDirectory(join(PI_CODING_AGENT_DIR, "examples"), join(outDir, "examples"));
-  copyDirectory(join(PI_CODING_AGENT_DIR, "dist", "modes", "interactive", "theme"), join(outDir, "theme"));
-  copyDirectory(join(PI_CODING_AGENT_DIR, "dist", "core", "export-html"), join(outDir, "export-html"));
+  copyDirectory(join(PI_CODING_AGENT_PACKAGE_DIR, "docs"), join(outDir, "docs"));
+  copyDirectory(join(PI_CODING_AGENT_PACKAGE_DIR, "examples"), join(outDir, "examples"));
+  copyDirectory(
+    join(PI_CODING_AGENT_PACKAGE_DIR, "dist", "modes", "interactive", "theme"),
+    join(outDir, "theme"),
+  );
+  copyDirectory(
+    join(PI_CODING_AGENT_PACKAGE_DIR, "dist", "core", "export-html"),
+    join(outDir, "export-html"),
+  );
   copyDirectory(join(process.cwd(), "skills"), join(outDir, "skills"));
 }
 
@@ -113,7 +164,8 @@ async function buildPlatform(platform: PlatformTarget): Promise<boolean> {
 
     return true;
   } catch (error) {
-    console.error(`  failed: ${error}`);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`  failed: ${message}`);
     return false;
   }
 }

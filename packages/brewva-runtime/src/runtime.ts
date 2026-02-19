@@ -1,4 +1,58 @@
 import { relative, resolve } from "node:path";
+import { loadBrewvaConfigWithDiagnostics, type BrewvaConfigDiagnostic } from "./config/loader.js";
+import { ContextBudgetManager } from "./context/budget.js";
+import { ContextInjectionCollector, type ContextInjectionPriority } from "./context/injection.js";
+import { buildTruthFactsBlock } from "./context/truth-facts.js";
+import { buildTruthLedgerBlock } from "./context/truth.js";
+import {
+  buildViewportContext,
+  type ViewportContextResult,
+  type ViewportMetrics,
+} from "./context/viewport.js";
+import { SessionCostTracker } from "./cost/tracker.js";
+import { BrewvaEventStore } from "./events/store.js";
+import { extractEvidenceArtifacts, type EvidenceArtifact } from "./evidence/artifacts.js";
+import { parseTscDiagnostics } from "./evidence/tsc.js";
+import { buildLedgerDigest } from "./ledger/digest.js";
+import { EvidenceLedger } from "./ledger/evidence-ledger.js";
+import { formatLedgerRows } from "./ledger/query.js";
+import { ParallelBudgetManager } from "./parallel/budget.js";
+import { ParallelResultStore } from "./parallel/results.js";
+import {
+  classifyViewportQuality,
+  computeViewportSignalScore,
+  shouldSkipViewportInjection,
+  type ViewportQuality,
+} from "./policy/viewport-policy.js";
+import { redactSecrets } from "./security/redact.js";
+import { sanitizeContextText } from "./security/sanitize.js";
+import { checkToolAccess } from "./security/tool-policy.js";
+import { SkillRegistry } from "./skills/registry.js";
+import { selectTopKSkills } from "./skills/selector.js";
+import { FileChangeTracker } from "./state/file-change-tracker.js";
+import {
+  TAPE_ANCHOR_EVENT_TYPE,
+  TAPE_CHECKPOINT_EVENT_TYPE,
+  buildTapeAnchorPayload,
+  buildTapeCheckpointPayload,
+  coerceTapeAnchorPayload,
+} from "./tape/events.js";
+import { TurnReplayEngine } from "./tape/replay-engine.js";
+import {
+  TASK_EVENT_TYPE,
+  buildBlockerRecordedEvent,
+  buildBlockerResolvedEvent,
+  buildStatusSetEvent,
+  buildItemAddedEvent,
+  buildItemUpdatedEvent,
+  formatTaskStateBlock,
+} from "./task/ledger.js";
+import { normalizeTaskSpec } from "./task/spec.js";
+import {
+  TRUTH_EVENT_TYPE,
+  buildTruthFactResolvedEvent,
+  buildTruthFactUpsertedEvent,
+} from "./truth/ledger.js";
 import type {
   ContextPressureLevel,
   ContextPressureStatus,
@@ -31,82 +85,14 @@ import type {
 } from "./types.js";
 import type { TaskItemStatus } from "./types.js";
 import type { TaskHealth, TaskPhase, TaskStatus } from "./types.js";
-import type {
-  TruthFact,
-  TruthFactSeverity,
-  TruthFactStatus,
-  TruthState,
-} from "./types.js";
-import { loadBrewvaConfigWithDiagnostics, type BrewvaConfigDiagnostic } from "./config/loader.js";
-import { SkillRegistry } from "./skills/registry.js";
-import { selectTopKSkills } from "./skills/selector.js";
-import { EvidenceLedger } from "./ledger/evidence-ledger.js";
-import { buildLedgerDigest } from "./ledger/digest.js";
-import { formatLedgerRows } from "./ledger/query.js";
-import {
-  extractEvidenceArtifacts,
-  type EvidenceArtifact,
-} from "./evidence/artifacts.js";
-import { parseTscDiagnostics } from "./evidence/tsc.js";
-import { classifyEvidence, isMutationTool } from "./verification/classifier.js";
-import { VerificationGate } from "./verification/gate.js";
-import { ParallelBudgetManager } from "./parallel/budget.js";
-import { ParallelResultStore } from "./parallel/results.js";
-import { sanitizeContextText } from "./security/sanitize.js";
-import { normalizePercent } from "./utils/token.js";
-import { redactSecrets } from "./security/redact.js";
-import { checkToolAccess } from "./security/tool-policy.js";
+import type { TruthFact, TruthFactSeverity, TruthFactStatus, TruthState } from "./types.js";
 import { runShellCommand } from "./utils/exec.js";
-import { ContextBudgetManager } from "./context/budget.js";
-import {
-  ContextInjectionCollector,
-  type ContextInjectionPriority,
-} from "./context/injection.js";
-import {
-  buildViewportContext,
-  type ViewportContextResult,
-  type ViewportMetrics,
-} from "./context/viewport.js";
-import { buildTruthLedgerBlock } from "./context/truth.js";
-import { buildTruthFactsBlock } from "./context/truth-facts.js";
-import {
-  classifyViewportQuality,
-  computeViewportSignalScore,
-  shouldSkipViewportInjection,
-  type ViewportQuality,
-} from "./policy/viewport-policy.js";
-import { BrewvaEventStore } from "./events/store.js";
-import { FileChangeTracker } from "./state/file-change-tracker.js";
-import { SessionCostTracker } from "./cost/tracker.js";
 import { sha256 } from "./utils/hash.js";
 import { normalizeJsonRecord } from "./utils/json.js";
-import {
-  estimateTokenCount,
-  truncateTextToTokenBudget,
-} from "./utils/token.js";
-import {
-  TASK_EVENT_TYPE,
-  buildBlockerRecordedEvent,
-  buildBlockerResolvedEvent,
-  buildStatusSetEvent,
-  buildItemAddedEvent,
-  buildItemUpdatedEvent,
-  formatTaskStateBlock,
-} from "./task/ledger.js";
-import {
-  TRUTH_EVENT_TYPE,
-  buildTruthFactResolvedEvent,
-  buildTruthFactUpsertedEvent,
-} from "./truth/ledger.js";
-import { normalizeTaskSpec } from "./task/spec.js";
-import { TurnReplayEngine } from "./tape/replay-engine.js";
-import {
-  TAPE_ANCHOR_EVENT_TYPE,
-  TAPE_CHECKPOINT_EVENT_TYPE,
-  buildTapeAnchorPayload,
-  buildTapeCheckpointPayload,
-  coerceTapeAnchorPayload,
-} from "./tape/events.js";
+import { normalizePercent } from "./utils/token.js";
+import { estimateTokenCount, truncateTextToTokenBudget } from "./utils/token.js";
+import { classifyEvidence, isMutationTool } from "./verification/classifier.js";
+import { VerificationGate } from "./verification/gate.js";
 
 const ALWAYS_ALLOWED_TOOLS = [
   "skill_complete",
@@ -140,18 +126,11 @@ function buildVerifierBlockerMessage(input: {
   truthFactId: string;
   run?: VerificationCheckRun;
 }): string {
-  const parts: string[] = [
-    `verification failed: ${input.checkName}`,
-    `truth=${input.truthFactId}`,
-  ];
+  const parts: string[] = [`verification failed: ${input.checkName}`, `truth=${input.truthFactId}`];
   if (input.run?.ledgerId) {
     parts.push(`evidence=${input.run.ledgerId}`);
   }
-  if (
-    input.run &&
-    input.run.exitCode !== null &&
-    input.run.exitCode !== undefined
-  ) {
+  if (input.run && input.run.exitCode !== null && input.run.exitCode !== undefined) {
     parts.push(`exitCode=${input.run.exitCode}`);
   }
   return parts.join(" ");
@@ -172,23 +151,14 @@ function inferEventCategory(type: string): BrewvaEventCategory {
   if (type === TAPE_ANCHOR_EVENT_TYPE || type === TAPE_CHECKPOINT_EVENT_TYPE) {
     return "state";
   }
-  if (
-    type.startsWith("session_") ||
-    type === "session_start" ||
-    type === "session_shutdown"
-  )
+  if (type.startsWith("session_") || type === "session_start" || type === "session_shutdown")
     return "session";
   if (type.startsWith("turn_")) return "turn";
-  if (type.includes("tool") || type.startsWith("patch_") || type === "rollback")
-    return "tool";
+  if (type.includes("tool") || type.startsWith("patch_") || type === "rollback") return "tool";
   if (type.startsWith("context_")) return "context";
   if (type.startsWith("cost_") || type.startsWith("budget_")) return "cost";
   if (type.startsWith("verification_")) return "verification";
-  if (
-    type.includes("snapshot") ||
-    type.includes("resumed") ||
-    type.includes("interrupted")
-  )
+  if (type.includes("snapshot") || type.includes("resumed") || type.includes("interrupted"))
     return "state";
   return "other";
 }
@@ -196,29 +166,18 @@ function inferEventCategory(type: string): BrewvaEventCategory {
 function buildSkillCandidateBlock(selected: SkillSelection[]): string {
   const skillLines =
     selected.length > 0
-      ? selected.map(
-          (entry) =>
-            `- ${entry.name} (score=${entry.score}, reason=${entry.reason})`,
-        )
+      ? selected.map((entry) => `- ${entry.name} (score=${entry.score}, reason=${entry.reason})`)
       : ["- (none)"];
-  return ["[Brewva Context]", "Top-K Skill Candidates:", ...skillLines].join(
-    "\n",
-  );
+  return ["[Brewva Context]", "Top-K Skill Candidates:", ...skillLines].join("\n");
 }
 
 function buildTaskStateBlock(state: TaskState): string {
   return formatTaskStateBlock(state);
 }
 
-function buildContextSourceTokenLimits(
-  maxInjectionTokens: number,
-): Record<string, number> {
+function buildContextSourceTokenLimits(maxInjectionTokens: number): Record<string, number> {
   const budget = Math.max(64, Math.floor(maxInjectionTokens));
-  const fromRatio = (
-    ratio: number,
-    minimum: number,
-    maximum = budget,
-  ): number => {
+  const fromRatio = (ratio: number, minimum: number, maximum = budget): number => {
     const scaled = Math.floor(budget * ratio);
     return Math.max(minimum, Math.min(maximum, scaled));
   };
@@ -263,10 +222,7 @@ export class BrewvaRuntime {
   private toolContractWarningsBySession = new Map<string, Set<string>>();
   private skillBudgetWarningsBySession = new Map<string, Set<string>>();
   private skillParallelWarningsBySession = new Map<string, Set<string>>();
-  private skillOutputsBySession = new Map<
-    string,
-    Map<string, SkillOutputRecord>
-  >();
+  private skillOutputsBySession = new Map<string, Map<string, SkillOutputRecord>>();
   private turnReplay: TurnReplayEngine;
   private viewportPolicyBySession = new Map<
     string,
@@ -306,30 +262,20 @@ export class BrewvaRuntime {
     this.verification = new VerificationGate(this.config);
     this.parallel = new ParallelBudgetManager(this.config.parallel);
     this.parallelResults = new ParallelResultStore();
-    this.events = new BrewvaEventStore(
-      this.config.infrastructure.events,
-      this.cwd,
-    );
-    this.contextBudget = new ContextBudgetManager(
-      this.config.infrastructure.contextBudget,
-    );
+    this.events = new BrewvaEventStore(this.config.infrastructure.events, this.cwd);
+    this.contextBudget = new ContextBudgetManager(this.config.infrastructure.contextBudget);
     this.contextInjection = new ContextInjectionCollector({
       sourceTokenLimits: this.isContextBudgetEnabled()
-        ? buildContextSourceTokenLimits(
-            this.config.infrastructure.contextBudget.maxInjectionTokens,
-          )
+        ? buildContextSourceTokenLimits(this.config.infrastructure.contextBudget.maxInjectionTokens)
         : {},
-      truncationStrategy:
-        this.config.infrastructure.contextBudget.truncationStrategy,
+      truncationStrategy: this.config.infrastructure.contextBudget.truncationStrategy,
     });
     this.turnReplay = new TurnReplayEngine({
       listEvents: (sessionId) => this.queryEvents(sessionId),
       getTurn: (sessionId) => this.getCurrentTurn(sessionId),
     });
     this.fileChanges = new FileChangeTracker(this.cwd);
-    this.costTracker = new SessionCostTracker(
-      this.config.infrastructure.costTracking,
-    );
+    this.costTracker = new SessionCostTracker(this.config.infrastructure.costTracking);
   }
 
   refreshSkills(): void {
@@ -346,14 +292,8 @@ export class BrewvaRuntime {
   }
 
   selectSkills(message: string): SkillSelection[] {
-    const input = this.config.security.sanitizeContext
-      ? sanitizeContextText(message)
-      : message;
-    return selectTopKSkills(
-      input,
-      this.skills.buildIndex(),
-      this.config.skills.selector.k,
-    );
+    const input = this.config.security.sanitizeContext ? sanitizeContextText(message) : message;
+    return selectTopKSkills(input, this.skills.buildIndex(), this.config.skills.selector.k);
   }
 
   onTurnStart(sessionId: string, turnIndex: number): void {
@@ -365,10 +305,7 @@ export class BrewvaRuntime {
     this.clearReservedInjectionTokensForSession(sessionId);
   }
 
-  observeContextUsage(
-    sessionId: string,
-    usage: ContextBudgetUsage | undefined,
-  ): void {
+  observeContextUsage(sessionId: string, usage: ContextBudgetUsage | undefined): void {
     this.contextBudget.observeUsage(sessionId, usage);
     if (!usage) return;
     this.recordEvent({
@@ -414,9 +351,7 @@ export class BrewvaRuntime {
   }
 
   getContextHardLimitRatio(): number {
-    const ratio = this.normalizeRatio(
-      this.config.infrastructure.contextBudget.hardLimitPercent,
-    );
+    const ratio = this.normalizeRatio(this.config.infrastructure.contextBudget.hardLimitPercent);
     if (ratio === null) return 1;
     return Math.max(0, Math.min(1, ratio));
   }
@@ -428,10 +363,7 @@ export class BrewvaRuntime {
     return thresholdRatio ?? this.getContextHardLimitRatio();
   }
 
-  getContextPressureStatus(
-    sessionId: string,
-    usage?: ContextBudgetUsage,
-  ): ContextPressureStatus {
+  getContextPressureStatus(sessionId: string, usage?: ContextBudgetUsage): ContextPressureStatus {
     const effectiveUsage = usage ?? this.getContextUsage(sessionId);
     const usageRatio = this.getContextUsageRatio(effectiveUsage);
     if (usageRatio === null) {
@@ -471,17 +403,11 @@ export class BrewvaRuntime {
     };
   }
 
-  getContextPressureLevel(
-    sessionId: string,
-    usage?: ContextBudgetUsage,
-  ): ContextPressureLevel {
+  getContextPressureLevel(sessionId: string, usage?: ContextBudgetUsage): ContextPressureLevel {
     return this.getContextPressureStatus(sessionId, usage).level;
   }
 
-  private isSameTaskStatus(
-    left: TaskStatus | undefined,
-    right: TaskStatus,
-  ): boolean {
+  private isSameTaskStatus(left: TaskStatus | undefined, right: TaskStatus): boolean {
     if (!left) return false;
     if (left.phase !== right.phase) return false;
     if (left.health !== right.health) return false;
@@ -508,19 +434,15 @@ export class BrewvaRuntime {
     const items = state.items ?? [];
     const openItems = items.filter((item) => item.status !== "done");
 
-    const activeTruthFacts = input.truthState.facts.filter(
-      (fact) => fact.status === "active",
-    );
+    const activeTruthFacts = input.truthState.facts.filter((fact) => fact.status === "active");
     const severityRank = (severity: string): number => {
       if (severity === "error") return 3;
       if (severity === "warn") return 2;
       return 1;
     };
     const truthFactIds = activeTruthFacts
-      .slice()
-      .sort((left, right) => {
-        const severity =
-          severityRank(right.severity) - severityRank(left.severity);
+      .toSorted((left, right) => {
+        const severity = severityRank(right.severity) - severityRank(left.severity);
         if (severity !== 0) return severity;
         return right.lastSeenAt - left.lastSeenAt;
       })
@@ -541,9 +463,7 @@ export class BrewvaRuntime {
         blocker.id.startsWith(VERIFIER_BLOCKER_PREFIX),
       );
       health = hasVerifier ? "verification_failed" : "blocked";
-      reason = hasVerifier
-        ? "verification_blockers_present"
-        : "blockers_present";
+      reason = hasVerifier ? "verification_blockers_present" : "blockers_present";
     } else if (items.length === 0) {
       phase = "investigate";
       health = "ok";
@@ -553,9 +473,7 @@ export class BrewvaRuntime {
       health = "ok";
       reason = `open_items=${openItems.length}`;
     } else {
-      const desiredLevel =
-        state.spec?.verification?.level ??
-        this.config.verification.defaultLevel;
+      const desiredLevel = state.spec?.verification?.level ?? this.config.verification.defaultLevel;
       const report = this.evaluateCompletion(input.sessionId, desiredLevel);
       phase = report.passed ? "done" : "verify";
       health = report.passed ? "ok" : "verification_failed";
@@ -573,19 +491,13 @@ export class BrewvaRuntime {
       });
       if (ratio !== null && this.isContextBudgetEnabled()) {
         const threshold =
-          normalizePercent(
-            this.config.infrastructure.contextBudget.compactionThresholdPercent,
-          ) ?? 1;
+          normalizePercent(this.config.infrastructure.contextBudget.compactionThresholdPercent) ??
+          1;
         const hardLimit =
-          normalizePercent(
-            this.config.infrastructure.contextBudget.hardLimitPercent,
-          ) ?? 1;
+          normalizePercent(this.config.infrastructure.contextBudget.hardLimitPercent) ?? 1;
         if (ratio >= hardLimit || ratio >= threshold) {
           health = "budget_pressure";
-          reason =
-            ratio >= hardLimit
-              ? "context_hard_limit_pressure"
-              : "context_usage_pressure";
+          reason = ratio >= hardLimit ? "context_hard_limit_pressure" : "context_usage_pressure";
         }
       }
     }
@@ -637,10 +549,7 @@ export class BrewvaRuntime {
       const flagsRaw = (health as { flags?: unknown }).flags;
       const flags = Array.isArray(flagsRaw)
         ? flagsRaw
-            .filter(
-              (item): item is string =>
-                typeof item === "string" && item.trim().length > 0,
-            )
+            .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
             .slice(0, 8)
         : [];
       return { score, drunk, flags };
@@ -648,10 +557,7 @@ export class BrewvaRuntime {
     return null;
   }
 
-  private buildOutputHealthGuardBlock(health: {
-    score: number;
-    flags: string[];
-  }): string {
+  private buildOutputHealthGuardBlock(health: { score: number; flags: string[] }): string {
     const score = Math.max(0, Math.min(1, health.score));
     const flags = health.flags.length > 0 ? health.flags.join(",") : "none";
     return [
@@ -672,12 +578,9 @@ export class BrewvaRuntime {
     reason: string;
     metrics: ViewportMetrics;
   }): string {
-    const format = (value: number | null): string =>
-      value === null ? "null" : value.toFixed(2);
+    const format = (value: number | null): string => (value === null ? "null" : value.toFixed(2));
     const included =
-      input.metrics.includedFiles.length > 0
-        ? input.metrics.includedFiles.join(", ")
-        : "(none)";
+      input.metrics.includedFiles.length > 0 ? input.metrics.includedFiles.join(", ") : "(none)";
     const unavailable =
       input.metrics.unavailableFiles.length > 0
         ? input.metrics.unavailableFiles
@@ -802,10 +705,7 @@ export class BrewvaRuntime {
       const improvement = candidateScore - currentScore;
       if (improvement > 0.04) return true;
 
-      if (
-        current.result.metrics.truncated &&
-        !candidate.result.metrics.truncated
-      ) {
+      if (current.result.metrics.truncated && !candidate.result.metrics.truncated) {
         if (improvement >= -0.01) return true;
       }
 
@@ -826,8 +726,7 @@ export class BrewvaRuntime {
     const shouldTryNoNeighborhood =
       selectedQuality === "low" ||
       selectedResult.metrics.truncated ||
-      ((selectedScore.score ?? 1) < 0.16 &&
-        selectedResult.metrics.neighborhoodLines > 12);
+      ((selectedScore.score ?? 1) < 0.16 && selectedResult.metrics.neighborhoodLines > 12);
 
     if (shouldTryNoNeighborhood) {
       const noNeighborhood = build({ maxNeighborImports: 0 });
@@ -852,8 +751,7 @@ export class BrewvaRuntime {
       }
     }
 
-    const shouldTryMinimal =
-      selectedQuality === "low" || selectedResult.metrics.truncated;
+    const shouldTryMinimal = selectedQuality === "low" || selectedResult.metrics.truncated;
     if (shouldTryMinimal) {
       const minimal = build({
         maxNeighborImports: 0,
@@ -867,12 +765,7 @@ export class BrewvaRuntime {
         score,
       });
 
-      if (
-        isBetter(
-          { result: selectedResult, score: selectedScore },
-          { result: minimal, score },
-        )
-      ) {
+      if (isBetter({ result: selectedResult, score: selectedScore }, { result: minimal, score })) {
         selectedVariant = "minimal";
         selectedResult = minimal;
         selectedScore = score;
@@ -957,8 +850,7 @@ export class BrewvaRuntime {
     const outputHealth = this.getLatestOutputHealth(sessionId);
     if (
       outputHealth &&
-      (outputHealth.drunk ||
-        outputHealth.score < OUTPUT_HEALTH_GUARD_SCORE_THRESHOLD)
+      (outputHealth.drunk || outputHealth.score < OUTPUT_HEALTH_GUARD_SCORE_THRESHOLD)
     ) {
       this.registerContextInjection(sessionId, {
         source: "brewva.output-guard",
@@ -983,8 +875,7 @@ export class BrewvaRuntime {
       content: digest,
     });
 
-    const latestCompaction =
-      this.latestCompactionSummaryBySession.get(sessionId);
+    const latestCompaction = this.latestCompactionSummaryBySession.get(sessionId);
     if (latestCompaction?.summary) {
       this.registerContextInjection(sessionId, {
         source: "brewva.compaction-summary",
@@ -1016,11 +907,8 @@ export class BrewvaRuntime {
     const taskSpec = taskState?.spec;
     const explicitFiles = taskSpec?.targets?.files ?? [];
     const fallbackFiles =
-      explicitFiles.length === 0
-        ? this.fileChanges.recentFiles(sessionId, 3)
-        : [];
-    const viewportFiles =
-      explicitFiles.length > 0 ? explicitFiles : fallbackFiles;
+      explicitFiles.length === 0 ? this.fileChanges.recentFiles(sessionId, 3) : [];
+    const viewportFiles = explicitFiles.length > 0 ? explicitFiles : fallbackFiles;
     const viewportSymbols = taskSpec?.targets?.symbols ?? [];
     if (viewportFiles.length > 0) {
       const viewportPolicy = this.decideViewportPolicy({
@@ -1063,14 +951,11 @@ export class BrewvaRuntime {
             requestedFiles: viewportPolicy.selected.metrics.requestedFiles,
             includedFiles: viewportPolicy.selected.metrics.includedFiles,
             unavailableFiles: viewportPolicy.selected.metrics.unavailableFiles,
-            importsExportsLines:
-              viewportPolicy.selected.metrics.importsExportsLines,
-            relevantTotalLines:
-              viewportPolicy.selected.metrics.relevantTotalLines,
+            importsExportsLines: viewportPolicy.selected.metrics.importsExportsLines,
+            relevantTotalLines: viewportPolicy.selected.metrics.relevantTotalLines,
             relevantHitLines: viewportPolicy.selected.metrics.relevantHitLines,
             symbolLines: viewportPolicy.selected.metrics.symbolLines,
-            neighborhoodLines:
-              viewportPolicy.selected.metrics.neighborhoodLines,
+            neighborhoodLines: viewportPolicy.selected.metrics.neighborhoodLines,
             totalChars: viewportPolicy.selected.metrics.totalChars,
             truncated: viewportPolicy.selected.metrics.truncated,
           },
@@ -1086,10 +971,7 @@ export class BrewvaRuntime {
         }
       }
 
-      if (
-        viewportPolicy.variant !== "full" ||
-        viewportPolicy.quality === "low"
-      ) {
+      if (viewportPolicy.variant !== "full" || viewportPolicy.quality === "low") {
         this.recordEvent({
           sessionId,
           type: "viewport_policy_evaluated",
@@ -1132,8 +1014,7 @@ export class BrewvaRuntime {
     if (decision.accepted) {
       const fingerprint = sha256(decision.finalText);
       const scopeKey = this.buildInjectionScopeKey(sessionId, injectionScopeId);
-      const previous =
-        this.lastInjectedContextFingerprintBySession.get(scopeKey);
+      const previous = this.lastInjectedContextFingerprintBySession.get(scopeKey);
       if (previous === fingerprint) {
         this.reservedContextInjectionTokensByScope.set(scopeKey, 0);
         this.contextInjection.commit(sessionId, merged.consumedKeys);
@@ -1181,10 +1062,7 @@ export class BrewvaRuntime {
       };
     }
 
-    const rejectedScopeKey = this.buildInjectionScopeKey(
-      sessionId,
-      injectionScopeId,
-    );
+    const rejectedScopeKey = this.buildInjectionScopeKey(sessionId, injectionScopeId);
     this.reservedContextInjectionTokensByScope.set(rejectedScopeKey, 0);
     this.recordEvent({
       sessionId,
@@ -1216,11 +1094,7 @@ export class BrewvaRuntime {
     truncated: boolean;
     droppedReason?: "hard_limit" | "budget_exhausted";
   } {
-    const decision = this.contextBudget.planInjection(
-      sessionId,
-      inputText,
-      usage,
-    );
+    const decision = this.contextBudget.planInjection(sessionId, inputText, usage);
     if (!decision.accepted) {
       return {
         accepted: false,
@@ -1243,8 +1117,7 @@ export class BrewvaRuntime {
     }
 
     const scopeKey = this.buildInjectionScopeKey(sessionId, injectionScopeId);
-    const usedTokens =
-      this.reservedContextInjectionTokensByScope.get(scopeKey) ?? 0;
+    const usedTokens = this.reservedContextInjectionTokensByScope.get(scopeKey) ?? 0;
     const maxTokens = Math.max(
       0,
       Math.floor(this.config.infrastructure.contextBudget.maxInjectionTokens),
@@ -1303,8 +1176,7 @@ export class BrewvaRuntime {
     if (normalizedTokens <= 0) return;
 
     const scopeKey = this.buildInjectionScopeKey(sessionId, injectionScopeId);
-    const usedTokens =
-      this.reservedContextInjectionTokensByScope.get(scopeKey) ?? 0;
+    const usedTokens = this.reservedContextInjectionTokensByScope.get(scopeKey) ?? 0;
     const maxTokens = Math.max(
       0,
       Math.floor(this.config.infrastructure.contextBudget.maxInjectionTokens),
@@ -1315,14 +1187,8 @@ export class BrewvaRuntime {
     );
   }
 
-  shouldRequestCompaction(
-    sessionId: string,
-    usage: ContextBudgetUsage | undefined,
-  ): boolean {
-    const decision = this.contextBudget.shouldRequestCompaction(
-      sessionId,
-      usage,
-    );
+  shouldRequestCompaction(sessionId: string, usage: ContextBudgetUsage | undefined): boolean {
+    const decision = this.contextBudget.shouldRequestCompaction(sessionId, usage);
     if (!decision.shouldCompact) return false;
     this.recordEvent({
       sessionId,
@@ -1424,10 +1290,8 @@ export class BrewvaRuntime {
     const activeName = this.activeSkillsBySession.get(sessionId);
     if (activeName && activeName !== name) {
       const activeSkill = this.skills.get(activeName);
-      const activeAllows =
-        activeSkill?.contract.composableWith?.includes(name) ?? false;
-      const nextAllows =
-        skill.contract.composableWith?.includes(activeName) ?? false;
+      const activeAllows = activeSkill?.contract.composableWith?.includes(name) ?? false;
+      const nextAllows = skill.contract.composableWith?.includes(activeName) ?? false;
       if (!activeAllows && !nextAllows) {
         return {
           ok: false,
@@ -1485,9 +1349,7 @@ export class BrewvaRuntime {
     for (const [i, step] of plan.steps.entries()) {
       const skill = this.skills.get(step.skill);
       if (!skill) {
-        errors.push(
-          `Step ${i + 1}: skill '${step.skill}' not found in registry.`,
-        );
+        errors.push(`Step ${i + 1}: skill '${step.skill}' not found in registry.`);
         continue;
       }
 
@@ -1535,17 +1397,11 @@ export class BrewvaRuntime {
     return validation;
   }
 
-  getSkillOutputs(
-    sessionId: string,
-    skillName: string,
-  ): Record<string, unknown> | undefined {
+  getSkillOutputs(sessionId: string, skillName: string): Record<string, unknown> | undefined {
     return this.skillOutputsBySession.get(sessionId)?.get(skillName)?.outputs;
   }
 
-  getAvailableConsumedOutputs(
-    sessionId: string,
-    targetSkillName: string,
-  ): Record<string, unknown> {
+  getAvailableConsumedOutputs(sessionId: string, targetSkillName: string): Record<string, unknown> {
     const targetSkill = this.skills.get(targetSkillName);
     if (!targetSkill) return {};
     const consumes = targetSkill.contract.consumes ?? [];
@@ -1566,10 +1422,7 @@ export class BrewvaRuntime {
     return result;
   }
 
-  checkToolAccess(
-    sessionId: string,
-    toolName: string,
-  ): { allowed: boolean; reason?: string } {
+  checkToolAccess(sessionId: string, toolName: string): { allowed: boolean; reason?: string } {
     const skill = this.getActiveSkill(sessionId);
     const normalizedToolName = normalizeToolName(toolName);
     const access = checkToolAccess(skill?.contract, toolName, {
@@ -1580,8 +1433,7 @@ export class BrewvaRuntime {
 
     if (access.warning && skill) {
       const key = `${skill.name}:${normalizedToolName}`;
-      const seen =
-        this.toolContractWarningsBySession.get(sessionId) ?? new Set<string>();
+      const seen = this.toolContractWarningsBySession.get(sessionId) ?? new Set<string>();
       if (!seen.has(key)) {
         seen.add(key);
         this.toolContractWarningsBySession.set(sessionId, seen);
@@ -1640,17 +1492,12 @@ export class BrewvaRuntime {
       !ALWAYS_ALLOWED_TOOL_SET.has(normalizedToolName)
     ) {
       const maxTokens = skill.contract.budget.maxTokens;
-      const usedTokens = this.costTracker.getSkillTotalTokens(
-        sessionId,
-        skill.name,
-      );
+      const usedTokens = this.costTracker.getSkillTotalTokens(sessionId, skill.name);
       if (usedTokens >= maxTokens) {
         const reason = `Skill '${skill.name}' exceeded maxTokens=${maxTokens} (used=${usedTokens}).`;
         if (this.config.security.skillMaxTokensMode === "warn") {
           const key = `maxTokens:${skill.name}`;
-          const seen =
-            this.skillBudgetWarningsBySession.get(sessionId) ??
-            new Set<string>();
+          const seen = this.skillBudgetWarningsBySession.get(sessionId) ?? new Set<string>();
           if (!seen.has(key)) {
             seen.add(key);
             this.skillBudgetWarningsBySession.set(sessionId, seen);
@@ -1713,15 +1560,12 @@ export class BrewvaRuntime {
       maxParallel > 0 &&
       this.config.security.skillMaxParallelMode !== "off"
     ) {
-      const activeRuns =
-        this.parallel.snapshotSession(sessionId)?.activeRunIds.length ?? 0;
+      const activeRuns = this.parallel.snapshotSession(sessionId)?.activeRunIds.length ?? 0;
       if (activeRuns >= maxParallel) {
         const mode = this.config.security.skillMaxParallelMode;
         if (mode === "warn") {
           const key = `maxParallel:${skill.name}`;
-          const seen =
-            this.skillParallelWarningsBySession.get(sessionId) ??
-            new Set<string>();
+          const seen = this.skillParallelWarningsBySession.get(sessionId) ?? new Set<string>();
           if (!seen.has(key)) {
             seen.add(key);
             this.skillParallelWarningsBySession.set(sessionId, seen);
@@ -1907,9 +1751,7 @@ export class BrewvaRuntime {
     return this.fileChanges.latestSessionWithHistory();
   }
 
-  private extractShellCommandFromArgs(
-    args: Record<string, unknown>,
-  ): string | undefined {
+  private extractShellCommandFromArgs(args: Record<string, unknown>): string | undefined {
     const candidate = args.command ?? args.cmd ?? args.script;
     if (typeof candidate !== "string") return undefined;
     const trimmed = candidate.trim();
@@ -1994,9 +1836,7 @@ export class BrewvaRuntime {
     },
   ): void {
     const current = this.getTaskState(sessionId);
-    const existing = current.blockers.find(
-      (blocker) => blocker.id === input.blockerId,
-    );
+    const existing = current.blockers.find((blocker) => blocker.id === input.blockerId);
     if (
       existing &&
       existing.message === input.message &&
@@ -2013,10 +1853,7 @@ export class BrewvaRuntime {
     });
   }
 
-  private resolveTruthBackedBlocker(
-    sessionId: string,
-    blockerId: string,
-  ): void {
+  private resolveTruthBackedBlocker(sessionId: string, blockerId: string): void {
     const current = this.getTaskState(sessionId);
     if (!current.blockers.some((blocker) => blocker.id === blockerId)) {
       return;
@@ -2040,9 +1877,7 @@ export class BrewvaRuntime {
   }): void {
     const normalizedToolName = normalizeToolName(input.toolName);
 
-    const metadataArtifacts = this.coerceEvidenceArtifacts(
-      input.metadata?.artifacts,
-    );
+    const metadataArtifacts = this.coerceEvidenceArtifacts(input.metadata?.artifacts);
     const extractedArtifacts = extractEvidenceArtifacts({
       toolName: input.toolName,
       args: input.args,
@@ -2050,10 +1885,7 @@ export class BrewvaRuntime {
       isError: !input.success,
       details: input.metadata?.details,
     });
-    const artifacts = this.dedupeArtifacts([
-      ...metadataArtifacts,
-      ...extractedArtifacts,
-    ]);
+    const artifacts = this.dedupeArtifacts([...metadataArtifacts, ...extractedArtifacts]);
 
     if (normalizedToolName === "bash" || normalizedToolName === "shell") {
       const commandFromArgs = this.extractShellCommandFromArgs(input.args);
@@ -2061,8 +1893,7 @@ export class BrewvaRuntime {
         (artifact) => artifact.kind === "command_failure",
       )?.command;
       const command =
-        typeof commandFromArtifact === "string" &&
-        commandFromArtifact.trim().length > 0
+        typeof commandFromArtifact === "string" && commandFromArtifact.trim().length > 0
           ? commandFromArtifact.trim()
           : commandFromArgs;
       if (!command) return;
@@ -2083,14 +1914,10 @@ export class BrewvaRuntime {
         return;
       }
 
-      const failure = artifacts.find(
-        (artifact) => artifact.kind === "command_failure",
-      );
+      const failure = artifacts.find((artifact) => artifact.kind === "command_failure");
       const exitCodeRaw = failure?.exitCode;
       const exitCode =
-        typeof exitCodeRaw === "number" && Number.isFinite(exitCodeRaw)
-          ? exitCodeRaw
-          : null;
+        typeof exitCodeRaw === "number" && Number.isFinite(exitCodeRaw) ? exitCodeRaw : null;
       const summary =
         exitCode === null
           ? `command failed: ${commandSummary}`
@@ -2109,15 +1936,11 @@ export class BrewvaRuntime {
           outputHash: input.ledgerRow.outputHash,
           argsSummary: input.ledgerRow.argsSummary,
           outputSummary: input.ledgerRow.outputSummary,
-          failingTests: Array.isArray(failure?.failingTests)
-            ? failure?.failingTests
-            : [],
+          failingTests: Array.isArray(failure?.failingTests) ? failure?.failingTests : [],
           failedAssertions: Array.isArray(failure?.failedAssertions)
             ? failure?.failedAssertions
             : [],
-          stackTrace: Array.isArray(failure?.stackTrace)
-            ? failure?.stackTrace
-            : [],
+          stackTrace: Array.isArray(failure?.stackTrace) ? failure?.stackTrace : [],
         },
       });
 
@@ -2131,14 +1954,11 @@ export class BrewvaRuntime {
 
     if (normalizedToolName === "lsp_diagnostics") {
       const rawSeverity = input.args.severity;
-      const severityFilter =
-        typeof rawSeverity === "string" ? rawSeverity.trim() : "";
-      const unfiltered =
-        severityFilter === "" || severityFilter.toLowerCase() === "all";
+      const severityFilter = typeof rawSeverity === "string" ? rawSeverity.trim() : "";
+      const unfiltered = severityFilter === "" || severityFilter.toLowerCase() === "all";
 
       const rawFilePath = input.args.filePath;
-      const targetFilePath =
-        typeof rawFilePath === "string" ? rawFilePath.trim() : "";
+      const targetFilePath = typeof rawFilePath === "string" ? rawFilePath.trim() : "";
       if (!targetFilePath) return;
       const targetFileKey = this.normalizeTruthFilePath(targetFilePath);
       const targetPrefix = this.truthFactPrefixForDiagnosticFile(targetFileKey);
@@ -2188,19 +2008,11 @@ export class BrewvaRuntime {
           const file = typeof diag.file === "string" ? diag.file.trim() : "";
           const line = typeof diag.line === "number" ? diag.line : NaN;
           const column = typeof diag.column === "number" ? diag.column : NaN;
-          const severity =
-            typeof diag.severity === "string" ? diag.severity.trim() : "";
+          const severity = typeof diag.severity === "string" ? diag.severity.trim() : "";
           const code = typeof diag.code === "string" ? diag.code.trim() : "";
-          const message =
-            typeof diag.message === "string" ? diag.message.trim() : "";
+          const message = typeof diag.message === "string" ? diag.message.trim() : "";
 
-          if (
-            !file ||
-            !Number.isFinite(line) ||
-            !Number.isFinite(column) ||
-            !code ||
-            !message
-          ) {
+          if (!file || !Number.isFinite(line) || !Number.isFinite(column) || !code || !message) {
             continue;
           }
           out.push({
@@ -2231,8 +2043,7 @@ export class BrewvaRuntime {
       }
 
       diagnostics = diagnostics.filter(
-        (diagnostic) =>
-          this.normalizeTruthFilePath(diagnostic.file) === targetFileKey,
+        (diagnostic) => this.normalizeTruthFilePath(diagnostic.file) === targetFileKey,
       );
       if (diagnostics.length === 0) {
         return;
@@ -2515,10 +2326,7 @@ export class BrewvaRuntime {
     return { ok: true, blockerId: payload.blocker.id };
   }
 
-  resolveTaskBlocker(
-    sessionId: string,
-    blockerId: string,
-  ): { ok: boolean; error?: string } {
+  resolveTaskBlocker(sessionId: string, blockerId: string): { ok: boolean; error?: string } {
     const id = blockerId?.trim();
     if (!id) return { ok: false, error: "missing_id" };
 
@@ -2570,9 +2378,7 @@ export class BrewvaRuntime {
     const entriesSinceAnchor =
       lastAnchorIndex >= 0 ? Math.max(0, totalEntries - lastAnchorIndex - 1) : totalEntries;
     const entriesSinceCheckpoint =
-      lastCheckpointIndex >= 0
-        ? Math.max(0, totalEntries - lastCheckpointIndex - 1)
-        : totalEntries;
+      lastCheckpointIndex >= 0 ? Math.max(0, totalEntries - lastCheckpointIndex - 1) : totalEntries;
 
     const thresholds = this.config.tape.tapePressureThresholds;
     const anchorPayload = coerceTapeAnchorPayload(lastAnchorEvent?.payload);
@@ -2646,19 +2452,12 @@ export class BrewvaRuntime {
     if (event.type === TAPE_ANCHOR_EVENT_TYPE) {
       const payload = coerceTapeAnchorPayload(event.payload);
       if (!payload) return `anchor ${event.id}`;
-      return [
-        "anchor",
-        payload.name,
-        payload.summary ?? "",
-        payload.nextSteps ?? "",
-      ]
+      return ["anchor", payload.name, payload.summary ?? "", payload.nextSteps ?? ""]
         .join(" ")
         .trim();
     }
     const payloadText =
-      event.payload && Object.keys(event.payload).length > 0
-        ? JSON.stringify(event.payload)
-        : "";
+      event.payload && Object.keys(event.payload).length > 0 ? JSON.stringify(event.payload) : "";
     return `${event.type} ${payloadText}`.trim();
   }
 
@@ -2772,10 +2571,7 @@ export class BrewvaRuntime {
     const existing = state.facts.find((fact) => fact.id === id);
     const status: TruthFactStatus = input.status ?? "active";
     const evidenceIds = [
-      ...new Set([
-        ...(existing?.evidenceIds ?? []),
-        ...(input.evidenceIds ?? []),
-      ]),
+      ...new Set([...(existing?.evidenceIds ?? []), ...(input.evidenceIds ?? [])]),
     ];
 
     const fact: TruthFact = {
@@ -2788,25 +2584,18 @@ export class BrewvaRuntime {
       evidenceIds,
       firstSeenAt: existing?.firstSeenAt ?? now,
       lastSeenAt: now,
-      resolvedAt:
-        status === "resolved" ? (existing?.resolvedAt ?? now) : undefined,
+      resolvedAt: status === "resolved" ? (existing?.resolvedAt ?? now) : undefined,
     };
 
     this.recordEvent({
       sessionId,
       type: TRUTH_EVENT_TYPE,
-      payload: buildTruthFactUpsertedEvent(fact) as unknown as Record<
-        string,
-        unknown
-      >,
+      payload: buildTruthFactUpsertedEvent(fact) as unknown as Record<string, unknown>,
     });
     return { ok: true, fact };
   }
 
-  resolveTruthFact(
-    sessionId: string,
-    truthFactId: string,
-  ): { ok: boolean; error?: string } {
+  resolveTruthFact(sessionId: string, truthFactId: string): { ok: boolean; error?: string } {
     const id = truthFactId?.trim();
     if (!id) return { ok: false, error: "missing_id" };
 
@@ -2849,20 +2638,12 @@ export class BrewvaRuntime {
     return row;
   }
 
-  queryEvents(
-    sessionId: string,
-    query: BrewvaEventQuery = {},
-  ): BrewvaEventRecord[] {
+  queryEvents(sessionId: string, query: BrewvaEventQuery = {}): BrewvaEventRecord[] {
     return this.events.list(sessionId, query);
   }
 
-  queryStructuredEvents(
-    sessionId: string,
-    query: BrewvaEventQuery = {},
-  ): BrewvaStructuredEvent[] {
-    return this.events
-      .list(sessionId, query)
-      .map((event) => this.toStructuredEvent(event));
+  queryStructuredEvents(sessionId: string, query: BrewvaEventQuery = {}): BrewvaStructuredEvent[] {
+    return this.events.list(sessionId, query).map((event) => this.toStructuredEvent(event));
   }
 
   listReplaySessions(limit = 20): BrewvaReplaySession[] {
@@ -2883,9 +2664,7 @@ export class BrewvaRuntime {
     return rows;
   }
 
-  subscribeEvents(
-    listener: (event: BrewvaStructuredEvent) => void,
-  ): () => void {
+  subscribeEvents(listener: (event: BrewvaStructuredEvent) => void): () => void {
     this.eventListeners.add(listener);
     return () => {
       this.eventListeners.delete(listener);
@@ -3021,10 +2800,7 @@ export class BrewvaRuntime {
     return this.costTracker.getSummary(sessionId);
   }
 
-  evaluateCompletion(
-    sessionId: string,
-    level?: VerificationLevel,
-  ): VerificationReport {
+  evaluateCompletion(sessionId: string, level?: VerificationLevel): VerificationReport {
     return this.verification.evaluate(sessionId, level);
   }
 
@@ -3096,18 +2872,13 @@ export class BrewvaRuntime {
     return report;
   }
 
-  private syncVerificationBlockers(
-    sessionId: string,
-    report: VerificationReport,
-  ): void {
+  private syncVerificationBlockers(sessionId: string, report: VerificationReport): void {
     const verificationState = this.verification.stateStore.get(sessionId);
     if (!verificationState.lastWriteAt) return;
 
     const lastWriteAt = verificationState.lastWriteAt ?? 0;
     const current = this.getTaskState(sessionId);
-    const existingById = new Map(
-      current.blockers.map((blocker) => [blocker.id, blocker]),
-    );
+    const existingById = new Map(current.blockers.map((blocker) => [blocker.id, blocker]));
     const failingIds = new Set<string>();
     const truthFactIdForCheck = (checkName: string): string =>
       `truth:verifier:${normalizeVerifierCheckForId(checkName)}`;
@@ -3167,8 +2938,7 @@ export class BrewvaRuntime {
       if (failingIds.has(blocker.id)) continue;
       this.resolveTaskBlocker(sessionId, blocker.id);
       const truthFactId =
-        blocker.truthFactId ??
-        `truth:verifier:${blocker.id.slice(VERIFIER_BLOCKER_PREFIX.length)}`;
+        blocker.truthFactId ?? `truth:verifier:${blocker.id.slice(VERIFIER_BLOCKER_PREFIX.length)}`;
       const active = truthState.facts.find(
         (fact) => fact.id === truthFactId && fact.status === "active",
       );
@@ -3204,8 +2974,7 @@ export class BrewvaRuntime {
       if (checkName === "diff-review") continue;
 
       const existing = state.checkRuns[checkName];
-      const isFresh =
-        existing && existing.ok && existing.timestamp >= state.lastWriteAt;
+      const isFresh = existing && existing.ok && existing.timestamp >= state.lastWriteAt;
       if (isFresh) continue;
 
       const result = await runShellCommand(command, {
@@ -3217,11 +2986,7 @@ export class BrewvaRuntime {
       const ok = result.exitCode === 0 && !result.timedOut;
       const outputText = `${result.stdout}\n${result.stderr}`.trim();
       const outputSummary =
-        outputText.length > 0
-          ? outputText.slice(0, 2000)
-          : ok
-            ? "(no output)"
-            : "(no output)";
+        outputText.length > 0 ? outputText.slice(0, 2000) : ok ? "(no output)" : "(no output)";
 
       const timestamp = Date.now();
       const ledgerId = this.recordToolResult({
@@ -3254,10 +3019,7 @@ export class BrewvaRuntime {
   }
 
   private maybeCompactLedger(sessionId: string, turn: number): void {
-    const every = Math.max(
-      0,
-      Math.trunc(this.config.ledger.checkpointEveryTurns),
-    );
+    const every = Math.max(0, Math.trunc(this.config.ledger.checkpointEveryTurns));
     if (every <= 0) return;
     if (turn <= 0) return;
     if (turn % every !== 0) return;
@@ -3265,10 +3027,7 @@ export class BrewvaRuntime {
       return;
     }
 
-    const keepLast = Math.max(
-      2,
-      Math.min(this.config.ledger.digestWindow, every - 1),
-    );
+    const keepLast = Math.max(2, Math.min(this.config.ledger.digestWindow, every - 1));
     const result = this.ledger.compactSession(sessionId, {
       keepLast,
       reason: `turn-${turn}`,

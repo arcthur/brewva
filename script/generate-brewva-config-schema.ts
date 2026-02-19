@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
 import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 type Schema = Record<string, unknown>;
@@ -28,7 +28,7 @@ function stableStringify(value: unknown): string {
   ];
   const keyPriority = new Map<string, number>(keyOrder.map((key, index) => [key, index]));
   const sortKeys = (keys: string[]): string[] =>
-    keys.sort((a, b) => {
+    keys.toSorted((a, b) => {
       const ai = keyPriority.get(a);
       const bi = keyPriority.get(b);
       if (ai !== undefined && bi !== undefined) return ai - bi;
@@ -54,7 +54,8 @@ function stableStringify(value: unknown): string {
 
 async function main(): Promise<void> {
   const require = createRequire(import.meta.url);
-  const { createGenerator } = require("ts-json-schema-generator") as typeof import("ts-json-schema-generator");
+  const { createGenerator } =
+    require("ts-json-schema-generator") as typeof import("ts-json-schema-generator");
 
   const scriptDir = dirname(fileURLToPath(import.meta.url));
   const repoRoot = resolve(scriptDir, "..");

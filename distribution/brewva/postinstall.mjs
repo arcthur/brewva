@@ -1,8 +1,56 @@
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { getBinaryPath, getPlatformPackage } from "./bin/platform.js";
+
+const NODE_VERSION_RANGE = "^20.19.0 || >=22.12.0";
+
+function parseSemver(versionText) {
+  if (typeof versionText !== "string" || versionText.length === 0) return null;
+  const normalized = versionText.startsWith("v") ? versionText.slice(1) : versionText;
+  const match = /^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)/u.exec(normalized);
+  if (!match?.groups) return null;
+
+  const major = Number(match.groups.major);
+  const minor = Number(match.groups.minor);
+  const patch = Number(match.groups.patch);
+
+  if (!Number.isInteger(major) || major < 0) return null;
+  if (!Number.isInteger(minor) || minor < 0) return null;
+  if (!Number.isInteger(patch) || patch < 0) return null;
+
+  return { major, minor, patch };
+}
+
+function isSupportedNodeVersion(version) {
+  if (version.major === 20) return version.minor >= 19;
+  if (version.major === 21) return false;
+  if (version.major === 22) return version.minor >= 12;
+  return version.major > 22;
+}
+
+function assertSupportedNodeRuntime() {
+  const detected =
+    typeof process.versions?.node === "string" ? process.versions.node : process.version;
+  const parsed = parseSemver(process.versions?.node ?? process.version);
+  if (!parsed || !isSupportedNodeVersion(parsed)) {
+    console.error(
+      `brewva: unsupported Node.js version ${detected}. Brewva requires Node.js ${NODE_VERSION_RANGE} (ES2023 baseline).`,
+    );
+    process.exit(1);
+  }
+}
+
+assertSupportedNodeRuntime();
 
 const require = createRequire(import.meta.url);
 
@@ -53,16 +101,10 @@ function resolveMaybeAbsolute(baseDir, pathText) {
 }
 
 function resolveGlobalBrewvaRootDir(env = process.env) {
-  const fromBrewva = typeof env["BREWVA_CODING_AGENT_DIR"] === "string"
-    ? env["BREWVA_CODING_AGENT_DIR"]
-    : "";
+  const fromBrewva =
+    typeof env["BREWVA_CODING_AGENT_DIR"] === "string" ? env["BREWVA_CODING_AGENT_DIR"] : "";
   if (fromBrewva.trim().length > 0) {
     return resolve(resolveMaybeAbsolute(process.cwd(), fromBrewva), "..");
-  }
-
-  const fromPi = typeof env.PI_CODING_AGENT_DIR === "string" ? env.PI_CODING_AGENT_DIR : "";
-  if (fromPi.trim().length > 0) {
-    return resolve(resolveMaybeAbsolute(process.cwd(), fromPi), "..");
   }
 
   const configured = typeof env.XDG_CONFIG_HOME === "string" ? env.XDG_CONFIG_HOME : "";
@@ -151,7 +193,7 @@ function listBundledSkillFiles(sourceSkillsDir) {
     }
   };
   walk(sourceSkillsDir);
-  return out.sort();
+  return out.toSorted((a, b) => a.localeCompare(b));
 }
 
 function readSkillsManifest(manifestPath) {

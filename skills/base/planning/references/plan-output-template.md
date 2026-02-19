@@ -58,6 +58,7 @@ VERIFICATION_PLAN
 ```
 
 ## Review Rules
+
 - Every step must have a verification check.
 - Every medium/high risk must have fallback.
 - If option difference is trivial, merge and keep one option.

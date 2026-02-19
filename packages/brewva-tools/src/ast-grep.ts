@@ -15,6 +15,7 @@ import {
   summarizeReadBatch,
 } from "./utils/parallel-read.js";
 import { textResult } from "./utils/result.js";
+import { defineTool } from "./utils/tool.js";
 
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", "build", "coverage"]);
 const BINARY_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".pdf", ".zip"]);
@@ -253,10 +254,8 @@ async function naiveReplace(
     : `Applied updates:\n${updates.join("\n")}`;
 }
 
-export function createAstGrepTools(
-  options?: { runtime?: BrewvaToolRuntime },
-): ToolDefinition<any>[] {
-  const astGrepSearch: ToolDefinition<any> = {
+export function createAstGrepTools(options?: { runtime?: BrewvaToolRuntime }): ToolDefinition[] {
+  const astGrepSearch = defineTool({
     name: "ast_grep_search",
     label: "AST Grep Search",
     description: "Search code patterns via ast-grep if available, fallback to regex search.",
@@ -288,14 +287,17 @@ export function createAstGrepTools(
           operation: "naive_search",
           config: resolveParallelReadConfig(options?.runtime),
         };
-        return textResult(await naiveSearch(ctx.cwd, params.pattern, scan, params.paths, params.globs), {
-          fallback: "regex",
-        });
+        return textResult(
+          await naiveSearch(ctx.cwd, params.pattern, scan, params.paths, params.globs),
+          {
+            fallback: "regex",
+          },
+        );
       }
     },
-  };
+  });
 
-  const astGrepReplace: ToolDefinition<any> = {
+  const astGrepReplace = defineTool({
     name: "ast_grep_replace",
     label: "AST Grep Replace",
     description: "Replace code patterns via ast-grep if available, fallback to regex replacement.",
@@ -351,7 +353,7 @@ export function createAstGrepTools(
         );
       }
     },
-  };
+  });
 
   return [astGrepSearch, astGrepReplace];
 }

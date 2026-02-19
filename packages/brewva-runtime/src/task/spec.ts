@@ -40,7 +40,9 @@ export function normalizeTaskSpec(input: TaskSpec): TaskSpec {
   };
 }
 
-export function parseTaskSpec(input: unknown): { ok: true; spec: TaskSpec } | { ok: false; error: string } {
+export function parseTaskSpec(
+  input: unknown,
+): { ok: true; spec: TaskSpec } | { ok: false; error: string } {
   if (typeof input === "string") {
     const goal = input.trim();
     if (!goal) return { ok: false, error: "TaskSpec goal must be a non-empty string." };
@@ -100,4 +102,3 @@ export function parseTaskSpec(input: unknown): { ok: true; spec: TaskSpec } | { 
 
   return { ok: true, spec };
 }
-

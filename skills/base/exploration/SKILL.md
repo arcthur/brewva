@@ -22,10 +22,13 @@ escalation_path:
 # Exploration Skill
 
 ## Intent
+
 Build a reliable mental model before planning or patching.
 
 ## Trigger
+
 Use this skill when:
+
 - repository is unfamiliar
 - request references unknown modules
 - design decision needs structural context
@@ -33,13 +36,16 @@ Use this skill when:
 ## Exploration Workflow
 
 ### Step 1: Entry-point scan (breadth first)
+
 Start from top-level anchors:
+
 1. runtime/package manifests
 2. app entrypoints
 3. build/test config
 4. major module directories
 
 Suggested command sequence:
+
 ```bash
 rg --files
 ```
@@ -47,12 +53,15 @@ rg --files
 Then inspect key anchors with `read`.
 
 ### Step 2: Build dependency map
+
 Identify:
+
 - upstream inputs (APIs, config, events)
 - core transforms (services, domain logic)
 - downstream outputs (CLI, HTTP, files, external tools)
 
 Capture module edges in concise form:
+
 ```text
 MODULE_EDGE
 - from: <module>
@@ -61,7 +70,9 @@ MODULE_EDGE
 ```
 
 ### Step 3: Locate critical paths
+
 Find the hot path for the user request:
+
 - request entry
 - primary decision logic
 - persistence or side-effect boundary
@@ -69,7 +80,9 @@ Find the hot path for the user request:
 Read deeply only in 2-4 critical files first.
 
 ### Step 4: Control exploration depth
+
 Depth limits:
+
 - initial scan: up to 50 files
 - deep dive: only files tied to hot path
 - stop broad scanning when repeated patterns emerge
@@ -77,6 +90,7 @@ Depth limits:
 If context remains unclear, list specific unknowns and continue focused search.
 
 ### Step 5: Emit exploration outputs
+
 ```text
 ARCHITECTURE_MAP
 - entrypoints:
@@ -92,17 +106,20 @@ UNKNOWNS
 ```
 
 ## Heuristics
+
 - Prefer current implementation paths over legacy/dead code.
 - Use test files to infer expected behavior quickly.
 - Track naming conventions to infer boundary ownership.
 - Prioritize modules with high fan-in or fan-out.
 
 ## Stop Conditions
+
 - Cannot identify real entrypoint after focused scan.
 - Request depends on generated/external code not present locally.
 - Tool-call budget exhausted without converging map.
 
 ## Anti-Patterns (never)
+
 - Reading random files without hypothesis.
 - Deep-diving implementation before mapping boundaries.
 - Producing generic architecture summary not tied to paths.
@@ -111,11 +128,13 @@ UNKNOWNS
 ## Example
 
 Input:
+
 ```text
 "Understand how verification state flows from tool results to final gate decision."
 ```
 
 Expected flow:
+
 1. Locate extension entrypoints.
 2. Trace evidence ingestion path.
 3. Trace gate evaluation path.

@@ -1,4 +1,10 @@
-import type { BrewvaEventRecord, TruthFact, TruthFactStatus, TruthLedgerEventPayload, TruthState } from "../types.js";
+import type {
+  BrewvaEventRecord,
+  TruthFact,
+  TruthFactStatus,
+  TruthLedgerEventPayload,
+  TruthState,
+} from "../types.js";
 import { isRecord, normalizeNonEmptyString, normalizeStringArray } from "../utils/coerce.js";
 
 export const TRUTH_EVENT_TYPE = "truth_event";
@@ -38,7 +44,11 @@ function mergeEvidenceIds(existing: string[], incoming: string[] | undefined): s
   return [...out.values()];
 }
 
-export function reduceTruthState(state: TruthState, payload: TruthLedgerEventPayload, timestamp: number): TruthState {
+export function reduceTruthState(
+  state: TruthState,
+  payload: TruthLedgerEventPayload,
+  timestamp: number,
+): TruthState {
   const updatedAt = Math.max(state.updatedAt ?? 0, timestamp);
 
   if (payload.kind === "fact_upserted") {
@@ -111,7 +121,10 @@ export function buildTruthFactUpsertedEvent(fact: TruthFact): FactUpsertedEvent 
   };
 }
 
-export function buildTruthFactResolvedEvent(input: { factId: string; resolvedAt?: number }): FactResolvedEvent {
+export function buildTruthFactResolvedEvent(input: {
+  factId: string;
+  resolvedAt?: number;
+}): FactResolvedEvent {
   return {
     schema: TRUTH_LEDGER_SCHEMA,
     kind: "fact_resolved",
@@ -159,7 +172,7 @@ export function coerceTruthLedgerPayload(value: unknown): TruthLedgerEventPayloa
 
   const kind = value.kind;
   if (kind === "fact_upserted") {
-    const fact = coerceTruthFact(value.fact as unknown);
+    const fact = coerceTruthFact(value.fact);
     if (!fact) return null;
     return {
       schema: TRUTH_LEDGER_SCHEMA,

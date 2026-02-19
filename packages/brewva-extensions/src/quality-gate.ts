@@ -1,5 +1,5 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
 export function registerQualityGate(pi: ExtensionAPI, runtime: BrewvaRuntime): void {
   pi.on("tool_call", (event, ctx) => {

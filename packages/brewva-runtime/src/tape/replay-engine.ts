@@ -1,4 +1,3 @@
-import type { BrewvaEventRecord, TaskState, TruthState } from "../types.js";
 import {
   TASK_EVENT_TYPE,
   coerceTaskLedgerPayload,
@@ -11,10 +10,8 @@ import {
   createEmptyTruthState,
   reduceTruthState,
 } from "../truth/ledger.js";
-import {
-  TAPE_CHECKPOINT_EVENT_TYPE,
-  coerceTapeCheckpointPayload,
-} from "./events.js";
+import type { BrewvaEventRecord, TaskState, TruthState } from "../types.js";
+import { TAPE_CHECKPOINT_EVENT_TYPE, coerceTapeCheckpointPayload } from "./events.js";
 
 export interface TurnReplayView {
   turn: number;
@@ -34,17 +31,11 @@ function cloneTaskState(state: TaskState): TaskState {
         ...state.spec,
         targets: state.spec.targets
           ? {
-              files: state.spec.targets.files
-                ? [...state.spec.targets.files]
-                : undefined,
-              symbols: state.spec.targets.symbols
-                ? [...state.spec.targets.symbols]
-                : undefined,
+              files: state.spec.targets.files ? [...state.spec.targets.files] : undefined,
+              symbols: state.spec.targets.symbols ? [...state.spec.targets.symbols] : undefined,
             }
           : undefined,
-        constraints: state.spec.constraints
-          ? [...state.spec.constraints]
-          : undefined,
+        constraints: state.spec.constraints ? [...state.spec.constraints] : undefined,
         verification: state.spec.verification
           ? {
               level: state.spec.verification.level,
@@ -61,9 +52,7 @@ function cloneTaskState(state: TaskState): TaskState {
     status: state.status
       ? {
           ...state.status,
-          truthFactIds: state.status.truthFactIds
-            ? [...state.status.truthFactIds]
-            : undefined,
+          truthFactIds: state.status.truthFactIds ? [...state.status.truthFactIds] : undefined,
         }
       : undefined,
     items: state.items.map((item) => ({ ...item })),
@@ -153,9 +142,7 @@ export class TurnReplayEngine {
       break;
     }
 
-    let taskState =
-      checkpointTaskState ??
-      createEmptyTaskState();
+    let taskState = checkpointTaskState ?? createEmptyTaskState();
     let truthState = checkpointTruthState ?? createEmptyTruthState();
 
     const replayStartIndex = checkpointIndex >= 0 ? checkpointIndex + 1 : 0;

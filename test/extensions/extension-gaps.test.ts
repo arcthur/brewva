@@ -1,7 +1,14 @@
+import { describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
+import {
+  registerContextTransform,
+  registerEventStream,
+  registerLedgerWriter,
+  registerQualityGate,
+} from "@brewva/brewva-extensions";
+import { DEFAULT_BREWVA_CONFIG, BrewvaRuntime, type BrewvaConfig } from "@brewva/brewva-runtime";
 import {
   AuthStorage,
   createEventBus,
@@ -11,13 +18,6 @@ import {
   SessionManager,
   type ExtensionAPI,
 } from "@mariozechner/pi-coding-agent";
-import {
-  registerContextTransform,
-  registerEventStream,
-  registerLedgerWriter,
-  registerQualityGate,
-} from "@brewva/brewva-extensions";
-import { DEFAULT_BREWVA_CONFIG, BrewvaRuntime, type BrewvaConfig } from "@brewva/brewva-runtime";
 
 type Handler = (event: any, ctx: any) => unknown;
 type DeepPartial<T> = T extends (...args: any[]) => unknown
@@ -82,31 +82,6 @@ function invokeHandlers<T = unknown>(
   return results;
 }
 
-function createLedgerRow(input: {
-  id: string;
-  timestamp: number;
-  tool: string;
-  verdict: "pass" | "fail" | "inconclusive";
-  argsSummary: string;
-  outputSummary: string;
-  sessionId: string;
-}): Record<string, unknown> {
-  return {
-    id: input.id,
-    timestamp: input.timestamp,
-    turn: 1,
-    skill: undefined,
-    tool: input.tool,
-    argsSummary: input.argsSummary,
-    outputSummary: input.outputSummary,
-    outputHash: "hash",
-    verdict: input.verdict,
-    sessionId: input.sessionId,
-    previousHash: "root",
-    hash: "hash",
-  };
-}
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -120,7 +95,8 @@ function deepMerge<T>(base: T, patch: DeepPartial<T> | undefined): T {
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined) continue;
     const current = output[key];
-    output[key] = isPlainObject(current) && isPlainObject(value) ? deepMerge(current, value) : value;
+    output[key] =
+      isPlainObject(current) && isPlainObject(value) ? deepMerge(current, value) : value;
   }
   return output as T;
 }
@@ -143,7 +119,9 @@ function withRuntimeConfig<T extends Record<string, unknown>>(
     return 1;
   };
   const resolveUsageRatio = (usage: unknown): number | null => {
-    const normalized = usage as { tokens?: unknown; contextWindow?: unknown; percent?: unknown } | undefined;
+    const normalized = usage as
+      | { tokens?: unknown; contextWindow?: unknown; percent?: unknown }
+      | undefined;
     if (!normalized) return null;
     const byPercent = normalizeRatio(
       typeof normalized.percent === "number" ? normalized.percent : null,
@@ -159,8 +137,7 @@ function withRuntimeConfig<T extends Record<string, unknown>>(
     }
     return Math.max(0, Math.min(1, normalized.tokens / normalized.contextWindow));
   };
-  const hardLimitRatio =
-    normalizeRatio(config.infrastructure.contextBudget.hardLimitPercent) ?? 1;
+  const hardLimitRatio = normalizeRatio(config.infrastructure.contextBudget.hardLimitPercent) ?? 1;
   const compactionThresholdRatio =
     normalizeRatio(config.infrastructure.contextBudget.compactionThresholdPercent) ??
     hardLimitRatio;
@@ -242,7 +219,6 @@ function withRuntimeConfig<T extends Record<string, unknown>>(
     config,
   };
 }
-
 
 describe("Extension gaps: context transform", () => {
   test("registers context hooks and injects hidden context message", () => {
@@ -348,7 +324,12 @@ describe("Extension gaps: context transform", () => {
       observeContextUsage: () => undefined,
       shouldRequestCompaction: () => false,
       markContextCompacted: () => undefined,
-      buildContextInjection: (_sessionId: string, _prompt: string, _usage: unknown, scopeId?: string) => {
+      buildContextInjection: (
+        _sessionId: string,
+        _prompt: string,
+        _usage: unknown,
+        scopeId?: string,
+      ) => {
         scopes.push(scopeId);
         return {
           text: "",
@@ -484,9 +465,7 @@ describe("Extension gaps: context transform", () => {
     expect(before.message?.content?.includes("[ContextCompactionGate]")).toBe(true);
     expect(before.message?.content?.includes("[TapeStatus]")).toBe(true);
     expect(before.message?.content?.includes("tape_pressure:")).toBe(true);
-    expect(before.message?.content?.includes("required_action: session_compact_now")).toBe(
-      true,
-    );
+    expect(before.message?.content?.includes("required_action: session_compact_now")).toBe(true);
     expect(eventTypes).toContain("context_compaction_gate_armed");
     expect(eventTypes).toContain("critical_without_compact");
 
@@ -507,7 +486,7 @@ describe("Extension gaps: context transform", () => {
     expect(blocked.block).toBe(true);
     expect(blocked.reason?.includes("session_compact")).toBe(true);
 
-    const allowedCompact = invokeHandler<unknown>(
+    const allowedCompact = invokeHandler(
       handlers,
       "tool_call",
       {
@@ -553,7 +532,7 @@ describe("Extension gaps: context transform", () => {
     expect(capturedCompactions[0]?.toTokens).toBe(1200);
     expect(eventTypes).toContain("context_compaction_gate_cleared");
 
-    const afterCompact = invokeHandler<unknown>(
+    const afterCompact = invokeHandler(
       handlers,
       "tool_call",
       {
@@ -649,7 +628,7 @@ describe("Extension gaps: context transform", () => {
     expect(before.message?.content?.includes("[ContextCompactionGate]")).toBe(false);
     expect(eventTypes).not.toContain("context_compaction_gate_armed");
 
-    const access = invokeHandler<unknown>(
+    const access = invokeHandler(
       handlers,
       "tool_call",
       {
@@ -942,76 +921,82 @@ describe("Extension integration: observability", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-dual-injection-"));
     mkdirSync(join(workspace, ".orchestrator"), { recursive: true });
 
-    const agentDir = join(workspace, ".pi-agent-test-dual-injection");
-    const oldAgentDir = process.env.PI_CODING_AGENT_DIR;
-    process.env.PI_CODING_AGENT_DIR = agentDir;
+    const agentDir = join(workspace, ".brewva-agent-test-dual-injection");
 
-    try {
-      const extensionPath = join(workspace, "brewva-inline-extension.ts");
-      const brewvaExtensionEntry = join(process.cwd(), "packages/brewva-extensions/src/index.ts").replaceAll("\\", "/");
-      writeFileSync(
-        extensionPath,
-        [
-          `import { createBrewvaExtension } from '${brewvaExtensionEntry}';`,
-          "export default createBrewvaExtension({ registerTools: false });",
-        ].join("\n"),
-        "utf8",
-      );
+    const extensionPath = join(workspace, "brewva-inline-extension.ts");
+    const brewvaExtensionEntry = join(
+      process.cwd(),
+      "packages/brewva-extensions/src/index.ts",
+    ).replaceAll("\\", "/");
+    writeFileSync(
+      extensionPath,
+      [
+        `import { createBrewvaExtension } from '${brewvaExtensionEntry}';`,
+        "export default createBrewvaExtension({ registerTools: false });",
+      ].join("\n"),
+      "utf8",
+    );
 
-      const loaded = await discoverAndLoadExtensions([extensionPath], workspace, agentDir, createEventBus());
-      expect(loaded.errors).toHaveLength(0);
+    const loaded = await discoverAndLoadExtensions(
+      [extensionPath],
+      workspace,
+      agentDir,
+      createEventBus(),
+    );
+    expect(loaded.errors).toHaveLength(0);
 
-      const sessionManager = SessionManager.inMemory(workspace);
-      const modelRegistry = new ModelRegistry(
-        AuthStorage.create(join(workspace, ".auth-test.json")),
-        join(workspace, ".models-test.json"),
-      );
-      const runner = new ExtensionRunner(loaded.extensions, loaded.runtime, workspace, sessionManager, modelRegistry);
+    const sessionManager = SessionManager.inMemory(workspace);
+    const modelRegistry = new ModelRegistry(
+      AuthStorage.create(join(workspace, ".auth-test.json")),
+      join(workspace, ".models-test.json"),
+    );
+    const runner = new ExtensionRunner(
+      loaded.extensions,
+      loaded.runtime,
+      workspace,
+      sessionManager,
+      modelRegistry,
+    );
 
-      runner.bindCore(
-        {
-          sendMessage: () => undefined,
-          sendUserMessage: () => undefined,
-          appendEntry: () => undefined,
-          setSessionName: () => undefined,
-          getSessionName: () => undefined,
-          setLabel: () => undefined,
-          getActiveTools: () => [],
-          getAllTools: () => [],
-          setActiveTools: () => undefined,
-          getCommands: () => [],
-          setModel: async () => true,
-          getThinkingLevel: () => "medium",
-          setThinkingLevel: () => undefined,
-        },
-        {
-          getModel: () => undefined,
-          isIdle: () => true,
-          abort: () => undefined,
-          hasPendingMessages: () => false,
-          shutdown: () => undefined,
-          getContextUsage: () => ({ tokens: 700, contextWindow: 4000, percent: 0.175 }),
-          compact: () => undefined,
-          getSystemPrompt: () => "base",
-        },
-      );
+    runner.bindCore(
+      {
+        sendMessage: () => undefined,
+        sendUserMessage: () => undefined,
+        appendEntry: () => undefined,
+        setSessionName: () => undefined,
+        getSessionName: () => undefined,
+        setLabel: () => undefined,
+        getActiveTools: () => [],
+        getAllTools: () => [],
+        setActiveTools: () => undefined,
+        getCommands: () => [],
+        setModel: async () => true,
+        getThinkingLevel: () => "medium",
+        setThinkingLevel: () => undefined,
+      },
+      {
+        getModel: () => undefined,
+        isIdle: () => true,
+        abort: () => undefined,
+        hasPendingMessages: () => false,
+        shutdown: () => undefined,
+        getContextUsage: () => ({ tokens: 700, contextWindow: 4000, percent: 0.175 }),
+        compact: () => undefined,
+        getSystemPrompt: () => "base",
+      },
+    );
 
-      await runner.emit({ type: "agent_end", messages: [] });
+    await runner.emit({ type: "agent_end", messages: [] });
 
-      const result = await runner.emitBeforeAgentStart("continue fixing flaky tests", undefined, "base");
-      const messageTypes = (result?.messages ?? []).map((message) => message.customType);
+    const result = await runner.emitBeforeAgentStart(
+      "continue fixing flaky tests",
+      undefined,
+      "base",
+    );
+    const messageTypes = (result?.messages ?? []).map((message) => message.customType);
 
-      expect(result?.systemPrompt?.includes("[Brewva Context Contract]")).toBe(
-        true,
-      );
-      expect(messageTypes).toEqual(["brewva-context-injection"]);
-    } finally {
-      if (oldAgentDir === undefined) {
-        delete process.env.PI_CODING_AGENT_DIR;
-      } else {
-        process.env.PI_CODING_AGENT_DIR = oldAgentDir;
-      }
-    }
+    expect(result?.systemPrompt?.includes("[Brewva Context Contract]")).toBe(true);
+    expect(messageTypes).toEqual(["brewva-context-injection"]);
   });
 
   test("tool call + tool result produces correlated events, ledger row, and patch record", () => {
@@ -1087,7 +1072,9 @@ describe("Extension integration: observability", () => {
 
     const patchRecorded = runtime.queryEvents(sessionId, { type: "patch_recorded", last: 1 })[0];
     expect(patchRecorded).toBeDefined();
-    const patchPayload = patchRecorded?.payload as { changes?: Array<{ path: string; action: string }> } | undefined;
+    const patchPayload = patchRecorded?.payload as
+      | { changes?: Array<{ path: string; action: string }> }
+      | undefined;
     expect(patchPayload?.changes).toEqual([{ path: "src/a.ts", action: "modify" }]);
 
     const reloaded = new BrewvaRuntime({ cwd: workspace });
@@ -1132,8 +1119,12 @@ describe("Extension integration: observability", () => {
 
     expect((runtime as any).turnsBySession.has(sessionId)).toBe(false);
     expect((runtime as any).toolCallsBySession.has(sessionId)).toBe(false);
-    expect(((runtime as any).contextBudget.sessions as Map<string, unknown>).has(sessionId)).toBe(false);
-    expect(((runtime as any).costTracker.sessions as Map<string, unknown>).has(sessionId)).toBe(false);
+    expect(((runtime as any).contextBudget.sessions as Map<string, unknown>).has(sessionId)).toBe(
+      false,
+    );
+    expect(((runtime as any).costTracker.sessions as Map<string, unknown>).has(sessionId)).toBe(
+      false,
+    );
   });
 
   test("blocked tool call is still observable as tool_call but not tool_call_marked", () => {
@@ -1189,7 +1180,9 @@ patching`,
     expect(results.some((result) => (result as any)?.block === true)).toBe(true);
     expect(runtime.queryEvents(sessionId, { type: "tool_call", last: 1 })).toHaveLength(1);
     expect(runtime.queryEvents(sessionId, { type: "tool_call_marked", last: 1 })).toHaveLength(0);
-    expect(runtime.queryEvents(sessionId, { type: "file_snapshot_captured", last: 1 })).toHaveLength(0);
+    expect(
+      runtime.queryEvents(sessionId, { type: "file_snapshot_captured", last: 1 }),
+    ).toHaveLength(0);
   });
 
   test("persists throttled message_update events", () => {
@@ -1212,7 +1205,12 @@ patching`,
     Date.now = () => now;
 
     try {
-      invokeHandlers(handlers, "message_start", { message: { role: "assistant", content: [] } }, ctx);
+      invokeHandlers(
+        handlers,
+        "message_start",
+        { message: { role: "assistant", content: [] } },
+        ctx,
+      );
 
       invokeHandlers(
         handlers,

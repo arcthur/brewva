@@ -19,7 +19,8 @@ function parseFrontmatter(markdown: string): ParsedFrontmatter {
   const yamlText = match[1] ?? "";
   const body = match[2] ?? "";
   const parsed = parseYaml(yamlText);
-  const data = typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+  const data =
+    typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
 
   return { body, data };
 }
@@ -45,35 +46,52 @@ function toString(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
 }
 
-function normalizeContract(name: string, tier: SkillTier, data: Record<string, unknown>): SkillContract {
-  const tools = (typeof data.tools === "object" && data.tools ? data.tools : {}) as Record<string, unknown>;
-  const budget = (typeof data.budget === "object" && data.budget ? data.budget : {}) as Record<string, unknown>;
+function normalizeContract(
+  name: string,
+  tier: SkillTier,
+  data: Record<string, unknown>,
+): SkillContract {
+  const tools = (typeof data.tools === "object" && data.tools ? data.tools : {}) as Record<
+    string,
+    unknown
+  >;
+  const budget = (typeof data.budget === "object" && data.budget ? data.budget : {}) as Record<
+    string,
+    unknown
+  >;
 
   const required = toToolNameArray(tools.required);
   const optional = toToolNameArray(tools.optional);
   const denied = toToolNameArray(tools.denied);
 
-  const maxToolCalls = typeof budget.max_tool_calls === "number"
-    ? budget.max_tool_calls
-    : typeof budget.maxToolCalls === "number"
-      ? budget.maxToolCalls
-      : 50;
+  const maxToolCalls =
+    typeof budget.max_tool_calls === "number"
+      ? budget.max_tool_calls
+      : typeof budget.maxToolCalls === "number"
+        ? budget.maxToolCalls
+        : 50;
 
-  const maxTokens = typeof budget.max_tokens === "number"
-    ? budget.max_tokens
-    : typeof budget.maxTokens === "number"
-      ? budget.maxTokens
-      : 100_000;
+  const maxTokens =
+    typeof budget.max_tokens === "number"
+      ? budget.max_tokens
+      : typeof budget.maxTokens === "number"
+        ? budget.maxTokens
+        : 100_000;
 
   const antiTags = toStringArray(data.anti_tags ?? data.antiTags);
   const outputs = toStringArray(data.outputs);
   const composableWith = toStringArray(data.composable_with ?? data.composableWith);
   const consumes = toStringArray(data.consumes);
-  const escalationPath = (typeof data.escalation_path === "object" && data.escalation_path && !Array.isArray(data.escalation_path))
-    ? data.escalation_path as Record<string, string>
-    : (typeof data.escalationPath === "object" && data.escalationPath && !Array.isArray(data.escalationPath))
-      ? data.escalationPath as Record<string, string>
-      : undefined;
+  const escalationPath =
+    typeof data.escalation_path === "object" &&
+    data.escalation_path &&
+    !Array.isArray(data.escalation_path)
+      ? (data.escalation_path as Record<string, string>)
+      : typeof data.escalationPath === "object" &&
+          data.escalationPath &&
+          !Array.isArray(data.escalationPath)
+        ? (data.escalationPath as Record<string, string>)
+        : undefined;
 
   return {
     name,
@@ -94,14 +112,23 @@ function normalizeContract(name: string, tier: SkillTier, data: Record<string, u
     composableWith,
     consumes,
     escalationPath,
-    maxParallel: typeof data.max_parallel === "number" ? Math.max(1, Math.trunc(data.max_parallel)) : undefined,
-    stability: data.stability === "experimental" || data.stability === "deprecated" ? data.stability : "stable",
+    maxParallel:
+      typeof data.max_parallel === "number"
+        ? Math.max(1, Math.trunc(data.max_parallel))
+        : undefined,
+    stability:
+      data.stability === "experimental" || data.stability === "deprecated"
+        ? data.stability
+        : "stable",
     version: typeof data.version === "string" ? data.version : undefined,
     costHint: data.cost_hint === "high" || data.cost_hint === "low" ? data.cost_hint : "medium",
   };
 }
 
-export function tightenContract(base: SkillContract, override: Partial<SkillContract>): SkillContract {
+export function tightenContract(
+  base: SkillContract,
+  override: Partial<SkillContract>,
+): SkillContract {
   const baseDenied = new Set([...base.tools.denied].map((tool) => normalizeToolName(tool)));
   const baseAllowed = new Set(
     [...base.tools.required, ...base.tools.optional]
@@ -116,7 +143,9 @@ export function tightenContract(base: SkillContract, override: Partial<SkillCont
     if (normalized) denied.add(normalized);
   }
 
-  const required = new Set([...base.tools.required].map((tool) => normalizeToolName(tool)).filter(Boolean));
+  const required = new Set(
+    [...base.tools.required].map((tool) => normalizeToolName(tool)).filter(Boolean),
+  );
   for (const tool of override.tools?.required ?? []) {
     const normalized = normalizeToolName(tool);
     if (!normalized) continue;
@@ -136,8 +165,12 @@ export function tightenContract(base: SkillContract, override: Partial<SkillCont
     optional.add(normalized);
   }
 
-  const maxToolCalls = override.budget?.maxToolCalls ? Math.min(base.budget.maxToolCalls, override.budget.maxToolCalls) : base.budget.maxToolCalls;
-  const maxTokens = override.budget?.maxTokens ? Math.min(base.budget.maxTokens, override.budget.maxTokens) : base.budget.maxTokens;
+  const maxToolCalls = override.budget?.maxToolCalls
+    ? Math.min(base.budget.maxToolCalls, override.budget.maxToolCalls)
+    : base.budget.maxToolCalls;
+  const maxTokens = override.budget?.maxTokens
+    ? Math.min(base.budget.maxTokens, override.budget.maxTokens)
+    : base.budget.maxTokens;
 
   return {
     ...base,
@@ -147,7 +180,9 @@ export function tightenContract(base: SkillContract, override: Partial<SkillCont
     composableWith: override.composableWith ?? base.composableWith,
     consumes: override.consumes ?? base.consumes,
     escalationPath: override.escalationPath ?? base.escalationPath,
-    maxParallel: override.maxParallel ? Math.min(base.maxParallel ?? override.maxParallel, override.maxParallel) : base.maxParallel,
+    maxParallel: override.maxParallel
+      ? Math.min(base.maxParallel ?? override.maxParallel, override.maxParallel)
+      : base.maxParallel,
     tools: {
       required: [...required],
       optional: [...optional],

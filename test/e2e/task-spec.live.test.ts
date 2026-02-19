@@ -23,7 +23,9 @@ type TaskSpecSetPayload = {
   [key: string]: unknown;
 };
 
-function findTaskSpecSetPayload(events: Array<{ type?: string; payload?: unknown }>): TaskSpecSetPayload | undefined {
+function findTaskSpecSetPayload(
+  events: Array<{ type?: string; payload?: unknown }>,
+): TaskSpecSetPayload | undefined {
   for (const event of events) {
     if (event.type !== "task_event") continue;
     if (!isRecord(event.payload)) continue;
@@ -50,12 +52,7 @@ describe("e2e: task spec plumbing", () => {
     };
 
     try {
-      const run = runCliSync(workspace, [
-        "--mode",
-        "json",
-        "--task",
-        JSON.stringify(taskSpec),
-      ]);
+      const run = runCliSync(workspace, ["--mode", "json", "--task", JSON.stringify(taskSpec)]);
 
       assertCliSuccess(run, "task-spec-inline");
 
@@ -89,12 +86,7 @@ describe("e2e: task spec plumbing", () => {
     writeFileSync(taskFile, JSON.stringify(taskSpec, null, 2), "utf8");
 
     try {
-      const run = runCliSync(workspace, [
-        "--mode",
-        "json",
-        "--task-file",
-        taskFile,
-      ]);
+      const run = runCliSync(workspace, ["--mode", "json", "--task-file", taskFile]);
 
       assertCliSuccess(run, "task-spec-file");
 
@@ -145,9 +137,7 @@ describe("e2e: task spec plumbing", () => {
       expect(run.error).toBeUndefined();
       expect(run.status).toBe(0);
       expect(run.stdout.trim()).toBe("");
-      expect(run.stderr.includes("Error: use only one of --task or --task-file.")).toBe(
-        true,
-      );
+      expect(run.stderr.includes("Error: use only one of --task or --task-file.")).toBe(true);
     } finally {
       cleanupWorkspace(workspace);
     }
@@ -158,19 +148,12 @@ describe("e2e: task spec plumbing", () => {
     writeMinimalConfig(workspace);
 
     try {
-      const run = runCliSync(workspace, [
-        "--mode",
-        "json",
-        "--task",
-        "{invalid-json",
-      ]);
+      const run = runCliSync(workspace, ["--mode", "json", "--task", "{invalid-json"]);
 
       expect(run.error).toBeUndefined();
       expect(run.status).toBe(0);
       expect(run.stdout.trim()).toBe("");
-      expect(run.stderr.includes("Error: failed to parse TaskSpec JSON (")).toBe(
-        true,
-      );
+      expect(run.stderr.includes("Error: failed to parse TaskSpec JSON (")).toBe(true);
     } finally {
       cleanupWorkspace(workspace);
     }
@@ -183,19 +166,12 @@ describe("e2e: task spec plumbing", () => {
     const missingTaskFile = join(workspace, "missing-task.json");
 
     try {
-      const run = runCliSync(workspace, [
-        "--mode",
-        "json",
-        "--task-file",
-        missingTaskFile,
-      ]);
+      const run = runCliSync(workspace, ["--mode", "json", "--task-file", missingTaskFile]);
 
       expect(run.error).toBeUndefined();
       expect(run.status).toBe(0);
       expect(run.stdout.trim()).toBe("");
-      expect(run.stderr.includes("Error: failed to read TaskSpec file (")).toBe(
-        true,
-      );
+      expect(run.stderr.includes("Error: failed to read TaskSpec file (")).toBe(true);
       expect(run.stderr.includes("missing-task.json")).toBe(true);
     } finally {
       cleanupWorkspace(workspace);

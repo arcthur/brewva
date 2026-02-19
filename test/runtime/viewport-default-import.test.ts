@@ -1,7 +1,7 @@
+import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { TaskSpec } from "@brewva/brewva-runtime";
 
@@ -18,12 +18,19 @@ describe("Viewport neighborhood probe", () => {
     mkdirSync(join(workspace, "src"), { recursive: true });
     writeFileSync(
       join(workspace, "src/bar.ts"),
-      ["export default function greet(name: string): string {", "  return `hi ${name}`;", "}"].join("\n"),
+      ["export default function greet(name: string): string {", "  return `hi ${name}`;", "}"].join(
+        "\n",
+      ),
       "utf8",
     );
     writeFileSync(
       join(workspace, "src/foo.ts"),
-      ['import greet from "./bar";', "export function run(): string {", '  return greet("pi");', "}"].join("\n"),
+      [
+        'import greet from "./bar";',
+        "export function run(): string {",
+        '  return greet("pi");',
+        "}",
+      ].join("\n"),
       "utf8",
     );
 

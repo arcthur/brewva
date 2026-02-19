@@ -16,7 +16,7 @@
 ## Global Roots
 
 - Global Brewva root: `$XDG_CONFIG_HOME/brewva` (or `~/.config/brewva`)
-  - resolution can be overridden via `BREWVA_CODING_AGENT_DIR` or `PI_CODING_AGENT_DIR` (see `packages/brewva-runtime/src/config/paths.ts`)
+  - resolution can be overridden via `BREWVA_CODING_AGENT_DIR` (see `packages/brewva-runtime/src/config/paths.ts`)
 - Agent directory: `<globalRoot>/agent` (default: `~/.config/brewva/agent`)
   - authentication: `auth.json`
   - model registry: `models.json`

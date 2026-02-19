@@ -21,17 +21,10 @@ function resolveMaybeAbsolute(baseDir: string, pathText: string): string {
 }
 
 function resolveAgentDirFromEnv(env: NodeJS.ProcessEnv): string | undefined {
-  const fromBrewva = typeof env["BREWVA_CODING_AGENT_DIR"] === "string"
-    ? env["BREWVA_CODING_AGENT_DIR"]
-    : "";
+  const fromBrewva =
+    typeof env["BREWVA_CODING_AGENT_DIR"] === "string" ? env["BREWVA_CODING_AGENT_DIR"] : "";
   if (fromBrewva.trim().length > 0) {
     return resolveMaybeAbsolute(process.cwd(), fromBrewva);
-  }
-
-  // legacy compat: upstream pi-coding-agent may set PI_CODING_AGENT_DIR
-  const fromPi = typeof env.PI_CODING_AGENT_DIR === "string" ? env.PI_CODING_AGENT_DIR : "";
-  if (fromPi.trim().length > 0) {
-    return resolveMaybeAbsolute(process.cwd(), fromPi);
   }
 
   return undefined;

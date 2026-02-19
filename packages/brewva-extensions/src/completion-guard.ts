@@ -1,5 +1,5 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
 const MAX_NUDGES_PER_PROMPT = 2;
 
@@ -58,4 +58,3 @@ export function registerCompletionGuard(pi: ExtensionAPI, runtime: BrewvaRuntime
     return undefined;
   });
 }
-

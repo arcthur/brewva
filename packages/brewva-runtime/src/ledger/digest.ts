@@ -7,13 +7,18 @@ const INFRASTRUCTURE_TOOLS = new Set([
   "ledger_checkpoint",
 ]);
 
-export function buildLedgerDigest(sessionId: string, rows: EvidenceLedgerRow[], maxRecords: number, maxTokens: number): LedgerDigest {
+export function buildLedgerDigest(
+  sessionId: string,
+  rows: EvidenceLedgerRow[],
+  maxRecords: number,
+  maxTokens: number,
+): LedgerDigest {
   const taskRows = rows.filter((row) => !INFRASTRUCTURE_TOOLS.has(row.tool));
   const recent = taskRows.slice(-Math.max(1, maxRecords));
 
-  const records: LedgerDigest["records"] = [];
+  let records: LedgerDigest["records"] = [];
   let usedTokens = 0;
-  for (const row of recent.reverse()) {
+  for (const row of recent.toReversed()) {
     const snippet = `${row.tool} ${row.argsSummary} ${row.outputSummary}`;
     const rowTokens = estimateTokenCount(snippet);
     if (usedTokens + rowTokens > maxTokens) {
@@ -31,7 +36,7 @@ export function buildLedgerDigest(sessionId: string, rows: EvidenceLedgerRow[], 
     });
   }
 
-  records.reverse();
+  records = records.toReversed();
 
   const summary = {
     total: records.length,

@@ -1,7 +1,7 @@
+import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 
 function createWorkspace(name: string): string {
@@ -53,9 +53,7 @@ describe("Truth extraction from lsp_diagnostics", () => {
     expect(fact2?.status).toBe("resolved");
 
     const task2 = runtime.getTaskState(sessionId);
-    expect(task2.blockers.some((blocker) => blocker.id === fact1?.id)).toBe(
-      false,
-    );
+    expect(task2.blockers.some((blocker) => blocker.id === fact1?.id)).toBe(false);
   });
 
   test("clean output resolves only diagnostic facts for that file", () => {
@@ -90,12 +88,10 @@ describe("Truth extraction from lsp_diagnostics", () => {
 
     const truth = runtime.getTruthState(sessionId);
     const foo = truth.facts.find(
-      (fact) =>
-        fact.summary.includes("src/foo.ts") && fact.summary.includes("TS2322"),
+      (fact) => fact.summary.includes("src/foo.ts") && fact.summary.includes("TS2322"),
     );
     const bar = truth.facts.find(
-      (fact) =>
-        fact.summary.includes("src/bar.ts") && fact.summary.includes("TS2304"),
+      (fact) => fact.summary.includes("src/bar.ts") && fact.summary.includes("TS2304"),
     );
     expect(foo).not.toBeUndefined();
     expect(bar).not.toBeUndefined();
@@ -134,12 +130,10 @@ describe("Truth extraction from lsp_diagnostics", () => {
 
     const truth = runtime.getTruthState(sessionId);
     const ts2322 = truth.facts.find(
-      (fact) =>
-        fact.summary.includes("src/foo.ts") && fact.summary.includes("TS2322"),
+      (fact) => fact.summary.includes("src/foo.ts") && fact.summary.includes("TS2322"),
     );
     const ts2304 = truth.facts.find(
-      (fact) =>
-        fact.summary.includes("src/foo.ts") && fact.summary.includes("TS2304"),
+      (fact) => fact.summary.includes("src/foo.ts") && fact.summary.includes("TS2304"),
     );
 
     expect(ts2322).not.toBeUndefined();
@@ -148,11 +142,7 @@ describe("Truth extraction from lsp_diagnostics", () => {
     expect(ts2304?.status).toBe("resolved");
 
     const task = runtime.getTaskState(sessionId);
-    expect(task.blockers.some((blocker) => blocker.id === ts2322?.id)).toBe(
-      true,
-    );
-    expect(task.blockers.some((blocker) => blocker.id === ts2304?.id)).toBe(
-      false,
-    );
+    expect(task.blockers.some((blocker) => blocker.id === ts2322?.id)).toBe(true);
+    expect(task.blockers.some((blocker) => blocker.id === ts2304?.id)).toBe(false);
   });
 });

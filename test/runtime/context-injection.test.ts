@@ -120,7 +120,7 @@ describe("Context injection collector", () => {
     const consumed = collector.consume(sessionId, 10);
     expect(consumed.entries).toHaveLength(1);
     expect(consumed.entries[0]?.content.includes("[ContextTruncated]")).toBe(true);
-    expect(consumed.entries[0]?.content.includes("{\"skills\"")).toBe(false);
+    expect(consumed.entries[0]?.content.includes('{"skills"')).toBe(false);
   });
 
   test("drop-entry strategy skips oversized entries and keeps smaller ones", () => {

@@ -69,7 +69,8 @@ function extractLinks(markdown: string, sourceFile: string): MarkdownLink[] {
 
 function normalizeLinkTarget(rawTarget: string): string {
   const trimmed = rawTarget.trim();
-  const unwrapped = trimmed.startsWith("<") && trimmed.endsWith(">") ? trimmed.slice(1, -1) : trimmed;
+  const unwrapped =
+    trimmed.startsWith("<") && trimmed.endsWith(">") ? trimmed.slice(1, -1) : trimmed;
   return unwrapped.split(/\s+/)[0] ?? "";
 }
 
@@ -154,7 +155,9 @@ describe("docs markdown links", () => {
         const resolvedPath = resolve(dirname(filePath), decodedPath);
 
         if (!existsSync(resolvedPath)) {
-          errors.push(`${filePath}:${link.lineNumber} missing link target "${target}" (resolved: ${resolvedPath})`);
+          errors.push(
+            `${filePath}:${link.lineNumber} missing link target "${target}" (resolved: ${resolvedPath})`,
+          );
           continue;
         }
 
@@ -169,7 +172,9 @@ describe("docs markdown links", () => {
             })();
 
           if (!anchors.has(anchorPartRaw)) {
-            errors.push(`${filePath}:${link.lineNumber} broken anchor link "${target}" (missing "#${anchorPartRaw}")`);
+            errors.push(
+              `${filePath}:${link.lineNumber} broken anchor link "${target}" (missing "#${anchorPartRaw}")`,
+            );
           }
         }
       }

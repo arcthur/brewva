@@ -33,8 +33,7 @@ export type BrewvaEventBundle = {
 };
 
 export const repoRoot = resolve(import.meta.dir, "../..");
-export const runLive: typeof test =
-  process.env.BREWVA_E2E_LIVE === "1" ? test : test.skip;
+export const runLive: typeof test = process.env.BREWVA_E2E_LIVE === "1" ? test : test.skip;
 export const keepWorkspace = process.env.BREWVA_E2E_KEEP_WORKSPACE === "1";
 
 export function createWorkspace(prefix: string): string {
@@ -46,17 +45,10 @@ export function cleanupWorkspace(workspace: string): void {
   rmSync(workspace, { recursive: true, force: true });
 }
 
-export function writeMinimalConfig(
-  workspace: string,
-  overrides?: Record<string, unknown>,
-): void {
+export function writeMinimalConfig(workspace: string, overrides?: Record<string, unknown>): void {
   const configDir = join(workspace, ".brewva");
   mkdirSync(configDir, { recursive: true });
-  writeFileSync(
-    join(configDir, "brewva.json"),
-    JSON.stringify(overrides ?? {}, null, 2),
-    "utf8",
-  );
+  writeFileSync(join(configDir, "brewva.json"), JSON.stringify(overrides ?? {}, null, 2), "utf8");
 }
 
 export function latestEventFile(workspace: string): string | undefined {
@@ -68,20 +60,7 @@ export function latestEventFile(workspace: string): string | undefined {
       const file = join(eventsDir, name);
       return { file, mtimeMs: statSync(file).mtimeMs };
     })
-    .sort((a, b) => b.mtimeMs - a.mtimeMs);
-  return candidates[0]?.file;
-}
-
-export function latestStateSnapshot(workspace: string): string | undefined {
-  const stateDir = join(workspace, ".orchestrator", "state");
-  if (!existsSync(stateDir)) return undefined;
-  const candidates = readdirSync(stateDir)
-    .filter((name) => name.endsWith(".json"))
-    .map((name) => {
-      const file = join(stateDir, name);
-      return { file, mtimeMs: statSync(file).mtimeMs };
-    })
-    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+    .toSorted((a, b) => b.mtimeMs - a.mtimeMs);
   return candidates[0]?.file;
 }
 
@@ -123,10 +102,7 @@ export function parseEventFile(
   return parsed;
 }
 
-export function parseJsonLines(
-  stdout: string,
-  options?: { strict?: boolean },
-): unknown[] {
+export function parseJsonLines(stdout: string, options?: { strict?: boolean }): unknown[] {
   const invalidLines: string[] = [];
 
   const parsed = stdout
@@ -171,17 +147,11 @@ export function findFinalBundle(lines: unknown[]): BrewvaEventBundle | undefined
   return undefined;
 }
 
-export function countEventType(
-  events: Array<{ type?: string }>,
-  eventType: string,
-): number {
+export function countEventType(events: Array<{ type?: string }>, eventType: string): number {
   return events.filter((event) => event.type === eventType).length;
 }
 
-export function firstIndexOf(
-  events: Array<{ type?: string }>,
-  eventType: string,
-): number {
+export function firstIndexOf(events: Array<{ type?: string }>, eventType: string): number {
   return events.findIndex((event) => event.type === eventType);
 }
 
@@ -195,16 +165,18 @@ export function runCliSync(
     env?: NodeJS.ProcessEnv;
   },
 ): SpawnSyncReturns<string> {
+  const env = { ...process.env };
+  if (options?.env) {
+    Object.assign(env, options.env);
+  }
+
   return spawnSync("bun", ["run", "start", "--cwd", workspace, ...args], {
     cwd: repoRoot,
     encoding: "utf8",
     input: options?.input,
     timeout: options?.timeoutMs ?? 10 * 60 * 1000,
     maxBuffer: options?.maxBufferBytes ?? 64 * 1024 * 1024,
-    env: {
-      ...process.env,
-      ...(options?.env ?? {}),
-    },
+    env,
   });
 }
 
@@ -216,10 +188,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-export function assertCliSuccess(
-  result: SpawnSyncReturns<string>,
-  label: string,
-): void {
+export function assertCliSuccess(result: SpawnSyncReturns<string>, label: string): void {
   if (result.status === 0 && result.error === undefined) return;
   const lines = [
     `[${label}] CLI exited with status ${result.status ?? "null"}`,
