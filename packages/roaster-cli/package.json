@@ -20,6 +20,6 @@
     "@pi-roaster/roaster-runtime": "workspace:*",
     "@pi-roaster/roaster-tools": "workspace:*",
     "@pi-roaster/roaster-extensions": "workspace:*",
-    "@mariozechner/pi-coding-agent": "^0.52.12"
+    "@mariozechner/pi-coding-agent": "^0.53.0"
   }
 }

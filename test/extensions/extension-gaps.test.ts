@@ -963,7 +963,7 @@ describe("Extension integration: observability", () => {
 
       const sessionManager = SessionManager.inMemory(workspace);
       const modelRegistry = new ModelRegistry(
-        new AuthStorage(join(workspace, ".auth-test.json")),
+        AuthStorage.create(join(workspace, ".auth-test.json")),
         join(workspace, ".models-test.json"),
       );
       const runner = new ExtensionRunner(loaded.extensions, loaded.runtime, workspace, sessionManager, modelRegistry);

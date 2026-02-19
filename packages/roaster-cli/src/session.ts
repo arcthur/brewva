@@ -45,7 +45,7 @@ export async function createRoasterSession(options: CreateRoasterSessionOptions 
   process.env.PI_CODING_AGENT_DIR = agentDir;
   process.env["PI-ROASTER_CODING_AGENT_DIR"] = agentDir;
 
-  const authStorage = new AuthStorage(join(agentDir, "auth.json"));
+  const authStorage = AuthStorage.create(join(agentDir, "auth.json"));
   const modelRegistry = new ModelRegistry(authStorage, join(agentDir, "models.json"));
   const selectedModel = resolveModel(options.model, modelRegistry);
 
