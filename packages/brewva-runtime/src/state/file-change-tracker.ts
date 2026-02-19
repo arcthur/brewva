@@ -1,9 +1,9 @@
 import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { basename, relative, resolve } from "node:path";
 import type { PatchFileAction, PatchSet, RollbackResult } from "../types.js";
-import { isMutationTool } from "../verification/classifier.js";
-import { sha256 } from "../utils/hash.js";
 import { ensureDir, writeFileAtomic } from "../utils/fs.js";
+import { sha256 } from "../utils/hash.js";
+import { isMutationTool } from "../verification/classifier.js";
 
 const EXTRA_MUTATION_TOOLS = new Set(["multi_edit"]);
 const CANDIDATE_PATH_KEY = /(path|file)/i;
@@ -102,7 +102,10 @@ function collectPathCandidates(value: unknown, keyHint?: string, output: string[
   return output;
 }
 
-function resolveFilePath(cwd: string, candidate: string): { absolutePath: string; relativePath: string } | undefined {
+function resolveFilePath(
+  cwd: string,
+  candidate: string,
+): { absolutePath: string; relativePath: string } | undefined {
   const trimmed = candidate.trim();
   if (!trimmed || trimmed.includes("\0")) return undefined;
 
@@ -161,7 +164,11 @@ export class FileChangeTracker {
       const resolvedPath = resolveFilePath(this.cwd, candidate);
       if (!resolvedPath) continue;
       if (trackedByPath.has(resolvedPath.absolutePath)) continue;
-      const snapshot = this.captureFileSnapshot(input.sessionId, resolvedPath.absolutePath, resolvedPath.relativePath);
+      const snapshot = this.captureFileSnapshot(
+        input.sessionId,
+        resolvedPath.absolutePath,
+        resolvedPath.relativePath,
+      );
       trackedByPath.set(resolvedPath.absolutePath, snapshot);
     }
 
@@ -254,7 +261,7 @@ export class FileChangeTracker {
 
     const restoredPaths: string[] = [];
     const failedPaths: string[] = [];
-    for (const change of [...latest.changes].reverse()) {
+    for (const change of latest.changes.toReversed()) {
       try {
         if (change.beforeExists) {
           if (!change.beforeSnapshotPath || !existsSync(change.beforeSnapshotPath)) {
@@ -306,7 +313,7 @@ export class FileChangeTracker {
     const selected: string[] = [];
     const seen = new Set<string>();
 
-    for (const entry of [...history].reverse()) {
+    for (const entry of history.toReversed()) {
       for (const change of entry.patchSet.changes) {
         const path = change.path;
         if (!path) continue;
@@ -331,7 +338,8 @@ export class FileChangeTracker {
       try {
         const parsed = JSON.parse(readFileSync(historyFile, "utf8")) as PersistedPatchHistory;
         if (!parsed || parsed.version !== 1 || typeof parsed.sessionId !== "string") continue;
-        const updatedAt = typeof parsed.updatedAt === "number" ? parsed.updatedAt : statSync(historyFile).mtimeMs;
+        const updatedAt =
+          typeof parsed.updatedAt === "number" ? parsed.updatedAt : statSync(historyFile).mtimeMs;
         if ((parsed.patchSets?.length ?? 0) > 0) {
           candidates.push({ sessionId: parsed.sessionId, updatedAt });
         }
@@ -340,11 +348,13 @@ export class FileChangeTracker {
       }
     }
 
-    candidates.sort((left, right) => right.updatedAt - left.updatedAt);
-    return candidates[0]?.sessionId;
+    return candidates.toSorted((left, right) => right.updatedAt - left.updatedAt)[0]?.sessionId;
   }
 
-  importSessionHistory(sourceSessionId: string, targetSessionId: string): { importedPatchSets: number } {
+  importSessionHistory(
+    sourceSessionId: string,
+    targetSessionId: string,
+  ): { importedPatchSets: number } {
     if (sourceSessionId === targetSessionId) {
       return { importedPatchSets: 0 };
     }
@@ -417,7 +427,9 @@ export class FileChangeTracker {
       return { importedPatchSets: 0 };
     }
 
-    const merged = [...targetHistory, ...imported].sort((left, right) => left.appliedAt - right.appliedAt);
+    const merged = [...targetHistory, ...imported].toSorted(
+      (left, right) => left.appliedAt - right.appliedAt,
+    );
     const trimmed = merged.slice(-MAX_HISTORY);
     this.historyBySession.set(targetSessionId, trimmed);
     this.persistHistory(targetSessionId);
@@ -430,7 +442,11 @@ export class FileChangeTracker {
     this.loadedSessions.delete(sessionId);
   }
 
-  private captureFileSnapshot(sessionId: string, absolutePath: string, relativePath: string): TrackedFileState {
+  private captureFileSnapshot(
+    sessionId: string,
+    absolutePath: string,
+    relativePath: string,
+  ): TrackedFileState {
     const beforeExists = existsSync(absolutePath);
     if (!beforeExists) {
       return {
@@ -468,7 +484,8 @@ export class FileChangeTracker {
   }): PatchFileAction | undefined {
     if (!input.beforeExists && input.afterExists) return "add";
     if (input.beforeExists && !input.afterExists) return "delete";
-    if (input.beforeExists && input.afterExists && input.beforeHash !== input.afterHash) return "modify";
+    if (input.beforeExists && input.afterExists && input.beforeHash !== input.afterHash)
+      return "modify";
     return undefined;
   }
 
@@ -502,7 +519,12 @@ export class FileChangeTracker {
 
     try {
       const parsed = JSON.parse(readFileSync(historyPath, "utf8")) as PersistedPatchHistory;
-      if (!parsed || parsed.version !== 1 || parsed.sessionId !== sessionId || !Array.isArray(parsed.patchSets)) {
+      if (
+        !parsed ||
+        parsed.version !== 1 ||
+        parsed.sessionId !== sessionId ||
+        !Array.isArray(parsed.patchSets)
+      ) {
         this.historyBySession.set(sessionId, []);
         return;
       }
@@ -567,7 +589,9 @@ export class FileChangeTracker {
           beforeExists: change.beforeExists,
           beforeHash: change.beforeHash,
           afterHash: change.afterHash,
-          beforeSnapshotFile: change.beforeSnapshotPath ? snapshotFileName(change.beforeSnapshotPath) : undefined,
+          beforeSnapshotFile: change.beforeSnapshotPath
+            ? snapshotFileName(change.beforeSnapshotPath)
+            : undefined,
         })),
       })),
     };

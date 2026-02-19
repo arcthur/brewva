@@ -11,6 +11,7 @@ Spec: [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0.
 ```
 
 Guidelines:
+
 - Write `description` in English imperative / present tense (e.g., "add", "support", "remove", "prevent").
 - No trailing period; avoid low-signal wording ("update", "misc", "fix bug").
 - Keep the subject around ~72 characters when practical for terminal and review tooling.
@@ -36,6 +37,7 @@ Note: Conventional Commits does not mandate a fixed `type` set, but consistency 
 ## 3) Choosing `scope` (optional, recommended)
 
 Use stable, searchable identifiers:
+
 - Workspace package names (e.g., `brewva-cli`, `brewva-runtime`, `brewva-tools`)
 - Or module/directory names (e.g., `distribution`, `docs`, `script`)
 
@@ -48,6 +50,7 @@ docs(distribution): add troubleshooting guide
 ## 4) Breaking changes (must be explicit)
 
 Two equivalent ways:
+
 - Use `!` in the header: `type(scope)!: ...` or `type!: ...`
 - Use a `BREAKING CHANGE:` footer trailer
 

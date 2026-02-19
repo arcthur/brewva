@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["unicorn", "typescript", "oxc"],
+  "categories": {
+    "correctness": "error",
+    "nursery": "off",
+    "pedantic": "off",
+    "perf": "error",
+    "restriction": "off",
+    "style": "off",
+    "suspicious": "error"
+  },
+  "rules": {
+    "eslint/no-await-in-loop": "off",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-extraneous-class": "off",
+    "typescript/no-unsafe-type-assertion": "off",
+    "unicorn/consistent-function-scoping": "off",
+    "unicorn/require-post-message-target-origin": "off"
+  },
+  "overrides": [
+    {
+      "files": ["test/**/*.ts"],
+      "rules": {
+        "typescript/no-explicit-any": "off"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "distribution/brewva-*/",
+    "node_modules/",
+    "packages/**/dist/",
+    "packages/**/node_modules/"
+  ]
+}

@@ -1,12 +1,10 @@
-import type { JsonValue } from "../utils/json.js";
 import { isRecord, normalizeNonEmptyString } from "../utils/coerce.js";
+import type { JsonValue } from "../utils/json.js";
 import { parseTscDiagnostics } from "./tsc.js";
 
 export type EvidenceArtifact = Record<string, JsonValue> & { kind: string };
 
-function getCommand(
-  args: Record<string, unknown> | undefined,
-): string | undefined {
+function getCommand(args: Record<string, unknown> | undefined): string | undefined {
   if (!args) return undefined;
   const cmd = args.command ?? args.cmd ?? args.script;
   return normalizeNonEmptyString(cmd);
@@ -33,8 +31,7 @@ function extractExitCode(details: unknown): number | null {
   const result = details.result;
   if (isRecord(result)) {
     const exitCode = result.exitCode;
-    if (typeof exitCode === "number" && Number.isFinite(exitCode))
-      return exitCode;
+    if (typeof exitCode === "number" && Number.isFinite(exitCode)) return exitCode;
   }
   return null;
 }
@@ -86,21 +83,20 @@ function coerceTscDiagnosticsFromDetails(details: unknown): {
 
   const truncated = Boolean(details.truncated);
   const diagnosticsCount =
-    typeof details.diagnosticsCount === "number" &&
-    Number.isFinite(details.diagnosticsCount)
+    typeof details.diagnosticsCount === "number" && Number.isFinite(details.diagnosticsCount)
       ? Math.max(0, Math.trunc(details.diagnosticsCount))
       : null;
   const countsByCode = (() => {
     if (!isRecord(details.countsByCode)) return null;
     const entries = Object.entries(details.countsByCode);
     if (entries.length === 0) return null;
-    const out: Record<string, number> = {};
+    const counts: Record<string, number> = {};
     for (const [key, value] of entries) {
       if (typeof key !== "string" || key.trim().length === 0) continue;
       if (typeof value !== "number" || !Number.isFinite(value)) continue;
-      out[key] = Math.max(0, Math.trunc(value));
+      counts[key] = Math.max(0, Math.trunc(value));
     }
-    return Object.keys(out).length > 0 ? out : null;
+    return Object.keys(counts).length > 0 ? counts : null;
   })();
 
   for (const entry of details.diagnostics.slice(0, 80)) {
@@ -108,19 +104,11 @@ function coerceTscDiagnosticsFromDetails(details: unknown): {
     const file = typeof entry.file === "string" ? entry.file.trim() : "";
     const line = typeof entry.line === "number" ? entry.line : NaN;
     const column = typeof entry.column === "number" ? entry.column : NaN;
-    const severity =
-      typeof entry.severity === "string" ? entry.severity.trim() : "";
+    const severity = typeof entry.severity === "string" ? entry.severity.trim() : "";
     const code = typeof entry.code === "string" ? entry.code.trim() : "";
-    const message =
-      typeof entry.message === "string" ? entry.message.trim() : "";
+    const message = typeof entry.message === "string" ? entry.message.trim() : "";
 
-    if (
-      !file ||
-      !Number.isFinite(line) ||
-      !Number.isFinite(column) ||
-      !code ||
-      !message
-    ) {
+    if (!file || !Number.isFinite(line) || !Number.isFinite(column) || !code || !message) {
       continue;
     }
 
@@ -163,10 +151,7 @@ export function extractEvidenceArtifacts(input: {
       ),
       12,
     );
-    const stackTrace = uniqueLines(
-      extractLines(input.outputText, /^\s*at\s+.+$/m, 18),
-      18,
-    );
+    const stackTrace = uniqueLines(extractLines(input.outputText, /^\s*at\s+.+$/m, 18), 18);
 
     artifacts.push({
       kind: "command_failure",
@@ -211,8 +196,7 @@ export function extractEvidenceArtifacts(input: {
 
     if (Object.keys(countsByCode).length === 0) {
       for (const diagnostic of diagnostics) {
-        countsByCode[diagnostic.code] =
-          (countsByCode[diagnostic.code] ?? 0) + 1;
+        countsByCode[diagnostic.code] = (countsByCode[diagnostic.code] ?? 0) + 1;
       }
     }
 

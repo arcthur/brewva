@@ -9,7 +9,7 @@ export interface ExecOutput {
 export function runCommand(
   command: string,
   args: string[],
-  options: { cwd: string; timeoutMs?: number } ,
+  options: { cwd: string; timeoutMs?: number },
 ): Promise<ExecOutput> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {

@@ -41,16 +41,12 @@ function maxNullable(...values: Array<number | null>): number | null {
   return best;
 }
 
-export function computeViewportSignalScore(
-  metrics: ViewportMetrics,
-): ViewportSignalScore {
+export function computeViewportSignalScore(metrics: ViewportMetrics): ViewportSignalScore {
   const keywordSnr = normalizeSnr(metrics.snr);
 
   const relevantHitLines = normalizeMetricNumber(metrics.relevantHitLines);
   const relevantTotalLines = normalizeMetricNumber(metrics.relevantTotalLines);
-  const importsExportsLines = normalizeMetricNumber(
-    metrics.importsExportsLines,
-  );
+  const importsExportsLines = normalizeMetricNumber(metrics.importsExportsLines);
   const symbolLines = normalizeMetricNumber(metrics.symbolLines);
   const neighborhoodLines = normalizeMetricNumber(metrics.neighborhoodLines);
 
@@ -99,9 +95,7 @@ export function shouldSkipViewportInjection(input: {
 
   if (score > thresholds.skip) return { skip: false };
 
-  const relevantHitLines = normalizeMetricNumber(
-    input.metrics.relevantHitLines,
-  );
+  const relevantHitLines = normalizeMetricNumber(input.metrics.relevantHitLines);
   const structuralSignal =
     normalizeMetricNumber(input.metrics.symbolLines) +
     normalizeMetricNumber(input.metrics.neighborhoodLines);

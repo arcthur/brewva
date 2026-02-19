@@ -14,7 +14,7 @@ function collectSkillNames(root: string): string[] {
     }
   }
 
-  return names.sort();
+  return names.toSorted();
 }
 
 describe("docs/guide skills coverage", () => {

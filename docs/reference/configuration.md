@@ -126,7 +126,7 @@ By default, runtime merges global config from `$XDG_CONFIG_HOME/brewva/brewva.js
 
 Loading behavior is implemented in `packages/brewva-runtime/src/config/loader.ts`.
 
-Global root resolution can be overridden via `BREWVA_CODING_AGENT_DIR` or `PI_CODING_AGENT_DIR`. See `packages/brewva-runtime/src/config/paths.ts`.
+Global root resolution can be overridden via `BREWVA_CODING_AGENT_DIR`. See `packages/brewva-runtime/src/config/paths.ts`.
 
 ## JSON Schema
 

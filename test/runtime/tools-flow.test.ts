@@ -1,7 +1,7 @@
+import { describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   createCostViewTool,
@@ -13,7 +13,9 @@ import {
 } from "@brewva/brewva-tools";
 
 function extractTextContent(result: { content: Array<{ type: string; text?: string }> }): string {
-  const textPart = result.content.find((item) => item.type === "text" && typeof item.text === "string");
+  const textPart = result.content.find(
+    (item) => item.type === "text" && typeof item.text === "string",
+  );
   return textPart?.text ?? "";
 }
 
@@ -33,10 +35,19 @@ describe("S-008 patching e2e loop", () => {
     const sessionId = "s8";
 
     const loadTool = createSkillLoadTool({ runtime });
-    const completeTool = createSkillCompleteTool({ runtime, verification: { executeCommands: false } });
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
 
-    const loaded = await loadTool.execute("tc-1", { name: "patching" }, undefined, undefined, fakeContext(sessionId));
-    const loadedText = extractTextContent(loaded as { content: Array<{ type: string; text?: string }> });
+    const loaded = await loadTool.execute(
+      "tc-1",
+      { name: "patching" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    const loadedText = extractTextContent(loaded);
     expect(loadedText.includes("Skill Loaded: patching")).toBe(true);
 
     runtime.markToolCall(sessionId, "edit");
@@ -69,7 +80,7 @@ describe("S-008 patching e2e loop", () => {
       fakeContext(sessionId),
     );
 
-    const completedText = extractTextContent(completed as { content: Array<{ type: string; text?: string }> });
+    const completedText = extractTextContent(completed);
     expect(completedText.includes("verification gate passed")).toBe(true);
     expect(runtime.getActiveSkill(sessionId)).toBeUndefined();
   });
@@ -79,9 +90,18 @@ describe("S-008 patching e2e loop", () => {
     const sessionId = "s8-blocked";
 
     const loadTool = createSkillLoadTool({ runtime });
-    const completeTool = createSkillCompleteTool({ runtime, verification: { executeCommands: false } });
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
 
-    await loadTool.execute("tc-1", { name: "patching" }, undefined, undefined, fakeContext(sessionId));
+    await loadTool.execute(
+      "tc-1",
+      { name: "patching" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
     runtime.markToolCall(sessionId, "edit");
 
     const completed = await completeTool.execute(
@@ -98,7 +118,7 @@ describe("S-008 patching e2e loop", () => {
       fakeContext(sessionId),
     );
 
-    const completedText = extractTextContent(completed as { content: Array<{ type: string; text?: string }> });
+    const completedText = extractTextContent(completed);
     expect(completedText.includes("Verification gate blocked")).toBe(true);
     expect(runtime.getActiveSkill(sessionId)?.name).toBe("patching");
   });
@@ -129,8 +149,14 @@ describe("S-009 rollback tool flow", () => {
     });
 
     const rollbackTool = createRollbackLastPatchTool({ runtime });
-    const result = await rollbackTool.execute("tc-rollback", {}, undefined, undefined, fakeContext(sessionId));
-    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    const result = await rollbackTool.execute(
+      "tc-rollback",
+      {},
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    const text = extractTextContent(result);
 
     expect(text.includes("Rolled back patch set")).toBe(true);
     expect(readFileSync(join(workspace, "src/example.ts"), "utf8")).toBe("export const n = 1;\n");
@@ -155,8 +181,14 @@ describe("S-010 cost view tool flow", () => {
     });
 
     const tool = createCostViewTool({ runtime });
-    const result = await tool.execute("tc-cost", { top: 3 }, undefined, undefined, fakeContext(sessionId));
-    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    const result = await tool.execute(
+      "tc-cost",
+      { top: 3 },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    const text = extractTextContent(result);
     expect(text.includes("# Cost View")).toBe(true);
     expect(text.includes("Top Skills")).toBe(true);
     expect(text.includes("Top Tools")).toBe(true);
@@ -183,10 +215,10 @@ describe("S-011 session compact tool flow", () => {
           capturedInstructions = options?.customInstructions;
         },
         getContextUsage: () => ({ tokens: 900, contextWindow: 1000, percent: 0.9 }),
-      } as any,
+      },
     );
 
-    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    const text = extractTextContent(result);
     expect(text.includes("Session compaction requested")).toBe(true);
     expect(compactCalls).toBe(1);
     expect(capturedInstructions).toBe(runtime.getCompactionInstructions());
@@ -223,21 +255,15 @@ describe("S-012 tape tools flow", () => {
       fakeContext(sessionId),
     );
 
-    const handoffText = extractTextContent(handoffResult as { content: Array<{ type: string; text?: string }> });
+    const handoffText = extractTextContent(handoffResult);
     expect(handoffText.includes("Tape handoff recorded")).toBe(true);
     expect(runtime.queryEvents(sessionId, { type: "anchor" }).length).toBe(1);
 
-    const infoResult = await tapeInfo!.execute(
-      "tc-info",
-      {},
-      undefined,
-      undefined,
-      {
-        ...fakeContext(sessionId),
-        getContextUsage: () => ({ tokens: 880, contextWindow: 1000, percent: 0.88 }),
-      } as any,
-    );
-    const infoText = extractTextContent(infoResult as { content: Array<{ type: string; text?: string }> });
+    const infoResult = await tapeInfo!.execute("tc-info", {}, undefined, undefined, {
+      ...fakeContext(sessionId),
+      getContextUsage: () => ({ tokens: 880, contextWindow: 1000, percent: 0.88 }),
+    });
+    const infoText = extractTextContent(infoResult);
     expect(infoText.includes("[TapeInfo]")).toBe(true);
     expect(infoText.includes("tape_pressure:")).toBe(true);
     expect(infoText.includes("context_pressure: high")).toBe(true);
@@ -276,7 +302,7 @@ describe("S-012 tape tools flow", () => {
       fakeContext(sessionId),
     );
 
-    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    const text = extractTextContent(result);
     expect(text.includes("[TapeSearch]")).toBe(true);
     expect(text.includes("matches:")).toBe(true);
     expect(text.toLowerCase().includes("flaky")).toBe(true);

@@ -18,9 +18,7 @@ export function getPlatformPackage({ platform, arch, libcFamily }) {
   let suffix = "";
   if (platform === "linux") {
     if (libcFamily === null || libcFamily === undefined) {
-      throw new Error(
-        "could not detect Linux libc family (expected glibc or musl).",
-      );
+      throw new Error("could not detect Linux libc family (expected glibc or musl).");
     }
     if (libcFamily === "musl") {
       suffix = "-musl";

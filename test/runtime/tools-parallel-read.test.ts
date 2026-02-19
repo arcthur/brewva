@@ -1,17 +1,15 @@
+import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
 import { DEFAULT_BREWVA_CONFIG, BrewvaRuntime } from "@brewva/brewva-runtime";
-import {
-  buildBrewvaTools,
-  createAstGrepTools,
-  createLspTools,
-} from "@brewva/brewva-tools";
+import { buildBrewvaTools, createAstGrepTools, createLspTools } from "@brewva/brewva-tools";
 import { resolveParallelReadConfig } from "../../packages/brewva-tools/src/utils/parallel-read.js";
 
 function extractTextContent(result: { content: Array<{ type: string; text?: string }> }): string {
-  const textPart = result.content.find((item) => item.type === "text" && typeof item.text === "string");
+  const textPart = result.content.find(
+    (item) => item.type === "text" && typeof item.text === "string",
+  );
   return textPart?.text ?? "";
 }
 
@@ -29,13 +27,24 @@ function fakeContext(sessionId: string, cwd: string): any {
 function workspaceWithSampleFiles(prefix: string): string {
   const workspace = mkdtempSync(join(tmpdir(), prefix));
   mkdirSync(join(workspace, "src"), { recursive: true });
-  writeFileSync(join(workspace, "src/a.ts"), "export const valueA = 1;\nexport const valueAX = valueA + 2;\n", "utf8");
-  writeFileSync(join(workspace, "src/b.ts"), "import { valueA } from './a';\nexport const valueB = valueA + 1;\n", "utf8");
+  writeFileSync(
+    join(workspace, "src/a.ts"),
+    "export const valueA = 1;\nexport const valueAX = valueA + 2;\n",
+    "utf8",
+  );
+  writeFileSync(
+    join(workspace, "src/b.ts"),
+    "import { valueA } from './a';\nexport const valueB = valueA + 1;\n",
+    "utf8",
+  );
   writeFileSync(join(workspace, "src/c.ts"), "export const valueC = 3;\n", "utf8");
   return workspace;
 }
 
-function getParallelReadPayloads(runtime: BrewvaRuntime, sessionId: string): Array<Record<string, unknown>> {
+function getParallelReadPayloads(
+  runtime: BrewvaRuntime,
+  sessionId: string,
+): Array<Record<string, unknown>> {
   const payloads: Array<Record<string, unknown>> = [];
   for (const event of runtime.queryEvents(sessionId, { type: "tool_parallel_read" })) {
     if (!event.payload) continue;
@@ -81,9 +90,7 @@ describe("tool parallel read runtime integration", () => {
       (payload) => payload.toolName === "lsp_symbols",
     );
     expect(payloads.length > 0).toBe(true);
-    expect(payloads.some((payload) => payload.operation === "find_references")).toBe(
-      true,
-    );
+    expect(payloads.some((payload) => payload.operation === "find_references")).toBe(true);
   });
 
   test("lsp workspace scan emits parallel telemetry when runtime parallel is enabled", async () => {
@@ -120,9 +127,7 @@ describe("tool parallel read runtime integration", () => {
     expect(typeof telemetry?.failedFiles).toBe("number");
     expect(typeof telemetry?.durationMs).toBe("number");
     if (telemetry) {
-      expectTelemetryCountersConsistent(
-        telemetry as unknown as Record<string, unknown>,
-      );
+      expectTelemetryCountersConsistent(telemetry as unknown as Record<string, unknown>);
     }
   });
 
@@ -155,9 +160,7 @@ describe("tool parallel read runtime integration", () => {
     expect(telemetry?.batchSize).toBe(1);
     expect(telemetry?.reason).toBe("parallel_disabled");
     if (telemetry) {
-      expectTelemetryCountersConsistent(
-        telemetry as unknown as Record<string, unknown>,
-      );
+      expectTelemetryCountersConsistent(telemetry as unknown as Record<string, unknown>);
     }
   });
 
@@ -192,9 +195,7 @@ describe("tool parallel read runtime integration", () => {
     expect(telemetry?.loadedFiles).toBe(1);
     expect(telemetry?.failedFiles).toBe(0);
     if (telemetry) {
-      expectTelemetryCountersConsistent(
-        telemetry as unknown as Record<string, unknown>,
-      );
+      expectTelemetryCountersConsistent(telemetry as unknown as Record<string, unknown>);
     }
   });
 
@@ -221,7 +222,9 @@ describe("tool parallel read runtime integration", () => {
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text.includes("valueA")).toBe(true);
 
-    const payloads = getParallelReadPayloads(runtime, sessionId).filter((payload) => payload.toolName === "lsp_find_references");
+    const payloads = getParallelReadPayloads(runtime, sessionId).filter(
+      (payload) => payload.toolName === "lsp_find_references",
+    );
     const operations = new Set(payloads.map((payload) => String(payload.operation)));
     expect(operations.has("find_references")).toBe(true);
     expect(operations.has("find_definition")).toBe(true);
@@ -249,7 +252,9 @@ describe("tool parallel read runtime integration", () => {
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text.includes("valueA")).toBe(true);
 
-    const payloads = getParallelReadPayloads(runtime, sessionId).filter((payload) => payload.toolName === "lsp_goto_definition");
+    const payloads = getParallelReadPayloads(runtime, sessionId).filter(
+      (payload) => payload.toolName === "lsp_goto_definition",
+    );
     expect(payloads.some((payload) => payload.operation === "find_definition")).toBe(true);
 
     const definitionTelemetry = payloads.find((payload) => payload.operation === "find_definition");
@@ -284,7 +289,9 @@ describe("tool parallel read runtime integration", () => {
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text.includes("Rename available")).toBe(true);
 
-    const payloads = getParallelReadPayloads(runtime, sessionId).filter((payload) => payload.toolName === "lsp_prepare_rename");
+    const payloads = getParallelReadPayloads(runtime, sessionId).filter(
+      (payload) => payload.toolName === "lsp_prepare_rename",
+    );
     const operations = new Set(payloads.map((payload) => String(payload.operation)));
     expect(operations.has("find_references")).toBe(true);
     expect(operations.has("find_definition")).toBe(true);
@@ -339,7 +346,9 @@ describe("tool parallel read runtime integration", () => {
       fakeContext(sessionId, workspace),
     );
 
-    const payloads = getParallelReadPayloads(runtime, sessionId).filter((payload) => payload.toolName === "lsp_symbols");
+    const payloads = getParallelReadPayloads(runtime, sessionId).filter(
+      (payload) => payload.toolName === "lsp_symbols",
+    );
     expect(payloads.length > 0).toBe(true);
     expect(payloads.some((payload) => payload.batchSize === 64)).toBe(true);
     if (payloads[0]) {
@@ -366,7 +375,9 @@ describe("tool parallel read runtime integration", () => {
       fakeContext("", workspace),
     );
 
-    expect(runtime.queryEvents("parallel-read-no-session", { type: "tool_parallel_read" })).toHaveLength(0);
+    expect(
+      runtime.queryEvents("parallel-read-no-session", { type: "tool_parallel_read" }),
+    ).toHaveLength(0);
   });
 
   test("counts failed files in telemetry when some files are unreadable", async () => {
@@ -394,7 +405,9 @@ describe("tool parallel read runtime integration", () => {
         fakeContext(sessionId, workspace),
       );
 
-      const payloads = getParallelReadPayloads(runtime, sessionId).filter((payload) => payload.toolName === "lsp_symbols");
+      const payloads = getParallelReadPayloads(runtime, sessionId).filter(
+        (payload) => payload.toolName === "lsp_symbols",
+      );
       expect(payloads.length > 0).toBe(true);
       const failedFiles = Number(payloads[0]?.failedFiles ?? 0);
       expect(Number.isFinite(failedFiles)).toBe(true);
@@ -432,7 +445,9 @@ describe("tool parallel read runtime integration", () => {
 
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toBe("No symbols found");
-    const payloads = getParallelReadPayloads(runtime, sessionId).filter((payload) => payload.toolName === "lsp_symbols");
+    const payloads = getParallelReadPayloads(runtime, sessionId).filter(
+      (payload) => payload.toolName === "lsp_symbols",
+    );
     expect(payloads.length > 0).toBe(true);
     expect(payloads.some((payload) => payload.scannedFiles === 0)).toBe(true);
     if (payloads[0]) {
@@ -462,7 +477,9 @@ describe("tool parallel read runtime integration", () => {
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text.includes("No matches found")).toBe(true);
 
-    const payloads = getParallelReadPayloads(runtime, sessionId).filter((payload) => payload.toolName === "ast_grep_search");
+    const payloads = getParallelReadPayloads(runtime, sessionId).filter(
+      (payload) => payload.toolName === "ast_grep_search",
+    );
     expect(payloads.length > 0).toBe(true);
     expect(payloads.some((payload) => payload.operation === "naive_search")).toBe(true);
     if (payloads[0]) {
@@ -477,7 +494,9 @@ describe("tool parallel read runtime integration", () => {
     mkdirSync(hitRoot, { recursive: true });
     mkdirSync(tailRoot, { recursive: true });
 
-    const saturated = Array.from({ length: 250 }, (_, index) => `const fallbackToken = ${index};`).join("\n") + "\n";
+    const saturated =
+      Array.from({ length: 250 }, (_, index) => `const fallbackToken = ${index};`).join("\n") +
+      "\n";
     writeFileSync(join(hitRoot, "hit.ts"), saturated, "utf8");
     for (let i = 0; i < 20; i += 1) {
       writeFileSync(join(tailRoot, `tail-${i}.ts`), `const tailToken${i} = ${i};\n`, "utf8");
@@ -504,7 +523,9 @@ describe("tool parallel read runtime integration", () => {
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text.includes("hit.ts")).toBe(true);
 
-    const payloads = getParallelReadPayloads(runtime, sessionId).filter((payload) => payload.toolName === "ast_grep_search");
+    const payloads = getParallelReadPayloads(runtime, sessionId).filter(
+      (payload) => payload.toolName === "ast_grep_search",
+    );
     expect(payloads.length > 0).toBe(true);
     const telemetry = payloads.find((payload) => payload.operation === "naive_search");
     expect(telemetry).toBeDefined();
@@ -538,7 +559,9 @@ describe("tool parallel read runtime integration", () => {
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text.includes("No matches found")).toBe(true);
 
-    const payloads = getParallelReadPayloads(runtime, sessionId).filter((payload) => payload.toolName === "ast_grep_search");
+    const payloads = getParallelReadPayloads(runtime, sessionId).filter(
+      (payload) => payload.toolName === "ast_grep_search",
+    );
     expect(payloads.length > 0).toBe(true);
     expect(payloads.some((payload) => payload.operation === "naive_search")).toBe(true);
     if (payloads[0]) {
@@ -570,7 +593,9 @@ describe("tool parallel read runtime integration", () => {
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text.includes("No matches found")).toBe(true);
 
-    const payloads = getParallelReadPayloads(runtime, sessionId).filter((payload) => payload.toolName === "ast_grep_replace");
+    const payloads = getParallelReadPayloads(runtime, sessionId).filter(
+      (payload) => payload.toolName === "ast_grep_replace",
+    );
     expect(payloads.length > 0).toBe(true);
     expect(payloads.some((payload) => payload.operation === "naive_replace")).toBe(true);
     if (payloads[0]) {
@@ -608,7 +633,9 @@ describe("tool parallel read runtime integration", () => {
     const rewritten = readFileSync(targetFile, "utf8");
     expect(rewritten.includes("valueAUpdated")).toBe(true);
 
-    const payloads = getParallelReadPayloads(runtime, sessionId).filter((payload) => payload.toolName === "ast_grep_replace");
+    const payloads = getParallelReadPayloads(runtime, sessionId).filter(
+      (payload) => payload.toolName === "ast_grep_replace",
+    );
     expect(payloads.length > 0).toBe(true);
     expect(payloads.some((payload) => payload.operation === "naive_replace")).toBe(true);
     if (payloads[0]) {

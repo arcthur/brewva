@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import { registerRuntimeCoreEventBridge } from "../../packages/brewva-cli/src/session-event-bridge.js";
 
 type RecordedEvent = {
@@ -136,7 +136,10 @@ describe("session event bridge", () => {
 
     sessionMock.emit({ type: "agent_end", messages: [{ role: "assistant" }] } as AgentSessionEvent);
     sessionMock.setSessionId("session-b");
-    sessionMock.emit({ type: "agent_end", messages: [{ role: "assistant" }, { role: "assistant" }] } as AgentSessionEvent);
+    sessionMock.emit({
+      type: "agent_end",
+      messages: [{ role: "assistant" }, { role: "assistant" }],
+    } as AgentSessionEvent);
 
     const agentEndEvents = events.filter((event) => event.type === "agent_end");
     expect(agentEndEvents).toHaveLength(2);
@@ -144,8 +147,12 @@ describe("session event bridge", () => {
     expect(agentEndEvents[1]?.sessionId).toBe("session-b");
     expect(agentEndEvents[0]?.payload?.messageCount).toBe(1);
     expect(agentEndEvents[1]?.payload?.messageCount).toBe(2);
-    expect((agentEndEvents[0]?.payload?.costSummary as { totalTokens?: number })?.totalTokens).toBe(11);
-    expect((agentEndEvents[1]?.payload?.costSummary as { totalTokens?: number })?.totalTokens).toBe(22);
+    expect((agentEndEvents[0]?.payload?.costSummary as { totalTokens?: number })?.totalTokens).toBe(
+      11,
+    );
+    expect((agentEndEvents[1]?.payload?.costSummary as { totalTokens?: number })?.totalTokens).toBe(
+      22,
+    );
   });
 
   test("records assistant usage from message_end only when usage exists", () => {

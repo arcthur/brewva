@@ -1,9 +1,9 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import {
   type ContextBudgetUsage,
   type ContextPressureStatus,
   type BrewvaRuntime,
 } from "@brewva/brewva-runtime";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
 const CONTEXT_INJECTION_MESSAGE_TYPE = "brewva-context-injection";
 const CONTEXT_CONTRACT_MARKER = "[Brewva Context Contract]";
@@ -14,7 +14,10 @@ interface CompactionGateState {
   lastCompactionTurn: number | null;
 }
 
-function getOrCreateGateState(store: Map<string, CompactionGateState>, sessionId: string): CompactionGateState {
+function getOrCreateGateState(
+  store: Map<string, CompactionGateState>,
+  sessionId: string,
+): CompactionGateState {
   const existing = store.get(sessionId);
   if (existing) return existing;
   const created: CompactionGateState = {
@@ -44,7 +47,9 @@ function emitRuntimeEvent(
 }
 
 function toBudgetUsage(input: unknown): ContextBudgetUsage | undefined {
-  const usage = input as { tokens: number | null; contextWindow: number; percent: number | null } | undefined;
+  const usage = input as
+    | { tokens: number | null; contextWindow: number; percent: number | null }
+    | undefined;
   if (!usage || typeof usage.contextWindow !== "number" || usage.contextWindow <= 0) {
     return undefined;
   }
@@ -81,10 +86,7 @@ function hydrateLastCompactionTurnFromTape(
   state.lastCompactionTurn = Math.max(0, Math.floor(latest.turn));
 }
 
-function hasRecentCompaction(
-  runtime: BrewvaRuntime,
-  state: CompactionGateState,
-): boolean {
+function hasRecentCompaction(runtime: BrewvaRuntime, state: CompactionGateState): boolean {
   if (state.lastCompactionTurn === null) return false;
   const turnsSinceCompact = Math.max(0, state.turnIndex - state.lastCompactionTurn);
   return turnsSinceCompact < resolveRecentCompactionWindowTurns(runtime);
@@ -128,16 +130,16 @@ function extractCompactionEntryId(input: unknown): string | undefined {
 }
 
 function resolveInjectionScopeId(input: unknown): string | undefined {
-  const sessionManager = input as { getLeafId?: (() => string | null | undefined) | undefined } | undefined;
+  const sessionManager = input as
+    | { getLeafId?: (() => string | null | undefined) | undefined }
+    | undefined;
   const leafId = sessionManager?.getLeafId?.();
   if (typeof leafId !== "string") return undefined;
   const normalized = leafId.trim();
   return normalized.length > 0 ? normalized : undefined;
 }
 
-function buildCompactionGateMessage(input: {
-  pressure: ContextPressureStatus;
-}): string {
+function buildCompactionGateMessage(input: { pressure: ContextPressureStatus }): string {
   const usagePercent = formatPercent(input.pressure.usageRatio);
   const hardLimitPercent = formatPercent(input.pressure.hardLimitRatio);
   return [
@@ -193,9 +195,7 @@ function normalizeToolName(name: string): string {
 function buildContextContractBlock(runtime: BrewvaRuntime): string {
   const tapeThresholds = runtime.config.tape.tapePressureThresholds;
   const hardLimitPercent = formatPercent(runtime.getContextHardLimitRatio());
-  const highThresholdPercent = formatPercent(
-    runtime.getContextCompactionThresholdRatio(),
-  );
+  const highThresholdPercent = formatPercent(runtime.getContextCompactionThresholdRatio());
 
   return [
     CONTEXT_CONTRACT_MARKER,
@@ -247,7 +247,7 @@ export function registerContextTransform(pi: ExtensionAPI, runtime: BrewvaRuntim
       return undefined;
     }
 
-    if (ctx.hasUI === false) {
+    if (!ctx.hasUI) {
       emitRuntimeEvent(runtime, {
         sessionId,
         turn: state.turnIndex,
@@ -366,7 +366,12 @@ export function registerContextTransform(pi: ExtensionAPI, runtime: BrewvaRuntim
       });
     }
 
-    const injection = runtime.buildContextInjection(sessionId, event.prompt, usage, injectionScopeId);
+    const injection = runtime.buildContextInjection(
+      sessionId,
+      event.prompt,
+      usage,
+      injectionScopeId,
+    );
     const blocks: string[] = [
       buildTapeStatusBlock({
         runtime,

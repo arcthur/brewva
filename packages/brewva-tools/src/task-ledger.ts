@@ -1,9 +1,10 @@
-import { Type } from "@sinclair/typebox";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { formatTaskStateBlock } from "@brewva/brewva-runtime";
+import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
+import { defineTool } from "./utils/tool.js";
 
 const VerificationLevelSchema = Type.Union([
   Type.Literal("quick"),
@@ -18,8 +19,8 @@ const TaskItemStatusSchema = Type.Union([
   Type.Literal("blocked"),
 ]);
 
-export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinition<any>[] {
-  const taskSetSpec: ToolDefinition<any> = {
+export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinition[] {
+  const taskSetSpec = defineTool({
     name: "task_set_spec",
     label: "Task Set Spec",
     description: "Set or update the TaskSpec (event-sourced Task Ledger).",
@@ -52,9 +53,9 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
       });
       return textResult("TaskSpec recorded.", { ok: true });
     },
-  };
+  });
 
-  const taskAddItem: ToolDefinition<any> = {
+  const taskAddItem = defineTool({
     name: "task_add_item",
     label: "Task Add Item",
     description: "Add a task item to the Task Ledger.",
@@ -75,9 +76,9 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
       }
       return textResult(`Task item added (${result.itemId}).`, result);
     },
-  };
+  });
 
-  const taskUpdateItem: ToolDefinition<any> = {
+  const taskUpdateItem = defineTool({
     name: "task_update_item",
     label: "Task Update Item",
     description: "Update a task item in the Task Ledger.",
@@ -94,13 +95,16 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
         status: params.status,
       });
       if (!result.ok) {
-        return textResult(`Task item update rejected (${result.error ?? "unknown_error"}).`, result);
+        return textResult(
+          `Task item update rejected (${result.error ?? "unknown_error"}).`,
+          result,
+        );
       }
       return textResult("Task item updated.", result);
     },
-  };
+  });
 
-  const taskRecordBlocker: ToolDefinition<any> = {
+  const taskRecordBlocker = defineTool({
     name: "task_record_blocker",
     label: "Task Record Blocker",
     description: "Record a blocker in the Task Ledger.",
@@ -123,9 +127,9 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
       }
       return textResult(`Blocker recorded (${result.blockerId}).`, result);
     },
-  };
+  });
 
-  const taskResolveBlocker: ToolDefinition<any> = {
+  const taskResolveBlocker = defineTool({
     name: "task_resolve_blocker",
     label: "Task Resolve Blocker",
     description: "Resolve (remove) a blocker from the Task Ledger.",
@@ -140,9 +144,9 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
       }
       return textResult("Blocker resolved.", result);
     },
-  };
+  });
 
-  const taskViewState: ToolDefinition<any> = {
+  const taskViewState = defineTool({
     name: "task_view_state",
     label: "Task View State",
     description: "Show the current folded Task Ledger state.",
@@ -153,7 +157,14 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
       const block = formatTaskStateBlock(state);
       return textResult(block || "[TaskLedger]\n(empty)", { ok: true });
     },
-  };
+  });
 
-  return [taskSetSpec, taskAddItem, taskUpdateItem, taskRecordBlocker, taskResolveBlocker, taskViewState];
+  return [
+    taskSetSpec,
+    taskAddItem,
+    taskUpdateItem,
+    taskRecordBlocker,
+    taskResolveBlocker,
+    taskViewState,
+  ];
 }

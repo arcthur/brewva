@@ -50,9 +50,7 @@ function clampBatchSize(value: number): number {
   return Math.max(1, Math.min(MAX_PARALLEL_READ_BATCH_SIZE, Math.trunc(value)));
 }
 
-export function resolveParallelReadConfig(
-  runtime?: BrewvaToolRuntime,
-): ParallelReadConfig {
+export function resolveParallelReadConfig(runtime?: BrewvaToolRuntime): ParallelReadConfig {
   const parallel = runtime?.config?.parallel;
   if (!parallel) {
     return {
@@ -86,10 +84,7 @@ export function resolveParallelReadConfig(
   };
 }
 
-export function resolveAdaptiveBatchSize(
-  batchSize: number,
-  remainingWork: number,
-): number {
+export function resolveAdaptiveBatchSize(batchSize: number, remainingWork: number): number {
   const normalizedBatch = clampBatchSize(batchSize);
   const normalizedRemaining = toPositiveInteger(remainingWork);
   return Math.max(1, Math.min(normalizedBatch, normalizedRemaining));
@@ -115,7 +110,8 @@ export function summarizeReadBatch(items: ReadBatchItem[]): ReadBatchSummary {
 
 export function getToolSessionId(ctx: unknown): string | undefined {
   if (!ctx || typeof ctx !== "object") return undefined;
-  const sessionManager = (ctx as { sessionManager?: { getSessionId?: () => unknown } }).sessionManager;
+  const sessionManager = (ctx as { sessionManager?: { getSessionId?: () => unknown } })
+    .sessionManager;
   const value = sessionManager?.getSessionId?.();
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();

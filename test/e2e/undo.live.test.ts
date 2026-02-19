@@ -94,9 +94,7 @@ describe("e2e: undo", () => {
     try {
       const undo = runCliSync(workspace, ["--undo"]);
       assertCliSuccess(undo, "undo-empty");
-      expect(undo.stdout.includes("No rollback applied (no_patchset).")).toBe(
-        true,
-      );
+      expect(undo.stdout.includes("No rollback applied (no_patchset).")).toBe(true);
     } finally {
       cleanupWorkspace(workspace);
     }

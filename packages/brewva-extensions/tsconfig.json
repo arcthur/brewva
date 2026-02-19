@@ -4,9 +4,6 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "references": [
-    { "path": "../brewva-runtime" },
-    { "path": "../brewva-tools" }
-  ],
+  "references": [{ "path": "../brewva-runtime" }, { "path": "../brewva-tools" }],
   "include": ["src/**/*.ts"]
 }

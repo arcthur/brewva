@@ -22,28 +22,33 @@ escalation_path:
 # Git Skill
 
 ## Intent
+
 Deliver reviewable and recoverable Git history with explicit checkpoints.
 
 ## Trigger
+
 Use this skill for any request that includes:
+
 - Commit creation or commit cleanup.
 - Rebase, squash, force-push decision, or conflict recovery.
 - History lookup such as "who changed this", "when was this added", or "find bad commit".
 
 ## Mode Detection (mandatory first step)
+
 Classify request into exactly one mode before running command sequences.
 
-| Pattern | Mode | Goal |
-| --- | --- | --- |
-| commit, changes ready, split commits | `COMMIT` | Create atomic commits |
-| rebase, squash, cleanup history, update onto main | `REBASE` | Rewrite history safely |
-| who changed, when added, blame, bisect | `HISTORY_SEARCH` | Produce evidence about history |
+| Pattern                                           | Mode             | Goal                           |
+| ------------------------------------------------- | ---------------- | ------------------------------ |
+| commit, changes ready, split commits              | `COMMIT`         | Create atomic commits          |
+| rebase, squash, cleanup history, update onto main | `REBASE`         | Rewrite history safely         |
+| who changed, when added, blame, bisect            | `HISTORY_SEARCH` | Produce evidence about history |
 
 If mode is ambiguous, ask one direct question before proceeding.
 
 ## Shared Safety Gate (all modes)
 
 ### Step S1: Gather context in parallel
+
 ```bash
 git status --short
 git branch --show-current
@@ -54,7 +59,9 @@ git log -30 --pretty=format:"%h %s"
 ```
 
 ### Step S2: Emit blocking checkpoint
+
 Do not continue until this is produced.
+
 ```text
 GIT_CONTEXT
 - mode: <COMMIT|REBASE|HISTORY_SEARCH>
@@ -67,6 +74,7 @@ GIT_CONTEXT
 ```
 
 ### Step S3: Enforce branch safety
+
 - Never rewrite `main` or `master`.
 - Never force-push without explicit warning.
 - Never run destructive history rewrite if branch status is unclear.
@@ -74,12 +82,15 @@ GIT_CONTEXT
 ## COMMIT Mode
 
 ### C1: Detect commit message style (blocking)
+
 Run script first, fallback to manual check only if script fails.
+
 ```bash
 bash skills/base/git/scripts/detect-commit-style.sh
 ```
 
 Manual fallback:
+
 1. Inspect `git log -30 --pretty=format:%s`.
 2. Language decision: Korean ratio >= 50% => Korean, else English.
 3. Style decision:
@@ -88,6 +99,7 @@ Manual fallback:
    - otherwise `PLAIN`.
 
 Blocking output:
+
 ```text
 STYLE_DETECTION
 - language: <ENGLISH|KOREAN>
@@ -102,6 +114,7 @@ STYLE_DETECTION
 ```
 
 ### C1.5: Conventional Commits (style=SEMANTIC)
+
 When `STYLE_DETECTION.style = SEMANTIC`, write commit subjects using [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) to keep history machine-parseable (changelog/versioning) and review-friendly.
 
 Minimum requirement: a valid Subject line. Add a body and footers only when they materially improve reviewability (motivation, migration notes, issue references).
@@ -116,15 +129,18 @@ Minimum requirement: a valid Subject line. Add a body and footers only when they
 Quick reference: `skills/base/git/references/conventional-commits.md`
 
 ### C2: Plan atomic commit groups
+
 Default is multiple commits, not one commit.
 
 Minimum commit policy:
+
 - `1-2 files`: 1+ commit.
 - `3-4 files`: 2+ commits.
 - `5-9 files`: 3+ commits.
 - `10+ files`: at least `ceil(file_count / 2)` commits.
 
 Split order:
+
 1. Split by directory/module first.
 2. Split by concern second (`logic`, `ui`, `config`, `test`, `docs`).
 3. Pair implementation with direct tests in same commit.
@@ -136,11 +152,13 @@ Split order:
    - level 4: config/infrastructure
 
 Hard rules:
+
 - Any commit with `>=3 files` needs one-line justification.
 - If justification is vague ("same feature", "same PR"), split again.
 - If two file groups can be reverted independently, they must be separate commits.
 
 ### C3: Emit commit plan (blocking)
+
 ```text
 COMMIT_PLAN
 - files_changed: <n>
@@ -166,6 +184,7 @@ EXECUTION_ORDER
 If status is `FAIL`, re-plan before staging.
 
 ### C4: Execute commit plan
+
 ```bash
 git add <files-for-commit-1>
 git diff --staged --stat
@@ -177,6 +196,7 @@ git commit -m "<message>"
 ```
 
 Post-commit checks:
+
 ```bash
 git status --short
 git log --oneline -n <planned_commits>
@@ -185,38 +205,48 @@ git log --oneline -n <planned_commits>
 ## REBASE Mode
 
 ### R1: Select rebase strategy
+
 Strategy matrix:
+
 - Current branch is `main/master` => no rewrite, create new commits only.
 - Branch has local unpublished commits => aggressive rewrite allowed.
 - Branch already pushed => careful rewrite with explicit force-push warning.
 
 ### R2: Run rebase workflow
+
 Preferred commands:
+
 ```bash
 MERGE_BASE=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD master)
 GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash "$MERGE_BASE"
 ```
 
 For base update:
+
 ```bash
 git fetch origin
 git rebase origin/main
 ```
 
 Conflict protocol:
+
 1. Inspect conflicted files with `git status`.
 2. Resolve file-by-file.
 3. Stage resolved files and continue:
+
 ```bash
 git add <resolved-file>
 git rebase --continue
 ```
+
 4. Abort if conflict scope is unclear:
+
 ```bash
 git rebase --abort
 ```
 
 ### R3: Rebase verification (blocking)
+
 ```text
 REBASE_REPORT
 - strategy: <NEW_COMMITS_ONLY|AGGRESSIVE_REWRITE|CAREFUL_REWRITE>
@@ -229,12 +259,14 @@ REBASE_REPORT
 ## HISTORY_SEARCH Mode
 
 ### H1: Choose search method
+
 - Exact string lifecycle => `git log -S`.
 - Pattern/regex history => `git log -G`.
 - Line ownership => `git blame`.
 - Regression origin between good/bad states => `git bisect`.
 
 ### H2: Execute focused queries
+
 ```bash
 git log -S "target_string" --oneline -- <path>
 git log -G "regex_pattern" --oneline -- <path>
@@ -242,6 +274,7 @@ git blame -L <start>,<end> <path>
 ```
 
 Bisect template:
+
 ```bash
 git bisect start
 git bisect bad
@@ -253,6 +286,7 @@ git bisect reset
 ```
 
 ### H3: Emit evidence report
+
 ```text
 HISTORY_REPORT
 - question: "<user question>"
@@ -265,6 +299,7 @@ HISTORY_REPORT
 ```
 
 ## Stop Conditions
+
 - Context commands fail repeatedly and branch state cannot be determined.
 - Request implies destructive rewrite on protected branch.
 - Rebase creates unresolved conflicts after two attempts.
@@ -273,6 +308,7 @@ HISTORY_REPORT
 When stopped, output what was tried and what exact input is needed next.
 
 ## Anti-Patterns (never)
+
 - One giant commit for unrelated files.
 - Mixing implementation and unrelated cleanup in one commit.
 - Force-pushing without warning.
@@ -280,6 +316,7 @@ When stopped, output what was tried and what exact input is needed next.
 - Using vague commit messages that do not describe one atomic change.
 
 ## References
+
 - Rebase decision and recovery guide: `skills/base/git/references/rebase-workflow.md`
 - Search command cookbook: `skills/base/git/references/history-search-cheatsheet.md`
 - Conventional Commits quick reference: `skills/base/git/references/conventional-commits.md`
@@ -287,11 +324,13 @@ When stopped, output what was tried and what exact input is needed next.
 ## Example
 
 Input:
+
 ```text
 "I changed 8 files, help me commit cleanly and keep history easy to review."
 ```
 
 Expected sequence:
+
 1. Run Shared Safety Gate.
 2. Run style detection script.
 3. Produce `COMMIT_PLAN` with 3+ commits and dependency order.

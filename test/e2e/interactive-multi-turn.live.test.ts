@@ -1,6 +1,14 @@
 import { describe, expect } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { keepWorkspace, repoRoot, runLive } from "./helpers.js";
@@ -214,7 +222,7 @@ function latestEventFile(eventsDir: string): string {
       const file = join(eventsDir, name);
       return { file, mtimeMs: statSync(file).mtimeMs };
     })
-    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+    .toSorted((a, b) => b.mtimeMs - a.mtimeMs);
 
   if (candidates.length === 0) {
     throw new Error(`No event files under ${eventsDir}`);
@@ -302,12 +310,16 @@ function runRegression(rounds: number): RegressionRunResult {
   const promptsPath = writePromptsFile(workspace);
   const expectPath = writeExpectDriver(workspace);
 
-  const child = spawnSync("/usr/bin/env", ["expect", "-f", expectPath, workspace, String(rounds), promptsPath], {
-    cwd: repoRoot,
-    encoding: "utf8",
-    env: { ...process.env },
-    timeout: 12 * 60 * 1000,
-  });
+  const child = spawnSync(
+    "/usr/bin/env",
+    ["expect", "-f", expectPath, workspace, String(rounds), promptsPath],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: { ...process.env },
+      timeout: 12 * 60 * 1000,
+    },
+  );
 
   const eventsDir = join(workspace, ".orchestrator", "events");
   const eventFile = latestEventFile(eventsDir);
@@ -342,7 +354,8 @@ function assertCompactionContinuity(result: RegressionRunResult): void {
   let previousAgentEnd = -1;
   for (let i = 0; i < agentEndIndexes.length; i += 1) {
     const currentAgentEnd = agentEndIndexes[i]!;
-    const nextAgentEnd = i + 1 < agentEndIndexes.length ? agentEndIndexes[i + 1]! : result.events.length;
+    const nextAgentEnd =
+      i + 1 < agentEndIndexes.length ? agentEndIndexes[i + 1]! : result.events.length;
 
     const segmentHasRequest = result.events
       .slice(previousAgentEnd + 1, currentAgentEnd + 1)
@@ -350,7 +363,9 @@ function assertCompactionContinuity(result: RegressionRunResult): void {
     if (segmentHasRequest) {
       const hasFollow = result.events
         .slice(currentAgentEnd + 1, nextAgentEnd)
-        .some((event) => COMPACTION_FOLLOW_TYPES.has(String(event.type ?? "")));
+        .some((event) =>
+          COMPACTION_FOLLOW_TYPES.has(typeof event.type === "string" ? event.type : ""),
+        );
       expect(hasFollow).toBe(true);
     }
 
@@ -372,6 +387,7 @@ describe("e2e: interactive multi-turn live regression", () => {
       } catch (error) {
         throw new Error(
           `${error instanceof Error ? error.message : String(error)}\n${formatFailureOutput(result)}`,
+          { cause: error },
         );
       } finally {
         if (!keepWorkspace) {

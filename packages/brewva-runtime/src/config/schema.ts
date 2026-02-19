@@ -12,9 +12,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function resolveSchemaPath(): string | undefined {
-  const overridePath = typeof process.env.BREWVA_CONFIG_SCHEMA_PATH === "string"
-    ? process.env.BREWVA_CONFIG_SCHEMA_PATH.trim()
-    : "";
+  const overridePath =
+    typeof process.env.BREWVA_CONFIG_SCHEMA_PATH === "string"
+      ? process.env.BREWVA_CONFIG_SCHEMA_PATH.trim()
+      : "";
   if (overridePath.length > 0) {
     return resolve(process.cwd(), overridePath);
   }
@@ -33,7 +34,9 @@ function resolveSchemaPath(): string | undefined {
   return undefined;
 }
 
-export function loadBrewvaConfigSchema(): { ok: true; schema: SchemaObject; schemaPath: string } | { ok: false; error: Error } {
+export function loadBrewvaConfigSchema():
+  | { ok: true; schema: SchemaObject; schemaPath: string }
+  | { ok: false; error: Error } {
   if (cachedSchema) {
     return { ok: true, schema: cachedSchema.schema, schemaPath: cachedSchema.schemaPath };
   }
@@ -61,4 +64,3 @@ export function loadBrewvaConfigSchema(): { ok: true; schema: SchemaObject; sche
     return { ok: false, error: cachedError };
   }
 }
-

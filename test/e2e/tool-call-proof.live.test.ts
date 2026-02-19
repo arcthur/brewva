@@ -59,10 +59,7 @@ describe("e2e: tool call proof", () => {
 
       const nonBundleLines = lines.filter((line) => {
         if (!isRecord(line)) return false;
-        return !(
-          line.schema === "brewva.stream.v1" &&
-          line.type === "brewva_event_bundle"
-        );
+        return !(line.schema === "brewva.stream.v1" && line.type === "brewva_event_bundle");
       });
       expect(nonBundleLines.length).toBeGreaterThan(0);
       expect(

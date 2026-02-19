@@ -15,7 +15,7 @@ export function buildTruthFactsBlock(input: {
 
   const active = input.state.facts
     .filter((fact) => fact.status === "active")
-    .sort((left, right) => right.lastSeenAt - left.lastSeenAt)
+    .toSorted((left, right) => right.lastSeenAt - left.lastSeenAt)
     .slice(0, maxFacts);
 
   const lines: string[] = ["[TruthFacts]"];
@@ -34,4 +34,3 @@ export function buildTruthFactsBlock(input: {
 
   return lines.join("\n");
 }
-

@@ -1,8 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { normalizeJsonRecord } from "../utils/json.js";
-import type { BrewvaConfig, BrewvaEventQuery, BrewvaEventRecord } from "../types.js";
-import { ensureDir } from "../utils/fs.js";
 import { redactUnknown } from "../security/redact.js";
 import {
   TAPE_ANCHOR_EVENT_TYPE,
@@ -10,6 +7,9 @@ import {
   type TapeAnchorPayload,
   type TapeCheckpointPayload,
 } from "../tape/events.js";
+import type { BrewvaConfig, BrewvaEventQuery, BrewvaEventRecord } from "../types.js";
+import { ensureDir } from "../utils/fs.js";
+import { normalizeJsonRecord } from "../utils/json.js";
 
 type EventAppendInput = {
   sessionId: string;
@@ -126,7 +126,10 @@ export class BrewvaEventStore {
     });
   }
 
-  listCheckpoints(sessionId: string, query: Omit<BrewvaEventQuery, "type"> = {}): BrewvaEventRecord[] {
+  listCheckpoints(
+    sessionId: string,
+    query: Omit<BrewvaEventQuery, "type"> = {},
+  ): BrewvaEventRecord[] {
     return this.list(sessionId, {
       ...query,
       type: TAPE_CHECKPOINT_EVENT_TYPE,
@@ -161,8 +164,7 @@ export class BrewvaEventStore {
       }
     }
 
-    rows.sort((left, right) => right.mtimeMs - left.mtimeMs);
-    return rows.map((row) => row.sessionId);
+    return rows.toSorted((left, right) => right.mtimeMs - left.mtimeMs).map((row) => row.sessionId);
   }
 
   private filePathForSession(sessionId: string): string {

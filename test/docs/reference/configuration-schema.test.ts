@@ -22,7 +22,8 @@ describe("brewva config schema", () => {
     const definitions = getObject(schema.definitions);
     expect(definitions).toBeDefined();
 
-    const brewvaConfig = getObject(definitions?.BrewvaConfigFile) ?? getObject(definitions?.BrewvaConfig);
+    const brewvaConfig =
+      getObject(definitions?.BrewvaConfigFile) ?? getObject(definitions?.BrewvaConfig);
     expect(brewvaConfig).toBeDefined();
 
     const properties = getObject(brewvaConfig?.properties);
@@ -31,8 +32,9 @@ describe("brewva config schema", () => {
     const keys = Object.keys(DEFAULT_BREWVA_CONFIG);
     const missing = keys.filter((key) => !(key in (properties ?? {})));
 
-    expect(missing, `Missing keys in packages/brewva-runtime/schema/brewva.schema.json: ${missing.join(", ")}`).toEqual(
-      [],
-    );
+    expect(
+      missing,
+      `Missing keys in packages/brewva-runtime/schema/brewva.schema.json: ${missing.join(", ")}`,
+    ).toEqual([]);
   });
 });

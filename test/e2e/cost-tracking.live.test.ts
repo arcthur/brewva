@@ -33,9 +33,7 @@ describe("e2e: cost tracking visibility", () => {
       expect(typeof bundle?.costSummary?.totalCostUsd).toBe("number");
       expect((bundle?.costSummary?.totalCostUsd as number) >= 0).toBe(true);
 
-      const costUpdates = (bundle?.events ?? []).filter(
-        (event) => event.type === "cost_update",
-      );
+      const costUpdates = (bundle?.events ?? []).filter((event) => event.type === "cost_update");
       for (const event of costUpdates) {
         if (!isRecord(event.payload)) continue;
         if (event.payload.totalTokens !== undefined) {
@@ -69,9 +67,7 @@ describe("e2e: cost tracking visibility", () => {
       assertCliSuccess(run, "cost-print");
 
       if (run.stderr.includes("[cost] session=")) {
-        expect(
-          /\[cost\] session=\S+\s+tokens=\d+/.test(run.stderr),
-        ).toBe(true);
+        expect(/\[cost\] session=\S+\s+tokens=\d+/.test(run.stderr)).toBe(true);
       } else {
         console.warn(
           "[cost-tracking.live] [cost] summary line is absent; this can happen when usage data is unavailable.",

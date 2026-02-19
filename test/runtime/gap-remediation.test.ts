@@ -1,7 +1,16 @@
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { describe, expect, test } from "bun:test";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { DEFAULT_BREWVA_CONFIG, BrewvaRuntime } from "@brewva/brewva-runtime";
 
@@ -12,7 +21,11 @@ function createWorkspace(name: string): string {
 }
 
 function writeConfig(workspace: string, config: BrewvaConfig): void {
-  writeFileSync(join(workspace, ".config/brewva/brewva.json"), JSON.stringify(config, null, 2), "utf8");
+  writeFileSync(
+    join(workspace, ".config/brewva/brewva.json"),
+    JSON.stringify(config, null, 2),
+    "utf8",
+  );
 }
 
 function createConfig(overrides: Partial<BrewvaConfig>): BrewvaConfig {
@@ -80,7 +93,10 @@ describe("Gap remediation: verification gate", () => {
     const sessionId = "verify-1";
     runtime.markToolCall(sessionId, "edit");
 
-    const report = await runtime.verifyCompletion(sessionId, "standard", { executeCommands: true, timeoutMs: 5_000 });
+    const report = await runtime.verifyCompletion(sessionId, "standard", {
+      executeCommands: true,
+      timeoutMs: 5_000,
+    });
     expect(report.passed).toBe(false);
     expect(report.missingEvidence).toContain("tests");
 
@@ -281,7 +297,11 @@ describe("Gap remediation: event stream and context budget", () => {
     const sessionId = "events-bad-lines-1";
     runtime.recordEvent({ sessionId, type: "session_start", payload: { cwd: workspace } });
 
-    const eventsPath = join(workspace, runtime.config.infrastructure.events.dir, `${sessionId}.jsonl`);
+    const eventsPath = join(
+      workspace,
+      runtime.config.infrastructure.events.dir,
+      `${sessionId}.jsonl`,
+    );
     appendFileSync(eventsPath, "\n{ this is not json", "utf8");
 
     const events = runtime.queryEvents(sessionId);
@@ -305,7 +325,11 @@ describe("Gap remediation: event stream and context budget", () => {
       },
     });
 
-    const eventsPath = join(workspace, runtime.config.infrastructure.events.dir, `${sessionId}.jsonl`);
+    const eventsPath = join(
+      workspace,
+      runtime.config.infrastructure.events.dir,
+      `${sessionId}.jsonl`,
+    );
     const raw = readFileSync(eventsPath, "utf8");
     expect(raw.includes("sk-proj-abcdefghijklmnopqrstuvwxyz0123456789")).toBe(false);
     expect(raw.includes("ghp_abcdefghijklmnopqrstuvwxyz0123456789")).toBe(false);
@@ -328,7 +352,10 @@ describe("Gap remediation: event stream and context budget", () => {
   test("deduplicates per branch scope and allows reinjection after compaction", () => {
     const workspace = createWorkspace("context-injection-dedup");
     writeConfig(workspace, createConfig({}));
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".config/brewva/brewva.json" }) as BrewvaRuntime & {
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      configPath: ".config/brewva/brewva.json",
+    }) as BrewvaRuntime & {
       getLedgerDigest: (sessionId: string) => string;
     };
     const sessionId = "context-injection-dedup-1";
@@ -361,7 +388,10 @@ describe("Gap remediation: event stream and context budget", () => {
     );
     expect(second.accepted).toBe(false);
 
-    const dropped = runtime.queryEvents(sessionId, { type: "context_injection_dropped", last: 1 })[0];
+    const dropped = runtime.queryEvents(sessionId, {
+      type: "context_injection_dropped",
+      last: 1,
+    })[0];
     const payload = dropped?.payload as { reason?: string } | undefined;
     expect(payload?.reason).toBe("duplicate_content");
 
@@ -513,7 +543,12 @@ describe("Gap remediation: event stream and context budget", () => {
 
     runtime.onTurnStart(sessionId, 1);
     const primary = runtime.buildContextInjection(sessionId, "fix flaky tests", usage, "leaf-a");
-    const supplemental = runtime.planSupplementalContextInjection(sessionId, "x".repeat(2000), usage, "leaf-a");
+    const supplemental = runtime.planSupplementalContextInjection(
+      sessionId,
+      "x".repeat(2000),
+      usage,
+      "leaf-a",
+    );
     const primaryTokens = primary.accepted ? primary.finalTokens : 0;
     const supplementalTokens = supplemental.accepted ? supplemental.finalTokens : 0;
     expect(primaryTokens + supplementalTokens).toBeLessThanOrEqual(48);
@@ -521,11 +556,21 @@ describe("Gap remediation: event stream and context budget", () => {
       expect(supplemental.droppedReason).toBe("budget_exhausted");
     }
 
-    const otherScope = runtime.planSupplementalContextInjection(sessionId, "y".repeat(120), usage, "leaf-b");
+    const otherScope = runtime.planSupplementalContextInjection(
+      sessionId,
+      "y".repeat(120),
+      usage,
+      "leaf-b",
+    );
     expect(otherScope.accepted).toBe(true);
 
     runtime.onTurnStart(sessionId, 2);
-    const afterTurnReset = runtime.planSupplementalContextInjection(sessionId, "z".repeat(120), usage, "leaf-a");
+    const afterTurnReset = runtime.planSupplementalContextInjection(
+      sessionId,
+      "z".repeat(120),
+      usage,
+      "leaf-a",
+    );
     expect(afterTurnReset.accepted).toBe(true);
   });
 
@@ -550,23 +595,48 @@ describe("Gap remediation: event stream and context budget", () => {
     };
 
     runtime.onTurnStart(sessionId, 1);
-    const first = runtime.planSupplementalContextInjection(sessionId, "x".repeat(2000), usage, "leaf-a");
+    const first = runtime.planSupplementalContextInjection(
+      sessionId,
+      "x".repeat(2000),
+      usage,
+      "leaf-a",
+    );
     expect(first.accepted).toBe(true);
 
-    const second = runtime.planSupplementalContextInjection(sessionId, "x".repeat(2000), usage, "leaf-a");
+    const second = runtime.planSupplementalContextInjection(
+      sessionId,
+      "x".repeat(2000),
+      usage,
+      "leaf-a",
+    );
     expect(second.accepted).toBe(true);
     expect(second.finalTokens).toBe(first.finalTokens);
 
     runtime.commitSupplementalContextInjection(sessionId, first.finalTokens, "leaf-a");
-    const exhausted = runtime.planSupplementalContextInjection(sessionId, "x".repeat(2000), usage, "leaf-a");
+    const exhausted = runtime.planSupplementalContextInjection(
+      sessionId,
+      "x".repeat(2000),
+      usage,
+      "leaf-a",
+    );
     expect(exhausted.accepted).toBe(false);
     expect(exhausted.droppedReason).toBe("budget_exhausted");
 
-    const otherScope = runtime.planSupplementalContextInjection(sessionId, "x".repeat(2000), usage, "leaf-b");
+    const otherScope = runtime.planSupplementalContextInjection(
+      sessionId,
+      "x".repeat(2000),
+      usage,
+      "leaf-b",
+    );
     expect(otherScope.accepted).toBe(true);
 
     runtime.onTurnStart(sessionId, 2);
-    const afterTurnReset = runtime.planSupplementalContextInjection(sessionId, "x".repeat(2000), usage, "leaf-a");
+    const afterTurnReset = runtime.planSupplementalContextInjection(
+      sessionId,
+      "x".repeat(2000),
+      usage,
+      "leaf-a",
+    );
     expect(afterTurnReset.accepted).toBe(true);
   });
 
@@ -702,18 +772,30 @@ describe("Gap remediation: event stream and context budget", () => {
 
     runtime.onTurnStart(sessionId, 1);
     expect(
-      runtime.shouldRequestCompaction(sessionId, { tokens: 820, contextWindow: 1000, percent: 0.9 }),
+      runtime.shouldRequestCompaction(sessionId, {
+        tokens: 820,
+        contextWindow: 1000,
+        percent: 0.9,
+      }),
     ).toBe(true);
     runtime.markContextCompacted(sessionId, { fromTokens: 820, toTokens: 120 });
 
     runtime.onTurnStart(sessionId, 2);
     expect(
-      runtime.shouldRequestCompaction(sessionId, { tokens: 820, contextWindow: 1000, percent: 0.9 }),
+      runtime.shouldRequestCompaction(sessionId, {
+        tokens: 820,
+        contextWindow: 1000,
+        percent: 0.9,
+      }),
     ).toBe(false);
 
     runtime.onTurnStart(sessionId, 3);
     expect(
-      runtime.shouldRequestCompaction(sessionId, { tokens: 820, contextWindow: 1000, percent: 0.9 }),
+      runtime.shouldRequestCompaction(sessionId, {
+        tokens: 820,
+        contextWindow: 1000,
+        percent: 0.9,
+      }),
     ).toBe(true);
   });
 
@@ -771,8 +853,7 @@ describe("Gap remediation: event stream and context budget", () => {
   });
 });
 
-describe("Gap remediation: interrupt recovery snapshot", () => {
-});
+describe("Gap remediation: interrupt recovery snapshot", () => {});
 
 describe("Gap remediation: rollback safety net", () => {
   test("tracks file mutations and restores the latest patch set", () => {
@@ -929,7 +1010,10 @@ describe("Gap remediation: rollback safety net", () => {
     const filePath = join(workspace, "src/persisted.ts");
     writeFileSync(filePath, "export const persisted = 1;\n", "utf8");
 
-    const runtimeA = new BrewvaRuntime({ cwd: workspace, configPath: ".config/brewva/brewva.json" });
+    const runtimeA = new BrewvaRuntime({
+      cwd: workspace,
+      configPath: ".config/brewva/brewva.json",
+    });
     runtimeA.onTurnStart(sessionId, 1);
     runtimeA.trackToolCallStart({
       sessionId,
@@ -945,7 +1029,10 @@ describe("Gap remediation: rollback safety net", () => {
       success: true,
     });
 
-    const runtimeB = new BrewvaRuntime({ cwd: workspace, configPath: ".config/brewva/brewva.json" });
+    const runtimeB = new BrewvaRuntime({
+      cwd: workspace,
+      configPath: ".config/brewva/brewva.json",
+    });
     const resolved = runtimeB.resolveUndoSessionId();
     expect(resolved).toBe(sessionId);
 
@@ -1000,8 +1087,12 @@ describe("Gap remediation: live event subscription", () => {
     });
 
     expect(received.some((event) => event.schema === "brewva.event.v1")).toBe(true);
-    expect(received.some((event) => event.type === "session_start" && event.category === "session")).toBe(true);
-    expect(received.some((event) => event.type === "tool_result_recorded" && event.category === "tool")).toBe(true);
+    expect(
+      received.some((event) => event.type === "session_start" && event.category === "session"),
+    ).toBe(true);
+    expect(
+      received.some((event) => event.type === "tool_result_recorded" && event.category === "tool"),
+    ).toBe(true);
 
     unsubscribe();
     const before = received.length;

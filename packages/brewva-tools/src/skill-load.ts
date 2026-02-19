@@ -1,8 +1,9 @@
-import { Type } from "@sinclair/typebox";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
+import { defineTool } from "./utils/tool.js";
 
 function formatSkillOutput(input: {
   name: string;
@@ -50,8 +51,8 @@ function formatSkillOutput(input: {
   return lines.join("\n");
 }
 
-export function createSkillLoadTool(options: BrewvaToolOptions): ToolDefinition<any> {
-  return {
+export function createSkillLoadTool(options: BrewvaToolOptions): ToolDefinition {
+  return defineTool({
     name: "skill_load",
     label: "Skill Load",
     description: "Load a skill by name, activate its contract, and return full skill instructions.",
@@ -65,7 +66,10 @@ export function createSkillLoadTool(options: BrewvaToolOptions): ToolDefinition<
         return textResult(`Error: ${result.reason ?? "Skill activation failed."}`, { ok: false });
       }
 
-      const availableConsumedOutputs = options.runtime.getAvailableConsumedOutputs(sessionId, params.name);
+      const availableConsumedOutputs = options.runtime.getAvailableConsumedOutputs(
+        sessionId,
+        params.name,
+      );
 
       return textResult(
         formatSkillOutput({
@@ -82,5 +86,5 @@ export function createSkillLoadTool(options: BrewvaToolOptions): ToolDefinition<
         },
       );
     },
-  };
+  });
 }

@@ -1,4 +1,10 @@
-import type { PatchConflict, PatchFileChange, PatchSet, WorkerMergeReport, WorkerResult } from "../types.js";
+import type {
+  PatchConflict,
+  PatchFileChange,
+  PatchSet,
+  WorkerMergeReport,
+  WorkerResult,
+} from "../types.js";
 
 interface PatchOrigin {
   workerId: string;
@@ -114,4 +120,3 @@ export class ParallelResultStore {
     return created;
   }
 }
-

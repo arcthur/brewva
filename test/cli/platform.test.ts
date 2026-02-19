@@ -3,8 +3,12 @@ import { getBinaryPath, getPlatformPackage } from "../../distribution/brewva/bin
 
 describe("brewva platform package resolution", () => {
   test("resolves macOS package names", () => {
-    expect(getPlatformPackage({ platform: "darwin", arch: "arm64" })).toBe("@brewva/brewva-darwin-arm64");
-    expect(getPlatformPackage({ platform: "darwin", arch: "x64" })).toBe("@brewva/brewva-darwin-x64");
+    expect(getPlatformPackage({ platform: "darwin", arch: "arm64" })).toBe(
+      "@brewva/brewva-darwin-arm64",
+    );
+    expect(getPlatformPackage({ platform: "darwin", arch: "x64" })).toBe(
+      "@brewva/brewva-darwin-x64",
+    );
   });
 
   test("resolves linux package names with libc", () => {
@@ -17,14 +21,18 @@ describe("brewva platform package resolution", () => {
   });
 
   test("maps win32 platform to windows package names", () => {
-    expect(getPlatformPackage({ platform: "win32", arch: "x64" })).toBe("@brewva/brewva-windows-x64");
+    expect(getPlatformPackage({ platform: "win32", arch: "x64" })).toBe(
+      "@brewva/brewva-windows-x64",
+    );
     expect(getBinaryPath("@brewva/brewva-windows-x64", "win32")).toBe(
       "@brewva/brewva-windows-x64/bin/brewva.exe",
     );
   });
 
   test("throws for unsupported or unknown Linux libc", () => {
-    expect(() => getPlatformPackage({ platform: "linux", arch: "x64", libcFamily: null })).toThrow();
+    expect(() =>
+      getPlatformPackage({ platform: "linux", arch: "x64", libcFamily: null }),
+    ).toThrow();
     expect(() => getPlatformPackage({ platform: "freebsd", arch: "x64" })).toThrow();
   });
 });

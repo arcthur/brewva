@@ -11,6 +11,9 @@ describe("docs/reference configuration coverage", () => {
 
     const missing = keys.filter((key) => !markdown.includes(`\`${key}\``));
 
-    expect(missing, `Missing keys in docs/reference/configuration.md: ${missing.join(", ")}`).toEqual([]);
+    expect(
+      missing,
+      `Missing keys in docs/reference/configuration.md: ${missing.join(", ")}`,
+    ).toEqual([]);
   });
 });

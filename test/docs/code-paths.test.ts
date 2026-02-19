@@ -90,7 +90,9 @@ describe("docs code path refs", () => {
 
         const resolvedPath = resolve(repoRoot, value);
         if (!existsSync(resolvedPath)) {
-          errors.push(`${ref.sourceFile}:${ref.lineNumber} missing path \`${value}\` (resolved: ${resolvedPath})`);
+          errors.push(
+            `${ref.sourceFile}:${ref.lineNumber} missing path \`${value}\` (resolved: ${resolvedPath})`,
+          );
         }
       }
     }

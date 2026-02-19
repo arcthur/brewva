@@ -93,7 +93,13 @@ export type TaskItemStatus = "todo" | "doing" | "done" | "blocked";
 
 export type TaskPhase = "align" | "investigate" | "execute" | "verify" | "blocked" | "done";
 
-export type TaskHealth = "ok" | "needs_spec" | "blocked" | "verification_failed" | "budget_pressure" | "unknown";
+export type TaskHealth =
+  | "ok"
+  | "needs_spec"
+  | "blocked"
+  | "verification_failed"
+  | "budget_pressure"
+  | "unknown";
 
 export interface TaskStatus {
   phase: TaskPhase;
@@ -277,7 +283,12 @@ export interface BrewvaConfigFile {
   };
   security?: Partial<BrewvaConfig["security"]>;
   parallel?: Partial<BrewvaConfig["parallel"]>;
-  infrastructure?: Partial<Omit<BrewvaConfig["infrastructure"], "events" | "contextBudget" | "interruptRecovery" | "costTracking">> & {
+  infrastructure?: Partial<
+    Omit<
+      BrewvaConfig["infrastructure"],
+      "events" | "contextBudget" | "interruptRecovery" | "costTracking"
+    >
+  > & {
     events?: Partial<BrewvaConfig["infrastructure"]["events"]>;
     contextBudget?: Partial<BrewvaConfig["infrastructure"]["contextBudget"]>;
     interruptRecovery?: Partial<BrewvaConfig["infrastructure"]["interruptRecovery"]>;
@@ -350,7 +361,12 @@ export type TruthLedgerEventPayload =
 export interface LedgerDigest {
   generatedAt: number;
   sessionId: string;
-  records: Array<Pick<EvidenceLedgerRow, "id" | "timestamp" | "tool" | "skill" | "verdict" | "argsSummary" | "outputSummary">>;
+  records: Array<
+    Pick<
+      EvidenceLedgerRow,
+      "id" | "timestamp" | "tool" | "skill" | "verdict" | "argsSummary" | "outputSummary"
+    >
+  >;
   summary: {
     total: number;
     pass: number;
@@ -403,13 +419,7 @@ export interface ContextBudgetUsage {
 
 export type TapePressureLevel = "none" | "low" | "medium" | "high";
 
-export type ContextPressureLevel =
-  | "none"
-  | "low"
-  | "medium"
-  | "high"
-  | "critical"
-  | "unknown";
+export type ContextPressureLevel = "none" | "low" | "medium" | "high" | "critical" | "unknown";
 
 export interface ContextPressureStatus {
   level: ContextPressureLevel;
@@ -441,10 +451,7 @@ export interface TapeStatusState {
   lastCheckpointId?: string;
 }
 
-export type TapeSearchScope =
-  | "current_phase"
-  | "all_phases"
-  | "anchors_only";
+export type TapeSearchScope = "current_phase" | "all_phases" | "anchors_only";
 
 export interface TapeSearchMatch {
   eventId: string;

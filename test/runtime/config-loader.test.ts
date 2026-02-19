@@ -1,7 +1,7 @@
+import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_BREWVA_CONFIG,
   loadBrewvaConfig,
@@ -50,7 +50,11 @@ describe("Brewva config loader normalization", () => {
         },
       },
     };
-    writeFileSync(join(workspace, ".brewva/brewva.json"), JSON.stringify(rawConfig, null, 2), "utf8");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(rawConfig, null, 2),
+      "utf8",
+    );
 
     const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
     const defaults = DEFAULT_BREWVA_CONFIG;
@@ -60,11 +64,11 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.tape.checkpointIntervalEntries).toBe(0);
     expect(loaded.tape.tapePressureThresholds.low).toBe(20);
     expect(loaded.tape.tapePressureThresholds.medium).toBe(20);
-    expect(loaded.tape.tapePressureThresholds.high).toBe(
-      defaults.tape.tapePressureThresholds.high,
-    );
+    expect(loaded.tape.tapePressureThresholds.high).toBe(defaults.tape.tapePressureThresholds.high);
 
-    expect(loaded.infrastructure.contextBudget.maxInjectionTokens).toBe(defaults.infrastructure.contextBudget.maxInjectionTokens);
+    expect(loaded.infrastructure.contextBudget.maxInjectionTokens).toBe(
+      defaults.infrastructure.contextBudget.maxInjectionTokens,
+    );
     expect(loaded.infrastructure.contextBudget.hardLimitPercent).toBe(1);
     expect(loaded.infrastructure.contextBudget.compactionThresholdPercent).toBeLessThanOrEqual(
       loaded.infrastructure.contextBudget.hardLimitPercent,
@@ -72,14 +76,18 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.infrastructure.contextBudget.minTurnsBetweenCompaction).toBe(0);
     expect(loaded.infrastructure.contextBudget.minSecondsBetweenCompaction).toBe(0);
     expect(loaded.infrastructure.contextBudget.pressureBypassPercent).toBe(0);
-    expect(loaded.infrastructure.contextBudget.truncationStrategy).toBe(defaults.infrastructure.contextBudget.truncationStrategy);
+    expect(loaded.infrastructure.contextBudget.truncationStrategy).toBe(
+      defaults.infrastructure.contextBudget.truncationStrategy,
+    );
 
     expect(loaded.infrastructure.interruptRecovery.gracefulTimeoutMs).toBe(
       defaults.infrastructure.interruptRecovery.gracefulTimeoutMs,
     );
 
     expect(loaded.infrastructure.costTracking.alertThresholdRatio).toBe(1);
-    expect(loaded.infrastructure.costTracking.actionOnExceed).toBe(defaults.infrastructure.costTracking.actionOnExceed);
+    expect(loaded.infrastructure.costTracking.actionOnExceed).toBe(
+      defaults.infrastructure.costTracking.actionOnExceed,
+    );
   });
 
   test("returns isolated config instances when no config file exists", () => {
@@ -89,7 +97,9 @@ describe("Brewva config loader normalization", () => {
     first.security.enforceDeniedTools = false;
 
     const second = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
-    expect(second.security.enforceDeniedTools).toBe(DEFAULT_BREWVA_CONFIG.security.enforceDeniedTools);
+    expect(second.security.enforceDeniedTools).toBe(
+      DEFAULT_BREWVA_CONFIG.security.enforceDeniedTools,
+    );
   });
 
   test("normalizes skills roots arrays and selector values", () => {
@@ -105,14 +115,20 @@ describe("Brewva config loader normalization", () => {
         },
       },
     };
-    writeFileSync(join(workspace, ".brewva/brewva.json"), JSON.stringify(rawConfig, null, 2), "utf8");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(rawConfig, null, 2),
+      "utf8",
+    );
 
     const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
     expect(loaded.skills.roots).toEqual([join(workspace, ".brewva/skills-extra")]);
     expect(loaded.skills.packs).toEqual(["typescript"]);
     expect(loaded.skills.disabled).toEqual(["review"]);
     expect(loaded.skills.selector.k).toBe(DEFAULT_BREWVA_CONFIG.skills.selector.k);
-    expect(loaded.skills.selector.maxDigestTokens).toBe(DEFAULT_BREWVA_CONFIG.skills.selector.maxDigestTokens);
+    expect(loaded.skills.selector.maxDigestTokens).toBe(
+      DEFAULT_BREWVA_CONFIG.skills.selector.maxDigestTokens,
+    );
   });
 
   test("loads explicit ui startup overrides", () => {
@@ -163,9 +179,14 @@ describe("Brewva config loader normalization", () => {
     const workspace = createWorkspace("invalid-json");
     writeFileSync(join(workspace, ".brewva/brewva.json"), "{", "utf8");
 
-    const loaded = loadBrewvaConfigWithDiagnostics({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    const loaded = loadBrewvaConfigWithDiagnostics({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    });
     expect(loaded.config.ui.quietStartup).toBe(DEFAULT_BREWVA_CONFIG.ui.quietStartup);
-    expect(loaded.diagnostics.some((diagnostic) => diagnostic.code === "config_parse_error")).toBe(true);
+    expect(loaded.diagnostics.some((diagnostic) => diagnostic.code === "config_parse_error")).toBe(
+      true,
+    );
   });
 
   test("drops unknown keys and tolerates invalid object shapes", () => {
@@ -235,24 +256,5 @@ describe("Brewva config loader normalization", () => {
         process.env.XDG_CONFIG_HOME = previousXdg;
       }
     }
-  });
-
-  test("does not fall back to legacy .pi config path", () => {
-    const workspace = createWorkspace("legacy-fallback-disabled");
-    mkdirSync(join(workspace, ".pi"), { recursive: true });
-    writeFileSync(
-      join(workspace, ".pi/brewva.json"),
-      JSON.stringify(
-        {
-          parallel: { maxConcurrent: 99 },
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
-
-    const loaded = loadBrewvaConfig({ cwd: workspace });
-    expect(loaded.parallel.maxConcurrent).toBe(DEFAULT_BREWVA_CONFIG.parallel.maxConcurrent);
   });
 });

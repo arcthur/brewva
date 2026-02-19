@@ -3,11 +3,6 @@
   "version": "0.1.0",
   "description": "Platform-aware binary launcher for the Brewva CLI",
   "license": "MIT",
-  "type": "module",
-  "piConfig": {
-    "name": "brewva",
-    "configDir": ".config/brewva"
-  },
   "bin": {
     "brewva": "./bin/brewva.js"
   },
@@ -15,6 +10,7 @@
     "bin",
     "postinstall.mjs"
   ],
+  "type": "module",
   "scripts": {
     "postinstall": "node postinstall.mjs"
   },
@@ -29,5 +25,12 @@
     "@brewva/brewva-linux-x64": "0.1.0",
     "@brewva/brewva-linux-x64-musl": "0.1.0",
     "@brewva/brewva-windows-x64": "0.1.0"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "piConfig": {
+    "name": "brewva",
+    "configDir": ".config/brewva"
   }
 }

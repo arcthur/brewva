@@ -1,9 +1,4 @@
-export type TscDiagnosticSeverity =
-  | "error"
-  | "warning"
-  | "information"
-  | "hint"
-  | "unknown";
+export type TscDiagnosticSeverity = "error" | "warning" | "information" | "hint" | "unknown";
 
 export interface TscDiagnostic {
   file: string;
@@ -14,9 +9,7 @@ export interface TscDiagnostic {
   message: string;
 }
 
-export function coerceTscDiagnosticSeverity(
-  value: string,
-): TscDiagnosticSeverity {
+export function coerceTscDiagnosticSeverity(value: string): TscDiagnosticSeverity {
   const normalized = value.trim().toLowerCase();
   if (normalized === "error") return "error";
   if (normalized === "warning") return "warning";

@@ -1,8 +1,8 @@
-import type { ExtensionAPI, ExtensionFactory } from "@mariozechner/pi-coding-agent";
 import { BrewvaRuntime, type BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { buildBrewvaTools } from "@brewva/brewva-tools";
-import { registerContextTransform } from "./context-transform.js";
+import type { ExtensionAPI, ExtensionFactory } from "@mariozechner/pi-coding-agent";
 import { registerCompletionGuard } from "./completion-guard.js";
+import { registerContextTransform } from "./context-transform.js";
 import { registerEventStream } from "./event-stream.js";
 import { registerLedgerWriter } from "./ledger-writer.js";
 import { registerNotification } from "./notification.js";
@@ -22,7 +22,9 @@ function registerAllHandlers(pi: ExtensionAPI, runtime: BrewvaRuntime): void {
   registerNotification(pi);
 }
 
-export function createBrewvaExtension(options: CreateBrewvaExtensionOptions = {}): ExtensionFactory {
+export function createBrewvaExtension(
+  options: CreateBrewvaExtensionOptions = {},
+): ExtensionFactory {
   return (pi) => {
     const runtime = options.runtime ?? new BrewvaRuntime(options);
 

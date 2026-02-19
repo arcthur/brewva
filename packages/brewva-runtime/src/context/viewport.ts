@@ -54,11 +54,7 @@ type RelevantExtraction = {
   lines: string[];
 };
 
-function extractRelevantLines(
-  text: string,
-  goal: string,
-  limit: number,
-): RelevantExtraction {
+function extractRelevantLines(text: string, goal: string, limit: number): RelevantExtraction {
   const lines = text.split("\n");
   const keywords = tokenizeGoalTerms(goal);
   if (keywords.length === 0) {
@@ -76,9 +72,9 @@ function extractRelevantLines(
   const ranked = lines
     .map((line, index) => ({ line, index, score: scoreLine(line, keywords) }))
     .filter((row) => row.score > 0)
-    .sort((a, b) => b.score - a.score)
+    .toSorted((a, b) => b.score - a.score)
     .slice(0, Math.max(1, limit))
-    .sort((a, b) => a.index - b.index);
+    .toSorted((a, b) => a.index - b.index);
 
   if (ranked.length === 0) {
     const extracted = lines
@@ -110,11 +106,7 @@ type ModuleEntry = {
 
 /** Extract import/export entries from the first N lines of source text.
  *  NOTE: Uses line-by-line regex matching — does not handle multi-line imports. */
-function extractModuleEntries(
-  text: string,
-  maxLines: number,
-  maxEntries: number,
-): ModuleEntry[] {
+function extractModuleEntries(text: string, maxLines: number, maxEntries: number): ModuleEntry[] {
   const entryLimit = Math.max(0, Math.floor(maxEntries));
   if (entryLimit === 0) return [];
 
@@ -124,8 +116,7 @@ function extractModuleEntries(
   for (const line of lines) {
     const trimmed = line.trimEnd();
     const statement = trimmed.trimStart();
-    if (!(statement.startsWith("import ") || statement.startsWith("export ")))
-      continue;
+    if (!(statement.startsWith("import ") || statement.startsWith("export "))) continue;
     const sourceMatch = /\bfrom\s+["']([^"']+)["']/.exec(statement);
     if (!sourceMatch) continue;
     const source = sourceMatch[1]?.trim() ?? "";
@@ -136,9 +127,7 @@ function extractModuleEntries(
 
     if (statement.startsWith("import ")) {
       const defaultMatch =
-        /^\s*import\s+(?:type\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:,|\s+from\b)/.exec(
-          statement,
-        );
+        /^\s*import\s+(?:type\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:,|\s+from\b)/.exec(statement);
       if (defaultMatch?.[1]) {
         defaultImport = defaultMatch[1];
       }
@@ -165,10 +154,7 @@ function extractModuleEntries(
 
 const MODULE_EXTS = [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts"];
 
-function resolveModulePath(
-  baseFile: string,
-  specifier: string,
-): string | undefined {
+function resolveModulePath(baseFile: string, specifier: string): string | undefined {
   const baseDir = dirname(baseFile);
   const base = resolve(baseDir, specifier);
 
@@ -193,11 +179,7 @@ function resolveModulePath(
   return undefined;
 }
 
-function findDefinitionLines(
-  text: string,
-  symbol: string,
-  limit: number,
-): string[] {
+function findDefinitionLines(text: string, symbol: string, limit: number): string[] {
   const lines = text.split("\n");
   const escaped = escapeRegExp(symbol);
   const patterns = [
@@ -205,9 +187,7 @@ function findDefinitionLines(
       `\\bexport\\s+(?:default\\s+)?(?:declare\\s+)?(?:type|interface|class|function|const|let|var|enum)\\s+${escaped}\\b`,
     ),
     new RegExp(`\\bexport\\s+default\\s+${escaped}\\b`),
-    new RegExp(
-      `\\b(?:type|interface|class|function|const|let|var|enum)\\s+${escaped}\\b`,
-    ),
+    new RegExp(`\\b(?:type|interface|class|function|const|let|var|enum)\\s+${escaped}\\b`),
   ];
 
   const matches: string[] = [];
@@ -321,16 +301,8 @@ export function buildViewportContext(input: {
       continue;
     }
 
-    const moduleEntries = extractModuleEntries(
-      content.text,
-      maxImportLines,
-      maxImportsPerFile,
-    );
-    const relevant = extractRelevantLines(
-      content.text,
-      input.goal,
-      maxRelevantLines,
-    );
+    const moduleEntries = extractModuleEntries(content.text, maxImportLines, maxImportsPerFile);
+    const relevant = extractRelevantLines(content.text, input.goal, maxRelevantLines);
     metrics.includedFiles.push(relative);
     metrics.importsExportsLines += moduleEntries.length;
     metrics.relevantTotalLines += relevant.totalLines;
@@ -353,11 +325,7 @@ export function buildViewportContext(input: {
     const symbolLines: string[] = [];
     if (targetSymbols.length > 0) {
       for (const symbol of targetSymbols) {
-        const defs = findDefinitionLines(
-          content.text,
-          symbol,
-          maxDefinitionLines,
-        );
+        const defs = findDefinitionLines(content.text, symbol, maxDefinitionLines);
         for (const def of defs) {
           symbolLines.push(`- ${symbol}: ${def}`);
         }
@@ -393,11 +361,7 @@ export function buildViewportContext(input: {
 
         const names = entry.names.slice(0, maxSymbolsPerImport);
         for (const name of names) {
-          const defs = findDefinitionLines(
-            neighborContent.text,
-            name,
-            maxDefinitionLines,
-          );
+          const defs = findDefinitionLines(neighborContent.text, name, maxDefinitionLines);
           if (defs.length === 0) continue;
           for (const def of defs) {
             blocks.push(`- ${entry.source} ${name}: ${def}`);
@@ -407,9 +371,7 @@ export function buildViewportContext(input: {
         }
 
         if (!wroteAny && names.length > 0) {
-          blocks.push(
-            `- ${entry.source}: (no definitions found for ${names.join(", ")})`,
-          );
+          blocks.push(`- ${entry.source}: (no definitions found for ${names.join(", ")})`);
           metrics.neighborhoodLines += 1;
         }
       }
@@ -422,9 +384,7 @@ export function buildViewportContext(input: {
 
   const combined = blocks.join("\n").trim();
   const truncated = combined.length > maxTotalChars;
-  const text = truncated
-    ? `${combined.slice(0, maxTotalChars - 3)}...`
-    : combined;
+  const text = truncated ? `${combined.slice(0, maxTotalChars - 3)}...` : combined;
 
   const signal = metrics.relevantHitLines;
   const noise =

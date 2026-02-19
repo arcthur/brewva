@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 
 function extractLongFlags(cliSource: string): string[] {
   const matches = cliSource.match(/--[a-z][a-z-]*/g) ?? [];
-  return [...new Set(matches)].sort();
+  return [...new Set(matches)].toSorted();
 }
 
 describe("docs/reference commands coverage", () => {

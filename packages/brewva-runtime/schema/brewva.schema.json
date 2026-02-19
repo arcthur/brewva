@@ -45,11 +45,7 @@
                 },
                 "truncationStrategy": {
                   "type": "string",
-                  "enum": [
-                    "drop-entry",
-                    "summarize",
-                    "tail"
-                  ]
+                  "enum": ["drop-entry", "summarize", "tail"]
                 }
               }
             },
@@ -59,10 +55,7 @@
               "properties": {
                 "actionOnExceed": {
                   "type": "string",
-                  "enum": [
-                    "warn",
-                    "block_tools"
-                  ]
+                  "enum": ["warn", "block_tools"]
                 },
                 "alertThresholdRatio": {
                   "type": "number"
@@ -141,11 +134,7 @@
             "allowedToolsMode": {
               "description": "Controls how (required + optional) tool allowlists are applied.\n- off: only denied tools can block.\n- warn: allow but emit a warning event the first time a disallowed tool is called per (session, skill, tool).\n- enforce: block tool calls that are not in the allowlist (unless globally always-allowed).",
               "type": "string",
-              "enum": [
-                "off",
-                "warn",
-                "enforce"
-              ]
+              "enum": ["off", "warn", "enforce"]
             },
             "enforceDeniedTools": {
               "type": "boolean"
@@ -156,20 +145,12 @@
             "skillMaxParallelMode": {
               "description": "Controls how per-skill maxParallel is applied when acquiring parallel slots.\n- off: use global parallel config only.\n- warn: allow but emit a warning event when a skill exceeds its parallel cap.\n- enforce: reject parallel slot acquisitions once the cap is reached.",
               "type": "string",
-              "enum": [
-                "off",
-                "warn",
-                "enforce"
-              ]
+              "enum": ["off", "warn", "enforce"]
             },
             "skillMaxTokensMode": {
               "description": "Controls how per-skill budget.maxTokens is applied.\n- off: no enforcement.\n- warn: allow but emit a warning event when a skill exceeds its token budget.\n- enforce: block tool calls (except always-allowed lifecycle tools) once the budget is exceeded.",
               "type": "string",
-              "enum": [
-                "off",
-                "warn",
-                "enforce"
-              ]
+              "enum": ["off", "warn", "enforce"]
             }
           }
         },
@@ -209,10 +190,7 @@
                         "type": "number"
                       }
                     },
-                    "required": [
-                      "maxToolCalls",
-                      "maxTokens"
-                    ]
+                    "required": ["maxToolCalls", "maxTokens"]
                   },
                   "composableWith": {
                     "type": "array",
@@ -249,11 +227,7 @@
                   },
                   "stability": {
                     "type": "string",
-                    "enum": [
-                      "experimental",
-                      "stable",
-                      "deprecated"
-                    ]
+                    "enum": ["experimental", "stable", "deprecated"]
                   },
                   "tags": {
                     "type": "array",
@@ -287,11 +261,7 @@
                         }
                       }
                     },
-                    "required": [
-                      "required",
-                      "optional",
-                      "denied"
-                    ]
+                    "required": ["required", "optional", "denied"]
                   },
                   "version": {
                     "type": "string"
@@ -404,27 +374,15 @@
     },
     "SkillCostHint": {
       "type": "string",
-      "enum": [
-        "low",
-        "medium",
-        "high"
-      ]
+      "enum": ["low", "medium", "high"]
     },
     "SkillTier": {
       "type": "string",
-      "enum": [
-        "base",
-        "pack",
-        "project"
-      ]
+      "enum": ["base", "pack", "project"]
     },
     "VerificationLevel": {
       "type": "string",
-      "enum": [
-        "quick",
-        "standard",
-        "strict"
-      ]
+      "enum": ["quick", "standard", "strict"]
     }
   }
 }

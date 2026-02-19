@@ -1,12 +1,12 @@
 {
   "name": "@brewva/brewva-cli",
   "version": "0.1.0",
-  "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "bin": {
     "brewva": "./dist/index.js"
   },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -16,9 +16,12 @@
     }
   },
   "dependencies": {
+    "@brewva/brewva-extensions": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
     "@brewva/brewva-tools": "workspace:*",
-    "@brewva/brewva-extensions": "workspace:*",
     "@mariozechner/pi-coding-agent": "^0.53.0"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   }
 }

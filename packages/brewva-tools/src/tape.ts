@@ -1,13 +1,14 @@
-import { Type } from "@sinclair/typebox";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import type {
   ContextBudgetUsage,
   ContextPressureStatus,
   TapeSearchScope,
 } from "@brewva/brewva-runtime";
+import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
+import { defineTool } from "./utils/tool.js";
 
 const TapeSearchScopeSchema = Type.Union([
   Type.Literal("current_phase"),
@@ -40,7 +41,9 @@ function formatPercent(ratio: number | null): string {
   return `${(ratio * 100).toFixed(1)}%`;
 }
 
-function resolveContextAction(level: "none" | "low" | "medium" | "high" | "critical" | "unknown"): string {
+function resolveContextAction(
+  level: "none" | "low" | "medium" | "high" | "critical" | "unknown",
+): string {
   if (level === "critical") return "session_compact_now";
   if (level === "high") return "session_compact_soon";
   return "none";
@@ -80,11 +83,12 @@ function toSafeScope(value: unknown): TapeSearchScope {
   return "current_phase";
 }
 
-export function createTapeTools(options: BrewvaToolOptions): ToolDefinition<any>[] {
-  const tapeHandoff: ToolDefinition<any> = {
+export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
+  const tapeHandoff = defineTool({
     name: "tape_handoff",
     label: "Tape Handoff",
-    description: "Create a tape anchor for semantic phase handoff. This does not compact message history.",
+    description:
+      "Create a tape anchor for semantic phase handoff. This does not compact message history.",
     parameters: Type.Object({
       name: Type.String({ minLength: 1, maxLength: 120 }),
       summary: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
@@ -119,9 +123,9 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition<any>
         totalEntries: status.totalEntries,
       });
     },
-  };
+  });
 
-  const tapeInfo: ToolDefinition<any> = {
+  const tapeInfo = defineTool({
     name: "tape_info",
     label: "Tape Info",
     description: "Show tape status and context pressure for the current session.",
@@ -129,8 +133,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition<any>
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
       const tape = options.runtime.getTapeStatus(sessionId);
-      const usage =
-        resolveToolContextUsage(ctx) ?? options.runtime.getContextUsage(sessionId);
+      const usage = resolveToolContextUsage(ctx) ?? options.runtime.getContextUsage(sessionId);
       const pressure = options.runtime.getContextPressureStatus(sessionId, usage);
 
       return textResult(
@@ -149,9 +152,9 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition<any>
         },
       );
     },
-  };
+  });
 
-  const tapeSearch: ToolDefinition<any> = {
+  const tapeSearch = defineTool({
     name: "tape_search",
     label: "Tape Search",
     description: "Search historical tape entries by text query.",
@@ -214,7 +217,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition<any>
         ...result,
       });
     },
-  };
+  });
 
   return [tapeHandoff, tapeInfo, tapeSearch];
 }

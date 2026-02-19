@@ -11,6 +11,7 @@
 `Brewva` is a Bun + TypeScript monorepo for an AI-native coding agent runtime built on top of `@mariozechner/pi-coding-agent`.
 
 Primary deliverables:
+
 - Runtime core (`@brewva/brewva-runtime`)
 - Tool registry (`@brewva/brewva-tools`)
 - Extension wiring (`@brewva/brewva-extensions`)
@@ -76,26 +77,27 @@ brewva/
 
 ## WHERE TO LOOK
 
-| Task | Location | Notes |
-|------|----------|-------|
-| Runtime behavior | `packages/brewva-runtime/src/runtime.ts` | orchestration state, verification, snapshots, replay |
-| Runtime contracts | `packages/brewva-runtime/src/types.ts` | core shared types |
-| Tool registry | `packages/brewva-tools/src/index.ts` | all registered tools |
-| Extension composition | `packages/brewva-extensions/src/index.ts` | hook wiring and runtime/tool registration |
-| CLI args/modes | `packages/brewva-cli/src/index.ts` | parseArgs, interactive/print/json, undo/replay |
-| Session bootstrap | `packages/brewva-cli/src/session.ts` | model/session/resource loader setup |
-| Binary build | `script/build-binaries.ts` | compile targets + runtime asset copy |
-| Dist smoke checks | `script/verify-dist.ts` | Node/dist import + help banner checks |
-| Launcher package | `distribution/brewva/` | postinstall and platform resolution |
-| CI pipeline | `.github/workflows/ci.yml` | quality + binaries jobs |
+| Task                  | Location                                  | Notes                                                |
+| --------------------- | ----------------------------------------- | ---------------------------------------------------- |
+| Runtime behavior      | `packages/brewva-runtime/src/runtime.ts`  | orchestration state, verification, snapshots, replay |
+| Runtime contracts     | `packages/brewva-runtime/src/types.ts`    | core shared types                                    |
+| Tool registry         | `packages/brewva-tools/src/index.ts`      | all registered tools                                 |
+| Extension composition | `packages/brewva-extensions/src/index.ts` | hook wiring and runtime/tool registration            |
+| CLI args/modes        | `packages/brewva-cli/src/index.ts`        | parseArgs, interactive/print/json, undo/replay       |
+| Session bootstrap     | `packages/brewva-cli/src/session.ts`      | model/session/resource loader setup                  |
+| Binary build          | `script/build-binaries.ts`                | compile targets + runtime asset copy                 |
+| Dist smoke checks     | `script/verify-dist.ts`                   | Node/dist import + help banner checks                |
+| Launcher package      | `distribution/brewva/`                    | postinstall and platform resolution                  |
+| CI pipeline           | `.github/workflows/ci.yml`                | quality + binaries jobs                              |
 
 ---
 
 ## CONVENTIONS
 
 - Package manager: Bun (`packageManager: bun@1.3.9`).
+- Node.js: `^20.19.0 || >=22.12.0` (required for oxc toolchain, launcher scripts, and `bun run test:dist`).
 - Module system: ESM (`type: module`).
-- TypeScript: strict mode, NodeNext, ES2022 target.
+- TypeScript: strict mode, NodeNext, ES2023 target.
 - Build graph:
   - root `tsconfig.json` references `packages/*` and `script/`.
   - `test/tsconfig.json` references package projects.
@@ -108,15 +110,15 @@ brewva/
 
 ## ANTI-PATTERNS (THIS REPO)
 
-| Category | Avoid |
-|----------|-------|
-| Imports | `../../packages/...` cross-package imports |
-| Aliases | Reintroducing `@/...` + `baseUrl` path alias model |
-| Typing | `src`/`dist` mixed class types in one boundary |
-| Type safety | `as any`, `@ts-ignore`, `@ts-expect-error` as quick fixes |
-| Dist flow | Editing generated distribution artifacts by hand |
-| Release safety | Skipping `test:dist` after export/CLI/distribution changes |
-| Package manager | npm/yarn workflows in this repository |
+| Category        | Avoid                                                      |
+| --------------- | ---------------------------------------------------------- |
+| Imports         | `../../packages/...` cross-package imports                 |
+| Aliases         | Reintroducing `@/...` + `baseUrl` path alias model         |
+| Typing          | `src`/`dist` mixed class types in one boundary             |
+| Type safety     | `as any`, `@ts-ignore`, `@ts-expect-error` as quick fixes  |
+| Dist flow       | Editing generated distribution artifacts by hand           |
+| Release safety  | Skipping `test:dist` after export/CLI/distribution changes |
+| Package manager | npm/yarn workflows in this repository                      |
 
 ---
 
@@ -158,6 +160,7 @@ Workflow: `.github/workflows/ci.yml`
 ## DEFINITION OF DONE (FOR CODE CHANGES)
 
 Before finalizing:
+
 1. `bun run typecheck` passes.
 2. `bun run typecheck:test` passes.
 3. `bun test` passes.

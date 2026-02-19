@@ -1,17 +1,8 @@
-import {
-  existsSync,
-  readFileSync,
-  readdirSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
+import { parseTscDiagnostics, type TscDiagnostic } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import {
-  parseTscDiagnostics,
-  type TscDiagnostic,
-} from "@brewva/brewva-runtime";
 import type { BrewvaToolRuntime } from "./types.js";
 import { runCommand } from "./utils/exec.js";
 import {
@@ -24,6 +15,7 @@ import {
   summarizeReadBatch,
 } from "./utils/parallel-read.js";
 import { textResult } from "./utils/result.js";
+import { defineTool } from "./utils/tool.js";
 
 const CODE_EXTENSIONS = new Set([
   ".ts",
@@ -37,14 +29,7 @@ const CODE_EXTENSIONS = new Set([
   ".rs",
   ".java",
 ]);
-const SKIP_DIRS = new Set([
-  ".git",
-  "node_modules",
-  "dist",
-  "build",
-  ".next",
-  "coverage",
-]);
+const SKIP_DIRS = new Set([".git", "node_modules", "dist", "build", ".next", "coverage"]);
 
 interface LspParallelReadContext {
   runtime?: BrewvaToolRuntime;
@@ -143,9 +128,7 @@ async function findDefinition(
   ];
 
   const files = walkCodeFiles(rootDir);
-  const ordered = hintFile
-    ? [hintFile, ...files.filter((file) => file !== hintFile)]
-    : files;
+  const ordered = hintFile ? [hintFile, ...files.filter((file) => file !== hintFile)] : files;
 
   const startedAt = Date.now();
   let scannedFiles = 0;
@@ -286,8 +269,7 @@ async function findReferences(
 
 function listSymbolsInFile(filePath: string, limit = 100): string[] {
   const lines = readFileSync(filePath, "utf8").split("\n");
-  const matcher =
-    /\b(function|class|interface|type|enum|const|let|var|def)\s+([A-Za-z0-9_]+)/;
+  const matcher = /\b(function|class|interface|type|enum|const|let|var|def)\s+([A-Za-z0-9_]+)/;
 
   const out: string[] = [];
   for (let i = 0; i < lines.length; i += 1) {
@@ -303,9 +285,7 @@ function listSymbolsInFile(filePath: string, limit = 100): string[] {
   return out;
 }
 
-function parseSeverityLine(
-  line: string,
-): "error" | "warning" | "information" | "hint" {
+function parseSeverityLine(line: string): "error" | "warning" | "information" | "hint" {
   const lower = line.toLowerCase();
   if (lower.includes("error")) return "error";
   if (lower.includes("warning")) return "warning";
@@ -327,14 +307,10 @@ async function diagnostics(
   filePath: string,
   severity?: string,
 ): Promise<DiagnosticsRun> {
-  const result = await runCommand(
-    "bunx",
-    ["tsc", "--noEmit", "--pretty", "false"],
-    {
-      cwd,
-      timeoutMs: 120000,
-    },
-  );
+  const result = await runCommand("bunx", ["tsc", "--noEmit", "--pretty", "false"], {
+    cwd,
+    timeoutMs: 120000,
+  });
 
   if (result.exitCode === 0) {
     return {
@@ -352,10 +328,7 @@ async function diagnostics(
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
-    .filter(
-      (line) =>
-        line.includes(basename(filePath)) || line.includes(resolve(filePath)),
-    );
+    .filter((line) => line.includes(basename(filePath)) || line.includes(resolve(filePath)));
 
   const filtered =
     severity && severity !== "all"
@@ -376,7 +349,7 @@ async function diagnostics(
   const limited = filtered.slice(0, 200);
   const text = limited.join("\n");
   const parsed = parseTscDiagnostics(text, 80);
-  const diagnostics = parsed.diagnostics.filter((diagnostic) => {
+  const fileDiagnostics = parsed.diagnostics.filter((diagnostic) => {
     try {
       return resolve(cwd, diagnostic.file) === resolve(cwd, filePath);
     } catch {
@@ -385,7 +358,7 @@ async function diagnostics(
   });
 
   const countsByCode: Record<string, number> = {};
-  for (const diagnostic of diagnostics) {
+  for (const diagnostic of fileDiagnostics) {
     countsByCode[diagnostic.code] = (countsByCode[diagnostic.code] ?? 0) + 1;
   }
 
@@ -393,7 +366,7 @@ async function diagnostics(
     text,
     exitCode: result.exitCode,
     filteredLineCount: filtered.length,
-    diagnostics,
+    diagnostics: fileDiagnostics,
     truncated: parsed.truncated || filtered.length > limited.length,
     countsByCode,
   };
@@ -425,10 +398,8 @@ function applyRename(
   return { filesChanged, replacements };
 }
 
-export function createLspTools(
-  options?: { runtime?: BrewvaToolRuntime },
-): ToolDefinition<any>[] {
-  const lspGotoDefinition: ToolDefinition<any> = {
+export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolDefinition[] {
+  const lspGotoDefinition = defineTool({
     name: "lsp_goto_definition",
     label: "LSP Go To Definition",
     description:
@@ -451,28 +422,20 @@ export function createLspTools(
         toolName: "lsp_goto_definition",
         config: resolveParallelReadConfig(options?.runtime),
       };
-      const matches = await findDefinition(
-        ctx.cwd,
-        symbol,
-        scan,
-        params.filePath,
-        1,
-      );
-      if (matches.length === 0)
-        return textResult(`No definition found for '${symbol}'.`);
+      const matches = await findDefinition(ctx.cwd, symbol, scan, params.filePath, 1);
+      if (matches.length === 0) return textResult(`No definition found for '${symbol}'.`);
 
       return textResult(matches.slice(0, 20).join("\n"), {
         symbol,
         count: matches.length,
       });
     },
-  };
+  });
 
-  const lspFindReferences: ToolDefinition<any> = {
+  const lspFindReferences = defineTool({
     name: "lsp_find_references",
     label: "LSP Find References",
-    description:
-      "Heuristic-based (regex/file scan), not real LSP. Find likely symbol references.",
+    description: "Heuristic-based (regex/file scan), not real LSP. Find likely symbol references.",
     parameters: Type.Object({
       filePath: Type.String(),
       line: Type.Number({ minimum: 1 }),
@@ -494,32 +457,27 @@ export function createLspTools(
       };
       let refs = await findReferences(ctx.cwd, symbol, scan, 500);
       if (params.includeDeclaration === false) {
-        const defs = new Set(
-          await findDefinition(ctx.cwd, symbol, scan, params.filePath),
-        );
+        const defs = new Set(await findDefinition(ctx.cwd, symbol, scan, params.filePath));
         refs = refs.filter((line) => !defs.has(line));
       }
 
-      if (refs.length === 0)
-        return textResult(`No references found for '${symbol}'.`);
+      if (refs.length === 0) return textResult(`No references found for '${symbol}'.`);
 
       return textResult(refs.slice(0, 200).join("\n"), {
         symbol,
         total: refs.length,
       });
     },
-  };
+  });
 
-  const lspSymbols: ToolDefinition<any> = {
+  const lspSymbols = defineTool({
     name: "lsp_symbols",
     label: "LSP Symbols",
     description:
       "Heuristic-based (regex/file scan), not real LSP. List symbols or search workspace.",
     parameters: Type.Object({
       filePath: Type.String(),
-      scope: Type.Optional(
-        Type.Union([Type.Literal("document"), Type.Literal("workspace")]),
-      ),
+      scope: Type.Optional(Type.Union([Type.Literal("document"), Type.Literal("workspace")])),
       query: Type.Optional(Type.String()),
       limit: Type.Optional(Type.Number({ minimum: 1, maximum: 1000 })),
     }),
@@ -532,9 +490,7 @@ export function createLspTools(
           return textResult(`Error: File not found: ${params.filePath}`);
 
         const symbols = listSymbolsInFile(params.filePath, limit);
-        return textResult(
-          symbols.length > 0 ? symbols.join("\n") : "No symbols found",
-        );
+        return textResult(symbols.length > 0 ? symbols.join("\n") : "No symbols found");
       }
 
       if (!params.query || params.query.trim().length === 0) {
@@ -550,13 +506,12 @@ export function createLspTools(
       const refs = await findReferences(ctx.cwd, params.query, scan, limit);
       return textResult(refs.length > 0 ? refs.join("\n") : "No symbols found");
     },
-  };
+  });
 
-  const lspDiagnostics: ToolDefinition<any> = {
+  const lspDiagnostics = defineTool({
     name: "lsp_diagnostics",
     label: "LSP Diagnostics",
-    description:
-      "Runs TypeScript compiler (tsc). Not a real LSP server connection.",
+    description: "Runs TypeScript compiler (tsc). Not a real LSP server connection.",
     parameters: Type.Object({
       filePath: Type.String(),
       severity: Type.Optional(
@@ -571,11 +526,7 @@ export function createLspTools(
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       try {
-        const run = await diagnostics(
-          ctx.cwd,
-          params.filePath,
-          params.severity,
-        );
+        const run = await diagnostics(ctx.cwd, params.filePath, params.severity);
         return textResult(run.text, {
           filePath: params.filePath,
           severity: params.severity ?? "all",
@@ -587,18 +538,15 @@ export function createLspTools(
           diagnostics: run.diagnostics,
         });
       } catch (error) {
-        return textResult(
-          `Error: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        return textResult(`Error: ${error instanceof Error ? error.message : String(error)}`);
       }
     },
-  };
+  });
 
-  const lspPrepareRename: ToolDefinition<any> = {
+  const lspPrepareRename = defineTool({
     name: "lsp_prepare_rename",
     label: "LSP Prepare Rename",
-    description:
-      "Heuristic-based. Checks rename availability via workspace scan (not real LSP).",
+    description: "Heuristic-based. Checks rename availability via workspace scan (not real LSP).",
     parameters: Type.Object({
       filePath: Type.String(),
       line: Type.Number({ minimum: 1 }),
@@ -609,8 +557,7 @@ export function createLspTools(
         return textResult(`Error: File not found: ${params.filePath}`);
 
       const symbol = wordAt(params.filePath, params.line, params.character);
-      if (!symbol)
-        return textResult("Rename not available: cursor is not on a symbol.");
+      if (!symbol) return textResult("Rename not available: cursor is not on a symbol.");
 
       const scan: LspParallelReadContext = {
         runtime: options?.runtime,
@@ -618,34 +565,20 @@ export function createLspTools(
         toolName: "lsp_prepare_rename",
         config: resolveParallelReadConfig(options?.runtime),
       };
-      const refs = await findReferences(
-        dirname(resolve(params.filePath)),
+      const refs = await findReferences(dirname(resolve(params.filePath)), symbol, scan, 1000);
+      const definitions = await findDefinition(ctx.cwd, symbol, scan, params.filePath);
+      return textResult(`Rename available for '${symbol}'. Estimated references: ${refs.length}.`, {
         symbol,
-        scan,
-        1000,
-      );
-      const definitions = await findDefinition(
-        ctx.cwd,
-        symbol,
-        scan,
-        params.filePath,
-      );
-      return textResult(
-        `Rename available for '${symbol}'. Estimated references: ${refs.length}.`,
-        {
-          symbol,
-          references: refs.length,
-          definitions: definitions.length,
-        },
-      );
+        references: refs.length,
+        definitions: definitions.length,
+      });
     },
-  };
+  });
 
-  const lspRename: ToolDefinition<any> = {
+  const lspRename = defineTool({
     name: "lsp_rename",
     label: "LSP Rename",
-    description:
-      "Heuristic-based global replacement (unsafe). Not real LSP rename.",
+    description: "Heuristic-based global replacement (unsafe). Not real LSP rename.",
     parameters: Type.Object({
       filePath: Type.String(),
       line: Type.Number({ minimum: 1 }),
@@ -669,7 +602,7 @@ export function createLspTools(
         result,
       );
     },
-  };
+  });
 
   return [
     lspGotoDefinition,

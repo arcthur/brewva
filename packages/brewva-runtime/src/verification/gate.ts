@@ -29,10 +29,13 @@ export class VerificationGate {
     const lastWriteAt = state.lastWriteAt ?? 0;
 
     const lspEvidence = state.evidence.filter(
-      (entry) => entry.kind === "lsp_clean" && (!state.lastWriteAt || entry.timestamp >= state.lastWriteAt),
+      (entry) =>
+        entry.kind === "lsp_clean" && (!state.lastWriteAt || entry.timestamp >= state.lastWriteAt),
     );
     const testEvidence = state.evidence.filter(
-      (entry) => entry.kind === "test_or_build_passed" && (!state.lastWriteAt || entry.timestamp >= state.lastWriteAt),
+      (entry) =>
+        entry.kind === "test_or_build_passed" &&
+        (!state.lastWriteAt || entry.timestamp >= state.lastWriteAt),
     );
 
     const checks = this.config.verification.checks[level].map((name) => {

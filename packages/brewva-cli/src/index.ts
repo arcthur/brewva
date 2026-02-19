@@ -1,13 +1,65 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
-import process from "node:process";
 import { resolve } from "node:path";
+import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { format } from "node:util";
-import { InteractiveMode, runPrintMode } from "@mariozechner/pi-coding-agent";
 import { BrewvaRuntime, parseTaskSpec, type TaskSpec } from "@brewva/brewva-runtime";
-import { createBrewvaSession, type BrewvaSessionResult } from "./session.js";
+import { InteractiveMode, runPrintMode } from "@mariozechner/pi-coding-agent";
 import { JsonLineWriter, writeJsonLine } from "./json-lines.js";
+import { createBrewvaSession, type BrewvaSessionResult } from "./session.js";
+
+const NODE_VERSION_RANGE = "^20.19.0 || >=22.12.0";
+
+type Semver = Readonly<{ major: number; minor: number; patch: number }>;
+
+function parseSemver(versionText: string | undefined): Semver | null {
+  if (typeof versionText !== "string" || versionText.length === 0) return null;
+  const normalized = versionText.startsWith("v") ? versionText.slice(1) : versionText;
+  const match = /^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)/u.exec(normalized);
+  if (!match?.groups) return null;
+
+  const major = Number(match.groups.major);
+  const minor = Number(match.groups.minor);
+  const patch = Number(match.groups.patch);
+
+  if (!Number.isInteger(major) || major < 0) return null;
+  if (!Number.isInteger(minor) || minor < 0) return null;
+  if (!Number.isInteger(patch) || patch < 0) return null;
+
+  return { major, minor, patch };
+}
+
+function isSupportedNodeVersion(version: Semver): boolean {
+  if (version.major === 20) return version.minor >= 19;
+  if (version.major === 21) return false;
+  if (version.major === 22) return version.minor >= 12;
+  return version.major > 22;
+}
+
+function assertSupportedRuntime(): void {
+  const versions = process.versions as NodeJS.ProcessVersions & { bun?: string };
+  if (typeof versions.bun === "string" && versions.bun.length > 0) return;
+
+  const detected = typeof versions.node === "string" ? versions.node : process.version;
+  const parsed = parseSemver(versions.node ?? process.version);
+  if (!parsed || !isSupportedNodeVersion(parsed)) {
+    console.error(
+      `brewva: unsupported Node.js version ${detected}. Brewva requires Node.js ${NODE_VERSION_RANGE} (ES2023 baseline).`,
+    );
+    process.exit(1);
+  }
+
+  if (
+    typeof Array.prototype.toSorted !== "function" ||
+    typeof Array.prototype.toReversed !== "function"
+  ) {
+    console.error(
+      `brewva: Node.js ${detected} is missing ES2023 builtins (toSorted/toReversed). Please upgrade Node.js to ${NODE_VERSION_RANGE}.`,
+    );
+    process.exit(1);
+  }
+}
 
 function printConfigDiagnostics(
   diagnostics: BrewvaRuntime["configDiagnostics"],
@@ -28,7 +80,9 @@ function printConfigDiagnostics(
     console.error(`[config:warn] ${diagnostic.configPath}: ${diagnostic.message}`);
   }
   if (!verbose && warnings.length > maxWarnings) {
-    console.error(`[config:warn] ${warnings.length - maxWarnings} more warning(s) suppressed (run with --verbose for details).`);
+    console.error(
+      `[config:warn] ${warnings.length - maxWarnings} more warning(s) suppressed (run with --verbose for details).`,
+    );
   }
 }
 
@@ -297,7 +351,7 @@ async function readPipedStdin(): Promise<string | undefined> {
     return undefined;
   }
 
-  return await new Promise((resolve) => {
+  return await new Promise((fulfill) => {
     let data = "";
     process.stdin.setEncoding("utf8");
     process.stdin.on("data", (chunk) => {
@@ -305,7 +359,7 @@ async function readPipedStdin(): Promise<string | undefined> {
     });
     process.stdin.on("end", () => {
       const text = data.trim();
-      resolve(text.length > 0 ? text : undefined);
+      fulfill(text.length > 0 ? text : undefined);
     });
     process.stdin.resume();
   });
@@ -336,7 +390,14 @@ function applyDefaultInteractiveEnv(mode: CliMode): void {
   }
 }
 
-function printReplayText(events: Array<{ timestamp: number; turn?: number; type: string; payload?: Record<string, unknown> }>): void {
+function printReplayText(
+  events: Array<{
+    timestamp: number;
+    turn?: number;
+    type: string;
+    payload?: Record<string, unknown>;
+  }>,
+): void {
   for (const event of events) {
     const iso = new Date(event.timestamp).toISOString();
     const turnText = typeof event.turn === "number" ? `turn=${event.turn}` : "turn=-";
@@ -349,8 +410,12 @@ function printCostSummary(sessionId: string, runtime: BrewvaRuntime): void {
   const summary = runtime.getCostSummary(sessionId);
   if (summary.totalTokens <= 0 && summary.totalCostUsd <= 0) return;
 
-  const topSkill = Object.entries(summary.skills).sort((a, b) => b[1].totalCostUsd - a[1].totalCostUsd)[0];
-  const topTool = Object.entries(summary.tools).sort((a, b) => b[1].allocatedCostUsd - a[1].allocatedCostUsd)[0];
+  const topSkill = Object.entries(summary.skills).toSorted(
+    (a, b) => b[1].totalCostUsd - a[1].totalCostUsd,
+  )[0];
+  const topTool = Object.entries(summary.tools).toSorted(
+    (a, b) => b[1].allocatedCostUsd - a[1].allocatedCostUsd,
+  )[0];
 
   const parts = [
     `tokens=${summary.totalTokens}`,
@@ -539,28 +604,30 @@ async function run(): Promise<void> {
   } finally {
     process.off("SIGINT", handleSignal);
     process.off("SIGTERM", handleSignal);
-    if (terminatedBySignal) {
-      return;
+    if (!terminatedBySignal) {
+      const sessionId = getSessionId();
+      if (emitJsonBundle) {
+        const replayEvents = runtime.queryStructuredEvents(sessionId);
+        await writeJsonLine({
+          schema: "brewva.stream.v1",
+          type: "brewva_event_bundle",
+          sessionId,
+          events: replayEvents,
+          costSummary: runtime.getCostSummary(sessionId),
+        });
+      }
+      session.dispose();
     }
-    const sessionId = getSessionId();
-    if (emitJsonBundle) {
-      const replayEvents = runtime.queryStructuredEvents(sessionId);
-      await writeJsonLine({
-        schema: "brewva.stream.v1",
-        type: "brewva_event_bundle",
-        sessionId,
-        events: replayEvents,
-        costSummary: runtime.getCostSummary(sessionId),
-      });
-    }
-    session.dispose();
   }
 }
 
 const isBunMain = (import.meta as ImportMeta & { main?: boolean }).main;
-const isNodeMain = process.argv[1] ? resolve(process.argv[1]) === fileURLToPath(import.meta.url) : false;
+const isNodeMain = process.argv[1]
+  ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
 
 if (isBunMain ?? isNodeMain) {
+  assertSupportedRuntime();
   void run();
 }
 

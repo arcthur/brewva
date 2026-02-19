@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { JsonLineWriter, type JsonLineWritable, writeJsonLine } from "../../packages/brewva-cli/src/json-lines.js";
+import {
+  JsonLineWriter,
+  type JsonLineWritable,
+  writeJsonLine,
+} from "../../packages/brewva-cli/src/json-lines.js";
 
 class MemoryWritable implements JsonLineWritable {
   private readonly chunks: string[] = [];
@@ -62,7 +66,12 @@ describe("json line output", () => {
     const writer = new JsonLineWriter(output);
     writer.writeLine(JSON.stringify({ fail: true }));
 
-    await expect(writer.flush()).rejects.toThrow("write_failed");
+    try {
+      await writer.flush();
+      throw new Error("Expected flush to throw");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      expect(message).toContain("write_failed");
+    }
   });
 });
-

@@ -1,5 +1,5 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
 type MessageHealth = {
   score: number;
@@ -196,7 +196,11 @@ function computeMessageHealth(windowText: string, windowChars: number): MessageH
   };
 }
 
-function maybeRecordAssistantUsage(runtime: BrewvaRuntime, sessionId: string, message: unknown): void {
+function maybeRecordAssistantUsage(
+  runtime: BrewvaRuntime,
+  sessionId: string,
+  message: unknown,
+): void {
   if (!message || typeof message !== "object") return;
 
   const value = message as {
@@ -217,7 +221,8 @@ function maybeRecordAssistantUsage(runtime: BrewvaRuntime, sessionId: string, me
   };
   if (value.role !== "assistant" || !value.usage) return;
 
-  const model = value.provider && value.model ? `${value.provider}/${value.model}` : value.model ?? "unknown";
+  const model =
+    value.provider && value.model ? `${value.provider}/${value.model}` : (value.model ?? "unknown");
   runtime.recordAssistantUsage({
     sessionId,
     model,
@@ -329,7 +334,8 @@ export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): v
     const previousText = lastAssistantTextBySession.get(sessionId) ?? "";
 
     const deltaFromEvent =
-      (event.assistantMessageEvent.type === "text_delta" || event.assistantMessageEvent.type === "thinking_delta") &&
+      (event.assistantMessageEvent.type === "text_delta" ||
+        event.assistantMessageEvent.type === "thinking_delta") &&
       typeof (event.assistantMessageEvent as { delta?: unknown }).delta === "string"
         ? ((event.assistantMessageEvent as { delta: string }).delta ?? "")
         : "";
@@ -338,7 +344,10 @@ export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): v
     lastAssistantTextBySession.set(sessionId, currentText);
 
     if (delta) {
-      const nextWindow = clampTail((assistantWindowBySession.get(sessionId) ?? "") + delta, MESSAGE_HEALTH_WINDOW_MAX_CHARS);
+      const nextWindow = clampTail(
+        (assistantWindowBySession.get(sessionId) ?? "") + delta,
+        MESSAGE_HEALTH_WINDOW_MAX_CHARS,
+      );
       assistantWindowBySession.set(sessionId, nextWindow);
     }
 

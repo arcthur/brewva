@@ -1,4 +1,8 @@
-import type { VerificationCheckRun, VerificationEvidence, VerificationSessionState } from "../types.js";
+import type {
+  VerificationCheckRun,
+  VerificationEvidence,
+  VerificationSessionState,
+} from "../types.js";
 
 const DEFAULT_TTL_MS = 15 * 60 * 1000;
 

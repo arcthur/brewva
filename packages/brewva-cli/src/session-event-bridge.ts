@@ -1,5 +1,5 @@
-import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 
 type SessionLike = {
   sessionManager: {
@@ -27,12 +27,10 @@ function maybeRecordAssistantUsage(
   const usage = message.usage;
   if (!isRecord(usage)) return;
 
-  const provider =
-    typeof message.provider === "string" ? message.provider : undefined;
+  const provider = typeof message.provider === "string" ? message.provider : undefined;
   const modelName = typeof message.model === "string" ? message.model : undefined;
-  const model = provider && modelName ? `${provider}/${modelName}` : modelName ?? "unknown";
-  const stopReason =
-    typeof message.stopReason === "string" ? message.stopReason : undefined;
+  const model = provider && modelName ? `${provider}/${modelName}` : (modelName ?? "unknown");
+  const stopReason = typeof message.stopReason === "string" ? message.stopReason : undefined;
 
   runtime.recordAssistantUsage({
     sessionId,
@@ -86,11 +84,7 @@ export function registerRuntimeCoreEventBridge(
         break;
       }
       case "message_end":
-        maybeRecordAssistantUsage(
-          runtime,
-          sessionId,
-          (event as { message?: unknown }).message,
-        );
+        maybeRecordAssistantUsage(runtime, sessionId, (event as { message?: unknown }).message);
         break;
       case "agent_end": {
         const messages = (event as { messages?: unknown }).messages;

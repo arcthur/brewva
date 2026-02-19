@@ -11,9 +11,7 @@ function normalizeToolName(name: string): string {
 }
 
 function normalizeToolList(tools: string[]): string[] {
-  return tools
-    .map((tool) => normalizeToolName(tool))
-    .filter((tool) => tool.length > 0);
+  return tools.map((tool) => normalizeToolName(tool)).filter((tool) => tool.length > 0);
 }
 
 export function checkToolAccess(
@@ -46,7 +44,9 @@ export function checkToolAccess(
 
   const required = normalizeToolList(contract.tools.required);
   const optional = normalizeToolList(contract.tools.optional);
-  const allowlist = new Set([...required, ...optional].filter((tool) => !effectiveDenied.has(tool)));
+  const allowlist = new Set(
+    [...required, ...optional].filter((tool) => !effectiveDenied.has(tool)),
+  );
 
   // Treat an empty allowlist as "no allowlist" to avoid accidental total block.
   if (allowlist.size === 0) {

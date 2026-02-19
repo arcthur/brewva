@@ -22,10 +22,13 @@ outputs: [compose_analysis, skill_sequence, compose_plan]
 # Compose Skill
 
 ## Intent
+
 Decompose complex requests into an ordered, dependency-aware sequence of skill invocations with explicit data contracts between them.
 
 ## Trigger
+
 Use this skill when:
+
 - Task spans 2+ skill domains (e.g., explore then plan then patch then verify).
 - Output of one skill is a required input for another.
 - Parallelization across independent subtasks is possible.
@@ -49,15 +52,18 @@ Skip this skill for tasks where a single skill's workflow already covers all ste
 ## Compose Workflow
 
 ### Step 1: Decompose the request (mandatory)
+
 Break the user request into atomic subtasks. Each subtask must map to exactly one existing skill.
 
 Identify for each subtask:
+
 - which skill handles it
 - what input it needs
 - what output it produces
 - whether it blocks downstream subtasks
 
 Blocking output:
+
 ```text
 COMPOSE_ANALYSIS
 - request_summary: "<one-line distillation>"
@@ -75,11 +81,13 @@ COMPOSE_ANALYSIS
 ```
 
 Rules:
+
 - Every subtask must map to a known skill. If no skill fits, stop and escalate.
 - Keep subtask count minimal; do not fragment artificially.
 - Mark data dependencies explicitly; do not assume implicit ordering.
 
 ### Step 2: Define inter-skill data contracts
+
 For each dependency edge, specify exactly what data flows and in what format.
 
 ```text
@@ -94,8 +102,10 @@ DATA_CONTRACT
 If a skill's documented outputs do not cover the required shape, note the gap as a risk.
 
 ### Step 3: Identify parallel opportunities
+
 Group subtasks into execution lanes:
-- **Sequential**: T_n depends on T_(n-1) output.
+
+- **Sequential**: T*n depends on T*(n-1) output.
 - **Parallel**: independent subtasks with no shared data dependency.
 
 ```text
@@ -107,23 +117,26 @@ EXECUTION_LANES
 ```
 
 Parallelization rules:
+
 - Never parallelize skills that read and write overlapping file sets.
 - Verification must always run after all patching completes.
 - Git operations are always the final lane.
 
 ### Step 4: Plan failure handling
+
 For each subtask, define behavior on stop/failure:
 
-| Failure Mode | Response |
-| --- | --- |
-| Skill stops with missing input | Backtrack: re-run upstream skill with narrower scope |
-| Skill produces partial output | Assess: if downstream can proceed with partial, continue; else stop |
-| All skills insufficient | Escalate to `planning` skill for strategy redesign |
-| Budget exceeded mid-sequence | Emit partial `COMPOSE_PLAN` with completed steps and remaining queue |
+| Failure Mode                   | Response                                                             |
+| ------------------------------ | -------------------------------------------------------------------- |
+| Skill stops with missing input | Backtrack: re-run upstream skill with narrower scope                 |
+| Skill produces partial output  | Assess: if downstream can proceed with partial, continue; else stop  |
+| All skills insufficient        | Escalate to `planning` skill for strategy redesign                   |
+| Budget exceeded mid-sequence   | Emit partial `COMPOSE_PLAN` with completed steps and remaining queue |
 
 ### Step 5: Emit final plan
 
 Blocking output:
+
 ```text
 SKILL_SEQUENCE
 - step: 1
@@ -141,6 +154,7 @@ SKILL_SEQUENCE
 ```
 
 Final blocking output:
+
 ```text
 COMPOSE_PLAN
 - total_steps: <N>
@@ -153,6 +167,7 @@ COMPOSE_PLAN
 ```
 
 ## Stop Conditions
+
 - A subtask maps to no existing skill and cannot be decomposed further.
 - Circular dependency detected between subtasks.
 - Total estimated budget exceeds system limits with no pruning path.
@@ -160,6 +175,7 @@ COMPOSE_PLAN
 On stop, report the blocking subtask and recommend escalation target.
 
 ## Anti-Patterns (never)
+
 - Invoking compose for single-skill tasks.
 - Creating subtasks that duplicate work across skills.
 - Omitting data contracts and hoping skills "just connect."
@@ -170,11 +186,13 @@ On stop, report the blocking subtask and recommend escalation target.
 ## Example
 
 Input:
+
 ```text
 "Refactor the verification gate to use command-backed checks, update tests, and commit."
 ```
 
 Expected outputs:
+
 1. `COMPOSE_ANALYSIS`: 5 subtasks — exploration, planning, patching (×2: gate + tests), verification, git.
 2. `DATA_CONTRACT`: exploration map feeds planning; plan feeds patching inputs.
 3. `EXECUTION_LANES`: exploration → planning → [patch-gate ∥ patch-tests] → verification → git.

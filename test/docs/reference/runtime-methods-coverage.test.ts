@@ -19,18 +19,24 @@ function collectPublicRuntimeMethods(source: string): string[] {
     methods.push(method);
   }
 
-  return [...new Set(methods)].sort();
+  return [...new Set(methods)].toSorted();
 }
 
 describe("docs/reference runtime coverage", () => {
   it("documents public runtime methods", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
-    const runtimeSource = readFileSync(resolve(repoRoot, "packages/brewva-runtime/src/runtime.ts"), "utf-8");
+    const runtimeSource = readFileSync(
+      resolve(repoRoot, "packages/brewva-runtime/src/runtime.ts"),
+      "utf-8",
+    );
     const markdown = readFileSync(resolve(repoRoot, "docs/reference/runtime.md"), "utf-8");
 
     const methods = collectPublicRuntimeMethods(runtimeSource);
     const missing = methods.filter((name) => !markdown.includes(`\`${name}\``));
 
-    expect(missing, `Missing runtime methods in docs/reference/runtime.md: ${missing.join(", ")}`).toEqual([]);
+    expect(
+      missing,
+      `Missing runtime methods in docs/reference/runtime.md: ${missing.join(", ")}`,
+    ).toEqual([]);
   });
 });

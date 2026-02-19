@@ -12,9 +12,9 @@ Brewva takes the opposite approach: **make the agent the owner**.
 
 The runtime exposes two orthogonal resource pipelines and hands the controls directly to the agent:
 
-| Pipeline | Resource | Pressure Signal | Agent Action |
-|----------|----------|-----------------|--------------|
-| **State Tape** | Working memory (task, truth, verification, cost) | `tape_pressure` | `tape_handoff` — mark a semantic phase boundary |
+| Pipeline           | Resource                                          | Pressure Signal    | Agent Action                                      |
+| ------------------ | ------------------------------------------------- | ------------------ | ------------------------------------------------- |
+| **State Tape**     | Working memory (task, truth, verification, cost)  | `tape_pressure`    | `tape_handoff` — mark a semantic phase boundary   |
 | **Message Buffer** | LLM context window (user/assistant/tool messages) | `context_pressure` | `session_compact` — compress conversation history |
 
 The framework injects a **Context Contract** — explicit if-then rules that tell the agent which pressure triggers which action — but never acts on the agent's behalf. No auto-compaction, no prebuilt memory injection, no opaque snapshot restoration.
@@ -91,22 +91,22 @@ is documented in:
 
 ## Packages
 
-| Package | Responsibility |
-|---------|---------------|
-| `@brewva/brewva-runtime` | Skill contracts, evidence ledger, verification gates, tape replay engine, context budget, cost tracking |
-| `@brewva/brewva-tools` | Runtime-aware tools: LSP/AST adapters, ledger query, skill lifecycle, task management, tape operations |
-| `@brewva/brewva-extensions` | Event hook wiring: context injection, quality gates, completion guards, event stream persistence |
-| `@brewva/brewva-cli` | CLI entrypoint, session bootstrap, TUI / `--print` / `--json` modes, replay and undo |
+| Package                     | Responsibility                                                                                          |
+| --------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `@brewva/brewva-runtime`    | Skill contracts, evidence ledger, verification gates, tape replay engine, context budget, cost tracking |
+| `@brewva/brewva-tools`      | Runtime-aware tools: LSP/AST adapters, ledger query, skill lifecycle, task management, tape operations  |
+| `@brewva/brewva-extensions` | Event hook wiring: context injection, quality gates, completion guards, event stream persistence        |
+| `@brewva/brewva-cli`        | CLI entrypoint, session bootstrap, TUI / `--print` / `--json` modes, replay and undo                    |
 
 ## Skill System
 
 Skills are loaded in three tiers with increasing precedence — higher tiers can tighten but never relax lower-tier contracts:
 
-| Tier | Location | Examples |
-|------|----------|----------|
-| Base | `skills/base/` | `cartography`, `debugging`, `planning`, `verification`, `patching`, `review` |
-| Pack | `skills/packs/` | `typescript`, `react`, `bun`, `browser`, `frontend-ui-ux` |
-| Project | `skills/project/` | `brewva-project` |
+| Tier    | Location          | Examples                                                                     |
+| ------- | ----------------- | ---------------------------------------------------------------------------- |
+| Base    | `skills/base/`    | `cartography`, `debugging`, `planning`, `verification`, `patching`, `review` |
+| Pack    | `skills/packs/`   | `typescript`, `react`, `bun`, `browser`, `frontend-ui-ux`                    |
+| Project | `skills/project/` | `brewva-project`                                                             |
 
 Discovery walks multiple roots (module ancestors, executable sidecar, global config, project config, explicit `skills.roots`) with symlink containment and depth bounds.
 
@@ -161,15 +161,15 @@ bun run build:binaries     # Compile platform binaries
 
 ## Documentation
 
-| Section | Path | Purpose |
-|---------|------|---------|
-| Guides | `docs/guide/` | Operational usage and system understanding |
-| Architecture | `docs/architecture/` | System layers, control flow, invariants |
-| Journeys | `docs/journeys/` | End-to-end cross-module workflows |
-| Reference | `docs/reference/` | Contract-level definitions (config, tools, skills, events, runtime API) |
-| Plans | `docs/plans/` | Design documents for major architectural decisions |
-| Research | `docs/research/` | Roadmap priorities and design notes |
-| Troubleshooting | `docs/troubleshooting/` | Failure patterns and remediation |
+| Section         | Path                    | Purpose                                                                 |
+| --------------- | ----------------------- | ----------------------------------------------------------------------- |
+| Guides          | `docs/guide/`           | Operational usage and system understanding                              |
+| Architecture    | `docs/architecture/`    | System layers, control flow, invariants                                 |
+| Journeys        | `docs/journeys/`        | End-to-end cross-module workflows                                       |
+| Reference       | `docs/reference/`       | Contract-level definitions (config, tools, skills, events, runtime API) |
+| Plans           | `docs/plans/`           | Design documents for major architectural decisions                      |
+| Research        | `docs/research/`        | Roadmap priorities and design notes                                     |
+| Troubleshooting | `docs/troubleshooting/` | Failure patterns and remediation                                        |
 
 ## License
 

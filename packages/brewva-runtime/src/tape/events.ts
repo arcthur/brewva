@@ -83,9 +83,7 @@ export function coerceTapeAnchorPayload(value: unknown): TapeAnchorPayload | nul
   };
 }
 
-export function coerceTapeCheckpointPayload(
-  value: unknown,
-): TapeCheckpointPayload | null {
+export function coerceTapeCheckpointPayload(value: unknown): TapeCheckpointPayload | null {
   if (!isRecord(value)) return null;
   if (value.schema !== TAPE_CHECKPOINT_SCHEMA) return null;
   if (!isRecord(value.state)) return null;

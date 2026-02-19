@@ -1,7 +1,7 @@
+import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { describe, expect, test } from "bun:test";
 import { DEFAULT_BREWVA_CONFIG, BrewvaRuntime } from "@brewva/brewva-runtime";
 import { discoverSkillRegistryRoots } from "../../packages/brewva-runtime/src/skills/registry.js";
 
@@ -29,8 +29,11 @@ describe("skill discovery and loading", () => {
       configuredRoots: runtime.config.skills.roots ?? [],
     });
     expect(
-      roots.some((entry) =>
-        entry.source === "project_root" && entry.skillDir === resolve(workspace, ".brewva/skills")),
+      roots.some(
+        (entry) =>
+          entry.source === "project_root" &&
+          entry.skillDir === resolve(workspace, ".brewva/skills"),
+      ),
     ).toBe(true);
   });
 
@@ -51,9 +54,9 @@ describe("skill discovery and loading", () => {
       cwd: nested,
       configuredRoots: runtime.config.skills.roots ?? [],
     });
-    expect(
-      roots.some((entry) => entry.skillDir === resolve(workspace, ".brewva/skills")),
-    ).toBe(false);
+    expect(roots.some((entry) => entry.skillDir === resolve(workspace, ".brewva/skills"))).toBe(
+      false,
+    );
   });
 
   test("loads skills from config.skills.roots when cwd has no local skill tree", () => {
@@ -75,8 +78,9 @@ describe("skill discovery and loading", () => {
       configuredRoots: runtime.config.skills.roots ?? [],
     });
     expect(
-      roots.some((entry) =>
-        entry.source === "config_root" && entry.skillDir === resolve(external, "skills")),
+      roots.some(
+        (entry) => entry.source === "config_root" && entry.skillDir === resolve(external, "skills"),
+      ),
     ).toBe(true);
   });
 
@@ -101,8 +105,10 @@ describe("skill discovery and loading", () => {
         configuredRoots: runtime.config.skills.roots ?? [],
       });
       expect(
-        roots.some((entry) =>
-          entry.source === "global_root" && entry.skillDir === resolve(xdgRoot, "brewva/skills")),
+        roots.some(
+          (entry) =>
+            entry.source === "global_root" && entry.skillDir === resolve(xdgRoot, "brewva/skills"),
+        ),
       ).toBe(true);
     } finally {
       if (previousXdg === undefined) {

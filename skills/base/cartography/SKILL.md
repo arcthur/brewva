@@ -22,10 +22,13 @@ escalation_path:
 # Cartography Skill
 
 ## Intent
+
 Produce a reusable structural map that supports exploration, planning, and onboarding.
 
 ## Trigger
+
 Use this skill when the user needs:
+
 - module dependency orientation
 - ownership or boundary discovery
 - impact analysis before changes
@@ -33,13 +36,16 @@ Use this skill when the user needs:
 ## Mapping Workflow
 
 ### Step 1: Build top-level tree summary
+
 Map the repository by major zones:
+
 - entrypoints (`cli`, `app`, `service`, `runtime`)
 - domain logic
 - adapters/integrations
 - test and tooling directories
 
 Output:
+
 ```text
 TREE_SUMMARY
 - zone: "<name>"
@@ -49,12 +55,15 @@ TREE_SUMMARY
 ```
 
 ### Step 2: Extract dependency hotspots
+
 Identify modules with:
+
 - high fan-in (many callers)
 - high fan-out (many dependencies)
 - boundary crossing responsibilities
 
 Hotspot template:
+
 ```text
 DEPENDENCY_HOTSPOT
 - module: <path-or-symbol>
@@ -64,12 +73,15 @@ DEPENDENCY_HOTSPOT
 ```
 
 ### Step 3: Infer ownership hints
+
 Use naming, directory conventions, and test proximity to infer:
+
 - module ownership domain
 - shared utility vs feature-specific code
 - likely review stakeholders
 
 Output:
+
 ```text
 OWNERSHIP_HINT
 - area: <path>
@@ -78,12 +90,14 @@ OWNERSHIP_HINT
 ```
 
 ### Step 4: Highlight critical pathways
+
 For target request, map at least one end-to-end path:
 `input -> transformation -> side effect/output`
 
 If multiple pathways exist, provide the primary one and mention alternates.
 
 ### Step 5: Emit confidence and unknowns
+
 ```text
 MAP_CONFIDENCE
 - confidence: <low|medium|high>
@@ -93,16 +107,19 @@ MAP_CONFIDENCE
 ```
 
 ## Heuristics
+
 - Prioritize active code over deprecated/legacy folders.
 - Use test files to confirm intended module boundaries.
 - Prefer import graph signals over file size when ranking hotspots.
 
 ## Stop Conditions
+
 - Repository lacks enough structure to infer boundaries.
 - Generated code dominates and source ownership is unclear.
 - Request scope spans external systems not present locally.
 
 ## Anti-Patterns (never)
+
 - Dumping directory listings without interpretation.
 - Treating every module as equally important.
 - Ignoring dependency direction when naming hotspots.
@@ -111,11 +128,13 @@ MAP_CONFIDENCE
 ## Example
 
 Input:
+
 ```text
 "Map the runtime-to-extension-to-tools flow and identify high-risk coupling points."
 ```
 
 Expected output:
+
 1. `TREE_SUMMARY` of runtime, extensions, tools, tests.
 2. `DEPENDENCY_HOTSPOT` list for coupling points.
 3. `OWNERSHIP_HINT` and `MAP_CONFIDENCE` with unknowns.

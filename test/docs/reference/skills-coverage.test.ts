@@ -14,7 +14,7 @@ function collectSkillNames(root: string): string[] {
     }
   }
 
-  return names.sort();
+  return names.toSorted();
 }
 
 describe("docs/reference skills coverage", () => {
@@ -25,6 +25,8 @@ describe("docs/reference skills coverage", () => {
 
     const missing = skillNames.filter((name) => !markdown.includes(`\`${name}\``));
 
-    expect(missing, `Missing skills in docs/reference/skills.md: ${missing.join(", ")}`).toEqual([]);
+    expect(missing, `Missing skills in docs/reference/skills.md: ${missing.join(", ")}`).toEqual(
+      [],
+    );
   });
 });

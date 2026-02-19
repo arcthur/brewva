@@ -1,5 +1,5 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { extractEvidenceArtifacts, type BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
 function extractTextContent(content: Array<{ type: string; text?: string }>): string {
   return content

@@ -90,13 +90,9 @@ describe("e2e: print and json modes", () => {
     writeMinimalConfig(workspace);
 
     try {
-      const result = runCliSync(
-        workspace,
-        [],
-        {
-          input: "Do not call any tool. Reply exactly: PIPED-OK\n",
-        },
-      );
+      const result = runCliSync(workspace, [], {
+        input: "Do not call any tool. Reply exactly: PIPED-OK\n",
+      });
 
       assertCliSuccess(result, "piped-stdin");
       expect(result.stdout.trim().length).toBeGreaterThan(0);

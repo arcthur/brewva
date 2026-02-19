@@ -1,7 +1,7 @@
+import { describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { TaskSpec } from "@brewva/brewva-runtime";
 
@@ -61,9 +61,12 @@ describe("Task ledger", () => {
     );
     writeFileSync(
       join(workspace, "src/foo.ts"),
-      ['import type { Bar } from "./bar";', "export function useBar(bar: Bar): string {", "  return bar.value;", "}"].join(
-        "\n",
-      ),
+      [
+        'import type { Bar } from "./bar";',
+        "export function useBar(bar: Bar): string {",
+        "  return bar.value;",
+        "}",
+      ].join("\n"),
       "utf8",
     );
 

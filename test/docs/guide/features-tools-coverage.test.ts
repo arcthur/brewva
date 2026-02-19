@@ -27,7 +27,7 @@ function collectToolNames(sourceRoot: string): string[] {
     }
   }
 
-  return [...names].sort();
+  return [...names].toSorted();
 }
 
 describe("docs/guide features tool coverage", () => {

@@ -45,7 +45,11 @@ export class ContextBudgetManager {
     };
   }
 
-  planInjection(sessionId: string, inputText: string, usage?: ContextBudgetUsage): ContextInjectionDecision {
+  planInjection(
+    sessionId: string,
+    inputText: string,
+    usage?: ContextBudgetUsage,
+  ): ContextInjectionDecision {
     if (!this.config.enabled) {
       const tokens = estimateTokenCount(inputText);
       return {
@@ -90,7 +94,10 @@ export class ContextBudgetManager {
     };
   }
 
-  shouldRequestCompaction(sessionId: string, usage?: ContextBudgetUsage): ContextCompactionDecision {
+  shouldRequestCompaction(
+    sessionId: string,
+    usage?: ContextBudgetUsage,
+  ): ContextCompactionDecision {
     if (!this.config.enabled) {
       return { shouldCompact: false };
     }
@@ -109,10 +116,12 @@ export class ContextBudgetManager {
     }
 
     const hardLimitPercent = normalizePercent(this.config.hardLimitPercent) ?? 1;
-    const compactionThresholdPercent = normalizePercent(this.config.compactionThresholdPercent) ?? hardLimitPercent;
+    const compactionThresholdPercent =
+      normalizePercent(this.config.compactionThresholdPercent) ?? hardLimitPercent;
     const pressureBypassPercent = normalizePercent(this.config.pressureBypassPercent);
     const bypassCooldown =
-      usagePercent >= hardLimitPercent || (pressureBypassPercent !== null && usagePercent >= pressureBypassPercent);
+      usagePercent >= hardLimitPercent ||
+      (pressureBypassPercent !== null && usagePercent >= pressureBypassPercent);
 
     if (!bypassCooldown) {
       const sinceLastCompaction = Math.max(0, state.turnIndex - state.lastCompactionTurn);
@@ -170,7 +179,8 @@ export class ContextBudgetManager {
       turnIndex: snapshot.turnIndex,
       lastCompactionTurn: snapshot.lastCompactionTurn,
       lastCompactionAtMs:
-        typeof snapshot.lastCompactionAtMs === "number" && Number.isFinite(snapshot.lastCompactionAtMs)
+        typeof snapshot.lastCompactionAtMs === "number" &&
+        Number.isFinite(snapshot.lastCompactionAtMs)
           ? snapshot.lastCompactionAtMs
           : undefined,
       lastContextUsage: snapshot.lastContextUsage

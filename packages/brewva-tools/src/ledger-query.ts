@@ -1,18 +1,21 @@
-import { Type } from "@sinclair/typebox";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
+import { defineTool } from "./utils/tool.js";
 
-export function createLedgerQueryTool(options: BrewvaToolOptions): ToolDefinition<any> {
-  return {
+export function createLedgerQueryTool(options: BrewvaToolOptions): ToolDefinition {
+  return defineTool({
     name: "ledger_query",
     label: "Ledger Query",
     description: "Query evidence ledger by file, skill, verdict, tool, or last N entries.",
     parameters: Type.Object({
       file: Type.Optional(Type.String()),
       skill: Type.Optional(Type.String()),
-      verdict: Type.Optional(Type.Union([Type.Literal("pass"), Type.Literal("fail"), Type.Literal("inconclusive")])),
+      verdict: Type.Optional(
+        Type.Union([Type.Literal("pass"), Type.Literal("fail"), Type.Literal("inconclusive")]),
+      ),
       tool: Type.Optional(Type.String()),
       last: Type.Optional(Type.Number({ minimum: 1, maximum: 200 })),
     }),
@@ -21,5 +24,5 @@ export function createLedgerQueryTool(options: BrewvaToolOptions): ToolDefinitio
       const text = options.runtime.queryLedger(sessionId, params);
       return textResult(text, { sessionId, query: params });
     },
-  };
+  });
 }
