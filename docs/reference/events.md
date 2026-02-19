@@ -27,6 +27,7 @@ fields as forward-compatible.
 - `tool_call`
 - `tool_result`
 - `tool_parallel_read`
+- `task_event`
 - `truth_event`
 - `anchor`
 - `checkpoint`
@@ -138,6 +139,29 @@ Payload fields:
 - `latestAnchorEventId`: nearest semantic anchor id when available
 - `reason`: checkpoint trigger reason
 - `createdAt`: event creation timestamp (epoch ms)
+
+## Task and Truth Ledger Events
+
+### `task_event`
+
+Event-sourced task ledger updates (`roaster.task.ledger.v1`) used to rebuild task state.
+Payload `kind` includes:
+
+- `spec_set`
+- `checkpoint_set`
+- `status_set`
+- `item_added`
+- `item_updated`
+- `blocker_recorded`
+- `blocker_resolved`
+
+### `truth_event`
+
+Event-sourced truth ledger updates (`roaster.truth.ledger.v1`) used to rebuild truth state.
+Payload `kind` includes:
+
+- `fact_upserted`
+- `fact_resolved`
 
 ## Context Gate Events
 

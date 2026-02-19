@@ -10,11 +10,15 @@ It composes the following subsystems:
 - `ledger`
 - `verification`
 - `parallel`
+- `parallelResults`
 - `events`
 - `contextBudget`
-- `snapshots`
+- `contextInjection`
 - `fileChanges`
 - `costTracker`
+
+Runtime state reconstruction is handled by tape replay (`checkpoint + delta`) via
+`TurnReplayEngine`, not by persisted runtime session-state snapshot files.
 
 ## Shared Type Contract
 
@@ -24,7 +28,9 @@ All core contracts are defined in `packages/roaster-runtime/src/types.ts`, inclu
 - Ledger row and digest types
 - Verification evidence and report types
 - Event and replay types
-- Snapshot and restore types
+- Task/truth/tape state and event payload types
+- Patch set and rollback result types
+- Parallel slot and worker result types
 - Cost tracking types
 
 ## Configuration Contract

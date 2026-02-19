@@ -5,6 +5,7 @@
 - Skill contract selection and activation
 - Tool access policy checks and budget checks
 - Evidence ledger and digest injection
+- Task/truth state management with event-sourced replay
 - Verification gates (`quick`, `standard`, `strict`)
 - Context budget tracking and compaction events
 - Event-first runtime persistence and replay
@@ -23,6 +24,9 @@
 - `look_at`
 - `cost_view`
 - `ledger_query`
+- `tape_handoff`
+- `tape_info`
+- `tape_search`
 - `session_compact`
 - `rollback_last_patch`
 - `skill_load`

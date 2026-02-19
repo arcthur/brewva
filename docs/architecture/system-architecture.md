@@ -1,55 +1,69 @@
 # System Architecture
 
-This document defines the architectural model of `pi-roaster` as a layered AI-native CLI runtime.
+This document describes the implemented architecture of `pi-roaster` based on
+current package dependencies and runtime wiring.
 
-## Layered Architecture
+## Package Dependency Graph
 
 ```mermaid
 flowchart TD
-  L5["Layer 5: CLI / UX\nTUI, --print, --json, replay, undo"]
-  L4["Layer 4: Collaboration\nClarification gate, plan editability"]
-  L3["Layer 3: Strategy\nSkill contracts, selection, model policy, escalation"]
-  L2["Layer 2: Assurance\nEvidence ledger, verification gate, quality gate, completion guard"]
-  L1["Layer 1: Infrastructure\nEvent bus, context budget, interrupt recovery, rollback, cost tracking"]
-  L0["Layer 0: Ecosystem\nCheckpoint/replay integration, MCP gateway, external tool registries"]
+  CLI["@pi-roaster/roaster-cli"]
+  EXT["@pi-roaster/roaster-extensions"]
+  TOOLS["@pi-roaster/roaster-tools"]
+  RT["@pi-roaster/roaster-runtime"]
+  DIST["distribution/*"]
+  SCRIPT["script/*"]
 
-  L5 --> L4
-  L4 --> L3
-  L3 --> L2
-  L2 --> L1
-  L1 --> L0
+  CLI --> EXT
+  CLI --> TOOLS
+  CLI --> RT
+  EXT --> TOOLS
+  EXT --> RT
+  TOOLS --> RT
+  DIST --> CLI
+  SCRIPT --> DIST
 ```
 
-## Package-to-Layer Mapping
+## Responsibility Slices
 
-- Layer 5: `packages/roaster-cli/src/index.ts`
-- Layer 4: interaction policy is currently distributed across runtime + extensions:
-  - `packages/roaster-runtime/src/runtime.ts`
-  - `packages/roaster-extensions/src/completion-guard.ts`
-- Layer 3:
-  - `packages/roaster-runtime/src/skills/contract.ts`
-  - `packages/roaster-runtime/src/skills/registry.ts`
-  - `packages/roaster-runtime/src/skills/selector.ts`
-- Layer 2:
-  - `packages/roaster-runtime/src/ledger/evidence-ledger.ts`
-  - `packages/roaster-runtime/src/verification/gate.ts`
-  - `packages/roaster-extensions/src/quality-gate.ts`
-  - `packages/roaster-extensions/src/completion-guard.ts`
-- Layer 1:
-  - `packages/roaster-runtime/src/events/store.ts`
-  - `packages/roaster-runtime/src/context/budget.ts`
-  - `packages/roaster-runtime/src/tape/replay-engine.ts`
-  - `packages/roaster-runtime/src/state/file-change-tracker.ts`
-  - `packages/roaster-runtime/src/cost/tracker.ts`
-- Layer 0:
-  - `distribution/*`
-  - `packages/roaster-tools/src/index.ts`
+- **Session entry and mode control (`@pi-roaster/roaster-cli`)**
+  - CLI flags, interactive/print/json modes, replay/undo, signal handling.
+  - Session bootstrap and extension-enabled/disabled selection.
+- **Lifecycle orchestration (`@pi-roaster/roaster-extensions`)**
+  - Event stream persistence hooks.
+  - Context transform and compaction gate behavior.
+  - Tool-call quality gate and input sanitization.
+  - Ledger writer and completion guard hooks.
+- **Tool surface (`@pi-roaster/roaster-tools`)**
+  - Runtime-aware tool definitions (LSP/AST, tape, ledger, task, skill, rollback).
+  - Tool-side scan telemetry (`tool_parallel_read`) and runtime APIs.
+- **Runtime core (`@pi-roaster/roaster-runtime`)**
+  - Skill contracts/selection, tool policy enforcement, verification gate.
+  - Evidence ledger + truth/task event-sourced state.
+  - Tape replay (`checkpoint + delta`), context budget, parallel budget, cost tracking.
+  - Rollback tracking via file snapshots.
+- **Distribution/build packaging (`distribution/*`, `script/*`)**
+  - Platform launcher packages and binary build/verification scripts.
+
+## Execution Profiles
+
+- **Default profile (`extensions enabled`)**
+  - `createRoasterExtension()` registers tools and all lifecycle handlers.
+  - Runtime behavior is mediated through extension hooks (`before_agent_start`,
+    `tool_call`, `tool_result`, `agent_end`, etc.).
+- **Direct-tool profile (`--no-extensions`)**
+  - Tools are registered directly from `buildRoasterTools()`.
+  - CLI installs `registerRuntimeCoreEventBridge()` for minimal lifecycle and
+    assistant usage telemetry.
+  - Extension-layer guards/hooks (context contract injection, quality gate,
+    completion guard) are intentionally not active.
 
 ## Dependency Direction Rules
 
-- Higher layers can depend on lower layers.
-- Lower layers must not depend on higher layers.
-- Policy logic should be implemented once in runtime or extension hooks, not duplicated in tools.
+- Runtime package should stay independent from other workspace packages.
+- Tools and extensions can depend on runtime, but runtime must not depend on them.
+- CLI may orchestrate runtime/tools/extensions, but policy decisions should live
+  in runtime and extension hooks.
 - `reference` docs are normative for contracts; `guide/journeys` are operational views.
 
 ## Architectural Objectives

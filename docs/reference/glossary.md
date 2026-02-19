@@ -4,7 +4,8 @@
 - Contract: a skill policy defining tool permissions, budgets, and required outputs
 - Ledger: append-only evidence stream for tool outcomes
 - Verification Gate: completion policy that checks required evidence
-- Snapshot: persisted runtime state used for interruption recovery
+- Checkpoint: machine-generated tape baseline event used to accelerate replay
+- Snapshot (rollback): per-file pre-mutation copy used by `rollback_last_patch`; not a runtime session-state source of truth
 - Replay: reconstruction of session history from structured events
 - PatchSet: tracked file change set used for rollback
 - Context Budget: policy for context injection and compaction

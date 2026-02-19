@@ -68,6 +68,20 @@ Relevant implementation:
 - `packages/roaster-runtime/src/cost/tracker.ts`
 - `packages/roaster-runtime/src/runtime.ts`
 
+## 7) Profile Transparency Invariant
+
+- Extension-enabled and `--no-extensions` profiles must be behaviorally explicit:
+  reduced profile may bypass extension hooks, but this must be deliberate and
+  observable.
+- When extensions are disabled, core lifecycle and assistant-usage telemetry
+  must still be persisted.
+
+Relevant implementation:
+
+- `packages/roaster-cli/src/session.ts`
+- `packages/roaster-cli/src/session-event-bridge.ts`
+- `packages/roaster-extensions/src/index.ts`
+
 ## Failure Modes and Containment
 
 - Missing verification evidence: gate must block completion.

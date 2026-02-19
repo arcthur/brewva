@@ -1,61 +1,85 @@
 # Control And Data Flow
 
-This document models runtime control flow and persistence flow for normal execution, interruption, replay, and rollback.
+This document models runtime control flow and persistence flow for normal
+execution, interruption recovery, replay, and rollback.
 
-## Normal Execution (Control Flow)
+## Default Session Flow (Extensions Enabled)
 
 ```mermaid
 sequenceDiagram
   participant U as User
-  participant CLI as CLI
+  participant CLI as roaster-cli
+  participant SES as session.ts
   participant RT as RoasterRuntime
-  participant EXT as Extensions
-  participant TOOLS as Tools
+  participant EXT as roaster-extensions
+  participant TOOLS as roaster-tools
   participant STORES as Ledger/Event Stores
 
-  U->>CLI: start session
-  CLI->>RT: create runtime
-  CLI->>EXT: register handlers
-  U->>CLI: submit prompt
+  U->>CLI: invoke command
+  CLI->>CLI: parse args + resolve mode
+  CLI->>SES: createRoasterSession()
+  SES->>RT: construct runtime
+  SES->>EXT: register extension handlers + tools
+  U->>CLI: submit prompt / run turn
   CLI->>EXT: before_agent_start
-  EXT->>RT: buildContextInjection()
-  CLI->>TOOLS: execute tool call
-  EXT->>RT: checkToolAccess() + markToolCall()
-  TOOLS->>EXT: tool_result
-  EXT->>RT: recordToolResult()
+  EXT->>RT: observeContextUsage() + buildContextInjection()
+  CLI->>EXT: tool_call
+  EXT->>RT: checkToolAccess() + trackToolCallStart()
+  CLI->>TOOLS: execute tool
+  TOOLS-->>EXT: tool_result
+  EXT->>RT: recordToolResult() + trackToolCallEnd()
   RT->>STORES: append ledger/events
   CLI->>EXT: agent_end
 ```
+
+## `--no-extensions` Flow (Reduced Orchestration)
+
+```mermaid
+flowchart TD
+  A["createRoasterSession(enableExtensions=false)"] --> B["register custom tools directly"]
+  B --> C["registerRuntimeCoreEventBridge()"]
+  C --> D["record core lifecycle + assistant usage events"]
+  D --> E["runtime/tools continue without extension hooks"]
+```
+
+This mode keeps runtime/tool execution available, but extension-layer gates and
+transforms are intentionally bypassed.
 
 ## Persistence Data Flow
 
 ```mermaid
 flowchart LR
   INPUT["Prompt / Tool IO / Usage"] --> RT["RoasterRuntime"]
-  RT --> LEDGER[".orchestrator/ledger/evidence.jsonl"]
-  RT --> EVENTS[".orchestrator/events/<session>.jsonl"]
+  RT --> EVENTS[".orchestrator/events/<session>.jsonl (event tape)"]
+  RT --> LEDGER[".orchestrator/ledger/evidence.jsonl (evidence chain)"]
+  RT --> SNAP[".orchestrator/snapshots/<session>/* (rollback only)"]
   RT --> INDEX[".pi-roaster/skills_index.json"]
 ```
 
-## Interruption and Resume Flow
+## Interruption and Recovery Flow
 
 ```mermaid
 flowchart TD
-  A["SIGINT/SIGTERM or shutdown"] --> B["record session_interrupted event"]
-  B --> C["abort current run and exit"]
-  C --> D["next startup"]
-  D --> E["rebuild runtime state from ledger/events"]
-  E --> F["continue normal turn loop"]
+  A["SIGINT/SIGTERM"] --> B["record session_interrupted"]
+  B --> C["waitForIdle (bounded by graceful timeout)"]
+  C --> D["abort/exit"]
+  D --> E["next startup"]
+  E --> F["read event tape"]
+  F --> G["TurnReplayEngine fold (checkpoint + delta)"]
+  G --> H["resume with reconstructed task/truth state"]
 ```
 
 ## Replay and Rollback Flow
 
 ```mermaid
 flowchart TD
-  A["--replay"] --> B["queryStructuredEvents(sessionId)"] --> C["emit timeline text/json"]
+  A["--replay"] --> B["resolve session (explicit --session or latest)"]
+  B --> C["queryStructuredEvents(sessionId)"]
+  C --> D["emit timeline text/json"]
 
-  D["--undo or rollback_last_patch"] --> E["rollbackLastPatchSet(sessionId)"]
-  E --> F{"rollback ok?"}
-  F -->|Yes| G["reset verification state + emit rollback event"]
-  F -->|No| H["return no_patchset or restore_failed"]
+  U["--undo or rollback_last_patch"] --> V["resolve session id"]
+  V --> W["rollbackLastPatchSet(sessionId)"]
+  W --> X{"rollback ok?"}
+  X -->|Yes| Y["restore tracked files + emit rollback + verification_state_reset"]
+  X -->|No| Z["return no_patchset or restore_failed"]
 ```

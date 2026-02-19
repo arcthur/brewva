@@ -2,12 +2,19 @@
 
 ## Lifecycle Stages
 
-1. Session creation (`packages/roaster-cli/src/session.ts`)
-2. Runtime bootstrap (`packages/roaster-runtime/src/runtime.ts`)
-3. Turn loop with tool execution and evidence capture
-4. Verification and completion evaluation
-5. Event persistence for replay/audit
+1. Parse CLI args and resolve mode/input (`packages/roaster-cli/src/index.ts`)
+2. Create session + runtime (`packages/roaster-cli/src/session.ts`)
+3. Register extension handlers (`packages/roaster-extensions/src/index.ts`)
+4. Run turn loop with tool execution, ledger/event writes, and verification updates
+5. Emit replayable event timeline and dispose session resources
+
+## Mode-Specific Paths
+
+- Replay (`--replay`): query structured events and print text/JSON timeline
+- Undo (`--undo`): resolve target session and rollback latest tracked patch set
+- JSON one-shot (`--mode json`/`--json`): emits normal stream plus final `roaster_event_bundle`
 
 ## Recovery Path
 
-- Event replay: `queryStructuredEvents` and CLI `--replay`
+- On `SIGINT`/`SIGTERM`, CLI records `session_interrupted`, waits for agent idle (bounded by graceful timeout), then exits.
+- Next startup reconstructs foldable runtime state from event tape (`checkpoint + delta` replay).

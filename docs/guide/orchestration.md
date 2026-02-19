@@ -5,14 +5,23 @@ Orchestration is driven by runtime state management plus extension lifecycle han
 - Runtime state machine: `packages/roaster-runtime/src/runtime.ts`
 - Extension registration: `packages/roaster-extensions/src/index.ts`
 
-## Main Execution Sequence
+## Default Profile (Extensions Enabled)
 
 1. CLI creates a session (`packages/roaster-cli/src/session.ts`)
 2. Extensions are registered (`packages/roaster-extensions/src/index.ts`)
-3. `before_agent_start` injects context contract + tape status + replay context
-4. `tool_call` passes quality and budget gates
-5. `tool_result` updates ledger, events, and verification evidence
-6. `agent_end` runs completion guard checks and notification hooks
+3. `before_agent_start` injects context contract + tape status + replay context (`context-transform`)
+4. `tool_call` passes quality/security/budget gates (`quality-gate`)
+5. `tool_result` updates ledger, truth/verification evidence, and tool-call tracking (`ledger-writer`)
+6. `agent_end` records summary events and runs completion guard / notification hooks
+
+## Direct-Tool Profile (`--no-extensions`)
+
+1. CLI registers runtime-aware tools directly (`buildRoasterTools`)
+2. CLI installs `registerRuntimeCoreEventBridge` for core lifecycle/cost telemetry
+3. Session can execute tools and runtime APIs without extension hook chain
+
+This profile is intentionally reduced: extension-layer context transform and
+guard behaviors are not active.
 
 ## Runtime Subsystems
 

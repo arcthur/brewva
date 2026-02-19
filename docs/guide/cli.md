@@ -6,14 +6,22 @@ CLI implementation: `packages/roaster-cli/src/index.ts`.
 
 - Interactive mode (default)
 - One-shot text mode (`--print`)
-- One-shot JSON mode (`--mode json` or `--json`)
+- One-shot JSON mode (`--mode json` or `--json`; newline-delimited JSON output, plus final `roaster_event_bundle`)
 - Undo mode (`--undo`)
 - Replay mode (`--replay`)
 
 ## Startup Behavior
 
 - Interactive mode defaults to quiet startup, reducing banner/changelog/version-check noise during initialization.
-- This behavior is enforced by `roaster-cli` and does not depend on local `pi` configuration files.
+- This behavior is enforced by `@pi-roaster/roaster-cli` and does not depend on local `pi-coding-agent` configuration files.
+
+## Mode and Input Resolution
+
+- `--task` and `--task-file` are mutually exclusive.
+- If both TaskSpec and prompt text are provided, prompt text overrides `TaskSpec.goal`.
+- When stdin/stdout is not a TTY and no explicit mode is selected, CLI falls back to text print mode.
+- Explicit `--interactive` requires a TTY terminal and exits with an error otherwise.
+- `--replay`/`--undo` default to auto-resolved sessions when `--session` is omitted.
 
 ## Flags
 
@@ -32,6 +40,12 @@ CLI implementation: `packages/roaster-cli/src/index.ts`.
 - `--session`
 - `--verbose`
 - `--help`
+
+Short aliases:
+
+- `-p` for `--print`
+- `-i` for `--interactive`
+- `-h` for `--help`
 
 `--verbose` overrides quiet startup and emits the full startup output.
 

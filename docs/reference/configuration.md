@@ -20,31 +20,77 @@ Configuration contract sources:
 
 ## Key Defaults
 
+Defaults are defined in `packages/roaster-runtime/src/config/defaults.ts`.
+
+### Skills
+
 - `skills.roots`: `[]` (optional additional skill root directories; relative paths in config files are resolved from that config file's directory)
-- `skills.packs`: `typescript`, `react`, `bun`
+- `skills.packs`: `["typescript", "react", "bun"]`
+- `skills.disabled`: `[]`
+- `skills.overrides`: `{}`
+- `skills.selector.k`: `4`
+- `skills.selector.maxDigestTokens`: `1200`
+
+### Verification
+
 - `verification.defaultLevel`: `standard`
+- `verification.checks.quick`: `["type-check"]`
+- `verification.checks.standard`: `["type-check", "tests", "lint"]`
+- `verification.checks.strict`: `["type-check", "tests", "lint", "diff-review"]`
+- `verification.commands.type-check`: `bun run typecheck`
+- `verification.commands.tests`: `bun test`
+- `verification.commands.lint`: `bunx tsc --noEmit`
+- `verification.commands.diff-review`: `git diff --stat`
+
+### Ledger
+
 - `ledger.path`: `.orchestrator/ledger/evidence.jsonl`
+- `ledger.digestWindow`: `12`
+- `ledger.checkpointEveryTurns`: `20`
+
+### Tape
+
 - `tape.checkpointIntervalEntries`: `120`
 - `tape.tapePressureThresholds.low`: `80`
 - `tape.tapePressureThresholds.medium`: `160`
 - `tape.tapePressureThresholds.high`: `280`
+
+### Parallel
+
+- `parallel.enabled`: `true`
 - `parallel.maxConcurrent`: `3`
 - `parallel.maxTotal`: `10`
+
+### Infrastructure
+
+- `infrastructure.events.enabled`: `true`
 - `infrastructure.events.dir`: `.orchestrator/events`
-- `infrastructure.contextBudget.truncationStrategy`: `summarize`
+- `infrastructure.contextBudget.enabled`: `true`
+- `infrastructure.contextBudget.maxInjectionTokens`: `1200`
+- `infrastructure.contextBudget.compactionThresholdPercent`: `0.82`
+- `infrastructure.contextBudget.hardLimitPercent`: `0.94`
+- `infrastructure.contextBudget.minTurnsBetweenCompaction`: `2`
 - `infrastructure.contextBudget.minSecondsBetweenCompaction`: `45`
 - `infrastructure.contextBudget.pressureBypassPercent`: `0.94`
+- `infrastructure.contextBudget.truncationStrategy`: `summarize`
 - `infrastructure.interruptRecovery.enabled`: `true`
 - `infrastructure.interruptRecovery.gracefulTimeoutMs`: `8000`
+- `infrastructure.costTracking.enabled`: `true`
+- `infrastructure.costTracking.maxCostUsdPerSession`: `0`
+- `infrastructure.costTracking.maxCostUsdPerSkill`: `0`
+- `infrastructure.costTracking.alertThresholdRatio`: `0.8`
+- `infrastructure.costTracking.actionOnExceed`: `warn`
 
 ## Skill Discovery
 
 Skill loading is root-aware and merges from multiple sources (lowest to highest
 precedence):
 
-1. global config root (`$XDG_CONFIG_HOME/pi-roaster` or `~/.config/pi-roaster`)
-2. project root (`<cwd>/.pi-roaster`)
-3. explicit `skills.roots` entries
+1. module ancestors (bounded to depth 10 from the runtime module path)
+2. executable ancestors (bounded to depth 10 from `process.execPath`)
+3. global roaster root (`$XDG_CONFIG_HOME/pi-roaster` or `~/.config/pi-roaster`)
+4. project root (`<cwd>/.pi-roaster`)
+5. explicit `skills.roots` entries (relative paths are resolved from the config file that declared them)
 
 For each discovered root, runtime accepts either:
 
@@ -68,9 +114,11 @@ Pack loading behavior:
 ## Config File Location
 
 Default project config path: `.pi-roaster/roaster.json`.
-By default, runtime merges global config from `~/.config/pi-roaster/roaster.json` and then project config from `.pi-roaster/roaster.json`; project values override global values on conflicts.
+By default, runtime merges global config from `$XDG_CONFIG_HOME/pi-roaster/roaster.json` (or `~/.config/pi-roaster/roaster.json`) and then project config from `.pi-roaster/roaster.json`; project values override global values on conflicts.
 
 Loading behavior is implemented in `packages/roaster-runtime/src/config/loader.ts`.
+
+Global root resolution can be overridden via `PI-ROASTER_CODING_AGENT_DIR` or `PI_CODING_AGENT_DIR`. See `packages/roaster-runtime/src/config/paths.ts`.
 
 ## JSON Schema
 
@@ -110,7 +158,7 @@ concurrency from `parallel`:
 
 - `parallel.enabled=false`: force sequential scan reads (`batchSize=1`).
 - `parallel.enabled=true`: scan batch size is derived from
-  `parallel.maxConcurrent * 4` and clamped to `[1, 64]`.
+  `min(parallel.maxConcurrent, parallel.maxTotal) * 4` and clamped to `[1, 64]`.
 - During scans, tools adapt per-batch reads to remaining match budget so
   low-limit queries avoid eager over-read.
 
