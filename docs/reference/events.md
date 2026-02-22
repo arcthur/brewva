@@ -622,6 +622,10 @@ Example payload:
 
 ## Context Gate Events
 
+These events are emitted by extension `registerContextTransform` (default profile).
+In `--no-extensions`, runtime core bridge injects `[CoreTapeStatus]` but does not
+emit these extension-specific context-gate events.
+
 ### `critical_without_compact`
 
 Emitted during `before_agent_start` when context usage is at critical pressure and

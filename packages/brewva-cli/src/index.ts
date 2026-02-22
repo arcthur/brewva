@@ -3,21 +3,16 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { format, parseArgs as parseNodeArgs } from "node:util";
+import { parseArgs as parseNodeArgs } from "node:util";
 import { runGatewayCli } from "@brewva/brewva-gateway";
-import {
-  BrewvaRuntime,
-  SchedulerService,
-  parseScheduleIntentEvent,
-  parseTaskSpec,
-  type ScheduleIntentProjectionRecord,
-  type TaskSpec,
-} from "@brewva/brewva-runtime";
+import { BrewvaRuntime, parseTaskSpec, type TaskSpec } from "@brewva/brewva-runtime";
 import { InteractiveMode, runPrintMode } from "@mariozechner/pi-coding-agent";
-import { differenceInSeconds, formatISO } from "date-fns";
+import { formatISO } from "date-fns";
 import { runChannelMode } from "./channel-mode.js";
-import { JsonLineWriter, writeJsonLine } from "./json-lines.js";
-import { createBrewvaSession, type BrewvaSessionResult } from "./session.js";
+import { runDaemon } from "./daemon-mode.js";
+import { writeJsonLine } from "./json-lines.js";
+import { ensureSessionShutdownRecorded } from "./runtime-utils.js";
+import { createBrewvaSession } from "./session.js";
 
 const NODE_VERSION_RANGE = "^20.19.0 || >=22.12.0";
 
@@ -136,6 +131,7 @@ Options:
                         Delay before retry when polling fails
   --session <id>        Target session id for --undo/--replay
   --verbose             Verbose interactive startup
+  -v, --version         Show CLI version
   -h, --help            Show help
 
 Examples:
@@ -148,6 +144,27 @@ Examples:
   brewva --replay --mode json --session <session-id>
   brewva --channel telegram --telegram-token <bot-token>
   brewva --daemon`);
+}
+
+function readCliVersion(): string {
+  try {
+    const packageJsonPath = fileURLToPath(new URL("../package.json", import.meta.url));
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+      version?: unknown;
+    };
+    if (typeof packageJson.version === "string" && packageJson.version.trim().length > 0) {
+      return packageJson.version.trim();
+    }
+  } catch {
+    // Fall back to unknown version when package metadata cannot be read.
+  }
+  return "unknown";
+}
+
+const CLI_VERSION = readCliVersion();
+
+function printVersion(): void {
+  console.log(CLI_VERSION);
 }
 
 type CliMode = "interactive" | "print-text" | "print-json";
@@ -183,8 +200,15 @@ interface CliArgs {
   prompt?: string;
 }
 
+type CliParseResult =
+  | { kind: "ok"; args: CliArgs }
+  | { kind: "help" }
+  | { kind: "version" }
+  | { kind: "error" };
+
 const CLI_PARSE_OPTIONS = {
   help: { type: "boolean", short: "h" },
+  version: { type: "boolean", short: "v" },
   cwd: { type: "string" },
   config: { type: "string" },
   model: { type: "string" },
@@ -233,7 +257,7 @@ function parseOptionalIntegerFlag(
   return { value };
 }
 
-function parseArgs(argv: string[]): CliArgs | null {
+function parseCliArgs(argv: string[]): CliParseResult {
   let parsed: ReturnType<typeof parseNodeArgs>;
   try {
     parsed = parseNodeArgs({
@@ -246,12 +270,16 @@ function parseArgs(argv: string[]): CliArgs | null {
   } catch (error) {
     console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     printHelp();
-    return null;
+    return { kind: "error" };
   }
 
   if (parsed.values.help === true) {
     printHelp();
-    return null;
+    return { kind: "help" };
+  }
+  if (parsed.values.version === true) {
+    printVersion();
+    return { kind: "version" };
   }
 
   let mode: CliMode = "interactive";
@@ -276,7 +304,7 @@ function parseArgs(argv: string[]): CliArgs | null {
     if (token.name === "mode") {
       if (typeof token.value !== "string") continue;
       const resolved = resolveModeFromFlag(token.value);
-      if (!resolved) return null;
+      if (!resolved) return { kind: "error" };
       mode = resolved;
       modeExplicit = true;
     }
@@ -289,7 +317,7 @@ function parseArgs(argv: string[]): CliArgs | null {
   );
   if (pollTimeout.error) {
     console.error(pollTimeout.error);
-    return null;
+    return { kind: "error" };
   }
   const pollLimit = parseOptionalIntegerFlag(
     "telegram-poll-limit",
@@ -297,7 +325,7 @@ function parseArgs(argv: string[]): CliArgs | null {
   );
   if (pollLimit.error) {
     console.error(pollLimit.error);
-    return null;
+    return { kind: "error" };
   }
   const pollRetryMs = parseOptionalIntegerFlag(
     "telegram-poll-retry-ms",
@@ -305,10 +333,9 @@ function parseArgs(argv: string[]): CliArgs | null {
   );
   if (pollRetryMs.error) {
     console.error(pollRetryMs.error);
-    return null;
+    return { kind: "error" };
   }
-
-  return {
+  const args: CliArgs = {
     cwd: typeof parsed.values.cwd === "string" ? parsed.values.cwd : undefined,
     configPath: typeof parsed.values.config === "string" ? parsed.values.config : undefined,
     model: typeof parsed.values.model === "string" ? parsed.values.model : undefined,
@@ -341,6 +368,25 @@ function parseArgs(argv: string[]): CliArgs | null {
     verbose: parsed.values.verbose === true,
     prompt,
   };
+
+  if (args.undo && args.replay) {
+    console.error("Error: --undo cannot be combined with --replay.");
+    return { kind: "error" };
+  }
+  if ((args.undo || args.replay) && (args.taskJson || args.taskFile)) {
+    console.error("Error: --undo/--replay cannot be combined with --task/--task-file.");
+    return { kind: "error" };
+  }
+
+  return { kind: "ok", args };
+}
+
+function parseArgs(argv: string[]): CliArgs | null {
+  const parsed = parseCliArgs(argv);
+  if (parsed.kind !== "ok") {
+    return null;
+  }
+  return parsed.args;
 }
 
 function loadTaskSpec(parsed: CliArgs): { spec?: TaskSpec; error?: string } {
@@ -466,379 +512,6 @@ function printCostSummary(sessionId: string, runtime: BrewvaRuntime): void {
   console.error(`[cost] session=${sessionId} ${parts.join(" ")}`);
 }
 
-async function runSerializedJsonPrintMode(
-  session: BrewvaSessionResult["session"],
-  initialMessage: string | undefined,
-): Promise<void> {
-  const writer = new JsonLineWriter();
-  const originalLog = console.log;
-
-  console.log = (...args: unknown[]): void => {
-    const line = args.length === 0 ? "" : format(...args);
-    writer.writeLine(line);
-  };
-
-  try {
-    await runPrintMode(session, {
-      mode: "json",
-      initialMessage,
-    });
-  } finally {
-    console.log = originalLog;
-    await writer.flush();
-  }
-}
-
-function clampText(value: string | undefined, maxChars: number): string | undefined {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  if (trimmed.length <= maxChars) return trimmed;
-  return `${trimmed.slice(0, Math.max(0, maxChars - 3))}...`;
-}
-
-function ensureSessionShutdownRecorded(runtime: BrewvaRuntime, sessionId: string): void {
-  if (runtime.queryEvents(sessionId, { type: "session_shutdown", last: 1 }).length > 0) return;
-  runtime.recordEvent({
-    sessionId,
-    type: "session_shutdown",
-  });
-}
-
-function inheritScheduleContext(
-  runtime: BrewvaRuntime,
-  input: { parentSessionId: string; childSessionId: string; continuityMode: "inherit" | "fresh" },
-): {
-  taskSpecCopied: boolean;
-  truthFactsCopied: number;
-  parentAnchor?: { id: string; name?: string; summary?: string; nextSteps?: string };
-} {
-  const parentAnchor = runtime.getTapeStatus(input.parentSessionId).lastAnchor;
-  if (input.continuityMode !== "inherit") {
-    return {
-      taskSpecCopied: false,
-      truthFactsCopied: 0,
-      parentAnchor,
-    };
-  }
-
-  const parentTask = runtime.getTaskState(input.parentSessionId);
-  if (parentTask.spec) {
-    runtime.setTaskSpec(input.childSessionId, parentTask.spec);
-  }
-
-  const parentTruth = runtime.getTruthState(input.parentSessionId);
-  let copied = 0;
-  for (const fact of parentTruth.facts) {
-    const result = runtime.upsertTruthFact(input.childSessionId, {
-      id: fact.id,
-      kind: fact.kind,
-      severity: fact.severity,
-      summary: fact.summary,
-      details: fact.details as Record<string, unknown> | undefined,
-      evidenceIds: fact.evidenceIds,
-      status: fact.status,
-    });
-    if (result.ok) {
-      copied += 1;
-    }
-  }
-
-  if (parentAnchor) {
-    runtime.recordTapeHandoff(input.childSessionId, {
-      name: `schedule:inherit:${parentAnchor.name ?? "parent"}`,
-      summary: parentAnchor.summary,
-      nextSteps: parentAnchor.nextSteps,
-    });
-  }
-
-  return {
-    taskSpecCopied: Boolean(parentTask.spec),
-    truthFactsCopied: copied,
-    parentAnchor,
-  };
-}
-
-function buildScheduleWakeupMessage(input: {
-  intent: ScheduleIntentProjectionRecord;
-  runIndex: number;
-  inherited: {
-    taskSpecCopied: boolean;
-    truthFactsCopied: number;
-    parentAnchor?: { id: string; name?: string; summary?: string; nextSteps?: string };
-  };
-}): string {
-  const anchor = input.inherited.parentAnchor;
-  const lines = [
-    "[Schedule Wakeup]",
-    `intent_id: ${input.intent.intentId}`,
-    `parent_session_id: ${input.intent.parentSessionId}`,
-    `run_index: ${input.runIndex}`,
-    `reason: ${input.intent.reason}`,
-    `continuity_mode: ${input.intent.continuityMode}`,
-    `time_zone: ${input.intent.timeZone ?? "none"}`,
-    `goal_ref: ${input.intent.goalRef ?? "none"}`,
-    `inherited_task_spec: ${input.inherited.taskSpecCopied ? "yes" : "no"}`,
-    `inherited_truth_facts: ${input.inherited.truthFactsCopied}`,
-    `parent_anchor_id: ${anchor?.id ?? "none"}`,
-    `parent_anchor_name: ${anchor?.name ?? "none"}`,
-  ];
-
-  const anchorSummary = clampText(anchor?.summary, 320);
-  if (anchorSummary) lines.push(`parent_anchor_summary: ${anchorSummary}`);
-  const nextSteps = clampText(anchor?.nextSteps, 320);
-  if (nextSteps) lines.push(`parent_anchor_next_steps: ${nextSteps}`);
-
-  lines.push("Please continue the task from this wakeup context and produce concrete progress.");
-  return lines.join("\n");
-}
-
-async function runDaemon(parsed: CliArgs): Promise<void> {
-  if (parsed.modeExplicit && parsed.mode !== "interactive") {
-    console.error("Error: --daemon cannot be combined with --print/--json/--mode.");
-    return;
-  }
-  if (parsed.undo || parsed.replay) {
-    console.error("Error: --daemon cannot be combined with --undo/--replay.");
-    return;
-  }
-  if (parsed.taskJson || parsed.taskFile) {
-    console.error("Error: --daemon cannot be combined with --task/--task-file.");
-    return;
-  }
-  if (parsed.prompt) {
-    console.error("Error: --daemon does not accept prompt text.");
-    return;
-  }
-
-  const runtime = new BrewvaRuntime({
-    cwd: parsed.cwd,
-    configPath: parsed.configPath,
-  });
-  printConfigDiagnostics(runtime.configDiagnostics, parsed.verbose);
-
-  if (!runtime.config.schedule.enabled) {
-    console.error("brewva scheduler daemon: disabled by config (schedule.enabled=false).");
-    return;
-  }
-  if (!runtime.config.infrastructure.events.enabled) {
-    console.error(
-      "brewva scheduler daemon: requires infrastructure.events.enabled=true for durable event replay.",
-    );
-    return;
-  }
-
-  const activeRuns = new Map<string, BrewvaSessionResult["session"]>();
-  const summaryWindow = {
-    startedAtMs: Date.now(),
-    firedIntents: 0,
-    erroredIntents: 0,
-    deferredIntents: 0,
-    circuitOpened: 0,
-    childStarted: 0,
-    childFinished: 0,
-    childFailed: 0,
-  };
-  const emitSummaryWindow = (reason: "tick" | "shutdown"): void => {
-    if (!parsed.verbose) return;
-    const nowMs = Date.now();
-    const windowSeconds = Math.max(1, differenceInSeconds(nowMs, summaryWindow.startedAtMs));
-    console.error(
-      `[daemon][${reason}] window_start=${formatISO(new Date(summaryWindow.startedAtMs))} window_s=${windowSeconds} fired=${summaryWindow.firedIntents} errored=${summaryWindow.erroredIntents} deferred=${summaryWindow.deferredIntents} circuit_opened=${summaryWindow.circuitOpened} child_started=${summaryWindow.childStarted} child_finished=${summaryWindow.childFinished} child_failed=${summaryWindow.childFailed}`,
-    );
-    summaryWindow.startedAtMs = nowMs;
-    summaryWindow.firedIntents = 0;
-    summaryWindow.erroredIntents = 0;
-    summaryWindow.deferredIntents = 0;
-    summaryWindow.circuitOpened = 0;
-    summaryWindow.childStarted = 0;
-    summaryWindow.childFinished = 0;
-    summaryWindow.childFailed = 0;
-  };
-  const unsubscribeEvents = runtime.subscribeEvents((event) => {
-    if (event.type === "schedule_recovery_deferred") {
-      summaryWindow.deferredIntents += 1;
-      return;
-    }
-    if (event.type === "schedule_child_session_started") {
-      summaryWindow.childStarted += 1;
-      return;
-    }
-    if (event.type === "schedule_child_session_finished") {
-      summaryWindow.childFinished += 1;
-      return;
-    }
-    if (event.type === "schedule_child_session_failed") {
-      summaryWindow.childFailed += 1;
-      return;
-    }
-    if (event.type !== "schedule_intent") return;
-
-    const payload = parseScheduleIntentEvent({
-      id: event.id,
-      sessionId: event.sessionId,
-      type: event.type,
-      timestamp: event.timestamp,
-      payload: event.payload,
-    });
-    if (!payload) return;
-    if (payload.kind === "intent_fired") {
-      if (payload.error) {
-        summaryWindow.erroredIntents += 1;
-      } else {
-        summaryWindow.firedIntents += 1;
-      }
-      return;
-    }
-    if (payload.kind === "intent_cancelled" && payload.error?.startsWith("circuit_open:")) {
-      summaryWindow.circuitOpened += 1;
-    }
-  });
-  const summaryInterval = parsed.verbose
-    ? setInterval(() => emitSummaryWindow("tick"), 60_000)
-    : null;
-  summaryInterval?.unref?.();
-  const scheduler = new SchedulerService({
-    runtime,
-    executeIntent: async (intent) => {
-      const runIndex = intent.runCount + 1;
-      const child = await createBrewvaSession({
-        cwd: parsed.cwd,
-        configPath: parsed.configPath,
-        model: parsed.model,
-        enableExtensions: parsed.enableExtensions,
-        runtime,
-      });
-      const childSessionId = child.session.sessionManager.getSessionId();
-      activeRuns.set(childSessionId, child.session);
-
-      const inherited = inheritScheduleContext(runtime, {
-        parentSessionId: intent.parentSessionId,
-        childSessionId,
-        continuityMode: intent.continuityMode,
-      });
-      const wakeupMessage = buildScheduleWakeupMessage({
-        intent,
-        runIndex,
-        inherited,
-      });
-
-      runtime.recordEvent({
-        sessionId: childSessionId,
-        type: "schedule_wakeup",
-        payload: {
-          schema: "brewva.schedule-wakeup.v1",
-          intentId: intent.intentId,
-          parentSessionId: intent.parentSessionId,
-          runIndex,
-          reason: intent.reason,
-          continuityMode: intent.continuityMode,
-          timeZone: intent.timeZone ?? null,
-          goalRef: intent.goalRef ?? null,
-          inheritedTaskSpec: inherited.taskSpecCopied,
-          inheritedTruthFacts: inherited.truthFactsCopied,
-          parentAnchorId: inherited.parentAnchor?.id ?? null,
-        },
-      });
-      runtime.recordEvent({
-        sessionId: intent.parentSessionId,
-        type: "schedule_child_session_started",
-        payload: {
-          intentId: intent.intentId,
-          childSessionId,
-          runIndex,
-        },
-      });
-
-      try {
-        await child.session.sendUserMessage(wakeupMessage);
-        await child.session.agent.waitForIdle();
-        runtime.recordEvent({
-          sessionId: intent.parentSessionId,
-          type: "schedule_child_session_finished",
-          payload: {
-            intentId: intent.intentId,
-            childSessionId,
-            runIndex,
-          },
-        });
-        return { evaluationSessionId: childSessionId };
-      } catch (error) {
-        runtime.recordEvent({
-          sessionId: intent.parentSessionId,
-          type: "schedule_child_session_failed",
-          payload: {
-            intentId: intent.intentId,
-            childSessionId,
-            runIndex,
-            error: error instanceof Error ? error.message : String(error),
-          },
-        });
-        throw error;
-      } finally {
-        ensureSessionShutdownRecorded(runtime, childSessionId);
-        activeRuns.delete(childSessionId);
-        child.session.dispose();
-      }
-    },
-  });
-  const recovered = await scheduler.recover();
-  const stats = scheduler.getStats();
-  if (!stats.executionEnabled) {
-    console.error(
-      "brewva scheduler daemon: execution is disabled because no intent executor is configured.",
-    );
-    scheduler.stop();
-    process.exitCode = 1;
-    return;
-  }
-  if (parsed.verbose) {
-    console.error(
-      `[daemon] projection=${stats.projectionPath} active=${stats.intentsActive}/${stats.intentsTotal} timers=${stats.timersArmed} events=${recovered.rebuiltFromEvents} matched=${recovered.projectionMatched} catchup_due=${recovered.catchUp.dueIntents} catchup_fired=${recovered.catchUp.firedIntents} catchup_deferred=${recovered.catchUp.deferredIntents} catchup_sessions=${recovered.catchUp.sessions.length}`,
-    );
-  }
-
-  await new Promise<void>((complete) => {
-    let resolved = false;
-    const shutdown = (signal: NodeJS.Signals): void => {
-      if (resolved) return;
-      resolved = true;
-      scheduler.stop();
-      if (summaryInterval) {
-        clearInterval(summaryInterval);
-      }
-
-      const abortAll = async (): Promise<void> => {
-        await Promise.allSettled(
-          [...activeRuns.values()].map(async (session) => {
-            try {
-              await session.abort();
-            } catch {
-              // Best effort abort during daemon shutdown.
-            }
-          }),
-        );
-      };
-
-      void abortAll().finally(() => {
-        emitSummaryWindow("shutdown");
-        unsubscribeEvents();
-        if (parsed.verbose) {
-          console.error(`[daemon] received ${signal}, scheduler stopped.`);
-        }
-        process.off("SIGINT", onSigInt);
-        process.off("SIGTERM", onSigTerm);
-        complete();
-      });
-    };
-
-    const onSigInt = (): void => shutdown("SIGINT");
-    const onSigTerm = (): void => shutdown("SIGTERM");
-    process.on("SIGINT", onSigInt);
-    process.on("SIGTERM", onSigTerm);
-  });
-}
-
 async function run(): Promise<void> {
   process.title = "brewva";
   const rawArgs = process.argv.slice(2);
@@ -850,28 +523,40 @@ async function run(): Promise<void> {
     }
   }
 
-  const parsed = parseArgs(rawArgs);
-  if (!parsed) return;
+  const parseResult = parseCliArgs(rawArgs);
+  if (parseResult.kind === "help" || parseResult.kind === "version") {
+    return;
+  }
+  if (parseResult.kind === "error") {
+    process.exitCode = 1;
+    return;
+  }
+  const parsed = parseResult.args;
 
   if (parsed.channel) {
     if (parsed.daemon) {
       console.error("Error: --channel cannot be combined with --daemon.");
+      process.exitCode = 1;
       return;
     }
     if (parsed.undo || parsed.replay) {
       console.error("Error: --channel cannot be combined with --undo/--replay.");
+      process.exitCode = 1;
       return;
     }
     if (parsed.taskJson || parsed.taskFile) {
       console.error("Error: --channel cannot be combined with --task/--task-file.");
+      process.exitCode = 1;
       return;
     }
     if (parsed.prompt) {
       console.error("Error: --channel mode does not accept prompt text.");
+      process.exitCode = 1;
       return;
     }
     if (parsed.modeExplicit && parsed.mode !== "interactive") {
       console.error("Error: --channel mode cannot be combined with --print/--json/--mode.");
+      process.exitCode = 1;
       return;
     }
 
@@ -891,33 +576,46 @@ async function run(): Promise<void> {
   }
 
   if (parsed.daemon) {
-    await runDaemon(parsed);
+    if (parsed.modeExplicit && parsed.mode !== "interactive") {
+      console.error("Error: --daemon cannot be combined with --print/--json/--mode.");
+      process.exitCode = 1;
+      return;
+    }
+    if (parsed.undo || parsed.replay) {
+      console.error("Error: --daemon cannot be combined with --undo/--replay.");
+      process.exitCode = 1;
+      return;
+    }
+    if (parsed.taskJson || parsed.taskFile) {
+      console.error("Error: --daemon cannot be combined with --task/--task-file.");
+      process.exitCode = 1;
+      return;
+    }
+    if (parsed.prompt) {
+      console.error("Error: --daemon does not accept prompt text.");
+      process.exitCode = 1;
+      return;
+    }
+
+    await runDaemon({
+      cwd: parsed.cwd,
+      configPath: parsed.configPath,
+      model: parsed.model,
+      enableExtensions: parsed.enableExtensions,
+      verbose: parsed.verbose,
+      onRuntimeReady: (runtime) => {
+        printConfigDiagnostics(runtime.configDiagnostics, parsed.verbose);
+      },
+    });
     return;
   }
 
-  const pipedInput = await readPipedStdin();
-  const taskResolved = loadTaskSpec(parsed);
-  if (taskResolved.error) {
-    console.error(taskResolved.error);
-    return;
-  }
-
-  let taskSpec = taskResolved.spec;
-  let initialMessage = parsed.prompt ?? pipedInput;
-  if (taskSpec && parsed.prompt) {
-    taskSpec = { ...taskSpec, goal: parsed.prompt.trim() };
-  }
-  if (taskSpec && !initialMessage) {
-    initialMessage = taskSpec.goal;
-  }
   const mode = resolveEffectiveMode(parsed);
-  if (!mode) return;
-  applyDefaultInteractiveEnv(mode);
-
-  if (!parsed.undo && !parsed.replay && mode !== "interactive" && !initialMessage) {
-    printHelp();
+  if (!mode) {
+    process.exitCode = 1;
     return;
   }
+  applyDefaultInteractiveEnv(mode);
 
   if (parsed.replay) {
     const runtime = new BrewvaRuntime({
@@ -927,6 +625,7 @@ async function run(): Promise<void> {
     const targetSessionId = parsed.sessionId ?? runtime.listReplaySessions(1)[0]?.sessionId;
     if (!targetSessionId) {
       console.error("Error: no replayable session found.");
+      process.exitCode = 1;
       return;
     }
     const events = runtime.queryStructuredEvents(targetSessionId);
@@ -959,6 +658,29 @@ async function run(): Promise<void> {
         `Rolled back patch set ${rollback.patchSetId ?? "unknown"} in session ${targetSessionId} (${rollback.restoredPaths.length} file(s) restored).`,
       );
     }
+    return;
+  }
+
+  const pipedInput = await readPipedStdin();
+  const taskResolved = loadTaskSpec(parsed);
+  if (taskResolved.error) {
+    console.error(taskResolved.error);
+    process.exitCode = 1;
+    return;
+  }
+
+  let taskSpec = taskResolved.spec;
+  let initialMessage = parsed.prompt ?? pipedInput;
+  if (taskSpec && parsed.prompt) {
+    taskSpec = { ...taskSpec, goal: parsed.prompt.trim() };
+  }
+  if (taskSpec && !initialMessage) {
+    initialMessage = taskSpec.goal;
+  }
+
+  if (mode !== "interactive" && !initialMessage) {
+    printHelp();
+    process.exitCode = 1;
     return;
   }
 
@@ -1027,7 +749,10 @@ async function run(): Promise<void> {
     }
 
     if (mode === "print-json") {
-      await runSerializedJsonPrintMode(session, initialMessage);
+      await runPrintMode(session, {
+        mode: "json",
+        initialMessage,
+      });
       emitJsonBundle = true;
     } else {
       await runPrintMode(session, {

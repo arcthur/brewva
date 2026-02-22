@@ -38,6 +38,10 @@ For operational details, see `docs/guide/gateway-control-plane-daemon.md`.
 - When stdin/stdout is not a TTY and no explicit mode is selected, CLI falls back to text print mode.
 - Explicit `--interactive` requires a TTY terminal and exits with an error otherwise.
 - `--replay`/`--undo` default to auto-resolved sessions when `--session` is omitted.
+- `--replay` and `--undo` are mutually exclusive.
+- `--replay`/`--undo` cannot be combined with `--task`/`--task-file`.
+- CLI parse/validation failures return non-zero exit code (`1`).
+- `--help` and `--version` return success exit code (`0`).
 
 ## Flags
 
@@ -62,17 +66,20 @@ For operational details, see `docs/guide/gateway-control-plane-daemon.md`.
 - `--telegram-poll-retry-ms`
 - `--session`
 - `--verbose`
+- `--version`
 - `--help`
 
 Short aliases:
 
 - `-p` for `--print`
 - `-i` for `--interactive`
+- `-v` for `--version`
 - `-h` for `--help`
 
 `--no-extensions` disables presentation-oriented extension stack. CLI still
 installs runtime core bridge hooks, so tool policy, compaction gate, and
-ledger/patch tracking remain enforced.
+ledger/patch tracking remain enforced. A minimal autonomy context contract
+and tape/context pressure status block are still injected before agent start.
 
 `--verbose` overrides quiet startup and emits the full startup output.
 
@@ -109,6 +116,7 @@ bun run start -- --mode json "Summarize recent changes"
 bun run start -- --print --task-file ./task.json
 bun run start -- --undo --session <session-id>
 bun run start -- --replay --mode json --session <session-id>
+bun run start -- --version
 bun run start -- --channel telegram --telegram-token <bot-token>
 bun run start -- --channel tg --telegram-token <bot-token> --telegram-poll-timeout 15
 ```

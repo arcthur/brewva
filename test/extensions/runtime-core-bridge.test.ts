@@ -39,6 +39,7 @@ describe("runtime core bridge extension", () => {
       compacted: [] as any[],
       events: [] as any[],
       cleared: [] as string[],
+      observedContext: [] as any[],
     };
 
     const runtime = {
@@ -59,6 +60,39 @@ describe("runtime core bridge extension", () => {
       clearSessionState(sessionId: string) {
         calls.cleared.push(sessionId);
       },
+      observeContextUsage(sessionId: string, usage: unknown) {
+        calls.observedContext.push({ sessionId, usage });
+      },
+      getTapeStatus() {
+        return {
+          tapePressure: "medium",
+          totalEntries: 42,
+          entriesSinceAnchor: 7,
+          entriesSinceCheckpoint: 4,
+          lastAnchor: { id: "anchor-1", name: "phase-alpha" },
+        };
+      },
+      getContextCompactionGateStatus() {
+        return {
+          required: true,
+          pressure: { level: "critical", usageRatio: 0.97, hardLimitRatio: 0.98 },
+          recentCompaction: false,
+          windowTurns: 2,
+          lastCompactionTurn: null,
+          turnsSinceCompaction: null,
+        };
+      },
+      getContextCompactionThresholdRatio() {
+        return 0.8;
+      },
+      getContextHardLimitRatio() {
+        return 0.98;
+      },
+      config: {
+        tape: {
+          tapePressureThresholds: { low: 5, medium: 20, high: 50 },
+        },
+      },
       sanitizeInput(text: string) {
         return text;
       },
@@ -68,6 +102,7 @@ describe("runtime core bridge extension", () => {
 
     expect(handlers.has("tool_call")).toBe(true);
     expect(handlers.has("tool_result")).toBe(true);
+    expect(handlers.has("before_agent_start")).toBe(true);
     expect(handlers.has("session_compact")).toBe(true);
     expect(handlers.has("session_shutdown")).toBe(true);
 
@@ -77,6 +112,28 @@ describe("runtime core bridge extension", () => {
       },
       getContextUsage: () => ({ tokens: 320, contextWindow: 4096, percent: 0.078 }),
     };
+
+    const beforeStart = invokeHandler<{
+      systemPrompt?: string;
+      message?: { content?: string; details?: Record<string, unknown> };
+    }>(
+      handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "continue task",
+        systemPrompt: "base prompt",
+      },
+      sessionCtx,
+    );
+    expect(beforeStart.systemPrompt?.includes("[Brewva Core Context Contract]")).toBe(true);
+    expect(beforeStart.message?.content?.includes("[CoreTapeStatus]")).toBe(true);
+    expect(beforeStart.message?.content?.includes("required_action: session_compact_now")).toBe(
+      true,
+    );
+    expect(beforeStart.message?.details?.profile).toBe("runtime-core");
+    expect(calls.observedContext).toHaveLength(1);
+    expect(calls.observedContext[0].sessionId).toBe("core-1");
 
     const toolCallResult = invokeHandler(
       handlers,

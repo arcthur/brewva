@@ -17,12 +17,14 @@ Orchestration is driven by runtime state management plus extension lifecycle han
 ## Direct-Tool Profile (`--no-extensions`)
 
 1. CLI registers tools directly (`buildBrewvaTools`)
-2. CLI installs `createRuntimeCoreBridgeExtension` (quality gate + ledger writer + compact lifecycle bridge)
+2. CLI installs `createRuntimeCoreBridgeExtension` (quality gate + ledger writer + compact lifecycle bridge + core context contract/status injection)
 3. Runtime core bridge enforces `startToolCall`/`finishToolCall` semantics:
    tool policy + critical compaction gate + tool-call accounting + patch tracking + ledger write
 4. CLI installs `registerRuntimeCoreEventBridge` for lifecycle and assistant-usage telemetry
-5. Extension-only presentation hooks remain disabled (`before_agent_start` context injection,
+5. Extension-only presentation hooks remain disabled (`context-transform` memory injection,
    completion guard, notification, streaming message-health events)
+6. Runtime core bridge still runs `before_agent_start` to inject a minimal autonomy contract
+   and `[CoreTapeStatus]` pressure/action block for agent self-management
 
 ## Runtime Subsystems
 

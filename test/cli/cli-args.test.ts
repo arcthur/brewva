@@ -21,6 +21,24 @@ describe("brewva cli args", () => {
     expect(output.includes("Usage:\n  brewva [options] [prompt]")).toBe(true);
   });
 
+  test("prints CLI version", () => {
+    const originalLog = console.log;
+    const logs: string[] = [];
+    console.log = (...args: unknown[]) => {
+      logs.push(args.map((value) => String(value)).join(" "));
+    };
+
+    try {
+      const parsed = parseArgs(["--version"]);
+      expect(parsed).toBeNull();
+    } finally {
+      console.log = originalLog;
+    }
+
+    expect(logs.length).toBe(1);
+    expect(logs[0]?.trim().length).toBeGreaterThan(0);
+  });
+
   test("defaults to interactive mode and keeps prompt", () => {
     const parsed = parseArgs(["fix", "failing", "tests"]);
     expect(parsed).not.toBeNull();
@@ -69,6 +87,40 @@ describe("brewva cli args", () => {
     expect(parsed!.replay).toBe(true);
     expect(parsed!.sessionId).toBe("session-123");
     expect(parsed!.mode).toBe("print-json");
+  });
+
+  test("rejects combining --undo and --replay", () => {
+    const originalError = console.error;
+    const errors: string[] = [];
+    console.error = (...args: unknown[]) => {
+      errors.push(args.map((value) => String(value)).join(" "));
+    };
+    try {
+      const parsed = parseArgs(["--undo", "--replay"]);
+      expect(parsed).toBeNull();
+    } finally {
+      console.error = originalError;
+    }
+    expect(errors.some((line) => line.includes("--undo cannot be combined with --replay"))).toBe(
+      true,
+    );
+  });
+
+  test("rejects combining --replay with --task-file", () => {
+    const originalError = console.error;
+    const errors: string[] = [];
+    console.error = (...args: unknown[]) => {
+      errors.push(args.map((value) => String(value)).join(" "));
+    };
+    try {
+      const parsed = parseArgs(["--replay", "--task-file", "task.json"]);
+      expect(parsed).toBeNull();
+    } finally {
+      console.error = originalError;
+    }
+    expect(
+      errors.some((line) => line.includes("--undo/--replay cannot be combined with --task")),
+    ).toBe(true);
   });
 
   test("supports daemon mode flag", () => {

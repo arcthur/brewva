@@ -88,17 +88,20 @@ With `--verbose`, daemon prints a rolling 60-second scheduler window summary
 - `--telegram-poll-retry-ms`
 - `--session`
 - `--verbose`
+- `--version`
 - `--help`
 
 Short aliases:
 
 - `-p` for `--print`
 - `-i` for `--interactive`
+- `-v` for `--version`
 - `-h` for `--help`
 
 `--no-extensions` disables presentation-oriented extension handlers. Runtime
 core bridge hooks remain active for tool policy, compaction gate, and
-ledger/patch tracking.
+ledger/patch tracking. A minimal autonomy context contract plus tape/context
+pressure status injection remains active in this profile.
 
 Channel mode examples:
 
@@ -113,8 +116,12 @@ Channel mode examples:
 - Explicit `--interactive` requires a TTY terminal.
 - `--replay` uses `--session` when provided; otherwise it replays the latest replayable session.
 - `--undo` uses `--session` when provided; otherwise it resolves the latest session with rollback history.
+- `--replay` and `--undo` are mutually exclusive.
+- `--replay`/`--undo` cannot be combined with `--task`/`--task-file`.
 - Prompt text is ignored in `--replay` and `--undo` flows.
 - Replay JSON output is event-per-line; the `brewva_event_bundle` record is only emitted for one-shot JSON runs.
+- CLI parse/pre-session validation failures return exit code `1`.
+- `--help` and `--version` return exit code `0`.
 
 ## Startup Defaults
 

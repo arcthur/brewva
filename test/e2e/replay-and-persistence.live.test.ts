@@ -87,7 +87,8 @@ describe("e2e: replay and persistence", () => {
 
     try {
       const replay = runCliSync(workspace, ["--replay", "--mode", "json"]);
-      assertCliSuccess(replay, "replay-empty");
+      expect(replay.error).toBeUndefined();
+      expect(replay.status).toBe(1);
       expect(replay.stdout.trim()).toBe("");
       expect(replay.stderr.includes("Error: no replayable session found.")).toBe(true);
     } finally {

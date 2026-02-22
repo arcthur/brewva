@@ -3,6 +3,65 @@ import type { ExtensionAPI, ExtensionFactory } from "@mariozechner/pi-coding-age
 import { registerLedgerWriter } from "./ledger-writer.js";
 import { registerQualityGate } from "./quality-gate.js";
 
+const CORE_CONTEXT_INJECTION_MESSAGE_TYPE = "brewva-core-context-injection";
+const CORE_CONTEXT_CONTRACT_MARKER = "[Brewva Core Context Contract]";
+
+function formatPercent(ratio: number | null): string {
+  if (ratio === null) return "unknown";
+  return `${(ratio * 100).toFixed(1)}%`;
+}
+
+function buildCoreContextContract(runtime: BrewvaRuntime): string {
+  const tapeThresholds = runtime.config.tape.tapePressureThresholds;
+  const highThresholdPercent = formatPercent(runtime.getContextCompactionThresholdRatio());
+  const hardLimitPercent = formatPercent(runtime.getContextHardLimitRatio());
+
+  return [
+    CORE_CONTEXT_CONTRACT_MARKER,
+    "Autonomy controls available in this profile:",
+    "- use `tape_handoff` for semantic handoff boundaries.",
+    "- use `tape_info` to inspect tape/context pressure.",
+    "- use `tape_search` for historical recall from event tape.",
+    "- use `session_compact` to reduce message buffer pressure.",
+    "Hard rules:",
+    "- `tape_handoff` does not reduce message tokens.",
+    "- `session_compact` does not change tape semantics.",
+    `- tape_pressure thresholds: low=${tapeThresholds.low}, medium=${tapeThresholds.medium}, high=${tapeThresholds.high}.`,
+    `- compact soon when context_pressure >= high (${highThresholdPercent}).`,
+    `- compact immediately when context_pressure == critical (${hardLimitPercent}).`,
+  ].join("\n");
+}
+
+function applyCoreContextContract(systemPrompt: unknown, runtime: BrewvaRuntime): string {
+  const base = typeof systemPrompt === "string" ? systemPrompt : "";
+  if (base.includes(CORE_CONTEXT_CONTRACT_MARKER)) return base;
+  const contract = buildCoreContextContract(runtime);
+  if (!base.trim()) return contract;
+  return `${base}\n\n${contract}`;
+}
+
+function buildCoreStatusBlock(runtime: BrewvaRuntime, sessionId: string): string {
+  const tapeStatus = runtime.getTapeStatus(sessionId);
+  const gate = runtime.getContextCompactionGateStatus(sessionId);
+  const action = gate.required ? "session_compact_now" : "none";
+
+  return [
+    "[CoreTapeStatus]",
+    `tape_pressure: ${tapeStatus.tapePressure}`,
+    `tape_entries_total: ${tapeStatus.totalEntries}`,
+    `tape_entries_since_anchor: ${tapeStatus.entriesSinceAnchor}`,
+    `tape_entries_since_checkpoint: ${tapeStatus.entriesSinceCheckpoint}`,
+    `last_anchor_name: ${tapeStatus.lastAnchor?.name ?? "none"}`,
+    `last_anchor_id: ${tapeStatus.lastAnchor?.id ?? "none"}`,
+    `context_pressure: ${gate.pressure.level}`,
+    `context_usage: ${formatPercent(gate.pressure.usageRatio)}`,
+    `context_hard_limit: ${formatPercent(gate.pressure.hardLimitRatio)}`,
+    `recent_compact_performed: ${gate.recentCompaction ? "true" : "false"}`,
+    `recent_compaction_window_turns: ${gate.windowTurns}`,
+    `required_action: ${action}`,
+  ].join("\n");
+}
+
 function extractCompactionSummary(input: unknown): string | undefined {
   const event = input as
     | {
@@ -42,6 +101,27 @@ function extractCompactionEntryId(input: unknown): string | undefined {
 export function registerRuntimeCoreBridge(pi: ExtensionAPI, runtime: BrewvaRuntime): void {
   registerQualityGate(pi, runtime);
   registerLedgerWriter(pi, runtime);
+
+  pi.on("before_agent_start", (event, ctx) => {
+    const sessionId = ctx.sessionManager.getSessionId();
+    const usage = coerceContextBudgetUsage(ctx.getContextUsage());
+    runtime.observeContextUsage(sessionId, usage);
+
+    return {
+      systemPrompt: applyCoreContextContract(
+        (event as { systemPrompt?: unknown }).systemPrompt,
+        runtime,
+      ),
+      message: {
+        customType: CORE_CONTEXT_INJECTION_MESSAGE_TYPE,
+        content: buildCoreStatusBlock(runtime, sessionId),
+        display: false,
+        details: {
+          profile: "runtime-core",
+        },
+      },
+    };
+  });
 
   pi.on("session_compact", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();

@@ -11,8 +11,11 @@ projects into two context blocks on each agent start:
 Scope note:
 
 - This journey describes the extension-enabled runtime profile.
-- In `--no-extensions`, ingest/projection still runs, but auto-injection and
-  memory bridge hooks are intentionally not active.
+- In `--no-extensions`, ingest/projection still runs, but `brewva.working-memory`
+  / `brewva.memory-recall` auto-injection and memory bridge hooks are intentionally
+  not active.
+- `--no-extensions` still injects a lightweight runtime-core autonomy/status block
+  (`[CoreTapeStatus]`), which is separate from memory projection injection.
 
 The system is intentionally **event-driven** and **projection-based**:
 
@@ -182,6 +185,8 @@ Checklist:
 2. Extensions are enabled and `before_agent_start` runs `runtime.buildContextInjection()`.
 3. `.orchestrator/memory/working.md` exists and is non-empty.
 4. Check tape for `context_injection_dropped` (budget hard-limit / budget exhausted).
+5. If running with `--no-extensions`, this checklist does not apply for
+   `brewva.working-memory`/`brewva.memory-recall` because those extension hooks are disabled.
 
 ### Working memory looks stale after major changes
 

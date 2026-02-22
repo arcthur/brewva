@@ -80,6 +80,8 @@ flowchart TD
   - Tools are registered directly from `buildBrewvaTools()`.
   - CLI installs `createRuntimeCoreBridgeExtension()` to run core tool hooks
     (`quality-gate`, `ledger-writer`, compact lifecycle bridge) without full extension stack.
+  - Runtime core bridge also handles `before_agent_start` with a minimal
+    autonomy contract + `[CoreTapeStatus]` pressure/action block.
   - Runtime core path (`startToolCall`/`finishToolCall`) enforces tool policy,
     critical context-compaction gate, tool-call accounting, patch tracking, and
     tool-result ledger persistence.
@@ -87,8 +89,8 @@ flowchart TD
     can still be projected), but extension presentation hooks are disabled.
   - CLI installs `registerRuntimeCoreEventBridge()` for lifecycle and
     assistant-usage telemetry.
-  - Extension-only presentation hooks (context-injection message, completion
-    guard, notification, memory bridge) remain disabled by design.
+  - Extension-only presentation hooks (`context-transform` memory injection,
+    completion guard, notification, memory bridge) remain disabled by design.
 
 ## Configuration-to-UI Flow
 

@@ -44,6 +44,7 @@ state transitions and side effects are delegated to service modules in
 flowchart TD
   A["createBrewvaSession(enableExtensions=false)"] --> B["register built-in + custom tools"]
   B --> C["register createRuntimeCoreBridgeExtension()"]
+  C --> C2["before_agent_start => observeContextUsage + inject core autonomy contract + [CoreTapeStatus]"]
   C --> D["tool_call => runtime.startToolCall(): policy + compaction gate + call tracking"]
   D --> E["tool execute"]
   E --> F["tool_result => runtime.finishToolCall(): ledger write + patch tracking"]
@@ -59,8 +60,10 @@ chain enforcement stay active through the runtime core bridge hooks.
 Memory behavior in this profile is split:
 
 - Projection ingest still runs on `recordEvent()` (memory JSONL state can advance).
+- Runtime core bridge still injects a minimal `before_agent_start` status block
+  (`[CoreTapeStatus]` + autonomy contract), independent of memory projection.
 - Auto-injection (`brewva.working-memory` / `brewva.memory-recall`) and `agent_end`
-  refresh hooks are extension-only and therefore disabled.
+  memory refresh hooks are extension-only and therefore disabled.
 - On first `onTurnStart()` after restart, runtime hydration can rebuild missing
   memory projections from tape (`memory_*` snapshot payloads + semantic fallback).
 

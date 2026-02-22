@@ -8,6 +8,7 @@ import {
   type TurnPart,
 } from "@brewva/brewva-runtime/channels";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
+import { clampText, ensureSessionShutdownRecorded } from "./runtime-utils.js";
 import { createBrewvaSession, type BrewvaSessionResult } from "./session.js";
 
 export interface RunChannelModeOptions {
@@ -171,11 +172,6 @@ function extractToolResultText(result: unknown): string {
   } catch {
     return "";
   }
-}
-
-function clampText(value: string, maxChars: number): string {
-  if (value.length <= maxChars) return value;
-  return `${value.slice(0, Math.max(0, maxChars - 3))}...`;
 }
 
 function asToolExecutionEndEvent(event: AgentSessionEvent): {
@@ -357,14 +353,6 @@ export async function collectPromptTurnOutputs(
   }
 }
 
-function ensureSessionShutdownRecorded(runtime: BrewvaRuntime, sessionId: string): void {
-  if (runtime.queryEvents(sessionId, { type: "session_shutdown", last: 1 }).length > 0) return;
-  runtime.recordEvent({
-    sessionId,
-    type: "session_shutdown",
-  });
-}
-
 async function waitForAllSettledWithTimeout(
   promises: Promise<unknown>[],
   timeoutMs: number,
@@ -382,6 +370,7 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
     console.error(
       `Error: unsupported channel "${options.channel}". Supported channels: ${formatSupportedChannels()}.`,
     );
+    process.exitCode = 1;
     return;
   }
 
@@ -569,6 +558,7 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
     });
   } catch (error) {
     console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
     return;
   }
 

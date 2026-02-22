@@ -6,7 +6,9 @@
 2. Create session + runtime (`packages/brewva-cli/src/session.ts`)
    - runtime config is loaded/normalized first
    - startup UI settings (`ui.quietStartup`, `ui.collapseChangelog`) are applied from `runtime.config.ui` into session settings overrides
-3. Register extension handlers (`packages/brewva-extensions/src/index.ts`)
+3. Register lifecycle handlers (profile-dependent)
+   - extensions-enabled: full extension stack from `packages/brewva-extensions/src/index.ts`
+   - `--no-extensions`: runtime core bridge + session event bridge (`packages/brewva-extensions/src/runtime-core-bridge.ts`, `packages/brewva-cli/src/session-event-bridge.ts`)
 4. Run turn loop with tool execution, ledger/event writes, and verification updates
 5. Emit replayable event timeline and dispose session resources
 
@@ -15,6 +17,7 @@
 - Replay (`--replay`): query structured events and print text/JSON timeline
 - Undo (`--undo`): resolve target session and rollback latest tracked patch set
 - JSON one-shot (`--mode json`/`--json`): emits normal stream plus final `brewva_event_bundle`
+- `--no-extensions`: keeps runtime-core safety/evidence hooks plus minimal core context status injection, while extension presentation hooks remain disabled
 - Channel gateway (`--channel`): run adapter bridge loop; bind channel conversations to agent sessions and dispatch inbound turns serially per conversation key
 
 ## Recovery Path
