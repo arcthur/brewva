@@ -1,10 +1,10 @@
 ---
 name: brewva-project
-description: Project control skill for Brewva migration, runtime hardening, and delivery readiness.
-version: 1.0.0
+description: Project orchestration skill for Brewva source analysis, runtime evidence diagnosis, and issue/PR delivery.
+version: 1.2.0
 stability: stable
 tier: project
-tags: [project, migration, runtime, verification, delivery]
+tags: [project, migration, runtime, diagnostics, verification, delivery]
 anti_tags: []
 tools:
   required: [read, grep]
@@ -14,8 +14,15 @@ budget:
   max_tool_calls: 110
   max_tokens: 220000
 outputs:
-  [scope_alignment, workstream_decision, migration_plan, verification_matrix, delivery_report]
-consumes: [architecture_map, execution_steps, findings, verification]
+  [
+    scope_alignment,
+    workstream_decision,
+    process_evidence,
+    migration_plan,
+    verification_matrix,
+    delivery_report,
+  ]
+consumes: [architecture_map, execution_steps, findings, verification, runtime_artifacts]
 escalation_path:
   constraint_missing: planning
   no_rollback_path: review
@@ -25,13 +32,20 @@ escalation_path:
 
 ## Objective
 
-Turn migration and hardening work in Brewva into an executable, verifiable, and reversible delivery flow while preserving upstream compatibility.
+Enable evidence-led diagnosis and delivery for Brewva across two complementary analysis surfaces:
+
+1. **Source surface** — understand the codebase: package boundaries, call paths, contracts, and minimal edit points.
+2. **Process surface** — reconstruct runtime behavior from session artifacts (event store JSONL, evidence ledger, memory files, tape checkpoints, file snapshots, schedule projections) to confirm or refute hypotheses that source inspection alone cannot resolve.
+
+Findings from both surfaces converge into a single delivery action: a well-evidenced issue, a reviewable PR, or an explicit "blocked" signal.
+This skill is an orchestrator: it routes work across source analysis, process evidence analysis, and delivery actions without duplicating specialized pack/base skills.
 
 ## Trigger
 
 Use this skill when requests involve:
 
 - migration and feature integration into Brewva
+- runtime behavior diagnosis from session logs and JSONL artifacts
 - remediation of architecture-review P0/P1 gaps
 - cross-package work (`runtime/tools/extensions/cli`)
 - prioritized delivery requiring explicit verification and risk control
@@ -42,23 +56,25 @@ Use this skill when requests involve:
 - Keep runtime contracts explicit and verifiable (tool policy, budgets, outputs).
 - Any high-risk change must include rollback strategy and validation matrix.
 - Preserve compatibility path with upstream `pi-coding-agent`.
+- Source evidence and process evidence must converge before issue/PR escalation.
 
 ## Mode Detection (mandatory first output)
 
 Classify the task into exactly one execution mode:
 
-| Mode                       | Typical Work                                           | Goal                            |
-| -------------------------- | ------------------------------------------------------ | ------------------------------- |
-| `MIGRATION_IMPLEMENTATION` | capability migration, skill migration, behavior parity | land proven capabilities safely |
-| `RUNTIME_HARDENING`        | gate/security/contract strengthening                   | increase correctness and safety |
-| `SKILL_SYSTEM_UPGRADE`     | skill content and resource system upgrades             | improve agent execution quality |
-| `RELEASE_READINESS`        | pre-release checks and risk convergence                | produce release-ready state     |
+| Mode                       | Typical Work                                           | Goal                               |
+| -------------------------- | ------------------------------------------------------ | ---------------------------------- |
+| `MIGRATION_IMPLEMENTATION` | capability migration, skill migration, behavior parity | land proven capabilities safely    |
+| `RUNTIME_HARDENING`        | gate/security/contract strengthening                   | increase correctness and safety    |
+| `RUNTIME_DIAGNOSIS`        | session log/JSONL analysis, behavioral anomaly triage  | locate defect via process evidence |
+| `SKILL_SYSTEM_UPGRADE`     | skill content and resource system upgrades             | improve agent execution quality    |
+| `RELEASE_READINESS`        | pre-release checks and risk convergence                | produce release-ready state        |
 
 Blocking output (do not proceed without it):
 
 ```text
 PROJECT_SCOPE_ALIGNMENT
-- mode: <MIGRATION_IMPLEMENTATION|RUNTIME_HARDENING|SKILL_SYSTEM_UPGRADE|RELEASE_READINESS>
+- mode: <MIGRATION_IMPLEMENTATION|RUNTIME_HARDENING|RUNTIME_DIAGNOSIS|SKILL_SYSTEM_UPGRADE|RELEASE_READINESS>
 - objective: "<single delivery objective>"
 - in_scope:
   - "<item>"
@@ -67,6 +83,26 @@ PROJECT_SCOPE_ALIGNMENT
 - success_signal:
   - "<observable signal>"
 ```
+
+## Workstream Architecture (mandatory)
+
+Treat execution as three coordinated lanes:
+
+1. **Source Lane**: understand code boundaries, call paths, and minimal edit points.
+2. **Process Lane**: reconstruct runtime behavior from session artifacts (event store, evidence ledger, memory files, tape checkpoints, file snapshots, schedule projections). See `skills/project/brewva-project/references/runtime-artifacts.md` for the full artifact catalog.
+3. **Delivery Lane**: convert confirmed findings into issue/PR artifacts with reproducible evidence and explicit acceptance criteria.
+
+This skill must orchestrate specialized skills instead of re-implementing their logic:
+
+- source mapping and boundary discovery: `skills/base/exploration/SKILL.md`
+- root-cause confirmation and hypothesis validation: `skills/base/debugging/SKILL.md`
+- command-backed validation and verdicting: `skills/base/verification/SKILL.md`
+- surgical code changes with rollback: `skills/base/patching/SKILL.md`
+- execution plan construction: `skills/base/planning/SKILL.md`
+- merge-safety review before delivery: `skills/base/review/SKILL.md`
+- commit architecture and history operations: `skills/base/git/SKILL.md`
+- issue/PR artifact generation and GitHub execution: `skills/packs/github/SKILL.md`
+- issue triage to PR pipeline: `skills/packs/gh-issues/SKILL.md`
 
 ## Execution Workflow
 
@@ -100,7 +136,127 @@ IMPACT_MAP
   - "<check path>"
 ```
 
-### Step 3: Slice into Reviewable Increments
+### Step 3: Workstream Decision (mandatory output)
+
+Decide which investigation lanes are required before implementation:
+
+- `source_lane` is required when code changes, API behavior, or contract boundaries are in scope.
+- `process_lane` is required when runtime logs/JSONL/ledger evidence exists or when source inspection alone cannot explain observed behavior.
+- if both are relevant, run both lanes and resolve discrepancies before delivery decisions.
+
+Blocking output:
+
+```text
+WORKSTREAM_DECISION
+- source_lane: <required|optional|skip + reason>
+- process_lane: <required|optional|skip + reason>
+- delegated_skills:
+  - "<skill + responsibility>"
+- delivery_target: <issue|pr|both|none>
+- readiness_gate:
+  - "<condition required before delivery action>"
+```
+
+### Step 4: Source Lane (when required)
+
+Produce an executable source-level diagnosis:
+
+- map entrypoints and hot path to the failing or target behavior
+- identify the smallest safe change boundary
+- rank 1-3 root-cause hypotheses and validation actions
+
+Output template:
+
+```text
+SOURCE_ANALYSIS
+- entrypoints:
+  - "<path:function>"
+- hot_path:
+  - "<A -> B -> C>"
+- change_boundary:
+  - "<minimal files/interfaces to change>"
+- hypotheses:
+  - "<cause + validation action>"
+- code_confidence: <high|medium|low>
+```
+
+### Step 5: Process Lane (when required)
+
+Reconstruct operational truth from runtime artifacts.
+Full artifact catalog: `skills/project/brewva-project/references/runtime-artifacts.md`.
+
+#### 5a. Evidence Inputs (ordered by diagnostic value)
+
+| Artifact            | Path                                                 | Key Correlation Fields                                              |
+| ------------------- | ---------------------------------------------------- | ------------------------------------------------------------------- |
+| Event store         | `.orchestrator/events/{sessionId}.jsonl`             | `id`, `sessionId`, `type`, `timestamp`, `turn`                      |
+| Evidence ledger     | `.orchestrator/ledger/evidence.jsonl`                | `id`, `sessionId`, `tool`, `verdict`, `turn`, `hash`/`previousHash` |
+| Memory units        | `.orchestrator/memory/units.jsonl`                   | `id`, `sessionId`, `topic`, `status`, `confidence`                  |
+| Memory crystals     | `.orchestrator/memory/crystals.jsonl`                | `id`, `sessionId`, `topic`, `unitIds[]`                             |
+| Memory insights     | `.orchestrator/memory/insights.jsonl`                | `id`, `sessionId`, `kind`, `relatedUnitIds[]`                       |
+| Memory evolution    | `.orchestrator/memory/evolves.jsonl`                 | `sourceUnitId`, `targetUnitId`, `relation`                          |
+| Tape checkpoints    | Embedded in event store (`type: "checkpoint"`)       | `state.task`, `state.truth`, `basedOnEventId`                       |
+| File snapshots      | `.orchestrator/snapshots/{sessionId}/patchsets.json` | `patchSets[].toolName`, `changes[]`                                 |
+| Schedule projection | `.brewva/schedule/intents.jsonl`                     | `intentId`, `parentSessionId`, `status`                             |
+| Cost events         | Event store filtered by `type: "cost_update"`        | per-model, per-skill, per-tool budget deltas                        |
+
+#### 5b. Mandatory First Steps
+
+1. **Ledger hash chain verification** — walk `previousHash` → `hash` links in the evidence ledger. A broken chain indicates data corruption, out-of-order writes, or manual tampering. Do not trust downstream analysis if the chain is broken.
+2. **Event store correlation** — use `sessionId` + `turn` to join events with ledger rows and memory units.
+3. **Replay engine shortcut** — when full state reconstruction at a specific turn is needed, prefer `TurnReplayEngine` (`packages/brewva-runtime/src/tape/replay-engine.ts`) over manual JSONL parsing. It uses tape checkpoints for fast-forward and rebuilds `TaskState` + `TruthState` at any target turn.
+
+#### 5c. Parsing Contract
+
+For any structured JSONL artifact:
+
+- timestamp field: `timestamp` (event store, ledger) or `createdAt`/`updatedAt` (memory artifacts)
+- correlation key: `sessionId` (all artifacts), `turn` (events + ledger), `id` (all artifacts)
+- component identity: `type` (events), `tool` (ledger), `topic` (memory)
+- outcome signal: `verdict` field with values `pass` | `fail` | `inconclusive` (ledger); `type` field for event classification
+
+#### 5d. Output Template
+
+```text
+PROCESS_EVIDENCE
+- evidence_inputs:
+  - "<artifact path + record count>"
+- chain_integrity: <verified|broken at row N|not applicable>
+- timeline:
+  - "<timestamped event>"
+- correlation_summary:
+  - "<sessionId:turn -> event chain>"
+- anomalies:
+  - "<unexpected transition, invariant break, or verdict pattern>"
+- cost_signals:
+  - "<budget exceeded | model cost spike | none>"
+- evidence_confidence: <high|medium|low>
+```
+
+### Step 6: Convergence and Delivery Decision
+
+Merge source and process findings into a single delivery target.
+
+Rules:
+
+- If root cause is confirmed and code changes are required, prepare patch + verification, then route to PR flow.
+- If defect is confirmed but fix is not implemented yet, produce a high-signal issue draft with reproduction and acceptance criteria.
+- If evidence is insufficient or contradictory, stop with explicit missing inputs and do not open speculative issue/PR.
+
+Blocking output:
+
+```text
+MIGRATION_PLAN
+- increments:
+  - "<single-purpose increment + rollback>"
+- selected_path: <implement-now|issue-first|blocked>
+- delivery_channel:
+  - "<github|gh-issues|local-draft>"
+- handoff_criteria:
+  - "<what must be true before opening issue/PR>"
+```
+
+### Step 7: Slice into Reviewable Increments
 
 Each increment must be:
 
@@ -116,13 +272,14 @@ Preferred sequencing:
 4. tests and verification closure
 5. docs/skill sync
 
-### Step 4: Execution Guardrails
+### Step 8: Execution Guardrails
 
 - Read target files and adjacent dependencies before any modification.
 - Keep changes strictly within required scope.
 - If constraints shift or risk escalates, return to planning immediately.
+- Do not open issue/PR artifacts without direct evidence linkage.
 
-### Step 5: Verification Matrix (mandatory output)
+### Step 9: Verification Matrix (mandatory output)
 
 Verification must match impact surface. Do not use informal claims.
 
@@ -138,7 +295,7 @@ VERIFICATION_MATRIX
   - "<risk>"
 ```
 
-### Step 6: Delivery Report (mandatory output)
+### Step 10: Delivery Report (mandatory output)
 
 ```text
 DELIVERY_REPORT
@@ -156,6 +313,7 @@ DELIVERY_REPORT
 - Correctness and safety take precedence over brevity and optimization.
 - Satisfy hard constraints first, optimize second.
 - Prefer options with stronger verification and rollback characteristics.
+- Prefer composing specialized skills over duplicating their procedures in this skill.
 
 ## Stop Conditions
 
@@ -163,6 +321,7 @@ DELIVERY_REPORT
 - High-risk change has no rollback path.
 - Required verification checks are not executable and no substitute evidence exists.
 - Required verification is blocked and no meaningful `TOOL_BRIDGE` can be produced.
+- Process evidence lacks usable correlation keys and cannot be normalized reliably.
 
 When stopping, always report:
 
@@ -179,24 +338,68 @@ When executable verification is blocked by environment constraints, emit `TOOL_B
 - Expanding edits across packages without impact mapping.
 - Replacing executable evidence with purely theoretical reasoning.
 - Migrating only skeleton structure without operational knowledge.
+- Opening issue/PR actions without source-process evidence convergence.
+- Treating unstructured logs as proof without timestamp and correlation normalization.
+- Analyzing evidence ledger without first verifying hash chain integrity.
+- Manual JSONL parsing when `TurnReplayEngine` can reconstruct the target state directly.
 
 ## Resource Navigation
 
+### Project References
+
+- Runtime artifact catalog: `skills/project/brewva-project/references/runtime-artifacts.md`
 - Priority matrix and phased strategy: `skills/project/brewva-project/references/migration-priority-matrix.md`
 - Package boundaries and invariants: `skills/project/brewva-project/references/package-boundaries.md`
 - Skill DoD quick-check script: `skills/project/brewva-project/scripts/check-skill-dod.sh`
 
-## Example
+### Delegated Skills — Source and Process Lanes
+
+- Source discovery method: `skills/base/exploration/SKILL.md`
+- Root-cause workflow: `skills/base/debugging/SKILL.md`
+- Verification workflow: `skills/base/verification/SKILL.md`
+
+### Delegated Skills — Delivery Lane
+
+- Surgical patching: `skills/base/patching/SKILL.md`
+- Execution planning: `skills/base/planning/SKILL.md`
+- Merge-safety review: `skills/base/review/SKILL.md`
+- Git operations: `skills/base/git/SKILL.md`
+- GitHub issue/PR operations: `skills/packs/github/SKILL.md`
+- Issue-triage to PR pipeline: `skills/packs/gh-issues/SKILL.md`
+
+## Examples
+
+### Example A — Process-led diagnosis
 
 Input:
 
 ```text
-"Continue the next migration phase and resolve the P0 verification gate gap first."
+"Analyze runtime JSONL and verification logs for tool-budget failures, localize the code path, and decide whether to open an issue or a PR."
 ```
 
 Expected flow:
 
-1. Output `PROJECT_SCOPE_ALIGNMENT` (mode should be `RUNTIME_HARDENING`).
+1. Output `PROJECT_SCOPE_ALIGNMENT` (mode: `RUNTIME_DIAGNOSIS`).
 2. Output `IMPACT_MAP` (at minimum covering runtime + extensions).
-3. Execute minimal, reviewable increments.
-4. Output `VERIFICATION_MATRIX` and `DELIVERY_REPORT`.
+3. Output `WORKSTREAM_DECISION` — activate both Source and Process lanes.
+4. **Process Lane**: verify ledger hash chain, filter `cost_update` events for budget spikes, correlate `verdict: "fail"` rows with `sessionId:turn`, optionally replay to the failing turn via `TurnReplayEngine`.
+5. **Source Lane**: trace the code path from the identified tool call to the budget enforcement gate.
+6. Converge into `MIGRATION_PLAN` with `selected_path: implement-now | issue-first | blocked`.
+7. Execute minimal, reviewable increments and output `VERIFICATION_MATRIX` and `DELIVERY_REPORT`.
+
+### Example B — Source-led migration
+
+Input:
+
+```text
+"Migrate the context injection model from pi-coding-agent into Brewva runtime, preserving behavior parity."
+```
+
+Expected flow:
+
+1. Output `PROJECT_SCOPE_ALIGNMENT` (mode: `MIGRATION_IMPLEMENTATION`).
+2. Output `IMPACT_MAP` (runtime + extensions + cli).
+3. Output `WORKSTREAM_DECISION` — Source Lane required, Process Lane optional (activate if upstream behavioral logs are available).
+4. **Source Lane**: map upstream entrypoints, identify contract differences, determine minimal change boundary.
+5. Converge into `MIGRATION_PLAN` with increments sequenced as type prerequisites → runtime logic → integration → tests.
+6. Output `VERIFICATION_MATRIX` and `DELIVERY_REPORT`.
