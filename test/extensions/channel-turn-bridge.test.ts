@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { createRuntimeChannelTurnBridge } from "@brewva/brewva-extensions";
-import type { BrewvaRuntime, ChannelAdapter, TurnEnvelope } from "@brewva/brewva-runtime";
-import { DEFAULT_CHANNEL_CAPABILITIES } from "@brewva/brewva-runtime";
+import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  DEFAULT_CHANNEL_CAPABILITIES,
+  type ChannelAdapter,
+  type TurnEnvelope,
+} from "@brewva/brewva-runtime/channels";
 import { assertRejectsWithMessage } from "../helpers.js";
 
 type RuntimeLike = {

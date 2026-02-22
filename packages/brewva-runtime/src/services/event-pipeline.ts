@@ -1,5 +1,8 @@
 import { formatISO } from "date-fns";
 import { BrewvaEventStore } from "../events/store.js";
+import { TAPE_CHECKPOINT_EVENT_TYPE } from "../tape/events.js";
+import { TASK_EVENT_TYPE } from "../task/ledger.js";
+import { TRUTH_EVENT_TYPE } from "../truth/ledger.js";
 import type {
   BrewvaEventCategory,
   BrewvaEventQuery,
@@ -8,6 +11,12 @@ import type {
   BrewvaStructuredEvent,
 } from "../types.js";
 import type { RuntimeCallback } from "./callback.js";
+
+const REPLAY_INVALIDATION_EVENT_TYPES = new Set<string>([
+  TASK_EVENT_TYPE,
+  TRUTH_EVENT_TYPE,
+  TAPE_CHECKPOINT_EVENT_TYPE,
+]);
 
 export interface RuntimeRecordEventInput {
   sessionId: string;
@@ -52,7 +61,9 @@ export class EventPipelineService {
     });
     if (!row) return undefined;
 
-    this.invalidateReplay(row.sessionId);
+    if (REPLAY_INVALIDATION_EVENT_TYPES.has(row.type)) {
+      this.invalidateReplay(row.sessionId);
+    }
 
     const structured = this.toStructuredEvent(row);
     for (const listener of this.eventListeners.values()) {

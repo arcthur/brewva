@@ -10,6 +10,13 @@ Primary class: `packages/brewva-runtime/src/runtime.ts`.
 - Ephemeral session maps are centralized in `RuntimeSessionStateStore`
   (`packages/brewva-runtime/src/services/session-state.ts`) instead of scattered runtime fields.
 
+## Import Boundaries
+
+- Runtime core contracts and facade APIs are imported from `@brewva/brewva-runtime`.
+- Channel adapter/turn contracts are imported from `@brewva/brewva-runtime/channels`.
+- The root runtime entry intentionally excludes channel exports to keep runtime API
+  surface focused on core orchestration concerns.
+
 ## Public Methods
 
 - `refreshSkills`

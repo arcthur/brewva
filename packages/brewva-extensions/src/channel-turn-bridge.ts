@@ -1,6 +1,10 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
-import type { ChannelAdapter, ChannelTurnBridge, TurnEnvelope } from "@brewva/brewva-runtime";
-import { ChannelTurnBridge as RuntimeChannelTurnBridge } from "@brewva/brewva-runtime";
+import type {
+  ChannelAdapter,
+  ChannelTurnBridge,
+  TurnEnvelope,
+} from "@brewva/brewva-runtime/channels";
+import { ChannelTurnBridge as RuntimeChannelTurnBridge } from "@brewva/brewva-runtime/channels";
 
 export interface CreateRuntimeChannelTurnBridgeOptions {
   runtime: BrewvaRuntime;

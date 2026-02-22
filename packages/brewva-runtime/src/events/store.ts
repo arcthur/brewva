@@ -1,4 +1,14 @@
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { resolve } from "node:path";
 import { redactUnknown } from "../security/redact.js";
 import {
@@ -23,31 +33,36 @@ function sanitizeSessionId(sessionId: string): string {
   return sessionId.replaceAll(/[^\w.-]+/g, "_");
 }
 
-function parseLines(path: string): BrewvaEventRecord[] {
-  if (!existsSync(path)) return [];
-  const lines = readFileSync(path, "utf8")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
+interface EventFileCache {
+  readonly rows: BrewvaEventRecord[];
+  byteOffset: number;
+  trailingFragment: string;
+}
 
-  const records: BrewvaEventRecord[] = [];
-  for (const line of lines) {
-    try {
-      const value = JSON.parse(line) as BrewvaEventRecord;
-      if (value && typeof value.id === "string" && typeof value.type === "string") {
-        records.push(value);
-      }
-    } catch {
-      continue;
+function parseEventRecord(line: string): BrewvaEventRecord | null {
+  try {
+    const value = JSON.parse(line) as BrewvaEventRecord;
+    if (
+      value &&
+      typeof value.id === "string" &&
+      typeof value.sessionId === "string" &&
+      typeof value.type === "string" &&
+      typeof value.timestamp === "number" &&
+      Number.isFinite(value.timestamp)
+    ) {
+      return value;
     }
+  } catch {
+    return null;
   }
-  return records;
+  return null;
 }
 
 export class BrewvaEventStore {
   private readonly enabled: boolean;
   private readonly dir: string;
   private readonly fileHasContent = new Map<string, boolean>();
+  private readonly eventCacheByFilePath = new Map<string, EventFileCache>();
 
   constructor(config: BrewvaConfig["infrastructure"]["events"], cwd: string) {
     this.enabled = config.enabled;
@@ -61,7 +76,7 @@ export class BrewvaEventStore {
     if (!this.enabled) return undefined;
 
     const timestamp = input.timestamp ?? Date.now();
-    const id = `evt_${timestamp}_${Math.random().toString(36).slice(2, 10)}`;
+    const id = `evt_${timestamp}_${randomUUID()}`;
     const row: BrewvaEventRecord = {
       id,
       sessionId: input.sessionId,
@@ -75,8 +90,11 @@ export class BrewvaEventStore {
 
     const filePath = this.filePathForSession(row.sessionId);
     const prefix = this.hasContent(filePath) ? "\n" : "";
-    writeFileSync(filePath, `${prefix}${JSON.stringify(row)}`, { flag: "a" });
+    const serialized = JSON.stringify(row);
+    const appended = `${prefix}${serialized}`;
+    writeFileSync(filePath, appended, { flag: "a" });
     this.fileHasContent.set(filePath, true);
+    this.trackAppendedRow(filePath, row, appended);
     return row;
   }
 
@@ -111,12 +129,32 @@ export class BrewvaEventStore {
   }
 
   list(sessionId: string, query: BrewvaEventQuery = {}): BrewvaEventRecord[] {
-    const rows = parseLines(this.filePathForSession(sessionId));
-    const filtered = query.type ? rows.filter((row) => row.type === query.type) : rows;
-    if (query.last && query.last > 0) {
-      return filtered.slice(-query.last);
+    const rows = this.listFromCache(sessionId);
+    const requestedLast =
+      typeof query.last === "number" && Number.isFinite(query.last)
+        ? Math.max(0, Math.floor(query.last))
+        : 0;
+
+    if (requestedLast > 0 && query.type) {
+      const matches: BrewvaEventRecord[] = [];
+      for (let index = rows.length - 1; index >= 0; index -= 1) {
+        const row = rows[index];
+        if (!row || row.type !== query.type) continue;
+        matches.push(row);
+        if (matches.length >= requestedLast) break;
+      }
+      return matches.toReversed();
     }
-    return filtered;
+
+    if (requestedLast > 0) {
+      return rows.slice(-requestedLast);
+    }
+
+    if (query.type) {
+      return rows.filter((row) => row.type === query.type);
+    }
+
+    return rows.slice();
   }
 
   listAnchors(sessionId: string, query: Omit<BrewvaEventQuery, "type"> = {}): BrewvaEventRecord[] {
@@ -141,7 +179,9 @@ export class BrewvaEventStore {
   }
 
   clearSessionCache(sessionId: string): void {
-    this.fileHasContent.delete(this.filePathForSession(sessionId));
+    const filePath = this.filePathForSession(sessionId);
+    this.fileHasContent.delete(filePath);
+    this.eventCacheByFilePath.delete(filePath);
   }
 
   listSessionIds(): string[] {
@@ -169,6 +209,127 @@ export class BrewvaEventStore {
 
   private filePathForSession(sessionId: string): string {
     return resolve(this.dir, `${sanitizeSessionId(sessionId)}.jsonl`);
+  }
+
+  private listFromCache(sessionId: string): BrewvaEventRecord[] {
+    if (!this.enabled) return [];
+    const filePath = this.filePathForSession(sessionId);
+    return this.syncCacheForFile(filePath).rows;
+  }
+
+  private syncCacheForFile(filePath: string): EventFileCache {
+    if (!existsSync(filePath)) {
+      const empty: EventFileCache = {
+        rows: [],
+        byteOffset: 0,
+        trailingFragment: "",
+      };
+      this.eventCacheByFilePath.set(filePath, empty);
+      return empty;
+    }
+
+    let size = 0;
+    try {
+      size = statSync(filePath).size;
+    } catch {
+      const empty: EventFileCache = {
+        rows: [],
+        byteOffset: 0,
+        trailingFragment: "",
+      };
+      this.eventCacheByFilePath.set(filePath, empty);
+      return empty;
+    }
+
+    const cached = this.eventCacheByFilePath.get(filePath);
+    if (!cached || size < cached.byteOffset) {
+      return this.rebuildCacheFromFile(filePath, size);
+    }
+
+    if (size === cached.byteOffset) {
+      return cached;
+    }
+
+    const appended = this.readTextRange(filePath, cached.byteOffset, size);
+    this.consumeChunk(cached, appended);
+    cached.byteOffset = size;
+    return cached;
+  }
+
+  private rebuildCacheFromFile(filePath: string, size: number): EventFileCache {
+    const cache: EventFileCache = {
+      rows: [],
+      byteOffset: size,
+      trailingFragment: "",
+    };
+
+    if (size > 0) {
+      const text = readFileSync(filePath, "utf8");
+      this.consumeChunk(cache, text);
+    }
+
+    this.eventCacheByFilePath.set(filePath, cache);
+    return cache;
+  }
+
+  private readTextRange(filePath: string, fromOffset: number, toOffset: number): string {
+    const length = Math.max(0, toOffset - fromOffset);
+    if (length <= 0) return "";
+
+    const fd = openSync(filePath, "r");
+    try {
+      const buffer = Buffer.allocUnsafe(length);
+      let consumed = 0;
+      while (consumed < length) {
+        const read = readSync(fd, buffer, consumed, length - consumed, fromOffset + consumed);
+        if (read <= 0) break;
+        consumed += read;
+      }
+      return buffer.subarray(0, consumed).toString("utf8");
+    } finally {
+      closeSync(fd);
+    }
+  }
+
+  private consumeChunk(cache: EventFileCache, text: string): void {
+    if (!text && !cache.trailingFragment) {
+      return;
+    }
+    const combined = `${cache.trailingFragment}${text}`;
+    if (!combined) {
+      cache.trailingFragment = "";
+      return;
+    }
+    const lines = combined.split("\n");
+    cache.trailingFragment = "";
+
+    for (let index = 0; index < lines.length; index += 1) {
+      const raw = lines[index] ?? "";
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+
+      const parsed = parseEventRecord(trimmed);
+      if (parsed) {
+        cache.rows.push(parsed);
+        continue;
+      }
+
+      // Keep only a potentially incomplete tail fragment for the next incremental read.
+      if (index === lines.length - 1) {
+        cache.trailingFragment = raw;
+      }
+    }
+  }
+
+  private trackAppendedRow(filePath: string, row: BrewvaEventRecord, appended: string): void {
+    const cached = this.eventCacheByFilePath.get(filePath);
+    if (!cached) return;
+    if (cached.trailingFragment) {
+      this.eventCacheByFilePath.delete(filePath);
+      return;
+    }
+    cached.rows.push(row);
+    cached.byteOffset += Buffer.byteLength(appended, "utf8");
   }
 
   private hasContent(filePath: string): boolean {

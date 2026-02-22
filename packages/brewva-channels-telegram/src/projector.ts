@@ -1,5 +1,5 @@
-import { buildChannelDedupeKey, buildChannelSessionId } from "@brewva/brewva-runtime";
-import type { ApprovalPayload, TurnEnvelope, TurnPart } from "@brewva/brewva-runtime";
+import { buildChannelDedupeKey, buildChannelSessionId } from "@brewva/brewva-runtime/channels";
+import type { ApprovalPayload, TurnEnvelope, TurnPart } from "@brewva/brewva-runtime/channels";
 import {
   decodeTelegramApprovalCallback,
   encodeTelegramApprovalCallback,

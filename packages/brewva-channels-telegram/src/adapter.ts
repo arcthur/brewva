@@ -2,8 +2,11 @@ import type {
   AdapterSendResult,
   AdapterStartContext,
   ChannelAdapter,
-} from "@brewva/brewva-runtime";
-import { resolveChannelCapabilities, type ChannelCapabilities } from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/channels";
+import {
+  resolveChannelCapabilities,
+  type ChannelCapabilities,
+} from "@brewva/brewva-runtime/channels";
 import {
   buildTelegramInboundDedupeKey,
   projectTelegramUpdateToTurn,

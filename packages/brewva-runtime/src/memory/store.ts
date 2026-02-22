@@ -270,6 +270,41 @@ export class MemoryStore {
     return filtered.toSorted((left, right) => right.updatedAt - left.updatedAt);
   }
 
+  importUnitSnapshot(unit: MemoryUnit): { applied: boolean; unit?: MemoryUnit } {
+    this.ensureUnitsLoaded();
+    if (
+      !unit ||
+      typeof unit.id !== "string" ||
+      typeof unit.sessionId !== "string" ||
+      typeof unit.fingerprint !== "string" ||
+      typeof unit.topic !== "string" ||
+      typeof unit.statement !== "string" ||
+      typeof unit.updatedAt !== "number" ||
+      !Number.isFinite(unit.updatedAt)
+    ) {
+      return { applied: false };
+    }
+
+    const fingerprintKey = `${unit.sessionId}:${unit.fingerprint}`;
+    const existingIdByFingerprint = this.unitIdBySessionFingerprint.get(fingerprintKey);
+    if (existingIdByFingerprint && existingIdByFingerprint !== unit.id) {
+      this.unitsById.delete(existingIdByFingerprint);
+    }
+
+    const existingById = this.unitsById.get(unit.id);
+    if (existingById) {
+      this.unitIdBySessionFingerprint.delete(
+        `${existingById.sessionId}:${existingById.fingerprint}`,
+      );
+    }
+
+    this.unitsById.set(unit.id, unit);
+    this.unitIdBySessionFingerprint.set(fingerprintKey, unit.id);
+    this.unitWriteAt = Math.max(this.unitWriteAt, unit.updatedAt);
+    this.appendJsonLine(this.unitsPath, unit);
+    return { applied: true, unit };
+  }
+
   upsertCrystal(input: Omit<MemoryCrystal, "id" | "createdAt" | "updatedAt">): MemoryCrystal {
     this.ensureCrystalsLoaded();
     const timestamp = Date.now();
@@ -325,6 +360,38 @@ export class MemoryStore {
     return filtered.toSorted((left, right) => right.updatedAt - left.updatedAt);
   }
 
+  importCrystalSnapshot(crystal: MemoryCrystal): { applied: boolean; crystal?: MemoryCrystal } {
+    this.ensureCrystalsLoaded();
+    if (
+      !crystal ||
+      typeof crystal.id !== "string" ||
+      typeof crystal.sessionId !== "string" ||
+      typeof crystal.topic !== "string" ||
+      typeof crystal.updatedAt !== "number" ||
+      !Number.isFinite(crystal.updatedAt)
+    ) {
+      return { applied: false };
+    }
+
+    const topicKey = `${crystal.sessionId}:${normalizeText(crystal.topic)}`;
+    const existingIdByTopic = this.crystalIdBySessionTopic.get(topicKey);
+    if (existingIdByTopic && existingIdByTopic !== crystal.id) {
+      this.crystalsById.delete(existingIdByTopic);
+    }
+
+    const existingById = this.crystalsById.get(crystal.id);
+    if (existingById) {
+      this.crystalIdBySessionTopic.delete(
+        `${existingById.sessionId}:${normalizeText(existingById.topic)}`,
+      );
+    }
+
+    this.crystalsById.set(crystal.id, crystal);
+    this.crystalIdBySessionTopic.set(topicKey, crystal.id);
+    this.appendJsonLine(this.crystalsPath, crystal);
+    return { applied: true, crystal };
+  }
+
   addInsight(input: Omit<MemoryInsight, "id" | "createdAt" | "updatedAt">): MemoryInsight {
     this.ensureInsightsLoaded();
     const timestamp = Date.now();
@@ -348,6 +415,22 @@ export class MemoryStore {
     return filtered.toSorted((left, right) => right.updatedAt - left.updatedAt);
   }
 
+  importInsightSnapshot(insight: MemoryInsight): { applied: boolean; insight?: MemoryInsight } {
+    this.ensureInsightsLoaded();
+    if (
+      !insight ||
+      typeof insight.id !== "string" ||
+      typeof insight.sessionId !== "string" ||
+      typeof insight.updatedAt !== "number" ||
+      !Number.isFinite(insight.updatedAt)
+    ) {
+      return { applied: false };
+    }
+    this.insightsById.set(insight.id, insight);
+    this.appendJsonLine(this.insightsPath, insight);
+    return { applied: true, insight };
+  }
+
   addEvolvesEdge(
     input: Omit<MemoryEvolvesEdge, "id" | "createdAt" | "updatedAt">,
   ): MemoryEvolvesEdge {
@@ -369,6 +452,25 @@ export class MemoryStore {
     const edges = [...this.evolvesById.values()];
     const filtered = sessionId ? edges.filter((edge) => edge.sessionId === sessionId) : edges;
     return filtered.toSorted((left, right) => right.updatedAt - left.updatedAt);
+  }
+
+  importEvolvesEdgeSnapshot(edge: MemoryEvolvesEdge): {
+    applied: boolean;
+    edge?: MemoryEvolvesEdge;
+  } {
+    this.ensureEvolvesLoaded();
+    if (
+      !edge ||
+      typeof edge.id !== "string" ||
+      typeof edge.sessionId !== "string" ||
+      typeof edge.updatedAt !== "number" ||
+      !Number.isFinite(edge.updatedAt)
+    ) {
+      return { applied: false };
+    }
+    this.evolvesById.set(edge.id, edge);
+    this.appendJsonLine(this.evolvesPath, edge);
+    return { applied: true, edge };
   }
 
   setEvolvesEdgeStatus(
@@ -457,6 +559,19 @@ export class MemoryStore {
     });
   }
 
+  importWorkingSnapshot(snapshot: WorkingMemorySnapshot, maxChars: number): void {
+    if (
+      !snapshot ||
+      typeof snapshot.sessionId !== "string" ||
+      typeof snapshot.generatedAt !== "number" ||
+      !Number.isFinite(snapshot.generatedAt) ||
+      typeof snapshot.content !== "string"
+    ) {
+      return;
+    }
+    this.publishWorking(snapshot, maxChars);
+  }
+
   getWorkingSnapshot(sessionId: string): WorkingMemorySnapshot | undefined {
     return this.workingBySession.get(sessionId);
   }
@@ -470,10 +585,10 @@ export class MemoryStore {
     }
   }
 
-  dismissInsight(insightId: string): boolean {
+  dismissInsight(insightId: string): MemoryInsight | undefined {
     this.ensureInsightsLoaded();
     const insight = this.insightsById.get(insightId);
-    if (!insight || insight.status !== "open") return false;
+    if (!insight || insight.status !== "open") return undefined;
     const updatedAt = nextUpdatedAt(insight.updatedAt);
     const updated: MemoryInsight = {
       ...insight,
@@ -482,7 +597,7 @@ export class MemoryStore {
     };
     this.insightsById.set(updated.id, updated);
     this.appendJsonLine(this.insightsPath, updated);
-    return true;
+    return updated;
   }
 
   withRefreshLock<T>(fn: () => T): { acquired: true; value: T } | { acquired: false } {

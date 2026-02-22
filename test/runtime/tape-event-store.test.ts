@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -51,5 +51,71 @@ describe("BrewvaEventStore tape helpers", () => {
     expect(checkpoints).toHaveLength(1);
     expect(anchors[0]?.type).toBe("anchor");
     expect(checkpoints[0]?.type).toBe("checkpoint");
+  });
+
+  test("keeps incremental cache synchronized for external append and file truncation", () => {
+    const workspace = createWorkspace("tape-store-incremental");
+    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    const sessionId = "tape-store-incremental-1";
+    const first = store.append({
+      sessionId,
+      type: "session_start",
+      payload: { source: "test" },
+      timestamp: 100,
+    });
+    expect(first).toBeDefined();
+    expect(store.list(sessionId)).toHaveLength(1);
+
+    const eventsDir = DEFAULT_BREWVA_CONFIG.infrastructure.events.dir;
+    const eventFilePath = join(workspace, eventsDir, `${sessionId}.jsonl`);
+    const externalRow = {
+      id: "evt_external_1",
+      sessionId,
+      type: "tool_call",
+      timestamp: 101,
+      payload: { toolName: "look_at" },
+    };
+    writeFileSync(eventFilePath, `\n${JSON.stringify(externalRow)}`, { flag: "a" });
+
+    const afterExternalAppend = store.list(sessionId);
+    expect(afterExternalAppend).toHaveLength(2);
+    expect(afterExternalAppend[1]?.id).toBe("evt_external_1");
+
+    const rewrittenRow = {
+      id: "evt_rewritten_1",
+      sessionId,
+      type: "session_restart",
+      timestamp: 102,
+      payload: { reason: "manual-truncate" },
+    };
+    writeFileSync(eventFilePath, JSON.stringify(rewrittenRow), "utf8");
+
+    const afterTruncate = store.list(sessionId);
+    expect(afterTruncate).toHaveLength(1);
+    expect(afterTruncate[0]?.id).toBe("evt_rewritten_1");
+  });
+
+  test("generates unique event ids for high-frequency appends", () => {
+    const workspace = createWorkspace("tape-store-id");
+    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    const sessionId = "tape-store-id-1";
+
+    const ids = new Set<string>();
+    for (let index = 0; index < 200; index += 1) {
+      const row = store.append({
+        sessionId,
+        type: "test_event",
+        payload: { index },
+        timestamp: 1735689600000,
+      });
+      expect(row).toBeDefined();
+      if (!row) continue;
+      ids.add(row.id);
+    }
+
+    expect(ids.size).toBe(200);
+    for (const id of ids.values()) {
+      expect(id.startsWith("evt_1735689600000_")).toBe(true);
+    }
   });
 });

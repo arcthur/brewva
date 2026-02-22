@@ -1,12 +1,12 @@
 import { createRuntimeTelegramChannelBridge } from "@brewva/brewva-extensions";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
-  BrewvaRuntime,
   type ChannelTurnBridge,
   buildRawConversationKey,
   normalizeChannelId,
   type TurnEnvelope,
   type TurnPart,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/channels";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import { createBrewvaSession, type BrewvaSessionResult } from "./session.js";
 

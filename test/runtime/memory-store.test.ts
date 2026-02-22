@@ -161,8 +161,8 @@ describe("memory store", () => {
       relatedUnitIds: ["u1", "u2"],
     });
 
-    expect(store.dismissInsight(insight.id)).toBe(true);
-    expect(store.dismissInsight(insight.id)).toBe(false);
+    expect(store.dismissInsight(insight.id)?.status).toBe("dismissed");
+    expect(store.dismissInsight(insight.id)).toBeUndefined();
 
     const latest = store
       .listInsights("memory-store-session")

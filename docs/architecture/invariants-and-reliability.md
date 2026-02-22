@@ -28,7 +28,8 @@ Relevant implementation:
 ## 3) Recovery Consistency Invariant
 
 - Runtime recovery state must be derivable from persisted event tape only
-  (checkpoint + delta replay).
+  (`checkpoint + delta` replay for task/truth, plus event-fold hydration for
+  runtime session counters/budgets/cost).
 - Process restart must not require opaque runtime snapshot blobs.
 
 Relevant implementation:
@@ -89,8 +90,10 @@ Relevant implementation:
 - Memory must remain projection-derived and auditable:
   units/crystals/insights/evolves are derived from event tape semantics, not an
   independent mutable source of truth.
+- Memory projection events (`memory_*`) should carry sufficient snapshot fields
+  to rebuild projection artifacts when `.orchestrator/memory/*` is missing.
 - Working-memory injection must be reproducible from persisted projection
-  artifacts and bounded by context-budget policy.
+  artifacts (or tape-driven rebuild outputs) and bounded by context-budget policy.
 - EVOLVES side effects must be explicit and review-gated:
   proposed edges do not mutate unit status until accepted review.
 

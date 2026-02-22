@@ -61,6 +61,8 @@ Memory behavior in this profile is split:
 - Projection ingest still runs on `recordEvent()` (memory JSONL state can advance).
 - Auto-injection (`brewva.working-memory` / `brewva.memory-recall`) and `agent_end`
   refresh hooks are extension-only and therefore disabled.
+- On first `onTurnStart()` after restart, runtime hydration can rebuild missing
+  memory projections from tape (`memory_*` snapshot payloads + semantic fallback).
 
 ## Persistence Data Flow
 
@@ -108,7 +110,9 @@ flowchart TD
   D --> E["next startup"]
   E --> F["read event tape"]
   F --> G["TurnReplayEngine fold (checkpoint + delta)"]
-  G --> H["resume with reconstructed task/truth state"]
+  G --> H["session hydration from tape events (skill/budget/cost/compaction state)"]
+  H --> I["optional memory projection rebuild when .orchestrator/memory is missing"]
+  I --> J["resume with reconstructed runtime state"]
 ```
 
 ## Replay and Rollback Flow

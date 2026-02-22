@@ -446,6 +446,7 @@ Payload fields:
 - `unitType`: `fact | decision | constraint | preference | pattern | hypothesis | learning | risk`.
 - `created`: whether this was a first insert vs merge update.
 - `confidence`: normalized unit confidence (`0..1`).
+- `unit`: full unit snapshot row at write time (for tape-driven projection rebuild).
 
 Example payload:
 
@@ -470,6 +471,7 @@ Payload fields:
 - `supersededByUnitId`: the newer unit id that superseded this one (when available).
 - `edgeId`: evolves edge id that triggered the change (when available).
 - `relation`: evolves relation label (`replaces | enriches | confirms | challenges`).
+- `unit`: full superseded unit snapshot after status transition.
 
 Example payload:
 
@@ -493,6 +495,7 @@ Payload fields:
 - `topic`: crystal topic.
 - `unitCount`: number of backing units.
 - `confidence`: aggregate confidence (`0..1`).
+- `crystal`: full crystal snapshot row at write time.
 
 Example payload:
 
@@ -516,6 +519,7 @@ Payload fields:
 - `crystals`: number of source crystals used.
 - `insights`: number of included insights.
 - `chars`: final published text length.
+- `working`: full working-memory snapshot payload.
 
 Example payload:
 
@@ -541,6 +545,8 @@ Payload fields:
 - `relatedUnitIds`: associated unit ids (when available).
 - `edgeId`: evolves edge id (only for `evolves_pending` when available).
 - `relation`: evolves relation label (`replaces | enriches | confirms | challenges`) for evolves insight.
+- `insight`: full insight snapshot row at write time.
+- `edge`: evolves edge snapshot when emitted from evolves proposal path.
 
 Kind-specific field matrix:
 
@@ -579,6 +585,7 @@ Emitted when an open memory insight is explicitly dismissed.
 Payload fields:
 
 - `insightId`: dismissed insight id.
+- `insight`: full insight snapshot row after dismissal.
 
 Example payload:
 
@@ -599,6 +606,7 @@ Payload fields:
 - `relation`: evolves relation label (`replaces | enriches | confirms | challenges`).
 - `sourceUnitId`: source (newer) unit id.
 - `targetUnitId`: target (older) unit id.
+- `edge`: full evolves edge snapshot row after review decision.
 
 Example payload:
 

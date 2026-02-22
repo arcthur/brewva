@@ -60,6 +60,23 @@ describe("tool contract policy modes", () => {
     expect(runtime.queryEvents(sessionId, { type: "tool_contract_warning" })).toHaveLength(2);
   });
 
+  test("warn mode keeps tool-contract warning dedupe after restart", () => {
+    const workspace = createWorkspace("tool-contract-warn-restart");
+    const options = { security: { allowedToolsMode: "warn" as const } };
+    const sessionId = "tool-contract-warn-restart-1";
+
+    const runtime = createRuntime(workspace, options);
+    runtime.onTurnStart(sessionId, 1);
+    expect(runtime.activateSkill(sessionId, "patching").ok).toBe(true);
+    expect(runtime.checkToolAccess(sessionId, "look_at").allowed).toBe(true);
+    expect(runtime.queryEvents(sessionId, { type: "tool_contract_warning" })).toHaveLength(1);
+
+    const reloaded = createRuntime(workspace, options);
+    reloaded.onTurnStart(sessionId, 1);
+    expect(reloaded.checkToolAccess(sessionId, "look_at").allowed).toBe(true);
+    expect(reloaded.queryEvents(sessionId, { type: "tool_contract_warning" })).toHaveLength(1);
+  });
+
   test("enforce mode blocks disallowed tools but allows reserved lifecycle tools", () => {
     const workspace = createWorkspace("tool-contract-enforce");
     const runtime = createRuntime(workspace, { security: { allowedToolsMode: "enforce" } });
@@ -161,6 +178,27 @@ describe("skill maxToolCalls contract modes", () => {
 
     expect(runtime.checkToolAccess(sessionId, "grep").allowed).toBe(true);
     expect(runtime.queryEvents(sessionId, { type: "skill_budget_warning" })).toHaveLength(1);
+  });
+
+  test("warn mode keeps tool-call budget warning dedupe after restart", () => {
+    const workspace = createWorkspace("skill-max-tool-calls-warn-restart");
+    const options = {
+      security: { skillMaxToolCallsMode: "warn" as const, allowedToolsMode: "off" as const },
+      skillOverrides: { patching: { budget: { maxToolCalls: 1 } } },
+    };
+    const sessionId = "skill-max-tool-calls-warn-restart-1";
+
+    const runtime = createRuntime(workspace, options);
+    runtime.onTurnStart(sessionId, 1);
+    expect(runtime.activateSkill(sessionId, "patching").ok).toBe(true);
+    runtime.markToolCall(sessionId, "read");
+    expect(runtime.checkToolAccess(sessionId, "grep").allowed).toBe(true);
+    expect(runtime.queryEvents(sessionId, { type: "skill_budget_warning" })).toHaveLength(1);
+
+    const reloaded = createRuntime(workspace, options);
+    reloaded.onTurnStart(sessionId, 1);
+    expect(reloaded.checkToolAccess(sessionId, "grep").allowed).toBe(true);
+    expect(reloaded.queryEvents(sessionId, { type: "skill_budget_warning" })).toHaveLength(1);
   });
 
   test("enforce mode blocks non-lifecycle tools after tool-call budget is exceeded", () => {

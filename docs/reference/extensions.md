@@ -31,3 +31,9 @@ Extension factory entrypoint: `packages/brewva-extensions/src/index.ts`.
 - The contract separates state tape actions (`tape_handoff` / `tape_info` / `tape_search`) from message-buffer compaction (`session_compact`).
 - Runtime gate remains fail-closed on critical context pressure when recent compaction is missing.
 - `session_compact` lifecycle bookkeeping is handled only in `registerContextTransform` to avoid duplicate event paths.
+
+## Channel Bridge Notes
+
+- Channel turn bridge helpers (`createRuntimeChannelTurnBridge`,
+  `createRuntimeTelegramChannelBridge`) consume channel contracts from
+  `@brewva/brewva-runtime/channels` rather than runtime root exports.

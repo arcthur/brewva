@@ -59,6 +59,14 @@ export class SkillLifecycleService {
 
     this.sessionState.activeSkillsBySession.set(sessionId, name);
     this.sessionState.toolCallsBySession.set(sessionId, 0);
+    this.recordEvent({
+      sessionId,
+      type: "skill_activated",
+      turn: this.getCurrentTurn(sessionId),
+      payload: {
+        skillName: name,
+      },
+    });
     return { ok: true, skill };
   }
 

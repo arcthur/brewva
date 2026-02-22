@@ -49,6 +49,8 @@ flowchart TD
   - Tool-side scan telemetry (`tool_parallel_read`) and runtime APIs.
 - **Runtime core (`@brewva/brewva-runtime`)**
   - Public facade: `BrewvaRuntime` (`packages/brewva-runtime/src/runtime.ts`) stays as external API entry.
+  - Channel contracts are exposed via dedicated subpath entry `@brewva/brewva-runtime/channels`
+    (implemented by `packages/brewva-runtime/src/channels.ts`) to keep root runtime exports focused.
   - Internal logic is split into domain services (`packages/brewva-runtime/src/services/*`) and wired by constructor injection.
   - Session-local ephemeral maps are centralized in `RuntimeSessionStateStore` (`packages/brewva-runtime/src/services/session-state.ts`).
   - Scheduler boundary uses a narrow runtime port (`SchedulerRuntimePort`) instead of direct runtime coupling.
@@ -120,8 +122,9 @@ Memory is implemented as a derived projection layer over the event tape:
 5. Working snapshot is published to `.orchestrator/memory/working.md` and then
    injected as `brewva.working-memory`; retrieval may emit `brewva.memory-recall`.
 
-This path is deterministic, auditable, and restart-safe because each projection
-is persisted and can be rehydrated independently of process-local caches.
+This path is deterministic, auditable, and restart-safe: projection artifacts are
+persisted on disk and can also be rebuilt from tape-backed `memory_*` snapshot
+events when projection files are missing.
 
 Related docs:
 

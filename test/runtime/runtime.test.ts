@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -7,6 +7,7 @@ import {
   ParallelBudgetManager,
   BrewvaRuntime,
   TAPE_CHECKPOINT_EVENT_TYPE,
+  buildTruthFactUpsertedEvent,
   tightenContract,
 } from "@brewva/brewva-runtime";
 import type { SkillContract } from "@brewva/brewva-runtime";
@@ -272,6 +273,19 @@ describe("skill output registry", () => {
     };
     expect(payload.skillName).toBe("exploration");
     expect(payload.outputKeys).toEqual(["architecture_map", "key_modules", "unknowns"]);
+  });
+
+  test("emits skill_activated event when a skill is loaded", () => {
+    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const sessionId = `skill-activated-event-${Date.now()}`;
+    runtime.activateSkill(sessionId, "exploration");
+
+    const event = runtime.queryEvents(sessionId, { type: "skill_activated", last: 1 })[0];
+    expect(event).toBeDefined();
+    const payload = (event?.payload ?? {}) as {
+      skillName?: string;
+    };
+    expect(payload.skillName).toBe("exploration");
   });
 
   test("buildContextInjection includes working memory after semantic events", () => {
@@ -707,6 +721,52 @@ describe("session state cleanup", () => {
     expect(updated.items[0]?.text).toBe("item-1");
     expect(turnReplay.hasSession(sessionId)).toBe(true);
   });
+
+  test("keeps replay cache for non-folding events and invalidates for truth/task/checkpoint events", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-replay-filter-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "replay-filter-1";
+
+    runtime.setTaskSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Replay cache should ignore non-folding events",
+    });
+    runtime.getTaskState(sessionId);
+
+    const turnReplay = (runtime as any).turnReplay as {
+      hasSession: (session: string) => boolean;
+    };
+    expect(turnReplay.hasSession(sessionId)).toBe(true);
+
+    runtime.recordEvent({
+      sessionId,
+      type: "tool_call",
+      payload: {
+        toolCallId: "tc-1",
+        toolName: "look_at",
+      },
+    });
+    expect(turnReplay.hasSession(sessionId)).toBe(true);
+
+    runtime.recordEvent({
+      sessionId,
+      type: "truth_event",
+      payload: buildTruthFactUpsertedEvent({
+        id: "truth-1",
+        kind: "test",
+        status: "active",
+        severity: "warn",
+        summary: "truth update",
+        evidenceIds: ["led-1"],
+        firstSeenAt: Date.now(),
+        lastSeenAt: Date.now(),
+      }) as unknown as Record<string, unknown>,
+    });
+    expect(turnReplay.hasSession(sessionId)).toBe(false);
+
+    runtime.getTruthState(sessionId);
+    expect(turnReplay.hasSession(sessionId)).toBe(true);
+  });
 });
 
 describe("tape checkpoint automation", () => {
@@ -759,6 +819,321 @@ describe("tape checkpoint automation", () => {
     expect(taskState.items.map((item) => item.text)).toEqual(["item-1", "item-2", "item-3"]);
     expect(truthState.facts.some((fact) => fact.id === "truth-1")).toBe(true);
     expect(truthState.facts.some((fact) => fact.id === "truth-2")).toBe(true);
+  });
+
+  test("rehydrates active skill and tool-call budget state from tape after restart", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-budget-rehydrate-"));
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.tape.checkpointIntervalEntries = 0;
+    config.security.skillMaxToolCallsMode = "enforce";
+    config.skills.roots = [join(repoRoot(), "skills")];
+    const sessionId = "budget-rehydrate-1";
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    runtime.onTurnStart(sessionId, 1);
+    const activated = runtime.activateSkill(sessionId, "exploration");
+    expect(activated.ok).toBe(true);
+    const maxToolCalls = activated.skill?.contract.budget.maxToolCalls ?? 0;
+    const consumed = Math.max(1, maxToolCalls);
+    for (let index = 0; index < consumed; index += 1) {
+      runtime.markToolCall(sessionId, "look_at");
+    }
+    const blockedBeforeRestart = runtime.checkToolAccess(sessionId, "look_at");
+    expect(blockedBeforeRestart.allowed).toBe(false);
+
+    const reloaded = new BrewvaRuntime({ cwd: workspace, config });
+    reloaded.onTurnStart(sessionId, 1);
+    const blockedAfterRestart = reloaded.checkToolAccess(sessionId, "look_at");
+    expect(blockedAfterRestart.allowed).toBe(false);
+    expect(blockedAfterRestart.reason?.includes("maxToolCalls")).toBe(true);
+  });
+
+  test("rehydrates session cost budget state from tape after restart", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-cost-rehydrate-"));
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.infrastructure.costTracking.actionOnExceed = "block_tools";
+    config.infrastructure.costTracking.maxCostUsdPerSession = 0.001;
+    config.infrastructure.costTracking.maxCostUsdPerSkill = 0;
+    const sessionId = "cost-rehydrate-1";
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    runtime.onTurnStart(sessionId, 1);
+    runtime.recordAssistantUsage({
+      sessionId,
+      model: "test/model",
+      inputTokens: 120,
+      outputTokens: 30,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 150,
+      costUsd: 0.002,
+    });
+
+    const blockedBeforeRestart = runtime.checkToolAccess(sessionId, "look_at");
+    expect(blockedBeforeRestart.allowed).toBe(false);
+
+    const reloaded = new BrewvaRuntime({ cwd: workspace, config });
+    reloaded.onTurnStart(sessionId, 1);
+    const blockedAfterRestart = reloaded.checkToolAccess(sessionId, "look_at");
+    expect(blockedAfterRestart.allowed).toBe(false);
+    expect(blockedAfterRestart.reason?.includes("Session cost exceeded")).toBe(true);
+  });
+
+  test("rehydrates ledger compaction cooldown turn from tape after restart", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-ledger-cooldown-rehydrate-"));
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.ledger.checkpointEveryTurns = 1;
+    const sessionId = "ledger-cooldown-rehydrate-1";
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    runtime.onTurnStart(sessionId, 1);
+    runtime.recordToolResult({
+      sessionId,
+      toolName: "exec",
+      args: { command: "echo first-a" },
+      outputText: "ok",
+      success: true,
+    });
+    runtime.recordToolResult({
+      sessionId,
+      toolName: "exec",
+      args: { command: "echo first-b" },
+      outputText: "ok",
+      success: true,
+    });
+    runtime.recordToolResult({
+      sessionId,
+      toolName: "exec",
+      args: { command: "echo first-c" },
+      outputText: "ok",
+      success: true,
+    });
+    expect(runtime.queryEvents(sessionId, { type: "ledger_compacted" })).toHaveLength(1);
+
+    const reloaded = new BrewvaRuntime({ cwd: workspace, config });
+    reloaded.onTurnStart(sessionId, 1);
+    reloaded.recordToolResult({
+      sessionId,
+      toolName: "exec",
+      args: { command: "echo second" },
+      outputText: "ok",
+      success: true,
+    });
+    expect(reloaded.queryEvents(sessionId, { type: "ledger_compacted" })).toHaveLength(1);
+  });
+
+  test("rebuilds memory projection from tape after memory files are removed", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-memory-rebuild-"));
+    const sessionId = "memory-rebuild-1";
+
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    runtime.onTurnStart(sessionId, 1);
+    runtime.setTaskSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Recover memory projection from tape",
+      constraints: ["rebuild projection when files are missing"],
+    });
+    runtime.recordTaskBlocker(sessionId, {
+      message: "projection rebuild validation",
+      source: "test",
+    });
+    const before = runtime.buildContextInjection(sessionId, "continue");
+    expect(before.text.includes("[WorkingMemory]")).toBe(true);
+
+    const memoryDir = join(workspace, ".orchestrator/memory");
+    rmSync(join(memoryDir, "units.jsonl"), { force: true });
+    rmSync(join(memoryDir, "crystals.jsonl"), { force: true });
+    rmSync(join(memoryDir, "insights.jsonl"), { force: true });
+    rmSync(join(memoryDir, "evolves.jsonl"), { force: true });
+    rmSync(join(memoryDir, "state.json"), { force: true });
+    rmSync(join(memoryDir, "working.md"), { force: true });
+
+    const reloaded = new BrewvaRuntime({ cwd: workspace });
+    reloaded.onTurnStart(sessionId, 2);
+    const after = reloaded.buildContextInjection(sessionId, "continue");
+    expect(after.text.includes("[WorkingMemory]")).toBe(true);
+    expect(after.text.includes("Recover memory projection from tape")).toBe(true);
+
+    const unitsPath = join(memoryDir, "units.jsonl");
+    expect(existsSync(unitsPath)).toBe(true);
+    const lines = readFileSync(unitsPath, "utf8")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    expect(lines.length).toBeGreaterThan(0);
+  });
+
+  test("rebuild replays memory review side-effects from tape snapshots", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-memory-review-rebuild-"));
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.memory.evolvesMode = "shadow";
+    const sessionId = "memory-review-rebuild-1";
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    runtime.onTurnStart(sessionId, 1);
+    runtime.setTaskSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Use sqlite for current task.",
+    });
+    runtime.setTaskSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Use postgres instead of sqlite for current task.",
+    });
+    runtime.buildContextInjection(sessionId, "continue implementation");
+
+    const evolvesPath = join(workspace, ".orchestrator/memory/evolves.jsonl");
+    const evolvesRows = readFileSync(evolvesPath, "utf8")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            id: string;
+            status: string;
+            relation: string;
+            sourceUnitId: string;
+            targetUnitId: string;
+            updatedAt: number;
+          },
+      );
+    const evolvesLatest = new Map<
+      string,
+      {
+        id: string;
+        status: string;
+        relation: string;
+        sourceUnitId: string;
+        targetUnitId: string;
+        updatedAt: number;
+      }
+    >();
+    for (const row of evolvesRows) {
+      const current = evolvesLatest.get(row.id);
+      if (!current || row.updatedAt >= current.updatedAt) {
+        evolvesLatest.set(row.id, row);
+      }
+    }
+    const proposed = [...evolvesLatest.values()].find((edge) => edge.status === "proposed");
+    expect(proposed).toBeDefined();
+    if (!proposed) return;
+
+    const accepted = runtime.reviewMemoryEvolvesEdge(sessionId, {
+      edgeId: proposed.id,
+      decision: "accept",
+    });
+    expect(accepted).toEqual({ ok: true });
+
+    const insightsPath = join(workspace, ".orchestrator/memory/insights.jsonl");
+    const insightRowsBefore = readFileSync(insightsPath, "utf8")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            id: string;
+            kind?: string;
+            status: string;
+            edgeId?: string | null;
+            updatedAt: number;
+          },
+      );
+    const insightsLatestBefore = new Map<
+      string,
+      { id: string; kind?: string; status: string; edgeId?: string | null; updatedAt: number }
+    >();
+    for (const row of insightRowsBefore) {
+      const current = insightsLatestBefore.get(row.id);
+      if (!current || row.updatedAt >= current.updatedAt) {
+        insightsLatestBefore.set(row.id, row);
+      }
+    }
+    const evolvesInsightBefore = [...insightsLatestBefore.values()].find(
+      (row) => row.kind === "evolves_pending" && row.edgeId === proposed.id,
+    );
+    expect(evolvesInsightBefore).toBeDefined();
+    expect(evolvesInsightBefore?.status).toBe("dismissed");
+    if (!evolvesInsightBefore) return;
+
+    const memoryDir = join(workspace, ".orchestrator/memory");
+    rmSync(join(memoryDir, "units.jsonl"), { force: true });
+    rmSync(join(memoryDir, "crystals.jsonl"), { force: true });
+    rmSync(join(memoryDir, "insights.jsonl"), { force: true });
+    rmSync(join(memoryDir, "evolves.jsonl"), { force: true });
+    rmSync(join(memoryDir, "state.json"), { force: true });
+    rmSync(join(memoryDir, "working.md"), { force: true });
+
+    const reloaded = new BrewvaRuntime({ cwd: workspace, config });
+    reloaded.onTurnStart(sessionId, 2);
+    reloaded.buildContextInjection(sessionId, "continue implementation");
+
+    const evolvesRowsAfter = readFileSync(evolvesPath, "utf8")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            id: string;
+            status: string;
+            sourceUnitId: string;
+            targetUnitId: string;
+            updatedAt: number;
+          },
+      );
+    const evolvesLatestAfter = new Map<
+      string,
+      { id: string; status: string; sourceUnitId: string; targetUnitId: string; updatedAt: number }
+    >();
+    for (const row of evolvesRowsAfter) {
+      const current = evolvesLatestAfter.get(row.id);
+      if (!current || row.updatedAt >= current.updatedAt) {
+        evolvesLatestAfter.set(row.id, row);
+      }
+    }
+    expect(evolvesLatestAfter.get(proposed.id)?.status).toBe("accepted");
+
+    const unitsPath = join(workspace, ".orchestrator/memory/units.jsonl");
+    const unitRowsAfter = readFileSync(unitsPath, "utf8")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((line) => JSON.parse(line) as { id: string; status: string; updatedAt: number });
+    const unitsLatestAfter = new Map<string, { id: string; status: string; updatedAt: number }>();
+    for (const row of unitRowsAfter) {
+      const current = unitsLatestAfter.get(row.id);
+      if (!current || row.updatedAt >= current.updatedAt) {
+        unitsLatestAfter.set(row.id, row);
+      }
+    }
+    expect(unitsLatestAfter.get(proposed.targetUnitId)?.status).toBe("superseded");
+
+    const insightRowsAfter = readFileSync(insightsPath, "utf8")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            id: string;
+            kind?: string;
+            status: string;
+            edgeId?: string | null;
+            updatedAt: number;
+          },
+      );
+    const insightsLatestAfter = new Map<
+      string,
+      { id: string; kind?: string; status: string; edgeId?: string | null; updatedAt: number }
+    >();
+    for (const row of insightRowsAfter) {
+      const current = insightsLatestAfter.get(row.id);
+      if (!current || row.updatedAt >= current.updatedAt) {
+        insightsLatestAfter.set(row.id, row);
+      }
+    }
+    expect(insightsLatestAfter.get(evolvesInsightBefore.id)?.status).toBe("dismissed");
   });
 });
 

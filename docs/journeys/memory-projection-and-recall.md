@@ -165,7 +165,10 @@ See `docs/reference/artifacts-and-paths.md` for the canonical list.
 - Trace is the tape: memory never mutates or backfills `.orchestrator/events/`.
 - Projections are append-only JSONL with compaction: replay is “last row wins”.
 - `working.md` is a projection output, not a source of truth.
-- `evolves.jsonl` is the only source of truth for evolves edges (no duplicated edge state on units).
+- Projection events include snapshot payloads, enabling tape-driven rebuild when
+  projection files are missing.
+- `evolves.jsonl` is the local projection authority for evolves edges during
+  normal operation (no duplicated edge state on units).
 - Refresh publication uses an advisory lock file (`.refresh.lock`) to reduce
   concurrent-publish race windows in multi-session edge cases.
 
@@ -190,6 +193,16 @@ Checklist:
 4. If an evolves edge was accepted, ensure the older unit is `superseded` and no longer appears in:
    - `[WorkingMemory]` Decisions section
    - `[MemoryRecall]` hits
+
+### Memory projection files were removed
+
+Checklist:
+
+1. Start a new turn (`onTurnStart`) for the same session id.
+2. Confirm tape contains historical `memory_*` events for the session.
+3. Check `.orchestrator/memory/*.jsonl` and `working.md` are recreated.
+4. If no `memory_*` snapshots exist (older tapes), semantic replay still rebuilds
+   core units from task/truth/skill events.
 
 ### EVOLVES pending keeps reappearing
 

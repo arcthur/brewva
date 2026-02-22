@@ -44,6 +44,7 @@ flowchart TD
 
 - CLI channel orchestration: `packages/brewva-cli/src/channel-mode.ts`
 - Runtime channel bridge contracts: `packages/brewva-runtime/src/channels/turn-bridge.ts`
+- Public import path for channel contracts: `@brewva/brewva-runtime/channels`
 - Extension bridge telemetry wrapper: `packages/brewva-extensions/src/channel-turn-bridge.ts`
 - Telegram adapter/projector/transport:
   - `packages/brewva-channels-telegram/src/adapter.ts`

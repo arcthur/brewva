@@ -4,11 +4,22 @@ import { compileCrystalDrafts } from "./crystal.js";
 import { extractMemoryFromEvent } from "./extractor.js";
 import { searchMemory, type MemoryRetrievalWeights } from "./retrieval.js";
 import { MemoryStore } from "./store.js";
-import type { MemoryEvolvesEdge, MemorySearchResult, WorkingMemorySnapshot } from "./types.js";
+import type {
+  MemoryCrystal,
+  MemoryEvolvesEdge,
+  MemoryInsight,
+  MemorySearchResult,
+  MemoryUnit,
+  WorkingMemorySnapshot,
+} from "./types.js";
 import { buildWorkingMemorySnapshot } from "./working-memory.js";
 
 function toDayKey(date: Date): string {
   return format(date, "yyyy-MM-dd");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object";
 }
 
 function inferEvolvesRelation(input: {
@@ -84,6 +95,15 @@ export interface MemoryEngineOptions {
   }) => void;
 }
 
+export interface MemoryRebuildFromTapeResult {
+  rebuilt: boolean;
+  reason: "disabled" | "already_present" | "no_replayable_events" | "replayed";
+  scannedEvents: number;
+  replayedEvents: number;
+  upsertedUnits: number;
+  resolvedUnits: number;
+}
+
 export class MemoryEngine {
   private readonly enabled: boolean;
   private readonly rootDir: string;
@@ -142,6 +162,7 @@ export class MemoryEngine {
           unitType: result.unit.type,
           created: result.created,
           confidence: result.unit.confidence,
+          unit: result.unit as unknown as Record<string, unknown>,
         },
       });
     }
@@ -196,6 +217,7 @@ export class MemoryEngine {
             topic: crystal.topic,
             unitCount: crystal.unitIds.length,
             confidence: crystal.confidence,
+            crystal: crystal as unknown as Record<string, unknown>,
           },
         });
         return crystal;
@@ -227,6 +249,7 @@ export class MemoryEngine {
           crystals: snapshot.crystalIds.length,
           insights: snapshot.insightIds.length,
           chars: snapshot.content.length,
+          working: snapshot as unknown as Record<string, unknown>,
         },
       });
       return snapshot;
@@ -310,15 +333,18 @@ export class MemoryEngine {
 
   dismissInsight(sessionId: string, insightId: string): boolean {
     if (!this.enabled) return false;
-    const dismissed = this.getStore().dismissInsight(insightId);
-    if (dismissed) {
+    const dismissedInsight = this.getStore().dismissInsight(insightId);
+    if (dismissedInsight) {
       this.recordEvent?.({
         sessionId,
         type: "memory_insight_dismissed",
-        payload: { insightId },
+        payload: {
+          insightId,
+          insight: dismissedInsight as unknown as Record<string, unknown>,
+        },
       });
     }
-    return dismissed;
+    return Boolean(dismissedInsight);
   }
 
   reviewEvolvesEdge(
@@ -342,6 +368,7 @@ export class MemoryEngine {
         relation: result.edge.relation,
         sourceUnitId: result.edge.sourceUnitId,
         targetUnitId: result.edge.targetUnitId,
+        edge: result.edge as unknown as Record<string, unknown>,
       },
     });
 
@@ -373,6 +400,7 @@ export class MemoryEngine {
             supersededByUnitId: result.edge.sourceUnitId,
             edgeId: result.edge.id,
             relation: result.edge.relation,
+            unit: superseded.unit as unknown as Record<string, unknown>,
           },
         });
         for (const insight of store.listInsights(sessionId)) {
@@ -390,6 +418,210 @@ export class MemoryEngine {
 
   clearSessionCache(sessionId: string): void {
     this.store?.clearSessionCache(sessionId);
+  }
+
+  rebuildSessionFromTape(input: {
+    sessionId: string;
+    events: BrewvaEventRecord[];
+    mode?: "missing_only" | "force";
+  }): MemoryRebuildFromTapeResult {
+    if (!this.enabled) {
+      return {
+        rebuilt: false,
+        reason: "disabled",
+        scannedEvents: input.events.length,
+        replayedEvents: 0,
+        upsertedUnits: 0,
+        resolvedUnits: 0,
+      };
+    }
+
+    const store = this.getStore();
+    const mode = input.mode ?? "missing_only";
+    const hasProjectionData =
+      store.listUnits(input.sessionId).length > 0 ||
+      store.listCrystals(input.sessionId).length > 0 ||
+      store.listInsights(input.sessionId).length > 0 ||
+      store.listEvolvesEdges(input.sessionId).length > 0;
+    if (mode === "missing_only" && hasProjectionData) {
+      return {
+        rebuilt: false,
+        reason: "already_present",
+        scannedEvents: input.events.length,
+        replayedEvents: 0,
+        upsertedUnits: 0,
+        resolvedUnits: 0,
+      };
+    }
+
+    const semanticReplay = this.replaySemanticEventsFromTape(input.sessionId, input.events);
+    const projectionReplay = this.replayProjectionEventsFromTape(input.sessionId, input.events);
+
+    const replayedEvents = semanticReplay.replayedEvents + projectionReplay.replayedEvents;
+    const upsertedUnits = semanticReplay.upsertedUnits + projectionReplay.importedUnits;
+    const resolvedUnits = semanticReplay.resolvedUnits;
+    const rebuilt =
+      semanticReplay.rebuilt ||
+      projectionReplay.importedUnits > 0 ||
+      projectionReplay.importedCrystals > 0 ||
+      projectionReplay.importedInsights > 0 ||
+      projectionReplay.importedEdges > 0 ||
+      projectionReplay.importedWorking > 0;
+    return {
+      rebuilt,
+      reason: rebuilt ? "replayed" : "no_replayable_events",
+      scannedEvents: input.events.length,
+      replayedEvents,
+      upsertedUnits,
+      resolvedUnits,
+    };
+  }
+
+  private replaySemanticEventsFromTape(
+    sessionId: string,
+    events: BrewvaEventRecord[],
+  ): {
+    rebuilt: boolean;
+    replayedEvents: number;
+    upsertedUnits: number;
+    resolvedUnits: number;
+  } {
+    const store = this.getStore();
+    let replayedEvents = 0;
+    let upsertedUnits = 0;
+    let resolvedUnits = 0;
+    const dirtyTopics: string[] = [];
+
+    for (const event of events) {
+      if (!event || event.sessionId !== sessionId) continue;
+      if (event.type.startsWith("memory_")) continue;
+      const extraction = extractMemoryFromEvent(event);
+      if (extraction.upserts.length === 0 && extraction.resolves.length === 0) {
+        continue;
+      }
+      replayedEvents += 1;
+
+      for (const candidate of extraction.upserts) {
+        const result = store.upsertUnit(candidate);
+        upsertedUnits += 1;
+        const taskKind =
+          typeof result.unit.metadata?.taskKind === "string" ? result.unit.metadata.taskKind : null;
+        const memorySignal =
+          typeof result.unit.metadata?.memorySignal === "string"
+            ? result.unit.metadata.memorySignal
+            : null;
+        if (taskKind !== "status_set" || memorySignal === "verification") {
+          dirtyTopics.push(result.unit.topic);
+        }
+      }
+
+      for (const directive of extraction.resolves) {
+        const resolvedCount = store.resolveUnits(directive);
+        resolvedUnits += resolvedCount;
+        if (resolvedCount > 0) {
+          dirtyTopics.push(`${directive.sourceType}:${directive.sourceId}`);
+        }
+      }
+    }
+
+    if (dirtyTopics.length > 0) {
+      store.mergeDirtyTopics(dirtyTopics);
+    }
+
+    return {
+      rebuilt: replayedEvents > 0 || upsertedUnits > 0 || resolvedUnits > 0,
+      replayedEvents,
+      upsertedUnits,
+      resolvedUnits,
+    };
+  }
+
+  private replayProjectionEventsFromTape(
+    sessionId: string,
+    events: BrewvaEventRecord[],
+  ): {
+    replayedEvents: number;
+    importedUnits: number;
+    importedCrystals: number;
+    importedInsights: number;
+    importedEdges: number;
+    importedWorking: number;
+  } {
+    const store = this.getStore();
+    let replayedEvents = 0;
+    let importedUnits = 0;
+    let importedCrystals = 0;
+    let importedInsights = 0;
+    let importedEdges = 0;
+    let importedWorking = 0;
+
+    for (const event of events) {
+      if (!event || event.sessionId !== sessionId) continue;
+      if (!event.type.startsWith("memory_")) continue;
+      if (!isRecord(event.payload)) continue;
+      const payload = event.payload;
+
+      if (isRecord(payload.unit)) {
+        const imported = store.importUnitSnapshot(payload.unit as unknown as MemoryUnit);
+        if (imported.applied) {
+          importedUnits += 1;
+          replayedEvents += 1;
+        }
+      }
+
+      if (isRecord(payload.crystal)) {
+        const imported = store.importCrystalSnapshot(payload.crystal as unknown as MemoryCrystal);
+        if (imported.applied) {
+          importedCrystals += 1;
+          replayedEvents += 1;
+        }
+      }
+
+      if (isRecord(payload.insight)) {
+        const imported = store.importInsightSnapshot(payload.insight as unknown as MemoryInsight);
+        if (imported.applied) {
+          importedInsights += 1;
+          replayedEvents += 1;
+        }
+      }
+
+      if (isRecord(payload.edge)) {
+        const imported = store.importEvolvesEdgeSnapshot(
+          payload.edge as unknown as MemoryEvolvesEdge,
+        );
+        if (imported.applied) {
+          importedEdges += 1;
+          replayedEvents += 1;
+        }
+      }
+
+      if (event.type === "memory_working_published" && isRecord(payload.working)) {
+        const generatedAt =
+          typeof payload.generatedAt === "number" && Number.isFinite(payload.generatedAt)
+            ? payload.generatedAt
+            : typeof payload.working.generatedAt === "number" &&
+                Number.isFinite(payload.working.generatedAt)
+              ? payload.working.generatedAt
+              : Date.now();
+        const working = payload.working as unknown as WorkingMemorySnapshot;
+        store.importWorkingSnapshot(working, this.maxWorkingChars);
+        store.markPublished({
+          at: generatedAt,
+          dayKey: toDayKey(new Date(generatedAt)),
+        });
+        importedWorking += 1;
+        replayedEvents += 1;
+      }
+    }
+
+    return {
+      replayedEvents,
+      importedUnits,
+      importedCrystals,
+      importedInsights,
+      importedEdges,
+      importedWorking,
+    };
   }
 
   private collectInsights(sessionId: string, units: ReturnType<MemoryStore["listUnits"]>) {
@@ -429,6 +661,7 @@ export class MemoryEngine {
           kind: insight.kind,
           message: insight.message,
           relatedUnitIds: insight.relatedUnitIds,
+          insight: insight as unknown as Record<string, unknown>,
         },
       });
     }
@@ -502,6 +735,8 @@ export class MemoryEngine {
             relation: edge.relation,
             message: insight.message,
             relatedUnitIds: insight.relatedUnitIds,
+            insight: insight as unknown as Record<string, unknown>,
+            edge: edge as unknown as Record<string, unknown>,
           },
         });
       }

@@ -44,13 +44,14 @@ In the extension-enabled profile, the runtime injects a **Context Contract** wit
 
 ### 2. Tape-First Recovery — State Lives in the Event Stream
 
-Runtime state is never cached in opaque blobs. The **append-only event tape** (JSONL) is the single source of truth:
+Runtime state is never cached in opaque blobs. The **append-only event tape** (JSONL) is the authoritative state log:
 
-- **Every turn**: the `TurnReplayEngine` reads the tape, folds from the nearest checkpoint, and produces a `TurnStateView` — the complete reconstructed state for task, truth, cost, verification, and parallel execution.
-- **After `kill -9`**: the next startup replays the same tape and arrives at the identical state. No snapshot files, no in-memory maps, no dual-source ambiguity.
-- **Checkpoints**: the runtime periodically writes machine-generated checkpoints to accelerate replay. **Anchors** are semantic phase markers created by the agent via `tape_handoff`.
+- **Every turn**: `TurnReplayEngine` folds from tape checkpoints + deltas and reconstructs task/truth state deterministically.
+- **Session hydration on startup**: runtime replays tape events to recover skill activation, tool-call counters, warning dedupe sets, ledger compaction cooldown, and cost-budget state.
+- **Memory recovery**: when `.orchestrator/memory/*` artifacts are missing, memory projections can be rebuilt from tape (`memory_*` projection snapshots, with semantic extraction fallback).
+- **Checkpoints**: machine-generated checkpoints accelerate replay. **Anchors** are semantic phase markers created by the agent via `tape_handoff`.
 
-This means every session is fully auditable, every state transition is replayable, and recovery is deterministic.
+This keeps sessions auditable and replayable across restarts without relying on process-local runtime maps.
 
 ### 3. Contract-Driven Execution — Every Step Has Constraints
 
@@ -66,7 +67,8 @@ Execution flows through explicit gates at every layer:
 
 Memory is implemented as an event-driven projection layer on top of the tape:
 
-- **Trace source**: `.orchestrator/events/<session>.jsonl` is the immutable source; memory never mutates tape rows.
+- **Trace source**: `.orchestrator/events/<session>.jsonl` is immutable; memory never mutates tape rows.
+- **Replayable projections**: `memory_*` events persist projection snapshots so memory can be rebuilt from tape when projection files are missing.
 - **Derived projections**: `Unit`, `Crystal`, `Insight`, and `EVOLVES` edges are stored in `.orchestrator/memory/*.jsonl`.
 - **Context surfaces**: in the extension-enabled profile, each `before_agent_start` can inject `[WorkingMemory]` (`brewva.working-memory`) and `[MemoryRecall]` (`brewva.memory-recall`) with budget-aware truncation/drop behavior.
 - **Reviewable evolution**: proposed EVOLVES relations stay shadow-only until explicit review (`memory_review_evolves_edge`), after which side effects (such as unit superseding) are auditable via memory events.
@@ -106,14 +108,14 @@ is documented in:
 
 ## Packages
 
-| Package                            | Responsibility                                                                                                                        |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `@brewva/brewva-runtime`           | Skill contracts, evidence ledger, verification gates, tape replay engine, memory projection/retrieval, context budget, cost tracking  |
-| `@brewva/brewva-channels-telegram` | Telegram channel adapter package: update projection, approval callback signing, long-polling transport, and outbound rendering        |
-| `@brewva/brewva-gateway`           | Local control-plane daemon: typed WebSocket API, session process supervision, heartbeat policy reload, and lifecycle CLI              |
-| `@brewva/brewva-tools`             | Runtime-aware tools: LSP/AST adapters, ledger query, skill lifecycle, task management, tape operations, memory insight/evolves review |
-| `@brewva/brewva-extensions`        | Event hook wiring: context injection, memory bridge hooks, quality gates, completion guards, event stream persistence                 |
-| `@brewva/brewva-cli`               | CLI entrypoint, session bootstrap, TUI / `--print` / `--json` modes, replay and undo                                                  |
+| Package                            | Responsibility                                                                                                                                                                                 |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@brewva/brewva-runtime`           | Skill contracts, evidence ledger, verification gates, tape replay engine, memory projection/retrieval, context budget, cost tracking (`@brewva/brewva-runtime/channels` for channel contracts) |
+| `@brewva/brewva-channels-telegram` | Telegram channel adapter package: update projection, approval callback signing, long-polling transport, and outbound rendering                                                                 |
+| `@brewva/brewva-gateway`           | Local control-plane daemon: typed WebSocket API, session process supervision, heartbeat policy reload, and lifecycle CLI                                                                       |
+| `@brewva/brewva-tools`             | Runtime-aware tools: LSP/AST adapters, ledger query, skill lifecycle, task management, tape operations, memory insight/evolves review                                                          |
+| `@brewva/brewva-extensions`        | Event hook wiring: context injection, memory bridge hooks, quality gates, completion guards, event stream persistence                                                                          |
+| `@brewva/brewva-cli`               | CLI entrypoint, session bootstrap, TUI / `--print` / `--json` modes, replay and undo                                                                                                           |
 
 ## Skill System
 
