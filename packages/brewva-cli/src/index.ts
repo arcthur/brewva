@@ -10,6 +10,12 @@ import { InteractiveMode, runPrintMode } from "@mariozechner/pi-coding-agent";
 import { formatISO } from "date-fns";
 import { runChannelMode } from "./channel-mode.js";
 import { runDaemon } from "./daemon-mode.js";
+import {
+  resolveBackendWorkingCwd,
+  shouldFallbackAfterGatewayFailure,
+  tryGatewayPrint,
+  writeGatewayAssistantText,
+} from "./gateway-print.js";
 import { writeJsonLine } from "./json-lines.js";
 import { ensureSessionShutdownRecorded } from "./runtime-utils.js";
 import { createBrewvaSession } from "./session.js";
@@ -115,6 +121,7 @@ Options:
   --print, -p           Run one-shot mode
   --interactive, -i     Force interactive TUI mode
   --mode <text|json>    One-shot output mode
+  --backend <kind>      Session backend: auto | embedded | gateway (default: auto)
   --json                Alias for --mode json
   --undo                Roll back the latest tracked patch set in this session
   --replay              Replay persisted runtime events
@@ -138,6 +145,7 @@ Examples:
   brewva
   brewva "Fix failing tests in runtime"
   brewva --print "Refactor this function"
+  brewva --backend gateway --print "Summarize this file"
   brewva --mode json "Summarize recent changes"
   brewva --task-file ./task.json
   brewva --undo --session <session-id>
@@ -168,6 +176,7 @@ function printVersion(): void {
 }
 
 type CliMode = "interactive" | "print-text" | "print-json";
+type CliBackendKind = "auto" | "embedded" | "gateway";
 
 interface TelegramCliChannelConfig {
   token?: string;
@@ -195,6 +204,7 @@ interface CliArgs {
   daemon: boolean;
   sessionId?: string;
   mode: CliMode;
+  backend: CliBackendKind;
   modeExplicit: boolean;
   verbose: boolean;
   prompt?: string;
@@ -218,6 +228,7 @@ const CLI_PARSE_OPTIONS = {
   print: { type: "boolean", short: "p" },
   interactive: { type: "boolean", short: "i" },
   mode: { type: "string" },
+  backend: { type: "string" },
   json: { type: "boolean" },
   undo: { type: "boolean" },
   replay: { type: "boolean" },
@@ -236,6 +247,15 @@ function resolveModeFromFlag(value: string): CliMode | null {
   if (value === "text") return "print-text";
   if (value === "json") return "print-json";
   console.error(`Error: --mode must be "text" or "json" (received "${value}").`);
+  return null;
+}
+
+function resolveBackendFromFlag(value: string | undefined): CliBackendKind | null {
+  if (!value) return "auto";
+  if (value === "auto" || value === "embedded" || value === "gateway") {
+    return value;
+  }
+  console.error(`Error: --backend must be "auto", "embedded", or "gateway" (received "${value}").`);
   return null;
 }
 
@@ -309,6 +329,12 @@ function parseCliArgs(argv: string[]): CliParseResult {
       modeExplicit = true;
     }
   }
+  const backend = resolveBackendFromFlag(
+    typeof parsed.values.backend === "string" ? parsed.values.backend : undefined,
+  );
+  if (!backend) {
+    return { kind: "error" };
+  }
 
   const prompt = parsed.positionals.join(" ").trim() || undefined;
   const pollTimeout = parseOptionalIntegerFlag(
@@ -364,6 +390,7 @@ function parseCliArgs(argv: string[]): CliParseResult {
     daemon: parsed.values.daemon === true,
     sessionId: typeof parsed.values.session === "string" ? parsed.values.session : undefined,
     mode,
+    backend,
     modeExplicit,
     verbose: parsed.values.verbose === true,
     prompt,
@@ -512,6 +539,24 @@ function printCostSummary(sessionId: string, runtime: BrewvaRuntime): void {
   console.error(`[cost] session=${sessionId} ${parts.join(" ")}`);
 }
 
+function printGatewayCostSummary(input: {
+  cwd?: string;
+  configPath?: string;
+  requestedSessionId: string;
+  agentSessionId?: string;
+}): void {
+  const replaySessionId =
+    typeof input.agentSessionId === "string" && input.agentSessionId.trim()
+      ? input.agentSessionId
+      : input.requestedSessionId;
+  const runtime = new BrewvaRuntime({
+    cwd: resolveBackendWorkingCwd(input.cwd),
+    configPath: input.configPath,
+  });
+  runtime.context.onTurnStart(replaySessionId, 0);
+  printCostSummary(replaySessionId, runtime);
+}
+
 async function run(): Promise<void> {
   process.title = "brewva";
   const rawArgs = process.argv.slice(2);
@@ -534,6 +579,11 @@ async function run(): Promise<void> {
   const parsed = parseResult.args;
 
   if (parsed.channel) {
+    if (parsed.backend === "gateway") {
+      console.error("Error: --backend gateway is not supported with --channel.");
+      process.exitCode = 1;
+      return;
+    }
     if (parsed.daemon) {
       console.error("Error: --channel cannot be combined with --daemon.");
       process.exitCode = 1;
@@ -576,6 +626,11 @@ async function run(): Promise<void> {
   }
 
   if (parsed.daemon) {
+    if (parsed.backend === "gateway") {
+      console.error("Error: --backend gateway is not supported with --daemon.");
+      process.exitCode = 1;
+      return;
+    }
     if (parsed.modeExplicit && parsed.mode !== "interactive") {
       console.error("Error: --daemon cannot be combined with --print/--json/--mode.");
       process.exitCode = 1;
@@ -614,6 +669,23 @@ async function run(): Promise<void> {
   if (!mode) {
     process.exitCode = 1;
     return;
+  }
+  if (parsed.backend === "gateway") {
+    if (parsed.undo || parsed.replay) {
+      console.error("Error: --backend gateway is not supported with --undo/--replay.");
+      process.exitCode = 1;
+      return;
+    }
+    if (mode === "interactive") {
+      console.error("Error: --backend gateway is not supported in interactive mode.");
+      process.exitCode = 1;
+      return;
+    }
+    if (mode === "print-json") {
+      console.error("Error: --backend gateway is not supported with --mode json.");
+      process.exitCode = 1;
+      return;
+    }
   }
   applyDefaultInteractiveEnv(mode);
 
@@ -682,6 +754,57 @@ async function run(): Promise<void> {
     printHelp();
     process.exitCode = 1;
     return;
+  }
+
+  if (taskSpec && parsed.backend === "gateway") {
+    console.error("Error: --task/--task-file is not supported with --backend gateway.");
+    process.exitCode = 1;
+    return;
+  }
+
+  const shouldAttemptGatewayPrint =
+    mode === "print-text" && parsed.backend !== "embedded" && !taskSpec;
+  if (mode === "print-text" && parsed.backend === "auto" && taskSpec && parsed.verbose) {
+    console.error("[backend] skipping gateway because TaskSpec requires embedded path");
+  }
+
+  if (shouldAttemptGatewayPrint) {
+    const gatewayResult = await tryGatewayPrint({
+      cwd: parsed.cwd,
+      configPath: parsed.configPath,
+      model: parsed.model,
+      enableExtensions: parsed.enableExtensions,
+      prompt: initialMessage ?? "",
+      verbose: parsed.verbose,
+    });
+    if (gatewayResult.ok) {
+      writeGatewayAssistantText(gatewayResult.assistantText);
+      printGatewayCostSummary({
+        cwd: parsed.cwd,
+        configPath: parsed.configPath,
+        requestedSessionId: gatewayResult.requestedSessionId,
+        agentSessionId: gatewayResult.agentSessionId,
+      });
+      return;
+    }
+
+    if (parsed.backend === "gateway") {
+      console.error(`gateway: ${gatewayResult.error}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    if (shouldFallbackAfterGatewayFailure(parsed.backend, gatewayResult.stage)) {
+      if (parsed.verbose) {
+        console.error(
+          `[backend] gateway unavailable (${gatewayResult.error}), falling back to embedded`,
+        );
+      }
+    } else {
+      console.error(`gateway: ${gatewayResult.error}`);
+      process.exitCode = 1;
+      return;
+    }
   }
 
   const { session, runtime } = await createBrewvaSession({
@@ -794,3 +917,8 @@ if (isBunMain ?? isNodeMain) {
 
 export { createBrewvaSession } from "./session.js";
 export { parseArgs };
+export {
+  resolveBackendWorkingCwd,
+  resolveGatewayFailureStage,
+  shouldFallbackAfterGatewayFailure,
+} from "./gateway-print.js";

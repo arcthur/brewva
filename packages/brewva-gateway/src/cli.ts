@@ -15,7 +15,7 @@ import {
 } from "./daemon/pid.js";
 import { assertLoopbackHost, normalizeGatewayHost } from "./network.js";
 
-interface GatewayPaths {
+export interface GatewayPaths {
   stateDir: string;
   pidFilePath: string;
   logFilePath: string;
@@ -23,7 +23,7 @@ interface GatewayPaths {
   heartbeatPolicyPath: string;
 }
 
-interface GatewayStatusReport {
+export interface GatewayStatusReport {
   running: boolean;
   reachable: boolean;
   stalePid: boolean;
@@ -271,7 +271,7 @@ function readTailLines(filePath: string, tail: number): string[] {
   return lines.slice(-tail);
 }
 
-function resolveGatewayPaths(input: {
+export function resolveGatewayPaths(input: {
   stateDir?: string;
   pidFilePath?: string;
   logFilePath?: string;
@@ -324,7 +324,7 @@ async function waitForProcessExit(pid: number, timeoutMs: number): Promise<boole
   return !isProcessAlive(pid);
 }
 
-async function queryGatewayStatus(input: {
+export async function queryGatewayStatus(input: {
   paths: GatewayPaths;
   deep: boolean;
   timeoutMs: number;

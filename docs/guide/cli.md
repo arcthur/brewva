@@ -54,6 +54,7 @@ For operational details, see `docs/guide/gateway-control-plane-daemon.md`.
 - `--print`
 - `--interactive`
 - `--mode`
+- `--backend`
 - `--json`
 - `--undo`
 - `--replay`
@@ -80,6 +81,28 @@ Short aliases:
 installs runtime core bridge hooks, so tool policy, compaction gate, and
 ledger/patch tracking remain enforced. A minimal autonomy context contract
 and tape/context pressure status block are still injected before agent start.
+
+`--backend` selects the primary session backend:
+
+- `auto` (default): for `--print`, try gateway first then fall back to embedded only on pre-ack failures.
+- `embedded`: always run local in-process session.
+- `gateway`: force gateway path (currently supports `--print` only).
+
+Current backend constraints:
+
+- `--backend gateway` is rejected for interactive mode.
+- `--backend gateway` is rejected for `--mode json`.
+- `--backend gateway` is rejected with `--undo`, `--replay`, `--daemon`, and `--channel`.
+- `--backend gateway` is rejected with `--task` / `--task-file`.
+- `--backend auto` skips gateway when `--task` / `--task-file` is provided.
+
+Advanced gateway discovery overrides (environment variables):
+
+- `BREWVA_GATEWAY_STATE_DIR`
+- `BREWVA_GATEWAY_PID_FILE`
+- `BREWVA_GATEWAY_TOKEN_FILE`
+- `BREWVA_GATEWAY_HOST`
+- `BREWVA_GATEWAY_PORT`
 
 `--verbose` overrides quiet startup and emits the full startup output.
 

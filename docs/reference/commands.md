@@ -76,6 +76,7 @@ With `--verbose`, daemon prints a rolling 60-second scheduler window summary
 - `--print`
 - `--interactive`
 - `--mode`
+- `--backend`
 - `--json`
 - `--undo`
 - `--replay`
@@ -102,6 +103,28 @@ Short aliases:
 core bridge hooks remain active for tool policy, compaction gate, and
 ledger/patch tracking. A minimal autonomy context contract plus tape/context
 pressure status injection remains active in this profile.
+
+`--backend` controls the primary session backend:
+
+- `auto` (default): for print-text mode, try gateway first and fall back to embedded only for pre-ack failures.
+- `embedded`: always use local in-process sessions.
+- `gateway`: force gateway path (currently supports print-text mode only).
+
+Current constraints for `--backend gateway`:
+
+- interactive mode is not supported.
+- JSON mode (`--mode json` / `--json`) is not supported.
+- `--undo`, `--replay`, `--daemon`, and `--channel` combinations are not supported.
+- `--task` / `--task-file` combinations are not supported.
+- Under `--backend auto`, task-based runs skip gateway and use embedded directly.
+
+Advanced gateway discovery overrides (environment variables):
+
+- `BREWVA_GATEWAY_STATE_DIR`
+- `BREWVA_GATEWAY_PID_FILE`
+- `BREWVA_GATEWAY_TOKEN_FILE`
+- `BREWVA_GATEWAY_HOST`
+- `BREWVA_GATEWAY_PORT`
 
 Channel mode examples:
 

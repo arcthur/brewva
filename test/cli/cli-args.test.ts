@@ -43,10 +43,38 @@ describe("brewva cli args", () => {
     const parsed = parseArgs(["fix", "failing", "tests"]);
     expect(parsed).not.toBeNull();
     expect(parsed!.mode).toBe("interactive");
+    expect(parsed!.backend).toBe("auto");
     expect(parsed!.undo).toBe(false);
     expect(parsed!.replay).toBe(false);
     expect(parsed!.prompt).toBe("fix failing tests");
     expect(parsed!.modeExplicit).toBe(false);
+  });
+
+  test("supports explicit backend values", () => {
+    const embedded = parseArgs(["--backend", "embedded", "--print", "hello"]);
+    expect(embedded).not.toBeNull();
+    expect(embedded!.backend).toBe("embedded");
+
+    const gateway = parseArgs(["--backend", "gateway", "--print", "hello"]);
+    expect(gateway).not.toBeNull();
+    expect(gateway!.backend).toBe("gateway");
+  });
+
+  test("rejects invalid backend value", () => {
+    const originalError = console.error;
+    const errors: string[] = [];
+    console.error = (...args: unknown[]) => {
+      errors.push(args.map((value) => String(value)).join(" "));
+    };
+    try {
+      const parsed = parseArgs(["--backend", "invalid-backend", "--print", "hello"]);
+      expect(parsed).toBeNull();
+    } finally {
+      console.error = originalError;
+    }
+    expect(
+      errors.some((line) => line.includes('--backend must be "auto", "embedded", or "gateway"')),
+    ).toBe(true);
   });
 
   test("supports one-shot print mode", () => {
