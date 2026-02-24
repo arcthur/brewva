@@ -4,14 +4,10 @@ import { normalizeGatewayHost, assertLoopbackHost } from "./network.js";
 import type { GatewayErrorShape, GatewayMethod, GatewayParamsByMethod } from "./protocol/index.js";
 import { PROTOCOL_VERSION } from "./protocol/index.js";
 import { validateGatewayFrame } from "./protocol/validate.js";
+import { createDeferred } from "./utils/deferred.js";
+import { toErrorMessage } from "./utils/errors.js";
 import { safeParseJson } from "./utils/json.js";
-
-interface Deferred<T> {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (error: unknown) => void;
-  settled: () => boolean;
-}
+import { rawToText } from "./utils/ws.js";
 
 interface PendingResponse {
   resolve: (frame: GatewayResponseFrame) => void;
@@ -41,30 +37,6 @@ export type GatewayClientEventListener = (event: GatewayClientEvent) => void;
 const DEFAULT_CONNECT_TIMEOUT_MS = 5_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 5 * 60_000;
 
-function createDeferred<T>(): Deferred<T> {
-  let settled = false;
-  let resolveValue!: (value: T) => void;
-  let rejectValue!: (error: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolveValue = (value) => {
-      if (settled) return;
-      settled = true;
-      resolvePromise(value);
-    };
-    rejectValue = (error) => {
-      if (settled) return;
-      settled = true;
-      rejectPromise(error);
-    };
-  });
-  return {
-    promise,
-    resolve: resolveValue,
-    reject: rejectValue,
-    settled: () => settled,
-  };
-}
-
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   return new Promise<T>((resolvePromise, rejectPromise) => {
     const timer = setTimeout(
@@ -85,40 +57,6 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
         rejectPromise(error);
       });
   });
-}
-
-function rawToText(raw: RawData): string {
-  if (typeof raw === "string") {
-    return raw;
-  }
-  if (raw instanceof ArrayBuffer) {
-    return Buffer.from(raw).toString("utf8");
-  }
-  if (Array.isArray(raw)) {
-    return Buffer.concat(raw).toString("utf8");
-  }
-  return raw.toString("utf8");
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  if (error === undefined || error === null) {
-    return "unknown error";
-  }
-  try {
-    const serialized = JSON.stringify(error);
-    if (typeof serialized === "string") {
-      return serialized;
-    }
-  } catch {
-    // fall through
-  }
-  return "non-serializable error";
 }
 
 function toErrorFromGatewayShape(shape: GatewayErrorShape | undefined): Error {

@@ -1,3 +1,5 @@
+import { join } from "node:path";
+import { writePidRecord, removePidRecord } from "@brewva/brewva-gateway";
 import {
   BrewvaRuntime,
   SchedulerService,
@@ -111,6 +113,23 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
     configPath: parsed.configPath,
   });
   parsed.onRuntimeReady?.(runtime);
+
+  const pidFilePath = join(runtime.workspaceRoot, ".brewva", "scheduler.pid");
+  try {
+    writePidRecord(pidFilePath, {
+      pid: process.pid,
+      host: "127.0.0.1",
+      port: 0,
+      startedAt: Date.now(),
+      cwd: runtime.workspaceRoot,
+    });
+  } catch (error) {
+    console.error(
+      `brewva scheduler daemon: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    process.exitCode = 1;
+    return;
+  }
 
   if (!runtime.config.schedule.enabled) {
     console.error("brewva scheduler daemon: disabled by config (schedule.enabled=false).");
@@ -358,6 +377,7 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
       void abortAll().finally(() => {
         emitSummaryWindow("shutdown");
         unsubscribeEvents();
+        removePidRecord(pidFilePath);
         if (parsed.verbose) {
           console.error(`[daemon] received ${signal}, scheduler stopped.`);
         }

@@ -17,6 +17,8 @@ CLI implementation: `packages/brewva-cli/src/index.ts`.
 In addition to `brewva [flags]` primary modes, the CLI exposes control-plane subcommands:
 
 - `brewva gateway start`
+- `brewva gateway install`
+- `brewva gateway uninstall`
 - `brewva gateway status`
 - `brewva gateway stop`
 - `brewva gateway heartbeat-reload`
@@ -25,6 +27,20 @@ In addition to `brewva [flags]` primary modes, the CLI exposes control-plane sub
 
 `brewva gateway` and `--channel` are different execution paths: the former is the local control-plane daemon, while the latter is channel ingress/egress orchestration.
 For operational details, see `docs/guide/gateway-control-plane-daemon.md`.
+
+## Onboard Subcommand (`brewva onboard`)
+
+`brewva onboard` is a wrapper around gateway service lifecycle:
+
+- `brewva onboard --install-daemon`
+- `brewva onboard --uninstall-daemon`
+
+Useful flags:
+
+- `--launchd` / `--systemd`
+- `--no-start`
+- `--dry-run`
+- `--json`
 
 ## Startup Behavior
 
@@ -60,11 +76,32 @@ For operational details, see `docs/guide/gateway-control-plane-daemon.md`.
 - `--replay`
 - `--daemon`
 - `--channel`
+- `--install-daemon`
+- `--uninstall-daemon`
+- `--launchd`
+- `--systemd`
+- `--no-start`
+- `--dry-run`
 - `--telegram-token`
 - `--telegram-callback-secret`
 - `--telegram-poll-timeout`
 - `--telegram-poll-limit`
 - `--telegram-poll-retry-ms`
+- `--pid-file`
+- `--log-file`
+- `--token-file`
+- `--heartbeat`
+- `--tick-interval-ms`
+- `--session-idle-ms`
+- `--max-workers`
+- `--max-open-queue`
+- `--max-payload-bytes`
+- `--health-http-port`
+- `--health-http-path`
+- `--label`
+- `--service-name`
+- `--plist-file`
+- `--unit-file`
 - `--session`
 - `--verbose`
 - `--version`
@@ -140,6 +177,7 @@ bun run start -- --print --task-file ./task.json
 bun run start -- --undo --session <session-id>
 bun run start -- --replay --mode json --session <session-id>
 bun run start -- --version
+bun run start -- onboard --install-daemon
 bun run start -- --channel telegram --telegram-token <bot-token>
 bun run start -- --channel tg --telegram-token <bot-token> --telegram-poll-timeout 15
 ```

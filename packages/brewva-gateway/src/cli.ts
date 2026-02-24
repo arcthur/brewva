@@ -13,7 +13,16 @@ import {
   removePidRecord,
   type GatewayPidRecord,
 } from "./daemon/pid.js";
+import {
+  GatewaySupervisorDefaults,
+  buildGatewaySupervisorCommand,
+  installGatewayService,
+  resolveSupervisorKind,
+  uninstallGatewayService,
+} from "./daemon/service-manager.js";
 import { assertLoopbackHost, normalizeGatewayHost } from "./network.js";
+import { sleep } from "./utils/async.js";
+import { toErrorMessage } from "./utils/errors.js";
 
 export interface GatewayPaths {
   stateDir: string;
@@ -66,6 +75,8 @@ const START_PARSE_OPTIONS = {
   "max-workers": { type: "string" },
   "max-open-queue": { type: "string" },
   "max-payload-bytes": { type: "string" },
+  "health-http-port": { type: "string" },
+  "health-http-path": { type: "string" },
 } as const;
 
 const STATUS_PARSE_OPTIONS = {
@@ -123,32 +134,48 @@ const LOGS_PARSE_OPTIONS = {
   tail: { type: "string" },
 } as const;
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolveSleep) => {
-    setTimeout(resolveSleep, ms);
-  });
-}
+const INSTALL_PARSE_OPTIONS = {
+  help: { type: "boolean", short: "h" },
+  json: { type: "boolean" },
+  launchd: { type: "boolean" },
+  systemd: { type: "boolean" },
+  "no-start": { type: "boolean" },
+  "dry-run": { type: "boolean" },
+  cwd: { type: "string" },
+  config: { type: "string" },
+  model: { type: "string" },
+  host: { type: "string" },
+  port: { type: "string" },
+  "state-dir": { type: "string" },
+  "pid-file": { type: "string" },
+  "log-file": { type: "string" },
+  "token-file": { type: "string" },
+  heartbeat: { type: "string" },
+  "no-extensions": { type: "boolean" },
+  "tick-interval-ms": { type: "string" },
+  "session-idle-ms": { type: "string" },
+  "max-workers": { type: "string" },
+  "max-open-queue": { type: "string" },
+  "max-payload-bytes": { type: "string" },
+  "health-http-port": { type: "string" },
+  "health-http-path": { type: "string" },
+  label: { type: "string" },
+  "service-name": { type: "string" },
+  "plist-file": { type: "string" },
+  "unit-file": { type: "string" },
+} as const;
 
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  if (error === undefined || error === null) {
-    return "unknown error";
-  }
-  try {
-    const serialized = JSON.stringify(error);
-    if (typeof serialized === "string") {
-      return serialized;
-    }
-  } catch {
-    // fall through
-  }
-  return "non-serializable error";
-}
+const UNINSTALL_PARSE_OPTIONS = {
+  help: { type: "boolean", short: "h" },
+  json: { type: "boolean" },
+  launchd: { type: "boolean" },
+  systemd: { type: "boolean" },
+  "dry-run": { type: "boolean" },
+  label: { type: "string" },
+  "service-name": { type: "string" },
+  "plist-file": { type: "string" },
+  "unit-file": { type: "string" },
+} as const;
 
 function parseOptionalIntegerFlag(
   flag: string,
@@ -205,6 +232,31 @@ function resolveDetachedBootstrapPrefix(): string[] {
   return [resolved];
 }
 
+function isLikelyBrewvaEntrypoint(filePath: string | undefined): boolean {
+  if (typeof filePath !== "string" || !filePath.trim()) {
+    return false;
+  }
+  const resolved = resolve(filePath);
+  const normalized = resolved.toLowerCase();
+  const baseName = normalized.split(/[\\/]/u).pop() ?? "";
+  if (baseName === "brewva" || baseName === "brewva.exe") {
+    return true;
+  }
+  if (baseName.startsWith("brewva.")) {
+    return true;
+  }
+  if (
+    normalized.includes("/packages/brewva-cli/") ||
+    normalized.includes("\\packages\\brewva-cli\\")
+  ) {
+    return true;
+  }
+  if (normalized.includes("/distribution/") && baseName.startsWith("brewva")) {
+    return true;
+  }
+  return false;
+}
+
 function buildDetachedStartArgs(values: Readonly<Record<string, unknown>>): string[] {
   const args = ["gateway", "start", "--foreground"];
   pushStringFlag(args, "cwd", values.cwd);
@@ -222,10 +274,25 @@ function buildDetachedStartArgs(values: Readonly<Record<string, unknown>>): stri
   pushStringFlag(args, "max-workers", values["max-workers"]);
   pushStringFlag(args, "max-open-queue", values["max-open-queue"]);
   pushStringFlag(args, "max-payload-bytes", values["max-payload-bytes"]);
+  pushStringFlag(args, "health-http-port", values["health-http-port"]);
+  pushStringFlag(args, "health-http-path", values["health-http-path"]);
   if (values["no-extensions"] === true) {
     args.push("--no-extensions");
   }
   return args;
+}
+
+function parseOptionalPathFlag(flag: string, raw: unknown): { value?: string; error?: string } {
+  if (typeof raw !== "string") {
+    return {};
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { error: `Error: --${flag} must be a non-empty path.` };
+  }
+  return {
+    value: trimmed.startsWith("/") ? trimmed : `/${trimmed}`,
+  };
 }
 
 async function waitForGatewayReady(
@@ -296,6 +363,8 @@ Usage:
 
 Commands:
   start               Start gateway daemon (foreground by default; add --detach for background)
+  install             Install OS supervisor service (launchd on macOS, systemd --user on Linux)
+  uninstall           Uninstall OS supervisor service
   status              Probe daemon health or deep status
   stop                Ask daemon to stop and wait for process exit (--force enables SIGTERM fallback)
   heartbeat-reload    Reload HEARTBEAT.md policy without restart
@@ -306,6 +375,10 @@ Commands:
 Examples:
   brewva gateway start
   brewva gateway start --detach
+  brewva gateway start --health-http-port 43112
+  brewva gateway install
+  brewva gateway install --systemd
+  brewva gateway uninstall
   brewva gateway status --deep --json
   brewva gateway logs --tail 200
   brewva gateway heartbeat-reload
@@ -519,6 +592,26 @@ async function handleStart(argv: string[]): Promise<number> {
     console.error(waitParsed.error);
     return 1;
   }
+  const healthPortParsed = parseOptionalIntegerFlag(
+    "health-http-port",
+    parsed.values["health-http-port"],
+    {
+      minimum: 1,
+      maximum: 65535,
+    },
+  );
+  if (healthPortParsed.error) {
+    console.error(healthPortParsed.error);
+    return 1;
+  }
+  const healthPathParsed = parseOptionalPathFlag(
+    "health-http-path",
+    parsed.values["health-http-path"],
+  );
+  if (healthPathParsed.error) {
+    console.error(healthPathParsed.error);
+    return 1;
+  }
 
   const host = normalizeGatewayHost(
     typeof parsed.values.host === "string" ? parsed.values.host : undefined,
@@ -638,6 +731,8 @@ async function handleStart(argv: string[]): Promise<number> {
     maxWorkers: maxWorkersParsed.value,
     maxPendingSessionOpens: maxQueueParsed.value,
     maxPayloadBytes: maxPayloadParsed.value,
+    healthHttpPort: healthPortParsed.value,
+    healthHttpPath: healthPathParsed.value,
   });
 
   try {
@@ -1212,6 +1307,358 @@ async function handleLogs(argv: string[]): Promise<number> {
   return 0;
 }
 
+function printSupervisorCommandResults(commands: Array<{ command: string; ok: boolean }>): void {
+  for (const command of commands) {
+    const status = command.ok ? "ok" : "failed";
+    console.log(`gateway: supervisor command ${status}: ${command.command}`);
+  }
+}
+
+async function handleInstall(argv: string[]): Promise<number> {
+  let parsed: ReturnType<typeof parseNodeArgs>;
+  try {
+    parsed = parseNodeArgs({
+      args: argv,
+      options: INSTALL_PARSE_OPTIONS,
+      allowPositionals: true,
+      strict: true,
+    });
+  } catch (error) {
+    console.error(`Error: ${toErrorMessage(error)}`);
+    return 1;
+  }
+
+  if (parsed.values.help === true) {
+    printGatewayHelp();
+    return 0;
+  }
+  if (parsed.positionals.length > 0) {
+    console.error(
+      `Error: unexpected positional args for gateway install: ${parsed.positionals.join(" ")}`,
+    );
+    return 1;
+  }
+
+  const supervisor = resolveSupervisorKind({
+    launchd: parsed.values.launchd === true,
+    systemd: parsed.values.systemd === true,
+    platform: process.platform,
+  });
+  if (supervisor.error || !supervisor.kind) {
+    console.error(supervisor.error ?? "Error: failed to resolve supervisor type.");
+    return 1;
+  }
+
+  const portParsed = parseOptionalIntegerFlag("port", parsed.values.port, {
+    minimum: 1,
+    maximum: 65535,
+  });
+  if (portParsed.error) {
+    console.error(portParsed.error);
+    return 1;
+  }
+  const tickParsed = parseOptionalIntegerFlag(
+    "tick-interval-ms",
+    parsed.values["tick-interval-ms"],
+    { minimum: 1000 },
+  );
+  if (tickParsed.error) {
+    console.error(tickParsed.error);
+    return 1;
+  }
+  const maxPayloadParsed = parseOptionalIntegerFlag(
+    "max-payload-bytes",
+    parsed.values["max-payload-bytes"],
+    { minimum: 16 * 1024 },
+  );
+  if (maxPayloadParsed.error) {
+    console.error(maxPayloadParsed.error);
+    return 1;
+  }
+  const sessionIdleParsed = parseOptionalIntegerFlag(
+    "session-idle-ms",
+    parsed.values["session-idle-ms"],
+    { minimum: 1_000 },
+  );
+  if (sessionIdleParsed.error) {
+    console.error(sessionIdleParsed.error);
+    return 1;
+  }
+  const maxWorkersParsed = parseOptionalIntegerFlag("max-workers", parsed.values["max-workers"], {
+    minimum: 1,
+  });
+  if (maxWorkersParsed.error) {
+    console.error(maxWorkersParsed.error);
+    return 1;
+  }
+  const maxQueueParsed = parseOptionalIntegerFlag(
+    "max-open-queue",
+    parsed.values["max-open-queue"],
+    { minimum: 0 },
+  );
+  if (maxQueueParsed.error) {
+    console.error(maxQueueParsed.error);
+    return 1;
+  }
+  const healthPortParsed = parseOptionalIntegerFlag(
+    "health-http-port",
+    parsed.values["health-http-port"],
+    { minimum: 1, maximum: 65535 },
+  );
+  if (healthPortParsed.error) {
+    console.error(healthPortParsed.error);
+    return 1;
+  }
+  const healthPathParsed = parseOptionalPathFlag(
+    "health-http-path",
+    parsed.values["health-http-path"],
+  );
+  if (healthPathParsed.error) {
+    console.error(healthPathParsed.error);
+    return 1;
+  }
+
+  const host = normalizeGatewayHost(
+    typeof parsed.values.host === "string" ? parsed.values.host : undefined,
+  );
+  try {
+    assertLoopbackHost(host);
+  } catch (error) {
+    console.error(`Error: ${toErrorMessage(error)}`);
+    return 1;
+  }
+
+  const daemonCwd = typeof parsed.values.cwd === "string" ? parsed.values.cwd : process.cwd();
+  const paths = resolveGatewayPaths({
+    stateDir:
+      typeof parsed.values["state-dir"] === "string" ? parsed.values["state-dir"] : undefined,
+    pidFilePath:
+      typeof parsed.values["pid-file"] === "string" ? parsed.values["pid-file"] : undefined,
+    logFilePath:
+      typeof parsed.values["log-file"] === "string" ? parsed.values["log-file"] : undefined,
+    tokenFilePath:
+      typeof parsed.values["token-file"] === "string" ? parsed.values["token-file"] : undefined,
+    heartbeatPolicyPath:
+      typeof parsed.values.heartbeat === "string" ? parsed.values.heartbeat : undefined,
+  });
+
+  const startValues: Record<string, unknown> = {
+    ...parsed.values,
+    cwd: daemonCwd,
+    host,
+    port: portParsed.value?.toString() ?? parsed.values.port,
+    "tick-interval-ms": tickParsed.value?.toString() ?? parsed.values["tick-interval-ms"],
+    "session-idle-ms": sessionIdleParsed.value?.toString() ?? parsed.values["session-idle-ms"],
+    "max-workers": maxWorkersParsed.value?.toString() ?? parsed.values["max-workers"],
+    "max-open-queue": maxQueueParsed.value?.toString() ?? parsed.values["max-open-queue"],
+    "max-payload-bytes": maxPayloadParsed.value?.toString() ?? parsed.values["max-payload-bytes"],
+    "health-http-port": healthPortParsed.value?.toString() ?? parsed.values["health-http-port"],
+    "health-http-path": healthPathParsed.value,
+    "state-dir": paths.stateDir,
+    "pid-file": paths.pidFilePath,
+    "log-file": paths.logFilePath,
+    "token-file": paths.tokenFilePath,
+    heartbeat: paths.heartbeatPolicyPath,
+  };
+
+  const startArgs = buildDetachedStartArgs(startValues);
+  const bootstrapPrefixRaw = resolveDetachedBootstrapPrefix();
+  const bootstrapPrefix =
+    bootstrapPrefixRaw.length > 0 && isLikelyBrewvaEntrypoint(bootstrapPrefixRaw[0])
+      ? bootstrapPrefixRaw
+      : [];
+  const entryArg = isLikelyBrewvaEntrypoint(process.argv[1]) ? process.argv[1] : undefined;
+  const programArguments = buildGatewaySupervisorCommand({
+    startArgs,
+    bootstrapPrefix,
+    entryArg,
+  });
+
+  const jsonMode = parsed.values.json === true;
+  const dryRun = parsed.values["dry-run"] === true;
+  const noStart = parsed.values["no-start"] === true;
+
+  try {
+    const installResult = installGatewayService({
+      kind: supervisor.kind,
+      programArguments,
+      workingDirectory: daemonCwd,
+      logFilePath: paths.logFilePath,
+      pathEnv: process.env.PATH,
+      label:
+        typeof parsed.values.label === "string"
+          ? parsed.values.label
+          : GatewaySupervisorDefaults.launchdLabel,
+      serviceName:
+        typeof parsed.values["service-name"] === "string"
+          ? parsed.values["service-name"]
+          : GatewaySupervisorDefaults.systemdServiceName,
+      plistFilePath:
+        typeof parsed.values["plist-file"] === "string" ? parsed.values["plist-file"] : undefined,
+      unitFilePath:
+        typeof parsed.values["unit-file"] === "string" ? parsed.values["unit-file"] : undefined,
+      noStart,
+      dryRun,
+    });
+
+    if (jsonMode) {
+      console.log(
+        JSON.stringify({
+          schema: "brewva.gateway.install.v1",
+          ok: true,
+          dryRun,
+          noStart,
+          supervisor: supervisor.kind,
+          command: programArguments,
+          ...installResult,
+        }),
+      );
+      return 0;
+    }
+
+    const modeText = dryRun ? "previewed" : "installed";
+    console.log(
+      `gateway: ${modeText} ${supervisor.kind} service=${installResult.labelOrService} file=${installResult.filePath}`,
+    );
+    console.log(`gateway: exec=${programArguments.join(" ")}`);
+    if (installResult.commands.length > 0) {
+      printSupervisorCommandResults(installResult.commands);
+    }
+
+    if (dryRun) {
+      return 0;
+    }
+    if (noStart) {
+      if (supervisor.kind === "launchd") {
+        console.log(`gateway: start manually with: launchctl load -w ${installResult.filePath}`);
+      } else {
+        console.log("gateway: start manually with:");
+        console.log(
+          `  systemctl --user daemon-reload && systemctl --user enable --now ${installResult.labelOrService}`,
+        );
+      }
+      return 0;
+    }
+    if (supervisor.kind === "systemd") {
+      console.log(
+        "gateway: tip for reboot persistence without active login: loginctl enable-linger",
+      );
+    }
+    return 0;
+  } catch (error) {
+    if (jsonMode) {
+      console.log(
+        JSON.stringify({
+          schema: "brewva.gateway.install.v1",
+          ok: false,
+          dryRun,
+          noStart,
+          supervisor: supervisor.kind,
+          error: toErrorMessage(error),
+        }),
+      );
+    } else {
+      console.error(`gateway: install failed (${toErrorMessage(error)})`);
+    }
+    return 1;
+  }
+}
+
+async function handleUninstall(argv: string[]): Promise<number> {
+  let parsed: ReturnType<typeof parseNodeArgs>;
+  try {
+    parsed = parseNodeArgs({
+      args: argv,
+      options: UNINSTALL_PARSE_OPTIONS,
+      allowPositionals: true,
+      strict: true,
+    });
+  } catch (error) {
+    console.error(`Error: ${toErrorMessage(error)}`);
+    return 1;
+  }
+
+  if (parsed.values.help === true) {
+    printGatewayHelp();
+    return 0;
+  }
+  if (parsed.positionals.length > 0) {
+    console.error(
+      `Error: unexpected positional args for gateway uninstall: ${parsed.positionals.join(" ")}`,
+    );
+    return 1;
+  }
+
+  const supervisor = resolveSupervisorKind({
+    launchd: parsed.values.launchd === true,
+    systemd: parsed.values.systemd === true,
+    platform: process.platform,
+  });
+  if (supervisor.error || !supervisor.kind) {
+    console.error(supervisor.error ?? "Error: failed to resolve supervisor type.");
+    return 1;
+  }
+
+  const dryRun = parsed.values["dry-run"] === true;
+  const jsonMode = parsed.values.json === true;
+
+  try {
+    const result = uninstallGatewayService({
+      kind: supervisor.kind,
+      label:
+        typeof parsed.values.label === "string"
+          ? parsed.values.label
+          : GatewaySupervisorDefaults.launchdLabel,
+      serviceName:
+        typeof parsed.values["service-name"] === "string"
+          ? parsed.values["service-name"]
+          : GatewaySupervisorDefaults.systemdServiceName,
+      plistFilePath:
+        typeof parsed.values["plist-file"] === "string" ? parsed.values["plist-file"] : undefined,
+      unitFilePath:
+        typeof parsed.values["unit-file"] === "string" ? parsed.values["unit-file"] : undefined,
+      dryRun,
+    });
+
+    if (jsonMode) {
+      console.log(
+        JSON.stringify({
+          schema: "brewva.gateway.uninstall.v1",
+          ok: true,
+          dryRun,
+          supervisor: supervisor.kind,
+          ...result,
+        }),
+      );
+      return 0;
+    }
+
+    const modeText = dryRun ? "previewed uninstall for" : "uninstalled";
+    console.log(
+      `gateway: ${modeText} ${supervisor.kind} service=${result.labelOrService} file=${result.filePath}`,
+    );
+    if (result.commands.length > 0) {
+      printSupervisorCommandResults(result.commands);
+    }
+    return 0;
+  } catch (error) {
+    if (jsonMode) {
+      console.log(
+        JSON.stringify({
+          schema: "brewva.gateway.uninstall.v1",
+          ok: false,
+          dryRun,
+          supervisor: supervisor.kind,
+          error: toErrorMessage(error),
+        }),
+      );
+    } else {
+      console.error(`gateway: uninstall failed (${toErrorMessage(error)})`);
+    }
+    return 1;
+  }
+}
+
 export async function runGatewayCli(
   argv: string[],
   options: RunGatewayCliOptions = {},
@@ -1231,6 +1678,20 @@ export async function runGatewayCli(
     return {
       handled: true,
       exitCode: await handleStart(rest),
+    };
+  }
+
+  if (command === "install") {
+    return {
+      handled: true,
+      exitCode: await handleInstall(rest),
+    };
+  }
+
+  if (command === "uninstall") {
+    return {
+      handled: true,
+      exitCode: await handleUninstall(rest),
     };
   }
 

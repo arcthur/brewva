@@ -20,13 +20,15 @@ The primary CLI also exposes control-plane subcommands via `brewva gateway ...`.
 
 - `start`
 - `run` (alias of `start`)
+- `install`
+- `uninstall`
 - `status`
 - `stop`
 - `heartbeat-reload`
 - `rotate-token`
 - `logs`
 
-This subcommand set covers local daemon lifecycle management, health probing, token rotation, and log access. It is distinct from `--channel`.
+This subcommand set covers local daemon lifecycle management, OS supervisor bootstrap, health probing, token rotation, and log access. It is distinct from `--channel`.
 Protocol and method reference: `docs/reference/gateway-control-plane-protocol.md`.  
 Operational guide: `docs/guide/gateway-control-plane-daemon.md`.
 Gateway CLI implementation source: `packages/brewva-gateway/src/cli.ts`.
@@ -57,6 +59,49 @@ Loopback-only host policy applies to gateway start/probe/control (`--host` must 
 - `--max-workers`
 - `--max-open-queue`
 - `--max-payload-bytes`
+- `--health-http-port`
+- `--health-http-path`
+
+`brewva gateway install`:
+
+- `--json`
+- `--launchd`
+- `--systemd`
+- `--no-start`
+- `--dry-run`
+- `--cwd`
+- `--config`
+- `--model`
+- `--host`
+- `--port`
+- `--state-dir`
+- `--pid-file`
+- `--log-file`
+- `--token-file`
+- `--heartbeat`
+- `--no-extensions`
+- `--tick-interval-ms`
+- `--session-idle-ms`
+- `--max-workers`
+- `--max-open-queue`
+- `--max-payload-bytes`
+- `--health-http-port`
+- `--health-http-path`
+- `--label`
+- `--service-name`
+- `--plist-file`
+- `--unit-file`
+
+`brewva gateway uninstall`:
+
+- `--json`
+- `--launchd`
+- `--systemd`
+- `--dry-run`
+- `--label`
+- `--service-name`
+- `--plist-file`
+- `--unit-file`
 
 `brewva gateway status`:
 
@@ -117,13 +162,42 @@ Loopback-only host policy applies to gateway start/probe/control (`--host` must 
 - `--max-payload-bytes` (start): integer `>= 16384`.
 - `--max-workers` (start): integer `>= 1`.
 - `--max-open-queue` (start): integer `>= 0`.
+- `--health-http-port` (start/install): integer in `[1, 65535]`.
 - `--timeout-ms` (status/stop/heartbeat-reload/rotate-token): integer `>= 100`.
 - `--tail` (logs): integer `>= 1`.
+
+Platform notes for supervisor install:
+
+- macOS defaults to `launchd` and writes `~/Library/LaunchAgents/com.brewva.gateway.plist`.
+- Linux defaults to `systemd --user` and writes `~/.config/systemd/user/brewva-gateway.service`.
+- `--launchd` and `--systemd` are mutually exclusive.
+- `--no-start` writes service files but skips `load` / `enable --now`.
 
 ### Gateway Exit Code Notes
 
 - `brewva gateway status`: `0` reachable, `1` not running/invalid input, `2` process alive but probe failed.
 - `brewva gateway stop`: `0` stopped (or already not running), `2` process still alive after timeout/fallback.
+- `brewva gateway install`: `0` success, `1` invalid input or supervisor operation failure.
+- `brewva gateway uninstall`: `0` success, `1` invalid input.
+
+## Subcommand: `brewva onboard`
+
+`brewva onboard` is a convenience wrapper over `brewva gateway install/uninstall`.
+
+- `brewva onboard --install-daemon`: install daemon service for current OS (macOS `launchd`, Linux `systemd --user`).
+- `brewva onboard --uninstall-daemon`: remove daemon service.
+
+Shared flags mirror gateway install/uninstall:
+
+- `--launchd` / `--systemd`
+- `--no-start`
+- `--dry-run`
+- `--json`
+- `--cwd`, `--config`, `--model`, `--host`, `--port`, `--state-dir`
+- `--pid-file`, `--log-file`, `--token-file`, `--heartbeat`
+- `--tick-interval-ms`, `--session-idle-ms`, `--max-workers`, `--max-open-queue`, `--max-payload-bytes`
+- `--health-http-port`, `--health-http-path`
+- `--label`, `--service-name`, `--plist-file`, `--unit-file`
 
 `--daemon` executes due intents in child sessions (lineage-aware wakeups) and
 handles graceful shutdown by aborting active child runs on signals.
@@ -178,11 +252,32 @@ With `--verbose`, daemon prints a rolling 60-second scheduler window summary
 - `--replay`
 - `--daemon`
 - `--channel`
+- `--install-daemon`
+- `--uninstall-daemon`
+- `--launchd`
+- `--systemd`
+- `--no-start`
+- `--dry-run`
 - `--telegram-token`
 - `--telegram-callback-secret`
 - `--telegram-poll-timeout`
 - `--telegram-poll-limit`
 - `--telegram-poll-retry-ms`
+- `--pid-file`
+- `--log-file`
+- `--token-file`
+- `--heartbeat`
+- `--tick-interval-ms`
+- `--session-idle-ms`
+- `--max-workers`
+- `--max-open-queue`
+- `--max-payload-bytes`
+- `--health-http-port`
+- `--health-http-path`
+- `--label`
+- `--service-name`
+- `--plist-file`
+- `--unit-file`
 - `--session`
 - `--verbose`
 - `--version`

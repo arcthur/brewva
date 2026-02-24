@@ -45,6 +45,8 @@ interface DaemonHarness {
   daemon: GatewayDaemon;
   host: string;
   port: number;
+  healthHttpPort?: number;
+  healthHttpPath?: string;
   dispose: () => Promise<void>;
 }
 
@@ -287,7 +289,13 @@ async function closeRawSocket(ws: WebSocket): Promise<void> {
   });
 }
 
-async function startDaemonHarness(initialRules: PolicyRule[]): Promise<DaemonHarness> {
+async function startDaemonHarness(
+  initialRules: PolicyRule[],
+  options: {
+    healthHttpPort?: number;
+    healthHttpPath?: string;
+  } = {},
+): Promise<DaemonHarness> {
   const root = mkdtempSync(join(tmpdir(), "brewva-gateway-integration-"));
   const stateDir = join(root, "state");
   const policyPath = join(root, "HEARTBEAT.md");
@@ -306,6 +314,8 @@ async function startDaemonHarness(initialRules: PolicyRule[]): Promise<DaemonHar
     heartbeatPolicyPath: policyPath,
     cwd: root,
     tickIntervalMs: 1_000,
+    healthHttpPort: options.healthHttpPort,
+    healthHttpPath: options.healthHttpPath,
   });
   await daemon.start();
   const runtime = daemon.getRuntimeInfo();
@@ -323,6 +333,8 @@ async function startDaemonHarness(initialRules: PolicyRule[]): Promise<DaemonHar
     daemon,
     host: runtime.host,
     port: runtime.port,
+    healthHttpPort: runtime.healthHttpPort,
+    healthHttpPath: runtime.healthHttpPath,
     dispose: async () => {
       await daemon.stop("test_dispose").catch(() => undefined);
       await daemon.waitForStop().catch(() => undefined);
@@ -365,6 +377,34 @@ function injectWorkerEvent(daemon: GatewayDaemon, event: string, payload: unknow
 }
 
 describe("gateway daemon integration", () => {
+  test("serves optional http health endpoint for supervisor probes", async () => {
+    const harness = await startDaemonHarness([], {
+      healthHttpPort: 0,
+      healthHttpPath: "/gateway-healthz",
+    });
+    try {
+      expect(typeof harness.healthHttpPort).toBe("number");
+      expect(harness.healthHttpPort && harness.healthHttpPort > 0).toBe(true);
+
+      const response = await fetch(
+        `http://${harness.host}:${harness.healthHttpPort}${harness.healthHttpPath}`,
+      );
+      expect(response.status).toBe(200);
+      const payload = (await response.json()) as {
+        schema?: string;
+        ok?: boolean;
+        path?: string;
+        port?: number;
+      };
+      expect(payload.schema).toBe("brewva.gateway.health-http.v1");
+      expect(payload.ok).toBe(true);
+      expect(payload.path).toBe("/gateway-healthz");
+      expect(payload.port).toBe(harness.port);
+    } finally {
+      await harness.dispose();
+    }
+  });
+
   test("enforces auth flow and rejects invalid request params", async () => {
     const harness = await startDaemonHarness([]);
     const ws = new WebSocket(`ws://${harness.host}:${harness.port}`);

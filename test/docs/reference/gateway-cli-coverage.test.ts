@@ -9,6 +9,8 @@ const GATEWAY_OPTION_BLOCKS = [
   "HEARTBEAT_PARSE_OPTIONS",
   "ROTATE_TOKEN_PARSE_OPTIONS",
   "LOGS_PARSE_OPTIONS",
+  "INSTALL_PARSE_OPTIONS",
+  "UNINSTALL_PARSE_OPTIONS",
 ] as const;
 
 function extractOptionKeys(source: string, constName: string): string[] {
@@ -41,6 +43,8 @@ describe("docs/reference gateway CLI coverage", () => {
     const expectedCommands = [
       "start",
       "run",
+      "install",
+      "uninstall",
       "status",
       "stop",
       "heartbeat-reload",

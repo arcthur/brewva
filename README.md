@@ -182,6 +182,15 @@ bun run start -- gateway start --detach
 
 # If brewva is installed globally, this also works
 brewva gateway start --detach
+
+# Install as always-on OS service (recommended for production/devbox)
+brewva onboard --install-daemon
+
+# Linux explicit mode
+brewva onboard --install-daemon --systemd
+
+# Optional loopback HTTP liveness probe (for supervisor checks)
+brewva onboard --install-daemon --health-http-port 43112 --health-http-path /healthz
 ```
 
 ## Binary Distribution

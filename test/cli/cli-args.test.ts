@@ -19,6 +19,7 @@ describe("brewva cli args", () => {
     const output = logs.join("\n");
     expect(output.includes("Brewva - AI-native coding agent CLI")).toBe(true);
     expect(output.includes("Usage:\n  brewva [options] [prompt]")).toBe(true);
+    expect(output.includes("brewva onboard ...")).toBe(true);
   });
 
   test("prints CLI version", () => {

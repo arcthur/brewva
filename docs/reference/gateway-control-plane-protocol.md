@@ -104,5 +104,11 @@ The current protocol intentionally does not keep legacy compatibility branches:
 - `brewva.gateway.heartbeat-reload.v1`
 - `brewva.gateway.rotate-token.v1`
 - `brewva.gateway.logs.v1`
+- `brewva.gateway.install.v1`
+- `brewva.gateway.uninstall.v1`
+
+Optional HTTP probe endpoint (`--health-http-port`, default path `/healthz`) responds with:
+
+- `brewva.gateway.health-http.v1`
 
 Implementation: `packages/brewva-gateway/src/cli.ts`.

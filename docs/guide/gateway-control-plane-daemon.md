@@ -20,6 +20,7 @@ This is a different path from `--channel` (for example, Telegram ingress/egress)
 
 ```bash
 brewva gateway start
+brewva gateway install
 brewva gateway status --deep
 brewva gateway rotate-token
 brewva gateway logs --tail 200
@@ -30,6 +31,14 @@ Detached mode:
 
 ```bash
 brewva gateway start --detach
+```
+
+Install as always-on service:
+
+```bash
+brewva gateway install
+brewva gateway install --systemd
+brewva gateway uninstall
 ```
 
 For scripting and automation, use `--json`:
@@ -45,9 +54,19 @@ brewva gateway rotate-token --json
 - `start` (`run` alias): start daemon (foreground by default, use `--detach` for background).
 - `status`: health probe and deep status (`--deep`, `--json` supported).
 - `stop`: graceful stop; use `--force` as fallback.
+- `install`: install OS supervisor service (macOS `launchd`, Linux `systemd --user`).
+- `uninstall`: remove installed OS supervisor service.
 - `heartbeat-reload`: hot-reload `HEARTBEAT.md` policy.
 - `rotate-token`: rotate token and immediately revoke authenticated connections using the previous token.
 - `logs`: read daemon logs (`--tail` and `--json` supported).
+
+Supervisor defaults:
+
+- macOS: `~/Library/LaunchAgents/com.brewva.gateway.plist` (`KeepAlive=true`, `RunAtLoad=true`).
+- Linux: `~/.config/systemd/user/brewva-gateway.service` (`Restart=always`).
+- Use `--no-start` to write files without enabling/startup.
+- Use `--dry-run` to preview generated service content.
+- One-shot wrapper: `brewva onboard --install-daemon`.
 
 For full flag-level contract (per subcommand), see:
 
@@ -65,6 +84,12 @@ Key files:
 - `gateway.token`: control plane auth token.
 - `HEARTBEAT.md`: externalized heartbeat policy file.
 - `children.json`: child-process registry used for orphan cleanup during restart.
+
+Optional HTTP probe endpoint:
+
+- `--health-http-port <port>` enables loopback HTTP probe server.
+- `--health-http-path <path>` customizes probe path (default `/healthz`).
+- Response schema: `brewva.gateway.health-http.v1`.
 
 ## Latest-Only Protocol Semantics
 

@@ -15,7 +15,11 @@ import {
   type ChildRegistryEntry,
   type GatewayStateStore,
 } from "../state-store.js";
+import { sleep } from "../utils/async.js";
+import { createDeferred, type Deferred } from "../utils/deferred.js";
+import { toErrorMessage } from "../utils/errors.js";
 import type { StructuredLogger } from "./logger.js";
+import { isProcessAlive } from "./pid.js";
 import {
   type OpenSessionInput,
   type OpenSessionResult,
@@ -53,12 +57,6 @@ interface PendingTurn {
   walId?: string;
 }
 
-interface Deferred<T> {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (error: unknown) => void;
-}
-
 interface WorkerHandle {
   sessionId: string;
   child: ChildProcess;
@@ -82,26 +80,6 @@ interface WorkerHandle {
 interface WorkerReadyPayload {
   requestedSessionId: string;
   agentSessionId: string;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolveSleep) => {
-    setTimeout(resolveSleep, ms);
-  });
-}
-
-function createDeferred<T>(): Deferred<T> {
-  let resolvePromise!: (value: T) => void;
-  let rejectPromise!: (error: unknown) => void;
-  const promise = new Promise<T>((resolveDeferred, rejectDeferred) => {
-    resolvePromise = resolveDeferred;
-    rejectPromise = rejectDeferred;
-  });
-  return {
-    promise,
-    resolve: resolvePromise,
-    reject: rejectPromise,
-  };
 }
 
 function normalizeOptionalString(value: string | undefined): string | undefined {
@@ -144,24 +122,6 @@ function toWorkerResultError(input: { error: string; errorCode?: WorkerResultErr
     return new SessionBackendStateError("session_busy", input.error);
   }
   return new Error(input.error);
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return String(error);
-}
-
-function isProcessAlive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) {
-    return false;
-  }
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 async function terminatePid(pid: number): Promise<void> {

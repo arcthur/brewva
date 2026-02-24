@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runGatewayCli } from "@brewva/brewva-gateway";
@@ -99,6 +99,22 @@ describe("gateway cli routing", () => {
     expect(errors.some((line) => line.includes("--max-workers must be >= 1"))).toBe(true);
   });
 
+  test("rejects invalid health http port", async () => {
+    const originalError = console.error;
+    const errors: string[] = [];
+    console.error = (...args: unknown[]) => {
+      errors.push(args.map((value) => String(value)).join(" "));
+    };
+    try {
+      const result = await runGatewayCli(["start", "--health-http-port", "70000"]);
+      expect(result.handled).toBe(true);
+      expect(result.exitCode).toBe(1);
+    } finally {
+      console.error = originalError;
+    }
+    expect(errors.some((line) => line.includes("--health-http-port must be <= 65535"))).toBe(true);
+  });
+
   test("rejects deprecated rotate-token grace flag", async () => {
     const originalError = console.error;
     const errors: string[] = [];
@@ -162,6 +178,59 @@ describe("gateway cli routing", () => {
       expect(payload.lines?.[0]?.includes('"message":"second"')).toBe(true);
     } finally {
       rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test("installs and uninstalls supervisor file with no-start mode", async () => {
+    const root = mkdtempSync(join(tmpdir(), "brewva-gateway-install-"));
+    const cwd = join(root, "cwd");
+    const stateDir = join(root, "state");
+    const plistFile = join(root, "com.brewva.gateway.plist");
+    const unitFile = join(root, "brewva-gateway.service");
+    const installArgs =
+      process.platform === "darwin"
+        ? ["install", "--launchd", "--plist-file", plistFile]
+        : ["install", "--systemd", "--unit-file", unitFile];
+    const uninstallArgs =
+      process.platform === "darwin"
+        ? ["uninstall", "--launchd", "--plist-file", plistFile]
+        : ["uninstall", "--systemd", "--unit-file", unitFile];
+
+    const originalLog = console.log;
+    console.log = () => undefined;
+    try {
+      const install = await runGatewayCli([
+        ...installArgs,
+        "--no-start",
+        "--cwd",
+        cwd,
+        "--state-dir",
+        stateDir,
+        "--health-http-port",
+        "43112",
+      ]);
+      expect(install.handled).toBe(true);
+      expect(install.exitCode).toBe(0);
+
+      const generatedFile = process.platform === "darwin" ? plistFile : unitFile;
+      expect(existsSync(generatedFile)).toBe(true);
+      const content = readFileSync(generatedFile, "utf8");
+      expect(content.includes("gateway")).toBe(true);
+      expect(content.includes("--foreground")).toBe(true);
+      expect(content.includes("--health-http-port")).toBe(true);
+      if (process.platform === "darwin") {
+        expect(content.includes("<key>KeepAlive</key>")).toBe(true);
+      } else {
+        expect(content.includes("Restart=always")).toBe(true);
+      }
+
+      const uninstall = await runGatewayCli(uninstallArgs);
+      expect(uninstall.handled).toBe(true);
+      expect(uninstall.exitCode).toBe(0);
+      expect(existsSync(generatedFile)).toBe(false);
+    } finally {
+      console.log = originalLog;
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

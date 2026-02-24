@@ -105,6 +105,7 @@ Usage:
 
 Subcommands:
   brewva gateway ...   Local control-plane daemon commands
+  brewva onboard ...   One-shot onboarding helpers (daemon install/uninstall)
 
 Modes:
   default               Interactive TUI mode (same flow as pi)
@@ -150,6 +151,7 @@ Examples:
   brewva --task-file ./task.json
   brewva --undo --session <session-id>
   brewva --replay --mode json --session <session-id>
+  brewva onboard --install-daemon
   brewva --channel telegram --telegram-token <bot-token>
   brewva --daemon`);
 }
@@ -241,6 +243,39 @@ const CLI_PARSE_OPTIONS = {
   "telegram-poll-retry-ms": { type: "string" },
   session: { type: "string" },
   verbose: { type: "boolean" },
+} as const;
+
+const ONBOARD_PARSE_OPTIONS = {
+  help: { type: "boolean", short: "h" },
+  json: { type: "boolean" },
+  "install-daemon": { type: "boolean" },
+  "uninstall-daemon": { type: "boolean" },
+  launchd: { type: "boolean" },
+  systemd: { type: "boolean" },
+  "no-start": { type: "boolean" },
+  "dry-run": { type: "boolean" },
+  cwd: { type: "string" },
+  config: { type: "string" },
+  model: { type: "string" },
+  host: { type: "string" },
+  port: { type: "string" },
+  "state-dir": { type: "string" },
+  "pid-file": { type: "string" },
+  "log-file": { type: "string" },
+  "token-file": { type: "string" },
+  heartbeat: { type: "string" },
+  "no-extensions": { type: "boolean" },
+  "tick-interval-ms": { type: "string" },
+  "session-idle-ms": { type: "string" },
+  "max-workers": { type: "string" },
+  "max-open-queue": { type: "string" },
+  "max-payload-bytes": { type: "string" },
+  "health-http-port": { type: "string" },
+  "health-http-path": { type: "string" },
+  label: { type: "string" },
+  "service-name": { type: "string" },
+  "plist-file": { type: "string" },
+  "unit-file": { type: "string" },
 } as const;
 
 function resolveModeFromFlag(value: string): CliMode | null {
@@ -416,6 +451,120 @@ function parseArgs(argv: string[]): CliArgs | null {
   return parsed.args;
 }
 
+function printOnboardHelp(): void {
+  console.log(`Brewva Onboard - daemon bootstrap shortcuts
+
+Usage:
+  brewva onboard --install-daemon [options]
+  brewva onboard --uninstall-daemon [options]
+
+Options:
+  --install-daemon       Install gateway daemon service for current OS
+  --uninstall-daemon     Remove previously installed daemon service
+  --launchd              Force launchd mode (macOS only)
+  --systemd              Force systemd user-service mode (Linux only)
+  --no-start             Install files only (skip enable/start)
+  --dry-run              Preview generated service and actions
+  --json                 Emit JSON output
+  -h, --help             Show help
+
+Examples:
+  brewva onboard --install-daemon
+  brewva onboard --install-daemon --systemd
+  brewva onboard --install-daemon --dry-run --json
+  brewva onboard --uninstall-daemon`);
+}
+
+function pushOnboardStringFlag(args: string[], name: string, value: unknown): void {
+  if (typeof value !== "string") {
+    return;
+  }
+  const normalized = value.trim();
+  if (!normalized) {
+    return;
+  }
+  args.push(`--${name}`, normalized);
+}
+
+function pushOnboardBooleanFlag(args: string[], name: string, value: unknown): void {
+  if (value === true) {
+    args.push(`--${name}`);
+  }
+}
+
+async function runOnboardCli(argv: string[]): Promise<number> {
+  let parsed: ReturnType<typeof parseNodeArgs>;
+  try {
+    parsed = parseNodeArgs({
+      args: argv,
+      options: ONBOARD_PARSE_OPTIONS,
+      allowPositionals: true,
+      strict: true,
+    });
+  } catch (error) {
+    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    return 1;
+  }
+
+  if (parsed.values.help === true) {
+    printOnboardHelp();
+    return 0;
+  }
+  if (parsed.positionals.length > 0) {
+    console.error(`Error: unexpected positional args for onboard: ${parsed.positionals.join(" ")}`);
+    return 1;
+  }
+
+  const installDaemon = parsed.values["install-daemon"] === true;
+  const uninstallDaemon = parsed.values["uninstall-daemon"] === true;
+  if (installDaemon && uninstallDaemon) {
+    console.error("Error: --install-daemon and --uninstall-daemon cannot be used together.");
+    return 1;
+  }
+  if (!installDaemon && !uninstallDaemon) {
+    console.error("Error: onboard requires --install-daemon or --uninstall-daemon.");
+    printOnboardHelp();
+    return 1;
+  }
+
+  const gatewayArgs = [installDaemon ? "install" : "uninstall"];
+  pushOnboardBooleanFlag(gatewayArgs, "json", parsed.values.json);
+  pushOnboardBooleanFlag(gatewayArgs, "launchd", parsed.values.launchd);
+  pushOnboardBooleanFlag(gatewayArgs, "systemd", parsed.values.systemd);
+  pushOnboardBooleanFlag(gatewayArgs, "dry-run", parsed.values["dry-run"]);
+
+  if (installDaemon) {
+    pushOnboardBooleanFlag(gatewayArgs, "no-start", parsed.values["no-start"]);
+    pushOnboardBooleanFlag(gatewayArgs, "no-extensions", parsed.values["no-extensions"]);
+
+    pushOnboardStringFlag(gatewayArgs, "cwd", parsed.values.cwd);
+    pushOnboardStringFlag(gatewayArgs, "config", parsed.values.config);
+    pushOnboardStringFlag(gatewayArgs, "model", parsed.values.model);
+    pushOnboardStringFlag(gatewayArgs, "host", parsed.values.host);
+    pushOnboardStringFlag(gatewayArgs, "port", parsed.values.port);
+    pushOnboardStringFlag(gatewayArgs, "state-dir", parsed.values["state-dir"]);
+    pushOnboardStringFlag(gatewayArgs, "pid-file", parsed.values["pid-file"]);
+    pushOnboardStringFlag(gatewayArgs, "log-file", parsed.values["log-file"]);
+    pushOnboardStringFlag(gatewayArgs, "token-file", parsed.values["token-file"]);
+    pushOnboardStringFlag(gatewayArgs, "heartbeat", parsed.values.heartbeat);
+    pushOnboardStringFlag(gatewayArgs, "tick-interval-ms", parsed.values["tick-interval-ms"]);
+    pushOnboardStringFlag(gatewayArgs, "session-idle-ms", parsed.values["session-idle-ms"]);
+    pushOnboardStringFlag(gatewayArgs, "max-workers", parsed.values["max-workers"]);
+    pushOnboardStringFlag(gatewayArgs, "max-open-queue", parsed.values["max-open-queue"]);
+    pushOnboardStringFlag(gatewayArgs, "max-payload-bytes", parsed.values["max-payload-bytes"]);
+    pushOnboardStringFlag(gatewayArgs, "health-http-port", parsed.values["health-http-port"]);
+    pushOnboardStringFlag(gatewayArgs, "health-http-path", parsed.values["health-http-path"]);
+  }
+
+  pushOnboardStringFlag(gatewayArgs, "label", parsed.values.label);
+  pushOnboardStringFlag(gatewayArgs, "service-name", parsed.values["service-name"]);
+  pushOnboardStringFlag(gatewayArgs, "plist-file", parsed.values["plist-file"]);
+  pushOnboardStringFlag(gatewayArgs, "unit-file", parsed.values["unit-file"]);
+
+  const gatewayResult = await runGatewayCli(gatewayArgs);
+  return gatewayResult.exitCode;
+}
+
 function loadTaskSpec(parsed: CliArgs): { spec?: TaskSpec; error?: string } {
   if (!parsed.taskJson && !parsed.taskFile) {
     return {};
@@ -566,6 +715,10 @@ async function run(): Promise<void> {
       process.exitCode = gatewayResult.exitCode;
       return;
     }
+  }
+  if (rawArgs[0] === "onboard") {
+    process.exitCode = await runOnboardCli(rawArgs.slice(1));
+    return;
   }
 
   const parseResult = parseCliArgs(rawArgs);

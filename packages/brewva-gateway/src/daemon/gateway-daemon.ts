@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { resolve } from "node:path";
 import process from "node:process";
 import { loadBrewvaConfig, resolveWorkspaceRootDir } from "@brewva/brewva-runtime";
@@ -21,7 +22,10 @@ import {
 } from "../protocol/index.js";
 import { validateParamsForMethod, validateRequestFrame } from "../protocol/validate.js";
 import { FileGatewayStateStore, type GatewayStateStore } from "../state-store.js";
+import { createDeferred } from "../utils/deferred.js";
+import { toErrorMessage } from "../utils/errors.js";
 import { safeParseJson } from "../utils/json.js";
+import { rawToText } from "../utils/ws.js";
 import { HeartbeatScheduler, type HeartbeatRule } from "./heartbeat-policy.js";
 import { StructuredLogger } from "./logger.js";
 import { readPidRecord, removePidRecord, writePidRecord, type GatewayPidRecord } from "./pid.js";
@@ -38,6 +42,7 @@ const DEFAULT_TICK_INTERVAL_MS = 5_000;
 const DEFAULT_MAX_PAYLOAD_BYTES = 256 * 1024;
 const DEFAULT_HEARTBEAT_TICK_INTERVAL_MS = 15_000;
 const WEBSOCKET_CLOSE_TIMEOUT_MS = 3_000;
+const HTTP_CLOSE_TIMEOUT_MS = 3_000;
 const SESSION_SCOPED_EVENTS = new Set<GatewayEvent>([
   "session.turn.start",
   "session.turn.chunk",
@@ -61,60 +66,6 @@ interface ConnectionState {
     version: string;
     mode?: string;
   };
-}
-
-interface Deferred<T> {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (error: unknown) => void;
-}
-
-function createDeferred<T>(): Deferred<T> {
-  let resolveValue!: (value: T) => void;
-  let rejectValue!: (error: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolveValue = resolvePromise;
-    rejectValue = rejectPromise;
-  });
-  return {
-    promise,
-    resolve: resolveValue,
-    reject: rejectValue,
-  };
-}
-
-function toMessageText(raw: RawData): string {
-  if (typeof raw === "string") {
-    return raw;
-  }
-  if (raw instanceof ArrayBuffer) {
-    return Buffer.from(raw).toString("utf8");
-  }
-  if (Array.isArray(raw)) {
-    return Buffer.concat(raw).toString("utf8");
-  }
-  return raw.toString("utf8");
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  if (error === undefined || error === null) {
-    return "unknown error";
-  }
-  try {
-    const serialized = JSON.stringify(error);
-    if (typeof serialized === "string") {
-      return serialized;
-    }
-  } catch {
-    // fall through
-  }
-  return "non-serializable error";
 }
 
 function isGatewayErrorShape(value: unknown): value is GatewayErrorShape {
@@ -148,6 +99,17 @@ function normalizeTraceId(traceId: unknown): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
+function normalizeHealthPath(pathRaw: string | undefined): string {
+  if (typeof pathRaw !== "string") {
+    return "/healthz";
+  }
+  const normalized = pathRaw.trim();
+  if (!normalized) {
+    return "/healthz";
+  }
+  return normalized.startsWith("/") ? normalized : `/${normalized}`;
+}
+
 export interface GatewayDaemonOptions {
   host?: string;
   port?: number;
@@ -168,6 +130,8 @@ export interface GatewayDaemonOptions {
   maxWorkers?: number;
   maxPendingSessionOpens?: number;
   maxPayloadBytes?: number;
+  healthHttpPort?: number;
+  healthHttpPath?: string;
   sessionBackend?: SessionBackend;
   stateStore?: GatewayStateStore;
 }
@@ -181,6 +145,8 @@ export interface GatewayRuntimeInfo {
   pidFilePath: string;
   logFilePath: string;
   heartbeatPolicyPath: string;
+  healthHttpPort?: number;
+  healthHttpPath?: string;
 }
 
 export interface GatewayHealthPayload {
@@ -199,6 +165,8 @@ export interface GatewayStatusDeepPayload extends GatewayHealthPayload {
   pidFilePath: string;
   logFilePath: string;
   tokenFilePath: string;
+  healthHttpPort?: number;
+  healthHttpPath?: string;
   heartbeat: ReturnType<HeartbeatScheduler["getStatus"]>;
   workersDetail: SessionWorkerInfo[];
   connectionsDetail: Array<{
@@ -226,6 +194,8 @@ export class GatewayDaemon {
   private readonly heartbeatPolicyPath: string;
   private readonly tickIntervalMs: number;
   private readonly maxPayloadBytes: number;
+  private readonly configuredHealthHttpPort?: number;
+  private readonly healthHttpPath: string;
   private authToken: string;
   private readonly stateStore: GatewayStateStore;
   private readonly logger: StructuredLogger;
@@ -240,7 +210,9 @@ export class GatewayDaemon {
   private readonly sessionSubscribers = new Map<string, Set<string>>();
 
   private wss: WebSocketServer | null = null;
+  private healthHttpServer: Server | null = null;
   private currentPort: number;
+  private currentHealthHttpPort?: number;
   private eventSeq = 0;
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   private stopping = false;
@@ -266,6 +238,11 @@ export class GatewayDaemon {
       16 * 1024,
       options.maxPayloadBytes ?? DEFAULT_MAX_PAYLOAD_BYTES,
     );
+    this.configuredHealthHttpPort =
+      Number.isInteger(options.healthHttpPort) && Number(options.healthHttpPort) >= 0
+        ? Number(options.healthHttpPort)
+        : undefined;
+    this.healthHttpPath = normalizeHealthPath(options.healthHttpPath);
     this.stateStore = options.stateStore ?? new FileGatewayStateStore();
 
     ensureDirectoryCwd(options.cwd);
@@ -375,10 +352,44 @@ export class GatewayDaemon {
         this.currentPort = address.port;
       }
 
+      if (this.configuredHealthHttpPort !== undefined) {
+        const healthServer = createServer((request, response) => {
+          this.handleHealthHttpRequest(request, response);
+        });
+
+        await new Promise<void>((resolveStart, rejectStart) => {
+          const onError = (error: Error): void => {
+            healthServer.off("listening", onListening);
+            rejectStart(error);
+          };
+          const onListening = (): void => {
+            healthServer.off("error", onError);
+            resolveStart();
+          };
+          healthServer.once("error", onError);
+          healthServer.once("listening", onListening);
+          healthServer.listen(this.configuredHealthHttpPort, this.host);
+        });
+
+        healthServer.on("error", (error: Error) => {
+          this.logger.warn("gateway health http server error", {
+            error: error.message,
+          });
+        });
+
+        this.healthHttpServer = healthServer;
+        const healthAddress = healthServer.address();
+        if (healthAddress && typeof healthAddress === "object") {
+          this.currentHealthHttpPort = healthAddress.port;
+        }
+      }
+
       this.logger.info("gateway daemon started", {
         pid: process.pid,
         host: this.host,
         port: this.currentPort,
+        healthHttpPort: this.currentHealthHttpPort,
+        healthHttpPath: this.currentHealthHttpPort ? this.healthHttpPath : undefined,
         stateDir: this.stateDir,
         heartbeatPolicyPath: this.heartbeatPolicyPath,
         protocol: PROTOCOL_VERSION,
@@ -399,6 +410,8 @@ export class GatewayDaemon {
       pidFilePath: this.pidFilePath,
       logFilePath: this.logFilePath,
       heartbeatPolicyPath: this.heartbeatPolicyPath,
+      healthHttpPort: this.currentHealthHttpPort,
+      healthHttpPath: this.currentHealthHttpPort ? this.healthHttpPath : undefined,
     };
   }
 
@@ -424,6 +437,8 @@ export class GatewayDaemon {
       pidFilePath: this.pidFilePath,
       logFilePath: this.logFilePath,
       tokenFilePath: this.tokenFilePath,
+      healthHttpPort: this.currentHealthHttpPort,
+      healthHttpPath: this.currentHealthHttpPort ? this.healthHttpPath : undefined,
       heartbeat: this.heartbeatScheduler.getStatus(),
       workersDetail: this.supervisor.listWorkers(),
       connectionsDetail: [...this.connections.values()].map((value) => ({
@@ -461,7 +476,11 @@ export class GatewayDaemon {
     }
 
     this.heartbeatScheduler.stop();
-    await this.supervisor.stop();
+    try {
+      await this.supervisor.stop();
+    } catch {
+      // best effort; continue cleanup
+    }
 
     if (this.wss) {
       const server = this.wss;
@@ -480,6 +499,13 @@ export class GatewayDaemon {
       this.sessionSubscribers.clear();
 
       await this.closeWebSocketServer(server, WEBSOCKET_CLOSE_TIMEOUT_MS);
+    }
+
+    if (this.healthHttpServer) {
+      const healthServer = this.healthHttpServer;
+      this.healthHttpServer = null;
+      this.currentHealthHttpPort = undefined;
+      await this.closeHttpServer(healthServer, HTTP_CLOSE_TIMEOUT_MS);
     }
 
     this.uninstallSignalHandlers();
@@ -526,6 +552,13 @@ export class GatewayDaemon {
       const server = this.wss;
       this.wss = null;
       await this.closeWebSocketServer(server, WEBSOCKET_CLOSE_TIMEOUT_MS);
+    }
+
+    if (this.healthHttpServer) {
+      const healthServer = this.healthHttpServer;
+      this.healthHttpServer = null;
+      this.currentHealthHttpPort = undefined;
+      await this.closeHttpServer(healthServer, HTTP_CLOSE_TIMEOUT_MS);
     }
 
     await this.supervisor.stop().catch(() => undefined);
@@ -599,6 +632,78 @@ export class GatewayDaemon {
     });
   }
 
+  private async closeHttpServer(server: Server, timeoutMs: number): Promise<void> {
+    await new Promise<void>((resolveClose) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolveClose();
+      };
+
+      const timer = setTimeout(
+        () => {
+          this.logger.warn("gateway health http close timeout", { timeoutMs });
+          finish();
+        },
+        Math.max(200, timeoutMs),
+      );
+      timer.unref?.();
+
+      try {
+        server.close((error) => {
+          clearTimeout(timer);
+          if (error) {
+            this.logger.warn("gateway health http close error", {
+              error: error.message,
+            });
+          }
+          finish();
+        });
+      } catch (error) {
+        clearTimeout(timer);
+        this.logger.warn("gateway health http close threw error", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        finish();
+      }
+    });
+  }
+
+  private handleHealthHttpRequest(request: IncomingMessage, response: ServerResponse): void {
+    const requestMethod = request.method ?? "GET";
+    if (requestMethod !== "GET" && requestMethod !== "HEAD") {
+      response.statusCode = 405;
+      response.setHeader("content-type", "application/json; charset=utf-8");
+      response.end(JSON.stringify({ ok: false, error: "method_not_allowed" }));
+      return;
+    }
+
+    const requestPath = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+    if (requestPath !== this.healthHttpPath) {
+      response.statusCode = 404;
+      response.setHeader("content-type", "application/json; charset=utf-8");
+      response.end(JSON.stringify({ ok: false, error: "not_found" }));
+      return;
+    }
+
+    response.statusCode = 200;
+    response.setHeader("content-type", "application/json; charset=utf-8");
+    if (requestMethod === "HEAD") {
+      response.end();
+      return;
+    }
+    response.end(
+      JSON.stringify({
+        schema: "brewva.gateway.health-http.v1",
+        ...this.getHealthStatus(),
+        path: this.healthHttpPath,
+      }),
+    );
+  }
+
   private nextEventSeq(): number {
     this.eventSeq += 1;
     return this.eventSeq;
@@ -638,7 +743,7 @@ export class GatewayDaemon {
 
   private async handleIncomingMessage(state: ConnectionState, raw: RawData): Promise<void> {
     state.lastSeenAt = Date.now();
-    const text = toMessageText(raw);
+    const text = rawToText(raw);
     const parsedRaw = safeParseJson(text);
     if (!validateRequestFrame(parsedRaw)) {
       const id =
@@ -647,6 +752,7 @@ export class GatewayDaemon {
         typeof (parsedRaw as { id?: unknown }).id === "string"
           ? (parsedRaw as { id: string }).id
           : randomUUID();
+      this.logger.debug("invalid request frame", { connId: state.connId });
       this.sendResponse(state, {
         id,
         ok: false,
@@ -662,6 +768,7 @@ export class GatewayDaemon {
     const request = parsedRaw as RequestFrame;
     const methodRaw = request.method;
     if (!GatewayMethods.includes(methodRaw as GatewayMethod)) {
+      this.logger.debug("unknown method", { connId: state.connId, method: methodRaw });
       this.sendResponse(state, {
         id: request.id,
         ok: false,
@@ -674,6 +781,7 @@ export class GatewayDaemon {
     const traceId = normalizeTraceId(request.traceId);
 
     if (state.phase === "closing") {
+      this.logger.debug("request on closing connection", { connId: state.connId, method });
       this.sendResponse(state, {
         id: request.id,
         ok: false,
@@ -684,6 +792,7 @@ export class GatewayDaemon {
     }
 
     if (method !== "connect" && !isConnectionAuthenticated(state)) {
+      this.logger.debug("unauthenticated request", { connId: state.connId, method });
       this.sendResponse(state, {
         id: request.id,
         ok: false,
