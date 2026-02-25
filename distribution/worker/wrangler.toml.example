@@ -1,0 +1,27 @@
+name = "brewva-telegram-ingress"
+main = "./telegram-webhook-worker.ts"
+compatibility_date = "2026-02-25"
+
+[vars]
+BREWVA_INGRESS_URL = "https://<your-fly-app>.fly.dev/ingest/telegram"
+
+# Required secrets – never put these in [vars] or commit them to source control.
+# Run once per environment:
+#   wrangler secret put BREWVA_INGRESS_HMAC_SECRET
+#   wrangler secret put BREWVA_TELEGRAM_SECRET_TOKEN    (if using telegram secret token)
+#   wrangler secret put BREWVA_INGRESS_BEARER_TOKEN     (if using bearer auth)
+
+# Optional hardening (non-secret vars):
+# BREWVA_TELEGRAM_EXPECTED_PATH = "/telegram/webhook"
+# BREWVA_TELEGRAM_ALLOWED_CHAT_IDS = "12345,67890"
+# BREWVA_TELEGRAM_ALLOWED_USER_IDS = "1001,1002"
+# BREWVA_TELEGRAM_DEDUPE_TTL_SECONDS = "600"
+# BREWVA_TELEGRAM_MAX_BODY_BYTES = "1048576"
+# BREWVA_TELEGRAM_RATE_LIMIT_MAX = "60"
+# BREWVA_TELEGRAM_RATE_LIMIT_WINDOW_SECONDS = "60"
+# BREWVA_TELEGRAM_RATE_LIMIT_SCOPE = "chat"
+
+# Optional distributed dedupe storage (best-effort, see README caveats):
+# [[kv_namespaces]]
+# binding = "BREWVA_TELEGRAM_DEDUPE_KV"
+# id = "<kv-namespace-id>"

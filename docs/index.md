@@ -15,6 +15,7 @@ This repository uses a layered documentation system:
 - Features: `docs/guide/features.md`
 - CLI: `docs/guide/cli.md`
 - Gateway daemon: `docs/guide/gateway-control-plane-daemon.md`
+- Telegram webhook edge ingress: `docs/guide/telegram-webhook-edge-ingress.md`
 - Runtime architecture: `docs/guide/understanding-runtime-system.md`
 - Orchestration: `docs/guide/orchestration.md`
 - Skill categories: `docs/guide/category-and-skills.md`
@@ -59,6 +60,7 @@ This repository uses a layered documentation system:
 
 - Runtime package: `packages/brewva-runtime/src/index.ts`
 - Telegram channel package: `packages/brewva-channels-telegram/src/index.ts`
+- Telegram ingress package: `packages/brewva-ingress/src/index.ts`
 - Tool package: `packages/brewva-tools/src/index.ts`
 - Extension package: `packages/brewva-extensions/src/index.ts`
 - CLI package: `packages/brewva-cli/src/index.ts`

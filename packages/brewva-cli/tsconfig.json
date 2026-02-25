@@ -6,6 +6,8 @@
   },
   "references": [
     { "path": "../brewva-runtime" },
+    { "path": "../brewva-channels-telegram" },
+    { "path": "../brewva-ingress" },
     { "path": "../brewva-tools" },
     { "path": "../brewva-extensions" },
     { "path": "../brewva-gateway" }

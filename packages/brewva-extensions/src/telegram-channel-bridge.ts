@@ -1,6 +1,7 @@
 import {
   TelegramChannelAdapter,
   TelegramHttpTransport,
+  type TelegramChannelTransport,
   type TelegramChannelAdapterOptions,
   type TelegramHttpTransportOptions,
 } from "@brewva/brewva-channels-telegram";
@@ -10,7 +11,7 @@ import { createRuntimeChannelTurnBridge } from "./channel-turn-bridge.js";
 
 export interface CreateRuntimeTelegramChannelBridgeOptions {
   runtime: BrewvaRuntime;
-  token: string;
+  token?: string;
   onInboundTurn: (turn: TurnEnvelope) => Promise<void>;
   onAdapterError?: (error: unknown) => Promise<void> | void;
   resolveIngestedSessionId?: (
@@ -18,21 +19,30 @@ export interface CreateRuntimeTelegramChannelBridgeOptions {
   ) => Promise<string | undefined> | string | undefined;
   adapter?: Omit<TelegramChannelAdapterOptions, "transport">;
   transport?: Omit<TelegramHttpTransportOptions, "token">;
+  transportInstance?: TelegramChannelTransport;
 }
 
 export interface RuntimeTelegramChannelBridge {
   bridge: ChannelTurnBridge;
   adapter: TelegramChannelAdapter;
-  transport: TelegramHttpTransport;
+  transport: TelegramChannelTransport;
 }
 
 export function createRuntimeTelegramChannelBridge(
   options: CreateRuntimeTelegramChannelBridgeOptions,
 ): RuntimeTelegramChannelBridge {
-  const transport = new TelegramHttpTransport({
-    token: options.token,
-    ...options.transport,
-  });
+  const transport =
+    options.transportInstance ??
+    (() => {
+      const token = options.token?.trim() ?? "";
+      if (!token) {
+        throw new Error("telegram token is required when transportInstance is not provided");
+      }
+      return new TelegramHttpTransport({
+        token,
+        ...options.transport,
+      });
+    })();
   const adapter = new TelegramChannelAdapter({
     ...options.adapter,
     transport,

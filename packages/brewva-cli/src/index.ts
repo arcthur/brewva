@@ -1098,6 +1098,7 @@ export {
   SUPPORTED_CHANNELS,
   canonicalizeInboundTurnSession,
   collectPromptTurnOutputs,
+  resolveTelegramWebhookIngressConfig,
   resolveSupportedChannel,
 } from "./channel-mode.js";
 export { AgentRegistry } from "./channel/agent-registry.js";

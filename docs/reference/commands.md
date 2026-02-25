@@ -222,6 +222,22 @@ Channel mode rejects incompatible input surfaces:
 `--telegram-callback-secret`, `--telegram-poll-timeout`, `--telegram-poll-limit`,
 and `--telegram-poll-retry-ms` are optional tuning flags.
 
+Webhook ingress is configured through environment variables (not exposed as CLI flags):
+
+- `BREWVA_TELEGRAM_WEBHOOK_ENABLED`
+- `BREWVA_TELEGRAM_INGRESS_HOST`
+- `BREWVA_TELEGRAM_INGRESS_PORT`
+- `BREWVA_TELEGRAM_INGRESS_PATH`
+- `BREWVA_TELEGRAM_INGRESS_MAX_BODY_BYTES`
+- `BREWVA_TELEGRAM_INGRESS_AUTH_MODE`
+- `BREWVA_TELEGRAM_INGRESS_BEARER_TOKEN`
+- `BREWVA_TELEGRAM_INGRESS_HMAC_SECRET`
+- `BREWVA_TELEGRAM_INGRESS_HMAC_MAX_SKEW_MS`
+- `BREWVA_TELEGRAM_INGRESS_NONCE_TTL_MS`
+
+For Cloudflare Worker + Fly ingress deployment steps, see:
+`docs/guide/telegram-webhook-edge-ingress.md`
+
 With channel orchestration enabled (default `channels.orchestration.enabled=true`), channel text commands are available:
 
 - `/new-agent <name>` or `/new-agent name=<name> model=<provider/id>`
@@ -332,6 +348,7 @@ Channel mode examples:
 
 - `bun run start -- --channel telegram --telegram-token <bot-token>`
 - `bun run start -- --channel tg --telegram-token <bot-token> --telegram-poll-timeout 15`
+- `BREWVA_TELEGRAM_WEBHOOK_ENABLED=1 BREWVA_TELEGRAM_INGRESS_HMAC_SECRET=<secret> bun run start -- --channel telegram --telegram-token <bot-token>`
 
 ## Input Resolution Rules
 
