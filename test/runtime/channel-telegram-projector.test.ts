@@ -228,6 +228,351 @@ describe("channel telegram projector", () => {
     ).toBe(true);
   });
 
+  test("renders telegram-ui blocks from assistant text as inline callbacks", () => {
+    const turn: TurnEnvelope = {
+      schema: "brewva.turn.v1",
+      kind: "assistant",
+      sessionId: "channel:session",
+      turnId: "assistant-ui-1",
+      channel: "telegram",
+      conversationId: "12345",
+      timestamp: 1_700_000_000_000,
+      parts: [
+        {
+          type: "text",
+          text: `Please choose deployment action.
+\`\`\`telegram-ui
+{
+  "version": "telegram-ui/v1",
+  "screen_id": "deploy-confirm",
+  "text": "Choose deploy action",
+  "components": [
+    {
+      "type": "buttons",
+      "rows": [
+        [
+          { "action_id": "confirm", "label": "Confirm", "style": "primary" },
+          { "action_id": "cancel", "label": "Cancel", "style": "danger" }
+        ]
+      ]
+    }
+  ],
+  "fallback_text": "Reply with: confirm or cancel"
+}
+\`\`\``,
+        },
+      ],
+    };
+
+    const requests = renderTurnToTelegramRequests(turn, {
+      inlineApproval: true,
+      callbackSecret: "callback-secret",
+    });
+    const first = requests[0];
+    const firstText = typeof first?.params.text === "string" ? first.params.text : "";
+    expect(first?.method).toBe("sendMessage");
+    expect(typeof first?.params.reply_markup).toBe("object");
+    expect(firstText).toContain("Please choose deployment action.");
+    expect(firstText).not.toContain("telegram-ui");
+    const inlineKeyboard = (
+      first?.params.reply_markup as {
+        inline_keyboard?: Array<Array<{ callback_data?: string }>>;
+      }
+    )?.inline_keyboard;
+    expect(inlineKeyboard).toHaveLength(1);
+    expect(inlineKeyboard?.[0]).toHaveLength(2);
+
+    const callbackData = (inlineKeyboard?.[0]?.[0]?.callback_data ?? "").toString();
+    const decoded = decodeTelegramApprovalCallback(callbackData, "callback-secret", {
+      context: "12345",
+    });
+    expect(decoded?.actionId).toBe("confirm");
+    expect(typeof decoded?.requestId).toBe("string");
+    expect((decoded?.requestId ?? "").length).toBeGreaterThan(0);
+
+    const cancelCallbackData = (inlineKeyboard?.[0]?.[1]?.callback_data ?? "").toString();
+    const cancelDecoded = decodeTelegramApprovalCallback(cancelCallbackData, "callback-secret", {
+      context: "12345",
+    });
+    expect(cancelDecoded?.actionId).toBe("cancel");
+    expect(cancelDecoded?.requestId).toBe(decoded?.requestId);
+  });
+
+  test("persists and restores telegram-ui state via projection hooks", () => {
+    const secret = "callback-secret";
+    let persisted:
+      | {
+          conversationId: string;
+          requestId: string;
+          snapshot: {
+            screenId?: string;
+            stateKey?: string;
+            state?: unknown;
+          };
+        }
+      | undefined;
+    const turn: TurnEnvelope = {
+      schema: "brewva.turn.v1",
+      kind: "assistant",
+      sessionId: "channel:session",
+      turnId: "assistant-ui-state-1",
+      channel: "telegram",
+      conversationId: "12345",
+      timestamp: 1_700_000_000_000,
+      parts: [
+        {
+          type: "text",
+          text: `\`\`\`telegram-ui
+{
+  "version": "telegram-ui/v1",
+  "screen_id": "deploy-confirm",
+  "state_key": "deploy-confirm-st",
+  "text": "Choose deploy action",
+  "components": [
+    {
+      "type": "buttons",
+      "rows": [[{ "action_id": "confirm", "label": "Confirm" }]]
+    }
+  ],
+  "state": { "flow": "deploy", "step": "confirm" }
+}
+\`\`\``,
+        },
+      ],
+    };
+
+    const requests = renderTurnToTelegramRequests(turn, {
+      inlineApproval: true,
+      callbackSecret: secret,
+      persistApprovalState: (params) => {
+        persisted = params;
+      },
+    });
+    expect(persisted).toBeDefined();
+    expect(persisted?.conversationId).toBe("12345");
+    expect(persisted?.snapshot.screenId).toBe("deploy-confirm");
+    expect(persisted?.snapshot.stateKey).toBe("deploy-confirm-st");
+    expect(persisted?.snapshot.state).toEqual({
+      flow: "deploy",
+      step: "confirm",
+    });
+
+    const callbackData = (
+      (
+        requests[0]?.params.reply_markup as {
+          inline_keyboard?: Array<Array<{ callback_data?: string }>>;
+        }
+      )?.inline_keyboard?.[0]?.[0]?.callback_data ?? ""
+    ).toString();
+    expect(callbackData.length).toBeGreaterThan(0);
+
+    const callbackUpdate: TelegramUpdate = {
+      update_id: 101,
+      callback_query: {
+        id: "cbq-state-1",
+        from: { id: 99, is_bot: false, first_name: "Ada", username: "ada" },
+        message: {
+          message_id: 200,
+          date: 1_700_000_003,
+          chat: { id: 12345, type: "private" },
+        },
+        data: callbackData,
+      },
+    };
+    const callbackTurn = projectTelegramUpdateToTurn(callbackUpdate, {
+      callbackSecret: secret,
+      resolveApprovalState: (params) => {
+        if (
+          !persisted ||
+          params.conversationId !== persisted.conversationId ||
+          params.requestId !== persisted.requestId
+        ) {
+          return undefined;
+        }
+        return persisted.snapshot;
+      },
+    });
+
+    expect(callbackTurn?.kind).toBe("approval");
+    expect(callbackTurn?.approval?.detail).toContain("screen: deploy-confirm");
+    expect(callbackTurn?.approval?.detail).toContain("state_key: deploy-confirm-st");
+    expect(callbackTurn?.meta?.approvalScreenId).toBe("deploy-confirm");
+    expect(callbackTurn?.meta?.approvalStateKey).toBe("deploy-confirm-st");
+    expect(callbackTurn?.meta?.approvalState).toEqual({
+      flow: "deploy",
+      step: "confirm",
+    });
+  });
+
+  test("renders multiple telegram-ui blocks from one assistant message", () => {
+    const turn: TurnEnvelope = {
+      schema: "brewva.turn.v1",
+      kind: "assistant",
+      sessionId: "channel:session",
+      turnId: "assistant-ui-multi-1",
+      channel: "telegram",
+      conversationId: "12345",
+      timestamp: 1_700_000_000_000,
+      parts: [
+        {
+          type: "text",
+          text: `intro
+\`\`\`telegram-ui
+{
+  "version": "telegram-ui/v1",
+  "screen_id": "first-screen",
+  "text": "First action",
+  "components": [
+    {
+      "type": "buttons",
+      "rows": [[{ "action_id": "first", "label": "First" }]]
+    }
+  ]
+}
+\`\`\`
+next
+\`\`\`telegram-ui
+{
+  "version": "telegram-ui/v1",
+  "screen_id": "second-screen",
+  "text": "Second action",
+  "components": [
+    {
+      "type": "buttons",
+      "rows": [[{ "action_id": "second", "label": "Second" }]]
+    }
+  ]
+}
+\`\`\``,
+        },
+      ],
+    };
+
+    const requests = renderTurnToTelegramRequests(turn, {
+      inlineApproval: true,
+      callbackSecret: "callback-secret",
+    });
+    const callbackMessages = requests.filter(
+      (entry) => entry.method === "sendMessage" && entry.params.reply_markup !== undefined,
+    );
+    expect(callbackMessages).toHaveLength(2);
+    expect(callbackMessages[0]?.params.text).toEqual(expect.stringContaining("intro"));
+    expect(callbackMessages[0]?.params.text).toEqual(expect.not.stringContaining("telegram-ui"));
+    expect(callbackMessages[1]?.params.text).toBe("Second action");
+
+    const firstCallbackData = (
+      (
+        callbackMessages[0]?.params.reply_markup as {
+          inline_keyboard?: Array<Array<{ callback_data?: string }>>;
+        }
+      )?.inline_keyboard?.[0]?.[0]?.callback_data ?? ""
+    ).toString();
+    const secondCallbackData = (
+      (
+        callbackMessages[1]?.params.reply_markup as {
+          inline_keyboard?: Array<Array<{ callback_data?: string }>>;
+        }
+      )?.inline_keyboard?.[0]?.[0]?.callback_data ?? ""
+    ).toString();
+    const firstDecoded = decodeTelegramApprovalCallback(firstCallbackData, "callback-secret", {
+      context: "12345",
+    });
+    const secondDecoded = decodeTelegramApprovalCallback(secondCallbackData, "callback-secret", {
+      context: "12345",
+    });
+    expect(firstDecoded?.actionId).toBe("first");
+    expect(secondDecoded?.actionId).toBe("second");
+  });
+
+  test("does not parse telegram-ui block from tool turns", () => {
+    const turn: TurnEnvelope = {
+      schema: "brewva.turn.v1",
+      kind: "tool",
+      sessionId: "channel:session",
+      turnId: "tool-ui-1",
+      channel: "telegram",
+      conversationId: "12345",
+      timestamp: 1_700_000_000_000,
+      parts: [
+        {
+          type: "text",
+          text: `tool output
+\`\`\`telegram-ui
+{
+  "version": "telegram-ui/v1",
+  "screen_id": "should-not-render",
+  "text": "Choose deploy action",
+  "components": [
+    {
+      "type": "buttons",
+      "rows": [[{ "action_id": "confirm", "label": "Confirm" }]]
+    }
+  ]
+}
+\`\`\``,
+        },
+      ],
+    };
+
+    const requests = renderTurnToTelegramRequests(turn, {
+      inlineApproval: true,
+      callbackSecret: "callback-secret",
+    });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.params.reply_markup).toBeUndefined();
+    expect(requests[0]?.params.text).toEqual(expect.stringContaining("telegram-ui"));
+  });
+
+  test("falls back to textual telegram-ui instructions when callback secret is missing", () => {
+    const turn: TurnEnvelope = {
+      schema: "brewva.turn.v1",
+      kind: "assistant",
+      sessionId: "channel:session",
+      turnId: "assistant-ui-2",
+      channel: "telegram",
+      conversationId: "12345",
+      timestamp: 1_700_000_000_000,
+      parts: [
+        {
+          type: "text",
+          text: `\`\`\`telegram-ui
+{
+  "version": "telegram-ui/v1",
+  "screen_id": "deploy-confirm",
+  "text": "Choose deploy action",
+  "components": [
+    {
+      "type": "buttons",
+      "rows": [
+        [
+          { "action_id": "confirm", "label": "Confirm" },
+          { "action_id": "cancel", "label": "Cancel" }
+        ]
+      ]
+    }
+  ],
+  "fallback_text": "Reply with: confirm or cancel"
+}
+\`\`\``,
+        },
+      ],
+    };
+
+    const requests = renderTurnToTelegramRequests(turn, {
+      inlineApproval: true,
+    });
+    const messages = requests.filter((entry) => entry.method === "sendMessage");
+    expect(messages.length).toBeGreaterThan(0);
+    expect(messages.some((entry) => entry.params.reply_markup !== undefined)).toBe(false);
+    expect(
+      messages.some(
+        (entry) =>
+          typeof entry.params.text === "string" &&
+          entry.params.text.includes("Reply with: confirm or cancel"),
+      ),
+    ).toBe(true);
+  });
+
   test("builds deterministic dedupe keys", () => {
     const messageUpdate: TelegramUpdate = {
       update_id: 99,

@@ -4,7 +4,10 @@ import {
   TelegramChannelAdapter,
   type TelegramChannelTransport,
 } from "../../packages/brewva-channels-telegram/src/adapter.js";
-import { encodeTelegramApprovalCallback } from "../../packages/brewva-channels-telegram/src/approval-callback.js";
+import {
+  decodeTelegramApprovalCallback,
+  encodeTelegramApprovalCallback,
+} from "../../packages/brewva-channels-telegram/src/approval-callback.js";
 import type {
   TelegramOutboundRequest,
   TelegramUpdate,
@@ -154,6 +157,93 @@ describe("channel telegram adapter", () => {
     expect(transport.sent).toContainEqual({
       method: "answerCallbackQuery",
       params: { callback_query_id: "cbq-1" },
+    });
+  });
+
+  test("restores persisted telegram-ui state in callback approval turn", async () => {
+    const transport = createTransport();
+    const secret = "callback-secret";
+    const adapter = new TelegramChannelAdapter({
+      transport: transport.transport,
+      inbound: { callbackSecret: secret },
+      outbound: { callbackSecret: secret, inlineApproval: true },
+    });
+    const inbound: TurnEnvelope[] = [];
+    const outboundTurn: TurnEnvelope = {
+      schema: "brewva.turn.v1",
+      kind: "assistant",
+      sessionId: "channel:session",
+      turnId: "outbound-ui-state-1",
+      channel: "telegram",
+      conversationId: "12345",
+      timestamp: 1_700_000_000_000,
+      parts: [
+        {
+          type: "text",
+          text: `\`\`\`telegram-ui
+{
+  "version": "telegram-ui/v1",
+  "screen_id": "deploy-confirm",
+  "state_key": "deploy-flow",
+  "text": "Choose deploy action",
+  "components": [
+    {
+      "type": "buttons",
+      "rows": [[{ "action_id": "confirm", "label": "Confirm" }]]
+    }
+  ],
+  "state": { "flow": "deploy", "step": "confirm", "target": "service-a" }
+}
+\`\`\``,
+        },
+      ],
+    };
+
+    await adapter.start({
+      onTurn: async (turn) => {
+        inbound.push(turn);
+      },
+    });
+    await adapter.sendTurn(outboundTurn);
+
+    const callbackData = (
+      (
+        transport.sent[0]?.params.reply_markup as {
+          inline_keyboard?: Array<Array<{ callback_data?: string }>>;
+        }
+      )?.inline_keyboard?.[0]?.[0]?.callback_data ?? ""
+    ).toString();
+    const decoded = decodeTelegramApprovalCallback(callbackData, secret, {
+      context: "12345",
+    });
+    expect(decoded).not.toBeNull();
+
+    await transport.emitUpdate({
+      update_id: 9003,
+      callback_query: {
+        id: "cbq-ui-state",
+        from: { id: 42, is_bot: false, first_name: "Ada", username: "ada" },
+        message: {
+          message_id: 120,
+          date: 1_700_000_004,
+          chat: { id: 12345, type: "private" },
+        },
+        data: callbackData,
+      },
+    });
+    await adapter.stop();
+
+    expect(inbound).toHaveLength(1);
+    expect(inbound[0]?.kind).toBe("approval");
+    expect(inbound[0]?.approval?.requestId).toBe(decoded?.requestId);
+    expect(inbound[0]?.approval?.detail).toContain("screen: deploy-confirm");
+    expect(inbound[0]?.approval?.detail).toContain("state_key: deploy-flow");
+    expect(inbound[0]?.meta?.approvalScreenId).toBe("deploy-confirm");
+    expect(inbound[0]?.meta?.approvalStateKey).toBe("deploy-flow");
+    expect(inbound[0]?.meta?.approvalState).toEqual({
+      flow: "deploy",
+      step: "confirm",
+      target: "service-a",
     });
   });
 

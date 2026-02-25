@@ -143,7 +143,7 @@ Skills are loaded in three tiers with increasing precedence — higher tiers can
 | Tier    | Location          | Current Skills                                                                                                |
 | ------- | ----------------- | ------------------------------------------------------------------------------------------------------------- |
 | Base    | `skills/base/`    | `cartography`, `compose`, `debugging`, `exploration`, `git`, `patching`, `planning`, `review`, `verification` |
-| Pack    | `skills/packs/`   | `browser`, `frontend-ui-ux`, `gh-issues`, `github`, `skill-creator`                                           |
+| Pack    | `skills/packs/`   | `browser`, `frontend-ui-ux`, `gh-issues`, `github`, `skill-creator`, `telegram-interactive-components`        |
 | Project | `skills/project/` | `brewva-project`                                                                                              |
 
 Discovery walks multiple roots (module ancestors, executable sidecar, global config, project config, explicit `skills.roots`) with symlink containment and depth bounds.

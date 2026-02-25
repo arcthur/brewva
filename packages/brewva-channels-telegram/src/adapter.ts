@@ -11,6 +11,9 @@ import {
   buildTelegramInboundDedupeKey,
   projectTelegramUpdateToTurn,
   renderTurnToTelegramRequests,
+  type TelegramApprovalStatePersistParams,
+  type TelegramApprovalStateResolveParams,
+  type TelegramApprovalStateSnapshot,
   type TelegramInboundProjectionOptions,
   type TelegramOutboundRenderOptions,
 } from "./projector.js";
@@ -19,6 +22,9 @@ import type { TelegramOutboundRequest, TelegramUpdate } from "./types.js";
 const TELEGRAM_DEDUPE_MAX_ENTRIES_DEFAULT = 2048;
 const TELEGRAM_DEDUPE_MAX_ENTRIES_MIN = 32;
 const TELEGRAM_DEDUPE_MAX_ENTRIES_MAX = 50_000;
+const TELEGRAM_APPROVAL_STATE_MAX_ENTRIES_DEFAULT = 2048;
+const TELEGRAM_APPROVAL_STATE_MAX_ENTRIES_MIN = 32;
+const TELEGRAM_APPROVAL_STATE_MAX_ENTRIES_MAX = 50_000;
 
 export const TELEGRAM_CHANNEL_DEFAULT_CAPABILITIES: ChannelCapabilities = {
   streaming: false,
@@ -56,6 +62,11 @@ export interface TelegramCallbackAckOptions {
   cacheTimeSeconds?: number;
 }
 
+export interface TelegramApprovalStateOptions {
+  enabled?: boolean;
+  maxEntries?: number;
+}
+
 export interface TelegramChannelAdapterOptions {
   transport: TelegramChannelTransport;
   capabilities?: TelegramChannelCapabilitiesResolver;
@@ -63,6 +74,7 @@ export interface TelegramChannelAdapterOptions {
   outbound?: TelegramOutboundRenderOptions;
   dedupe?: TelegramInboundDedupeOptions;
   callbackAck?: TelegramCallbackAckOptions;
+  approvalState?: TelegramApprovalStateOptions;
 }
 
 type DedupeStatus = "inflight" | "done";
@@ -84,6 +96,17 @@ function resolveDedupeMaxEntries(input: number | undefined): number {
   );
 }
 
+function resolveApprovalStateMaxEntries(input: number | undefined): number {
+  if (typeof input !== "number" || !Number.isFinite(input)) {
+    return TELEGRAM_APPROVAL_STATE_MAX_ENTRIES_DEFAULT;
+  }
+  const floored = Math.floor(input);
+  return Math.max(
+    TELEGRAM_APPROVAL_STATE_MAX_ENTRIES_MIN,
+    Math.min(TELEGRAM_APPROVAL_STATE_MAX_ENTRIES_MAX, floored),
+  );
+}
+
 function normalizeOptionalText(value: string | undefined): string | undefined {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim();
@@ -102,12 +125,15 @@ export class TelegramChannelAdapter implements ChannelAdapter {
 
   private startContext: AdapterStartContext | null = null;
   private readonly inboundDedupeState = new Map<string, DedupeStatus>();
+  private readonly approvalStateStore = new Map<string, TelegramApprovalStateSnapshot>();
   private readonly dedupeEnabled: boolean;
   private readonly dedupeMaxEntries: number;
   private readonly callbackAckEnabled: boolean;
   private readonly callbackAckText: string | undefined;
   private readonly callbackAckShowAlert: boolean | undefined;
   private readonly callbackAckCacheTimeSeconds: number | undefined;
+  private readonly approvalStateEnabled: boolean;
+  private readonly approvalStateMaxEntries: number;
 
   constructor(private readonly options: TelegramChannelAdapterOptions) {
     this.dedupeEnabled = options.dedupe?.enabled ?? true;
@@ -120,6 +146,10 @@ export class TelegramChannelAdapter implements ChannelAdapter {
         : undefined;
     this.callbackAckCacheTimeSeconds = normalizeOptionalNonNegativeInt(
       options.callbackAck?.cacheTimeSeconds,
+    );
+    this.approvalStateEnabled = options.approvalState?.enabled ?? true;
+    this.approvalStateMaxEntries = resolveApprovalStateMaxEntries(
+      options.approvalState?.maxEntries,
     );
   }
 
@@ -146,6 +176,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     } catch (error) {
       this.startContext = null;
       this.inboundDedupeState.clear();
+      this.approvalStateStore.clear();
       throw error;
     }
   }
@@ -155,12 +186,20 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     await this.options.transport.stop();
     this.startContext = null;
     this.inboundDedupeState.clear();
+    this.approvalStateStore.clear();
   }
 
   async sendTurn(
     turn: Parameters<typeof renderTurnToTelegramRequests>[0],
   ): Promise<AdapterSendResult> {
-    const requests = renderTurnToTelegramRequests(turn, this.options.outbound);
+    const outboundOptions = this.options.outbound;
+    const requests = renderTurnToTelegramRequests(turn, {
+      ...outboundOptions,
+      persistApprovalState: (params) => {
+        this.persistApprovalState(params);
+        outboundOptions?.persistApprovalState?.(params);
+      },
+    });
     if (requests.length === 0) {
       return {};
     }
@@ -211,6 +250,72 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     }
   }
 
+  private buildApprovalStateStoreKey(params: {
+    conversationId: string;
+    requestId: string;
+  }): string {
+    return `${params.conversationId}:${params.requestId}`;
+  }
+
+  private normalizeApprovalStateSnapshot(
+    snapshot: TelegramApprovalStateSnapshot | undefined,
+  ): TelegramApprovalStateSnapshot | undefined {
+    if (!snapshot) return undefined;
+    const screenId =
+      typeof snapshot.screenId === "string" && snapshot.screenId.trim().length > 0
+        ? snapshot.screenId.trim()
+        : undefined;
+    const stateKey =
+      typeof snapshot.stateKey === "string" && snapshot.stateKey.trim().length > 0
+        ? snapshot.stateKey.trim()
+        : undefined;
+    const state = snapshot.state;
+    if (!screenId && !stateKey && state === undefined) {
+      return undefined;
+    }
+    return {
+      ...(screenId ? { screenId } : {}),
+      ...(stateKey ? { stateKey } : {}),
+      ...(state !== undefined ? { state } : {}),
+    };
+  }
+
+  private persistApprovalState(params: TelegramApprovalStatePersistParams): void {
+    if (!this.approvalStateEnabled) {
+      return;
+    }
+    const snapshot = this.normalizeApprovalStateSnapshot(params.snapshot);
+    if (!snapshot) {
+      return;
+    }
+    const key = this.buildApprovalStateStoreKey(params);
+    if (this.approvalStateStore.has(key)) {
+      this.approvalStateStore.delete(key);
+    }
+    this.approvalStateStore.set(key, snapshot);
+    while (this.approvalStateStore.size > this.approvalStateMaxEntries) {
+      const oldest = this.approvalStateStore.keys().next().value;
+      if (!oldest) break;
+      this.approvalStateStore.delete(oldest);
+    }
+  }
+
+  private resolveApprovalState(
+    params: TelegramApprovalStateResolveParams,
+  ): TelegramApprovalStateSnapshot | undefined {
+    if (!this.approvalStateEnabled) {
+      return undefined;
+    }
+    const key = this.buildApprovalStateStoreKey(params);
+    const snapshot = this.approvalStateStore.get(key);
+    if (!snapshot) {
+      return undefined;
+    }
+    this.approvalStateStore.delete(key);
+    this.approvalStateStore.set(key, snapshot);
+    return snapshot;
+  }
+
   private async handleUpdate(update: TelegramUpdate): Promise<void> {
     const context = this.startContext;
     if (!context) {
@@ -223,7 +328,12 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     }
 
     try {
-      const projected = projectTelegramUpdateToTurn(update, this.options.inbound);
+      const inboundOptions = this.options.inbound;
+      const projected = projectTelegramUpdateToTurn(update, {
+        ...inboundOptions,
+        resolveApprovalState: (params) =>
+          inboundOptions?.resolveApprovalState?.(params) ?? this.resolveApprovalState(params),
+      });
       if (!projected) {
         this.finishInboundProcessing(dedupeKey, true);
         return;
