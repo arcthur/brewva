@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { buildChannelDedupeKey, buildChannelSessionId } from "@brewva/brewva-runtime/channels";
 import type { ApprovalPayload, TurnEnvelope, TurnPart } from "@brewva/brewva-runtime/channels";
 import {
@@ -13,17 +14,64 @@ import type {
 } from "./types.js";
 
 const TELEGRAM_TEXT_LIMIT = 4096;
+const TELEGRAM_UI_VERSION = "telegram-ui/v1";
+const TELEGRAM_UI_CODE_BLOCK = /```([a-z0-9_-]*)\s*\n([\s\S]*?)```/gi;
+const TELEGRAM_UI_ACTION_ID_MAX_LENGTH = 12;
+const TELEGRAM_UI_REQUEST_PREFIX_MAX_LENGTH = 7;
+const TELEGRAM_UI_REQUEST_HASH_LENGTH = 8;
+
+interface TelegramUiAction {
+  actionId: string;
+  label: string;
+  style?: "primary" | "neutral" | "danger";
+}
+
+interface TelegramUiActionExtraction {
+  actions: TelegramUiAction[];
+  rows: string[][];
+}
+
+export interface TelegramApprovalStateSnapshot {
+  screenId?: string;
+  stateKey?: string;
+  state?: unknown;
+}
+
+interface TelegramUiProjection {
+  approval: ApprovalPayload;
+  approvalText: string;
+  fallbackText: string;
+  cleanedText: string;
+  actionRows: string[][];
+  stateSnapshot?: TelegramApprovalStateSnapshot;
+}
+
+export interface TelegramApprovalStateResolveParams {
+  conversationId: string;
+  requestId: string;
+  actionId: string;
+}
+
+export interface TelegramApprovalStatePersistParams {
+  conversationId: string;
+  requestId: string;
+  snapshot: TelegramApprovalStateSnapshot;
+}
 
 export interface TelegramInboundProjectionOptions {
   callbackSecret?: string;
   includeBotMessages?: boolean;
   now?: () => number;
+  resolveApprovalState?: (
+    params: TelegramApprovalStateResolveParams,
+  ) => TelegramApprovalStateSnapshot | null | undefined;
 }
 
 export interface TelegramOutboundRenderOptions {
   inlineApproval?: boolean;
   callbackSecret?: string;
   maxTextLength?: number;
+  persistApprovalState?: (params: TelegramApprovalStatePersistParams) => void;
 }
 
 function nowMs(options?: TelegramInboundProjectionOptions): number {
@@ -213,21 +261,329 @@ function buildApprovalFallbackText(payload: ApprovalPayload): string {
   return lines.join("\n");
 }
 
+function normalizeOptionalText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeCallbackToken(value: unknown, maxLength: number): string | undefined {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) return undefined;
+  const compact = normalized
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[-_]+|[-_]+$/g, "");
+  if (!compact) return undefined;
+  return compact.slice(0, Math.max(1, maxLength));
+}
+
+function normalizeActionStyle(value: unknown): "primary" | "neutral" | "danger" | undefined {
+  if (value !== "primary" && value !== "neutral" && value !== "danger") {
+    return undefined;
+  }
+  return value;
+}
+
+function summarizeState(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  try {
+    const serialized = JSON.stringify(value);
+    if (!serialized || serialized === "{}" || serialized === "[]") {
+      return undefined;
+    }
+    return serialized.length <= 180 ? serialized : `${serialized.slice(0, 177)}...`;
+  } catch {
+    return undefined;
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function hasOwnProperty(record: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+function normalizeApprovalStateSnapshot(value: unknown): TelegramApprovalStateSnapshot | undefined {
+  const record = asRecord(value);
+  if (!record) return undefined;
+
+  const screenId = normalizeOptionalText(record.screenId ?? record.screen_id);
+  const stateKey = normalizeOptionalText(record.stateKey ?? record.state_key);
+  const state = hasOwnProperty(record, "state") ? record.state : undefined;
+  if (!screenId && !stateKey && state === undefined) {
+    return undefined;
+  }
+  return {
+    ...(screenId ? { screenId } : {}),
+    ...(stateKey ? { stateKey } : {}),
+    ...(state !== undefined ? { state } : {}),
+  };
+}
+
+function buildApprovalStateDetail(
+  snapshot: TelegramApprovalStateSnapshot | undefined,
+): string | undefined {
+  if (!snapshot) return undefined;
+  const detailLines: string[] = [];
+  if (snapshot.screenId) detailLines.push(`screen: ${snapshot.screenId}`);
+  if (snapshot.stateKey) detailLines.push(`state_key: ${snapshot.stateKey}`);
+  const stateSummary = summarizeState(snapshot.state);
+  if (stateSummary) detailLines.push(`state: ${stateSummary}`);
+  return detailLines.length > 0 ? detailLines.join("\n") : undefined;
+}
+
+function extractApprovalStateSnapshotFromTurnMeta(
+  turn: TurnEnvelope,
+): TelegramApprovalStateSnapshot | undefined {
+  const meta = asRecord(turn.meta);
+  if (!meta) return undefined;
+
+  const nested =
+    normalizeApprovalStateSnapshot(meta.approvalState) ??
+    normalizeApprovalStateSnapshot(meta.approval_state);
+  if (nested) {
+    return nested;
+  }
+
+  const screenId = normalizeOptionalText(meta.approvalScreenId ?? meta.approval_screen_id);
+  const stateKey = normalizeOptionalText(meta.approvalStateKey ?? meta.approval_state_key);
+  const state = hasOwnProperty(meta, "approvalState") ? meta.approvalState : undefined;
+  if (!screenId && !stateKey && state === undefined) {
+    return undefined;
+  }
+  return {
+    ...(screenId ? { screenId } : {}),
+    ...(stateKey ? { stateKey } : {}),
+    ...(state !== undefined ? { state } : {}),
+  };
+}
+
+function parseUiAction(value: unknown, fallbackIndex: number): TelegramUiAction | null {
+  const record = asRecord(value);
+  if (!record) return null;
+
+  const actionId =
+    normalizeCallbackToken(record.action_id ?? record.id, TELEGRAM_UI_ACTION_ID_MAX_LENGTH) ??
+    `a${fallbackIndex}`;
+  const label =
+    normalizeOptionalText(record.label) ??
+    normalizeOptionalText(record.text) ??
+    normalizeOptionalText(record.title) ??
+    actionId;
+  const style = normalizeActionStyle(record.style);
+
+  return {
+    actionId,
+    label,
+    ...(style ? { style } : {}),
+  };
+}
+
+function extractUiActions(components: unknown): TelegramUiActionExtraction {
+  if (!Array.isArray(components)) {
+    return { actions: [], rows: [] };
+  }
+
+  const dedupedActions = new Map<string, TelegramUiAction>();
+  const rowGroups: string[][] = [];
+  let fallbackIndex = 1;
+  const addAction = (value: unknown): TelegramUiAction | null => {
+    const parsed = parseUiAction(value, fallbackIndex);
+    if (!parsed) return null;
+    fallbackIndex += 1;
+    if (!dedupedActions.has(parsed.actionId)) {
+      dedupedActions.set(parsed.actionId, parsed);
+    }
+    return dedupedActions.get(parsed.actionId) ?? parsed;
+  };
+  const appendRow = (values: unknown[]): void => {
+    const row: string[] = [];
+    for (const value of values) {
+      const action = addAction(value);
+      if (!action || row.includes(action.actionId)) continue;
+      row.push(action.actionId);
+    }
+    if (row.length > 0) {
+      rowGroups.push(row);
+    }
+  };
+
+  for (const component of components) {
+    const record = asRecord(component);
+    if (!record) continue;
+
+    const rows = Array.isArray(record.rows) ? record.rows : [];
+    for (const row of rows) {
+      if (!Array.isArray(row)) continue;
+      appendRow(row);
+    }
+
+    if (record.type === "single_select" && Array.isArray(record.options)) {
+      appendRow(record.options);
+    }
+
+    if (Array.isArray(record.actions)) {
+      appendRow(record.actions);
+    }
+  }
+
+  const actions = [...dedupedActions.values()];
+  const rows = rowGroups
+    .map((row) => row.filter((actionId) => dedupedActions.has(actionId)))
+    .filter((row) => row.length > 0);
+  if (rows.length === 0) {
+    for (const action of actions) {
+      rows.push([action.actionId]);
+    }
+  }
+  return { actions, rows };
+}
+
+function buildUiRequestId(payload: Record<string, unknown>, actions: TelegramUiAction[]): string {
+  const explicitRequestId = normalizeCallbackToken(
+    payload.request_id,
+    TELEGRAM_UI_ACTION_ID_MAX_LENGTH,
+  );
+  if (explicitRequestId) {
+    return explicitRequestId;
+  }
+
+  const screenToken =
+    normalizeCallbackToken(payload.screen_id, TELEGRAM_UI_REQUEST_PREFIX_MAX_LENGTH) ?? "ui";
+  const seed = JSON.stringify({
+    screenId: payload.screen_id ?? null,
+    state: payload.state ?? null,
+    actions: actions.map((action) => action.actionId),
+  });
+  const digest = createHash("sha256")
+    .update(seed)
+    .digest("hex")
+    .slice(0, TELEGRAM_UI_REQUEST_HASH_LENGTH);
+  return `${screenToken}_${digest}`;
+}
+
+function projectTelegramUiBlock(text: string): TelegramUiProjection | null {
+  TELEGRAM_UI_CODE_BLOCK.lastIndex = 0;
+  for (const match of text.matchAll(TELEGRAM_UI_CODE_BLOCK)) {
+    const language = (match[1] ?? "").trim().toLowerCase();
+    const body = (match[2] ?? "").trim();
+    if (!body) continue;
+    if (
+      language &&
+      language !== "telegram-ui" &&
+      language !== "telegram_ui" &&
+      language !== "json"
+    ) {
+      continue;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      continue;
+    }
+    const payload = asRecord(parsed);
+    if (!payload) continue;
+    if (normalizeOptionalText(payload.version) !== TELEGRAM_UI_VERSION) {
+      continue;
+    }
+
+    const { actions, rows } = extractUiActions(payload.components);
+    if (actions.length === 0) {
+      continue;
+    }
+
+    const requestId = buildUiRequestId(payload, actions);
+    const title =
+      normalizeOptionalText(payload.text) ??
+      normalizeOptionalText(payload.title) ??
+      "Choose an action";
+    const fallbackCandidate = normalizeOptionalText(payload.fallback_text);
+    const stateSnapshot = normalizeApprovalStateSnapshot({
+      screenId: payload.screen_id,
+      stateKey: payload.state_key,
+      ...(hasOwnProperty(payload, "state") ? { state: payload.state } : {}),
+    });
+
+    const detailLines: string[] = [];
+    const stateDetail = buildApprovalStateDetail(stateSnapshot);
+    if (stateDetail) detailLines.push(stateDetail);
+    if (fallbackCandidate) detailLines.push(fallbackCandidate);
+
+    const approvalActions: ApprovalPayload["actions"] = actions.map((action) => {
+      const mapped: ApprovalPayload["actions"][number] = {
+        id: action.actionId,
+        label: action.label,
+      };
+      if (action.style) {
+        mapped.style = action.style;
+      }
+      return mapped;
+    });
+
+    const approval: ApprovalPayload = {
+      requestId,
+      title,
+      ...(detailLines.length > 0 ? { detail: detailLines.join("\n") } : {}),
+      actions: approvalActions,
+    };
+
+    const fullMatch = match[0] ?? "";
+    const matchStart = match.index ?? 0;
+    const cleanedText =
+      `${text.slice(0, matchStart)}${text.slice(matchStart + fullMatch.length)}`.trim();
+    const fallbackText = fallbackCandidate ?? buildApprovalFallbackText(approval);
+    const approvalText = cleanedText || normalizeOptionalText(payload.text) || fallbackText;
+
+    return {
+      approval,
+      approvalText,
+      fallbackText,
+      cleanedText,
+      actionRows: rows,
+      ...(stateSnapshot ? { stateSnapshot } : {}),
+    };
+  }
+  return null;
+}
+
 function buildReplyMarkup(
   approval: ApprovalPayload,
   callbackSecret: string,
   context?: string,
+  actionRows?: string[][],
 ): Record<string, unknown> {
-  const inlineKeyboard = approval.actions.map((action) => [
-    {
+  const actionById = new Map(approval.actions.map((action) => [action.id, action]));
+  const resolvedRows =
+    actionRows && actionRows.length > 0
+      ? actionRows
+          .map((row) =>
+            row
+              .map((actionId) => actionById.get(actionId))
+              .filter(
+                (action): action is ApprovalPayload["actions"][number] => action !== undefined,
+              ),
+          )
+          .filter((row): row is ApprovalPayload["actions"] => row.length > 0)
+      : approval.actions.map((action) => [action]);
+  const inlineKeyboard = resolvedRows.map((row) =>
+    row.map((action) => ({
       text: action.label,
       callback_data: encodeTelegramApprovalCallback(
         { requestId: approval.requestId, actionId: action.id },
         callbackSecret,
         context ? { context } : undefined,
       ),
-    },
-  ]);
+    })),
+  );
   return { inline_keyboard: inlineKeyboard };
 }
 
@@ -266,6 +622,18 @@ function projectCallbackQueryToApprovalTurn(
     [callback.from.first_name, callback.from.last_name].filter(Boolean).join(" ").trim() ||
     callback.from.username ||
     String(callback.from.id);
+  const restoredState = normalizeApprovalStateSnapshot(
+    options?.resolveApprovalState?.({
+      conversationId,
+      requestId: decision.requestId,
+      actionId: decision.actionId,
+    }),
+  );
+  const stateDetail = buildApprovalStateDetail(restoredState);
+  const partText = [`approval ${decision.requestId} -> ${decision.actionId}`];
+  if (stateDetail) {
+    partText.push(stateDetail);
+  }
 
   return {
     schema: "brewva.turn.v1",
@@ -280,10 +648,11 @@ function projectCallbackQueryToApprovalTurn(
         ? String(callback.message.message_thread_id)
         : undefined,
     timestamp,
-    parts: [{ type: "text", text: `approval ${decision.requestId} -> ${decision.actionId}` }],
+    parts: [{ type: "text", text: partText.join("\n") }],
     approval: {
       requestId: decision.requestId,
       title: "Approval decision",
+      ...(stateDetail ? { detail: stateDetail } : {}),
       actions: [{ id: decision.actionId, label: decision.actionId }],
     },
     meta: {
@@ -293,6 +662,9 @@ function projectCallbackQueryToApprovalTurn(
       senderId: callback.from.id.toString(),
       senderName,
       senderUsername: callback.from.username ?? null,
+      ...(restoredState?.screenId ? { approvalScreenId: restoredState.screenId } : {}),
+      ...(restoredState?.stateKey ? { approvalStateKey: restoredState.stateKey } : {}),
+      ...(restoredState?.state !== undefined ? { approvalState: restoredState.state } : {}),
     },
   };
 }
@@ -384,6 +756,26 @@ export function renderTurnToTelegramRequests(
   const textParts = turn.parts.filter(
     (part): part is Extract<TurnPart, { type: "text" }> => part.type === "text",
   );
+  const normalizedTextParts: Extract<TurnPart, { type: "text" }>[] = [];
+  const uiProjections: TelegramUiProjection[] = [];
+  for (const textPart of textParts) {
+    let normalizedText = textPart.text;
+    if (turn.kind === "assistant") {
+      while (true) {
+        const projected = projectTelegramUiBlock(normalizedText);
+        if (!projected) break;
+        uiProjections.push(projected);
+        if (projected.cleanedText === normalizedText) {
+          break;
+        }
+        normalizedText = projected.cleanedText;
+      }
+    }
+    const cleaned = normalizedText.trim();
+    if (cleaned.length > 0) {
+      normalizedTextParts.push({ type: "text", text: cleaned });
+    }
+  }
   const mediaParts = turn.parts.filter((part) => part.type !== "text");
   const appendSplitSendMessage = (text: string, replyMarkup?: Record<string, unknown>): void => {
     for (const [index, chunk] of splitText(text, maxTextLength).entries()) {
@@ -406,7 +798,7 @@ export function renderTurnToTelegramRequests(
         entry.params.text.includes("Reply with one of:"),
     );
 
-  for (const textPart of textParts) {
+  for (const textPart of normalizedTextParts) {
     for (const chunk of splitText(textPart.text, maxTextLength)) {
       if (!chunk) continue;
       requests.push(
@@ -439,33 +831,65 @@ export function renderTurnToTelegramRequests(
     );
   }
 
+  const approvalEntries: Array<{ payload: ApprovalPayload; projection?: TelegramUiProjection }> =
+    [];
   if (turn.kind === "approval" && turn.approval) {
+    approvalEntries.push({ payload: turn.approval });
+  } else {
+    for (const projection of uiProjections) {
+      approvalEntries.push({ payload: projection.approval, projection });
+    }
+  }
+
+  const turnMetaApprovalState =
+    turn.kind === "approval" ? extractApprovalStateSnapshotFromTurnMeta(turn) : undefined;
+  for (const [index, approvalEntry] of approvalEntries.entries()) {
+    const approvalPayload = approvalEntry.payload;
+    const projection = approvalEntry.projection;
     const inlineEnabled = options.inlineApproval !== false;
     const callbackSecret = options.callbackSecret?.trim();
-    const fallbackText = buildApprovalFallbackText(turn.approval);
-    const baseText = turn.parts.find(
-      (part): part is Extract<TurnPart, { type: "text" }> => part.type === "text",
-    )?.text;
+    const fallbackText = projection?.fallbackText ?? buildApprovalFallbackText(approvalPayload);
+    const baseText = projection
+      ? projection.approvalText
+      : normalizedTextParts.find(
+          (part): part is Extract<TurnPart, { type: "text" }> => part.type === "text",
+        )?.text;
     const approvalText = baseText?.trim() || fallbackText;
+    const approvalActionText = projection?.approval.title?.trim() || approvalText;
+    const avoidDuplicateHint = turn.kind === "approval";
 
     if (inlineEnabled && callbackSecret) {
       try {
-        const markup = buildReplyMarkup(turn.approval, callbackSecret, chatId);
-        const firstTextIdx = requests.findIndex((entry) => entry.method === "sendMessage");
-        if (firstTextIdx >= 0) {
+        const markup = buildReplyMarkup(
+          approvalPayload,
+          callbackSecret,
+          chatId,
+          projection?.actionRows,
+        );
+        const snapshot = projection?.stateSnapshot ?? turnMetaApprovalState;
+        if (snapshot) {
+          options.persistApprovalState?.({
+            conversationId: chatId,
+            requestId: approvalPayload.requestId,
+            snapshot,
+          });
+        }
+
+        const firstTextIdx = requests.findIndex((request) => request.method === "sendMessage");
+        if (index === 0 && firstTextIdx >= 0) {
           requests[firstTextIdx] = buildSendRequest("sendMessage", {
             ...requests[firstTextIdx]!.params,
             reply_markup: markup,
           });
         } else {
-          appendSplitSendMessage(approvalText, markup);
+          appendSplitSendMessage(approvalActionText, markup);
         }
       } catch {
-        if (!hasApprovalHint()) {
+        if (!avoidDuplicateHint || !hasApprovalHint()) {
           appendSplitSendMessage(fallbackText);
         }
       }
-    } else if (!hasApprovalHint()) {
+    } else if (!avoidDuplicateHint || !hasApprovalHint()) {
       appendSplitSendMessage(fallbackText);
     }
   }

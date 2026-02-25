@@ -58,6 +58,7 @@ interface PromptTurnOutputs {
 
 export const SUPPORTED_CHANNELS = ["telegram"] as const;
 export type SupportedChannel = (typeof SUPPORTED_CHANNELS)[number];
+const TELEGRAM_INTERACTIVE_SKILL_NAME = "telegram-interactive-components";
 
 interface ChannelLaunchBundle {
   bridge: ChannelTurnBridge;
@@ -92,6 +93,31 @@ export function resolveSupportedChannel(raw: string): SupportedChannel | null {
 
 function formatSupportedChannels(): string {
   return SUPPORTED_CHANNELS.join(", ");
+}
+
+function buildChannelSkillPolicyBlock(runtime: BrewvaRuntime, turn: TurnEnvelope): string {
+  if (turn.channel !== "telegram") {
+    return "";
+  }
+
+  const skill = runtime.skills.get(TELEGRAM_INTERACTIVE_SKILL_NAME);
+  if (!skill) {
+    return [
+      "[Brewva Channel Skill Policy]",
+      "Channel: telegram",
+      `Preferred interactive skill '${TELEGRAM_INTERACTIVE_SKILL_NAME}' is not available in this runtime.`,
+      "When interaction is required, emit plain-text fallback instructions only.",
+    ].join("\n");
+  }
+
+  return [
+    "[Brewva Channel Skill Policy]",
+    "Channel: telegram",
+    `Preferred interactive skill: ${skill.name}`,
+    `Skill description: ${skill.description}`,
+    `If interaction is needed, call tool 'skill_load' with name='${skill.name}' before composing output.`,
+    "If interaction is not needed, reply normally.",
+  ].join("\n");
 }
 
 const CHANNEL_LAUNCHERS: Record<
@@ -465,7 +491,13 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
     turnWalStore.markInflight(walId);
     try {
       const canonicalTurn = canonicalizeInboundTurnSession(turn, state.agentSessionId);
-      const prompt = buildInboundPrompt(canonicalTurn);
+      const prompt = [
+        buildChannelSkillPolicyBlock(runtime, canonicalTurn),
+        buildInboundPrompt(canonicalTurn),
+      ]
+        .filter((segment) => segment.trim().length > 0)
+        .join("\n\n")
+        .trim();
       if (!prompt) {
         turnWalStore.markDone(walId);
         return;

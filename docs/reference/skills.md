@@ -25,6 +25,7 @@ Skill parsing, merge, and selection logic:
 - `gh-issues`
 - `github`
 - `skill-creator`
+- `telegram-interactive-components`
 
 ## Project Skills
 

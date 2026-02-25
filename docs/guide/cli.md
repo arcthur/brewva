@@ -64,6 +64,7 @@ Useful flags:
 - `--cwd`
 - `--config`
 - `--model`
+- `--agent`
 - `--task`
 - `--task-file`
 - `--no-extensions`

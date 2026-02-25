@@ -6,7 +6,7 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
   },
   skills: {
     roots: [],
-    packs: ["skill-creator"],
+    packs: ["skill-creator", "telegram-interactive-components"],
     disabled: [],
     overrides: {},
     selector: {
