@@ -16,8 +16,10 @@
     }
   },
   "dependencies": {
+    "@brewva/brewva-channels-telegram": "workspace:*",
     "@brewva/brewva-extensions": "workspace:*",
     "@brewva/brewva-gateway": "workspace:*",
+    "@brewva/brewva-ingress": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
     "@brewva/brewva-tools": "workspace:*",
     "@mariozechner/pi-coding-agent": "^0.55.0",

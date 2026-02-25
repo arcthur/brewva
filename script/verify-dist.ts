@@ -93,6 +93,7 @@ function main(): void {
     const require = createRequire(import.meta.url);
     const packages = [
       "@brewva/brewva-runtime",
+      "@brewva/brewva-ingress",
       "@brewva/brewva-tools",
       "@brewva/brewva-extensions",
       "@brewva/brewva-cli",

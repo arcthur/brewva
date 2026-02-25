@@ -28,6 +28,8 @@
     "test:e2e:live:core": "BREWVA_E2E_LIVE=1 bun test test/e2e/replay-and-persistence.live.test.ts test/e2e/tool-call-proof.live.test.ts test/e2e/task-spec.live.test.ts test/e2e/signal-handling.live.test.ts test/e2e/undo.live.test.ts test/e2e/print-and-json-modes.live.test.ts test/e2e/cost-tracking.live.test.ts test/e2e/microsandbox-isolation.live.test.ts --timeout 600000",
     "test:e2e:live:interactive": "BREWVA_E2E_LIVE=1 bun test test/e2e/interactive-multi-turn.live.test.ts --timeout 600000",
     "test:e2e:live:msb": "BREWVA_E2E_LIVE=1 BREWVA_E2E_MSB=1 bun test test/e2e/microsandbox-isolation.live.test.ts --timeout 600000",
+    "test:webhook-smoke": "bun run script/smoke-telegram-webhook-edge.ts",
+    "test:webhook-smoke:live": "bun run script/smoke-telegram-webhook-live.ts",
     "typecheck": "tsc -b",
     "typecheck:test": "tsc -b test/tsconfig.json"
   },
@@ -36,6 +38,7 @@
     "@brewva/brewva-cli": "workspace:*",
     "@brewva/brewva-extensions": "workspace:*",
     "@brewva/brewva-gateway": "workspace:*",
+    "@brewva/brewva-ingress": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
     "@brewva/brewva-tools": "workspace:*",
     "@mariozechner/pi-coding-agent": "^0.55.0",

@@ -8,21 +8,28 @@ Describe the end-to-end `--channel` execution path: inbound channel updates are 
 
 ```mermaid
 flowchart TD
-  A["Channel Update (Telegram getUpdates)"] --> B["Telegram projector -> TurnEnvelope"]
-  B --> C["ChannelTurnBridge onTurnIngested/onInboundTurn"]
-  C --> D["CommandRouter (slash/@agent/default route)"]
-  D --> E["AgentRegistry (focus/ACL/CRUD)"]
-  E --> F["RuntimeManager (lazy worker runtime)"]
-  F --> G["Coordinator (fanout/discuss/A2A)"]
-  G --> H["Prompt synthesis + agent execution"]
-  H --> I["Assistant/tool turns generated"]
-  I --> J["Capability-aware delivery plan"]
-  J --> K["Telegram adapter sendTurn + callback acknowledgement"]
+  A["Channel Update"] --> B{"Transport"}
+  B -->|"Polling"| C["TelegramHttpTransport(getUpdates)"]
+  B -->|"Webhook"| D["Cloudflare Worker -> Fly ingress"]
+  C --> E["Telegram projector -> TurnEnvelope"]
+  D --> E
+  E --> F["ChannelTurnBridge onTurnIngested/onInboundTurn"]
+  F --> G["CommandRouter (slash/@agent/default route)"]
+  G --> H["AgentRegistry (focus/ACL/CRUD)"]
+  H --> I["RuntimeManager (lazy worker runtime)"]
+  I --> J["Coordinator (fanout/discuss/A2A)"]
+  J --> K["Prompt synthesis + agent execution"]
+  K --> L["Assistant/tool turns generated"]
+  L --> M["Capability-aware delivery plan"]
+  M --> N["Telegram adapter sendTurn + callback acknowledgement"]
 ```
 
 ## Key Steps
 
-1. Adapter ingress: the transport polls updates; the adapter deduplicates and projects each update into a normalized turn.
+1. Adapter ingress:
+   - polling path: transport calls `getUpdates`;
+   - webhook path: Worker validates and forwards update to Fly ingress;
+   - both paths end at projector + adapter dedupe and produce normalized turn.
 2. Bridge ingest: `channel_turn_ingested` is recorded, then the turn is handed to the CLI channel loop.
 3. Router/ACL phase: channel text is matched against orchestration commands and owner ACL policy (when enabled).
 4. Registry/scope phase: focus and agent lifecycle state are loaded from registry; routing scope is computed (`chat` or `thread`).
@@ -66,9 +73,15 @@ flowchart TD
   - `packages/brewva-channels-telegram/src/adapter.ts`
   - `packages/brewva-channels-telegram/src/projector.ts`
   - `packages/brewva-channels-telegram/src/http-transport.ts`
+  - `packages/brewva-channels-telegram/src/webhook-transport.ts`
+- Webhook ingress / edge adapter:
+  - `packages/brewva-ingress/src/telegram-ingress.ts`
+  - `packages/brewva-ingress/src/telegram-webhook-worker.ts`
+  - `distribution/worker/telegram-webhook-worker.ts`
 
 ## Related Docs
 
 - CLI guide: `docs/guide/cli.md`
+- Webhook edge ingress guide: `docs/guide/telegram-webhook-edge-ingress.md`
 - Command surface: `docs/reference/commands.md`
 - Event reference: `docs/reference/events.md`

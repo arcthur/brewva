@@ -162,6 +162,22 @@ Other Telegram flags are optional and mapped into channel-scoped config:
 `channelConfig.telegram.pollLimit`,
 `channelConfig.telegram.pollRetryMs`.
 
+Webhook ingress can be enabled via environment variables (no additional CLI flags):
+
+- `BREWVA_TELEGRAM_WEBHOOK_ENABLED=1`
+- `BREWVA_TELEGRAM_INGRESS_HOST`
+- `BREWVA_TELEGRAM_INGRESS_PORT`
+- `BREWVA_TELEGRAM_INGRESS_PATH`
+- `BREWVA_TELEGRAM_INGRESS_MAX_BODY_BYTES`
+- `BREWVA_TELEGRAM_INGRESS_AUTH_MODE` (`hmac|bearer|both`)
+- `BREWVA_TELEGRAM_INGRESS_BEARER_TOKEN`
+- `BREWVA_TELEGRAM_INGRESS_HMAC_SECRET`
+- `BREWVA_TELEGRAM_INGRESS_HMAC_MAX_SKEW_MS`
+- `BREWVA_TELEGRAM_INGRESS_NONCE_TTL_MS`
+
+For the complete Worker + Fly webhook deployment path, see:
+`docs/guide/telegram-webhook-edge-ingress.md`
+
 To temporarily restore upstream version-check notifications (this is an upstream `pi-coding-agent` environment variable), launch with an empty override:
 
 ```bash
@@ -181,6 +197,7 @@ bun run start -- --version
 bun run start -- onboard --install-daemon
 bun run start -- --channel telegram --telegram-token <bot-token>
 bun run start -- --channel tg --telegram-token <bot-token> --telegram-poll-timeout 15
+BREWVA_TELEGRAM_WEBHOOK_ENABLED=1 BREWVA_TELEGRAM_INGRESS_HMAC_SECRET=<secret> bun run start -- --channel telegram --telegram-token <bot-token>
 ```
 
 ## Related Journey

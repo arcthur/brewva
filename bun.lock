@@ -9,6 +9,7 @@
         "@brewva/brewva-cli": "workspace:*",
         "@brewva/brewva-extensions": "workspace:*",
         "@brewva/brewva-gateway": "workspace:*",
+        "@brewva/brewva-ingress": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
         "@brewva/brewva-tools": "workspace:*",
         "@mariozechner/pi-coding-agent": "^0.55.0",
@@ -104,8 +105,10 @@
         "brewva": "./dist/index.js",
       },
       "dependencies": {
+        "@brewva/brewva-channels-telegram": "workspace:*",
         "@brewva/brewva-extensions": "workspace:*",
         "@brewva/brewva-gateway": "workspace:*",
+        "@brewva/brewva-ingress": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
         "@brewva/brewva-tools": "workspace:*",
         "@mariozechner/pi-coding-agent": "^0.55.0",
@@ -133,6 +136,13 @@
         "@sinclair/typebox": "^0.34.48",
         "ajv": "^8.17.1",
         "ws": "^8.18.3",
+      },
+    },
+    "packages/brewva-ingress": {
+      "name": "@brewva/brewva-ingress",
+      "version": "0.1.0",
+      "dependencies": {
+        "@brewva/brewva-channels-telegram": "workspace:*",
       },
     },
     "packages/brewva-runtime": {
@@ -244,6 +254,8 @@
     "@brewva/brewva-extensions": ["@brewva/brewva-extensions@workspace:packages/brewva-extensions"],
 
     "@brewva/brewva-gateway": ["@brewva/brewva-gateway@workspace:packages/brewva-gateway"],
+
+    "@brewva/brewva-ingress": ["@brewva/brewva-ingress@workspace:packages/brewva-ingress"],
 
     "@brewva/brewva-linux-arm64": ["@brewva/brewva-linux-arm64@workspace:distribution/brewva-linux-arm64"],
 
