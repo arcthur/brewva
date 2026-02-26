@@ -437,7 +437,9 @@ export function buildGatewaySupervisorCommand(input: {
 
   if (typeof input.entryArg === "string" && input.entryArg.trim()) {
     const resolvedEntry = resolve(input.entryArg);
-    if (existsSync(resolvedEntry)) {
+    const normalizedEntry = resolvedEntry.replaceAll("\\", "/");
+    const isBunVirtualPath = normalizedEntry.includes("/$bunfs/");
+    if (existsSync(resolvedEntry) && !isBunVirtualPath) {
       return [resolvedEntry, ...startArgs];
     }
   }

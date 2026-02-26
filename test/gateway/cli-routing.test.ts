@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { runGatewayCli } from "@brewva/brewva-gateway";
 
 describe("gateway cli routing", () => {
@@ -229,6 +229,50 @@ describe("gateway cli routing", () => {
       expect(uninstall.exitCode).toBe(0);
       expect(existsSync(generatedFile)).toBe(false);
     } finally {
+      console.log = originalLog;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("install ignores bun virtual argv entry and falls back to env brewva", async () => {
+    const root = mkdtempSync(join(tmpdir(), "brewva-gateway-bunfs-"));
+    const cwd = join(root, "cwd");
+    const stateDir = join(root, "state");
+    const plistFile = join(root, "com.brewva.gateway.plist");
+    const unitFile = join(root, "brewva-gateway.service");
+    const installArgs =
+      process.platform === "darwin"
+        ? ["install", "--launchd", "--plist-file", plistFile]
+        : ["install", "--systemd", "--unit-file", unitFile];
+    const generatedFile = process.platform === "darwin" ? plistFile : unitFile;
+
+    const originalArgv1 = process.argv[1] ?? "";
+    const virtualEntryPath = join(root, "$bunfs", "root", "brewva");
+    process.argv[1] = virtualEntryPath;
+    mkdirSync(dirname(virtualEntryPath), { recursive: true });
+    writeFileSync(virtualEntryPath, "#!/usr/bin/env bash\nexit 0\n", "utf8");
+
+    const originalLog = console.log;
+    console.log = () => undefined;
+    try {
+      const install = await runGatewayCli([
+        ...installArgs,
+        "--no-start",
+        "--cwd",
+        cwd,
+        "--state-dir",
+        stateDir,
+      ]);
+      expect(install.handled).toBe(true);
+      expect(install.exitCode).toBe(0);
+      expect(existsSync(generatedFile)).toBe(true);
+
+      const content = readFileSync(generatedFile, "utf8");
+      expect(content.includes("/$bunfs/")).toBe(false);
+      expect(content.includes("/usr/bin/env")).toBe(true);
+      expect(content.includes("brewva")).toBe(true);
+    } finally {
+      process.argv[1] = originalArgv1;
       console.log = originalLog;
       rmSync(root, { recursive: true, force: true });
     }

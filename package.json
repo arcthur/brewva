@@ -16,6 +16,7 @@
     "format:docs": "git ls-files 'docs/**/*.md' 'docs/**/*.mdx' 'README.md' | xargs oxfmt --write",
     "format:docs:check": "git ls-files 'docs/**/*.md' 'docs/**/*.mdx' 'README.md' | xargs oxfmt --check",
     "generate:schema": "bun run script/generate-brewva-config-schema.ts",
+    "install:local": "bash script/install-local.sh",
     "lint": "oxlint --type-aware",
     "lint:fix": "oxlint --type-aware --fix && bun run format",
     "start": "bun run packages/brewva-cli/src/index.ts",
@@ -31,7 +32,8 @@
     "test:webhook-smoke": "bun run script/smoke-telegram-webhook-edge.ts",
     "test:webhook-smoke:live": "bun run script/smoke-telegram-webhook-live.ts",
     "typecheck": "tsc -b",
-    "typecheck:test": "tsc -b test/tsconfig.json"
+    "typecheck:test": "tsc -b test/tsconfig.json",
+    "uninstall:local": "bash script/install-local.sh --uninstall"
   },
   "devDependencies": {
     "@brewva/brewva-channels-telegram": "workspace:*",

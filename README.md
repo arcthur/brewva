@@ -163,6 +163,10 @@ Discovery walks multiple roots (module ancestors, executable sidecar, global con
 bun install
 bun run build
 bun run start -- --help
+
+# Optional: install `brewva` into ~/.local/bin (macOS/Linux)
+bun run install:local
+brewva --help
 ```
 
 ### CLI Modes
