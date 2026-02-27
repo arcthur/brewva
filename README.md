@@ -12,19 +12,25 @@ Brewva is a runtime for AI coding agents that makes governance explicit, evented
 
 ## Core Design Principles
 
-Brewva follows five architecture drivers:
+Brewva follows six architecture drivers:
 
 1. **Agent autonomy with explicit pressure contracts**
    - Runtime emits pressure signals (`tape_pressure`, `context_pressure`) and context contracts.
    - Agent remains responsible for control actions (`tape_handoff`, `session_compact`).
-2. **Tape-first recovery**
+   - Context injection is managed as an append-only arena with deterministic zone budgeting.
+2. **Skill-first orchestration with dynamic loading**
+   - Prompt text is treated as a dispatch signal, not the primary execution structure.
+   - Executable skill contracts are activated on demand (`skill_load`) instead of eager capability preload.
+   - Skill lifecycle events (`skill_activated`, `skill_completed`) keep orchestration replayable and auditable.
+3. **Tape-first recovery**
    - Session state is reconstructed from append-only events, checkpoints, and replay.
    - Recovery avoids opaque process-local snapshots.
-3. **Contract-driven execution**
+4. **Contract-driven execution**
    - Skill policy, verification gates, evidence ledger, and budget limits are explicit runtime constraints.
-4. **Projection-based memory**
+5. **Projection-based memory**
    - Memory structures are derived from tape events and can be rebuilt deterministically.
-5. **Workspace-first orchestration**
+   - Runtime injects split memory sources (`brewva.memory-working`, `brewva.memory-recall`) with pressure-aware recall fallback.
+6. **Workspace-first orchestration**
    - Multi-agent and channel state is isolated and persisted in workspace-scoped storage for restart-safe operation.
 
 ## Architecture
@@ -34,8 +40,8 @@ Conceptual architecture view (high-level intent and control model):
 ```mermaid
 flowchart TD
   AGENT["Agent (LLM)<br>plans and executes"]
-  CONTRACT["Context Contract<br>state tape vs message buffer"]
-  ORCH["Runtime Orchestration<br>skill selection, tool policy, budgeting"]
+  CONTRACT["Context Contract<br>state tape vs message buffer vs injection arena"]
+  ORCH["Runtime Orchestration<br>skill-first dispatch, dynamic load, tool policy, budgeting"]
   MEMORY["Memory Projection Layer<br>extractor, units/crystals, recall/injection"]
   ASSURE["Assurance Layer<br>evidence ledger, verification gate, completion guard"]
   RECOVERY["Recovery Layer<br>event tape, checkpoints, replay"]
@@ -124,6 +130,12 @@ bun run build:binaries     # Compile platform binaries
 | Reference       | `docs/reference/`       | Contract-level definitions (config, tools, skills, events, runtime API) |
 | Research        | `docs/research/`        | Incubating roadmap notes and design hypotheses with promotion targets   |
 | Troubleshooting | `docs/troubleshooting/` | Failure patterns and remediation                                        |
+
+## Inspired by
+
+- [Amp](https://ampcode.com/)
+- [bub](https://bub.build/)
+- [openclaw](https://openclaw.ai/)
 
 ## License
 

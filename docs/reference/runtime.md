@@ -155,15 +155,29 @@ Common async calls:
 
 ## Default Context Injection Semantics
 
-The default injection path is organized around five semantic sources:
+The default injection path is organized around seven semantic sources:
 
 - `brewva.identity`
-- `brewva.truth`
+- `brewva.truth-static`
+- `brewva.truth-facts`
 - `brewva.task-state`
 - `brewva.tool-failures`
-- `brewva.memory`
+- `brewva.memory-working`
+- `brewva.memory-recall`
 
-`brewva.memory` is the merged memory source (working memory + recall block).
+Truth split behavior:
+
+- `brewva.truth-static` carries the workspace truth-ledger contract block and is
+  registered as `oncePerSession`.
+- `brewva.truth-facts` carries active truth facts and is refreshed across turns.
+
+Memory split behavior:
+
+- `brewva.memory-working` carries the latest working-memory snapshot and is
+  registered as `critical`.
+- `brewva.memory-recall` carries retrieval hits and is registered as `normal`.
+- `memory.recallMode="primary"` always enables recall.
+- `memory.recallMode="fallback"` skips recall under `high`/`critical` context pressure.
 
 Identity source behavior:
 
@@ -173,6 +187,15 @@ Identity source behavior:
 - Missing or empty identity file means no `brewva.identity` injection.
 - Runtime never auto-generates or rewrites identity files.
 - `brewva.identity` is registered as `critical` + `oncePerSession`.
+
+Arena layout and budgeting:
+
+- Planner layout follows deterministic zone order:
+  `identity -> truth -> task_state -> tool_failures -> memory_working -> memory_recall`.
+- Zone floors/caps are configured via
+  `infrastructure.contextBudget.arena.zones.*`.
+- If demanded floors exceed available budget, runtime emits
+  `context_arena_floor_unmet` and drops that turn's context injection.
 
 Execution profile note:
 

@@ -55,10 +55,12 @@ Key implications:
 Default semantic injection sources are:
 
 - `brewva.identity`
-- `brewva.truth`
+- `brewva.truth-static`
+- `brewva.truth-facts`
 - `brewva.task-state`
 - `brewva.tool-failures`
-- `brewva.memory`
+- `brewva.memory-working`
+- `brewva.memory-recall`
 
 ## Runtime Core Bridge (`--no-extensions`)
 

@@ -46,7 +46,6 @@ export interface ContextInjectionOrchestratorDeps {
   getTaskState(sessionId: string): TaskState;
   buildTaskStateBlock(state: TaskState): string;
   registerContextInjection(sessionId: string, input: RegisterContextInjectionInput): void;
-  getCurrentTurn(sessionId: string): number;
   recordEvent(input: {
     sessionId: string;
     type: string;
@@ -61,7 +60,6 @@ export interface ContextInjectionOrchestratorDeps {
     usage?: ContextBudgetUsage,
   ): ContextInjectionDecision;
   buildInjectionScopeKey(sessionId: string, injectionScopeId?: string): string;
-  getReservedTokens(scopeKey: string): number;
   setReservedTokens(scopeKey: string, tokens: number): void;
   getLastInjectedFingerprint(scopeKey: string): string | undefined;
   setLastInjectedFingerprint(scopeKey: string, fingerprint: string): void;
@@ -77,16 +75,25 @@ export function buildContextInjection(
   const truthFactsBlock = truthState.facts.some((fact) => fact.status === "active")
     ? buildTruthFactsBlock({ state: truthState })
     : "";
-  const truthBlock = [truthLedgerBlock, truthFactsBlock].filter(Boolean).join("\n\n").trim();
-  if (truthBlock) {
+
+  if (truthLedgerBlock) {
     deps.registerContextInjection(input.sessionId, {
-      source: "brewva.truth",
-      id: "truth",
+      source: "brewva.truth-static",
+      id: "truth-static",
       priority: "critical",
       oncePerSession: true,
-      content: truthBlock,
+      content: truthLedgerBlock,
     });
   }
+  if (truthFactsBlock) {
+    deps.registerContextInjection(input.sessionId, {
+      source: "brewva.truth-facts",
+      id: "truth-facts",
+      priority: "critical",
+      content: truthFactsBlock,
+    });
+  }
+
   deps.maybeAlignTaskStatus({
     sessionId: input.sessionId,
     promptText,
@@ -133,6 +140,16 @@ export function buildContextInjection(
     input.sessionId,
     deps.isContextBudgetEnabled() ? deps.maxInjectionTokens : Number.MAX_SAFE_INTEGER,
   );
+  if (merged.planReason === "floor_unmet") {
+    deps.recordEvent({
+      sessionId: input.sessionId,
+      type: "context_arena_floor_unmet",
+      payload: {
+        reason: "insufficient_budget_for_zone_floors",
+      },
+    });
+  }
+
   const decision = deps.planBudgetInjection(input.sessionId, merged.text, input.usage);
   const wasTruncated = decision.truncated || merged.truncated;
   if (decision.accepted) {
@@ -185,11 +202,14 @@ export function buildContextInjection(
 
   const rejectedScopeKey = deps.buildInjectionScopeKey(input.sessionId, input.injectionScopeId);
   deps.setReservedTokens(rejectedScopeKey, 0);
+  const droppedReason =
+    decision.droppedReason ??
+    (merged.planReason === "floor_unmet" ? "budget_exhausted" : "unknown");
   deps.recordEvent({
     sessionId: input.sessionId,
     type: "context_injection_dropped",
     payload: {
-      reason: decision.droppedReason ?? "unknown",
+      reason: droppedReason,
       originalTokens: decision.originalTokens,
     },
   });

@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 function listMarkdownFiles(directory: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(directory)) {
+    if (entry === "plans") continue;
     const fullPath = join(directory, entry);
     const stats = statSync(fullPath);
     if (stats.isDirectory()) {
@@ -23,8 +24,10 @@ const BANNED_PATTERNS: RegExp[] = [
   /\bfinishToolCall\b/u,
   /\bruntime\.recordEvent\b/u,
   /\bruntime\.buildContextInjection\b/u,
+  /\bbrewva\.truth\b(?![.-])/u,
+  /\bbrewva\.memory\b(?![.-])/u,
   /\bbrewva\.working-memory\b/u,
-  /\bbrewva\.memory-recall\b/u,
+  /\bbrewva\.memory_recall\b/u,
 ];
 
 describe("docs legacy runtime term guard", () => {

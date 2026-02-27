@@ -47,6 +47,7 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
       recency: 0.25,
       confidence: 0.2,
     },
+    recallMode: "primary",
     evolvesMode: "shadow",
     cognitive: {
       mode: "active",
@@ -120,6 +121,16 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
       truncationStrategy: "summarize",
       compactionInstructions:
         "Summarize stale tool outputs and keep only active objectives, unresolved failures, and latest verification evidence.",
+      arena: {
+        zones: {
+          identity: { min: 0, max: 320 },
+          truth: { min: 0, max: 420 },
+          taskState: { min: 0, max: 360 },
+          toolFailures: { min: 0, max: 480 },
+          memoryWorking: { min: 0, max: 300 },
+          memoryRecall: { min: 0, max: 600 },
+        },
+      },
     },
     toolFailureInjection: {
       enabled: true,

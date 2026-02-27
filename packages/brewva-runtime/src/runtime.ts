@@ -570,6 +570,14 @@ export class BrewvaRuntime {
           )
         : {},
       truncationStrategy: this.config.infrastructure.contextBudget.truncationStrategy,
+      zoneBudgets: {
+        identity: this.config.infrastructure.contextBudget.arena.zones.identity,
+        truth: this.config.infrastructure.contextBudget.arena.zones.truth,
+        task_state: this.config.infrastructure.contextBudget.arena.zones.taskState,
+        tool_failures: this.config.infrastructure.contextBudget.arena.zones.toolFailures,
+        memory_working: this.config.infrastructure.contextBudget.arena.zones.memoryWorking,
+        memory_recall: this.config.infrastructure.contextBudget.arena.zones.memoryRecall,
+      },
     });
     const turnReplay = new TurnReplayEngine({
       listEvents: (sessionId) => eventStore.list(sessionId),

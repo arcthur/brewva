@@ -7,6 +7,7 @@ const VALID_EXECUTION_BACKENDS = new Set(["host", "sandbox", "auto"]);
 const VALID_EVENT_LEVELS = new Set(["audit", "ops", "debug"]);
 const VALID_MEMORY_EVOLVES_MODES = new Set(["off", "shadow"]);
 const VALID_MEMORY_COGNITIVE_MODES = new Set(["off", "shadow", "active"]);
+const VALID_MEMORY_RECALL_MODES = new Set(["primary", "fallback"]);
 const VALID_VERIFICATION_LEVELS = new Set<VerificationLevel>(["quick", "standard", "strict"]);
 const VALID_CHANNEL_SCOPE_STRATEGIES = new Set(["chat", "thread"]);
 const VALID_CHANNEL_ACL_MODES = new Set(["open", "closed"]);
@@ -123,6 +124,19 @@ function normalizeMemoryRetrievalWeights(
   };
 }
 
+function normalizeContextArenaZone(
+  value: unknown,
+  fallback: { min: number; max: number },
+): { min: number; max: number } {
+  const input = isRecord(value) ? value : {};
+  const min = normalizeNonNegativeInteger(input.min, fallback.min);
+  const rawMax = normalizeNonNegativeInteger(input.max, fallback.max);
+  return {
+    min,
+    max: Math.max(min, rawMax),
+  };
+}
+
 export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): BrewvaConfig {
   const input = isRecord(config) ? config : {};
   const uiInput = isRecord(input.ui) ? input.ui : {};
@@ -161,6 +175,12 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
   const contextBudgetInput = isRecord(infrastructureInput.contextBudget)
     ? infrastructureInput.contextBudget
     : {};
+  const contextBudgetArenaInput = isRecord(contextBudgetInput.arena)
+    ? contextBudgetInput.arena
+    : {};
+  const contextBudgetArenaZonesInput = isRecord(contextBudgetArenaInput.zones)
+    ? contextBudgetArenaInput.zones
+    : {};
   const toolFailureInjectionInput = isRecord(infrastructureInput.toolFailureInjection)
     ? infrastructureInput.toolFailureInjection
     : {};
@@ -174,6 +194,7 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
 
   const defaultContextBudget = defaults.infrastructure.contextBudget;
   const defaultToolFailureInjection = defaults.infrastructure.toolFailureInjection;
+  const defaultContextArena = defaultContextBudget.arena;
   const normalizedHardLimitPercent = normalizeUnitInterval(
     contextBudgetInput.hardLimitPercent,
     defaultContextBudget.hardLimitPercent,
@@ -284,6 +305,9 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
         memoryInput.retrievalWeights,
         defaults.memory.retrievalWeights,
       ),
+      recallMode: VALID_MEMORY_RECALL_MODES.has(memoryInput.recallMode as string)
+        ? (memoryInput.recallMode as BrewvaConfig["memory"]["recallMode"])
+        : defaults.memory.recallMode,
       evolvesMode: VALID_MEMORY_EVOLVES_MODES.has(memoryInput.evolvesMode as string)
         ? (memoryInput.evolvesMode as BrewvaConfig["memory"]["evolvesMode"])
         : defaults.memory.evolvesMode,
@@ -462,6 +486,34 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
           contextBudgetInput.compactionInstructions,
           defaultContextBudget.compactionInstructions,
         ),
+        arena: {
+          zones: {
+            identity: normalizeContextArenaZone(
+              contextBudgetArenaZonesInput.identity,
+              defaultContextArena.zones.identity,
+            ),
+            truth: normalizeContextArenaZone(
+              contextBudgetArenaZonesInput.truth,
+              defaultContextArena.zones.truth,
+            ),
+            taskState: normalizeContextArenaZone(
+              contextBudgetArenaZonesInput.taskState,
+              defaultContextArena.zones.taskState,
+            ),
+            toolFailures: normalizeContextArenaZone(
+              contextBudgetArenaZonesInput.toolFailures,
+              defaultContextArena.zones.toolFailures,
+            ),
+            memoryWorking: normalizeContextArenaZone(
+              contextBudgetArenaZonesInput.memoryWorking,
+              defaultContextArena.zones.memoryWorking,
+            ),
+            memoryRecall: normalizeContextArenaZone(
+              contextBudgetArenaZonesInput.memoryRecall,
+              defaultContextArena.zones.memoryRecall,
+            ),
+          },
+        },
       },
       toolFailureInjection: {
         enabled: normalizeBoolean(

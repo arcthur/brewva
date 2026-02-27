@@ -127,6 +127,7 @@ This list is intentionally non-exhaustive. Unknown event types/fields should be 
 
 - `context_usage`
 - `context_injected`
+- `context_arena_floor_unmet`
 - `context_injection_dropped`
 - `context_compaction_requested`
 - `context_compaction_skipped`
@@ -255,6 +256,13 @@ Common fields include:
 ### `verification_outcome_recorded`
 
 Verification outcome summary (`brewva.verification.outcome.v1`) used by replay and memory learning loops.
+
+### `context_arena_floor_unmet`
+
+Emitted when arena zone floor requirements cannot fit into the current
+injection budget. Common payload fields include:
+
+- `reason` (`insufficient_budget_for_zone_floors`)
 
 ### `memory_global_sync`
 

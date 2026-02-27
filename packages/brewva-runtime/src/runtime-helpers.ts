@@ -91,11 +91,17 @@ export function buildContextSourceTokenLimits(
     Math.min(toolFailureUpperBound, toolFailureEstimated + 16),
   );
 
-  return {
+  const baseLimits = {
     "brewva.identity": fromRatio(0.2, 140, 320),
-    "brewva.truth": fromRatio(0.18, 96, 420),
     "brewva.task-state": fromRatio(0.15, 96, 360),
     "brewva.tool-failures": toolFailureLimit,
-    "brewva.memory": fromRatio(0.52, 220, budget),
+  };
+
+  return {
+    ...baseLimits,
+    "brewva.truth-static": fromRatio(0.1, 64, 240),
+    "brewva.truth-facts": fromRatio(0.15, 96, 420),
+    "brewva.memory-working": fromRatio(0.3, 128, Math.max(220, Math.floor(budget * 0.65))),
+    "brewva.memory-recall": fromRatio(0.36, 160, budget),
   };
 }

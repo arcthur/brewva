@@ -354,7 +354,7 @@ export class ContextService {
     truncated: boolean;
   }> {
     this.registerIdentityContextInjection(sessionId);
-    await this.registerMemoryContextInjection(sessionId, prompt);
+    await this.registerMemoryContextInjection(sessionId, prompt, usage);
     return this.finalizeContextInjection(sessionId, prompt, usage, injectionScopeId);
   }
 
@@ -415,7 +415,6 @@ export class ContextService {
         buildTaskStateBlock: (state) => this.buildTaskStateBlock(state),
         registerContextInjection: (id, registerInput) =>
           this.registerContextInjection(id, registerInput),
-        getCurrentTurn: (id) => this.getCurrentTurn(id),
         recordEvent: (eventInput) => this.recordEvent(eventInput),
         planContextInjection: (id, tokenBudget) => this.contextInjection.plan(id, tokenBudget),
         commitContextInjection: (id, consumedKeys) =>
@@ -423,8 +422,6 @@ export class ContextService {
         planBudgetInjection: (id, inputText, budgetUsage) =>
           this.contextBudget.planInjection(id, inputText, budgetUsage),
         buildInjectionScopeKey: (id, scopeId) => this.buildInjectionScopeKey(id, scopeId),
-        getReservedTokens: (scopeKey) =>
-          this.sessionState.reservedContextInjectionTokensByScope.get(scopeKey) ?? 0,
         setReservedTokens: (scopeKey, tokens) =>
           this.sessionState.reservedContextInjectionTokensByScope.set(scopeKey, tokens),
         getLastInjectedFingerprint: (scopeKey) =>
@@ -441,34 +438,52 @@ export class ContextService {
     );
   }
 
-  private async registerMemoryContextInjection(sessionId: string, prompt: string): Promise<void> {
+  private async registerMemoryContextInjection(
+    sessionId: string,
+    prompt: string,
+    usage?: ContextBudgetUsage,
+  ): Promise<void> {
     if (!this.config.memory.enabled) return;
     const taskGoal = this.getTaskState(sessionId).spec?.goal;
     this.memory.refreshIfNeeded({ sessionId });
 
-    const sections: string[] = [];
     const working = this.memory.getWorkingMemory(sessionId);
-    if (working?.content.trim()) {
-      sections.push(working.content);
-    }
-
-    const recallQuery = [taskGoal, prompt].filter(Boolean).join("\n");
-    const recall = await this.memory.buildRecallBlock({
-      sessionId,
-      query: recallQuery,
-      limit: this.config.memory.retrievalTopK,
-    });
-    if (recall.trim()) {
-      sections.push(recall);
-    }
-
-    const memoryBlock = sections.join("\n\n").trim();
-    if (memoryBlock) {
+    const workingContent = working?.content.trim() ?? "";
+    if (workingContent) {
       this.registerContextInjection(sessionId, {
-        source: "brewva.memory",
-        id: "memory",
+        source: "brewva.memory-working",
+        id: "memory-working",
         priority: "critical",
-        content: memoryBlock,
+        content: workingContent,
+      });
+    }
+
+    const recallMode = this.config.memory.recallMode ?? "primary";
+    let shouldIncludeRecall = true;
+    if (recallMode === "fallback") {
+      const pressureLevel = this.getContextPressureLevel(sessionId, usage);
+      if (pressureLevel === "high" || pressureLevel === "critical") {
+        shouldIncludeRecall = false;
+      }
+    }
+
+    let recallContent = "";
+    if (shouldIncludeRecall) {
+      const recallQuery = [taskGoal, prompt].filter(Boolean).join("\n");
+      const recall = await this.memory.buildRecallBlock({
+        sessionId,
+        query: recallQuery,
+        limit: this.config.memory.retrievalTopK,
+      });
+      recallContent = recall.trim();
+    }
+
+    if (recallContent) {
+      this.registerContextInjection(sessionId, {
+        source: "brewva.memory-recall",
+        id: "memory-recall",
+        priority: "normal",
+        content: recallContent,
       });
     }
   }
@@ -608,7 +623,7 @@ export class ContextService {
     },
   ): void {
     this.contextBudget.markCompacted(sessionId);
-    this.contextInjection.resetOncePerSession(sessionId);
+    this.contextInjection.onCompaction(sessionId);
     this.clearInjectionFingerprintsForSession(sessionId);
     this.clearReservedInjectionTokensForSession(sessionId);
     const turn = this.getCurrentTurn(sessionId);

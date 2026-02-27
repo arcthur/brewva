@@ -78,6 +78,90 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
+                "arena": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "zones": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "identity": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "max": {
+                              "type": "number"
+                            },
+                            "min": {
+                              "type": "number"
+                            }
+                          }
+                        },
+                        "memoryRecall": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "max": {
+                              "type": "number"
+                            },
+                            "min": {
+                              "type": "number"
+                            }
+                          }
+                        },
+                        "memoryWorking": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "max": {
+                              "type": "number"
+                            },
+                            "min": {
+                              "type": "number"
+                            }
+                          }
+                        },
+                        "taskState": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "max": {
+                              "type": "number"
+                            },
+                            "min": {
+                              "type": "number"
+                            }
+                          }
+                        },
+                        "toolFailures": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "max": {
+                              "type": "number"
+                            },
+                            "min": {
+                              "type": "number"
+                            }
+                          }
+                        },
+                        "truth": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "max": {
+                              "type": "number"
+                            },
+                            "min": {
+                              "type": "number"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
                 "compactionInstructions": {
                   "type": "string"
                 },
@@ -246,6 +330,10 @@
             },
             "maxWorkingChars": {
               "type": "number"
+            },
+            "recallMode": {
+              "type": "string",
+              "enum": ["primary", "fallback"]
             },
             "retrievalTopK": {
               "type": "number"

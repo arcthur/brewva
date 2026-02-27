@@ -68,6 +68,7 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 - `memory.retrievalWeights.lexical`: `0.55`
 - `memory.retrievalWeights.recency`: `0.25`
 - `memory.retrievalWeights.confidence`: `0.20`
+- `memory.recallMode`: `primary`
 - `memory.evolvesMode`: `shadow`
 - `memory.cognitive.mode`: `active`
 - `memory.cognitive.maxTokensPerTurn`: `0` (`0` means unlimited)
@@ -128,6 +129,12 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 - `infrastructure.contextBudget.hardLimitPercent`: `0.94`
 - `infrastructure.contextBudget.truncationStrategy`: `summarize`
 - `infrastructure.contextBudget.compactionInstructions`: default operational compaction guidance string
+- `infrastructure.contextBudget.arena.zones.identity`: `{ min: 0, max: 320 }`
+- `infrastructure.contextBudget.arena.zones.truth`: `{ min: 0, max: 420 }`
+- `infrastructure.contextBudget.arena.zones.taskState`: `{ min: 0, max: 360 }`
+- `infrastructure.contextBudget.arena.zones.toolFailures`: `{ min: 0, max: 480 }`
+- `infrastructure.contextBudget.arena.zones.memoryWorking`: `{ min: 0, max: 300 }`
+- `infrastructure.contextBudget.arena.zones.memoryRecall`: `{ min: 0, max: 600 }`
 - `infrastructure.toolFailureInjection.enabled`: `true`
 - `infrastructure.toolFailureInjection.maxEntries`: `3`
 - `infrastructure.toolFailureInjection.maxOutputChars`: `300`
@@ -221,14 +228,26 @@ With `infrastructure.contextBudget.enabled=true`, runtime enforces:
 - primary injection cap (`maxInjectionTokens`)
 - pressure thresholds (`compactionThresholdPercent`, `hardLimitPercent`)
 - truncation policy (`truncationStrategy`)
+- arena zone floor/cap allocation (`arena.zones.*`)
 
 `enabled=false` disables runtime token-budget enforcement for context injection.
+
+Arena allocation behavior:
+
+- Sources are planned by deterministic zone order:
+  `identity -> truth -> task_state -> tool_failures -> memory_working -> memory_recall`.
+- `zones.<zone>.min` is a floor for demanded content; `zones.<zone>.max` is a hard cap.
+- If demanded floors exceed available injection budget, planning is rejected and
+  `context_arena_floor_unmet` is emitted.
+- Memory recall can be pressure-gated by `memory.recallMode="fallback"`.
 
 Normalization details from `normalizeBrewvaConfig(...)`:
 
 - `compactionThresholdPercent` is clamped to `<= hardLimitPercent`.
 - Percent-like ratios are clamped into `[0, 1]` (`alertThresholdRatio`, memory/global confidence).
 - `memory.retrievalWeights` are normalized to sum to `1` when total weight is positive; otherwise defaults are used.
+- `memory.recallMode` is normalized to `primary | fallback` (invalid values fall back to defaults).
+- `arena.zones.<zone>.min/max` are normalized to non-negative integers and `max >= min`.
 - Most numeric fields are floor-normalized to positive/non-negative integers (invalid values fall back to defaults).
 
 ## Turn WAL Model

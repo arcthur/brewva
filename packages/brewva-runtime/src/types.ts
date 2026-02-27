@@ -378,6 +378,7 @@ export interface BrewvaConfig {
       recency: number;
       confidence: number;
     };
+    recallMode: "primary" | "fallback";
     evolvesMode: "off" | "shadow";
     cognitive: {
       mode: "off" | "shadow" | "active";
@@ -448,6 +449,16 @@ export interface BrewvaConfig {
       hardLimitPercent: number;
       truncationStrategy: "drop-entry" | "summarize" | "tail";
       compactionInstructions: string;
+      arena: {
+        zones: {
+          identity: { min: number; max: number };
+          truth: { min: number; max: number };
+          taskState: { min: number; max: number };
+          toolFailures: { min: number; max: number };
+          memoryWorking: { min: number; max: number };
+          memoryRecall: { min: number; max: number };
+        };
+      };
     };
     toolFailureInjection: {
       enabled: boolean;
@@ -526,7 +537,7 @@ export interface BrewvaConfigFile {
     >
   > & {
     events?: Partial<BrewvaConfig["infrastructure"]["events"]>;
-    contextBudget?: Partial<BrewvaConfig["infrastructure"]["contextBudget"]>;
+    contextBudget?: DeepPartial<BrewvaConfig["infrastructure"]["contextBudget"]>;
     toolFailureInjection?: Partial<BrewvaConfig["infrastructure"]["toolFailureInjection"]>;
     interruptRecovery?: Partial<BrewvaConfig["infrastructure"]["interruptRecovery"]>;
     costTracking?: Partial<BrewvaConfig["infrastructure"]["costTracking"]>;

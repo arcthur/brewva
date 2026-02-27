@@ -91,10 +91,10 @@ flowchart TD
   U --> E["evolves.jsonl (shadow proposals)"]
   C --> W["working.md publish"]
   I --> W
-  W --> INJ["before_agent_start inject: brewva.memory (working snapshot)"]
+  W --> INJ["before_agent_start inject: brewva.memory-working"]
   U --> R["memory retrieval search"]
   C --> R
-  R --> INJ2["before_agent_start inject: brewva.memory (recall section)"]
+  R --> INJ2["before_agent_start inject: brewva.memory-recall"]
 ```
 
 Notes:

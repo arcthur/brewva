@@ -5,15 +5,14 @@
 Maintain a durable, high-signal memory layer that grows from the event tape and
 projects memory context on each agent start:
 
-- `brewva.memory`: merged injection source composed from:
-  - `[WorkingMemory]`: compact “what matters now” snapshot (`working.md`)
-  - `[MemoryRecall]`: task-aware top-k recall block (units + crystals)
+- `brewva.memory-working`: `[WorkingMemory]` compact “what matters now” snapshot (`working.md`)
+- `brewva.memory-recall`: `[MemoryRecall]` task-aware top-k recall block (units + crystals)
 
 Scope note:
 
 - This journey describes the extension-enabled runtime profile.
 - In `--no-extensions`, ingest/projection still runs, but memory auto-injection
-  (`brewva.memory`) and memory bridge hooks are intentionally not active.
+  (`brewva.memory-working` / `brewva.memory-recall`) and memory bridge hooks are intentionally not active.
 - `--no-extensions` still injects a lightweight runtime-core autonomy/status block
   (`[CoreTapeStatus]`), which is separate from memory projection injection.
 
@@ -93,10 +92,11 @@ Code pointers:
 
 **Behavior:**
 
-- Runtime composes one merged source (`brewva.memory`) from:
-  - `working.md` snapshot content
-  - task-aware recall hits derived from `{task.goal + user prompt}`
-- The merged source respects global context budget policies (truncation/drop decisions).
+- Runtime registers two independent sources:
+  - `brewva.memory-working` from `working.md` snapshot content
+  - `brewva.memory-recall` from task-aware recall hits derived from `{task.goal + user prompt}`
+- `memory.recallMode="fallback"` can skip `brewva.memory-recall` under high context pressure.
+- Both sources respect global context budget policies (zone caps + truncation/drop decisions).
 
 Code pointers:
 
@@ -186,7 +186,7 @@ Checklist:
 3. `.orchestrator/memory/working.md` exists and is non-empty.
 4. Check tape for `context_injection_dropped` (budget hard-limit / budget exhausted).
 5. If running with `--no-extensions`, this checklist does not apply for
-   `brewva.memory` because those extension hooks are disabled.
+   `brewva.memory-working` / `brewva.memory-recall` because those extension hooks are disabled.
 
 ### Working memory looks stale after major changes
 

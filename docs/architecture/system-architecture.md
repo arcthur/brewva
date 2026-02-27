@@ -7,20 +7,36 @@ current package dependencies and runtime wiring.
 
 ### 1) Agent Autonomy With Explicit Pressure Contracts
 
-The runtime exposes three orthogonal control loops and keeps control actions in
+The runtime exposes four orthogonal control loops and keeps control actions in
 the agent loop:
 
-| Pipeline                | Resource                                                       | Pressure Signal                          | Agent/Runtime Action                                                 |
-| ----------------------- | -------------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------- |
-| **State Tape**          | Append-only operational state (task/truth/verification/cost)   | `tape_pressure`                          | `tape_handoff` marks semantic phase boundaries                       |
-| **Message Buffer**      | LLM context window (user/assistant/tool messages)              | `context_pressure`                       | `session_compact` compacts conversation history                      |
-| **Cognitive Inference** | Runtime cognition budget for semantic relation/ranking/lessons | cognitive budget status (calls + tokens) | `CognitivePort` path or deterministic fallback under budget pressure |
+| Pipeline                    | Resource                                                                        | Pressure Signal                          | Agent/Runtime Action                                                 |
+| --------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------- |
+| **State Tape**              | Append-only operational state (task/truth/verification/cost)                    | `tape_pressure`                          | `tape_handoff` marks semantic phase boundaries                       |
+| **Message Buffer**          | LLM context window (user/assistant/tool messages)                               | `context_pressure`                       | `session_compact` compacts conversation history                      |
+| **Context Injection Arena** | Append-only semantic injection arena (identity/truth/task/tool-failures/memory) | zone floors/caps + injection hard limit  | deterministic zone planning + truncation/drop + floor_unmet event    |
+| **Cognitive Inference**     | Runtime cognition budget for semantic relation/ranking/lessons                  | cognitive budget status (calls + tokens) | `CognitivePort` path or deterministic fallback under budget pressure |
 
 In extension-enabled execution, runtime injects context policy as explicit
 contract text and pressure state, but does not silently compact on behalf of
 the agent. Memory/context surfaces are explicit and traceable via
-`brewva.identity`, `brewva.truth`, `brewva.task-state`,
-`brewva.tool-failures`, and `brewva.memory`.
+`brewva.identity`, `brewva.truth-static`, `brewva.truth-facts`,
+`brewva.task-state`, `brewva.tool-failures`, `brewva.memory-working`,
+and `brewva.memory-recall`.
+
+Context injection follows allocator-first constraints:
+
+- Context injection storage is append-only per session epoch (`ContextArena`):
+  writes append, planning reads latest-by-key, and lifecycle reset is explicit
+  (`markCompacted -> onCompaction -> resetEpoch`).
+- Planning order is deterministic by semantic zone locality first
+  (`identity -> truth -> task_state -> tool_failures -> memory_working -> memory_recall`),
+  then by source priority/timestamp within a zone.
+- Budgeting is bidirectional (Goldilocks): per-zone floor+cap allocation and
+  global injection cap are enforced together; unsatisfied demanded floors emit
+  `context_arena_floor_unmet` and reject that injection plan.
+- Memory recall loading is dynamic: `memory.recallMode="fallback"` skips
+  `brewva.memory-recall` under high/critical context pressure.
 
 Cognitive behavior follows a dual-path model:
 
@@ -34,10 +50,39 @@ Implementation anchors:
 
 - `packages/brewva-runtime/src/runtime.ts`
 - `packages/brewva-runtime/src/context/budget.ts`
+- `packages/brewva-runtime/src/context/arena.ts`
+- `packages/brewva-runtime/src/context/zone-budget.ts`
+- `packages/brewva-runtime/src/context/zones.ts`
+- `packages/brewva-runtime/src/context/injection-orchestrator.ts`
 - `packages/brewva-extensions/src/context-transform.ts`
 - `packages/brewva-cli/src/session.ts`
 
-### 2) Tape-First Recovery And Replay
+### 2) Skill-First Orchestration With Dynamic Loading
+
+Execution is skill-first and prompt-triggered, not prompt-first:
+
+- Prompt text is treated as a dispatch signal for selecting/activating
+  executable skill contracts.
+- Skill contracts remain the primary unit for tool policy, budget envelope, and
+  completion requirements.
+- Skill activation is dynamic (`skill_load`) and scoped to session state instead
+  of preloading all capabilities into context.
+- Context injection and replay stay skill-addressable through
+  `skill_activated`/`skill_completed` tape events.
+
+This keeps orchestration deterministic and auditable while reducing unnecessary
+context expansion from prompt-only routing.
+
+Implementation anchors:
+
+- `packages/brewva-runtime/src/runtime.ts`
+- `packages/brewva-runtime/src/services/skill-lifecycle.ts`
+- `packages/brewva-runtime/src/skills/registry.ts`
+- `packages/brewva-runtime/src/skills/selector.ts`
+- `packages/brewva-tools/src/skill-load.ts`
+- `packages/brewva-tools/src/skill-complete.ts`
+
+### 3) Tape-First Recovery And Replay
 
 Runtime state is recovered from append-only tape events instead of opaque
 process-local blobs:
@@ -58,7 +103,7 @@ Implementation anchors:
 - `packages/brewva-runtime/src/events/store.ts`
 - `packages/brewva-cli/src/index.ts`
 
-### 3) Contract-Driven Execution Boundaries
+### 4) Contract-Driven Execution Boundaries
 
 Execution is constrained by explicit contracts at each layer:
 
@@ -79,7 +124,7 @@ Implementation anchors:
 - `packages/brewva-runtime/src/runtime.ts`
 - `packages/brewva-tools/src/skill-complete.ts`
 
-### 4) Projection-Based Memory (Derived, Traceable, Reviewable)
+### 5) Projection-Based Memory (Derived, Traceable, Reviewable)
 
 Memory is a projection layer derived from event tape semantics:
 
@@ -88,8 +133,9 @@ Memory is a projection layer derived from event tape semantics:
   derived artifacts under `.orchestrator/memory/`.
 - Projection snapshots (`memory_*`) keep replay/rebuild paths deterministic even
   when projection artifacts are missing.
-- Working-memory context can be injected with budget-aware truncation/drop
-  behavior in extension-enabled profile.
+- Working-memory and recall context are injected as split semantic sources
+  (`brewva.memory-working` + `brewva.memory-recall`) with pressure-aware recall
+  fallback and zone-aware budget/truncation behavior in extension-enabled profile.
 - EVOLVES effects remain review-gated before mutating stable unit state.
 
 Event stream visibility remains level-based via
@@ -106,7 +152,7 @@ Implementation anchors:
 - `packages/brewva-runtime/src/cost/tracker.ts`
 - `packages/brewva-extensions/src/event-stream.ts`
 
-### 5) Workspace-First Orchestration
+### 6) Workspace-First Orchestration
 
 Orchestration is modeled as workspace state first, process memory second:
 
@@ -191,7 +237,7 @@ flowchart TD
   - Runtime behavior is mediated through extension hooks (`before_agent_start`,
     `tool_call`, `tool_result`, `agent_end`, etc.).
   - During `before_agent_start`, runtime may refresh memory projections and inject
-    merged memory context (`brewva.memory`, composed from working-memory + recall blocks)
+    split memory context (`brewva.memory-working` + `brewva.memory-recall`)
     under context-budget policy.
   - On `agent_end`, memory bridge triggers an additional memory refresh pass to
     keep `working.md` aligned with the latest tape-derived projections.
@@ -244,7 +290,7 @@ Memory is implemented as a derived projection layer over the event tape:
 4. In shadow mode, evolves candidates are written to `evolves.jsonl`; manual
    review may supersede units and emit additional memory events.
 5. Working snapshot is published to `.orchestrator/memory/working.md`; runtime then
-   builds a merged `brewva.memory` injection block (working snapshot + recall hits).
+   builds split memory injection sources (`brewva.memory-working` + `brewva.memory-recall`).
 
 This path is deterministic, auditable, and restart-safe: projection artifacts are
 persisted on disk and can also be rebuilt from tape-backed `memory_*` snapshot
