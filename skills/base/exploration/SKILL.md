@@ -1,6 +1,6 @@
 ---
 name: exploration
-description: Understand unfamiliar codebases quickly and produce map-level context.
+description: Use when repository is unfamiliar, request references unknown modules, or design decision needs structural context — before planning or patching.
 version: 1.0.0
 stability: stable
 tier: base

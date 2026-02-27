@@ -1,6 +1,6 @@
 ---
 name: compose
-description: Plan a multi-skill strategy for complex tasks. Use when a single skill is insufficient.
+description: Use when task spans 2+ skill domains and output of one skill is a required input for another — single skill insufficient.
 version: 1.0.0
 stability: stable
 tier: base

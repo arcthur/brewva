@@ -1,6 +1,6 @@
 ---
 name: review
-description: Risk-driven merge-safety review with deterministic issue tables and evidence-backed decisions.
+description: Use when reviewing code changes for merge safety, pre-merge risk checks, or quality audits — read-only assessment with deterministic issue tables.
 version: 2.0.0
 stability: stable
 tier: base
@@ -13,8 +13,18 @@ tools:
 budget:
   max_tool_calls: 60
   max_tokens: 120000
-outputs: [review_context, plan_conformance, risk_profile, findings, failure_modes, review_decision, testing_gaps]
-consumes: [change_summary, files_changed, verification, execution_steps]
+outputs:
+  [
+    review_context,
+    plan_conformance,
+    risk_profile,
+    findings,
+    failure_modes,
+    review_decision,
+    testing_gaps,
+  ]
+consumes:
+  [change_summary, files_changed, verification, execution_steps, handoff_packet, test_diagram]
 escalation_path:
   scope_unknown: exploration
   cross_skill_orchestration: compose
@@ -332,8 +342,9 @@ Input:
 Expected outputs:
 
 1. `REVIEW_CONTEXT`
-2. `RISK_PROFILE` with `QUICK` or `DEEP`
-3. `CHECKS_PERFORMED`
-4. Findings list (`P0-P3`, with confidence and evidence)
-5. `Code Review Results` table + checks list
-6. `REVIEW_DECISION` + `testing_gaps`
+2. `PLAN_CONFORMANCE` (when prior plan exists)
+3. `RISK_PROFILE` with `QUICK` or `DEEP`
+4. `CHECKS_PERFORMED` + `FAILURE_MODES` (in `DEEP` mode)
+5. Findings list (`P0-P3`, with confidence and evidence)
+6. `Code Review Results` table + checks list
+7. `REVIEW_DECISION` + `testing_gaps`

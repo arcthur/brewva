@@ -8,20 +8,24 @@ Skill parsing, merge, and selection logic:
 
 ## Base Skills
 
+- `brainstorming`
 - `cartography`
 - `compose`
 - `debugging`
+- `execution`
 - `exploration`
+- `finishing`
 - `git`
 - `patching`
 - `planning`
 - `review`
+- `tdd`
 - `verification`
 
 ## Pack Skills
 
 - `agent-browser`
-- `frontend-ui-ux`
+- `frontend-design`
 - `gh-issues`
 - `github`
 - `skill-creator`
@@ -30,14 +34,25 @@ Skill parsing, merge, and selection logic:
 ## Project Skills
 
 - `brewva-project`
+- `brewva-self-improve`
+- `brewva-session-logs`
 
-## `brewva-project` Contract Notes
+## Project Skill Notes
+
+- `brewva-project` orchestrates source-lane analysis, process-evidence diagnosis,
+  and delivery flows for runtime-facing work in this monorepo.
+- `brewva-session-logs` provides artifact-centric inspection across event store,
+  evidence ledger, memory, snapshots, cost traces, and schedule projections.
+- `brewva-self-improve` captures reusable learnings and errors, then promotes
+  validated patterns into durable assets such as `AGENTS.md`, skills, and docs.
+
+## `brewva-project` Contract Focus
 
 - Baseline tools stay read-first: `read`, `grep`.
-- Optional tool contract is aligned with `@brewva/brewva-tools` runtime surface
+- Optional tools are aligned with the `@brewva/brewva-tools` runtime surface
   (LSP, AST, process, ledger/tape/cost, schedule, task ledger, skill lifecycle tools).
-- Deliberate limitation: generic mutation-only tools (`write`, `edit`) are not part of this
-  project skill contract; code mutation is delegated to specialized skills such as `patching`.
+- Generic mutation-only tools (`write`, `edit`) remain intentionally excluded;
+  code changes are delegated to specialized skills such as `patching`.
 
 ## Storage Convention
 

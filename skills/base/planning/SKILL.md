@@ -1,6 +1,6 @@
 ---
 name: planning
-description: Build execution-ready implementation plans with assumptions, risks, and validations.
+description: Use when task is ambiguous, multi-step across modules, or high risk — after design is approved and before implementation.
 version: 1.0.0
 stability: stable
 tier: base
@@ -13,7 +13,19 @@ tools:
 budget:
   max_tool_calls: 60
   max_tokens: 130000
-outputs: [scope_challenge, what_already_exists, objective, assumptions, options, execution_steps, risk_register, verification_plan, test_diagram, handoff_packet]
+outputs:
+  [
+    scope_challenge,
+    what_already_exists,
+    objective,
+    assumptions,
+    options,
+    execution_steps,
+    risk_register,
+    verification_plan,
+    test_diagram,
+    handoff_packet,
+  ]
 consumes: [architecture_map, key_modules, unknowns, root_cause]
 escalation_path:
   system_unclear: exploration

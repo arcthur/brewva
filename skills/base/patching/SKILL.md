@@ -1,6 +1,6 @@
 ---
 name: patching
-description: Make minimal surgical code changes with explicit verification.
+description: Use when applying code changes to fix a known issue or implement a scoped requirement — after root cause is confirmed or plan is approved.
 version: 1.0.0
 stability: stable
 tier: base
@@ -25,6 +25,15 @@ escalation_path:
 ## Intent
 
 Apply the smallest correct patch that resolves the target issue without collateral refactor.
+
+## The Iron Law
+
+```
+NO PATCH WITHOUT READING TARGET CODE FIRST
+```
+
+If you haven't read the file and understood the change boundary, you cannot edit.
+Blind patches create more bugs than they fix.
 
 ## Trigger
 
@@ -131,6 +140,29 @@ PATCH_REPORT
 - Verification is blocked and no meaningful `TOOL_BRIDGE` can be produced.
 
 When stopping, provide exact blocker and recommended next planning scope.
+
+## Red Flags — STOP
+
+If you catch yourself:
+
+- Editing a file you haven't read in this session
+- Rewriting an entire file for a local change
+- Bundling cleanup/refactor with the bug fix
+- Adding "while I'm here" improvements
+- Editing test expectations to match buggy behavior
+- Adding broad try/catch to suppress failure
+
+**ALL of these mean: STOP. Re-read the change boundary. Apply only the minimal fix.**
+
+## Common Rationalizations
+
+| Excuse                                   | Reality                                               |
+| ---------------------------------------- | ----------------------------------------------------- |
+| "While I'm here, I'll clean up..."       | Separate commits for separate concerns.               |
+| "Rewriting is cleaner"                   | Minimal diff is safer and more reviewable.            |
+| "Tests should match new behavior"        | If behavior is buggy, fix behavior not tests.         |
+| "Adding error handling is good practice" | Only add handling for errors that can actually occur. |
+| "This refactor makes the fix easier"     | Ship the fix first, refactor second.                  |
 
 ## Anti-Patterns (never)
 

@@ -123,6 +123,7 @@ Treat execution as three coordinated lanes:
 
 This skill must orchestrate specialized skills instead of re-implementing their logic:
 
+- **process evidence and session analysis**: `skills/project/brewva-session-logs/SKILL.md`
 - source mapping and boundary discovery: `skills/base/exploration/SKILL.md`
 - root-cause confirmation and hypothesis validation: `skills/base/debugging/SKILL.md`
 - command-backed validation and verdicting: `skills/base/verification/SKILL.md`
@@ -230,40 +231,16 @@ SOURCE_ANALYSIS
 
 ### Step 5: Process Lane (when required)
 
-Reconstruct operational truth from runtime artifacts.
-Full artifact catalog: `skills/project/brewva-project/references/runtime-artifacts.md`.
+Delegate process evidence collection to `skills/project/brewva-session-logs/SKILL.md`.
 
-#### 5a. Evidence Inputs (ordered by diagnostic value)
+That skill provides:
 
-| Artifact            | Path                                                 | Key Correlation Fields                                              |
-| ------------------- | ---------------------------------------------------- | ------------------------------------------------------------------- |
-| Event store         | `.orchestrator/events/{sessionId}.jsonl`             | `id`, `sessionId`, `type`, `timestamp`, `turn`                      |
-| Evidence ledger     | `.orchestrator/ledger/evidence.jsonl`                | `id`, `sessionId`, `tool`, `verdict`, `turn`, `hash`/`previousHash` |
-| Memory units        | `.orchestrator/memory/units.jsonl`                   | `id`, `sessionId`, `topic`, `status`, `confidence`                  |
-| Memory crystals     | `.orchestrator/memory/crystals.jsonl`                | `id`, `sessionId`, `topic`, `unitIds[]`                             |
-| Memory insights     | `.orchestrator/memory/insights.jsonl`                | `id`, `sessionId`, `kind`, `relatedUnitIds[]`                       |
-| Memory evolution    | `.orchestrator/memory/evolves.jsonl`                 | `sourceUnitId`, `targetUnitId`, `relation`                          |
-| Tape checkpoints    | Embedded in event store (`type: "checkpoint"`)       | `state.task`, `state.truth`, `basedOnEventId`                       |
-| File snapshots      | `.orchestrator/snapshots/{sessionId}/patchsets.json` | `patchSets[].toolName`, `changes[]`                                 |
-| Schedule projection | `.brewva/schedule/intents.jsonl`                     | `intentId`, `parentSessionId`, `status`                             |
-| Cost events         | Event store filtered by `type: "cost_update"`        | per-model, per-skill, per-tool budget deltas                        |
+- artifact location and field reference for all `.orchestrator` JSONL artifacts
+- ready-made `jq`/`rg` recipes for event timeline, cost, ledger, memory, and tape queries
+- hash chain integrity verification procedure
+- replay engine guidance (`TurnReplayEngine`)
 
-#### 5b. Mandatory First Steps
-
-1. **Ledger hash chain verification** — walk `previousHash` → `hash` links in the evidence ledger. A broken chain indicates data corruption, out-of-order writes, or manual tampering. Do not trust downstream analysis if the chain is broken.
-2. **Event store correlation** — use `sessionId` + `turn` to join events with ledger rows and memory units.
-3. **Replay engine shortcut** — when full state reconstruction at a specific turn is needed, prefer `TurnReplayEngine` (`packages/brewva-runtime/src/tape/replay-engine.ts`) over manual JSONL parsing. It uses tape checkpoints for fast-forward and rebuilds `TaskState` + `TruthState` at any target turn.
-
-#### 5c. Parsing Contract
-
-For any structured JSONL artifact:
-
-- timestamp field: `timestamp` (event store, ledger) or `createdAt`/`updatedAt` (memory artifacts)
-- correlation key: `sessionId` (all artifacts), `turn` (events + ledger), `id` (all artifacts)
-- component identity: `type` (events), `tool` (ledger), `topic` (memory)
-- outcome signal: `verdict` field with values `pass` | `fail` | `inconclusive` (ledger); `type` field for event classification
-
-#### 5d. Output Template
+After collecting evidence via session-logs, summarize findings using:
 
 ```text
 PROCESS_EVIDENCE
@@ -272,8 +249,6 @@ PROCESS_EVIDENCE
 - chain_integrity: <verified|broken at row N|not applicable>
 - timeline:
   - "<timestamped event>"
-- correlation_summary:
-  - "<sessionId:turn -> event chain>"
 - anomalies:
   - "<unexpected transition, invariant break, or verdict pattern>"
 - cost_signals:
@@ -387,8 +362,8 @@ When executable verification is blocked by environment constraints, emit `TOOL_B
 - Replacing executable evidence with purely theoretical reasoning.
 - Migrating only skeleton structure without operational knowledge.
 - Opening issue/PR actions without source-process evidence convergence.
-- Treating unstructured logs as proof without timestamp and correlation normalization.
-- Analyzing evidence ledger without first verifying hash chain integrity.
+- Inlining JSONL parsing recipes instead of delegating to `brewva-session-logs`.
+- Analyzing evidence ledger without first verifying hash chain integrity (session-logs enforces this).
 - Manual JSONL parsing when `TurnReplayEngine` can reconstruct the target state directly.
 
 ## Resource Navigation
@@ -400,7 +375,15 @@ When executable verification is blocked by environment constraints, emit `TOOL_B
 - Package boundaries and invariants: `skills/project/brewva-project/references/package-boundaries.md`
 - Skill DoD quick-check script: `skills/project/brewva-project/scripts/check-skill-dod.sh`
 
-### Delegated Skills — Source and Process Lanes
+### Delegated Skills — Feedback Loop
+
+- Self-improvement and learning capture: `skills/project/brewva-self-improve/SKILL.md`
+
+### Delegated Skills — Process Lane
+
+- Session log queries and runtime artifact analysis: `skills/project/brewva-session-logs/SKILL.md`
+
+### Delegated Skills — Source Lane
 
 - Source discovery method: `skills/base/exploration/SKILL.md`
 - Root-cause workflow: `skills/base/debugging/SKILL.md`

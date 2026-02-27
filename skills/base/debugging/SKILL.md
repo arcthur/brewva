@@ -1,6 +1,6 @@
 ---
 name: debugging
-description: Systematic bug diagnosis with hypotheses and reproducible verification.
+description: Use when encountering any bug, test failure, or unexpected behavior — before proposing fixes.
 version: 1.0.0
 stability: stable
 tier: base
@@ -25,6 +25,16 @@ escalation_path:
 ## Intent
 
 Reproduce failures reliably, isolate root cause, apply minimal fix, and verify without regressions.
+
+## The Iron Law
+
+```
+NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST
+```
+
+If you haven't completed Step 3 (hypothesis validation), you cannot apply fixes. Symptom fixes are failure.
+
+**Violating the letter of this process is violating the spirit of debugging.**
 
 ## Trigger
 
@@ -200,6 +210,35 @@ When stopping, provide:
 1. what was tried
 2. strongest remaining hypothesis
 3. minimal missing input required from user
+
+## Red Flags — STOP and Return to Step 1
+
+If you catch yourself thinking:
+
+- "Quick fix for now, investigate later"
+- "Just try changing X and see if it works"
+- "Add multiple changes, run tests"
+- "Skip the test, I'll manually verify"
+- "It's probably X, let me fix that"
+- "I don't fully understand but this might work"
+- "Here are the main problems" (listing fixes without investigation)
+- Proposing solutions before tracing data flow
+- "One more fix attempt" (when already tried 2+)
+
+**ALL of these mean: STOP. Return to Step 1.**
+
+**If 3+ fixes failed**: Question the architecture — each fix revealing new problems in different places indicates an architectural issue, not a local bug. Stop and discuss before attempting more fixes.
+
+## Common Rationalizations
+
+| Excuse                                     | Reality                                                                 |
+| ------------------------------------------ | ----------------------------------------------------------------------- |
+| "Issue is simple, don't need process"      | Simple issues have root causes too. Process is fast for simple bugs.    |
+| "Emergency, no time for process"           | Systematic debugging is FASTER than guess-and-check thrashing.          |
+| "Just try this first, then investigate"    | First fix sets the pattern. Do it right from the start.                 |
+| "I see the problem, let me fix it"         | Seeing symptoms ≠ understanding root cause.                             |
+| "Multiple fixes at once saves time"        | Can't isolate what worked. Causes new bugs.                             |
+| "One more fix attempt" (after 2+ failures) | 3+ failures = architectural problem. Question pattern, don't fix again. |
 
 ## Anti-Patterns (never)
 

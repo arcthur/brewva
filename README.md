@@ -68,9 +68,9 @@ Primary package surfaces:
 
 Skill tiers (higher tiers can tighten but never relax lower-tier contracts):
 
-- Base (`skills/base/`): `cartography`, `compose`, `debugging`, `exploration`, `git`, `patching`, `planning`, `review`, `verification`
-- Pack (`skills/packs/`): `browser`, `deep-research`, `frontend-ui-ux`, `gh-issues`, `github`, `skill-creator`, `telegram-interactive-components`
-- Project (`skills/project/`): `brewva-project`
+- Base (`skills/base/`): `brainstorming`, `cartography`, `compose`, `debugging`, `execution`, `exploration`, `finishing`, `git`, `patching`, `planning`, `review`, `tdd`, `verification`
+- Pack (`skills/packs/`): `agent-browser`, `frontend-design`, `gh-issues`, `github`, `skill-creator`, `telegram-interactive-components`
+- Project (`skills/project/`): `brewva-project`, `brewva-self-improve`, `brewva-session-logs`
 
 ## Quick Start
 

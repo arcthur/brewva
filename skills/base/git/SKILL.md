@@ -1,6 +1,6 @@
 ---
 name: git
-description: Safe Git workflow guidance for commit architecture, rebase surgery, and history search.
+description: Use when creating commits, rebasing branches, or searching git history — covers commit architecture, rebase surgery, and blame/bisect workflows.
 version: 1.0.0
 stability: stable
 tier: base

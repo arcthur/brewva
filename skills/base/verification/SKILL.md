@@ -1,6 +1,6 @@
 ---
 name: verification
-description: Validate changes with diagnostics, tests, and policy checks.
+description: Use when about to claim work is complete, fixed, or passing — requires running verification commands and confirming output before making any success claims.
 version: 1.0.0
 stability: stable
 tier: base
@@ -25,6 +25,17 @@ escalation_path:
 ## Intent
 
 Ensure changed behavior is proven by concrete evidence with explicit pass/fail criteria.
+
+## The Iron Law
+
+```
+NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
+```
+
+If you haven't run the verification command in this step, you cannot claim it passes.
+Claiming work is complete without verification is dishonesty, not efficiency.
+
+**Evidence before claims, always.**
 
 ## Trigger
 
@@ -121,6 +132,32 @@ If a required command does not exist or cannot run in the current environment, e
 - Required verification is blocked and no meaningful `TOOL_BRIDGE` can be produced.
 
 When stopped, emit exact missing command/info needed.
+
+## Red Flags — STOP
+
+If you catch yourself:
+
+- Using "should", "probably", "seems to"
+- Expressing satisfaction before verification ("Great!", "Perfect!", "Done!")
+- About to commit/push/PR without verification
+- Trusting agent success reports without independent check
+- Relying on partial verification
+- Thinking "just this once"
+- **ANY wording implying success without having run verification**
+
+**ALL of these mean: STOP. Run the command. Read the output. THEN claim the result.**
+
+## Common Rationalizations
+
+| Excuse                                  | Reality                                 |
+| --------------------------------------- | --------------------------------------- |
+| "Should work now"                       | RUN the verification.                   |
+| "I'm confident"                         | Confidence ≠ evidence.                  |
+| "Just this once"                        | No exceptions.                          |
+| "Linter passed"                         | Linter ≠ compiler ≠ tests.              |
+| "Agent said success"                    | Verify independently.                   |
+| "Partial check is enough"               | Partial proves nothing about the whole. |
+| "Different words so rule doesn't apply" | Spirit over letter. Always.             |
 
 ## Anti-Patterns (never)
 

@@ -1,6 +1,6 @@
 ---
 name: cartography
-description: Generate structured project map and module dependency orientation.
+description: Use when needing module dependency orientation, ownership discovery, or impact analysis before changes.
 version: 1.0.0
 stability: stable
 tier: base
