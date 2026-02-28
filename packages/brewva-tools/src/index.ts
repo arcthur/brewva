@@ -1,5 +1,4 @@
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
-import { createA2ATools } from "./a2a.js";
 import { createAstGrepTools } from "./ast-grep.js";
 import { createCostViewTool } from "./cost-view.js";
 import { createExecTool } from "./exec.js";
@@ -41,6 +40,8 @@ export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefiniti
 
 export { createLspTools } from "./lsp.js";
 export { createAstGrepTools } from "./ast-grep.js";
+// A2A tools require an orchestration adapter and are typically registered by channel extensions
+// (for example `createChannelA2AExtension` in `@brewva/brewva-cli`), not by the default bundle.
 export { createA2ATools } from "./a2a.js";
 export { createLookAtTool } from "./look-at.js";
 export { createExecTool } from "./exec.js";

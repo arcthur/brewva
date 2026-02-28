@@ -546,10 +546,11 @@ describe("scheduler service", () => {
         maxRuns: 1,
       }),
     };
+    const encodedSessionId = Buffer.from(sessionId, "utf8").toString("base64url");
     const eventsFilePath = join(
       workspace,
       runtime.config.infrastructure.events.dir,
-      `${sessionId}.jsonl`,
+      `sess_${encodedSessionId}.jsonl`,
     );
     writeFileSync(eventsFilePath, `${JSON.stringify(createRow)}\n${JSON.stringify(cancelRow)}\n`);
 

@@ -22,10 +22,9 @@ Defined in `packages/brewva-tools/src/ast-grep.ts`.
 
 ## Runtime-Aware Tools
 
+Default tool bundle (registered by `buildBrewvaTools()`):
+
 - `look_at`
-- `agent_send`
-- `agent_broadcast`
-- `agent_list`
 - `exec`
 - `process`
 - `cost_view`
@@ -46,6 +45,12 @@ Defined in `packages/brewva-tools/src/ast-grep.ts`.
 - `task_view_state`
 - `memory_dismiss_insight`
 - `memory_review_evolves_edge`
+
+Optional A2A tools (registered by channel orchestration extensions when an A2A adapter is available):
+
+- `agent_send`
+- `agent_broadcast`
+- `agent_list`
 
 `schedule_intent` supports `action=create|update|cancel|list`:
 

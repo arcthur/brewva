@@ -93,10 +93,12 @@ function main(): void {
     const require = createRequire(import.meta.url);
     const packages = [
       "@brewva/brewva-runtime",
+      "@brewva/brewva-channels-telegram",
       "@brewva/brewva-ingress",
       "@brewva/brewva-tools",
       "@brewva/brewva-extensions",
       "@brewva/brewva-cli",
+      "@brewva/brewva-gateway",
     ];
     const resolved = packages.map((name) => ({ name, path: require.resolve(name) }));
     for (const entry of resolved) {

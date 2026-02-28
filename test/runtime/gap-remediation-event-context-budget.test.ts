@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
@@ -8,6 +8,23 @@ import {
   createGapRemediationWorkspace as createWorkspace,
   writeGapRemediationConfig as writeConfig,
 } from "./gap-remediation.helpers.js";
+
+function findEventFilePath(workspace: string, eventsDir: string, sessionId: string): string {
+  const root = join(workspace, eventsDir);
+  const files = readdirSync(root).filter((name) => name.endsWith(".jsonl"));
+  for (const name of files) {
+    const filePath = join(root, name);
+    try {
+      const content = readFileSync(filePath, "utf8");
+      if (content.includes(`"sessionId":"${sessionId}"`)) {
+        return filePath;
+      }
+    } catch {
+      continue;
+    }
+  }
+  throw new Error(`event_file_not_found:${sessionId}`);
+}
 
 describe("Gap remediation: event stream and context budget", () => {
   test("normalizes event payload to JSON-safe values", async () => {
@@ -57,10 +74,10 @@ describe("Gap remediation: event stream and context budget", () => {
     const sessionId = "events-bad-lines-1";
     runtime.events.record({ sessionId, type: "session_start", payload: { cwd: workspace } });
 
-    const eventsPath = join(
+    const eventsPath = findEventFilePath(
       workspace,
       runtime.config.infrastructure.events.dir,
-      `${sessionId}.jsonl`,
+      sessionId,
     );
     appendFileSync(eventsPath, "\n{ this is not json", "utf8");
 
@@ -85,10 +102,10 @@ describe("Gap remediation: event stream and context budget", () => {
       },
     });
 
-    const eventsPath = join(
+    const eventsPath = findEventFilePath(
       workspace,
       runtime.config.infrastructure.events.dir,
-      `${sessionId}.jsonl`,
+      sessionId,
     );
     const raw = readFileSync(eventsPath, "utf8");
     expect(raw.includes("sk-proj-abcdefghijklmnopqrstuvwxyz0123456789")).toBe(false);

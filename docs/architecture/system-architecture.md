@@ -391,7 +391,7 @@ Key implementation points:
 
 Memory is implemented as a derived projection layer over the event tape:
 
-1. Runtime appends semantic events to `.orchestrator/events/<session>.jsonl`.
+1. Runtime appends semantic events to `.orchestrator/events/sess_<base64url(sessionId)>.jsonl`.
 2. Memory extractor ingests events and upserts/merges units into `.orchestrator/memory/units.jsonl`.
 3. Crystal compiler and insight generation update `crystals.jsonl` / `insights.jsonl`.
 4. In shadow mode, evolves candidates are written to `evolves.jsonl`; manual

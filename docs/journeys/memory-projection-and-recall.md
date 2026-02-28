@@ -18,7 +18,7 @@ Scope note:
 
 The system is intentionally **event-driven** and **projection-based**:
 
-- Trace source: session event tape (`.orchestrator/events/<session>.jsonl`)
+- Trace source: session event tape (`.orchestrator/events/sess_<base64url(sessionId)>.jsonl`)
 - Projections: JSONL stores under `.orchestrator/memory/`
 - No background daemon and no graph/vector database
 

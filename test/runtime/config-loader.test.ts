@@ -250,6 +250,42 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.memory.global.minConfidence).toBe(1);
   });
 
+  test("given whitespace-padded string fields, when loading config, then values are trimmed", () => {
+    const workspace = createWorkspace("trim-strings");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          ledger: {
+            path: "  .orchestrator/ledger/evidence-custom.jsonl  ",
+          },
+          memory: {
+            dir: "  .orchestrator/memory-custom  ",
+            workingFile: "  working-custom.md  ",
+          },
+          schedule: {
+            projectionPath: "  .brewva/schedule/custom-intents.jsonl  ",
+          },
+          infrastructure: {
+            turnWal: {
+              dir: "  .orchestrator/turn-wal-custom  ",
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    expect(loaded.ledger.path).toBe(".orchestrator/ledger/evidence-custom.jsonl");
+    expect(loaded.memory.dir).toBe(".orchestrator/memory-custom");
+    expect(loaded.memory.workingFile).toBe("working-custom.md");
+    expect(loaded.schedule.projectionPath).toBe(".brewva/schedule/custom-intents.jsonl");
+    expect(loaded.infrastructure.turnWal.dir).toBe(".orchestrator/turn-wal-custom");
+  });
+
   test("given strict security config with invalid execution fields, when loading config, then execution config is normalized fail-closed", () => {
     const workspace = createWorkspace("security-execution-normalize");
     writeFileSync(

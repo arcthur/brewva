@@ -57,7 +57,7 @@ function normalizeUnitInterval(value: unknown, fallback: number): number {
 function normalizeNonEmptyString(value: unknown, fallback: string): string {
   if (typeof value !== "string") return fallback;
   const trimmed = value.trim();
-  return trimmed.length > 0 ? value : fallback;
+  return trimmed.length > 0 ? trimmed : fallback;
 }
 
 function normalizeOptionalNonEmptyString(value: unknown): string | undefined {

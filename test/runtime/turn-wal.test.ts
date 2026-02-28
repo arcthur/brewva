@@ -177,4 +177,68 @@ describe("turn wal store", () => {
     expect(new Set(walIds).size).toBe(rows.length);
     expect(store.listPending()).toHaveLength(40);
   });
+
+  test("given a dedupe key, when appendPending is called multiple times, then existing recoverable record is reused", () => {
+    const workspace = createWorkspace("dedupe");
+    const store = new TurnWALStore({
+      workspaceRoot: workspace,
+      config: DEFAULT_BREWVA_CONFIG.infrastructure.turnWal,
+      scope: "channel-telegram",
+    });
+
+    const envelope = createEnvelope("turn-dedupe");
+    const first = store.appendPending(envelope, "channel", { dedupeKey: "dedupe-1" });
+    const second = store.appendPending(envelope, "channel", { dedupeKey: "dedupe-1" });
+
+    expect(second.walId).toBe(first.walId);
+    expect(store.listPending()).toHaveLength(1);
+    const lines = readFileSync(store.filePath, "utf8")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    expect(lines.length).toBe(1);
+  });
+
+  test("given a terminal record, when appendPending is called with the same dedupe key, then a new wal record is created", () => {
+    const workspace = createWorkspace("dedupe-terminal");
+    const store = new TurnWALStore({
+      workspaceRoot: workspace,
+      config: DEFAULT_BREWVA_CONFIG.infrastructure.turnWal,
+      scope: "gateway",
+    });
+
+    const envelope = createEnvelope("turn-dedupe-terminal");
+    const first = store.appendPending(envelope, "gateway", { dedupeKey: "dedupe-2" });
+    store.markDone(first.walId);
+
+    const second = store.appendPending(envelope, "gateway", { dedupeKey: "dedupe-2" });
+    expect(second.walId).not.toBe(first.walId);
+    expect(store.listPending()).toHaveLength(1);
+    expect(store.listCurrent().map((row) => row.walId)).toEqual([first.walId, second.walId]);
+  });
+
+  test("given an expired recoverable record, when appendPending is called with the same dedupe key, then prior record is expired and a new record is created", () => {
+    const workspace = createWorkspace("dedupe-expired");
+    let nowMs = 10_000;
+    const store = new TurnWALStore({
+      workspaceRoot: workspace,
+      config: {
+        ...DEFAULT_BREWVA_CONFIG.infrastructure.turnWal,
+        defaultTtlMs: 25,
+      },
+      scope: "channel-telegram",
+      now: () => nowMs,
+    });
+
+    const envelope = createEnvelope("turn-dedupe-expired");
+    const first = store.appendPending(envelope, "channel", { dedupeKey: "dedupe-3" });
+
+    nowMs += 100;
+    const second = store.appendPending(envelope, "channel", { dedupeKey: "dedupe-3" });
+    expect(second.walId).not.toBe(first.walId);
+    const current = store.listCurrent();
+    const firstStatus = current.find((row) => row.walId === first.walId)?.status;
+    expect(firstStatus).toBe("expired");
+    expect(store.listPending().map((row) => row.walId)).toEqual([second.walId]);
+  });
 });

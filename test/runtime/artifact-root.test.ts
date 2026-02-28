@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
@@ -30,7 +30,9 @@ describe("runtime artifact root resolution", () => {
 
     expect(runtime.workspaceRoot).toBe(workspace);
     expect(runtime.ledger.path).toBe(join(workspace, ".orchestrator", "ledger", "evidence.jsonl"));
-    expect(existsSync(join(workspace, ".orchestrator", "events", `${sessionId}.jsonl`))).toBe(true);
+    const eventsRoot = join(workspace, ".orchestrator", "events");
+    const eventFiles = readdirSync(eventsRoot).filter((name) => name.endsWith(".jsonl"));
+    expect(eventFiles.length).toBeGreaterThan(0);
     expect(existsSync(join(nestedCwd, ".orchestrator"))).toBe(false);
   });
 

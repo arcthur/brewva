@@ -29,8 +29,19 @@ type EventAppendInput = {
   timestamp?: number;
 };
 
-function sanitizeSessionId(sessionId: string): string {
-  return sessionId.replaceAll(/[^\w.-]+/g, "_");
+const ENCODED_SESSION_PREFIX = "sess_";
+
+function encodeSessionIdForFileName(sessionId: string): string {
+  return Buffer.from(sessionId, "utf8").toString("base64url");
+}
+
+function decodeSessionIdFromFileName(encoded: string): string | null {
+  try {
+    const decoded = Buffer.from(encoded, "base64url").toString("utf8");
+    return decoded.trim() ? decoded : null;
+  } catch {
+    return null;
+  }
 }
 
 interface EventFileCache {
@@ -188,33 +199,40 @@ export class BrewvaEventStore {
     if (!this.enabled) return [];
     if (!existsSync(this.dir)) return [];
 
-    const rows: Array<{ sessionId: string; mtimeMs: number }> = [];
+    const mtimeBySessionId = new Map<string, number>();
     for (const entry of readdirSync(this.dir, { withFileTypes: true })) {
       if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
       const filePath = resolve(this.dir, entry.name);
       try {
         const stat = statSync(filePath);
         if (stat.size <= 0) continue;
-        rows.push({
-          sessionId: entry.name.slice(0, -".jsonl".length),
-          mtimeMs: stat.mtimeMs,
-        });
+        const stem = entry.name.slice(0, -".jsonl".length);
+        if (!stem.startsWith(ENCODED_SESSION_PREFIX)) continue;
+
+        const decoded = decodeSessionIdFromFileName(stem.slice(ENCODED_SESSION_PREFIX.length));
+        if (!decoded) continue;
+
+        const previous = mtimeBySessionId.get(decoded) ?? 0;
+        mtimeBySessionId.set(decoded, Math.max(previous, stat.mtimeMs));
       } catch {
         continue;
       }
     }
 
-    return rows.toSorted((left, right) => right.mtimeMs - left.mtimeMs).map((row) => row.sessionId);
-  }
-
-  private filePathForSession(sessionId: string): string {
-    return resolve(this.dir, `${sanitizeSessionId(sessionId)}.jsonl`);
+    return [...mtimeBySessionId.entries()]
+      .toSorted((left, right) => right[1] - left[1])
+      .map(([sessionId]) => sessionId);
   }
 
   private listFromCache(sessionId: string): BrewvaEventRecord[] {
     if (!this.enabled) return [];
     const filePath = this.filePathForSession(sessionId);
     return this.syncCacheForFile(filePath).rows;
+  }
+
+  private filePathForSession(sessionId: string): string {
+    const encoded = encodeSessionIdForFileName(sessionId);
+    return resolve(this.dir, `${ENCODED_SESSION_PREFIX}${encoded}.jsonl`);
   }
 
   private syncCacheForFile(filePath: string): EventFileCache {

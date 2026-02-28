@@ -73,7 +73,7 @@ Memory behavior in this profile is split:
 ```mermaid
 flowchart LR
   INPUT["Prompt / Tool IO / Usage"] --> RT["BrewvaRuntime"]
-  RT --> EVENTS[".orchestrator/events/<session>.jsonl (event tape)"]
+  RT --> EVENTS[".orchestrator/events/sess_<base64url(sessionId)>.jsonl (event tape)"]
   RT --> LEDGER[".orchestrator/ledger/evidence.jsonl (evidence chain)"]
   RT --> MEMORY[".orchestrator/memory/*.jsonl + working.md (memory projections)"]
   RT --> SNAP[".orchestrator/snapshots/<session>/* (rollback only)"]

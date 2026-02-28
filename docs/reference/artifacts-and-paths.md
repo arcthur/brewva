@@ -5,7 +5,9 @@
 Runtime artifact paths are resolved from the workspace root (`nearest .brewva/brewva.json` or `.git` ancestor), not the leaf execution subdirectory.
 
 - Evidence ledger: `.orchestrator/ledger/evidence.jsonl`
-- Event stream: `.orchestrator/events/<session>.jsonl`
+- Event stream (event tape): `.orchestrator/events/sess_<base64url(sessionId)>.jsonl`
+  - file name uses a reversible base64url encoding of the UTF-8 `sessionId` to avoid filesystem collisions and preserve the original identifier
+  - only `sess_*.jsonl` files are treated as event tape shards; non-prefixed JSONL files in the directory are ignored by the runtime
   - includes runtime and tool telemetry events such as `tool_parallel_read`
 - Memory units projection: `.orchestrator/memory/units.jsonl`
 - Memory crystal projection: `.orchestrator/memory/crystals.jsonl`
@@ -20,7 +22,7 @@ Runtime artifact paths are resolved from the workspace root (`nearest .brewva/br
   - `.orchestrator/memory/global/global-working.md`
   - `.orchestrator/memory/global/global-decay.json`
 - Global sync snapshots (optional): `.orchestrator/memory/global-sync/snapshot-*.json`
-- Tape checkpoints: `checkpoint` events embedded in `.orchestrator/events/<session>.jsonl`
+- Tape checkpoints: `checkpoint` events embedded in the per-session event tape (`.orchestrator/events/sess_<base64url(sessionId)>.jsonl`)
 - Runtime recovery source: event tape replay (`checkpoint + delta`); no standalone runtime session-state snapshot file
 - Rollback snapshots: `.orchestrator/snapshots/<session>/*.snap`
   - per-file pre-mutation snapshots used only by rollback

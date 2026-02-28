@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -95,7 +95,10 @@ describe("BrewvaEventStore tape helpers", () => {
     expect(store.list(sessionId)).toHaveLength(1);
 
     const eventsDir = DEFAULT_BREWVA_CONFIG.infrastructure.events.dir;
-    const eventFilePath = join(workspace, eventsDir, `${sessionId}.jsonl`);
+    const eventsRoot = join(workspace, eventsDir);
+    const files = readdirSync(eventsRoot).filter((name) => name.endsWith(".jsonl"));
+    expect(files).toHaveLength(1);
+    const eventFilePath = join(eventsRoot, files[0] ?? "missing.jsonl");
     const externalRow = {
       id: "evt_external_1",
       sessionId,

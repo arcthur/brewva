@@ -218,6 +218,17 @@ export class TurnWALStore {
     const dedupeKey = normalizeOptionalString(options.dedupeKey);
     const ttlMs = this.resolveTtlMs(source, options.ttlMs);
 
+    if (this.enabled && dedupeKey) {
+      const existing = this.findRecoverableByDedupeKey(dedupeKey);
+      if (existing) {
+        if (!this.isExpired(existing, timestamp)) {
+          return cloneTurnWALRecord(existing);
+        }
+
+        this.markExpired(existing.walId);
+      }
+    }
+
     const row: TurnWALRecord = {
       schema: "brewva.turn-wal.v1",
       walId: `wal_${timestamp}_${randomUUID()}`,
@@ -337,6 +348,33 @@ export class TurnWALStore {
     }
     if (source === "schedule") return this.scheduleTurnTtlMs;
     return this.defaultTtlMs;
+  }
+
+  private isExpired(record: TurnWALRecord, nowMs: number): boolean {
+    const ttlMs =
+      typeof record.ttlMs === "number" && Number.isFinite(record.ttlMs) && record.ttlMs > 0
+        ? Math.floor(record.ttlMs)
+        : record.source === "schedule"
+          ? this.scheduleTurnTtlMs
+          : this.defaultTtlMs;
+    const lastActivity = Math.max(record.createdAt, record.updatedAt);
+    return lastActivity + ttlMs < nowMs;
+  }
+
+  private findRecoverableByDedupeKey(dedupeKey: string): TurnWALRecord | undefined {
+    let candidate: TurnWALRecord | undefined;
+    for (const row of this.syncCache().rowsByWalId.values()) {
+      if (!row || row.dedupeKey !== dedupeKey) continue;
+      if (!RECOVERABLE_STATUSES.has(row.status)) continue;
+      if (!candidate) {
+        candidate = row;
+        continue;
+      }
+      if (compareByCreatedAt(candidate, row) < 0) {
+        candidate = row;
+      }
+    }
+    return candidate;
   }
 
   private transitionStatus(
