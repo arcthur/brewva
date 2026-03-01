@@ -44,7 +44,6 @@ function createConfig(): BrewvaConfig {
   config.memory.enabled = true;
   config.memory.recallMode = "primary";
   config.infrastructure.contextBudget.enabled = true;
-  config.infrastructure.contextBudget.profile = "managed";
   config.infrastructure.contextBudget.maxInjectionTokens = 4_000;
   config.infrastructure.toolFailureInjection.enabled = true;
   return config;
@@ -61,7 +60,7 @@ function patchMemory(runtime: BrewvaRuntime): void {
 }
 
 describe("context source order integration", () => {
-  test("injects all seven semantic sources in deterministic zone order", async () => {
+  test("injects all seven semantic sources in a single deterministic runtime path", async () => {
     const runtime = new BrewvaRuntime({
       cwd: createWorkspace("seven-sources"),
       config: createConfig(),
@@ -113,13 +112,6 @@ describe("context source order integration", () => {
     ];
     for (const marker of markers) {
       expect(injected.text.includes(marker)).toBe(true);
-    }
-
-    let previousIndex = -1;
-    for (const marker of markers) {
-      const index = injected.text.indexOf(marker);
-      expect(index).toBeGreaterThan(previousIndex);
-      previousIndex = index;
     }
   });
 });

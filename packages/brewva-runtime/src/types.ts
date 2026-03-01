@@ -431,7 +431,6 @@ export interface BrewvaConfig {
     recallMode: "primary" | "fallback";
     externalRecall: {
       enabled: boolean;
-      builtinProvider: "off" | "crystal-lexical";
       minInternalScore: number;
       queryTopK: number;
       injectedConfidence: number;
@@ -501,7 +500,6 @@ export interface BrewvaConfig {
     };
     contextBudget: {
       enabled: boolean;
-      profile: ContextBudgetProfile;
       maxInjectionTokens: number;
       compactionThresholdPercent: number;
       hardLimitPercent: number;
@@ -512,40 +510,8 @@ export interface BrewvaConfig {
         minSecondsBetween: number;
         pressureBypassPercent: number;
       };
-      adaptiveZones: {
-        enabled: boolean;
-        emaAlpha: number;
-        minTurnsBeforeAdapt: number;
-        stepTokens: number;
-        maxShiftPerTurn: number;
-        upshiftTruncationRatio: number;
-        downshiftIdleRatio: number;
-        retirement: ContextRetirementPolicy;
-      };
-      floorUnmetPolicy: {
-        enabled: boolean;
-        relaxOrder: ContextBudgetZone[];
-        finalFallback: "critical_only";
-        requestCompaction: boolean;
-      };
-      stabilityMonitor: {
-        enabled: boolean;
-        consecutiveThreshold: number;
-        retirement: ContextRetirementPolicy;
-      };
       arena: {
         maxEntriesPerSession: number;
-        degradationPolicy: ContextArenaDegradationPolicy;
-        zones: {
-          identity: { min: number; max: number };
-          truth: { min: number; max: number };
-          skills: { min: number; max: number };
-          taskState: { min: number; max: number };
-          toolFailures: { min: number; max: number };
-          memoryWorking: { min: number; max: number };
-          memoryRecall: { min: number; max: number };
-          ragExternal: { min: number; max: number };
-        };
       };
     };
     toolFailureInjection: {
@@ -780,31 +746,7 @@ export type TapePressureLevel = "none" | "low" | "medium" | "high";
 
 export type ContextPressureLevel = "none" | "low" | "medium" | "high" | "critical" | "unknown";
 
-export type ContextBudgetZone =
-  | "identity"
-  | "truth"
-  | "skills"
-  | "task_state"
-  | "tool_failures"
-  | "memory_working"
-  | "memory_recall"
-  | "rag_external";
-
-export type ContextArenaDegradationPolicy = "drop_recall" | "drop_low_priority" | "force_compact";
-export type ContextStrategyArm = "managed";
-export type ContextBudgetProfile = "simple" | "managed";
-export type ContextRetirementMetricKey = "floor_unmet_rate_7d" | "zone_adaptation_benefit_7d";
-
-export interface ContextRetirementPolicy {
-  enabled: boolean;
-  metricKey: ContextRetirementMetricKey;
-  disableBelow: number;
-  reenableAbove: number;
-  checkIntervalHours: number;
-  minSamples: number;
-}
-
-export type ContextCompactionReason = "usage_threshold" | "hard_limit" | "floor_unmet";
+export type ContextCompactionReason = "usage_threshold" | "hard_limit";
 
 export interface ContextPressureStatus {
   level: ContextPressureLevel;

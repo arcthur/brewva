@@ -64,7 +64,7 @@ describe("ContextPressureService", () => {
     );
   });
 
-  test("keeps floor_unmet gate active and deduplicates compaction request events", () => {
+  test("deduplicates repeated hard_limit compaction request events", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
 
@@ -76,7 +76,7 @@ describe("ContextPressureService", () => {
     }> = [];
 
     const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
-    budget.beginTurn("floor-session", 7);
+    budget.beginTurn("pressure-session", 7);
 
     const service = new ContextPressureService({
       config,
@@ -88,22 +88,50 @@ describe("ContextPressureService", () => {
       },
     });
 
-    const lowUsage = createUsage(0.2);
-    service.requestCompaction("floor-session", "floor_unmet", lowUsage);
-    service.requestCompaction("floor-session", "floor_unmet", lowUsage);
+    const highUsage = createUsage(0.95);
+    service.requestCompaction("pressure-session", "hard_limit", highUsage);
+    service.requestCompaction("pressure-session", "hard_limit", highUsage);
 
     const requestedEvents = events.filter((event) => event.type === "context_compaction_requested");
     expect(requestedEvents).toHaveLength(1);
     expect(requestedEvents[0]?.payload).toEqual(
       expect.objectContaining({
-        reason: "floor_unmet",
-        usagePercent: 0.2,
-        tokens: 200,
+        reason: "hard_limit",
+        usagePercent: 0.95,
+        tokens: 950,
       }),
     );
 
-    const gate = service.getContextCompactionGateStatus("floor-session", lowUsage);
+    const gate = service.getContextCompactionGateStatus("pressure-session", highUsage);
     expect(gate.required).toBe(true);
-    expect(gate.reason).toBe("floor_unmet");
+    expect(gate.reason).toBe("hard_limit");
+  });
+
+  test("does not arm compaction gate from pending reason alone when pressure is below critical", () => {
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.infrastructure.contextBudget.enabled = true;
+    config.infrastructure.contextBudget.hardLimitPercent = 0.8;
+    config.infrastructure.contextBudget.compactionThresholdPercent = 0.7;
+
+    const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
+    budget.beginTurn("pressure-session", 9);
+
+    const service = new ContextPressureService({
+      config,
+      contextBudget: budget,
+      getCurrentTurn: () => 9,
+      recordEvent: () => undefined as BrewvaEventRecord | undefined,
+    });
+
+    service.requestCompaction("pressure-session", "hard_limit", createUsage(0.5));
+
+    const mediumUsage = createUsage(0.75);
+    const gate = service.getContextCompactionGateStatus("pressure-session", mediumUsage);
+    expect(gate.pressure.level).toBe("high");
+    expect(gate.required).toBe(false);
+    expect(gate.reason).toBeNull();
+
+    const decision = service.checkContextCompactionGate("pressure-session", "exec", mediumUsage);
+    expect(decision.allowed).toBe(true);
   });
 });

@@ -7,11 +7,6 @@ import type {
   TaskState,
 } from "./types.js";
 
-const DEFAULT_TOOL_FAILURE_MAX_ENTRIES = 3;
-const DEFAULT_TOOL_FAILURE_MAX_OUTPUT_CHARS = 300;
-const TOOL_FAILURE_ARGS_SUMMARY_CHARS = 140;
-const TOKEN_ESTIMATE_CHARS_PER_TOKEN = 3.5;
-
 export const ALWAYS_ALLOWED_TOOLS = [
   "skill_complete",
   "skill_load",
@@ -77,59 +72,4 @@ export function buildSkillDispatchGateBlock(decision: SkillDispatchDecision): st
     `- call tool \`skill_load\` with name=\`${primary}\` before non-lifecycle tools`,
     "- if intentional bypass, call `skill_route_override` with reason first",
   ].join("\n");
-}
-
-function estimateToolFailureBlockTokens(input?: {
-  maxEntries?: number;
-  maxOutputChars?: number;
-}): number {
-  const maxEntries = Math.max(1, Math.floor(input?.maxEntries ?? DEFAULT_TOOL_FAILURE_MAX_ENTRIES));
-  const maxOutputChars = Math.max(
-    32,
-    Math.floor(input?.maxOutputChars ?? DEFAULT_TOOL_FAILURE_MAX_OUTPUT_CHARS),
-  );
-
-  const perEntryChars = 32 + TOOL_FAILURE_ARGS_SUMMARY_CHARS + maxOutputChars;
-  const blockChars = 24 + maxEntries * perEntryChars;
-  return Math.max(64, Math.ceil(blockChars / TOKEN_ESTIMATE_CHARS_PER_TOKEN));
-}
-
-export function buildContextSourceTokenLimits(
-  maxInjectionTokens: number,
-  options: {
-    toolFailureInjection?: {
-      maxEntries?: number;
-      maxOutputChars?: number;
-    };
-  } = {},
-): Record<string, number> {
-  const budget = Math.max(64, Math.floor(maxInjectionTokens));
-  const fromRatio = (ratio: number, minimum: number, maximum = budget): number => {
-    const scaled = Math.floor(budget * ratio);
-    return Math.max(minimum, Math.min(maximum, scaled));
-  };
-  const toolFailureUpperBound = Math.max(96, Math.floor(budget * 0.55));
-  const toolFailureFloor = fromRatio(0.12, 96, toolFailureUpperBound);
-  const toolFailureEstimated = estimateToolFailureBlockTokens(options.toolFailureInjection);
-  const toolFailureLimit = Math.max(
-    toolFailureFloor,
-    Math.min(toolFailureUpperBound, toolFailureEstimated + 16),
-  );
-
-  const baseLimits = {
-    "brewva.identity": fromRatio(0.2, 140, 320),
-    "brewva.task-state": fromRatio(0.15, 96, 360),
-    "brewva.skill-candidates": fromRatio(0.12, 96, 320),
-    "brewva.skill-dispatch-gate": fromRatio(0.12, 96, 320),
-    "brewva.tool-failures": toolFailureLimit,
-  };
-
-  return {
-    ...baseLimits,
-    "brewva.truth-static": fromRatio(0.1, 64, 240),
-    "brewva.truth-facts": fromRatio(0.15, 96, 420),
-    "brewva.memory-working": fromRatio(0.3, 128, Math.max(220, Math.floor(budget * 0.65))),
-    "brewva.memory-recall": fromRatio(0.36, 160, budget),
-    "brewva.rag-external": fromRatio(0.2, 128, budget),
-  };
 }

@@ -31,7 +31,7 @@ current model limitations and are designed to progressively retire.
 ### Capability-adaptive
 
 7. **Pressure transparency** — runtime exposes resource pressure (`tape_pressure`, `context_pressure`) as explicit contract text; the agent decides how to respond.
-8. **Adaptive context strategy** — context injection is governed by a strategy arm (`managed` → `hybrid` → `passthrough`) selected per session based on model capability and context window size. Transitional mechanisms (zone budgets, adaptive controller, stability monitor) each carry retirement policies and can be independently disabled by observed 7-day effectiveness metrics.
+8. **Deterministic context budgeting** — context injection follows one runtime path: global injection cap, hard-limit compaction gate, and arena SLO degradation policy. There is no adaptive strategy-arm switching in the default runtime.
 
 ## Architecture
 

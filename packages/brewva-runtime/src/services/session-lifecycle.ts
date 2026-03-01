@@ -20,7 +20,6 @@ export interface SessionLifecycleServiceOptions {
   contextBudget: ContextBudgetManager;
   contextInjection: ContextInjectionCollector;
   clearReservedInjectionTokensForSession: RuntimeCallback<[sessionId: string]>;
-  clearContextStabilityForSession: RuntimeCallback<[sessionId: string]>;
   fileChanges: FileChangeTracker;
   verification: VerificationGate;
   parallel: ParallelBudgetManager;
@@ -37,7 +36,6 @@ export class SessionLifecycleService {
   private readonly contextBudget: ContextBudgetManager;
   private readonly contextInjection: ContextInjectionCollector;
   private readonly clearReservedInjectionTokensForSession: (sessionId: string) => void;
-  private readonly clearContextStabilityForSession: (sessionId: string) => void;
   private readonly fileChanges: FileChangeTracker;
   private readonly verification: VerificationGate;
   private readonly parallel: ParallelBudgetManager;
@@ -54,7 +52,6 @@ export class SessionLifecycleService {
     this.contextBudget = options.contextBudget;
     this.contextInjection = options.contextInjection;
     this.clearReservedInjectionTokensForSession = options.clearReservedInjectionTokensForSession;
-    this.clearContextStabilityForSession = options.clearContextStabilityForSession;
     this.fileChanges = options.fileChanges;
     this.verification = options.verification;
     this.parallel = options.parallel;
@@ -91,7 +88,6 @@ export class SessionLifecycleService {
     this.parallelResults.clear(sessionId);
     this.contextBudget.clear(sessionId);
     this.costTracker.clear(sessionId);
-    this.clearContextStabilityForSession(sessionId);
 
     this.contextInjection.clearSession(sessionId);
     this.memory.clearSessionCache(sessionId);

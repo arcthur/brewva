@@ -243,7 +243,7 @@ That skill provides:
 
 - artifact location and field reference for all `.orchestrator` JSONL artifacts
 - ready-made `jq`/`rg` recipes for event timeline, cost, ledger, memory, and tape queries
-- context arena telemetry recipes (`context_injected`, `context_arena_*`, `context_external_recall_*`)
+- context telemetry recipes (`context_injected`, `context_injection_dropped`, `context_arena_slo_enforced`, `context_external_recall_decision`)
 - hash chain integrity verification procedure
 - replay engine guidance (`TurnReplayEngine`)
 
@@ -420,7 +420,7 @@ Expected flow:
 1. Output `PROJECT_SCOPE_ALIGNMENT` (mode: `RUNTIME_DIAGNOSIS`).
 2. Output `IMPACT_MAP` (at minimum covering runtime + extensions).
 3. Output `WORKSTREAM_DECISION` — activate both Source and Process lanes.
-4. **Process Lane**: verify ledger hash chain, filter `cost_update` events for budget spikes, inspect `context_arena_*` and `context_external_recall_*` transitions for control-path anomalies, correlate `verdict: "fail"` rows with `sessionId:turn`, optionally replay to the failing turn via `TurnReplayEngine`.
+4. **Process Lane**: verify ledger hash chain, filter `cost_update` events for budget spikes, inspect `context_injected`, `context_injection_dropped`, `context_arena_slo_enforced`, and `context_external_recall_decision` transitions for control-path anomalies, correlate `verdict: "fail"` rows with `sessionId:turn`, optionally replay to the failing turn via `TurnReplayEngine`.
 5. **Source Lane**: trace the code path from the identified tool call to the budget enforcement gate.
 6. Converge into `MIGRATION_PLAN` with `selected_path: implement-now | issue-first | blocked`.
 7. Execute minimal, reviewable increments and output `VERIFICATION_MATRIX` and `DELIVERY_REPORT`.
@@ -430,7 +430,7 @@ Expected flow:
 Input:
 
 ```text
-"Harden the context arena control plane (adaptive zones + floor_unmet recovery + SLO enforcement) and close any event/doc mismatch."
+"Harden the deterministic context injection path (compaction gate + arena SLO + external recall boundary) and close any event/doc mismatch."
 ```
 
 Expected flow:
@@ -438,6 +438,6 @@ Expected flow:
 1. Output `PROJECT_SCOPE_ALIGNMENT` (mode: `MIGRATION_IMPLEMENTATION`).
 2. Output `IMPACT_MAP` (runtime + extensions + cli).
 3. Output `WORKSTREAM_DECISION` — Source Lane required, Process Lane required (control-plane changes need runtime evidence confirmation).
-4. **Source Lane**: map arena/controller/orchestrator entrypoints, identify contract differences, determine minimal change boundary.
+4. **Source Lane**: map context-service/orchestrator/arena entrypoints, identify contract differences, determine minimal change boundary.
 5. Converge into `MIGRATION_PLAN` with increments sequenced as type prerequisites → runtime logic → integration → tests.
 6. Output `VERIFICATION_MATRIX` and `DELIVERY_REPORT`.

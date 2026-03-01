@@ -4,7 +4,6 @@ import type { MemoryEngine } from "../../packages/brewva-runtime/src/memory/engi
 import { ContextMemoryInjectionService } from "../../packages/brewva-runtime/src/services/context-memory-injection.js";
 import type {
   BrewvaConfig,
-  BrewvaEventRecord,
   ContextBudgetUsage,
   SkillDocument,
   TaskState,
@@ -100,7 +99,7 @@ function createMemoryStub(options?: {
 }
 
 describe("ContextMemoryInjectionService", () => {
-  test("emits provider_unavailable when external recall is triggered without a provider", async () => {
+  test("returns provider_unavailable decision when external recall is triggered without a provider", async () => {
     const config = createConfig();
     const events: CapturedEvent[] = [];
 
@@ -116,7 +115,7 @@ describe("ContextMemoryInjectionService", () => {
       registerContextInjection: () => ({ accepted: true }),
       recordEvent: (eventInput) => {
         events.push(eventInput);
-        return undefined as BrewvaEventRecord | undefined;
+        return undefined;
       },
     });
 
@@ -124,19 +123,19 @@ describe("ContextMemoryInjectionService", () => {
       "provider-unavailable",
       "find docs",
     );
-    expect(outcome).toBeNull();
-
-    const skipped = events.find((event) => event.type === "context_external_recall_skipped");
-    expect(skipped).toBeDefined();
-    expect(skipped?.payload).toEqual(
+    expect(outcome).toEqual(
       expect.objectContaining({
-        reason: "provider_unavailable",
-        threshold: 0.8,
+        status: "skipped",
+        payload: expect.objectContaining({
+          reason: "provider_unavailable",
+          threshold: 0.8,
+        }),
       }),
     );
+    expect(events.some((event) => event.type.startsWith("context_external_recall_"))).toBe(false);
   });
 
-  test("emits arena_rejected with degradation policy when external block is rejected", async () => {
+  test("returns arena_rejected decision when external block is rejected", async () => {
     const config = createConfig();
     const events: CapturedEvent[] = [];
 
@@ -164,7 +163,6 @@ describe("ContextMemoryInjectionService", () => {
           ? {
               accepted: false,
               sloEnforced: {
-                policy: "drop_recall",
                 entriesBefore: 10,
                 entriesAfter: 8,
                 dropped: true,
@@ -173,20 +171,19 @@ describe("ContextMemoryInjectionService", () => {
           : { accepted: true },
       recordEvent: (eventInput) => {
         events.push(eventInput);
-        return undefined as BrewvaEventRecord | undefined;
+        return undefined;
       },
     });
 
     const outcome = await service.registerMemoryContextInjection("arena-rejected", "find guidance");
-    expect(outcome).toBeNull();
-
-    const skipped = events.findLast((event) => event.type === "context_external_recall_skipped");
-    expect(skipped).toBeDefined();
-    expect(skipped?.payload).toEqual(
+    expect(outcome).toEqual(
       expect.objectContaining({
-        reason: "arena_rejected",
-        degradationPolicy: "drop_recall",
+        status: "skipped",
+        payload: expect.objectContaining({
+          reason: "arena_rejected",
+        }),
       }),
     );
+    expect(events.some((event) => event.type.startsWith("context_external_recall_"))).toBe(false);
   });
 });

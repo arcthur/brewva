@@ -26,19 +26,19 @@ All paths are relative to the workspace root (detected via `.brewva/` marker or 
 
 ### Event Types
 
-| Type                        | Semantics                                                                                        |
-| --------------------------- | ------------------------------------------------------------------------------------------------ |
-| `session_start`             | Session initialization                                                                           |
-| `tool_call`                 | Tool invocation record                                                                           |
-| `anchor`                    | Tape handoff anchor point                                                                        |
-| `checkpoint`                | Tape checkpoint (task/truth/cost/evidence/memory replay slices)                                  |
-| `context_injected`          | Context injection accepted with zone telemetry (`zoneDemandTokens`, `zoneAllocatedTokens`, etc.) |
-| `context_injection_dropped` | Context injection rejected (budget/hard-limit/duplicate/floor_unmet path)                        |
-| `context_arena_*`           | Arena control-plane events (`zone_adapted`, `slo_enforced`, `floor_unmet_*`)                     |
-| `context_external_recall_*` | External recall boundary events (`skipped` / `injected`)                                         |
-| `memory_*`                  | Memory engine lifecycle events                                                                   |
-| `cost_update`               | Per-model / per-skill / per-tool cost delta                                                      |
-| `ledger_compacted`          | Ledger compaction checkpoint                                                                     |
+| Type                               | Semantics                                                                                             |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `session_start`                    | Session initialization                                                                                |
+| `tool_call`                        | Tool invocation record                                                                                |
+| `anchor`                           | Tape handoff anchor point                                                                             |
+| `checkpoint`                       | Tape checkpoint (task/truth/cost/evidence/memory replay slices)                                       |
+| `context_injected`                 | Context injection accepted with token telemetry (`sourceCount`, `sourceTokens`, `degradationApplied`) |
+| `context_injection_dropped`        | Context injection rejected (`hard_limit`, `budget_exhausted`, `duplicate_content`, etc.)              |
+| `context_arena_slo_enforced`       | Arena entry ceiling triggered and SLO degradation was applied                                         |
+| `context_external_recall_decision` | External recall boundary decision (`skipped` / `filtered_out` / `injected`)                           |
+| `memory_*`                         | Memory engine lifecycle events                                                                        |
+| `cost_update`                      | Per-model / per-skill / per-tool cost delta                                                           |
+| `ledger_compacted`                 | Ledger compaction checkpoint                                                                          |
 
 ### Diagnostic Value
 
@@ -46,7 +46,7 @@ Primary correlation artifact. Every runtime action produces at least one event.
 Use `sessionId` + `turn` to correlate with ledger rows and memory units.
 Cost analysis: filter `type === "cost_update"` for per-model and per-tool budget consumption.
 Context control-path analysis: inspect `context_injected`, `context_injection_dropped`,
-`context_arena_*`, and `context_external_recall_*`.
+`context_arena_slo_enforced`, and `context_external_recall_decision`.
 
 ---
 

@@ -74,16 +74,10 @@ async function resolveContextInjection(
   );
 }
 
-function buildCompactionGateMessage(input: {
-  pressure: ContextPressureStatus;
-  reason: "hard_limit" | "floor_unmet";
-}): string {
+function buildCompactionGateMessage(input: { pressure: ContextPressureStatus }): string {
   const usagePercent = formatPercent(input.pressure.usageRatio);
   const hardLimitPercent = formatPercent(input.pressure.hardLimitRatio);
-  const reasonLine =
-    input.reason === "floor_unmet"
-      ? "Context arena floors are unmet after planning; compaction is required to restore minimum viable context."
-      : "Context pressure is critical.";
+  const reasonLine = "Context pressure is critical.";
   return [
     "[ContextCompactionGate]",
     reasonLine,
@@ -244,7 +238,7 @@ export function registerContextTransform(pi: ExtensionAPI, runtime: BrewvaRuntim
     runtime.context.observeUsage(sessionId, usage);
     const emitGateEvents = (
       gateStatus: ContextCompactionGateStatus,
-      reason: "hard_limit" | "floor_unmet",
+      reason: "hard_limit",
     ): void => {
       emitRuntimeEvent(runtime, {
         sessionId,
@@ -271,12 +265,7 @@ export function registerContextTransform(pi: ExtensionAPI, runtime: BrewvaRuntim
     };
 
     let gateStatus = runtime.context.getCompactionGateStatus(sessionId, usage);
-    let gateReason: "hard_limit" | "floor_unmet" | null =
-      gateStatus.reason === "floor_unmet"
-        ? "floor_unmet"
-        : gateStatus.required
-          ? "hard_limit"
-          : null;
+    let gateReason: "hard_limit" | null = gateStatus.required ? "hard_limit" : null;
     if (gateStatus.required && gateReason) {
       emitGateEvents(gateStatus, gateReason);
     }
@@ -293,17 +282,10 @@ export function registerContextTransform(pi: ExtensionAPI, runtime: BrewvaRuntim
     });
     const gateStatusAfterInjection = runtime.context.getCompactionGateStatus(sessionId, usage);
     if (!gateStatus.required && gateStatusAfterInjection.required) {
-      const postInjectionReason =
-        gateStatusAfterInjection.reason === "floor_unmet" ? "floor_unmet" : "hard_limit";
-      emitGateEvents(gateStatusAfterInjection, postInjectionReason);
+      emitGateEvents(gateStatusAfterInjection, "hard_limit");
     }
     gateStatus = gateStatusAfterInjection;
-    gateReason =
-      gateStatus.reason === "floor_unmet"
-        ? "floor_unmet"
-        : gateStatus.required
-          ? "hard_limit"
-          : null;
+    gateReason = gateStatus.required ? "hard_limit" : null;
     state.lastRuntimeGateRequired = gateStatus.required;
 
     const blocks: string[] = [
@@ -317,7 +299,6 @@ export function registerContextTransform(pi: ExtensionAPI, runtime: BrewvaRuntim
       blocks.push(
         buildCompactionGateMessage({
           pressure: gateStatus.pressure,
-          reason: gateReason === "floor_unmet" ? "floor_unmet" : "hard_limit",
         }),
       );
     }

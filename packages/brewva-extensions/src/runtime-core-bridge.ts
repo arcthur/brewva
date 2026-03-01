@@ -73,23 +73,14 @@ export function registerRuntimeCoreBridge(pi: ExtensionAPI, runtime: BrewvaRunti
     const sessionId = ctx.sessionManager.getSessionId();
     const usage = coerceContextBudgetUsage(ctx.getContextUsage());
     runtime.context.observeUsage(sessionId, usage);
-    const injection =
-      typeof runtime.context.buildInjection === "function"
-        ? await runtime.context.buildInjection(
-            sessionId,
-            typeof (event as { prompt?: unknown }).prompt === "string"
-              ? ((event as { prompt: string }).prompt ?? "")
-              : "",
-            usage,
-            resolveInjectionScopeId(ctx.sessionManager),
-          )
-        : {
-            text: "",
-            accepted: false,
-            originalTokens: 0,
-            finalTokens: 0,
-            truncated: false,
-          };
+    const injection = await runtime.context.buildInjection(
+      sessionId,
+      typeof (event as { prompt?: unknown }).prompt === "string"
+        ? ((event as { prompt: string }).prompt ?? "")
+        : "",
+      usage,
+      resolveInjectionScopeId(ctx.sessionManager),
+    );
     const blocks = [buildCoreStatusBlock(runtime, sessionId)];
     if (injection.accepted && injection.text.trim().length > 0) {
       blocks.push(injection.text);

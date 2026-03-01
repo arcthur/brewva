@@ -78,168 +78,12 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "adaptiveZones": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "downshiftIdleRatio": {
-                      "type": "number"
-                    },
-                    "emaAlpha": {
-                      "type": "number"
-                    },
-                    "enabled": {
-                      "type": "boolean"
-                    },
-                    "maxShiftPerTurn": {
-                      "type": "number"
-                    },
-                    "minTurnsBeforeAdapt": {
-                      "type": "number"
-                    },
-                    "retirement": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "checkIntervalHours": {
-                          "type": "number"
-                        },
-                        "disableBelow": {
-                          "type": "number"
-                        },
-                        "enabled": {
-                          "type": "boolean"
-                        },
-                        "metricKey": {
-                          "$ref": "#/definitions/ContextRetirementMetricKey"
-                        },
-                        "minSamples": {
-                          "type": "number"
-                        },
-                        "reenableAbove": {
-                          "type": "number"
-                        }
-                      }
-                    },
-                    "stepTokens": {
-                      "type": "number"
-                    },
-                    "upshiftTruncationRatio": {
-                      "type": "number"
-                    }
-                  }
-                },
                 "arena": {
                   "type": "object",
                   "additionalProperties": false,
                   "properties": {
-                    "degradationPolicy": {
-                      "$ref": "#/definitions/ContextArenaDegradationPolicy"
-                    },
                     "maxEntriesPerSession": {
                       "type": "number"
-                    },
-                    "zones": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "identity": {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "properties": {
-                            "max": {
-                              "type": "number"
-                            },
-                            "min": {
-                              "type": "number"
-                            }
-                          }
-                        },
-                        "memoryRecall": {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "properties": {
-                            "max": {
-                              "type": "number"
-                            },
-                            "min": {
-                              "type": "number"
-                            }
-                          }
-                        },
-                        "memoryWorking": {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "properties": {
-                            "max": {
-                              "type": "number"
-                            },
-                            "min": {
-                              "type": "number"
-                            }
-                          }
-                        },
-                        "ragExternal": {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "properties": {
-                            "max": {
-                              "type": "number"
-                            },
-                            "min": {
-                              "type": "number"
-                            }
-                          }
-                        },
-                        "skills": {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "properties": {
-                            "max": {
-                              "type": "number"
-                            },
-                            "min": {
-                              "type": "number"
-                            }
-                          }
-                        },
-                        "taskState": {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "properties": {
-                            "max": {
-                              "type": "number"
-                            },
-                            "min": {
-                              "type": "number"
-                            }
-                          }
-                        },
-                        "toolFailures": {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "properties": {
-                            "max": {
-                              "type": "number"
-                            },
-                            "min": {
-                              "type": "number"
-                            }
-                          }
-                        },
-                        "truth": {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "properties": {
-                            "max": {
-                              "type": "number"
-                            },
-                            "min": {
-                              "type": "number"
-                            }
-                          }
-                        }
-                      }
                     }
                   }
                 },
@@ -267,83 +111,11 @@
                 "enabled": {
                   "type": "boolean"
                 },
-                "floorUnmetPolicy": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "enabled": {
-                      "type": "boolean"
-                    },
-                    "finalFallback": {
-                      "type": "string",
-                      "const": "critical_only"
-                    },
-                    "relaxOrder": {
-                      "type": "array",
-                      "items": {
-                        "type": "string",
-                        "enum": [
-                          "identity",
-                          "truth",
-                          "skills",
-                          "task_state",
-                          "tool_failures",
-                          "memory_working",
-                          "memory_recall",
-                          "rag_external"
-                        ]
-                      }
-                    },
-                    "requestCompaction": {
-                      "type": "boolean"
-                    }
-                  }
-                },
                 "hardLimitPercent": {
                   "type": "number"
                 },
                 "maxInjectionTokens": {
                   "type": "number"
-                },
-                "profile": {
-                  "type": "string",
-                  "enum": ["simple", "managed"]
-                },
-                "stabilityMonitor": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "consecutiveThreshold": {
-                      "type": "number"
-                    },
-                    "enabled": {
-                      "type": "boolean"
-                    },
-                    "retirement": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "checkIntervalHours": {
-                          "type": "number"
-                        },
-                        "disableBelow": {
-                          "type": "number"
-                        },
-                        "enabled": {
-                          "type": "boolean"
-                        },
-                        "metricKey": {
-                          "$ref": "#/definitions/ContextRetirementMetricKey"
-                        },
-                        "minSamples": {
-                          "type": "number"
-                        },
-                        "reenableAbove": {
-                          "type": "number"
-                        }
-                      }
-                    }
-                  }
                 },
                 "truncationStrategy": {
                   "type": "string",
@@ -488,10 +260,6 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "builtinProvider": {
-                  "type": "string",
-                  "enum": ["off", "crystal-lexical"]
-                },
                 "enabled": {
                   "type": "boolean"
                 },
@@ -749,14 +517,6 @@
           }
         }
       }
-    },
-    "ContextArenaDegradationPolicy": {
-      "type": "string",
-      "enum": ["drop_recall", "drop_low_priority", "force_compact"]
-    },
-    "ContextRetirementMetricKey": {
-      "type": "string",
-      "enum": ["floor_unmet_rate_7d", "zone_adaptation_benefit_7d"]
     },
     "SkillContractOverride": {
       "type": "object",

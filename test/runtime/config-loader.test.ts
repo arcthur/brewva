@@ -27,33 +27,10 @@ describe("Brewva config loader normalization", () => {
       },
       infrastructure: {
         contextBudget: {
-          profile: "invalid_profile",
           maxInjectionTokens: -100,
           hardLimitPercent: 1.6,
           compactionThresholdPercent: 1.8,
           truncationStrategy: "invalid_strategy",
-          adaptiveZones: {
-            retirement: {
-              enabled: "yes",
-              metricKey: "invalid_metric",
-              disableBelow: 2,
-              reenableAbove: -1,
-              checkIntervalHours: -1,
-              minSamples: 0,
-            },
-          },
-          stabilityMonitor: {
-            enabled: "yes",
-            consecutiveThreshold: -2,
-            retirement: {
-              enabled: "yes",
-              metricKey: "invalid_metric",
-              disableBelow: 9,
-              reenableAbove: -5,
-              checkIntervalHours: 0,
-              minSamples: -3,
-            },
-          },
         },
         toolFailureInjection: {
           enabled: "yes",
@@ -102,49 +79,12 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.infrastructure.contextBudget.maxInjectionTokens).toBe(
       defaults.infrastructure.contextBudget.maxInjectionTokens,
     );
-    expect(loaded.infrastructure.contextBudget.profile).toBe(
-      defaults.infrastructure.contextBudget.profile,
-    );
     expect(loaded.infrastructure.contextBudget.hardLimitPercent).toBe(1);
     expect(loaded.infrastructure.contextBudget.compactionThresholdPercent).toBeLessThanOrEqual(
       loaded.infrastructure.contextBudget.hardLimitPercent,
     );
     expect(loaded.infrastructure.contextBudget.truncationStrategy).toBe(
       defaults.infrastructure.contextBudget.truncationStrategy,
-    );
-    expect(loaded.infrastructure.contextBudget.stabilityMonitor.enabled).toBe(
-      defaults.infrastructure.contextBudget.stabilityMonitor.enabled,
-    );
-    expect(loaded.infrastructure.contextBudget.stabilityMonitor.consecutiveThreshold).toBe(
-      defaults.infrastructure.contextBudget.stabilityMonitor.consecutiveThreshold,
-    );
-    expect(loaded.infrastructure.contextBudget.stabilityMonitor.retirement.enabled).toBe(
-      defaults.infrastructure.contextBudget.stabilityMonitor.retirement.enabled,
-    );
-    expect(loaded.infrastructure.contextBudget.stabilityMonitor.retirement.metricKey).toBe(
-      defaults.infrastructure.contextBudget.stabilityMonitor.retirement.metricKey,
-    );
-    expect(loaded.infrastructure.contextBudget.stabilityMonitor.retirement.disableBelow).toBe(1);
-    expect(loaded.infrastructure.contextBudget.stabilityMonitor.retirement.reenableAbove).toBe(1);
-    expect(loaded.infrastructure.contextBudget.stabilityMonitor.retirement.checkIntervalHours).toBe(
-      defaults.infrastructure.contextBudget.stabilityMonitor.retirement.checkIntervalHours,
-    );
-    expect(loaded.infrastructure.contextBudget.stabilityMonitor.retirement.minSamples).toBe(
-      defaults.infrastructure.contextBudget.stabilityMonitor.retirement.minSamples,
-    );
-    expect(loaded.infrastructure.contextBudget.adaptiveZones.retirement.enabled).toBe(
-      defaults.infrastructure.contextBudget.adaptiveZones.retirement.enabled,
-    );
-    expect(loaded.infrastructure.contextBudget.adaptiveZones.retirement.metricKey).toBe(
-      defaults.infrastructure.contextBudget.adaptiveZones.retirement.metricKey,
-    );
-    expect(loaded.infrastructure.contextBudget.adaptiveZones.retirement.disableBelow).toBe(1);
-    expect(loaded.infrastructure.contextBudget.adaptiveZones.retirement.reenableAbove).toBe(1);
-    expect(loaded.infrastructure.contextBudget.adaptiveZones.retirement.checkIntervalHours).toBe(
-      defaults.infrastructure.contextBudget.adaptiveZones.retirement.checkIntervalHours,
-    );
-    expect(loaded.infrastructure.contextBudget.adaptiveZones.retirement.minSamples).toBe(
-      defaults.infrastructure.contextBudget.adaptiveZones.retirement.minSamples,
     );
     expect(loaded.infrastructure.toolFailureInjection.enabled).toBe(
       defaults.infrastructure.toolFailureInjection.enabled,
@@ -208,9 +148,6 @@ describe("Brewva config loader normalization", () => {
               recency: 2,
               confidence: 2,
             },
-            externalRecall: {
-              builtinProvider: "unsupported",
-            },
             evolvesMode: "unsupported",
             cognitive: {
               mode: "unsupported",
@@ -240,9 +177,6 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.memory.retrievalWeights.lexical).toBe(0);
     expect(loaded.memory.retrievalWeights.recency).toBe(0.5);
     expect(loaded.memory.retrievalWeights.confidence).toBe(0.5);
-    expect(loaded.memory.externalRecall.builtinProvider).toBe(
-      defaults.externalRecall.builtinProvider,
-    );
     expect(loaded.memory.evolvesMode).toBe(defaults.evolvesMode);
     expect(loaded.memory.cognitive.mode).toBe(defaults.cognitive.mode);
     expect(loaded.memory.cognitive.maxTokensPerTurn).toBe(0);

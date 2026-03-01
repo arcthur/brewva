@@ -17,7 +17,6 @@ function createWorkspace(prefix: string): string {
 function createConfig(): BrewvaConfig {
   const config = structuredClone(DEFAULT_BREWVA_CONFIG);
   config.infrastructure.contextBudget.enabled = true;
-  config.infrastructure.contextBudget.profile = "managed";
   config.infrastructure.contextBudget.maxInjectionTokens = 1200;
   config.memory.enabled = false;
   config.infrastructure.toolFailureInjection.enabled = false;
@@ -25,7 +24,7 @@ function createConfig(): BrewvaConfig {
 }
 
 describe("context default dead-path", () => {
-  test("does not emit context_arena_* or context_stability_* events with managed profile and zero floors", async () => {
+  test("does not emit context_arena_* or legacy context_stability_* events in runtime default path", async () => {
     const runtime = new BrewvaRuntime({
       cwd: createWorkspace("brewva-context-default-dead-path-"),
       config: createConfig(),
@@ -40,7 +39,7 @@ describe("context default dead-path", () => {
       id: "truth:default-dead-path",
       kind: "diagnostic",
       severity: "info",
-      summary: "default floor config should avoid floor_unmet control loop",
+      summary: "default context path should avoid legacy control loops",
     });
 
     await runtime.context.buildInjection(sessionId, "run baseline injection", {
@@ -51,9 +50,11 @@ describe("context default dead-path", () => {
 
     const events = runtime.events.query(sessionId);
     const arenaEvents = events.filter((event) => event.type.startsWith("context_arena_"));
-    const stabilityEvents = events.filter((event) => event.type.startsWith("context_stability_"));
+    const legacyStabilityEvents = events.filter((event) =>
+      event.type.startsWith("context_stability_"),
+    );
 
     expect(arenaEvents).toHaveLength(0);
-    expect(stabilityEvents).toHaveLength(0);
+    expect(legacyStabilityEvents).toHaveLength(0);
   });
 });

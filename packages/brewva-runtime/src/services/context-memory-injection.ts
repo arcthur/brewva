@@ -3,6 +3,7 @@ import type {
   ContextInjectionPriority,
   ContextInjectionRegisterResult,
 } from "../context/injection.js";
+import { CONTEXT_SOURCES } from "../context/sources.js";
 import type { ExternalRecallHit, ExternalRecallPort } from "../external-recall/types.js";
 import { MemoryEngine } from "../memory/engine.js";
 import type {
@@ -21,6 +22,35 @@ export interface ExternalRecallInjectionOutcome {
   internalTopScore: number | null;
   threshold: number;
 }
+
+export type ExternalRecallSkipReason =
+  | "skill_tag_missing"
+  | "internal_score_sufficient"
+  | "provider_unavailable"
+  | "no_hits"
+  | "empty_block"
+  | "arena_rejected";
+
+export type ExternalRecallSkipPayload = Record<string, unknown> & {
+  reason: ExternalRecallSkipReason;
+  query: string;
+  threshold?: number;
+  internalTopScore?: number | null;
+  hitCount?: number;
+};
+
+export type ExternalRecallDecision =
+  | {
+      status: "disabled";
+    }
+  | {
+      status: "skipped";
+      payload: ExternalRecallSkipPayload;
+    }
+  | {
+      status: "accepted";
+      outcome: ExternalRecallInjectionOutcome;
+    };
 
 interface ContextMemoryInjectionServiceOptions {
   workspaceRoot: string;
@@ -114,7 +144,7 @@ export class ContextMemoryInjectionService {
     const content = profile.content.trim();
     if (!content) return;
     this.registerContextInjection(sessionId, {
-      source: "brewva.identity",
+      source: CONTEXT_SOURCES.identity,
       id: `identity-${profile.agentId}`,
       priority: "critical",
       content,
@@ -126,8 +156,8 @@ export class ContextMemoryInjectionService {
     sessionId: string,
     prompt: string,
     usage?: ContextBudgetUsage,
-  ): Promise<ExternalRecallInjectionOutcome | null> {
-    if (!this.config.memory.enabled) return null;
+  ): Promise<ExternalRecallDecision> {
+    if (!this.config.memory.enabled) return { status: "disabled" };
     const taskGoal = this.getTaskState(sessionId).spec?.goal;
     this.memory.refreshIfNeeded({ sessionId });
 
@@ -135,7 +165,7 @@ export class ContextMemoryInjectionService {
     const workingContent = working?.content.trim() ?? "";
     if (workingContent) {
       this.registerContextInjection(sessionId, {
-        source: "brewva.memory-working",
+        source: CONTEXT_SOURCES.memoryWorking,
         id: "memory-working",
         priority: "critical",
         content: workingContent,
@@ -175,128 +205,128 @@ export class ContextMemoryInjectionService {
 
     if (recallContent) {
       this.registerContextInjection(sessionId, {
-        source: "brewva.memory-recall",
+        source: CONTEXT_SOURCES.memoryRecall,
         id: "memory-recall",
         priority: "normal",
         content: recallContent,
       });
     }
 
+    const externalRecall = await this.decideExternalRecall({
+      sessionId,
+      query: recallQuery,
+    });
+    return externalRecall;
+  }
+
+  private async decideExternalRecall(input: {
+    sessionId: string;
+    query: string;
+  }): Promise<ExternalRecallDecision> {
     const externalRecallConfig = this.config.memory.externalRecall;
-    const activeSkill = this.getActiveSkill(sessionId);
-    const isExternalKnowledgeSkill =
-      activeSkill?.contract.tags.some((tag) => tag === "external-knowledge") === true;
     if (!externalRecallConfig.enabled) {
-      return null;
-    }
-    if (!isExternalKnowledgeSkill) {
-      this.recordEvent({
-        sessionId,
-        type: "context_external_recall_skipped",
-        payload: {
-          reason: "skill_tag_missing",
-          query: recallQuery,
-          threshold: externalRecallConfig.minInternalScore,
-        },
-      });
-      return null;
+      return { status: "disabled" };
     }
 
-    const probe = await this.memory.search(sessionId, {
-      query: recallQuery,
+    const activeSkill = this.getActiveSkill(input.sessionId);
+    const isExternalKnowledgeSkill =
+      activeSkill?.contract.tags.some((tag) => tag === "external-knowledge") === true;
+    if (!isExternalKnowledgeSkill) {
+      return {
+        status: "skipped",
+        payload: {
+          reason: "skill_tag_missing",
+          query: input.query,
+          threshold: externalRecallConfig.minInternalScore,
+        },
+      };
+    }
+
+    const probe = await this.memory.search(input.sessionId, {
+      query: input.query,
       limit: 1,
     });
     const internalTopScore = probe.hits[0]?.score ?? null;
-    const triggerExternalRecall =
-      internalTopScore === null || internalTopScore < externalRecallConfig.minInternalScore;
-    if (!triggerExternalRecall) {
-      this.recordEvent({
-        sessionId,
-        type: "context_external_recall_skipped",
+    if (internalTopScore !== null && internalTopScore >= externalRecallConfig.minInternalScore) {
+      return {
+        status: "skipped",
         payload: {
           reason: "internal_score_sufficient",
-          query: recallQuery,
+          query: input.query,
           internalTopScore,
           threshold: externalRecallConfig.minInternalScore,
         },
-      });
-      return null;
+      };
     }
 
     if (!this.externalRecallPort) {
-      this.recordEvent({
-        sessionId,
-        type: "context_external_recall_skipped",
+      return {
+        status: "skipped",
         payload: {
           reason: "provider_unavailable",
-          query: recallQuery,
+          query: input.query,
           internalTopScore,
           threshold: externalRecallConfig.minInternalScore,
         },
-      });
-      return null;
+      };
     }
 
     const externalHits = await this.externalRecallPort.search({
-      sessionId,
-      query: recallQuery,
+      sessionId: input.sessionId,
+      query: input.query,
       limit: externalRecallConfig.queryTopK,
     });
-    if (!externalHits.length) {
-      this.recordEvent({
-        sessionId,
-        type: "context_external_recall_skipped",
+    if (externalHits.length === 0) {
+      return {
+        status: "skipped",
         payload: {
           reason: "no_hits",
-          query: recallQuery,
+          query: input.query,
           internalTopScore,
           threshold: externalRecallConfig.minInternalScore,
         },
-      });
-      return null;
+      };
     }
 
-    const externalBlock = this.buildExternalRecallBlock(recallQuery, externalHits);
+    const externalBlock = this.buildExternalRecallBlock(input.query, externalHits);
     if (!externalBlock) {
-      this.recordEvent({
-        sessionId,
-        type: "context_external_recall_skipped",
+      return {
+        status: "skipped",
         payload: {
           reason: "empty_block",
-          query: recallQuery,
+          query: input.query,
           hitCount: externalHits.length,
         },
-      });
-      return null;
+      };
     }
 
-    const externalRegistration = this.registerContextInjection(sessionId, {
-      source: "brewva.rag-external",
+    const externalRegistration = this.registerContextInjection(input.sessionId, {
+      source: CONTEXT_SOURCES.ragExternal,
       id: "rag-external",
       priority: "normal",
       content: externalBlock,
     });
     if (!externalRegistration.accepted) {
-      this.recordEvent({
-        sessionId,
-        type: "context_external_recall_skipped",
+      return {
+        status: "skipped",
         payload: {
           reason: "arena_rejected",
-          query: recallQuery,
+          query: input.query,
           hitCount: externalHits.length,
           internalTopScore,
           threshold: externalRecallConfig.minInternalScore,
-          degradationPolicy: externalRegistration.sloEnforced?.policy ?? null,
         },
-      });
-      return null;
+      };
     }
 
     return {
-      query: recallQuery,
-      hits: externalHits,
-      internalTopScore,
-      threshold: externalRecallConfig.minInternalScore,
+      status: "accepted",
+      outcome: {
+        query: input.query,
+        hits: externalHits,
+        internalTopScore,
+        threshold: externalRecallConfig.minInternalScore,
+      },
     };
   }
 

@@ -9,16 +9,15 @@ import {
   type BrewvaConfig,
 } from "@brewva/brewva-runtime";
 
-function createManagedConfig(): BrewvaConfig {
+function createConfig(): BrewvaConfig {
   const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-  config.infrastructure.contextBudget.profile = "managed";
   return config;
 }
 
 describe("session state cleanup", () => {
   test("clearSessionState releases in-memory per-session caches", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-session-clean-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace, config: createManagedConfig() });
+    const runtime = new BrewvaRuntime({ cwd: workspace, config: createConfig() });
     const sessionId = "cleanup-state-1";
 
     runtime.context.onTurnStart(sessionId, 1);
@@ -58,12 +57,6 @@ describe("session state cleanup", () => {
       totalTokens: 15,
       costUsd: 0.0001,
     });
-    const contextStabilityMonitor = (runtime as any).contextStabilityMonitor as {
-      recordDegraded: (id: string, turn?: number) => boolean;
-      sessions: Map<string, unknown>;
-    };
-    contextStabilityMonitor.recordDegraded(sessionId, 1);
-
     const sessionState = (runtime as any).sessionState as {
       turnsBySession: Map<string, number>;
       toolCallsBySession: Map<string, number>;
@@ -83,7 +76,6 @@ describe("session state cleanup", () => {
     ).toBe(true);
     expect(((runtime as any).eventStore.fileHasContent as Map<string, boolean>).size).toBe(1);
     expect((runtime as any).ledger.lastHashBySession.has(sessionId) as boolean).toBe(true);
-    expect(contextStabilityMonitor.sessions.has(sessionId)).toBe(true);
 
     runtime.session.clearState(sessionId);
 
@@ -107,7 +99,6 @@ describe("session state cleanup", () => {
     );
     expect(((runtime as any).eventStore.fileHasContent as Map<string, boolean>).size).toBe(0);
     expect((runtime as any).ledger.lastHashBySession.has(sessionId) as boolean).toBe(false);
-    expect(contextStabilityMonitor.sessions.has(sessionId)).toBe(false);
   });
 
   test("keeps replay cache hot and incrementally updates task replay view", async () => {

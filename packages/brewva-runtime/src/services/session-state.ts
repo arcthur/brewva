@@ -18,8 +18,6 @@ export class RuntimeSessionStateStore {
   readonly turnsBySession = new Map<string, number>();
   readonly toolCallsBySession = new Map<string, number>();
   readonly latestCompactionSummaryBySession = new Map<string, SessionCompactionSummary>();
-  readonly contextProfileSelectedBySession = new Set<string>();
-  readonly contextProfileIgnoredOptionsBySession = new Map<string, Set<string>>();
   readonly lastInjectedContextFingerprintBySession = new Map<string, string>();
   readonly reservedContextInjectionTokensByScope = new Map<string, number>();
   readonly lastLedgerCompactionTurnBySession = new Map<string, number>();
@@ -83,8 +81,6 @@ export class RuntimeSessionStateStore {
     this.skillOutputsBySession.delete(sessionId);
     this.pendingDispatchBySession.delete(sessionId);
     this.latestCompactionSummaryBySession.delete(sessionId);
-    this.contextProfileSelectedBySession.delete(sessionId);
-    this.contextProfileIgnoredOptionsBySession.delete(sessionId);
     this.viewportPolicyBySession.delete(sessionId);
     this.clearInjectionFingerprintsForSession(sessionId);
     this.clearReservedInjectionTokensForSession(sessionId);

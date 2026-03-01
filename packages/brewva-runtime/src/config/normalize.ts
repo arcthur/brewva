@@ -8,21 +8,9 @@ const VALID_EVENT_LEVELS = new Set(["audit", "ops", "debug"]);
 const VALID_MEMORY_EVOLVES_MODES = new Set(["off", "shadow"]);
 const VALID_MEMORY_COGNITIVE_MODES = new Set(["off", "shadow", "active"]);
 const VALID_MEMORY_RECALL_MODES = new Set(["primary", "fallback"]);
-const VALID_MEMORY_EXTERNAL_RECALL_BUILTIN_PROVIDERS = new Set(["off", "crystal-lexical"]);
 const VALID_VERIFICATION_LEVELS = new Set<VerificationLevel>(["quick", "standard", "strict"]);
 const VALID_CHANNEL_SCOPE_STRATEGIES = new Set(["chat", "thread"]);
 const VALID_CHANNEL_ACL_MODES = new Set(["open", "closed"]);
-const VALID_CONTEXT_ARENA_DEGRADATION_POLICIES = new Set([
-  "drop_recall",
-  "drop_low_priority",
-  "force_compact",
-]);
-const VALID_CONTEXT_FLOOR_UNMET_FALLBACKS = new Set(["critical_only"]);
-const VALID_CONTEXT_BUDGET_PROFILES = new Set(["simple", "managed"]);
-const VALID_CONTEXT_RETIREMENT_METRICS = new Set([
-  "floor_unmet_rate_7d",
-  "zone_adaptation_benefit_7d",
-]);
 
 type AnyRecord = Record<string, unknown>;
 
@@ -136,73 +124,6 @@ function normalizeMemoryRetrievalWeights(
   };
 }
 
-function normalizeContextArenaZone(
-  value: unknown,
-  fallback: { min: number; max: number },
-): { min: number; max: number } {
-  const input = isRecord(value) ? value : {};
-  const min = normalizeNonNegativeInteger(input.min, fallback.min);
-  const rawMax = normalizeNonNegativeInteger(input.max, fallback.max);
-  return {
-    min,
-    max: Math.max(min, rawMax),
-  };
-}
-
-function normalizeContextBudgetZoneOrder(
-  value: unknown,
-  fallback: BrewvaConfig["infrastructure"]["contextBudget"]["floorUnmetPolicy"]["relaxOrder"],
-): BrewvaConfig["infrastructure"]["contextBudget"]["floorUnmetPolicy"]["relaxOrder"] {
-  if (!Array.isArray(value)) return [...fallback];
-  const allowed = new Set([
-    "identity",
-    "truth",
-    "skills",
-    "task_state",
-    "tool_failures",
-    "memory_working",
-    "memory_recall",
-    "rag_external",
-  ]);
-  const normalized = value
-    .filter((entry): entry is string => typeof entry === "string")
-    .map((entry) => entry.trim())
-    .filter((entry) => allowed.has(entry))
-    .filter((entry, index, array) => array.indexOf(entry) === index);
-  return normalized.length > 0
-    ? (normalized as BrewvaConfig["infrastructure"]["contextBudget"]["floorUnmetPolicy"]["relaxOrder"])
-    : [...fallback];
-}
-
-function normalizeContextRetirementPolicy(
-  value: unknown,
-  fallback: BrewvaConfig["infrastructure"]["contextBudget"]["adaptiveZones"]["retirement"],
-): BrewvaConfig["infrastructure"]["contextBudget"]["adaptiveZones"]["retirement"] {
-  const input = isRecord(value) ? value : {};
-  const metricCandidate =
-    typeof input.metricKey === "string" && VALID_CONTEXT_RETIREMENT_METRICS.has(input.metricKey)
-      ? input.metricKey
-      : fallback.metricKey;
-  const disableBelow = normalizeUnitInterval(input.disableBelow, fallback.disableBelow);
-  const reenableFallback = Math.max(fallback.reenableAbove, disableBelow);
-  const reenableAbove = Math.max(
-    disableBelow,
-    normalizeUnitInterval(input.reenableAbove, reenableFallback),
-  );
-  return {
-    enabled: normalizeBoolean(input.enabled, fallback.enabled),
-    metricKey:
-      metricCandidate as BrewvaConfig["infrastructure"]["contextBudget"]["adaptiveZones"]["retirement"]["metricKey"],
-    disableBelow,
-    reenableAbove,
-    checkIntervalHours: normalizePositiveInteger(
-      input.checkIntervalHours,
-      fallback.checkIntervalHours,
-    ),
-    minSamples: normalizePositiveInteger(input.minSamples, fallback.minSamples),
-  };
-}
-
 export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): BrewvaConfig {
   const input = isRecord(config) ? config : {};
   const uiInput = isRecord(input.ui) ? input.ui : {};
@@ -250,20 +171,8 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
   const contextBudgetCompactionInput = isRecord(contextBudgetInput.compaction)
     ? contextBudgetInput.compaction
     : {};
-  const contextBudgetAdaptiveZonesInput = isRecord(contextBudgetInput.adaptiveZones)
-    ? contextBudgetInput.adaptiveZones
-    : {};
-  const contextBudgetFloorUnmetPolicyInput = isRecord(contextBudgetInput.floorUnmetPolicy)
-    ? contextBudgetInput.floorUnmetPolicy
-    : {};
-  const contextBudgetStabilityMonitorInput = isRecord(contextBudgetInput.stabilityMonitor)
-    ? contextBudgetInput.stabilityMonitor
-    : {};
   const contextBudgetArenaInput = isRecord(contextBudgetInput.arena)
     ? contextBudgetInput.arena
-    : {};
-  const contextBudgetArenaZonesInput = isRecord(contextBudgetArenaInput.zones)
-    ? contextBudgetArenaInput.zones
     : {};
   const toolFailureInjectionInput = isRecord(infrastructureInput.toolFailureInjection)
     ? infrastructureInput.toolFailureInjection
@@ -279,9 +188,6 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
   const defaultContextBudget = defaults.infrastructure.contextBudget;
   const defaultToolFailureInjection = defaults.infrastructure.toolFailureInjection;
   const defaultContextCompaction = defaultContextBudget.compaction;
-  const defaultContextAdaptiveZones = defaultContextBudget.adaptiveZones;
-  const defaultContextFloorUnmetPolicy = defaultContextBudget.floorUnmetPolicy;
-  const defaultContextStabilityMonitor = defaultContextBudget.stabilityMonitor;
   const defaultContextArena = defaultContextBudget.arena;
   const normalizedHardLimitPercent = normalizeUnitInterval(
     contextBudgetInput.hardLimitPercent,
@@ -422,11 +328,6 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
           memoryExternalRecallInput.enabled,
           defaults.memory.externalRecall.enabled,
         ),
-        builtinProvider: VALID_MEMORY_EXTERNAL_RECALL_BUILTIN_PROVIDERS.has(
-          memoryExternalRecallInput.builtinProvider as string,
-        )
-          ? (memoryExternalRecallInput.builtinProvider as BrewvaConfig["memory"]["externalRecall"]["builtinProvider"])
-          : defaults.memory.externalRecall.builtinProvider,
         minInternalScore: normalizeUnitInterval(
           memoryExternalRecallInput.minInternalScore,
           defaults.memory.externalRecall.minInternalScore,
@@ -603,9 +504,6 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
       },
       contextBudget: {
         enabled: normalizeBoolean(contextBudgetInput.enabled, defaultContextBudget.enabled),
-        profile: VALID_CONTEXT_BUDGET_PROFILES.has(contextBudgetInput.profile as string)
-          ? (contextBudgetInput.profile as BrewvaConfig["infrastructure"]["contextBudget"]["profile"])
-          : defaultContextBudget.profile,
         maxInjectionTokens: normalizePositiveInteger(
           contextBudgetInput.maxInjectionTokens,
           defaultContextBudget.maxInjectionTokens,
@@ -635,117 +533,11 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
             defaultContextCompaction.pressureBypassPercent,
           ),
         },
-        adaptiveZones: {
-          enabled: normalizeBoolean(
-            contextBudgetAdaptiveZonesInput.enabled,
-            defaultContextAdaptiveZones.enabled,
-          ),
-          emaAlpha: normalizeUnitInterval(
-            contextBudgetAdaptiveZonesInput.emaAlpha,
-            defaultContextAdaptiveZones.emaAlpha,
-          ),
-          minTurnsBeforeAdapt: normalizeNonNegativeInteger(
-            contextBudgetAdaptiveZonesInput.minTurnsBeforeAdapt,
-            defaultContextAdaptiveZones.minTurnsBeforeAdapt,
-          ),
-          stepTokens: normalizePositiveInteger(
-            contextBudgetAdaptiveZonesInput.stepTokens,
-            defaultContextAdaptiveZones.stepTokens,
-          ),
-          maxShiftPerTurn: normalizeNonNegativeInteger(
-            contextBudgetAdaptiveZonesInput.maxShiftPerTurn,
-            defaultContextAdaptiveZones.maxShiftPerTurn,
-          ),
-          upshiftTruncationRatio: normalizeUnitInterval(
-            contextBudgetAdaptiveZonesInput.upshiftTruncationRatio,
-            defaultContextAdaptiveZones.upshiftTruncationRatio,
-          ),
-          downshiftIdleRatio: normalizeUnitInterval(
-            contextBudgetAdaptiveZonesInput.downshiftIdleRatio,
-            defaultContextAdaptiveZones.downshiftIdleRatio,
-          ),
-          retirement: normalizeContextRetirementPolicy(
-            contextBudgetAdaptiveZonesInput.retirement,
-            defaultContextAdaptiveZones.retirement,
-          ),
-        },
-        floorUnmetPolicy: {
-          enabled: normalizeBoolean(
-            contextBudgetFloorUnmetPolicyInput.enabled,
-            defaultContextFloorUnmetPolicy.enabled,
-          ),
-          relaxOrder: normalizeContextBudgetZoneOrder(
-            contextBudgetFloorUnmetPolicyInput.relaxOrder,
-            defaultContextFloorUnmetPolicy.relaxOrder,
-          ),
-          finalFallback: VALID_CONTEXT_FLOOR_UNMET_FALLBACKS.has(
-            contextBudgetFloorUnmetPolicyInput.finalFallback as string,
-          )
-            ? (contextBudgetFloorUnmetPolicyInput.finalFallback as BrewvaConfig["infrastructure"]["contextBudget"]["floorUnmetPolicy"]["finalFallback"])
-            : defaultContextFloorUnmetPolicy.finalFallback,
-          requestCompaction: normalizeBoolean(
-            contextBudgetFloorUnmetPolicyInput.requestCompaction,
-            defaultContextFloorUnmetPolicy.requestCompaction,
-          ),
-        },
-        stabilityMonitor: {
-          enabled: normalizeBoolean(
-            contextBudgetStabilityMonitorInput.enabled,
-            defaultContextStabilityMonitor.enabled,
-          ),
-          consecutiveThreshold: normalizePositiveInteger(
-            contextBudgetStabilityMonitorInput.consecutiveThreshold,
-            defaultContextStabilityMonitor.consecutiveThreshold,
-          ),
-          retirement: normalizeContextRetirementPolicy(
-            contextBudgetStabilityMonitorInput.retirement,
-            defaultContextStabilityMonitor.retirement,
-          ),
-        },
         arena: {
           maxEntriesPerSession: normalizePositiveInteger(
             contextBudgetArenaInput.maxEntriesPerSession,
             defaultContextArena.maxEntriesPerSession,
           ),
-          degradationPolicy: VALID_CONTEXT_ARENA_DEGRADATION_POLICIES.has(
-            contextBudgetArenaInput.degradationPolicy as string,
-          )
-            ? (contextBudgetArenaInput.degradationPolicy as BrewvaConfig["infrastructure"]["contextBudget"]["arena"]["degradationPolicy"])
-            : defaultContextArena.degradationPolicy,
-          zones: {
-            identity: normalizeContextArenaZone(
-              contextBudgetArenaZonesInput.identity,
-              defaultContextArena.zones.identity,
-            ),
-            truth: normalizeContextArenaZone(
-              contextBudgetArenaZonesInput.truth,
-              defaultContextArena.zones.truth,
-            ),
-            skills: normalizeContextArenaZone(
-              contextBudgetArenaZonesInput.skills,
-              defaultContextArena.zones.skills,
-            ),
-            taskState: normalizeContextArenaZone(
-              contextBudgetArenaZonesInput.taskState,
-              defaultContextArena.zones.taskState,
-            ),
-            toolFailures: normalizeContextArenaZone(
-              contextBudgetArenaZonesInput.toolFailures,
-              defaultContextArena.zones.toolFailures,
-            ),
-            memoryWorking: normalizeContextArenaZone(
-              contextBudgetArenaZonesInput.memoryWorking,
-              defaultContextArena.zones.memoryWorking,
-            ),
-            memoryRecall: normalizeContextArenaZone(
-              contextBudgetArenaZonesInput.memoryRecall,
-              defaultContextArena.zones.memoryRecall,
-            ),
-            ragExternal: normalizeContextArenaZone(
-              contextBudgetArenaZonesInput.ragExternal,
-              defaultContextArena.zones.ragExternal,
-            ),
-          },
         },
       },
       toolFailureInjection: {

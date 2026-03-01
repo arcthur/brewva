@@ -74,7 +74,6 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 - `memory.retrievalWeights.confidence`: `0.20`
 - `memory.recallMode`: `primary`
 - `memory.externalRecall.enabled`: `false`
-- `memory.externalRecall.builtinProvider`: `off`
 - `memory.externalRecall.minInternalScore`: `0.62`
 - `memory.externalRecall.queryTopK`: `5`
 - `memory.externalRecall.injectedConfidence`: `0.6`
@@ -133,7 +132,6 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 - `infrastructure.events.dir`: `.orchestrator/events`
 - `infrastructure.events.level`: `ops`
 - `infrastructure.contextBudget.enabled`: `true`
-- `infrastructure.contextBudget.profile`: `simple`
 - `infrastructure.contextBudget.maxInjectionTokens`: `1200`
 - `infrastructure.contextBudget.compactionThresholdPercent`: `0.82`
 - `infrastructure.contextBudget.hardLimitPercent`: `0.94`
@@ -142,41 +140,7 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 - `infrastructure.contextBudget.compaction.minTurnsBetween`: `2`
 - `infrastructure.contextBudget.compaction.minSecondsBetween`: `45`
 - `infrastructure.contextBudget.compaction.pressureBypassPercent`: `0.94`
-- `infrastructure.contextBudget.adaptiveZones.enabled`: `true`
-- `infrastructure.contextBudget.adaptiveZones.emaAlpha`: `0.3`
-- `infrastructure.contextBudget.adaptiveZones.minTurnsBeforeAdapt`: `3`
-- `infrastructure.contextBudget.adaptiveZones.stepTokens`: `32`
-- `infrastructure.contextBudget.adaptiveZones.maxShiftPerTurn`: `96`
-- `infrastructure.contextBudget.adaptiveZones.upshiftTruncationRatio`: `0.25`
-- `infrastructure.contextBudget.adaptiveZones.downshiftIdleRatio`: `0.15`
-- `infrastructure.contextBudget.adaptiveZones.retirement.enabled`: `false`
-- `infrastructure.contextBudget.adaptiveZones.retirement.metricKey`: `zone_adaptation_benefit_7d`
-- `infrastructure.contextBudget.adaptiveZones.retirement.disableBelow`: `0.02`
-- `infrastructure.contextBudget.adaptiveZones.retirement.reenableAbove`: `0.05`
-- `infrastructure.contextBudget.adaptiveZones.retirement.checkIntervalHours`: `168`
-- `infrastructure.contextBudget.adaptiveZones.retirement.minSamples`: `50`
-- `infrastructure.contextBudget.floorUnmetPolicy.enabled`: `true`
-- `infrastructure.contextBudget.floorUnmetPolicy.relaxOrder`: `["memory_recall", "tool_failures", "memory_working"]`
-- `infrastructure.contextBudget.floorUnmetPolicy.finalFallback`: `critical_only`
-- `infrastructure.contextBudget.floorUnmetPolicy.requestCompaction`: `true`
-- `infrastructure.contextBudget.stabilityMonitor.enabled`: `true`
-- `infrastructure.contextBudget.stabilityMonitor.consecutiveThreshold`: `3`
-- `infrastructure.contextBudget.stabilityMonitor.retirement.enabled`: `false`
-- `infrastructure.contextBudget.stabilityMonitor.retirement.metricKey`: `floor_unmet_rate_7d`
-- `infrastructure.contextBudget.stabilityMonitor.retirement.disableBelow`: `0.01`
-- `infrastructure.contextBudget.stabilityMonitor.retirement.reenableAbove`: `0.03`
-- `infrastructure.contextBudget.stabilityMonitor.retirement.checkIntervalHours`: `168`
-- `infrastructure.contextBudget.stabilityMonitor.retirement.minSamples`: `50`
 - `infrastructure.contextBudget.arena.maxEntriesPerSession`: `4096`
-- `infrastructure.contextBudget.arena.degradationPolicy`: `drop_recall`
-- `infrastructure.contextBudget.arena.zones.identity`: `{ min: 0, max: 320 }`
-- `infrastructure.contextBudget.arena.zones.truth`: `{ min: 0, max: 420 }`
-- `infrastructure.contextBudget.arena.zones.skills`: `{ min: 0, max: 240 }`
-- `infrastructure.contextBudget.arena.zones.taskState`: `{ min: 0, max: 360 }`
-- `infrastructure.contextBudget.arena.zones.toolFailures`: `{ min: 0, max: 480 }`
-- `infrastructure.contextBudget.arena.zones.memoryWorking`: `{ min: 0, max: 300 }`
-- `infrastructure.contextBudget.arena.zones.memoryRecall`: `{ min: 0, max: 600 }`
-- `infrastructure.contextBudget.arena.zones.ragExternal`: `{ min: 0, max: 0 }`
 - `infrastructure.toolFailureInjection.enabled`: `true`
 - `infrastructure.toolFailureInjection.maxEntries`: `3`
 - `infrastructure.toolFailureInjection.maxOutputChars`: `300`
@@ -271,63 +235,19 @@ With `infrastructure.contextBudget.enabled=true`, runtime enforces:
 - primary injection cap (`maxInjectionTokens`)
 - pressure thresholds (`compactionThresholdPercent`, `hardLimitPercent`)
 - truncation policy (`truncationStrategy`)
-- session arena SLO policy (`arena.maxEntriesPerSession`, `arena.degradationPolicy`)
+- session arena SLO policy (`arena.maxEntriesPerSession`)
 
 `enabled=false` disables runtime token-budget enforcement for context injection.
 
-Profile behavior:
+Runtime behavior:
 
-- `profile=simple` (default):
-  - skips zone allocation (`arena.zones.*`)
-  - skips adaptive zone controller (`adaptiveZones.*`)
-  - skips floor-unmet cascade (`floorUnmetPolicy.*`)
-  - skips evolution manager instantiation (no managed retirement/event scanning)
-  - keeps global injection cap + hard-limit gate model
-- `profile=managed`:
-  - enables full zone/floor/cascade/adaptive/evolution behavior (fixed managed arm)
-
-In `simple`, runtime emits one-time profile telemetry per session:
-
-- `context_profile_selected`
-- `context_profile_option_ignored` (deduped by `session + optionKey`)
-
-`context_profile_option_ignored` currently covers:
-
-- `infrastructure.contextBudget.arena.zones`
-- `infrastructure.contextBudget.adaptiveZones`
-- `infrastructure.contextBudget.stabilityMonitor`
-- `infrastructure.contextBudget.floorUnmetPolicy`
-- `infrastructure.toolFailureInjection.sourceTokenLimitsDerived`
-
-Managed arena behavior:
-
-- Sources are planned by deterministic zone order:
-  `identity -> truth -> skills -> task_state -> tool_failures -> memory_working -> memory_recall -> rag_external`.
-- `zones.<zone>.min` is a floor for demanded content; `zones.<zone>.max` is a hard cap.
-- If demanded floors exceed available injection budget, planner runs
-  floor-relaxation cascade (`floorUnmetPolicy.relaxOrder`), then optional
-  `critical_only` fallback before declaring unrecoverable floor unmet.
-- Floor-unmet policy can request compaction explicitly
-  (`floorUnmetPolicy.requestCompaction`), which bypasses normal cooldown.
-- Adaptive zone controller updates per-session zone `max` overrides based on
-  observed truncation/idle ratios (`adaptiveZones.*`), while allocator remains pure.
-- Retirement policy (`adaptiveZones.retirement`, `stabilityMonitor.retirement`) can
-  auto-disable mechanisms when 7-day effectiveness metrics stay below thresholds, and
-  auto-reenable once metrics recover above `reenableAbove`.
-  - Performance note: retirement metric evaluation scans session event history when
-    checks are due (`checkIntervalHours`). Keep retirement disabled unless needed,
-    and prefer larger check intervals in large workspaces with high event volume.
-- Arena SLO ceiling (`arena.maxEntriesPerSession`) enforces deterministic
-  degradation policy (`drop_recall | drop_low_priority | force_compact`).
+- Context injection uses a single deterministic path:
+  global cap + hard-limit gate + arena SLO (`arena.maxEntriesPerSession`).
 - Memory recall can be pressure-gated by `memory.recallMode="fallback"`.
 - External recall boundary is explicit and disabled by default:
-  `memory.externalRecall.enabled=true` + non-zero `arena.zones.ragExternal.max`
-  are both required for effective external injection.
-- Runtime auto-wires a default crystal-lexical external recall provider (feature-hashing bag-of-words; zero-dependency deterministic fallback) only when:
-  - `memory.externalRecall.enabled=true`
-  - `memory.externalRecall.builtinProvider="crystal-lexical"`
-  - no custom `externalRecallPort` is injected
-  - provider reads global crystal projection artifacts only.
+  set `memory.externalRecall.enabled=true` and inject a custom
+  `externalRecallPort`.
+- Runtime never auto-wires a built-in external recall provider.
 
 Normalization details from `normalizeBrewvaConfig(...)`:
 
@@ -339,11 +259,7 @@ Normalization details from `normalizeBrewvaConfig(...)`:
 - `skills.selector.semanticFallback.lexicalBypassScore` is normalized to a non-negative number.
 - `skills.selector.semanticFallback.minSimilarity` is clamped to `[0, 1]`.
 - `skills.selector.semanticFallback.embeddingDimensions` is normalized to an integer floor with minimum `64`.
-- `arena.zones.<zone>.min/max` are normalized to non-negative integers and `max >= min`.
-- `floorUnmetPolicy.relaxOrder` is normalized to valid zone names in deterministic order.
-- `adaptiveZones.*` and compaction cooldown settings are clamped to safe numeric ranges.
-- `adaptiveZones.retirement.*` and `stabilityMonitor.retirement.*` are normalized to bounded
-  ratios/positive integers, and `reenableAbove` is clamped to `>= disableBelow`.
+- Compaction cooldown settings are clamped to safe numeric ranges.
 - Most numeric fields are floor-normalized to positive/non-negative integers (invalid values fall back to defaults).
 
 ## Turn WAL Model

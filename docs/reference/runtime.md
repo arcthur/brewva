@@ -192,11 +192,10 @@ Memory split behavior:
 - Open memory insights can expand recall query terms (`memory_recall_query_expanded` event).
 - `brewva.rag-external` is injected only when `memory.externalRecall.enabled=true`,
   active skill carries tag `external-knowledge`, internal recall top score is below
-  threshold (`memory.externalRecall.minInternalScore`), and active context profile
-  permits `rag_external`.
-- If `BrewvaRuntimeOptions.externalRecallPort` is not provided, runtime only auto-wires
-  built-in crystal-lexical provider when
-  `memory.externalRecall.builtinProvider="crystal-lexical"` (default is `off`).
+  threshold (`memory.externalRecall.minInternalScore`).
+- If `BrewvaRuntimeOptions.externalRecallPort` is not provided, external recall is skipped
+  (`context_external_recall_decision` with `outcome="skipped"` and
+  `reason="provider_unavailable"`).
 
 Identity source behavior:
 
@@ -207,33 +206,14 @@ Identity source behavior:
 - Runtime never auto-generates or rewrites identity files.
 - `brewva.identity` is registered as `critical` + `oncePerSession`.
 
-Context budget profile:
+Context budget behavior:
 
-- Default profile is `infrastructure.contextBudget.profile="simple"`.
-- `simple` keeps global budget and hard-limit compaction gate semantics, while skipping
-  managed zone control loops.
-- `managed` enables full arena zoning, floor-unmet cascade, adaptive zones, and
-  stability monitor behavior.
-
-Arena layout and budgeting (`managed` profile):
-
-- Planner layout follows deterministic zone order:
-  `identity -> truth -> skills -> task_state -> tool_failures -> memory_working -> memory_recall -> rag_external`.
-- Zone floors/caps are configured via
-  `infrastructure.contextBudget.arena.zones.*`.
-- `ZoneBudgetAllocator` is pure; adaptive zone control is handled by a separate
-  controller (`adaptiveZones.*`) and emitted as `context_arena_zone_adapted`.
-- Floor-unmet path is deterministic:
-  floor relax cascade -> `critical_only` fallback -> unrecoverable drop.
-  - recovered path emits `context_arena_floor_unmet_recovered`
-  - unrecoverable path emits `context_arena_floor_unmet_unrecoverable`
-- Injection telemetry (`context_injected` / `context_injection_dropped`) includes:
-  `zoneDemandTokens`, `zoneAllocatedTokens`, `zoneAcceptedTokens`,
-  `floorUnmet`, `appliedFloorRelaxation`, `degradationApplied`.
-- Arena SLO enforcement (`maxEntriesPerSession`) emits `context_arena_slo_enforced`.
-- Profile telemetry:
-  - `context_profile_selected` (once per session)
-  - `context_profile_option_ignored` (simple profile only, deduped by option key)
+- Runtime uses a single deterministic injection path:
+  global budget cap + hard-limit compaction gate.
+- Arena SLO enforcement (`arena.maxEntriesPerSession`,
+  deterministic `drop_recall` policy) emits `context_arena_slo_enforced`.
+- Injection telemetry (`context_injected` / `context_injection_dropped`) records
+  deterministic boolean `degradationApplied` state for observability.
 
 Execution profile note:
 

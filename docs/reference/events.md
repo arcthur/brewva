@@ -136,20 +136,9 @@ This list is intentionally non-exhaustive. Unknown event types/fields should be 
 
 - `context_usage`
 - `context_injected`
-- `context_arena_zone_adapted`
 - `context_arena_slo_enforced`
-- `context_arena_floor_unmet_recovered`
-- `context_arena_floor_unmet_unrecoverable`
-- `context_stability_monitor_tripped`
-- `context_stability_monitor_reset`
-- `context_strategy_selected`
-- `context_evolution_feature_disabled`
-- `context_evolution_feature_reenabled`
-- `context_profile_selected`
-- `context_profile_option_ignored`
 - `context_injection_dropped`
-- `context_external_recall_skipped`
-- `context_external_recall_injected`
+- `context_external_recall_decision`
 - `context_compaction_requested`
 - `context_compaction_skipped`
 - `context_compaction_gate_armed`
@@ -283,71 +272,32 @@ Verification outcome summary (`brewva.verification.outcome.v1`) used by replay a
 
 Context planner telemetry summary. Common payload fields include:
 
-- `zoneDemandTokens`
-- `zoneAllocatedTokens`
-- `zoneAcceptedTokens`
-- `floorUnmet`
-- `appliedFloorRelaxation`
-- `degradationApplied`
-
-### `context_arena_zone_adapted`
-
-Adaptive zone controller update for next-turn zone caps. Common payload fields include:
-
-- `movedTokens`
-- `turn`
-- `shifts` (`[{ from, to, tokens }]`)
-- `maxByZone`
+- `degradationApplied` (boolean)
 
 ### `context_arena_slo_enforced`
 
 Arena entry-count SLO enforcement event. Common payload fields include:
 
-- `policy` (`drop_recall | drop_low_priority | force_compact`)
 - `entriesBefore`
 - `entriesAfter`
 - `dropped`
 - `source`
 
-### `context_arena_floor_unmet_recovered`
+### `context_external_recall_decision`
 
-Emitted when demanded zone floors were initially unmet but recovered by floor
-relaxation / fallback policy. Common payload fields include:
-
-- `reason` (`insufficient_budget_for_zone_floors`)
-- `appliedFloorRelaxation`
-
-### `context_arena_floor_unmet_unrecoverable`
-
-Emitted when floor-unmet recovery cascade still cannot produce a viable
-injection plan. Common payload fields include:
-
-- `reason` (`insufficient_budget_for_zone_floors`)
-- `appliedFloorRelaxation`
-
-### `context_external_recall_skipped`
-
-Emitted when external recall gating is evaluated but injection does not happen.
+Single external-recall decision summary event.
 Common payload fields include:
 
+- `outcome` (`skipped | injected | filtered_out`)
 - `reason` (`skill_tag_missing | internal_score_sufficient | provider_unavailable | no_hits | empty_block | arena_rejected | filtered_out`)
 - `query`
 - `internalTopScore`
 - `threshold`
-
-Note: `reason="filtered_out"` indicates external recall was accepted into the arena but removed by
-final injection planning; write-back does not occur.
-
-### `context_external_recall_injected`
-
-Emitted when external recall content is injected and written back to memory.
-Common payload fields include:
-
-- `query`
 - `hitCount`
-- `internalTopScore`
-- `threshold`
 - `writebackUnits`
+
+Note: `outcome="filtered_out"` means external recall was accepted into the arena but removed by
+final injection planning; write-back does not occur.
 
 ### `memory_recall_query_expanded`
 

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { registerContextTransform, registerRuntimeCoreBridge } from "@brewva/brewva-extensions";
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { createMockExtensionAPI, invokeHandler, invokeHandlerAsync } from "../helpers/extension.js";
 import { createRuntimeConfig, createRuntimeFixture } from "./fixtures/runtime.js";
 
@@ -43,96 +42,7 @@ function parseStatusBlock(
   };
 }
 
-async function collectExtensionStatus(input: {
-  runtime: BrewvaRuntime;
-  sessionId: string;
-  usage: { tokens: number; contextWindow: number; percent: number };
-}): Promise<StatusBlock> {
-  const { api, handlers } = createMockExtensionAPI();
-  registerContextTransform(api, input.runtime);
-  const result = await invokeHandlerAsync<{ message?: { content?: string } }>(
-    handlers,
-    "before_agent_start",
-    {
-      type: "before_agent_start",
-      prompt: "check parity",
-      systemPrompt: "base",
-    },
-    {
-      sessionManager: {
-        getSessionId: () => input.sessionId,
-      },
-      getContextUsage: () => input.usage,
-    },
-  );
-  return parseStatusBlock(result.message?.content ?? "", "[TapeStatus]");
-}
-
-async function collectCoreStatus(input: {
-  runtime: BrewvaRuntime;
-  sessionId: string;
-  usage: { tokens: number; contextWindow: number; percent: number };
-}): Promise<StatusBlock> {
-  const { api, handlers } = createMockExtensionAPI();
-  registerRuntimeCoreBridge(api, input.runtime);
-  const result = await invokeHandlerAsync<{ message?: { content?: string } }>(
-    handlers,
-    "before_agent_start",
-    {
-      type: "before_agent_start",
-      prompt: "check parity",
-      systemPrompt: "base",
-    },
-    {
-      sessionManager: {
-        getSessionId: () => input.sessionId,
-      },
-      getContextUsage: () => input.usage,
-    },
-  );
-  return parseStatusBlock(result.message?.content ?? "", "[CoreTapeStatus]");
-}
-
 describe("context gate parity", () => {
-  test("keeps extension and runtime-core gate status aligned for floor_unmet re-arm", async () => {
-    const makeRuntime = () => {
-      let runtime = null as unknown as BrewvaRuntime;
-      runtime = createRuntimeFixture({
-        context: {
-          buildInjection: async (sessionId: string) => {
-            runtime.context.requestCompaction(sessionId, "floor_unmet");
-            return {
-              text: "",
-              accepted: false,
-              originalTokens: 0,
-              finalTokens: 0,
-              truncated: false,
-            };
-          },
-        },
-      });
-      return runtime;
-    };
-
-    const sessionId = "parity-floor-unmet";
-    const usage = { tokens: 300, contextWindow: 1000, percent: 0.3 };
-
-    const extensionStatus = await collectExtensionStatus({
-      runtime: makeRuntime(),
-      sessionId,
-      usage,
-    });
-    const coreStatus = await collectCoreStatus({
-      runtime: makeRuntime(),
-      sessionId,
-      usage,
-    });
-
-    expect(extensionStatus).toEqual(coreStatus);
-    expect(extensionStatus.requiredAction).toBe("session_compact_now");
-    expect(extensionStatus.reason).toBe("floor_unmet");
-  });
-
   test("keeps extension and runtime-core gate status aligned after session_compact clears gate", async () => {
     const config = createRuntimeConfig((draft) => {
       draft.infrastructure.contextBudget.hardLimitPercent = 0.8;

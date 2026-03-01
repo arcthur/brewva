@@ -164,7 +164,8 @@ export class ContextPressureService {
     const pendingReason = this.getPendingCompactionReason(sessionId);
     const required =
       this.config.infrastructure.contextBudget.enabled &&
-      ((pressure.level === "critical" && !recentCompaction) || pendingReason === "floor_unmet");
+      pressure.level === "critical" &&
+      !recentCompaction;
     const reason: ContextCompactionReason | null = required
       ? (pendingReason ?? (pressure.level === "critical" ? "hard_limit" : "usage_threshold"))
       : null;
@@ -196,19 +197,14 @@ export class ContextPressureService {
     }
 
     const reason =
-      gate.reason === "floor_unmet"
-        ? "Context floor requirements are unmet. Call tool 'session_compact' first, then continue with other tools."
-        : "Context usage is critical. Call tool 'session_compact' first, then continue with other tools.";
+      "Context usage is critical. Call tool 'session_compact' first, then continue with other tools.";
     this.recordEvent({
       sessionId,
       type: "context_compaction_gate_blocked_tool",
       turn: this.getCurrentTurn(sessionId),
       payload: {
         blockedTool: toolName,
-        reason:
-          gate.reason === "floor_unmet"
-            ? "context_floor_unmet_without_compaction"
-            : "critical_context_pressure_without_compaction",
+        reason: "critical_context_pressure_without_compaction",
         usagePercent: gate.pressure.usageRatio,
         hardLimitPercent: gate.pressure.hardLimitRatio,
       },

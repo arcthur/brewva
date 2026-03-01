@@ -107,14 +107,13 @@ Memory is a projection layer derived from event tape semantics:
   stay explicit (`topic + reason + updatedAt`) instead of opaque dirty flags.
 - Working-memory and recall context are injected as split semantic sources
   (`brewva.memory-working` + `brewva.memory-recall`) with pressure-aware recall
-  fallback and zone-aware budget/truncation behavior in extension-enabled profile.
+  fallback and deterministic budget/truncation behavior in extension-enabled runtime.
 - Open insights may expand recall query terms before retrieval
   (`memory_recall_query_expanded`), tightening retrieval around unresolved context.
 - External recall remains an explicit boundary (`brewva.rag-external`): trigger
-  requires skill-tag + low internal score + zone budget, and write-back stores
-  lower-confidence external units. When enabled and no custom provider is
-  injected, runtime auto-wires a built-in crystal-lexical recall adapter
-  (feature-hashing bag-of-words; zero-dependency deterministic fallback) over global crystal projection artifacts.
+  requires skill-tag + low internal score, and write-back stores
+  lower-confidence external units. Runtime does not auto-wire a provider;
+  external recall runs only when a custom `ExternalRecallPort` is injected.
 - EVOLVES effects remain review-gated before mutating stable unit state.
 - Quality evaluation is also projection-based: recall/rerank quality is derived
   offline from tape events rather than hot-path counters.
@@ -169,25 +168,18 @@ dependency rather than an optional accelerator.
 
 Concrete enforcement:
 
-- **Retirement policies** (`ContextRetirementPolicy`): each transitional
-  mechanism (adaptive zones, stability monitor) declares a metric key, a
-  disable-below threshold, a re-enable-above threshold, a check interval, and
-  a minimum sample size. The `ContextEvolutionManager` evaluates these from
-  7-day event windows and emits `context_evolution_feature_disabled` /
-  `context_evolution_feature_reenabled` on transitions.
-- **Profile fallback**: `simple` profile remains the default path (global
-  cap + compaction gate only). Managed mechanisms are opt-in via
-  `infrastructure.contextBudget.profile="managed"` and can be exited by
-  switching back to `simple`.
+- **Single-path context budget**: runtime keeps one deterministic path
+  (global cap + compaction gate + arena SLO), no profile branching.
+- **No adaptive controller**: no runtime self-tuning control loop or retirement
+  scanner in context injection.
 - **Durable principles are exempt**: tape, contracts, ledger, and skill
-  orchestration do not carry retirement policies because they serve system
+  orchestration do not carry metabolism policies because they serve system
   integrity, not model-capability compensation.
 
 Implementation anchors:
 
-- `packages/brewva-runtime/src/context/evolution-manager.ts`
-- `packages/brewva-runtime/src/types.ts` (`ContextRetirementPolicy`)
-- `packages/brewva-runtime/src/config/defaults.ts` (retirement defaults)
+- `packages/brewva-runtime/src/context/arena.ts`
+- `packages/brewva-runtime/src/config/defaults.ts`
 - `skills/project/brewva-self-improve/SKILL.md` (observer/tuner cadence)
 
 ### Capability-Adaptive Principles
@@ -195,8 +187,7 @@ Implementation anchors:
 The following principles describe mechanisms that compensate for current model
 limitations (bounded context windows, quality degradation under long context).
 As models improve and costs decrease, these mechanisms are expected to
-progressively simplify toward the default `simple` profile. Their design anticipates this
-trajectory.
+continue simplifying toward lower operator cognitive load.
 
 #### 7) Agent Autonomy With Pressure Transparency
 
@@ -205,17 +196,18 @@ rather than silently managing it. The agent decides how to respond.
 
 Four orthogonal pressure surfaces:
 
-| Pipeline                    | Resource                      | Pressure Signal                | Agent Action                              |
-| --------------------------- | ----------------------------- | ------------------------------ | ----------------------------------------- |
-| **State Tape**              | Append-only operational state | `tape_pressure`                | `tape_handoff` marks phase boundaries     |
-| **Message Buffer**          | LLM context window            | `context_pressure`             | `session_compact` compacts history        |
-| **Context Injection Arena** | Semantic injection budget     | zone/arena SLO + injection cap | profile-dependent (see Principle 8)       |
-| **Cognitive Inference**     | Runtime cognition budget      | cognitive budget status        | `CognitivePort` or deterministic fallback |
+| Pipeline                    | Resource                      | Pressure Signal           | Agent Action                              |
+| --------------------------- | ----------------------------- | ------------------------- | ----------------------------------------- |
+| **State Tape**              | Append-only operational state | `tape_pressure`           | `tape_handoff` marks phase boundaries     |
+| **Message Buffer**          | LLM context window            | `context_pressure`        | `session_compact` compacts history        |
+| **Context Injection Arena** | Semantic injection budget     | arena SLO + injection cap | deterministic single-path budget behavior |
+| **Cognitive Inference**     | Runtime cognition budget      | cognitive budget status   | `CognitivePort` or deterministic fallback |
 
-Context injection zones (`brewva.identity`, `brewva.truth-static`,
-`brewva.truth-facts`, `brewva.task-state`, `brewva.tool-failures`,
-`brewva.memory-working`, `brewva.memory-recall`, `brewva.rag-external`) remain
-explicit and traceable regardless of profile.
+Context injection sources (`brewva.identity`, `brewva.truth-static`,
+`brewva.truth-facts`, `brewva.skill-candidates`, `brewva.skill-dispatch-gate`,
+`brewva.task-state`, `brewva.tool-failures`, `brewva.memory-working`,
+`brewva.memory-recall`, `brewva.rag-external`) remain explicit and traceable in
+runtime behavior.
 
 Cognitive behavior follows a tri-mode model:
 
@@ -232,52 +224,26 @@ Implementation anchors:
 
 - `packages/brewva-runtime/src/runtime.ts`
 - `packages/brewva-runtime/src/context/budget.ts`
-- `packages/brewva-runtime/src/context/zones.ts`
 - `packages/brewva-runtime/src/services/event-pipeline.ts`
 - `packages/brewva-extensions/src/context-transform.ts`
 - `packages/brewva-cli/src/session.ts`
 - `script/analyze-memory-recall.ts`
 
-#### 8) Context Profile And Managed Controls
+#### 8) Context Budget Controls
 
-Context injection is profile-gated:
+Context injection uses one deterministic path by default:
 
-| Profile     | Zone Budgets | Adaptive Controller | Floor Cascade | Stability Monitor | Evolution Manager |
-| ----------- | ------------ | ------------------- | ------------- | ----------------- | ----------------- |
-| **simple**  | bypassed     | bypassed            | bypassed      | bypassed          | not instantiated  |
-| **managed** | enforced     | active              | active        | active            | instantiated      |
-
-Default profile is `simple`, optimizing for predictable E2E behavior around two
-numbers: `maxInjectionTokens` and `hardLimitPercent`.
-
-Inside `managed`, arm selection is fixed to `managed`; `ContextEvolutionManager`
-only controls retirement-driven enable/disable for adaptive zones and stability
-monitor.
-
-Within managed mode, the following transitional mechanisms apply:
-
-- **Zone budget allocation** (`ZoneBudgetAllocator`): pure function
-  (`totalBudget + demand + config → allocation`).
-- **Adaptive zone controller** (`ZoneBudgetController`): EMA-based
-  utilization/truncation feedback that shifts zone caps between turns.
-  Subject to `adaptiveZones.retirement`.
-- **Floor-unmet cascade**: deterministic relaxation
-  (`floorUnmetPolicy.relaxOrder`) → `critical_only` fallback →
-  `context_arena_floor_unmet_unrecoverable`.
-- **Stability monitor** (`ContextStabilityMonitor`): cross-turn circuit
-  breaker. After `consecutiveThreshold` consecutive floor-unmet turns,
-  forces `critical_only` planning with periodic recovery probes.
-  Subject to `stabilityMonitor.retirement`.
+- **Global cap + compaction gate**: `maxInjectionTokens` and
+  `hardLimitPercent` define the primary behavior boundary.
 - **Arena SLO** (`arena.maxEntriesPerSession`): deterministic degradation
-  (`drop_recall` / `drop_low_priority` / `force_compact`).
+  (`drop_recall`) when append-only arena pressure grows.
+- **Deterministic telemetry**: injection decisions emit consistent operational
+  payloads (`context_injected` / `context_injection_dropped`) for replayable
+  root-cause inspection.
 
 Implementation anchors:
 
-- `packages/brewva-runtime/src/context/evolution-manager.ts`
 - `packages/brewva-runtime/src/context/arena.ts`
-- `packages/brewva-runtime/src/context/stability-monitor.ts`
-- `packages/brewva-runtime/src/context/zone-budget.ts`
-- `packages/brewva-runtime/src/context/zone-budget-controller.ts`
 - `packages/brewva-runtime/src/context/injection-orchestrator.ts`
 
 ## Package Dependency Graph
@@ -410,7 +376,7 @@ Memory is implemented as a derived projection layer over the event tape:
    keep refresh triggers explainable and tuneable.
 9. Offline evaluation scripts project recall/rerank quality directly from tape
    events (`memory_global_recall`, `cognitive_relevance_ranking*`,
-   `context_external_recall_*`).
+   `context_external_recall_decision`).
 
 This path is deterministic, auditable, and restart-safe: projection artifacts are
 persisted on disk and can also be rebuilt from tape-backed `memory_*` snapshot

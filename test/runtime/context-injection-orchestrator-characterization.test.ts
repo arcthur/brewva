@@ -36,7 +36,6 @@ describe("Context injection orchestrator characterization", () => {
     writeIdentity(workspace, "default", "role: orchestrator characterization");
     writeAgentsRules(workspace);
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.infrastructure.contextBudget.profile = "managed";
 
     const runtime = new BrewvaRuntime({ cwd: workspace, agentId: "default", config });
     const sessionId = "ctx-orchestrator-sources-1";
@@ -87,16 +86,14 @@ describe("Context injection orchestrator characterization", () => {
           sourceCount?: number;
           finalTokens?: number;
           originalTokens?: number;
-          strategyArm?: string;
-          stabilityForced?: boolean;
+          degradationApplied?: boolean;
         }
       | undefined;
     expect(typeof payload?.sourceCount).toBe("number");
     expect((payload?.sourceCount ?? 0) >= 5).toBe(true);
     expect((payload?.finalTokens ?? 0) > 0).toBe(true);
     expect((payload?.originalTokens ?? 0) >= (payload?.finalTokens ?? 0)).toBe(true);
-    expect(payload?.strategyArm).toBe("managed");
-    expect(payload?.stabilityForced).toBe(false);
+    expect(payload?.degradationApplied).toBe(false);
   });
 
   test("drops duplicate fingerprint in same scope and emits context_injection_dropped", async () => {

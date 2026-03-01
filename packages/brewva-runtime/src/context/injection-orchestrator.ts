@@ -1,7 +1,6 @@
 import type {
   ContextBudgetUsage,
   ContextInjectionDecision,
-  ContextStrategyArm,
   SkillDispatchDecision,
   SkillSelection,
   TaskState,
@@ -9,6 +8,7 @@ import type {
 } from "../types.js";
 import { sha256 } from "../utils/hash.js";
 import type { ContextInjectionPlanResult, RegisterContextInjectionInput } from "./injection.js";
+import { CONTEXT_SOURCES } from "./sources.js";
 import { buildRecentToolFailuresBlock, type ToolFailureEntry } from "./tool-failures.js";
 import { buildTruthFactsBlock } from "./truth-facts.js";
 import { buildTruthLedgerBlock } from "./truth.js";
@@ -18,8 +18,6 @@ export interface BuildContextInjectionInput {
   prompt: string;
   usage?: ContextBudgetUsage;
   injectionScopeId?: string;
-  adaptiveZonesEnabled?: boolean;
-  stabilityMonitorEnabled?: boolean;
 }
 
 export interface BuildContextInjectionResult {
@@ -64,14 +62,7 @@ export interface ContextInjectionOrchestratorDeps {
     turn?: number;
     payload?: Record<string, unknown>;
   }): void;
-  planContextInjection(
-    sessionId: string,
-    totalTokenBudget: number,
-    options?: {
-      forceCriticalOnly?: boolean;
-      disableAdaptiveZones?: boolean;
-    },
-  ): ContextInjectionPlanResult;
+  planContextInjection(sessionId: string, totalTokenBudget: number): ContextInjectionPlanResult;
   commitContextInjection(sessionId: string, consumedKeys: string[]): void;
   planBudgetInjection(
     sessionId: string,
@@ -83,11 +74,6 @@ export interface ContextInjectionOrchestratorDeps {
   getLastInjectedFingerprint(scopeKey: string): string | undefined;
   setLastInjectedFingerprint(scopeKey: string, fingerprint: string): void;
   getCurrentTurn(sessionId: string): number;
-  shouldForceCriticalOnly(sessionId: string, turn: number): boolean;
-  recordStabilityDegraded(sessionId: string, turn: number): boolean;
-  recordStabilityNormal(sessionId: string, options: { wasForced: boolean; turn: number }): boolean;
-  shouldRequestCompactionOnFloorUnmet(): boolean;
-  requestCompaction(sessionId: string, reason: "floor_unmet"): void;
 }
 
 export function buildContextInjection(
@@ -103,7 +89,7 @@ export function buildContextInjection(
 
   if (truthLedgerBlock) {
     deps.registerContextInjection(input.sessionId, {
-      source: "brewva.truth-static",
+      source: CONTEXT_SOURCES.truthStatic,
       id: "truth-static",
       priority: "critical",
       oncePerSession: true,
@@ -112,7 +98,7 @@ export function buildContextInjection(
   }
   if (truthFactsBlock) {
     deps.registerContextInjection(input.sessionId, {
-      source: "brewva.truth-facts",
+      source: CONTEXT_SOURCES.truthFacts,
       id: "truth-facts",
       priority: "critical",
       content: truthFactsBlock,
@@ -134,7 +120,7 @@ export function buildContextInjection(
   const selectedSkills = dispatchDecision.selected;
   if (selectedSkills.length > 0) {
     deps.registerContextInjection(input.sessionId, {
-      source: "brewva.skill-candidates",
+      source: CONTEXT_SOURCES.skillCandidates,
       id: "top-k-skills",
       priority: "high",
       content: deps.buildSkillCandidateBlock(selectedSkills),
@@ -142,7 +128,7 @@ export function buildContextInjection(
   }
   if (dispatchDecision.mode === "gate" || dispatchDecision.mode === "auto") {
     deps.registerContextInjection(input.sessionId, {
-      source: "brewva.skill-dispatch-gate",
+      source: CONTEXT_SOURCES.skillDispatchGate,
       id: "skill-dispatch-gate",
       priority: "critical",
       content: deps.buildSkillDispatchGateBlock(dispatchDecision),
@@ -158,7 +144,7 @@ export function buildContextInjection(
     });
     if (failureBlock) {
       deps.registerContextInjection(input.sessionId, {
-        source: "brewva.tool-failures",
+        source: CONTEXT_SOURCES.toolFailures,
         id: "recent-failures",
         priority: "high",
         content: failureBlock,
@@ -176,7 +162,7 @@ export function buildContextInjection(
     const taskBlock = deps.buildTaskStateBlock(taskState);
     if (taskBlock) {
       deps.registerContextInjection(input.sessionId, {
-        source: "brewva.task-state",
+        source: CONTEXT_SOURCES.taskState,
         id: "task-state",
         priority: "critical",
         content: taskBlock,
@@ -184,87 +170,10 @@ export function buildContextInjection(
     }
   }
 
-  const strategyArm: ContextStrategyArm = "managed";
-  const stabilityMonitorEnabled = input.stabilityMonitorEnabled !== false;
-  const adaptiveZonesEnabled = input.adaptiveZonesEnabled !== false;
-  const forceCriticalOnly = stabilityMonitorEnabled
-    ? deps.shouldForceCriticalOnly(input.sessionId, currentTurn)
-    : false;
   const merged = deps.planContextInjection(
     input.sessionId,
     deps.isContextBudgetEnabled() ? deps.maxInjectionTokens : Number.MAX_SAFE_INTEGER,
-    {
-      forceCriticalOnly,
-      disableAdaptiveZones: !adaptiveZonesEnabled,
-    },
   );
-  if (merged.planTelemetry.zoneAdaptation && merged.planTelemetry.zoneAdaptation.movedTokens > 0) {
-    deps.recordEvent({
-      sessionId: input.sessionId,
-      type: "context_arena_zone_adapted",
-      payload: {
-        movedTokens: merged.planTelemetry.zoneAdaptation.movedTokens,
-        turn: merged.planTelemetry.zoneAdaptation.turn,
-        shifts: merged.planTelemetry.zoneAdaptation.shifts,
-        maxByZone: merged.planTelemetry.zoneAdaptation.maxByZone,
-      },
-    });
-  }
-  if (merged.planReason === "floor_unmet") {
-    if (stabilityMonitorEnabled) {
-      const tripped = deps.recordStabilityDegraded(input.sessionId, currentTurn);
-      if (tripped) {
-        deps.recordEvent({
-          sessionId: input.sessionId,
-          type: "context_stability_monitor_tripped",
-          payload: {
-            reason: "consecutive_floor_unmet",
-            strategyArm,
-          },
-        });
-      }
-    }
-    deps.recordEvent({
-      sessionId: input.sessionId,
-      type: "context_arena_floor_unmet_unrecoverable",
-      payload: {
-        reason: "insufficient_budget_for_zone_floors",
-        strategyArm,
-        appliedFloorRelaxation: merged.planTelemetry.appliedFloorRelaxation,
-      },
-    });
-    if (deps.shouldRequestCompactionOnFloorUnmet()) {
-      deps.requestCompaction(input.sessionId, "floor_unmet");
-    }
-  } else {
-    if (stabilityMonitorEnabled) {
-      const recovered = deps.recordStabilityNormal(input.sessionId, {
-        wasForced: forceCriticalOnly,
-        turn: currentTurn,
-      });
-      if (recovered) {
-        deps.recordEvent({
-          sessionId: input.sessionId,
-          type: "context_stability_monitor_reset",
-          payload: {
-            reason: "plan_succeeded",
-            strategyArm,
-          },
-        });
-      }
-    }
-    if (merged.planTelemetry.floorUnmet) {
-      deps.recordEvent({
-        sessionId: input.sessionId,
-        type: "context_arena_floor_unmet_recovered",
-        payload: {
-          reason: "insufficient_budget_for_zone_floors",
-          strategyArm,
-          appliedFloorRelaxation: merged.planTelemetry.appliedFloorRelaxation,
-        },
-      });
-    }
-  }
 
   const decision = deps.planBudgetInjection(input.sessionId, merged.text, input.usage);
   const wasTruncated = decision.truncated || merged.truncated;
@@ -305,14 +214,6 @@ export function buildContextInjection(
         usagePercent: input.usage?.percent ?? null,
         sourceCount: merged.entries.length,
         sourceTokens: merged.estimatedTokens,
-        strategyArm: merged.planTelemetry.strategyArm,
-        adaptiveZonesDisabled: merged.planTelemetry.adaptiveZonesDisabled,
-        zoneDemandTokens: merged.planTelemetry.zoneDemandTokens,
-        zoneAllocatedTokens: merged.planTelemetry.zoneAllocatedTokens,
-        zoneAcceptedTokens: merged.planTelemetry.zoneAcceptedTokens,
-        stabilityForced: merged.planTelemetry.stabilityForced,
-        floorUnmet: merged.planTelemetry.floorUnmet,
-        appliedFloorRelaxation: merged.planTelemetry.appliedFloorRelaxation,
         degradationApplied: merged.planTelemetry.degradationApplied,
       },
     });
@@ -327,22 +228,13 @@ export function buildContextInjection(
 
   const rejectedScopeKey = deps.buildInjectionScopeKey(input.sessionId, input.injectionScopeId);
   deps.setReservedTokens(rejectedScopeKey, 0);
-  const droppedReason =
-    decision.droppedReason ?? (merged.planReason === "floor_unmet" ? "floor_unmet" : "unknown");
+  const droppedReason = decision.droppedReason ?? "unknown";
   deps.recordEvent({
     sessionId: input.sessionId,
     type: "context_injection_dropped",
     payload: {
       reason: droppedReason,
       originalTokens: decision.originalTokens,
-      strategyArm: merged.planTelemetry.strategyArm,
-      adaptiveZonesDisabled: merged.planTelemetry.adaptiveZonesDisabled,
-      zoneDemandTokens: merged.planTelemetry.zoneDemandTokens,
-      zoneAllocatedTokens: merged.planTelemetry.zoneAllocatedTokens,
-      zoneAcceptedTokens: merged.planTelemetry.zoneAcceptedTokens,
-      stabilityForced: merged.planTelemetry.stabilityForced,
-      floorUnmet: merged.planTelemetry.floorUnmet,
-      appliedFloorRelaxation: merged.planTelemetry.appliedFloorRelaxation,
       degradationApplied: merged.planTelemetry.degradationApplied,
     },
   });

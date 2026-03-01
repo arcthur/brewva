@@ -13,10 +13,8 @@ import { resolveWorkspaceRootDir } from "./config/paths.js";
 import { ContextBudgetManager } from "./context/budget.js";
 import { normalizeAgentId } from "./context/identity.js";
 import { ContextInjectionCollector } from "./context/injection.js";
-import { ContextStabilityMonitor } from "./context/stability-monitor.js";
 import { SessionCostTracker } from "./cost/tracker.js";
 import { BrewvaEventStore } from "./events/store.js";
-import { createCrystalLexicalExternalRecallPort } from "./external-recall/crystal-lexical-port.js";
 import type { ExternalRecallPort } from "./external-recall/types.js";
 import { EvidenceLedger } from "./ledger/evidence-ledger.js";
 import { MemoryEngine } from "./memory/engine.js";
@@ -25,7 +23,6 @@ import { ParallelBudgetManager } from "./parallel/budget.js";
 import { ParallelResultStore } from "./parallel/results.js";
 import {
   ALWAYS_ALLOWED_TOOLS,
-  buildContextSourceTokenLimits,
   buildSkillCandidateBlock,
   buildSkillDispatchGateBlock,
   buildTaskStateBlock,
@@ -38,7 +35,6 @@ import { CostService } from "./services/cost.js";
 import { EventPipelineService, type RuntimeRecordEventInput } from "./services/event-pipeline.js";
 import { FileChangeService } from "./services/file-change.js";
 import { LedgerService } from "./services/ledger.js";
-import { MemoryAccessService } from "./services/memory-access.js";
 import { ParallelService } from "./services/parallel.js";
 import { ScheduleIntentService } from "./services/schedule-intent.js";
 import { SessionLifecycleService } from "./services/session-lifecycle.js";
@@ -127,7 +123,6 @@ type RuntimeCoreDependencies = {
   turnWalStore: TurnWALStore;
   contextBudget: ContextBudgetManager;
   contextInjection: ContextInjectionCollector;
-  stabilityMonitor: ContextStabilityMonitor;
   turnReplay: TurnReplayEngine;
   fileChanges: FileChangeTracker;
   costTracker: SessionCostTracker;
@@ -145,7 +140,6 @@ type RuntimeServiceDependencies = {
   contextService: ContextService;
   tapeService: TapeService;
   eventPipeline: EventPipelineService;
-  memoryAccessService: MemoryAccessService;
   scheduleIntentService: ScheduleIntentService;
   fileChangeService: FileChangeService;
   sessionLifecycleService: SessionLifecycleService;
@@ -461,7 +455,6 @@ export class BrewvaRuntime {
   private readonly verificationGate: VerificationGate;
   private readonly eventStore: BrewvaEventStore;
   private readonly turnWalStore: TurnWALStore;
-  private readonly contextStabilityMonitor: ContextStabilityMonitor;
   private readonly memoryEngine: MemoryEngine;
 
   private readonly sessionState = new RuntimeSessionStateStore();
@@ -470,7 +463,6 @@ export class BrewvaRuntime {
   private readonly eventPipeline: EventPipelineService;
   private readonly fileChangeService: FileChangeService;
   private readonly ledgerService: LedgerService;
-  private readonly memoryAccessService: MemoryAccessService;
   private readonly parallelService: ParallelService;
   private readonly scheduleIntentService: ScheduleIntentService;
   private readonly sessionLifecycleService: SessionLifecycleService;
@@ -499,7 +491,6 @@ export class BrewvaRuntime {
     this.turnWalStore = coreDependencies.turnWalStore;
     this.contextBudget = coreDependencies.contextBudget;
     this.contextInjection = coreDependencies.contextInjection;
-    this.contextStabilityMonitor = coreDependencies.stabilityMonitor;
     this.turnReplay = coreDependencies.turnReplay;
     this.fileChanges = coreDependencies.fileChanges;
     this.costTracker = coreDependencies.costTracker;
@@ -516,7 +507,6 @@ export class BrewvaRuntime {
     this.contextService = serviceDependencies.contextService;
     this.tapeService = serviceDependencies.tapeService;
     this.eventPipeline = serviceDependencies.eventPipeline;
-    this.memoryAccessService = serviceDependencies.memoryAccessService;
     this.scheduleIntentService = serviceDependencies.scheduleIntentService;
     this.fileChangeService = serviceDependencies.fileChangeService;
     this.sessionLifecycleService = serviceDependencies.sessionLifecycleService;
@@ -581,47 +571,11 @@ export class BrewvaRuntime {
       },
     });
     const contextBudget = new ContextBudgetManager(this.config.infrastructure.contextBudget);
-    const managedContextProfile = this.config.infrastructure.contextBudget.profile === "managed";
-    const stabilityMonitor = new ContextStabilityMonitor({
-      consecutiveThreshold:
-        managedContextProfile && this.config.infrastructure.contextBudget.stabilityMonitor.enabled
-          ? this.config.infrastructure.contextBudget.stabilityMonitor.consecutiveThreshold
-          : 0,
+    const contextInjection = new ContextInjectionCollector({
+      sourceTokenLimits: {},
+      truncationStrategy: this.config.infrastructure.contextBudget.truncationStrategy,
+      maxEntriesPerSession: this.config.infrastructure.contextBudget.arena.maxEntriesPerSession,
     });
-    const contextInjection = managedContextProfile
-      ? new ContextInjectionCollector({
-          sourceTokenLimits: this.isContextBudgetEnabled()
-            ? buildContextSourceTokenLimits(
-                this.config.infrastructure.contextBudget.maxInjectionTokens,
-                {
-                  toolFailureInjection: this.config.infrastructure.toolFailureInjection,
-                },
-              )
-            : {},
-          truncationStrategy: this.config.infrastructure.contextBudget.truncationStrategy,
-          zoneLayout: true,
-          zoneBudgets: {
-            identity: this.config.infrastructure.contextBudget.arena.zones.identity,
-            truth: this.config.infrastructure.contextBudget.arena.zones.truth,
-            skills: this.config.infrastructure.contextBudget.arena.zones.skills,
-            task_state: this.config.infrastructure.contextBudget.arena.zones.taskState,
-            tool_failures: this.config.infrastructure.contextBudget.arena.zones.toolFailures,
-            memory_working: this.config.infrastructure.contextBudget.arena.zones.memoryWorking,
-            memory_recall: this.config.infrastructure.contextBudget.arena.zones.memoryRecall,
-            rag_external: this.config.infrastructure.contextBudget.arena.zones.ragExternal,
-          },
-          adaptiveZones: this.config.infrastructure.contextBudget.adaptiveZones,
-          maxEntriesPerSession: this.config.infrastructure.contextBudget.arena.maxEntriesPerSession,
-          degradationPolicy: this.config.infrastructure.contextBudget.arena.degradationPolicy,
-          floorUnmetPolicy: this.config.infrastructure.contextBudget.floorUnmetPolicy,
-        })
-      : new ContextInjectionCollector({
-          sourceTokenLimits: {},
-          truncationStrategy: this.config.infrastructure.contextBudget.truncationStrategy,
-          zoneLayout: false,
-          maxEntriesPerSession: this.config.infrastructure.contextBudget.arena.maxEntriesPerSession,
-          degradationPolicy: this.config.infrastructure.contextBudget.arena.degradationPolicy,
-        });
     const turnReplay = new TurnReplayEngine({
       listEvents: (sessionId) => eventStore.list(sessionId),
       getTurn: (sessionId) => this.getCurrentTurn(sessionId),
@@ -661,7 +615,6 @@ export class BrewvaRuntime {
       turnWalStore,
       contextBudget,
       contextInjection,
-      stabilityMonitor,
       turnReplay,
       fileChanges,
       costTracker,
@@ -749,16 +702,12 @@ export class BrewvaRuntime {
       config: this.config,
       contextBudget: this.contextBudget,
       contextInjection: this.contextInjection,
-      stabilityMonitor: this.contextStabilityMonitor,
       memory: this.memoryEngine,
       externalRecallPort,
       ledger: this.ledger,
       sessionState: this.sessionState,
-      listSessionIds: () => this.eventStore.listSessionIds(),
-      listEvents: (sessionId) => this.eventStore.list(sessionId),
       getTaskState: (sessionId) => this.getTaskState(sessionId),
       getTruthState: (sessionId) => this.getTruthState(sessionId),
-      getCostSummary: (sessionId) => this.costService.getCostSummary(sessionId),
       prepareSkillDispatch: (dispatchInput) => this.prepareSkillDispatch(dispatchInput),
       buildSkillCandidateBlock: (selected) => buildSkillCandidateBlock(selected),
       buildSkillDispatchGateBlock: (decision) => buildSkillDispatchGateBlock(decision),
@@ -792,9 +741,6 @@ export class BrewvaRuntime {
       observeReplayEvent: (event) => this.turnReplay.observeEvent(event),
       ingestMemoryEvent: (event) => this.memoryEngine.ingestEvent(event),
       maybeRecordTapeCheckpoint: (event) => tapeService.maybeRecordTapeCheckpoint(event),
-    });
-    const memoryAccessService = new MemoryAccessService({
-      memory: this.memoryEngine,
     });
     const scheduleIntentService = new ScheduleIntentService({
       createManager: () =>
@@ -837,8 +783,6 @@ export class BrewvaRuntime {
       contextInjection: this.contextInjection,
       clearReservedInjectionTokensForSession: (sessionId) =>
         contextService.clearReservedInjectionTokensForSession(sessionId),
-      clearContextStabilityForSession: (sessionId) =>
-        contextService.clearStabilityMonitorSession(sessionId),
       fileChanges: this.fileChanges,
       verification: this.verificationGate,
       parallel: this.parallel,
@@ -879,7 +823,6 @@ export class BrewvaRuntime {
       contextService,
       tapeService,
       eventPipeline,
-      memoryAccessService,
       scheduleIntentService,
       fileChangeService,
       sessionLifecycleService,
@@ -890,14 +833,8 @@ export class BrewvaRuntime {
   private resolveExternalRecallPort(
     externalRecallPort: ExternalRecallPort | undefined,
   ): ExternalRecallPort | undefined {
-    if (externalRecallPort) return externalRecallPort;
     if (!this.config.memory.externalRecall.enabled) return undefined;
-    if (this.config.memory.externalRecall.builtinProvider === "off") return undefined;
-    return createCrystalLexicalExternalRecallPort({
-      memoryRootDir: resolve(this.workspaceRoot, this.config.memory.dir),
-      includeWorkspaceCrystals: false,
-      includeGlobalCrystals: true,
-    });
+    return externalRecallPort;
   }
 
   private createDomainApis(): {
@@ -1029,12 +966,10 @@ export class BrewvaRuntime {
           this.truthService.resolveTruthFact(sessionId, truthFactId),
       },
       memory: {
-        getWorking: (sessionId) => this.memoryAccessService.getWorkingMemory(sessionId),
-        search: (sessionId, input) => this.memoryAccessService.search(sessionId, input),
-        dismissInsight: (sessionId, insightId) =>
-          this.memoryAccessService.dismissMemoryInsight(sessionId, insightId),
-        reviewEvolvesEdge: (sessionId, input) =>
-          this.memoryAccessService.reviewMemoryEvolvesEdge(sessionId, input),
+        getWorking: (sessionId) => this.memoryEngine.getWorkingMemory(sessionId),
+        search: (sessionId, input) => this.memoryEngine.search(sessionId, input),
+        dismissInsight: (sessionId, insightId) => this.dismissMemoryInsight(sessionId, insightId),
+        reviewEvolvesEdge: (sessionId, input) => this.reviewMemoryEvolvesEdge(sessionId, input),
         refreshIfNeeded: (input) => this.memoryEngine.refreshIfNeeded(input),
         clearSessionCache: (sessionId) => this.memoryEngine.clearSessionCache(sessionId),
       },
@@ -1153,6 +1088,35 @@ export class BrewvaRuntime {
       return text;
     }
     return sanitizeContextText(text);
+  }
+
+  private dismissMemoryInsight(
+    sessionId: string,
+    insightId: string,
+  ): { ok: boolean; error?: "missing_id" | "not_found" } {
+    const id = insightId.trim();
+    if (!id) {
+      return { ok: false, error: "missing_id" };
+    }
+    const dismissed = this.memoryEngine.dismissInsight(sessionId, id);
+    if (!dismissed) {
+      return { ok: false, error: "not_found" };
+    }
+    return { ok: true };
+  }
+
+  private reviewMemoryEvolvesEdge(
+    sessionId: string,
+    input: { edgeId: string; decision: "accept" | "reject" },
+  ): { ok: boolean; error?: "missing_id" | "not_found" | "already_set" } {
+    const edgeId = input.edgeId.trim();
+    if (!edgeId) {
+      return { ok: false, error: "missing_id" };
+    }
+    return this.memoryEngine.reviewEvolvesEdge(sessionId, {
+      edgeId,
+      decision: input.decision,
+    });
   }
 
   private getCognitiveBudgetStatus(sessionId: string): CognitiveTokenBudgetStatus {

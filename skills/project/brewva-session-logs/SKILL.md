@@ -95,7 +95,7 @@ All paths are relative to the workspace root (detected via `.brewva/` marker or 
 
 Event types: `session_start`, `agent_end`, `tool_call`, `anchor`, `checkpoint`,
 `memory_*`, `cost_update`, `context_usage`, `context_injected`, `context_injection_dropped`,
-`context_arena_*`, `context_external_recall_*`, `task_event`, `ledger_compacted`,
+`context_arena_slo_enforced`, `context_external_recall_decision`, `task_event`, `ledger_compacted`,
 `skill_completed`.
 
 ### Evidence Ledger
@@ -206,27 +206,22 @@ jq -r '
   | [
       .timestamp,
       .type,
-      ("floor_unmet=" + ((.payload.floorUnmet // false) | tostring)),
-      ("degrade=" + (.payload.degradationApplied // "none")),
-      ("truth_alloc=" + ((.payload.zoneAllocatedTokens.truth // 0) | tostring)),
-      ("truth_accept=" + ((.payload.zoneAcceptedTokens.truth // 0) | tostring)),
-      ("recall_alloc=" + ((.payload.zoneAllocatedTokens.memory_recall // 0) | tostring)),
-      ("recall_accept=" + ((.payload.zoneAcceptedTokens.memory_recall // 0) | tostring))
+      ("reason=" + (.payload.reason // "accepted")),
+      ("degrade=" + ((.payload.degradationApplied // false) | tostring)),
+      ("orig=" + ((.payload.originalTokens // 0) | tostring)),
+      ("final=" + ((.payload.finalTokens // 0) | tostring)),
+      ("source_tokens=" + ((.payload.sourceTokens // 0) | tostring)),
+      ("truncated=" + ((.payload.truncated // false) | tostring))
     ]
   | @tsv
 ' .orchestrator/events/<sessionId>.jsonl
 ```
 
-### Arena adaptation / SLO / floor recovery events
+### Arena SLO enforcement events
 
 ```bash
 jq -r '
-  select(
-    .type == "context_arena_zone_adapted"
-    or .type == "context_arena_slo_enforced"
-    or .type == "context_arena_floor_unmet_recovered"
-    or .type == "context_arena_floor_unmet_unrecoverable"
-  )
+  select(.type == "context_arena_slo_enforced")
   | [.timestamp, .type, (.payload | tostring)]
   | @tsv
 ' .orchestrator/events/<sessionId>.jsonl
@@ -236,8 +231,8 @@ jq -r '
 
 ```bash
 jq -r '
-  select(.type == "context_external_recall_injected" or .type == "context_external_recall_skipped")
-  | [.timestamp, .type, (.payload.reason // "injected"), (.payload.query // "")]
+  select(.type == "context_external_recall_decision")
+  | [.timestamp, .type, (.payload.outcome // "unknown"), (.payload.reason // "-"), (.payload.query // "")]
   | @tsv
 ' .orchestrator/events/<sessionId>.jsonl
 ```
@@ -424,7 +419,7 @@ Determine what to inspect:
 - date range → scan event files by timestamp
 - keyword/pattern → `rg` across all session files
 - cost question → filter `agent_end` or `cost_update` events
-- context allocator question → filter `context_injected`, `context_injection_dropped`, `context_arena_*`, `context_external_recall_*`
+- context allocator question → filter `context_injected`, `context_injection_dropped`, `context_arena_slo_enforced`, `context_external_recall_decision`
 
 ### Step 2: Extract evidence
 

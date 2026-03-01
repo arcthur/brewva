@@ -1,12 +1,10 @@
 import { ContextBudgetManager } from "../context/budget.js";
-import { ContextEvolutionManager } from "../context/evolution-manager.js";
 import { buildContextInjection as buildContextInjectionOrchestrated } from "../context/injection-orchestrator.js";
 import {
   ContextInjectionCollector,
   type ContextInjectionPriority,
   type ContextInjectionRegisterResult,
 } from "../context/injection.js";
-import { ContextStabilityMonitor } from "../context/stability-monitor.js";
 import type { ToolFailureEntry } from "../context/tool-failures.js";
 import type { ExternalRecallPort } from "../external-recall/types.js";
 import { EvidenceLedger } from "../ledger/evidence-ledger.js";
@@ -19,29 +17,25 @@ import type {
   ContextCompactionGateStatus,
   ContextPressureLevel,
   ContextPressureStatus,
-  SessionCostSummary,
   SkillDispatchDecision,
   SkillDocument,
   TaskState,
   TruthState,
 } from "../types.js";
-import { estimateTokenCount, truncateTextToTokenBudget } from "../utils/token.js";
 import type { RuntimeCallback } from "./callback.js";
+import { type ContextCompactionDeps, markContextCompacted } from "./context-compaction.js";
 import {
-  ContextMemoryInjectionService,
-  type ExternalRecallInjectionOutcome,
-} from "./context-memory-injection.js";
+  type ContextExternalRecallDeps,
+  recordContextExternalRecallDecision,
+} from "./context-external-recall.js";
+import { ContextMemoryInjectionService } from "./context-memory-injection.js";
 import { ContextPressureService } from "./context-pressure.js";
-import { ContextStrategyService } from "./context-strategy.js";
+import {
+  type ContextSupplementalBudgetDeps,
+  commitSupplementalContextInjection,
+  planSupplementalContextInjection,
+} from "./context-supplemental-budget.js";
 import { RuntimeSessionStateStore } from "./session-state.js";
-
-const SIMPLE_PROFILE_IGNORED_OPTION_KEYS = [
-  "infrastructure.contextBudget.arena.zones",
-  "infrastructure.contextBudget.adaptiveZones",
-  "infrastructure.contextBudget.stabilityMonitor",
-  "infrastructure.contextBudget.floorUnmetPolicy",
-  "infrastructure.toolFailureInjection.sourceTokenLimitsDerived",
-] as const;
 
 export interface ContextServiceOptions {
   cwd: string;
@@ -50,16 +44,12 @@ export interface ContextServiceOptions {
   config: BrewvaConfig;
   contextBudget: ContextBudgetManager;
   contextInjection: ContextInjectionCollector;
-  stabilityMonitor: ContextStabilityMonitor;
   memory: MemoryEngine;
   externalRecallPort?: ExternalRecallPort;
   ledger: EvidenceLedger;
   sessionState: RuntimeSessionStateStore;
-  listSessionIds: RuntimeCallback<[], string[]>;
-  listEvents: RuntimeCallback<[sessionId: string], BrewvaEventRecord[]>;
   getTaskState: RuntimeCallback<[sessionId: string], TaskState>;
   getTruthState: RuntimeCallback<[sessionId: string], TruthState>;
-  getCostSummary: RuntimeCallback<[sessionId: string], SessionCostSummary>;
   prepareSkillDispatch: RuntimeCallback<
     [
       input: {
@@ -107,13 +97,11 @@ export class ContextService {
   private readonly config: BrewvaConfig;
   private readonly contextBudget: ContextBudgetManager;
   private readonly contextInjection: ContextInjectionCollector;
-  private readonly stabilityMonitor: ContextStabilityMonitor;
   private readonly memory: MemoryEngine;
   private readonly ledger: EvidenceLedger;
   private readonly sessionState: RuntimeSessionStateStore;
   private readonly getTaskState: (sessionId: string) => TaskState;
   private readonly getTruthState: (sessionId: string) => TruthState;
-  private readonly getCostSummary: (sessionId: string) => SessionCostSummary;
   private readonly prepareSkillDispatch: (input: {
     sessionId: string;
     promptText: string;
@@ -130,23 +118,22 @@ export class ContextService {
   private readonly sanitizeInput: (text: string) => string;
   private readonly getFoldedToolFailures: (sessionId: string) => ToolFailureEntry[];
   private readonly recordEvent: ContextServiceOptions["recordEvent"];
-  private readonly contextProfile: BrewvaConfig["infrastructure"]["contextBudget"]["profile"];
   private readonly contextPressure: ContextPressureService;
   private readonly contextMemoryInjection: ContextMemoryInjectionService;
-  private readonly contextStrategy: ContextStrategyService;
+  private readonly contextCompactionDeps: ContextCompactionDeps;
+  private readonly contextSupplementalBudgetDeps: ContextSupplementalBudgetDeps;
+  private readonly contextExternalRecallDeps: ContextExternalRecallDeps;
 
   constructor(options: ContextServiceOptions) {
     this.cwd = options.cwd;
     this.config = options.config;
     this.contextBudget = options.contextBudget;
     this.contextInjection = options.contextInjection;
-    this.stabilityMonitor = options.stabilityMonitor;
     this.memory = options.memory;
     this.ledger = options.ledger;
     this.sessionState = options.sessionState;
     this.getTaskState = options.getTaskState;
     this.getTruthState = options.getTruthState;
-    this.getCostSummary = options.getCostSummary;
     this.prepareSkillDispatch = options.prepareSkillDispatch;
     this.buildSkillCandidateBlock = options.buildSkillCandidateBlock;
     this.buildSkillDispatchGateBlock = options.buildSkillDispatchGateBlock;
@@ -157,17 +144,6 @@ export class ContextService {
     this.sanitizeInput = options.sanitizeInput;
     this.getFoldedToolFailures = options.getFoldedToolFailures;
     this.recordEvent = options.recordEvent;
-
-    this.contextProfile = this.config.infrastructure.contextBudget.profile;
-
-    const contextEvolution =
-      this.contextProfile === "managed"
-        ? new ContextEvolutionManager({
-            config: this.config.infrastructure.contextBudget,
-            listSessionIds: () => options.listSessionIds(),
-            listEvents: (sessionId) => options.listEvents(sessionId),
-          })
-        : null;
 
     this.contextPressure = new ContextPressureService({
       config: this.config,
@@ -192,14 +168,27 @@ export class ContextService {
       recordEvent: (input) => this.recordEvent(input),
     });
 
-    this.contextStrategy = new ContextStrategyService({
-      contextEvolution,
-      stabilityMonitor: this.stabilityMonitor,
+    this.contextCompactionDeps = {
+      sessionState: this.sessionState,
+      ledger: this.ledger,
+      markPressureCompacted: (sessionId) => this.contextPressure.markCompacted(sessionId),
+      markInjectionCompacted: (sessionId) => this.contextInjection.onCompaction(sessionId),
       getCurrentTurn: (sessionId) => this.getCurrentTurn(sessionId),
-      getSessionModel: (sessionId) => this.resolveSessionModel(sessionId),
-      getTaskClass: (sessionId) => this.resolveTaskClass(sessionId),
+      getActiveSkill: (sessionId) => this.getActiveSkill(sessionId),
       recordEvent: (input) => this.recordEvent(input),
-    });
+    };
+
+    this.contextSupplementalBudgetDeps = {
+      config: this.config,
+      contextBudget: this.contextBudget,
+      sessionState: this.sessionState,
+    };
+
+    this.contextExternalRecallDeps = {
+      config: this.config,
+      memory: this.memory,
+      recordEvent: (input) => this.recordEvent(input),
+    };
   }
 
   observeContextUsage(sessionId: string, usage: ContextBudgetUsage | undefined): void {
@@ -261,16 +250,20 @@ export class ContextService {
     finalTokens: number;
     truncated: boolean;
   }> {
-    this.ensureContextProfileEvents(sessionId);
     this.contextMemoryInjection.registerIdentityContextInjection(sessionId);
-    const externalRecallOutcome = await this.contextMemoryInjection.registerMemoryContextInjection(
+    const externalRecallDecision = await this.contextMemoryInjection.registerMemoryContextInjection(
       sessionId,
       prompt,
       usage,
     );
     const finalized = this.finalizeContextInjection(sessionId, prompt, usage, injectionScopeId);
 
-    this.maybeWriteBackExternalRecall(sessionId, finalized.text, externalRecallOutcome);
+    recordContextExternalRecallDecision(
+      this.contextExternalRecallDeps,
+      sessionId,
+      finalized.text,
+      externalRecallDecision,
+    );
     return finalized;
   }
 
@@ -287,73 +280,13 @@ export class ContextService {
     truncated: boolean;
     droppedReason?: "hard_limit" | "budget_exhausted";
   } {
-    const decision = this.contextBudget.planInjection(sessionId, inputText, usage);
-    if (!decision.accepted) {
-      return {
-        accepted: false,
-        text: "",
-        originalTokens: decision.originalTokens,
-        finalTokens: 0,
-        truncated: false,
-        droppedReason: decision.droppedReason,
-      };
-    }
-
-    if (!this.isContextBudgetEnabled()) {
-      return {
-        accepted: true,
-        text: decision.finalText,
-        originalTokens: decision.originalTokens,
-        finalTokens: decision.finalTokens,
-        truncated: decision.truncated,
-      };
-    }
-
-    const scopeKey = this.buildInjectionScopeKey(sessionId, injectionScopeId);
-    const usedTokens = this.sessionState.reservedContextInjectionTokensByScope.get(scopeKey) ?? 0;
-    const maxTokens = Math.max(
-      0,
-      Math.floor(this.config.infrastructure.contextBudget.maxInjectionTokens),
+    return planSupplementalContextInjection(
+      this.contextSupplementalBudgetDeps,
+      sessionId,
+      inputText,
+      usage,
+      injectionScopeId,
     );
-    const remainingTokens = Math.max(0, maxTokens - usedTokens);
-    if (remainingTokens <= 0) {
-      return {
-        accepted: false,
-        text: "",
-        originalTokens: decision.originalTokens,
-        finalTokens: 0,
-        truncated: false,
-        droppedReason: "budget_exhausted",
-      };
-    }
-
-    let finalText = decision.finalText;
-    let finalTokens = decision.finalTokens;
-    let truncated = decision.truncated;
-    if (finalTokens > remainingTokens) {
-      finalText = truncateTextToTokenBudget(finalText, remainingTokens);
-      finalTokens = estimateTokenCount(finalText);
-      truncated = true;
-    }
-
-    if (finalText.length === 0 || finalTokens <= 0) {
-      return {
-        accepted: false,
-        text: "",
-        originalTokens: decision.originalTokens,
-        finalTokens: 0,
-        truncated: false,
-        droppedReason: "budget_exhausted",
-      };
-    }
-
-    return {
-      accepted: true,
-      text: finalText,
-      originalTokens: decision.originalTokens,
-      finalTokens,
-      truncated,
-    };
   }
 
   commitSupplementalContextInjection(
@@ -361,22 +294,11 @@ export class ContextService {
     finalTokens: number,
     injectionScopeId?: string,
   ): void {
-    if (!this.isContextBudgetEnabled()) {
-      return;
-    }
-
-    const normalizedTokens = Math.max(0, Math.floor(finalTokens));
-    if (normalizedTokens <= 0) return;
-
-    const scopeKey = this.buildInjectionScopeKey(sessionId, injectionScopeId);
-    const usedTokens = this.sessionState.reservedContextInjectionTokensByScope.get(scopeKey) ?? 0;
-    const maxTokens = Math.max(
-      0,
-      Math.floor(this.config.infrastructure.contextBudget.maxInjectionTokens),
-    );
-    this.sessionState.reservedContextInjectionTokensByScope.set(
-      scopeKey,
-      Math.min(maxTokens, usedTokens + normalizedTokens),
+    commitSupplementalContextInjection(
+      this.contextSupplementalBudgetDeps,
+      sessionId,
+      finalTokens,
+      injectionScopeId,
     );
   }
 
@@ -409,54 +331,7 @@ export class ContextService {
       entryId?: string;
     },
   ): void {
-    this.contextPressure.markCompacted(sessionId);
-    this.contextInjection.onCompaction(sessionId);
-    this.clearInjectionFingerprintsForSession(sessionId);
-    this.clearReservedInjectionTokensForSession(sessionId);
-
-    const turn = this.getCurrentTurn(sessionId);
-    const summary = input.summary?.trim();
-    const entryId = input.entryId?.trim();
-    if (summary) {
-      this.sessionState.latestCompactionSummaryBySession.set(sessionId, {
-        entryId,
-        summary,
-      });
-    } else {
-      this.sessionState.latestCompactionSummaryBySession.delete(sessionId);
-    }
-
-    this.recordEvent({
-      sessionId,
-      type: "context_compacted",
-      turn,
-      payload: {
-        fromTokens: input.fromTokens ?? null,
-        toTokens: input.toTokens ?? null,
-        entryId: entryId ?? null,
-        summaryChars: summary?.length ?? null,
-      },
-    });
-    this.ledger.append({
-      sessionId,
-      turn,
-      skill: this.getActiveSkill(sessionId)?.name,
-      tool: "brewva_context_compaction",
-      argsSummary: "context_compaction",
-      outputSummary: `from=${input.fromTokens ?? "unknown"} to=${input.toTokens ?? "unknown"}`,
-      fullOutput: JSON.stringify({
-        fromTokens: input.fromTokens ?? null,
-        toTokens: input.toTokens ?? null,
-      }),
-      verdict: "inconclusive",
-      metadata: {
-        source: "context_budget",
-        fromTokens: input.fromTokens ?? null,
-        toTokens: input.toTokens ?? null,
-        entryId: entryId ?? null,
-        summaryChars: summary?.length ?? null,
-      },
-    });
+    markContextCompacted(this.contextCompactionDeps, sessionId, input);
   }
 
   isContextBudgetEnabled(): boolean {
@@ -475,11 +350,6 @@ export class ContextService {
     this.sessionState.clearReservedInjectionTokensForSession(sessionId);
   }
 
-  clearStabilityMonitorSession(sessionId: string): void {
-    this.stabilityMonitor.clearSession(sessionId);
-    this.contextStrategy.clearSession(sessionId);
-  }
-
   private finalizeContextInjection(
     sessionId: string,
     prompt: string,
@@ -492,8 +362,6 @@ export class ContextService {
     finalTokens: number;
     truncated: boolean;
   } {
-    const strategyDecision = this.contextStrategy.resolve({ sessionId });
-
     return buildContextInjectionOrchestrated(
       {
         cwd: this.cwd,
@@ -512,8 +380,7 @@ export class ContextService {
         registerContextInjection: (id, registerInput) =>
           this.registerContextInjection(id, registerInput),
         recordEvent: (eventInput) => this.recordEvent(eventInput),
-        planContextInjection: (id, tokenBudget, planOptions) =>
-          this.contextInjection.plan(id, tokenBudget, planOptions),
+        planContextInjection: (id, tokenBudget) => this.contextInjection.plan(id, tokenBudget),
         commitContextInjection: (id, consumedKeys) =>
           this.contextInjection.commit(id, consumedKeys),
         planBudgetInjection: (id, inputText, budgetUsage) =>
@@ -526,122 +393,14 @@ export class ContextService {
         setLastInjectedFingerprint: (scopeKey, fingerprint) =>
           this.sessionState.lastInjectedContextFingerprintBySession.set(scopeKey, fingerprint),
         getCurrentTurn: (id) => this.getCurrentTurn(id),
-        shouldForceCriticalOnly: (id, decisionTurn) =>
-          this.stabilityMonitor.shouldForceCriticalOnly(id, decisionTurn),
-        recordStabilityDegraded: (id, decisionTurn) =>
-          this.stabilityMonitor.recordDegraded(id, decisionTurn),
-        recordStabilityNormal: (id, monitorOptions) =>
-          this.stabilityMonitor.recordNormal(id, monitorOptions),
-        shouldRequestCompactionOnFloorUnmet: () =>
-          this.config.infrastructure.contextBudget.floorUnmetPolicy.requestCompaction,
-        requestCompaction: (id, reason) => this.contextPressure.requestCompaction(id, reason),
       },
       {
         sessionId,
         prompt,
         usage,
         injectionScopeId,
-        adaptiveZonesEnabled: strategyDecision.adaptiveZonesEnabled,
-        stabilityMonitorEnabled: strategyDecision.stabilityMonitorEnabled,
       },
     );
-  }
-
-  private maybeWriteBackExternalRecall(
-    sessionId: string,
-    finalInjectionText: string,
-    externalRecallOutcome: ExternalRecallInjectionOutcome | null,
-  ): void {
-    if (!externalRecallOutcome) return;
-
-    if (finalInjectionText.includes("[ExternalRecall]")) {
-      const writeback = this.memory.ingestExternalRecall({
-        sessionId,
-        query: externalRecallOutcome.query,
-        defaultConfidence: this.config.memory.externalRecall.injectedConfidence,
-        hits: externalRecallOutcome.hits.map((hit) => ({
-          topic: hit.topic,
-          excerpt: hit.excerpt,
-          score: typeof hit.score === "number" ? hit.score : 0,
-          confidence: hit.confidence,
-          metadata: hit.metadata,
-        })),
-      });
-      this.recordEvent({
-        sessionId,
-        type: "context_external_recall_injected",
-        payload: {
-          query: externalRecallOutcome.query,
-          hitCount: externalRecallOutcome.hits.length,
-          internalTopScore: externalRecallOutcome.internalTopScore,
-          threshold: externalRecallOutcome.threshold,
-          writebackUnits: writeback.upserted,
-        },
-      });
-      return;
-    }
-
-    this.recordEvent({
-      sessionId,
-      type: "context_external_recall_skipped",
-      payload: {
-        reason: "filtered_out",
-        query: externalRecallOutcome.query,
-        hitCount: externalRecallOutcome.hits.length,
-        internalTopScore: externalRecallOutcome.internalTopScore,
-        threshold: externalRecallOutcome.threshold,
-      },
-    });
-  }
-
-  private ensureContextProfileEvents(sessionId: string): void {
-    if (!this.sessionState.contextProfileSelectedBySession.has(sessionId)) {
-      this.sessionState.contextProfileSelectedBySession.add(sessionId);
-      this.recordEvent({
-        sessionId,
-        type: "context_profile_selected",
-        turn: this.getCurrentTurn(sessionId),
-        payload: {
-          profile: this.contextProfile,
-        },
-      });
-    }
-
-    if (this.contextProfile !== "simple") {
-      return;
-    }
-
-    let ignored = this.sessionState.contextProfileIgnoredOptionsBySession.get(sessionId);
-    if (!ignored) {
-      ignored = new Set<string>();
-      this.sessionState.contextProfileIgnoredOptionsBySession.set(sessionId, ignored);
-    }
-
-    for (const optionKey of SIMPLE_PROFILE_IGNORED_OPTION_KEYS) {
-      if (ignored.has(optionKey)) continue;
-      ignored.add(optionKey);
-      this.recordEvent({
-        sessionId,
-        type: "context_profile_option_ignored",
-        turn: this.getCurrentTurn(sessionId),
-        payload: {
-          profile: "simple",
-          optionKey,
-        },
-      });
-    }
-  }
-
-  private resolveSessionModel(sessionId: string): string {
-    const summary = this.getCostSummary(sessionId);
-    const modelRows = Object.entries(summary.models);
-    if (modelRows.length === 0) return "(unknown)";
-    const top = modelRows.toSorted((left, right) => right[1].totalTokens - left[1].totalTokens)[0];
-    return top?.[0] ?? "(unknown)";
-  }
-
-  private resolveTaskClass(sessionId: string): string {
-    return this.getActiveSkill(sessionId)?.name ?? "(none)";
   }
 
   private getRecentToolFailures(sessionId: string): ToolFailureEntry[] {
@@ -671,7 +430,6 @@ export class ContextService {
         sessionId,
         type: "context_arena_slo_enforced",
         payload: {
-          policy: result.sloEnforced.policy,
           entriesBefore: result.sloEnforced.entriesBefore,
           entriesAfter: result.sloEnforced.entriesAfter,
           dropped: result.sloEnforced.dropped,
