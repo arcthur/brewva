@@ -87,6 +87,92 @@ describe("Tool failure context injection", () => {
 
     const injection = await runtime.context.buildInjection(sessionId, "continue");
     expect(injection.text.includes("[RecentToolFailures]")).toBe(false);
+    expect(injection.text.includes("[RecentToolOutputsDistilled]")).toBe(false);
+  });
+
+  test("injects recent distilled tool outputs for compressed execution context", async () => {
+    const workspace = createWorkspace("tool-output-distilled-inject");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "tool-output-distilled-inject-1";
+
+    runtime.events.record({
+      sessionId,
+      type: "tool_output_distilled",
+      payload: {
+        toolName: "exec",
+        strategy: "exec_heuristic",
+        summaryText: "[ExecDistilled]\nstatus: failed\n- Error: test suite failed",
+        rawTokens: 160,
+        summaryTokens: 32,
+        compressionRatio: 0.2,
+        artifactRef: ".orchestrator/tool-output-artifacts/sess/tc-exec-distill.txt",
+        isError: true,
+      },
+    });
+
+    const injection = await runtime.context.buildInjection(sessionId, "continue");
+    expect(injection.text.includes("[RecentToolOutputsDistilled]")).toBe(true);
+    expect(injection.text.includes("tool=exec")).toBe(true);
+    expect(injection.text.includes("strategy=exec_heuristic")).toBe(true);
+    expect(injection.text.includes("raw_tokens=160")).toBe(true);
+    expect(injection.text.includes("summary_tokens=32")).toBe(true);
+    expect(injection.text.includes("compression=0.200")).toBe(true);
+    expect(
+      injection.text.includes(
+        "artifact=.orchestrator/tool-output-artifacts/sess/tc-exec-distill.txt",
+      ),
+    ).toBe(true);
+    expect(injection.text.includes("summary: [ExecDistilled] status: failed")).toBe(true);
+  });
+
+  test("respects distilled output maxEntries and maxOutputChars from config", async () => {
+    const workspace = createWorkspace("tool-output-distilled-limits");
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.infrastructure.toolFailureInjection.maxEntries = 1;
+    config.infrastructure.toolFailureInjection.maxOutputChars = 36;
+    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const sessionId = "tool-output-distilled-limits-1";
+
+    runtime.events.record({
+      sessionId,
+      type: "tool_output_distilled",
+      payload: {
+        toolName: "exec",
+        strategy: "exec_heuristic",
+        summaryText:
+          "[ExecDistilled]\nstatus: failed\n- first summary should be dropped by maxEntries",
+        rawTokens: 120,
+        summaryTokens: 30,
+        compressionRatio: 0.25,
+        artifactRef: ".orchestrator/tool-output-artifacts/sess/tc-1.txt",
+        isError: true,
+      },
+    });
+    runtime.events.record({
+      sessionId,
+      type: "tool_output_distilled",
+      payload: {
+        toolName: "lsp_diagnostics",
+        strategy: "lsp_heuristic",
+        summaryText:
+          "[LspDistilled] errors=2 warnings=1\n- src/main.ts:12:3 very long summary detail that should be truncated",
+        rawTokens: 90,
+        summaryTokens: 18,
+        compressionRatio: 0.2,
+        artifactRef: ".orchestrator/tool-output-artifacts/sess/tc-2.txt",
+        isError: false,
+      },
+    });
+
+    const injection = await runtime.context.buildInjection(sessionId, "continue");
+    expect(injection.text.includes("[RecentToolOutputsDistilled]")).toBe(true);
+    expect(injection.text.includes("tool=exec")).toBe(false);
+    expect(injection.text.includes("tool=lsp_diagnostics")).toBe(true);
+    expect(
+      injection.text.includes("artifact=.orchestrator/tool-output-artifacts/sess/tc-2.txt"),
+    ).toBe(true);
+    expect(injection.text.includes("summary: [LspDistilled] errors=2 warning")).toBe(true);
+    expect(injection.text.includes("...")).toBe(true);
   });
 
   test("persists structured failure context metadata on failed tool results", async () => {

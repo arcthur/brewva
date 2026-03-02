@@ -27,6 +27,7 @@ tools:
     - ast_grep_replace
     - cost_view
     - ledger_query
+    - output_search
     - schedule_intent
     - tape_handoff
     - tape_info
@@ -148,7 +149,7 @@ the current `@brewva/brewva-tools` runtime tool surface.
 Operational routing:
 
 - Source lane (`runtime/tools/extensions/cli` boundary tracing): `lsp_*`, `ast_grep_*`, `look_at`
-- Process lane (runtime artifact reconstruction): `ledger_query`, `tape_info`, `tape_search`, `cost_view`, `process`
+- Process lane (runtime artifact reconstruction): `ledger_query`, `output_search`, `tape_info`, `tape_search`, `cost_view`, `process`
 - Delivery lane (bounded execution and rollback): `task_*`, `skill_load`, `skill_complete`, `rollback_last_patch`
 - Scheduling/continuity lane: `schedule_intent`
 - Pressure/recovery lane: `session_compact`, `tape_handoff`

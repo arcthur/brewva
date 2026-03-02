@@ -6,6 +6,7 @@ import {
   type ContextInjectionRegisterResult,
 } from "../context/injection.js";
 import type { ToolFailureEntry } from "../context/tool-failures.js";
+import type { ToolOutputDistillationEntry } from "../context/tool-output-distilled.js";
 import type { ExternalRecallPort } from "../external-recall/types.js";
 import { EvidenceLedger } from "../ledger/evidence-ledger.js";
 import { MemoryEngine } from "../memory/engine.js";
@@ -77,6 +78,10 @@ export interface ContextServiceOptions {
   getActiveSkill: RuntimeCallback<[sessionId: string], SkillDocument | undefined>;
   sanitizeInput: RuntimeCallback<[text: string], string>;
   getFoldedToolFailures: RuntimeCallback<[sessionId: string], ToolFailureEntry[]>;
+  getRecentToolOutputDistillations: RuntimeCallback<
+    [sessionId: string],
+    ToolOutputDistillationEntry[]
+  >;
   recordEvent: RuntimeCallback<
     [
       input: {
@@ -117,6 +122,9 @@ export class ContextService {
   private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
   private readonly sanitizeInput: (text: string) => string;
   private readonly getFoldedToolFailures: (sessionId: string) => ToolFailureEntry[];
+  private readonly getRecentToolOutputDistillations: (
+    sessionId: string,
+  ) => ToolOutputDistillationEntry[];
   private readonly recordEvent: ContextServiceOptions["recordEvent"];
   private readonly contextPressure: ContextPressureService;
   private readonly contextMemoryInjection: ContextMemoryInjectionService;
@@ -143,6 +151,7 @@ export class ContextService {
     this.getActiveSkill = options.getActiveSkill;
     this.sanitizeInput = options.sanitizeInput;
     this.getFoldedToolFailures = options.getFoldedToolFailures;
+    this.getRecentToolOutputDistillations = options.getRecentToolOutputDistillations;
     this.recordEvent = options.recordEvent;
 
     this.contextPressure = new ContextPressureService({
@@ -372,6 +381,7 @@ export class ContextService {
         getTruthState: (id) => this.getTruthState(id),
         maybeAlignTaskStatus: (orchestrationInput) => this.maybeAlignTaskStatus(orchestrationInput),
         getRecentToolFailures: (id) => this.getRecentToolFailures(id),
+        getRecentToolOutputDistillations: (id) => this.getRecentToolOutputDistillationsBlock(id),
         getTaskState: (id) => this.getTaskState(id),
         buildTaskStateBlock: (state) => this.buildTaskStateBlock(state),
         prepareSkillDispatch: (dispatchInput) => this.prepareSkillDispatch(dispatchInput),
@@ -411,6 +421,24 @@ export class ContextService {
       outputText: this.sanitizeInput(entry.outputText),
       turn: Number.isFinite(entry.turn) ? Math.max(0, Math.floor(entry.turn)) : 0,
     }));
+  }
+
+  private getRecentToolOutputDistillationsBlock(sessionId: string): ToolOutputDistillationEntry[] {
+    const entries = this.getRecentToolOutputDistillations(sessionId);
+    return entries
+      .map((entry) => ({
+        toolName: entry.toolName,
+        strategy: entry.strategy,
+        summaryText: this.sanitizeInput(entry.summaryText),
+        rawTokens: entry.rawTokens,
+        summaryTokens: entry.summaryTokens,
+        compressionRatio: entry.compressionRatio,
+        artifactRef: entry.artifactRef ? this.sanitizeInput(entry.artifactRef) : null,
+        isError: entry.isError,
+        turn: entry.turn,
+        timestamp: entry.timestamp,
+      }))
+      .filter((entry) => entry.summaryText.trim().length > 0);
   }
 
   private registerContextInjection(

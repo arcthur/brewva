@@ -58,3 +58,14 @@ export { registerMemoryBridge } from "./memory-bridge.js";
 export { registerNotification } from "./notification.js";
 export { createRuntimeChannelTurnBridge } from "./channel-turn-bridge.js";
 export { createRuntimeTelegramChannelBridge } from "./telegram-channel-bridge.js";
+export {
+  CHARS_PER_TOKEN,
+  distillToolOutput,
+  estimateTokens,
+  type ToolOutputDistillation,
+} from "./tool-output-distiller.js";
+export {
+  extractToolResultText,
+  resolveToolDisplayText,
+  type ResolveToolDisplayTextInput,
+} from "./tool-output-display.js";

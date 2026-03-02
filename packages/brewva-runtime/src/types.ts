@@ -792,6 +792,28 @@ export interface TapeAnchorState {
   timestamp: number;
 }
 
+export interface OutputSearchTelemetryState {
+  recentCalls: number;
+  singleQueryCalls: number;
+  batchedCalls: number;
+  throttledCalls: number;
+  blockedCalls: number;
+  totalQueries: number;
+  totalResults: number;
+  averageResultsPerQuery: number | null;
+  cacheHits: number;
+  cacheMisses: number;
+  cacheHitRate: number | null;
+  matchLayers: {
+    exact: number;
+    partial: number;
+    fuzzy: number;
+    none: number;
+  };
+  lastThrottleLevel: "normal" | "limited" | "blocked" | "unknown";
+  lastTimestamp?: number;
+}
+
 export interface TapeStatusState {
   totalEntries: number;
   entriesSinceAnchor: number;
@@ -804,6 +826,7 @@ export interface TapeStatusState {
   };
   lastAnchor?: TapeAnchorState;
   lastCheckpointId?: string;
+  outputSearch?: OutputSearchTelemetryState;
 }
 
 export type TapeSearchScope = "current_phase" | "all_phases" | "anchors_only";

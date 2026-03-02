@@ -11,6 +11,7 @@ function collectToolNames(sourceRoot: string): string[] {
     "ledger-query.ts",
     "look-at.ts",
     "lsp.ts",
+    "output-search.ts",
     "process.ts",
     "rollback-last-patch.ts",
     "schedule-intent.ts",

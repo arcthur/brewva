@@ -29,6 +29,7 @@ Default tool bundle (registered by `buildBrewvaTools()`):
 - `process`
 - `cost_view`
 - `ledger_query`
+- `output_search`
 - `schedule_intent`
 - `tape_handoff`
 - `tape_info`
@@ -70,6 +71,14 @@ Structured `convergenceCondition` predicates include:
 
 For cron intents, runtime defaults `maxRuns` to `10000` when omitted.
 
+`output_search` supports query-mode and inventory-mode:
+
+- query-mode: pass `query` or `queries`; results are ranked per artifact and include compact snippets.
+- inventory-mode: omit both `query` and `queries` to list recent persisted artifacts.
+- search behavior: exact -> partial -> fuzzy layered fallback.
+- throttling: repeated single-query calls can be limited or blocked; batch with `queries` to avoid pressure.
+- source data: only persisted `tool_output_artifact_persisted` artifacts are scanned.
+
 Definitions:
 
 - `packages/brewva-tools/src/look-at.ts`
@@ -78,6 +87,7 @@ Definitions:
 - `packages/brewva-tools/src/process.ts`
 - `packages/brewva-tools/src/cost-view.ts`
 - `packages/brewva-tools/src/ledger-query.ts`
+- `packages/brewva-tools/src/output-search.ts`
 - `packages/brewva-tools/src/schedule-intent.ts`
 - `packages/brewva-tools/src/tape.ts`
 - `packages/brewva-tools/src/session-compact.ts`

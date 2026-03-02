@@ -13,6 +13,7 @@ import { resolveWorkspaceRootDir } from "./config/paths.js";
 import { ContextBudgetManager } from "./context/budget.js";
 import { normalizeAgentId } from "./context/identity.js";
 import { ContextInjectionCollector } from "./context/injection.js";
+import type { ToolOutputDistillationEntry } from "./context/tool-output-distilled.js";
 import { SessionCostTracker } from "./cost/tracker.js";
 import { BrewvaEventStore } from "./events/store.js";
 import type { ExternalRecallPort } from "./external-recall/types.js";
@@ -717,6 +718,8 @@ export class BrewvaRuntime {
       getActiveSkill: (sessionId) => skillLifecycleService.getActiveSkill(sessionId),
       sanitizeInput: (text) => this.sanitizeInput(text),
       getFoldedToolFailures: (sessionId) => this.turnReplay.getRecentToolFailures(sessionId, 12),
+      getRecentToolOutputDistillations: (sessionId) =>
+        this.getRecentToolOutputDistillations(sessionId, 12),
       recordEvent: (input) => this.recordEvent(input),
     });
     const tapeService = new TapeService({
@@ -1175,6 +1178,77 @@ export class BrewvaRuntime {
 
   private getCurrentTurn(sessionId: string): number {
     return this.sessionState.getCurrentTurn(sessionId);
+  }
+
+  private getRecentToolOutputDistillations(
+    sessionId: string,
+    maxEntries = 12,
+  ): ToolOutputDistillationEntry[] {
+    const limit = Number.isFinite(maxEntries) ? Math.max(1, Math.floor(maxEntries)) : 12;
+    const candidateEvents = this.eventStore.list(sessionId, {
+      type: "tool_output_distilled",
+      last: Math.max(limit * 4, limit),
+    });
+
+    const entries: ToolOutputDistillationEntry[] = [];
+    for (const event of candidateEvents) {
+      const payload = event.payload;
+      if (!payload) continue;
+
+      const toolNameRaw = payload.toolName;
+      const toolName =
+        typeof toolNameRaw === "string" && toolNameRaw.trim().length > 0
+          ? toolNameRaw.trim()
+          : "(unknown)";
+
+      const strategyRaw = payload.strategy;
+      const strategy =
+        typeof strategyRaw === "string" && strategyRaw.trim().length > 0
+          ? strategyRaw.trim()
+          : "unknown";
+
+      const summaryTextRaw = payload.summaryText;
+      const summaryText = typeof summaryTextRaw === "string" ? summaryTextRaw : "";
+      const artifactRefRaw = payload.artifactRef;
+      const artifactRef =
+        typeof artifactRefRaw === "string" && artifactRefRaw.trim().length > 0
+          ? artifactRefRaw.trim()
+          : null;
+
+      const rawTokens =
+        typeof payload.rawTokens === "number" && Number.isFinite(payload.rawTokens)
+          ? Math.max(0, Math.floor(payload.rawTokens))
+          : null;
+      const summaryTokens =
+        typeof payload.summaryTokens === "number" && Number.isFinite(payload.summaryTokens)
+          ? Math.max(0, Math.floor(payload.summaryTokens))
+          : null;
+      const compressionRatio =
+        typeof payload.compressionRatio === "number" && Number.isFinite(payload.compressionRatio)
+          ? Math.max(0, Math.min(1, payload.compressionRatio))
+          : null;
+      const isError = payload.isError === true;
+      const turn =
+        typeof event.turn === "number" && Number.isFinite(event.turn)
+          ? Math.max(0, Math.floor(event.turn))
+          : 0;
+      const timestamp = Number.isFinite(event.timestamp) ? event.timestamp : Date.now();
+
+      entries.push({
+        toolName,
+        strategy,
+        summaryText,
+        rawTokens,
+        summaryTokens,
+        compressionRatio,
+        artifactRef,
+        isError,
+        turn,
+        timestamp,
+      });
+    }
+
+    return entries.slice(-limit);
   }
 
   private isContextBudgetEnabled(): boolean {

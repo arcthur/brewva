@@ -11,6 +11,7 @@ import type {
   BrewvaConfig,
   BrewvaEventQuery,
   BrewvaEventRecord,
+  OutputSearchTelemetryState,
   SessionCostSummary,
   TapePressureLevel,
   TapeSearchMatch,
@@ -28,6 +29,8 @@ const TAPE_PRESSURE_THRESHOLDS = {
   medium: 160,
   high: 280,
 } as const;
+const OUTPUT_SEARCH_EVENT_TYPE = "tool_output_search";
+const OUTPUT_SEARCH_EVENT_LOOKBACK = 120;
 
 export interface TapeServiceOptions {
   tapeConfig: BrewvaConfig["tape"];
@@ -104,6 +107,93 @@ export class TapeService {
     return { ...TAPE_PRESSURE_THRESHOLDS };
   }
 
+  private toNonNegativeCount(value: unknown): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+    return Math.max(0, Math.floor(value));
+  }
+
+  private toSearchThrottleLevel(value: unknown): OutputSearchTelemetryState["lastThrottleLevel"] {
+    if (value === "normal" || value === "limited" || value === "blocked") return value;
+    return "unknown";
+  }
+
+  private buildOutputSearchTelemetry(sessionId: string): OutputSearchTelemetryState | undefined {
+    const events = this.queryEvents(sessionId, {
+      type: OUTPUT_SEARCH_EVENT_TYPE,
+      last: OUTPUT_SEARCH_EVENT_LOOKBACK,
+    });
+    if (events.length === 0) return undefined;
+
+    const telemetry: OutputSearchTelemetryState = {
+      recentCalls: 0,
+      singleQueryCalls: 0,
+      batchedCalls: 0,
+      throttledCalls: 0,
+      blockedCalls: 0,
+      totalQueries: 0,
+      totalResults: 0,
+      averageResultsPerQuery: null,
+      cacheHits: 0,
+      cacheMisses: 0,
+      cacheHitRate: null,
+      matchLayers: {
+        exact: 0,
+        partial: 0,
+        fuzzy: 0,
+        none: 0,
+      },
+      lastThrottleLevel: "unknown",
+      lastTimestamp: undefined,
+    };
+
+    let latestTimestamp = 0;
+    for (const event of events) {
+      telemetry.recentCalls += 1;
+      const payload = event.payload ?? {};
+      const queryCount = this.toNonNegativeCount(payload.queryCount);
+      const resultCount = this.toNonNegativeCount(payload.resultCount);
+      const cacheHits = this.toNonNegativeCount(payload.cacheHits);
+      const cacheMisses = this.toNonNegativeCount(payload.cacheMisses);
+      const throttleLevel = this.toSearchThrottleLevel(payload.throttleLevel);
+
+      telemetry.totalQueries += queryCount;
+      telemetry.totalResults += resultCount;
+      telemetry.cacheHits += cacheHits;
+      telemetry.cacheMisses += cacheMisses;
+
+      if (queryCount === 1) telemetry.singleQueryCalls += 1;
+      if (queryCount > 1) telemetry.batchedCalls += 1;
+      if (throttleLevel === "limited" || throttleLevel === "blocked") {
+        telemetry.throttledCalls += 1;
+      }
+
+      const blocked = payload.blocked === true || throttleLevel === "blocked";
+      if (blocked) telemetry.blockedCalls += 1;
+
+      if (event.timestamp >= latestTimestamp) {
+        latestTimestamp = event.timestamp;
+        telemetry.lastTimestamp = event.timestamp;
+        telemetry.lastThrottleLevel = throttleLevel;
+      }
+
+      const matchLayersPayload = payload.matchLayers;
+      if (matchLayersPayload && typeof matchLayersPayload === "object") {
+        for (const layer of Object.values(matchLayersPayload)) {
+          if (layer === "exact" || layer === "partial" || layer === "fuzzy" || layer === "none") {
+            telemetry.matchLayers[layer] += 1;
+          }
+        }
+      }
+    }
+
+    telemetry.averageResultsPerQuery =
+      telemetry.totalQueries > 0 ? telemetry.totalResults / telemetry.totalQueries : null;
+    const totalCacheLoads = telemetry.cacheHits + telemetry.cacheMisses;
+    telemetry.cacheHitRate = totalCacheLoads > 0 ? telemetry.cacheHits / totalCacheLoads : null;
+
+    return telemetry;
+  }
+
   getTapeStatus(sessionId: string): TapeStatusState {
     const events = this.queryEvents(sessionId);
     const totalEntries = events.length;
@@ -165,6 +255,7 @@ export class TapeService {
       entriesSinceCheckpoint,
       tapePressure: this.resolveTapePressureLevel(entriesSinceAnchor),
       thresholds,
+      outputSearch: this.buildOutputSearchTelemetry(sessionId),
       lastAnchor: lastAnchorEvent
         ? {
             id: lastAnchorEvent.id,

@@ -26,6 +26,7 @@
 - `process`
 - `cost_view`
 - `ledger_query`
+- `output_search`
 - `schedule_intent`
 - `tape_handoff`
 - `tape_info`

@@ -205,7 +205,7 @@ Four orthogonal pressure surfaces:
 
 Context injection sources (`brewva.identity`, `brewva.truth-static`,
 `brewva.truth-facts`, `brewva.skill-candidates`, `brewva.skill-dispatch-gate`,
-`brewva.task-state`, `brewva.tool-failures`, `brewva.memory-working`,
+`brewva.task-state`, `brewva.tool-failures`, `brewva.tool-outputs-distilled`, `brewva.memory-working`,
 `brewva.memory-recall`, `brewva.rag-external`) remain explicit and traceable in
 runtime behavior.
 

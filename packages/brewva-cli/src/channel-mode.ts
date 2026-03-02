@@ -1,6 +1,9 @@
 import type { Server } from "node:http";
 import { TelegramWebhookTransport } from "@brewva/brewva-channels-telegram";
-import { createRuntimeTelegramChannelBridge } from "@brewva/brewva-extensions";
+import {
+  createRuntimeTelegramChannelBridge,
+  resolveToolDisplayText,
+} from "@brewva/brewva-extensions";
 import { createTelegramIngressServer, type TelegramIngressAuth } from "@brewva/brewva-ingress";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
@@ -543,37 +546,6 @@ function extractMessageText(message: unknown): string {
   return parts.join("");
 }
 
-function extractToolResultText(result: unknown): string {
-  if (typeof result === "string") {
-    return result.trim();
-  }
-  if (!result || typeof result !== "object") {
-    return "";
-  }
-
-  const content = (result as { content?: unknown }).content;
-  if (Array.isArray(content)) {
-    const texts: string[] = [];
-    for (const item of content) {
-      if (!item || typeof item !== "object") continue;
-      const text = (item as { text?: unknown }).text;
-      if (typeof text === "string" && text.trim()) {
-        texts.push(text.trim());
-      }
-    }
-    if (texts.length > 0) {
-      return texts.join("\n");
-    }
-  }
-
-  try {
-    const serialized = JSON.stringify(result);
-    return serialized && serialized !== "{}" ? serialized : "";
-  } catch {
-    return "";
-  }
-}
-
 function asToolExecutionEndEvent(event: AgentSessionEvent): {
   toolCallId: string;
   toolName: string;
@@ -610,7 +582,14 @@ function formatToolTurnOutput(input: {
   result: unknown;
 }): ToolTurnOutput {
   const status = input.isError ? "failed" : "completed";
-  const detail = clampText(extractToolResultText(input.result), 1200);
+  const detail = clampText(
+    resolveToolDisplayText({
+      toolName: input.toolName,
+      isError: input.isError,
+      result: input.result,
+    }),
+    1200,
+  );
   const text = detail
     ? `Tool ${input.toolName} (${input.toolCallId}) ${status}\n${detail}`
     : `Tool ${input.toolName} (${input.toolCallId}) ${status}`;

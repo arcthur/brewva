@@ -182,6 +182,30 @@ export class LedgerService {
       outputText: input.outputText,
       success: input.success,
     });
+    const outputObservation =
+      metadata &&
+      typeof metadata === "object" &&
+      "outputObservation" in metadata &&
+      metadata.outputObservation &&
+      typeof metadata.outputObservation === "object"
+        ? (metadata.outputObservation as Record<string, unknown>)
+        : null;
+    const outputDistillation =
+      metadata &&
+      typeof metadata === "object" &&
+      "outputDistillation" in metadata &&
+      metadata.outputDistillation &&
+      typeof metadata.outputDistillation === "object"
+        ? (metadata.outputDistillation as Record<string, unknown>)
+        : null;
+    const outputArtifact =
+      metadata &&
+      typeof metadata === "object" &&
+      "outputArtifact" in metadata &&
+      metadata.outputArtifact &&
+      typeof metadata.outputArtifact === "object"
+        ? (metadata.outputArtifact as Record<string, unknown>)
+        : null;
     const toolFailureContext = readToolFailureContextMetadata(
       metadata as Record<string, JsonValue> | undefined,
     );
@@ -196,6 +220,9 @@ export class LedgerService {
         verdict,
         success: input.success,
         ledgerId: ledgerRow.id,
+        outputObservation,
+        outputArtifact,
+        outputDistillation,
         failureContext: toolFailureContext
           ? {
               args: toolFailureContext.args,

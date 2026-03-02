@@ -162,8 +162,8 @@ Common async calls:
 
 ## Default Context Injection Semantics
 
-The default injection path is organized around ten semantic sources (the
-tenth is optional and budget-gated):
+The default injection path is organized around eleven semantic sources (the
+eleventh is optional and budget-gated):
 
 - `brewva.identity`
 - `brewva.truth-static`
@@ -172,6 +172,7 @@ tenth is optional and budget-gated):
 - `brewva.skill-dispatch-gate`
 - `brewva.task-state`
 - `brewva.tool-failures`
+- `brewva.tool-outputs-distilled`
 - `brewva.memory-working`
 - `brewva.memory-recall`
 - `brewva.rag-external`

@@ -1,6 +1,8 @@
 import type {
   ContextBudgetUsage,
   ContextPressureStatus,
+  BrewvaEventQuery,
+  BrewvaEventRecord,
   EvidenceQuery,
   BrewvaConfig,
   RollbackResult,
@@ -27,6 +29,8 @@ import type {
 } from "@brewva/brewva-runtime";
 
 export interface BrewvaToolRuntime {
+  readonly cwd?: string;
+  readonly workspaceRoot?: string;
   readonly config?: Pick<BrewvaConfig, "parallel" | "infrastructure" | "schedule" | "security">;
   skills: {
     activate(
@@ -73,6 +77,7 @@ export interface BrewvaToolRuntime {
     getPressureStatus(sessionId: string, usage?: ContextBudgetUsage): ContextPressureStatus;
   };
   events: {
+    list(sessionId: string, query?: BrewvaEventQuery): BrewvaEventRecord[];
     getTapeStatus(sessionId: string): TapeStatusState;
     recordTapeHandoff(
       sessionId: string,

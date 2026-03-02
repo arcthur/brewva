@@ -10,6 +10,10 @@ import { sha256 } from "../utils/hash.js";
 import type { ContextInjectionPlanResult, RegisterContextInjectionInput } from "./injection.js";
 import { CONTEXT_SOURCES } from "./sources.js";
 import { buildRecentToolFailuresBlock, type ToolFailureEntry } from "./tool-failures.js";
+import {
+  buildRecentToolOutputDistillationBlock,
+  type ToolOutputDistillationEntry,
+} from "./tool-output-distilled.js";
 import { buildTruthFactsBlock } from "./truth-facts.js";
 import { buildTruthLedgerBlock } from "./truth.js";
 
@@ -48,6 +52,7 @@ export interface ContextInjectionOrchestratorDeps {
     usage?: ContextBudgetUsage;
   }): void;
   getRecentToolFailures(sessionId: string): ToolFailureEntry[];
+  getRecentToolOutputDistillations(sessionId: string): ToolOutputDistillationEntry[];
   getTaskState(sessionId: string): TaskState;
   buildTaskStateBlock(state: TaskState): string;
   prepareSkillDispatch(input: {
@@ -153,6 +158,20 @@ export function buildContextInjection(
         id: "recent-failures",
         priority: "high",
         content: failureBlock,
+      });
+    }
+
+    const distilledOutputs = deps.getRecentToolOutputDistillations(input.sessionId);
+    const distilledBlock = buildRecentToolOutputDistillationBlock(distilledOutputs, {
+      maxEntries: toolFailureConfig.maxEntries,
+      maxSummaryChars: toolFailureConfig.maxOutputChars,
+    });
+    if (distilledBlock) {
+      deps.registerContextInjection(input.sessionId, {
+        source: CONTEXT_SOURCES.toolOutputsDistilled,
+        id: "recent-tool-output-distilled",
+        priority: "high",
+        content: distilledBlock,
       });
     }
   }

@@ -37,3 +37,7 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 ## Active notes
 
 - `docs/research/roadmap-notes.md`
+
+## Promoted notes (status pointers)
+
+- `docs/research/rfc-capability-compression-and-output-distillation.md`

@@ -128,6 +128,35 @@ describe("channel mode prompt output collector", () => {
     expect(outputs.toolOutputs[1]?.text).toContain("missing file");
   });
 
+  test("given high-volume exec output, when collecting prompt outputs, then tool output uses distilled summary", async () => {
+    const noisyOutput = Array.from({ length: 220 }, (_value, index) =>
+      index % 29 === 0
+        ? `error at step ${index}: timeout while waiting for response`
+        : `line ${index}: working`,
+    ).join("\n");
+    const session = createSessionMock([
+      {
+        type: "tool_execution_end",
+        toolCallId: "tc-exec-noisy",
+        toolName: "exec",
+        result: noisyOutput,
+        isError: true,
+      } as AgentSessionEvent,
+    ]);
+
+    const outputs = await collectPromptTurnOutputs(
+      session as unknown as Parameters<typeof collectPromptTurnOutputs>[0],
+      "hello",
+    );
+
+    expect(outputs.toolOutputs).toHaveLength(1);
+    const text = outputs.toolOutputs[0]?.text ?? "";
+    expect(text).toContain("Tool exec (tc-exec-noisy) failed");
+    expect(text).toContain("[ExecDistilled]");
+    expect(text).toContain("status: failed");
+    expect(text.length).toBeLessThan(noisyOutput.length);
+  });
+
   test("given repeated tool_execution_end with same toolCallId, when collecting outputs, then duplicate tool output is removed", async () => {
     const repeatedEvent = {
       type: "tool_execution_end",

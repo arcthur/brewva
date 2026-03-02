@@ -9,6 +9,7 @@ import {
 } from "@brewva/brewva-runtime";
 import {
   createCostViewTool,
+  createOutputSearchTool,
   createRollbackLastPatchTool,
   createScheduleIntentTool,
   createSessionCompactTool,
@@ -265,6 +266,33 @@ describe("S-012 tape tools flow", () => {
     expect(handoffText.includes("Tape handoff recorded")).toBe(true);
     expect(runtime.events.query(sessionId, { type: "anchor" }).length).toBe(1);
 
+    runtime.events.record({
+      sessionId,
+      type: "tool_output_search",
+      payload: {
+        queryCount: 1,
+        resultCount: 2,
+        throttleLevel: "normal",
+        cacheHits: 3,
+        cacheMisses: 1,
+        blocked: false,
+        matchLayers: { q1: "exact" },
+      } as Record<string, unknown>,
+    });
+    runtime.events.record({
+      sessionId,
+      type: "tool_output_search",
+      payload: {
+        queryCount: 1,
+        resultCount: 0,
+        throttleLevel: "limited",
+        cacheHits: 1,
+        cacheMisses: 2,
+        blocked: false,
+        matchLayers: { q2: "none" },
+      } as Record<string, unknown>,
+    });
+
     const infoResult = await tapeInfo!.execute("tc-info", {}, undefined, undefined, {
       ...fakeContext(sessionId),
       getContextUsage: () => ({ tokens: 880, contextWindow: 1000, percent: 0.88 }),
@@ -273,6 +301,12 @@ describe("S-012 tape tools flow", () => {
     expect(infoText.includes("[TapeInfo]")).toBe(true);
     expect(infoText.includes("tape_pressure:")).toBe(true);
     expect(infoText.includes("context_pressure: high")).toBe(true);
+    expect(infoText.includes("output_search_recent_calls: 2")).toBe(true);
+    expect(infoText.includes("output_search_throttled_calls: 1")).toBe(true);
+    expect(infoText.includes("output_search_cache_hit_rate: 57.1%")).toBe(true);
+    expect(infoText.includes("output_search_match_layers: exact=1 partial=0 fuzzy=0 none=1")).toBe(
+      true,
+    );
   });
 
   test("tape_search returns matching entries in current phase", async () => {
@@ -312,6 +346,249 @@ describe("S-012 tape tools flow", () => {
     expect(text.includes("[TapeSearch]")).toBe(true);
     expect(text.includes("matches:")).toBe(true);
     expect(text.toLowerCase().includes("flaky")).toBe(true);
+  });
+});
+
+describe("S-012b output search tool flow", () => {
+  test("output_search finds snippets from persisted artifacts", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-output-search-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "s12-output-search";
+
+    const artifactRef = ".orchestrator/tool-output-artifacts/session-a/100-exec-call.txt";
+    const artifactDir = join(workspace, ".orchestrator/tool-output-artifacts/session-a");
+    mkdirSync(artifactDir, { recursive: true });
+    const artifactText = [
+      "build started",
+      "WARN network jitter detected",
+      "ERROR connection refused to postgres at 127.0.0.1:5432",
+      "retry 3/3 failed",
+    ].join("\n");
+    writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
+
+    runtime.events.record({
+      sessionId,
+      type: "tool_output_artifact_persisted",
+      payload: {
+        toolName: "exec",
+        artifactRef,
+        rawBytes: Buffer.byteLength(artifactText, "utf8"),
+      } as Record<string, unknown>,
+    });
+
+    const tool = createOutputSearchTool({ runtime });
+    const result = await tool.execute(
+      "tc-output-search",
+      {
+        query: "connection refused postgres",
+        limit: 1,
+      },
+      undefined,
+      undefined,
+      {
+        ...fakeContext(sessionId),
+        cwd: workspace,
+      },
+    );
+
+    const text = extractTextContent(result);
+    expect(text.includes("[OutputSearch]")).toBe(true);
+    expect(text.toLowerCase().includes("connection refused")).toBe(true);
+    expect(text.includes("tool=exec")).toBe(true);
+    expect(
+      text.includes("ref=.orchestrator/tool-output-artifacts/session-a/100-exec-call.txt"),
+    ).toBe(true);
+  });
+
+  test("output_search falls back to fuzzy matching for typo queries", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-output-search-fuzzy-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "s12-output-search-fuzzy";
+
+    const artifactRef = ".orchestrator/tool-output-artifacts/session-b/101-exec-call.txt";
+    const artifactDir = join(workspace, ".orchestrator/tool-output-artifacts/session-b");
+    mkdirSync(artifactDir, { recursive: true });
+    const artifactText = [
+      "pipeline bootstrap complete",
+      "authentication middleware initialized",
+      "token exchange validated",
+    ].join("\n");
+    writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
+
+    runtime.events.record({
+      sessionId,
+      type: "tool_output_artifact_persisted",
+      payload: {
+        toolName: "exec",
+        artifactRef,
+        rawBytes: Buffer.byteLength(artifactText, "utf8"),
+      } as Record<string, unknown>,
+    });
+
+    const tool = createOutputSearchTool({ runtime });
+    const result = await tool.execute(
+      "tc-output-search-fuzzy",
+      {
+        query: "authentcation",
+        limit: 2,
+      },
+      undefined,
+      undefined,
+      {
+        ...fakeContext(sessionId),
+        cwd: workspace,
+      },
+    );
+
+    const text = extractTextContent(result);
+    expect(text.includes("[OutputSearch]")).toBe(true);
+    expect(text.includes("Match layer: fuzzy")).toBe(true);
+    expect(text.toLowerCase().includes("authentication middleware")).toBe(true);
+  });
+
+  test("output_search throttles repeated single-query calls", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-output-search-throttle-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "s12-output-search-throttle";
+    const artifactDir = join(workspace, ".orchestrator/tool-output-artifacts/session-c");
+    mkdirSync(artifactDir, { recursive: true });
+
+    const artifacts = [
+      {
+        ref: ".orchestrator/tool-output-artifacts/session-c/201-exec-call.txt",
+        text: "ERROR timeout while connecting to gateway",
+      },
+      {
+        ref: ".orchestrator/tool-output-artifacts/session-c/202-exec-call.txt",
+        text: "timeout retry budget exhausted on upstream",
+      },
+    ];
+
+    for (const artifact of artifacts) {
+      writeFileSync(join(workspace, artifact.ref), artifact.text, "utf8");
+      runtime.events.record({
+        sessionId,
+        type: "tool_output_artifact_persisted",
+        payload: {
+          toolName: "exec",
+          artifactRef: artifact.ref,
+          rawBytes: Buffer.byteLength(artifact.text, "utf8"),
+        } as Record<string, unknown>,
+      });
+    }
+
+    const tool = createOutputSearchTool({ runtime });
+    for (let call = 0; call < 4; call += 1) {
+      const result = await tool.execute(
+        `tc-output-search-throttle-normal-${call}`,
+        { query: "timeout", limit: 2 },
+        undefined,
+        undefined,
+        { ...fakeContext(sessionId), cwd: workspace },
+      );
+      expect(extractTextContent(result).includes("Throttle: normal")).toBe(true);
+    }
+
+    const limited = await tool.execute(
+      "tc-output-search-throttle-limited",
+      { query: "timeout", limit: 2 },
+      undefined,
+      undefined,
+      { ...fakeContext(sessionId), cwd: workspace },
+    );
+    const limitedText = extractTextContent(limited);
+    expect(limitedText.includes("Throttle: limited")).toBe(true);
+    expect(limitedText.includes("Result limit: 1/2")).toBe(true);
+    expect(limitedText.includes("[Throttle]")).toBe(true);
+
+    for (let call = 0; call < 5; call += 1) {
+      await tool.execute(
+        `tc-output-search-throttle-more-${call}`,
+        { query: "timeout", limit: 2 },
+        undefined,
+        undefined,
+        { ...fakeContext(sessionId), cwd: workspace },
+      );
+    }
+
+    const blocked = await tool.execute(
+      "tc-output-search-throttle-blocked",
+      { query: "timeout", limit: 2 },
+      undefined,
+      undefined,
+      { ...fakeContext(sessionId), cwd: workspace },
+    );
+    const blockedText = extractTextContent(blocked);
+    expect(blockedText.includes("Blocked due to high-frequency single-query search calls.")).toBe(
+      true,
+    );
+  });
+
+  test("output_search reuses cache and invalidates on artifact change", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-output-search-cache-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "s12-output-search-cache";
+
+    const artifactRef = ".orchestrator/tool-output-artifacts/session-d/301-exec-call.txt";
+    const artifactDir = join(workspace, ".orchestrator/tool-output-artifacts/session-d");
+    mkdirSync(artifactDir, { recursive: true });
+
+    let artifactText = "cache marker alpha";
+    writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
+    runtime.events.record({
+      sessionId,
+      type: "tool_output_artifact_persisted",
+      payload: {
+        toolName: "exec",
+        artifactRef,
+        rawBytes: Buffer.byteLength(artifactText, "utf8"),
+      } as Record<string, unknown>,
+    });
+
+    const tool = createOutputSearchTool({ runtime });
+    const first = await tool.execute(
+      "tc-output-search-cache-first",
+      { query: "marker alpha", limit: 2 },
+      undefined,
+      undefined,
+      { ...fakeContext(sessionId), cwd: workspace },
+    );
+    const firstText = extractTextContent(first);
+    expect(firstText.includes("cache marker alpha")).toBe(true);
+    expect(firstText.includes("Cache hits/misses: 0/1")).toBe(true);
+
+    const second = await tool.execute(
+      "tc-output-search-cache-second",
+      { query: "marker alpha", limit: 2 },
+      undefined,
+      undefined,
+      { ...fakeContext(sessionId), cwd: workspace },
+    );
+    const secondText = extractTextContent(second);
+    expect(secondText.includes("Cache hits/misses: 1/0")).toBe(true);
+
+    artifactText = "cache marker beta with updated payload";
+    writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
+    runtime.events.record({
+      sessionId,
+      type: "tool_output_artifact_persisted",
+      payload: {
+        toolName: "exec",
+        artifactRef,
+        rawBytes: Buffer.byteLength(artifactText, "utf8"),
+      } as Record<string, unknown>,
+    });
+
+    const third = await tool.execute(
+      "tc-output-search-cache-third",
+      { query: "marker beta updated", limit: 2 },
+      undefined,
+      undefined,
+      { ...fakeContext(sessionId), cwd: workspace },
+    );
+    const thirdText = extractTextContent(third);
+    expect(thirdText.includes("cache marker beta with updated payload")).toBe(true);
+    expect(thirdText.includes("Cache hits/misses: 0/1")).toBe(true);
   });
 });
 

@@ -1,3 +1,4 @@
+import { resolveToolDisplayText } from "@brewva/brewva-extensions";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import type { GatewaySessionResult } from "./create-session.js";
 
@@ -58,37 +59,6 @@ function extractMessageText(message: unknown): string {
     }
   }
   return parts.join("");
-}
-
-function extractToolResultText(result: unknown): string {
-  if (typeof result === "string") {
-    return result.trim();
-  }
-  if (!result || typeof result !== "object") {
-    return "";
-  }
-
-  const content = (result as { content?: unknown }).content;
-  if (Array.isArray(content)) {
-    const texts: string[] = [];
-    for (const item of content) {
-      if (!item || typeof item !== "object") continue;
-      const text = (item as { text?: unknown }).text;
-      if (typeof text === "string" && text.trim()) {
-        texts.push(text.trim());
-      }
-    }
-    if (texts.length > 0) {
-      return texts.join("\n");
-    }
-  }
-
-  try {
-    const serialized = JSON.stringify(result);
-    return serialized && serialized !== "{}" ? serialized : "";
-  } catch {
-    return "";
-  }
 }
 
 function asToolExecutionEndEvent(event: AgentSessionEvent): {
@@ -212,7 +182,11 @@ export async function collectSessionPromptOutput(
 
     const toolUpdateEvent = asToolExecutionUpdateEvent(event);
     if (toolUpdateEvent) {
-      const streamedText = extractToolResultText(toolUpdateEvent.partialResult);
+      const streamedText = resolveToolDisplayText({
+        toolName: toolUpdateEvent.toolName,
+        isError: false,
+        result: toolUpdateEvent.partialResult,
+      });
       const previousText = latestToolStreamTextByCall.get(toolUpdateEvent.toolCallId);
       if (streamedText && streamedText !== previousText) {
         latestToolStreamTextByCall.set(toolUpdateEvent.toolCallId, streamedText);
@@ -236,7 +210,11 @@ export async function collectSessionPromptOutput(
         toolCallId: toolEvent.toolCallId,
         toolName: toolEvent.toolName,
         isError: toolEvent.isError,
-        text: extractToolResultText(toolEvent.result),
+        text: resolveToolDisplayText({
+          toolName: toolEvent.toolName,
+          isError: toolEvent.isError,
+          result: toolEvent.result,
+        }),
       });
       const finalText = toolOutputs[toolOutputs.length - 1]?.text;
       const previousText = latestToolStreamTextByCall.get(toolEvent.toolCallId);

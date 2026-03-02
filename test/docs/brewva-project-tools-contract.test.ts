@@ -9,6 +9,7 @@ const TOOL_SOURCE_FILES = [
   "ledger-query.ts",
   "look-at.ts",
   "lsp.ts",
+  "output-search.ts",
   "process.ts",
   "rollback-last-patch.ts",
   "schedule-intent.ts",

@@ -46,6 +46,17 @@ function createRuntimeFixture(
       observeUsage(sessionId: string, usage: unknown) {
         calls.observedContext.push({ sessionId, usage });
       },
+      getUsage() {
+        return { tokens: 320, contextWindow: 4096, percent: 0.078 };
+      },
+      getPressureStatus(_sessionId: string, usage?: { percent?: number }) {
+        return {
+          level: "low",
+          usageRatio: typeof usage?.percent === "number" ? usage.percent : 0.078,
+          hardLimitRatio: 0.98,
+          compactionThresholdRatio: 0.8,
+        };
+      },
       async buildInjection() {
         return {
           text: "",

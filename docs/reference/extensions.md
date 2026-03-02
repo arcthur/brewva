@@ -33,6 +33,12 @@ Implementation files:
 - `packages/brewva-extensions/src/notification.ts`
 - `packages/brewva-extensions/src/memory-bridge.ts`
 
+`registerLedgerWriter` additionally persists tool-output observability events:
+
+- `tool_output_observed`
+- `tool_output_artifact_persisted`
+- `tool_output_distilled`
+
 ## Runtime Integration Contract
 
 Extensions consume runtime domain APIs (for example `runtime.context.*`, `runtime.events.*`, `runtime.tools.*`) instead of legacy flat runtime methods.
@@ -59,6 +65,7 @@ Default semantic injection sources are:
 - `brewva.truth-facts`
 - `brewva.task-state`
 - `brewva.tool-failures`
+- `brewva.tool-outputs-distilled`
 - `brewva.memory-working`
 - `brewva.memory-recall`
 

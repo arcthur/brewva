@@ -33,6 +33,9 @@ Audit level keeps replay/audit-critical events only:
 - `task_event`
 - `truth_event`
 - `tool_result_recorded`
+- `tool_output_observed`
+- `tool_output_distilled`
+- `tool_output_artifact_persisted`
 - `verification_outcome_recorded`
 - `verification_state_reset`
 - `schedule_intent`
@@ -57,6 +60,7 @@ Common operational events include:
 - `turn_wal_status_changed`
 - `turn_wal_recovery_completed`
 - `turn_wal_compacted`
+- `tool_output_search`
 
 ### `debug`
 
@@ -107,6 +111,10 @@ This list is intentionally non-exhaustive. Unknown event types/fields should be 
 
 - `tool_call`
 - `tool_result_recorded`
+- `tool_output_observed`
+- `tool_output_distilled`
+- `tool_output_artifact_persisted`
+- `tool_output_search` (ops/debug; excluded from audit)
 - `tool_parallel_read`
 - `ledger_compacted`
 - `exec_routed`
@@ -115,6 +123,10 @@ This list is intentionally non-exhaustive. Unknown event types/fields should be 
 - `exec_sandbox_error`
 
 `tool_result` itself is treated as an SDK hook boundary. Persisted semantic result records are emitted as `tool_result_recorded`.
+
+`tool_output_search` events are emitted by `output_search` to record throttling state,
+cache behavior, and result counts. These events are intentionally operational (non-audit)
+to avoid polluting audit-level streams with high-frequency search telemetry.
 
 ### Skill Routing
 

@@ -6,6 +6,7 @@ export const CONTEXT_SOURCES = {
   skillDispatchGate: "brewva.skill-dispatch-gate",
   taskState: "brewva.task-state",
   toolFailures: "brewva.tool-failures",
+  toolOutputsDistilled: "brewva.tool-outputs-distilled",
   memoryWorking: "brewva.memory-working",
   memoryRecall: "brewva.memory-recall",
   ragExternal: "brewva.rag-external",

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -178,14 +178,77 @@ describe("Extension integration: observability", () => {
       ctx,
     );
 
+    const observed = runtime.events.query(sessionId, { type: "tool_output_observed", last: 1 })[0];
+    expect(observed).toBeDefined();
+    const observedPayload = observed?.payload as
+      | {
+          toolCallId?: string;
+          toolName?: string;
+          rawChars?: number;
+          rawBytes?: number;
+          rawTokens?: number;
+          contextPressure?: string;
+          artifactRef?: string | null;
+        }
+      | undefined;
+    expect(observedPayload?.toolCallId).toBe(toolCallId);
+    expect(observedPayload?.toolName).toBe("edit");
+    expect(observedPayload?.rawChars).toBeGreaterThan(0);
+    expect(observedPayload?.rawBytes).toBeGreaterThan(0);
+    expect(observedPayload?.rawTokens).toBeGreaterThan(0);
+    expect(typeof observedPayload?.contextPressure).toBe("string");
+    expect(typeof observedPayload?.artifactRef).toBe("string");
+
+    const artifactPersisted = runtime.events.query(sessionId, {
+      type: "tool_output_artifact_persisted",
+      last: 1,
+    })[0];
+    expect(artifactPersisted).toBeDefined();
+    const artifactPersistedPayload = artifactPersisted?.payload as
+      | {
+          artifactRef?: string;
+        }
+      | undefined;
+    expect(typeof artifactPersistedPayload?.artifactRef).toBe("string");
+    const artifactRef = artifactPersistedPayload?.artifactRef ?? "";
+    const artifactPath = join(workspace, artifactRef);
+    expect(existsSync(artifactPath)).toBe(true);
+    expect(readFileSync(artifactPath, "utf8")).toContain("edited");
+
     const ledgerRows = runtime.ledger.list(sessionId);
     expect(ledgerRows).toHaveLength(1);
     expect(ledgerRows[0]?.tool).toBe("edit");
 
     const recorded = runtime.events.query(sessionId, { type: "tool_result_recorded", last: 1 })[0];
     expect(recorded).toBeDefined();
-    const payload = recorded?.payload as { ledgerId?: string } | undefined;
+    const payload = recorded?.payload as
+      | {
+          ledgerId?: string;
+          outputObservation?: {
+            rawChars?: number;
+            rawBytes?: number;
+            rawTokens?: number;
+            artifactRef?: string | null;
+          };
+          outputArtifact?: {
+            artifactRef?: string;
+            rawChars?: number;
+            rawBytes?: number;
+            sha256?: string;
+          } | null;
+          outputDistillation?: {
+            strategy?: string;
+            summaryTokens?: number;
+          } | null;
+        }
+      | undefined;
     expect(payload?.ledgerId).toBe(ledgerRows[0]?.id);
+    expect(payload?.outputObservation?.rawChars).toBeGreaterThan(0);
+    expect(payload?.outputObservation?.rawBytes).toBeGreaterThan(0);
+    expect(payload?.outputObservation?.rawTokens).toBeGreaterThan(0);
+    expect(typeof payload?.outputObservation?.artifactRef).toBe("string");
+    expect(typeof payload?.outputArtifact?.artifactRef).toBe("string");
+    expect(payload?.outputDistillation).toBeNull();
     expect(runtime.events.query(sessionId, { type: "tool_result", last: 1 })).toHaveLength(0);
 
     const snapshot = runtime.events.query(sessionId, {
@@ -206,6 +269,103 @@ describe("Extension integration: observability", () => {
     const reloaded = new BrewvaRuntime({ cwd: workspace });
     expect(reloaded.events.query(sessionId).length).toBeGreaterThan(0);
     expect(reloaded.ledger.list(sessionId)).toHaveLength(1);
+  });
+
+  test("given high-volume exec tool output, when ledger writer handles tool_result, then distilled event and metadata are recorded", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-distill-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "ext-distill-1";
+
+    const { api, handlers } = createMockExtensionAPI();
+    registerEventStream(api, runtime);
+    registerLedgerWriter(api, runtime);
+
+    const ctx = {
+      cwd: workspace,
+      sessionManager: {
+        getSessionId: () => sessionId,
+      },
+    };
+
+    const noisyOutput = Array.from({ length: 180 }, (_value, index) =>
+      index % 17 === 0
+        ? `error at step ${index}: timeout while waiting for response`
+        : `line ${index}: working`,
+    ).join("\n");
+
+    invokeHandlers(
+      handlers,
+      "tool_result",
+      {
+        toolCallId: "tc-exec-distill",
+        toolName: "exec",
+        input: { command: "echo test" },
+        isError: true,
+        content: [{ type: "text", text: noisyOutput }],
+        details: { durationMs: 12 },
+      },
+      ctx,
+    );
+
+    const distilled = runtime.events.query(sessionId, {
+      type: "tool_output_distilled",
+      last: 1,
+    })[0];
+    expect(distilled).toBeDefined();
+    const distilledPayload = distilled?.payload as
+      | {
+          strategy?: string;
+          rawTokens?: number;
+          summaryTokens?: number;
+          compressionRatio?: number;
+          summaryText?: string;
+          artifactRef?: string | null;
+        }
+      | undefined;
+    expect(distilledPayload?.strategy).toBe("exec_heuristic");
+    expect((distilledPayload?.rawTokens ?? 0) > (distilledPayload?.summaryTokens ?? 0)).toBe(true);
+    expect((distilledPayload?.compressionRatio ?? 1) < 1).toBe(true);
+    expect((distilledPayload?.summaryText ?? "").includes("[ExecDistilled]")).toBe(true);
+    expect(typeof distilledPayload?.artifactRef).toBe("string");
+
+    const artifactPersisted = runtime.events.query(sessionId, {
+      type: "tool_output_artifact_persisted",
+      last: 1,
+    })[0];
+    expect(artifactPersisted).toBeDefined();
+    const artifactPayload = artifactPersisted?.payload as
+      | {
+          artifactRef?: string;
+        }
+      | undefined;
+    expect(typeof artifactPayload?.artifactRef).toBe("string");
+    const artifactRef = artifactPayload?.artifactRef ?? "";
+    const artifactPath = join(workspace, artifactRef);
+    expect(existsSync(artifactPath)).toBe(true);
+    expect(readFileSync(artifactPath, "utf8")).toContain("error at step");
+
+    const recorded = runtime.events.query(sessionId, { type: "tool_result_recorded", last: 1 })[0];
+    const recordedPayload = recorded?.payload as
+      | {
+          outputArtifact?: {
+            artifactRef?: string;
+            rawBytes?: number;
+          } | null;
+          outputDistillation?: {
+            strategy?: string;
+            rawTokens?: number;
+            summaryTokens?: number;
+            artifactRef?: string | null;
+          } | null;
+        }
+      | undefined;
+    expect(recordedPayload?.outputDistillation?.strategy).toBe("exec_heuristic");
+    expect(typeof recordedPayload?.outputDistillation?.artifactRef).toBe("string");
+    expect(typeof recordedPayload?.outputArtifact?.artifactRef).toBe("string");
+    expect(
+      (recordedPayload?.outputDistillation?.rawTokens ?? 0) >
+        (recordedPayload?.outputDistillation?.summaryTokens ?? 0),
+    ).toBe(true);
   });
 
   test("given session_shutdown event, when observability handler runs, then in-memory runtime session state is cleared", () => {

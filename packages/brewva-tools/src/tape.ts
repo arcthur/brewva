@@ -71,6 +71,33 @@ function formatTapeInfoBlock(input: {
     `context_hard_limit: ${formatPercent(input.pressure.hardLimitRatio)}`,
     `required_action: ${resolveContextAction(input.pressure.level)}`,
   ];
+
+  const outputSearch = input.tape.outputSearch;
+  if (outputSearch) {
+    lines.push(
+      `output_search_recent_calls: ${outputSearch.recentCalls}`,
+      `output_search_single_calls: ${outputSearch.singleQueryCalls}`,
+      `output_search_batched_calls: ${outputSearch.batchedCalls}`,
+      `output_search_throttled_calls: ${outputSearch.throttledCalls}`,
+      `output_search_blocked_calls: ${outputSearch.blockedCalls}`,
+      `output_search_last_throttle: ${outputSearch.lastThrottleLevel}`,
+      `output_search_total_queries: ${outputSearch.totalQueries}`,
+      `output_search_total_results: ${outputSearch.totalResults}`,
+      `output_search_avg_results_per_query: ${
+        outputSearch.averageResultsPerQuery === null
+          ? "unknown"
+          : outputSearch.averageResultsPerQuery.toFixed(2)
+      }`,
+      `output_search_cache_hit_rate: ${formatPercent(outputSearch.cacheHitRate)}`,
+      `output_search_match_layers: exact=${outputSearch.matchLayers.exact} partial=${outputSearch.matchLayers.partial} fuzzy=${outputSearch.matchLayers.fuzzy} none=${outputSearch.matchLayers.none}`,
+      `output_search_last_at: ${
+        typeof outputSearch.lastTimestamp === "number"
+          ? formatISO(outputSearch.lastTimestamp)
+          : "none"
+      }`,
+    );
+  }
+
   return lines.join("\n");
 }
 
