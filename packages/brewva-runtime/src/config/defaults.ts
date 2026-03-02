@@ -11,12 +11,6 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     overrides: {},
     selector: {
       k: 4,
-      semanticFallback: {
-        enabled: true,
-        lexicalBypassScore: 8,
-        minSimilarity: 0.22,
-        embeddingDimensions: 384,
-      },
     },
   },
   verification: {

@@ -13,6 +13,8 @@ import { buildRecentToolFailuresBlock, type ToolFailureEntry } from "./tool-fail
 import { buildTruthFactsBlock } from "./truth-facts.js";
 import { buildTruthLedgerBlock } from "./truth.js";
 
+const MIN_SKILL_CANDIDATE_INJECTION_CONFIDENCE = 0.55;
+
 export interface BuildContextInjectionInput {
   sessionId: string;
   prompt: string;
@@ -118,7 +120,10 @@ export function buildContextInjection(
     turn: currentTurn,
   });
   const selectedSkills = dispatchDecision.selected;
-  if (selectedSkills.length > 0) {
+  if (
+    selectedSkills.length > 0 &&
+    dispatchDecision.confidence >= MIN_SKILL_CANDIDATE_INJECTION_CONFIDENCE
+  ) {
     deps.registerContextInjection(input.sessionId, {
       source: CONTEXT_SOURCES.skillCandidates,
       id: "top-k-skills",

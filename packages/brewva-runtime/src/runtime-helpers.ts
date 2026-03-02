@@ -46,7 +46,12 @@ export function inferEventCategory(type: string): BrewvaEventCategory {
 export function buildSkillCandidateBlock(selected: SkillSelection[]): string {
   const skillLines =
     selected.length > 0
-      ? selected.map((entry) => `- ${entry.name} (score=${entry.score}, reason=${entry.reason})`)
+      ? selected.map((entry) => {
+          const breakdown = entry.breakdown
+            .map((item) => `${item.signal}:${item.term}(${item.delta})`)
+            .join("|");
+          return `- ${entry.name} (score=${entry.score}, reason=${entry.reason}, breakdown=${breakdown})`;
+        })
       : ["- (none)"];
   return ["[Brewva Context]", "Top-K Skill Candidates:", ...skillLines].join("\n");
 }

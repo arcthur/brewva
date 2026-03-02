@@ -312,12 +312,6 @@ describe("Brewva config loader normalization", () => {
         disabled: ["  review  ", "", null],
         selector: {
           k: 0,
-          semanticFallback: {
-            enabled: "yes",
-            lexicalBypassScore: -5,
-            minSimilarity: 2,
-            embeddingDimensions: 12,
-          },
         },
       },
     };
@@ -332,12 +326,6 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.skills.packs).toEqual(["typescript"]);
     expect(loaded.skills.disabled).toEqual(["review"]);
     expect(loaded.skills.selector.k).toBe(DEFAULT_BREWVA_CONFIG.skills.selector.k);
-    expect(loaded.skills.selector.semanticFallback.enabled).toBe(
-      DEFAULT_BREWVA_CONFIG.skills.selector.semanticFallback.enabled,
-    );
-    expect(loaded.skills.selector.semanticFallback.lexicalBypassScore).toBe(0);
-    expect(loaded.skills.selector.semanticFallback.minSimilarity).toBe(1);
-    expect(loaded.skills.selector.semanticFallback.embeddingDimensions).toBe(64);
   });
 
   test("given ui startup overrides in config, when loading config, then startup settings are applied", () => {

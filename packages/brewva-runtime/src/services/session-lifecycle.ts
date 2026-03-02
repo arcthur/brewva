@@ -9,11 +9,19 @@ import type { ParallelResultStore } from "../parallel/results.js";
 import type { FileChangeTracker } from "../state/file-change-tracker.js";
 import { TAPE_CHECKPOINT_EVENT_TYPE, coerceTapeCheckpointPayload } from "../tape/events.js";
 import type { TurnReplayEngine } from "../tape/replay-engine.js";
-import type { BrewvaEventRecord, SkillDispatchDecision } from "../types.js";
+import type {
+  BrewvaEventRecord,
+  SkillDispatchDecision,
+  SkillSelectionBreakdownEntry,
+  SkillSelectionSignal,
+} from "../types.js";
+import { SKILL_SELECTION_SIGNALS as SKILL_SELECTION_SIGNALS_LIST } from "../types.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import type { VerificationGate } from "../verification/gate.js";
 import type { RuntimeCallback } from "./callback.js";
 import { RuntimeSessionStateStore } from "./session-state.js";
+
+const SKILL_SELECTION_SIGNALS = new Set<SkillSelectionSignal>(SKILL_SELECTION_SIGNALS_LIST);
 
 export interface SessionLifecycleServiceOptions {
   sessionState: RuntimeSessionStateStore;
@@ -338,6 +346,30 @@ export class SessionLifecycleService {
     return normalized || null;
   }
 
+  private readSelectionBreakdown(value: unknown): SkillSelectionBreakdownEntry[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value
+      .filter(
+        (entry): entry is Record<string, unknown> =>
+          typeof entry === "object" && entry !== null && !Array.isArray(entry),
+      )
+      .map((entry) => {
+        const signal =
+          typeof entry.signal === "string" &&
+          SKILL_SELECTION_SIGNALS.has(entry.signal as SkillSelectionSignal)
+            ? (entry.signal as SkillSelectionSignal)
+            : null;
+        const term =
+          typeof entry.term === "string" && entry.term.trim().length > 0 ? entry.term.trim() : "";
+        const delta = this.readFiniteNumber(entry.delta) ?? 0;
+        if (!signal || !term || delta === 0) return null;
+        return { signal, term, delta };
+      })
+      .filter((entry): entry is SkillSelectionBreakdownEntry => entry !== null);
+  }
+
   private readPendingDispatch(
     payload: Record<string, unknown> | null,
     eventTurn: number | undefined,
@@ -365,6 +397,7 @@ export class SessionLifecycleService {
       typeof primaryPayload?.reason === "string" && primaryPayload.reason.trim().length > 0
         ? primaryPayload.reason.trim()
         : "unknown";
+    const primaryBreakdown = this.readSelectionBreakdown(primaryPayload?.breakdown);
 
     const selectedPayload = Array.isArray(payload.selected) ? payload.selected : [];
     const selected = selectedPayload
@@ -381,14 +414,25 @@ export class SessionLifecycleService {
           typeof entry.reason === "string" && entry.reason.trim().length > 0
             ? entry.reason.trim()
             : "unknown";
-        return { name, score, reason };
+        const breakdown = this.readSelectionBreakdown(entry.breakdown);
+        return { name, score, reason, breakdown };
       })
-      .filter((entry): entry is { name: string; score: number; reason: string } => entry !== null);
+      .filter(
+        (
+          entry,
+        ): entry is {
+          name: string;
+          score: number;
+          reason: string;
+          breakdown: SkillSelectionBreakdownEntry[];
+        } => entry !== null,
+      );
     if (selected.length === 0) {
       selected.push({
         name: primaryName,
         score: primaryScore,
         reason: primaryReason,
+        breakdown: primaryBreakdown,
       });
     }
 
@@ -427,6 +471,7 @@ export class SessionLifecycleService {
         name: primaryName,
         score: primaryScore,
         reason: primaryReason,
+        breakdown: primaryBreakdown,
       },
       selected,
       chain: chain.length > 0 ? chain : [primaryName],
@@ -545,6 +590,11 @@ export class SessionLifecycleService {
   private readNonNegativeNumber(value: unknown): number | null {
     if (typeof value !== "number" || !Number.isFinite(value)) return null;
     return Math.max(0, value);
+  }
+
+  private readFiniteNumber(value: unknown): number | null {
+    if (typeof value !== "number" || !Number.isFinite(value)) return null;
+    return value;
   }
 
   private readUnitIntervalNumber(value: unknown): number | null {

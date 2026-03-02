@@ -87,18 +87,36 @@ export interface SkillSelection {
   name: string;
   score: number;
   reason: string;
-}
-
-export interface SkillSelectorSemanticFallbackConfig {
-  enabled: boolean;
-  lexicalBypassScore: number;
-  minSimilarity: number;
-  embeddingDimensions: number;
+  breakdown: SkillSelectionBreakdownEntry[];
 }
 
 export interface SkillSelectorConfig {
   k: number;
-  semanticFallback: SkillSelectorSemanticFallbackConfig;
+}
+
+export type SkillSelectionSignal =
+  | "name_match"
+  | "intent_match"
+  | "intent_body_match"
+  | "phrase_match"
+  | "tag_match"
+  | "anti_tag_penalty"
+  | "cost_adjustment";
+
+export const SKILL_SELECTION_SIGNALS: SkillSelectionSignal[] = [
+  "name_match",
+  "intent_match",
+  "intent_body_match",
+  "phrase_match",
+  "tag_match",
+  "anti_tag_penalty",
+  "cost_adjustment",
+];
+
+export interface SkillSelectionBreakdownEntry {
+  signal: SkillSelectionSignal;
+  term: string;
+  delta: number;
 }
 
 export type SkillDispatchDecisionMode = "none" | SkillDispatchMode;

@@ -14,11 +14,11 @@ Skill frontmatter supports dispatch-focused metadata:
 - `dispatch.gate_threshold/auto_threshold/default_mode` for routing policy
 - `outputs/consumes/composable_with` for deterministic chain planning
 
-Selector execution is two-stage:
+Selector execution is deterministic and lexical-first:
 
-1. deterministic lexical scoring (`intents/topics/phrases` + legacy fallback)
-2. semantic fallback (`feature-hashing bag-of-words + cosine`) when lexical top score is below `skills.selector.semanticFallback.lexicalBypassScore`
-3. lightweight token alias expansion is applied inside semantic text projection (for example `review/audit`, `ready/release/ship`) to reduce brittle phrase dependence while staying zero-dependency
+1. hard negative filtering (`triggers.negatives` with scope-aware intent/topic matching)
+2. lexical scoring (`name/intents/intent-body/phrases/tags`) with structured score breakdown (`anti-tag` penalty + `costHint` adjustment included)
+3. lightweight token alias expansion is applied inside lexical matching (for example `review/audit`, `ready/release/ship`) to reduce brittle phrase dependence while staying zero-dependency
 
 `skills_index.json` now carries the normalized `outputs`, `triggers`, and `dispatch` fields for each skill entry.
 

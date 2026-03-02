@@ -87,16 +87,11 @@ describe("S-001 selector inject top-k and anti-tags", () => {
         }),
       ],
       3,
-      {
-        semanticFallback: {
-          enabled: false,
-        },
-      },
     );
     expect(selected).toEqual([]);
   });
 
-  test("falls back to legacy matching when triggers are omitted", () => {
+  test("falls back to tag matching when triggers are omitted", () => {
     const selected = selectTopKSkills(
       "Review architecture quality risks",
       [
@@ -109,99 +104,174 @@ describe("S-001 selector inject top-k and anti-tags", () => {
       1,
     );
     expect(selected[0]?.name).toBe("review-lite");
+    expect(selected[0]?.reason).toContain("tag_match");
   });
 
-  test("uses semantic fallback when lexical score is below bypass threshold", () => {
+  test("expands intent aliases in lexical stage", () => {
     const selected = selectTopKSkills(
-      "Is this ready to ship?",
+      "Please audit this change",
       [
         createIndexEntry({
-          name: "review",
-          description: "Pre-merge risk checks and merge safety assessment for release decisions",
-          tags: ["quality", "risk", "merge-safety"],
-          triggers: emptyTriggers(),
-        }),
-        createIndexEntry({
-          name: "patching",
-          description: "Apply code edits and implement requested fixes",
-          tags: ["implementation"],
-          triggers: emptyTriggers(),
-        }),
-      ],
-      2,
-      {
-        semanticFallback: {
-          enabled: true,
-          lexicalBypassScore: 8,
-          minSimilarity: 0.2,
-          embeddingDimensions: 384,
-        },
-      },
-    );
-
-    expect(selected[0]?.name).toBe("review");
-    expect(selected[0]?.reason.startsWith("semantic:")).toBe(true);
-  });
-
-  test("skips semantic fallback when lexical top score already passes bypass threshold", () => {
-    const selected = selectTopKSkills(
-      "Review this diff thoroughly.",
-      [
-        createIndexEntry({
-          name: "review",
-          description: "Pre-merge risk checks and quality audits",
-          tags: ["review", "risk"],
+          name: "review-lite",
+          tags: [],
           triggers: {
             ...emptyTriggers(),
             intents: ["review"],
           },
         }),
-        createIndexEntry({
-          name: "ship-readiness",
-          description: "Release readiness checklist for production shipping",
-          tags: [],
-          triggers: emptyTriggers(),
-        }),
       ],
-      3,
-      {
-        semanticFallback: {
-          enabled: true,
-          lexicalBypassScore: 8,
-          minSimilarity: 0,
-          embeddingDimensions: 384,
-        },
-      },
+      1,
     );
 
-    expect(selected.some((entry) => entry.name === "ship-readiness")).toBe(false);
+    expect(selected[0]?.name).toBe("review-lite");
+    expect(selected[0]?.reason).toContain("intent_match:audit");
   });
 
-  test("respects negative intent rules for semantic fallback candidates", () => {
+  test("does not treat intent alias as name match", () => {
     const selected = selectTopKSkills(
-      "Please implement this. Is this ready to ship?",
+      "Please audit this change",
       [
         createIndexEntry({
           name: "review",
-          description: "Pre-merge risk checks and merge safety assessment for release decisions",
+          tags: [],
+          triggers: {
+            ...emptyTriggers(),
+            intents: ["review"],
+          },
+        }),
+      ],
+      1,
+    );
+
+    expect(selected[0]?.reason).not.toContain("name_match:audit");
+    expect(selected[0]?.reason).toContain("intent_match:audit");
+  });
+
+  test("accumulates multiple matched tags with cap for better ranking separation", () => {
+    const selected = selectTopKSkills(
+      "typescript runtime security",
+      [
+        createIndexEntry({
+          name: "alpha",
+          tags: ["typescript", "runtime", "security"],
+          triggers: emptyTriggers(),
+        }),
+        createIndexEntry({
+          name: "beta",
+          tags: ["typescript"],
+          triggers: emptyTriggers(),
+        }),
+      ],
+      2,
+    );
+
+    expect(selected[0]?.name).toBe("alpha");
+    expect(selected[0]?.score).toBeGreaterThan(selected[1]?.score ?? 0);
+    expect(selected[0]?.breakdown.filter((entry) => entry.signal === "tag_match")).toHaveLength(3);
+  });
+
+  test("matches intent terms that appear in body with reduced weight", () => {
+    const selected = selectTopKSkills(
+      "Context about project. Please review this.",
+      [
+        createIndexEntry({
+          name: "quality-check",
+          tags: [],
+          triggers: {
+            ...emptyTriggers(),
+            intents: ["review"],
+          },
+        }),
+      ],
+      1,
+    );
+
+    expect(selected[0]?.name).toBe("quality-check");
+    expect(selected[0]?.reason).toContain("intent_body_match:review");
+  });
+
+  test("filters by negative intent rules before scoring", () => {
+    const selected = selectTopKSkills(
+      "Please implement this review",
+      [
+        createIndexEntry({
+          name: "review",
           tags: ["quality", "risk"],
           triggers: {
             ...emptyTriggers(),
+            intents: ["review"],
             negatives: [{ scope: "intent", terms: ["implement"] }],
           },
         }),
       ],
       1,
-      {
-        semanticFallback: {
-          enabled: true,
-          lexicalBypassScore: 8,
-          minSimilarity: 0.2,
-          embeddingDimensions: 384,
-        },
-      },
     );
 
     expect(selected).toEqual([]);
+  });
+
+  test("returns no skill for unrelated chatter without lexical signal", () => {
+    const selected = selectTopKSkills(
+      "camera mountain island concert festival school rain river recipe dog hotel cat school",
+      [
+        createIndexEntry({
+          name: "review",
+          tags: ["quality", "risk"],
+          triggers: {
+            ...emptyTriggers(),
+            intents: ["review"],
+            phrases: ["code review"],
+          },
+        }),
+      ],
+      2,
+    );
+
+    expect(selected).toEqual([]);
+  });
+
+  test("applies anti-tag as penalty instead of hard filtering", () => {
+    const selected = selectTopKSkills(
+      "review and implement this",
+      [
+        createIndexEntry({
+          name: "review",
+          tags: [],
+          antiTags: ["implement"],
+          triggers: {
+            ...emptyTriggers(),
+            intents: ["review"],
+          },
+        }),
+      ],
+      1,
+    );
+
+    expect(selected[0]?.name).toBe("review");
+    expect(selected[0]?.breakdown.some((entry) => entry.signal === "anti_tag_penalty")).toBe(true);
+    expect(selected[0]?.score).toBe(15);
+  });
+
+  test("emits structured score breakdown for matched skills", () => {
+    const selected = selectTopKSkills(
+      "review this patch with code review checklist",
+      [
+        createIndexEntry({
+          name: "review",
+          tags: ["quality"],
+          triggers: {
+            ...emptyTriggers(),
+            intents: ["review"],
+            phrases: ["code review"],
+          },
+        }),
+      ],
+      1,
+    );
+
+    expect(selected).toHaveLength(1);
+    expect(selected[0]?.breakdown.length).toBeGreaterThan(0);
+    expect(selected[0]?.breakdown.some((entry) => entry.signal === "name_match")).toBe(true);
+    expect(selected[0]?.breakdown.some((entry) => entry.signal === "intent_match")).toBe(true);
   });
 });

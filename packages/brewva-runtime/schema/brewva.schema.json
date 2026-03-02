@@ -451,9 +451,6 @@
               "properties": {
                 "k": {
                   "type": "number"
-                },
-                "semanticFallback": {
-                  "$ref": "#/definitions/SkillSelectorSemanticFallbackConfig"
                 }
               }
             }
@@ -647,25 +644,6 @@
         }
       },
       "required": ["gateThreshold", "autoThreshold", "defaultMode"]
-    },
-    "SkillSelectorSemanticFallbackConfig": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "embeddingDimensions": {
-          "type": "number"
-        },
-        "enabled": {
-          "type": "boolean"
-        },
-        "lexicalBypassScore": {
-          "type": "number"
-        },
-        "minSimilarity": {
-          "type": "number"
-        }
-      },
-      "required": ["enabled", "lexicalBypassScore", "minSimilarity", "embeddingDimensions"]
     },
     "SkillTier": {
       "type": "string",

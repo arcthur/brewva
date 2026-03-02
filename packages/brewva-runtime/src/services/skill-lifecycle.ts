@@ -327,6 +327,7 @@ export class SkillLifecycleService {
             name: decision.primary.name,
             score: decision.primary.score,
             reason: decision.primary.reason,
+            breakdown: decision.primary.breakdown,
           }
         : null,
       selectedCount: decision.selected.length,
@@ -334,6 +335,7 @@ export class SkillLifecycleService {
         name: entry.name,
         score: entry.score,
         reason: entry.reason,
+        breakdown: entry.breakdown,
       })),
       chain: decision.chain,
       unresolvedConsumes: decision.unresolvedConsumes,

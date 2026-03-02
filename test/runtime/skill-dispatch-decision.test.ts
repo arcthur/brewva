@@ -24,7 +24,7 @@ function createEntry(
 describe("skill dispatch decision", () => {
   test("falls back to default dispatch thresholds when dispatch metadata is absent", () => {
     const decision = resolveSkillDispatchDecision({
-      selected: [{ name: "review", score: 12, reason: "topic:review" }],
+      selected: [{ name: "review", score: 12, reason: "intent_match:review", breakdown: [] }],
       index: [createEntry({ name: "review" })],
       turn: 5,
     });
@@ -35,7 +35,7 @@ describe("skill dispatch decision", () => {
 
   test("normalizes malformed dispatch metadata from external index entries", () => {
     const decision = resolveSkillDispatchDecision({
-      selected: [{ name: "review", score: 0, reason: "none" }],
+      selected: [{ name: "review", score: 0, reason: "none", breakdown: [] }],
       index: [
         createEntry({
           name: "review",

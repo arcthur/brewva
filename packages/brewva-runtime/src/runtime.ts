@@ -1046,9 +1046,7 @@ export class BrewvaRuntime {
 
   private selectSkills(message: string): SkillSelection[] {
     const input = this.config.security.sanitizeContext ? sanitizeContextText(message) : message;
-    return selectTopKSkills(input, this.skillRegistry.buildIndex(), this.config.skills.selector.k, {
-      semanticFallback: this.config.skills.selector.semanticFallback,
-    });
+    return selectTopKSkills(input, this.skillRegistry.buildIndex(), this.config.skills.selector.k);
   }
 
   private prepareSkillDispatch(input: {

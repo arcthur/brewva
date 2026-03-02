@@ -35,10 +35,6 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 - `skills.disabled`: `[]`
 - `skills.overrides`: `{}`
 - `skills.selector.k`: `4`
-- `skills.selector.semanticFallback.enabled`: `true`
-- `skills.selector.semanticFallback.lexicalBypassScore`: `8`
-- `skills.selector.semanticFallback.minSimilarity`: `0.22`
-- `skills.selector.semanticFallback.embeddingDimensions`: `384`
 
 ### `verification`
 
@@ -256,9 +252,6 @@ Normalization details from `normalizeBrewvaConfig(...)`:
 - `memory.retrievalWeights` are normalized to sum to `1` when total weight is positive; otherwise defaults are used.
 - `memory.recallMode` is normalized to `primary | fallback` (invalid values fall back to defaults).
 - `memory.externalRecall.*` is normalized to bounded numeric/boolean defaults.
-- `skills.selector.semanticFallback.lexicalBypassScore` is normalized to a non-negative number.
-- `skills.selector.semanticFallback.minSimilarity` is clamped to `[0, 1]`.
-- `skills.selector.semanticFallback.embeddingDimensions` is normalized to an integer floor with minimum `64`.
 - Compaction cooldown settings are clamped to safe numeric ranges.
 - Most numeric fields are floor-normalized to positive/non-negative integers (invalid values fall back to defaults).
 

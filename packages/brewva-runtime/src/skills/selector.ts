@@ -1,11 +1,10 @@
 import type {
   SkillSelection,
-  SkillSelectorSemanticFallbackConfig,
+  SkillSelectionBreakdownEntry,
   SkillTriggerNegativeRule,
   SkillTriggerPolicy,
   SkillsIndexEntry,
 } from "../types.js";
-import { buildHashedBagOfWordsEmbedding, cosineSimilaritySparse } from "../utils/lexical-vector.js";
 
 const WORD_RE = /[\p{L}\p{N}_-]+/gu;
 const TERM_CHAR_RE = /[\p{L}\p{N}_-]/u;
@@ -21,53 +20,15 @@ const IMPERATIVE_PREFIXES = [
   "i'd like to",
 ];
 
-const STOP_WORDS = new Set([
-  "a",
-  "an",
-  "and",
-  "are",
-  "as",
-  "at",
-  "be",
-  "by",
-  "do",
-  "for",
-  "from",
-  "has",
-  "have",
-  "in",
-  "is",
-  "it",
-  "of",
-  "on",
-  "or",
-  "that",
-  "the",
-  "this",
-  "to",
-  "use",
-  "when",
-  "with",
-]);
-
+const NAME_MATCH_SCORE = 10;
 const INTENT_MATCH_SCORE = 8;
 const INTENT_BODY_MATCH_SCORE = 4;
-const TOPIC_MATCH_SCORE = 3;
-const PHRASE_MATCH_SCORE = 6;
-const NAME_MATCH_SCORE = 7;
-const TAG_MATCH_SCORE = 4;
-const DESCRIPTION_MATCH_SCORE = 1;
+const PHRASE_MATCH_SCORE = 7;
+const TAG_MATCH_SCORE = 3;
 const ANTI_TAG_PENALTY = 3;
-const INTENT_NEGATIVE_PENALTY = 5;
-const TOPIC_NEGATIVE_PENALTY = 2;
-const MAX_DESCRIPTION_MATCHES = 3;
-const DEFAULT_SEMANTIC_FALLBACK: SkillSelectorSemanticFallbackConfig = {
-  enabled: true,
-  lexicalBypassScore: 8,
-  minSimilarity: 0.22,
-  embeddingDimensions: 384,
-};
-const SEMANTIC_TOKEN_ALIASES: Record<string, string[]> = {
+const MAX_TAG_MATCHES = 3;
+
+const TOKEN_ALIASES: Record<string, string[]> = {
   review: ["audit", "assess", "evaluate", "quality", "risk", "safety", "readiness"],
   audit: ["review", "assess", "evaluate", "quality", "risk", "safety"],
   assess: ["review", "audit", "evaluate", "quality", "risk"],
@@ -81,6 +42,7 @@ const SEMANTIC_TOKEN_ALIASES: Record<string, string[]> = {
   safe: ["safety", "review", "risk"],
   safety: ["safe", "review", "risk"],
 };
+
 const EMPTY_TRIGGER_POLICY: SkillTriggerPolicy = {
   intents: [],
   topics: [],
@@ -97,12 +59,6 @@ interface PromptRegions {
   allText: string;
 }
 
-interface NormalizedSemanticFallbackConfig extends SkillSelectorSemanticFallbackConfig {}
-
-export interface SkillSelectorOptions {
-  semanticFallback?: Partial<SkillSelectorSemanticFallbackConfig>;
-}
-
 function isAsciiWord(token: string): boolean {
   return /^[a-z0-9_-]+$/u.test(token);
 }
@@ -116,44 +72,18 @@ function tokenize(input: string): string[] {
   });
 }
 
-function costWeight(costHint: SkillsIndexEntry["costHint"] | undefined): number {
-  if (costHint === "low") return 1;
-  if (costHint === "high") return -1;
-  return 0;
-}
-
-function normalizeSemanticFallbackConfig(
-  value: SkillSelectorOptions["semanticFallback"],
-): NormalizedSemanticFallbackConfig {
-  const candidate = value ?? {};
-  return {
-    enabled:
-      typeof candidate.enabled === "boolean"
-        ? candidate.enabled
-        : DEFAULT_SEMANTIC_FALLBACK.enabled,
-    lexicalBypassScore:
-      typeof candidate.lexicalBypassScore === "number" &&
-      Number.isFinite(candidate.lexicalBypassScore)
-        ? Math.max(0, candidate.lexicalBypassScore)
-        : DEFAULT_SEMANTIC_FALLBACK.lexicalBypassScore,
-    minSimilarity:
-      typeof candidate.minSimilarity === "number" && Number.isFinite(candidate.minSimilarity)
-        ? Math.max(0, Math.min(1, candidate.minSimilarity))
-        : DEFAULT_SEMANTIC_FALLBACK.minSimilarity,
-    embeddingDimensions:
-      typeof candidate.embeddingDimensions === "number" &&
-      Number.isFinite(candidate.embeddingDimensions)
-        ? Math.max(64, Math.floor(candidate.embeddingDimensions))
-        : DEFAULT_SEMANTIC_FALLBACK.embeddingDimensions,
-  };
-}
-
 function normalizeStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
     .filter((item): item is string => typeof item === "string")
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+}
+
+function costWeight(costHint: SkillsIndexEntry["costHint"] | undefined): number {
+  if (costHint === "low") return 1;
+  if (costHint === "high") return -1;
+  return 0;
 }
 
 function normalizeNegativeRules(value: unknown): SkillTriggerNegativeRule[] {
@@ -257,17 +187,6 @@ function extractPromptRegions(message: string): PromptRegions {
   };
 }
 
-function descriptionSignalTokens(description: string): string[] {
-  const unique = new Set<string>();
-  for (const token of tokenize(description)) {
-    if (STOP_WORDS.has(token)) continue;
-    if (isAsciiWord(token) && token.length < 3) continue;
-    unique.add(token);
-    if (unique.size >= 16) break;
-  }
-  return [...unique];
-}
-
 function matchesTerm(input: {
   term: string;
   text: string;
@@ -301,22 +220,7 @@ function hasExplicitTriggers(entry: SkillsIndexEntry): boolean {
   );
 }
 
-function resolveEffectiveTriggers(entry: SkillsIndexEntry): SkillTriggerPolicy {
-  const explicitTriggers = readEntryTriggers(entry);
-  if (hasExplicitTriggers(entry)) {
-    return explicitTriggers;
-  }
-  const tags = normalizeStringArray(entry.tags);
-  const description = typeof entry.description === "string" ? entry.description : "";
-  return {
-    intents: [entry.name, ...tags],
-    topics: descriptionSignalTokens(description),
-    phrases: [],
-    negatives: [],
-  };
-}
-
-function stemSemanticToken(token: string): string {
+function stemToken(token: string): string {
   if (token.length <= 3) return token;
   if (token.endsWith("tion")) return token.slice(0, -4);
   if (token.endsWith("sion")) return token.slice(0, -4);
@@ -330,14 +234,19 @@ function stemSemanticToken(token: string): string {
   return token;
 }
 
-function semanticAliasTokens(text: string): string[] {
+function expandTermsWithAliases(terms: string[]): string[] {
   const expanded = new Set<string>();
-  for (const rawToken of tokenize(text)) {
-    const token = rawToken.trim().toLowerCase();
-    if (!token) continue;
-    const stemmed = stemSemanticToken(token);
-    const aliases = SEMANTIC_TOKEN_ALIASES[token] ?? SEMANTIC_TOKEN_ALIASES[stemmed];
-    if (!aliases) continue;
+  for (const term of terms) {
+    const normalized = term.trim().toLowerCase();
+    if (!normalized) continue;
+    expanded.add(normalized);
+
+    const tokens = tokenize(normalized);
+    if (tokens.length !== 1) continue;
+
+    const token = tokens[0]!;
+    const stemmed = stemToken(token);
+    const aliases = TOKEN_ALIASES[token] ?? TOKEN_ALIASES[stemmed] ?? [];
     for (const alias of aliases) {
       const normalizedAlias = alias.trim().toLowerCase();
       if (!normalizedAlias) continue;
@@ -347,21 +256,109 @@ function semanticAliasTokens(text: string): string[] {
   return [...expanded];
 }
 
-function augmentSemanticText(text: string): string {
-  const normalized = text.trim();
-  if (!normalized) return normalized;
-  const aliases = semanticAliasTokens(normalized);
-  if (aliases.length === 0) return normalized;
-  return `${normalized}\n${aliases.join(" ")}`;
+function resolveEffectiveTriggers(entry: SkillsIndexEntry): SkillTriggerPolicy {
+  const explicitTriggers = readEntryTriggers(entry);
+  if (hasExplicitTriggers(entry)) {
+    return {
+      intents: expandTermsWithAliases(explicitTriggers.intents),
+      topics: explicitTriggers.topics,
+      phrases: explicitTriggers.phrases,
+      negatives: explicitTriggers.negatives,
+    };
+  }
+
+  return {
+    intents: expandTermsWithAliases([entry.name]),
+    topics: [],
+    phrases: [],
+    negatives: [],
+  };
 }
 
-function semanticScoreFromSimilarity(similarity: number, lexicalBypassScore: number): number {
-  const cap = Math.max(4, Math.round(lexicalBypassScore));
-  return Math.max(1, Math.round(similarity * cap));
+function findFirstMatchedTerm(input: {
+  terms: string[];
+  text: string;
+  tokenList: string[];
+  tokenSet: Set<string>;
+}): string | null {
+  for (const term of new Set(input.terms.map((value) => value.trim()).filter(Boolean))) {
+    if (
+      matchesTerm({
+        term,
+        text: input.text,
+        tokenList: input.tokenList,
+        tokenSet: input.tokenSet,
+      })
+    ) {
+      return term;
+    }
+  }
+  return null;
 }
 
-function roundSimilarityReason(similarity: number): string {
-  return (Math.round(similarity * 1000) / 1000).toFixed(3);
+function findMatchedTerms(input: {
+  terms: string[];
+  text: string;
+  tokenList: string[];
+  tokenSet: Set<string>;
+  maxMatches?: number;
+}): string[] {
+  const matches: string[] = [];
+  for (const term of new Set(input.terms.map((value) => value.trim()).filter(Boolean))) {
+    if (
+      matchesTerm({
+        term,
+        text: input.text,
+        tokenList: input.tokenList,
+        tokenSet: input.tokenSet,
+      })
+    ) {
+      matches.push(term);
+      if (typeof input.maxMatches === "number" && matches.length >= input.maxMatches) {
+        break;
+      }
+    }
+  }
+  return matches;
+}
+
+function findFirstMatchedPhrase(phrases: string[], allTokens: string[]): string | null {
+  for (const phrase of new Set(phrases.map((value) => value.trim()).filter(Boolean))) {
+    const phraseTokens = tokenize(phrase);
+    if (phraseTokens.length === 0) continue;
+    if (hasTokenSequence(allTokens, phraseTokens)) {
+      return phrase;
+    }
+  }
+  return null;
+}
+
+function shouldFilterByNegativeRules(input: {
+  triggers: SkillTriggerPolicy;
+  regions: PromptRegions;
+  intentSet: Set<string>;
+  allSet: Set<string>;
+}): boolean {
+  for (const rule of input.triggers.negatives) {
+    for (const term of rule.terms) {
+      const matched =
+        rule.scope === "intent"
+          ? matchesTerm({
+              term,
+              text: input.regions.intentText,
+              tokenList: input.regions.intentTokens,
+              tokenSet: input.intentSet,
+            })
+          : matchesTerm({
+              term,
+              text: input.regions.allText,
+              tokenList: input.regions.allTokens,
+              tokenSet: input.allSet,
+            });
+      if (matched) return true;
+    }
+  }
+  return false;
 }
 
 function rankAndTake(scored: SkillSelection[], k: number): SkillSelection[] {
@@ -373,229 +370,137 @@ function rankAndTake(scored: SkillSelection[], k: number): SkillSelection[] {
     .slice(0, Math.max(1, k));
 }
 
-function buildSemanticSkillText(entry: SkillsIndexEntry, triggers: SkillTriggerPolicy): string {
-  const parts = [
-    entry.name,
-    entry.description,
-    ...normalizeStringArray(entry.tags),
-    ...normalizeStringArray(entry.outputs),
-    ...normalizeStringArray(entry.consumes),
-    ...triggers.intents,
-    ...triggers.topics,
-    ...triggers.phrases,
-  ]
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
-  return parts.join("\n");
-}
-
-function applyTriggerNegativePenalties(input: {
-  triggers: SkillTriggerPolicy;
-  regions: PromptRegions;
-  intentSet: Set<string>;
-  allSet: Set<string>;
-  reasons: string[];
-}): number {
-  let penalty = 0;
-  for (const rule of input.triggers.negatives) {
-    for (const term of rule.terms) {
-      if (
-        rule.scope === "intent" &&
-        matchesTerm({
-          term,
-          text: input.regions.intentText,
-          tokenList: input.regions.intentTokens,
-          tokenSet: input.intentSet,
-        })
-      ) {
-        penalty += INTENT_NEGATIVE_PENALTY;
-        input.reasons.push(`neg-intent:${term}`);
-        continue;
-      }
-      if (
-        rule.scope === "topic" &&
-        matchesTerm({
-          term,
-          text: input.regions.allText,
-          tokenList: input.regions.allTokens,
-          tokenSet: input.allSet,
-        })
-      ) {
-        penalty += TOPIC_NEGATIVE_PENALTY;
-        input.reasons.push(`neg-topic:${term}`);
-      }
-    }
-  }
-  return penalty;
-}
-
-function applyAntiTagPenalties(input: {
-  antiTags: string[];
-  regions: PromptRegions;
-  allSet: Set<string>;
-  reasons: string[];
-}): number {
-  let penalty = 0;
-  for (const antiTag of new Set(input.antiTags.map((value) => value.trim()).filter(Boolean))) {
-    if (
-      !matchesTerm({
-        term: antiTag,
-        text: input.regions.allText,
-        tokenList: input.regions.allTokens,
-        tokenSet: input.allSet,
-      })
-    ) {
-      continue;
-    }
-    penalty += ANTI_TAG_PENALTY;
-    input.reasons.push(`anti:${antiTag}`);
-  }
-  return penalty;
+function summarizeBreakdown(breakdown: SkillSelectionBreakdownEntry[]): string {
+  return breakdown.map((entry) => `${entry.signal}:${entry.term}`).join(",");
 }
 
 export function selectTopKSkills(
   message: string,
   index: SkillsIndexEntry[],
   k: number,
-  options: SkillSelectorOptions = {},
 ): SkillSelection[] {
   const regions = extractPromptRegions(message);
   const intentSet = new Set(regions.intentTokens);
   const bodySet = new Set(regions.bodyTokens);
   const allSet = new Set(regions.allTokens);
-  const semanticFallback = normalizeSemanticFallbackConfig(options.semanticFallback);
 
   const scored: SkillSelection[] = [];
 
   for (const entry of index) {
-    let score = 0;
-    let positiveSignals = 0;
-    const reasons: string[] = [];
-    const tags = normalizeStringArray(entry.tags);
-    const antiTags = normalizeStringArray(entry.antiTags);
-    const explicitTriggers = readEntryTriggers(entry);
     const triggers = resolveEffectiveTriggers(entry);
-    const explicitNegatives = explicitTriggers.negatives.length > 0;
-
-    for (const intent of new Set(triggers.intents.map((value) => value.trim()).filter(Boolean))) {
-      if (
-        matchesTerm({
-          term: intent,
-          text: regions.intentText,
-          tokenList: regions.intentTokens,
-          tokenSet: intentSet,
-        })
-      ) {
-        score += INTENT_MATCH_SCORE;
-        positiveSignals += 1;
-        reasons.push(`intent:${intent}`);
-        continue;
-      }
-      if (
-        matchesTerm({
-          term: intent,
-          text: regions.bodyText,
-          tokenList: regions.bodyTokens,
-          tokenSet: bodySet,
-        })
-      ) {
-        score += INTENT_BODY_MATCH_SCORE;
-        positiveSignals += 1;
-        reasons.push(`intent-body:${intent}`);
-      }
-    }
-
-    for (const topic of new Set(triggers.topics.map((value) => value.trim()).filter(Boolean))) {
-      if (
-        !matchesTerm({
-          term: topic,
-          text: regions.allText,
-          tokenList: regions.allTokens,
-          tokenSet: allSet,
-        })
-      ) {
-        continue;
-      }
-      score += TOPIC_MATCH_SCORE;
-      positiveSignals += 1;
-      reasons.push(`topic:${topic}`);
-    }
-
-    for (const phrase of new Set(triggers.phrases.map((value) => value.trim()).filter(Boolean))) {
-      const phraseTokens = tokenize(phrase);
-      if (phraseTokens.length === 0) continue;
-      if (!hasTokenSequence(regions.allTokens, phraseTokens)) continue;
-      score += PHRASE_MATCH_SCORE;
-      positiveSignals += 1;
-      reasons.push(`phrase:${phrase}`);
-    }
-
-    score -= applyTriggerNegativePenalties({
-      triggers,
-      regions,
-      intentSet,
-      allSet,
-      reasons,
-    });
+    const tags = expandTermsWithAliases(normalizeStringArray(entry.tags));
+    const antiTags = normalizeStringArray(entry.antiTags);
 
     if (
-      matchesTerm({
-        term: entry.name,
-        text: regions.allText,
-        tokenList: regions.allTokens,
-        tokenSet: allSet,
+      shouldFilterByNegativeRules({
+        triggers,
+        regions,
+        intentSet,
+        allSet,
       })
     ) {
-      score += NAME_MATCH_SCORE;
-      positiveSignals += 1;
-      reasons.push("name-match");
-    }
-
-    for (const tag of new Set(tags.map((value) => value.trim()).filter(Boolean))) {
-      if (
-        !matchesTerm({
-          term: tag,
-          text: regions.allText,
-          tokenList: regions.allTokens,
-          tokenSet: allSet,
-        })
-      ) {
-        continue;
-      }
-      score += TAG_MATCH_SCORE;
-      positiveSignals += 1;
-      reasons.push(`tag:${tag}`);
-    }
-
-    let descriptionMatches = 0;
-    for (const token of descriptionSignalTokens(entry.description)) {
-      if (allSet.has(token)) {
-        descriptionMatches += 1;
-      }
-      if (descriptionMatches >= MAX_DESCRIPTION_MATCHES) {
-        break;
-      }
-    }
-    if (descriptionMatches > 0) {
-      score += descriptionMatches * DESCRIPTION_MATCH_SCORE;
-      positiveSignals += descriptionMatches;
-      reasons.push(`description:${descriptionMatches}`);
-    }
-
-    if (positiveSignals === 0) {
       continue;
     }
 
-    if (!explicitNegatives) {
-      score -= applyAntiTagPenalties({
-        antiTags,
-        regions,
-        allSet,
-        reasons,
+    const breakdown: SkillSelectionBreakdownEntry[] = [];
+
+    const nameTerm = findFirstMatchedTerm({
+      terms: [entry.name],
+      text: regions.allText,
+      tokenList: regions.allTokens,
+      tokenSet: allSet,
+    });
+    if (nameTerm) {
+      breakdown.push({
+        signal: "name_match",
+        term: nameTerm,
+        delta: NAME_MATCH_SCORE,
       });
     }
 
-    score += costWeight(entry.costHint);
+    const intentTerm = findFirstMatchedTerm({
+      terms: triggers.intents,
+      text: regions.intentText,
+      tokenList: regions.intentTokens,
+      tokenSet: intentSet,
+    });
+    if (intentTerm) {
+      breakdown.push({
+        signal: "intent_match",
+        term: intentTerm,
+        delta: INTENT_MATCH_SCORE,
+      });
+    } else {
+      const intentBodyTerm = findFirstMatchedTerm({
+        terms: triggers.intents,
+        text: regions.bodyText,
+        tokenList: regions.bodyTokens,
+        tokenSet: bodySet,
+      });
+      if (intentBodyTerm) {
+        breakdown.push({
+          signal: "intent_body_match",
+          term: intentBodyTerm,
+          delta: INTENT_BODY_MATCH_SCORE,
+        });
+      }
+    }
+
+    const phrase = findFirstMatchedPhrase(triggers.phrases, regions.allTokens);
+    if (phrase) {
+      breakdown.push({
+        signal: "phrase_match",
+        term: phrase,
+        delta: PHRASE_MATCH_SCORE,
+      });
+    }
+
+    const matchedTags = findMatchedTerms({
+      terms: tags,
+      text: regions.allText,
+      tokenList: regions.allTokens,
+      tokenSet: allSet,
+      maxMatches: MAX_TAG_MATCHES,
+    });
+    for (const tag of matchedTags) {
+      breakdown.push({
+        signal: "tag_match",
+        term: tag,
+        delta: TAG_MATCH_SCORE,
+      });
+    }
+
+    for (const antiTag of new Set(antiTags.map((value) => value.trim()).filter(Boolean))) {
+      if (
+        matchesTerm({
+          term: antiTag,
+          text: regions.allText,
+          tokenList: regions.allTokens,
+          tokenSet: allSet,
+        })
+      ) {
+        breakdown.push({
+          signal: "anti_tag_penalty",
+          term: antiTag,
+          delta: -ANTI_TAG_PENALTY,
+        });
+      }
+    }
+
+    const weight = costWeight(entry.costHint);
+    if (weight !== 0) {
+      breakdown.push({
+        signal: "cost_adjustment",
+        term: entry.costHint ?? "medium",
+        delta: weight,
+      });
+    }
+
+    if (breakdown.length === 0) {
+      continue;
+    }
+
+    const score = breakdown.reduce((sum, item) => sum + item.delta, 0);
     if (score <= 0) {
       continue;
     }
@@ -603,79 +508,10 @@ export function selectTopKSkills(
     scored.push({
       name: entry.name,
       score,
-      reason: reasons.length > 0 ? reasons.join(",") : "description-match",
+      reason: summarizeBreakdown(breakdown),
+      breakdown,
     });
   }
 
-  const lexicalTopScore = scored.reduce((best, entry) => Math.max(best, entry.score), 0);
-  if (!semanticFallback.enabled || lexicalTopScore >= semanticFallback.lexicalBypassScore) {
-    return rankAndTake(scored, k);
-  }
-
-  const semanticPromptText = augmentSemanticText(regions.allText);
-  const promptEmbedding = buildHashedBagOfWordsEmbedding(
-    semanticPromptText,
-    semanticFallback.embeddingDimensions,
-  );
-  if (promptEmbedding.size === 0) {
-    return rankAndTake(scored, k);
-  }
-
-  const combinedByName = new Map(scored.map((entry) => [entry.name, entry]));
-  for (const entry of index) {
-    const existing = combinedByName.get(entry.name);
-    const explicitTriggers = readEntryTriggers(entry);
-    const explicitNegatives = explicitTriggers.negatives.length > 0;
-    const antiTags = normalizeStringArray(entry.antiTags);
-    const triggers = resolveEffectiveTriggers(entry);
-    const semanticSkillText = augmentSemanticText(buildSemanticSkillText(entry, triggers));
-    if (!semanticSkillText) continue;
-    const skillEmbedding = buildHashedBagOfWordsEmbedding(
-      semanticSkillText,
-      semanticFallback.embeddingDimensions,
-    );
-    if (skillEmbedding.size === 0) continue;
-    const similarity = cosineSimilaritySparse(promptEmbedding, skillEmbedding);
-    if (similarity < semanticFallback.minSimilarity) continue;
-    const semanticReasons = [`semantic:${roundSimilarityReason(similarity)}`];
-    let semanticScore = semanticScoreFromSimilarity(
-      similarity,
-      semanticFallback.lexicalBypassScore,
-    );
-    semanticScore -= applyTriggerNegativePenalties({
-      triggers,
-      regions,
-      intentSet,
-      allSet,
-      reasons: semanticReasons,
-    });
-    if (!explicitNegatives) {
-      semanticScore -= applyAntiTagPenalties({
-        antiTags,
-        regions,
-        allSet,
-        reasons: semanticReasons,
-      });
-    }
-    semanticScore += costWeight(entry.costHint);
-    if (semanticScore <= 0) continue;
-
-    if (!existing) {
-      combinedByName.set(entry.name, {
-        name: entry.name,
-        score: semanticScore,
-        reason: semanticReasons.join(","),
-      });
-      continue;
-    }
-    if (semanticScore > existing.score) {
-      combinedByName.set(entry.name, {
-        name: entry.name,
-        score: semanticScore,
-        reason: `${existing.reason},${semanticReasons.join(",")}`,
-      });
-    }
-  }
-
-  return rankAndTake([...combinedByName.values()], k);
+  return rankAndTake(scored, k);
 }
