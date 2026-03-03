@@ -45,10 +45,10 @@ Execution is constrained by explicit contracts at each layer:
   is critical and compaction contract is not satisfied.
 - Step-0 routing translation runs before semantic routing and context
   injection. On translation failure, routing falls back to the original prompt.
-- Command execution routing is policy-explicit: `backend=best_available` and
-  `backend=sandbox` both route to sandbox first; host fallback is always
-  governed by `fallbackToHost` (and is force-disabled by strict/enforced
-  isolation).
+- Command execution routing is policy-explicit: `backend=best_available`
+  routes to sandbox first and implicitly falls back to host when sandbox is
+  unavailable; `backend=sandbox` governs host fallback via `fallbackToHost`.
+  Both are force-disabled by strict/enforced isolation.
 - Low-fidelity tool degradation is fail-signaled (`status=unavailable`)
   instead of returning pseudo-success payloads.
 - Evidence ledger is append-only; missing evidence is treated as a hard

@@ -203,6 +203,15 @@ export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): v
   const lastMessageUpdateAtBySession = new Map<string, number>();
   const lastAssistantTextBySession = new Map<string, string>();
   const assistantWindowBySession = new Map<string, string>();
+  const observedToolCallsBySession = new Map<string, Set<string>>();
+
+  const getObservedToolCalls = (sessionId: string): Set<string> => {
+    const existing = observedToolCallsBySession.get(sessionId);
+    if (existing) return existing;
+    const created = new Set<string>();
+    observedToolCallsBySession.set(sessionId, created);
+    return created;
+  };
 
   pi.on("session_start", (_event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
@@ -225,6 +234,7 @@ export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): v
     lastMessageUpdateAtBySession.delete(sessionId);
     lastAssistantTextBySession.delete(sessionId);
     assistantWindowBySession.delete(sessionId);
+    observedToolCallsBySession.delete(sessionId);
     runtime.session.clearState(sessionId);
     return undefined;
   });
@@ -374,8 +384,23 @@ export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): v
   });
 
   pi.on("tool_execution_end", (event, ctx) => {
+    const sessionId = ctx.sessionManager.getSessionId();
+    const observedToolCalls = getObservedToolCalls(sessionId);
+    if (!observedToolCalls.has(event.toolCallId)) {
+      runtime.events.record({
+        sessionId,
+        type: "tool_call",
+        payload: {
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          lifecycleFallbackReason: "tool_execution_end_without_tool_call",
+        },
+      });
+      observedToolCalls.add(event.toolCallId);
+    }
+
     runtime.events.record({
-      sessionId: ctx.sessionManager.getSessionId(),
+      sessionId,
       type: "tool_execution_end",
       payload: {
         toolCallId: event.toolCallId,
@@ -383,12 +408,15 @@ export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): v
         isError: event.isError,
       },
     });
+    observedToolCalls.delete(event.toolCallId);
     return undefined;
   });
 
   pi.on("tool_call", (event, ctx) => {
+    const sessionId = ctx.sessionManager.getSessionId();
+    getObservedToolCalls(sessionId).add(event.toolCallId);
     runtime.events.record({
-      sessionId: ctx.sessionManager.getSessionId(),
+      sessionId,
       type: "tool_call",
       payload: {
         toolCallId: event.toolCallId,

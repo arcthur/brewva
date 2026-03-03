@@ -27,5 +27,6 @@
   including task/truth/cost/evidence/memory fold slices.
 - First `onTurnStart()` hydrates session-local runtime state from tape events
   (skill/budget/cost counters, warning dedupe, ledger compaction cooldown).
+- Note: upstream `turnIndex` can reset to `0` on `agent_start` boundaries. Brewva normalizes turns to be monotonic per session (for example `effectiveTurn = max(current, turnIndex)`) and uses the normalized value for gating/reconciliation.
 - If memory projection artifacts are missing, runtime can rebuild memory
   projection files from tape-backed `memory_*` snapshots.

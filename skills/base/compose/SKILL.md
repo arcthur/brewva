@@ -15,7 +15,7 @@ tools:
   denied: [write, edit]
 budget:
   max_tool_calls: 120
-  max_tokens: 100000
+  max_tokens: 130000
 outputs: [compose_analysis, skill_sequence, compose_plan]
 ---
 

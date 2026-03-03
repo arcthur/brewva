@@ -251,7 +251,8 @@ export class SkillLifecycleService {
   reconcilePendingDispatchOnTurnEnd(sessionId: string, turn: number): void {
     const pending = this.getPendingDispatch(sessionId);
     if (!pending || pending.mode === "none") return;
-    if (pending.turn > turn) return;
+    const effectiveTurn = Math.max(turn, this.getCurrentTurn(sessionId));
+    if (pending.turn > effectiveTurn) return;
 
     this.recordEvent({
       sessionId,

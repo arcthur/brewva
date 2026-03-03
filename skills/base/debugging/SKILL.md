@@ -11,8 +11,8 @@ tools:
   optional: [lsp_diagnostics, ast_grep_search, edit, ledger_query, skill_complete]
   denied: []
 budget:
-  max_tool_calls: 90
-  max_tokens: 150000
+  max_tool_calls: 100
+  max_tokens: 180000
 outputs: [oracle_brief, oracle_synthesis, root_cause, fix_description, evidence, verification]
 consumes: [architecture_map, execution_steps]
 escalation_path:

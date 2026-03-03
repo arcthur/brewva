@@ -333,6 +333,30 @@ describe("tool parallel read runtime integration", () => {
     expect(getParallelReadPayloads(runtime, sessionId)).toHaveLength(0);
   });
 
+  test("lsp_symbols in document scope returns a friendly error when filePath is a directory", async () => {
+    const workspace = workspaceWithSampleFiles("brewva-tools-doc-scope-dir-");
+    const runtime = createRuntime(workspace);
+    const sessionId = "parallel-read-doc-scope-dir";
+    const tools = createLspTools({ runtime });
+    const lspSymbols = tools.find((tool) => tool.name === "lsp_symbols");
+    expect(lspSymbols).toBeDefined();
+
+    const result = await lspSymbols!.execute(
+      "tc-lsp-symbols-document-dir",
+      {
+        filePath: join(workspace, "src"),
+        scope: "document",
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId, workspace),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("Error: Path is not a file:");
+    expect(getParallelReadPayloads(runtime, sessionId)).toHaveLength(0);
+  });
+
   test("parallel batch size is capped for very high runtime maxConcurrent", async () => {
     const workspace = workspaceWithSampleFiles("brewva-tools-batch-cap-");
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);

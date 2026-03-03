@@ -11,8 +11,8 @@ tools:
   optional: [grep, edit, lsp_diagnostics, skill_complete]
   denied: []
 budget:
-  max_tool_calls: 80
-  max_tokens: 140000
+  max_tool_calls: 90
+  max_tokens: 160000
 outputs: [tdd_target, tdd_cycle, tdd_report]
 consumes: [execution_steps, root_cause, fix_description]
 escalation_path:

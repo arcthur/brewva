@@ -508,8 +508,22 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
       if (scope === "document") {
         if (!existsSync(params.filePath))
           return textResult(`Error: File not found: ${params.filePath}`);
+        let targetStat: import("node:fs").Stats;
+        try {
+          targetStat = statSync(params.filePath);
+        } catch (error) {
+          return textResult(`Error: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        if (!targetStat.isFile()) {
+          return textResult(`Error: Path is not a file: ${params.filePath}`);
+        }
 
-        const symbols = listSymbolsInFile(params.filePath, limit);
+        let symbols: string[];
+        try {
+          symbols = listSymbolsInFile(params.filePath, limit);
+        } catch (error) {
+          return textResult(`Error: ${error instanceof Error ? error.message : String(error)}`);
+        }
         return textResult(symbols.length > 0 ? symbols.join("\n") : "No symbols found");
       }
 

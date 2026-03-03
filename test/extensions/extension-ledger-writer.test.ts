@@ -48,4 +48,63 @@ describe("Extension gaps: ledger writer", () => {
     expect(finished[0].outputText).toBe("line-a\nline-b");
     expect(finished[0].metadata.toolCallId).toBe("tc-err");
   });
+
+  test("given failed tool_execution_end without tool_result, when ledger writer runs, then fallback failure result is recorded once", () => {
+    const { api, handlers } = createMockExtensionAPI();
+
+    const finished: any[] = [];
+    const runtime = createRuntimeFixture({
+      tools: {
+        finish: (input: any) => {
+          finished.push(input);
+        },
+      },
+    });
+
+    registerLedgerWriter(api, runtime);
+
+    const ctx = {
+      sessionManager: {
+        getSessionId: () => "lw-fallback-1",
+      },
+    };
+
+    invokeHandler(
+      handlers,
+      "tool_execution_end",
+      {
+        toolCallId: "tc-fallback",
+        toolName: "skill_complete",
+        isError: true,
+      },
+      ctx,
+    );
+
+    expect(finished).toHaveLength(1);
+    expect(finished[0].sessionId).toBe("lw-fallback-1");
+    expect(finished[0].toolCallId).toBe("tc-fallback");
+    expect(finished[0].toolName).toBe("skill_complete");
+    expect(finished[0].success).toBe(false);
+    expect(finished[0].verdict).toBe("fail");
+    expect(finished[0].args).toEqual({});
+    expect(String(finished[0].outputText)).toContain("[ToolResultFallback]");
+    expect(finished[0].metadata.lifecycleFallbackReason).toBe(
+      "tool_execution_end_without_tool_result",
+    );
+
+    invokeHandler(
+      handlers,
+      "tool_result",
+      {
+        toolCallId: "tc-fallback",
+        toolName: "skill_complete",
+        input: { outputs: { ok: true } },
+        isError: false,
+        content: [{ type: "text", text: "done" }],
+      },
+      ctx,
+    );
+
+    expect(finished).toHaveLength(1);
+  });
 });

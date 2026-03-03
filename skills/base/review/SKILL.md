@@ -15,8 +15,8 @@ tools:
   optional: [lsp_diagnostics, ledger_query, skill_complete]
   denied: [write, edit]
 budget:
-  max_tool_calls: 60
-  max_tokens: 120000
+  max_tool_calls: 80
+  max_tokens: 160000
 outputs:
   [
     review_context,

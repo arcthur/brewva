@@ -13,6 +13,11 @@ Tool registry entrypoint: `packages/brewva-tools/src/index.ts`.
 
 Defined in `packages/brewva-tools/src/lsp.ts`.
 
+`lsp_symbols` supports:
+
+- `scope=document`: `filePath` must point to a file. Directories return a friendly error.
+- `scope=workspace`: `query` is required and the tool scans code files under `cwd` (using runtime parallel-read when enabled).
+
 `lsp_diagnostics` returns `status=unavailable` with
 `reason=diagnostics_scope_mismatch` when `tsc` fails but no diagnostics match
 the requested file/severity scope.

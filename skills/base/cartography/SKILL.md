@@ -11,8 +11,8 @@ tools:
   optional: [glob, ledger_query, skill_complete]
   denied: [write, edit]
 budget:
-  max_tool_calls: 55
-  max_tokens: 120000
+  max_tool_calls: 80
+  max_tokens: 150000
 outputs: [tree_summary, dependency_hotspots, ownership_hints, map_confidence]
 consumes: []
 escalation_path:

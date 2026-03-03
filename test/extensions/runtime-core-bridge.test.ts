@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { registerRuntimeCoreBridge } from "@brewva/brewva-extensions";
-import { createMockExtensionAPI, invokeHandler, invokeHandlerAsync } from "../helpers/extension.js";
+import {
+  createMockExtensionAPI,
+  invokeHandler,
+  invokeHandlerAsync,
+  invokeHandlers,
+} from "../helpers/extension.js";
 
 interface RuntimeCalls {
   started: Array<Record<string, unknown>>;
@@ -240,7 +245,7 @@ describe("runtime core bridge extension", () => {
     const { api, handlers } = createMockExtensionAPI();
     const { runtime, calls } = createRuntimeFixture();
     registerRuntimeCoreBridge(api, runtime as any);
-    invokeHandler(handlers, "session_shutdown", {}, createSessionContext("core-shutdown"));
+    invokeHandlers(handlers, "session_shutdown", {}, createSessionContext("core-shutdown"));
     expect(calls.cleared).toEqual(["core-shutdown"]);
   });
 

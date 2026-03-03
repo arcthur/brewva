@@ -368,6 +368,73 @@ describe("Extension integration: observability", () => {
     ).toBe(true);
   });
 
+  test("given failed tool_execution_end without tool_result, when observability handlers run, then fallback output and ledger events are persisted", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-fallback-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "ext-fallback-1";
+
+    const { api, handlers } = createMockExtensionAPI();
+    registerEventStream(api, runtime);
+    registerLedgerWriter(api, runtime);
+
+    const ctx = {
+      cwd: workspace,
+      sessionManager: {
+        getSessionId: () => sessionId,
+      },
+    };
+
+    invokeHandlers(handlers, "session_start", {}, ctx);
+    invokeHandlers(handlers, "turn_start", { turnIndex: 1, timestamp: Date.now() }, ctx);
+    invokeHandlers(
+      handlers,
+      "tool_execution_start",
+      {
+        toolCallId: "tc-fallback-lsp",
+        toolName: "lsp_symbols",
+      },
+      ctx,
+    );
+    invokeHandlers(
+      handlers,
+      "tool_execution_end",
+      {
+        toolCallId: "tc-fallback-lsp",
+        toolName: "lsp_symbols",
+        isError: true,
+      },
+      ctx,
+    );
+
+    const observed = runtime.events.query(sessionId, { type: "tool_output_observed", last: 1 })[0];
+    expect(observed).toBeDefined();
+    const observedPayload = observed?.payload as
+      | {
+          toolCallId?: string;
+          toolName?: string;
+        }
+      | undefined;
+    expect(observedPayload?.toolCallId).toBe("tc-fallback-lsp");
+    expect(observedPayload?.toolName).toBe("lsp_symbols");
+
+    const recorded = runtime.events.query(sessionId, { type: "tool_result_recorded", last: 1 })[0];
+    expect(recorded).toBeDefined();
+    const recordedPayload = recorded?.payload as
+      | {
+          verdict?: string;
+        }
+      | undefined;
+    expect(recordedPayload?.verdict).toBe("fail");
+
+    const ledgerRows = runtime.truth.listLedgerRows(sessionId);
+    expect(ledgerRows).toHaveLength(1);
+    expect(ledgerRows[0]?.tool).toBe("lsp_symbols");
+    expect(
+      (ledgerRows[0]?.metadata as { lifecycleFallbackReason?: string } | undefined)
+        ?.lifecycleFallbackReason,
+    ).toBe("tool_execution_end_without_tool_result");
+  });
+
   test("given session_shutdown event, when observability handler runs, then in-memory runtime session state is cleared", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-shutdown-clean-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });

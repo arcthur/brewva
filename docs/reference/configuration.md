@@ -183,7 +183,7 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 
 `security.execution` controls command isolation for `exec`:
 
-- `backend=best_available` prefers sandbox first; host fallback is controlled by `fallbackToHost`.
+- `backend=best_available` prefers sandbox first; host fallback is implicit (always allowed unless strict/enforced isolation).
 - `backend=sandbox` is isolation-first; host fallback is controlled by `fallbackToHost` (`false` by default).
 - `enforceIsolation=true` forces `backend=sandbox` and disables host fallback regardless of other inputs.
 - `strict` always disables host fallback.
@@ -205,16 +205,15 @@ This yields the following invariants:
 - If `BREWVA_ENFORCE_EXEC_ISOLATION` is enabled, host fallback is disabled.
 - If `enforceIsolation=true`, host fallback is disabled.
 - If `security.mode=strict`, host fallback is disabled.
-- `backend=best_available` routes `sandbox` first and follows `fallbackToHost` for host fallback.
+- `backend=best_available` routes `sandbox` first and implicitly allows host fallback.
 - `backend=host` is honored only when none of the above force sandbox.
 
 ### `security.execution` Routing Matrix
 
 | mode       | backend        | enforceIsolation | fallbackToHost | resolved backend | host fallback |
 | ---------- | -------------- | ---------------- | -------------- | ---------------- | ------------- |
-| permissive | best_available | false            | false          | sandbox          | false         |
-| standard   | best_available | false            | false          | sandbox          | false         |
-| standard   | best_available | false            | true           | sandbox          | true          |
+| permissive | best_available | false            | any            | sandbox          | true          |
+| standard   | best_available | false            | any            | sandbox          | true          |
 | standard   | sandbox        | false            | false          | sandbox          | false         |
 | standard   | sandbox        | false            | true           | sandbox          | true          |
 | strict     | any            | false            | any            | sandbox          | false         |
@@ -223,7 +222,7 @@ This yields the following invariants:
 Notes:
 
 - `host fallback` applies only when the resolved backend is `sandbox`.
-- `backend=best_available` no longer forces host fallback; `fallbackToHost` remains authoritative.
+- `backend=best_available` implicitly enables host fallback; `fallbackToHost` controls fallback for explicit `backend=sandbox`.
 - Sandbox background process mode is unsupported; with fallback disabled this is fail-closed.
 - When sandbox execution fails and host fallback is enabled, runtime applies a short backoff window before retrying sandbox (`exec_fallback_host.reason=sandbox_unavailable_cached`) to avoid repeated sandbox error churn.
 - If `exec.workdir` is omitted, sandbox execution defaults to `/` and does not inherit host runtime cwd.

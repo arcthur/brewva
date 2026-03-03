@@ -455,7 +455,7 @@ function resolveExecutionPolicy(runtime?: BrewvaToolRuntime): ResolvedExecutionP
     backend === "sandbox" &&
     !enforceIsolation &&
     security.mode !== "strict" &&
-    execution.fallbackToHost;
+    (configuredBackend === "best_available" || execution.fallbackToHost);
 
   return {
     mode: security.mode,

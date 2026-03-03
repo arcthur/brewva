@@ -123,7 +123,9 @@ This list is intentionally non-exhaustive. Unknown event types/fields should be 
 - `exec_blocked_isolation`
 - `exec_sandbox_error`
 
-`tool_result` itself is treated as an SDK hook boundary. Persisted semantic result records are emitted as `tool_result_recorded`.
+`tool_result` is the primary SDK hook boundary for semantic tool outcomes. Persisted, durable tool outcome records are emitted as `tool_result_recorded` (with correlated output telemetry emitted as `tool_output_observed`).
+
+In rare cases, a tool may reach `tool_execution_end` but no SDK `tool_result` hook is observed (for example due to pre-result failures in wrapper paths). Brewva can synthesize a minimal outcome record to avoid ledger/tape gaps; synthesized outcomes are flagged via `lifecycleFallbackReason` in correlation payloads/metadata.
 
 `tool_output_search` events are emitted by `output_search` to record throttling state,
 cache behavior, and result counts. These events are intentionally operational (non-audit)
@@ -217,6 +219,29 @@ whether async results were actually applied to runtime state.
 - `turn_wal_compacted`
 
 ## Key Payload Notes
+
+### `tool_call`
+
+Operational correlation event emitted by the extension bridge before tool execution. Common payload fields include:
+
+- `toolCallId`
+- `toolName`
+
+In rare cases, `tool_call` can be synthesized from the tool execution lifecycle stream (for example when `tool_execution_end` is observed without a preceding `tool_call`). Synthesized events include `lifecycleFallbackReason`.
+
+### `tool_result_recorded`
+
+Durable, replayable tool outcome emitted by the runtime ledger service. Common payload fields include:
+
+- `toolName`
+- `verdict` (`pass` | `fail` | `inconclusive`)
+- `success` (boolean)
+- `ledgerId` (correlation handle into the evidence ledger)
+- `outputObservation` / `outputArtifact` / `outputDistillation` (when available)
+
+Note: `tool_result_recorded` does not carry `toolCallId`. Correlate via `ledgerId` (and ledger-row metadata) or via `tool_output_*` events.
+
+This event is normally produced from the SDK `tool_result` hook (via `ledger-writer`). If a tool reaches `tool_execution_end` but no `tool_result` hook is observed, Brewva can synthesize a minimal outcome record; the corresponding evidence-ledger row metadata includes `lifecycleFallbackReason` to make the path auditable.
 
 ### `session_bootstrap`
 
