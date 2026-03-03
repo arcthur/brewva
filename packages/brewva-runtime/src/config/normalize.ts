@@ -12,6 +12,9 @@ const VALID_MEMORY_RECALL_MODES = new Set(["always", "pressure-aware"]);
 const VALID_VERIFICATION_LEVELS = new Set<VerificationLevel>(["quick", "standard", "strict"]);
 const VALID_CHANNEL_SCOPE_STRATEGIES = new Set(["chat", "thread"]);
 const VALID_CHANNEL_ACL_MODES = new Set(["open", "closed"]);
+const VALID_SKILL_CASCADE_MODES = new Set(["off", "assist", "auto"]);
+const VALID_SKILL_CASCADE_SOURCES = new Set(["compose", "dispatch", "explicit"]);
+const VALID_SKILL_CASCADE_MISSING_CONSUMES = new Set(["pause", "replan", "escalate"]);
 
 type AnyRecord = Record<string, unknown>;
 
@@ -139,6 +142,21 @@ function normalizeSkillOverrides(
   return out;
 }
 
+function normalizeSkillCascadeSourceList(
+  value: unknown,
+  fallback: BrewvaConfig["skills"]["cascade"]["enabledSources"],
+): BrewvaConfig["skills"]["cascade"]["enabledSources"] {
+  if (!Array.isArray(value)) return [...fallback];
+  const out: BrewvaConfig["skills"]["cascade"]["enabledSources"] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string" || !VALID_SKILL_CASCADE_SOURCES.has(entry)) continue;
+    const normalizedEntry = entry as BrewvaConfig["skills"]["cascade"]["enabledSources"][number];
+    if (out.includes(normalizedEntry)) continue;
+    out.push(normalizedEntry);
+  }
+  return out.length > 0 ? out : [...fallback];
+}
+
 function normalizeMemoryRetrievalWeights(
   value: unknown,
   fallback: BrewvaConfig["memory"]["retrievalWeights"],
@@ -161,6 +179,7 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
   const uiInput = isRecord(input.ui) ? input.ui : {};
   const skillsInput = isRecord(input.skills) ? input.skills : {};
   const skillsSelectorInput = isRecord(skillsInput.selector) ? skillsInput.selector : {};
+  const skillsCascadeInput = isRecord(skillsInput.cascade) ? skillsInput.cascade : {};
   const verificationInput = isRecord(input.verification) ? input.verification : {};
   const verificationChecksInput = isRecord(verificationInput.checks)
     ? verificationInput.checks
@@ -263,6 +282,22 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
           securityExecutionInput.fallbackToHost,
           defaults.security.execution.fallbackToHost,
         );
+  const normalizedCascadeSourcePriority = normalizeSkillCascadeSourceList(
+    skillsCascadeInput.sourcePriority,
+    defaults.skills.cascade.sourcePriority,
+  );
+  const normalizedCascadeEnabledSources = normalizeSkillCascadeSourceList(
+    skillsCascadeInput.enabledSources,
+    defaults.skills.cascade.enabledSources,
+  );
+  const effectiveCascadeSourcePriority = [
+    ...normalizedCascadeSourcePriority.filter((source) =>
+      normalizedCascadeEnabledSources.includes(source),
+    ),
+    ...normalizedCascadeEnabledSources.filter(
+      (source) => !normalizedCascadeSourcePriority.includes(source),
+    ),
+  ] as BrewvaConfig["skills"]["cascade"]["sourcePriority"];
 
   return {
     ui: {
@@ -275,6 +310,30 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
       overrides: normalizeSkillOverrides(skillsInput.overrides, defaults.skills.overrides),
       selector: {
         k: normalizePositiveInteger(skillsSelectorInput.k, defaults.skills.selector.k),
+      },
+      cascade: {
+        mode: normalizeStrictStringEnum(
+          skillsCascadeInput.mode,
+          defaults.skills.cascade.mode,
+          VALID_SKILL_CASCADE_MODES,
+          "skills.cascade.mode",
+        ),
+        enabledSources: normalizedCascadeEnabledSources,
+        sourcePriority: effectiveCascadeSourcePriority,
+        onMissingConsumes: normalizeStrictStringEnum(
+          skillsCascadeInput.onMissingConsumes,
+          defaults.skills.cascade.onMissingConsumes,
+          VALID_SKILL_CASCADE_MISSING_CONSUMES,
+          "skills.cascade.onMissingConsumes",
+        ),
+        maxStepsPerRun: normalizePositiveInteger(
+          skillsCascadeInput.maxStepsPerRun,
+          defaults.skills.cascade.maxStepsPerRun,
+        ),
+        maxReplans: normalizeNonNegativeInteger(
+          skillsCascadeInput.maxReplans,
+          defaults.skills.cascade.maxReplans,
+        ),
       },
     },
     verification: {

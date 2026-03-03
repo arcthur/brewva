@@ -35,6 +35,15 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 - `skills.disabled`: `[]`
 - `skills.overrides`: `{}`
 - `skills.selector.k`: `4`
+- `skills.cascade.mode`: `off` (`off | assist | auto`)
+- `skills.cascade.enabledSources`: `["compose", "dispatch"]`
+- `skills.cascade.sourcePriority`: `["compose", "dispatch"]`
+- `skills.cascade.onMissingConsumes`: `replan` (`pause | replan | escalate`)
+- `skills.cascade.maxStepsPerRun`: `8`
+- `skills.cascade.maxReplans`: `2`
+
+`skills.cascade.enabledSources` controls which sources are allowed to produce/replan chain intents.
+`skills.cascade.sourcePriority` only controls arbitration order among enabled sources.
 
 `skills.packs` is an optional allowlist for pack directories across all discovered skill roots
 (`global_root`, `project_root`, and `config_root`).

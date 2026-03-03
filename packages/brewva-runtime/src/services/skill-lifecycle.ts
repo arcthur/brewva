@@ -359,6 +359,9 @@ export class SkillLifecycleService {
       });
       const outputKeys = Object.keys(outputs).toSorted();
 
+      this.sessionState.activeSkillsBySession.delete(sessionId);
+      this.sessionState.toolCallsBySession.delete(sessionId);
+
       this.recordEvent({
         sessionId,
         type: "skill_completed",
@@ -372,9 +375,6 @@ export class SkillLifecycleService {
       });
 
       this.maybePromoteTaskSpec(sessionId, activeSkillName, outputs);
-
-      this.sessionState.activeSkillsBySession.delete(sessionId);
-      this.sessionState.toolCallsBySession.delete(sessionId);
     }
     return validation;
   }

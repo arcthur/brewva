@@ -15,6 +15,7 @@ import type {
   ScheduleIntentUpdateInput,
   ScheduleIntentUpdateResult,
   ScheduleProjectionSnapshot,
+  SkillChainIntent,
   SessionCostSummary,
   SkillDispatchDecision,
   SkillDocument,
@@ -54,6 +55,21 @@ export interface BrewvaToolRuntime {
       input?: { reason?: string; targetSkillName?: string },
     ): { ok: boolean; reason?: string; decision?: SkillDispatchDecision };
     getPendingDispatch?(sessionId: string): SkillDispatchDecision | undefined;
+    getCascadeIntent?(sessionId: string): SkillChainIntent | undefined;
+    pauseCascade?(sessionId: string, reason?: string): { ok: boolean; reason?: string };
+    resumeCascade?(sessionId: string, reason?: string): { ok: boolean; reason?: string };
+    cancelCascade?(sessionId: string, reason?: string): { ok: boolean; reason?: string };
+    startCascade?(
+      sessionId: string,
+      input: {
+        steps: Array<{
+          skill: string;
+          consumes?: string[];
+          produces?: string[];
+          lane?: string;
+        }>;
+      },
+    ): { ok: boolean; reason?: string };
   };
   verification: {
     verify(

@@ -49,6 +49,14 @@ Audit level keeps replay/audit-critical events only:
 - `exec_fallback_host`
 - `exec_blocked_isolation`
 - `exec_sandbox_error`
+- `skill_cascade_planned`
+- `skill_cascade_step_started`
+- `skill_cascade_step_completed`
+- `skill_cascade_paused`
+- `skill_cascade_replanned`
+- `skill_cascade_overridden`
+- `skill_cascade_finished`
+- `skill_cascade_aborted`
 
 ### `ops`
 
@@ -142,6 +150,46 @@ to avoid polluting audit-level streams with high-frequency search telemetry.
 - `skill_routing_ignored`
 - `skill_dispatch_gate_warning`
 - `skill_dispatch_gate_blocked_tool`
+
+### Skill Cascade
+
+- `skill_cascade_planned`
+- `skill_cascade_step_started`
+- `skill_cascade_step_completed`
+- `skill_cascade_paused`
+- `skill_cascade_replanned`
+- `skill_cascade_overridden`
+- `skill_cascade_finished`
+- `skill_cascade_aborted`
+
+Most cascade events include a durable `payload.intent` snapshot for replay/recovery.
+`skill_cascade_overridden` may be emitted as a source-decision rejection before any
+intent exists, so `payload.intent` is optional on that path.
+When source arbitration is involved, payload can include `sourceDecision`:
+
+- `replace`: whether incoming source can replace existing intent
+- `incomingSource` / `existingSource`: source identities (`dispatch|compose|explicit`)
+- `incomingRank` / `existingRank`: resolved rank in `skills.cascade.sourcePriority`
+- `reason`: stable policy reason code
+
+`sourceDecision.reason` values:
+
+- `no_existing_intent`
+- `incoming_source_disabled`
+- `existing_source_disabled`
+- `existing_terminal`
+- `existing_running_active_skill`
+- `explicit_source_locked`
+- `incoming_source_not_configured`
+- `existing_source_not_configured`
+- `incoming_same_unconfigured_source`
+- `incoming_higher_or_equal_priority`
+- `incoming_lower_priority`
+
+`skill_cascade_overridden.payload.reason` also includes:
+
+- `source_decision_keep`: existing intent is retained
+- `source_decision_rejected`: incoming source is rejected before an intent exists
 
 ### Task/Truth/Verification
 

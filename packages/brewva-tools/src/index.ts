@@ -10,6 +10,7 @@ import { createProcessTool } from "./process.js";
 import { createRollbackLastPatchTool } from "./rollback-last-patch.js";
 import { createScheduleIntentTool } from "./schedule-intent.js";
 import { createSessionCompactTool } from "./session-compact.js";
+import { createSkillChainControlTool } from "./skill-chain-control.js";
 import { createSkillCompleteTool } from "./skill-complete.js";
 import { createSkillLoadTool } from "./skill-load.js";
 import { createSkillRouteOverrideTool } from "./skill-route-override.js";
@@ -38,6 +39,7 @@ export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefiniti
     createSkillLoadTool({ runtime: options.runtime }),
     createSkillRouteOverrideTool({ runtime: options.runtime }),
     createSkillCompleteTool({ runtime: options.runtime }),
+    createSkillChainControlTool({ runtime: options.runtime }),
     ...createTaskLedgerTools({ runtime: options.runtime }),
   ];
 }
@@ -60,6 +62,7 @@ export { createScheduleIntentTool } from "./schedule-intent.js";
 export { createSkillLoadTool } from "./skill-load.js";
 export { createSkillRouteOverrideTool } from "./skill-route-override.js";
 export { createSkillCompleteTool } from "./skill-complete.js";
+export { createSkillChainControlTool } from "./skill-chain-control.js";
 export { createTaskLedgerTools } from "./task-ledger.js";
 export type { BrewvaToolRuntime } from "./types.js";
 export {

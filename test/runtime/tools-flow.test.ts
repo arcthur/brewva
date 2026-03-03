@@ -13,6 +13,7 @@ import {
   createRollbackLastPatchTool,
   createScheduleIntentTool,
   createSessionCompactTool,
+  createSkillChainControlTool,
   createSkillCompleteTool,
   createSkillLoadTool,
   createTapeTools,
@@ -346,6 +347,68 @@ describe("S-012 tape tools flow", () => {
     expect(text.includes("[TapeSearch]")).toBe(true);
     expect(text.includes("matches:")).toBe(true);
     expect(text.toLowerCase().includes("flaky")).toBe(true);
+  });
+});
+
+describe("S-015 skill chain control tool flow", () => {
+  test("skill_chain_control supports status/start/pause/resume/cancel", async () => {
+    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const sessionId = "s15";
+    const tool = createSkillChainControlTool({ runtime });
+
+    const before = await tool.execute(
+      "tc-s15-status-before",
+      { action: "status" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    expect(
+      extractTextContent(before).includes("No active or historical skill cascade intent"),
+    ).toBe(true);
+
+    const started = await tool.execute(
+      "tc-s15-start",
+      {
+        action: "start",
+        steps: [{ skill: "exploration", consumes: [], produces: ["architecture_map"] }],
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    expect(extractTextContent(started).includes("# Skill Cascade")).toBe(true);
+    expect(runtime.skills.getCascadeIntent(sessionId)?.source).toBe("explicit");
+
+    const paused = await tool.execute(
+      "tc-s15-pause",
+      { action: "pause", reason: "manual pause for review" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    expect(extractTextContent(paused).includes("status: paused")).toBe(true);
+    expect(runtime.skills.getCascadeIntent(sessionId)?.status).toBe("paused");
+
+    const resumed = await tool.execute(
+      "tc-s15-resume",
+      { action: "resume", reason: "continue execution" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    expect(extractTextContent(resumed).includes("# Skill Cascade")).toBe(true);
+    expect(runtime.skills.getCascadeIntent(sessionId)?.status).toBe("running");
+
+    const cancelled = await tool.execute(
+      "tc-s15-cancel",
+      { action: "cancel", reason: "manual stop" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    expect(extractTextContent(cancelled).includes("status: cancelled")).toBe(true);
+    expect(runtime.skills.getCascadeIntent(sessionId)?.status).toBe("cancelled");
   });
 });
 

@@ -31,28 +31,22 @@
                   "additionalProperties": false,
                   "properties": {
                     "a2aMaxDepth": {
-                      "type": "number",
-                      "minimum": 1
+                      "type": "number"
                     },
                     "a2aMaxHops": {
-                      "type": "number",
-                      "minimum": 1
+                      "type": "number"
                     },
                     "fanoutMaxAgents": {
-                      "type": "number",
-                      "minimum": 1
+                      "type": "number"
                     },
                     "idleRuntimeTtlMs": {
-                      "type": "number",
-                      "minimum": 1
+                      "type": "number"
                     },
                     "maxDiscussionRounds": {
-                      "type": "number",
-                      "minimum": 1
+                      "type": "number"
                     },
                     "maxLiveRuntimes": {
-                      "type": "number",
-                      "minimum": 1
+                      "type": "number"
                     }
                   }
                 },
@@ -89,8 +83,7 @@
                   "additionalProperties": false,
                   "properties": {
                     "maxEntriesPerSession": {
-                      "type": "number",
-                      "minimum": 1
+                      "type": "number"
                     }
                   }
                 },
@@ -99,17 +92,13 @@
                   "additionalProperties": false,
                   "properties": {
                     "minSecondsBetween": {
-                      "type": "number",
-                      "minimum": 0
+                      "type": "number"
                     },
                     "minTurnsBetween": {
-                      "type": "number",
-                      "minimum": 0
+                      "type": "number"
                     },
                     "pressureBypassPercent": {
-                      "type": "number",
-                      "minimum": 0,
-                      "maximum": 1
+                      "type": "number"
                     }
                   }
                 },
@@ -117,21 +106,16 @@
                   "type": "string"
                 },
                 "compactionThresholdPercent": {
-                  "type": "number",
-                  "minimum": 0,
-                  "maximum": 1
+                  "type": "number"
                 },
                 "enabled": {
                   "type": "boolean"
                 },
                 "hardLimitPercent": {
-                  "type": "number",
-                  "minimum": 0,
-                  "maximum": 1
+                  "type": "number"
                 },
                 "maxInjectionTokens": {
-                  "type": "number",
-                  "minimum": 1
+                  "type": "number"
                 },
                 "truncationStrategy": {
                   "type": "string",
@@ -148,16 +132,13 @@
                   "enum": ["warn", "block_tools"]
                 },
                 "alertThresholdRatio": {
-                  "type": "number",
-                  "minimum": 0,
-                  "maximum": 1
+                  "type": "number"
                 },
                 "enabled": {
                   "type": "boolean"
                 },
                 "maxCostUsdPerSession": {
-                  "type": "number",
-                  "minimum": 0
+                  "type": "number"
                 }
               }
             },
@@ -185,8 +166,7 @@
                   "type": "boolean"
                 },
                 "gracefulTimeoutMs": {
-                  "type": "number",
-                  "minimum": 1
+                  "type": "number"
                 }
               }
             },
@@ -198,12 +178,10 @@
                   "type": "boolean"
                 },
                 "maxEntries": {
-                  "type": "number",
-                  "minimum": 1
+                  "type": "number"
                 },
                 "maxOutputChars": {
-                  "type": "number",
-                  "minimum": 1
+                  "type": "number"
                 }
               }
             },
@@ -215,12 +193,10 @@
                   "type": "boolean"
                 },
                 "maxEntries": {
-                  "type": "number",
-                  "minimum": 1
+                  "type": "number"
                 },
                 "maxOutputChars": {
-                  "type": "number",
-                  "minimum": 1
+                  "type": "number"
                 }
               }
             },
@@ -229,12 +205,10 @@
               "additionalProperties": false,
               "properties": {
                 "compactAfterMs": {
-                  "type": "number",
-                  "minimum": 1
+                  "type": "number"
                 },
                 "defaultTtlMs": {
-                  "type": "number",
-                  "minimum": 1
+                  "type": "number"
                 },
                 "dir": {
                   "type": "string"
@@ -243,12 +217,10 @@
                   "type": "boolean"
                 },
                 "maxRetries": {
-                  "type": "number",
-                  "minimum": 0
+                  "type": "number"
                 },
                 "scheduleTurnTtlMs": {
-                  "type": "number",
-                  "minimum": 1
+                  "type": "number"
                 }
               }
             }
@@ -259,8 +231,7 @@
           "additionalProperties": false,
           "properties": {
             "checkpointEveryTurns": {
-              "type": "number",
-              "minimum": 0
+              "type": "number"
             },
             "path": {
               "type": "string"
@@ -295,7 +266,8 @@
               "maximum": 23
             },
             "dir": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "enabled": {
               "type": "boolean"
@@ -372,7 +344,8 @@
               }
             },
             "workingFile": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             }
           }
         },
@@ -384,8 +357,7 @@
               "type": "boolean"
             },
             "maxConcurrent": {
-              "type": "number",
-              "minimum": 1
+              "type": "number"
             }
           }
         },
@@ -397,28 +369,22 @@
               "type": "boolean"
             },
             "leaseDurationMs": {
-              "type": "number",
-              "minimum": 1
+              "type": "number"
             },
             "maxActiveIntentsGlobal": {
-              "type": "number",
-              "minimum": 1
+              "type": "number"
             },
             "maxActiveIntentsPerSession": {
-              "type": "number",
-              "minimum": 1
+              "type": "number"
             },
             "maxConsecutiveErrors": {
-              "type": "number",
-              "minimum": 1
+              "type": "number"
             },
             "maxRecoveryCatchUps": {
-              "type": "number",
-              "minimum": 1
+              "type": "number"
             },
             "minIntervalMs": {
-              "type": "number",
-              "minimum": 1
+              "type": "number"
             },
             "projectionPath": {
               "type": "string"
@@ -429,6 +395,34 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "enforcement": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "allowedToolsMode": {
+                  "$ref": "#/definitions/SecurityEnforcementPreference"
+                },
+                "skillDispatchGateMode": {
+                  "$ref": "#/definitions/SecurityEnforcementPreference"
+                },
+                "skillMaxParallelMode": {
+                  "$ref": "#/definitions/SecurityEnforcementPreference"
+                },
+                "skillMaxTokensMode": {
+                  "$ref": "#/definitions/SecurityEnforcementPreference"
+                },
+                "skillMaxToolCallsMode": {
+                  "$ref": "#/definitions/SecurityEnforcementPreference"
+                }
+              },
+              "required": [
+                "allowedToolsMode",
+                "skillMaxTokensMode",
+                "skillMaxToolCallsMode",
+                "skillMaxParallelMode",
+                "skillDispatchGateMode"
+              ]
+            },
             "execution": {
               "type": "object",
               "additionalProperties": false,
@@ -457,50 +451,21 @@
                       "type": "string"
                     },
                     "cpus": {
-                      "type": "number",
-                      "minimum": 1
+                      "type": "number"
                     },
                     "defaultImage": {
                       "type": "string"
                     },
                     "memory": {
-                      "type": "number",
-                      "minimum": 1
+                      "type": "number"
                     },
                     "serverUrl": {
                       "type": "string"
                     },
                     "timeout": {
-                      "type": "number",
-                      "minimum": 1
+                      "type": "number"
                     }
                   }
-                }
-              }
-            },
-            "enforcement": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "allowedToolsMode": {
-                  "type": "string",
-                  "enum": ["off", "warn", "enforce", "inherit"]
-                },
-                "skillDispatchGateMode": {
-                  "type": "string",
-                  "enum": ["off", "warn", "enforce", "inherit"]
-                },
-                "skillMaxParallelMode": {
-                  "type": "string",
-                  "enum": ["off", "warn", "enforce", "inherit"]
-                },
-                "skillMaxTokensMode": {
-                  "type": "string",
-                  "enum": ["off", "warn", "enforce", "inherit"]
-                },
-                "skillMaxToolCallsMode": {
-                  "type": "string",
-                  "enum": ["off", "warn", "enforce", "inherit"]
                 }
               }
             },
@@ -517,6 +482,36 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "cascade": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabledSources": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/SkillCascadeSource"
+                  }
+                },
+                "maxReplans": {
+                  "type": "number"
+                },
+                "maxStepsPerRun": {
+                  "type": "number"
+                },
+                "mode": {
+                  "$ref": "#/definitions/SkillCascadeMode"
+                },
+                "onMissingConsumes": {
+                  "$ref": "#/definitions/SkillCascadeMissingConsumesPolicy"
+                },
+                "sourcePriority": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/SkillCascadeSource"
+                  }
+                }
+              }
+            },
             "disabled": {
               "type": "array",
               "items": {
@@ -546,8 +541,7 @@
               "additionalProperties": false,
               "properties": {
                 "k": {
-                  "type": "number",
-                  "minimum": 1
+                  "type": "number"
                 }
               }
             }
@@ -558,8 +552,7 @@
           "additionalProperties": false,
           "properties": {
             "checkpointIntervalEntries": {
-              "type": "number",
-              "minimum": 0
+              "type": "number"
             }
           }
         },
@@ -613,6 +606,33 @@
         }
       }
     },
+    "SecurityEnforcementMode": {
+      "type": "string",
+      "enum": ["off", "warn", "enforce"]
+    },
+    "SecurityEnforcementPreference": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SecurityEnforcementMode"
+        },
+        {
+          "type": "string",
+          "const": "inherit"
+        }
+      ]
+    },
+    "SkillCascadeMissingConsumesPolicy": {
+      "type": "string",
+      "enum": ["pause", "replan", "escalate"]
+    },
+    "SkillCascadeMode": {
+      "type": "string",
+      "enum": ["off", "assist", "auto"]
+    },
+    "SkillCascadeSource": {
+      "type": "string",
+      "enum": ["dispatch", "compose", "explicit"]
+    },
     "SkillContractOverride": {
       "type": "object",
       "additionalProperties": false,
@@ -631,12 +651,10 @@
           "additionalProperties": false,
           "properties": {
             "maxTokens": {
-              "type": "number",
-              "minimum": 1
+              "type": "number"
             },
             "maxToolCalls": {
-              "type": "number",
-              "minimum": 1
+              "type": "number"
             }
           }
         },
@@ -665,8 +683,7 @@
           }
         },
         "maxParallel": {
-          "type": "number",
-          "minimum": 1
+          "type": "number"
         },
         "name": {
           "type": "string"
@@ -732,15 +749,13 @@
       "additionalProperties": false,
       "properties": {
         "autoThreshold": {
-          "type": "number",
-          "minimum": 1
+          "type": "number"
         },
         "defaultMode": {
           "$ref": "#/definitions/SkillDispatchMode"
         },
         "gateThreshold": {
-          "type": "number",
-          "minimum": 1
+          "type": "number"
         }
       },
       "required": ["gateThreshold", "autoThreshold", "defaultMode"]

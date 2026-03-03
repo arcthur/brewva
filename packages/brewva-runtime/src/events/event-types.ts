@@ -11,6 +11,15 @@ export const EXEC_SANDBOX_ERROR_EVENT_TYPE = "exec_sandbox_error" as const;
 export const VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE = "verification_outcome_recorded" as const;
 export const VERIFICATION_STATE_RESET_EVENT_TYPE = "verification_state_reset" as const;
 
+export const SKILL_CASCADE_PLANNED_EVENT_TYPE = "skill_cascade_planned" as const;
+export const SKILL_CASCADE_STEP_STARTED_EVENT_TYPE = "skill_cascade_step_started" as const;
+export const SKILL_CASCADE_STEP_COMPLETED_EVENT_TYPE = "skill_cascade_step_completed" as const;
+export const SKILL_CASCADE_PAUSED_EVENT_TYPE = "skill_cascade_paused" as const;
+export const SKILL_CASCADE_REPLANNED_EVENT_TYPE = "skill_cascade_replanned" as const;
+export const SKILL_CASCADE_OVERRIDDEN_EVENT_TYPE = "skill_cascade_overridden" as const;
+export const SKILL_CASCADE_FINISHED_EVENT_TYPE = "skill_cascade_finished" as const;
+export const SKILL_CASCADE_ABORTED_EVENT_TYPE = "skill_cascade_aborted" as const;
+
 export const SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE = "schedule_recovery_deferred" as const;
 export const SCHEDULE_RECOVERY_SUMMARY_EVENT_TYPE = "schedule_recovery_summary" as const;
 export const SCHEDULE_WAKEUP_EVENT_TYPE = "schedule_wakeup" as const;

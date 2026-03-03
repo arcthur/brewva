@@ -11,6 +11,7 @@ import { TAPE_CHECKPOINT_EVENT_TYPE, coerceTapeCheckpointPayload } from "../tape
 import type { TurnReplayEngine } from "../tape/replay-engine.js";
 import type {
   BrewvaEventRecord,
+  SkillChainIntent,
   SkillDispatchDecision,
   SkillOutputRecord,
   SkillSelectionBreakdownEntry,
@@ -152,6 +153,7 @@ export class SessionLifecycleService {
     );
     const skillOutputs = new Map<string, SkillOutputRecord>();
     let pendingDispatch = this.sessionState.pendingDispatchBySession.get(sessionId);
+    let skillChainIntent = this.sessionState.skillChainIntentsBySession.get(sessionId);
 
     for (let index = 0; index < events.length; index += 1) {
       const event = events[index];
@@ -257,6 +259,14 @@ export class SessionLifecycleService {
         continue;
       }
 
+      if (event.type.startsWith("skill_cascade_")) {
+        const parsedIntent = this.readSkillChainIntent(payload);
+        if (parsedIntent) {
+          skillChainIntent = parsedIntent;
+        }
+        continue;
+      }
+
       if (
         event.type === "skill_routing_followed" ||
         event.type === "skill_routing_overridden" ||
@@ -321,6 +331,11 @@ export class SessionLifecycleService {
       this.sessionState.skillOutputsBySession.set(sessionId, skillOutputs);
     } else {
       this.sessionState.skillOutputsBySession.delete(sessionId);
+    }
+    if (skillChainIntent) {
+      this.sessionState.skillChainIntentsBySession.set(sessionId, skillChainIntent);
+    } else {
+      this.sessionState.skillChainIntentsBySession.delete(sessionId);
     }
   }
 
@@ -516,6 +531,117 @@ export class SessionLifecycleService {
       reason,
       turn,
       routingOutcome,
+    };
+  }
+
+  private readSkillChainIntent(
+    payload: Record<string, unknown> | null,
+  ): SkillChainIntent | undefined {
+    if (!payload) return undefined;
+    const intentPayload =
+      payload.intent && typeof payload.intent === "object" && !Array.isArray(payload.intent)
+        ? (payload.intent as Record<string, unknown>)
+        : null;
+    if (!intentPayload) return undefined;
+
+    const id = typeof intentPayload.id === "string" ? intentPayload.id.trim() : "";
+    if (!id) return undefined;
+    const source =
+      intentPayload.source === "dispatch" ||
+      intentPayload.source === "compose" ||
+      intentPayload.source === "explicit"
+        ? intentPayload.source
+        : null;
+    if (!source) return undefined;
+    const sourceTurn = this.readNonNegativeNumber(intentPayload.sourceTurn) ?? 0;
+    const cursor = this.readNonNegativeNumber(intentPayload.cursor) ?? 0;
+    const status =
+      intentPayload.status === "pending" ||
+      intentPayload.status === "running" ||
+      intentPayload.status === "paused" ||
+      intentPayload.status === "completed" ||
+      intentPayload.status === "failed" ||
+      intentPayload.status === "cancelled"
+        ? intentPayload.status
+        : "pending";
+    const stepsPayload = Array.isArray(intentPayload.steps) ? intentPayload.steps : [];
+    const steps: SkillChainIntent["steps"] = [];
+    for (const [index, entry] of stepsPayload.entries()) {
+      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) continue;
+      const record = entry as Record<string, unknown>;
+      const skill = typeof record.skill === "string" ? record.skill.trim() : "";
+      if (!skill) continue;
+      const stepId =
+        typeof record.id === "string" && record.id.trim().length > 0
+          ? record.id.trim()
+          : `step-${index + 1}:${skill}`;
+      const consumes = Array.isArray(record.consumes)
+        ? record.consumes
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+        : [];
+      const produces = Array.isArray(record.produces)
+        ? record.produces
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+        : [];
+      const lane =
+        typeof record.lane === "string" && record.lane.trim().length > 0
+          ? record.lane.trim()
+          : undefined;
+      const nextStep: SkillChainIntent["steps"][number] = {
+        id: stepId,
+        skill,
+        consumes,
+        produces,
+      };
+      if (lane) {
+        nextStep.lane = lane;
+      }
+      steps.push(nextStep);
+    }
+    if (steps.length === 0) return undefined;
+    const sourceEventId =
+      typeof intentPayload.sourceEventId === "string" &&
+      intentPayload.sourceEventId.trim().length > 0
+        ? intentPayload.sourceEventId.trim()
+        : undefined;
+    const unresolvedConsumes = Array.isArray(intentPayload.unresolvedConsumes)
+      ? intentPayload.unresolvedConsumes
+          .filter((entry): entry is string => typeof entry === "string")
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0)
+      : [];
+    const createdAt = this.readNonNegativeNumber(intentPayload.createdAt) ?? Date.now();
+    const updatedAt = this.readNonNegativeNumber(intentPayload.updatedAt) ?? createdAt;
+    const retries = this.readNonNegativeNumber(intentPayload.retries) ?? 0;
+    const replans = this.readNonNegativeNumber(intentPayload.replans) ?? 0;
+    const lastError =
+      typeof intentPayload.lastError === "string" && intentPayload.lastError.trim().length > 0
+        ? intentPayload.lastError.trim()
+        : undefined;
+
+    const maxCursor =
+      status === "completed" || status === "failed" || status === "cancelled"
+        ? steps.length
+        : Math.max(0, steps.length - 1);
+
+    return {
+      id,
+      source,
+      sourceEventId,
+      sourceTurn,
+      steps,
+      cursor: Math.min(cursor, maxCursor),
+      status,
+      unresolvedConsumes,
+      createdAt,
+      updatedAt,
+      retries,
+      replans,
+      lastError,
     };
   }
 

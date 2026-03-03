@@ -5,6 +5,9 @@ export type VerificationLevel = "quick" | "standard" | "strict";
 export type SkillTier = "base" | "pack" | "project";
 export type SkillCostHint = "low" | "medium" | "high";
 export type SkillDispatchMode = "suggest" | "gate" | "auto";
+export type SkillCascadeMode = "off" | "assist" | "auto";
+export type SkillCascadeSource = "dispatch" | "compose" | "explicit";
+export type SkillCascadeMissingConsumesPolicy = "pause" | "replan" | "escalate";
 
 export interface SkillDispatchPolicy {
   gateThreshold: number;
@@ -112,6 +115,99 @@ export interface SkillDispatchDecision {
   reason: string;
   turn: number;
   routingOutcome?: SkillRoutingOutcome;
+}
+
+export type SkillChainIntentStatus =
+  | "pending"
+  | "running"
+  | "paused"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface SkillChainIntentStep {
+  id: string;
+  skill: string;
+  consumes: string[];
+  produces: string[];
+  lane?: string;
+}
+
+export interface SkillChainIntent {
+  id: string;
+  source: SkillCascadeSource;
+  sourceEventId?: string;
+  sourceTurn: number;
+  steps: SkillChainIntentStep[];
+  cursor: number;
+  status: SkillChainIntentStatus;
+  unresolvedConsumes: string[];
+  createdAt: number;
+  updatedAt: number;
+  retries: number;
+  replans: number;
+  lastError?: string;
+}
+
+export interface SkillCascadeControlResult {
+  ok: boolean;
+  reason?: string;
+  intent?: SkillChainIntent;
+  activatedSkill?: string;
+}
+
+export interface SkillCascadeChainCandidate {
+  source: SkillCascadeSource;
+  steps: SkillChainIntentStep[];
+  unresolvedConsumes: string[];
+}
+
+export interface SkillCascadeDispatchSourceInput {
+  decision: SkillDispatchDecision;
+  maxStepsPerRun: number;
+}
+
+export interface SkillCascadeComposeSourceInput {
+  outputs: Record<string, unknown>;
+  maxStepsPerRun: number;
+}
+
+export interface SkillCascadeExplicitSourceInput {
+  steps: Array<{
+    skill: string;
+    consumes?: string[];
+    produces?: string[];
+    lane?: string;
+  }>;
+}
+
+export interface SkillCascadeChainSource {
+  readonly source: SkillCascadeSource;
+  fromDispatch?(input: SkillCascadeDispatchSourceInput): SkillCascadeChainCandidate | null;
+  fromCompose?(input: SkillCascadeComposeSourceInput): SkillCascadeChainCandidate | null;
+  fromExplicit?(input: SkillCascadeExplicitSourceInput): SkillCascadeChainCandidate | null;
+}
+
+export type SkillCascadeSourceDecisionReason =
+  | "incoming_source_disabled"
+  | "existing_source_disabled"
+  | "no_existing_intent"
+  | "existing_terminal"
+  | "existing_running_active_skill"
+  | "explicit_source_locked"
+  | "incoming_source_not_configured"
+  | "existing_source_not_configured"
+  | "incoming_same_unconfigured_source"
+  | "incoming_higher_or_equal_priority"
+  | "incoming_lower_priority";
+
+export interface SkillCascadeSourceDecision {
+  replace: boolean;
+  reason: SkillCascadeSourceDecisionReason;
+  incomingSource: SkillCascadeSource;
+  existingSource?: SkillCascadeSource;
+  incomingRank: number | null;
+  existingRank: number | null;
 }
 
 export interface SkillOutputRecord {
@@ -405,6 +501,14 @@ export interface BrewvaConfig {
     disabled: string[];
     overrides: Record<string, SkillContractOverride>;
     selector: SkillSelectorConfig;
+    cascade: {
+      mode: SkillCascadeMode;
+      enabledSources: SkillCascadeSource[];
+      sourcePriority: SkillCascadeSource[];
+      onMissingConsumes: SkillCascadeMissingConsumesPolicy;
+      maxStepsPerRun: number;
+      maxReplans: number;
+    };
   };
   verification: {
     defaultLevel: VerificationLevel;

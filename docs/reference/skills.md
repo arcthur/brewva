@@ -23,6 +23,46 @@ Selector execution is LLM-first for runtime routing:
 
 `skills_index.json` now carries normalized contract metadata for each skill entry (including `outputs`, `consumes`, and `dispatch`).
 
+## Cascade Orchestration
+
+Skill cascading is policy-driven via `skills.cascade.*`:
+
+- `mode=off`: no automatic cascade behavior
+- `mode=assist`: runtime records/plans chains but waits for manual continuation
+- `mode=auto`: runtime auto-advances to next steps after `skill_completed` events
+
+Chain intent can come from dispatch planning (`outputs/consumes/composable_with`) or compose output (`skill_sequence`).
+Source arbitration uses:
+
+- `skills.cascade.enabledSources` as allowlist
+- `skills.cascade.sourcePriority` as ordering for enabled sources
+
+Runtime records cascade lifecycle as replayable events:
+
+- `skill_cascade_planned`
+- `skill_cascade_step_started`
+- `skill_cascade_step_completed`
+- `skill_cascade_paused`
+- `skill_cascade_replanned`
+- `skill_cascade_overridden`
+- `skill_cascade_finished`
+- `skill_cascade_aborted`
+
+When cascade source arbitration occurs (for example compose vs dispatch), runtime
+emits `sourceDecision` in cascade event payloads with stable reason codes:
+
+- `no_existing_intent`
+- `incoming_source_disabled`
+- `existing_source_disabled`
+- `existing_terminal`
+- `existing_running_active_skill`
+- `explicit_source_locked`
+- `incoming_source_not_configured`
+- `existing_source_not_configured`
+- `incoming_same_unconfigured_source`
+- `incoming_higher_or_equal_priority`
+- `incoming_lower_priority`
+
 ## Base Skills
 
 - `brainstorming`

@@ -350,6 +350,77 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.skills.selector.k).toBe(4);
   });
 
+  test("given cascade sourcePriority only, when loading config, then enabledSources keeps default allowlist and sourcePriority is aligned", () => {
+    const workspace = createWorkspace("skills-cascade-source-priority-only");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          skills: {
+            cascade: {
+              sourcePriority: ["compose"],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    expect(loaded.skills.cascade.enabledSources).toEqual(["compose", "dispatch"]);
+    expect(loaded.skills.cascade.sourcePriority).toEqual(["compose", "dispatch"]);
+  });
+
+  test("given cascade enabledSources extends sourcePriority, when loading config, then sourcePriority appends enabled sources deterministically", () => {
+    const workspace = createWorkspace("skills-cascade-enabled-sources");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          skills: {
+            cascade: {
+              enabledSources: ["dispatch", "explicit"],
+              sourcePriority: ["dispatch"],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    expect(loaded.skills.cascade.enabledSources).toEqual(["dispatch", "explicit"]);
+    expect(loaded.skills.cascade.sourcePriority).toEqual(["dispatch", "explicit"]);
+  });
+
+  test("given cascade enabledSources excludes dispatch, when loading config, then dispatch source is disabled", () => {
+    const workspace = createWorkspace("skills-cascade-dispatch-disabled");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          skills: {
+            cascade: {
+              enabledSources: ["compose"],
+              sourcePriority: ["compose"],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    expect(loaded.skills.cascade.enabledSources).toEqual(["compose"]);
+    expect(loaded.skills.cascade.sourcePriority).toEqual(["compose"]);
+  });
+
   test("given ui startup overrides in config, when loading config, then startup settings are applied", () => {
     const workspace = createWorkspace("ui-overrides");
     writeFileSync(

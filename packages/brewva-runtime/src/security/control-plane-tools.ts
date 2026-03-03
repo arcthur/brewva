@@ -2,6 +2,7 @@
 // They must remain available to recover from partial failures and to complete lifecycle actions.
 export const CONTROL_PLANE_TOOLS = [
   "skill_complete",
+  "skill_chain_control",
   "skill_load",
   "skill_route_override",
   "ledger_query",

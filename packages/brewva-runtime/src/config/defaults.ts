@@ -12,6 +12,14 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     selector: {
       k: 4,
     },
+    cascade: {
+      mode: "off",
+      enabledSources: ["compose", "dispatch"],
+      sourcePriority: ["compose", "dispatch"],
+      onMissingConsumes: "replan",
+      maxStepsPerRun: 8,
+      maxReplans: 2,
+    },
   },
   verification: {
     defaultLevel: "standard",

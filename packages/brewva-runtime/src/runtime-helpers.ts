@@ -11,6 +11,7 @@ export function inferEventCategory(type: string): BrewvaEventCategory {
   if (type === TAPE_ANCHOR_EVENT_TYPE || type === TAPE_CHECKPOINT_EVENT_TYPE) {
     return "state";
   }
+  if (type.startsWith("skill_cascade_")) return "state";
   if (
     type.startsWith("session_") ||
     type.startsWith("channel_session_") ||

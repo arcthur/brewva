@@ -217,6 +217,17 @@ Identity source behavior:
 - Runtime never auto-generates or rewrites identity files.
 - `brewva.identity` is registered as `critical` + `oncePerSession`.
 
+Skill cascade source extension behavior:
+
+- `BrewvaRuntimeOptions.skillCascadeChainSources` allows injecting custom chain
+  sources for `dispatch/compose/explicit`.
+- Runtime always starts from built-in sources, then overrides by `source` key with
+  injected entries (partial injection keeps unspecified built-in sources active).
+- Source replacement decisions are policy-governed and emitted in event payloads
+  as `sourceDecision` for audit/replay explainability.
+- Cascade source arbitration uses `skills.cascade.enabledSources` as allowlist and
+  `skills.cascade.sourcePriority` as ordering among enabled sources.
+
 Context budget behavior:
 
 - Runtime uses a single deterministic injection path:

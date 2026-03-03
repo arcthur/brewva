@@ -44,6 +44,7 @@ import { ParallelService } from "./services/parallel.js";
 import { ScheduleIntentService } from "./services/schedule-intent.js";
 import { SessionLifecycleService } from "./services/session-lifecycle.js";
 import { RuntimeSessionStateStore } from "./services/session-state.js";
+import { SkillCascadeService } from "./services/skill-cascade.js";
 import { SkillLifecycleService } from "./services/skill-lifecycle.js";
 import { TapeService } from "./services/tape.js";
 import { TaskService } from "./services/task.js";
@@ -80,6 +81,9 @@ import type {
   BrewvaStructuredEvent,
   SkillDocument,
   SkillDispatchDecision,
+  SkillChainIntent,
+  SkillCascadeChainSource,
+  SkillCascadeControlResult,
   SkillPreselection,
   SkillRoutingOutcome,
   SkillSelection,
@@ -108,6 +112,7 @@ export interface BrewvaRuntimeOptions {
   cognitivePort?: CognitivePort;
   externalRecallPort?: ExternalRecallPort;
   agentId?: string;
+  skillCascadeChainSources?: SkillCascadeChainSource[];
 }
 
 export interface VerifyCompletionOptions {
@@ -137,6 +142,7 @@ type RuntimeCoreDependencies = {
 
 type RuntimeServiceDependencies = {
   skillLifecycleService: SkillLifecycleService;
+  skillCascadeService: SkillCascadeService;
   taskService: TaskService;
   truthService: TruthService;
   ledgerService: LedgerService;
@@ -195,6 +201,21 @@ export class BrewvaRuntime {
     ): { ok: boolean; missing: string[] };
     getOutputs(sessionId: string, skillName: string): Record<string, unknown> | undefined;
     getConsumedOutputs(sessionId: string, targetSkillName: string): Record<string, unknown>;
+    getCascadeIntent(sessionId: string): SkillChainIntent | undefined;
+    pauseCascade(sessionId: string, reason?: string): SkillCascadeControlResult;
+    resumeCascade(sessionId: string, reason?: string): SkillCascadeControlResult;
+    cancelCascade(sessionId: string, reason?: string): SkillCascadeControlResult;
+    startCascade(
+      sessionId: string,
+      input: {
+        steps: Array<{
+          skill: string;
+          consumes?: string[];
+          produces?: string[];
+          lane?: string;
+        }>;
+      },
+    ): SkillCascadeControlResult;
   };
   readonly context: {
     onTurnStart(sessionId: string, turnIndex: number): void;
@@ -476,6 +497,7 @@ export class BrewvaRuntime {
   private readonly scheduleIntentService: ScheduleIntentService;
   private readonly sessionLifecycleService: SessionLifecycleService;
   private readonly skillLifecycleService: SkillLifecycleService;
+  private readonly skillCascadeService: SkillCascadeService;
   private readonly taskService: TaskService;
   private readonly tapeService: TapeService;
   private readonly truthService: TruthService;
@@ -506,6 +528,7 @@ export class BrewvaRuntime {
 
     const serviceDependencies = this.createServiceDependencies(options);
     this.skillLifecycleService = serviceDependencies.skillLifecycleService;
+    this.skillCascadeService = serviceDependencies.skillCascadeService;
     this.taskService = serviceDependencies.taskService;
     this.truthService = serviceDependencies.truthService;
     this.ledgerService = serviceDependencies.ledgerService;
@@ -519,6 +542,9 @@ export class BrewvaRuntime {
     this.fileChangeService = serviceDependencies.fileChangeService;
     this.sessionLifecycleService = serviceDependencies.sessionLifecycleService;
     this.toolGateService = serviceDependencies.toolGateService;
+    this.eventPipeline.subscribeEvents((event) =>
+      this.skillCascadeService.handleRuntimeEvent(event),
+    );
 
     const domainApis = this.createDomainApis();
     this.skills = domainApis.skills;
@@ -644,6 +670,20 @@ export class BrewvaRuntime {
       getTaskState: (sessionId) => this.getTaskState(sessionId),
       recordEvent: (input) => this.recordEvent(input),
       setTaskSpec: (sessionId, spec) => taskService.setTaskSpec(sessionId, spec),
+    });
+    const skillCascadeService = new SkillCascadeService({
+      config: this.config.skills.cascade,
+      skills: this.skillRegistry,
+      sessionState: this.sessionState,
+      getCurrentTurn: (sessionId) => this.getCurrentTurn(sessionId),
+      getActiveSkill: (sessionId) => skillLifecycleService.getActiveSkill(sessionId),
+      activateSkill: (sessionId, name) => skillLifecycleService.activateSkill(sessionId, name),
+      getSkillOutputs: (sessionId, skillName) =>
+        skillLifecycleService.getSkillOutputs(sessionId, skillName),
+      listProducedOutputKeys: (sessionId) =>
+        skillLifecycleService.listProducedOutputKeys(sessionId),
+      recordEvent: (input) => this.recordEvent(input),
+      chainSources: options.skillCascadeChainSources,
     });
     const truthService = new TruthService({
       getTruthState: (sessionId) => this.getTruthState(sessionId),
@@ -825,6 +865,7 @@ export class BrewvaRuntime {
 
     return {
       skillLifecycleService,
+      skillCascadeService,
       taskService,
       truthService,
       ledgerService,
@@ -898,6 +939,15 @@ export class BrewvaRuntime {
           this.skillLifecycleService.getSkillOutputs(sessionId, skillName),
         getConsumedOutputs: (sessionId, targetSkillName) =>
           this.skillLifecycleService.getAvailableConsumedOutputs(sessionId, targetSkillName),
+        getCascadeIntent: (sessionId) => this.skillCascadeService.getIntent(sessionId),
+        pauseCascade: (sessionId, reason) =>
+          this.skillCascadeService.pauseIntent(sessionId, reason),
+        resumeCascade: (sessionId, reason) =>
+          this.skillCascadeService.resumeIntent(sessionId, reason),
+        cancelCascade: (sessionId, reason) =>
+          this.skillCascadeService.cancelIntent(sessionId, reason),
+        startCascade: (sessionId, input) =>
+          this.skillCascadeService.createExplicitIntent(sessionId, input),
       },
       context: {
         onTurnStart: (sessionId, turnIndex) =>
