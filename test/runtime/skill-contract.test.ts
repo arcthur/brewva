@@ -225,4 +225,27 @@ describe("skill contract and dispatch parsing", () => {
       expect(parsed.contract.dispatch).toBeDefined();
     }
   });
+
+  test("telegram pack skills declare composable handoff", () => {
+    const behaviorPath = join(
+      repoRoot(),
+      "skills",
+      "packs",
+      "telegram-channel-behavior",
+      "SKILL.md",
+    );
+    const interactivePath = join(
+      repoRoot(),
+      "skills",
+      "packs",
+      "telegram-interactive-components",
+      "SKILL.md",
+    );
+
+    const behavior = parseSkillDocument(behaviorPath, "pack");
+    const interactive = parseSkillDocument(interactivePath, "pack");
+
+    expect(behavior.contract.composableWith).toContain("telegram-interactive-components");
+    expect(interactive.contract.composableWith).toContain("telegram-channel-behavior");
+  });
 });

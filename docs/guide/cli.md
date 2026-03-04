@@ -167,6 +167,8 @@ Other Telegram flags are optional and mapped into channel-scoped config:
 `channelConfig.telegram.pollTimeoutSeconds`,
 `channelConfig.telegram.pollLimit`,
 `channelConfig.telegram.pollRetryMs`.
+Telegram channel skill policy does not currently have dedicated CLI flags; it is read from
+built-in defaults (`telegram-channel-behavior` and `telegram-interactive-components`).
 
 Webhook ingress can be enabled via environment variables (no additional CLI flags):
 
@@ -180,6 +182,10 @@ Webhook ingress can be enabled via environment variables (no additional CLI flag
 - `BREWVA_TELEGRAM_INGRESS_HMAC_SECRET`
 - `BREWVA_TELEGRAM_INGRESS_HMAC_MAX_SKEW_MS`
 - `BREWVA_TELEGRAM_INGRESS_NONCE_TTL_MS`
+
+Optional Telegram API endpoint override (useful for local e2e/fake API tests):
+
+- `BREWVA_TELEGRAM_API_BASE_URL`
 
 For the complete Worker + Fly webhook deployment path, see:
 `docs/guide/telegram-webhook-edge-ingress.md`

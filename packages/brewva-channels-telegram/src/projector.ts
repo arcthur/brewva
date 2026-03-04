@@ -16,7 +16,8 @@ import type {
 const TELEGRAM_TEXT_LIMIT = 4096;
 const TELEGRAM_UI_VERSION = "telegram-ui/v1";
 const TELEGRAM_UI_CODE_BLOCK = /```([a-z0-9_-]*)\s*\n([\s\S]*?)```/gi;
-const TELEGRAM_UI_ACTION_ID_MAX_LENGTH = 12;
+const TELEGRAM_UI_ACTION_ID_MAX_LENGTH = 20;
+const TELEGRAM_UI_REQUEST_ID_MAX_LENGTH = 20;
 const TELEGRAM_UI_REQUEST_PREFIX_MAX_LENGTH = 7;
 const TELEGRAM_UI_REQUEST_HASH_LENGTH = 8;
 
@@ -276,6 +277,20 @@ function normalizeOptionalText(value: unknown): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
+function shortenTokenWithHash(token: string, maxLength: number): string {
+  if (token.length <= maxLength) {
+    return token;
+  }
+  if (maxLength <= 4) {
+    return token.slice(0, maxLength);
+  }
+
+  const digestLength = Math.min(8, Math.max(4, Math.floor((maxLength - 1) / 2)));
+  const digest = createHash("sha256").update(token).digest("hex").slice(0, digestLength);
+  const headLength = Math.max(1, maxLength - digestLength - 1);
+  return `${token.slice(0, headLength)}-${digest}`;
+}
+
 function normalizeCallbackToken(value: unknown, maxLength: number): string | undefined {
   const normalized = normalizeOptionalText(value);
   if (!normalized) return undefined;
@@ -285,7 +300,7 @@ function normalizeCallbackToken(value: unknown, maxLength: number): string | und
     .replace(/-+/g, "-")
     .replace(/^[-_]+|[-_]+$/g, "");
   if (!compact) return undefined;
-  return compact.slice(0, Math.max(1, maxLength));
+  return shortenTokenWithHash(compact, Math.max(1, maxLength));
 }
 
 function normalizeActionStyle(value: unknown): "primary" | "neutral" | "danger" | undefined {
@@ -458,7 +473,7 @@ function extractUiActions(components: unknown): TelegramUiActionExtraction {
 function buildUiRequestId(payload: Record<string, unknown>, actions: TelegramUiAction[]): string {
   const explicitRequestId = normalizeCallbackToken(
     payload.request_id,
-    TELEGRAM_UI_ACTION_ID_MAX_LENGTH,
+    TELEGRAM_UI_REQUEST_ID_MAX_LENGTH,
   );
   if (explicitRequestId) {
     return explicitRequestId;

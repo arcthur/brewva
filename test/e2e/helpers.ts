@@ -104,20 +104,44 @@ export function parseEventFile(
 
 export function parseJsonLines(stdout: string, options?: { strict?: boolean }): unknown[] {
   const invalidLines: string[] = [];
+  const parsed: unknown[] = [];
+  const input = stdout.trim();
+  let cursor = 0;
 
-  const parsed = stdout
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      try {
-        return JSON.parse(line);
-      } catch {
-        invalidLines.push(line);
-        return undefined;
+  while (cursor < input.length) {
+    while (cursor < input.length && /\s/u.test(input[cursor] ?? "")) {
+      cursor += 1;
+    }
+    if (cursor >= input.length) break;
+
+    if (input[cursor] !== "{") {
+      const nextLineBreak = input.indexOf("\n", cursor);
+      const end = nextLineBreak === -1 ? input.length : nextLineBreak;
+      const fragment = input.slice(cursor, end).trim();
+      if (fragment.length > 0) {
+        invalidLines.push(fragment);
       }
-    })
-    .filter((line): line is unknown => line !== undefined);
+      cursor = nextLineBreak === -1 ? input.length : nextLineBreak + 1;
+      continue;
+    }
+
+    const end = findJsonObjectEnd(input, cursor);
+    if (end === -1) {
+      const fragment = input.slice(cursor).trim();
+      if (fragment.length > 0) {
+        invalidLines.push(fragment);
+      }
+      break;
+    }
+
+    const objectText = input.slice(cursor, end);
+    try {
+      parsed.push(JSON.parse(objectText));
+    } catch {
+      invalidLines.push(objectText);
+    }
+    cursor = end;
+  }
 
   if (options?.strict && invalidLines.length > 0) {
     const sample = invalidLines.slice(0, 3).join("\n");
@@ -131,6 +155,51 @@ export function parseJsonLines(stdout: string, options?: { strict?: boolean }): 
   }
 
   return parsed;
+}
+
+function findJsonObjectEnd(input: string, start: number): number {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < input.length; index += 1) {
+    const char = input[index];
+    if (char === undefined) break;
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{") {
+      depth += 1;
+      continue;
+    }
+
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return index + 1;
+      }
+    }
+  }
+
+  return -1;
 }
 
 export function findFinalBundle(lines: unknown[]): BrewvaEventBundle | undefined {

@@ -149,6 +149,9 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 - `channels.orchestration.limits.maxLiveRuntimes`: `8`
 - `channels.orchestration.limits.idleRuntimeTtlMs`: `900000`
 
+Telegram channel skill policy is now built-in and no longer configurable via
+`brewva.json`.
+
 ### `infrastructure`
 
 - `infrastructure.events.enabled`: `true`

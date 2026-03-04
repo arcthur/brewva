@@ -107,6 +107,44 @@ describe("channel telegram adapter", () => {
     expect(inbound[0]?.turnId).toBe("tg:message:12345:77");
   });
 
+  test("uses custom inbound interaction policy when provided", async () => {
+    const transport = createTransport();
+    const projectedTurn: TurnEnvelope = {
+      schema: "brewva.turn.v1",
+      kind: "user",
+      sessionId: "channel:custom-session",
+      turnId: "custom-turn",
+      channel: "telegram",
+      conversationId: "99999",
+      timestamp: 1_700_000_123_000,
+      parts: [{ type: "text", text: "custom inbound" }],
+      meta: { source: "custom-policy" },
+    };
+    let projectionCalls = 0;
+    const adapter = new TelegramChannelAdapter({
+      transport: transport.transport,
+      interactionPolicy: {
+        projectInboundTurn: (update) => {
+          projectionCalls += 1;
+          expect(update.update_id).toBe(9001);
+          return projectedTurn;
+        },
+      },
+    });
+    const inbound: TurnEnvelope[] = [];
+
+    await adapter.start({
+      onTurn: async (turn) => {
+        inbound.push(turn);
+      },
+    });
+    await transport.emitUpdate(createMessageUpdate());
+    await adapter.stop();
+
+    expect(projectionCalls).toBe(1);
+    expect(inbound).toEqual([projectedTurn]);
+  });
+
   test("retries same update when inbound callback fails once", async () => {
     const transport = createTransport();
     const adapter = new TelegramChannelAdapter({
@@ -308,6 +346,68 @@ describe("channel telegram adapter", () => {
       },
     ]);
     expect(result).toEqual({ providerMessageId: "101", providerMessageIds: ["100", "101"] });
+  });
+
+  test("uses custom outbound interaction policy when provided", async () => {
+    const transport = createTransport();
+    transport.sendResults.push({ providerMessageId: "m-1" }, { providerMessageId: "m-2" });
+    let renderCalls = 0;
+    const adapter = new TelegramChannelAdapter({
+      transport: transport.transport,
+      interactionPolicy: {
+        renderOutboundRequests: (turn) => {
+          renderCalls += 1;
+          expect(turn.turnId).toBe("outbound-custom");
+          return [
+            {
+              method: "sendMessage",
+              params: {
+                chat_id: "12345",
+                text: "custom one",
+              },
+            },
+            {
+              method: "sendMessage",
+              params: {
+                chat_id: "12345",
+                text: "custom two",
+              },
+            },
+          ];
+        },
+      },
+    });
+    const outboundTurn: TurnEnvelope = {
+      schema: "brewva.turn.v1",
+      kind: "assistant",
+      sessionId: "channel:session",
+      turnId: "outbound-custom",
+      channel: "telegram",
+      conversationId: "12345",
+      timestamp: 1_700_000_000_000,
+      parts: [{ type: "text", text: "ignored by custom policy" }],
+    };
+
+    const result = await adapter.sendTurn(outboundTurn);
+
+    expect(renderCalls).toBe(1);
+    expect(transport.sent).toEqual([
+      {
+        method: "sendMessage",
+        params: {
+          chat_id: "12345",
+          text: "custom one",
+        },
+      },
+      {
+        method: "sendMessage",
+        params: {
+          chat_id: "12345",
+          text: "custom two",
+        },
+      },
+    ]);
+    expect(result).toEqual({ providerMessageId: "m-2", providerMessageIds: ["m-1", "m-2"] });
   });
 
   test("supports dynamic capability resolver", () => {

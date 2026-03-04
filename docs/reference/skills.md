@@ -86,6 +86,7 @@ emits `sourceDecision` in cascade event payloads with stable reason codes:
 - `gh-issues`
 - `github`
 - `skill-creator`
+- `telegram-channel-behavior`
 - `telegram-interactive-components`
 
 ## Project Skills

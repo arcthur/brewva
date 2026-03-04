@@ -767,7 +767,6 @@ async function run(): Promise<void> {
       process.exitCode = 1;
       return;
     }
-
     await runChannelMode({
       cwd: parsed.cwd,
       configPath: parsed.configPath,
@@ -1077,10 +1076,18 @@ export { createBrewvaSession } from "./session.js";
 export { parseArgs };
 export {
   SUPPORTED_CHANNELS,
+  buildChannelDispatchPrompt,
   canonicalizeInboundTurnSession,
   collectPromptTurnOutputs,
+  runChannelMode,
   resolveTelegramWebhookIngressConfig,
   resolveSupportedChannel,
+} from "./channel-mode.js";
+export type {
+  ChannelModeLauncher,
+  ChannelModeLauncherInput,
+  RunChannelModeDependencies,
+  RunChannelModeOptions,
 } from "./channel-mode.js";
 export { AgentRegistry } from "./channel/agent-registry.js";
 export { ApprovalRoutingStore } from "./channel/approval-routing.js";
@@ -1097,6 +1104,13 @@ export type { AgentSessionUsage } from "./channel/eviction.js";
 export { selectIdleEvictableAgentsByTtl, selectLruEvictableAgent } from "./channel/eviction.js";
 export { resolveChannelOrchestrationConfig } from "./channel/orchestration-config.js";
 export { buildAgentScopedConversationKey, buildRoutingScopeKey } from "./channel/routing-scope.js";
+export {
+  buildChannelSkillPolicyBlock,
+  resolveTelegramChannelSkillPolicyState,
+  DEFAULT_TELEGRAM_CHANNEL_BEHAVIOR_SKILL_NAME,
+  DEFAULT_TELEGRAM_INTERACTIVE_SKILL_NAME,
+} from "./channel/skill-policy.js";
+export type { TelegramChannelSkillPolicyState } from "./channel/skill-policy.js";
 export { JsonLineWriter, type JsonLineWritable, writeJsonLine } from "./json-lines.js";
 export {
   resolveBackendWorkingCwd,

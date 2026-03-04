@@ -15,6 +15,7 @@ budget:
   max_tokens: 80000
 outputs: [telegram_ui_payload, callback_contract, fallback_text]
 consumes: [objective, constraints, inbound_event]
+composable_with: [telegram-channel-behavior]
 escalation_path:
   unsupported_component: planning
 ---
@@ -77,7 +78,7 @@ Do not emit component types that Telegram cannot render natively. If the product
 
 ## Callback Contract
 
-- `action_id` must match `[a-z0-9_-]`, length 1-24.
+- `action_id` must match `[a-z0-9_-]`, length 1-20.
 - Keep `label` concise (recommended: <= 32 characters).
 - Do not embed business payloads in `action_id`.
 - Place business context in `state`; let the bridge persist and return a `state_key`.

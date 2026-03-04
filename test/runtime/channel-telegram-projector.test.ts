@@ -297,6 +297,123 @@ describe("channel telegram projector", () => {
     expect(cancelDecoded?.requestId).toBe(decoded?.requestId);
   });
 
+  test("keeps distinct callbacks when long action ids share a prefix", () => {
+    const turn: TurnEnvelope = {
+      schema: "brewva.turn.v1",
+      kind: "assistant",
+      sessionId: "channel:session",
+      turnId: "assistant-ui-long-actions-1",
+      channel: "telegram",
+      conversationId: "12345",
+      timestamp: 1_700_000_000_000,
+      parts: [
+        {
+          type: "text",
+          text: `\`\`\`telegram-ui
+{
+  "version": "telegram-ui/v1",
+  "screen_id": "deploy-confirm",
+  "text": "Choose deploy action",
+  "components": [
+    {
+      "type": "buttons",
+      "rows": [[
+        { "action_id": "very-long-shared-prefix-alpha", "label": "Alpha" },
+        { "action_id": "very-long-shared-prefix-beta", "label": "Beta" }
+      ]]
+    }
+  ]
+}
+\`\`\``,
+        },
+      ],
+    };
+
+    const requests = renderTurnToTelegramRequests(turn, {
+      inlineApproval: true,
+      callbackSecret: "callback-secret",
+    });
+
+    const inlineKeyboard = (
+      requests[0]?.params.reply_markup as {
+        inline_keyboard?: Array<Array<{ callback_data?: string }>>;
+      }
+    )?.inline_keyboard;
+    expect(inlineKeyboard).toHaveLength(1);
+    expect(inlineKeyboard?.[0]).toHaveLength(2);
+
+    const firstCallbackData = (inlineKeyboard?.[0]?.[0]?.callback_data ?? "").toString();
+    const secondCallbackData = (inlineKeyboard?.[0]?.[1]?.callback_data ?? "").toString();
+    const firstDecoded = decodeTelegramApprovalCallback(firstCallbackData, "callback-secret", {
+      context: "12345",
+    });
+    const secondDecoded = decodeTelegramApprovalCallback(secondCallbackData, "callback-secret", {
+      context: "12345",
+    });
+
+    expect(firstDecoded?.actionId).toBeTruthy();
+    expect(secondDecoded?.actionId).toBeTruthy();
+    expect(firstDecoded?.actionId).not.toBe(secondDecoded?.actionId);
+  });
+
+  test("keeps explicit long request ids distinct for routing persistence", () => {
+    const persistedRequestIds: string[] = [];
+    const turn: TurnEnvelope = {
+      schema: "brewva.turn.v1",
+      kind: "assistant",
+      sessionId: "channel:session",
+      turnId: "assistant-ui-long-request-id-1",
+      channel: "telegram",
+      conversationId: "12345",
+      timestamp: 1_700_000_000_000,
+      parts: [
+        {
+          type: "text",
+          text: `\`\`\`telegram-ui
+{
+  "version": "telegram-ui/v1",
+  "request_id": "request-long-shared-prefix-alpha",
+  "screen_id": "first-screen",
+  "text": "First action",
+  "components": [
+    {
+      "type": "buttons",
+      "rows": [[{ "action_id": "confirm", "label": "Confirm" }]]
+    }
+  ]
+}
+\`\`\`
+\`\`\`telegram-ui
+{
+  "version": "telegram-ui/v1",
+  "request_id": "request-long-shared-prefix-beta",
+  "screen_id": "second-screen",
+  "text": "Second action",
+  "components": [
+    {
+      "type": "buttons",
+      "rows": [[{ "action_id": "confirm", "label": "Confirm" }]]
+    }
+  ]
+}
+\`\`\``,
+        },
+      ],
+    };
+
+    renderTurnToTelegramRequests(turn, {
+      inlineApproval: true,
+      callbackSecret: "callback-secret",
+      persistApprovalRouting: (params) => {
+        persistedRequestIds.push(params.requestId);
+      },
+    });
+
+    expect(persistedRequestIds).toHaveLength(2);
+    expect(new Set(persistedRequestIds).size).toBe(2);
+    expect(persistedRequestIds.every((requestId) => requestId.length <= 20)).toBe(true);
+  });
+
   test("persists and restores telegram-ui state via projection hooks", () => {
     const secret = "callback-secret";
     let persisted:

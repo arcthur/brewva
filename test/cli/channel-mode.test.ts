@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
+  DEFAULT_TELEGRAM_CHANNEL_BEHAVIOR_SKILL_NAME,
+  DEFAULT_TELEGRAM_INTERACTIVE_SKILL_NAME,
   SUPPORTED_CHANNELS,
+  buildChannelDispatchPrompt,
   canonicalizeInboundTurnSession,
   collectPromptTurnOutputs,
   resolveSupportedChannel,
@@ -194,5 +197,36 @@ describe("channel mode prompt output collector", () => {
 
     expect(outputs.assistantText).toBe("");
     expect(outputs.toolOutputs).toEqual([]);
+  });
+
+  test("given telegram inbound turn, when building channel dispatch prompt, then prompt includes built-in policy block and inbound payload", () => {
+    const turn: TurnEnvelope = {
+      schema: "brewva.turn.v1",
+      kind: "user",
+      sessionId: "channel-session",
+      turnId: "turn-99",
+      channel: "telegram",
+      conversationId: "12345",
+      timestamp: 1_700_000_000_000,
+      parts: [{ type: "text", text: "hello from telegram" }],
+    };
+
+    const { canonicalTurn, prompt } = buildChannelDispatchPrompt({
+      turn,
+      agentSessionId: "agent-session",
+    });
+
+    expect(canonicalTurn.sessionId).toBe("agent-session");
+    expect(canonicalTurn.meta).toEqual({
+      channelSessionId: "channel-session",
+    });
+    expect(prompt).toContain("[Brewva Channel Skill Policy]");
+    expect(prompt).toContain(
+      `Primary behavior skill: ${DEFAULT_TELEGRAM_CHANNEL_BEHAVIOR_SKILL_NAME}`,
+    );
+    expect(prompt).toContain(`Interactive skill: ${DEFAULT_TELEGRAM_INTERACTIVE_SKILL_NAME}`);
+    expect(prompt).toContain("[channel:telegram] conversation:12345");
+    expect(prompt).toContain("turn_kind:user");
+    expect(prompt).toContain("hello from telegram");
   });
 });

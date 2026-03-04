@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -61,9 +62,11 @@ function writeWorkspaceConfig(workspace: string): void {
             enabled: true,
             compactionThresholdPercent: 0.0001,
             hardLimitPercent: 0.999,
-            minTurnsBetweenCompaction: 0,
-            minSecondsBetweenCompaction: 0,
-            pressureBypassPercent: 0,
+            compaction: {
+              minTurnsBetween: 0,
+              minSecondsBetween: 0,
+              pressureBypassPercent: 0,
+            },
           },
         },
       },
@@ -322,8 +325,17 @@ function runRegression(rounds: number): RegressionRunResult {
   );
 
   const eventsDir = join(workspace, ".orchestrator", "events");
-  const eventFile = latestEventFile(eventsDir);
-  const events = parseEvents(eventFile);
+  let eventFile = `<missing events under ${eventsDir}>`;
+  let events: RuntimeEvent[] = [];
+  if (existsSync(eventsDir)) {
+    try {
+      eventFile = latestEventFile(eventsDir);
+      events = parseEvents(eventFile);
+    } catch {
+      eventFile = `<unreadable event file under ${eventsDir}>`;
+      events = [];
+    }
+  }
 
   rmSync(promptsPath, { force: true });
   rmSync(expectPath, { force: true });

@@ -70,6 +70,21 @@ function stripMetaFields(value: Record<string, unknown>): Record<string, unknown
   return output;
 }
 
+function collectConfigMigrationHints(errors: string[]): string[] {
+  const hints: string[] = [];
+  const hasRemovedTelegramBranch = errors.some(
+    (entry) =>
+      entry.includes('/channels: unknown property "telegram"') ||
+      entry.includes("/channels/telegram"),
+  );
+  if (hasRemovedTelegramBranch) {
+    hints.push(
+      "Migration: 'channels.telegram' was removed. Telegram skill policy is now built-in; remove the 'channels.telegram' block from brewva.json.",
+    );
+  }
+  return hints;
+}
+
 function readConfigFile(configPath: string): Partial<BrewvaConfig> | undefined {
   if (!existsSync(configPath)) return undefined;
   let parsed: unknown;
@@ -104,9 +119,15 @@ function readConfigFile(configPath: string): Partial<BrewvaConfig> | undefined {
     }
 
     if (validation.errors.length > 0) {
+      const baseMessage = `Config does not match schema: ${validation.errors.join("; ")}`;
+      const migrationHints = collectConfigMigrationHints(validation.errors);
+      const message =
+        migrationHints.length > 0
+          ? `${baseMessage}\n${migrationHints.map((hint) => `Hint: ${hint}`).join("\n")}`
+          : baseMessage;
       throw new BrewvaConfigLoadError({
         code: "config_schema_invalid",
-        message: `Config does not match schema: ${validation.errors.join("; ")}`,
+        message,
         configPath,
       });
     }

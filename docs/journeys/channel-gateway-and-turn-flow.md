@@ -39,6 +39,31 @@ flowchart TD
 8. Delivery and negotiation: outbound turns are capability-adjusted, then rendered by the adapter into channel-specific outbound requests.
 9. Approval loop: callback queries are signature-validated, projected into approval turns, and acknowledged via `answerCallbackQuery`.
 
+## Telegram Skill Policy Path
+
+Telegram channel behavior/UI skill policy is built-in and always injected as:
+
+- behavior: `telegram-channel-behavior`
+- interactive: `telegram-interactive-components`
+
+Start channel mode:
+
+```bash
+bun run start -- --channel telegram --telegram-token <bot-token>
+```
+
+Flow:
+
+1. CLI starts channel mode with Telegram transport settings.
+2. Channel loop builds a fixed `[Brewva Channel Skill Policy]` prompt block.
+3. Runtime prompt asks the agent to call `skill_load` for built-in behavior/interactive skills before composing channel replies.
+
+### Boundary Rationale
+
+- Keep transport concerns configurable (`token`, polling, webhook, API endpoint override).
+- Keep behavior policy deterministic and fixed in runtime prompt assembly.
+- Fail fast on removed config branches to avoid hidden partial compatibility paths.
+
 ## Observability
 
 - Ingress / egress bridge:

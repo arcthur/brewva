@@ -2,6 +2,7 @@ import type {
   AdapterSendResult,
   AdapterStartContext,
   ChannelAdapter,
+  TurnEnvelope,
 } from "@brewva/brewva-runtime/channels";
 import {
   resolveChannelCapabilities,
@@ -67,11 +68,28 @@ export interface TelegramApprovalStateOptions {
   maxEntries?: number;
 }
 
+export interface TelegramChannelInteractionPolicy {
+  projectInboundTurn(
+    update: TelegramUpdate,
+    options?: TelegramInboundProjectionOptions,
+  ): TurnEnvelope | null;
+  renderOutboundRequests(
+    turn: TurnEnvelope,
+    options?: TelegramOutboundRenderOptions,
+  ): TelegramOutboundRequest[];
+}
+
+export const TELEGRAM_CHANNEL_DEFAULT_INTERACTION_POLICY: TelegramChannelInteractionPolicy = {
+  projectInboundTurn: (update, options) => projectTelegramUpdateToTurn(update, options),
+  renderOutboundRequests: (turn, options) => renderTurnToTelegramRequests(turn, options),
+};
+
 export interface TelegramChannelAdapterOptions {
   transport: TelegramChannelTransport;
   capabilities?: TelegramChannelCapabilitiesResolver;
   inbound?: TelegramInboundProjectionOptions;
   outbound?: TelegramOutboundRenderOptions;
+  interactionPolicy?: Partial<TelegramChannelInteractionPolicy>;
   dedupe?: TelegramInboundDedupeOptions;
   callbackAck?: TelegramCallbackAckOptions;
   approvalState?: TelegramApprovalStateOptions;
@@ -134,6 +152,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
   private readonly callbackAckCacheTimeSeconds: number | undefined;
   private readonly approvalStateEnabled: boolean;
   private readonly approvalStateMaxEntries: number;
+  private readonly interactionPolicy: TelegramChannelInteractionPolicy;
 
   constructor(private readonly options: TelegramChannelAdapterOptions) {
     this.dedupeEnabled = options.dedupe?.enabled ?? true;
@@ -151,6 +170,16 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     this.approvalStateMaxEntries = resolveApprovalStateMaxEntries(
       options.approvalState?.maxEntries,
     );
+    this.interactionPolicy = {
+      projectInboundTurn:
+        options.interactionPolicy?.projectInboundTurn ??
+        ((update, params) =>
+          TELEGRAM_CHANNEL_DEFAULT_INTERACTION_POLICY.projectInboundTurn(update, params)),
+      renderOutboundRequests:
+        options.interactionPolicy?.renderOutboundRequests ??
+        ((turn, params) =>
+          TELEGRAM_CHANNEL_DEFAULT_INTERACTION_POLICY.renderOutboundRequests(turn, params)),
+    };
   }
 
   capabilities(params: { conversationId: string }): ChannelCapabilities {
@@ -189,11 +218,9 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     this.approvalStateStore.clear();
   }
 
-  async sendTurn(
-    turn: Parameters<typeof renderTurnToTelegramRequests>[0],
-  ): Promise<AdapterSendResult> {
+  async sendTurn(turn: TurnEnvelope): Promise<AdapterSendResult> {
     const outboundOptions = this.options.outbound;
-    const requests = renderTurnToTelegramRequests(turn, {
+    const requests = this.interactionPolicy.renderOutboundRequests(turn, {
       ...outboundOptions,
       persistApprovalState: (params) => {
         this.persistApprovalState(params);
@@ -329,7 +356,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
 
     try {
       const inboundOptions = this.options.inbound;
-      const projected = projectTelegramUpdateToTurn(update, {
+      const projected = this.interactionPolicy.projectInboundTurn(update, {
         ...inboundOptions,
         resolveApprovalState: (params) =>
           inboundOptions?.resolveApprovalState?.(params) ?? this.resolveApprovalState(params),

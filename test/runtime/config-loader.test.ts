@@ -671,4 +671,38 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.channels.orchestration.limits.maxLiveRuntimes).toBe(12);
     expect(loaded.channels.orchestration.limits.idleRuntimeTtlMs).toBe(90_000);
   });
+
+  test("given removed telegram channel config branch, when loading config, then load fails fast", () => {
+    const workspace = createWorkspace("channels-telegram-removed");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          channels: {
+            telegram: {
+              skillPolicy: {
+                behaviorSkillName: "telegram-behavior-v2",
+                interactiveSkillName: "telegram-ui-v2",
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    try {
+      loadBrewvaConfig({
+        cwd: workspace,
+        configPath: ".brewva/brewva.json",
+      });
+      throw new Error("expected loadBrewvaConfig to throw");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      expect(message).toContain('unknown property "telegram"');
+      expect(message).toContain("'channels.telegram' was removed");
+    }
+  });
 });

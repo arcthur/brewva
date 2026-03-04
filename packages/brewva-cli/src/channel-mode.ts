@@ -30,6 +30,11 @@ import type { AgentSessionUsage } from "./channel/eviction.js";
 import { selectIdleEvictableAgentsByTtl, selectLruEvictableAgent } from "./channel/eviction.js";
 import { resolveChannelOrchestrationConfig } from "./channel/orchestration-config.js";
 import { buildAgentScopedConversationKey, buildRoutingScopeKey } from "./channel/routing-scope.js";
+import {
+  buildChannelSkillPolicyBlock,
+  resolveTelegramChannelSkillPolicyState,
+  type TelegramChannelSkillPolicyState,
+} from "./channel/skill-policy.js";
 import { clampText, ensureSessionShutdownRecorded } from "./runtime-utils.js";
 import { createBrewvaSession, type BrewvaSessionResult } from "./session.js";
 
@@ -43,10 +48,13 @@ export interface RunChannelModeOptions {
   channel: string;
   channelConfig?: ChannelModeConfig;
   onRuntimeReady?: (runtime: BrewvaRuntime) => void;
+  shutdownSignal?: AbortSignal;
+  dependencies?: RunChannelModeDependencies;
 }
 
 export interface TelegramChannelModeConfig {
   token?: string;
+  apiBaseUrl?: string;
   callbackSecret?: string;
   pollTimeoutSeconds?: number;
   pollLimit?: number;
@@ -106,15 +114,14 @@ interface DispatchToAgentResult {
 
 export const SUPPORTED_CHANNELS = ["telegram"] as const;
 export type SupportedChannel = (typeof SUPPORTED_CHANNELS)[number];
-const TELEGRAM_INTERACTIVE_SKILL_NAME = "telegram-interactive-components";
 
-interface ChannelLaunchBundle {
+export interface ChannelModeLaunchBundle {
   bridge: ChannelTurnBridge;
   onStart?: () => Promise<void>;
   onStop?: () => Promise<void>;
 }
 
-interface ChannelLauncherInput {
+export interface ChannelModeLauncherInput {
   runtime: BrewvaRuntime;
   channelConfig?: ChannelModeConfig;
   onInboundTurn: (turn: TurnEnvelope) => Promise<void>;
@@ -152,6 +159,19 @@ interface ChannelLauncherInput {
   }) => void;
 }
 
+export type ChannelModeLauncher = (input: ChannelModeLauncherInput) => ChannelModeLaunchBundle;
+
+export interface RunChannelModeDependencies {
+  createSession?: (
+    options?: Parameters<typeof createBrewvaSession>[0],
+  ) => Promise<BrewvaSessionResult>;
+  collectPromptTurnOutputs?: (
+    session: BrewvaSessionResult["session"],
+    prompt: string,
+  ) => Promise<PromptTurnOutputs>;
+  launchers?: Partial<Record<SupportedChannel, ChannelModeLauncher>>;
+}
+
 function normalizeText(value: string | undefined): string {
   return (value ?? "").trim();
 }
@@ -175,6 +195,7 @@ const TELEGRAM_WEBHOOK_HMAC_NONCE_TTL_MS_ENV = "BREWVA_TELEGRAM_INGRESS_NONCE_TT
 const TELEGRAM_WEBHOOK_DEFAULT_HOST = "0.0.0.0";
 const TELEGRAM_WEBHOOK_DEFAULT_PORT = 8787;
 const TELEGRAM_WEBHOOK_DEFAULT_PATH = "/ingest/telegram";
+const TELEGRAM_API_BASE_URL_ENV = "BREWVA_TELEGRAM_API_BASE_URL";
 
 export interface ResolvedTelegramWebhookIngressConfig {
   host: string;
@@ -386,41 +407,16 @@ function formatSupportedChannels(): string {
   return SUPPORTED_CHANNELS.join(", ");
 }
 
-function buildChannelSkillPolicyBlock(runtime: BrewvaRuntime, turn: TurnEnvelope): string {
-  if (turn.channel !== "telegram") {
-    return "";
-  }
-
-  const skill = runtime.skills.get(TELEGRAM_INTERACTIVE_SKILL_NAME);
-  if (!skill) {
-    return [
-      "[Brewva Channel Skill Policy]",
-      "Channel: telegram",
-      `Preferred interactive skill '${TELEGRAM_INTERACTIVE_SKILL_NAME}' is not available in this runtime.`,
-      "When interaction is required, emit plain-text fallback instructions only.",
-    ].join("\n");
-  }
-
-  return [
-    "[Brewva Channel Skill Policy]",
-    "Channel: telegram",
-    `Preferred interactive skill: ${skill.name}`,
-    `Skill description: ${skill.description}`,
-    `If interaction is needed, call tool 'skill_load' with name='${skill.name}' before composing output.`,
-    "If interaction is not needed, reply normally.",
-  ].join("\n");
-}
-
-const CHANNEL_LAUNCHERS: Record<
-  SupportedChannel,
-  (input: ChannelLauncherInput) => ChannelLaunchBundle
-> = {
+const CHANNEL_LAUNCHERS: Record<SupportedChannel, ChannelModeLauncher> = {
   telegram: (input) => {
     const telegram = input.channelConfig?.telegram;
     const telegramToken = normalizeText(telegram?.token);
     if (!telegramToken) {
       throw new Error("--telegram-token is required when --channel telegram is set.");
     }
+    const apiBaseUrl = normalizeOptionalText(
+      telegram?.apiBaseUrl ?? process.env[TELEGRAM_API_BASE_URL_ENV],
+    );
     const callbackSecret = normalizeText(telegram?.callbackSecret) || undefined;
     const webhookIngress = resolveTelegramWebhookIngressConfig(telegram);
     if (!webhookIngress) {
@@ -439,6 +435,7 @@ const CHANNEL_LAUNCHERS: Record<
           },
         },
         transport: {
+          ...(apiBaseUrl ? { apiBaseUrl } : {}),
           poll: {
             timeoutSeconds: telegram?.pollTimeoutSeconds,
             limit: telegram?.pollLimit,
@@ -453,6 +450,7 @@ const CHANNEL_LAUNCHERS: Record<
 
     const webhookTransport = new TelegramWebhookTransport({
       token: telegramToken,
+      ...(apiBaseUrl ? { apiBaseUrl } : {}),
       onError: input.onAdapterError,
     });
     const bridgeBundle = createRuntimeTelegramChannelBridge({
@@ -708,6 +706,29 @@ function formatDispatchError(error: unknown): DispatchToAgentResult {
   };
 }
 
+export function buildChannelDispatchPrompt(input: {
+  turn: TurnEnvelope;
+  agentSessionId: string;
+  skillPolicyState?: TelegramChannelSkillPolicyState;
+}): {
+  canonicalTurn: TurnEnvelope;
+  prompt: string;
+} {
+  const canonicalTurn = canonicalizeInboundTurnSession(input.turn, input.agentSessionId);
+  const prompt = [
+    buildChannelSkillPolicyBlock(canonicalTurn, input.skillPolicyState),
+    buildInboundPrompt(canonicalTurn),
+  ]
+    .filter((segment) => segment.trim().length > 0)
+    .join("\n\n")
+    .trim();
+
+  return {
+    canonicalTurn,
+    prompt,
+  };
+}
+
 export function canonicalizeInboundTurnSession(
   turn: TurnEnvelope,
   agentSessionId: string,
@@ -806,6 +827,34 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
   });
   options.onRuntimeReady?.(runtime);
 
+  const telegramSkillPolicyState = resolveTelegramChannelSkillPolicyState({
+    availableSkillNames: runtime.skills.list().map((skill) => skill.name),
+  });
+  if (channel === "telegram" && telegramSkillPolicyState.missingSkillNames.length > 0) {
+    runtime.events.record({
+      sessionId: "channel:system",
+      type: "channel_skill_policy_degraded",
+      payload: {
+        channel: "telegram",
+        missingSkillNames: telegramSkillPolicyState.missingSkillNames,
+      },
+      skipTapeCheckpoint: true,
+    });
+    if (options.verbose) {
+      console.error(
+        `[channel:telegram] skill policy degraded: missing skills ${telegramSkillPolicyState.missingSkillNames.join(", ")}`,
+      );
+    }
+  }
+
+  const createSession = options.dependencies?.createSession ?? createBrewvaSession;
+  const collectPromptOutputs =
+    options.dependencies?.collectPromptTurnOutputs ?? collectPromptTurnOutputs;
+  const channelLaunchers: Record<SupportedChannel, ChannelModeLauncher> = {
+    ...CHANNEL_LAUNCHERS,
+    ...options.dependencies?.launchers,
+  };
+
   const orchestrationConfig = resolveChannelOrchestrationConfig(runtime);
   const scopeStrategy = orchestrationConfig.enabled ? orchestrationConfig.scopeStrategy : "chat";
 
@@ -851,7 +900,7 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
   const lastTurnByScope = new Map<string, TurnEnvelope>();
   let shuttingDown = false;
 
-  let bundle: ChannelLaunchBundle;
+  let bundle: ChannelModeLaunchBundle;
 
   const nextControllerSequenceByScope = new Map<string, number>();
   const nextControllerSequence = (scopeKey: string): number => {
@@ -1091,7 +1140,7 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
       const extensionFactory = createChannelA2AExtension({
         adapter: a2aAdapter,
       });
-      const result = await createBrewvaSession({
+      const result = await createSession({
         cwd: options.cwd,
         configPath: options.configPath,
         model,
@@ -1157,7 +1206,7 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
         state.lastUsedAt = Date.now();
         state.lastTurn = input.turn;
         runtimeManager.touchRuntime(state.agentId);
-        return collectPromptTurnOutputs(state.result.session, input.prompt);
+        return collectPromptOutputs(state.result.session, input.prompt);
       });
       await registry.touchAgent(input.agentId, Date.now(), true);
       return {
@@ -1180,14 +1229,11 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
     targetAgentId: string,
   ): Promise<void> => {
     const state = await getOrCreateSession(scopeKey, targetAgentId, turn);
-    const canonicalTurn = canonicalizeInboundTurnSession(turn, state.agentSessionId);
-    const prompt = [
-      buildChannelSkillPolicyBlock(state.runtime, canonicalTurn),
-      buildInboundPrompt(canonicalTurn),
-    ]
-      .filter((segment) => segment.trim().length > 0)
-      .join("\n\n")
-      .trim();
+    const { canonicalTurn, prompt } = buildChannelDispatchPrompt({
+      turn,
+      agentSessionId: state.agentSessionId,
+      skillPolicyState: telegramSkillPolicyState,
+    });
 
     if (!prompt) {
       return;
@@ -1207,7 +1253,7 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
       state.lastUsedAt = Date.now();
       state.lastTurn = canonicalTurn;
       runtimeManager.touchRuntime(state.agentId);
-      return collectPromptTurnOutputs(state.result.session, prompt);
+      return collectPromptOutputs(state.result.session, prompt);
     });
     await registry.touchAgent(state.agentId, Date.now(), true);
 
@@ -1747,7 +1793,7 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
   };
 
   try {
-    bundle = CHANNEL_LAUNCHERS[channel]({
+    bundle = channelLaunchers[channel]({
       runtime,
       channelConfig: options.channelConfig,
       resolveApprovalState: (params) => {
@@ -1904,6 +1950,7 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
 
   await new Promise<void>((complete) => {
     let stopping = false;
+    let removeAbortListener: (() => void) | null = null;
     const shutdown = (signal: NodeJS.Signals): void => {
       if (stopping) return;
       stopping = true;
@@ -1933,6 +1980,8 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
 
         process.off("SIGINT", onSigInt);
         process.off("SIGTERM", onSigTerm);
+        removeAbortListener?.();
+        removeAbortListener = null;
         if (options.verbose) {
           console.error("[channel] shutdown completed");
         }
@@ -1944,5 +1993,16 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
     const onSigTerm = (): void => shutdown("SIGTERM");
     process.on("SIGINT", onSigInt);
     process.on("SIGTERM", onSigTerm);
+
+    if (options.shutdownSignal) {
+      const onAbort = () => shutdown("SIGTERM");
+      options.shutdownSignal.addEventListener("abort", onAbort, { once: true });
+      removeAbortListener = () => {
+        options.shutdownSignal?.removeEventListener("abort", onAbort);
+      };
+      if (options.shutdownSignal.aborted) {
+        shutdown("SIGTERM");
+      }
+    }
   });
 }
