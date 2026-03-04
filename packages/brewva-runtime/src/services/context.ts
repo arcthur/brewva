@@ -13,6 +13,7 @@ import type { ToolOutputDistillationEntry } from "../context/tool-output-distill
 import type { ExternalRecallPort } from "../external-recall/types.js";
 import { EvidenceLedger } from "../ledger/evidence-ledger.js";
 import { MemoryEngine } from "../memory/engine.js";
+import { sanitizeByTrust, wrapByTrust } from "../security/sanitize.js";
 import type {
   BrewvaConfig,
   BrewvaEventRecord,
@@ -464,7 +465,13 @@ export class ContextService {
       oncePerSession?: boolean;
     },
   ): ContextInjectionRegisterResult {
-    const result = this.contextInjection.register(sessionId, input);
+    const sanitizedContent = this.config.security.sanitizeContext
+      ? sanitizeByTrust(input.content, input.source)
+      : wrapByTrust(input.content, input.source);
+    const result = this.contextInjection.register(sessionId, {
+      ...input,
+      content: sanitizedContent,
+    });
     if (result.sloEnforced) {
       this.recordEvent({
         sessionId,

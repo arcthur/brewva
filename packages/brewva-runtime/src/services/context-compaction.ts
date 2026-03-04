@@ -1,4 +1,8 @@
 import type { EvidenceLedger } from "../ledger/evidence-ledger.js";
+import {
+  sanitizeCompactionSummary,
+  validateCompactionSummary,
+} from "../security/compaction-integrity.js";
 import type { BrewvaEventRecord, SkillDocument } from "../types.js";
 import type { RuntimeCallback } from "./callback.js";
 import type { RuntimeSessionStateStore } from "./session-state.js";
@@ -43,8 +47,29 @@ export function markContextCompacted(
   deps.sessionState.clearReservedInjectionTokensForSession(sessionId);
 
   const turn = deps.getCurrentTurn(sessionId);
-  const summary = input.summary?.trim();
+  const rawSummary = input.summary?.trim();
   const entryId = input.entryId?.trim();
+
+  let summary = rawSummary;
+  let integrityViolations: string[] | null = null;
+  if (rawSummary) {
+    const integrity = validateCompactionSummary(rawSummary);
+    if (!integrity.clean) {
+      integrityViolations = integrity.violations;
+      summary = sanitizeCompactionSummary(rawSummary);
+      deps.recordEvent({
+        sessionId,
+        type: "compaction_integrity_violation",
+        turn,
+        payload: {
+          violationCount: integrity.violations.length,
+          violations: integrity.violations,
+          originalChars: rawSummary.length,
+          sanitizedChars: summary.trim().length,
+        },
+      });
+    }
+  }
 
   deps.recordEvent({
     sessionId,
@@ -55,6 +80,7 @@ export function markContextCompacted(
       toTokens: input.toTokens ?? null,
       entryId: entryId ?? null,
       summaryChars: summary?.length ?? null,
+      integrityViolations: integrityViolations,
     },
   });
 
@@ -76,6 +102,7 @@ export function markContextCompacted(
       toTokens: input.toTokens ?? null,
       entryId: entryId ?? null,
       summaryChars: summary?.length ?? null,
+      integrityViolations: integrityViolations,
     },
   });
 }
