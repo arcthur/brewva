@@ -79,6 +79,7 @@ Injection sources:
 | `context_external_recall_decision` | External recall final decision summary       |
 | `context_compaction_requested`     | Compaction requested by pressure rules       |
 | `context_compacted`                | Compaction completed                         |
+| `compaction_integrity_violation`   | Compaction summary contained suspicious text |
 
 ## Code Pointers
 

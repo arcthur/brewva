@@ -200,7 +200,9 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 - `strict`
   - Enforce denied tools and all policy checks (`enforce`)
 
-`security.sanitizeContext` independently controls user-text sanitization before skill selection and context injection.
+`security.sanitizeContext` controls pattern-based text sanitization before skill selection and
+context injection. Structural boundary wrapping for external recall/context data remains enabled
+even when this flag is `false`.
 
 Runtime reserves a small set of control-plane tools (for example `skill_complete`, `session_compact`, and tape/ledger inspection tools) that bypass skill allowlists and per-skill budget enforcement to avoid deadlocks during recovery. These tools may still be blocked by the critical context compaction gate.
 

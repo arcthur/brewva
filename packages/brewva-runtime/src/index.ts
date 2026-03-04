@@ -18,6 +18,7 @@ export * from "./verification/state.js";
 export * from "./parallel/budget.js";
 export * from "./parallel/results.js";
 export * from "./security/sanitize.js";
+export * from "./security/compaction-integrity.js";
 export * from "./security/tool-policy.js";
 export * from "./context/budget.js";
 export * from "./context/arena.js";

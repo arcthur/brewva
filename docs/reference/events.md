@@ -212,6 +212,7 @@ When source arbitration is involved, payload can include `sourceDecision`:
 - `context_compaction_gate_cleared`
 - `critical_without_compact`
 - `context_compacted`
+- `compaction_integrity_violation`
 - `session_compact`
 - `session_compact_requested`
 - `session_compact_request_failed`
@@ -453,6 +454,30 @@ Common payload fields include:
 
 Note: `outcome="filtered_out"` means external recall was accepted into the arena but removed by
 final injection planning; write-back does not occur.
+
+### `context_compacted`
+
+Emitted when runtime marks context compaction as completed.
+
+Common payload fields include:
+
+- `fromTokens`
+- `toTokens`
+- `entryId`
+- `summaryChars` (summary text length only; summary content is not persisted)
+- `integrityViolations` (`string[] | null`, pattern ids detected during summary integrity checks)
+
+### `compaction_integrity_violation`
+
+Emitted when the compaction summary contains prompt-leak or instruction-injection signatures and
+runtime sanitizes it before recording compaction metadata.
+
+Common payload fields include:
+
+- `violationCount`
+- `violations` (matched integrity pattern ids)
+- `originalChars`
+- `sanitizedChars`
 
 ### `context_compaction_gate_armed`
 
