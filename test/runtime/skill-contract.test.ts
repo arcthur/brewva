@@ -79,7 +79,6 @@ describe("S-006 three-layer contract tightening", () => {
     const base: SkillContract = {
       name: "foo",
       tier: "base",
-      tags: ["x"],
       tools: {
         required: ["read"],
         optional: ["edit"],
@@ -183,7 +182,6 @@ describe("skill contract and dispatch parsing", () => {
     const base: SkillContract = {
       name: "review",
       tier: "base",
-      tags: ["review"],
       dispatch: {
         gateThreshold: 10,
         autoThreshold: 16,

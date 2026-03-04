@@ -1,11 +1,8 @@
 ---
 name: verification
 description: Use when about to claim work is complete, fixed, or passing — requires running verification commands and confirming output before making any success claims.
-version: 1.0.0
 stability: stable
 tier: base
-tags: [verify, test, lint, quality]
-anti_tags: [explore]
 tools:
   required: [exec, lsp_diagnostics, ledger_query]
   optional: [read, skill_complete]
@@ -15,9 +12,6 @@ budget:
   max_tokens: 100000
 outputs: [checks, verdict, missing_evidence]
 consumes: [change_summary, files_changed]
-escalation_path:
-  verification_fails: debugging
-  command_unavailable: exploration
 ---
 
 # Verification Skill
@@ -132,6 +126,11 @@ If a required command does not exist or cannot run in the current environment, e
 - Required verification is blocked and no meaningful `TOOL_BRIDGE` can be produced.
 
 When stopped, emit exact missing command/info needed.
+
+## Escalation
+
+- If verification consistently fails, hand off to `debugging` for root-cause investigation.
+- If the required verification command is unavailable, hand off to `exploration` to locate alternatives.
 
 ## Red Flags — STOP
 

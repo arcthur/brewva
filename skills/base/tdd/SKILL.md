@@ -1,11 +1,8 @@
 ---
 name: tdd
 description: Use when implementing any feature, bugfix, or behavior change — before writing implementation code.
-version: 1.0.0
 stability: stable
 tier: base
-tags: [tdd, test, red-green-refactor, implementation]
-anti_tags: [explore, research, architecture]
 tools:
   required: [read, exec]
   optional: [grep, edit, lsp_diagnostics, skill_complete]
@@ -15,9 +12,6 @@ budget:
   max_tokens: 160000
 outputs: [tdd_target, tdd_cycle, tdd_report]
 consumes: [execution_steps, root_cause, fix_description]
-escalation_path:
-  test_infrastructure_missing: exploration
-  design_unclear: brainstorming
 ---
 
 # Test-Driven Development Skill
@@ -241,6 +235,11 @@ When stopping, provide:
 1. what was completed (cycles finished, tests written)
 2. what blocked further progress
 3. recommended next step or skill escalation
+
+## Escalation
+
+- If the required test infrastructure is missing, hand off to `exploration` to locate or set it up.
+- If the design is unclear and tests cannot be specified, hand off to `brainstorming`.
 
 ## Anti-Patterns (never)
 

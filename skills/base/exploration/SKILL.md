@@ -1,11 +1,8 @@
 ---
 name: exploration
 description: Use when repository is unfamiliar, request references unknown modules, or design decision needs structural context — before planning or patching.
-version: 1.0.0
 stability: stable
 tier: base
-tags: [explore, understand, map, discover]
-anti_tags: [apply-change]
 tools:
   required: [read, grep]
   optional: [glob, ledger_query, look_at, skill_complete]
@@ -15,8 +12,6 @@ budget:
   max_tokens: 200000
 outputs: [architecture_map, key_modules, unknowns]
 consumes: [tree_summary]
-escalation_path:
-  entrypoint_not_found: cartography
 ---
 
 # Exploration Skill
@@ -122,6 +117,10 @@ or generated outputs, emit `TOOL_BRIDGE` using `skills/base/planning/references/
 - Cannot identify real entrypoint after focused scan.
 - Request depends on generated/external code not present locally.
 - Tool-call budget exhausted without converging map.
+
+## Escalation
+
+- If no entrypoint can be located after thorough search, hand off to `cartography` for structural mapping.
 
 ## Anti-Patterns (never)
 

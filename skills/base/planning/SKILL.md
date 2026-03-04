@@ -1,11 +1,8 @@
 ---
 name: planning
 description: Use when task is ambiguous, multi-step across modules, or high risk — after design is approved and before implementation.
-version: 1.0.0
 stability: stable
 tier: base
-tags: [plan, roadmap, architecture, scope]
-anti_tags: [quick-fix]
 tools:
   required: [read]
   optional: [grep, ledger_query, skill_complete]
@@ -29,9 +26,6 @@ outputs:
     handoff_packet,
   ]
 consumes: [architecture_map, key_modules, unknowns, root_cause]
-escalation_path:
-  system_unclear: exploration
-  all_options_violate_constraints: review
 ---
 
 # Planning Skill
@@ -316,6 +310,11 @@ HANDOFF_PACKET
 - All options violate a hard constraint.
 
 On stop, report exactly what missing input blocks progress.
+
+## Escalation
+
+- If the system shape remains unclear after focused investigation, hand off to `exploration`.
+- If all options violate hard constraints, hand off to `review` for constraint reassessment.
 
 ## Anti-Patterns (never)
 

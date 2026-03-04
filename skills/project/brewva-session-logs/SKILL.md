@@ -1,11 +1,8 @@
 ---
 name: brewva-session-logs
 description: Search and analyze Brewva runtime session artifacts (event store, evidence ledger, memory, cost, tape, context arena telemetry) using jq and rg.
-version: 1.1.1
 stability: stable
 tier: project
-tags: [session, logs, events, ledger, memory, cost, diagnosis, jsonl, context-arena]
-anti_tags: []
 tools:
   required: [read, grep]
   optional: [exec, process, ledger_query, tape_info, tape_search, cost_view, skill_complete]
@@ -23,9 +20,6 @@ outputs:
     process_evidence,
   ]
 consumes: []
-escalation_path:
-  artifact_missing: exploration
-  chain_broken: debugging
 ---
 
 # Brewva Session Logs Skill
@@ -449,6 +443,11 @@ SESSION_SUMMARY
 - Target artifact does not exist at expected path.
 - Hash chain is broken and analysis depends on ledger integrity.
 - Session file is too large for inline analysis (> 10k events) — recommend sampling.
+
+## Escalation
+
+- If required session artifacts are missing, hand off to `exploration` to locate them.
+- If the evidence chain is broken, hand off to `debugging` to investigate the gap.
 
 ## Anti-Patterns (never)
 

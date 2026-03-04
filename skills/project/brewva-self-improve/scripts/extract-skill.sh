@@ -125,11 +125,8 @@ TEMPLATE=$(cat << ENDTEMPLATE
 ---
 name: ${SKILL_NAME}
 description: "[TODO: Concise description of what this skill does and when to use it]"
-version: 1.0.0
 stability: experimental
 tier: ${TIER}
-tags: [TODO]
-anti_tags: []
 tools:
   required: [read]
   optional: [grep, exec]
@@ -139,8 +136,6 @@ budget:
   max_tokens: 80000
 outputs: [TODO]
 consumes: []
-escalation_path:
-  default: exploration
 ---
 
 # ${TITLE}

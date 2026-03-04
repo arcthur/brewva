@@ -209,7 +209,7 @@ Memory split behavior:
   `high`/`critical` (`context_external_recall_decision` with `reason="pressure_gated"`).
 - Open memory insights can expand recall query terms (`memory_recall_query_expanded` event).
 - `brewva.rag-external` is injected only when `memory.externalRecall.enabled=true`,
-  active skill carries tag `external-knowledge`, internal recall top score is below
+  active skill has `externalRecall: true` in its contract, internal recall top score is below
   threshold (`memory.externalRecall.minInternalScore`).
 - If `BrewvaRuntimeOptions.externalRecallPort` is not provided, external recall is skipped
   (`context_external_recall_decision` with `outcome="skipped"` and

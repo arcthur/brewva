@@ -371,8 +371,6 @@ export class SkillRegistry {
       name: skill.name,
       tier: skill.tier,
       description: skill.description,
-      tags: skill.contract.tags,
-      antiTags: skill.contract.antiTags ?? [],
       outputs: skill.contract.outputs ?? [],
       toolsRequired: skill.contract.tools.required,
       costHint: skill.contract.costHint ?? "medium",

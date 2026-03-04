@@ -35,10 +35,10 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 - `skills.disabled`: `[]`
 - `skills.overrides`: `{}`
 - `skills.selector.k`: `4`
-- `skills.cascade.mode`: `off` (`off | assist | auto`)
+- `skills.cascade.mode`: `auto` (`off | assist | auto`)
 - `skills.cascade.enabledSources`: `["compose", "dispatch"]`
 - `skills.cascade.sourcePriority`: `["compose", "dispatch"]`
-- `skills.cascade.onMissingConsumes`: `replan` (`pause | replan | escalate`)
+- `skills.cascade.onMissingConsumes`: `replan` (`pause | replan`)
 - `skills.cascade.maxStepsPerRun`: `8`
 - `skills.cascade.maxReplans`: `2`
 
@@ -288,9 +288,9 @@ Runtime behavior:
   set `memory.externalRecall.enabled=true` and inject a custom
   `externalRecallPort`.
 - External recall executes only when all runtime gates pass:
-  `pressure allowed` + active skill has `external-knowledge` tag +
+  `pressure allowed` + active skill has `externalRecall: true` in its contract +
   `internalTopScore < minInternalScore` + provider is available.
-- All skip outcomes (including `skill_tag_missing`) emit
+- All skip outcomes (including `skill_contract_missing`) emit
   `context_external_recall_decision` at `ops` level.
 - Runtime never auto-wires a built-in external recall provider.
 

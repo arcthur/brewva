@@ -57,7 +57,7 @@ SLO enforcement emits `context_arena_slo_enforced` with count/drop details.
 External recall is explicit and opt-in:
 
 1. Trigger: internal memory top score < `minInternalScore` and active skill has
-   `external-knowledge` tag.
+   `externalRecall: true` in its contract.
 2. Port: runtime calls `externalRecallPort.search()` if custom port is provided.
 3. Write-back: only when `[ExternalRecall]` remains in final injected text.
 

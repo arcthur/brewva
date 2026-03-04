@@ -1,11 +1,8 @@
 ---
 name: cartography
 description: Use when needing module dependency orientation, ownership discovery, or impact analysis before changes.
-version: 1.0.0
 stability: stable
 tier: base
-tags: [map, architecture, modules, dependency]
-anti_tags: [quick-fix]
 tools:
   required: [grep, read]
   optional: [glob, ledger_query, skill_complete]
@@ -15,8 +12,6 @@ budget:
   max_tokens: 150000
 outputs: [tree_summary, dependency_hotspots, ownership_hints, map_confidence]
 consumes: []
-escalation_path:
-  structure_unclear: exploration
 ---
 
 # Cartography Skill
@@ -123,6 +118,10 @@ collector and feed results back.
 - Repository lacks enough structure to infer boundaries.
 - Generated code dominates and source ownership is unclear.
 - Request scope spans external systems not present locally.
+
+## Escalation
+
+- If the repository structure remains unclear after mapping, hand off to `exploration` for deeper investigation.
 
 ## Anti-Patterns (never)
 

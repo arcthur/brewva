@@ -1,11 +1,8 @@
 ---
 name: debugging
 description: Use when encountering any bug, test failure, or unexpected behavior — before proposing fixes.
-version: 1.0.0
 stability: stable
 tier: base
-tags: [debug, bug, failure, regression]
-anti_tags: [feature]
 tools:
   required: [read, exec, grep]
   optional: [lsp_diagnostics, ast_grep_search, edit, ledger_query, skill_complete]
@@ -15,9 +12,6 @@ budget:
   max_tokens: 180000
 outputs: [oracle_brief, oracle_synthesis, root_cause, fix_description, evidence, verification]
 consumes: [architecture_map, execution_steps]
-escalation_path:
-  hypothesis_exhausted: exploration
-  fix_creates_regressions: planning
 ---
 
 # Debugging Skill
@@ -227,6 +221,11 @@ When stopping, provide:
 1. what was tried
 2. strongest remaining hypothesis
 3. minimal missing input required from user
+
+## Escalation
+
+- If all hypotheses are exhausted without a confirmed root cause, hand off to `exploration` for broader system investigation.
+- If the proposed fix creates new regressions, hand off to `planning` to redesign the approach.
 
 ## Red Flags — STOP and Return to Step 1
 

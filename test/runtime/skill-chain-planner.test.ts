@@ -8,8 +8,6 @@ function createEntry(
     name: input.name,
     tier: input.tier ?? "base",
     description: input.description ?? `${input.name} skill`,
-    tags: input.tags ?? [input.name],
-    antiTags: input.antiTags ?? [],
     outputs: input.outputs ?? [],
     toolsRequired: input.toolsRequired ?? [],
     costHint: input.costHint ?? "medium",

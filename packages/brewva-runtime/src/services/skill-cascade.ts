@@ -681,16 +681,6 @@ export class SkillCascadeService {
       return { ok: false, reason: "missing_consumes", intent: cloneIntent(intent) };
     }
 
-    if (this.config.onMissingConsumes === "escalate") {
-      const escalated = this.insertEscalationStep(sessionId, intent, step, missingConsumes);
-      if (!escalated.ok) return escalated;
-      return this.processCurrentStep(sessionId, intent, {
-        reason: "missing_consumes_escalated",
-        forceAutoActivation: true,
-        depth: depth + 1,
-      });
-    }
-
     if (intent.replans >= this.config.maxReplans) {
       intent.status = "failed";
       this.autoActivationBySession.delete(sessionId);
@@ -711,60 +701,6 @@ export class SkillCascadeService {
       forceAutoActivation: true,
       depth: depth + 1,
     });
-  }
-
-  private insertEscalationStep(
-    sessionId: string,
-    intent: SkillChainIntent,
-    step: SkillChainIntentStep,
-    missingConsumes: string[],
-  ): SkillCascadeControlResult {
-    const skill = this.skills.get(step.skill);
-    const escalationCandidates = skill?.contract.escalationPath
-      ? Object.values(skill.contract.escalationPath)
-      : [];
-    const targetSkillName = escalationCandidates
-      .map((entry) => entry.trim())
-      .find((entry) => entry.length > 0 && this.skills.get(entry));
-    if (!targetSkillName) {
-      intent.status = "paused";
-      intent.updatedAt = Date.now();
-      intent.lastError = "escalation_skill_missing";
-      this.persistIntent(sessionId, intent);
-      this.emitIntentEvent(SKILL_CASCADE_PAUSED_EVENT_TYPE, sessionId, intent, {
-        reason: "escalation_skill_missing",
-        missingConsumes,
-        stepSkill: step.skill,
-      });
-      return { ok: false, reason: "escalation_skill_missing", intent: cloneIntent(intent) };
-    }
-
-    const escalationStep = this.buildStep(targetSkillName, `esc-${intent.replans + 1}`);
-    if (!escalationStep) {
-      intent.status = "paused";
-      intent.updatedAt = Date.now();
-      intent.lastError = "escalation_skill_not_found";
-      this.persistIntent(sessionId, intent);
-      this.emitIntentEvent(SKILL_CASCADE_PAUSED_EVENT_TYPE, sessionId, intent, {
-        reason: "escalation_skill_not_found",
-        targetSkill: targetSkillName,
-      });
-      return { ok: false, reason: "escalation_skill_not_found", intent: cloneIntent(intent) };
-    }
-
-    const before = intent.steps.slice(0, intent.cursor);
-    const after = intent.steps.slice(intent.cursor);
-    intent.steps = [...before, escalationStep, ...after];
-    intent.replans += 1;
-    intent.updatedAt = Date.now();
-    intent.status = "pending";
-    this.persistIntent(sessionId, intent);
-    this.emitIntentEvent(SKILL_CASCADE_REPLANNED_EVENT_TYPE, sessionId, intent, {
-      strategy: "escalation",
-      insertedSkills: [targetSkillName],
-      missingConsumes,
-    });
-    return { ok: true, intent: cloneIntent(intent) };
   }
 
   private replanWithDispatchChain(

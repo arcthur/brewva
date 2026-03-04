@@ -7,7 +7,7 @@ export type SkillCostHint = "low" | "medium" | "high";
 export type SkillDispatchMode = "suggest" | "gate" | "auto";
 export type SkillCascadeMode = "off" | "assist" | "auto";
 export type SkillCascadeSource = "dispatch" | "compose" | "explicit";
-export type SkillCascadeMissingConsumesPolicy = "pause" | "replan" | "escalate";
+export type SkillCascadeMissingConsumesPolicy = "pause" | "replan";
 
 export interface SkillDispatchPolicy {
   gateThreshold: number;
@@ -18,8 +18,7 @@ export interface SkillDispatchPolicy {
 export interface SkillContract {
   name: string;
   tier: SkillTier;
-  tags: string[];
-  antiTags?: string[];
+  externalRecall?: boolean;
   dispatch?: SkillDispatchPolicy;
   tools: {
     required: string[];
@@ -33,10 +32,8 @@ export interface SkillContract {
   outputs?: string[];
   composableWith?: string[];
   consumes?: string[];
-  escalationPath?: Record<string, string>;
   maxParallel?: number;
   stability?: "experimental" | "stable" | "deprecated";
-  version?: string;
   description?: string;
   costHint?: SkillCostHint;
 }
@@ -64,8 +61,6 @@ export interface SkillsIndexEntry {
   name: string;
   tier: SkillTier;
   description: string;
-  tags: string[];
-  antiTags: string[];
   outputs: string[];
   toolsRequired: string[];
   costHint: SkillCostHint;

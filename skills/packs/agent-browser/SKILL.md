@@ -1,11 +1,8 @@
 ---
 name: agent-browser
 description: Browser automation workflow for navigation, interaction, extraction, and visual verification.
-version: 1.0.0
 stability: stable
 tier: pack
-tags: [agent-browser, browser, automation, e2e, screenshot, extraction]
-anti_tags: [backend-only]
 tools:
   required: [exec, read]
   optional: [look_at, ledger_query, skill_complete]
@@ -15,8 +12,6 @@ budget:
   max_tokens: 140000
 outputs: [browser_plan, action_log, extraction_result, troubleshooting]
 consumes: [execution_steps]
-escalation_path:
-  browser_env_missing: exploration
 ---
 
 # Agent Browser Pack Skill
@@ -368,6 +363,10 @@ TROUBLESHOOTING
 
 If browser automation cannot execute, emit `TOOL_BRIDGE` using
 `skills/base/planning/references/executable-evidence-bridge.md` for a reproducible human-run flow.
+
+## Escalation
+
+- If the browser environment is missing or cannot be configured, hand off to `exploration`.
 
 ## Anti-Patterns (never)
 

@@ -1,11 +1,8 @@
 ---
 name: frontend-design
 description: Senior UI/UX engineering workflow with metric-driven design rules, strict component architecture, CSS hardware acceleration, and anti-slop guardrails for bold, production-ready interfaces.
-version: 2.0.0
 stability: stable
 tier: pack
-tags: [frontend, ui, ux, design, motion, typography, layout]
-anti_tags: [backend, api-only]
 tools:
   required: [read]
   optional: [look_at, lsp_diagnostics, ast_grep_search, skill_complete]
@@ -15,8 +12,6 @@ budget:
   max_tokens: 130000
 outputs: [design_direction, ui_changes, interaction_checks]
 consumes: [execution_steps, component_changes]
-escalation_path:
-  design_system_conflict: planning
 ---
 
 # Frontend Design Pack Skill
@@ -190,6 +185,10 @@ When interactive verification cannot run in the current environment, emit `TOOL_
 - **GPU isolation:** CPU-heavy perpetual animations MUST live in their own isolated Client Components.
 - **`useEffect` cleanup:** All animation effects MUST contain strict cleanup functions.
 - **`will-change`:** Use sparingly and only on actively animating elements.
+
+## Escalation
+
+- If there is a design system conflict that cannot be resolved locally, hand off to `planning`.
 
 ## Anti-Patterns (banned)
 

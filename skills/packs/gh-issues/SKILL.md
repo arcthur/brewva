@@ -1,11 +1,8 @@
 ---
 name: gh-issues
 description: GitHub issue triage and issue-to-PR execution workflow via `gh` CLI. Use when processing filtered issues, writing actionable issue specs, converting selected issues into PRs, and tracking review follow-ups.
-version: 1.0.0
 stability: stable
 tier: pack
-tags: [github, gh, issues, triage, pr, review]
-anti_tags: [single-command-only]
 tools:
   required: [exec, read]
   optional: [grep, ledger_query, skill_complete]
@@ -15,9 +12,6 @@ budget:
   max_tokens: 180000
 outputs: [issue_triage, issue_spec, issue_execution_plan, review_followup]
 consumes: [github_context, verification]
-escalation_path:
-  scope_unclear: planning
-  repo_access_blocked: exploration
 ---
 
 # gh-issues Pack Skill
@@ -193,6 +187,11 @@ REVIEW_FOLLOWUP
 - Local or remote permissions are insufficient to push branches or create PRs.
 - Required validation cannot be executed and no acceptable alternative evidence exists.
 - The requested fix expands into large cross-subsystem refactoring beyond issue scope.
+
+## Escalation
+
+- If the issue scope is unclear, hand off to `planning`.
+- If repository access is blocked, hand off to `exploration` to resolve access.
 
 ## Anti-Patterns (never)
 

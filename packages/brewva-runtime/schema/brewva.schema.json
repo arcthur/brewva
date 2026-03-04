@@ -623,7 +623,7 @@
     },
     "SkillCascadeMissingConsumesPolicy": {
       "type": "string",
-      "enum": ["pause", "replan", "escalate"]
+      "enum": ["pause", "replan"]
     },
     "SkillCascadeMode": {
       "type": "string",
@@ -640,11 +640,8 @@
         "description": {
           "type": "string"
         },
-        "antiTags": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+        "externalRecall": {
+          "type": "boolean"
         },
         "budget": {
           "type": "object",
@@ -676,12 +673,6 @@
         "dispatch": {
           "$ref": "#/definitions/SkillDispatchPolicy"
         },
-        "escalationPath": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        },
         "maxParallel": {
           "type": "number"
         },
@@ -697,12 +688,6 @@
         "stability": {
           "type": "string",
           "enum": ["experimental", "stable", "deprecated"]
-        },
-        "tags": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
         },
         "tier": {
           "$ref": "#/definitions/SkillTier"
@@ -730,9 +715,6 @@
               }
             }
           }
-        },
-        "version": {
-          "type": "string"
         }
       }
     },

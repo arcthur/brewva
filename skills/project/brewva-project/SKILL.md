@@ -1,11 +1,8 @@
 ---
 name: brewva-project
 description: Project orchestration skill for Brewva source analysis, allocator-first runtime diagnosis, and issue/PR delivery.
-version: 1.4.0
 stability: stable
 tier: project
-tags: [project, migration, runtime, diagnostics, verification, delivery, context-arena]
-anti_tags: []
 tools:
   required: [read, grep]
   optional:
@@ -55,9 +52,6 @@ outputs:
     delivery_report,
   ]
 consumes: [architecture_map, execution_steps, findings, verification, runtime_artifacts]
-escalation_path:
-  constraint_missing: planning
-  no_rollback_path: review
 ---
 
 # Brewva Project Skill
@@ -359,6 +353,11 @@ When stopping, always report:
 
 When executable verification is blocked by environment constraints, emit `TOOL_BRIDGE` using
 `skills/base/planning/references/executable-evidence-bridge.md`.
+
+## Escalation
+
+- If a required constraint is missing, hand off to `planning`.
+- If no rollback path exists for a risky change, hand off to `review`.
 
 ## Anti-Patterns (forbidden)
 

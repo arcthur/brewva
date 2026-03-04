@@ -1,11 +1,8 @@
 ---
 name: review
 description: Use when reviewing code changes for merge safety, pre-merge risk checks, or quality audits — read-only assessment with deterministic issue tables.
-version: 2.0.0
 stability: stable
 tier: base
-tags: [review, quality, bug, risk, merge-safety]
-anti_tags: [implementation]
 dispatch:
   gate_threshold: 10
   auto_threshold: 18
@@ -40,9 +37,6 @@ outputs:
   ]
 consumes:
   [change_summary, files_changed, verification, execution_steps, handoff_packet, test_diagram]
-escalation_path:
-  scope_unknown: exploration
-  cross_skill_orchestration: compose
 ---
 
 # Review Skill
@@ -352,6 +346,11 @@ Handoff boundary:
 - risk is high while evidence is insufficient for a defensible severity call and no meaningful `TOOL_BRIDGE` can be produced
 
 When blocked, state exactly which artifact is missing.
+
+## Escalation
+
+- If the review scope or change context cannot be identified, hand off to `exploration`.
+- If the review requires cross-skill orchestration, hand off to `compose`.
 
 ## Anti-Patterns (never)
 

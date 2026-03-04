@@ -40,17 +40,16 @@ def validate_skill(skill_path):
 
     # Define allowed properties
     # Core fields parsed by contract.ts normalizeContract():
-    #   name, description, tags, anti_tags/antiTags, tools, budget, outputs,
-    #   consumes, composable_with/composableWith, escalation_path/escalationPath,
-    #   max_parallel, stability, version, cost_hint, tier
+    #   name, description, tools, budget, outputs,
+    #   consumes, composable_with/composableWith,
+    #   max_parallel, stability, cost_hint, tier
     # Additional metadata fields:
     #   license, allowed-tools, metadata, compatibility
     ALLOWED_PROPERTIES = {
-        'name', 'description', 'tags', 'anti_tags', 'antiTags',
+        'name', 'description',
         'tools', 'budget', 'outputs', 'consumes',
         'composable_with', 'composableWith',
-        'escalation_path', 'escalationPath',
-        'max_parallel', 'stability', 'version', 'cost_hint', 'tier',
+        'max_parallel', 'stability', 'cost_hint', 'tier',
         'license', 'allowed-tools', 'metadata', 'compatibility',
     }
 

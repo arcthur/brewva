@@ -5,14 +5,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 
-function writeSkill(
-  filePath: string,
-  input: { name: string; description: string; tag: string },
-): void {
+function writeSkill(filePath: string, input: { name: string; description: string }): void {
   mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(
     filePath,
-    `---\nname: ${input.name}\ndescription: ${input.description}\ntags: [${input.tag}]\ntools:\n  required: [read]\n  optional: []\n  denied: []\nbudget:\n  max_tool_calls: 20\n  max_tokens: 20000\n---\n# ${input.name}\n`,
+    `---\nname: ${input.name}\ndescription: ${input.description}\ntools:\n  required: [read]\n  optional: []\n  denied: []\nbudget:\n  max_tool_calls: 20\n  max_tokens: 20000\n---\n# ${input.name}\n`,
     "utf8",
   );
 }
@@ -58,7 +55,6 @@ describe("skill-creator fork script", () => {
       writeSkill(join(xdgRoot, "brewva/skills/base/chaincraft/SKILL.md"), {
         name: "chaincraft",
         description: "global chaincraft",
-        tag: "globaltag",
       });
 
       const result = runForkSkill({
@@ -101,7 +97,6 @@ describe("skill-creator fork script", () => {
       writeSkill(join(xdgRoot, "brewva/skills/base/forcecraft/SKILL.md"), {
         name: "forcecraft",
         description: "global forcecraft",
-        tag: "globaltag",
       });
 
       const env = {
@@ -148,7 +143,6 @@ describe("skill-creator fork script", () => {
       writeSkill(join(xdgRoot, "brewva/skills/base/inactivecraft/SKILL.md"), {
         name: "inactivecraft",
         description: "global inactivecraft",
-        tag: "globaltag",
       });
 
       const env = {
@@ -189,7 +183,6 @@ describe("skill-creator fork script", () => {
       writeSkill(join(xdgRoot, "brewva/skills/base/disabledcraft/SKILL.md"), {
         name: "disabledcraft",
         description: "global disabledcraft",
-        tag: "globaltag",
       });
 
       writeFileSync(

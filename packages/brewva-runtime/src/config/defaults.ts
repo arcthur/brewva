@@ -13,7 +13,7 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
       k: 4,
     },
     cascade: {
-      mode: "off",
+      mode: "auto",
       enabledSources: ["compose", "dispatch"],
       sourcePriority: ["compose", "dispatch"],
       onMissingConsumes: "replan",

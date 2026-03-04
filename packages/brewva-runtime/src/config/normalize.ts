@@ -14,7 +14,7 @@ const VALID_CHANNEL_SCOPE_STRATEGIES = new Set(["chat", "thread"]);
 const VALID_CHANNEL_ACL_MODES = new Set(["open", "closed"]);
 const VALID_SKILL_CASCADE_MODES = new Set(["off", "assist", "auto"]);
 const VALID_SKILL_CASCADE_SOURCES = new Set(["compose", "dispatch", "explicit"]);
-const VALID_SKILL_CASCADE_MISSING_CONSUMES = new Set(["pause", "replan", "escalate"]);
+const VALID_SKILL_CASCADE_MISSING_CONSUMES = new Set(["pause", "replan"]);
 
 type AnyRecord = Record<string, unknown>;
 

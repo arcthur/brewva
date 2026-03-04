@@ -1,11 +1,8 @@
 ---
 name: execution
 description: Dispatch and coordinate plan execution via subagents, batched steps, or parallel domains. Use when you have an approved implementation plan with discrete tasks ready for execution.
-version: 1.0.0
 stability: stable
 tier: base
-tags: [execute, dispatch, subagent, batch, parallel, orchestration]
-anti_tags: [explore, plan]
 tools:
   required: [read, exec]
   optional: [grep, lsp_symbols, lsp_find_references, lsp_diagnostics, edit, write, skill_complete]
@@ -24,9 +21,6 @@ outputs:
     execution_report,
   ]
 consumes: [execution_steps, design_spec, handoff_packet]
-escalation_path:
-  plan_unclear: planning
-  repeated_task_failure: debugging
 ---
 
 # Execution Skill
@@ -235,6 +229,11 @@ EXECUTION_REPORT
 - Budget is exhausted before completion.
 
 When stopped, emit `EXECUTION_REPORT` with partial results and the specific blocker.
+
+## Escalation
+
+- If the plan source is unclear or incomplete, hand off to `planning`.
+- If a task fails repeatedly after retry, hand off to `debugging` for root-cause investigation.
 
 ## Anti-Patterns (never)
 

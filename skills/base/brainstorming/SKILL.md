@@ -1,11 +1,8 @@
 ---
 name: brainstorming
 description: Use when creating features, building components, adding functionality, or modifying behavior — before any implementation skill.
-version: 1.0.0
 stability: stable
 tier: base
-tags: [design, ideation, pre-implementation, feature-scoping]
-anti_tags: [quick-fix, hotfix, typo]
 tools:
   required: [read, grep]
   optional:
@@ -25,9 +22,6 @@ budget:
   max_tokens: 130000
 outputs: [design_context, approach_options, design_spec]
 consumes: [architecture_map, tree_summary]
-escalation_path:
-  scope_too_large: planning
-  all_approaches_violate_constraints: review
 ---
 
 # Brainstorming Skill
@@ -205,6 +199,11 @@ Handoff boundary:
 - Critical system context cannot be gathered (missing code, inaccessible modules).
 
 On stop, report exactly what blocks progress or why design was skipped.
+
+## Escalation
+
+- If scope grows beyond a single design session, hand off to `planning`.
+- If all explored approaches violate hard constraints, hand off to `review` for constraint reassessment.
 
 ## Anti-Patterns (never)
 

@@ -266,8 +266,7 @@ export class ContextMemoryInjectionService {
     }
 
     const activeSkill = this.getActiveSkill(input.sessionId);
-    const isExternalKnowledgeSkill =
-      activeSkill?.contract.tags.some((tag) => tag === "external-knowledge") === true;
+    const isExternalKnowledgeSkill = activeSkill?.contract.externalRecall === true;
     if (!isExternalKnowledgeSkill) {
       return {
         status: "skipped",

@@ -1,11 +1,8 @@
 ---
 name: brewva-self-improve
 description: Capture learnings, errors, and corrections to enable continuous improvement. Use when a command fails, user corrects the agent, a knowledge gap is discovered, or a better approach emerges. Also review learnings before major tasks.
-version: 1.0.0
 stability: stable
 tier: project
-tags: [learning, self-improvement, feedback, promotion, skill-extraction]
-anti_tags: []
 tools:
   required: [read, grep]
   optional: [exec, edit, skill_load, skill_complete]
@@ -15,9 +12,6 @@ budget:
   max_tokens: 80000
 outputs: [learning_entry, error_entry, feature_entry, promotion_action, skill_scaffold]
 consumes: [root_cause, fix_description, evidence, verification]
-escalation_path:
-  learning_unclear: exploration
-  recurring_pattern: planning
 ---
 
 # Brewva Self-Improve Skill
@@ -358,6 +352,11 @@ Use `skills/project/brewva-session-logs/SKILL.md` for detailed JSONL query recip
 - Duplicate entry already exists with identical content — link with `See Also` instead.
 - The learning is session-specific trivia with no reuse value — skip.
 - Promotion target already contains equivalent guidance — skip promotion.
+
+## Escalation
+
+- If the learning or improvement opportunity is unclear, hand off to `exploration`.
+- If a recurring pattern is identified that needs systemic resolution, hand off to `planning`.
 
 ## Anti-Patterns (forbidden)
 

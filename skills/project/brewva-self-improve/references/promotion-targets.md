@@ -44,7 +44,7 @@ A learning qualifies for promotion when **any** of these hold:
 
 When promoting to a new skill, the extracted skill must satisfy Brewva DoD:
 
-- YAML frontmatter with `name`, `description`, `version`, `stability`, `tier`, `tags`, `tools`, `budget`, `outputs`
+- YAML frontmatter with `name`, `description`, `stability`, `tier`, `tools`, `budget`, `outputs`
 - Sections: Objective, Trigger, Workflow, Stop Conditions, Anti-Patterns, Examples
 - Pass `scripts/check-skill-dod.sh` from `brewva-project`
 

@@ -1,11 +1,8 @@
 ---
 name: skill-creator
 description: Create and update reusable skills with clear contracts, resources, and packaging workflow.
-version: 1.0.0
 stability: stable
 tier: pack
-tags: [skill, skills, creator, authoring, scaffold, packaging, workflow]
-anti_tags: []
 tools:
   required: [read]
   optional: [grep, exec, skill_complete]
@@ -15,8 +12,6 @@ budget:
   max_tokens: 150000
 outputs: [skill_spec, skill_structure, skill_package]
 consumes: [objective, constraints]
-escalation_path:
-  unclear_requirements: planning
 license: Complete terms in LICENSE.txt
 ---
 
@@ -371,7 +366,7 @@ Any example files and directories not needed for the skill should be deleted. Th
   - Include both capability and trigger context.
   - Keep "when to use" guidance in `description`, because body text is loaded later.
 
-Optional contract metadata is allowed when useful (for example: `tier`, `tags`, `tools`, `budget`, `outputs`, `consumes`, `escalation_path`, `metadata`) as long as it follows runtime parser expectations and repository conventions.
+Optional contract metadata is allowed when useful (for example: `tier`, `tools`, `budget`, `outputs`, `consumes`, `metadata`) as long as it follows runtime parser expectations and repository conventions.
 
 For forked skills, keep `metadata.fork` provenance unless there is a strong reason to remove it.
 
@@ -419,3 +414,7 @@ After testing the skill, users may request improvements. Often this happens righ
 2. Notice struggles or inefficiencies
 3. Identify how SKILL.md or bundled resources should be updated
 4. Implement changes and test again
+
+## Escalation
+
+- If skill requirements are unclear and cannot be refined, hand off to `planning`.

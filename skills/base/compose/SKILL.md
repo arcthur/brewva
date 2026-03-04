@@ -1,14 +1,9 @@
 ---
 name: compose
 description: Use when task spans 2+ skill domains and output of one skill is a required input for another — single skill insufficient.
-version: 1.0.0
 stability: stable
 tier: base
-tags: [complex, multi-step, architecture, orchestration]
-anti_tags: [quick-fix, trivial]
 consumes: []
-escalation_path:
-  all_skills_insufficient: planning
 tools:
   required: [read]
   optional: [grep, exec, skill_complete]
@@ -44,7 +39,7 @@ Is the task achievable by one skill invocation?
    │   ├─ YES → compose with parallel lanes
    │   └─ NO → compose with sequential chain
    └─ Does no existing skill cover a subtask?
-       └─ YES → escalate to planning (escalation_path)
+       └─ YES → escalate to planning (see Escalation)
 ```
 
 Skip this skill for tasks where a single skill's workflow already covers all steps.
@@ -177,6 +172,10 @@ When blocked by unverifiable steps, emit `TOOL_BRIDGE` using
 `skills/base/planning/references/executable-evidence-bridge.md` and assign the bridge to the appropriate downstream skill.
 
 On stop, report the blocking subtask and recommend escalation target.
+
+## Escalation
+
+- If no existing skill covers a required subtask, hand off to `planning` for strategy redesign.
 
 ## Anti-Patterns (never)
 

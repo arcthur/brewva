@@ -9,7 +9,7 @@ type RuntimeWithInternals = {
     getActiveSkill(sessionId: string):
       | {
           name: string;
-          contract: { tags: string[] };
+          contract: { externalRecall?: boolean };
         }
       | undefined;
   };
@@ -33,7 +33,7 @@ function patchExternalKnowledgeSkill(runtime: BrewvaRuntime): void {
   runtimeWithInternals.contextService.getActiveSkill = () => ({
     name: "external-knowledge-probe",
     contract: {
-      tags: ["external-knowledge"],
+      externalRecall: true,
     },
   });
 }

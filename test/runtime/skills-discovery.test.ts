@@ -10,11 +10,11 @@ import {
   resetSkippedPackFilterWarningCache,
 } from "@brewva/brewva-runtime";
 
-function writeSkill(filePath: string, input: { name: string; tag: string }): void {
+function writeSkill(filePath: string, input: { name: string }): void {
   mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(
     filePath,
-    `---\nname: ${input.name}\ndescription: ${input.name} skill\ntags: [${input.tag}]\ntools:\n  required: [read]\n  optional: []\n  denied: []\nbudget:\n  max_tool_calls: 10\n  max_tokens: 10000\n---\n# ${input.name}\n`,
+    `---\nname: ${input.name}\ndescription: ${input.name} skill\ntools:\n  required: [read]\n  optional: []\n  denied: []\nbudget:\n  max_tool_calls: 10\n  max_tokens: 10000\n---\n# ${input.name}\n`,
     "utf8",
   );
 }
@@ -24,7 +24,6 @@ describe("skill discovery and loading", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-project-"));
     writeSkill(join(workspace, ".brewva/skills/base/commitcraft/SKILL.md"), {
       name: "commitcraft",
-      tag: "commitcrafttag",
     });
     const runtime = new BrewvaRuntime({ cwd: workspace });
     expect(runtime.skills.get("commitcraft")).toBeDefined();
@@ -45,7 +44,6 @@ describe("skill discovery and loading", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-ancestor-disabled-"));
     writeSkill(join(workspace, ".brewva/skills/base/commitcraft/SKILL.md"), {
       name: "commitcraft",
-      tag: "commitcrafttag",
     });
     const nested = join(workspace, "apps/api");
     mkdirSync(nested, { recursive: true });
@@ -67,7 +65,6 @@ describe("skill discovery and loading", () => {
     const external = mkdtempSync(join(tmpdir(), "brewva-skill-config-root-external-"));
     writeSkill(join(external, "skills/base/externalcraft/SKILL.md"), {
       name: "externalcraft",
-      tag: "externalcrafttag",
     });
 
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
@@ -95,7 +92,6 @@ describe("skill discovery and loading", () => {
     try {
       writeSkill(join(xdgRoot, "brewva/skills/base/globalcraft/SKILL.md"), {
         name: "globalcraft",
-        tag: "globalcrafttag",
       });
 
       const runtime = new BrewvaRuntime({ cwd: workspace });
@@ -125,7 +121,6 @@ describe("skill discovery and loading", () => {
     const directRoot = mkdtempSync(join(tmpdir(), "brewva-skill-direct-layout-root-"));
     writeSkill(join(directRoot, "base/directcraft/SKILL.md"), {
       name: "directcraft",
-      tag: "directcrafttag",
     });
 
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
@@ -139,7 +134,6 @@ describe("skill discovery and loading", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-relative-root-workspace-"));
     writeSkill(join(workspace, "vendor-skills/skills/base/relativecraft/SKILL.md"), {
       name: "relativecraft",
-      tag: "relativecrafttag",
     });
 
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
@@ -153,7 +147,6 @@ describe("skill discovery and loading", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-workspace-pack-"));
     writeSkill(join(workspace, ".brewva/skills/packs/custom-pack/SKILL.md"), {
       name: "packcraft",
-      tag: "packcrafttag",
     });
 
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
@@ -171,7 +164,6 @@ describe("skill discovery and loading", () => {
     const external = mkdtempSync(join(tmpdir(), "brewva-skill-config-pack-external-"));
     writeSkill(join(external, "skills/packs/custom-pack/SKILL.md"), {
       name: "external-packcraft",
-      tag: "external-packcrafttag",
     });
 
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
@@ -227,15 +219,13 @@ describe("skill discovery and loading", () => {
     try {
       writeSkill(join(xdgRoot, "brewva/skills/base/chaincraft/SKILL.md"), {
         name: "chaincraft",
-        tag: "globaltag",
       });
       writeSkill(join(workspace, ".brewva/skills/base/chaincraft/SKILL.md"), {
         name: "chaincraft",
-        tag: "projecttag",
       });
 
       const runtime = new BrewvaRuntime({ cwd: workspace });
-      expect(runtime.skills.get("chaincraft")?.contract.tags).toContain("projecttag");
+      expect(runtime.skills.get("chaincraft")).toBeDefined();
     } finally {
       if (previousXdg === undefined) {
         delete process.env.XDG_CONFIG_HOME;

@@ -1,11 +1,8 @@
 ---
 name: patching
 description: Use when applying code changes to fix a known issue or implement a scoped requirement — after root cause is confirmed or plan is approved.
-version: 1.0.0
 stability: stable
 tier: base
-tags: [patch, edit, fix, implement]
-anti_tags: [research, architecture]
 tools:
   required: [read, edit]
   optional: [grep, lsp_diagnostics, ledger_query, exec, skill_complete]
@@ -15,9 +12,6 @@ budget:
   max_tokens: 130000
 outputs: [change_summary, files_changed, verification]
 consumes: [execution_steps, root_cause, fix_description]
-escalation_path:
-  api_change_needed: planning
-  repeated_patch_failure: debugging
 ---
 
 # Patching Skill
@@ -144,6 +138,11 @@ PATCH_REPORT
 - Verification is blocked and no meaningful `TOOL_BRIDGE` can be produced.
 
 When stopping, provide exact blocker and recommended next planning scope.
+
+## Escalation
+
+- If the fix requires an API or contract change beyond the patch scope, hand off to `planning`.
+- If the patch fails repeatedly, hand off to `debugging` for root-cause analysis.
 
 ## Red Flags — STOP
 

@@ -1,11 +1,8 @@
 ---
 name: github
 description: GitHub operations via `gh` CLI for issues, pull requests, checks, workflow runs, and API queries. Use when users need PR/issue lifecycle actions, CI diagnostics, or repository metadata.
-version: 1.0.0
 stability: stable
 tier: pack
-tags: [github, gh, pr, issue, ci, review]
-anti_tags: [local-git-only]
 tools:
   required: [exec, read]
   optional: [grep, ledger_query, skill_complete]
@@ -15,9 +12,6 @@ budget:
   max_tokens: 160000
 outputs: [github_context, issue_draft, pr_draft, ci_summary]
 consumes: [change_summary, verification]
-escalation_path:
-  gh_not_installed: exploration
-  gh_not_authenticated: planning
 ---
 
 # GitHub Pack Skill
@@ -213,6 +207,11 @@ CI_SUMMARY
 - `gh auth status` fails and no valid credentials are available.
 - Repository permissions are insufficient for issue/PR write actions.
 - The task requires complex browser-driven flows that are not reliable in CLI-only execution.
+
+## Escalation
+
+- If `gh` CLI is not installed, hand off to `exploration` to set up the environment.
+- If `gh` is not authenticated, hand off to `planning` to resolve credential setup.
 
 ## Anti-Patterns (never)
 

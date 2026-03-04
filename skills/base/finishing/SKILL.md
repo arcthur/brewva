@@ -1,11 +1,8 @@
 ---
 name: finishing
 description: Use when implementation is complete, all tasks pass, and you need to decide how to integrate the work.
-version: 1.0.0
 stability: stable
 tier: base
-tags: [finish, merge, pr, integrate, branch]
-anti_tags: [explore, debug]
 tools:
   required: [exec, read]
   optional: [grep, skill_complete]
@@ -15,9 +12,6 @@ budget:
   max_tokens: 80000
 outputs: [finish_readiness, finish_decision, finish_report]
 consumes: [execution_report, verification, change_summary]
-escalation_path:
-  tests_failing: debugging
-  merge_conflicts: git
 ---
 
 # Finishing Skill
@@ -143,6 +137,11 @@ FINISH_REPORT
 - User declines all four options.
 
 When stopped, output what was tried and what exact input is needed next.
+
+## Escalation
+
+- If tests fail, hand off to `debugging` before proceeding.
+- If merge conflicts cannot be resolved mechanically, hand off to `git`.
 
 ## Anti-Patterns (never)
 

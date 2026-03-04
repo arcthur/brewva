@@ -51,7 +51,7 @@ function createExternalSkill(): SkillDocument {
     contract: {
       name: "external-knowledge-skill",
       tier: "project",
-      tags: ["external-knowledge"],
+      externalRecall: true,
       tools: {
         required: [],
         optional: [],

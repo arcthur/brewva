@@ -1,11 +1,8 @@
 ---
 name: git
 description: Use when creating commits, rebasing branches, or searching git history — covers commit architecture, rebase surgery, and blame/bisect workflows.
-version: 1.0.0
 stability: stable
 tier: base
-tags: [git, branch, commit, rebase, blame, bisect]
-anti_tags: [runtime]
 tools:
   required: [exec, read]
   optional: [grep, process, ledger_query, skill_complete]
@@ -15,8 +12,6 @@ budget:
   max_tokens: 140000
 outputs: [branch_state, style_detection, commit_plan, safety_checks]
 consumes: [change_summary, files_changed, verification]
-escalation_path:
-  branch_state_unclear: exploration
 ---
 
 # Git Skill
@@ -310,6 +305,10 @@ When stopped, output what was tried and what exact input is needed next.
 
 If execution is blocked by environment/tooling constraints, emit `TOOL_BRIDGE` using
 `skills/base/planning/references/executable-evidence-bridge.md` for a human-run recovery script.
+
+## Escalation
+
+- If the branch state is unclear or history is ambiguous, hand off to `exploration`.
 
 ## Anti-Patterns (never)
 

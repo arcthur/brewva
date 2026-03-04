@@ -119,28 +119,16 @@ function normalizeContract(
         ? budget.maxTokens
         : 100_000;
 
-  const antiTags = normalizeStringList(data.anti_tags ?? data.antiTags);
   const outputs = normalizeStringList(data.outputs);
   const composableWith = normalizeStringList(data.composable_with ?? data.composableWith);
   const consumes = normalizeStringList(data.consumes);
   const dispatch = normalizeDispatchPolicy(data);
-  const escalationPath =
-    typeof data.escalation_path === "object" &&
-    data.escalation_path &&
-    !Array.isArray(data.escalation_path)
-      ? (data.escalation_path as Record<string, string>)
-      : typeof data.escalationPath === "object" &&
-          data.escalationPath &&
-          !Array.isArray(data.escalationPath)
-        ? (data.escalationPath as Record<string, string>)
-        : undefined;
 
   return {
     name,
     tier,
     description: typeof data.description === "string" ? data.description : undefined,
-    tags: normalizeStringList(data.tags),
-    antiTags,
+    externalRecall: data.external_recall === true || data.externalRecall === true || undefined,
     dispatch,
     tools: {
       required,
@@ -154,7 +142,6 @@ function normalizeContract(
     outputs,
     composableWith,
     consumes,
-    escalationPath,
     maxParallel:
       typeof data.max_parallel === "number"
         ? Math.max(1, Math.trunc(data.max_parallel))
@@ -163,7 +150,6 @@ function normalizeContract(
       data.stability === "experimental" || data.stability === "deprecated"
         ? data.stability
         : "stable",
-    version: typeof data.version === "string" ? data.version : undefined,
     costHint: data.cost_hint === "high" || data.cost_hint === "low" ? data.cost_hint : "medium",
   };
 }
@@ -252,13 +238,10 @@ export function tightenContract(
 
   return {
     ...base,
-    tags: override.tags ?? base.tags,
-    antiTags: override.antiTags ?? base.antiTags,
     dispatch,
     outputs: override.outputs ?? base.outputs,
     composableWith: override.composableWith ?? base.composableWith,
     consumes: override.consumes ?? base.consumes,
-    escalationPath: override.escalationPath ?? base.escalationPath,
     maxParallel,
     tools: {
       required: [...required],
