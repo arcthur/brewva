@@ -20,14 +20,20 @@ function normalizeStringArray(value: unknown): string[] {
     .filter((entry) => entry.length > 0);
 }
 
+const OUTPUT_REF_ALIASES: Readonly<Record<string, string>> = {
+  review_findings: "findings",
+};
+
 function normalizeConsumeRef(input: string): string {
   const normalized = input.trim();
   if (!normalized) return "";
   const dotIndex = normalized.lastIndexOf(".");
-  if (dotIndex > 0 && dotIndex < normalized.length - 1) {
-    return normalized.slice(dotIndex + 1).trim();
-  }
-  return normalized;
+  const terminal =
+    dotIndex > 0 && dotIndex < normalized.length - 1
+      ? normalized.slice(dotIndex + 1).trim()
+      : normalized;
+  if (!terminal) return "";
+  return OUTPUT_REF_ALIASES[terminal] ?? terminal;
 }
 
 function buildRegistryStep(
@@ -122,7 +128,9 @@ export class ComposeSkillCascadeChainSource implements SkillCascadeChainSource {
         .filter((item) => item.length > 0);
       const produces = normalizeStringArray(
         entry.expected_outputs ?? entry.produces ?? entry.outputs,
-      );
+      )
+        .map((item) => normalizeConsumeRef(item))
+        .filter((item) => item.length > 0);
       const lane =
         typeof entry.lane === "string" && entry.lane.trim().length > 0
           ? entry.lane.trim()
@@ -157,8 +165,12 @@ export class ExplicitSkillCascadeChainSource implements SkillCascadeChainSource 
     for (const [index, step] of input.steps.entries()) {
       const skill = step.skill.trim();
       if (!skill) continue;
-      const consumes = normalizeStringArray(step.consumes).map((item) => normalizeConsumeRef(item));
-      const produces = normalizeStringArray(step.produces);
+      const consumes = normalizeStringArray(step.consumes)
+        .map((item) => normalizeConsumeRef(item))
+        .filter((item) => item.length > 0);
+      const produces = normalizeStringArray(step.produces)
+        .map((item) => normalizeConsumeRef(item))
+        .filter((item) => item.length > 0);
       const lane =
         typeof step.lane === "string" && step.lane.trim().length > 0 ? step.lane.trim() : undefined;
       steps.push({

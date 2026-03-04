@@ -88,6 +88,36 @@ function deriveTaskSpecFromOutputs(
   };
 }
 
+const SKILL_OUTPUT_COMPATIBILITY_ALIASES: Readonly<
+  Record<string, ReadonlyArray<readonly [fromKey: string, toKey: string]>>
+> = {
+  review: [
+    ["findings", "review_findings"],
+    ["review_findings", "findings"],
+  ],
+};
+
+function applySkillOutputCompatibilityAliases(
+  skillName: string | null,
+  outputs: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!skillName) return outputs;
+  const aliases = SKILL_OUTPUT_COMPATIBILITY_ALIASES[skillName];
+  if (!aliases || aliases.length === 0) return outputs;
+
+  let normalizedOutputs: Record<string, unknown> | null = null;
+  for (const [fromKey, toKey] of aliases) {
+    if (!Object.prototype.hasOwnProperty.call(outputs, fromKey)) continue;
+    if (Object.prototype.hasOwnProperty.call(outputs, toKey)) continue;
+    if (!normalizedOutputs) {
+      normalizedOutputs = { ...outputs };
+    }
+    normalizedOutputs[toKey] = outputs[fromKey];
+  }
+
+  return normalizedOutputs ?? outputs;
+}
+
 export interface SkillLifecycleServiceOptions {
   skills: SkillRegistry;
   sessionState: RuntimeSessionStateStore;
@@ -339,12 +369,13 @@ export class SkillLifecycleService {
     sessionId: string,
     outputs: Record<string, unknown>,
   ): { ok: boolean; missing: string[] } {
-    const validation = this.validateSkillOutputs(sessionId, outputs);
+    const activeSkillName = this.sessionState.activeSkillsBySession.get(sessionId) ?? null;
+    const normalizedOutputs = applySkillOutputCompatibilityAliases(activeSkillName, outputs);
+    const validation = this.validateSkillOutputs(sessionId, normalizedOutputs);
     if (!validation.ok) {
       return validation;
     }
 
-    const activeSkillName = this.sessionState.activeSkillsBySession.get(sessionId);
     if (activeSkillName) {
       const completedAt = Date.now();
       let sessionOutputs = this.sessionState.skillOutputsBySession.get(sessionId);
@@ -355,9 +386,9 @@ export class SkillLifecycleService {
       sessionOutputs.set(activeSkillName, {
         skillName: activeSkillName,
         completedAt,
-        outputs,
+        outputs: normalizedOutputs,
       });
-      const outputKeys = Object.keys(outputs).toSorted();
+      const outputKeys = Object.keys(normalizedOutputs).toSorted();
 
       this.sessionState.activeSkillsBySession.delete(sessionId);
       this.sessionState.toolCallsBySession.delete(sessionId);
@@ -369,12 +400,12 @@ export class SkillLifecycleService {
         payload: {
           skillName: activeSkillName,
           outputKeys,
-          outputs,
+          outputs: normalizedOutputs,
           completedAt,
         },
       });
 
-      this.maybePromoteTaskSpec(sessionId, activeSkillName, outputs);
+      this.maybePromoteTaskSpec(sessionId, activeSkillName, normalizedOutputs);
     }
     return validation;
   }

@@ -40,14 +40,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+const CONSUME_OUTPUT_ALIASES: Readonly<Record<string, string>> = {
+  review_findings: "findings",
+};
+
 function normalizeConsumeRef(input: string): string {
   const normalized = input.trim();
   if (!normalized) return "";
   const dotIndex = normalized.lastIndexOf(".");
-  if (dotIndex > 0 && dotIndex < normalized.length - 1) {
-    return normalized.slice(dotIndex + 1).trim();
-  }
-  return normalized;
+  const terminal =
+    dotIndex > 0 && dotIndex < normalized.length - 1
+      ? normalized.slice(dotIndex + 1).trim()
+      : normalized;
+  if (!terminal) return "";
+  return CONSUME_OUTPUT_ALIASES[terminal] ?? terminal;
 }
 
 function cloneIntent(intent: SkillChainIntent): SkillChainIntent {
@@ -829,7 +835,11 @@ export class SkillCascadeService {
 
   private resolveMissingConsumes(sessionId: string, consumes: string[]): string[] {
     if (consumes.length === 0) return [];
-    const available = new Set(this.listProducedOutputKeys(sessionId));
+    const available = new Set(
+      this.listProducedOutputKeys(sessionId)
+        .map((key) => normalizeConsumeRef(key))
+        .filter((key) => key.length > 0),
+    );
     const missing: string[] = [];
     for (const consume of consumes) {
       const normalized = normalizeConsumeRef(consume);

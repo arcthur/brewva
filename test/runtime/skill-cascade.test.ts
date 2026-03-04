@@ -441,6 +441,60 @@ describe("skill cascade orchestration", () => {
     }
   });
 
+  test("compose sequence normalizes legacy review_findings contracts", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createWorkspace("compose-review-findings-alias"),
+      config: createConfig("assist"),
+    });
+    const sessionId = "skill-cascade-compose-review-findings-1";
+
+    runtime.context.onTurnStart(sessionId, 1);
+    expect(runtime.skills.activate(sessionId, "compose").ok).toBe(true);
+    const composeCompletion = runtime.skills.complete(sessionId, {
+      compose_analysis: "request_summary: normalize review findings contract",
+      compose_plan: "review then planning",
+      skill_sequence: [
+        {
+          id: "T1",
+          skill: "review",
+          consumes: ["md"],
+          expected_outputs: ["review_findings"],
+        },
+        {
+          id: "T2",
+          skill: "planning",
+          consumes: ["review_findings"],
+          expected_outputs: ["execution_steps"],
+        },
+      ],
+    });
+    expect(composeCompletion.ok).toBe(true);
+
+    const composeIntent = runtime.skills.getCascadeIntent(sessionId);
+    expect(composeIntent?.source).toBe("compose");
+    expect(composeIntent?.steps[0]?.produces).toContain("findings");
+    expect(composeIntent?.steps[0]?.produces).not.toContain("review_findings");
+    expect(composeIntent?.steps[1]?.consumes).toContain("findings");
+    expect(composeIntent?.steps[1]?.consumes).not.toContain("review_findings");
+
+    expect(runtime.skills.activate(sessionId, "review").ok).toBe(true);
+    const reviewCompletion = runtime.skills.complete(
+      sessionId,
+      buildSkillOutputs(runtime, "review"),
+    );
+    expect(reviewCompletion.ok).toBe(true);
+
+    const afterReview = runtime.skills.getCascadeIntent(sessionId);
+    expect(afterReview?.cursor).toBe(1);
+    expect(afterReview?.status).toBe("paused");
+    const latestPaused = findLatestEvent(runtime, sessionId, "skill_cascade_paused");
+    expect(latestPaused?.payload?.reason).toBe("await_manual_activation");
+    const unresolvedConsumes = Array.isArray(latestPaused?.payload?.unresolvedConsumes)
+      ? latestPaused?.payload?.unresolvedConsumes
+      : [];
+    expect(unresolvedConsumes).toEqual([]);
+  });
+
   test("running compose intent is not replaced by lower-priority dispatch reroute", () => {
     const runtime = new BrewvaRuntime({
       cwd: createWorkspace("compose-preserve"),

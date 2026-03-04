@@ -25,6 +25,35 @@ import { RuntimeSessionStateStore } from "./session-state.js";
 
 const SKILL_SELECTION_SIGNALS = new Set<SkillSelectionSignal>(SKILL_SELECTION_SIGNALS_LIST);
 
+const SKILL_OUTPUT_COMPATIBILITY_ALIASES: Readonly<
+  Record<string, ReadonlyArray<readonly [fromKey: string, toKey: string]>>
+> = {
+  review: [
+    ["findings", "review_findings"],
+    ["review_findings", "findings"],
+  ],
+};
+
+function applySkillOutputCompatibilityAliases(
+  skillName: string,
+  outputs: Record<string, unknown>,
+): Record<string, unknown> {
+  const aliases = SKILL_OUTPUT_COMPATIBILITY_ALIASES[skillName];
+  if (!aliases || aliases.length === 0) return outputs;
+
+  let normalizedOutputs: Record<string, unknown> | null = null;
+  for (const [fromKey, toKey] of aliases) {
+    if (!Object.prototype.hasOwnProperty.call(outputs, fromKey)) continue;
+    if (Object.prototype.hasOwnProperty.call(outputs, toKey)) continue;
+    if (!normalizedOutputs) {
+      normalizedOutputs = { ...outputs };
+    }
+    normalizedOutputs[toKey] = outputs[fromKey];
+  }
+
+  return normalizedOutputs ?? outputs;
+}
+
 export interface SessionLifecycleServiceOptions {
   sessionState: RuntimeSessionStateStore;
   contextBudget: ContextBudgetManager;
@@ -193,10 +222,11 @@ export class SessionLifecycleService {
         const skillName = this.readSkillName(payload);
         const outputs = this.readSkillOutputs(payload);
         if (skillName && outputs) {
+          const normalizedOutputs = applySkillOutputCompatibilityAliases(skillName, outputs);
           skillOutputs.set(skillName, {
             skillName,
             completedAt: this.readNonNegativeNumber(payload?.completedAt) ?? event.timestamp,
-            outputs,
+            outputs: normalizedOutputs,
           });
         }
         activeSkill = undefined;

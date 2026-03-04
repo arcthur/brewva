@@ -223,10 +223,16 @@ Useful extended checks:
 
 ```bash
 bun run lint
+bun run format
 bun run format:check
 bun run test:e2e
 bun run test:e2e:live
 ```
+
+Formatting policy note:
+
+- Use `bun run format` / `bun run format:check` (script entrypoint), not direct `oxfmt ...` commands.
+- This keeps formatter invocation consistent with repo policy and avoids PATH drift across environments.
 
 ---
 

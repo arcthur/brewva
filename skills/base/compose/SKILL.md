@@ -85,6 +85,7 @@ Rules:
 - Every subtask must map to a known skill. If no skill fits, stop and escalate.
 - Keep subtask count minimal; do not fragment artificially.
 - Mark data dependencies explicitly; do not assume implicit ordering.
+- `expected_outputs` must use exact canonical keys from the producing skill contract (no ad-hoc aliases such as `review_findings` when the skill contract defines `findings`).
 
 ### Step 2: Define inter-skill data contracts
 
