@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, type BrewvaConfig } from "@brewva/brewva-runtime";
@@ -9,44 +9,33 @@ type RuntimeWithInternals = {
     memory: {
       refreshIfNeeded(input: { sessionId: string }): void;
       getWorkingMemory(sessionId: string): { content: string } | null;
-      buildRecallBlock(input: {
-        sessionId: string;
-        query: string;
-        limit?: number;
-      }): Promise<string>;
     };
   };
 };
 
+function createConfig(): BrewvaConfig {
+  const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+  config.memory.enabled = true;
+  config.infrastructure.contextBudget.enabled = true;
+  config.infrastructure.contextBudget.maxInjectionTokens = 4_000;
+  config.infrastructure.toolFailureInjection.enabled = true;
+  return config;
+}
+
 function createWorkspace(name: string): string {
   const workspace = mkdtempSync(join(tmpdir(), `brewva-context-order-${name}-`));
-  mkdirSync(join(workspace, ".brewva", "agents", "default"), { recursive: true });
-  writeFileSync(
-    join(workspace, ".brewva", "agents", "default", "identity.md"),
-    ["[Identity]", "role: runtime ordering probe"].join("\n"),
-    "utf8",
-  );
   writeFileSync(
     join(workspace, "AGENTS.md"),
     [
       "## CRITICAL RULES",
       "- User-facing command name is `brewva`.",
       "- Use workspace package imports `@brewva/brewva-runtime`.",
-      "- Run bun run test:dist before release-sensitive changes.",
+      "- Use Bun `1.3.9`.",
+      "- Run bun run test:dist.",
     ].join("\n"),
     "utf8",
   );
   return workspace;
-}
-
-function createConfig(): BrewvaConfig {
-  const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-  config.memory.enabled = true;
-  config.memory.recallMode = "always";
-  config.infrastructure.contextBudget.enabled = true;
-  config.infrastructure.contextBudget.maxInjectionTokens = 4_000;
-  config.infrastructure.toolFailureInjection.enabled = true;
-  return config;
 }
 
 function patchMemory(runtime: BrewvaRuntime): void {
@@ -55,14 +44,16 @@ function patchMemory(runtime: BrewvaRuntime): void {
   runtimeWithInternals.contextService.memory.getWorkingMemory = () => ({
     content: "[WorkingMemory]\nsummary: deterministic working memory block",
   });
-  runtimeWithInternals.contextService.memory.buildRecallBlock = async () =>
-    "[MemoryRecall]\nquery: deterministic recall block";
+}
+
+function blockIndex(text: string, block: string): number {
+  return text.indexOf(`[${block}]`);
 }
 
 describe("context source order integration", () => {
-  test("injects all seven semantic sources in a single deterministic runtime path", async () => {
+  test("injects deterministic governance sources without recall branch", async () => {
     const runtime = new BrewvaRuntime({
-      cwd: createWorkspace("seven-sources"),
+      cwd: createWorkspace("strict-order"),
       config: createConfig(),
       agentId: "default",
     });
@@ -79,18 +70,18 @@ describe("context source order integration", () => {
       message: "tool failure blocks completion",
       source: "test",
     });
+    runtime.tools.recordResult({
+      sessionId,
+      toolName: "exec",
+      args: { command: "bun test" },
+      outputText: "Error: deterministic source order failure block",
+      success: false,
+    });
     runtime.truth.upsertFact(sessionId, {
       id: "truth:order",
       kind: "diagnostic",
       severity: "warn",
       summary: "deterministic truth fact",
-    });
-    runtime.tools.recordResult({
-      sessionId,
-      toolName: "exec",
-      args: { command: "bun test" },
-      outputText: "Error: deterministic failure",
-      success: false,
     });
 
     const injected = await runtime.context.buildInjection(
@@ -100,18 +91,17 @@ describe("context source order integration", () => {
       "leaf-order",
     );
     expect(injected.accepted).toBe(true);
-
-    const markers = [
-      "[Identity]",
-      "[TruthLedger]",
-      "[TruthFacts]",
-      "[TaskLedger]",
-      "[RecentToolFailures]",
-      "[WorkingMemory]",
-      "[MemoryRecall]",
-    ];
-    for (const marker of markers) {
-      expect(injected.text.includes(marker)).toBe(true);
-    }
+    expect(injected.text.length).toBeGreaterThan(0);
+    const workingMemoryPosition = blockIndex(injected.text, "WorkingMemory");
+    const truthLedgerPosition = blockIndex(injected.text, "TruthLedger");
+    const truthFactsPosition = blockIndex(injected.text, "TruthFacts");
+    const toolFailuresPosition = blockIndex(injected.text, "RecentToolFailures");
+    const taskLedgerPosition = blockIndex(injected.text, "TaskLedger");
+    expect(workingMemoryPosition).toBeGreaterThanOrEqual(0);
+    expect(truthLedgerPosition).toBeGreaterThan(workingMemoryPosition);
+    expect(truthFactsPosition).toBeGreaterThan(truthLedgerPosition);
+    expect(toolFailuresPosition).toBeGreaterThan(truthFactsPosition);
+    expect(taskLedgerPosition).toBeGreaterThan(toolFailuresPosition);
+    expect(injected.text.includes("[MemoryRecall]")).toBe(false);
   });
 });

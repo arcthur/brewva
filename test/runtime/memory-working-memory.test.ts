@@ -1,132 +1,61 @@
 import { describe, expect, test } from "bun:test";
-import {
-  buildWorkingMemorySnapshot,
-  type MemoryCrystal,
-  type MemoryInsight,
-} from "@brewva/brewva-runtime";
-import { createMemoryCrystal, createMemoryUnitFactory } from "../fixtures/memory.js";
+import { buildWorkingMemorySnapshot, type MemoryUnit } from "@brewva/brewva-runtime";
 
-const unit = createMemoryUnitFactory({
-  sessionId: "mem-working-session",
-  status: "active",
-  confidence: 0.8,
-  updatedAt: 1_700_000_000_000,
-  sourceRefsFactory: (input, timestamp) => [
-    {
-      eventId: `evt-${input.id}`,
-      eventType: "task_event",
-      sessionId: input.sessionId ?? "mem-working-session",
-      timestamp,
-    },
-  ],
-});
-
-function crystal(id: string, topic: string, summary: string): MemoryCrystal {
-  return createMemoryCrystal({
-    id,
-    topic,
-    summary,
-    sessionId: "mem-working-session",
-    confidence: 0.85,
-    unitIds: ["u1", "u2"],
-    updatedAt: 1_700_000_000_001,
-  });
-}
-
-function insight(id: string, message: string): MemoryInsight {
+function unit(input: {
+  id: string;
+  type: MemoryUnit["type"];
+  statement: string;
+  confidence?: number;
+}): MemoryUnit {
+  const now = Date.now();
   return {
-    id,
-    sessionId: "mem-working-session",
-    kind: "conflict",
-    status: "open",
-    message,
-    relatedUnitIds: ["u1", "u2"],
-    createdAt: 1_700_000_000_000,
-    updatedAt: 1_700_000_000_000,
+    id: input.id,
+    sessionId: "session-1",
+    type: input.type,
+    status: "active",
+    topic: input.type,
+    statement: input.statement,
+    confidence: input.confidence ?? 0.8,
+    fingerprint: `fp-${input.id}`,
+    sourceRefs: [
+      {
+        eventId: `evt-${input.id}`,
+        eventType: "task_event",
+        sessionId: "session-1",
+        timestamp: now,
+      },
+    ],
+    createdAt: now,
+    updatedAt: now,
+    lastSeenAt: now,
   };
 }
 
-describe("working memory builder", () => {
-  test("builds fixed sections with working memory header", () => {
+describe("working memory snapshot", () => {
+  test("builds sectioned content from units", () => {
     const snapshot = buildWorkingMemorySnapshot({
-      sessionId: "mem-working-session",
-      maxChars: 2400,
+      sessionId: "session-1",
       units: [
-        unit({
-          id: "u1",
-          type: "decision",
-          topic: "architecture",
-          statement: "Keep event tape as trace source.",
-        }),
-        unit({
-          id: "u2",
-          type: "constraint",
-          topic: "runtime",
-          statement: "Do not introduce graph database.",
-        }),
-        unit({
-          id: "u3",
-          type: "risk",
-          topic: "quality",
-          statement: "Noisy recalls may hurt context.",
-        }),
-        unit({
-          id: "u4",
-          type: "learning",
-          topic: "skill",
-          statement: "Skill completion should emit semantic event.",
-        }),
-        unit({
-          id: "u5",
-          type: "learning",
-          topic: "lessons learned",
-          statement: "When verification fails, tighten strategy before retrying.",
-          metadata: {
-            memorySignal: "lesson",
-            source: "cognitive_outcome_reflection",
-          },
-        }),
+        unit({ id: "u1", type: "fact", statement: "Current deployment is blocked by CI" }),
+        unit({ id: "u2", type: "decision", statement: "Use Bun for all test workflows" }),
+        unit({ id: "u3", type: "constraint", statement: "No backward compatibility layer" }),
       ],
-      crystals: [
-        crystal("c1", "architecture", "[Crystal]\n- Keep event tape.\n- Build memory projections."),
-      ],
-      insights: [insight("i1", "Potential conflict in topic 'quality' with 2 active statements.")],
+      maxChars: 2_000,
     });
 
     expect(snapshot.content.includes("[WorkingMemory]")).toBe(true);
-    expect(snapshot.content.includes("Now")).toBe(true);
     expect(snapshot.content.includes("Decisions")).toBe(true);
     expect(snapshot.content.includes("Constraints")).toBe(true);
-    expect(snapshot.content.includes("Risks")).toBe(true);
-    expect(snapshot.content.includes("Lessons Learned")).toBe(true);
-    expect(snapshot.content.includes("Open Threads")).toBe(true);
-    expect(snapshot.content.includes("tighten strategy before retrying")).toBe(true);
+    expect(snapshot.sourceUnitIds).toEqual(["u1", "u2", "u3"]);
   });
 
-  test("respects max chars by trimming output", () => {
+  test("respects maxChars cap", () => {
     const snapshot = buildWorkingMemorySnapshot({
-      sessionId: "mem-working-session",
-      maxChars: 260,
-      units: [
-        unit({
-          id: "u1",
-          type: "fact",
-          topic: "long",
-          statement:
-            "This is a very long statement that should be trimmed to stay within configured working memory limits.",
-        }),
-        unit({
-          id: "u2",
-          type: "risk",
-          topic: "long",
-          statement:
-            "Another long statement that increases total output length and should force trimming behavior.",
-        }),
-      ],
-      crystals: [],
-      insights: [],
+      sessionId: "session-1",
+      units: [unit({ id: "u1", type: "fact", statement: "a".repeat(2_000) })],
+      maxChars: 220,
     });
 
-    expect(snapshot.content.length).toBeLessThanOrEqual(260);
+    expect(snapshot.content.length).toBeLessThanOrEqual(220);
   });
 });

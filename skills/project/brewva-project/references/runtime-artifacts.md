@@ -1,7 +1,7 @@
 # Brewva Runtime Artifact Catalog
 
-Reference for all persistent artifacts the Brewva runtime produces during a session.
-All paths are relative to the workspace root (detected via `.brewva/` marker or git root).
+Reference for persistent artifacts the Brewva runtime produces during a session.
+All paths are relative to the workspace root.
 
 ---
 
@@ -9,7 +9,7 @@ All paths are relative to the workspace root (detected via `.brewva/` marker or 
 
 | Property | Value                                                                       |
 | -------- | --------------------------------------------------------------------------- |
-| Path     | `.orchestrator/events/{sessionId}.jsonl`                                    |
+| Path     | `.orchestrator/events/sess_<base64url(sessionId)>.jsonl`                    |
 | Format   | Newline-delimited JSON (JSONL)                                              |
 | Producer | `BrewvaEventStore.append()` — `packages/brewva-runtime/src/events/store.ts` |
 
@@ -19,34 +19,39 @@ All paths are relative to the workspace root (detected via `.brewva/` marker or 
 | ----------- | ------- | ----------------------------------------------- |
 | `id`        | string  | `evt_{timestamp}_{uuid}`                        |
 | `sessionId` | string  | Session identifier                              |
-| `type`      | string  | Event type (see below)                          |
+| `type`      | string  | Event type                                      |
 | `timestamp` | number  | Unix epoch milliseconds                         |
 | `turn`      | number? | Turn number (when applicable)                   |
 | `payload`   | object? | Event-specific data (redacted in some contexts) |
 
-### Event Types
+### High-Value Event Families
 
-| Type                               | Semantics                                                                                             |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `session_start`                    | Session initialization                                                                                |
-| `tool_call`                        | Tool invocation record                                                                                |
-| `anchor`                           | Tape handoff anchor point                                                                             |
-| `checkpoint`                       | Tape checkpoint (task/truth/cost/evidence/memory replay slices)                                       |
-| `context_injected`                 | Context injection accepted with token telemetry (`sourceCount`, `sourceTokens`, `degradationApplied`) |
-| `context_injection_dropped`        | Context injection rejected (`hard_limit`, `budget_exhausted`, `duplicate_content`, etc.)              |
-| `context_arena_slo_enforced`       | Arena entry ceiling triggered and SLO degradation was applied                                         |
-| `context_external_recall_decision` | External recall boundary decision (`skipped` / `filtered_out` / `injected`)                           |
-| `memory_*`                         | Memory engine lifecycle events                                                                        |
-| `cost_update`                      | Per-model / per-skill / per-tool cost delta                                                           |
-| `ledger_compacted`                 | Ledger compaction checkpoint                                                                          |
+| Type Prefix / Event                                                                                          | Semantics                                             |
+| ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| `session_start`, `agent_end`                                                                                 | Session lifecycle boundaries                          |
+| `tool_call`, `tool_call_blocked`, `tool_call_marked`                                                         | Tool execution and gate outcomes                      |
+| `task_event`                                                                                                 | Event-sourced task state transitions                  |
+| `anchor`, `checkpoint`                                                                                       | Tape anchors and replay checkpoints                   |
+| `context_usage`, `context_compaction_requested`, `context_compaction_gate_blocked_tool`, `context_compacted` | Context pressure and compaction boundary behavior     |
+| `context_injected`, `context_injection_dropped`, `context_arena_slo_enforced`                                | Deterministic context injection decisions             |
+| `memory_projection_ingested`, `memory_projection_refreshed`                                                  | Memory projection lifecycle (non-cognitive)           |
+| `cost_update`, `budget_alert`                                                                                | Cost tracking and budget boundaries                   |
+| `governance_verify_spec_*`                                                                                   | Governance verification outcomes                      |
+| `governance_cost_anomaly_*`                                                                                  | Governance anomaly detection over cost behavior       |
+| `governance_compaction_integrity_*`                                                                          | Governance integrity checks over compaction summaries |
+| `ledger_compacted`                                                                                           | Evidence ledger checkpoint/compaction marker          |
+| `turn_wal_*`                                                                                                 | Turn WAL append/status/compaction signals             |
 
 ### Diagnostic Value
 
-Primary correlation artifact. Every runtime action produces at least one event.
-Use `sessionId` + `turn` to correlate with ledger rows and memory units.
-Cost analysis: filter `type === "cost_update"` for per-model and per-tool budget consumption.
-Context control-path analysis: inspect `context_injected`, `context_injection_dropped`,
-`context_arena_slo_enforced`, and `context_external_recall_decision`.
+Primary correlation artifact. Use `sessionId` + `turn` to correlate with ledger rows,
+memory projection updates, and replay state.
+
+Context boundary analysis: inspect `context_injected`, `context_injection_dropped`,
+`context_arena_slo_enforced`, `context_compaction_*`, and `governance_compaction_integrity_*`.
+
+Governance analysis: inspect `governance_verify_spec_*` and
+`governance_cost_anomaly_*`.
 
 ---
 
@@ -55,7 +60,7 @@ Context control-path analysis: inspect `context_injected`, `context_injection_dr
 | Property | Value                                                                               |
 | -------- | ----------------------------------------------------------------------------------- |
 | Path     | `.orchestrator/ledger/evidence.jsonl`                                               |
-| Format   | JSONL with **hash chain** integrity                                                 |
+| Format   | JSONL with hash-chain integrity                                                     |
 | Producer | `EvidenceLedger.append()` — `packages/brewva-runtime/src/ledger/evidence-ledger.ts` |
 
 ### Key Fields
@@ -71,168 +76,84 @@ Context control-path analysis: inspect `context_injected`, `context_injection_dr
 | `argsSummary`   | string  | Truncated args (max 200 chars, redacted)   |
 | `outputSummary` | string  | Truncated output (max 200 chars, redacted) |
 | `outputHash`    | string  | SHA-256 of full output                     |
-| `verdict`       | enum    | `"pass"` \| `"fail"` \| `"inconclusive"`   |
+| `verdict`       | enum    | `"pass"` / `"fail"` / `"inconclusive"`     |
 | `previousHash`  | string  | Hash of previous row (chain link)          |
 | `hash`          | string  | SHA-256 of this row body                   |
 | `metadata`      | object? | Optional structured metadata               |
 
 ### Hash Chain Property
 
-Each row's `hash` is computed over its body fields plus `previousHash`.
-**First diagnostic step**: verify chain continuity — a broken chain indicates
-data corruption, out-of-order writes, or manual tampering.
-
-### Compaction
-
-The ledger periodically compacts old rows, retaining the most recent N entries
-and inserting a `ledger_compacted` checkpoint event in the event store.
+Each row hash is computed over body fields plus `previousHash`.
+First diagnostic step: verify chain continuity.
 
 ---
 
-## 3. Memory Artifacts
+## 3. Memory Projection Artifacts
 
 Base directory: `.orchestrator/memory/`
 
 ### 3a. Memory Units — `units.jsonl`
 
-| Field          | Type    | Description                                           |
-| -------------- | ------- | ----------------------------------------------------- |
-| `id`           | string  | Unit identifier                                       |
-| `sessionId`    | string  | Originating session                                   |
-| `type`         | string  | Unit type                                             |
-| `status`       | string  | Lifecycle status                                      |
-| `topic`        | string  | Topic cluster key                                     |
-| `statement`    | string  | Core assertion                                        |
-| `confidence`   | number  | Confidence score                                      |
-| `fingerprint`  | string  | Dedup fingerprint                                     |
-| `sourceRefs`   | array   | Source references                                     |
-| `metadata`     | object? | Optional structured metadata                          |
-| `createdAt`    | number  | Creation timestamp                                    |
-| `updatedAt`    | number  | Last update timestamp                                 |
-| `firstSeenAt`  | number  | First observed timestamp                              |
-| `lastSeenAt`   | number  | Most recent observed timestamp                        |
-| `resolvedAt`   | number? | Resolved timestamp (when status becomes resolved)     |
-| `supersededAt` | number? | Superseded timestamp (when status becomes superseded) |
+| Field         | Type    | Description                                       |
+| ------------- | ------- | ------------------------------------------------- |
+| `id`          | string  | Unit identifier                                   |
+| `sessionId`   | string  | Originating session                               |
+| `type`        | string  | Unit type (`fact`, `decision`, `constraint`, ...) |
+| `status`      | string  | Lifecycle status (`active` or `resolved`)         |
+| `topic`       | string  | Topic key                                         |
+| `statement`   | string  | Core statement                                    |
+| `confidence`  | number  | Confidence in [0, 1]                              |
+| `fingerprint` | string  | Deterministic dedup key                           |
+| `sourceRefs`  | array   | Event/evidence source references                  |
+| `metadata`    | object? | Optional structured metadata                      |
+| `createdAt`   | number  | Creation timestamp                                |
+| `updatedAt`   | number  | Last update timestamp                             |
+| `lastSeenAt`  | number  | Last observed timestamp                           |
+| `resolvedAt`  | number? | Resolution timestamp                              |
 
-### 3b. Memory Crystals — `crystals.jsonl`
+### 3b. Projection State — `state.json`
 
-| Field        | Type    | Description                  |
-| ------------ | ------- | ---------------------------- |
-| `id`         | string  | Crystal identifier           |
-| `sessionId`  | string  | Originating session          |
-| `topic`      | string  | Topic cluster key            |
-| `summary`    | string  | Aggregated summary           |
-| `unitIds`    | array   | Constituent unit IDs         |
-| `confidence` | number  | Aggregate confidence         |
-| `sourceRefs` | array   | Source references            |
-| `metadata`   | object? | Optional structured metadata |
-| `createdAt`  | number  | Creation timestamp           |
-| `updatedAt`  | number  | Last update timestamp        |
+| Field             | Type           | Description                              |
+| ----------------- | -------------- | ---------------------------------------- |
+| `schemaVersion`   | number         | Projection state schema version          |
+| `lastProjectedAt` | number or null | Last working-memory projection timestamp |
 
-### 3c. Memory Insights — `insights.jsonl`
+### 3c. Working Memory Snapshot — `working.md`
 
-| Field            | Type    | Description                    |
-| ---------------- | ------- | ------------------------------ |
-| `id`             | string  | Insight identifier             |
-| `sessionId`      | string  | Originating session            |
-| `kind`           | string  | Insight category               |
-| `status`         | string  | Lifecycle status               |
-| `message`        | string  | Insight content                |
-| `relatedUnitIds` | array   | Associated memory units        |
-| `edgeId`         | string? | Evolution edge (if applicable) |
-| `createdAt`      | number  | Creation timestamp             |
-| `updatedAt`      | number  | Last update timestamp          |
-
-### 3d. Memory Evolution Edges — `evolves.jsonl`
-
-| Field          | Type   | Description             |
-| -------------- | ------ | ----------------------- |
-| `id`           | string | Edge identifier         |
-| `sessionId`    | string | Originating session     |
-| `sourceUnitId` | string | Predecessor unit        |
-| `targetUnitId` | string | Successor unit          |
-| `relation`     | string | Evolution relation type |
-| `status`       | string | Edge status             |
-| `confidence`   | number | Edge confidence         |
-| `rationale`    | string | Justification           |
-| `createdAt`    | number | Creation timestamp      |
-| `updatedAt`    | number | Last update timestamp   |
-
-### 3e. Memory State — `state.json`
-
-| Field                 | Type   | Description                                    |
-| --------------------- | ------ | ---------------------------------------------- |
-| `schemaVersion`       | number | Schema version                                 |
-| `lastPublishedAt`     | number | Last publish timestamp                         |
-| `lastPublishedDayKey` | string | Calendar day key                               |
-| `dirtyEntries`        | array  | Dirty topic entries triggering refresh/publish |
-
-`dirtyEntries` rows have shape: `{ topic, reason, updatedAt }`.
-
-| Field       | Type   | Description                                       |
-| ----------- | ------ | ------------------------------------------------- |
-| `topic`     | string | Topic key or directive key                        |
-| `reason`    | string | Dirty reason (`new_unit`, `external_recall`, ...) |
-| `updatedAt` | number | Last time this dirty reason was observed          |
-
-### 3f. Working Memory — `working.md`
-
-Markdown snapshot of current working memory, truncated to `maxWorkingChars` (default 2400).
-
-### 3g. Global Memory Tier (optional)
-
-When `memory.global.enabled` is on, global memory is projected into a dedicated store:
-
-- `.orchestrator/memory/global/units.jsonl`
-- `.orchestrator/memory/global/crystals.jsonl`
-- `.orchestrator/memory/global/global-working.md`
-- `.orchestrator/memory/global/global-decay.json`
-
-Global tier rows use a synthetic `sessionId` (`"__global__"`).
-
-### 3h. Global Sync Snapshots (optional)
-
-When syncing/publishing global memory across sessions, the runtime may emit snapshot files:
-
-- `.orchestrator/memory/global-sync/snapshot-*.json`
+Markdown snapshot derived from memory units, truncated to `maxWorkingChars`.
 
 ### Diagnostic Value
 
-Cross-reference `units.jsonl` by `sessionId` and `topic` to trace how knowledge
-evolved. `evolves.jsonl` edges reveal belief revision chains.
+Memory is a deterministic projection layer, not a cognitive augmentation layer.
+Use unit rows plus projection events (`memory_projection_*`) to explain why
+working memory changed.
 
 ---
 
-## 4. Tape Checkpoints
+## 4. Tape Checkpoints and Replay
 
-| Property | Value                                                                                      |
-| -------- | ------------------------------------------------------------------------------------------ |
-| Path     | Embedded in event store as events with `type: "checkpoint"`                                |
-| Schema   | `brewva.tape.checkpoint.v1`                                                                |
-| Producer | `TapeService.maybeRecordTapeCheckpoint()` — `packages/brewva-runtime/src/services/tape.ts` |
-| Interval | Every `checkpointIntervalEntries` events (default: 120)                                    |
+| Property   | Value                                                                                      |
+| ---------- | ------------------------------------------------------------------------------------------ |
+| Event type | `checkpoint`                                                                               |
+| Schema     | `brewva.tape.checkpoint.v2`                                                                |
+| Producer   | `TapeService.maybeRecordTapeCheckpoint()` — `packages/brewva-runtime/src/services/tape.ts` |
+| Interval   | Every `checkpointIntervalEntries` events (default: 120)                                    |
 
-### Payload Fields
+### Payload State
 
-| Field                 | Type    | Description                      |
-| --------------------- | ------- | -------------------------------- |
-| `schema`              | string  | `"brewva.tape.checkpoint.v1"`    |
-| `createdAt`           | number  | Checkpoint timestamp             |
-| `reason`              | string  | Trigger reason                   |
-| `basedOnEventId`      | string  | Last event ID at checkpoint time |
-| `latestAnchorEventId` | string? | Latest tape anchor event         |
-| `state.task`          | object  | Full `TaskState` snapshot        |
-| `state.truth`         | object  | Full `TruthState` snapshot       |
-| `state.cost`          | object? | Cost fold snapshot               |
-| `state.evidence`      | object? | Evidence fold snapshot           |
-| `state.memory`        | object? | Memory fold snapshot             |
+| Field                           | Type   | Description                                          |
+| ------------------------------- | ------ | ---------------------------------------------------- |
+| `state.task`                    | object | Full `TaskState` snapshot                            |
+| `state.truth`                   | object | Full `TruthState` snapshot                           |
+| `state.cost`                    | object | Folded cost summary                                  |
+| `state.costSkillLastTurnByName` | object | Last turn index per skill                            |
+| `state.evidence`                | object | Evidence fold summary                                |
+| `state.memory`                  | object | `{ updatedAt, unitCount }` memory projection summary |
 
 ### Diagnostic Value
 
-Enables fast state reconstruction via `TurnReplayEngine`
-(`packages/brewva-runtime/src/tape/replay-engine.ts`).
-Instead of replaying all events from the start, locate the nearest checkpoint
-before the target turn and replay forward from there.
+`TurnReplayEngine` (`packages/brewva-runtime/src/tape/replay-engine.ts`) rebuilds
+state at any target turn from nearest checkpoint + forward replay.
 
 ---
 
@@ -242,26 +163,40 @@ Base directory: `.orchestrator/snapshots/{sessionId}/`
 
 ### 5a. Patch History — `patchsets.json`
 
-| Field       | Type   | Description           |
-| ----------- | ------ | --------------------- |
-| `version`   | number | Schema version        |
-| `sessionId` | string | Session identifier    |
-| `updatedAt` | number | Last update timestamp |
-| `patchSets` | array  | Ordered patch sets    |
-
-Each patch set contains: `id`, `createdAt`, `summary`, `toolName`, `appliedAt`,
-and `changes[]` (with `path`, `action`, content hashes, snapshot file references).
+Contains ordered patch sets with summary, tool attribution, and per-file change metadata.
 
 ### 5b. File Snapshots — `{hash}.snap`
 
-Pre-mutation file contents stored as `{sha256(relativePath:beforeHash)}.snap`.
-Used by `FileChangeTracker.rollbackLastPatchSet()` to restore files during undo.
+Pre-mutation file contents used by rollback.
 
 Producer: `FileChangeTracker` — `packages/brewva-runtime/src/state/file-change-tracker.ts`
 
 ---
 
-## 6. Schedule Projection
+## 6. Tool Output Artifacts
+
+| Property | Value                                                                                          |
+| -------- | ---------------------------------------------------------------------------------------------- |
+| Path     | `.orchestrator/tool-output-artifacts/<base64url(sessionId)>/*.txt`                             |
+| Producer | `persistToolOutputArtifact()` — `packages/brewva-extensions/src/tool-output-artifact-store.ts` |
+
+Used when distilled tool-output entries persist references (`artifactRef`) for later forensics.
+
+---
+
+## 7. Turn WAL
+
+| Property | Value                                                               |
+| -------- | ------------------------------------------------------------------- |
+| Path     | `.orchestrator/turn-wal/{scope}.jsonl`                              |
+| Schema   | `brewva.turn-wal.v1`                                                |
+| Producer | `TurnWALStore` — `packages/brewva-runtime/src/channels/turn-wal.ts` |
+
+Key statuses: `pending`, `inflight`, `done`, `failed`, `expired`.
+
+---
+
+## 8. Schedule Projection
 
 | Property | Value                                                                                   |
 | -------- | --------------------------------------------------------------------------------------- |
@@ -269,55 +204,32 @@ Producer: `FileChangeTracker` — `packages/brewva-runtime/src/state/file-change
 | Format   | JSONL (meta line + intent records)                                                      |
 | Producer | `ScheduleProjectionStore.save()` — `packages/brewva-runtime/src/schedule/projection.ts` |
 
-### Structure
-
-- **Line 1 (meta)**: `{ schema, kind: "meta", generatedAt, watermarkOffset }`
-- **Lines 2+**: `{ schema, kind: "intent", record: ScheduleIntentProjectionRecord }`
-
-### Intent Record Fields
-
-| Field               | Type    | Description              |
-| ------------------- | ------- | ------------------------ |
-| `intentId`          | string  | Unique intent identifier |
-| `parentSessionId`   | string  | Owning session           |
-| `reason`            | string  | Scheduling reason        |
-| `goalRef`           | string  | Goal reference           |
-| `cron`              | string? | Cron expression          |
-| `runAt`             | number? | One-shot run timestamp   |
-| `status`            | string  | Intent lifecycle status  |
-| `nextRunAt`         | number? | Next scheduled execution |
-| `consecutiveErrors` | number  | Error counter            |
-| `lastError`         | string? | Most recent error        |
-
 ---
 
 ## Replay and Undo Infrastructure
 
 ### TurnReplayEngine
 
-Location: `packages/brewva-runtime/src/tape/replay-engine.ts`
+`packages/brewva-runtime/src/tape/replay-engine.ts`
 
-Reads from the event store JSONL, uses tape checkpoints for fast-forward,
-and rebuilds `TaskState` + `TruthState` at any target turn. This is the
-preferred diagnostic tool for reconstructing the exact runtime state at a
-specific point in a session — avoids manual JSONL parsing.
+Preferred way to reconstruct exact runtime state for a specific turn.
 
 ### FileChangeTracker Rollback
 
-Location: `packages/brewva-runtime/src/state/file-change-tracker.ts`
+`packages/brewva-runtime/src/state/file-change-tracker.ts`
 
 `rollbackLastPatchSet()` restores workspace files from pre-mutation snapshots.
-Patch sets in `patchsets.json` record the full change graph for each tool action.
 
 ---
 
 ## Quick Reference: Correlation Keys
 
-| Artifact            | Primary Key       | Cross-Reference                                        |
-| ------------------- | ----------------- | ------------------------------------------------------ |
-| Event Store         | `id`, `sessionId` | `turn` links to ledger rows                            |
-| Evidence Ledger     | `id`, `sessionId` | `turn` links to events; `tool` links to tool registry  |
-| Memory Units        | `id`, `sessionId` | `topic` clusters units; `sourceRefs` links to evidence |
-| Tape Checkpoints    | `basedOnEventId`  | Links to event store for position                      |
-| Patch History       | `patchSet.id`     | `toolName` links to tool call events                   |
-| Schedule Projection | `intentId`        | `parentSessionId` links to event store                 |
+| Artifact            | Primary Key                                          | Cross-Reference                                        |
+| ------------------- | ---------------------------------------------------- | ------------------------------------------------------ |
+| Event Store         | `id`, `sessionId`, `turn`                            | Links to ledger, task/truth, governance, memory events |
+| Evidence Ledger     | `id`, `sessionId`, `turn`                            | Links to event timeline and tool lifecycle             |
+| Memory Units        | `id`, `sessionId`                                    | `sourceRefs` links to event/ledger evidence            |
+| Tape Checkpoints    | `basedOnEventId`                                     | Links checkpoint boundary to event stream              |
+| Patch History       | `patchSet.id`                                        | `toolName` links to tool call events                   |
+| Turn WAL            | `walId`, `turnId`, `status` (+ scope from file name) | Links asynchronous turn execution lifecycle            |
+| Schedule Projection | `intentId`                                           | `parentSessionId` links to session timeline            |

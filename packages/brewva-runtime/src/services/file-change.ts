@@ -1,6 +1,5 @@
 import { SessionCostTracker } from "../cost/tracker.js";
 import { VERIFICATION_STATE_RESET_EVENT_TYPE } from "../events/event-types.js";
-import { EvidenceLedger } from "../ledger/evidence-ledger.js";
 import { FileChangeTracker } from "../state/file-change-tracker.js";
 import type { SkillDocument } from "../types.js";
 import type { RollbackResult } from "../types.js";
@@ -28,7 +27,22 @@ export interface FileChangeServiceOptions {
   fileChanges: FileChangeTracker;
   costTracker: SessionCostTracker;
   verification: VerificationGate;
-  ledger: EvidenceLedger;
+  recordInfrastructureRow: RuntimeCallback<
+    [
+      input: {
+        sessionId: string;
+        tool: string;
+        argsSummary: string;
+        outputSummary: string;
+        fullOutput?: string;
+        verdict?: "pass" | "fail" | "inconclusive";
+        metadata?: Record<string, unknown>;
+        turn?: number;
+        skill?: string | null;
+      },
+    ],
+    string
+  >;
   getActiveSkill: RuntimeCallback<[sessionId: string], SkillDocument | undefined>;
   getCurrentTurn: RuntimeCallback<[sessionId: string], number>;
   recordEvent: RuntimeCallback<
@@ -51,7 +65,7 @@ export class FileChangeService {
   private readonly fileChanges: FileChangeTracker;
   private readonly costTracker: SessionCostTracker;
   private readonly verification: VerificationGate;
-  private readonly ledger: EvidenceLedger;
+  private readonly recordInfrastructureRow: FileChangeServiceOptions["recordInfrastructureRow"];
   private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
   private readonly getCurrentTurn: (sessionId: string) => number;
   private readonly recordEvent: FileChangeServiceOptions["recordEvent"];
@@ -61,7 +75,7 @@ export class FileChangeService {
     this.fileChanges = options.fileChanges;
     this.costTracker = options.costTracker;
     this.verification = options.verification;
-    this.ledger = options.ledger;
+    this.recordInfrastructureRow = options.recordInfrastructureRow;
     this.getActiveSkill = options.getActiveSkill;
     this.getCurrentTurn = options.getCurrentTurn;
     this.recordEvent = options.recordEvent;
@@ -163,10 +177,10 @@ export class FileChangeService {
         reason: "rollback",
       },
     });
-    this.ledger.append({
+    this.recordInfrastructureRow({
       sessionId,
       turn,
-      skill: this.getActiveSkill(sessionId)?.name,
+      skill: this.getActiveSkill(sessionId)?.name ?? null,
       tool: "brewva_rollback",
       argsSummary: `patchSet=${rollback.patchSetId ?? "unknown"}`,
       outputSummary: `restored=${rollback.restoredPaths.length} failed=${rollback.failedPaths.length}`,

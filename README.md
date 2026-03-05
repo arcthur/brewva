@@ -10,28 +10,22 @@ Brewva is a runtime for AI coding agents that makes governance explicit, evented
 
 **Runtime may govern, but governance must be inspectable and replayable.**
 
-## Core Design Principles
+## Core Position
 
-Principles are split by permanence. Durable principles serve system integrity
-and do not simplify as models improve. Adaptive principles compensate for
-current model limitations and are designed to progressively retire.
+**Brewva does not try to make the agent smarter. Brewva makes agent behavior trustworthy.**
 
-### Durable
+The runtime is optimized for one question:
 
-1. **Tape-first recovery** — session state is reconstructed from append-only events, checkpoints, and replay; no opaque process-local snapshots.
-2. **Contract-driven execution** — skill policy, verification gates, evidence ledger, and budget limits are explicit runtime constraints.
-3. **Skill-first orchestration** — prompt text drives semantic dispatch preselection; runtime resolves `suggest | gate | auto` from per-skill policy, keeps decisions replayable, and activates executable contracts on demand (`skill_load`) with explicit gate/override control.
-4. **Projection-based memory** — memory structures are derived from tape events and can be rebuilt deterministically.
-5. **Workspace-first orchestration** — multi-agent and channel state is isolated in workspace-scoped storage for restart-safe operation.
+`Why can we trust this agent action?`
 
-### Governing meta-principle
+Design principles:
 
-6. **Mechanism metabolism** — every optimization mechanism carries its own exit condition. A mechanism that cannot demonstrate measurable benefit degrades to a no-op or is retired, without affecting correctness. Context management complexity tends to self-reproduce; this principle prevents the optimization layer from becoming a permanent dependency.
-
-### Capability-adaptive
-
-7. **Pressure transparency** — runtime exposes resource pressure (`tape_pressure`, `context_pressure`) as explicit contract text; the agent decides how to respond.
-8. **Deterministic context budgeting** — context injection follows one runtime path: global injection cap, hard-limit compaction gate, and arena SLO degradation policy. There is no adaptive strategy-arm switching in the default runtime.
+1. **Single-path explainability** — context injection, tool gating, compaction, and budget decisions follow deterministic runtime paths.
+2. **Tape-first replayability** — event tape + checkpoint replay is the recovery source of truth; behavior is reconstructable after failure.
+3. **Bounded autonomy** — context, tools, cost, and parallelism all have explicit limits and fail-closed behavior under pressure.
+4. **Evidence-first contracts** — verification, ledger, task/truth updates, and skill lifecycle are explicit contract boundaries.
+5. **Projection-only memory** — memory is deterministic projection from tape (`units` + `working.md`), not adaptive cognition.
+6. **Governance hooks, not cognition loops** — optional governance checks (`verifySpec`, cost anomaly, compaction integrity) enrich auditability without changing core decision semantics.
 
 ## Architecture
 
@@ -39,24 +33,21 @@ Conceptual architecture view (high-level intent and control model):
 
 ```mermaid
 flowchart TD
-  AGENT["Agent (LLM)<br>plans and executes"]
-  CONTRACT["Context Contract<br>state tape vs message buffer vs injection arena"]
-  ORCH["Runtime Orchestration<br>skill-first dispatch, dynamic load, tool policy, budgeting"]
-  MEMORY["Memory Projection Layer<br>extractor, units/crystals, recall/injection"]
-  ASSURE["Assurance Layer<br>evidence ledger, verification gate, completion guard"]
-  RECOVERY["Recovery Layer<br>event tape, checkpoints, replay"]
-  SURFACES["Operator Surfaces<br>CLI modes, replay/undo, telemetry"]
+  AGENT["Agent (LLM)"]
+  TRUST["Trust Layer<br/>Evidence Ledger + Verification + Truth"]
+  BOUNDARY["Boundary Layer<br/>Tool Gate + Cost Gate + Context Compaction Gate"]
+  CONTRACT["Contract Layer<br/>Skill Lifecycle + Cascade + Task State"]
+  DURABILITY["Durability Layer<br/>Event Tape + Checkpoint Replay + Turn WAL"]
+  MEMORY["Projection Memory<br/>units.jsonl + working.md"]
+  UX["Operator Surfaces<br/>CLI / Gateway / Extensions"]
 
-  AGENT --> CONTRACT
-  CONTRACT --> ORCH
-  ORCH --> MEMORY
-  MEMORY --> ORCH
-  ORCH --> ASSURE
-  ASSURE --> RECOVERY
-  RECOVERY --> MEMORY
-  SURFACES --> ORCH
-  SURFACES --> RECOVERY
-  SURFACES --> MEMORY
+  AGENT --> BOUNDARY
+  BOUNDARY --> CONTRACT
+  CONTRACT --> TRUST
+  TRUST --> DURABILITY
+  DURABILITY --> MEMORY
+  UX --> BOUNDARY
+  UX --> DURABILITY
 ```
 
 Implementation-level architecture (package DAG, execution profiles, hook wiring):
@@ -64,8 +55,8 @@ Implementation-level architecture (package DAG, execution profiles, hook wiring)
 
 Primary package surfaces:
 
-- `@brewva/brewva-runtime`: runtime contracts, tape replay, memory, verification, cost.
-- `@brewva/brewva-tools`: runtime-aware tools (ledger/task/tape/skill/memory flows).
+- `@brewva/brewva-runtime`: governance runtime contracts, tape replay, verification, memory projection, cost.
+- `@brewva/brewva-tools`: runtime-aware tools (ledger/task/tape/skill/cost/governance flows).
 - `@brewva/brewva-extensions`: lifecycle hook wiring and runtime integration guards.
 - `@brewva/brewva-cli`: user entrypoint and session bootstrap (`interactive` / `--print` / `--json` / replay/undo).
 - `@brewva/brewva-gateway`: local control-plane daemon and worker supervision.
@@ -110,6 +101,10 @@ For complete CLI modes and gateway/onboard operations:
 - Execution routing defaults to `security.execution.backend=best_available` with
   `security.execution.fallbackToHost=false`.
 - Read-only verification is explicitly reported as `skipped` (not `pass`).
+- Routing translation/semantic stages are governance-only skipped by default
+  (`skill_routing_translation` / `skill_routing_semantic` with `reason=governance_only`).
+- Cascade missing consumes is deterministic pause (`reason=missing_consumes`);
+  runtime no longer auto-replans dependency chains.
 - `compose` is planning-only and now has a higher read budget (`max_tool_calls: 120`).
 
 ## Development
@@ -118,7 +113,7 @@ For complete CLI modes and gateway/onboard operations:
 bun run check              # Full quality gate (format + lint + typecheck + typecheck:test)
 bun test                   # Run unit + integration tests
 bun run test:docs          # Validate documentation quality
-bun run analyze:memory-recall  # Project recall/rerank quality from tape events (offline)
+bun run analyze:memory-projection  # Project memory projection quality from tape events (offline)
 ```
 
 For distribution/release verification:

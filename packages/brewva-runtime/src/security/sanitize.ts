@@ -57,7 +57,7 @@ export function sanitizeContextText(text: string): string {
  *
  * - `system`:   Runtime-generated, trusted content (identity, truth, task state).
  * - `internal`: Runtime-derived but from LLM outputs (skill candidates, tool distillation).
- * - `external`: Content that originated outside the runtime boundary (memory recall, RAG).
+ * - `external`: Content that originated outside the runtime boundary.
  */
 export type SourceTrustTier = "system" | "internal" | "external";
 
@@ -72,8 +72,6 @@ const SOURCE_TRUST_MAP: Record<string, SourceTrustTier> = {
   [CONTEXT_SOURCES.toolFailures]: "internal",
   [CONTEXT_SOURCES.toolOutputsDistilled]: "internal",
   [CONTEXT_SOURCES.memoryWorking]: "internal",
-  [CONTEXT_SOURCES.memoryRecall]: "external",
-  [CONTEXT_SOURCES.ragExternal]: "external",
 };
 
 export function getSourceTrustTier(source: string): SourceTrustTier {

@@ -10,7 +10,6 @@ describe("ContextInjectionCollector compaction lifecycle", () => {
       source: "brewva.identity",
       id: "identity-default",
       content: "identity-v1",
-      priority: "critical",
       oncePerSession: true,
     });
     const first = collector.plan(sessionId, 10_000);
@@ -21,7 +20,6 @@ describe("ContextInjectionCollector compaction lifecycle", () => {
       source: "brewva.identity",
       id: "identity-default",
       content: "identity-v2",
-      priority: "critical",
       oncePerSession: true,
     });
     const blocked = collector.plan(sessionId, 10_000);
@@ -33,7 +31,6 @@ describe("ContextInjectionCollector compaction lifecycle", () => {
       source: "brewva.identity",
       id: "identity-default",
       content: "identity-v3",
-      priority: "critical",
       oncePerSession: true,
     });
     const afterCompaction = collector.plan(sessionId, 10_000);

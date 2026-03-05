@@ -22,7 +22,6 @@ import {
 
 const TOOL_FAILURE_ANCHOR_TTL = 3;
 const MAX_RECENT_TOOL_FAILURES = 48;
-const MAX_MEMORY_CRYSTALS = 128;
 const TOOL_FAILURE_INFRASTRUCTURE_TOOLS = new Set([
   "ledger_checkpoint",
   "brewva_cost",
@@ -43,18 +42,9 @@ export interface ReplayEvidenceState {
   recentFailures: ReplayToolFailureEntry[];
 }
 
-export interface ReplayMemoryCrystalState {
-  id: string;
-  topic: string;
-  summary?: string;
-  unitCount: number;
-  confidence: number;
-  updatedAt: number;
-}
-
 export interface ReplayMemoryState {
   updatedAt: number | null;
-  crystals: ReplayMemoryCrystalState[];
+  unitCount: number;
 }
 
 export interface ReplayCostState {
@@ -218,7 +208,7 @@ function cloneToolFailureEntry(entry: ReplayToolFailureEntry): ReplayToolFailure
 function createEmptyMemoryState(): ReplayMemoryState {
   return {
     updatedAt: null,
-    crystals: [],
+    unitCount: 0,
   };
 }
 
@@ -287,34 +277,6 @@ function pruneToolFailures(
   );
   if (pruned.length <= MAX_RECENT_TOOL_FAILURES) return pruned;
   return pruned.slice(-MAX_RECENT_TOOL_FAILURES);
-}
-
-function coerceMemoryCrystalFromEvent(
-  payload: JsonRecord,
-  timestamp: number,
-): ReplayMemoryCrystalState | null {
-  const raw = isRecord(payload.crystal) ? payload.crystal : payload;
-  const id = typeof raw.id === "string" && raw.id.trim().length > 0 ? raw.id.trim() : null;
-  const topic =
-    typeof raw.topic === "string" && raw.topic.trim().length > 0 ? raw.topic.trim() : null;
-  if (!id || !topic) return null;
-
-  const summary =
-    typeof raw.summary === "string" && raw.summary.trim().length > 0 ? raw.summary : undefined;
-  const confidence = normalizeNonNegativeNumber(raw.confidence, 0);
-  const updatedAt = normalizeNonNegativeNumber(raw.updatedAt, timestamp);
-  const unitCount = Array.isArray(raw.unitIds)
-    ? raw.unitIds.length
-    : normalizeNonNegativeInteger(raw.unitCount, 0);
-
-  return {
-    id,
-    topic,
-    summary,
-    unitCount,
-    confidence,
-    updatedAt,
-  };
 }
 
 function reduceCostState(
@@ -485,25 +447,13 @@ function reduceMemoryState(
   payload: JsonRecord,
   timestamp: number,
 ): ReplayMemoryState {
-  const crystal = coerceMemoryCrystalFromEvent(payload, timestamp);
-  if (!crystal) return state;
-
-  const crystals = state.crystals.map((item) => ({ ...item }));
-  const index = crystals.findIndex((item) => item.id === crystal.id);
-  if (index >= 0) {
-    crystals[index] = crystal;
-  } else {
-    crystals.push(crystal);
-  }
-
-  crystals.sort((left, right) => right.updatedAt - left.updatedAt);
-  if (crystals.length > MAX_MEMORY_CRYSTALS) {
-    crystals.length = MAX_MEMORY_CRYSTALS;
-  }
+  const unitCount = normalizeNonNegativeInteger(payload.unitCount, -1);
+  if (unitCount < 0) return state;
+  const updatedAt = normalizeNonNegativeNumber(payload.updatedAt, timestamp);
 
   return {
-    updatedAt: Math.max(state.updatedAt ?? 0, crystal.updatedAt),
-    crystals,
+    updatedAt: Math.max(state.updatedAt ?? 0, updatedAt),
+    unitCount,
   };
 }
 
@@ -526,20 +476,9 @@ function checkpointEvidenceToReplay(state: TapeCheckpointEvidenceState): ReplayE
 }
 
 function checkpointMemoryToReplay(state: TapeCheckpointMemoryState): ReplayMemoryState {
-  const crystals: ReplayMemoryCrystalState[] = [];
-  for (const crystal of state.crystals.slice(0, MAX_MEMORY_CRYSTALS)) {
-    crystals.push({
-      id: crystal.id,
-      topic: crystal.topic,
-      summary: crystal.summary,
-      unitCount: crystal.unitCount,
-      confidence: crystal.confidence,
-      updatedAt: crystal.updatedAt,
-    });
-  }
   return {
     updatedAt: state.updatedAt,
-    crystals,
+    unitCount: state.unitCount,
   };
 }
 
@@ -562,7 +501,7 @@ function replayEvidenceToCheckpoint(state: ReplayEvidenceState): TapeCheckpointE
 function replayMemoryToCheckpoint(state: ReplayMemoryState): TapeCheckpointMemoryState {
   return {
     updatedAt: state.updatedAt,
-    crystals: state.crystals.map((crystal) => ({ ...crystal })),
+    unitCount: state.unitCount,
   };
 }
 
@@ -644,7 +583,7 @@ function applyEventToView(
     if (isRecord(event.payload)) {
       costState = reduceCostAlert(costState, event.payload, event.timestamp);
     }
-  } else if (event.type === "memory_crystal_compiled") {
+  } else if (event.type === "memory_projection_refreshed") {
     if (isRecord(event.payload)) {
       memoryState = reduceMemoryState(memoryState, event.payload, event.timestamp);
     }

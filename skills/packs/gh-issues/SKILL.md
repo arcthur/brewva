@@ -2,7 +2,6 @@
 name: gh-issues
 description: GitHub issue triage and issue-to-PR execution workflow via `gh` CLI. Use when processing filtered issues, writing actionable issue specs, converting selected issues into PRs, and tracking review follow-ups.
 stability: stable
-tier: pack
 tools:
   required: [exec, read]
   optional: [grep, ledger_query, skill_complete]

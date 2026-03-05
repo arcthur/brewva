@@ -2,12 +2,12 @@
 
 ## Workspace Topology
 
-| Package                     | Responsibility                                                                               | Must Not Own                                            |
-| --------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `@brewva/brewva-runtime`    | contracts, registry, selector, verification state, ledger primitives, security policy        | CLI wiring, transport-specific tooling behavior         |
-| `@brewva/brewva-tools`      | concrete tool adapters (`ledger_query`, `lsp`, `ast-grep`, `look_at`, skill lifecycle tools) | runtime orchestration decisions                         |
-| `@brewva/brewva-extensions` | runtime hooks and event wiring to agent lifecycle                                            | core contract model or low-level persistence primitives |
-| `@brewva/brewva-cli`        | session bootstrap and user entrypoints                                                       | core policy logic and verification semantics            |
+| Package                     | Responsibility                                                                                 | Must Not Own                                            |
+| --------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `@brewva/brewva-runtime`    | governance kernel: contracts, gates, verification state, ledger primitives, context boundaries | CLI wiring, transport-specific tooling behavior         |
+| `@brewva/brewva-tools`      | concrete tool adapters (`ledger_query`, `lsp`, `ast-grep`, `look_at`, skill lifecycle tools)   | runtime orchestration decisions                         |
+| `@brewva/brewva-extensions` | runtime hooks and event wiring to agent lifecycle                                              | core contract model or low-level persistence primitives |
+| `@brewva/brewva-cli`        | session bootstrap and user entrypoints                                                         | core policy logic and verification semantics            |
 
 ## Dependency Direction
 
@@ -19,6 +19,7 @@ Hard constraints:
 - `runtime` should stay framework-agnostic where possible.
 - `tools` should avoid importing extension orchestration internals.
 - `cli` should orchestrate, not re-implement runtime policy.
+- `runtime` should not host adaptive cognition branches as default-path behavior.
 
 ## Contract Invariants
 
@@ -40,10 +41,11 @@ Hard constraints:
 - contract parsing and merge behavior still deterministic
 - tool access policy still enforced before execution
 - verification decision path still produces explicit verdict
+- governance anomaly/integrity events remain queryable (`governance_*`)
 
 ### Tools change checklist
 
-- tool output format remains stable for classifier/evidence consumers
+- tool output format remains stable for governance/evidence consumers
 - failures include actionable error details
 - heuristic tools clearly signal confidence/quality mode
 
@@ -55,6 +57,6 @@ Hard constraints:
 
 ### CLI change checklist
 
-- bootstrap options remain backward-compatible
+- bootstrap options remain deterministic and explicit
 - default config paths remain predictable
 - runtime and extensions initialization order remains deterministic

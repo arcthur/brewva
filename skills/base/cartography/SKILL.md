@@ -2,7 +2,6 @@
 name: cartography
 description: Use when needing module dependency orientation, ownership discovery, or impact analysis before changes.
 stability: stable
-tier: base
 tools:
   required: [grep, read]
   optional: [glob, ledger_query, skill_complete]

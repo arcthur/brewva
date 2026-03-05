@@ -2,7 +2,6 @@
 name: brewva-self-improve
 description: Capture learnings, errors, and corrections to enable continuous improvement. Use when a command fails, user corrects the agent, a knowledge gap is discovered, or a better approach emerges. Also review learnings before major tasks.
 stability: stable
-tier: project
 tools:
   required: [read, grep]
   optional: [exec, edit, skill_load, skill_complete]

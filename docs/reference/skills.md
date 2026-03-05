@@ -14,12 +14,12 @@ Skill frontmatter supports dispatch-focused metadata:
 - `dispatch.gate_threshold/auto_threshold/default_mode` for routing policy
 - `outputs/consumes/composable_with` for deterministic chain planning
 
-Selector execution is LLM-first for runtime routing:
+Selector execution is governance-first for runtime routing:
 
-1. step-0 routing translation runs before injection/dispatch: non-English prompts are translated to English by the active model in `before_agent_start`, while English prompts are passed through; on translation failure or empty output, runtime falls back to the original prompt
-2. semantic skill routing runs immediately after translation using the active model and skill catalog metadata (`name/description/outputs/consumes`); the resulting `selected` skills are injected into runtime as the next dispatch input
-3. runtime dispatch consumes that semantic selection directly (no lexical fallback in this path)
-4. lexical selector and `runtime.skills.select` are removed; runtime dispatch now consumes semantic preselection only
+1. `registerContextTransform` does not run model translation or semantic ranking in default path.
+2. Routing telemetry (`skill_routing_translation`, `skill_routing_semantic`) is emitted as deterministic `skipped` state with reason `governance_only`.
+3. Runtime dispatch consumes only explicit preselection inputs (for example control-plane injected selections), otherwise it falls back to deterministic no-skill decision.
+4. Runtime does not run lexical selector fallback or adaptive routing inference loops.
 
 `skills_index.json` now carries normalized contract metadata for each skill entry (including `outputs`, `consumes`, and `dispatch`).
 
@@ -47,6 +47,9 @@ Runtime records cascade lifecycle as replayable events:
 - `skill_cascade_overridden`
 - `skill_cascade_finished`
 - `skill_cascade_aborted`
+
+When step consumes are missing, cascade deterministically pauses (`reason=missing_consumes`).
+Runtime no longer injects auto-replan branches into the chain.
 
 When cascade source arbitration occurs (for example compose vs dispatch), runtime
 emits `sourceDecision` in cascade event payloads with stable reason codes:

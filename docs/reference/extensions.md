@@ -55,19 +55,23 @@ Key implications:
 `registerContextTransform` runs on `before_agent_start` and:
 
 - appends a system-level context contract block
+- injects a capability view block for progressive disclosure (compact tool list; expand with `$name`)
 - injects runtime-built context via async injection path
 - enforces compaction gate behavior under critical context pressure
+- records governance-only routing telemetry (`skill_routing_translation` / `skill_routing_semantic` as deterministic `skipped`)
 
-Default semantic injection sources are:
+Default context injection sources are:
 
 - `brewva.identity`
 - `brewva.truth-static`
 - `brewva.truth-facts`
+- `brewva.skill-candidates`
+- `brewva.skill-dispatch-gate`
+- `brewva.skill-cascade-gate`
 - `brewva.task-state`
 - `brewva.tool-failures`
 - `brewva.tool-outputs-distilled`
 - `brewva.memory-working`
-- `brewva.memory-recall`
 
 ## Runtime Core Bridge (`--no-extensions`)
 
@@ -82,7 +86,7 @@ Retained hooks in this profile:
 
 Disabled full-extension hooks in this profile:
 
-- `registerContextTransform` (`turn_start`, `context`, semantic routing translation/selection pipeline)
+- `registerContextTransform` (`turn_start`, `context`, governance context lifecycle)
 - `registerCompletionGuard`
 - `registerEventStream`
 - `registerNotification`

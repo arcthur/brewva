@@ -188,7 +188,7 @@ describe("Tool failure context injection", () => {
       success: false,
     });
 
-    const row = runtime.truth.listLedgerRows(sessionId).at(-1);
+    const row = runtime.ledger.listRows(sessionId).at(-1);
     const metadata = row?.metadata as
       | {
           brewvaToolFailureContext?: {
@@ -270,7 +270,7 @@ describe("Tool failure context injection", () => {
       success: false,
     });
 
-    const row = runtime.truth.listLedgerRows(sessionId).at(-1);
+    const row = runtime.ledger.listRows(sessionId).at(-1);
     const metadata = row?.metadata as
       | {
           brewvaToolFailureContext?: {

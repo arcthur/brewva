@@ -27,7 +27,7 @@ function writeRemovedTelegramConfig(workspace: string): void {
 }
 
 describe("e2e: config migration", () => {
-  test("fails fast with migration hint when removed channels.telegram branch is present", () => {
+  test("fails fast when removed channels.telegram branch is present", () => {
     const workspace = createWorkspace("config-migration");
     writeRemovedTelegramConfig(workspace);
 
@@ -39,8 +39,6 @@ describe("e2e: config migration", () => {
       const stderr = run.stderr ?? "";
       expect(stderr).toContain("[config:error]");
       expect(stderr).toContain('unknown property "telegram"');
-      expect(stderr).toContain("'channels.telegram' was removed");
-      expect(stderr).toContain("remove the 'channels.telegram' block");
     } finally {
       cleanupWorkspace(workspace);
     }

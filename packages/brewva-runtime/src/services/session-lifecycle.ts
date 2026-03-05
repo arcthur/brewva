@@ -25,35 +25,6 @@ import { RuntimeSessionStateStore } from "./session-state.js";
 
 const SKILL_SELECTION_SIGNALS = new Set<SkillSelectionSignal>(SKILL_SELECTION_SIGNALS_LIST);
 
-const SKILL_OUTPUT_COMPATIBILITY_ALIASES: Readonly<
-  Record<string, ReadonlyArray<readonly [fromKey: string, toKey: string]>>
-> = {
-  review: [
-    ["findings", "review_findings"],
-    ["review_findings", "findings"],
-  ],
-};
-
-function applySkillOutputCompatibilityAliases(
-  skillName: string,
-  outputs: Record<string, unknown>,
-): Record<string, unknown> {
-  const aliases = SKILL_OUTPUT_COMPATIBILITY_ALIASES[skillName];
-  if (!aliases || aliases.length === 0) return outputs;
-
-  let normalizedOutputs: Record<string, unknown> | null = null;
-  for (const [fromKey, toKey] of aliases) {
-    if (!Object.prototype.hasOwnProperty.call(outputs, fromKey)) continue;
-    if (Object.prototype.hasOwnProperty.call(outputs, toKey)) continue;
-    if (!normalizedOutputs) {
-      normalizedOutputs = { ...outputs };
-    }
-    normalizedOutputs[toKey] = outputs[fromKey];
-  }
-
-  return normalizedOutputs ?? outputs;
-}
-
 export interface SessionLifecycleServiceOptions {
   sessionState: RuntimeSessionStateStore;
   contextBudget: ContextBudgetManager;
@@ -222,11 +193,10 @@ export class SessionLifecycleService {
         const skillName = this.readSkillName(payload);
         const outputs = this.readSkillOutputs(payload);
         if (skillName && outputs) {
-          const normalizedOutputs = applySkillOutputCompatibilityAliases(skillName, outputs);
           skillOutputs.set(skillName, {
             skillName,
             completedAt: this.readNonNegativeNumber(payload?.completedAt) ?? event.timestamp,
-            outputs: normalizedOutputs,
+            outputs,
           });
         }
         activeSkill = undefined;
@@ -389,7 +359,7 @@ export class SessionLifecycleService {
   }
 
   private isCheckpointTurnCostTransientEvent(type: string): boolean {
-    return type === "tool_call_marked" || type === "cognitive_usage_recorded";
+    return type === "tool_call_marked";
   }
 
   private readSkillName(payload: Record<string, unknown> | null): string | null {
@@ -647,7 +617,6 @@ export class SessionLifecycleService {
     const createdAt = this.readNonNegativeNumber(intentPayload.createdAt) ?? Date.now();
     const updatedAt = this.readNonNegativeNumber(intentPayload.updatedAt) ?? createdAt;
     const retries = this.readNonNegativeNumber(intentPayload.retries) ?? 0;
-    const replans = this.readNonNegativeNumber(intentPayload.replans) ?? 0;
     const lastError =
       typeof intentPayload.lastError === "string" && intentPayload.lastError.trim().length > 0
         ? intentPayload.lastError.trim()
@@ -670,7 +639,6 @@ export class SessionLifecycleService {
       createdAt,
       updatedAt,
       retries,
-      replans,
       lastError,
     };
   }
@@ -701,33 +669,6 @@ export class SessionLifecycleService {
           turn,
         });
       }
-      return;
-    }
-
-    if (event.type === "cognitive_usage_recorded" && payload) {
-      const usagePayload =
-        payload.usage && typeof payload.usage === "object" && !Array.isArray(payload.usage)
-          ? (payload.usage as Record<string, unknown>)
-          : null;
-      if (!usagePayload) return;
-      const model =
-        typeof usagePayload.model === "string" && usagePayload.model.trim().length > 0
-          ? usagePayload.model.trim()
-          : undefined;
-      const inputTokens = this.readNonNegativeNumber(usagePayload.inputTokens);
-      const outputTokens = this.readNonNegativeNumber(usagePayload.outputTokens);
-      const totalTokens = this.readNonNegativeNumber(usagePayload.totalTokens);
-      const costUsd = this.readNonNegativeNumber(usagePayload.costUsd);
-      this.costTracker.recordCognitiveUsage(sessionId, {
-        turn,
-        usage: {
-          model,
-          inputTokens: inputTokens ?? undefined,
-          outputTokens: outputTokens ?? undefined,
-          totalTokens: totalTokens ?? undefined,
-          costUsd: costUsd ?? undefined,
-        },
-      });
       return;
     }
 

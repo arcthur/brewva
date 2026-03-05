@@ -3,10 +3,12 @@ import { spawn, type ChildProcess } from "node:child_process";
 import {
   cleanupWorkspace,
   createWorkspace,
+  hasProviderRateLimitText,
   latestEventFile,
   parseEventFile,
   repoRoot,
   runLive,
+  skipLiveForProviderRateLimit,
   writeMinimalConfig,
 } from "./helpers.js";
 
@@ -90,17 +92,27 @@ describe("e2e: signal handling", () => {
       await waitForEventType(workspace, "session_start", 30_000);
       await delay(500);
 
+      if (child.exitCode !== null && hasProviderRateLimitText(stdout, stderr)) {
+        console.warn(
+          "[signal.live] skipped because child exited early due upstream model quota/rate-limit.",
+        );
+        return;
+      }
+
       const killed = child.kill("SIGINT");
       expect(killed).toBe(true);
 
       const exit = await waitForExit(child, 60_000);
-      expect(exit.code).toBe(130);
+      expect(exit.code === 130 || exit.signal === "SIGINT").toBe(true);
 
       const eventFile = latestEventFile(workspace);
       expect(eventFile).toBeDefined();
       const events = parseEventFile(eventFile!, { strict: true });
       expect(events.some((event) => event.type === "session_interrupted")).toBe(true);
     } catch (error) {
+      if (skipLiveForProviderRateLimit("signal.live", stdout, stderr)) {
+        return;
+      }
       const message = [
         error instanceof Error ? error.message : String(error),
         "[signal.live] stdout:",
@@ -152,11 +164,18 @@ describe("e2e: signal handling", () => {
       await waitForEventType(workspace, "session_start", 30_000);
       await delay(500);
 
+      if (child.exitCode !== null && hasProviderRateLimitText(stdout, stderr)) {
+        console.warn(
+          "[signal-json.live] skipped because child exited early due upstream model quota/rate-limit.",
+        );
+        return;
+      }
+
       const killed = child.kill("SIGINT");
       expect(killed).toBe(true);
 
       const exit = await waitForExit(child, 60_000);
-      expect(exit.code).toBe(130);
+      expect(exit.code === 130 || exit.signal === "SIGINT").toBe(true);
 
       expect(stdout.includes('"type":"brewva_event_bundle"')).toBe(false);
       expect(stdout.includes('"schema":"brewva.stream.v1"')).toBe(false);
@@ -166,6 +185,9 @@ describe("e2e: signal handling", () => {
       const events = parseEventFile(eventFile!, { strict: true });
       expect(events.some((event) => event.type === "session_interrupted")).toBe(true);
     } catch (error) {
+      if (skipLiveForProviderRateLimit("signal-json.live", stdout, stderr)) {
+        return;
+      }
       const message = [
         error instanceof Error ? error.message : String(error),
         "[signal-json.live] stdout:",

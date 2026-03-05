@@ -11,6 +11,7 @@ import {
   parseJsonLines,
   runCliSync,
   runLive,
+  skipLiveForProviderRateLimitResult,
   writeMinimalConfig,
 } from "./helpers.js";
 
@@ -25,6 +26,9 @@ describe("e2e: print and json modes", () => {
         "Do not call any tool. Reply exactly: E2E-PRINT-OK",
       ]);
 
+      if (skipLiveForProviderRateLimitResult("print-mode", result)) {
+        return;
+      }
       assertCliSuccess(result, "print-mode");
       expect(result.stdout).toContain("E2E-PRINT-OK");
 
@@ -52,6 +56,9 @@ describe("e2e: print and json modes", () => {
         "Do not call any tool. Reply exactly: E2E-JSON-OK",
       ]);
 
+      if (skipLiveForProviderRateLimitResult("json-mode", result)) {
+        return;
+      }
       assertCliSuccess(result, "json-mode");
 
       const lines = parseJsonLines(result.stdout, { strict: true });
@@ -94,6 +101,9 @@ describe("e2e: print and json modes", () => {
         input: "Do not call any tool. Reply exactly: PIPED-OK\n",
       });
 
+      if (skipLiveForProviderRateLimitResult("piped-stdin", result)) {
+        return;
+      }
       assertCliSuccess(result, "piped-stdin");
       expect(result.stdout.trim().length).toBeGreaterThan(0);
       expect(latestEventFile(workspace)).toBeDefined();

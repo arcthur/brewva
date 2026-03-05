@@ -2,7 +2,6 @@
 name: github
 description: GitHub operations via `gh` CLI for issues, pull requests, checks, workflow runs, and API queries. Use when users need PR/issue lifecycle actions, CI diagnostics, or repository metadata.
 stability: stable
-tier: pack
 tools:
   required: [exec, read]
   optional: [grep, ledger_query, skill_complete]

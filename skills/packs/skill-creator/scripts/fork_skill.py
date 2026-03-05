@@ -368,27 +368,35 @@ def resolve_destination_skill_root(path_arg: Optional[str], cwd: Path) -> Tuple[
     return (explicit / "skills").resolve(), "explicit_generic"
 
 
-def inject_fork_metadata(destination_skill_md: Path, source_entry: SkillEntry) -> None:
+def rewrite_destination_frontmatter(
+    destination_skill_md: Path,
+    source_entry: SkillEntry,
+    inject_metadata: bool = True,
+) -> None:
     raw = destination_skill_md.read_text(encoding="utf8")
     frontmatter, body = parse_frontmatter(raw)
     if not frontmatter:
         raise RuntimeError(f"Missing frontmatter in destination SKILL.md: {destination_skill_md}")
 
-    metadata = frontmatter.get("metadata")
-    if not isinstance(metadata, dict):
-        metadata = {}
+    # Tier is derived from directory layout in runtime; do not persist it in frontmatter.
+    frontmatter.pop("tier", None)
 
-    metadata["fork"] = {
-        "source_name": source_entry.name,
-        "source_tier": source_entry.tier,
-        "source_file": str(source_entry.file_path),
-        "source_root": str(source_entry.root.skill_dir),
-        "source_origin": source_entry.root.source,
-        "forked_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-        "forked_by": os.environ.get("USER", ""),
-        "tool": "skill-creator/scripts/fork_skill.py",
-    }
-    frontmatter["metadata"] = metadata
+    if inject_metadata:
+        metadata = frontmatter.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+
+        metadata["fork"] = {
+            "source_name": source_entry.name,
+            "source_tier": source_entry.tier,
+            "source_file": str(source_entry.file_path),
+            "source_root": str(source_entry.root.skill_dir),
+            "source_origin": source_entry.root.source,
+            "forked_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+            "forked_by": os.environ.get("USER", ""),
+            "tool": "skill-creator/scripts/fork_skill.py",
+        }
+        frontmatter["metadata"] = metadata
 
     yaml_text = yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=False).strip()
     rebuilt = f"---\n{yaml_text}\n---\n{body}"
@@ -560,12 +568,15 @@ def main() -> int:
         print("❌ Error: Destination SKILL.md missing after copy.")
         return 1
 
-    if not args.no_metadata:
-        try:
-            inject_fork_metadata(destination_skill_md, source_entry)
-        except Exception as error:
-            print(f"❌ Error: Failed to inject fork metadata: {error}")
-            return 1
+    try:
+        rewrite_destination_frontmatter(
+            destination_skill_md,
+            source_entry,
+            inject_metadata=not args.no_metadata,
+        )
+    except Exception as error:
+        print(f"❌ Error: Failed to rewrite destination frontmatter: {error}")
+        return 1
 
     valid, message = run_validation(destination_skill_dir)
     if valid:

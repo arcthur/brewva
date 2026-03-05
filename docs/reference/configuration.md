@@ -38,12 +38,12 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 - `skills.cascade.mode`: `auto` (`off | assist | auto`)
 - `skills.cascade.enabledSources`: `["compose", "dispatch"]`
 - `skills.cascade.sourcePriority`: `["compose", "dispatch"]`
-- `skills.cascade.onMissingConsumes`: `replan` (`pause | replan`)
 - `skills.cascade.maxStepsPerRun`: `8`
-- `skills.cascade.maxReplans`: `2`
 
-`skills.cascade.enabledSources` controls which sources are allowed to produce/replan chain intents.
+`skills.cascade.enabledSources` controls which sources are allowed to produce chain intents.
 `skills.cascade.sourcePriority` only controls arbitration order among enabled sources.
+`skills.selector.k` remains a hard cap for externally injected preselection entries
+(for example control-plane `setNextSelection`), not a runtime semantic routing switch.
 
 `skills.packs` is an optional allowlist for pack directories across all discovered skill roots
 (`global_root`, `project_root`, and `config_root`).
@@ -77,22 +77,6 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 - `memory.dir`: `.orchestrator/memory`
 - `memory.workingFile`: `working.md`
 - `memory.maxWorkingChars`: `2400`
-- `memory.dailyRefreshHourLocal`: `8`
-- `memory.crystalMinUnits`: `4`
-- `memory.retrievalTopK`: `8`
-- `memory.retrievalWeights.lexical`: `0.55`
-- `memory.retrievalWeights.recency`: `0.25`
-- `memory.retrievalWeights.confidence`: `0.20`
-- `memory.recallMode`: `always`
-- `memory.externalRecall.enabled`: `false`
-- `memory.externalRecall.minInternalScore`: `0.62`
-- `memory.externalRecall.queryTopK`: `5`
-- `memory.externalRecall.injectedConfidence`: `0.6`
-- `memory.evolvesMode`: `review-gated`
-- `memory.cognitive.mode`: `shadow`
-- `memory.cognitive.maxTokensPerTurn`: `4096` (`<=0` disables cognitive port calls)
-- `memory.global.enabled`: `true`
-- `memory.global.minConfidence`: `0.8`
 
 ### `security`
 
@@ -161,7 +145,6 @@ Telegram channel skill policy is now built-in and no longer configurable via
 - `infrastructure.contextBudget.maxInjectionTokens`: `1200`
 - `infrastructure.contextBudget.compactionThresholdPercent`: `0.82`
 - `infrastructure.contextBudget.hardLimitPercent`: `0.94`
-- `infrastructure.contextBudget.truncationStrategy`: `drop-low-fidelity`
 - `infrastructure.contextBudget.compactionInstructions`: default operational compaction guidance string
 - `infrastructure.contextBudget.compaction.minTurnsBetween`: `2`
 - `infrastructure.contextBudget.compaction.minSecondsBetween`: `45`
@@ -204,8 +187,7 @@ Telegram channel skill policy is now built-in and no longer configurable via
   - Enforce denied tools and all policy checks (`enforce`)
 
 `security.sanitizeContext` controls pattern-based text sanitization before skill selection and
-context injection. Structural boundary wrapping for external recall/context data remains enabled
-even when this flag is `false`.
+context injection. Structural boundary wrapping remains enabled even when this flag is `false`.
 
 Runtime reserves a small set of control-plane tools (for example `skill_complete`, `session_compact`, and tape/ledger inspection tools) that bypass skill allowlists and per-skill budget enforcement to avoid deadlocks during recovery. These tools may still be blocked by the critical context compaction gate.
 
@@ -262,9 +244,8 @@ Notes:
 `infrastructure.events.level` controls default signal density:
 
 - `audit`: only replay/audit-critical events
-- `ops`: audit + operational state transitions/warnings
-- `debug`: full stream (including high-noise diagnostics such as most `cognitive_*`)
-- `cognitive_relevance_ranking*` stays visible at `ops` for rerank evaluation.
+- `ops`: audit + operational state transitions/warnings (including `governance_*`)
+- `debug`: full stream (including high-noise diagnostics such as `tool_parallel_read`)
 
 ## Context Budget Model
 
@@ -272,7 +253,6 @@ With `infrastructure.contextBudget.enabled=true`, runtime enforces:
 
 - primary injection cap (`maxInjectionTokens`)
 - pressure thresholds (`compactionThresholdPercent`, `hardLimitPercent`)
-- truncation policy (`truncationStrategy`)
 - session arena SLO policy (`arena.maxEntriesPerSession`)
 
 `enabled=false` disables runtime token-budget enforcement for context injection.
@@ -283,26 +263,13 @@ Runtime behavior:
   global cap + hard-limit gate + arena SLO (`arena.maxEntriesPerSession`).
 - When pressure is `critical` and no recent compaction has been performed, runtime arms a compaction gate:
   tool calls are blocked until `session_compact` is performed (only `session_compact` and `skill_complete` bypass the gate).
-- Memory recall can be pressure-gated by `memory.recallMode="pressure-aware"`.
-- External recall boundary is explicit and disabled by default:
-  set `memory.externalRecall.enabled=true` and inject a custom
-  `externalRecallPort`.
-- External recall executes only when all runtime gates pass:
-  `pressure allowed` + active skill has `externalRecall: true` in its contract +
-  `internalTopScore < minInternalScore` + provider is available.
-- All skip outcomes (including `skill_contract_missing`) emit
-  `context_external_recall_decision` at `ops` level.
-- Runtime never auto-wires a built-in external recall provider.
+- Memory injection is working-only (`brewva.memory-working`) and follows the same budget gate.
 
 Normalization details from `normalizeBrewvaConfig(...)`:
 
 - Key numeric ranges are schema-enforced fail-fast (for example confidence ratios, schedule limits, context budget limits, and memory bounds).
 - `compactionThresholdPercent` is still clamped to `<= hardLimitPercent` after schema validation.
-- `memory.retrievalWeights` are normalized to sum to `1` when total weight is positive; otherwise defaults are used.
-- Integer-like counters are floor-normalized when already in-range (for example `dailyRefreshHourLocal: 12.7 -> 12`).
-- `memory.recallMode` only accepts `always | pressure-aware`; invalid values fail config load.
-- `memory.evolvesMode` only accepts `off | review-gated`; invalid values fail config load.
-- `truncationStrategy` only accepts `drop-entry | drop-low-fidelity | tail`; unknown values fail config load.
+- Integer-like counters are floor-normalized when already in-range.
 
 ## Cost Tracking Model
 
@@ -335,13 +302,6 @@ Several low-level tuning knobs were intentionally internalized and are no longer
 
 Examples:
 
-- `memory.cognitive.maxInferenceCallsPerRefresh`
-- `memory.cognitive.maxRankCandidatesPerSearch`
-- `memory.cognitive.maxReflectionsPerVerification`
-- `memory.global.minSessionRecurrence`
-- `memory.global.decayIntervalDays`
-- `memory.global.decayFactor`
-- `memory.global.pruneBelowConfidence`
 - `skills.selector.maxDigestTokens`
 - `ledger.digestWindow`
 - `tape.tapePressureThresholds.*`

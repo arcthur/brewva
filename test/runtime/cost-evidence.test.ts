@@ -29,7 +29,7 @@ describe("cost evidence separation in digest", () => {
       costUsd: 0.001,
     });
 
-    const digest = runtime.truth.getLedgerDigest(sessionId);
+    const digest = runtime.ledger.getDigest(sessionId);
     expect(digest).toContain("count=1");
     expect(digest).not.toContain("brewva_cost");
   });

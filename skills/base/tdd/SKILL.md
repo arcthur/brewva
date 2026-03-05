@@ -2,7 +2,6 @@
 name: tdd
 description: Use when implementing any feature, bugfix, or behavior change — before writing implementation code.
 stability: stable
-tier: base
 tools:
   required: [read, exec]
   optional: [grep, edit, lsp_diagnostics, skill_complete]

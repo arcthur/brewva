@@ -62,7 +62,7 @@ function buildValidCheckpointPayload() {
     },
     memoryState: {
       updatedAt: 3,
-      crystals: [],
+      unitCount: 0,
     },
     reason: "unit_test",
     createdAt: 10,
@@ -113,23 +113,37 @@ describe("tape checkpoint payload coercion", () => {
     expect(coerceTapeCheckpointPayload(payload)).toBeNull();
   });
 
-  test("given legacy checkpoint payload missing extended state fields, when coercing payload, then defaults are applied", () => {
+  test("given checkpoint payload missing extended state fields, when coercing payload, then payload is rejected", () => {
     const payload = buildValidCheckpointPayload() as unknown as {
       state: {
         cost?: unknown;
         evidence?: unknown;
         memory?: unknown;
+        costSkillLastTurnByName?: unknown;
       };
     };
     delete payload.state.cost;
+    delete payload.state.costSkillLastTurnByName;
     delete payload.state.evidence;
     delete payload.state.memory;
 
-    const coerced = coerceTapeCheckpointPayload(payload);
-    expect(coerced).not.toBeNull();
-    expect(coerced?.state.cost.totalTokens).toBe(0);
-    expect(coerced?.state.costSkillLastTurnByName).toEqual({});
-    expect(coerced?.state.evidence.totalRecords).toBe(0);
-    expect(coerced?.state.memory.crystals).toHaveLength(0);
+    expect(coerceTapeCheckpointPayload(payload)).toBeNull();
+  });
+
+  test("given checkpoint payload with legacy memory crystals, when coercing payload, then payload is rejected", () => {
+    const payload = buildValidCheckpointPayload() as unknown as {
+      state: {
+        memory: {
+          updatedAt: number | null;
+          unitCount?: number;
+          crystals?: unknown[];
+        };
+      };
+    };
+    payload.state.memory = {
+      updatedAt: 3,
+      crystals: [],
+    };
+    expect(coerceTapeCheckpointPayload(payload)).toBeNull();
   });
 });

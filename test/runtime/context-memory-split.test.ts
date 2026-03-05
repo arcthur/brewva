@@ -9,11 +9,6 @@ type RuntimeWithInternals = {
     memory: {
       refreshIfNeeded(input: { sessionId: string }): void;
       getWorkingMemory(sessionId: string): { content: string } | null;
-      buildRecallBlock(input: {
-        sessionId: string;
-        query: string;
-        limit?: number;
-      }): Promise<string>;
     };
   };
 };
@@ -22,7 +17,6 @@ function createConfig(): BrewvaConfig {
   const config = structuredClone(DEFAULT_BREWVA_CONFIG);
   config.infrastructure.toolFailureInjection.enabled = false;
   config.memory.enabled = true;
-  config.memory.recallMode = "always";
   return config;
 }
 
@@ -32,21 +26,12 @@ function patchMemory(runtime: BrewvaRuntime): void {
   runtimeWithInternals.contextService.memory.getWorkingMemory = () => ({
     content: "[WorkingMemory]\nsummary: deterministic working memory",
   });
-  runtimeWithInternals.contextService.memory.buildRecallBlock = async () =>
-    "[MemoryRecall]\nquery: deterministic recall";
-}
-
-function getLastInjectedSourceCount(runtime: BrewvaRuntime, sessionId: string): number {
-  const event = runtime.events.query(sessionId, { type: "context_injected", last: 1 })[0];
-  const payload = event?.payload as { sourceCount?: number } | undefined;
-  return payload?.sourceCount ?? 0;
 }
 
 describe("context memory split", () => {
-  test("registers working and recall as independent semantic sources", async () => {
+  test("injects working-memory source only", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-memory-split-"));
     const sessionId = "memory-split";
-    const prompt = "deterministic memory split";
 
     const runtime = new BrewvaRuntime({
       cwd: workspace,
@@ -58,11 +43,9 @@ describe("context memory split", () => {
       goal: "baseline task state",
     });
 
-    const injection = await runtime.context.buildInjection(sessionId, prompt);
+    const injection = await runtime.context.buildInjection(sessionId, "deterministic memory split");
     expect(injection.accepted).toBe(true);
     expect(injection.text.includes("[WorkingMemory]")).toBe(true);
-    expect(injection.text.includes("[MemoryRecall]")).toBe(true);
-    const sourceCount = getLastInjectedSourceCount(runtime, sessionId);
-    expect(sourceCount).toBeGreaterThanOrEqual(3);
+    expect(injection.text.includes("[MemoryRecall]")).toBe(false);
   });
 });

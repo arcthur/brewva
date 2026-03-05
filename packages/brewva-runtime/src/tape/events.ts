@@ -5,7 +5,7 @@ export const TAPE_ANCHOR_EVENT_TYPE = "anchor";
 export const TAPE_CHECKPOINT_EVENT_TYPE = "checkpoint";
 
 export const TAPE_ANCHOR_SCHEMA = "brewva.tape.anchor.v1" as const;
-export const TAPE_CHECKPOINT_SCHEMA = "brewva.tape.checkpoint.v1" as const;
+export const TAPE_CHECKPOINT_SCHEMA = "brewva.tape.checkpoint.v2" as const;
 
 const TASK_ITEM_STATUSES = ["todo", "doing", "done", "blocked"] as const;
 const TASK_PHASES = ["align", "investigate", "execute", "verify", "blocked", "done"] as const;
@@ -60,18 +60,9 @@ export interface TapeCheckpointEvidenceState {
   recentFailures: TapeCheckpointToolFailureEntry[];
 }
 
-export interface TapeCheckpointMemoryCrystalState {
-  id: string;
-  topic: string;
-  summary?: string;
-  unitCount: number;
-  confidence: number;
-  updatedAt: number;
-}
-
 export interface TapeCheckpointMemoryState {
   updatedAt: number | null;
-  crystals: TapeCheckpointMemoryCrystalState[];
+  unitCount: number;
 }
 
 function normalizeFiniteNumber(value: unknown): number | null {
@@ -507,31 +498,11 @@ function coerceCheckpointEvidenceState(value: unknown): TapeCheckpointEvidenceSt
   };
 }
 
-function coerceCheckpointMemoryCrystalState(
-  value: unknown,
-): TapeCheckpointMemoryCrystalState | null {
-  if (!isRecord(value)) return null;
-  const id = normalizeNonEmptyString(value.id);
-  const topic = normalizeNonEmptyString(value.topic);
-  const summary = normalizeNonEmptyString(value.summary);
-  const unitCount = normalizeNonNegativeInteger(value.unitCount);
-  const confidence = normalizeNonNegativeNumber(value.confidence);
-  const updatedAt = normalizeNonNegativeNumber(value.updatedAt);
-  if (!id || !topic || unitCount === null || confidence === null || updatedAt === null) {
-    return null;
-  }
-  return {
-    id,
-    topic,
-    summary,
-    unitCount,
-    confidence,
-    updatedAt,
-  };
-}
-
 function coerceCheckpointMemoryState(value: unknown): TapeCheckpointMemoryState | null {
   if (!isRecord(value)) return null;
+  if ("crystals" in value) {
+    return null;
+  }
 
   let updatedAt: number | null = null;
   if (value.updatedAt !== null && value.updatedAt !== undefined) {
@@ -540,54 +511,12 @@ function coerceCheckpointMemoryState(value: unknown): TapeCheckpointMemoryState 
     updatedAt = normalized;
   }
 
-  const crystals: TapeCheckpointMemoryCrystalState[] = [];
-  if (Array.isArray(value.crystals)) {
-    for (const rawCrystal of value.crystals) {
-      const parsed = coerceCheckpointMemoryCrystalState(rawCrystal);
-      if (!parsed) continue;
-      crystals.push(parsed);
-    }
-  }
+  const unitCount = normalizeNonNegativeInteger(value.unitCount);
+  if (unitCount === null) return null;
 
   return {
     updatedAt,
-    crystals,
-  };
-}
-
-function createEmptySessionCostSummary(): SessionCostSummary {
-  return {
-    inputTokens: 0,
-    outputTokens: 0,
-    cacheReadTokens: 0,
-    cacheWriteTokens: 0,
-    totalTokens: 0,
-    totalCostUsd: 0,
-    models: {},
-    skills: {},
-    tools: {},
-    alerts: [],
-    budget: {
-      action: "warn",
-      sessionExceeded: false,
-      blocked: false,
-    },
-  };
-}
-
-function createEmptyCheckpointEvidenceState(): TapeCheckpointEvidenceState {
-  return {
-    totalRecords: 0,
-    failureRecords: 0,
-    anchorEpoch: 0,
-    recentFailures: [],
-  };
-}
-
-function createEmptyCheckpointMemoryState(): TapeCheckpointMemoryState {
-  return {
-    updatedAt: null,
-    crystals: [],
+    unitCount,
   };
 }
 
@@ -672,22 +601,20 @@ export function coerceTapeCheckpointPayload(value: unknown): TapeCheckpointPaylo
 
   const basedOnEventId = normalizeNonEmptyString(value.basedOnEventId);
   const latestAnchorEventId = normalizeNonEmptyString(value.latestAnchorEventId);
-  const cost =
-    value.state.cost === undefined
-      ? createEmptySessionCostSummary()
-      : coerceSessionCostSummary(value.state.cost);
-  const costSkillLastTurnByName =
-    value.state.costSkillLastTurnByName === undefined
-      ? {}
-      : coerceCostSkillLastTurnByName(value.state.costSkillLastTurnByName);
-  const evidence =
-    value.state.evidence === undefined
-      ? createEmptyCheckpointEvidenceState()
-      : coerceCheckpointEvidenceState(value.state.evidence);
-  const memory =
+  if (
+    value.state.cost === undefined ||
+    value.state.costSkillLastTurnByName === undefined ||
+    value.state.evidence === undefined ||
     value.state.memory === undefined
-      ? createEmptyCheckpointMemoryState()
-      : coerceCheckpointMemoryState(value.state.memory);
+  ) {
+    return null;
+  }
+  const cost = coerceSessionCostSummary(value.state.cost);
+  const costSkillLastTurnByName = coerceCostSkillLastTurnByName(
+    value.state.costSkillLastTurnByName,
+  );
+  const evidence = coerceCheckpointEvidenceState(value.state.evidence);
+  const memory = coerceCheckpointMemoryState(value.state.memory);
   if (!cost || !costSkillLastTurnByName || !evidence || !memory) return null;
 
   return {

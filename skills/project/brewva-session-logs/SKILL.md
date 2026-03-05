@@ -1,8 +1,7 @@
 ---
 name: brewva-session-logs
-description: Search and analyze Brewva runtime session artifacts (event store, evidence ledger, memory, cost, tape, context arena telemetry) using jq and rg.
+description: Search and analyze Brewva runtime session artifacts (event store, evidence ledger, memory projection, cost, tape, governance telemetry) using jq and rg.
 stability: stable
-tier: project
 tools:
   required: [read, grep]
   optional: [exec, process, ledger_query, tape_info, tape_search, cost_view, skill_complete]
@@ -27,7 +26,7 @@ consumes: []
 ## Objective
 
 Provide practical, recipe-driven access to Brewva runtime artifacts for session inspection,
-cost analysis, behavioral reconstruction, and evidence integrity verification.
+cost analysis, deterministic boundary diagnosis, and evidence integrity verification.
 
 This skill is the process evidence layer. It answers: "what happened at runtime?" without
 making source-level or delivery decisions.
@@ -39,36 +38,27 @@ Use this skill when:
 - inspecting session history or runtime behavior
 - checking cost/budget consumption across sessions
 - verifying evidence ledger hash chain integrity
-- exploring memory evolution or knowledge state
+- exploring memory projection state
 - reconstructing a specific turn or event sequence
 - searching across sessions for a pattern or anomaly
-- debugging runtime behavior from JSONL artifacts
+- debugging governance signals from JSONL artifacts
 
 ## Artifact Locations
 
-All paths are relative to the workspace root (detected via `.brewva/` marker or git root).
+All paths are relative to the workspace root.
 
-| Artifact              | Path                                                 | Format              |
-| --------------------- | ---------------------------------------------------- | ------------------- |
-| Event store           | `.orchestrator/events/{sessionId}.jsonl`             | JSONL               |
-| Evidence ledger       | `.orchestrator/ledger/evidence.jsonl`                | JSONL (hash chain)  |
-| Memory units          | `.orchestrator/memory/units.jsonl`                   | JSONL               |
-| Memory crystals       | `.orchestrator/memory/crystals.jsonl`                | JSONL               |
-| Memory insights       | `.orchestrator/memory/insights.jsonl`                | JSONL               |
-| Memory evolves        | `.orchestrator/memory/evolves.jsonl`                 | JSONL               |
-| Global memory units   | `.orchestrator/memory/global/units.jsonl`            | JSONL (optional)    |
-| Global crystals       | `.orchestrator/memory/global/crystals.jsonl`         | JSONL (optional)    |
-| Global working        | `.orchestrator/memory/global/global-working.md`      | Markdown (optional) |
-| Global decay state    | `.orchestrator/memory/global/global-decay.json`      | JSON (optional)     |
-| Global sync snapshots | `.orchestrator/memory/global-sync/snapshot-*.json`   | JSON (optional)     |
-| Memory state          | `.orchestrator/memory/state.json`                    | JSON                |
-| Working memory        | `.orchestrator/memory/working.md`                    | Markdown            |
-| Session state         | `.orchestrator/state/{sessionId}.json`               | JSON                |
-| Task ledger           | `.orchestrator/state/task-ledger/`                   | JSON                |
-| File snapshots        | `.orchestrator/snapshots/{sessionId}/patchsets.json` | JSON                |
-| Turn WAL              | `.orchestrator/turn-wal/`                            | JSONL               |
-| Schedule projection   | `.brewva/schedule/intents.jsonl`                     | JSONL               |
-| Skills index          | `.brewva/skills_index.json`                          | JSON                |
+| Artifact              | Path                                                 | Format             |
+| --------------------- | ---------------------------------------------------- | ------------------ |
+| Event store           | `.orchestrator/events/sess_*.jsonl`                  | JSONL              |
+| Evidence ledger       | `.orchestrator/ledger/evidence.jsonl`                | JSONL (hash chain) |
+| Memory units          | `.orchestrator/memory/units.jsonl`                   | JSONL              |
+| Memory state          | `.orchestrator/memory/state.json`                    | JSON               |
+| Working memory        | `.orchestrator/memory/working.md`                    | Markdown           |
+| File snapshots        | `.orchestrator/snapshots/{sessionId}/patchsets.json` | JSON               |
+| Tool output artifacts | `.orchestrator/tool-output-artifacts/<bucket>/*.txt` | Text               |
+| Turn WAL              | `.orchestrator/turn-wal/*.jsonl`                     | JSONL              |
+| Schedule projection   | `.brewva/schedule/intents.jsonl`                     | JSONL              |
+| Skills index          | `.brewva/skills_index.json`                          | JSON               |
 
 ## Key Fields Reference
 
@@ -83,10 +73,15 @@ All paths are relative to the workspace root (detected via `.brewva/` marker or 
 | `turn`      | number? | Turn number (when applicable) |
 | `payload`   | object? | Event-specific data           |
 
-Event types: `session_start`, `agent_end`, `tool_call`, `anchor`, `checkpoint`,
-`memory_*`, `cost_update`, `context_usage`, `context_injected`, `context_injection_dropped`,
-`context_arena_slo_enforced`, `context_external_recall_decision`, `task_event`, `ledger_compacted`,
-`skill_completed`.
+High-value event families:
+
+- session and tool lifecycle: `session_start`, `agent_end`, `tool_call`, `tool_call_blocked`, `tool_call_marked`
+- task/tape: `task_event`, `anchor`, `checkpoint`
+- context boundary: `context_usage`, `context_compaction_requested`, `context_compaction_gate_blocked_tool`, `context_compacted`, `context_injected`, `context_injection_dropped`, `context_arena_slo_enforced`
+- memory projection: `memory_projection_ingested`, `memory_projection_refreshed`
+- cost and budget: `cost_update`, `budget_alert`
+- governance checks: `governance_verify_spec_*`, `governance_cost_anomaly_*`, `governance_compaction_integrity_*`
+- durability: `ledger_compacted`, `turn_wal_*`
 
 ### Evidence Ledger
 
@@ -107,104 +102,75 @@ Event types: `session_start`, `agent_end`, `tool_call`, `anchor`, `checkpoint`,
 | ------------ | ------ | ------------------- |
 | `id`         | string | Unit identifier     |
 | `sessionId`  | string | Originating session |
-| `topic`      | string | Topic cluster key   |
+| `topic`      | string | Topic key           |
 | `statement`  | string | Core assertion      |
 | `confidence` | number | Confidence score    |
-| `status`     | string | Lifecycle status    |
+| `status`     | string | `active`/`resolved` |
 
 ## Common Queries
 
-### List all sessions by date and size
+### List event files (latest first)
 
 ```bash
-for f in .orchestrator/events/*.jsonl; do
-  ts=$(head -1 "$f" | jq -r '.timestamp')
-  date=$(date -r $((ts / 1000)) '+%Y-%m-%d %H:%M' 2>/dev/null || date -d @$((ts / 1000)) '+%Y-%m-%d %H:%M')
-  size=$(ls -lh "$f" | awk '{print $5}')
-  lines=$(wc -l < "$f")
-  echo "$date ${lines}events $size $(basename "$f" .jsonl)"
-done | sort -r | head -30
+ls -lt .orchestrator/events/sess_*.jsonl | head -30
 ```
 
-### Find sessions from a specific day
+### Convert sessionId to event file path
 
 ```bash
-for f in .orchestrator/events/*.jsonl; do
-  head -1 "$f" | jq -r '.timestamp' | \
-    awk '{d=int($1/1000); cmd="date -r " d " +%Y-%m-%d"; cmd | getline dt; close(cmd); if(dt=="2026-02-25") print FILENAME}' FILENAME="$f"
-done
+session_id="<sessionId>"
+encoded=$(node -e 'process.stdout.write(Buffer.from(process.argv[1], "utf8").toString("base64url"))' "$session_id")
+echo ".orchestrator/events/sess_${encoded}.jsonl"
 ```
 
-### Extract event timeline for a session
+### Decode event file name to sessionId
 
 ```bash
-jq -r '[.timestamp, .type, (.payload | keys? // [] | join(","))] | @tsv' \
-  .orchestrator/events/<sessionId>.jsonl | head -50
+file=".orchestrator/events/sess_<encoded>.jsonl"
+encoded=$(basename "$file" .jsonl)
+encoded=${encoded#sess_}
+node -e 'process.stdout.write(Buffer.from(process.argv[1], "base64url").toString("utf8"))' "$encoded"
 ```
 
-### Filter by event type
+### Extract event timeline for one session file
 
 ```bash
-jq -r 'select(.type == "tool_call") | [.timestamp, .type, .payload.tool // "?"] | @tsv' \
-  .orchestrator/events/<sessionId>.jsonl
+jq -r '[.timestamp, .turn, .type, (.payload.reason // "")] | @tsv' \
+  .orchestrator/events/sess_<encoded>.jsonl | sort -n
 ```
 
-### Tool usage breakdown for a session
-
-```bash
-jq -r 'select(.type == "tool_call") | .payload.tool // .payload.toolName // "unknown"' \
-  .orchestrator/events/<sessionId>.jsonl | sort | uniq -c | sort -rn
-```
-
-### Skill completion history for a session
-
-```bash
-jq -r 'select(.type == "skill_completed") | [.timestamp, .payload.skillName // "?", (.payload.outputKeys // [] | join(","))] | @tsv' \
-  .orchestrator/events/<sessionId>.jsonl
-```
-
-### Cost summary for a session
-
-```bash
-jq -r 'select(.type == "agent_end") | .payload.costSummary | "input=\(.inputTokens) output=\(.outputTokens) cache_read=\(.cacheReadTokens) cost=$\(.totalCostUsd)"' \
-  .orchestrator/events/<sessionId>.jsonl
-```
-
-### Daily cost summary across all sessions
-
-```bash
-for f in .orchestrator/events/*.jsonl; do
-  ts=$(head -1 "$f" | jq -r '.timestamp')
-  date=$(date -r $((ts / 1000)) '+%Y-%m-%d' 2>/dev/null)
-  cost=$(jq -r 'select(.type == "agent_end") | .payload.costSummary.totalCostUsd // 0' "$f" | awk '{s+=$1} END {print s}')
-  [ -n "$cost" ] && [ "$cost" != "0" ] && echo "$date $cost"
-done | awk '{a[$1]+=$2} END {for(d in a) printf "%s $%.4f\n", d, a[d]}' | sort -r
-```
-
-### Context usage for a session
-
-```bash
-jq -r 'select(.type == "context_usage") | "turn=\(.turn // "?") tokens=\(.payload.tokens) pct=\(.payload.percent * 100 | floor)%"' \
-  .orchestrator/events/<sessionId>.jsonl
-```
-
-### Context arena planning telemetry
+### Context boundary decisions
 
 ```bash
 jq -r '
   select(.type == "context_injected" or .type == "context_injection_dropped")
-  | [
-      .timestamp,
-      .type,
-      ("reason=" + (.payload.reason // "accepted")),
-      ("degrade=" + ((.payload.degradationApplied // false) | tostring)),
-      ("orig=" + ((.payload.originalTokens // 0) | tostring)),
-      ("final=" + ((.payload.finalTokens // 0) | tostring)),
-      ("source_tokens=" + ((.payload.sourceTokens // 0) | tostring)),
-      ("truncated=" + ((.payload.truncated // false) | tostring))
-    ]
+  | [.timestamp, .type, (.payload.reason // "accepted"), (.payload.originalTokens // 0), (.payload.finalTokens // 0)]
   | @tsv
-' .orchestrator/events/<sessionId>.jsonl
+' .orchestrator/events/sess_<encoded>.jsonl
+```
+
+### Context compaction path
+
+```bash
+jq -r '
+  select(
+    .type == "context_compaction_requested" or
+    .type == "context_compaction_gate_blocked_tool" or
+    .type == "context_compacted"
+  )
+  | [.timestamp, .type, (.payload.reason // "-"), (.payload.fromTokens // 0), (.payload.toTokens // 0)]
+  | @tsv
+' .orchestrator/events/sess_<encoded>.jsonl
+```
+
+### Governance signal outcomes
+
+```bash
+jq -r '
+  select(.type | startswith("governance_"))
+  | [.timestamp, .type, (.payload.reason // "-"), (.payload.error // "")]
+  | @tsv
+' .orchestrator/events/sess_<encoded>.jsonl
 ```
 
 ### Arena SLO enforcement events
@@ -212,31 +178,15 @@ jq -r '
 ```bash
 jq -r '
   select(.type == "context_arena_slo_enforced")
-  | [.timestamp, .type, (.payload | tostring)]
+  | [.timestamp, .type, (.payload.source // "-"), (.payload.entriesBefore // 0), (.payload.entriesAfter // 0), (.payload.dropped // false)]
   | @tsv
-' .orchestrator/events/<sessionId>.jsonl
+' .orchestrator/events/sess_<encoded>.jsonl
 ```
 
-### External recall boundary outcomes
+### Search across all event files
 
 ```bash
-jq -r '
-  select(.type == "context_external_recall_decision")
-  | [.timestamp, .type, (.payload.outcome // "unknown"), (.payload.reason // "-"), (.payload.query // "")]
-  | @tsv
-' .orchestrator/events/<sessionId>.jsonl
-```
-
-### Search across ALL sessions for a keyword
-
-```bash
-rg -l "keyword" .orchestrator/events/*.jsonl
-```
-
-### Search event payloads for a pattern
-
-```bash
-rg -l '"type":"tool_call".*"tool":"lsp_diagnostics"' .orchestrator/events/*.jsonl
+rg -n "keyword" .orchestrator/events/sess_*.jsonl
 ```
 
 ## Evidence Ledger Queries
@@ -269,20 +219,7 @@ jq -r 'select(.verdict == "fail") | [.id, .turn, .skill, .tool, .argsSummary[:60
   .orchestrator/ledger/evidence.jsonl
 ```
 
-### Tool-specific evidence
-
-```bash
-jq -r 'select(.tool == "lsp_diagnostics") | [.id, .verdict, .outputSummary[:80]] | @tsv' \
-  .orchestrator/ledger/evidence.jsonl
-```
-
-### Evidence count by skill
-
-```bash
-jq -r '.skill // "none"' .orchestrator/ledger/evidence.jsonl | sort | uniq -c | sort -rn
-```
-
-## Memory Queries
+## Memory Projection Queries
 
 ### Current working memory
 
@@ -290,7 +227,7 @@ jq -r '.skill // "none"' .orchestrator/ledger/evidence.jsonl | sort | uniq -c | 
 cat .orchestrator/memory/working.md
 ```
 
-### All memory topics with counts
+### Memory topics with counts
 
 ```bash
 jq -r '.topic' .orchestrator/memory/units.jsonl | sort | uniq -c | sort -rn
@@ -299,65 +236,42 @@ jq -r '.topic' .orchestrator/memory/units.jsonl | sort | uniq -c | sort -rn
 ### Active memory units
 
 ```bash
-jq -r 'select(.status == "active") | [.id[:20], .topic, .confidence, .statement[:60]] | @tsv' \
+jq -r 'select(.status == "active") | [.id[:20], .topic, .confidence, .statement[:80]] | @tsv' \
   .orchestrator/memory/units.jsonl
 ```
 
-### Memory evolution: belief revisions
+### Recently resolved units
 
 ```bash
-jq -r 'select(.status == "superseded") | [.updatedAt, .id, .topic, .statement[:60]] | @tsv' \
+jq -r 'select(.status == "resolved") | [.updatedAt, .id, .topic, .statement[:80]] | @tsv' \
   .orchestrator/memory/units.jsonl | sort -n | tail -30
 ```
 
-### Memory crystals (latest)
-
-```bash
-jq -r '[.updatedAt // 0, .sessionId, .topic, .confidence, (.summary // "")[:80]] | @tsv' \
-  .orchestrator/memory/crystals.jsonl | sort -n | tail -30
-```
-
-### Open insights
-
-```bash
-jq -r 'select(.status == "open") | [.createdAt, .id, .kind, .message] | @tsv' \
-  .orchestrator/memory/insights.jsonl | sort -n | tail -30
-```
-
-### Accepted evolves edges
-
-```bash
-jq -r 'select(.status == "accepted") | [.updatedAt // 0, .id, .relation, .sourceUnitId, .targetUnitId, .confidence] | @tsv' \
-  .orchestrator/memory/evolves.jsonl | sort -n | tail -30
-```
-
-### Memory state
+### Projection state
 
 ```bash
 jq '.' .orchestrator/memory/state.json
 ```
 
-### Dirty entries by reason (refresh triggers)
+### Analyze projection events (offline)
 
 ```bash
-jq -r '.dirtyEntries[]?.reason // "unknown"' .orchestrator/memory/state.json | sort | uniq -c | sort -rn
+bun run script/analyze-memory-projection.ts .orchestrator/events/sess_<encoded>.jsonl
 ```
 
-## Session State Queries
+## Turn WAL Queries
 
-### View session state
+### View turn WAL status counts
 
 ```bash
-jq '.' .orchestrator/state/<sessionId>.json
+jq -r '.status' .orchestrator/turn-wal/*.jsonl | sort | uniq -c | sort -rn
 ```
 
-### List all session states
+### Pending/inflight WAL rows
 
 ```bash
-for f in .orchestrator/state/*.json; do
-  [ "$(basename "$f")" = "state.json" ] && continue
-  echo "$(basename "$f" .json): $(jq -r '.phase // .status // "?"' "$f" 2>/dev/null)"
-done
+jq -r 'select(.status == "pending" or .status == "inflight") | [input_filename, .updatedAt, .walId, .turnId, .sessionId, .status] | @tsv' \
+  .orchestrator/turn-wal/*.jsonl 2>/dev/null
 ```
 
 ## File Change / Snapshot Queries
@@ -389,15 +303,7 @@ jq -r 'select(.kind == "intent") | .record | [.intentId[:12], .status, .reason[:
 
 When full state reconstruction at a specific turn is needed, prefer `TurnReplayEngine`
 (`packages/brewva-runtime/src/tape/replay-engine.ts`) over manual JSONL parsing.
-It uses tape checkpoints for fast-forward and rebuilds `TaskState` + `TruthState`.
-
-## Offline Recall/Rerank Analysis
-
-Project recall and cognitive rerank quality directly from tape events (offline):
-
-```bash
-bun run analyze:memory-recall | jq '.ranking.promotionRecommendation, .externalRecall, .globalRecall'
-```
+It uses checkpoints and rebuilds task/truth/cost/evidence/memory projection state.
 
 ## Workflow
 
@@ -405,11 +311,12 @@ bun run analyze:memory-recall | jq '.ranking.promotionRecommendation, .externalR
 
 Determine what to inspect:
 
-- specific session ID → direct JSONL access
-- date range → scan event files by timestamp
-- keyword/pattern → `rg` across all session files
-- cost question → filter `agent_end` or `cost_update` events
-- context allocator question → filter `context_injected`, `context_injection_dropped`, `context_arena_slo_enforced`, `context_external_recall_decision`
+- specific session ID -> map to `sess_<base64url(sessionId)>.jsonl`
+- date range -> scan event files by first/last timestamp
+- keyword/pattern -> `rg` across all session files
+- cost question -> filter `cost_update` and `budget_alert`
+- context boundary question -> filter `context_injected`, `context_injection_dropped`, `context_arena_slo_enforced`, `context_compaction_*`
+- governance question -> filter `governance_*`
 
 ### Step 2: Extract evidence
 
@@ -442,20 +349,20 @@ SESSION_SUMMARY
 
 - Target artifact does not exist at expected path.
 - Hash chain is broken and analysis depends on ledger integrity.
-- Session file is too large for inline analysis (> 10k events) — recommend sampling.
+- Session file is too large for inline analysis (> 10k events): switch to filtered sampling.
 
 ## Escalation
 
 - If required session artifacts are missing, hand off to `exploration` to locate them.
-- If the evidence chain is broken, hand off to `debugging` to investigate the gap.
+- If evidence chain is broken, hand off to `debugging` to investigate the gap.
 
 ## Anti-Patterns (never)
 
 - Parsing JSONL manually when `jq` can do it.
 - Trusting ledger data without hash chain verification.
 - Reading entire multi-MB event stores into memory without filtering.
-- Correlating events across sessions without verifying `sessionId` matches.
-- Manual JSONL parsing when `TurnReplayEngine` can reconstruct state directly.
+- Correlating events across sessions without verifying `sessionId`.
+- Manual state reconstruction when `TurnReplayEngine` can reconstruct deterministically.
 
 ## Examples
 
@@ -470,7 +377,7 @@ Input:
 Expected flow:
 
 1. Scan event files for sessions in date range.
-2. Extract `agent_end` cost summaries.
+2. Extract `cost_update` / `agent_end` summaries.
 3. Aggregate by day and return `COST_REPORT`.
 
 ### Example B — Session forensics
@@ -483,10 +390,10 @@ Input:
 
 Expected flow:
 
-1. Read event timeline from `events/<id>.jsonl`.
-2. Check for `agent_end` cost summary.
-3. Check for tool calls, skill completions.
-4. Return `SESSION_SUMMARY` with key events.
+1. Convert session ID to encoded event file path.
+2. Read event timeline and governance/context boundary events.
+3. Correlate with ledger verdicts and cost updates.
+4. Return `SESSION_SUMMARY` with key transitions.
 
 ### Example C — Ledger integrity check
 

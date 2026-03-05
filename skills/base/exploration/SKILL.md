@@ -2,7 +2,6 @@
 name: exploration
 description: Use when repository is unfamiliar, request references unknown modules, or design decision needs structural context — before planning or patching.
 stability: stable
-tier: base
 tools:
   required: [read, grep]
   optional: [glob, ledger_query, look_at, skill_complete]

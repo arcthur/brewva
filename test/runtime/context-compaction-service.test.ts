@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import type { EvidenceLedger } from "../../packages/brewva-runtime/src/ledger/evidence-ledger.js";
 import {
   markContextCompacted,
   type ContextCompactionDeps,
 } from "../../packages/brewva-runtime/src/services/context-compaction.js";
 import { RuntimeSessionStateStore } from "../../packages/brewva-runtime/src/services/session-state.js";
 import type { SkillDocument } from "../../packages/brewva-runtime/src/types.js";
+
+async function flushAsyncEvents(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 describe("context-compaction module", () => {
   test("marks compaction, clears scope caches, emits event, and appends ledger evidence", () => {
@@ -27,12 +31,10 @@ describe("context-compaction module", () => {
 
     const deps: ContextCompactionDeps = {
       sessionState,
-      ledger: {
-        append: (row: unknown) => {
-          ledgerRows.push(row as Record<string, unknown>);
-          return row;
-        },
-      } as unknown as EvidenceLedger,
+      recordInfrastructureRow: (row) => {
+        ledgerRows.push(row as Record<string, unknown>);
+        return "ev_test";
+      },
       markPressureCompacted: (sessionId) => {
         pressureMarks.push(sessionId);
       },
@@ -109,9 +111,7 @@ describe("context-compaction module", () => {
 
     const deps: ContextCompactionDeps = {
       sessionState,
-      ledger: {
-        append: () => undefined,
-      } as unknown as EvidenceLedger,
+      recordInfrastructureRow: () => "ev_test",
       markPressureCompacted: () => undefined,
       markInjectionCompacted: () => undefined,
       getCurrentTurn: () => 3,
@@ -135,5 +135,123 @@ describe("context-compaction module", () => {
         summaryChars: 0,
       }),
     );
+  });
+
+  test("emits governance_compaction_integrity_checked when governance port accepts summary", async () => {
+    const sessionState = new RuntimeSessionStateStore();
+    const events: Array<{
+      sessionId: string;
+      type: string;
+      turn?: number;
+      payload?: Record<string, unknown>;
+    }> = [];
+
+    const deps: ContextCompactionDeps = {
+      sessionState,
+      recordInfrastructureRow: () => "ev_test",
+      governancePort: {
+        checkCompactionIntegrity: () => ({ ok: true }),
+      },
+      markPressureCompacted: () => undefined,
+      markInjectionCompacted: () => undefined,
+      getCurrentTurn: () => 3,
+      getActiveSkill: () => undefined,
+      recordEvent: (input) => {
+        events.push(input);
+        return undefined;
+      },
+    };
+
+    markContextCompacted(deps, "session-a", {
+      fromTokens: 400,
+      toTokens: 120,
+      summary: "compact summary",
+      entryId: "cmp-ok",
+    });
+    await flushAsyncEvents();
+
+    expect(events.some((event) => event.type === "governance_compaction_integrity_checked")).toBe(
+      true,
+    );
+  });
+
+  test("emits governance_compaction_integrity_failed when governance port rejects summary", async () => {
+    const sessionState = new RuntimeSessionStateStore();
+    const events: Array<{
+      sessionId: string;
+      type: string;
+      turn?: number;
+      payload?: Record<string, unknown>;
+    }> = [];
+
+    const deps: ContextCompactionDeps = {
+      sessionState,
+      recordInfrastructureRow: () => "ev_test",
+      governancePort: {
+        checkCompactionIntegrity: () => ({ ok: false, reason: "missing-required-fact" }),
+      },
+      markPressureCompacted: () => undefined,
+      markInjectionCompacted: () => undefined,
+      getCurrentTurn: () => 3,
+      getActiveSkill: () => undefined,
+      recordEvent: (input) => {
+        events.push(input);
+        return undefined;
+      },
+    };
+
+    markContextCompacted(deps, "session-a", {
+      fromTokens: 400,
+      toTokens: 120,
+      summary: "compact summary",
+      entryId: "cmp-failed",
+    });
+    await flushAsyncEvents();
+
+    const failed = events.find((event) => event.type === "governance_compaction_integrity_failed");
+    expect(failed).toBeDefined();
+    const payload = failed?.payload as { reason?: string } | undefined;
+    expect(payload?.reason).toBe("missing-required-fact");
+  });
+
+  test("emits governance_compaction_integrity_error when governance port throws", async () => {
+    const sessionState = new RuntimeSessionStateStore();
+    const events: Array<{
+      sessionId: string;
+      type: string;
+      turn?: number;
+      payload?: Record<string, unknown>;
+    }> = [];
+
+    const deps: ContextCompactionDeps = {
+      sessionState,
+      recordInfrastructureRow: () => "ev_test",
+      governancePort: {
+        checkCompactionIntegrity: () => {
+          throw new Error("compaction-integrity-port-error");
+        },
+      },
+      markPressureCompacted: () => undefined,
+      markInjectionCompacted: () => undefined,
+      getCurrentTurn: () => 3,
+      getActiveSkill: () => undefined,
+      recordEvent: (input) => {
+        events.push(input);
+        return undefined;
+      },
+    };
+
+    markContextCompacted(deps, "session-a", {
+      fromTokens: 400,
+      toTokens: 120,
+      summary: "compact summary",
+      entryId: "cmp-error",
+    });
+    await flushAsyncEvents();
+
+    const errored = events.find((event) => event.type === "governance_compaction_integrity_error");
+    expect(errored).toBeDefined();
+    const payload = errored?.payload as { error?: string } | undefined;
+    expect(payload?.error).toContain("compaction-integrity-port-error");
   });
 });

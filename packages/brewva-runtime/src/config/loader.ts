@@ -70,19 +70,29 @@ function stripMetaFields(value: Record<string, unknown>): Record<string, unknown
   return output;
 }
 
-function collectConfigMigrationHints(errors: string[]): string[] {
-  const hints: string[] = [];
-  const hasRemovedTelegramBranch = errors.some(
-    (entry) =>
-      entry.includes('/channels: unknown property "telegram"') ||
-      entry.includes("/channels/telegram"),
-  );
-  if (hasRemovedTelegramBranch) {
-    hints.push(
-      "Migration: 'channels.telegram' was removed. Telegram skill policy is now built-in; remove the 'channels.telegram' block from brewva.json.",
-    );
+const REMOVED_MEMORY_FIELDS = new Set<string>([
+  "dailyRefreshHourLocal",
+  "crystalMinUnits",
+  "retrievalTopK",
+  "retrievalWeights",
+  "recallMode",
+  "externalRecall",
+  "evolvesMode",
+  "cognitive",
+  "global",
+]);
+
+function collectRemovedFieldErrors(parsed: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+  const memory = parsed["memory"];
+  if (!isRecord(memory)) return errors;
+
+  for (const key of Object.keys(memory)) {
+    if (!REMOVED_MEMORY_FIELDS.has(key)) continue;
+    errors.push(`/memory: unknown property "${key}"`);
   }
-  return hints;
+
+  return errors;
 }
 
 function readConfigFile(configPath: string): Partial<BrewvaConfig> | undefined {
@@ -108,6 +118,15 @@ function readConfigFile(configPath: string): Partial<BrewvaConfig> | undefined {
     });
   }
 
+  const removedFieldErrors = collectRemovedFieldErrors(parsed);
+  if (removedFieldErrors.length > 0) {
+    throw new BrewvaConfigLoadError({
+      code: "config_schema_invalid",
+      message: `Config does not match schema: ${removedFieldErrors.join("; ")}`,
+      configPath,
+    });
+  }
+
   const validation = validateBrewvaConfigFile(parsed);
   if (!validation.ok) {
     if (validation.error) {
@@ -119,15 +138,9 @@ function readConfigFile(configPath: string): Partial<BrewvaConfig> | undefined {
     }
 
     if (validation.errors.length > 0) {
-      const baseMessage = `Config does not match schema: ${validation.errors.join("; ")}`;
-      const migrationHints = collectConfigMigrationHints(validation.errors);
-      const message =
-        migrationHints.length > 0
-          ? `${baseMessage}\n${migrationHints.map((hint) => `Hint: ${hint}`).join("\n")}`
-          : baseMessage;
       throw new BrewvaConfigLoadError({
         code: "config_schema_invalid",
-        message,
+        message: `Config does not match schema: ${validation.errors.join("; ")}`,
         configPath,
       });
     }

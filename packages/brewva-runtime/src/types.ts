@@ -7,7 +7,6 @@ export type SkillCostHint = "low" | "medium" | "high";
 export type SkillDispatchMode = "suggest" | "gate" | "auto";
 export type SkillCascadeMode = "off" | "assist" | "auto";
 export type SkillCascadeSource = "dispatch" | "compose" | "explicit";
-export type SkillCascadeMissingConsumesPolicy = "pause" | "replan";
 
 export interface SkillDispatchPolicy {
   gateThreshold: number;
@@ -18,7 +17,6 @@ export interface SkillDispatchPolicy {
 export interface SkillContract {
   name: string;
   tier: SkillTier;
-  externalRecall?: boolean;
   dispatch?: SkillDispatchPolicy;
   tools: {
     required: string[];
@@ -140,7 +138,6 @@ export interface SkillChainIntent {
   createdAt: number;
   updatedAt: number;
   retries: number;
-  replans: number;
   lastError?: string;
 }
 
@@ -500,9 +497,7 @@ export interface BrewvaConfig {
       mode: SkillCascadeMode;
       enabledSources: SkillCascadeSource[];
       sourcePriority: SkillCascadeSource[];
-      onMissingConsumes: SkillCascadeMissingConsumesPolicy;
       maxStepsPerRun: number;
-      maxReplans: number;
     };
   };
   verification: {
@@ -519,30 +514,6 @@ export interface BrewvaConfig {
     dir: string;
     workingFile: string;
     maxWorkingChars: number;
-    dailyRefreshHourLocal: number;
-    crystalMinUnits: number;
-    retrievalTopK: number;
-    retrievalWeights: {
-      lexical: number;
-      recency: number;
-      confidence: number;
-    };
-    recallMode: "always" | "pressure-aware";
-    externalRecall: {
-      enabled: boolean;
-      minInternalScore: number;
-      queryTopK: number;
-      injectedConfidence: number;
-    };
-    evolvesMode: "off" | "review-gated";
-    cognitive: {
-      mode: "off" | "shadow" | "active";
-      maxTokensPerTurn: number;
-    };
-    global: {
-      enabled: boolean;
-      minConfidence: number;
-    };
   };
   security: {
     mode: "permissive" | "standard" | "strict";
@@ -609,7 +580,6 @@ export interface BrewvaConfig {
       maxInjectionTokens: number;
       compactionThresholdPercent: number;
       hardLimitPercent: number;
-      truncationStrategy: "drop-entry" | "drop-low-fidelity" | "tail";
       compactionInstructions: string;
       compaction: {
         minTurnsBetween: number;
@@ -664,9 +634,10 @@ type DeepPartial<T> = T extends readonly (infer U)[]
 export interface BrewvaConfigFile {
   $schema?: string;
   ui?: Partial<BrewvaConfig["ui"]>;
-  skills?: Partial<Omit<BrewvaConfig["skills"], "selector" | "overrides">> & {
+  skills?: Partial<Omit<BrewvaConfig["skills"], "selector" | "overrides" | "cascade">> & {
     overrides?: BrewvaConfig["skills"]["overrides"];
     selector?: Partial<BrewvaConfig["skills"]["selector"]>;
+    cascade?: Partial<BrewvaConfig["skills"]["cascade"]>;
   };
   verification?: Partial<Omit<BrewvaConfig["verification"], "checks" | "commands">> & {
     checks?: Partial<BrewvaConfig["verification"]["checks"]>;
@@ -775,28 +746,6 @@ export type TruthLedgerEventPayload =
       factId: string;
       resolvedAt?: number;
     };
-
-export interface MemoryGlobalSyncSummary {
-  schema: "brewva.memory.global.v1";
-  generatedAt: number;
-  unitCount: number;
-  crystalCount: number;
-}
-
-export interface MemoryGlobalSyncEventPayload {
-  stage: "refresh";
-  scannedCandidates: number;
-  promoted: number;
-  refreshed: number;
-  decayed: number;
-  pruned: number;
-  resolvedByPass: number;
-  crystalsCompiled: number;
-  crystalsRemoved: number;
-  promotedUnitIds: string[];
-  globalSummary: MemoryGlobalSyncSummary;
-  globalSnapshotRef: string | null;
-}
 
 export interface LedgerDigest {
   generatedAt: number;
@@ -1052,6 +1001,7 @@ export type BrewvaEventCategory =
   | "context"
   | "cost"
   | "verification"
+  | "governance"
   | "state"
   | "other";
 

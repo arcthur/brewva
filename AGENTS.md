@@ -1,11 +1,5 @@
 # PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-02-23T22:05:00Z  
-**Commit:** 5f3be8e  
-**Branch:** main
-
----
-
 ## OVERVIEW
 
 `Brewva` is a Bun + TypeScript monorepo for an AI-native coding-agent runtime
@@ -74,6 +68,7 @@ brewva/
   - `runtime.tools.*`
   - `runtime.task.*`
   - `runtime.truth.*`
+  - `runtime.ledger.*`
   - `runtime.memory.*`
   - `runtime.schedule.*`
   - `runtime.turnWal.*`
@@ -96,29 +91,31 @@ brewva/
   - `strict` or `enforceIsolation=true` always fail-closed.
 - Event stream is level-based:
   - `infrastructure.events.level: audit | ops | debug` (default `ops`)
-- Exception: `cognitive_relevance_ranking*` remains `ops`-visible to support shadow-to-active rerank evaluation.
 - Config loading is fail-fast:
   - JSON parse/non-object/schema invalid/schema unavailable are startup-blocking.
   - Runtime does not continue with default-config fallback on invalid config.
 - Context injection is single-path and deterministic:
   - global injection cap + hard-limit compaction gate
-  - arena SLO enforcement (`maxEntriesPerSession`, degradation policy)
-- Context injection uses explicit semantic source labels:
+  - arena SLO enforcement (`maxEntriesPerSession`, hard boundary)
+- Context injection uses explicit context source labels:
   - `brewva.identity`
   - `brewva.truth-static` / `brewva.truth-facts`
-  - `brewva.skill-candidates` / `brewva.skill-dispatch-gate`
+  - `brewva.skill-candidates` / `brewva.skill-dispatch-gate` / `brewva.skill-cascade-gate`
   - `brewva.task-state`
   - `brewva.tool-failures`
   - `brewva.tool-outputs-distilled`
-  - `brewva.memory-working` / `brewva.memory-recall`
-  - `brewva.rag-external` (opt-in external I/O boundary)
-- Context arena has one closed loop plus one explicit boundary:
-  - **Arena SLO**: entry ceiling (`maxEntriesPerSession`) with deterministic `drop_recall` degradation.
-  - **External recall boundary**: triggered by low internal score + skill tag. Runtime queries `ExternalRecallPort`, injects `brewva.rag-external`, and writes back only if the final injection includes `[ExternalRecall]` (filtered-out results do not pollute memory). Write-back uses configured injected confidence; provider score/confidence are persisted as metadata.
-- Cognitive defaults are explicit:
-  - `memory.cognitive.mode: shadow` (default)
-  - `memory.cognitive.maxTokensPerTurn: 4096` (default)
-  - `memory.cognitive.maxTokensPerTurn <= 0` disables cognitive port calls.
+  - `brewva.memory-working`
+- Memory model is projection-only and working-only:
+  - no recall lane
+  - no external recall runtime branch
+  - no cognitive/adaptive inference path in runtime core
+- `registerContextTransform` emits deterministic governance routing telemetry:
+  - `skill_routing_translation`: `status=skipped`, `reason=governance_only` (or `critical_compaction_gate`)
+  - `skill_routing_semantic`: `status=skipped`, `reason=governance_only` (or `critical_compaction_gate`)
+- Optional `governancePort` is governance-only:
+  - `verifySpec`
+  - `detectCostAnomaly`
+  - `checkCompactionIntegrity`
 - Turn durability/recovery is WAL-based through `runtime.turnWal.*` and
   `infrastructure.turnWal.*` configuration.
 - Internal tuning knobs removed from public config should stay internal unless they
@@ -157,12 +154,11 @@ brewva/
 | Context injection orchestrator | `packages/brewva-runtime/src/context/injection-orchestrator.ts`       | injection decision and telemetry emission       |
 | Context service façade         | `packages/brewva-runtime/src/services/context.ts`                     | runtime.context.\* facade and orchestration     |
 | Context pressure               | `packages/brewva-runtime/src/services/context-pressure.ts`            | pressure ratios, compaction gate/request        |
-| Context memory injection       | `packages/brewva-runtime/src/services/context-memory-injection.ts`    | working/recall/external injection boundary      |
+| Context memory injection       | `packages/brewva-runtime/src/services/context-memory-injection.ts`    | working-only memory injection boundary          |
 | Context compaction             | `packages/brewva-runtime/src/services/context-compaction.ts`          | compaction side effects, event/ledger emission  |
-| Context external recall        | `packages/brewva-runtime/src/services/context-external-recall.ts`     | external recall decision event + write-back     |
 | Context supplemental budget    | `packages/brewva-runtime/src/services/context-supplemental-budget.ts` | supplemental injection budget accounting        |
-| External recall ports/adapters | `packages/brewva-runtime/src/external-recall/*`                       | ExternalRecallPort contract and adapters        |
-| Offline recall analysis        | `script/analyze-memory-recall.ts`                                     | projects recall/rerank quality from tape events |
+| Governance port contract       | `packages/brewva-runtime/src/governance/port.ts`                      | governance-only runtime checks                  |
+| Offline projection analysis    | `script/analyze-memory-projection.ts`                                 | projects memory projection quality from tape    |
 | Turn WAL durability/recovery   | `packages/brewva-runtime/src/channels/turn-wal*.ts`                   | append/recover/compact turn WAL rows            |
 | Tool registry                  | `packages/brewva-tools/src/index.ts`                                  | assembled tool surface                          |
 | Extension composition          | `packages/brewva-extensions/src/index.ts`                             | runtime hook wiring and bridge helpers          |

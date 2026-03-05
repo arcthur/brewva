@@ -18,7 +18,7 @@ describe("S-003 ledger write/query", () => {
       success: true,
     });
 
-    const text = runtime.truth.queryLedger(sessionId, { last: 5 });
+    const text = runtime.ledger.query(sessionId, { last: 5 });
     expect(text.includes("exec")).toBe(true);
     expect(text.includes("PASS")).toBe(true);
   });

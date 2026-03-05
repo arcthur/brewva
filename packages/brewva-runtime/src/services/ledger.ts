@@ -120,6 +120,37 @@ export class LedgerService {
     this.recordEvent = options.recordEvent;
   }
 
+  recordInfrastructureRow(input: {
+    sessionId: string;
+    tool: string;
+    argsSummary: string;
+    outputSummary: string;
+    fullOutput?: string;
+    verdict?: "pass" | "fail" | "inconclusive";
+    metadata?: Record<string, unknown>;
+    turn?: number;
+    skill?: string | null;
+  }): string {
+    const turn = input.turn ?? this.getCurrentTurn(input.sessionId);
+    const activeSkill = this.getActiveSkill(input.sessionId);
+    const ledgerRow = this.ledger.append({
+      sessionId: input.sessionId,
+      turn,
+      skill: input.skill ?? activeSkill?.name,
+      tool: input.tool,
+      argsSummary: input.argsSummary,
+      outputSummary: input.outputSummary,
+      fullOutput: input.fullOutput,
+      verdict: input.verdict ?? "inconclusive",
+      metadata: input.metadata,
+    });
+
+    // Infrastructure rows are part of the evidence chain, but they intentionally do not
+    // participate in truth sync or verification evidence classification.
+    this.maybeCompactLedger(input.sessionId, turn);
+    return ledgerRow.id;
+  }
+
   recordToolResult(input: {
     sessionId: string;
     toolName: string;

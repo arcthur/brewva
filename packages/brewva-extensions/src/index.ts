@@ -50,6 +50,12 @@ export {
   registerRuntimeCoreBridge,
 } from "./runtime-core-bridge.js";
 export { registerContextTransform } from "./context-transform.js";
+export {
+  buildCapabilityView,
+  type CapabilityAccessDecision,
+  type BuildCapabilityViewInput,
+  type BuildCapabilityViewResult,
+} from "./capability-view.js";
 export { registerEventStream } from "./event-stream.js";
 export { registerQualityGate } from "./quality-gate.js";
 export { registerLedgerWriter } from "./ledger-writer.js";

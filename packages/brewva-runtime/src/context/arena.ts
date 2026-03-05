@@ -2,24 +2,14 @@ import { estimateTokenCount, truncateTextToTokenBudget } from "../utils/token.js
 import type {
   ContextInjectionEntry,
   ContextInjectionPlanResult,
-  ContextInjectionPriority,
   ContextInjectionRegisterResult,
-  ContextInjectionTruncationStrategy,
   RegisterContextInjectionInput,
 } from "./injection.js";
-import { isDropRecallDegradableSource } from "./source-classification.js";
 
 const ENTRY_SEPARATOR = "\n\n";
 const ARENA_TRIM_MIN_ENTRIES = 2_048;
 const ARENA_TRIM_MIN_SUPERSEDED = 512;
 const ARENA_TRIM_MIN_SUPERSEDED_RATIO = 0.25;
-
-const PRIORITY_ORDER: Record<ContextInjectionPriority, number> = {
-  critical: 0,
-  high: 1,
-  normal: 2,
-  low: 3,
-};
 
 interface ArenaEntry extends ContextInjectionEntry {
   key: string;
@@ -50,19 +40,16 @@ export interface ArenaSnapshot {
 
 export class ContextArena {
   private readonly sourceTokenLimits: Record<string, number>;
-  private readonly truncationStrategy: ContextInjectionTruncationStrategy;
   private readonly maxEntriesPerSession: number;
   private readonly sessions = new Map<string, ArenaSessionState>();
 
   constructor(
     options: {
       sourceTokenLimits?: Record<string, number>;
-      truncationStrategy?: ContextInjectionTruncationStrategy;
       maxEntriesPerSession?: number;
     } = {},
   ) {
     this.sourceTokenLimits = options.sourceTokenLimits ? { ...options.sourceTokenLimits } : {};
-    this.truncationStrategy = options.truncationStrategy ?? "drop-low-fidelity";
     this.maxEntriesPerSession = Math.max(1, Math.floor(options.maxEntriesPerSession ?? 4096));
   }
 
@@ -85,7 +72,6 @@ export class ContextArena {
       source,
       id,
       content,
-      priority: input.priority ?? "normal",
       estimatedTokens: estimateTokenCount(content),
       timestamp: Date.now(),
       oncePerSession,
@@ -167,16 +153,7 @@ export class ContextArena {
       };
     }
 
-    const sortEntries = (entries: ArenaEntry[]): ArenaEntry[] => {
-      entries.sort((left, right) => {
-        const byPriority = PRIORITY_ORDER[left.priority] - PRIORITY_ORDER[right.priority];
-        if (byPriority !== 0) return byPriority;
-        return left.timestamp - right.timestamp;
-      });
-      return entries;
-    };
-
-    const candidates = sortEntries([...allCandidates]);
+    const candidates = allCandidates;
 
     const separatorTokens = estimateTokenCount(ENTRY_SEPARATOR);
     let remainingTokens = Math.max(0, Math.floor(totalTokenBudget));
@@ -208,19 +185,7 @@ export class ContextArena {
       if (fitted) {
         consumedKeys.push(entry.key);
         accepted.push(fitted);
-        remainingTokens = Math.max(0, remainingTokens - separatorCost - fitted.estimatedTokens);
-
-        if (this.truncationStrategy === "tail") {
-          break;
-        }
-        continue;
-      }
-
-      if (
-        this.truncationStrategy === "drop-entry" ||
-        this.truncationStrategy === "drop-low-fidelity"
-      ) {
-        continue;
+        break;
       }
       break;
     }
@@ -298,15 +263,6 @@ export class ContextArena {
       return this.toPublicEntry(entry);
     }
 
-    if (this.truncationStrategy === "drop-entry") {
-      return null;
-    }
-
-    if (this.truncationStrategy === "drop-low-fidelity") {
-      // Synthetic placeholders are too low-fidelity to be useful context.
-      return null;
-    }
-
     const partialText = truncateTextToTokenBudget(entry.content, budget);
     const partialTokens = estimateTokenCount(partialText);
     if (partialTokens <= 0) return null;
@@ -344,7 +300,6 @@ export class ContextArena {
       source: entry.source,
       id: entry.id,
       content: entry.content,
-      priority: entry.priority,
       estimatedTokens: entry.estimatedTokens,
       timestamp: entry.timestamp,
       oncePerSession: entry.oncePerSession,
@@ -354,7 +309,7 @@ export class ContextArena {
 
   private ensureAppendCapacity(
     state: ArenaSessionState,
-    entry: ContextInjectionEntry,
+    _entry: ContextInjectionEntry,
   ): ArenaCapacityDecision {
     state.lastDegradationApplied = false;
     const before = state.entries.length;
@@ -379,70 +334,14 @@ export class ContextArena {
       };
     }
 
-    if (isDropRecallDegradableSource(entry.source)) {
-      const evictedForIncomingRecall = this.evictActiveEntry(state, (candidate) =>
-        isDropRecallDegradableSource(candidate.source),
-      );
-      state.lastDegradationApplied = true;
-      if (!evictedForIncomingRecall) {
-        return {
-          allow: false,
-          entriesBefore: before,
-          entriesAfter: state.entries.length,
-          dropped: true,
-          degradationApplied: true,
-        };
-      }
-      return {
-        allow: true,
-        entriesBefore: before,
-        entriesAfter: state.entries.length,
-        dropped: false,
-        degradationApplied: true,
-      };
-    }
-
-    const evicted = this.evictActiveEntry(state, (candidate) =>
-      isDropRecallDegradableSource(candidate.source),
-    );
-    if (!evicted) {
-      state.lastDegradationApplied = true;
-      return {
-        allow: false,
-        entriesBefore: before,
-        entriesAfter: state.entries.length,
-        dropped: true,
-        degradationApplied: true,
-      };
-    }
-
     state.lastDegradationApplied = true;
     return {
-      allow: true,
+      allow: false,
       entriesBefore: before,
       entriesAfter: state.entries.length,
-      dropped: false,
+      dropped: true,
       degradationApplied: true,
     };
-  }
-
-  private evictActiveEntry(
-    state: ArenaSessionState,
-    predicate: (entry: ArenaEntry) => boolean,
-  ): boolean {
-    const activeEntries: ArenaEntry[] = [];
-    for (const index of state.latestIndexByKey.values()) {
-      const entry = state.entries[index];
-      if (!entry) continue;
-      activeEntries.push(entry);
-    }
-    const candidate = activeEntries
-      .filter((entry) => predicate(entry))
-      .toSorted((left, right) => left.timestamp - right.timestamp)[0];
-    if (!candidate) return false;
-    state.latestIndexByKey.delete(candidate.key);
-    this.compactToLatest(state);
-    return true;
   }
 
   private compactToLatest(state: ArenaSessionState): void {

@@ -5,13 +5,11 @@ import {
 } from "../context/injection-orchestrator.js";
 import {
   ContextInjectionCollector,
-  type ContextInjectionPriority,
   type ContextInjectionRegisterResult,
 } from "../context/injection.js";
 import type { ToolFailureEntry } from "../context/tool-failures.js";
 import type { ToolOutputDistillationEntry } from "../context/tool-output-distilled.js";
-import type { ExternalRecallPort } from "../external-recall/types.js";
-import { EvidenceLedger } from "../ledger/evidence-ledger.js";
+import type { GovernancePort } from "../governance/port.js";
 import { MemoryEngine } from "../memory/engine.js";
 import { sanitizeByTrust, wrapByTrust } from "../security/sanitize.js";
 import type {
@@ -30,10 +28,6 @@ import type {
 } from "../types.js";
 import type { RuntimeCallback } from "./callback.js";
 import { type ContextCompactionDeps, markContextCompacted } from "./context-compaction.js";
-import {
-  type ContextExternalRecallDeps,
-  recordContextExternalRecallDecision,
-} from "./context-external-recall.js";
 import { ContextMemoryInjectionService } from "./context-memory-injection.js";
 import { ContextPressureService } from "./context-pressure.js";
 import {
@@ -52,8 +46,7 @@ export interface ContextServiceOptions {
   contextBudget: ContextBudgetManager;
   contextInjection: ContextInjectionCollector;
   memory: MemoryEngine;
-  externalRecallPort?: ExternalRecallPort;
-  ledger: EvidenceLedger;
+  recordInfrastructureRow: ContextCompactionDeps["recordInfrastructureRow"];
   sessionState: RuntimeSessionStateStore;
   getTaskState: RuntimeCallback<[sessionId: string], TaskState>;
   getTruthState: RuntimeCallback<[sessionId: string], TruthState>;
@@ -103,6 +96,7 @@ export interface ContextServiceOptions {
     ],
     BrewvaEventRecord | undefined
   >;
+  governancePort?: GovernancePort;
 }
 
 export class ContextService {
@@ -111,7 +105,6 @@ export class ContextService {
   private readonly contextBudget: ContextBudgetManager;
   private readonly contextInjection: ContextInjectionCollector;
   private readonly memory: MemoryEngine;
-  private readonly ledger: EvidenceLedger;
   private readonly sessionState: RuntimeSessionStateStore;
   private readonly getTaskState: (sessionId: string) => TaskState;
   private readonly getTruthState: (sessionId: string) => TruthState;
@@ -140,7 +133,6 @@ export class ContextService {
   private readonly contextMemoryInjection: ContextMemoryInjectionService;
   private readonly contextCompactionDeps: ContextCompactionDeps;
   private readonly contextSupplementalBudgetDeps: ContextSupplementalBudgetDeps;
-  private readonly contextExternalRecallDeps: ContextExternalRecallDeps;
   private readonly contextInjectionOrchestratorDeps: ContextInjectionOrchestratorDeps;
 
   constructor(options: ContextServiceOptions) {
@@ -149,7 +141,6 @@ export class ContextService {
     this.contextBudget = options.contextBudget;
     this.contextInjection = options.contextInjection;
     this.memory = options.memory;
-    this.ledger = options.ledger;
     this.sessionState = options.sessionState;
     this.getTaskState = options.getTaskState;
     this.getTruthState = options.getTruthState;
@@ -180,12 +171,7 @@ export class ContextService {
       agentId: options.agentId,
       config: this.config,
       memory: this.memory,
-      externalRecallPort: options.externalRecallPort,
       sanitizeInput: (text) => this.sanitizeInput(text),
-      getTaskState: (sessionId) => this.getTaskState(sessionId),
-      getActiveSkill: (sessionId) => this.getActiveSkill(sessionId),
-      getContextPressureLevel: (sessionId, usage) =>
-        this.contextPressure.getContextPressureLevel(sessionId, usage),
       registerContextInjection: (sessionId, input) =>
         this.registerContextInjection(sessionId, input),
       recordEvent: (input) => this.recordEvent(input),
@@ -193,7 +179,8 @@ export class ContextService {
 
     this.contextCompactionDeps = {
       sessionState: this.sessionState,
-      ledger: this.ledger,
+      recordInfrastructureRow: options.recordInfrastructureRow,
+      governancePort: options.governancePort,
       markPressureCompacted: (sessionId) => this.contextPressure.markCompacted(sessionId),
       markInjectionCompacted: (sessionId) => this.contextInjection.onCompaction(sessionId),
       getCurrentTurn: (sessionId) => this.getCurrentTurn(sessionId),
@@ -205,12 +192,6 @@ export class ContextService {
       config: this.config,
       contextBudget: this.contextBudget,
       sessionState: this.sessionState,
-    };
-
-    this.contextExternalRecallDeps = {
-      config: this.config,
-      memory: this.memory,
-      recordEvent: (input) => this.recordEvent(input),
     };
 
     this.contextInjectionOrchestratorDeps = {
@@ -298,6 +279,14 @@ export class ContextService {
     return this.contextPressure.checkContextCompactionGate(sessionId, toolName, usage);
   }
 
+  explainContextCompactionGate(
+    sessionId: string,
+    toolName: string,
+    usage?: ContextBudgetUsage,
+  ): { allowed: boolean; reason?: string } {
+    return this.contextPressure.explainContextCompactionGate(sessionId, toolName, usage);
+  }
+
   async buildContextInjection(
     sessionId: string,
     prompt: string,
@@ -311,19 +300,8 @@ export class ContextService {
     truncated: boolean;
   }> {
     this.contextMemoryInjection.registerIdentityContextInjection(sessionId);
-    const externalRecallDecision = await this.contextMemoryInjection.registerMemoryContextInjection(
-      sessionId,
-      prompt,
-      usage,
-    );
+    await this.contextMemoryInjection.registerMemoryContextInjection(sessionId, prompt, usage);
     const finalized = this.finalizeContextInjection(sessionId, prompt, usage, injectionScopeId);
-
-    recordContextExternalRecallDecision(
-      this.contextExternalRecallDeps,
-      sessionId,
-      finalized.text,
-      externalRecallDecision,
-    );
     return finalized;
   }
 
@@ -460,7 +438,6 @@ export class ContextService {
       source: string;
       id: string;
       content: string;
-      priority?: ContextInjectionPriority;
       estimatedTokens?: number;
       oncePerSession?: boolean;
     },

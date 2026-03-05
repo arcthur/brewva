@@ -1,412 +1,85 @@
 # System Architecture
 
-This document describes the implemented architecture of Brewva based on
-current package dependencies and runtime wiring.
-
-## Design Principles And Drivers
-
-Principles are organized by permanence. Durable principles are
-model-capability-independent and will not simplify as models improve.
-Adaptive principles explicitly anticipate that their mechanisms may retire
-as the environment changes. The governing meta-principle binds all adaptive
-mechanisms to observable exit conditions.
-
-### Durable Principles
-
-#### 1) Tape-First Recovery And Replay
-
-Runtime state is recovered from append-only tape events instead of opaque
-process-local blobs:
-
-- Per turn: replay from checkpoints + deltas reconstructs task/truth/cost and
-  related runtime state.
-- On startup: session hydration rebuilds counters, warning dedupe sets, and
-  budget states from persisted tape/events.
-- For memory artifacts: missing projection files can be rebuilt from
-  `memory_*` snapshot semantics and extraction fallback.
-- Checkpoints optimize replay speed; anchors remain semantic phase markers
-  controlled by the agent.
-
-Implementation anchors:
-
-- `packages/brewva-runtime/src/tape/replay-engine.ts`
-- `packages/brewva-runtime/src/channels/turn-wal.ts`
-- `packages/brewva-runtime/src/events/store.ts`
-- `packages/brewva-cli/src/index.ts`
-
-#### 2) Contract-Driven Execution Boundaries
-
-Execution is constrained by explicit contracts at each layer:
-
-- Skill contracts define allowed tools, budget envelope, and required outputs.
-- Verification gates (`quick` / `standard` / `strict`) block completion until
-  required evidence is recorded.
-- Fail-closed context handling blocks unsafe continuation when context pressure
-  is critical and compaction contract is not satisfied.
-- Step-0 routing translation runs before semantic routing and context
-  injection. On translation failure, routing falls back to the original prompt.
-- Command execution routing is policy-explicit: `backend=best_available`
-  routes to sandbox first and implicitly falls back to host when sandbox is
-  unavailable; `backend=sandbox` governs host fallback via `fallbackToHost`.
-  Both are force-disabled by strict/enforced isolation.
-- Low-fidelity tool degradation is fail-signaled (`status=unavailable`)
-  instead of returning pseudo-success payloads.
-- Evidence ledger is append-only; missing evidence is treated as a hard
-  completion blocker.
-- Budget policies constrain context injection, session cost, and parallel
-  runtime behavior.
-
-Implementation anchors:
-
-- `packages/brewva-runtime/src/security/tool-policy.ts`
-- `packages/brewva-runtime/src/ledger/evidence-ledger.ts`
-- `packages/brewva-runtime/src/runtime.ts`
-- `packages/brewva-tools/src/skill-complete.ts`
-
-#### 3) Skill-First Orchestration With Dynamic Loading
-
-Execution is skill-first and prompt-triggered, not prompt-first:
-
-- Prompt text is treated as a dispatch signal and routed by LLM-first semantic
-  routing. Runtime no longer performs lexical keyword matching for dispatch.
-- Dispatch decision resolves `suggest | gate | auto` from per-skill policy
-  (`dispatch` metadata), keeping mode and confidence replayable.
-- Skill contracts remain the primary unit for tool policy, budget envelope, and
-  completion requirements.
-- Skill activation is dynamic (`skill_load`) and scoped to session state instead
-  of preloading all capabilities into context.
-- In `gate/auto`, runtime stores pending dispatch and enforces the gate at
-  tool-call boundary (mode-aware by security policy); bypass is explicit via
-  `skill_route_override`.
-- Dispatch reconciliation is evented and deterministic:
-  `skill_routing_decided` -> `followed | overridden | ignored`.
-- Chain planning uses `outputs/consumes/composableWith` to derive deterministic
-  prerequisite-first execution order.
-- Context injection and replay stay skill-addressable through
-  `skill_activated`/`skill_completed` and `skill_routing_*` tape events.
-
-This keeps orchestration auditable while avoiding keyword-fragile routing logic.
-
-Implementation anchors:
-
-- `packages/brewva-runtime/src/runtime.ts`
-- `packages/brewva-runtime/src/services/skill-lifecycle.ts`
-- `packages/brewva-runtime/src/services/tool-gate.ts`
-- `packages/brewva-runtime/src/skills/registry.ts`
-- `packages/brewva-runtime/src/skills/dispatch.ts`
-- `packages/brewva-runtime/src/skills/chain-planner.ts`
-- `packages/brewva-extensions/src/context-transform.ts`
-- `packages/brewva-tools/src/skill-load.ts`
-- `packages/brewva-tools/src/skill-route-override.ts`
-- `packages/brewva-tools/src/skill-complete.ts`
-
-#### 4) Projection-Based Memory (Derived, Traceable, Reviewable)
-
-Memory is a projection layer derived from event tape semantics:
-
-- Source of truth is tape events under `.orchestrator/events/`.
-- Projection outputs (`Unit`, `Crystal`, `Insight`, `EVOLVES`) are persisted as
-  derived artifacts under `.orchestrator/memory/`.
-- Projection snapshots (`memory_*`) keep replay/rebuild paths deterministic even
-  when projection artifacts are missing.
-- Projection refresh state is reason-tagged (`dirtyEntries`) so refresh causes
-  stay explicit (`topic + reason + updatedAt`) instead of opaque dirty flags.
-- Working-memory and recall context are injected as split semantic sources
-  (`brewva.memory-working` + `brewva.memory-recall`) with pressure-aware recall
-  fallback and deterministic budget/truncation behavior in extension-enabled runtime.
-- Open insights may expand recall query terms before retrieval
-  (`memory_recall_query_expanded`), tightening retrieval around unresolved context.
-- External recall remains an explicit boundary (`brewva.rag-external`): trigger
-  requires skill-tag + low internal score, and write-back stores
-  lower-confidence external units. Runtime does not auto-wire a provider;
-  external recall runs only when a custom `ExternalRecallPort` is injected.
-- EVOLVES effects remain review-gated before mutating stable unit state.
-- Quality evaluation is also projection-based: recall/rerank quality is derived
-  offline from tape events rather than hot-path counters.
-
-Event stream visibility remains level-based via
-`infrastructure.events.level`:
-
-- `audit`: replay/audit-critical stream.
-- `ops`: audit stream + operational transitions and warnings.
-- `debug`: full diagnostic details including scan telemetry and most
-  cognitive diagnostics.
-- Exception: `cognitive_relevance_ranking*` remains `ops`-visible for
-  shadow-to-active rerank evaluation.
-
-Implementation anchors:
-
-- `packages/brewva-runtime/src/memory/engine.ts`
-- `packages/brewva-runtime/src/memory/store.ts`
-- `packages/brewva-runtime/src/cost/tracker.ts`
-- `packages/brewva-extensions/src/event-stream.ts`
-
-#### 5) Workspace-First Orchestration
-
-Orchestration is modeled as workspace state first, process memory second:
-
-- Worker state is isolated by agent/session namespaces to avoid contamination.
-- Callback routing and approval state are persisted for restart continuity.
-- Runtime lifecycle restoration relies on persisted records and deterministic
-  rebuild paths.
-- Cross-agent coordination and channel boundaries remain explicit in evented
-  surfaces for replay and postmortem analysis.
-
-Implementation anchors:
-
-- `packages/brewva-gateway/src`
-- `packages/brewva-ingress/src/telegram-ingress.ts`
-- `packages/brewva-ingress/src/telegram-webhook-worker.ts`
-- `packages/brewva-runtime/src/runtime.ts`
-
-### Governing Meta-Principle
-
-#### 6) Mechanism Metabolism
-
-Every optimization mechanism in the runtime must carry its own exit condition.
-A mechanism that cannot demonstrate measurable benefit should degrade to a
-no-op or be retired, without affecting system correctness.
-
-This principle exists because context management complexity tends to
-self-reproduce: each mechanism introduces failure modes that motivate further
-mechanisms. Left unchecked, the optimization layer becomes a permanent
-dependency rather than an optional accelerator.
-
-Concrete enforcement:
-
-- **Single-path context budget**: runtime keeps one deterministic path
-  (global cap + compaction gate + arena SLO), no profile branching.
-- **No adaptive controller**: no runtime self-tuning control loop or retirement
-  scanner in context injection.
-- **Durable principles are exempt**: tape, contracts, ledger, and skill
-  orchestration do not carry metabolism policies because they serve system
-  integrity, not model-capability compensation.
-
-Implementation anchors:
-
-- `packages/brewva-runtime/src/context/arena.ts`
-- `packages/brewva-runtime/src/config/defaults.ts`
-- `skills/project/brewva-self-improve/SKILL.md` (observer/tuner cadence)
-
-### Capability-Adaptive Principles
-
-The following principles describe mechanisms that compensate for current model
-limitations (bounded context windows, quality degradation under long context).
-As models improve and costs decrease, these mechanisms are expected to
-continue simplifying toward lower operator cognitive load.
-
-#### 7) Agent Autonomy With Pressure Transparency
-
-The runtime exposes resource pressure to the agent as explicit contract text
-rather than silently managing it. The agent decides how to respond.
-
-Four orthogonal pressure surfaces:
-
-| Pipeline                    | Resource                      | Pressure Signal           | Agent Action                              |
-| --------------------------- | ----------------------------- | ------------------------- | ----------------------------------------- |
-| **State Tape**              | Append-only operational state | `tape_pressure`           | `tape_handoff` marks phase boundaries     |
-| **Message Buffer**          | LLM context window            | `context_pressure`        | `session_compact` compacts history        |
-| **Context Injection Arena** | Semantic injection budget     | arena SLO + injection cap | deterministic single-path budget behavior |
-| **Cognitive Inference**     | Runtime cognition budget      | cognitive budget status   | `CognitivePort` or deterministic fallback |
-
-Context injection sources (`brewva.identity`, `brewva.truth-static`,
-`brewva.truth-facts`, `brewva.skill-candidates`, `brewva.skill-dispatch-gate`,
-`brewva.task-state`, `brewva.tool-failures`, `brewva.tool-outputs-distilled`, `brewva.memory-working`,
-`brewva.memory-recall`, `brewva.rag-external`) remain explicit and traceable in
-runtime behavior.
-
-Cognitive behavior follows a tri-mode model:
-
-- `memory.cognitive.mode="off"`: deterministic mode only.
-- `memory.cognitive.mode="shadow"`: cognition runs and is audited but cannot
-  mutate runtime decisions.
-- `memory.cognitive.mode="active"`: cognition can influence decisions within
-  budget, with deterministic fallback on error/exhaustion.
-
-Runtime default is `shadow` with `memory.cognitive.maxTokensPerTurn=4096`.
-Additionally, `memory.cognitive.maxTokensPerTurn<=0` hard-disables cognitive
-port calls even if mode is not `off`.
-
-Implementation anchors:
-
-- `packages/brewva-runtime/src/runtime.ts`
-- `packages/brewva-runtime/src/context/budget.ts`
-- `packages/brewva-runtime/src/services/event-pipeline.ts`
-- `packages/brewva-extensions/src/context-transform.ts`
-- `packages/brewva-cli/src/session.ts`
-- `script/analyze-memory-recall.ts`
-
-#### 8) Context Budget Controls
-
-Context injection uses one deterministic path by default:
-
-- **Global cap + compaction gate**: `maxInjectionTokens` and
-  `hardLimitPercent` define the primary behavior boundary.
-- **Arena SLO** (`arena.maxEntriesPerSession`): deterministic degradation
-  (`drop_recall`) when append-only arena pressure grows.
-- **Deterministic telemetry**: injection decisions emit consistent operational
-  payloads (`context_injected` / `context_injection_dropped`) for replayable
-  root-cause inspection.
-
-Implementation anchors:
-
-- `packages/brewva-runtime/src/context/arena.ts`
-- `packages/brewva-runtime/src/context/injection-orchestrator.ts`
-
-## Package Dependency Graph
-
-```mermaid
-flowchart TD
-  CLI["@brewva/brewva-cli"]
-  GTW["@brewva/brewva-gateway"]
-  EXT["@brewva/brewva-extensions"]
-  TOOLS["@brewva/brewva-tools"]
-  RT["@brewva/brewva-runtime"]
-  DIST["distribution/*"]
-  SCRIPT["script/*"]
-
-  CLI --> GTW
-  CLI --> EXT
-  CLI --> TOOLS
-  CLI --> RT
-  GTW --> RT
-  EXT --> TOOLS
-  EXT --> RT
-  TOOLS --> RT
-  DIST --> CLI
-  SCRIPT --> DIST
-```
-
-## Responsibility Slices
-
-- **Session entry and mode control (`@brewva/brewva-cli`)**
-  - CLI flags, interactive/print/json modes, replay/undo, signal handling.
-  - Gateway subcommand dispatch (`brewva gateway ...`).
-  - Session bootstrap and extension-enabled/disabled selection.
-- **Control-plane daemon (`@brewva/brewva-gateway`)**
-  - Local daemon lifecycle management (`start`/`status`/`stop`/`rotate-token`/`logs`).
-  - Typed WebSocket protocol surface (frame validation, method/event schema, traceId propagation).
-  - Connection authentication (challenge-response) and connection revocation after token rotation.
-  - Session worker supervision, heartbeat policy reload, PID/state-file management.
-- **Lifecycle orchestration (`@brewva/brewva-extensions`)**
-  - Event stream persistence hooks.
-  - Context transform and compaction gate behavior.
-  - Memory bridge hooks (`agent_end` refresh, `session_shutdown` cache clear).
-  - Tool-call quality gate and input sanitization.
-  - Ledger writer and completion guard hooks.
-- **Tool surface (`@brewva/brewva-tools`)**
-  - Runtime-aware tool definitions (LSP/AST, tape, ledger, task, skill, rollback, memory review/dismiss).
-  - Tool-side scan telemetry (`tool_parallel_read`) and runtime APIs.
-- **Runtime core (`@brewva/brewva-runtime`)**
-  - Public facade: `BrewvaRuntime` (`packages/brewva-runtime/src/runtime.ts`) stays as external API entry.
-  - Channel contracts are exposed via dedicated subpath entry `@brewva/brewva-runtime/channels`
-    (implemented by `packages/brewva-runtime/src/channels.ts`) to keep root runtime exports focused.
-  - Internal logic is split into domain services (`packages/brewva-runtime/src/services/*`) and wired by constructor injection.
-  - Session-local ephemeral maps are centralized in `RuntimeSessionStateStore` (`packages/brewva-runtime/src/services/session-state.ts`).
-  - Scheduler boundary uses a narrow runtime port (`SchedulerRuntimePort`) instead of direct runtime coupling.
-  - Skill contracts/selection, tool policy enforcement, verification gate.
-  - Evidence ledger + truth/task event-sourced state.
-  - Tape replay (`checkpoint + delta`), context budget, parallel budget, cost tracking.
-  - Memory projection engine (units/crystals/insights/evolves), working-memory publication, recall retrieval.
-  - Rollback tracking via file snapshots.
-  - Canonical runtime configuration contract (`BrewvaConfig`), including startup UI policy (`ui.quietStartup`).
-- **Distribution/build packaging (`distribution/*`, `script/*`)**
-  - Platform launcher packages and binary build/verification scripts.
-
-## Execution Profiles
-
-- **Default profile (`extensions enabled`)**
-  - `createBrewvaExtension()` registers tools and all lifecycle handlers.
-  - Runtime behavior is mediated through extension hooks (`before_agent_start`,
-    `tool_call`, `tool_result`, `agent_end`, etc.).
-  - During `before_agent_start`, runtime may refresh memory projections and inject
-    split memory context (`brewva.memory-working` + `brewva.memory-recall`)
-    under context-budget policy.
-  - On `agent_end`, memory bridge triggers an additional memory refresh pass to
-    keep `working.md` aligned with the latest tape-derived projections.
-  - Event tape keeps raw and semantic layers separated: raw lifecycle signals
-    come from `event-stream`, while derived tool-result semantics are persisted
-    as `tool_result_recorded` by runtime/ledger writer.
-- **Direct-tool profile (`--no-extensions`)**
-  - Tools are registered directly from `buildBrewvaTools()`.
-  - CLI installs `createRuntimeCoreBridgeExtension()` to run core tool hooks
-    (`quality-gate`, `ledger-writer`, compact lifecycle bridge) without full extension stack.
-  - Runtime core bridge also handles `before_agent_start` with a minimal
-    autonomy contract + `[CoreTapeStatus]` pressure/action block.
-  - Runtime core path (`runtime.tools.start` / `runtime.tools.finish`) enforces tool policy,
-    critical context-compaction gate, tool-call accounting, patch tracking, and
-    tool-result ledger persistence.
-  - Memory ingest on `runtime.events.record()` remains active (units/crystals/insights/evolves
-    can still be projected), but extension presentation hooks are disabled.
-  - CLI installs `registerRuntimeCoreEventBridge()` for lifecycle and
-    assistant-usage telemetry.
-  - Extension-only presentation hooks (`context-transform` memory injection,
-    completion guard, notification, memory bridge) remain disabled by design.
-
-## Configuration-to-UI Flow
-
-`BrewvaConfig` is the source of truth for startup UI defaults. The flow is:
-
-1. Runtime loads config with startup-blocking parse/schema validation
-   (`loadBrewvaConfig`), then applies normalization (`normalizeBrewvaConfig`).
-2. CLI session bootstrap reads `runtime.config.ui`.
-3. CLI applies `runtime.config.ui` into upstream `SettingsManager` overrides.
-4. Interactive mode startup rendering uses `quietStartup`.
-
-Key implementation points:
-
-- Runtime types/defaults/normalization:
-  - `packages/brewva-runtime/src/types.ts`
-  - `packages/brewva-runtime/src/config/defaults.ts`
-  - `packages/brewva-runtime/src/config/normalize.ts`
-- Session bootstrap wiring:
-  - `packages/brewva-cli/src/session.ts`
-- Distribution global seed defaults:
-  - `distribution/brewva/postinstall.mjs`
-
-## Memory Projection Path
-
-Memory is implemented as a derived projection layer over the event tape:
-
-1. Runtime appends semantic events to `.orchestrator/events/sess_<base64url(sessionId)>.jsonl`.
-2. Memory extractor ingests events and upserts/merges units into `.orchestrator/memory/units.jsonl`.
-3. Crystal compiler and insight generation update `crystals.jsonl` / `insights.jsonl`.
-4. In shadow mode, evolves candidates are written to `evolves.jsonl`; manual
-   review may supersede units and emit additional memory events.
-5. Working snapshot is published to `.orchestrator/memory/working.md`; runtime then
-   builds split memory injection sources (`brewva.memory-working` + `brewva.memory-recall`).
-6. Open insights can expand recall query terms before retrieval
-   (`memory_recall_query_expanded`), improving unresolved-topic targeting.
-7. If external recall gating passes, runtime queries `ExternalRecallPort`,
-   injects `brewva.rag-external`, and writes accepted hits back as
-   lower-confidence external units.
-8. Projection state persists reason-tagged dirty entries in `state.json` to
-   keep refresh triggers explainable and tuneable.
-9. Offline evaluation scripts project recall/rerank quality directly from tape
-   events (`memory_global_recall`, `cognitive_relevance_ranking*`,
-   `context_external_recall_decision`).
-
-This path is deterministic, auditable, and restart-safe: projection artifacts are
-persisted on disk and can also be rebuilt from tape-backed `memory_*` snapshot
-events when projection files are missing.
-
-Related docs:
-
-- `docs/journeys/memory-projection-and-recall.md`
-- `docs/reference/configuration.md`
-
-## Dependency Direction Rules
-
-- Runtime package should stay independent from other workspace packages.
-- Tools and extensions can depend on runtime, but runtime must not depend on them.
-- CLI may orchestrate runtime/tools/extensions, but policy decisions should live
-  in runtime and extension hooks.
-- `reference` docs are normative for contracts; `guide/journeys` are operational views.
-
-## Architectural Objectives
-
-- Deterministic recoverability after interruption
-- Observable execution timeline and evidence chain
-- Contract-driven execution safety
-- Bounded context and bounded cost under long-running sessions
-- Traceable, reviewable memory evolution over append-only tape data
+## Philosophy
+
+Brewva is a Governance Kernel Runtime.
+
+The system optimizes for one question:
+
+`Why can we trust this agent behavior?`
+
+Design priority:
+
+1. evidence and replayability
+2. bounded execution and cost
+3. deterministic context control
+4. operator-friendly contracts
+
+## Core Kernel
+
+### Trust Layer
+
+- `EvidenceLedger`: append-only evidence chain
+- `VerificationService`: verification outcome + blocker integration
+- `TruthService`: explicit runtime facts
+
+### Boundary Layer
+
+- `ToolGateService`: execution authorization + policy checks
+- `SessionCostTracker` + `CostService`: cost boundary and budget actions
+- `ContextBudgetManager` + compaction gate: context boundary
+
+### Contract Layer
+
+- `SkillLifecycleService`: skill activation/completion contracts
+- `SkillCascadeService`: contract-driven chain progression
+- `TaskService`: task spec/item/blocker state machine
+
+### Durability Layer
+
+- event tape (`BrewvaEventStore`)
+- checkpoint + delta replay (`TurnReplayEngine`)
+- turn WAL (`TurnWALStore`, `TurnWALRecovery`)
+
+## Memory Model
+
+Memory is projection-only:
+
+- source-of-truth: event tape
+- projection: `.orchestrator/memory/units.jsonl`
+- working snapshot: `.orchestrator/memory/working.md`
+- injected source: `brewva.memory-working` only
+
+No recall lane and no external recall runtime branch are part of the kernel.
+
+## Context Model
+
+Context injection is single-path and deterministic:
+
+- governance source registration
+- arena planning
+- global budget clamp
+- hard-limit compaction gate
+
+Arena SLO is an execution boundary, not an inference selector.
+
+## Governance Port
+
+`BrewvaRuntimeOptions.governancePort` is optional and governance-only:
+
+- `verifySpec`
+- `detectCostAnomaly`
+- `checkCompactionIntegrity`
+
+These checks enrich auditability; they do not introduce adaptive inference paths.
+
+## Extensions
+
+Extensions can shape operator UX (for example capability disclosure), but kernel
+governance decisions remain in runtime services.
+
+## Non-goals
+
+- runtime-managed model routing inference
+- multi-tier adaptive memory structures
+- multi-branch context retrieval heuristics

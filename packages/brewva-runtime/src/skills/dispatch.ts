@@ -118,7 +118,7 @@ function emptyDecision(turn: number, routingOutcome?: SkillRoutingOutcome): Skil
     chain: [],
     unresolvedConsumes: [],
     confidence: 0,
-    reason: routingOutcome === "failed" ? "semantic-routing-failed" : "no-skill-match",
+    reason: routingOutcome === "failed" ? "routing-failed" : "no-skill-match",
     turn,
     routingOutcome,
   };
@@ -132,7 +132,7 @@ function conservativeFailureDecision(turn: number): SkillDispatchDecision {
     chain: [],
     unresolvedConsumes: [],
     confidence: 0,
-    reason: "semantic-routing-failed",
+    reason: "routing-failed",
     turn,
     routingOutcome: "failed",
   };

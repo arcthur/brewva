@@ -22,7 +22,6 @@ function formatIntent(intent: SkillChainIntent): string {
     `- status: ${intent.status}`,
     `- cursor: ${intent.cursor}/${intent.steps.length}`,
     `- retries: ${intent.retries}`,
-    `- replans: ${intent.replans}`,
     `- unresolved_consumes: ${
       intent.unresolvedConsumes.length > 0 ? intent.unresolvedConsumes.join(", ") : "(none)"
     }`,

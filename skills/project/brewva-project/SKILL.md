@@ -1,8 +1,7 @@
 ---
 name: brewva-project
-description: Project orchestration skill for Brewva source analysis, allocator-first runtime diagnosis, and issue/PR delivery.
+description: Project orchestration skill for Brewva source analysis, governance-kernel runtime diagnosis, and issue/PR delivery.
 stability: stable
-tier: project
 tools:
   required: [read, grep]
   optional:
@@ -36,8 +35,6 @@ tools:
     - task_record_blocker
     - task_resolve_blocker
     - task_view_state
-    - memory_dismiss_insight
-    - memory_review_evolves_edge
   denied: []
 budget:
   max_tool_calls: 110
@@ -61,7 +58,7 @@ consumes: [architecture_map, execution_steps, findings, verification, runtime_ar
 Enable evidence-led diagnosis and delivery for Brewva across two complementary analysis surfaces:
 
 1. **Source surface** — understand the codebase: package boundaries, call paths, contracts, and minimal edit points.
-2. **Process surface** — reconstruct runtime behavior from session artifacts (event store JSONL, evidence ledger, memory files, tape checkpoints, file snapshots, schedule projections) to confirm or refute hypotheses that source inspection alone cannot resolve.
+2. **Process surface** — reconstruct runtime behavior from session artifacts (event store JSONL, evidence ledger, memory projection files, tape checkpoints, file snapshots, schedule projections) to confirm or refute hypotheses that source inspection alone cannot resolve.
 
 Findings from both surfaces converge into a single delivery action: a well-evidenced issue, a reviewable PR, or an explicit "blocked" signal.
 This skill is an orchestrator: it routes work across source analysis, process evidence analysis, and delivery actions without duplicating specialized pack/base skills.
@@ -78,10 +75,11 @@ Use this skill when requests involve:
 
 ## Project Invariants (non-negotiable)
 
-- Prefer migration of proven behavior over greenfield reinvention.
+- Prefer governance-kernel correctness over adaptive cognition add-ons.
 - Keep runtime contracts explicit and verifiable (tool policy, budgets, outputs).
 - Any high-risk change must include rollback strategy and validation matrix.
-- Prefer allocator-first context design over retrieval-first prompt patching.
+- Keep context as a deterministic boundary system (hard limits, compaction gates, explicit stop actions).
+- Avoid runtime-side "make the model smarter" branches when model-native capability can own the decision.
 - Avoid compatibility-only branches unless explicitly required by task scope.
 - Source evidence and process evidence must converge before issue/PR escalation.
 
@@ -158,7 +156,7 @@ Limitation:
 Default priority order:
 
 1. P0 (real command-backed verification, enforced contract outputs)
-2. P1 (allocator-first context control plane, evidence quality semantics, memory/parallel completeness)
+2. P1 (deterministic context boundary, evidence quality semantics, memory projection completeness)
 3. P2 (checkpointing, skill test harness, security sanitization hardening)
 
 If user direction conflicts with this order, proceed only after explicitly stating risk trade-offs.
@@ -235,7 +233,7 @@ That skill provides:
 
 - artifact location and field reference for all `.orchestrator` JSONL artifacts
 - ready-made `jq`/`rg` recipes for event timeline, cost, ledger, memory, and tape queries
-- context telemetry recipes (`context_injected`, `context_injection_dropped`, `context_arena_slo_enforced`, `context_external_recall_decision`)
+- context + governance telemetry recipes (`context_injected`, `context_injection_dropped`, `context_arena_slo_enforced`, `governance_compaction_integrity_*`, `governance_verify_spec_*`, `governance_cost_anomaly_*`)
 - hash chain integrity verification procedure
 - replay engine guidance (`TurnReplayEngine`)
 
@@ -417,7 +415,7 @@ Expected flow:
 1. Output `PROJECT_SCOPE_ALIGNMENT` (mode: `RUNTIME_DIAGNOSIS`).
 2. Output `IMPACT_MAP` (at minimum covering runtime + extensions).
 3. Output `WORKSTREAM_DECISION` — activate both Source and Process lanes.
-4. **Process Lane**: verify ledger hash chain, filter `cost_update` events for budget spikes, inspect `context_injected`, `context_injection_dropped`, `context_arena_slo_enforced`, and `context_external_recall_decision` transitions for control-path anomalies, correlate `verdict: "fail"` rows with `sessionId:turn`, optionally replay to the failing turn via `TurnReplayEngine`.
+4. **Process Lane**: verify ledger hash chain, filter `cost_update` events for budget spikes, inspect `context_injected`, `context_injection_dropped`, `context_arena_slo_enforced`, `context_compaction_*`, and `governance_*` transitions for control-path anomalies, correlate `verdict: "fail"` rows with `sessionId:turn`, optionally replay to the failing turn via `TurnReplayEngine`.
 5. **Source Lane**: trace the code path from the identified tool call to the budget enforcement gate.
 6. Converge into `MIGRATION_PLAN` with `selected_path: implement-now | issue-first | blocked`.
 7. Execute minimal, reviewable increments and output `VERIFICATION_MATRIX` and `DELIVERY_REPORT`.
@@ -427,7 +425,7 @@ Expected flow:
 Input:
 
 ```text
-"Harden the deterministic context injection path (compaction gate + arena SLO + external recall boundary) and close any event/doc mismatch."
+"Harden the deterministic context boundary path (compaction gate + arena SLO + governance integrity checks) and close any event/doc mismatch."
 ```
 
 Expected flow:

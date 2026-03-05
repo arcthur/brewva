@@ -104,7 +104,6 @@ describe("Gap remediation: cost view and budget linkage", () => {
       `---
 name: patching
 description: test patching skill
-tier: base
 tags: [patching]
 tools:
   required: [read]
@@ -113,6 +112,8 @@ tools:
 budget:
   max_tool_calls: 20
   max_tokens: 20000
+outputs: [change_summary]
+consumes: []
 ---
 patching`,
       "utf8",

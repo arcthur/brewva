@@ -11,14 +11,12 @@ describe("Context injection collector", () => {
     collector.register(sessionId, {
       source: "source-a",
       id: "a",
-      priority: "high",
       content: "first",
       estimatedTokens: 1000,
     });
     collector.register(sessionId, {
       source: "source-b",
       id: "b",
-      priority: "normal",
       content: "second",
       estimatedTokens: 2,
     });
@@ -37,7 +35,6 @@ describe("Context injection collector", () => {
     collector.register(sessionId, {
       source: "source-once",
       id: "once-id",
-      priority: "high",
       content: "first pass",
       oncePerSession: true,
     });
@@ -49,7 +46,6 @@ describe("Context injection collector", () => {
     collector.register(sessionId, {
       source: "source-once",
       id: "once-id",
-      priority: "high",
       content: "second pass",
       oncePerSession: true,
     });
@@ -66,7 +62,6 @@ describe("Context injection collector", () => {
     collector.register(sessionId, {
       source: "source-once",
       id: "once-id",
-      priority: "high",
       content: "only once",
       oncePerSession: true,
     });
@@ -76,7 +71,6 @@ describe("Context injection collector", () => {
     collector.register(sessionId, {
       source: "source-once",
       id: "once-id",
-      priority: "high",
       content: "should be skipped",
       oncePerSession: true,
     });
@@ -92,7 +86,6 @@ describe("Context injection collector", () => {
     collector.register(sessionId, {
       source: "source-dense",
       id: "dense",
-      priority: "normal",
       content: dense,
     });
 
@@ -101,9 +94,9 @@ describe("Context injection collector", () => {
     expect(consumed.entries[0]?.estimatedTokens).toBe(5);
   });
 
-  test("drop-low-fidelity strategy drops oversized low-fidelity entries", () => {
-    const collector = new ContextInjectionCollector({ truncationStrategy: "drop-low-fidelity" });
-    const sessionId = "collector-drop-low-fidelity-strategy";
+  test("oversized entries are truncated under deterministic single-path policy", () => {
+    const collector = new ContextInjectionCollector();
+    const sessionId = "collector-deterministic-truncate";
     const structured = JSON.stringify({
       skills: ["debugging", "patching", "review"],
       objective: "Fix flaky test and preserve context format",
@@ -113,56 +106,50 @@ describe("Context injection collector", () => {
     collector.register(sessionId, {
       source: "source-structured",
       id: "structured",
-      priority: "high",
       content: structured,
     });
 
     const consumed = collector.consume(sessionId, 10);
-    expect(consumed.entries).toHaveLength(0);
-    expect(consumed.text).toBe("");
+    expect(consumed.entries).toHaveLength(1);
+    expect(consumed.entries[0]?.truncated).toBe(true);
+    expect(consumed.entries[0]?.estimatedTokens).toBeLessThanOrEqual(10);
   });
 
-  test("drop-entry strategy skips oversized entries and keeps smaller ones", () => {
-    const collector = new ContextInjectionCollector({ truncationStrategy: "drop-entry" });
-    const sessionId = "collector-drop-entry-strategy";
+  test("planning stops after the first truncated oversized entry", () => {
+    const collector = new ContextInjectionCollector();
+    const sessionId = "collector-deterministic-tail-stop";
 
     collector.register(sessionId, {
       source: "source-large",
       id: "large",
-      priority: "high",
       content: "x".repeat(200),
     });
     collector.register(sessionId, {
       source: "source-small",
       id: "small",
-      priority: "normal",
       content: "small-context",
     });
 
-    const first = collector.consume(sessionId, 8);
-    expect(first.entries).toHaveLength(1);
-    expect(first.entries[0]?.id).toBe("small");
-
-    const second = collector.consume(sessionId, 80);
-    expect(second.entries).toHaveLength(1);
-    expect(second.entries[0]?.id).toBe("large");
+    const plan = collector.plan(sessionId, 8);
+    expect(plan.entries).toHaveLength(1);
+    expect(plan.entries[0]?.id).toBe("large");
+    expect(plan.entries[0]?.truncated).toBe(true);
+    expect(plan.entries.some((entry) => entry.id === "small")).toBe(false);
   });
 
   test("accounts for entry separators when planning token budget", () => {
-    const collector = new ContextInjectionCollector({ truncationStrategy: "tail" });
+    const collector = new ContextInjectionCollector();
     const sessionId = "collector-separator-budget";
     const block = "x".repeat(35);
 
     collector.register(sessionId, {
       source: "source-a",
       id: "a",
-      priority: "high",
       content: block,
     });
     collector.register(sessionId, {
       source: "source-b",
       id: "b",
-      priority: "normal",
       content: block,
     });
 

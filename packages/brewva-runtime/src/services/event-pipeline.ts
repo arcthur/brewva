@@ -71,16 +71,7 @@ const AUDIT_EVENT_TYPES = new Set<string>([
   SKILL_CASCADE_ABORTED_EVENT_TYPE,
 ]);
 
-const DEBUG_EVENT_TYPES = new Set<string>([
-  "tool_parallel_read",
-  "cognitive_usage_recorded",
-  "cognitive_relation_inference",
-  "cognitive_relation_inference_skipped",
-  "cognitive_relation_inference_failed",
-  "cognitive_outcome_reflection",
-  "cognitive_outcome_reflection_skipped",
-  "cognitive_outcome_reflection_failed",
-]);
+const DEBUG_EVENT_TYPES = new Set<string>(["tool_parallel_read"]);
 
 const TURN_WAL_EVENT_TYPES = new Set<string>([
   "turn_wal_appended",
@@ -161,11 +152,10 @@ export class EventPipelineService {
   }
 
   private classifyEventLevel(type: string): "audit" | "ops" | "debug" {
-    if (type.startsWith("cognitive_relevance_ranking")) return "ops";
     if (AUDIT_EVENT_TYPES.has(type)) return "audit";
     if (DEBUG_EVENT_TYPES.has(type)) return "debug";
     if (TURN_WAL_EVENT_TYPES.has(type)) return "ops";
-    if (type.startsWith("cognitive_")) return "debug";
+    if (type.startsWith("governance_")) return "ops";
     return "ops";
   }
 

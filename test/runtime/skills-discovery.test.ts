@@ -14,7 +14,7 @@ function writeSkill(filePath: string, input: { name: string }): void {
   mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(
     filePath,
-    `---\nname: ${input.name}\ndescription: ${input.name} skill\ntools:\n  required: [read]\n  optional: []\n  denied: []\nbudget:\n  max_tool_calls: 10\n  max_tokens: 10000\n---\n# ${input.name}\n`,
+    `---\nname: ${input.name}\ndescription: ${input.name} skill\ntools:\n  required: [read]\n  optional: []\n  denied: []\nbudget:\n  max_tool_calls: 10\n  max_tokens: 10000\noutputs: []\nconsumes: []\n---\n# ${input.name}\n`,
     "utf8",
   );
 }

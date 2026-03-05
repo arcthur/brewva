@@ -18,7 +18,6 @@ function buildIntent(
     createdAt: now,
     updatedAt: now,
     retries: 0,
-    replans: 0,
   };
 }
 

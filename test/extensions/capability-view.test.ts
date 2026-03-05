@@ -1,0 +1,135 @@
+import { describe, expect, test } from "bun:test";
+import { buildCapabilityView } from "@brewva/brewva-extensions";
+
+describe("capability view", () => {
+  test("builds compact capability list with governance-first ordering", () => {
+    const result = buildCapabilityView({
+      prompt: "continue",
+      allTools: [
+        {
+          name: "exec",
+          description: "Run a shell command.",
+          parameters: {
+            type: "object",
+            properties: {
+              command: {
+                type: "string",
+              },
+            },
+          },
+        },
+        {
+          name: "session_compact",
+          description: "Compact session context.",
+          parameters: {
+            type: "object",
+            properties: {},
+          },
+        },
+        {
+          name: "tape_search",
+          description: "Search tape entries.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: {
+                type: "string",
+              },
+            },
+          },
+        },
+      ],
+      activeToolNames: ["exec"],
+    });
+
+    expect(result.block.includes("[CapabilityView]")).toBe(true);
+    expect(result.block.includes("available_total: 3")).toBe(true);
+    expect(result.block.includes("active_count: 1")).toBe(true);
+    expect(result.block.indexOf("$session_compact")).toBeLessThan(result.block.indexOf("$exec"));
+  });
+
+  test("expands capability details from $name requests", () => {
+    const result = buildCapabilityView({
+      prompt: "inspect $exec and $not_exists",
+      allTools: [
+        {
+          name: "exec",
+          description: "Run a shell command.",
+          parameters: {
+            type: "object",
+            properties: {
+              command: {
+                type: "string",
+              },
+              args: {
+                type: "array",
+              },
+            },
+          },
+        },
+      ],
+      activeToolNames: [],
+    });
+
+    expect(result.requested).toEqual(["exec", "not_exists"]);
+    expect(result.expanded).toEqual(["exec"]);
+    expect(result.missing).toEqual(["not_exists"]);
+    expect(result.block.includes("[CapabilityDetail:$exec]")).toBe(true);
+    expect(result.block.includes("parameters: args, command")).toBe(true);
+    expect(result.block.includes("unknown: $not_exists")).toBe(true);
+  });
+
+  test("returns empty block when tool list is empty", () => {
+    const result = buildCapabilityView({
+      prompt: "$exec",
+      allTools: [],
+      activeToolNames: [],
+    });
+
+    expect(result.block).toBe("");
+    expect(result.requested).toHaveLength(0);
+    expect(result.expanded).toHaveLength(0);
+    expect(result.missing).toHaveLength(0);
+  });
+
+  test("does not treat uppercase $NAME tokens as capability requests", () => {
+    const result = buildCapabilityView({
+      prompt: "env $PATH and $HOME should not expand, but $exec should.",
+      allTools: [
+        {
+          name: "exec",
+          description: "Run a shell command.",
+          parameters: { type: "object", properties: { command: { type: "string" } } },
+        },
+      ],
+      activeToolNames: [],
+    });
+
+    expect(result.requested).toEqual(["exec"]);
+    expect(result.expanded).toEqual(["exec"]);
+    expect(result.missing).toEqual([]);
+  });
+
+  test("includes allowed_now and deny_reason when access resolver is provided", () => {
+    const result = buildCapabilityView({
+      prompt: "inspect $exec",
+      allTools: [
+        {
+          name: "exec",
+          description: "Run a shell command.",
+          parameters: { type: "object", properties: { command: { type: "string" } } },
+        },
+      ],
+      activeToolNames: [],
+      resolveAccess: (toolName) => {
+        if (toolName === "exec") {
+          return { allowed: false, reason: "blocked-for-test" };
+        }
+        return { allowed: true };
+      },
+    });
+
+    expect(result.block.includes("allowed_now: false")).toBe(true);
+    expect(result.block.includes("deny_reason: blocked-for-test")).toBe(true);
+  });
+});

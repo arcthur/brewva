@@ -1,14 +1,5 @@
-import type {
-  CognitivePort,
-  CognitiveTokenBudgetStatus,
-  CognitiveUsage,
-} from "../cognitive/port.js";
-import {
-  cognitiveBudgetPayload,
-  cognitiveUsagePayload,
-  normalizeCognitiveUsage,
-} from "../cognitive/usage.js";
 import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "../events/event-types.js";
+import type { GovernancePort } from "../governance/port.js";
 import type {
   BrewvaConfig,
   TaskState,
@@ -25,7 +16,8 @@ import type { VerificationGate } from "../verification/gate.js";
 import type { RuntimeCallback } from "./callback.js";
 
 const VERIFIER_BLOCKER_PREFIX = "verifier:" as const;
-const COGNITIVE_MAX_REFLECTIONS_PER_VERIFICATION = 1;
+const GOVERNANCE_BLOCKER_ID = "verifier:governance:verify-spec";
+const GOVERNANCE_TRUTH_FACT_ID = "truth:governance:verify-spec";
 
 function normalizeVerifierCheckForId(name: string): string {
   const normalized = name.trim().toLowerCase();
@@ -76,34 +68,11 @@ function buildVerificationLessonKey(input: {
   return `verification:${sanitizeKeyToken(input.level)}:${skill}:${checks}`;
 }
 
-interface VerificationOutcomeContext {
-  taskGoal: string;
-  strategy: string;
-  lessonKey: string;
-  pattern: string;
-  outcome: "pass" | "fail" | "skipped";
-  rootCause: string | null;
-  recommendation: string | null;
-  evidence: string;
-}
-
-interface ReflectionAttemptBudget {
-  max: number;
-  remaining: number;
-}
-
 export interface VerificationServiceOptions {
   cwd: string;
   config: BrewvaConfig;
   verification: VerificationGate;
-  cognitiveMode: BrewvaConfig["memory"]["cognitive"]["mode"];
-  cognitivePort?: CognitivePort;
-  getCognitiveBudgetStatus?: (sessionId: string) => CognitiveTokenBudgetStatus;
-  recordCognitiveUsage?: (input: {
-    sessionId: string;
-    stage: string;
-    usage: CognitiveUsage;
-  }) => CognitiveTokenBudgetStatus;
+  governancePort?: GovernancePort;
   getTaskState: RuntimeCallback<[sessionId: string], TaskState>;
   getTruthState: RuntimeCallback<[sessionId: string], TruthState>;
   getActiveSkillName: RuntimeCallback<[sessionId: string], string | undefined>;
@@ -180,15 +149,7 @@ export class VerificationService {
   private readonly cwd: string;
   private readonly config: BrewvaConfig;
   private readonly verification: VerificationGate;
-  private readonly cognitiveMode: BrewvaConfig["memory"]["cognitive"]["mode"];
-  private readonly cognitiveMaxReflectionsPerVerification: number;
-  private readonly cognitivePort?: CognitivePort;
-  private readonly getCognitiveBudgetStatus?: (sessionId: string) => CognitiveTokenBudgetStatus;
-  private readonly recordCognitiveUsage?: (input: {
-    sessionId: string;
-    stage: string;
-    usage: CognitiveUsage;
-  }) => CognitiveTokenBudgetStatus;
+  private readonly governancePort?: GovernancePort;
   private readonly getTaskState: (sessionId: string) => TaskState;
   private readonly getTruthState: (sessionId: string) => TruthState;
   private readonly getActiveSkillName: (sessionId: string) => string | undefined;
@@ -203,14 +164,7 @@ export class VerificationService {
     this.cwd = options.cwd;
     this.config = options.config;
     this.verification = options.verification;
-    this.cognitiveMode = options.cognitiveMode;
-    this.cognitiveMaxReflectionsPerVerification = Math.max(
-      0,
-      COGNITIVE_MAX_REFLECTIONS_PER_VERIFICATION,
-    );
-    this.cognitivePort = options.cognitivePort;
-    this.getCognitiveBudgetStatus = options.getCognitiveBudgetStatus;
-    this.recordCognitiveUsage = options.recordCognitiveUsage;
+    this.governancePort = options.governancePort;
     this.getTaskState = options.getTaskState;
     this.getTruthState = options.getTruthState;
     this.getActiveSkillName = options.getActiveSkillName;
@@ -240,12 +194,8 @@ export class VerificationService {
       requireCommands: executeCommands,
     });
     this.syncVerificationBlockers(sessionId, report);
-    const outcomeContext = this.recordVerificationOutcome(sessionId, effectiveLevel, report);
-    const reflectionBudget: ReflectionAttemptBudget = {
-      max: this.cognitiveMaxReflectionsPerVerification,
-      remaining: this.cognitiveMaxReflectionsPerVerification,
-    };
-    void this.maybeReflectOnOutcome(sessionId, outcomeContext, reflectionBudget);
+    this.recordVerificationOutcome(sessionId, effectiveLevel, report);
+    await this.applyGovernanceVerification(sessionId, effectiveLevel, report);
     return report;
   }
 
@@ -253,12 +203,12 @@ export class VerificationService {
     sessionId: string,
     level: VerificationLevel,
     report: VerificationReport,
-  ): VerificationOutcomeContext | null {
+  ): void {
     const verificationState = this.verification.stateStore.get(sessionId);
     const taskState = this.getTaskState(sessionId);
     const taskGoal = taskState.spec?.goal?.trim() ?? "";
     const activeSkillName = this.getActiveSkillName(sessionId);
-    const outcome: VerificationOutcomeContext["outcome"] = report.skipped
+    const outcome: "pass" | "fail" | "skipped" = report.skipped
       ? "skipped"
       : report.passed
         ? "pass"
@@ -337,6 +287,7 @@ export class VerificationService {
         evidenceParts.push(`${check.name}: ${compactText(check.evidence, 360)}`);
       }
     }
+
     const evidence = compactText(
       evidenceParts.length > 0 ? evidenceParts.join(" | ") : "no_failed_check_output_captured",
       1200,
@@ -390,162 +341,76 @@ export class VerificationService {
         checkProvenance,
       },
     });
-
-    return {
-      taskGoal,
-      strategy,
-      lessonKey,
-      pattern,
-      outcome,
-      rootCause,
-      recommendation,
-      evidence,
-    };
   }
 
-  private resolveCognitiveBudgetStatus(sessionId: string): CognitiveTokenBudgetStatus | null {
-    if (!this.getCognitiveBudgetStatus) return null;
-    try {
-      return this.getCognitiveBudgetStatus(sessionId);
-    } catch {
-      return null;
-    }
-  }
-
-  private recordCognitiveUsageWithBudget(input: {
-    sessionId: string;
-    stage: string;
-    usage: CognitiveUsage | null;
-  }): CognitiveTokenBudgetStatus | null {
-    if (!this.recordCognitiveUsage) return this.resolveCognitiveBudgetStatus(input.sessionId);
-    const effectiveUsage: CognitiveUsage = input.usage ?? { totalTokens: 0 };
-    try {
-      return this.recordCognitiveUsage({
-        sessionId: input.sessionId,
-        stage: input.stage,
-        usage: effectiveUsage,
-      });
-    } catch {
-      return this.resolveCognitiveBudgetStatus(input.sessionId);
-    }
-  }
-
-  private async maybeReflectOnOutcome(
+  private async applyGovernanceVerification(
     sessionId: string,
-    context: VerificationOutcomeContext | null,
-    budget: ReflectionAttemptBudget,
+    level: VerificationLevel,
+    report: VerificationReport,
   ): Promise<void> {
-    if (!context) return;
-    if (context.outcome !== "fail") return;
-    if (this.cognitiveMode === "off") return;
-    if (budget.remaining <= 0) {
-      this.recordEvent({
-        sessionId,
-        type: "cognitive_outcome_reflection_skipped",
-        payload: {
-          stage: "verification_outcome",
-          reason: "reflection_limit_reached",
-          maxReflectionsPerVerification: budget.max,
-          usedReflections: Math.max(0, budget.max - budget.remaining),
-        },
-      });
-      return;
-    }
-    const tokenBudgetBefore = this.resolveCognitiveBudgetStatus(sessionId);
-    if ((tokenBudgetBefore?.maxTokensPerTurn ?? 1) <= 0) {
-      return;
-    }
-    if (tokenBudgetBefore?.exhausted) {
-      this.recordEvent({
-        sessionId,
-        type: "cognitive_outcome_reflection_skipped",
-        payload: {
-          stage: "verification_outcome",
-          reason: "token_budget_exhausted",
-          strategy: context.strategy,
-          budget: cognitiveBudgetPayload(tokenBudgetBefore),
-        },
-      });
-      return;
-    }
-    const cognitivePort = this.cognitivePort;
-    if (!cognitivePort?.reflectOnOutcome) return;
-    budget.remaining -= 1;
+    const governancePort = this.governancePort;
+    if (!governancePort?.verifySpec) return;
 
     try {
-      const reflection = await Promise.resolve(
-        cognitivePort.reflectOnOutcome({
-          taskGoal: context.taskGoal,
-          strategy: context.strategy,
-          outcome: context.outcome,
-          evidence: context.evidence,
-        }),
-      );
-      const lesson =
-        typeof reflection?.lesson === "string" ? compactText(reflection.lesson, 600) : "";
-      if (!lesson) {
+      const result = await Promise.resolve(governancePort.verifySpec({ sessionId, level, report }));
+      if (result.ok) {
         this.recordEvent({
           sessionId,
-          type: "cognitive_outcome_reflection_failed",
+          type: "governance_verify_spec_passed",
           payload: {
-            stage: "verification_outcome",
-            reason: "empty_lesson",
-            strategy: context.strategy,
-            budget: cognitiveBudgetPayload(this.resolveCognitiveBudgetStatus(sessionId)),
+            level,
           },
         });
+
+        const truthState = this.getTruthState(sessionId);
+        const active = truthState.facts.find(
+          (fact) => fact.id === GOVERNANCE_TRUTH_FACT_ID && fact.status === "active",
+        );
+        if (active) {
+          this.resolveTruthFact(sessionId, GOVERNANCE_TRUTH_FACT_ID);
+        }
+        const taskState = this.getTaskState(sessionId);
+        const hasBlocker = taskState.blockers.some(
+          (blocker) => blocker.id === GOVERNANCE_BLOCKER_ID,
+        );
+        if (hasBlocker) {
+          this.resolveTaskBlocker(sessionId, GOVERNANCE_BLOCKER_ID);
+        }
         return;
       }
-      const adjustedStrategy =
-        typeof reflection.adjustedStrategy === "string" &&
-        reflection.adjustedStrategy.trim().length > 0
-          ? compactText(reflection.adjustedStrategy, 600)
-          : null;
-      const pattern =
-        typeof reflection.pattern === "string" && reflection.pattern.trim().length > 0
-          ? compactText(reflection.pattern, 240)
-          : context.pattern;
-      const rootCause =
-        typeof reflection.rootCause === "string" && reflection.rootCause.trim().length > 0
-          ? compactText(reflection.rootCause, 400)
-          : context.rootCause;
-      const recommendation =
-        typeof reflection.recommendation === "string" && reflection.recommendation.trim().length > 0
-          ? compactText(reflection.recommendation, 500)
-          : (adjustedStrategy ?? context.recommendation);
-      const usage = normalizeCognitiveUsage(reflection.usage);
-      const tokenBudgetAfter = this.recordCognitiveUsageWithBudget({
-        sessionId,
-        stage: "verification_outcome",
-        usage,
-      });
+
+      const reason = (result.reason ?? "unknown").trim() || "unknown";
       this.recordEvent({
         sessionId,
-        type: "cognitive_outcome_reflection",
+        type: "governance_verify_spec_failed",
         payload: {
-          stage: "verification_outcome",
-          mode: this.cognitiveMode,
-          lessonKey: context.lessonKey,
-          pattern,
-          rootCause,
-          recommendation,
-          taskGoal: context.taskGoal || null,
-          strategy: context.strategy,
-          outcome: context.outcome,
-          lesson,
-          adjustedStrategy,
-          usage: cognitiveUsagePayload(usage),
-          budget: cognitiveBudgetPayload(tokenBudgetAfter),
+          level,
+          reason,
         },
+      });
+
+      this.upsertTruthFact(sessionId, {
+        id: GOVERNANCE_TRUTH_FACT_ID,
+        kind: "governance_verify_spec_failed",
+        severity: "error",
+        summary: `governance verification failed: ${reason}`,
+        details: {
+          level,
+          reason,
+        },
+      });
+      this.recordTaskBlocker(sessionId, {
+        id: GOVERNANCE_BLOCKER_ID,
+        message: `governance verification failed: ${reason}`,
+        source: "governance_verify_spec",
+        truthFactId: GOVERNANCE_TRUTH_FACT_ID,
       });
     } catch (error) {
       this.recordEvent({
         sessionId,
-        type: "cognitive_outcome_reflection_failed",
+        type: "governance_verify_spec_error",
         payload: {
-          stage: "verification_outcome",
-          strategy: context.strategy,
-          budget: cognitiveBudgetPayload(this.resolveCognitiveBudgetStatus(sessionId)),
+          level,
           error: error instanceof Error ? error.message : String(error),
         },
       });

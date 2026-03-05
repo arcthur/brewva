@@ -2,7 +2,6 @@
 name: brainstorming
 description: Use when creating features, building components, adding functionality, or modifying behavior — before any implementation skill.
 stability: stable
-tier: base
 tools:
   required: [read, grep]
   optional:

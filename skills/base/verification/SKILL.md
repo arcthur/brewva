@@ -2,7 +2,6 @@
 name: verification
 description: Use when about to claim work is complete, fixed, or passing — requires running verification commands and confirming output before making any success claims.
 stability: stable
-tier: base
 tools:
   required: [exec, lsp_diagnostics, ledger_query]
   optional: [read, skill_complete]

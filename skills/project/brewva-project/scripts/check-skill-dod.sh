@@ -24,6 +24,38 @@ while IFS= read -r file; do
     missing+=("outputs_field")
   fi
 
+  if ! grep -Eq '^consumes:' "${file}"; then
+    missing+=("consumes_field")
+  fi
+
+  if ! grep -Eq '^tools:' "${file}"; then
+    missing+=("tools_field")
+  fi
+
+  if ! grep -Eq '^budget:' "${file}"; then
+    missing+=("budget_field")
+  fi
+
+  if ! grep -Eq '^[[:space:]]+required:' "${file}"; then
+    missing+=("tools_required")
+  fi
+
+  if ! grep -Eq '^[[:space:]]+optional:' "${file}"; then
+    missing+=("tools_optional")
+  fi
+
+  if ! grep -Eq '^[[:space:]]+denied:' "${file}"; then
+    missing+=("tools_denied")
+  fi
+
+  if ! grep -Eq '^[[:space:]]+max_tool_calls:' "${file}"; then
+    missing+=("budget_max_tool_calls")
+  fi
+
+  if ! grep -Eq '^[[:space:]]+max_tokens:' "${file}"; then
+    missing+=("budget_max_tokens")
+  fi
+
   if ! grep -Eq '^## (Intent|Objective)' "${file}"; then
     missing+=("intent_or_objective")
   fi

@@ -2,7 +2,6 @@
 name: planning
 description: Use when task is ambiguous, multi-step across modules, or high risk — after design is approved and before implementation.
 stability: stable
-tier: base
 tools:
   required: [read]
   optional: [grep, ledger_query, skill_complete]

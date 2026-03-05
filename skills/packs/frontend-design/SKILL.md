@@ -2,7 +2,6 @@
 name: frontend-design
 description: Senior UI/UX engineering workflow with metric-driven design rules, strict component architecture, CSS hardware acceleration, and anti-slop guardrails for bold, production-ready interfaces.
 stability: stable
-tier: pack
 tools:
   required: [read]
   optional: [look_at, lsp_diagnostics, ast_grep_search, skill_complete]

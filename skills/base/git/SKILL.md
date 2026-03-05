@@ -2,7 +2,6 @@
 name: git
 description: Use when creating commits, rebasing branches, or searching git history — covers commit architecture, rebase surgery, and blame/bisect workflows.
 stability: stable
-tier: base
 tools:
   required: [exec, read]
   optional: [grep, process, ledger_query, skill_complete]

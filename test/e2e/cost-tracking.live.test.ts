@@ -8,6 +8,7 @@ import {
   parseJsonLines,
   runCliSync,
   runLive,
+  skipLiveForProviderRateLimitResult,
   writeMinimalConfig,
 } from "./helpers.js";
 
@@ -23,6 +24,9 @@ describe("e2e: cost tracking visibility", () => {
         "Do not call any tool. Reply exactly: COST-OK",
       ]);
 
+      if (skipLiveForProviderRateLimitResult("cost-json", run)) {
+        return;
+      }
       assertCliSuccess(run, "cost-json");
 
       const bundle = findFinalBundle(parseJsonLines(run.stdout, { strict: true }));
@@ -64,6 +68,9 @@ describe("e2e: cost tracking visibility", () => {
         "Do not call any tool. Reply exactly: COST-PRINT-OK",
       ]);
 
+      if (skipLiveForProviderRateLimitResult("cost-print", run)) {
+        return;
+      }
       assertCliSuccess(run, "cost-print");
 
       if (run.stderr.includes("[cost] session=")) {

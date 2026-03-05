@@ -1,20 +1,15 @@
 import type { BrewvaConfig, VerificationLevel } from "../types.js";
 
-const VALID_TRUNCATION_STRATEGIES = new Set(["drop-entry", "drop-low-fidelity", "tail"]);
 const VALID_COST_ACTIONS = new Set(["warn", "block_tools"]);
 const VALID_SECURITY_MODES = new Set(["permissive", "standard", "strict"]);
 const VALID_SECURITY_ENFORCEMENT_MODES = new Set(["off", "warn", "enforce", "inherit"]);
 const VALID_EXECUTION_BACKENDS = new Set(["host", "sandbox", "best_available"]);
 const VALID_EVENT_LEVELS = new Set(["audit", "ops", "debug"]);
-const VALID_MEMORY_EVOLVES_MODES = new Set(["off", "review-gated"]);
-const VALID_MEMORY_COGNITIVE_MODES = new Set(["off", "shadow", "active"]);
-const VALID_MEMORY_RECALL_MODES = new Set(["always", "pressure-aware"]);
 const VALID_VERIFICATION_LEVELS = new Set<VerificationLevel>(["quick", "standard", "strict"]);
 const VALID_CHANNEL_SCOPE_STRATEGIES = new Set(["chat", "thread"]);
 const VALID_CHANNEL_ACL_MODES = new Set(["open", "closed"]);
 const VALID_SKILL_CASCADE_MODES = new Set(["off", "assist", "auto"]);
 const VALID_SKILL_CASCADE_SOURCES = new Set(["compose", "dispatch", "explicit"]);
-const VALID_SKILL_CASCADE_MISSING_CONSUMES = new Set(["pause", "replan"]);
 
 type AnyRecord = Record<string, unknown>;
 
@@ -104,16 +99,6 @@ function normalizeStrictStringEnum<T extends string>(
   );
 }
 
-function normalizeTruncationStrategy(
-  value: unknown,
-  fallback: BrewvaConfig["infrastructure"]["contextBudget"]["truncationStrategy"],
-): BrewvaConfig["infrastructure"]["contextBudget"]["truncationStrategy"] {
-  if (typeof value !== "string") return fallback;
-  const normalized = value.trim();
-  if (!VALID_TRUNCATION_STRATEGIES.has(normalized)) return fallback;
-  return normalized as BrewvaConfig["infrastructure"]["contextBudget"]["truncationStrategy"];
-}
-
 function normalizeStringRecord(
   value: unknown,
   fallback: Record<string, string>,
@@ -157,23 +142,6 @@ function normalizeSkillCascadeSourceList(
   return out.length > 0 ? out : [...fallback];
 }
 
-function normalizeMemoryRetrievalWeights(
-  value: unknown,
-  fallback: BrewvaConfig["memory"]["retrievalWeights"],
-): BrewvaConfig["memory"]["retrievalWeights"] {
-  const input = isRecord(value) ? value : {};
-  const lexical = normalizeNonNegativeNumber(input.lexical, fallback.lexical);
-  const recency = normalizeNonNegativeNumber(input.recency, fallback.recency);
-  const confidence = normalizeNonNegativeNumber(input.confidence, fallback.confidence);
-  const total = lexical + recency + confidence;
-  if (total <= 0) return { ...fallback };
-  return {
-    lexical: lexical / total,
-    recency: recency / total,
-    confidence: confidence / total,
-  };
-}
-
 export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): BrewvaConfig {
   const input = isRecord(config) ? config : {};
   const uiInput = isRecord(input.ui) ? input.ui : {};
@@ -187,11 +155,6 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
   const ledgerInput = isRecord(input.ledger) ? input.ledger : {};
   const tapeInput = isRecord(input.tape) ? input.tape : {};
   const memoryInput = isRecord(input.memory) ? input.memory : {};
-  const memoryCognitiveInput = isRecord(memoryInput.cognitive) ? memoryInput.cognitive : {};
-  const memoryGlobalInput = isRecord(memoryInput.global) ? memoryInput.global : {};
-  const memoryExternalRecallInput = isRecord(memoryInput.externalRecall)
-    ? memoryInput.externalRecall
-    : {};
   const securityInput = isRecord(input.security) ? input.security : {};
   const securityEnforcementInput = isRecord(securityInput.enforcement)
     ? securityInput.enforcement
@@ -320,19 +283,9 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
         ),
         enabledSources: normalizedCascadeEnabledSources,
         sourcePriority: effectiveCascadeSourcePriority,
-        onMissingConsumes: normalizeStrictStringEnum(
-          skillsCascadeInput.onMissingConsumes,
-          defaults.skills.cascade.onMissingConsumes,
-          VALID_SKILL_CASCADE_MISSING_CONSUMES,
-          "skills.cascade.onMissingConsumes",
-        ),
         maxStepsPerRun: normalizePositiveInteger(
           skillsCascadeInput.maxStepsPerRun,
           defaults.skills.cascade.maxStepsPerRun,
-        ),
-        maxReplans: normalizeNonNegativeInteger(
-          skillsCascadeInput.maxReplans,
-          defaults.skills.cascade.maxReplans,
         ),
       },
     },
@@ -378,71 +331,6 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
         memoryInput.maxWorkingChars,
         defaults.memory.maxWorkingChars,
       ),
-      dailyRefreshHourLocal: Math.min(
-        23,
-        normalizeNonNegativeInteger(
-          memoryInput.dailyRefreshHourLocal,
-          defaults.memory.dailyRefreshHourLocal,
-        ),
-      ),
-      crystalMinUnits: normalizePositiveInteger(
-        memoryInput.crystalMinUnits,
-        defaults.memory.crystalMinUnits,
-      ),
-      retrievalTopK: normalizePositiveInteger(
-        memoryInput.retrievalTopK,
-        defaults.memory.retrievalTopK,
-      ),
-      retrievalWeights: normalizeMemoryRetrievalWeights(
-        memoryInput.retrievalWeights,
-        defaults.memory.retrievalWeights,
-      ),
-      recallMode: normalizeStrictStringEnum(
-        memoryInput.recallMode,
-        defaults.memory.recallMode,
-        VALID_MEMORY_RECALL_MODES,
-        "memory.recallMode",
-      ),
-      externalRecall: {
-        enabled: normalizeBoolean(
-          memoryExternalRecallInput.enabled,
-          defaults.memory.externalRecall.enabled,
-        ),
-        minInternalScore: normalizeUnitInterval(
-          memoryExternalRecallInput.minInternalScore,
-          defaults.memory.externalRecall.minInternalScore,
-        ),
-        queryTopK: normalizePositiveInteger(
-          memoryExternalRecallInput.queryTopK,
-          defaults.memory.externalRecall.queryTopK,
-        ),
-        injectedConfidence: normalizeUnitInterval(
-          memoryExternalRecallInput.injectedConfidence,
-          defaults.memory.externalRecall.injectedConfidence,
-        ),
-      },
-      evolvesMode: normalizeStrictStringEnum(
-        memoryInput.evolvesMode,
-        defaults.memory.evolvesMode,
-        VALID_MEMORY_EVOLVES_MODES,
-        "memory.evolvesMode",
-      ),
-      cognitive: {
-        mode: VALID_MEMORY_COGNITIVE_MODES.has(memoryCognitiveInput.mode as string)
-          ? (memoryCognitiveInput.mode as BrewvaConfig["memory"]["cognitive"]["mode"])
-          : defaults.memory.cognitive.mode,
-        maxTokensPerTurn: normalizeNonNegativeInteger(
-          memoryCognitiveInput.maxTokensPerTurn,
-          defaults.memory.cognitive.maxTokensPerTurn,
-        ),
-      },
-      global: {
-        enabled: normalizeBoolean(memoryGlobalInput.enabled, defaults.memory.global.enabled),
-        minConfidence: normalizeUnitInterval(
-          memoryGlobalInput.minConfidence,
-          defaults.memory.global.minConfidence,
-        ),
-      },
     },
     security: {
       mode: normalizedSecurityMode,
@@ -625,10 +513,6 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
         ),
         compactionThresholdPercent: normalizedCompactionThresholdPercent,
         hardLimitPercent: normalizedHardLimitPercent,
-        truncationStrategy: normalizeTruncationStrategy(
-          contextBudgetInput.truncationStrategy,
-          defaultContextBudget.truncationStrategy,
-        ),
         compactionInstructions: normalizeNonEmptyString(
           contextBudgetInput.compactionInstructions,
           defaultContextBudget.compactionInstructions,

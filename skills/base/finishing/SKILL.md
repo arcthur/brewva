@@ -2,7 +2,6 @@
 name: finishing
 description: Use when implementation is complete, all tasks pass, and you need to decide how to integrate the work.
 stability: stable
-tier: base
 tools:
   required: [exec, read]
   optional: [grep, skill_complete]

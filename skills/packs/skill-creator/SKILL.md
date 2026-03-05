@@ -2,7 +2,6 @@
 name: skill-creator
 description: Create and update reusable skills with clear contracts, resources, and packaging workflow.
 stability: stable
-tier: pack
 tools:
   required: [read]
   optional: [grep, exec, skill_complete]

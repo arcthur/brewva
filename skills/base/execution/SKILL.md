@@ -2,7 +2,6 @@
 name: execution
 description: Dispatch and coordinate plan execution via subagents, batched steps, or parallel domains. Use when you have an approved implementation plan with discrete tasks ready for execution.
 stability: stable
-tier: base
 tools:
   required: [read, exec]
   optional: [grep, lsp_symbols, lsp_find_references, lsp_diagnostics, edit, write, skill_complete]

@@ -126,7 +126,6 @@ TEMPLATE=$(cat << ENDTEMPLATE
 name: ${SKILL_NAME}
 description: "[TODO: Concise description of what this skill does and when to use it]"
 stability: experimental
-tier: ${TIER}
 tools:
   required: [read]
   optional: [grep, exec]

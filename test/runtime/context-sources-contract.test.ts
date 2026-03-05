@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  CONTEXT_SOURCES,
-  DROP_RECALL_DEGRADABLE_SOURCES,
-} from "../../packages/brewva-runtime/src/context/sources.js";
+import { CONTEXT_SOURCES } from "../../packages/brewva-runtime/src/context/sources.js";
 
 describe("context sources contract", () => {
   test("defines unique source ids", () => {
@@ -11,10 +8,9 @@ describe("context sources contract", () => {
     expect(unique.size).toBe(sourceValues.length);
   });
 
-  test("drop_recall degradable set includes only recall-tier sources", () => {
-    expect(DROP_RECALL_DEGRADABLE_SOURCES).toEqual([
-      CONTEXT_SOURCES.memoryRecall,
-      CONTEXT_SOURCES.ragExternal,
-    ]);
+  test("does not expose recall/external semantic sources", () => {
+    const sourceValues = Object.values(CONTEXT_SOURCES) as string[];
+    expect(sourceValues.includes("brewva.memory-recall")).toBe(false);
+    expect(sourceValues.includes("brewva.rag-external")).toBe(false);
   });
 });

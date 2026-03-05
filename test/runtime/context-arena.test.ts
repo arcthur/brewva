@@ -10,13 +10,11 @@ describe("ContextArena", () => {
       source: "brewva.truth-facts",
       id: "truth-facts",
       content: "fact v1",
-      priority: "critical",
     });
     arena.append(sessionId, {
       source: "brewva.truth-facts",
       id: "truth-facts",
       content: "fact v2",
-      priority: "critical",
     });
 
     const snapshot = arena.snapshot(sessionId);
@@ -30,18 +28,41 @@ describe("ContextArena", () => {
       source: "brewva.truth-facts",
       id: "truth-facts",
       content: "old fact",
-      priority: "critical",
     });
     arena.append(sessionId, {
       source: "brewva.truth-facts",
       id: "truth-facts",
       content: "new fact",
-      priority: "critical",
     });
 
     const plan = arena.plan(sessionId, 10_000);
     expect(plan.entries).toHaveLength(1);
     expect(plan.entries[0]?.content).toBe("new fact");
+  });
+
+  test("re-registering existing key keeps deterministic key order while updating content", () => {
+    const arena = new ContextArena();
+    arena.append(sessionId, {
+      source: "source-a",
+      id: "same",
+      content: "a-old",
+    });
+    arena.append(sessionId, {
+      source: "source-b",
+      id: "b",
+      content: "b",
+    });
+    arena.append(sessionId, {
+      source: "source-a",
+      id: "same",
+      content: "a-new",
+    });
+
+    const plan = arena.plan(sessionId, 10_000);
+    expect(plan.entries).toHaveLength(2);
+    expect(plan.entries[0]?.source).toBe("source-a");
+    expect(plan.entries[0]?.content).toBe("a-new");
+    expect(plan.entries[1]?.source).toBe("source-b");
   });
 
   test("markPresented keeps stored entries and suppresses next plan", () => {
@@ -50,7 +71,6 @@ describe("ContextArena", () => {
       source: "brewva.truth-facts",
       id: "truth-facts",
       content: "fact",
-      priority: "critical",
     });
 
     const first = arena.plan(sessionId, 10_000);
@@ -69,7 +89,6 @@ describe("ContextArena", () => {
       source: "brewva.identity",
       id: "identity-1",
       content: "identity",
-      priority: "critical",
       oncePerSession: true,
     });
     const first = arena.plan(sessionId, 10_000);
@@ -79,37 +98,33 @@ describe("ContextArena", () => {
       source: "brewva.identity",
       id: "identity-1",
       content: "identity-v2",
-      priority: "critical",
       oncePerSession: true,
     });
     const second = arena.plan(sessionId, 10_000);
     expect(second.entries).toHaveLength(0);
   });
 
-  test("plan orders by priority before timestamp", () => {
+  test("plan preserves deterministic append order", () => {
     const arena = new ContextArena();
     arena.append(sessionId, {
       source: "brewva.memory-working",
       id: "memory-working",
       content: "memory",
-      priority: "normal",
     });
     arena.append(sessionId, {
       source: "brewva.truth-facts",
       id: "truth-facts",
       content: "truth",
-      priority: "critical",
     });
     arena.append(sessionId, {
       source: "brewva.task-state",
       id: "task-1",
       content: "task",
-      priority: "high",
     });
 
     const planned = arena.plan(sessionId, 10_000);
     const sources = planned.entries.map((entry) => entry.source);
-    expect(sources).toEqual(["brewva.truth-facts", "brewva.task-state", "brewva.memory-working"]);
+    expect(sources).toEqual(["brewva.memory-working", "brewva.truth-facts", "brewva.task-state"]);
   });
 
   test("clearSession clears the whole session arena", () => {
@@ -118,7 +133,6 @@ describe("ContextArena", () => {
       source: "brewva.truth-facts",
       id: "truth-facts",
       content: "fact",
-      priority: "critical",
     });
 
     arena.clearSession(sessionId);
@@ -137,7 +151,6 @@ describe("ContextArena", () => {
         source: "brewva.truth-facts",
         id: "truth-facts",
         content: `fact-${i}`,
-        priority: "critical",
       });
     }
 
@@ -150,7 +163,7 @@ describe("ContextArena", () => {
     expect(plan.entries[0]?.content).toBe("fact-2499");
   });
 
-  test("drop_recall policy drops incoming recall entry at SLO ceiling", () => {
+  test("enforces hard SLO boundary when session arena is full", () => {
     const arena = new ContextArena({
       maxEntriesPerSession: 1,
     });
@@ -158,60 +171,30 @@ describe("ContextArena", () => {
       source: "brewva.truth-facts",
       id: "truth-facts",
       content: "truth",
-      priority: "critical",
     });
     const dropped = arena.append(sessionId, {
-      source: "brewva.memory-recall",
-      id: "memory-recall",
-      content: "recall",
-      priority: "normal",
+      source: "brewva.tool-failures",
+      id: "tool-failures",
+      content: "failure summary",
     });
     expect(dropped.accepted).toBe(false);
     expect(dropped.sloEnforced?.dropped).toBe(true);
   });
 
-  test("drop_recall policy prefers fresher incoming recall by evicting older recall entries", () => {
-    const arena = new ContextArena({
-      maxEntriesPerSession: 1,
-    });
-    arena.append(sessionId, {
-      source: "brewva.memory-recall",
-      id: "memory-recall",
-      content: "old-recall",
-      priority: "normal",
-    });
-    const result = arena.append(sessionId, {
-      source: "brewva.memory-recall",
-      id: "memory-recall-next",
-      content: "new-recall",
-      priority: "normal",
-    });
-    expect(result.accepted).toBe(true);
-    expect(result.sloEnforced?.dropped).toBe(false);
-
-    const plan = arena.plan(sessionId, 500);
-    expect(plan.entries).toHaveLength(1);
-    expect(plan.entries[0]?.id).toBe("memory-recall-next");
-    expect(plan.entries[0]?.content).toBe("new-recall");
-  });
-
   test("snapshot exposes append-only arena counters", () => {
     const snapshotSessionId = "context-arena-snapshot";
     const arena = new ContextArena({
-      truncationStrategy: "drop-entry",
       maxEntriesPerSession: 64,
     });
     arena.append(snapshotSessionId, {
       source: "brewva.truth-facts",
       id: "truth-facts",
       content: "t".repeat(2_000),
-      priority: "critical",
     });
     arena.append(snapshotSessionId, {
-      source: "brewva.rag-external",
-      id: "rag-external",
+      source: "vendor.reference",
+      id: "reference-block",
       content: "r".repeat(800),
-      priority: "normal",
     });
 
     arena.plan(snapshotSessionId, 421);

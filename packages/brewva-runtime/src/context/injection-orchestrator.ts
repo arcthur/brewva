@@ -107,7 +107,6 @@ export function buildContextInjection(
     deps.registerContextInjection(input.sessionId, {
       source: CONTEXT_SOURCES.truthStatic,
       id: "truth-static",
-      priority: "critical",
       oncePerSession: true,
       content: truthLedgerBlock,
     });
@@ -116,7 +115,6 @@ export function buildContextInjection(
     deps.registerContextInjection(input.sessionId, {
       source: CONTEXT_SOURCES.truthFacts,
       id: "truth-facts",
-      priority: "critical",
       content: truthFactsBlock,
     });
   }
@@ -141,7 +139,6 @@ export function buildContextInjection(
     deps.registerContextInjection(input.sessionId, {
       source: CONTEXT_SOURCES.skillCandidates,
       id: "top-k-skills",
-      priority: "high",
       content: deps.buildSkillCandidateBlock(selectedSkills),
     });
   }
@@ -149,7 +146,6 @@ export function buildContextInjection(
     deps.registerContextInjection(input.sessionId, {
       source: CONTEXT_SOURCES.skillDispatchGate,
       id: "skill-dispatch-gate",
-      priority: "critical",
       content: deps.buildSkillDispatchGateBlock(dispatchDecision),
     });
   }
@@ -161,7 +157,6 @@ export function buildContextInjection(
       deps.registerContextInjection(input.sessionId, {
         source: CONTEXT_SOURCES.skillCascadeGate,
         id: "skill-cascade-gate",
-        priority: "critical",
         content: deps.buildSkillCascadeGateBlock(intent),
       });
     }
@@ -178,7 +173,6 @@ export function buildContextInjection(
       deps.registerContextInjection(input.sessionId, {
         source: CONTEXT_SOURCES.toolFailures,
         id: "recent-failures",
-        priority: "high",
         content: failureBlock,
       });
     }
@@ -195,7 +189,6 @@ export function buildContextInjection(
       deps.registerContextInjection(input.sessionId, {
         source: CONTEXT_SOURCES.toolOutputsDistilled,
         id: "recent-tool-output-distilled",
-        priority: "high",
         content: distilledBlock,
       });
     }
@@ -213,7 +206,6 @@ export function buildContextInjection(
       deps.registerContextInjection(input.sessionId, {
         source: CONTEXT_SOURCES.taskState,
         id: "task-state",
-        priority: "critical",
         content: taskBlock,
       });
     }

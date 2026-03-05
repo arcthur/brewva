@@ -10,6 +10,12 @@ function createAuditConfig(): BrewvaConfig {
   return config;
 }
 
+function createOpsConfig(): BrewvaConfig {
+  const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+  config.infrastructure.events.level = "ops";
+  return config;
+}
+
 describe("event pipeline level classification", () => {
   test("keeps tool_output_observed visible at audit level", () => {
     const runtime = new BrewvaRuntime({
@@ -66,5 +72,61 @@ describe("event pipeline level classification", () => {
     ).toHaveLength(1);
     expect(runtime.events.query(sessionId, { type: "tool_output_search" })).toHaveLength(0);
     expect(runtime.events.query(sessionId, { type: "tool_execution_end" })).toHaveLength(0);
+  });
+
+  test("keeps governance events visible at ops level with governance category", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-events-ops-")),
+      config: createOpsConfig(),
+    });
+    const sessionId = "ops-level-governance-session";
+
+    const governanceTypes = [
+      "governance_verify_spec_failed",
+      "governance_verify_spec_passed",
+      "governance_verify_spec_error",
+      "governance_cost_anomaly_detected",
+      "governance_cost_anomaly_error",
+      "governance_compaction_integrity_checked",
+      "governance_compaction_integrity_failed",
+      "governance_compaction_integrity_error",
+    ] as const;
+
+    for (const type of governanceTypes) {
+      runtime.events.record({
+        sessionId,
+        type,
+        payload: {
+          reason: "unit-test",
+        },
+      });
+    }
+
+    for (const type of governanceTypes) {
+      const events = runtime.events.query(sessionId, { type });
+      expect(events).toHaveLength(1);
+      const structured = runtime.events.queryStructured(sessionId, { type });
+      expect(structured[0]?.category).toBe("governance");
+    }
+  });
+
+  test("drops governance events at audit level", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-governance-")),
+      config: createAuditConfig(),
+    });
+    const sessionId = "audit-level-governance-session";
+
+    runtime.events.record({
+      sessionId,
+      type: "governance_verify_spec_failed",
+      payload: {
+        reason: "spec_mismatch",
+      },
+    });
+
+    expect(runtime.events.query(sessionId, { type: "governance_verify_spec_failed" })).toHaveLength(
+      0,
+    );
   });
 });

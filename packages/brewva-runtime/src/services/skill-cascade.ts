@@ -8,7 +8,6 @@ import {
   SKILL_CASCADE_STEP_COMPLETED_EVENT_TYPE,
   SKILL_CASCADE_STEP_STARTED_EVENT_TYPE,
 } from "../events/event-types.js";
-import { planSkillChain } from "../skills/chain-planner.js";
 import type { SkillRegistry } from "../skills/registry.js";
 import type {
   BrewvaConfig,
@@ -40,10 +39,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-const CONSUME_OUTPUT_ALIASES: Readonly<Record<string, string>> = {
-  review_findings: "findings",
-};
-
 function normalizeConsumeRef(input: string): string {
   const normalized = input.trim();
   if (!normalized) return "";
@@ -53,7 +48,7 @@ function normalizeConsumeRef(input: string): string {
       ? normalized.slice(dotIndex + 1).trim()
       : normalized;
   if (!terminal) return "";
-  return CONSUME_OUTPUT_ALIASES[terminal] ?? terminal;
+  return terminal;
 }
 
 function cloneIntent(intent: SkillChainIntent): SkillChainIntent {
@@ -169,7 +164,6 @@ export class SkillCascadeService {
     return this.processCurrentStep(sessionId, intent, {
       reason: "manual_resume",
       forceAutoActivation: true,
-      depth: 0,
     });
   }
 
@@ -221,7 +215,6 @@ export class SkillCascadeService {
     return this.processCurrentStep(sessionId, intent, {
       reason: "explicit_start",
       forceAutoActivation: true,
-      depth: 0,
     });
   }
 
@@ -348,7 +341,6 @@ export class SkillCascadeService {
       void this.processCurrentStep(sessionId, intent, {
         reason: "routing_auto",
         forceAutoActivation: true,
-        depth: 0,
       });
       return;
     }
@@ -463,7 +455,6 @@ export class SkillCascadeService {
           void this.processCurrentStep(sessionId, intent, {
             reason: "step_completed",
             forceAutoActivation: this.config.mode === "auto" || intent.source === "explicit",
-            depth: 0,
           });
         }
       }
@@ -499,7 +490,6 @@ export class SkillCascadeService {
       steps: parsed.steps,
       unresolvedConsumes: parsed.unresolvedConsumes,
       retries: intent?.retries ?? 0,
-      replans: intent?.replans ?? 0,
     });
     this.autoActivationBySession.delete(sessionId);
     this.persistIntent(sessionId, composeIntent);
@@ -513,7 +503,6 @@ export class SkillCascadeService {
       void this.processCurrentStep(sessionId, composeIntent, {
         reason: "compose_auto",
         forceAutoActivation: true,
-        depth: 0,
       });
       return;
     }
@@ -532,7 +521,7 @@ export class SkillCascadeService {
   private processCurrentStep(
     sessionId: string,
     intent: SkillChainIntent,
-    options: { reason: string; forceAutoActivation: boolean; depth: number },
+    options: { reason: string; forceAutoActivation: boolean },
   ): SkillCascadeControlResult {
     if (this.isTerminal(intent.status)) {
       return { ok: false, reason: `intent_${intent.status}`, intent: cloneIntent(intent) };
@@ -547,18 +536,6 @@ export class SkillCascadeService {
       });
       return { ok: true, intent: cloneIntent(intent) };
     }
-    if (options.depth > this.config.maxReplans + 1) {
-      intent.status = "failed";
-      this.autoActivationBySession.delete(sessionId);
-      intent.updatedAt = Date.now();
-      intent.lastError = "replan_depth_exceeded";
-      this.persistIntent(sessionId, intent);
-      this.emitIntentEvent(SKILL_CASCADE_ABORTED_EVENT_TYPE, sessionId, intent, {
-        reason: "replan_depth_exceeded",
-      });
-      return { ok: false, reason: "replan_depth_exceeded", intent: cloneIntent(intent) };
-    }
-
     const step = intent.steps[intent.cursor];
     if (!step) {
       intent.status = "failed";
@@ -576,7 +553,7 @@ export class SkillCascadeService {
       intent.unresolvedConsumes = missingConsumes;
       intent.updatedAt = Date.now();
       this.persistIntent(sessionId, intent);
-      return this.handleMissingConsumes(sessionId, intent, step, missingConsumes, options.depth);
+      return this.handleMissingConsumes(sessionId, intent, step, missingConsumes);
     }
 
     intent.unresolvedConsumes = [];
@@ -666,107 +643,17 @@ export class SkillCascadeService {
     intent: SkillChainIntent,
     step: SkillChainIntentStep,
     missingConsumes: string[],
-    depth: number,
   ): SkillCascadeControlResult {
-    if (this.config.onMissingConsumes === "pause") {
-      intent.status = "paused";
-      intent.updatedAt = Date.now();
-      intent.lastError = `missing_consumes:${missingConsumes.join(",")}`;
-      this.persistIntent(sessionId, intent);
-      this.emitIntentEvent(SKILL_CASCADE_PAUSED_EVENT_TYPE, sessionId, intent, {
-        reason: "missing_consumes",
-        missingConsumes,
-        stepSkill: step.skill,
-      });
-      return { ok: false, reason: "missing_consumes", intent: cloneIntent(intent) };
-    }
-
-    if (intent.replans >= this.config.maxReplans) {
-      intent.status = "failed";
-      this.autoActivationBySession.delete(sessionId);
-      intent.updatedAt = Date.now();
-      intent.lastError = "max_replans_exceeded";
-      this.persistIntent(sessionId, intent);
-      this.emitIntentEvent(SKILL_CASCADE_ABORTED_EVENT_TYPE, sessionId, intent, {
-        reason: "max_replans_exceeded",
-        missingConsumes,
-      });
-      return { ok: false, reason: "max_replans_exceeded", intent: cloneIntent(intent) };
-    }
-
-    const replanned = this.replanWithDispatchChain(sessionId, intent, step, missingConsumes);
-    if (!replanned.ok) return replanned;
-    return this.processCurrentStep(sessionId, intent, {
-      reason: "missing_consumes_replanned",
-      forceAutoActivation: true,
-      depth: depth + 1,
-    });
-  }
-
-  private replanWithDispatchChain(
-    sessionId: string,
-    intent: SkillChainIntent,
-    step: SkillChainIntentStep,
-    missingConsumes: string[],
-  ): SkillCascadeControlResult {
-    const index = this.skills.buildIndex();
-    const primary = index.find((entry) => entry.name === step.skill);
-    if (!primary) {
-      intent.status = "paused";
-      intent.updatedAt = Date.now();
-      intent.lastError = "replan_primary_missing";
-      this.persistIntent(sessionId, intent);
-      this.emitIntentEvent(SKILL_CASCADE_PAUSED_EVENT_TYPE, sessionId, intent, {
-        reason: "replan_primary_missing",
-        missingConsumes,
-        stepSkill: step.skill,
-      });
-      return { ok: false, reason: "replan_primary_missing", intent: cloneIntent(intent) };
-    }
-
-    const plan = planSkillChain({
-      primary,
-      index,
-      availableOutputs: this.listProducedOutputKeys(sessionId),
-    });
-    const targetIndex = plan.chain.lastIndexOf(step.skill);
-    const prerequisites =
-      targetIndex > 0
-        ? plan.chain.slice(0, targetIndex).filter((entry) => entry !== step.skill)
-        : [];
-    const insertable = prerequisites
-      .map((skillName, idx) => this.buildStep(skillName, `replan-${intent.replans + 1}-${idx + 1}`))
-      .filter((entry): entry is SkillChainIntentStep => Boolean(entry));
-    if (insertable.length === 0) {
-      intent.status = "paused";
-      intent.updatedAt = Date.now();
-      intent.lastError = "replan_no_prerequisites";
-      intent.unresolvedConsumes =
-        plan.unresolvedConsumes.length > 0 ? plan.unresolvedConsumes : missingConsumes;
-      this.persistIntent(sessionId, intent);
-      this.emitIntentEvent(SKILL_CASCADE_PAUSED_EVENT_TYPE, sessionId, intent, {
-        reason: "replan_no_prerequisites",
-        missingConsumes,
-        unresolvedConsumes: intent.unresolvedConsumes,
-      });
-      return { ok: false, reason: "replan_no_prerequisites", intent: cloneIntent(intent) };
-    }
-
-    const before = intent.steps.slice(0, intent.cursor);
-    const after = intent.steps.slice(intent.cursor);
-    intent.steps = [...before, ...insertable, ...after];
-    intent.replans += 1;
+    intent.status = "paused";
     intent.updatedAt = Date.now();
-    intent.status = "pending";
-    intent.unresolvedConsumes = plan.unresolvedConsumes;
+    intent.lastError = `missing_consumes:${missingConsumes.join(",")}`;
     this.persistIntent(sessionId, intent);
-    this.emitIntentEvent(SKILL_CASCADE_REPLANNED_EVENT_TYPE, sessionId, intent, {
-      strategy: "dispatch_replan",
-      insertedSkills: insertable.map((entry) => entry.skill),
-      unresolvedConsumes: plan.unresolvedConsumes,
+    this.emitIntentEvent(SKILL_CASCADE_PAUSED_EVENT_TYPE, sessionId, intent, {
+      reason: "missing_consumes",
       missingConsumes,
+      stepSkill: step.skill,
     });
-    return { ok: true, intent: cloneIntent(intent) };
+    return { ok: false, reason: "missing_consumes", intent: cloneIntent(intent) };
   }
 
   private resolveMissingConsumes(sessionId: string, consumes: string[]): string[] {
@@ -823,17 +710,6 @@ export class SkillCascadeService {
     });
   }
 
-  private buildStep(skillName: string, prefix: string): SkillChainIntentStep | null {
-    const skill = this.skills.get(skillName);
-    if (!skill) return null;
-    return {
-      id: `${prefix}:${skill.name}`,
-      skill: skill.name,
-      consumes: [...(skill.contract.consumes ?? [])],
-      produces: [...(skill.contract.outputs ?? [])],
-    };
-  }
-
   private createIntent(input: {
     source: "dispatch" | "compose" | "explicit";
     sourceEventId?: string;
@@ -841,7 +717,6 @@ export class SkillCascadeService {
     steps: SkillChainIntentStep[];
     unresolvedConsumes: string[];
     retries?: number;
-    replans?: number;
   }): SkillChainIntent {
     const now = Date.now();
     return {
@@ -860,7 +735,6 @@ export class SkillCascadeService {
       createdAt: now,
       updatedAt: now,
       retries: input.retries ?? 0,
-      replans: input.replans ?? 0,
     };
   }
 

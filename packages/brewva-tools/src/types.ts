@@ -81,8 +81,8 @@ export interface BrewvaToolRuntime {
   tools: {
     rollbackLastPatchSet(sessionId: string): RollbackResult;
   };
-  truth: {
-    queryLedger(sessionId: string, query: EvidenceQuery): string;
+  ledger: {
+    query(sessionId: string, query: EvidenceQuery): string;
   };
   cost: {
     getSummary(sessionId: string): SessionCostSummary;
@@ -135,14 +135,7 @@ export interface BrewvaToolRuntime {
     resolveBlocker(sessionId: string, blockerId: string): { ok: boolean; error?: string };
   };
   memory: {
-    dismissInsight(
-      sessionId: string,
-      insightId: string,
-    ): { ok: boolean; error?: "missing_id" | "not_found" };
-    reviewEvolvesEdge(
-      sessionId: string,
-      input: { edgeId: string; decision: "accept" | "reject" },
-    ): { ok: boolean; error?: "missing_id" | "not_found" | "already_set" };
+    getWorking?(sessionId: string): unknown;
   };
   schedule: {
     createIntent(

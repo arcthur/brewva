@@ -2,79 +2,69 @@
 
 ## Runtime Shape
 
-`BrewvaRuntime` in `packages/brewva-runtime/src/runtime.ts` is the public facade and stable API entrypoint.
+`BrewvaRuntime` (`packages/brewva-runtime/src/runtime.ts`) is the governance facade.
+It exposes domain APIs instead of a flat method bag:
 
-The facade wires foundational subsystems:
+- `runtime.skills`
+- `runtime.context`
+- `runtime.tools`
+- `runtime.task`
+- `runtime.truth`
+- `runtime.memory`
+- `runtime.schedule`
+- `runtime.turnWal`
+- `runtime.events`
+- `runtime.verification`
+- `runtime.cost`
+- `runtime.session`
 
-- `skills`
-- `ledger`
-- `verification`
-- `parallel`
-- `parallelResults`
-- `events`
-- `contextBudget`
-- `contextInjection`
-- `fileChanges`
-- `costTracker`
+The facade should stay thin: constructor wiring + delegation into services.
 
-Runtime domain logic is delegated to service modules in
-`packages/brewva-runtime/src/services/`, including:
+## Governance Core
 
-- `ContextService`
-- `ToolGateService`
-- `TaskService`
-- `TapeService`
-- `VerificationService`
-- `FileChangeService`
-- `SkillLifecycleService`
-- `LedgerService`
-- `EventPipelineService`
-- `ScheduleIntentService`
+Runtime behavior is organized around governance boundaries:
 
-`BrewvaRuntime` should remain thin: constructor wiring + one-line method delegation.
+- trust boundary: evidence ledger + verification + truth facts
+- execution boundary: tool gate + security policy + context compaction gate
+- economic boundary: cost tracking + budget actions
+- durability boundary: event tape + checkpoint replay + turn WAL
 
-## Runtime State Model
+The runtime does not attempt to make the model "smarter" through adaptive routing loops.
+Its role is to keep behavior explainable, bounded, and replayable.
 
-Short-lived per-session maps are centralized in
+## Replay And Session State
+
+Session runtime maps are managed by
 `packages/brewva-runtime/src/services/session-state.ts` (`RuntimeSessionStateStore`).
 
-Replay reconstruction is still tape-based (`checkpoint + delta`) through
-`TurnReplayEngine`, not persisted in-memory snapshot files. Folded replay slices
-include task/truth plus cost/evidence/memory state.
+Cross-process reconstruction is tape-first:
+
+- `TurnReplayEngine` rebuilds state via checkpoint + delta
+- folded slices include task/truth/cost/evidence/memory projection state
+- runtime bootstrap hydration restores control-plane state from persisted events
 
 ## Scheduling Boundary
 
-`ScheduleIntentService` lazily creates `SchedulerService` from
-`packages/brewva-runtime/src/schedule/service.ts`.
+`ScheduleIntentService` lazily initializes scheduler internals and keeps
+scheduler orchestration behind a narrow runtime port boundary.
+This avoids hidden coupling from scheduling internals back into facade methods.
 
-`SchedulerService` depends on `SchedulerRuntimePort` (a narrow runtime adapter),
-not on `BrewvaRuntime` directly. This keeps scheduler internals decoupled from
-the facade and avoids hidden runtime-to-scheduler coupling.
+## Shared Contract Surface
 
-## Shared Type Contract
+Core contracts are defined in `packages/brewva-runtime/src/types.ts`, including:
 
-All core contracts are defined in `packages/brewva-runtime/src/types.ts`, including:
+- skill contracts and dispatch/cascade types
+- ledger and truth/task payload contracts
+- event/replay/wal contracts
+- verification and cost summary contracts
+- memory projection contracts
 
-- Skill contracts and selection types
-- Ledger row and digest types
-- Verification evidence and report types
-- Event and replay types
-- Task/truth/tape state and event payload types
-- Patch set and rollback result types
-- Parallel slot and worker result types
-- Cost tracking types
+## Configuration Boundary
 
-## Configuration Contract
+Config contract entry points:
 
-- Defaults: `packages/brewva-runtime/src/config/defaults.ts`
-- Loader: `packages/brewva-runtime/src/config/loader.ts`
-- Merge: `packages/brewva-runtime/src/config/merge.ts`
+- defaults: `packages/brewva-runtime/src/config/defaults.ts`
+- loader: `packages/brewva-runtime/src/config/loader.ts`
+- merge/normalize: `packages/brewva-runtime/src/config/merge.ts`, `packages/brewva-runtime/src/config/normalize.ts`
 
-`BrewvaConfig` now includes startup UI policy under `ui`:
-
-- `ui.quietStartup`
-
-Runtime remains the canonical source for these values. During session bootstrap,
-`@brewva/brewva-cli` reads `runtime.config.ui` and applies it into upstream
-`SettingsManager` overrides, so interactive startup output is controlled by
-runtime config rather than hardcoded CLI constants.
+`BrewvaConfig.ui.quietStartup` remains runtime-owned and is read by CLI session bootstrap.

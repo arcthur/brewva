@@ -30,7 +30,6 @@ describe("Extension integration: observability", () => {
         {
           memory: {
             enabled: true,
-            dailyRefreshHourLocal: 0,
           },
         },
         null,
@@ -118,7 +117,8 @@ describe("Extension integration: observability", () => {
 
     expect(result?.systemPrompt?.includes("[Brewva Context Contract]")).toBe(true);
     expect(messageTypes).toEqual(["brewva-context-injection"]);
-    expect(mergedContent.includes("[WorkingMemory]")).toBe(true);
+    expect(mergedContent.length).toBeGreaterThan(0);
+    expect(mergedContent.includes("brewva.memory-recall")).toBe(false);
   });
 
   test("given tool_call and tool_result events, when observability handlers run, then ledger and correlation events are persisted", () => {
@@ -215,7 +215,7 @@ describe("Extension integration: observability", () => {
     expect(existsSync(artifactPath)).toBe(true);
     expect(readFileSync(artifactPath, "utf8")).toContain("edited");
 
-    const ledgerRows = runtime.truth.listLedgerRows(sessionId);
+    const ledgerRows = runtime.ledger.listRows(sessionId);
     expect(ledgerRows).toHaveLength(1);
     expect(ledgerRows[0]?.tool).toBe("edit");
 
@@ -268,7 +268,7 @@ describe("Extension integration: observability", () => {
 
     const reloaded = new BrewvaRuntime({ cwd: workspace });
     expect(reloaded.events.query(sessionId).length).toBeGreaterThan(0);
-    expect(reloaded.truth.listLedgerRows(sessionId)).toHaveLength(1);
+    expect(reloaded.ledger.listRows(sessionId)).toHaveLength(1);
   });
 
   test("given high-volume exec tool output, when ledger writer handles tool_result, then distilled event and metadata are recorded", () => {
@@ -426,7 +426,7 @@ describe("Extension integration: observability", () => {
       | undefined;
     expect(recordedPayload?.verdict).toBe("fail");
 
-    const ledgerRows = runtime.truth.listLedgerRows(sessionId);
+    const ledgerRows = runtime.ledger.listRows(sessionId);
     expect(ledgerRows).toHaveLength(1);
     expect(ledgerRows[0]?.tool).toBe("lsp_symbols");
     expect(
@@ -492,7 +492,6 @@ describe("Extension integration: observability", () => {
       `---
 name: patching
 description: patching skill
-tier: base
 tags: [patching]
 tools:
   required: [read]
@@ -501,6 +500,8 @@ tools:
 budget:
   max_tool_calls: 10
   max_tokens: 10000
+outputs: []
+consumes: []
 ---
 patching`,
       "utf8",
@@ -550,7 +551,6 @@ patching`,
       `---
 name: maxcalls
 description: maxcalls skill
-tier: base
 tags: [maxcalls]
 tools:
   required: [read]
@@ -559,6 +559,8 @@ tools:
 budget:
   max_tool_calls: 1
   max_tokens: 10000
+outputs: []
+consumes: []
 ---
 maxcalls`,
       "utf8",

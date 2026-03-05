@@ -2,12 +2,6 @@ import { resolve } from "node:path";
 import { TurnWALRecovery } from "./channels/turn-wal-recovery.js";
 import { TurnWALStore } from "./channels/turn-wal.js";
 import type { TurnEnvelope } from "./channels/turn.js";
-import type {
-  CognitivePort,
-  CognitiveTokenBudgetStatus,
-  CognitiveUsage,
-} from "./cognitive/port.js";
-import { cognitiveBudgetPayload, cognitiveUsagePayload } from "./cognitive/usage.js";
 import { loadBrewvaConfig } from "./config/loader.js";
 import { resolveWorkspaceRootDir } from "./config/paths.js";
 import { ContextBudgetManager } from "./context/budget.js";
@@ -17,10 +11,10 @@ import type { ToolOutputDistillationEntry } from "./context/tool-output-distille
 import { SessionCostTracker } from "./cost/tracker.js";
 import { TOOL_OUTPUT_DISTILLED_EVENT_TYPE } from "./events/event-types.js";
 import { BrewvaEventStore } from "./events/store.js";
-import type { ExternalRecallPort } from "./external-recall/types.js";
+import type { GovernancePort } from "./governance/port.js";
 import { EvidenceLedger } from "./ledger/evidence-ledger.js";
 import { MemoryEngine } from "./memory/engine.js";
-import type { MemorySearchResult, WorkingMemorySnapshot } from "./memory/types.js";
+import type { WorkingMemorySnapshot } from "./memory/types.js";
 import { ParallelBudgetManager } from "./parallel/budget.js";
 import { ParallelResultStore } from "./parallel/results.js";
 import {
@@ -110,8 +104,7 @@ export interface BrewvaRuntimeOptions {
   cwd?: string;
   configPath?: string;
   config?: BrewvaConfig;
-  cognitivePort?: CognitivePort;
-  externalRecallPort?: ExternalRecallPort;
+  governancePort?: GovernancePort;
   agentId?: string;
   skillCascadeChainSources?: SkillCascadeChainSource[];
 }
@@ -127,7 +120,7 @@ type RuntimeConfigState = {
 
 type RuntimeCoreDependencies = {
   skillRegistry: SkillRegistry;
-  ledger: EvidenceLedger;
+  evidenceLedger: EvidenceLedger;
   verificationGate: VerificationGate;
   parallel: ParallelBudgetManager;
   parallelResults: ParallelResultStore;
@@ -279,6 +272,11 @@ export class BrewvaRuntime {
   };
   readonly tools: {
     checkAccess(sessionId: string, toolName: string): { allowed: boolean; reason?: string };
+    explainAccess(input: { sessionId: string; toolName: string; usage?: ContextBudgetUsage }): {
+      allowed: boolean;
+      reason?: string;
+      warning?: string;
+    };
     start(input: {
       sessionId: string;
       toolCallId: string;
@@ -343,11 +341,6 @@ export class BrewvaRuntime {
   };
   readonly truth: {
     getState(sessionId: string): TruthState;
-    getLedgerDigest(sessionId: string): string;
-    queryLedger(sessionId: string, query: EvidenceQuery): string;
-    listLedgerRows(sessionId?: string): EvidenceLedgerRow[];
-    verifyLedgerChain(sessionId: string): { valid: boolean; reason?: string };
-    getLedgerPath(): string;
     upsertFact(
       sessionId: string,
       input: {
@@ -362,20 +355,15 @@ export class BrewvaRuntime {
     ): { ok: boolean; fact?: TruthFact; error?: string };
     resolveFact(sessionId: string, truthFactId: string): { ok: boolean; error?: string };
   };
+  readonly ledger: {
+    getDigest(sessionId: string): string;
+    query(sessionId: string, query: EvidenceQuery): string;
+    listRows(sessionId?: string): EvidenceLedgerRow[];
+    verifyChain(sessionId: string): { valid: boolean; reason?: string };
+    getPath(): string;
+  };
   readonly memory: {
     getWorking(sessionId: string): WorkingMemorySnapshot | undefined;
-    search(
-      sessionId: string,
-      input: { query: string; limit?: number },
-    ): Promise<MemorySearchResult>;
-    dismissInsight(
-      sessionId: string,
-      insightId: string,
-    ): { ok: boolean; error?: "missing_id" | "not_found" };
-    reviewEvolvesEdge(
-      sessionId: string,
-      input: { edgeId: string; decision: "accept" | "reject" },
-    ): { ok: boolean; error?: "missing_id" | "not_found" | "already_set" };
     refreshIfNeeded(input: {
       sessionId: string;
       force?: boolean;
@@ -474,7 +462,7 @@ export class BrewvaRuntime {
     clearState(sessionId: string): void;
   };
 
-  private readonly ledger: EvidenceLedger;
+  private readonly evidenceLedger: EvidenceLedger;
   private readonly parallel: ParallelBudgetManager;
   private readonly parallelResults: ParallelResultStore;
   private readonly contextBudget: ContextBudgetManager;
@@ -514,7 +502,7 @@ export class BrewvaRuntime {
     this.config = configState.config;
     const coreDependencies = this.createCoreDependencies(options);
     this.skillRegistry = coreDependencies.skillRegistry;
-    this.ledger = coreDependencies.ledger;
+    this.evidenceLedger = coreDependencies.evidenceLedger;
     this.verificationGate = coreDependencies.verificationGate;
     this.parallel = coreDependencies.parallel;
     this.parallelResults = coreDependencies.parallelResults;
@@ -553,6 +541,7 @@ export class BrewvaRuntime {
     this.tools = domainApis.tools;
     this.task = domainApis.task;
     this.truth = domainApis.truth;
+    this.ledger = domainApis.ledger;
     this.memory = domainApis.memory;
     this.schedule = domainApis.schedule;
     this.turnWal = domainApis.turnWal;
@@ -576,7 +565,7 @@ export class BrewvaRuntime {
     };
   }
 
-  private createCoreDependencies(options: BrewvaRuntimeOptions): RuntimeCoreDependencies {
+  private createCoreDependencies(_options: BrewvaRuntimeOptions): RuntimeCoreDependencies {
     const skillRegistry = new SkillRegistry({
       rootDir: this.cwd,
       config: this.config,
@@ -584,7 +573,7 @@ export class BrewvaRuntime {
     skillRegistry.load();
     skillRegistry.writeIndex();
 
-    const ledger = new EvidenceLedger(resolve(this.workspaceRoot, this.config.ledger.path));
+    const evidenceLedger = new EvidenceLedger(resolve(this.workspaceRoot, this.config.ledger.path));
     const verificationGate = new VerificationGate(this.config);
     const parallel = new ParallelBudgetManager(this.config.parallel);
     const parallelResults = new ParallelResultStore();
@@ -605,7 +594,6 @@ export class BrewvaRuntime {
     const contextBudget = new ContextBudgetManager(this.config.infrastructure.contextBudget);
     const contextInjection = new ContextInjectionCollector({
       sourceTokenLimits: {},
-      truncationStrategy: this.config.infrastructure.contextBudget.truncationStrategy,
       maxEntriesPerSession: this.config.infrastructure.contextBudget.arena.maxEntriesPerSession,
     });
     const turnReplay = new TurnReplayEngine({
@@ -615,31 +603,18 @@ export class BrewvaRuntime {
     const fileChanges = new FileChangeTracker(this.cwd, {
       artifactsBaseDir: this.workspaceRoot,
     });
-    const costTracker = new SessionCostTracker(this.config.infrastructure.costTracking, {
-      cognitiveTokensBudget: this.config.memory.cognitive.maxTokensPerTurn,
-    });
+    const costTracker = new SessionCostTracker(this.config.infrastructure.costTracking);
     const memoryEngine = new MemoryEngine({
       enabled: this.config.memory.enabled,
       rootDir: resolve(this.workspaceRoot, this.config.memory.dir),
       workingFile: this.config.memory.workingFile,
       maxWorkingChars: this.config.memory.maxWorkingChars,
-      dailyRefreshHourLocal: this.config.memory.dailyRefreshHourLocal,
-      crystalMinUnits: this.config.memory.crystalMinUnits,
-      retrievalTopK: this.config.memory.retrievalTopK,
-      retrievalWeights: this.config.memory.retrievalWeights,
-      evolvesMode: this.config.memory.evolvesMode,
-      cognitiveMode: this.config.memory.cognitive.mode,
-      cognitivePort: options.cognitivePort,
-      getCognitiveBudgetStatus: (sessionId) => this.getCognitiveBudgetStatus(sessionId),
-      recordCognitiveUsage: (input) => this.recordCognitiveUsage(input),
-      globalEnabled: this.config.memory.global.enabled,
-      globalMinConfidence: this.config.memory.global.minConfidence,
       recordEvent: (eventInput) => this.recordEvent(eventInput),
     });
 
     return {
       skillRegistry,
-      ledger,
+      evidenceLedger,
       verificationGate,
       parallel,
       parallelResults,
@@ -655,7 +630,6 @@ export class BrewvaRuntime {
   }
 
   private createServiceDependencies(options: BrewvaRuntimeOptions): RuntimeServiceDependencies {
-    const externalRecallPort = this.resolveExternalRecallPort(options.externalRecallPort);
     const taskService = new TaskService({
       config: this.config,
       isContextBudgetEnabled: () => this.isContextBudgetEnabled(),
@@ -693,7 +667,7 @@ export class BrewvaRuntime {
     const ledgerService = new LedgerService({
       cwd: this.cwd,
       config: this.config,
-      ledger: this.ledger,
+      ledger: this.evidenceLedger,
       verification: this.verificationGate,
       sessionState: this.sessionState,
       getCurrentTurn: (sessionId) => this.getCurrentTurn(sessionId),
@@ -719,7 +693,8 @@ export class BrewvaRuntime {
     });
     const costService = new CostService({
       costTracker: this.costTracker,
-      ledger: this.ledger,
+      recordInfrastructureRow: (input) => ledgerService.recordInfrastructureRow(input),
+      governancePort: options.governancePort,
       getCurrentTurn: (sessionId) => this.getCurrentTurn(sessionId),
       getActiveSkill: (sessionId) => skillLifecycleService.getActiveSkill(sessionId),
       recordEvent: (input) => this.recordEvent(input),
@@ -728,10 +703,7 @@ export class BrewvaRuntime {
       cwd: this.cwd,
       config: this.config,
       verification: this.verificationGate,
-      cognitiveMode: this.config.memory.cognitive.mode,
-      cognitivePort: options.cognitivePort,
-      getCognitiveBudgetStatus: (sessionId) => this.getCognitiveBudgetStatus(sessionId),
-      recordCognitiveUsage: (input) => this.recordCognitiveUsage(input),
+      governancePort: options.governancePort,
       getTaskState: (sessionId) => this.getTaskState(sessionId),
       getTruthState: (sessionId) => this.getTruthState(sessionId),
       getActiveSkillName: (sessionId) => skillLifecycleService.getActiveSkill(sessionId)?.name,
@@ -753,8 +725,7 @@ export class BrewvaRuntime {
       contextBudget: this.contextBudget,
       contextInjection: this.contextInjection,
       memory: this.memoryEngine,
-      externalRecallPort,
-      ledger: this.ledger,
+      recordInfrastructureRow: (input) => ledgerService.recordInfrastructureRow(input),
       sessionState: this.sessionState,
       getTaskState: (sessionId) => this.getTaskState(sessionId),
       getTruthState: (sessionId) => this.getTruthState(sessionId),
@@ -772,6 +743,7 @@ export class BrewvaRuntime {
       getRecentToolOutputDistillations: (sessionId) =>
         this.getRecentToolOutputDistillations(sessionId, 12),
       recordEvent: (input) => this.recordEvent(input),
+      governancePort: options.governancePort,
     });
     const tapeService = new TapeService({
       tapeConfig: this.config.tape,
@@ -826,7 +798,7 @@ export class BrewvaRuntime {
       fileChanges: this.fileChanges,
       costTracker: this.costTracker,
       verification: this.verificationGate,
-      ledger: this.ledger,
+      recordInfrastructureRow: (input) => ledgerService.recordInfrastructureRow(input),
       getActiveSkill: (sessionId) => skillLifecycleService.getActiveSkill(sessionId),
       getCurrentTurn: (sessionId) => this.getCurrentTurn(sessionId),
       recordEvent: (input) => this.recordEvent(input),
@@ -845,7 +817,7 @@ export class BrewvaRuntime {
       memory: this.memoryEngine,
       turnReplay: this.turnReplay,
       events: this.eventStore,
-      ledger: this.ledger,
+      ledger: this.evidenceLedger,
     });
     const toolGateService = new ToolGateService({
       securityConfig: this.config.security,
@@ -885,19 +857,13 @@ export class BrewvaRuntime {
     };
   }
 
-  private resolveExternalRecallPort(
-    externalRecallPort: ExternalRecallPort | undefined,
-  ): ExternalRecallPort | undefined {
-    if (!this.config.memory.externalRecall.enabled) return undefined;
-    return externalRecallPort;
-  }
-
   private createDomainApis(): {
     skills: BrewvaRuntime["skills"];
     context: BrewvaRuntime["context"];
     tools: BrewvaRuntime["tools"];
     task: BrewvaRuntime["task"];
     truth: BrewvaRuntime["truth"];
+    ledger: BrewvaRuntime["ledger"];
     memory: BrewvaRuntime["memory"];
     schedule: BrewvaRuntime["schedule"];
     turnWal: BrewvaRuntime["turnWal"];
@@ -993,6 +959,47 @@ export class BrewvaRuntime {
       tools: {
         checkAccess: (sessionId, toolName) =>
           this.toolGateService.checkToolAccess(sessionId, toolName),
+        explainAccess: (input) => {
+          const access = this.toolGateService.explainToolAccess(input.sessionId, input.toolName);
+          if (!access.allowed) {
+            return {
+              allowed: false,
+              reason: access.reason,
+              warning: access.warning,
+            };
+          }
+
+          const compaction = this.contextService.explainContextCompactionGate(
+            input.sessionId,
+            input.toolName,
+            input.usage,
+          );
+          if (!compaction.allowed) {
+            return {
+              allowed: false,
+              reason: compaction.reason,
+            };
+          }
+
+          const dispatchGate = this.toolGateService.explainSkillDispatchGate(
+            input.sessionId,
+            input.toolName,
+          );
+          if (!dispatchGate.allowed) {
+            return {
+              allowed: false,
+              reason: dispatchGate.reason,
+              warning: dispatchGate.warning,
+            };
+          }
+
+          const warnings = [access.warning, dispatchGate.warning].filter(
+            (value): value is string => typeof value === "string" && value.trim().length > 0,
+          );
+          return warnings.length > 0
+            ? { allowed: true, warning: warnings.join("; ") }
+            : { allowed: true };
+        },
         start: (input) => this.toolGateService.startToolCall(input),
         finish: (input) => {
           this.toolGateService.finishToolCall(input);
@@ -1020,20 +1027,19 @@ export class BrewvaRuntime {
       },
       truth: {
         getState: (sessionId) => this.turnReplay.getTruthState(sessionId),
-        getLedgerDigest: (sessionId) => this.ledgerService.getLedgerDigest(sessionId),
-        queryLedger: (sessionId, query) => this.ledgerService.queryLedger(sessionId, query),
-        listLedgerRows: (sessionId) => this.ledgerService.listLedgerRows(sessionId),
-        verifyLedgerChain: (sessionId) => this.ledgerService.verifyLedgerChain(sessionId),
-        getLedgerPath: () => this.ledgerService.getLedgerPath(),
         upsertFact: (sessionId, input) => this.truthService.upsertTruthFact(sessionId, input),
         resolveFact: (sessionId, truthFactId) =>
           this.truthService.resolveTruthFact(sessionId, truthFactId),
       },
+      ledger: {
+        getDigest: (sessionId) => this.ledgerService.getLedgerDigest(sessionId),
+        query: (sessionId, query) => this.ledgerService.queryLedger(sessionId, query),
+        listRows: (sessionId) => this.ledgerService.listLedgerRows(sessionId),
+        verifyChain: (sessionId) => this.ledgerService.verifyLedgerChain(sessionId),
+        getPath: () => this.ledgerService.getLedgerPath(),
+      },
       memory: {
         getWorking: (sessionId) => this.memoryEngine.getWorkingMemory(sessionId),
-        search: (sessionId, input) => this.memoryEngine.search(sessionId, input),
-        dismissInsight: (sessionId, insightId) => this.dismissMemoryInsight(sessionId, insightId),
-        reviewEvolvesEdge: (sessionId, input) => this.reviewMemoryEvolvesEdge(sessionId, input),
         refreshIfNeeded: (input) => this.memoryEngine.refreshIfNeeded(input),
         clearSessionCache: (sessionId) => this.memoryEngine.clearSessionCache(sessionId),
       },
@@ -1211,62 +1217,6 @@ export class BrewvaRuntime {
       return text;
     }
     return sanitizeContextText(text);
-  }
-
-  private dismissMemoryInsight(
-    sessionId: string,
-    insightId: string,
-  ): { ok: boolean; error?: "missing_id" | "not_found" } {
-    const id = insightId.trim();
-    if (!id) {
-      return { ok: false, error: "missing_id" };
-    }
-    const dismissed = this.memoryEngine.dismissInsight(sessionId, id);
-    if (!dismissed) {
-      return { ok: false, error: "not_found" };
-    }
-    return { ok: true };
-  }
-
-  private reviewMemoryEvolvesEdge(
-    sessionId: string,
-    input: { edgeId: string; decision: "accept" | "reject" },
-  ): { ok: boolean; error?: "missing_id" | "not_found" | "already_set" } {
-    const edgeId = input.edgeId.trim();
-    if (!edgeId) {
-      return { ok: false, error: "missing_id" };
-    }
-    return this.memoryEngine.reviewEvolvesEdge(sessionId, {
-      edgeId,
-      decision: input.decision,
-    });
-  }
-
-  private getCognitiveBudgetStatus(sessionId: string): CognitiveTokenBudgetStatus {
-    return this.costTracker.getCognitiveBudgetStatus(sessionId, this.getCurrentTurn(sessionId));
-  }
-
-  private recordCognitiveUsage(input: {
-    sessionId: string;
-    stage: string;
-    usage: CognitiveUsage;
-  }): CognitiveTokenBudgetStatus {
-    const turn = this.getCurrentTurn(input.sessionId);
-    const budget = this.costTracker.recordCognitiveUsage(input.sessionId, {
-      turn,
-      usage: input.usage,
-    });
-    this.recordEvent({
-      sessionId: input.sessionId,
-      type: "cognitive_usage_recorded",
-      turn,
-      payload: {
-        stage: input.stage,
-        usage: cognitiveUsagePayload(input.usage),
-        budget: cognitiveBudgetPayload(budget),
-      },
-    });
-    return budget;
   }
 
   private resolveCheckpointCostSummary(sessionId: string): SessionCostSummary {

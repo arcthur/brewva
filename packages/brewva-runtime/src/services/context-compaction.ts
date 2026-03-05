@@ -1,4 +1,4 @@
-import type { EvidenceLedger } from "../ledger/evidence-ledger.js";
+import type { GovernancePort } from "../governance/port.js";
 import {
   sanitizeCompactionSummary,
   validateCompactionSummary,
@@ -16,7 +16,23 @@ export interface ContextCompactionInput {
 
 export interface ContextCompactionDeps {
   sessionState: RuntimeSessionStateStore;
-  ledger: EvidenceLedger;
+  recordInfrastructureRow: RuntimeCallback<
+    [
+      input: {
+        sessionId: string;
+        tool: string;
+        argsSummary: string;
+        outputSummary: string;
+        fullOutput?: string;
+        verdict?: "pass" | "fail" | "inconclusive";
+        metadata?: Record<string, unknown>;
+        turn?: number;
+        skill?: string | null;
+      },
+    ],
+    string
+  >;
+  governancePort?: GovernancePort;
   markPressureCompacted: RuntimeCallback<[sessionId: string]>;
   markInjectionCompacted: RuntimeCallback<[sessionId: string]>;
   getCurrentTurn: RuntimeCallback<[sessionId: string], number>;
@@ -52,6 +68,8 @@ export function markContextCompacted(
 
   let summary = rawSummary;
   let integrityViolations: string[] | null = null;
+  let governanceSummary = "";
+  let governanceViolations: string[] = [];
   if (rawSummary) {
     const integrity = validateCompactionSummary(rawSummary);
     if (!integrity.clean) {
@@ -69,6 +87,8 @@ export function markContextCompacted(
         },
       });
     }
+    governanceSummary = summary ?? "";
+    governanceViolations = integrityViolations ?? [];
   }
 
   deps.recordEvent({
@@ -84,10 +104,10 @@ export function markContextCompacted(
     },
   });
 
-  deps.ledger.append({
+  deps.recordInfrastructureRow({
     sessionId,
     turn,
-    skill: deps.getActiveSkill(sessionId)?.name,
+    skill: deps.getActiveSkill(sessionId)?.name ?? null,
     tool: "brewva_context_compaction",
     argsSummary: "context_compaction",
     outputSummary: `from=${input.fromTokens ?? "unknown"} to=${input.toTokens ?? "unknown"}`,
@@ -105,4 +125,41 @@ export function markContextCompacted(
       integrityViolations: integrityViolations,
     },
   });
+
+  const governancePort = deps.governancePort;
+  if (!governancePort?.checkCompactionIntegrity || !governanceSummary) return;
+  const checkCompactionIntegrity = governancePort.checkCompactionIntegrity.bind(governancePort);
+
+  void Promise.resolve()
+    .then(() =>
+      checkCompactionIntegrity({
+        sessionId,
+        summary: governanceSummary,
+        violations: governanceViolations,
+      }),
+    )
+    .then((result) => {
+      deps.recordEvent({
+        sessionId,
+        type: result.ok
+          ? "governance_compaction_integrity_checked"
+          : "governance_compaction_integrity_failed",
+        turn,
+        payload: {
+          ok: result.ok,
+          reason: result.reason ?? null,
+          violationCount: governanceViolations.length,
+        },
+      });
+    })
+    .catch((error) => {
+      deps.recordEvent({
+        sessionId,
+        type: "governance_compaction_integrity_error",
+        turn,
+        payload: {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    });
 }

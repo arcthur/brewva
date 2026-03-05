@@ -40,7 +40,7 @@ describe("Gap remediation: verification gate", () => {
     expect(report.passed).toBe(false);
     expect(report.missingEvidence).toContain("tests");
 
-    const ledgerText = runtime.truth.queryLedger(sessionId, { tool: "brewva_verify" });
+    const ledgerText = runtime.ledger.query(sessionId, { tool: "brewva_verify" });
     expect(ledgerText.includes("type-check")).toBe(true);
     expect(ledgerText.includes("tests")).toBe(true);
   });

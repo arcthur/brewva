@@ -75,7 +75,7 @@ describe("session state cleanup", () => {
       ),
     ).toBe(true);
     expect(((runtime as any).eventStore.fileHasContent as Map<string, boolean>).size).toBe(1);
-    expect((runtime as any).ledger.lastHashBySession.has(sessionId) as boolean).toBe(true);
+    expect((runtime as any).evidenceLedger.lastHashBySession.has(sessionId) as boolean).toBe(true);
 
     runtime.session.clearState(sessionId);
 
@@ -98,7 +98,7 @@ describe("session state cleanup", () => {
       false,
     );
     expect(((runtime as any).eventStore.fileHasContent as Map<string, boolean>).size).toBe(0);
-    expect((runtime as any).ledger.lastHashBySession.has(sessionId) as boolean).toBe(false);
+    expect((runtime as any).evidenceLedger.lastHashBySession.has(sessionId) as boolean).toBe(false);
   });
 
   test("keeps replay cache hot and incrementally updates task replay view", async () => {

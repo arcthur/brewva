@@ -88,14 +88,12 @@ Relevant implementation:
 ## 8) Memory Projection Integrity Invariant
 
 - Memory must remain projection-derived and auditable:
-  units/crystals/insights/evolves are derived from event tape semantics, not an
+  units and working snapshot are derived from event tape semantics, not an
   independent mutable source of truth.
 - Memory projection events (`memory_*`) should carry sufficient snapshot fields
   to rebuild projection artifacts when `.orchestrator/memory/*` is missing.
 - Working-memory injection must be reproducible from persisted projection
   artifacts (or tape-driven rebuild outputs) and bounded by context-budget policy.
-- EVOLVES side effects must be explicit and review-gated:
-  proposed edges do not mutate unit status until accepted review.
 
 Relevant implementation:
 

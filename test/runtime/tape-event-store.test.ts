@@ -65,7 +65,7 @@ describe("BrewvaEventStore tape helpers", () => {
         },
         memoryState: {
           updatedAt: null,
-          crystals: [],
+          unitCount: 0,
         },
         reason: "unit_test",
       }),

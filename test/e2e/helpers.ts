@@ -269,3 +269,45 @@ export function assertCliSuccess(result: SpawnSyncReturns<string>, label: string
   ];
   throw new Error(lines.join("\n"));
 }
+
+const RATE_LIMIT_PATTERNS = [
+  "resource_exhausted",
+  "quota exceeded",
+  "too many requests",
+  '"code":429',
+  "rate limit",
+  "retry in",
+];
+
+export function hasProviderRateLimitText(...chunks: Array<string | undefined>): boolean {
+  const normalized = chunks
+    .filter((chunk): chunk is string => typeof chunk === "string")
+    .join("\n")
+    .toLowerCase();
+  if (!normalized) return false;
+  return RATE_LIMIT_PATTERNS.some((pattern) => normalized.includes(pattern));
+}
+
+export function hasProviderRateLimitResult(result: SpawnSyncReturns<string>): boolean {
+  return hasProviderRateLimitText(result.stdout, result.stderr, result.error?.message);
+}
+
+export function skipLiveForProviderRateLimit(
+  label: string,
+  ...chunks: Array<string | undefined>
+): boolean {
+  if (!hasProviderRateLimitText(...chunks)) {
+    return false;
+  }
+  console.warn(
+    `[${label}] live assertion skipped because upstream model quota/rate-limit is exhausted`,
+  );
+  return true;
+}
+
+export function skipLiveForProviderRateLimitResult(
+  label: string,
+  result: SpawnSyncReturns<string>,
+): boolean {
+  return skipLiveForProviderRateLimit(label, result.stdout, result.stderr, result.error?.message);
+}

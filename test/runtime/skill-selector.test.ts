@@ -5,8 +5,8 @@ function repoRoot(): string {
   return process.cwd();
 }
 
-describe("S-001 semantic skill selection input", () => {
-  test("prepareDispatch consumes semantic preselection", () => {
+describe("S-001 dispatch preselection input", () => {
+  test("prepareDispatch consumes injected preselection", () => {
     const runtime = new BrewvaRuntime({ cwd: repoRoot() });
     const sessionId = "semantic-preselect-1";
 
@@ -29,7 +29,7 @@ describe("S-001 semantic skill selection input", () => {
     expect(decision.mode).toBe("auto");
   });
 
-  test("prepareDispatch is empty when semantic preselection is absent", () => {
+  test("prepareDispatch is empty when preselection is absent", () => {
     const runtime = new BrewvaRuntime({ cwd: repoRoot() });
     const sessionId = "semantic-preselect-2";
 
@@ -38,7 +38,7 @@ describe("S-001 semantic skill selection input", () => {
     expect(decision.selected).toEqual([]);
   });
 
-  test("prepareDispatch enters conservative gate when semantic routing failed", () => {
+  test("prepareDispatch enters conservative gate when routing failed", () => {
     const runtime = new BrewvaRuntime({ cwd: repoRoot() });
     const sessionId = "semantic-preselect-failed";
 
@@ -50,6 +50,6 @@ describe("S-001 semantic skill selection input", () => {
     expect(decision.mode).toBe("gate");
     expect(decision.primary).toBeNull();
     expect(decision.routingOutcome).toBe("failed");
-    expect(decision.reason).toBe("semantic-routing-failed");
+    expect(decision.reason).toBe("routing-failed");
   });
 });

@@ -2,7 +2,6 @@
 name: agent-browser
 description: Browser automation workflow for navigation, interaction, extraction, and visual verification.
 stability: stable
-tier: pack
 tools:
   required: [exec, read]
   optional: [look_at, ledger_query, skill_complete]

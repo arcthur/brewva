@@ -5,13 +5,14 @@ and replay/observability sources.
 
 ## Runtime Budget Pipelines
 
-| Pipeline                    | Unit                  | Enforcement Point                                                          | Events                                                                                      | Config Key                                                      | Recovery Source                                |
-| --------------------------- | --------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------- |
-| **Session Cost**            | USD                   | `ToolGateService.checkToolAccess` via `SessionCostTracker.getBudgetStatus` | `cost_update`, `budget_alert`                                                               | `infrastructure.costTracking.*`                                 | checkpoint `state.cost` + `cost_update` replay |
-| **Context Injection**       | tokens                | `ContextBudgetManager.planInjection`                                       | `context_injected`, `context_injection_dropped`                                             | `infrastructure.contextBudget.*`                                | `ContextBudgetSessionState` snapshot           |
-| **Context Compaction Gate** | context window ratio  | `ContextPressureService.checkContextCompactionGate`                        | `context_compaction_requested`, `context_compaction_gate_blocked_tool`, `context_compacted` | `infrastructure.contextBudget.compaction.*`, `hardLimitPercent` | `ContextBudgetSessionState` snapshot           |
-| **Context Arena SLO**       | entry count           | `ContextArena.ensureAppendCapacity`                                        | `context_arena_slo_enforced`                                                                | `infrastructure.contextBudget.arena.maxEntriesPerSession`       | rebuilt from tape events                       |
-| **Parallel**                | concurrent/total runs | `ParallelBudgetManager.acquire`                                            | operational acquire/release telemetry                                                       | `parallel.*` + internal `PARALLEL_MAX_TOTAL_PER_SESSION`        | `ParallelSessionSnapshot`                      |
+| Pipeline                    | Unit                  | Enforcement Point                                                          | Events                                                                                       | Config Key                                                      | Recovery Source                                |
+| --------------------------- | --------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------- |
+| **Session Cost**            | USD                   | `ToolGateService.checkToolAccess` via `SessionCostTracker.getBudgetStatus` | `cost_update`, `budget_alert`                                                                | `infrastructure.costTracking.*`                                 | checkpoint `state.cost` + `cost_update` replay |
+| **Context Injection**       | tokens                | `ContextBudgetManager.planInjection`                                       | `context_injected`, `context_injection_dropped`                                              | `infrastructure.contextBudget.*`                                | `ContextBudgetSessionState` snapshot           |
+| **Context Compaction Gate** | context window ratio  | `ContextPressureService.checkContextCompactionGate`                        | `context_compaction_requested`, `context_compaction_gate_blocked_tool`, `context_compacted`  | `infrastructure.contextBudget.compaction.*`, `hardLimitPercent` | `ContextBudgetSessionState` snapshot           |
+| **Context Arena SLO**       | entry count           | `ContextArena.ensureAppendCapacity`                                        | `context_arena_slo_enforced`                                                                 | `infrastructure.contextBudget.arena.maxEntriesPerSession`       | rebuilt from tape events                       |
+| **Governance Checks**       | checks / turn         | verification/cost/compaction governance hooks                              | `governance_verify_spec_*`, `governance_cost_anomaly_*`, `governance_compaction_integrity_*` | `BrewvaRuntimeOptions.governancePort`                           | tape events + checkpoint replay                |
+| **Parallel**                | concurrent/total runs | `ParallelBudgetManager.acquire`                                            | operational acquire/release telemetry                                                        | `parallel.*` + internal `PARALLEL_MAX_TOTAL_PER_SESSION`        | `ParallelSessionSnapshot`                      |
 
 ## Skill Contract Budgets (Orthogonal)
 
@@ -36,8 +37,11 @@ When `enabled=true`, session budget behavior is controlled by:
 - `alertThresholdRatio`
 - `actionOnExceed` (`warn` or `block_tools`)
 
-## Cognitive Budget
+## Governance Check Semantics
 
-Cognitive calls are bounded by `memory.cognitive.maxTokensPerTurn` and tracked by
-`SessionCostTracker.getCognitiveBudgetStatus(...)`. Exhaustion causes deterministic
-fallback for cognitive-dependent paths.
+Governance checks are optional adapters, but once configured they participate in the
+runtime decision loop:
+
+- `verifySpec` can convert a verification pass into a governance failure with blocker evidence.
+- `detectCostAnomaly` emits anomaly diagnostics without changing session accounting totals.
+- `checkCompactionIntegrity` validates compaction summaries and emits governance integrity events.

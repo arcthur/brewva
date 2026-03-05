@@ -2,35 +2,25 @@ import { describe, expect, test } from "bun:test";
 import type { BrewvaConfigFile } from "@brewva/brewva-runtime";
 
 describe("BrewvaConfigFile typing", () => {
-  test("supports deep-partial memory overlays", () => {
+  test("supports minimal memory overlay shape", () => {
     const config: BrewvaConfigFile = {
       memory: {
-        cognitive: {
-          mode: "active",
-        },
-        retrievalWeights: {
-          lexical: 0.7,
-        },
-        global: {
-          enabled: true,
-        },
+        enabled: true,
+        dir: ".orchestrator/memory",
+        workingFile: "working.md",
+        maxWorkingChars: 3200,
       },
       infrastructure: {
         toolFailureInjection: {
           enabled: false,
           maxEntries: 5,
-        },
-        toolOutputDistillationInjection: {
-          enabled: true,
-          maxEntries: 2,
-          maxOutputChars: 120,
+          maxOutputChars: 180,
         },
       },
     };
 
-    expect(config.memory?.cognitive?.mode).toBe("active");
-    expect(config.memory?.global?.enabled).toBe(true);
+    expect(config.memory?.enabled).toBe(true);
+    expect(config.memory?.workingFile).toBe("working.md");
     expect(config.infrastructure?.toolFailureInjection?.enabled).toBe(false);
-    expect(config.infrastructure?.toolOutputDistillationInjection?.maxEntries).toBe(2);
   });
 });

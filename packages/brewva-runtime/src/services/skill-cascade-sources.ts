@@ -20,10 +20,6 @@ function normalizeStringArray(value: unknown): string[] {
     .filter((entry) => entry.length > 0);
 }
 
-const OUTPUT_REF_ALIASES: Readonly<Record<string, string>> = {
-  review_findings: "findings",
-};
-
 function normalizeConsumeRef(input: string): string {
   const normalized = input.trim();
   if (!normalized) return "";
@@ -33,7 +29,7 @@ function normalizeConsumeRef(input: string): string {
       ? normalized.slice(dotIndex + 1).trim()
       : normalized;
   if (!terminal) return "";
-  return OUTPUT_REF_ALIASES[terminal] ?? terminal;
+  return terminal;
 }
 
 function buildRegistryStep(

@@ -13,29 +13,6 @@ function repoRoot(): string {
   return process.cwd();
 }
 
-interface EvolveRow {
-  id: string;
-  status: string;
-  targetUnitId?: string;
-  updatedAt: number;
-}
-
-function readLatestEvolvesRows(filePath: string): Map<string, EvolveRow> {
-  const rows = readFileSync(filePath, "utf8")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .map((line) => JSON.parse(line) as EvolveRow);
-  const latestById = new Map<string, EvolveRow>();
-  for (const row of rows) {
-    const current = latestById.get(row.id);
-    if (!current || row.updatedAt >= current.updatedAt) {
-      latestById.set(row.id, row);
-    }
-  }
-  return latestById;
-}
-
 describe("tape checkpoint automation", () => {
   test("uses session-local checkpoint counters instead of per-event tape rescans", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tape-counter-"));
@@ -104,7 +81,7 @@ describe("tape checkpoint automation", () => {
         truth?: { facts?: Array<{ id?: string }> };
       };
     };
-    expect(checkpointPayload.schema).toBe("brewva.tape.checkpoint.v1");
+    expect(checkpointPayload.schema).toBe("brewva.tape.checkpoint.v2");
     expect(checkpointPayload.state?.task?.items?.some((item) => item.text === "item-1")).toBe(true);
     expect(checkpointPayload.state?.truth?.facts?.some((fact) => fact.id === "truth-1")).toBe(true);
 
@@ -352,9 +329,6 @@ describe("tape checkpoint automation", () => {
 
     const memoryDir = join(workspace, ".orchestrator/memory");
     rmSync(join(memoryDir, "units.jsonl"), { force: true });
-    rmSync(join(memoryDir, "crystals.jsonl"), { force: true });
-    rmSync(join(memoryDir, "insights.jsonl"), { force: true });
-    rmSync(join(memoryDir, "evolves.jsonl"), { force: true });
     rmSync(join(memoryDir, "state.json"), { force: true });
     rmSync(join(memoryDir, "working.md"), { force: true });
 
@@ -371,50 +345,5 @@ describe("tape checkpoint automation", () => {
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
     expect(lines.length).toBeGreaterThan(0);
-  });
-
-  test("given accepted evolves edge before restart, when runtime rebuilds from tape, then accepted edge status is preserved", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-memory-review-rebuild-"));
-    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.memory.evolvesMode = "review-gated";
-    const sessionId = "memory-review-rebuild-1";
-
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
-    runtime.context.onTurnStart(sessionId, 1);
-    runtime.task.setSpec(sessionId, {
-      schema: "brewva.task.v1",
-      goal: "Use sqlite for current task.",
-    });
-    runtime.task.setSpec(sessionId, {
-      schema: "brewva.task.v1",
-      goal: "Use postgres instead of sqlite for current task.",
-    });
-    await runtime.context.buildInjection(sessionId, "continue implementation");
-
-    const evolvesPath = join(workspace, ".orchestrator/memory/evolves.jsonl");
-    const evolvesLatest = readLatestEvolvesRows(evolvesPath);
-    const proposed = [...evolvesLatest.values()].find((edge) => edge.status === "proposed");
-    expect(proposed).toBeDefined();
-    if (!proposed) return;
-
-    runtime.memory.reviewEvolvesEdge(sessionId, {
-      edgeId: proposed.id,
-      decision: "accept",
-    });
-
-    const memoryDir = join(workspace, ".orchestrator/memory");
-    rmSync(join(memoryDir, "units.jsonl"), { force: true });
-    rmSync(join(memoryDir, "crystals.jsonl"), { force: true });
-    rmSync(join(memoryDir, "insights.jsonl"), { force: true });
-    rmSync(join(memoryDir, "evolves.jsonl"), { force: true });
-    rmSync(join(memoryDir, "state.json"), { force: true });
-    rmSync(join(memoryDir, "working.md"), { force: true });
-
-    const reloaded = new BrewvaRuntime({ cwd: workspace, config });
-    reloaded.context.onTurnStart(sessionId, 2);
-    await reloaded.context.buildInjection(sessionId, "continue implementation");
-
-    const evolvesLatestAfter = readLatestEvolvesRows(evolvesPath);
-    expect(evolvesLatestAfter.get(proposed.id)?.status).toBe("accepted");
   });
 });

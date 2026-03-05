@@ -11,7 +11,7 @@ Orchestration is driven by runtime state management plus extension lifecycle han
 2. Extensions are registered (`packages/brewva-extensions/src/index.ts`)
 3. `before_agent_start` injects context contract + tape status + replay context (`context-transform`)
 4. `tool_call` passes quality/security/budget gates (`quality-gate`)
-5. `ledger-writer` records durable tool outcomes (normally from SDK `tool_result`; can fallback to `tool_execution_end` when `tool_result` is missing). Persisted semantic event is `tool_result_recorded`.
+5. `ledger-writer` records durable tool outcomes (normally from SDK `tool_result`; can fallback to `tool_execution_end` when `tool_result` is missing). Persisted governance event is `tool_result_recorded`.
 6. `agent_end` records summary events and runs completion guard / notification hooks
 
 ## Direct-Tool Profile (`--no-extensions`)

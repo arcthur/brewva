@@ -13,9 +13,9 @@ The runtime no longer exposes a large flat method list. Public access is organiz
 ### `runtime.skills.*`
 
 - `refresh()`
+- `getLoadReport()`
 - `list()`
 - `get(name)`
-- `select(message)`
 - `prepareDispatch(sessionId, message)`
 - `getPendingDispatch(sessionId)`
 - `clearPendingDispatch(sessionId)`
@@ -61,6 +61,7 @@ The runtime no longer exposes a large flat method list. Public access is organiz
 ### `runtime.tools.*`
 
 - `checkAccess(sessionId, toolName)`
+- `explainAccess(input)`
 - `start(input)`
 - `finish(input)`
 - `acquireParallelSlot(sessionId, runId)`
@@ -84,20 +85,20 @@ The runtime no longer exposes a large flat method list. Public access is organiz
 ### `runtime.truth.*`
 
 - `getState(sessionId)`
-- `getLedgerDigest(sessionId)`
-- `queryLedger(sessionId, query)`
-- `listLedgerRows(sessionId?)`
-- `verifyLedgerChain(sessionId)`
-- `getLedgerPath()`
 - `upsertFact(sessionId, input)`
 - `resolveFact(sessionId, truthFactId)`
+
+### `runtime.ledger.*`
+
+- `getDigest(sessionId)`
+- `query(sessionId, query)`
+- `listRows(sessionId?)`
+- `verifyChain(sessionId)`
+- `getPath()`
 
 ### `runtime.memory.*`
 
 - `getWorking(sessionId)`
-- `search(sessionId, input)`
-- `dismissInsight(sessionId, insightId)`
-- `reviewEvolvesEdge(sessionId, input)`
 - `refreshIfNeeded(input)`
 - `clearSessionCache(sessionId)`
 
@@ -166,7 +167,6 @@ Public runtime integrations should use async-first flows. There is no separate s
 Common async calls:
 
 - `runtime.context.buildInjection(...)`
-- `runtime.memory.search(...)`
 - `runtime.schedule.createIntent(...)`
 - `runtime.schedule.cancelIntent(...)`
 - `runtime.schedule.updateIntent(...)`
@@ -177,20 +177,18 @@ Common async calls:
 
 ## Default Context Injection Semantics
 
-The default injection path is organized around eleven semantic sources (the
-eleventh is optional and budget-gated):
+The default injection path is organized around deterministic governance sources:
 
 - `brewva.identity`
 - `brewva.truth-static`
 - `brewva.truth-facts`
 - `brewva.skill-candidates`
 - `brewva.skill-dispatch-gate`
+- `brewva.skill-cascade-gate`
 - `brewva.task-state`
 - `brewva.tool-failures`
 - `brewva.tool-outputs-distilled`
 - `brewva.memory-working`
-- `brewva.memory-recall`
-- `brewva.rag-external`
 
 Truth split behavior:
 
@@ -200,20 +198,8 @@ Truth split behavior:
 
 Memory split behavior:
 
-- `brewva.memory-working` carries the latest working-memory snapshot and is
-  registered as `critical`.
-- `brewva.memory-recall` carries retrieval hits and is registered as `normal`.
-- `memory.recallMode="always"` always enables recall.
-- `memory.recallMode="pressure-aware"` skips recall under `high`/`critical` context pressure.
-- Under `memory.recallMode="pressure-aware"`, external recall is also skipped when pressure is
-  `high`/`critical` (`context_external_recall_decision` with `reason="pressure_gated"`).
-- Open memory insights can expand recall query terms (`memory_recall_query_expanded` event).
-- `brewva.rag-external` is injected only when `memory.externalRecall.enabled=true`,
-  active skill has `externalRecall: true` in its contract, internal recall top score is below
-  threshold (`memory.externalRecall.minInternalScore`).
-- If `BrewvaRuntimeOptions.externalRecallPort` is not provided, external recall is skipped
-  (`context_external_recall_decision` with `outcome="skipped"` and
-  `reason="provider_unavailable"`).
+- `brewva.memory-working` carries the latest working-memory snapshot.
+- Memory projection is working-only: no recall source, no external recall branch.
 
 Identity source behavior:
 
@@ -222,7 +208,7 @@ Identity source behavior:
 - Agent ids are normalized to lowercase slug format (`[a-z0-9._-]`, separators collapsed to `-`).
 - Missing or empty identity file means no `brewva.identity` injection.
 - Runtime never auto-generates or rewrites identity files.
-- `brewva.identity` is registered as `critical` + `oncePerSession`.
+- `brewva.identity` is registered as `oncePerSession`.
 
 Skill cascade source extension behavior:
 
@@ -239,14 +225,13 @@ Context budget behavior:
 
 - Runtime uses a single deterministic injection path:
   global budget cap + hard-limit compaction gate.
-- Arena SLO enforcement (`arena.maxEntriesPerSession`,
-  deterministic `drop_recall` policy) emits `context_arena_slo_enforced`.
+- Arena SLO enforcement (`arena.maxEntriesPerSession`) emits `context_arena_slo_enforced`.
 - Injection telemetry (`context_injected` / `context_injection_dropped`) records
   deterministic boolean `degradationApplied` state for observability.
 
 Execution profile note:
 
-- Extension-enabled profile (`createBrewvaExtension`) uses full semantic injections.
+- Extension-enabled profile (`createBrewvaExtension`) uses full governance lifecycle hooks and deterministic routing skip telemetry.
 - Runtime-core profile (`--no-extensions`) injects only `[CoreTapeStatus]` + core autonomy contract.
 
 ## Event Emission Levels
@@ -254,9 +239,8 @@ Execution profile note:
 `runtime.events.record(...)` is filtered by `infrastructure.events.level`:
 
 - `audit`: replay/audit critical stream (`anchor`, `checkpoint`, `task_event`, `truth_event`, schedule lifecycle, verification outcomes, tool-result evidence)
-- `ops` (default): audit + operational transitions and warnings
-- `debug`: full stream, including high-noise diagnostics (`cognitive_*`, parallel scan detail)
-- Exception: `cognitive_relevance_ranking*` events are kept at `ops` for ranking observability.
+- `ops` (default): audit + operational transitions and warnings (including `governance_*`)
+- `debug`: full stream, including high-noise diagnostics (for example `tool_parallel_read`)
 
 Switching level changes observability granularity, not business decisions.
 
@@ -270,7 +254,7 @@ The folded replay view includes:
 - cost summary state
 - cost skill turn dedupe metadata (`skillLastTurnByName`)
 - evidence fold state (including recent tool failures with anchor-epoch TTL pruning)
-- memory crystal fold state
+- memory projection fold state (`updatedAt`, `unitCount`)
 
 Checkpoint payloads persisted by tape automation include corresponding state slices,
 so replay can seek to the latest checkpoint and avoid full-tape recomputation for
@@ -305,4 +289,4 @@ Examples:
 - `ScheduleIntent*`
 - `TurnWALRecord`, `TurnWALRecoveryResult`
 - `BrewvaEventRecord`, `BrewvaStructuredEvent`
-- `MemorySearchResult`
+- `WorkingMemorySnapshot`

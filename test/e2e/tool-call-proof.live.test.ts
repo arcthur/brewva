@@ -11,6 +11,7 @@ import {
   parseJsonLines,
   runCliSync,
   runLive,
+  skipLiveForProviderRateLimitResult,
   writeMinimalConfig,
 } from "./helpers.js";
 
@@ -28,6 +29,9 @@ describe("e2e: tool call proof", () => {
         "Read the file ./token.txt and output its exact contents. Do not guess.",
       ]);
 
+      if (skipLiveForProviderRateLimitResult("tool-proof", run)) {
+        return;
+      }
       assertCliSuccess(run, "tool-proof");
       expect(run.stdout.includes(token)).toBe(true);
     } finally {
@@ -47,6 +51,9 @@ describe("e2e: tool call proof", () => {
         "Do not call any tool. Reply exactly: NO-EXT-OK",
       ]);
 
+      if (skipLiveForProviderRateLimitResult("no-extensions", run)) {
+        return;
+      }
       assertCliSuccess(run, "no-extensions");
 
       const lines = parseJsonLines(run.stdout, { strict: true });

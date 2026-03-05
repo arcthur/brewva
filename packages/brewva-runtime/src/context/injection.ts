@@ -1,13 +1,9 @@
 import { ContextArena } from "./arena.js";
 
-export type ContextInjectionPriority = "critical" | "high" | "normal" | "low";
-export type ContextInjectionTruncationStrategy = "drop-entry" | "drop-low-fidelity" | "tail";
-
 export interface RegisterContextInjectionInput {
   source: string;
   id: string;
   content: string;
-  priority?: ContextInjectionPriority;
   estimatedTokens?: number;
   oncePerSession?: boolean;
 }
@@ -16,7 +12,6 @@ export interface ContextInjectionEntry {
   source: string;
   id: string;
   content: string;
-  priority: ContextInjectionPriority;
   estimatedTokens: number;
   timestamp: number;
   oncePerSession: boolean;
@@ -54,13 +49,11 @@ export class ContextInjectionCollector {
   constructor(
     options: {
       sourceTokenLimits?: Record<string, number>;
-      truncationStrategy?: ContextInjectionTruncationStrategy;
       maxEntriesPerSession?: number;
     } = {},
   ) {
     this.arena = new ContextArena({
       sourceTokenLimits: options.sourceTokenLimits,
-      truncationStrategy: options.truncationStrategy,
       maxEntriesPerSession: options.maxEntriesPerSession,
     });
   }

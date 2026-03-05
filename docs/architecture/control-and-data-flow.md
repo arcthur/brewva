@@ -1,7 +1,6 @@
 # Control And Data Flow
 
-This document models runtime control flow and persistence flow for normal
-execution, interruption recovery, replay, and rollback.
+This document models governance-first runtime flow and persistence boundaries.
 
 ## Default Session Flow (Extensions Enabled)
 
@@ -9,127 +8,72 @@ execution, interruption recovery, replay, and rollback.
 sequenceDiagram
   participant U as User
   participant CLI as brewva-cli
-  participant SES as session.ts
   participant RT as BrewvaRuntime
   participant EXT as brewva-extensions
   participant TOOLS as brewva-tools
-  participant STORES as Event/Ledger/Memory Stores
+  participant STORE as Event/Ledger/Memory Stores
 
-  U->>CLI: invoke command
-  CLI->>CLI: parse args + resolve mode
-  CLI->>SES: createBrewvaSession()
-  SES->>RT: construct runtime
-  SES->>EXT: register extension handlers + tools
-  U->>CLI: submit prompt / run turn
+  U->>CLI: submit turn
   CLI->>EXT: before_agent_start
-  EXT->>RT: runtime.context.observeUsage() + runtime.context.buildInjection()
-  RT->>STORES: refresh memory projections + publish working.md (if needed)
+  EXT->>RT: context.observeUsage + context.buildInjection
+  RT->>STORE: read/update memory projection (units + working)
   CLI->>EXT: tool_call
-  EXT->>RT: runtime.tools.checkAccess() + runtime.tools.trackCallStart()
-  CLI->>TOOLS: execute tool
-  TOOLS-->>EXT: tool_result (raw hook)
-  EXT->>RT: runtime.tools.recordResult() + runtime.tools.trackCallEnd()
-  RT->>STORES: append ledger + semantic events (e.g. tool_result_recorded, memory_*)
-  CLI->>EXT: agent_end
-  EXT->>RT: memory refresh hook (agent_end)
+  EXT->>RT: tools.start (policy + budget + compaction gate)
+  CLI->>TOOLS: execute
+  TOOLS-->>EXT: tool_result
+  EXT->>RT: tools.finish + ledger append + event record
+  RT->>STORE: event tape + evidence ledger + snapshots
 ```
 
-In this diagram, `BrewvaRuntime` represents the facade API layer. Internal
-state transitions and side effects are delegated to service modules in
-`packages/brewva-runtime/src/services/*`.
-
-## `--no-extensions` Flow (Core-Enforced Profile)
+## Core Bridge Flow (`--no-extensions`)
 
 ```mermaid
 flowchart TD
-  A["createBrewvaSession(enableExtensions=false)"] --> B["register built-in + custom tools"]
-  B --> C["register createRuntimeCoreBridgeExtension()"]
-  C --> C2["before_agent_start => observeContextUsage + inject core autonomy contract + [CoreTapeStatus]"]
-  C --> D["tool_call => runtime.tools.start(): policy + compaction gate + call tracking"]
-  D --> E["tool execute"]
-  E --> F["tool_result => runtime.tools.finish(): ledger write + patch tracking"]
-  F --> G["registerRuntimeCoreEventBridge(): lifecycle + usage telemetry"]
+  A["create runtime"] --> B["register runtime-core bridge"]
+  B --> C["before_agent_start: core status + deterministic injection"]
+  C --> D["tool_call: tool gate + cost/context boundary"]
+  D --> E["tool_result: evidence + event write"]
+  E --> F["session lifecycle: compaction / shutdown bookkeeping"]
 ```
 
-For scheduling paths, facade methods delegate to `ScheduleIntentService`, which
-manages `SchedulerService` through a narrow `SchedulerRuntimePort` adapter.
-
-This mode disables extension presentation hooks, but runtime safety and evidence
-chain enforcement stay active through the runtime core bridge hooks.
-
-Memory behavior in this profile is split:
-
-- Projection ingest still runs on `runtime.events.record()` (memory JSONL state can advance).
-- Runtime core bridge still injects a minimal `before_agent_start` status block
-  (`[CoreTapeStatus]` + autonomy contract), independent of memory projection.
-- Memory bridge hooks are extension-only and therefore disabled (`agent_end`
-  refresh + `session_shutdown` cache clear). Runtime core bridge injects only
-  autonomy/status context (`[CoreTapeStatus]`) and does not inject memory projections.
-- On first `onTurnStart()` after restart, runtime hydration can rebuild missing
-  memory projections from tape (`memory_*` snapshot payloads + semantic fallback).
-
-## Persistence Data Flow
+## Persistence Flow
 
 ```mermaid
 flowchart LR
-  INPUT["Prompt / Tool IO / Usage"] --> RT["BrewvaRuntime"]
-  RT --> EVENTS[".orchestrator/events/sess_<base64url(sessionId)>.jsonl (event tape)"]
-  RT --> LEDGER[".orchestrator/ledger/evidence.jsonl (evidence chain)"]
-  RT --> MEMORY[".orchestrator/memory/*.jsonl + working.md (memory projections)"]
-  RT --> SNAP[".orchestrator/snapshots/<session>/* (rollback only)"]
-  RT --> INDEX[".brewva/skills_index.json"]
+  IN["Prompt / Tool IO / Usage"] --> RT["BrewvaRuntime"]
+  RT --> EV["event tape (.orchestrator/events/*.jsonl)"]
+  RT --> LD["evidence ledger (.orchestrator/ledger/evidence.jsonl)"]
+  RT --> MEM["memory projection (.orchestrator/memory/units.jsonl + working.md)"]
+  RT --> SNAP["rollback snapshots (.orchestrator/snapshots/<session>/*)"]
 ```
 
 ## Memory Projection Flow
 
 ```mermaid
 flowchart TD
-  EVT["Event Tape append"] --> EX["MemoryExtractor (rules-first)"]
-  EX --> U["units.jsonl upsert/merge"]
-  U --> C["crystals.jsonl compile"]
-  U --> I["insights.jsonl (conflict/evolves_pending)"]
-  U --> E["evolves.jsonl (shadow proposals)"]
-  C --> W["working.md publish"]
-  I --> W
-  W --> INJ["before_agent_start inject: brewva.memory-working"]
-  U --> R["memory retrieval search"]
-  C --> R
-  R --> INJ2["before_agent_start inject: brewva.memory-recall"]
+  EVT["event append"] --> EX["MemoryExtractor (deterministic rules)"]
+  EX --> U["units.jsonl upsert/resolve"]
+  U --> W["working.md refresh"]
+  W --> INJ["inject brewva.memory-working"]
 ```
 
-Notes:
-
-- EVOLVES proposals are shadow-only until reviewed (`memory_review_evolves_edge`).
-- Accepted `replaces/challenges` edges may supersede older units and trigger a
-  fresh working-memory publication on the next refresh cycle.
-- Retrieval scoring policy is configured via `memory.retrievalWeights.*`.
-
-## Interruption and Recovery Flow
+## Recovery Flow
 
 ```mermaid
 flowchart TD
-  A["SIGINT/SIGTERM"] --> B["record session_interrupted"]
-  B --> C["waitForIdle (bounded by graceful timeout)"]
-  C --> D["abort/exit"]
-  D --> E["next startup"]
-  E --> F["read event tape"]
-  F --> G["TurnReplayEngine fold (checkpoint + delta)"]
-  G --> H["session hydration from tape events (skill/budget/cost/compaction state)"]
-  H --> I["optional memory projection rebuild when .orchestrator/memory is missing"]
-  I --> J["resume with reconstructed runtime state"]
+  A["startup"] --> B["load event tape"]
+  B --> C["TurnReplayEngine (checkpoint + delta)"]
+  C --> D["hydrate task/truth/cost/evidence/memory-projection state"]
+  D --> E["if memory files missing: rebuild projection from tape"]
 ```
 
-## Replay and Rollback Flow
+## Rollback Flow
 
 ```mermaid
 flowchart TD
-  A["--replay"] --> B["resolve session (explicit --session or latest)"]
-  B --> C["queryStructuredEvents(sessionId)"]
-  C --> D["emit timeline text/json"]
-
-  U["--undo or rollback_last_patch"] --> V["resolve session id"]
-  V --> W["rollbackLastPatchSet(sessionId)"]
-  W --> X{"rollback ok?"}
-  X -->|Yes| Y["restore tracked files + emit rollback + verification_state_reset"]
-  X -->|No| Z["return no_patchset or restore_failed"]
+  A["rollback_last_patch / --undo"] --> B["resolve session"]
+  B --> C["restore tracked snapshot set"]
+  C --> D{"restore ok?"}
+  D -->|yes| E["emit rollback + verification_state_reset"]
+  D -->|no| F["emit no_patchset or restore_failed"]
 ```

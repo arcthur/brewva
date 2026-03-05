@@ -16,6 +16,10 @@ export interface ToolAccessDecision {
   reason?: string;
 }
 
+export interface ToolAccessExplanation extends ToolAccessDecision {
+  warning?: string;
+}
+
 export interface StartToolCallInput {
   sessionId: string;
   toolCallId: string;
@@ -308,6 +312,118 @@ export class ToolGateService {
     }
 
     return access;
+  }
+
+  explainToolAccess(sessionId: string, toolName: string): ToolAccessExplanation {
+    const skill = this.getActiveSkill(sessionId);
+    const normalizedToolName = normalizeToolName(toolName);
+    if (normalizedToolName === "bash" || normalizedToolName === "shell") {
+      return {
+        allowed: false,
+        reason: `Tool '${normalizedToolName}' has been removed. Use 'exec' with 'process' for command execution.`,
+      };
+    }
+
+    const access = evaluateSkillToolAccess(skill?.contract, toolName, {
+      enforceDeniedTools: this.securityPolicy.enforceDeniedTools,
+      allowedToolsMode: this.securityPolicy.allowedToolsMode,
+      alwaysAllowedTools: this.alwaysAllowedTools,
+    });
+
+    if (!access.allowed) {
+      return { allowed: false, reason: access.reason };
+    }
+
+    const budget = this.costTracker.getBudgetStatus(sessionId);
+    if (budget.blocked && !this.alwaysAllowedToolSet.has(normalizedToolName)) {
+      return {
+        allowed: false,
+        reason: budget.reason ?? "Session budget exceeded.",
+      };
+    }
+
+    if (!skill) {
+      return {
+        allowed: true,
+        warning: access.warning,
+      };
+    }
+
+    if (
+      this.securityPolicy.skillMaxTokensMode !== "off" &&
+      !this.alwaysAllowedToolSet.has(normalizedToolName)
+    ) {
+      const maxTokens = skill.contract.budget.maxTokens;
+      const usedTokens = this.costTracker.getSkillTotalTokens(sessionId, skill.name);
+      if (usedTokens >= maxTokens) {
+        const reason = `Skill '${skill.name}' exceeded maxTokens=${maxTokens} (used=${usedTokens}).`;
+        if (this.securityPolicy.skillMaxTokensMode === "enforce") {
+          return { allowed: false, reason };
+        }
+        if (this.securityPolicy.skillMaxTokensMode === "warn") {
+          return { allowed: true, warning: reason };
+        }
+      }
+    }
+
+    if (
+      this.securityPolicy.skillMaxToolCallsMode !== "off" &&
+      !this.alwaysAllowedToolSet.has(normalizedToolName)
+    ) {
+      const maxToolCalls = skill.contract.budget.maxToolCalls;
+      const usedCalls = this.sessionState.toolCallsBySession.get(sessionId) ?? 0;
+      if (usedCalls >= maxToolCalls) {
+        const reason = `Skill '${skill.name}' exceeded maxToolCalls=${maxToolCalls} (used=${usedCalls}).`;
+        if (this.securityPolicy.skillMaxToolCallsMode === "enforce") {
+          return { allowed: false, reason };
+        }
+        if (this.securityPolicy.skillMaxToolCallsMode === "warn") {
+          return { allowed: true, warning: reason };
+        }
+      }
+    }
+
+    return {
+      allowed: true,
+      warning: access.warning,
+    };
+  }
+
+  explainSkillDispatchGate(sessionId: string, toolName: string): ToolAccessExplanation {
+    const pendingDispatch = this.getPendingDispatch(sessionId);
+    if (!pendingDispatch) return { allowed: true };
+    if (pendingDispatch.mode === "none" || pendingDispatch.mode === "suggest") {
+      return { allowed: true };
+    }
+
+    const normalizedToolName = normalizeToolName(toolName);
+    if (!normalizedToolName) {
+      return { allowed: true };
+    }
+    if (this.alwaysAllowedToolSet.has(normalizedToolName)) {
+      return { allowed: true };
+    }
+
+    const primarySkillName = pendingDispatch.primary?.name ?? null;
+    const requiredSkillName =
+      pendingDispatch.chain.length > 0 ? pendingDispatch.chain[0] : primarySkillName;
+    const chainPreview =
+      pendingDispatch.chain.length > 1 ? ` (chain=${pendingDispatch.chain.join(" -> ")})` : "";
+    const reason = requiredSkillName
+      ? `Skill dispatch gate active. Load '${requiredSkillName}' via skill_load or explicitly bypass via skill_route_override.${chainPreview}`
+      : pendingDispatch.routingOutcome === "failed"
+        ? "Skill routing failed and conservative dispatch gate is active. Load a target skill via skill_load or explicitly bypass via skill_route_override."
+        : "Skill dispatch gate active. Load an explicit skill via skill_load or bypass via skill_route_override.";
+
+    if (this.securityPolicy.skillDispatchGateMode === "off") {
+      return { allowed: true };
+    }
+
+    if (this.securityPolicy.skillDispatchGateMode === "warn") {
+      return { allowed: true, warning: reason };
+    }
+
+    return { allowed: false, reason };
   }
 
   startToolCall(input: StartToolCallInput): ToolAccessDecision {

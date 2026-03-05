@@ -2,7 +2,6 @@
 name: patching
 description: Use when applying code changes to fix a known issue or implement a scoped requirement — after root cause is confirmed or plan is approved.
 stability: stable
-tier: base
 tools:
   required: [read, edit]
   optional: [grep, lsp_diagnostics, ledger_query, exec, skill_complete]

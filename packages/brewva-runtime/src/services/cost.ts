@@ -1,11 +1,27 @@
 import type { SessionCostTracker } from "../cost/tracker.js";
-import type { EvidenceLedger } from "../ledger/evidence-ledger.js";
+import type { GovernancePort } from "../governance/port.js";
 import type { SessionCostSummary, SkillDocument } from "../types.js";
 import type { RuntimeCallback } from "./callback.js";
 
 export interface CostServiceOptions {
   costTracker: SessionCostTracker;
-  ledger: EvidenceLedger;
+  recordInfrastructureRow: RuntimeCallback<
+    [
+      input: {
+        sessionId: string;
+        tool: string;
+        argsSummary: string;
+        outputSummary: string;
+        fullOutput?: string;
+        verdict?: "pass" | "fail" | "inconclusive";
+        metadata?: Record<string, unknown>;
+        turn?: number;
+        skill?: string | null;
+      },
+    ],
+    string
+  >;
+  governancePort?: GovernancePort;
   getCurrentTurn: RuntimeCallback<[sessionId: string], number>;
   getActiveSkill: RuntimeCallback<[sessionId: string], SkillDocument | undefined>;
   recordEvent: RuntimeCallback<
@@ -25,14 +41,16 @@ export interface CostServiceOptions {
 
 export class CostService {
   private readonly costTracker: SessionCostTracker;
-  private readonly ledger: EvidenceLedger;
+  private readonly recordInfrastructureRow: CostServiceOptions["recordInfrastructureRow"];
+  private readonly governancePort?: GovernancePort;
   private readonly getCurrentTurn: (sessionId: string) => number;
   private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
   private readonly recordEvent: CostServiceOptions["recordEvent"];
 
   constructor(options: CostServiceOptions) {
     this.costTracker = options.costTracker;
-    this.ledger = options.ledger;
+    this.recordInfrastructureRow = options.recordInfrastructureRow;
+    this.governancePort = options.governancePort;
     this.getCurrentTurn = options.getCurrentTurn;
     this.getActiveSkill = options.getActiveSkill;
     this.recordEvent = options.recordEvent;
@@ -84,6 +102,50 @@ export class CostService {
     );
     const summary = usageResult.summary;
 
+    const ledgerId = this.recordInfrastructureRow({
+      sessionId: input.sessionId,
+      turn,
+      skill: skillName ?? null,
+      tool: "brewva_cost",
+      argsSummary: `model=${input.model}`,
+      outputSummary: `tokens=${effectiveTotalTokens} cost=${input.costUsd.toFixed(6)} usd`,
+      fullOutput: JSON.stringify({
+        model: input.model,
+        usage: {
+          input: normalizedInputTokens,
+          output: normalizedOutputTokens,
+          cacheRead: normalizedCacheReadTokens,
+          cacheWrite: normalizedCacheWriteTokens,
+          total: effectiveTotalTokens,
+        },
+        allocation: {
+          skill: skillName ?? "(none)",
+          turn,
+          tools: summary.tools,
+        },
+        costUsd: input.costUsd,
+        sessionCostUsd: summary.totalCostUsd,
+        stopReason: input.stopReason ?? null,
+      }),
+      verdict: "inconclusive",
+      metadata: {
+        source: "llm_usage",
+        model: input.model,
+        usage: {
+          input: normalizedInputTokens,
+          output: normalizedOutputTokens,
+          cacheRead: normalizedCacheReadTokens,
+          cacheWrite: normalizedCacheWriteTokens,
+          total: effectiveTotalTokens,
+        },
+        skill: skillName ?? null,
+        turn,
+        costUsd: input.costUsd,
+        sessionCostUsd: summary.totalCostUsd,
+        stopReason: input.stopReason ?? null,
+      },
+    });
+
     this.recordEvent({
       sessionId: input.sessionId,
       type: "cost_update",
@@ -91,6 +153,7 @@ export class CostService {
       payload: {
         model: input.model,
         skill: skillName ?? null,
+        ledgerId,
         inputTokens: normalizedInputTokens,
         outputTokens: normalizedOutputTokens,
         cacheReadTokens: normalizedCacheReadTokens,
@@ -119,52 +182,47 @@ export class CostService {
       });
     }
 
-    this.ledger.append({
-      sessionId: input.sessionId,
-      turn,
-      skill: skillName,
-      tool: "brewva_cost",
-      argsSummary: `model=${input.model}`,
-      outputSummary: `tokens=${effectiveTotalTokens} cost=${input.costUsd.toFixed(6)} usd`,
-      fullOutput: JSON.stringify({
-        model: input.model,
-        usage: {
-          input: normalizedInputTokens,
-          output: normalizedOutputTokens,
-          cacheRead: normalizedCacheReadTokens,
-          cacheWrite: normalizedCacheWriteTokens,
-          total: effectiveTotalTokens,
-        },
-        allocation: {
-          skill: skillName ?? "(none)",
-          turn,
-          tools: summary.tools,
-        },
-        costUsd: input.costUsd,
-        sessionCostUsd: summary.totalCostUsd,
-      }),
-      verdict: "inconclusive",
-      metadata: {
-        source: "llm_usage",
-        model: input.model,
-        usage: {
-          input: normalizedInputTokens,
-          output: normalizedOutputTokens,
-          cacheRead: normalizedCacheReadTokens,
-          cacheWrite: normalizedCacheWriteTokens,
-          total: effectiveTotalTokens,
-        },
-        skill: skillName ?? null,
-        turn,
-        costUsd: input.costUsd,
-        sessionCostUsd: summary.totalCostUsd,
-      },
-    });
-
+    this.maybeDetectCostAnomaly(input.sessionId, turn, summary);
     return summary;
   }
 
   getCostSummary(sessionId: string): SessionCostSummary {
     return this.costTracker.getSummary(sessionId);
+  }
+
+  private maybeDetectCostAnomaly(
+    sessionId: string,
+    turn: number,
+    summary: SessionCostSummary,
+  ): void {
+    const governancePort = this.governancePort;
+    if (!governancePort?.detectCostAnomaly) return;
+    const detectCostAnomaly = governancePort.detectCostAnomaly.bind(governancePort);
+
+    void Promise.resolve()
+      .then(() => detectCostAnomaly({ sessionId, summary }))
+      .then((result) => {
+        if (!result.anomaly) return;
+        this.recordEvent({
+          sessionId,
+          type: "governance_cost_anomaly_detected",
+          turn,
+          payload: {
+            reason: result.reason ?? "unknown",
+            totalCostUsd: summary.totalCostUsd,
+            totalTokens: summary.totalTokens,
+          },
+        });
+      })
+      .catch((error) => {
+        this.recordEvent({
+          sessionId,
+          type: "governance_cost_anomaly_error",
+          turn,
+          payload: {
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      });
   }
 }

@@ -16,9 +16,7 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
       mode: "auto",
       enabledSources: ["compose", "dispatch"],
       sourcePriority: ["compose", "dispatch"],
-      onMissingConsumes: "replan",
       maxStepsPerRun: 8,
-      maxReplans: 2,
     },
   },
   verification: {
@@ -47,30 +45,6 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     dir: ".orchestrator/memory",
     workingFile: "working.md",
     maxWorkingChars: 2400,
-    dailyRefreshHourLocal: 8,
-    crystalMinUnits: 4,
-    retrievalTopK: 8,
-    retrievalWeights: {
-      lexical: 0.55,
-      recency: 0.25,
-      confidence: 0.2,
-    },
-    recallMode: "always",
-    externalRecall: {
-      enabled: false,
-      minInternalScore: 0.62,
-      queryTopK: 5,
-      injectedConfidence: 0.6,
-    },
-    evolvesMode: "review-gated",
-    cognitive: {
-      mode: "shadow",
-      maxTokensPerTurn: 4096,
-    },
-    global: {
-      enabled: true,
-      minConfidence: 0.8,
-    },
   },
   security: {
     mode: "standard",
@@ -139,7 +113,6 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
       maxInjectionTokens: 1200,
       compactionThresholdPercent: 0.82,
       hardLimitPercent: 0.94,
-      truncationStrategy: "drop-low-fidelity",
       compactionInstructions:
         "Summarize stale tool outputs and keep only active objectives, unresolved failures, and latest verification evidence.",
       compaction: {

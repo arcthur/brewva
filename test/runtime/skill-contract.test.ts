@@ -127,13 +127,13 @@ describe("S-006 three-layer contract tightening", () => {
     mkdirSync(join(workspace, ".brewva", "skills", "base", "foo"), { recursive: true });
     writeFileSync(
       join(workspace, ".brewva/skills/base/foo/SKILL.md"),
-      `---\nname: foo\ndescription: base\ntags: [foo]\ntools:\n  required: [read]\n  optional: [edit]\n  denied: [write]\nbudget:\n  max_tool_calls: 50\n  max_tokens: 10000\n---\nbase`,
+      `---\nname: foo\ndescription: base\ntags: [foo]\ntools:\n  required: [read]\n  optional: [edit]\n  denied: [write]\nbudget:\n  max_tool_calls: 50\n  max_tokens: 10000\noutputs: [base_output]\nconsumes: []\n---\nbase`,
     );
 
     mkdirSync(join(workspace, ".brewva", "skills", "project", "foo"), { recursive: true });
     writeFileSync(
       join(workspace, ".brewva/skills/project/foo/SKILL.md"),
-      `---\nname: foo\ndescription: project\ntags: [foo]\ntools:\n  required: []\n  optional: [write]\n  denied: [exec]\nbudget:\n  max_tool_calls: 30\n  max_tokens: 8000\n---\nproject`,
+      `---\nname: foo\ndescription: project\ntags: [foo]\ntools:\n  required: []\n  optional: [write]\n  denied: [exec]\nbudget:\n  max_tool_calls: 30\n  max_tokens: 8000\noutputs: [project_output]\nconsumes: []\n---\nproject`,
     );
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
@@ -146,6 +146,149 @@ describe("S-006 three-layer contract tightening", () => {
 });
 
 describe("skill contract and dispatch parsing", () => {
+  test("fails fast when forbidden tier frontmatter field is present", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-tier-forbidden-"));
+    const filePath = join(workspace, "skills", "base", "review", "SKILL.md");
+    mkdirSync(join(workspace, "skills", "base", "review"), { recursive: true });
+    writeFileSync(
+      filePath,
+      [
+        "---",
+        "name: review",
+        "description: review skill",
+        "tier: base",
+        "tools:",
+        "  required: [read]",
+        "  optional: []",
+        "  denied: []",
+        "budget:",
+        "  max_tool_calls: 10",
+        "  max_tokens: 10000",
+        "outputs: []",
+        "consumes: []",
+        "---",
+        "# review",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(() => parseSkillDocument(filePath, "base")).toThrow("tier");
+  });
+
+  test("fails fast when required outputs field is missing", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-missing-outputs-"));
+    const filePath = join(workspace, "skills", "base", "review", "SKILL.md");
+    mkdirSync(join(workspace, "skills", "base", "review"), { recursive: true });
+    writeFileSync(
+      filePath,
+      [
+        "---",
+        "name: review",
+        "description: review skill",
+        "tools:",
+        "  required: [read]",
+        "  optional: []",
+        "  denied: []",
+        "budget:",
+        "  max_tool_calls: 10",
+        "  max_tokens: 10000",
+        "consumes: []",
+        "---",
+        "# review",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(() => parseSkillDocument(filePath, "base")).toThrow("outputs");
+  });
+
+  test("fails fast when camelCase budget keys are present", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-budget-camelcase-"));
+    const filePath = join(workspace, "skills", "base", "review", "SKILL.md");
+    mkdirSync(join(workspace, "skills", "base", "review"), { recursive: true });
+    writeFileSync(
+      filePath,
+      [
+        "---",
+        "name: review",
+        "description: review skill",
+        "tools:",
+        "  required: [read]",
+        "  optional: []",
+        "  denied: []",
+        "budget:",
+        "  maxToolCalls: 10",
+        "  maxTokens: 10000",
+        "outputs: []",
+        "consumes: []",
+        "---",
+        "# review",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(() => parseSkillDocument(filePath, "base")).toThrow("maxToolCalls");
+  });
+
+  test("fails fast when camelCase dispatch keys are present", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-dispatch-camelcase-"));
+    const filePath = join(workspace, "skills", "base", "review", "SKILL.md");
+    mkdirSync(join(workspace, "skills", "base", "review"), { recursive: true });
+    writeFileSync(
+      filePath,
+      [
+        "---",
+        "name: review",
+        "description: review skill",
+        "tools:",
+        "  required: [read]",
+        "  optional: []",
+        "  denied: []",
+        "budget:",
+        "  max_tool_calls: 10",
+        "  max_tokens: 10000",
+        "dispatch:",
+        "  gateThreshold: 12",
+        "outputs: []",
+        "consumes: []",
+        "---",
+        "# review",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(() => parseSkillDocument(filePath, "base")).toThrow("gateThreshold");
+  });
+
+  test("fails fast when camelCase composableWith is present", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-composable-camelcase-"));
+    const filePath = join(workspace, "skills", "base", "review", "SKILL.md");
+    mkdirSync(join(workspace, "skills", "base", "review"), { recursive: true });
+    writeFileSync(
+      filePath,
+      [
+        "---",
+        "name: review",
+        "description: review skill",
+        "tools:",
+        "  required: [read]",
+        "  optional: []",
+        "  denied: []",
+        "budget:",
+        "  max_tool_calls: 10",
+        "  max_tokens: 10000",
+        "composableWith: [execution]",
+        "outputs: []",
+        "consumes: []",
+        "---",
+        "# review",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(() => parseSkillDocument(filePath, "base")).toThrow("composableWith");
+  });
+
   test("parses dispatch frontmatter with defaults", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-dispatch-"));
     const filePath = join(workspace, "skills", "base", "verify", "SKILL.md");
@@ -164,6 +307,8 @@ describe("skill contract and dispatch parsing", () => {
         "budget:",
         "  max_tool_calls: 10",
         "  max_tokens: 10000",
+        "outputs: []",
+        "consumes: []",
         "---",
         "# verify",
       ].join("\n"),

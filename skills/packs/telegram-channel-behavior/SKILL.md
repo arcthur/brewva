@@ -2,7 +2,6 @@
 name: telegram-channel-behavior
 description: Telegram 渠道回复行为策略。用于约束 Telegram 对话中的响应节奏、交互降级、文本可读性与失败回报方式，并与 telegram-interactive-components 协同工作。
 stability: stable
-tier: pack
 tools:
   required: [skill_load]
   optional: [skill_complete]

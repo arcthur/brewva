@@ -64,8 +64,6 @@ Default tool bundle (registered by `buildBrewvaTools()`):
 - `task_record_blocker`
 - `task_resolve_blocker`
 - `task_view_state`
-- `memory_dismiss_insight`
-- `memory_review_evolves_edge`
 
 Optional A2A tools (registered by channel orchestration extensions when an A2A adapter is available):
 
@@ -76,7 +74,7 @@ Optional A2A tools (registered by channel orchestration extensions when an A2A a
 Notes:
 
 - `grep` is a read-only workspace search tool intended to replace ad-hoc `exec` usage for text search in read-only skills.
-- `skill_route_override` and `skill_chain_control` are control-plane tools for steering semantic routing and cascade progression.
+- `skill_route_override` and `skill_chain_control` are control-plane tools for steering dispatch gating and cascade progression.
 
 ### `grep`
 

@@ -105,7 +105,7 @@ function checkpointEvent(input: {
       },
       memoryState: {
         updatedAt: null,
-        crystals: [],
+        unitCount: 0,
       },
       reason: "unit_test",
       basedOnEventId: "evt-prev",
@@ -460,13 +460,7 @@ describe("TurnReplayEngine", () => {
           totalRecords?: number;
         };
         memory?: {
-          crystals?: Array<{
-            id: string;
-            topic: string;
-            unitCount: number;
-            confidence: number;
-            updatedAt: number;
-          }>;
+          unitCount?: number;
         };
       };
     };
@@ -479,15 +473,7 @@ describe("TurnReplayEngine", () => {
     }
     checkpointPayload.state.cost.totalTokens = 7;
     checkpointPayload.state.evidence.totalRecords = 2;
-    checkpointPayload.state.memory.crystals = [
-      {
-        id: "crystal-from-checkpoint",
-        topic: "checkpoint-topic",
-        unitCount: 1,
-        confidence: 0.7,
-        updatedAt: 3,
-      },
-    ];
+    checkpointPayload.state.memory.unitCount = 1;
 
     events.push(checkpoint);
     engine.observeEvent(checkpoint);
@@ -498,7 +484,7 @@ describe("TurnReplayEngine", () => {
     expect(second.taskState.items.map((item) => item.text)).toEqual(["after"]);
     expect(second.costState.summary.totalTokens).toBe(7);
     expect(second.evidenceState.totalRecords).toBe(2);
-    expect(second.memoryState.crystals[0]?.id).toBe("crystal-from-checkpoint");
+    expect(second.memoryState.unitCount).toBe(1);
   });
 
   test("folds cost/evidence/memory state and prunes stale failures after 3 anchors", () => {
@@ -534,19 +520,13 @@ describe("TurnReplayEngine", () => {
         toolName: "exec",
       }),
       {
-        id: "evt-memory-crystal-1",
+        id: "evt-memory-projection-1",
         sessionId,
-        type: "memory_crystal_compiled",
+        type: "memory_projection_refreshed",
         timestamp: 3,
         payload: {
-          crystal: {
-            id: "crystal-1",
-            topic: "build",
-            summary: "build summary",
-            unitIds: ["u1", "u2"],
-            confidence: 0.8,
-            updatedAt: 3,
-          },
+          unitCount: 2,
+          updatedAt: 3,
         } as BrewvaEventRecord["payload"],
       },
       anchorEvent({
@@ -573,8 +553,7 @@ describe("TurnReplayEngine", () => {
     const view = engine.replay(sessionId);
     expect(view.costState.summary.totalTokens).toBe(15);
     expect(view.costState.summary.totalCostUsd).toBeCloseTo(0.001, 8);
-    expect(view.memoryState.crystals).toHaveLength(1);
-    expect(view.memoryState.crystals[0]?.id).toBe("crystal-1");
+    expect(view.memoryState.unitCount).toBe(2);
     expect(view.evidenceState.failureRecords).toBe(1);
     expect(view.evidenceState.recentFailures).toHaveLength(0);
   });
@@ -726,7 +705,7 @@ describe("TurnReplayEngine", () => {
           },
           memoryState: {
             updatedAt: null,
-            crystals: [],
+            unitCount: 0,
           },
           reason: "unit_test",
         }) as unknown as BrewvaEventRecord["payload"],

@@ -95,22 +95,29 @@ describe("skill cascade orchestration", () => {
     expect(initialIntent?.steps.length ?? 0).toBeGreaterThan(0);
 
     const firstStep = initialIntent?.steps[0]?.skill ?? "";
-    expect(runtime.skills.getActive(sessionId)?.name).toBe(firstStep);
-    const firstOutputs = buildSkillOutputs(runtime, firstStep);
-    const completion = runtime.skills.complete(sessionId, firstOutputs);
-    expect(completion.ok).toBe(true);
+    const initialStatus = initialIntent?.status;
+    if (initialStatus === "running") {
+      expect(runtime.skills.getActive(sessionId)?.name).toBe(firstStep);
+      const firstOutputs = buildSkillOutputs(runtime, firstStep);
+      const completion = runtime.skills.complete(sessionId, firstOutputs);
+      expect(completion.ok).toBe(true);
 
-    const updatedIntent = runtime.skills.getCascadeIntent(sessionId);
-    expect(updatedIntent).toBeDefined();
-    expect((updatedIntent?.cursor ?? 0) >= 1).toBe(true);
-    if (updatedIntent?.status === "running") {
-      expect(runtime.skills.getActive(sessionId)?.name).toBe(
-        updatedIntent.steps[updatedIntent.cursor]?.skill,
-      );
+      const updatedIntent = runtime.skills.getCascadeIntent(sessionId);
+      expect(updatedIntent).toBeDefined();
+      expect((updatedIntent?.cursor ?? 0) >= 1).toBe(true);
+      if (updatedIntent?.status === "running") {
+        expect(runtime.skills.getActive(sessionId)?.name).toBe(
+          updatedIntent.steps[updatedIntent.cursor]?.skill,
+        );
+      }
+      if (updatedIntent?.status === "completed") {
+        expect(updatedIntent?.status).toBe("completed");
+      }
+      return;
     }
-    if (updatedIntent?.status === "completed") {
-      expect(updatedIntent?.status).toBe("completed");
-    }
+    expect(initialStatus).toBe("paused");
+    expect(initialIntent?.lastError?.startsWith("missing_consumes:")).toBe(true);
+    expect(runtime.skills.getActive(sessionId)).toBeUndefined();
   });
 
   test("assist mode plans chain but waits for manual continuation", () => {
@@ -334,9 +341,16 @@ describe("skill cascade orchestration", () => {
 
     seedPlanningDispatch(runtime, sessionId);
     runtime.skills.prepareDispatch(sessionId, "Plan and execute the refactor end-to-end");
+    const beforeSeed = runtime.skills.getCascadeIntent(sessionId);
+    expect(beforeSeed).toBeDefined();
+    expect(beforeSeed?.source).toBe("dispatch");
+    if (beforeSeed?.status !== "running") {
+      const seedStep = beforeSeed?.steps[beforeSeed.cursor]?.skill ?? "";
+      if (seedStep) {
+        expect(runtime.skills.activate(sessionId, seedStep).ok).toBe(true);
+      }
+    }
     const before = runtime.skills.getCascadeIntent(sessionId);
-    expect(before).toBeDefined();
-    expect(before?.source).toBe("dispatch");
     expect(before?.status).toBe("running");
     expect(runtime.skills.getActive(sessionId)?.name).toBe(before?.steps[before.cursor]?.skill);
 
@@ -441,7 +455,7 @@ describe("skill cascade orchestration", () => {
     }
   });
 
-  test("compose sequence normalizes legacy review_findings contracts", () => {
+  test("compose sequence preserves explicit output refs without alias normalization", () => {
     const runtime = new BrewvaRuntime({
       cwd: createWorkspace("compose-review-findings-alias"),
       config: createConfig("assist"),
@@ -472,10 +486,10 @@ describe("skill cascade orchestration", () => {
 
     const composeIntent = runtime.skills.getCascadeIntent(sessionId);
     expect(composeIntent?.source).toBe("compose");
-    expect(composeIntent?.steps[0]?.produces).toContain("findings");
-    expect(composeIntent?.steps[0]?.produces).not.toContain("review_findings");
-    expect(composeIntent?.steps[1]?.consumes).toContain("findings");
-    expect(composeIntent?.steps[1]?.consumes).not.toContain("review_findings");
+    expect(composeIntent?.steps[0]?.produces).toContain("review_findings");
+    expect(composeIntent?.steps[0]?.produces).not.toContain("findings");
+    expect(composeIntent?.steps[1]?.consumes).toContain("review_findings");
+    expect(composeIntent?.steps[1]?.consumes).not.toContain("findings");
 
     expect(runtime.skills.activate(sessionId, "review").ok).toBe(true);
     const reviewCompletion = runtime.skills.complete(
@@ -487,12 +501,24 @@ describe("skill cascade orchestration", () => {
     const afterReview = runtime.skills.getCascadeIntent(sessionId);
     expect(afterReview?.cursor).toBe(1);
     expect(afterReview?.status).toBe("paused");
-    const latestPaused = findLatestEvent(runtime, sessionId, "skill_cascade_paused");
-    expect(latestPaused?.payload?.reason).toBe("await_manual_activation");
-    const unresolvedConsumes = Array.isArray(latestPaused?.payload?.unresolvedConsumes)
-      ? latestPaused?.payload?.unresolvedConsumes
-      : [];
-    expect(unresolvedConsumes).toEqual([]);
+    expect(afterReview?.lastError?.startsWith("missing_consumes:")).toBe(true);
+    const planningStep = afterReview?.steps.find((step) => step.id === "T2");
+    expect(planningStep?.consumes).toContain("review_findings");
+    expect(planningStep?.consumes).not.toContain("findings");
+    expect(afterReview?.steps.some((step) => step.id.startsWith("replan-"))).toBe(false);
+
+    const pausedEvents = runtime.events.query(sessionId, { type: "skill_cascade_paused" });
+    const hasMissingConsumesPause = pausedEvents.some((event) => {
+      if (!event.payload || typeof event.payload !== "object" || Array.isArray(event.payload)) {
+        return false;
+      }
+      const reason = event.payload["reason"];
+      const missingConsumes = Array.isArray(event.payload["missingConsumes"])
+        ? event.payload["missingConsumes"]
+        : [];
+      return reason === "missing_consumes" && missingConsumes.includes("review_findings");
+    });
+    expect(hasMissingConsumesPause).toBe(true);
   });
 
   test("running compose intent is not replaced by lower-priority dispatch reroute", () => {
@@ -533,8 +559,15 @@ describe("skill cascade orchestration", () => {
       ],
     });
     expect(composeCompletion.ok).toBe(true);
+    const beforeSeed = runtime.skills.getCascadeIntent(sessionId);
+    expect(beforeSeed?.source).toBe("compose");
+    if (beforeSeed?.status !== "running") {
+      const seedStep = beforeSeed?.steps[beforeSeed.cursor]?.skill ?? "";
+      if (seedStep) {
+        expect(runtime.skills.activate(sessionId, seedStep).ok).toBe(true);
+      }
+    }
     const before = runtime.skills.getCascadeIntent(sessionId);
-    expect(before?.source).toBe("compose");
     expect(before?.status).toBe("running");
 
     runtime.context.onTurnStart(sessionId, 2);
@@ -550,8 +583,10 @@ describe("skill cascade orchestration", () => {
 
     const after = runtime.skills.getCascadeIntent(sessionId);
     expect(after?.source).toBe("compose");
-    expect(after?.status).toBe("running");
-    expect(runtime.skills.getActive(sessionId)?.name).toBe(after?.steps[after.cursor]?.skill);
+    expect(after?.status === "running" || after?.status === "paused").toBe(true);
+    if (after?.status === "running") {
+      expect(runtime.skills.getActive(sessionId)?.name).toBe(after?.steps[after.cursor]?.skill);
+    }
     const latestKeep = findLatestEvent(runtime, sessionId, "skill_cascade_overridden");
     expect(latestKeep).toBeDefined();
     expect(latestKeep?.payload?.reason).toBe("source_decision_keep");

@@ -20,6 +20,16 @@ from pathlib import Path
 SKILL_TEMPLATE = """---
 name: {skill_name}
 description: [TODO: Complete and informative explanation of what the skill does and when to use it. Include WHEN to use this skill - specific scenarios, file types, or tasks that trigger it.]
+stability: experimental
+tools:
+  required: [read]
+  optional: [grep]
+  denied: []
+budget:
+  max_tool_calls: 40
+  max_tokens: 80000
+outputs: []
+consumes: []
 ---
 
 # {skill_title}

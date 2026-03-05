@@ -29,7 +29,7 @@ describe("runtime artifact root resolution", () => {
     });
 
     expect(runtime.workspaceRoot).toBe(workspace);
-    expect(runtime.truth.getLedgerPath()).toBe(
+    expect(runtime.ledger.getPath()).toBe(
       join(workspace, ".orchestrator", "ledger", "evidence.jsonl"),
     );
     const eventsRoot = join(workspace, ".orchestrator", "events");

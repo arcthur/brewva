@@ -232,6 +232,38 @@ export class ContextPressureService {
     return { allowed: false, reason };
   }
 
+  explainContextCompactionGate(
+    sessionId: string,
+    toolName: string,
+    usage?: ContextBudgetUsage,
+  ): { allowed: boolean; reason?: string } {
+    const normalizedToolName = normalizeToolName(toolName);
+    if (normalizedToolName === "session_compact") {
+      return { allowed: true };
+    }
+    if (this.alwaysAllowedToolSet.has(normalizedToolName)) {
+      return { allowed: true };
+    }
+
+    const gate = this.getContextCompactionGateStatus(sessionId, usage);
+    if (!gate.required) {
+      return { allowed: true };
+    }
+
+    const usageRatio =
+      typeof gate.pressure.usageRatio === "number"
+        ? gate.pressure.usageRatio
+        : gate.pressure.hardLimitRatio;
+    const usagePercent = Math.max(0, Math.min(1, usageRatio)) * 100;
+    const hardLimitPercent = Math.max(0, Math.min(1, gate.pressure.hardLimitRatio)) * 100;
+    const allowedTools = [
+      "session_compact",
+      ...[...this.alwaysAllowedToolSet].toSorted((a, b) => a.localeCompare(b)),
+    ];
+    const reason = `Context usage is critical (${usagePercent.toFixed(1)}% >= hard limit ${hardLimitPercent.toFixed(1)}%). Call tool 'session_compact' first, then continue with other tools. Allowed during gate: ${allowedTools.join(", ")}.`;
+    return { allowed: false, reason };
+  }
+
   checkAndRequestCompaction(sessionId: string, usage: ContextBudgetUsage | undefined): boolean {
     const decision = this.contextBudget.shouldRequestCompaction(sessionId, usage);
     if (!decision.shouldCompact) return false;

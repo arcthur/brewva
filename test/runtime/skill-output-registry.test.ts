@@ -23,7 +23,7 @@ describe("skill output registry", () => {
     expect(stored!.architecture_map).toBe("monorepo with 4 packages");
   });
 
-  test("review completion stores compatibility alias for findings", async () => {
+  test("review completion stores findings output", async () => {
     const runtime = new BrewvaRuntime({ cwd: repoRoot() });
     const sessionId = "output-reg-review-alias-1";
 
@@ -43,30 +43,6 @@ describe("skill output registry", () => {
 
     const stored = runtime.skills.getOutputs(sessionId, "review");
     expect(stored?.findings).toBe("one finding");
-    expect(stored?.review_findings).toBe("one finding");
-  });
-
-  test("review completion accepts legacy review_findings input by normalizing to findings", async () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
-    const sessionId = "output-reg-review-alias-2";
-
-    runtime.skills.activate(sessionId, "review");
-    const completion = runtime.skills.complete(sessionId, {
-      review_context: "context",
-      plan_conformance: "aligned",
-      risk_profile: "low",
-      oracle_brief: "brief",
-      oracle_synthesis: "synthesis",
-      review_findings: "legacy finding key",
-      failure_modes: "none",
-      review_decision: "approve_with_followups",
-      testing_gaps: "none",
-    });
-    expect(completion).toEqual({ ok: true, missing: [] });
-
-    const stored = runtime.skills.getOutputs(sessionId, "review");
-    expect(stored?.findings).toBe("legacy finding key");
-    expect(stored?.review_findings).toBe("legacy finding key");
   });
 
   test("getAvailableConsumedOutputs returns matching outputs for skill consumes", async () => {
@@ -126,7 +102,7 @@ describe("skill output registry", () => {
     expect(replayed.architecture_map).toBe("replayed module map");
   });
 
-  test("replay normalizes legacy review findings outputs", async () => {
+  test("replay restores review findings outputs", async () => {
     const sessionId = `skill-output-review-replay-${Date.now()}`;
     const runtimeA = new BrewvaRuntime({ cwd: repoRoot() });
     runtimeA.events.record({
@@ -147,7 +123,6 @@ describe("skill output registry", () => {
     runtimeB.context.onTurnStart(sessionId, 1);
     const replayed = runtimeB.skills.getOutputs(sessionId, "review");
     expect(replayed?.findings).toBe("legacy replay finding");
-    expect(replayed?.review_findings).toBe("legacy replay finding");
   });
 
   test("emits skill_completed event with outputs and output keys", async () => {
