@@ -443,6 +443,10 @@
                 },
                 "k": {
                   "type": "number"
+                },
+                "brokerJudgeMode": {
+                  "type": "string",
+                  "enum": ["heuristic", "llm"]
                 }
               }
             }

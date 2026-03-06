@@ -2,6 +2,8 @@
 
 Extension factory entrypoint: `packages/brewva-extensions/src/index.ts`.
 
+Control-plane broker entrypoint: `packages/brewva-skill-broker/src/index.ts`.
+
 ## Factory API
 
 - `createBrewvaExtension`
@@ -83,8 +85,20 @@ Key implications:
 - injects a capability view block for progressive disclosure (compact tool list; expand with `$name`)
 - injects runtime-built context via async injection path
 - enforces compaction gate behavior under critical context pressure
-- projects runtime routing telemetry (`skill_routing_translation` remains deterministic `skipped`; `skill_routing_semantic` mirrors runtime routing result)
+- projects runtime routing telemetry (`skill_routing_selection` mirrors runtime routing result)
 - clears pending skill preselection only under the critical compaction gate path
+
+CLI and gateway session bootstrap prepend `createSkillBrokerExtension` before the runtime extension stack.
+That broker:
+
+- reads `.brewva/skills_index.json`
+- reranks the shortlist against candidate skill previews (`Intent` / `Trigger` / boundary sections)
+- runs only preview heuristics by default
+- when `skills.selector.brokerJudgeMode=llm` and the current session model plus API key are available, runs a control-plane `pi-ai complete()` judge over the shortlist before selecting
+- falls back to preview-only heuristics when the judge is disabled, unavailable, abstains, or fails
+- writes control-plane traces under `.brewva/skill-broker/<sessionId>/`
+- injects explicit preselection via `runtime.skills.setNextSelection(...)` before `registerContextTransform` runs
+- forces broker-enabled sessions onto `skills.selector.mode=external_only`
 
 Default context injection sources are:
 

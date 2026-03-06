@@ -1166,23 +1166,23 @@ export class BrewvaRuntime {
     selected: SkillSelection[],
     routingOutcome: SkillRoutingOutcome,
   ): SkillRoutingTrace {
-    const semantic =
+    const selection =
       routingOutcome === "failed"
         ? {
-            ...trace.semantic,
+            ...trace.selection,
             status: "failed" as const,
             selectedCount: 0,
             selectedSkills: [],
           }
         : selected.length === 0
           ? {
-              ...trace.semantic,
+              ...trace.selection,
               status: "empty" as const,
               selectedCount: 0,
               selectedSkills: [],
             }
           : {
-              ...trace.semantic,
+              ...trace.selection,
               status: "selected" as const,
               selectedCount: selected.length,
               selectedSkills: selected.map((entry) => entry.name),
@@ -1190,7 +1190,7 @@ export class BrewvaRuntime {
     return {
       ...trace,
       routingOutcome,
-      semantic,
+      selection,
       candidates: selected,
       availableOutputs: [...trace.availableOutputs],
     };

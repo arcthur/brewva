@@ -5,9 +5,15 @@ function repoRoot(): string {
   return process.cwd();
 }
 
+function deterministicConfig() {
+  const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+  config.skills.selector.mode = "deterministic";
+  return config;
+}
+
 describe("S-001 skill routing selector", () => {
   test("prepareDispatch routes deterministically by default", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = new BrewvaRuntime({ cwd: repoRoot(), config: deterministicConfig() });
     const sessionId = "deterministic-route-1";
 
     const decision = runtime.skills.prepareDispatch(
@@ -20,8 +26,8 @@ describe("S-001 skill routing selector", () => {
     expect(decision.selected.length).toBeGreaterThan(0);
     const trace = runtime.skills.getLastRouting(sessionId);
     expect(trace?.source).toBe("deterministic_router");
-    expect(trace?.semantic.status).toBe("selected");
-    expect(trace?.semantic.selectedSkills).toContain("review");
+    expect(trace?.selection.status).toBe("selected");
+    expect(trace?.selection.selectedSkills).toContain("review");
   });
 
   test("prepareDispatch stays empty in external_only mode without preselection", () => {
@@ -35,12 +41,12 @@ describe("S-001 skill routing selector", () => {
     expect(decision.selected).toEqual([]);
     const trace = runtime.skills.getLastRouting(sessionId);
     expect(trace?.source).toBe("external_preselection");
-    expect(trace?.semantic.status).toBe("empty");
-    expect(trace?.semantic.reason).toBe("external_only_no_preselection");
+    expect(trace?.selection.status).toBe("empty");
+    expect(trace?.selection.reason).toBe("external_only_no_preselection");
   });
 
   test("prepareDispatch consumes injected preselection before deterministic routing", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = new BrewvaRuntime({ cwd: repoRoot(), config: deterministicConfig() });
     const sessionId = "semantic-preselect-1";
 
     runtime.skills.setNextSelection(sessionId, [
@@ -62,11 +68,11 @@ describe("S-001 skill routing selector", () => {
     expect(decision.mode).toBe("auto");
     const trace = runtime.skills.getLastRouting(sessionId);
     expect(trace?.source).toBe("external_preselection");
-    expect(trace?.semantic.reason).toBe("external_preselection_selected");
+    expect(trace?.selection.reason).toBe("external_preselection_selected");
   });
 
   test("prepareDispatch enters conservative gate when routing failed", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = new BrewvaRuntime({ cwd: repoRoot(), config: deterministicConfig() });
     const sessionId = "semantic-preselect-failed";
 
     runtime.skills.setNextSelection(sessionId, [], {

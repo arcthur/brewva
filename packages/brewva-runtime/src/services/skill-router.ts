@@ -1,7 +1,7 @@
 import type {
   SkillPreselection,
   SkillRoutingResult,
-  SkillRoutingSemanticTrace,
+  SkillRoutingSelectionTrace,
   SkillRoutingTrace,
   SkillSelection,
   SkillSelectionBreakdownEntry,
@@ -178,11 +178,11 @@ function buildAvailableOutputScore(
   return total;
 }
 
-function resolveSemanticTrace(input: {
+function resolveSelectionTrace(input: {
   reason: string;
   routingOutcome: SkillRoutingResult["routingOutcome"];
   selected: SkillSelection[];
-}): SkillRoutingSemanticTrace {
+}): SkillRoutingSelectionTrace {
   if (input.routingOutcome === "failed") {
     return {
       status: "failed",
@@ -256,7 +256,7 @@ export class SkillRouterService {
           configHash,
           latencyMs: Date.now() - startedAt,
           routingOutcome,
-          semanticReason:
+          selectionReason:
             routingOutcome === "failed"
               ? "external_preselection_failed"
               : input.preselection.selected.length > 0
@@ -282,7 +282,7 @@ export class SkillRouterService {
           configHash,
           latencyMs: Date.now() - startedAt,
           routingOutcome: "empty",
-          semanticReason: "external_only_no_preselection",
+          selectionReason: "external_only_no_preselection",
           selected: [],
           activeSkillName,
           availableOutputs,
@@ -370,7 +370,7 @@ export class SkillRouterService {
         configHash,
         latencyMs: Date.now() - startedAt,
         routingOutcome,
-        semanticReason:
+        selectionReason:
           routingOutcome === "selected"
             ? "deterministic_router_selected"
             : "deterministic_router_empty",
@@ -394,7 +394,7 @@ export class SkillRouterService {
         configHash,
         latencyMs: Date.now() - startedAt,
         routingOutcome: "failed",
-        semanticReason: "routing_failed",
+        selectionReason: "routing_failed",
         selected: [],
         activeSkillName,
         availableOutputs,
@@ -416,7 +416,7 @@ export class SkillRouterService {
     configHash: string;
     latencyMs: number;
     routingOutcome: SkillRoutingResult["routingOutcome"];
-    semanticReason: string;
+    selectionReason: string;
     selected: SkillSelection[];
     activeSkillName: string | null;
     availableOutputs: string[];
@@ -431,13 +431,8 @@ export class SkillRouterService {
       configHash: input.configHash,
       latencyMs: input.latencyMs,
       routingOutcome: input.routingOutcome,
-      translation: {
-        status: "skipped",
-        reason: input.source,
-        translated: false,
-      },
-      semantic: resolveSemanticTrace({
-        reason: input.semanticReason,
+      selection: resolveSelectionTrace({
+        reason: input.selectionReason,
         routingOutcome: input.routingOutcome,
         selected: input.selected,
       }),

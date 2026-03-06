@@ -36,6 +36,7 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 - `skills.overrides`: `{}`
 - `skills.selector.mode`: `deterministic` (`deterministic | external_only`)
 - `skills.selector.k`: `4`
+- `skills.selector.brokerJudgeMode`: `heuristic` (`heuristic | llm`)
 - `skills.cascade.mode`: `auto` (`off | assist | auto`)
 - `skills.cascade.enabledSources`: `["compose", "dispatch"]`
 - `skills.cascade.sourcePriority`: `["compose", "dispatch"]`
@@ -48,7 +49,17 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 - `deterministic` (default): runtime kernel performs deterministic contract-aware routing before dispatch
 - `external_only`: runtime consumes only explicit preselection (for example control-plane `setNextSelection`)
 
+CLI/gateway sessions that enable the external skill broker currently force `skills.selector.mode=external_only` at bootstrap time.
+Use `deterministic` only when running without that broker path.
+
 `skills.selector.k` caps the number of stored/returned candidates for both runtime deterministic routing and externally injected preselection.
+
+`skills.selector.brokerJudgeMode` controls stage-two broker behavior for broker-enabled sessions:
+
+- `heuristic` (default): shortlist only; no control-plane model completion
+- `llm`: allow the broker to run the optional control-plane judge on the shortlist when the session model and API key are available
+
+`llm` is an explicit cost/latency trade-off. If model resolution, credentials, or parsing fail, broker selection falls back to the heuristic path and runtime governance remains unchanged.
 
 `skills.packs` is an optional allowlist for pack directories across all discovered skill roots
 (`global_root`, `project_root`, and `config_root`).

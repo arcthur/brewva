@@ -11,6 +11,7 @@ const VALID_CHANNEL_ACL_MODES = new Set(["open", "closed"]);
 const VALID_SKILL_CASCADE_MODES = new Set(["off", "assist", "auto"]);
 const VALID_SKILL_CASCADE_SOURCES = new Set(["compose", "dispatch", "explicit"]);
 const VALID_SKILL_SELECTOR_MODES = new Set(["deterministic", "external_only"]);
+const VALID_SKILL_BROKER_JUDGE_MODES = new Set(["heuristic", "llm"]);
 
 type AnyRecord = Record<string, unknown>;
 
@@ -280,6 +281,12 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
           "skills.selector.mode",
         ),
         k: normalizePositiveInteger(skillsSelectorInput.k, defaults.skills.selector.k),
+        brokerJudgeMode: normalizeStrictStringEnum(
+          skillsSelectorInput.brokerJudgeMode,
+          defaults.skills.selector.brokerJudgeMode,
+          VALID_SKILL_BROKER_JUDGE_MODES,
+          "skills.selector.brokerJudgeMode",
+        ),
       },
       cascade: {
         mode: normalizeStrictStringEnum(

@@ -109,8 +109,7 @@ brewva/
   - no external recall runtime branch
   - no cognitive/adaptive inference path in runtime core
 - `registerContextTransform` emits deterministic governance routing telemetry:
-  - `skill_routing_translation`: `status=skipped`, `reason=governance_only` (or `critical_compaction_gate`)
-  - `skill_routing_semantic`: `status=skipped`, `reason=governance_only` (or `critical_compaction_gate`)
+  - `skill_routing_selection`: `status=selected|empty|failed|skipped`, with `skipped` used under `critical_compaction_gate`
 - Optional `governancePort` is governance-only:
   - `verifySpec`
   - `detectCostAnomaly`

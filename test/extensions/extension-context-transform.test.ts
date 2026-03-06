@@ -295,12 +295,7 @@ describe("Extension gaps: context transform", () => {
     const result = await invokeHandlerAsync<{
       message: {
         details?: {
-          routingTranslation?: {
-            status?: string;
-            reason?: string;
-            translated?: boolean;
-          };
-          semanticRouting?: {
+          routingSelection?: {
             status?: string;
             reason?: string;
             selectedCount?: number;
@@ -323,27 +318,17 @@ describe("Extension gaps: context transform", () => {
       },
     );
 
-    const translationPayload = runtime.events.query(sessionId, {
-      type: "skill_routing_translation",
-      last: 1,
-    })[0]?.payload as { status?: string; reason?: string; translated?: boolean } | undefined;
-    const semanticPayload = runtime.events.query(sessionId, {
-      type: "skill_routing_semantic",
+    const selectionPayload = runtime.events.query(sessionId, {
+      type: "skill_routing_selection",
       last: 1,
     })[0]?.payload as { status?: string; reason?: string; selectedCount?: number } | undefined;
 
-    expect(translationPayload?.status).toBe("skipped");
-    expect(translationPayload?.reason).toBe("deterministic_router");
-    expect(translationPayload?.translated).toBe(false);
-    expect(semanticPayload?.status).toBe("selected");
-    expect(semanticPayload?.reason).toBe("deterministic_router_selected");
-    expect((semanticPayload?.selectedCount ?? 0) > 0).toBe(true);
-    expect(result.message.details?.routingTranslation?.status).toBe("skipped");
-    expect(result.message.details?.routingTranslation?.reason).toBe("deterministic_router");
-    expect(result.message.details?.routingTranslation?.translated).toBe(false);
-    expect(result.message.details?.semanticRouting?.status).toBe("selected");
-    expect(result.message.details?.semanticRouting?.reason).toBe("deterministic_router_selected");
-    expect((result.message.details?.semanticRouting?.selectedCount ?? 0) > 0).toBe(true);
+    expect(selectionPayload?.status).toBe("selected");
+    expect(selectionPayload?.reason).toBe("deterministic_router_selected");
+    expect((selectionPayload?.selectedCount ?? 0) > 0).toBe(true);
+    expect(result.message.details?.routingSelection?.status).toBe("selected");
+    expect(result.message.details?.routingSelection?.reason).toBe("deterministic_router_selected");
+    expect((result.message.details?.routingSelection?.selectedCount ?? 0) > 0).toBe(true);
     expect(runtime.skills.clearNextSelection(sessionId)).toBeUndefined();
 
     const summary = runtime.cost.getSummary(sessionId);
@@ -856,8 +841,7 @@ describe("Extension gaps: context transform", () => {
       message?: {
         content?: string;
         details?: {
-          routingTranslation?: { status?: string; reason?: string };
-          semanticRouting?: { status?: string; reason?: string; selectedCount?: number };
+          routingSelection?: { status?: string; reason?: string; selectedCount?: number };
         };
       };
     }>(
@@ -878,17 +862,14 @@ describe("Extension gaps: context transform", () => {
 
     expect(injectionCalls).toBe(0);
     expect(result.message?.content?.includes("[ContextCompactionGate]")).toBe(true);
-    expect(result.message?.details?.routingTranslation?.status).toBe("skipped");
-    expect(result.message?.details?.routingTranslation?.reason).toBe("critical_compaction_gate");
-    expect(result.message?.details?.semanticRouting?.status).toBe("skipped");
-    expect(result.message?.details?.semanticRouting?.selectedCount).toBe(0);
+    expect(result.message?.details?.routingSelection?.status).toBe("skipped");
+    expect(result.message?.details?.routingSelection?.reason).toBe("critical_compaction_gate");
+    expect(result.message?.details?.routingSelection?.selectedCount).toBe(0);
     expect(runtime.skills.clearNextSelection("s-critical-short-circuit")).toBeUndefined();
 
-    const translationEvent = eventPayloads.find(
-      (event) => event.type === "skill_routing_translation",
-    );
-    expect(translationEvent?.payload?.status).toBe("skipped");
-    expect(translationEvent?.payload?.reason).toBe("critical_compaction_gate");
+    const selectionEvent = eventPayloads.find((event) => event.type === "skill_routing_selection");
+    expect(selectionEvent?.payload?.status).toBe("skipped");
+    expect(selectionEvent?.payload?.reason).toBe("critical_compaction_gate");
   });
 
   test("given critical context pressure, when gating lifecycle runs, then non-session_compact flow is gated and clears after compaction", async () => {

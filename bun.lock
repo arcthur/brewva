@@ -11,6 +11,7 @@
         "@brewva/brewva-gateway": "workspace:*",
         "@brewva/brewva-ingress": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
+        "@brewva/brewva-skill-broker": "workspace:*",
         "@brewva/brewva-tools": "workspace:*",
         "@mariozechner/pi-coding-agent": "^0.55.0",
         "@types/node": "^25.2.3",
@@ -110,6 +111,7 @@
         "@brewva/brewva-gateway": "workspace:*",
         "@brewva/brewva-ingress": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
+        "@brewva/brewva-skill-broker": "workspace:*",
         "@brewva/brewva-tools": "workspace:*",
         "@mariozechner/pi-coding-agent": "^0.55.0",
         "date-fns": "^4.1.0",
@@ -132,6 +134,7 @@
       "dependencies": {
         "@brewva/brewva-extensions": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
+        "@brewva/brewva-skill-broker": "workspace:*",
         "@brewva/brewva-tools": "workspace:*",
         "@mariozechner/pi-coding-agent": "^0.55.0",
         "@sinclair/typebox": "^0.34.48",
@@ -153,6 +156,15 @@
         "ajv": "^8.17.1",
         "date-fns": "^4.1.0",
         "yaml": "^2.8.2",
+      },
+    },
+    "packages/brewva-skill-broker": {
+      "name": "@brewva/brewva-skill-broker",
+      "version": "0.1.0",
+      "dependencies": {
+        "@brewva/brewva-runtime": "workspace:*",
+        "@mariozechner/pi-ai": "^0.55.0",
+        "@mariozechner/pi-coding-agent": "^0.55.0",
       },
     },
     "packages/brewva-tools": {
@@ -267,6 +279,8 @@
     "@brewva/brewva-linux-x64-musl": ["@brewva/brewva-linux-x64-musl@workspace:distribution/brewva-linux-x64-musl"],
 
     "@brewva/brewva-runtime": ["@brewva/brewva-runtime@workspace:packages/brewva-runtime"],
+
+    "@brewva/brewva-skill-broker": ["@brewva/brewva-skill-broker@workspace:packages/brewva-skill-broker"],
 
     "@brewva/brewva-tools": ["@brewva/brewva-tools@workspace:packages/brewva-tools"],
 

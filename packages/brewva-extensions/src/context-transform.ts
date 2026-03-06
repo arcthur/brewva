@@ -110,12 +110,7 @@ function resolveRoutingProjection(
   runtime: BrewvaRuntime,
   sessionId: string,
 ): {
-  translation: {
-    status: string;
-    reason: string;
-    translated: boolean;
-  };
-  semantic: {
+  selection: {
     status: string;
     reason: string;
     selectedCount: number;
@@ -126,12 +121,7 @@ function resolveRoutingProjection(
   const trace = runtime.skills.getLastRouting(sessionId);
   if (!trace) {
     return {
-      translation: {
-        status: "skipped",
-        reason: MISSING_ROUTING_TRACE_REASON,
-        translated: false,
-      },
-      semantic: {
+      selection: {
         status: "skipped",
         reason: MISSING_ROUTING_TRACE_REASON,
         selectedCount: 0,
@@ -141,16 +131,11 @@ function resolveRoutingProjection(
     };
   }
   return {
-    translation: {
-      status: trace.translation.status,
-      reason: trace.translation.reason,
-      translated: trace.translation.translated,
-    },
-    semantic: {
-      status: trace.semantic.status,
-      reason: trace.semantic.reason,
-      selectedCount: trace.semantic.selectedCount,
-      selectedSkills: [...trace.semantic.selectedSkills],
+    selection: {
+      status: trace.selection.status,
+      reason: trace.selection.reason,
+      selectedCount: trace.selection.selectedCount,
+      selectedSkills: [...trace.selection.selectedSkills],
     },
     error: trace.error ?? null,
   };
@@ -533,32 +518,13 @@ export function registerContextTransform(
       emitRuntimeEvent(runtime, {
         sessionId,
         turn: state.turnIndex,
-        type: "skill_routing_translation",
-        payload: {
-          status: "skipped",
-          reason: skippedReason,
-          translated: false,
-          inputChars: originalPrompt.length,
-          outputChars: originalPrompt.length,
-          provider: null,
-          model: null,
-          stopReason: null,
-          error: null,
-        },
-      });
-      emitRuntimeEvent(runtime, {
-        sessionId,
-        turn: state.turnIndex,
-        type: "skill_routing_semantic",
+        type: "skill_routing_selection",
         payload: {
           status: "skipped",
           reason: skippedReason,
           selectedCount: 0,
           selectedSkills: [],
           inputChars: originalPrompt.length,
-          provider: null,
-          model: null,
-          stopReason: null,
           error: null,
         },
       });
@@ -591,12 +557,7 @@ export function registerContextTransform(
             finalTokens: 0,
             truncated: false,
             gateRequired: true,
-            routingTranslation: {
-              status: "skipped",
-              reason: skippedReason,
-              translated: false,
-            },
-            semanticRouting: {
+            routingSelection: {
               status: "skipped",
               reason: skippedReason,
               selectedCount: 0,
@@ -628,32 +589,13 @@ export function registerContextTransform(
     emitRuntimeEvent(runtime, {
       sessionId,
       turn: state.turnIndex,
-      type: "skill_routing_translation",
+      type: "skill_routing_selection",
       payload: {
-        status: routingProjection.translation.status,
-        reason: routingProjection.translation.reason,
-        translated: routingProjection.translation.translated,
+        status: routingProjection.selection.status,
+        reason: routingProjection.selection.reason,
+        selectedCount: routingProjection.selection.selectedCount,
+        selectedSkills: routingProjection.selection.selectedSkills,
         inputChars: originalPrompt.length,
-        outputChars: originalPrompt.length,
-        provider: null,
-        model: null,
-        stopReason: null,
-        error: routingProjection.error,
-      },
-    });
-    emitRuntimeEvent(runtime, {
-      sessionId,
-      turn: state.turnIndex,
-      type: "skill_routing_semantic",
-      payload: {
-        status: routingProjection.semantic.status,
-        reason: routingProjection.semantic.reason,
-        selectedCount: routingProjection.semantic.selectedCount,
-        selectedSkills: routingProjection.semantic.selectedSkills,
-        inputChars: originalPrompt.length,
-        provider: null,
-        model: null,
-        stopReason: null,
         error: routingProjection.error,
       },
     });
@@ -712,15 +654,10 @@ export function registerContextTransform(
           finalTokens: injection.finalTokens,
           truncated: injection.truncated,
           gateRequired: gateStatus.required,
-          routingTranslation: {
-            status: routingProjection.translation.status,
-            reason: routingProjection.translation.reason,
-            translated: routingProjection.translation.translated,
-          },
-          semanticRouting: {
-            status: routingProjection.semantic.status,
-            reason: routingProjection.semantic.reason,
-            selectedCount: routingProjection.semantic.selectedCount,
+          routingSelection: {
+            status: routingProjection.selection.status,
+            reason: routingProjection.selection.reason,
+            selectedCount: routingProjection.selection.selectedCount,
           },
           capabilityView: {
             requested: capabilityView.requested,

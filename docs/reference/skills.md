@@ -18,10 +18,23 @@ Selector execution is governance-first for runtime routing:
 
 1. Runtime kernel routing is deterministic and contract-aware when `skills.selector.mode=deterministic`.
 2. Explicit preselection (for example control-plane `setNextSelection`) is consumed before runtime routing and wins when present.
-3. Routing telemetry keeps `skill_routing_translation` as deterministic `skipped` because there is no model translation stage; `skill_routing_semantic` reflects `selected | empty | failed` from the deterministic router.
+3. Routing telemetry emits `skill_routing_selection` and reflects the final runtime routing result (`selected | empty | failed`), plus `skipped` under the critical compaction gate, whether the source was the deterministic router or external preselection.
 4. `skills.selector.mode=external_only` disables kernel routing and keeps explicit preselection as the only selection source.
 5. Activation remains explicit: routing may produce `suggest/gate/auto` dispatch decisions, but actual skill entry still happens through `skill_load`.
 6. Runtime does not run adaptive inference loops or online model reranking in the kernel path.
+
+Session bootstrap currently installs the external control-plane broker before the runtime extension stack.
+That means CLI/gateway turns normally arrive at runtime as `external_preselection`.
+The current broker is two-stage:
+
+- stage 1: catalog shortlist from `.brewva/skills_index.json`
+- stage 2: candidate preview judge using the shortlisted skills' `Intent` / `Trigger` / boundary sections, optionally followed by a control-plane `pi-ai complete()` judge on the same shortlist when `skills.selector.brokerJudgeMode=llm`
+
+The default broker judge mode is `heuristic`, which stops after preview scoring.
+The optional control-plane judge uses the current session model and `ctx.modelRegistry.getApiKey(...)` when available.
+If model resolution, credentials, or parsing fail, broker selection falls back to the preview-only heuristic and the runtime kernel remains unchanged.
+
+Broker-enabled sessions are forced to `skills.selector.mode=external_only`, so runtime kernel selection is closed off and the runtime remains governance-only for dispatch, gate, and replay semantics.
 
 `skills_index.json` now carries normalized contract metadata for each skill entry (including `outputs`, `consumes`, and `dispatch`).
 

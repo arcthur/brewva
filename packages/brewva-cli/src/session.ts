@@ -6,6 +6,7 @@ import {
   resolveBrewvaAgentDir,
   type CreateBrewvaSessionOptions as RuntimeCreateBrewvaSessionOptions,
 } from "@brewva/brewva-runtime";
+import { createSkillBrokerExtension } from "@brewva/brewva-skill-broker";
 import { buildBrewvaTools } from "@brewva/brewva-tools";
 import {
   AuthStorage,
@@ -88,10 +89,14 @@ export async function createBrewvaSession(
   const settingsManager = SettingsManager.create(cwd, agentDir);
   applyRuntimeUiSettings(settingsManager, runtime.config.ui);
 
+  runtime.config.skills.selector.mode = "external_only";
   const extensionsEnabled = options.enableExtensions !== false;
-  const extensionFactories = extensionsEnabled
-    ? [createBrewvaExtension({ runtime, registerTools: true })]
-    : [createRuntimeCoreBridgeExtension({ runtime })];
+  const extensionFactories = [
+    createSkillBrokerExtension({ runtime }),
+    ...(extensionsEnabled
+      ? [createBrewvaExtension({ runtime, registerTools: true })]
+      : [createRuntimeCoreBridgeExtension({ runtime })]),
+  ];
   if (options.extensionFactories && options.extensionFactories.length > 0) {
     extensionFactories.push(...options.extensionFactories);
   }
@@ -134,6 +139,11 @@ export async function createBrewvaSession(
       cwd,
       agentId: runtime.agentId,
       extensionsEnabled,
+      skillBroker: {
+        enabled: true,
+        selectorMode: runtime.config.skills.selector.mode,
+        judgeMode: runtime.config.skills.selector.brokerJudgeMode,
+      },
       skillLoad: {
         activePacks: skillLoadReport.activePacks,
         skippedPacks: skillLoadReport.skippedPacks,

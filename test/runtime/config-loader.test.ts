@@ -122,6 +122,7 @@ describe("Brewva config loader normalization", () => {
             selector: {
               mode: "external_only",
               k: 6.9,
+              brokerJudgeMode: "llm",
             },
           },
         },
@@ -134,6 +135,7 @@ describe("Brewva config loader normalization", () => {
     const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
     expect(loaded.skills.selector.mode).toBe("external_only");
     expect(loaded.skills.selector.k).toBe(6);
+    expect(loaded.skills.selector.brokerJudgeMode).toBe("llm");
   });
 
   test("fails fast on invalid skills.selector.mode", () => {
@@ -145,6 +147,29 @@ describe("Brewva config loader normalization", () => {
           skills: {
             selector: {
               mode: "llm_auto",
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
+      /Config does not match schema/,
+    );
+  });
+
+  test("fails fast on invalid skills.selector.brokerJudgeMode", () => {
+    const workspace = createWorkspace("selector-broker-judge-mode-invalid");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          skills: {
+            selector: {
+              brokerJudgeMode: "always_on",
             },
           },
         },

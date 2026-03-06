@@ -6,6 +6,7 @@
   },
   "references": [
     { "path": "../brewva-runtime" },
+    { "path": "../brewva-skill-broker" },
     { "path": "../brewva-channels-telegram" },
     { "path": "../brewva-ingress" },
     { "path": "../brewva-tools" },

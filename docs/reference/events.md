@@ -37,8 +37,7 @@ These are retained under `infrastructure.events.level=audit`.
 - `budget_alert`
 - `scan_convergence_*`
 - `skill_*` lifecycle and cascade events
-- `skill_routing_translation`
-- `skill_routing_semantic`
+- `skill_routing_selection`
 - `skill_routing_decided`
 - `turn_wal_*`
 
@@ -66,8 +65,7 @@ Projection events describe deterministic projection state only.
 
 ## Skill Routing Notes
 
-- `skill_routing_translation` remains deterministic `skipped` in the kernel path because runtime does not run online translation/model routing.
-- `skill_routing_semantic` records the deterministic selector outcome as `selected`, `empty`, `failed`, or `skipped` (critical compaction gate).
+- `skill_routing_selection` records the runtime routing result projection as `selected`, `empty`, `failed`, or `skipped` (critical compaction gate), regardless of whether the source was the deterministic kernel selector or external preselection.
 - `skill_routing_decided` records the dispatch decision after routing and before explicit `skill_load` activation.
 
 ## Scan Convergence Guard Events

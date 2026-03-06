@@ -38,12 +38,12 @@ function loadEntry(relativePath: string, tier: SkillTier): SkillsIndexEntry {
     name: skill.name,
     tier: skill.tier,
     description: skill.description,
-    outputs: skill.contract.outputs,
+    outputs: skill.contract.outputs ?? [],
     toolsRequired: skill.contract.tools.required,
-    costHint: skill.contract.costHint,
-    stability: skill.contract.stability,
-    composableWith: skill.contract.composableWith,
-    consumes: skill.contract.consumes,
+    costHint: skill.contract.costHint ?? "medium",
+    stability: skill.contract.stability ?? "stable",
+    composableWith: skill.contract.composableWith ?? [],
+    consumes: skill.contract.consumes ?? [],
     dispatch: skill.contract.dispatch,
   };
 }

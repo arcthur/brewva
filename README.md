@@ -102,7 +102,10 @@ For complete CLI modes and gateway/onboard operations:
   `security.execution.fallbackToHost=false`.
 - Read-only verification is explicitly reported as `skipped` (not `pass`).
 - Skill routing defaults to deterministic governance-first selection
-  (`skills.selector.mode=deterministic`); translation stays skipped and semantic telemetry reflects runtime routing outcome.
+  (`skills.selector.mode=deterministic`), while broker-enabled sessions force
+  `external_only`; runtime `skill_routing_selection` telemetry reflects the
+  final runtime routing result, and broker judge mode defaults to
+  `heuristic` unless `skills.selector.brokerJudgeMode=llm` is explicitly set.
 - Cascade missing consumes is deterministic pause (`reason=missing_consumes`);
   runtime no longer auto-replans dependency chains.
 - `compose` is planning-only and now has a higher read budget (`max_tool_calls: 120`).

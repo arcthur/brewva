@@ -8,6 +8,7 @@ export type SkillDispatchMode = "suggest" | "gate" | "auto";
 export type SkillCascadeMode = "off" | "assist" | "auto";
 export type SkillCascadeSource = "dispatch" | "compose" | "explicit";
 export type SkillSelectorMode = "deterministic" | "external_only";
+export type SkillBrokerJudgeMode = "heuristic" | "llm";
 
 export interface SkillDispatchPolicy {
   gateThreshold: number;
@@ -79,6 +80,7 @@ export interface SkillSelection {
 export interface SkillSelectorConfig {
   mode: SkillSelectorMode;
   k: number;
+  brokerJudgeMode: SkillBrokerJudgeMode;
 }
 
 export type SkillSelectionSignal =
@@ -86,6 +88,8 @@ export type SkillSelectionSignal =
   | "name_exact"
   | "name_token"
   | "description_token"
+  | "preview_token"
+  | "preview_boundary"
   | "output_token"
   | "consume_token"
   | "tool_token"
@@ -96,6 +100,8 @@ export const SKILL_SELECTION_SIGNALS: SkillSelectionSignal[] = [
   "name_exact",
   "name_token",
   "description_token",
+  "preview_token",
+  "preview_boundary",
   "output_token",
   "consume_token",
   "tool_token",
@@ -112,17 +118,10 @@ export type SkillDispatchDecisionMode = "none" | SkillDispatchMode;
 
 export type SkillRoutingOutcome = "selected" | "empty" | "failed";
 export type SkillRoutingSource = "deterministic_router" | "external_preselection";
-export type SkillRoutingTranslationStatus = "skipped";
-export type SkillRoutingSemanticStatus = "selected" | "empty" | "failed" | "skipped";
+export type SkillRoutingSelectionStatus = "selected" | "empty" | "failed" | "skipped";
 
-export interface SkillRoutingTranslationTrace {
-  status: SkillRoutingTranslationStatus;
-  reason: string;
-  translated: false;
-}
-
-export interface SkillRoutingSemanticTrace {
-  status: SkillRoutingSemanticStatus;
+export interface SkillRoutingSelectionTrace {
+  status: SkillRoutingSelectionStatus;
   reason: string;
   selectedCount: number;
   selectedSkills: string[];
@@ -137,8 +136,7 @@ export interface SkillRoutingTrace {
   configHash: string;
   latencyMs: number;
   routingOutcome: SkillRoutingOutcome;
-  translation: SkillRoutingTranslationTrace;
-  semantic: SkillRoutingSemanticTrace;
+  selection: SkillRoutingSelectionTrace;
   candidates: SkillSelection[];
   activeSkillName: string | null;
   availableOutputs: string[];
