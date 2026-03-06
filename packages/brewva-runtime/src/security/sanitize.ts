@@ -71,7 +71,7 @@ const SOURCE_TRUST_MAP: Record<string, SourceTrustTier> = {
   [CONTEXT_SOURCES.skillCandidates]: "internal",
   [CONTEXT_SOURCES.toolFailures]: "internal",
   [CONTEXT_SOURCES.toolOutputsDistilled]: "internal",
-  [CONTEXT_SOURCES.memoryWorking]: "internal",
+  [CONTEXT_SOURCES.projectionWorking]: "internal",
 };
 
 export function getSourceTrustTier(source: string): SourceTrustTier {

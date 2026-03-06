@@ -9,10 +9,10 @@ Runtime artifact paths are resolved from the workspace root (`nearest .brewva/br
   - file name uses a reversible base64url encoding of the UTF-8 `sessionId` to avoid filesystem collisions and preserve the original identifier
   - only `sess_*.jsonl` files are treated as event tape shards; non-prefixed JSONL files in the directory are ignored by the runtime
 - includes runtime and tool telemetry events such as `tool_parallel_read`
-- Memory units projection: `.orchestrator/memory/units.jsonl`
-- Working memory markdown: `.orchestrator/memory/working.md`
-- Memory projection state: `.orchestrator/memory/state.json`
-- Memory refresh advisory lock (ephemeral): `.orchestrator/memory/.refresh.lock`
+- Projection units log: `.orchestrator/projection/units.jsonl`
+- Working projection markdown: `.orchestrator/projection/sessions/sess_<base64url(sessionId)>/working.md`
+- Projection state: `.orchestrator/projection/state.json`
+- Projection refresh advisory lock (ephemeral): `.orchestrator/projection/.refresh.lock`
 - Tape checkpoints: `checkpoint` events embedded in the per-session event tape (`.orchestrator/events/sess_<base64url(sessionId)>.jsonl`)
 - Runtime recovery source: event tape replay (`checkpoint + delta`); no standalone runtime session-state snapshot file
 - Rollback snapshots: `.orchestrator/snapshots/<session>/*.snap`

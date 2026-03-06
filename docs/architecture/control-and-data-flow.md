@@ -11,12 +11,12 @@ sequenceDiagram
   participant RT as BrewvaRuntime
   participant EXT as brewva-extensions
   participant TOOLS as brewva-tools
-  participant STORE as Event/Ledger/Memory Stores
+  participant STORE as Event/Ledger/Projection Stores
 
   U->>CLI: submit turn
   CLI->>EXT: before_agent_start
   EXT->>RT: context.observeUsage + context.buildInjection
-  RT->>STORE: read/update memory projection (units + working)
+  RT->>STORE: read/update working projection state (units + working)
   CLI->>EXT: tool_call
   EXT->>RT: tools.start (policy + budget + compaction gate)
   CLI->>TOOLS: execute
@@ -43,18 +43,18 @@ flowchart LR
   IN["Prompt / Tool IO / Usage"] --> RT["BrewvaRuntime"]
   RT --> EV["event tape (.orchestrator/events/*.jsonl)"]
   RT --> LD["evidence ledger (.orchestrator/ledger/evidence.jsonl)"]
-  RT --> MEM["memory projection (.orchestrator/memory/units.jsonl + working.md)"]
+  RT --> MEM["working projection (.orchestrator/projection/units.jsonl + sessions/sess_<id>/working.md)"]
   RT --> SNAP["rollback snapshots (.orchestrator/snapshots/<session>/*)"]
 ```
 
-## Memory Projection Flow
+## Working Projection Flow
 
 ```mermaid
 flowchart TD
-  EVT["event append"] --> EX["MemoryExtractor (deterministic rules)"]
+  EVT["event append"] --> EX["ProjectionExtractor (deterministic rules)"]
   EX --> U["units.jsonl upsert/resolve"]
-  U --> W["working.md refresh"]
-  W --> INJ["inject brewva.memory-working"]
+  U --> W["session working snapshot refresh"]
+  W --> INJ["inject brewva.projection-working"]
 ```
 
 ## Recovery Flow
@@ -63,8 +63,8 @@ flowchart TD
 flowchart TD
   A["startup"] --> B["load event tape"]
   B --> C["TurnReplayEngine (checkpoint + delta)"]
-  C --> D["hydrate task/truth/cost/evidence/memory-projection state"]
-  D --> E["if memory files missing: rebuild projection from tape"]
+  C --> D["hydrate task/truth/cost/evidence/projection state"]
+  D --> E["if projection files missing: rebuild projection from tape"]
 ```
 
 ## Rollback Flow

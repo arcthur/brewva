@@ -39,7 +39,7 @@ Default governance sources:
 - `brewva.task-state`
 - `brewva.tool-failures`
 - `brewva.tool-outputs-distilled`
-- `brewva.memory-working`
+- `brewva.projection-working`
 
 ## SLO And Degradation
 

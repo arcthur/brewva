@@ -39,7 +39,7 @@ Set `channels.orchestration.enabled=false` to disable orchestration and route tu
 Worker runtimes force these paths per agent:
 
 - `ledger.path -> .brewva/agents/<agentId>/state/ledger/evidence.jsonl`
-- `memory.dir -> .brewva/agents/<agentId>/state/memory`
+- `projection.dir -> .brewva/agents/<agentId>/state/projection`
 - `infrastructure.events.dir -> .brewva/agents/<agentId>/state/events`
 - `infrastructure.turnWal.dir -> .brewva/agents/<agentId>/state/turn-wal`
 - `schedule.projectionPath -> .brewva/agents/<agentId>/state/schedule/intents.jsonl`

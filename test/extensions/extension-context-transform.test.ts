@@ -106,6 +106,81 @@ describe("Extension gaps: context transform", () => {
     expect(result.message?.content?.includes("[Brewva Context]")).toBe(false);
   });
 
+  test("given pending non-critical compaction, when before_agent_start runs, then advisory is injected without arming gate", async () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const eventTypes: string[] = [];
+    const advisoryPayloads: Record<string, unknown>[] = [];
+    const runtime = createRuntimeFixture({
+      context: {
+        onTurnStart: () => undefined,
+        observeUsage: () => undefined,
+        buildInjection: async () => ({
+          text: "",
+          accepted: false,
+          originalTokens: 0,
+          finalTokens: 0,
+          truncated: false,
+        }),
+      },
+      events: {
+        record: (input: { type: string; payload?: Record<string, unknown> }) => {
+          eventTypes.push(input.type);
+          if (input.type === "context_compaction_advisory" && input.payload) {
+            advisoryPayloads.push(input.payload);
+          }
+          return undefined;
+        },
+      },
+    });
+
+    registerContextTransform(api, runtime);
+
+    const sessionId = "s-pending-compaction-advisory";
+    runtime.context.observeUsage(sessionId, {
+      tokens: 850,
+      contextWindow: 1000,
+      percent: 0.85,
+    });
+    runtime.context.requestCompaction(sessionId, "usage_threshold");
+
+    const result = await invokeHandlerAsync<{
+      systemPrompt?: string;
+      message?: { content?: string };
+    }>(
+      handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "continue the investigation",
+        systemPrompt: "base prompt",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => sessionId,
+        },
+        getContextUsage: () => ({ tokens: 850, contextWindow: 1000, percent: 0.85 }),
+      },
+    );
+
+    expect(result.systemPrompt?.includes("[Brewva Context Contract]")).toBe(true);
+    expect(result.message?.content?.includes("[TapeStatus]")).toBe(true);
+    expect(result.message?.content?.includes("pending_compaction_reason: usage_threshold")).toBe(
+      true,
+    );
+    expect(result.message?.content?.includes("required_action: session_compact_recommended")).toBe(
+      true,
+    );
+    expect(result.message?.content?.includes("[ContextCompactionAdvisory]")).toBe(true);
+    expect(result.message?.content?.includes("[ContextCompactionGate]")).toBe(false);
+    expect(eventTypes).toContain("context_compaction_advisory");
+    expect(advisoryPayloads).toHaveLength(1);
+    expect(advisoryPayloads[0]?.reason).toBe("usage_threshold");
+    expect(advisoryPayloads[0]?.requiredTool).toBe("session_compact");
+    expect(advisoryPayloads[0]?.contextPressure).toBe("high");
+    expect(eventTypes).not.toContain("context_compaction_gate_armed");
+    expect(eventTypes).not.toContain("critical_without_compact");
+  });
+
   test("given session leaf id, when building context injection, then runtime receives leaf scope id", async () => {
     const { api, handlers } = createMockExtensionAPI();
     const scopes: Array<string | undefined> = [];
@@ -203,57 +278,20 @@ describe("Extension gaps: context transform", () => {
     expect(result.message.content.includes("[async]")).toBe(true);
   });
 
-  test("given governance-only routing, when before_agent_start runs, then translation/semantic stages are deterministically skipped", async () => {
+  test("given deterministic runtime routing, when before_agent_start runs, then extension emits real routing telemetry", async () => {
     const { api, handlers } = createMockExtensionAPI();
-    const routedPrompts: string[] = [];
-    const translationPayloads: Record<string, unknown>[] = [];
-    const semanticPayloads: Record<string, unknown>[] = [];
     const runtime = createRuntimeFixture({
-      context: {
-        onTurnStart: () => undefined,
-        observeUsage: () => undefined,
-        checkAndRequestCompaction: () => false,
-        markCompacted: () => undefined,
-        buildInjection: async (_sessionId: string, prompt: string) => {
-          routedPrompts.push(prompt);
-          return {
-            text: "[governance-only-routing]",
-            accepted: true,
-            originalTokens: 11,
-            finalTokens: 11,
-            truncated: false,
-          };
-        },
-      },
-      events: {
-        record: (input: { type: string; payload?: Record<string, unknown> }) => {
-          if (input.type === "skill_routing_translation" && input.payload) {
-            translationPayloads.push(input.payload);
-          }
-          if (input.type === "skill_routing_semantic" && input.payload) {
-            semanticPayloads.push(input.payload);
-          }
-          return undefined;
-        },
-      },
+      config: createRuntimeConfig((config) => {
+        config.projection.enabled = false;
+        config.infrastructure.toolFailureInjection.enabled = false;
+        config.infrastructure.toolOutputDistillationInjection.enabled = false;
+      }),
     });
     const sessionId = "s-governance-routing";
-    runtime.skills.setNextSelection(
-      sessionId,
-      [
-        {
-          name: "review",
-          score: 20,
-          reason: "stale",
-          breakdown: [{ signal: "semantic_match", term: "stale", delta: 20 }],
-        },
-      ],
-      { routingOutcome: "selected" },
-    );
 
     registerContextTransform(api, runtime);
 
-    const prompt = "请评审当前架构和兜底设计";
+    const prompt = "Review architecture risks, merge safety, and quality audit gaps";
     const result = await invokeHandlerAsync<{
       message: {
         details?: {
@@ -285,21 +323,27 @@ describe("Extension gaps: context transform", () => {
       },
     );
 
-    expect(routedPrompts).toEqual([prompt]);
-    expect(translationPayloads).toHaveLength(1);
-    expect(translationPayloads[0]?.status).toBe("skipped");
-    expect(translationPayloads[0]?.reason).toBe("governance_only");
-    expect(translationPayloads[0]?.translated).toBe(false);
-    expect(semanticPayloads).toHaveLength(1);
-    expect(semanticPayloads[0]?.status).toBe("skipped");
-    expect(semanticPayloads[0]?.reason).toBe("governance_only");
-    expect(semanticPayloads[0]?.selectedCount).toBe(0);
+    const translationPayload = runtime.events.query(sessionId, {
+      type: "skill_routing_translation",
+      last: 1,
+    })[0]?.payload as { status?: string; reason?: string; translated?: boolean } | undefined;
+    const semanticPayload = runtime.events.query(sessionId, {
+      type: "skill_routing_semantic",
+      last: 1,
+    })[0]?.payload as { status?: string; reason?: string; selectedCount?: number } | undefined;
+
+    expect(translationPayload?.status).toBe("skipped");
+    expect(translationPayload?.reason).toBe("deterministic_router");
+    expect(translationPayload?.translated).toBe(false);
+    expect(semanticPayload?.status).toBe("selected");
+    expect(semanticPayload?.reason).toBe("deterministic_router_selected");
+    expect((semanticPayload?.selectedCount ?? 0) > 0).toBe(true);
     expect(result.message.details?.routingTranslation?.status).toBe("skipped");
-    expect(result.message.details?.routingTranslation?.reason).toBe("governance_only");
+    expect(result.message.details?.routingTranslation?.reason).toBe("deterministic_router");
     expect(result.message.details?.routingTranslation?.translated).toBe(false);
-    expect(result.message.details?.semanticRouting?.status).toBe("skipped");
-    expect(result.message.details?.semanticRouting?.reason).toBe("governance_only");
-    expect(result.message.details?.semanticRouting?.selectedCount).toBe(0);
+    expect(result.message.details?.semanticRouting?.status).toBe("selected");
+    expect(result.message.details?.semanticRouting?.reason).toBe("deterministic_router_selected");
+    expect((result.message.details?.semanticRouting?.selectedCount ?? 0) > 0).toBe(true);
     expect(runtime.skills.clearNextSelection(sessionId)).toBeUndefined();
 
     const summary = runtime.cost.getSummary(sessionId);
@@ -472,6 +516,7 @@ describe("Extension gaps: context transform", () => {
 
     const interactiveContext = {
       hasUI: true,
+      isIdle: () => true,
       compact: (options?: {
         customInstructions?: string;
         onComplete?: () => void;
@@ -496,6 +541,203 @@ describe("Extension gaps: context transform", () => {
 
     invokeHandler(handlers, "context", {}, interactiveContext);
     expect(compactOptions).toHaveLength(2);
+  });
+
+  test("given interactive mode and active agent run, when context hook requests compaction, then manual compact is skipped", () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const skippedReasons: string[] = [];
+    const autoRequestedReasons: string[] = [];
+    const compactCalls: Array<Record<string, unknown>> = [];
+
+    const runtime = createRuntimeFixture({
+      context: {
+        onTurnStart: () => undefined,
+        observeUsage: () => undefined,
+        checkAndRequestCompaction: () => true,
+        getPendingCompactionReason: () => "usage_threshold",
+        markCompacted: () => undefined,
+        buildInjection: async () => ({
+          text: "",
+          accepted: false,
+          originalTokens: 0,
+          finalTokens: 0,
+          truncated: false,
+        }),
+      },
+      events: {
+        record: (input: { type: string; payload?: { reason?: string } }) => {
+          if (input.type === "context_compaction_skipped" && input.payload?.reason) {
+            skippedReasons.push(input.payload.reason);
+          }
+          if (input.type === "context_compaction_auto_requested" && input.payload?.reason) {
+            autoRequestedReasons.push(input.payload.reason);
+          }
+          return undefined;
+        },
+      },
+    });
+
+    registerContextTransform(api, runtime);
+
+    const sessionManager = {
+      getSessionId: () => "s-ui-busy-compact",
+    };
+
+    invokeHandler(
+      handlers,
+      "turn_start",
+      { turnIndex: 7 },
+      {
+        sessionManager,
+      },
+    );
+
+    invokeHandler(
+      handlers,
+      "context",
+      {},
+      {
+        hasUI: true,
+        isIdle: () => false,
+        compact: (options?: Record<string, unknown>) => {
+          compactCalls.push(options ?? {});
+        },
+        sessionManager,
+        getContextUsage: () => ({ tokens: 990, contextWindow: 1000, percent: 0.99 }),
+      },
+    );
+
+    expect(compactCalls).toHaveLength(0);
+    expect(autoRequestedReasons).toHaveLength(0);
+    expect(skippedReasons).toContain("agent_active_manual_compaction_unsafe");
+  });
+
+  test("given interactive mode without idle probe, when context hook requests compaction, then manual compact is skipped fail-closed", () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const skippedReasons: string[] = [];
+    const autoRequestedReasons: string[] = [];
+    const compactCalls: Array<Record<string, unknown>> = [];
+
+    const runtime = createRuntimeFixture({
+      context: {
+        onTurnStart: () => undefined,
+        observeUsage: () => undefined,
+        checkAndRequestCompaction: () => true,
+        getPendingCompactionReason: () => "usage_threshold",
+        markCompacted: () => undefined,
+        buildInjection: async () => ({
+          text: "",
+          accepted: false,
+          originalTokens: 0,
+          finalTokens: 0,
+          truncated: false,
+        }),
+      },
+      events: {
+        record: (input: { type: string; payload?: { reason?: string } }) => {
+          if (input.type === "context_compaction_skipped" && input.payload?.reason) {
+            skippedReasons.push(input.payload.reason);
+          }
+          if (input.type === "context_compaction_auto_requested" && input.payload?.reason) {
+            autoRequestedReasons.push(input.payload.reason);
+          }
+          return undefined;
+        },
+      },
+    });
+
+    registerContextTransform(api, runtime);
+
+    const sessionManager = {
+      getSessionId: () => "s-ui-missing-idle-probe",
+    };
+
+    invokeHandler(
+      handlers,
+      "turn_start",
+      { turnIndex: 9 },
+      {
+        sessionManager,
+      },
+    );
+
+    invokeHandler(
+      handlers,
+      "context",
+      {},
+      {
+        hasUI: true,
+        compact: (options?: Record<string, unknown>) => {
+          compactCalls.push(options ?? {});
+        },
+        sessionManager,
+        getContextUsage: () => ({ tokens: 990, contextWindow: 1000, percent: 0.99 }),
+      },
+    );
+
+    expect(compactCalls).toHaveLength(0);
+    expect(autoRequestedReasons).toHaveLength(0);
+    expect(skippedReasons).toContain("agent_active_manual_compaction_unsafe");
+  });
+
+  test("given interactive mode and active agent run, when context hook repeats same pending compaction, then skip event is deduplicated", () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const skippedReasons: string[] = [];
+
+    const runtime = createRuntimeFixture({
+      context: {
+        onTurnStart: () => undefined,
+        observeUsage: () => undefined,
+        checkAndRequestCompaction: () => true,
+        getPendingCompactionReason: () => "usage_threshold",
+        markCompacted: () => undefined,
+        buildInjection: async () => ({
+          text: "",
+          accepted: false,
+          originalTokens: 0,
+          finalTokens: 0,
+          truncated: false,
+        }),
+      },
+      events: {
+        record: (input: { type: string; payload?: { reason?: string } }) => {
+          if (input.type === "context_compaction_skipped" && input.payload?.reason) {
+            skippedReasons.push(input.payload.reason);
+          }
+          return undefined;
+        },
+      },
+    });
+
+    registerContextTransform(api, runtime);
+
+    const sessionManager = {
+      getSessionId: () => "s-ui-busy-compact-dedupe",
+    };
+
+    invokeHandler(
+      handlers,
+      "turn_start",
+      { turnIndex: 8 },
+      {
+        sessionManager,
+      },
+    );
+
+    const busyContext = {
+      hasUI: true,
+      isIdle: () => false,
+      compact: () => {
+        throw new Error("compact should not be called while agent is active");
+      },
+      sessionManager,
+      getContextUsage: () => ({ tokens: 995, contextWindow: 1000, percent: 0.995 }),
+    };
+
+    invokeHandler(handlers, "context", {}, busyContext);
+    invokeHandler(handlers, "context", {}, busyContext);
+
+    expect(skippedReasons).toEqual(["agent_active_manual_compaction_unsafe"]);
   });
 
   test("given interactive mode and missing compact callbacks, when watchdog expires, then in-flight lock is cleared and next context retries", async () => {
@@ -547,6 +789,7 @@ describe("Extension gaps: context transform", () => {
 
     const interactiveContext = {
       hasUI: true,
+      isIdle: () => true,
       compact: (options?: Record<string, unknown>) => {
         compactCalls.push(options ?? {});
       },
@@ -706,6 +949,7 @@ describe("Extension gaps: context transform", () => {
     expect(before.message?.content?.includes("required_action: session_compact_now")).toBe(true);
     expect(eventTypes).toContain("context_compaction_gate_armed");
     expect(eventTypes).toContain("critical_without_compact");
+    expect(eventTypes).not.toContain("context_compaction_advisory");
 
     invokeHandler(
       handlers,

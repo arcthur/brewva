@@ -7,7 +7,7 @@ session snapshot blobs.
 
 ```mermaid
 flowchart TD
-  A["Turn Events Persisted"] --> B["Folded Replay (Task/Truth/Cost/Evidence/Memory)"]
+  A["Turn Events Persisted"] --> B["Folded Replay (Task/Truth/Cost/Evidence/Projection)"]
   B --> C["Next Process Startup"]
   C --> D["Runtime Rebuilds State from Tape"]
   D --> E["Context Injection and Turn Loop Continue"]
@@ -16,7 +16,7 @@ flowchart TD
 
 ## Key Steps
 
-1. Persist task/truth/cost/tool/memory events as the primary continuity source.
+1. Persist task/truth/cost/tool/projection events as the primary continuity source.
 2. Replay foldable state from event tape using checkpoint + delta.
 3. Continue execution and keep replay output fully derivable from persisted events.
 

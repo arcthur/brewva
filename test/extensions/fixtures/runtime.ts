@@ -9,7 +9,6 @@ export interface RuntimeFixtureOptions {
   events?: Partial<BrewvaRuntime["events"]>;
   tools?: Partial<BrewvaRuntime["tools"]>;
   session?: Partial<BrewvaRuntime["session"]>;
-  memory?: Partial<BrewvaRuntime["memory"]>;
 }
 
 export function createRuntimeConfig(mutate?: (config: BrewvaConfig) => void): BrewvaConfig {
@@ -35,9 +34,6 @@ export function createRuntimeFixture(options: RuntimeFixtureOptions = {}): Brewv
   }
   if (options.session) {
     Object.assign(runtime.session, options.session);
-  }
-  if (options.memory) {
-    Object.assign(runtime.memory, options.memory);
   }
 
   return runtime;

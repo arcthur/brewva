@@ -21,7 +21,7 @@ function createConfig(
   enabledSources: BrewvaConfig["skills"]["cascade"]["enabledSources"] = sourcePriority,
 ): BrewvaConfig {
   const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-  config.memory.enabled = false;
+  config.projection.enabled = false;
   config.infrastructure.toolFailureInjection.enabled = false;
   config.skills.cascade.mode = mode;
   config.skills.cascade.enabledSources = enabledSources;

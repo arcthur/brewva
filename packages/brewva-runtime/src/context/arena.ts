@@ -30,6 +30,7 @@ interface ArenaCapacityDecision {
   entriesAfter: number;
   dropped: boolean;
   degradationApplied: boolean;
+  replaceIndex?: number;
 }
 
 export interface ArenaSnapshot {
@@ -87,7 +88,7 @@ export class ContextArena {
 
     if (entry.estimatedTokens <= 0) return { accepted: false };
 
-    const capacity = this.ensureAppendCapacity(state, entry);
+    const capacity = this.ensureAppendCapacity(state, key);
     if (!capacity.allow) {
       return {
         accepted: false,
@@ -101,12 +102,20 @@ export class ContextArena {
       };
     }
 
+    const replaceIndex = capacity.replaceIndex;
     const arenaEntry: ArenaEntry = {
       ...entry,
       key,
-      index: state.entries.length,
+      index: replaceIndex ?? state.entries.length,
       presented: false,
     };
+    if (typeof replaceIndex === "number") {
+      state.entries[replaceIndex] = arenaEntry;
+      state.latestIndexByKey.set(key, replaceIndex);
+      return {
+        accepted: true,
+      };
+    }
     state.entries.push(arenaEntry);
     state.latestIndexByKey.set(key, arenaEntry.index);
     this.maybeTrimSupersededEntries(state);
@@ -307,10 +316,7 @@ export class ContextArena {
     };
   }
 
-  private ensureAppendCapacity(
-    state: ArenaSessionState,
-    _entry: ContextInjectionEntry,
-  ): ArenaCapacityDecision {
+  private ensureAppendCapacity(state: ArenaSessionState, key: string): ArenaCapacityDecision {
     state.lastDegradationApplied = false;
     const before = state.entries.length;
     if (before < this.maxEntriesPerSession) {
@@ -331,6 +337,18 @@ export class ContextArena {
         entriesAfter: state.entries.length,
         dropped: false,
         degradationApplied: false,
+      };
+    }
+
+    const replaceIndex = state.latestIndexByKey.get(key);
+    if (replaceIndex !== undefined) {
+      return {
+        allow: true,
+        entriesBefore: before,
+        entriesAfter: state.entries.length,
+        dropped: false,
+        degradationApplied: false,
+        replaceIndex,
       };
     }
 

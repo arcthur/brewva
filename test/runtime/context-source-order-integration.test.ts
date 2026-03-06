@@ -6,16 +6,16 @@ import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, type BrewvaConfig } from "@brewva
 
 type RuntimeWithInternals = {
   contextService: {
-    memory: {
+    projectionEngine: {
       refreshIfNeeded(input: { sessionId: string }): void;
-      getWorkingMemory(sessionId: string): { content: string } | null;
+      getWorkingProjection(sessionId: string): { content: string } | null;
     };
   };
 };
 
 function createConfig(): BrewvaConfig {
   const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-  config.memory.enabled = true;
+  config.projection.enabled = true;
   config.infrastructure.contextBudget.enabled = true;
   config.infrastructure.contextBudget.maxInjectionTokens = 4_000;
   config.infrastructure.toolFailureInjection.enabled = true;
@@ -38,11 +38,11 @@ function createWorkspace(name: string): string {
   return workspace;
 }
 
-function patchMemory(runtime: BrewvaRuntime): void {
+function patchProjection(runtime: BrewvaRuntime): void {
   const runtimeWithInternals = runtime as unknown as RuntimeWithInternals;
-  runtimeWithInternals.contextService.memory.refreshIfNeeded = () => undefined;
-  runtimeWithInternals.contextService.memory.getWorkingMemory = () => ({
-    content: "[WorkingMemory]\nsummary: deterministic working memory block",
+  runtimeWithInternals.contextService.projectionEngine.refreshIfNeeded = () => undefined;
+  runtimeWithInternals.contextService.projectionEngine.getWorkingProjection = () => ({
+    content: "[WorkingProjection]\nsummary: deterministic working projection block",
   });
 }
 
@@ -57,7 +57,7 @@ describe("context source order integration", () => {
       config: createConfig(),
       agentId: "default",
     });
-    patchMemory(runtime);
+    patchProjection(runtime);
 
     const sessionId = "context-source-order";
     runtime.context.onTurnStart(sessionId, 1);
@@ -92,16 +92,16 @@ describe("context source order integration", () => {
     );
     expect(injected.accepted).toBe(true);
     expect(injected.text.length).toBeGreaterThan(0);
-    const workingMemoryPosition = blockIndex(injected.text, "WorkingMemory");
     const truthLedgerPosition = blockIndex(injected.text, "TruthLedger");
     const truthFactsPosition = blockIndex(injected.text, "TruthFacts");
     const toolFailuresPosition = blockIndex(injected.text, "RecentToolFailures");
     const taskLedgerPosition = blockIndex(injected.text, "TaskLedger");
-    expect(workingMemoryPosition).toBeGreaterThanOrEqual(0);
-    expect(truthLedgerPosition).toBeGreaterThan(workingMemoryPosition);
+    const workingProjectionPosition = blockIndex(injected.text, "WorkingProjection");
+    expect(truthLedgerPosition).toBeGreaterThanOrEqual(0);
     expect(truthFactsPosition).toBeGreaterThan(truthLedgerPosition);
     expect(toolFailuresPosition).toBeGreaterThan(truthFactsPosition);
     expect(taskLedgerPosition).toBeGreaterThan(toolFailuresPosition);
+    expect(workingProjectionPosition).toBeGreaterThan(taskLedgerPosition);
     expect(injected.text.includes("[MemoryRecall]")).toBe(false);
   });
 });

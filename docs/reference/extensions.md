@@ -17,21 +17,23 @@ Default extension composition wires:
 
 - `registerEventStream`
 - `registerContextTransform`
+- `registerScanConvergenceGuard`
 - `registerQualityGate`
 - `registerLedgerWriter`
 - `registerCompletionGuard`
 - `registerNotification`
-- `registerMemoryBridge`
 
 Implementation files:
 
 - `packages/brewva-extensions/src/event-stream.ts`
 - `packages/brewva-extensions/src/context-transform.ts`
+- `packages/brewva-extensions/src/scan-convergence-guard.ts`
 - `packages/brewva-extensions/src/quality-gate.ts`
 - `packages/brewva-extensions/src/ledger-writer.ts`
 - `packages/brewva-extensions/src/completion-guard.ts`
 - `packages/brewva-extensions/src/notification.ts`
-- `packages/brewva-extensions/src/memory-bridge.ts`
+
+`registerScanConvergenceGuard` is intentionally registered before `registerQualityGate` so repeated scan drift is stopped before later tool-policy side effects run.
 
 `registerLedgerWriter` additionally persists tool-output observability events:
 
@@ -58,7 +60,8 @@ Key implications:
 - injects a capability view block for progressive disclosure (compact tool list; expand with `$name`)
 - injects runtime-built context via async injection path
 - enforces compaction gate behavior under critical context pressure
-- records governance-only routing telemetry (`skill_routing_translation` / `skill_routing_semantic` as deterministic `skipped`)
+- projects runtime routing telemetry (`skill_routing_translation` remains deterministic `skipped`; `skill_routing_semantic` mirrors runtime routing result)
+- clears pending skill preselection only under the critical compaction gate path
 
 Default context injection sources are:
 
@@ -71,7 +74,7 @@ Default context injection sources are:
 - `brewva.task-state`
 - `brewva.tool-failures`
 - `brewva.tool-outputs-distilled`
-- `brewva.memory-working`
+- `brewva.projection-working`
 
 ## Runtime Core Bridge (`--no-extensions`)
 
@@ -90,7 +93,6 @@ Disabled full-extension hooks in this profile:
 - `registerCompletionGuard`
 - `registerEventStream`
 - `registerNotification`
-- `registerMemoryBridge`
 
 This means no-extensions keeps core safety/evidence guarantees, but omits presentation-oriented lifecycle orchestration from the full extension stack.
 

@@ -36,6 +36,9 @@ These are retained under `infrastructure.events.level=audit`.
 - `cost_update`
 - `budget_alert`
 - `skill_*` lifecycle and cascade events
+- `skill_routing_translation`
+- `skill_routing_semantic`
+- `skill_routing_decided`
 - `turn_wal_*`
 
 These are retained under `ops` and `debug`.
@@ -53,18 +56,23 @@ These are retained under `ops` and `debug`.
 
 Governance events are available at `ops` and `debug` levels and remain replayable from tape.
 
-## Memory Projection Families
+## Projection Families
 
-- `memory_projection_ingested`
-- `memory_projection_refreshed`
-- `memory_rebuild_from_tape`
+- `projection_ingested`
+- `projection_refreshed`
 
-Memory events describe deterministic projection state only.
+Projection events describe deterministic projection state only.
+
+## Skill Routing Notes
+
+- `skill_routing_translation` remains deterministic `skipped` in the kernel path because runtime does not run online translation/model routing.
+- `skill_routing_semantic` records the deterministic selector outcome as `selected`, `empty`, `failed`, or `skipped` (critical compaction gate).
+- `skill_routing_decided` records the dispatch decision after routing and before explicit `skill_load` activation.
 
 ## Removed Families
 
 The following families are not part of the current kernel path:
 
 - adaptive inference event families
-- multi-tier memory enrichment event families
+- multi-tier adaptive projection enrichment families
 - optional external retrieval decision families

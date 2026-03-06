@@ -13,10 +13,9 @@ import { TOOL_OUTPUT_DISTILLED_EVENT_TYPE } from "./events/event-types.js";
 import { BrewvaEventStore } from "./events/store.js";
 import type { GovernancePort } from "./governance/port.js";
 import { EvidenceLedger } from "./ledger/evidence-ledger.js";
-import { MemoryEngine } from "./memory/engine.js";
-import type { WorkingMemorySnapshot } from "./memory/types.js";
 import { ParallelBudgetManager } from "./parallel/budget.js";
 import { ParallelResultStore } from "./parallel/results.js";
+import { ProjectionEngine } from "./projection/engine.js";
 import {
   buildSkillCandidateBlock,
   buildSkillCascadeGateBlock,
@@ -41,6 +40,7 @@ import { SessionLifecycleService } from "./services/session-lifecycle.js";
 import { RuntimeSessionStateStore } from "./services/session-state.js";
 import { SkillCascadeService } from "./services/skill-cascade.js";
 import { SkillLifecycleService } from "./services/skill-lifecycle.js";
+import { SkillRouterService } from "./services/skill-router.js";
 import { TapeService } from "./services/tape.js";
 import { TaskService } from "./services/task.js";
 import { ToolGateService } from "./services/tool-gate.js";
@@ -80,7 +80,9 @@ import type {
   SkillCascadeChainSource,
   SkillCascadeControlResult,
   SkillPreselection,
+  SkillRoutingResult,
   SkillRoutingOutcome,
+  SkillRoutingTrace,
   SkillSelection,
   SessionCostSummary,
   TapeSearchResult,
@@ -131,7 +133,7 @@ type RuntimeCoreDependencies = {
   turnReplay: TurnReplayEngine;
   fileChanges: FileChangeTracker;
   costTracker: SessionCostTracker;
-  memoryEngine: MemoryEngine;
+  projectionEngine: ProjectionEngine;
 };
 
 type RuntimeServiceDependencies = {
@@ -169,6 +171,7 @@ export class BrewvaRuntime {
     ): void;
     clearNextSelection(sessionId: string): SkillPreselection | undefined;
     prepareDispatch(sessionId: string, message: string): SkillDispatchDecision;
+    getLastRouting(sessionId: string): SkillRoutingTrace | undefined;
     getPendingDispatch(sessionId: string): SkillDispatchDecision | undefined;
     clearPendingDispatch(sessionId: string): SkillDispatchDecision | undefined;
     overridePendingDispatch(
@@ -362,14 +365,6 @@ export class BrewvaRuntime {
     verifyChain(sessionId: string): { valid: boolean; reason?: string };
     getPath(): string;
   };
-  readonly memory: {
-    getWorking(sessionId: string): WorkingMemorySnapshot | undefined;
-    refreshIfNeeded(input: {
-      sessionId: string;
-      force?: boolean;
-    }): WorkingMemorySnapshot | undefined;
-    clearSessionCache(sessionId: string): void;
-  };
   readonly schedule: {
     createIntent(
       sessionId: string,
@@ -471,10 +466,11 @@ export class BrewvaRuntime {
   private readonly costTracker: SessionCostTracker;
 
   private readonly skillRegistry: SkillRegistry;
+  private readonly skillRouterService: SkillRouterService;
   private readonly verificationGate: VerificationGate;
   private readonly eventStore: BrewvaEventStore;
   private readonly turnWalStore: TurnWALStore;
-  private readonly memoryEngine: MemoryEngine;
+  private readonly projectionEngine: ProjectionEngine;
 
   private readonly sessionState = new RuntimeSessionStateStore();
   private readonly contextService: ContextService;
@@ -502,6 +498,7 @@ export class BrewvaRuntime {
     this.config = configState.config;
     const coreDependencies = this.createCoreDependencies(options);
     this.skillRegistry = coreDependencies.skillRegistry;
+    this.skillRouterService = new SkillRouterService(this.config.skills.selector);
     this.evidenceLedger = coreDependencies.evidenceLedger;
     this.verificationGate = coreDependencies.verificationGate;
     this.parallel = coreDependencies.parallel;
@@ -513,7 +510,7 @@ export class BrewvaRuntime {
     this.turnReplay = coreDependencies.turnReplay;
     this.fileChanges = coreDependencies.fileChanges;
     this.costTracker = coreDependencies.costTracker;
-    this.memoryEngine = coreDependencies.memoryEngine;
+    this.projectionEngine = coreDependencies.projectionEngine;
 
     const serviceDependencies = this.createServiceDependencies(options);
     this.skillLifecycleService = serviceDependencies.skillLifecycleService;
@@ -542,7 +539,6 @@ export class BrewvaRuntime {
     this.task = domainApis.task;
     this.truth = domainApis.truth;
     this.ledger = domainApis.ledger;
-    this.memory = domainApis.memory;
     this.schedule = domainApis.schedule;
     this.turnWal = domainApis.turnWal;
     this.events = domainApis.events;
@@ -604,11 +600,11 @@ export class BrewvaRuntime {
       artifactsBaseDir: this.workspaceRoot,
     });
     const costTracker = new SessionCostTracker(this.config.infrastructure.costTracking);
-    const memoryEngine = new MemoryEngine({
-      enabled: this.config.memory.enabled,
-      rootDir: resolve(this.workspaceRoot, this.config.memory.dir),
-      workingFile: this.config.memory.workingFile,
-      maxWorkingChars: this.config.memory.maxWorkingChars,
+    const projectionEngine = new ProjectionEngine({
+      enabled: this.config.projection.enabled,
+      rootDir: resolve(this.workspaceRoot, this.config.projection.dir),
+      workingFile: this.config.projection.workingFile,
+      maxWorkingChars: this.config.projection.maxWorkingChars,
       recordEvent: (eventInput) => this.recordEvent(eventInput),
     });
 
@@ -625,7 +621,7 @@ export class BrewvaRuntime {
       turnReplay,
       fileChanges,
       costTracker,
-      memoryEngine,
+      projectionEngine,
     };
   }
 
@@ -724,7 +720,7 @@ export class BrewvaRuntime {
       alwaysAllowedTools: CONTEXT_CRITICAL_ALLOWED_TOOLS,
       contextBudget: this.contextBudget,
       contextInjection: this.contextInjection,
-      memory: this.memoryEngine,
+      projectionEngine: this.projectionEngine,
       recordInfrastructureRow: (input) => ledgerService.recordInfrastructureRow(input),
       sessionState: this.sessionState,
       getTaskState: (sessionId) => this.getTaskState(sessionId),
@@ -757,7 +753,8 @@ export class BrewvaRuntime {
         this.resolveCheckpointCostSkillLastTurnByName(sessionId),
       getCheckpointEvidenceState: (sessionId) =>
         this.turnReplay.getCheckpointEvidenceState(sessionId),
-      getCheckpointMemoryState: (sessionId) => this.turnReplay.getCheckpointMemoryState(sessionId),
+      getCheckpointProjectionState: (sessionId) =>
+        this.turnReplay.getCheckpointProjectionState(sessionId),
       recordEvent: (input) => this.recordEvent(input),
     });
     const eventPipeline = new EventPipelineService({
@@ -765,7 +762,7 @@ export class BrewvaRuntime {
       level: this.config.infrastructure.events.level,
       inferEventCategory,
       observeReplayEvent: (event) => this.turnReplay.observeEvent(event),
-      ingestMemoryEvent: (event) => this.memoryEngine.ingestEvent(event),
+      ingestProjectionEvent: (event) => this.projectionEngine.ingestEvent(event),
       maybeRecordTapeCheckpoint: (event) => tapeService.maybeRecordTapeCheckpoint(event),
     });
     const scheduleIntentService = new ScheduleIntentService({
@@ -814,7 +811,7 @@ export class BrewvaRuntime {
       parallel: this.parallel,
       parallelResults: this.parallelResults,
       costTracker: this.costTracker,
-      memory: this.memoryEngine,
+      projectionEngine: this.projectionEngine,
       turnReplay: this.turnReplay,
       events: this.eventStore,
       ledger: this.evidenceLedger,
@@ -864,7 +861,6 @@ export class BrewvaRuntime {
     task: BrewvaRuntime["task"];
     truth: BrewvaRuntime["truth"];
     ledger: BrewvaRuntime["ledger"];
-    memory: BrewvaRuntime["memory"];
     schedule: BrewvaRuntime["schedule"];
     turnWal: BrewvaRuntime["turnWal"];
     events: BrewvaRuntime["events"];
@@ -890,6 +886,7 @@ export class BrewvaRuntime {
             promptText: message,
             turn: this.getCurrentTurn(sessionId),
           }),
+        getLastRouting: (sessionId) => this.getLastSkillRouting(sessionId),
         getPendingDispatch: (sessionId) => this.skillLifecycleService.getPendingDispatch(sessionId),
         clearPendingDispatch: (sessionId) =>
           this.skillLifecycleService.clearPendingDispatch(sessionId),
@@ -1038,11 +1035,6 @@ export class BrewvaRuntime {
         verifyChain: (sessionId) => this.ledgerService.verifyLedgerChain(sessionId),
         getPath: () => this.ledgerService.getLedgerPath(),
       },
-      memory: {
-        getWorking: (sessionId) => this.memoryEngine.getWorkingMemory(sessionId),
-        refreshIfNeeded: (input) => this.memoryEngine.refreshIfNeeded(input),
-        clearSessionCache: (sessionId) => this.memoryEngine.clearSessionCache(sessionId),
-      },
       schedule: {
         createIntent: (sessionId, input) =>
           this.scheduleIntentService.createScheduleIntent(sessionId, input),
@@ -1169,14 +1161,69 @@ export class BrewvaRuntime {
     );
   }
 
-  private selectSkillsForDispatch(sessionId: string, message: string): SkillPreselection {
-    void message;
-    const preselected = this.consumeNextSkillSelections(sessionId);
-    return (
-      preselected ?? {
-        selected: [],
-      }
-    );
+  private normalizeSkillRoutingTrace(
+    trace: SkillRoutingTrace,
+    selected: SkillSelection[],
+    routingOutcome: SkillRoutingOutcome,
+  ): SkillRoutingTrace {
+    const semantic =
+      routingOutcome === "failed"
+        ? {
+            ...trace.semantic,
+            status: "failed" as const,
+            selectedCount: 0,
+            selectedSkills: [],
+          }
+        : selected.length === 0
+          ? {
+              ...trace.semantic,
+              status: "empty" as const,
+              selectedCount: 0,
+              selectedSkills: [],
+            }
+          : {
+              ...trace.semantic,
+              status: "selected" as const,
+              selectedCount: selected.length,
+              selectedSkills: selected.map((entry) => entry.name),
+            };
+    return {
+      ...trace,
+      routingOutcome,
+      semantic,
+      candidates: selected,
+      availableOutputs: [...trace.availableOutputs],
+    };
+  }
+
+  private getLastSkillRouting(sessionId: string): SkillRoutingTrace | undefined {
+    const trace = this.sessionState.lastSkillRoutingBySession.get(sessionId);
+    return trace ? structuredClone(trace) : undefined;
+  }
+
+  private selectSkillsForDispatch(
+    sessionId: string,
+    message: string,
+    index: ReturnType<SkillRegistry["buildIndex"]>,
+  ): SkillRoutingResult {
+    const routing = this.skillRouterService.route({
+      promptText: message,
+      index,
+      activeSkillName: this.skillLifecycleService.getActiveSkill(sessionId)?.name ?? null,
+      availableOutputs: this.skillLifecycleService.listProducedOutputKeys(sessionId),
+      preselection: this.consumeNextSkillSelections(sessionId),
+    });
+    const selected = this.normalizeSkillSelections(routing.selected);
+    const routingOutcome =
+      this.normalizeRoutingOutcome(routing.routingOutcome) ??
+      (selected.length > 0 ? "selected" : "empty");
+    const trace = this.normalizeSkillRoutingTrace(routing.trace, selected, routingOutcome);
+    this.sessionState.lastSkillRoutingBySession.set(sessionId, trace);
+    return {
+      selected,
+      routingOutcome,
+      trace,
+    };
   }
 
   private prepareSkillDispatch(input: {
@@ -1184,11 +1231,12 @@ export class BrewvaRuntime {
     promptText: string;
     turn: number;
   }): SkillDispatchDecision {
-    const preselection = this.selectSkillsForDispatch(input.sessionId, input.promptText);
+    const index = this.skillRegistry.buildIndex();
+    const routing = this.selectSkillsForDispatch(input.sessionId, input.promptText, index);
     const decision = resolveSkillDispatchDecision({
-      selected: preselection.selected,
-      routingOutcome: preselection.routingOutcome,
-      index: this.skillRegistry.buildIndex(),
+      selected: routing.selected,
+      routingOutcome: routing.routingOutcome,
+      index,
       turn: input.turn,
       availableOutputs: this.skillLifecycleService.listProducedOutputKeys(input.sessionId),
     });

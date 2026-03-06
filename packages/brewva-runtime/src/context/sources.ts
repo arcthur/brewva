@@ -8,7 +8,7 @@ export const CONTEXT_SOURCES = {
   taskState: "brewva.task-state",
   toolFailures: "brewva.tool-failures",
   toolOutputsDistilled: "brewva.tool-outputs-distilled",
-  memoryWorking: "brewva.memory-working",
+  projectionWorking: "brewva.projection-working",
 } as const;
 
 export type ContextSourceId = (typeof CONTEXT_SOURCES)[keyof typeof CONTEXT_SOURCES];

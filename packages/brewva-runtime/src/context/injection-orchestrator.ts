@@ -71,6 +71,11 @@ export interface ContextInjectionOrchestratorDeps {
   getActiveSkillName(sessionId: string): string | null;
   getSkillCascadeIntent(sessionId: string): SkillChainIntent | undefined;
   buildSkillCascadeGateBlock(intent: SkillChainIntent): string;
+  registerLateContextInjection(
+    sessionId: string,
+    promptText: string,
+    usage?: ContextBudgetUsage,
+  ): void;
   registerContextInjection(sessionId: string, input: RegisterContextInjectionInput): void;
   recordEvent(input: {
     sessionId: string;
@@ -210,6 +215,8 @@ export function buildContextInjection(
       });
     }
   }
+
+  deps.registerLateContextInjection(input.sessionId, promptText, input.usage);
 
   const merged = deps.planContextInjection(
     input.sessionId,

@@ -16,7 +16,7 @@ Configuration contract sources:
 - `verification`
 - `ledger`
 - `tape`
-- `memory`
+- `projection`
 - `security`
 - `schedule`
 - `parallel`
@@ -34,6 +34,7 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 - `skills.packs`: `[]`
 - `skills.disabled`: `[]`
 - `skills.overrides`: `{}`
+- `skills.selector.mode`: `deterministic` (`deterministic | external_only`)
 - `skills.selector.k`: `4`
 - `skills.cascade.mode`: `auto` (`off | assist | auto`)
 - `skills.cascade.enabledSources`: `["compose", "dispatch"]`
@@ -42,8 +43,12 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 
 `skills.cascade.enabledSources` controls which sources are allowed to produce chain intents.
 `skills.cascade.sourcePriority` only controls arbitration order among enabled sources.
-`skills.selector.k` remains a hard cap for externally injected preselection entries
-(for example control-plane `setNextSelection`), not a runtime semantic routing switch.
+`skills.selector.mode` controls skill candidate sourcing:
+
+- `deterministic` (default): runtime kernel performs deterministic contract-aware routing before dispatch
+- `external_only`: runtime consumes only explicit preselection (for example control-plane `setNextSelection`)
+
+`skills.selector.k` caps the number of stored/returned candidates for both runtime deterministic routing and externally injected preselection.
 
 `skills.packs` is an optional allowlist for pack directories across all discovered skill roots
 (`global_root`, `project_root`, and `config_root`).
@@ -71,12 +76,13 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 
 - `tape.checkpointIntervalEntries`: `120`
 
-### `memory`
+### `projection`
 
-- `memory.enabled`: `true`
-- `memory.dir`: `.orchestrator/memory`
-- `memory.workingFile`: `working.md`
-- `memory.maxWorkingChars`: `2400`
+- `projection.enabled`: `true`
+- `projection.dir`: `.orchestrator/projection`
+- `projection.workingFile`: `working.md`
+- `projection.maxWorkingChars`: `2400`
+- per-session working snapshots are written under `.orchestrator/projection/sessions/sess_<base64url(sessionId)>/`
 
 ### `security`
 
@@ -263,11 +269,11 @@ Runtime behavior:
   global cap + hard-limit gate + arena SLO (`arena.maxEntriesPerSession`).
 - When pressure is `critical` and no recent compaction has been performed, runtime arms a compaction gate:
   tool calls are blocked until `session_compact` is performed (only `session_compact` and `skill_complete` bypass the gate).
-- Memory injection is working-only (`brewva.memory-working`) and follows the same budget gate.
+- Projection injection is working-only (`brewva.projection-working`) and follows the same budget gate.
 
 Normalization details from `normalizeBrewvaConfig(...)`:
 
-- Key numeric ranges are schema-enforced fail-fast (for example confidence ratios, schedule limits, context budget limits, and memory bounds).
+- Key numeric ranges are schema-enforced fail-fast (for example confidence ratios, schedule limits, context budget limits, and projection bounds).
 - `compactionThresholdPercent` is still clamped to `<= hardLimitPercent` after schema validation.
 - Integer-like counters are floor-normalized when already in-range.
 

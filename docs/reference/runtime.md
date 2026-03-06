@@ -17,6 +17,7 @@ The runtime no longer exposes a large flat method list. Public access is organiz
 - `list()`
 - `get(name)`
 - `prepareDispatch(sessionId, message)`
+- `getLastRouting(sessionId)`
 - `getPendingDispatch(sessionId)`
 - `clearPendingDispatch(sessionId)`
 - `overridePendingDispatch(sessionId, input?)`
@@ -96,12 +97,6 @@ The runtime no longer exposes a large flat method list. Public access is organiz
 - `verifyChain(sessionId)`
 - `getPath()`
 
-### `runtime.memory.*`
-
-- `getWorking(sessionId)`
-- `refreshIfNeeded(input)`
-- `clearSessionCache(sessionId)`
-
 ### `runtime.schedule.*`
 
 - `createIntent(sessionId, input)`
@@ -162,7 +157,7 @@ Read-only verification semantics:
 
 ## Async-Only API Direction
 
-Public runtime integrations should use async-first flows. There is no separate sync facade for context/memory orchestration.
+Public runtime integrations should use async-first flows. There is no separate sync facade for context/projection orchestration.
 
 Common async calls:
 
@@ -188,7 +183,7 @@ The default injection path is organized around deterministic governance sources:
 - `brewva.task-state`
 - `brewva.tool-failures`
 - `brewva.tool-outputs-distilled`
-- `brewva.memory-working`
+- `brewva.projection-working`
 
 Truth split behavior:
 
@@ -196,10 +191,10 @@ Truth split behavior:
   registered as `oncePerSession`.
 - `brewva.truth-facts` carries active truth facts and is refreshed across turns.
 
-Memory split behavior:
+Projection split behavior:
 
-- `brewva.memory-working` carries the latest working-memory snapshot.
-- Memory projection is working-only: no recall source, no external recall branch.
+- `brewva.projection-working` carries the latest working projection snapshot.
+- Projection runtime is working-only: no recall source, no external recall branch.
 
 Identity source behavior:
 
@@ -231,7 +226,7 @@ Context budget behavior:
 
 Execution profile note:
 
-- Extension-enabled profile (`createBrewvaExtension`) uses full governance lifecycle hooks and deterministic routing skip telemetry.
+- Extension-enabled profile (`createBrewvaExtension`) uses full governance lifecycle hooks and projects runtime routing telemetry.
 - Runtime-core profile (`--no-extensions`) injects only `[CoreTapeStatus]` + core autonomy contract.
 
 ## Event Emission Levels
@@ -254,7 +249,7 @@ The folded replay view includes:
 - cost summary state
 - cost skill turn dedupe metadata (`skillLastTurnByName`)
 - evidence fold state (including recent tool failures with anchor-epoch TTL pruning)
-- memory projection fold state (`updatedAt`, `unitCount`)
+- projection fold state (`updatedAt`, `unitCount`)
 
 Checkpoint payloads persisted by tape automation include corresponding state slices,
 so replay can seek to the latest checkpoint and avoid full-tape recomputation for
@@ -286,7 +281,7 @@ Examples:
 
 - `BrewvaConfig`
 - `TaskState`, `TruthState`
+- `EvidenceLedgerRow`, `VerificationReport`
 - `ScheduleIntent*`
 - `TurnWALRecord`, `TurnWALRecoveryResult`
 - `BrewvaEventRecord`, `BrewvaStructuredEvent`
-- `WorkingMemorySnapshot`

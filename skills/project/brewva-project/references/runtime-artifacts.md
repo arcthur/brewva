@@ -34,7 +34,7 @@ All paths are relative to the workspace root.
 | `anchor`, `checkpoint`                                                                                       | Tape anchors and replay checkpoints                   |
 | `context_usage`, `context_compaction_requested`, `context_compaction_gate_blocked_tool`, `context_compacted` | Context pressure and compaction boundary behavior     |
 | `context_injected`, `context_injection_dropped`, `context_arena_slo_enforced`                                | Deterministic context injection decisions             |
-| `memory_projection_ingested`, `memory_projection_refreshed`                                                  | Memory projection lifecycle (non-cognitive)           |
+| `projection_ingested`, `projection_refreshed`                                                                | Working projection lifecycle (non-cognitive)          |
 | `cost_update`, `budget_alert`                                                                                | Cost tracking and budget boundaries                   |
 | `governance_verify_spec_*`                                                                                   | Governance verification outcomes                      |
 | `governance_cost_anomaly_*`                                                                                  | Governance anomaly detection over cost behavior       |
@@ -45,7 +45,7 @@ All paths are relative to the workspace root.
 ### Diagnostic Value
 
 Primary correlation artifact. Use `sessionId` + `turn` to correlate with ledger rows,
-memory projection updates, and replay state.
+working projection updates, and replay state.
 
 Context boundary analysis: inspect `context_injected`, `context_injection_dropped`,
 `context_arena_slo_enforced`, `context_compaction_*`, and `governance_compaction_integrity_*`.
@@ -88,45 +88,45 @@ First diagnostic step: verify chain continuity.
 
 ---
 
-## 3. Memory Projection Artifacts
+## 3. Working Projection Artifacts
 
-Base directory: `.orchestrator/memory/`
+Base directory: `.orchestrator/projection/`
 
-### 3a. Memory Units — `units.jsonl`
+### 3a. Projection Units — `units.jsonl`
 
-| Field         | Type    | Description                                       |
-| ------------- | ------- | ------------------------------------------------- |
-| `id`          | string  | Unit identifier                                   |
-| `sessionId`   | string  | Originating session                               |
-| `type`        | string  | Unit type (`fact`, `decision`, `constraint`, ...) |
-| `status`      | string  | Lifecycle status (`active` or `resolved`)         |
-| `topic`       | string  | Topic key                                         |
-| `statement`   | string  | Core statement                                    |
-| `confidence`  | number  | Confidence in [0, 1]                              |
-| `fingerprint` | string  | Deterministic dedup key                           |
-| `sourceRefs`  | array   | Event/evidence source references                  |
-| `metadata`    | object? | Optional structured metadata                      |
-| `createdAt`   | number  | Creation timestamp                                |
-| `updatedAt`   | number  | Last update timestamp                             |
-| `lastSeenAt`  | number  | Last observed timestamp                           |
-| `resolvedAt`  | number? | Resolution timestamp                              |
+| Field           | Type    | Description                               |
+| --------------- | ------- | ----------------------------------------- |
+| `id`            | string  | Unit identifier                           |
+| `sessionId`     | string  | Originating session                       |
+| `status`        | string  | Lifecycle status (`active` or `resolved`) |
+| `projectionKey` | string  | Deterministic projection identity         |
+| `label`         | string  | Rendered label in working projection      |
+| `statement`     | string  | Core statement                            |
+| `fingerprint`   | string  | Deterministic dedup key                   |
+| `sourceRefs`    | array   | Event/evidence source references          |
+| `metadata`      | object? | Optional structured metadata              |
+| `createdAt`     | number  | Creation timestamp                        |
+| `updatedAt`     | number  | Last update timestamp                     |
+| `lastSeenAt`    | number  | Last observed timestamp                   |
+| `resolvedAt`    | number? | Resolution timestamp                      |
 
 ### 3b. Projection State — `state.json`
 
-| Field             | Type           | Description                              |
-| ----------------- | -------------- | ---------------------------------------- |
-| `schemaVersion`   | number         | Projection state schema version          |
-| `lastProjectedAt` | number or null | Last working-memory projection timestamp |
+| Field             | Type           | Description                       |
+| ----------------- | -------------- | --------------------------------- |
+| `schemaVersion`   | number         | Projection state schema version   |
+| `lastProjectedAt` | number or null | Last working projection timestamp |
 
-### 3c. Working Memory Snapshot — `working.md`
+### 3c. Working Projection Snapshot — `sessions/sess_<base64url(sessionId)>/working.md`
 
-Markdown snapshot derived from memory units, truncated to `maxWorkingChars`.
+Markdown snapshot derived from active projection units, scoped per session and
+truncated to `maxWorkingChars`.
 
 ### Diagnostic Value
 
-Memory is a deterministic projection layer, not a cognitive augmentation layer.
-Use unit rows plus projection events (`memory_projection_*`) to explain why
-working memory changed.
+Projection is a deterministic runtime layer, not a cognitive augmentation layer.
+Use unit rows plus projection events (`projection_*`) to explain why the
+working projection changed.
 
 ---
 
@@ -135,20 +135,20 @@ working memory changed.
 | Property   | Value                                                                                      |
 | ---------- | ------------------------------------------------------------------------------------------ |
 | Event type | `checkpoint`                                                                               |
-| Schema     | `brewva.tape.checkpoint.v2`                                                                |
+| Schema     | `brewva.tape.checkpoint.v3`                                                                |
 | Producer   | `TapeService.maybeRecordTapeCheckpoint()` — `packages/brewva-runtime/src/services/tape.ts` |
 | Interval   | Every `checkpointIntervalEntries` events (default: 120)                                    |
 
 ### Payload State
 
-| Field                           | Type   | Description                                          |
-| ------------------------------- | ------ | ---------------------------------------------------- |
-| `state.task`                    | object | Full `TaskState` snapshot                            |
-| `state.truth`                   | object | Full `TruthState` snapshot                           |
-| `state.cost`                    | object | Folded cost summary                                  |
-| `state.costSkillLastTurnByName` | object | Last turn index per skill                            |
-| `state.evidence`                | object | Evidence fold summary                                |
-| `state.memory`                  | object | `{ updatedAt, unitCount }` memory projection summary |
+| Field                           | Type   | Description                                           |
+| ------------------------------- | ------ | ----------------------------------------------------- |
+| `state.task`                    | object | Full `TaskState` snapshot                             |
+| `state.truth`                   | object | Full `TruthState` snapshot                            |
+| `state.cost`                    | object | Folded cost summary                                   |
+| `state.costSkillLastTurnByName` | object | Last turn index per skill                             |
+| `state.evidence`                | object | Evidence fold summary                                 |
+| `state.projection`              | object | `{ updatedAt, unitCount }` working projection summary |
 
 ### Diagnostic Value
 

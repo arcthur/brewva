@@ -10,7 +10,7 @@ import {
 import type { ToolFailureEntry } from "../context/tool-failures.js";
 import type { ToolOutputDistillationEntry } from "../context/tool-output-distilled.js";
 import type { GovernancePort } from "../governance/port.js";
-import { MemoryEngine } from "../memory/engine.js";
+import { ProjectionEngine } from "../projection/engine.js";
 import { sanitizeByTrust, wrapByTrust } from "../security/sanitize.js";
 import type {
   BrewvaConfig,
@@ -28,8 +28,8 @@ import type {
 } from "../types.js";
 import type { RuntimeCallback } from "./callback.js";
 import { type ContextCompactionDeps, markContextCompacted } from "./context-compaction.js";
-import { ContextMemoryInjectionService } from "./context-memory-injection.js";
 import { ContextPressureService } from "./context-pressure.js";
+import { ContextProjectionInjectionService } from "./context-projection-injection.js";
 import {
   type ContextSupplementalBudgetDeps,
   commitSupplementalContextInjection,
@@ -45,7 +45,7 @@ export interface ContextServiceOptions {
   alwaysAllowedTools: string[];
   contextBudget: ContextBudgetManager;
   contextInjection: ContextInjectionCollector;
-  memory: MemoryEngine;
+  projectionEngine: ProjectionEngine;
   recordInfrastructureRow: ContextCompactionDeps["recordInfrastructureRow"];
   sessionState: RuntimeSessionStateStore;
   getTaskState: RuntimeCallback<[sessionId: string], TaskState>;
@@ -104,7 +104,7 @@ export class ContextService {
   private readonly config: BrewvaConfig;
   private readonly contextBudget: ContextBudgetManager;
   private readonly contextInjection: ContextInjectionCollector;
-  private readonly memory: MemoryEngine;
+  private readonly projectionEngine: ProjectionEngine;
   private readonly sessionState: RuntimeSessionStateStore;
   private readonly getTaskState: (sessionId: string) => TaskState;
   private readonly getTruthState: (sessionId: string) => TruthState;
@@ -130,7 +130,7 @@ export class ContextService {
   ) => ToolOutputDistillationEntry[];
   private readonly recordEvent: ContextServiceOptions["recordEvent"];
   private readonly contextPressure: ContextPressureService;
-  private readonly contextMemoryInjection: ContextMemoryInjectionService;
+  private readonly contextProjectionInjection: ContextProjectionInjectionService;
   private readonly contextCompactionDeps: ContextCompactionDeps;
   private readonly contextSupplementalBudgetDeps: ContextSupplementalBudgetDeps;
   private readonly contextInjectionOrchestratorDeps: ContextInjectionOrchestratorDeps;
@@ -140,7 +140,7 @@ export class ContextService {
     this.config = options.config;
     this.contextBudget = options.contextBudget;
     this.contextInjection = options.contextInjection;
-    this.memory = options.memory;
+    this.projectionEngine = options.projectionEngine;
     this.sessionState = options.sessionState;
     this.getTaskState = options.getTaskState;
     this.getTruthState = options.getTruthState;
@@ -166,11 +166,11 @@ export class ContextService {
       recordEvent: (input) => this.recordEvent(input),
     });
 
-    this.contextMemoryInjection = new ContextMemoryInjectionService({
+    this.contextProjectionInjection = new ContextProjectionInjectionService({
       workspaceRoot: options.workspaceRoot,
       agentId: options.agentId,
       config: this.config,
-      memory: this.memory,
+      projectionEngine: this.projectionEngine,
       sanitizeInput: (text) => this.sanitizeInput(text),
       registerContextInjection: (sessionId, input) =>
         this.registerContextInjection(sessionId, input),
@@ -214,6 +214,8 @@ export class ContextService {
       getActiveSkillName: (id) => this.getActiveSkill(id)?.name ?? null,
       getSkillCascadeIntent: (id) => this.getSkillCascadeIntent(id),
       buildSkillCascadeGateBlock: (intent) => this.buildSkillCascadeGateBlock(intent),
+      registerLateContextInjection: (id, promptText, usage) =>
+        this.contextProjectionInjection.registerProjectionContextInjection(id, promptText, usage),
       registerContextInjection: (id, registerInput) =>
         this.registerContextInjection(id, registerInput),
       recordEvent: (eventInput) => this.recordEvent(eventInput),
@@ -299,8 +301,7 @@ export class ContextService {
     finalTokens: number;
     truncated: boolean;
   }> {
-    this.contextMemoryInjection.registerIdentityContextInjection(sessionId);
-    await this.contextMemoryInjection.registerMemoryContextInjection(sessionId, prompt, usage);
+    this.contextProjectionInjection.registerIdentityContextInjection(sessionId);
     const finalized = this.finalizeContextInjection(sessionId, prompt, usage, injectionScopeId);
     return finalized;
   }

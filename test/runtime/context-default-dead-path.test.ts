@@ -18,7 +18,7 @@ function createConfig(): BrewvaConfig {
   const config = structuredClone(DEFAULT_BREWVA_CONFIG);
   config.infrastructure.contextBudget.enabled = true;
   config.infrastructure.contextBudget.maxInjectionTokens = 1200;
-  config.memory.enabled = false;
+  config.projection.enabled = false;
   config.infrastructure.toolFailureInjection.enabled = false;
   return config;
 }

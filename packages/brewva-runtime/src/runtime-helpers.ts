@@ -13,6 +13,7 @@ export function inferEventCategory(type: string): BrewvaEventCategory {
     return "state";
   }
   if (type.startsWith("skill_cascade_")) return "state";
+  if (type.startsWith("projection_")) return "state";
   if (
     type.startsWith("session_") ||
     type.startsWith("channel_session_") ||

@@ -23,7 +23,7 @@ Primary deliverables:
 ```text
 brewva/
 ├── packages/
-│   ├── brewva-runtime/            # runtime facade, services, replay, memory, schedule, policy
+│   ├── brewva-runtime/            # runtime facade, services, replay, projection, schedule, policy
 │   ├── brewva-channels-telegram/  # telegram adapter, transport, projector
 │   ├── brewva-ingress/            # edge ingress server + worker adapters for webhook delivery
 │   ├── brewva-tools/              # runtime-aware tools (lsp/ast/ledger/task/schedule/tape)
@@ -69,7 +69,6 @@ brewva/
   - `runtime.task.*`
   - `runtime.truth.*`
   - `runtime.ledger.*`
-  - `runtime.memory.*`
   - `runtime.schedule.*`
   - `runtime.turnWal.*`
   - `runtime.events.*`
@@ -104,8 +103,8 @@ brewva/
   - `brewva.task-state`
   - `brewva.tool-failures`
   - `brewva.tool-outputs-distilled`
-  - `brewva.memory-working`
-- Memory model is projection-only and working-only:
+  - `brewva.projection-working`
+- Projection model is working-only:
   - no recall lane
   - no external recall runtime branch
   - no cognitive/adaptive inference path in runtime core
@@ -142,33 +141,33 @@ brewva/
 
 ## WHERE TO LOOK
 
-| Task                           | Location                                                              | Notes                                           |
-| ------------------------------ | --------------------------------------------------------------------- | ----------------------------------------------- |
-| Runtime facade/API shape       | `packages/brewva-runtime/src/runtime.ts`                              | domain API surface and dependency wiring        |
-| Runtime contracts              | `packages/brewva-runtime/src/types.ts`                                | shared config/event/runtime types               |
-| Runtime event filtering        | `packages/brewva-runtime/src/services/event-pipeline.ts`              | audit/ops/debug level classification            |
-| Security mode mapping          | `packages/brewva-runtime/src/security/mode.ts`                        | `security.mode` -> effective enforcement policy |
-| Runtime defaults               | `packages/brewva-runtime/src/config/defaults.ts`                      | canonical default config                        |
-| Runtime config normalization   | `packages/brewva-runtime/src/config/normalize.ts`                     | type/enum/range normalization                   |
-| Context arena allocator        | `packages/brewva-runtime/src/context/arena.ts`                        | append-only arena and SLO enforcement           |
-| Context injection orchestrator | `packages/brewva-runtime/src/context/injection-orchestrator.ts`       | injection decision and telemetry emission       |
-| Context service façade         | `packages/brewva-runtime/src/services/context.ts`                     | runtime.context.\* facade and orchestration     |
-| Context pressure               | `packages/brewva-runtime/src/services/context-pressure.ts`            | pressure ratios, compaction gate/request        |
-| Context memory injection       | `packages/brewva-runtime/src/services/context-memory-injection.ts`    | working-only memory injection boundary          |
-| Context compaction             | `packages/brewva-runtime/src/services/context-compaction.ts`          | compaction side effects, event/ledger emission  |
-| Context supplemental budget    | `packages/brewva-runtime/src/services/context-supplemental-budget.ts` | supplemental injection budget accounting        |
-| Governance port contract       | `packages/brewva-runtime/src/governance/port.ts`                      | governance-only runtime checks                  |
-| Offline projection analysis    | `script/analyze-memory-projection.ts`                                 | projects memory projection quality from tape    |
-| Turn WAL durability/recovery   | `packages/brewva-runtime/src/channels/turn-wal*.ts`                   | append/recover/compact turn WAL rows            |
-| Tool registry                  | `packages/brewva-tools/src/index.ts`                                  | assembled tool surface                          |
-| Extension composition          | `packages/brewva-extensions/src/index.ts`                             | runtime hook wiring and bridge helpers          |
-| Telegram ingress               | `packages/brewva-ingress/src/index.ts`                                | webhook ingress worker/server bootstrap         |
-| CLI command surface            | `packages/brewva-cli/src/index.ts`                                    | mode routing, args, entrypoint behavior         |
-| CLI session bootstrap          | `packages/brewva-cli/src/session.ts`                                  | runtime/session creation and options            |
-| Gateway daemon core            | `packages/brewva-gateway/src`                                         | websocket API, supervisor, policies             |
-| Dist verification              | `script/verify-dist.ts`                                               | release guardrail checks                        |
-| Binary build                   | `script/build-binaries.ts`                                            | platform binaries and launcher copy             |
-| CI workflow                    | `.github/workflows/ci.yml`                                            | quality + binaries jobs                         |
+| Task                           | Location                                                               | Notes                                           |
+| ------------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------- |
+| Runtime facade/API shape       | `packages/brewva-runtime/src/runtime.ts`                               | domain API surface and dependency wiring        |
+| Runtime contracts              | `packages/brewva-runtime/src/types.ts`                                 | shared config/event/runtime types               |
+| Runtime event filtering        | `packages/brewva-runtime/src/services/event-pipeline.ts`               | audit/ops/debug level classification            |
+| Security mode mapping          | `packages/brewva-runtime/src/security/mode.ts`                         | `security.mode` -> effective enforcement policy |
+| Runtime defaults               | `packages/brewva-runtime/src/config/defaults.ts`                       | canonical default config                        |
+| Runtime config normalization   | `packages/brewva-runtime/src/config/normalize.ts`                      | type/enum/range normalization                   |
+| Context arena allocator        | `packages/brewva-runtime/src/context/arena.ts`                         | append-only arena and SLO enforcement           |
+| Context injection orchestrator | `packages/brewva-runtime/src/context/injection-orchestrator.ts`        | injection decision and telemetry emission       |
+| Context service façade         | `packages/brewva-runtime/src/services/context.ts`                      | runtime.context.\* facade and orchestration     |
+| Context pressure               | `packages/brewva-runtime/src/services/context-pressure.ts`             | pressure ratios, compaction gate/request        |
+| Context projection injection   | `packages/brewva-runtime/src/services/context-projection-injection.ts` | working-only projection injection boundary      |
+| Context compaction             | `packages/brewva-runtime/src/services/context-compaction.ts`           | compaction side effects, event/ledger emission  |
+| Context supplemental budget    | `packages/brewva-runtime/src/services/context-supplemental-budget.ts`  | supplemental injection budget accounting        |
+| Governance port contract       | `packages/brewva-runtime/src/governance/port.ts`                       | governance-only runtime checks                  |
+| Offline projection analysis    | `script/analyze-projection.ts`                                         | projects working-projection quality from tape   |
+| Turn WAL durability/recovery   | `packages/brewva-runtime/src/channels/turn-wal*.ts`                    | append/recover/compact turn WAL rows            |
+| Tool registry                  | `packages/brewva-tools/src/index.ts`                                   | assembled tool surface                          |
+| Extension composition          | `packages/brewva-extensions/src/index.ts`                              | runtime hook wiring and bridge helpers          |
+| Telegram ingress               | `packages/brewva-ingress/src/index.ts`                                 | webhook ingress worker/server bootstrap         |
+| CLI command surface            | `packages/brewva-cli/src/index.ts`                                     | mode routing, args, entrypoint behavior         |
+| CLI session bootstrap          | `packages/brewva-cli/src/session.ts`                                   | runtime/session creation and options            |
+| Gateway daemon core            | `packages/brewva-gateway/src`                                          | websocket API, supervisor, policies             |
+| Dist verification              | `script/verify-dist.ts`                                                | release guardrail checks                        |
+| Binary build                   | `script/build-binaries.ts`                                             | platform binaries and launcher copy             |
+| CI workflow                    | `.github/workflows/ci.yml`                                             | quality + binaries jobs                         |
 
 ---
 

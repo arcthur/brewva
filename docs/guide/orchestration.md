@@ -21,7 +21,7 @@ Orchestration is driven by runtime state management plus extension lifecycle han
 3. Runtime core bridge enforces `runtime.tools.start` / `runtime.tools.finish` semantics:
    tool policy + critical compaction gate + tool-call accounting + patch tracking + ledger write
 4. CLI installs `registerRuntimeCoreEventBridge` for lifecycle and assistant-usage telemetry
-5. Extension-only presentation hooks remain disabled (`context-transform` memory injection,
+5. Extension-only presentation hooks remain disabled (`context-transform` projection injection,
    completion guard, notification, streaming message-health events)
 6. Runtime core bridge still runs `before_agent_start` to inject a minimal autonomy contract
    and `[CoreTapeStatus]` pressure/action block for agent self-management

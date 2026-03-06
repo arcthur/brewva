@@ -11,6 +11,9 @@ export const EXEC_SANDBOX_ERROR_EVENT_TYPE = "exec_sandbox_error" as const;
 export const VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE = "verification_outcome_recorded" as const;
 export const VERIFICATION_STATE_RESET_EVENT_TYPE = "verification_state_reset" as const;
 
+export const PROJECTION_INGESTED_EVENT_TYPE = "projection_ingested" as const;
+export const PROJECTION_REFRESHED_EVENT_TYPE = "projection_refreshed" as const;
+
 export const SKILL_CASCADE_PLANNED_EVENT_TYPE = "skill_cascade_planned" as const;
 export const SKILL_CASCADE_STEP_STARTED_EVENT_TYPE = "skill_cascade_step_started" as const;
 export const SKILL_CASCADE_STEP_COMPLETED_EVENT_TYPE = "skill_cascade_step_completed" as const;

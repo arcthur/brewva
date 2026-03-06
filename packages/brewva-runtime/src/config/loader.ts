@@ -70,7 +70,7 @@ function stripMetaFields(value: Record<string, unknown>): Record<string, unknown
   return output;
 }
 
-const REMOVED_MEMORY_FIELDS = new Set<string>([
+const REMOVED_PROJECTION_FIELDS = new Set<string>([
   "dailyRefreshHourLocal",
   "crystalMinUnits",
   "retrievalTopK",
@@ -84,12 +84,12 @@ const REMOVED_MEMORY_FIELDS = new Set<string>([
 
 function collectRemovedFieldErrors(parsed: Record<string, unknown>): string[] {
   const errors: string[] = [];
-  const memory = parsed["memory"];
-  if (!isRecord(memory)) return errors;
+  const projection = parsed["projection"];
+  if (!isRecord(projection)) return errors;
 
-  for (const key of Object.keys(memory)) {
-    if (!REMOVED_MEMORY_FIELDS.has(key)) continue;
-    errors.push(`/memory: unknown property "${key}"`);
+  for (const key of Object.keys(projection)) {
+    if (!REMOVED_PROJECTION_FIELDS.has(key)) continue;
+    errors.push(`/projection: unknown property "${key}"`);
   }
 
   return errors;

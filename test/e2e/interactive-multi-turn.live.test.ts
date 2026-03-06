@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
@@ -16,6 +16,7 @@ import { hasProviderRateLimitText, keepWorkspace, repoRoot, runLive } from "./he
 
 type RuntimeEvent = {
   type?: unknown;
+  timestamp?: unknown;
 };
 
 type RegressionRunResult = {
@@ -33,6 +34,21 @@ const COMPACTION_FOLLOW_TYPES = new Set([
   "context_compacted",
   "context_compaction_skipped",
 ]);
+
+const POST_AUTO_COMPACTION_CONTINUATION_TYPES = new Set([
+  "message_start",
+  "message_update",
+  "message_end",
+  "tool_call",
+  "tool_execution_start",
+  "tool_execution_update",
+  "tool_execution_end",
+  "tool_result",
+]);
+
+const POST_AUTO_COMPACTION_CLOSURE_TYPES = new Set(["turn_end", "agent_end"]);
+const MAX_POST_AUTO_COMPACTION_EVENT_WINDOW = 24;
+const MAX_POST_AUTO_COMPACTION_GAP_MS = 90_000;
 
 const MULTI_TURN_PROMPTS = [
   "Do not call any tool. Reply exactly: ROUND-1 Snake levels increase both speed and obstacle count.",
@@ -266,6 +282,14 @@ function eventIndexes(events: RuntimeEvent[], eventType: string): number[] {
   return indexes;
 }
 
+function eventTypeOf(event: RuntimeEvent | undefined): string {
+  return typeof event?.type === "string" ? event.type : "";
+}
+
+function eventTimestampOf(event: RuntimeEvent | undefined): number | null {
+  return typeof event?.timestamp === "number" ? event.timestamp : null;
+}
+
 function summarizeCounts(events: RuntimeEvent[]): string {
   const input = countEvents(events, "input");
   const turnStart = countEvents(events, "turn_start");
@@ -383,11 +407,96 @@ function assertCompactionContinuity(result: RegressionRunResult): void {
   }
 }
 
+function assertAutoCompactionCompletionContinuity(result: RegressionRunResult): void {
+  const completionIndexes = eventIndexes(result.events, "context_compaction_auto_completed");
+  if (completionIndexes.length === 0) return;
+
+  for (const completionIndex of completionIndexes) {
+    const nextTurnStart =
+      eventIndexes(result.events, "turn_start").find((index) => index > completionIndex) ??
+      result.events.length;
+    const searchEnd = Math.min(
+      nextTurnStart,
+      completionIndex + 1 + MAX_POST_AUTO_COMPACTION_EVENT_WINDOW,
+    );
+    const recoveryIndex = result.events.slice(completionIndex + 1, searchEnd).findIndex((event) => {
+      const type = eventTypeOf(event);
+      return (
+        POST_AUTO_COMPACTION_CONTINUATION_TYPES.has(type) ||
+        POST_AUTO_COMPACTION_CLOSURE_TYPES.has(type)
+      );
+    });
+
+    expect(recoveryIndex).toBeGreaterThanOrEqual(0);
+    if (recoveryIndex < 0) continue;
+
+    const absoluteRecoveryIndex = completionIndex + 1 + recoveryIndex;
+    const recoveryEvent = result.events[absoluteRecoveryIndex];
+    const completionTimestamp = eventTimestampOf(result.events[completionIndex]);
+    const recoveryTimestamp = eventTimestampOf(recoveryEvent);
+
+    if (completionTimestamp !== null && recoveryTimestamp !== null) {
+      expect(recoveryTimestamp - completionTimestamp).toBeLessThanOrEqual(
+        MAX_POST_AUTO_COMPACTION_GAP_MS,
+      );
+    }
+  }
+}
+
 function hasCompactionAutoFailure(result: RegressionRunResult): boolean {
   return countEvents(result.events, "context_compaction_auto_failed") > 0;
 }
 
 describe("e2e: interactive multi-turn live regression", () => {
+  test("assertion helper accepts bounded continuation after auto compaction completion", () => {
+    const result: RegressionRunResult = {
+      workspace: "/tmp/brewva-live-assert-pass",
+      stdout: "",
+      stderr: "",
+      driverExit: 0,
+      eventFile: "/tmp/events.jsonl",
+      events: [
+        { type: "context_compaction_auto_completed", timestamp: 1_000 },
+        { type: "message_update", timestamp: 1_800 },
+        { type: "agent_end", timestamp: 2_200 },
+      ],
+    };
+
+    expect(() => assertAutoCompactionCompletionContinuity(result)).not.toThrow();
+  });
+
+  test("assertion helper rejects missing continuation before next turn", () => {
+    const result: RegressionRunResult = {
+      workspace: "/tmp/brewva-live-assert-missing",
+      stdout: "",
+      stderr: "",
+      driverExit: 0,
+      eventFile: "/tmp/events.jsonl",
+      events: [
+        { type: "context_compaction_auto_completed", timestamp: 1_000 },
+        { type: "turn_start", timestamp: 2_000 },
+      ],
+    };
+
+    expect(() => assertAutoCompactionCompletionContinuity(result)).toThrow();
+  });
+
+  test("assertion helper rejects excessive silence after auto compaction completion", () => {
+    const result: RegressionRunResult = {
+      workspace: "/tmp/brewva-live-assert-gap",
+      stdout: "",
+      stderr: "",
+      driverExit: 0,
+      eventFile: "/tmp/events.jsonl",
+      events: [
+        { type: "context_compaction_auto_completed", timestamp: 1_000 },
+        { type: "message_update", timestamp: 1_000 + MAX_POST_AUTO_COMPACTION_GAP_MS + 1 },
+      ],
+    };
+
+    expect(() => assertAutoCompactionCompletionContinuity(result)).toThrow();
+  });
+
   runLive("runs 3~5 round segmented conversation and validates compaction continuity", () => {
     ensureExpectAvailable();
     for (const rounds of [3, 5]) {
@@ -410,6 +519,7 @@ describe("e2e: interactive multi-turn live regression", () => {
         }
         assertCoreCounts(result, rounds);
         assertCompactionContinuity(result);
+        assertAutoCompactionCompletionContinuity(result);
       } catch (error) {
         throw new Error(
           `${error instanceof Error ? error.message : String(error)}\n${formatFailureOutput(result)}`,

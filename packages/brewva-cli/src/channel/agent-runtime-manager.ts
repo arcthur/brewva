@@ -52,9 +52,9 @@ function forceNamespaceConfig(baseConfig: BrewvaConfig, agentId: string): Brewva
       ...baseConfig.ledger,
       path: `${stateRoot}/ledger/evidence.jsonl`,
     },
-    memory: {
-      ...baseConfig.memory,
-      dir: `${stateRoot}/memory`,
+    projection: {
+      ...baseConfig.projection,
+      dir: `${stateRoot}/projection`,
     },
     schedule: {
       ...baseConfig.schedule,

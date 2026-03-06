@@ -1,6 +1,6 @@
 ---
 name: brewva-session-logs
-description: Search and analyze Brewva runtime session artifacts (event store, evidence ledger, memory projection, cost, tape, governance telemetry) using jq and rg.
+description: Search and analyze Brewva runtime session artifacts (event store, evidence ledger, working projection, cost, tape, governance telemetry) using jq and rg.
 stability: stable
 tools:
   required: [read, grep]
@@ -15,7 +15,7 @@ outputs:
     event_timeline,
     cost_report,
     ledger_integrity,
-    memory_snapshot,
+    projection_snapshot,
     process_evidence,
   ]
 consumes: []
@@ -38,7 +38,7 @@ Use this skill when:
 - inspecting session history or runtime behavior
 - checking cost/budget consumption across sessions
 - verifying evidence ledger hash chain integrity
-- exploring memory projection state
+- exploring working projection state
 - reconstructing a specific turn or event sequence
 - searching across sessions for a pattern or anomaly
 - debugging governance signals from JSONL artifacts
@@ -47,18 +47,18 @@ Use this skill when:
 
 All paths are relative to the workspace root.
 
-| Artifact              | Path                                                 | Format             |
-| --------------------- | ---------------------------------------------------- | ------------------ |
-| Event store           | `.orchestrator/events/sess_*.jsonl`                  | JSONL              |
-| Evidence ledger       | `.orchestrator/ledger/evidence.jsonl`                | JSONL (hash chain) |
-| Memory units          | `.orchestrator/memory/units.jsonl`                   | JSONL              |
-| Memory state          | `.orchestrator/memory/state.json`                    | JSON               |
-| Working memory        | `.orchestrator/memory/working.md`                    | Markdown           |
-| File snapshots        | `.orchestrator/snapshots/{sessionId}/patchsets.json` | JSON               |
-| Tool output artifacts | `.orchestrator/tool-output-artifacts/<bucket>/*.txt` | Text               |
-| Turn WAL              | `.orchestrator/turn-wal/*.jsonl`                     | JSONL              |
-| Schedule projection   | `.brewva/schedule/intents.jsonl`                     | JSONL              |
-| Skills index          | `.brewva/skills_index.json`                          | JSON               |
+| Artifact              | Path                                                     | Format             |
+| --------------------- | -------------------------------------------------------- | ------------------ |
+| Event store           | `.orchestrator/events/sess_*.jsonl`                      | JSONL              |
+| Evidence ledger       | `.orchestrator/ledger/evidence.jsonl`                    | JSONL (hash chain) |
+| Projection units      | `.orchestrator/projection/units.jsonl`                   | JSONL              |
+| Projection state      | `.orchestrator/projection/state.json`                    | JSON               |
+| Working projection    | `.orchestrator/projection/sessions/sess_<id>/working.md` | Markdown           |
+| File snapshots        | `.orchestrator/snapshots/{sessionId}/patchsets.json`     | JSON               |
+| Tool output artifacts | `.orchestrator/tool-output-artifacts/<bucket>/*.txt`     | Text               |
+| Turn WAL              | `.orchestrator/turn-wal/*.jsonl`                         | JSONL              |
+| Schedule projection   | `.brewva/schedule/intents.jsonl`                         | JSONL              |
+| Skills index          | `.brewva/skills_index.json`                              | JSON               |
 
 ## Key Fields Reference
 
@@ -78,7 +78,7 @@ High-value event families:
 - session and tool lifecycle: `session_start`, `agent_end`, `tool_call`, `tool_call_blocked`, `tool_call_marked`
 - task/tape: `task_event`, `anchor`, `checkpoint`
 - context boundary: `context_usage`, `context_compaction_requested`, `context_compaction_gate_blocked_tool`, `context_compacted`, `context_injected`, `context_injection_dropped`, `context_arena_slo_enforced`
-- memory projection: `memory_projection_ingested`, `memory_projection_refreshed`
+- projection lifecycle: `projection_ingested`, `projection_refreshed`
 - cost and budget: `cost_update`, `budget_alert`
 - governance checks: `governance_verify_spec_*`, `governance_cost_anomaly_*`, `governance_compaction_integrity_*`
 - durability: `ledger_compacted`, `turn_wal_*`
@@ -96,16 +96,16 @@ High-value event families:
 | `previousHash` | string | Hash of previous row (chain link)  |
 | `hash`         | string | SHA-256 of this row                |
 
-### Memory Units
+### Projection Units
 
-| Field        | Type   | Description         |
-| ------------ | ------ | ------------------- |
-| `id`         | string | Unit identifier     |
-| `sessionId`  | string | Originating session |
-| `topic`      | string | Topic key           |
-| `statement`  | string | Core assertion      |
-| `confidence` | number | Confidence score    |
-| `status`     | string | `active`/`resolved` |
+| Field           | Type   | Description                       |
+| --------------- | ------ | --------------------------------- |
+| `id`            | string | Unit identifier                   |
+| `sessionId`     | string | Originating session               |
+| `projectionKey` | string | Deterministic projection identity |
+| `label`         | string | Rendered projection label         |
+| `statement`     | string | Core statement                    |
+| `status`        | string | `active`/`resolved`               |
 
 ## Common Queries
 
@@ -219,44 +219,44 @@ jq -r 'select(.verdict == "fail") | [.id, .turn, .skill, .tool, .argsSummary[:60
   .orchestrator/ledger/evidence.jsonl
 ```
 
-## Memory Projection Queries
+## Working Projection Queries
 
-### Current working memory
+### Current working projection
 
 ```bash
-cat .orchestrator/memory/working.md
+cat .orchestrator/projection/sessions/sess_<id>/working.md
 ```
 
-### Memory topics with counts
+### Projection labels with counts
 
 ```bash
-jq -r '.topic' .orchestrator/memory/units.jsonl | sort | uniq -c | sort -rn
+jq -r '.label' .orchestrator/projection/units.jsonl | sort | uniq -c | sort -rn
 ```
 
-### Active memory units
+### Active projection units
 
 ```bash
-jq -r 'select(.status == "active") | [.id[:20], .topic, .confidence, .statement[:80]] | @tsv' \
-  .orchestrator/memory/units.jsonl
+jq -r 'select(.status == "active") | [.id[:20], .projectionKey, .label, .statement[:80]] | @tsv' \
+  .orchestrator/projection/units.jsonl
 ```
 
-### Recently resolved units
+### Recently resolved projection units
 
 ```bash
-jq -r 'select(.status == "resolved") | [.updatedAt, .id, .topic, .statement[:80]] | @tsv' \
-  .orchestrator/memory/units.jsonl | sort -n | tail -30
+jq -r 'select(.status == "resolved") | [.updatedAt, .id, .projectionKey, .statement[:80]] | @tsv' \
+  .orchestrator/projection/units.jsonl | sort -n | tail -30
 ```
 
 ### Projection state
 
 ```bash
-jq '.' .orchestrator/memory/state.json
+jq '.' .orchestrator/projection/state.json
 ```
 
 ### Analyze projection events (offline)
 
 ```bash
-bun run script/analyze-memory-projection.ts .orchestrator/events/sess_<encoded>.jsonl
+bun run script/analyze-projection.ts .orchestrator/events/sess_<encoded>.jsonl
 ```
 
 ## Turn WAL Queries
@@ -303,7 +303,7 @@ jq -r 'select(.kind == "intent") | .record | [.intentId[:12], .status, .reason[:
 
 When full state reconstruction at a specific turn is needed, prefer `TurnReplayEngine`
 (`packages/brewva-runtime/src/tape/replay-engine.ts`) over manual JSONL parsing.
-It uses checkpoints and rebuilds task/truth/cost/evidence/memory projection state.
+It uses checkpoints and rebuilds task/truth/cost/evidence/projection state.
 
 ## Workflow
 

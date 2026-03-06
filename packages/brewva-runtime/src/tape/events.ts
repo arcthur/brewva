@@ -5,7 +5,7 @@ export const TAPE_ANCHOR_EVENT_TYPE = "anchor";
 export const TAPE_CHECKPOINT_EVENT_TYPE = "checkpoint";
 
 export const TAPE_ANCHOR_SCHEMA = "brewva.tape.anchor.v1" as const;
-export const TAPE_CHECKPOINT_SCHEMA = "brewva.tape.checkpoint.v2" as const;
+export const TAPE_CHECKPOINT_SCHEMA = "brewva.tape.checkpoint.v3" as const;
 
 const TASK_ITEM_STATUSES = ["todo", "doing", "done", "blocked"] as const;
 const TASK_PHASES = ["align", "investigate", "execute", "verify", "blocked", "done"] as const;
@@ -36,7 +36,7 @@ export interface TapeCheckpointPayload {
     cost: SessionCostSummary;
     costSkillLastTurnByName: Record<string, number>;
     evidence: TapeCheckpointEvidenceState;
-    memory: TapeCheckpointMemoryState;
+    projection: TapeCheckpointProjectionState;
   };
   basedOnEventId?: string;
   latestAnchorEventId?: string;
@@ -69,7 +69,7 @@ export interface TapeCheckpointEvidenceState {
   failureClassCounts?: TapeCheckpointFailureClassCounts;
 }
 
-export interface TapeCheckpointMemoryState {
+export interface TapeCheckpointProjectionState {
   updatedAt: number | null;
   unitCount: number;
 }
@@ -528,7 +528,7 @@ function coerceCheckpointEvidenceState(value: unknown): TapeCheckpointEvidenceSt
   };
 }
 
-function coerceCheckpointMemoryState(value: unknown): TapeCheckpointMemoryState | null {
+function coerceCheckpointProjectionState(value: unknown): TapeCheckpointProjectionState | null {
   if (!isRecord(value)) return null;
   if ("crystals" in value) {
     return null;
@@ -571,7 +571,7 @@ export function buildTapeCheckpointPayload(input: {
   costSummary: SessionCostSummary;
   costSkillLastTurnByName?: Record<string, number>;
   evidenceState: TapeCheckpointEvidenceState;
-  memoryState: TapeCheckpointMemoryState;
+  projectionState: TapeCheckpointProjectionState;
   basedOnEventId?: string;
   latestAnchorEventId?: string;
   reason: string;
@@ -585,7 +585,7 @@ export function buildTapeCheckpointPayload(input: {
       cost: input.costSummary,
       costSkillLastTurnByName: input.costSkillLastTurnByName ?? {},
       evidence: input.evidenceState,
-      memory: input.memoryState,
+      projection: input.projectionState,
     },
     basedOnEventId: input.basedOnEventId,
     latestAnchorEventId: input.latestAnchorEventId,
@@ -635,7 +635,7 @@ export function coerceTapeCheckpointPayload(value: unknown): TapeCheckpointPaylo
     value.state.cost === undefined ||
     value.state.costSkillLastTurnByName === undefined ||
     value.state.evidence === undefined ||
-    value.state.memory === undefined
+    value.state.projection === undefined
   ) {
     return null;
   }
@@ -644,8 +644,8 @@ export function coerceTapeCheckpointPayload(value: unknown): TapeCheckpointPaylo
     value.state.costSkillLastTurnByName,
   );
   const evidence = coerceCheckpointEvidenceState(value.state.evidence);
-  const memory = coerceCheckpointMemoryState(value.state.memory);
-  if (!cost || !costSkillLastTurnByName || !evidence || !memory) return null;
+  const projection = coerceCheckpointProjectionState(value.state.projection);
+  if (!cost || !costSkillLastTurnByName || !evidence || !projection) return null;
 
   return {
     schema: TAPE_CHECKPOINT_SCHEMA,
@@ -655,7 +655,7 @@ export function coerceTapeCheckpointPayload(value: unknown): TapeCheckpointPaylo
       cost,
       costSkillLastTurnByName,
       evidence,
-      memory,
+      projection,
     },
     basedOnEventId,
     latestAnchorEventId,

@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  TASK_EVENT_TYPE,
-  TRUTH_EVENT_TYPE,
-  extractMemoryFromEvent,
-  type BrewvaEventRecord,
-} from "@brewva/brewva-runtime";
+import { TASK_EVENT_TYPE, TRUTH_EVENT_TYPE, type BrewvaEventRecord } from "@brewva/brewva-runtime";
+import { extractProjectionFromEvent } from "../../packages/brewva-runtime/src/projection/extractor.js";
 
 function event(input: {
   id: string;
@@ -15,16 +11,16 @@ function event(input: {
 }): BrewvaEventRecord {
   return {
     id: input.id,
-    sessionId: input.sessionId ?? "mem-extractor-session",
+    sessionId: input.sessionId ?? "projection-extractor-session",
     type: input.type,
     timestamp: input.timestamp ?? 1_700_000_000_000,
     payload: input.payload as BrewvaEventRecord["payload"],
   };
 }
 
-describe("memory extractor", () => {
-  test("extracts truth upsert into deterministic memory unit candidate", () => {
-    const result = extractMemoryFromEvent(
+describe("projection extractor", () => {
+  test("extracts truth upsert into deterministic projection unit candidate", () => {
+    const result = extractProjectionFromEvent(
       event({
         id: "evt-truth-upsert",
         type: TRUTH_EVENT_TYPE,
@@ -46,13 +42,14 @@ describe("memory extractor", () => {
     );
 
     expect(result.upserts).toHaveLength(1);
-    expect(result.upserts[0]?.type).toBe("risk");
+    expect(result.upserts[0]?.projectionKey).toBe("truth_fact:truth:command:1");
+    expect(result.upserts[0]?.label).toBe("truth.command_failure");
     expect(result.upserts[0]?.metadata?.truthFactId).toBe("truth:command:1");
     expect(result.resolves).toHaveLength(0);
   });
 
-  test("extracts spec_set into goal decision + constraint units", () => {
-    const result = extractMemoryFromEvent(
+  test("extracts spec_set into source-backed task projection units", () => {
+    const result = extractProjectionFromEvent(
       event({
         id: "evt-task-spec-set",
         type: TASK_EVENT_TYPE,
@@ -75,12 +72,26 @@ describe("memory extractor", () => {
     const statements = result.upserts.map((unit) => unit.statement);
     expect(statements).toContain("Ship governance kernel runtime");
     expect(statements).toContain("No backward compatibility.");
-    expect(statements).toContain("verification.level=standard");
-    expect(statements).toContain("verification.commands=bun test");
+    expect(statements).toContain("standard");
+    expect(statements).toContain("bun test");
+    expect(result.resolves).toEqual([
+      {
+        sessionId: "projection-extractor-session",
+        sourceType: "projection_group",
+        groupKey: "task_spec",
+        keepProjectionKeys: [
+          "task_spec.goal",
+          "task_spec.constraint:no backward compatibility.",
+          "task_spec.verification.level",
+          "task_spec.verification.command:bun test",
+        ],
+        resolvedAt: 1_700_000_000_000,
+      },
+    ]);
   });
 
   test("extracts blocker_recorded into risk unit candidate", () => {
-    const result = extractMemoryFromEvent(
+    const result = extractProjectionFromEvent(
       event({
         id: "evt-task-blocker-recorded",
         type: TASK_EVENT_TYPE,
@@ -97,14 +108,15 @@ describe("memory extractor", () => {
     );
 
     expect(result.upserts).toHaveLength(1);
-    expect(result.upserts[0]?.type).toBe("risk");
+    expect(result.upserts[0]?.projectionKey).toBe("task_blocker:blocker-1");
+    expect(result.upserts[0]?.label).toBe("task.blocker");
     expect(result.upserts[0]?.metadata?.taskBlockerId).toBe("blocker-1");
     expect(result.upserts[0]?.metadata?.truthFactId).toBe("truth:verifier:tests");
     expect(result.resolves).toHaveLength(0);
   });
 
   test("extracts task blocker_resolved into resolve directive", () => {
-    const result = extractMemoryFromEvent(
+    const result = extractProjectionFromEvent(
       event({
         id: "evt-task-resolved",
         type: TASK_EVENT_TYPE,
@@ -119,7 +131,7 @@ describe("memory extractor", () => {
     expect(result.upserts).toHaveLength(0);
     expect(result.resolves).toEqual([
       {
-        sessionId: "mem-extractor-session",
+        sessionId: "projection-extractor-session",
         sourceType: "task_blocker",
         sourceId: "blocker-1",
         resolvedAt: 1_700_000_000_000,
@@ -128,7 +140,7 @@ describe("memory extractor", () => {
   });
 
   test("ignores task status_set events (task state is injected elsewhere)", () => {
-    const result = extractMemoryFromEvent(
+    const result = extractProjectionFromEvent(
       event({
         id: "evt-task-status",
         type: TASK_EVENT_TYPE,
@@ -149,7 +161,7 @@ describe("memory extractor", () => {
   });
 
   test("ignores non-projectable event types", () => {
-    const result = extractMemoryFromEvent(
+    const result = extractProjectionFromEvent(
       event({
         id: "evt-non-projectable",
         type: "tool_call_result_recorded",

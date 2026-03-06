@@ -94,7 +94,7 @@ export interface EventPipelineServiceOptions {
   level: "audit" | "ops" | "debug";
   inferEventCategory: RuntimeCallback<[type: string], BrewvaEventCategory>;
   observeReplayEvent: RuntimeCallback<[event: BrewvaEventRecord]>;
-  ingestMemoryEvent: RuntimeCallback<[event: BrewvaEventRecord]>;
+  ingestProjectionEvent: RuntimeCallback<[event: BrewvaEventRecord]>;
   maybeRecordTapeCheckpoint: RuntimeCallback<[event: BrewvaEventRecord]>;
 }
 
@@ -103,7 +103,7 @@ export class EventPipelineService {
   private readonly level: "audit" | "ops" | "debug";
   private readonly inferEventCategory: (type: string) => BrewvaEventCategory;
   private readonly observeReplayEvent: (event: BrewvaEventRecord) => void;
-  private readonly ingestMemoryEvent: (event: BrewvaEventRecord) => void;
+  private readonly ingestProjectionEvent: (event: BrewvaEventRecord) => void;
   private readonly maybeRecordTapeCheckpoint: (event: BrewvaEventRecord) => void;
   private readonly eventListeners = new Set<(event: BrewvaStructuredEvent) => void>();
 
@@ -112,7 +112,7 @@ export class EventPipelineService {
     this.level = options.level;
     this.inferEventCategory = options.inferEventCategory;
     this.observeReplayEvent = options.observeReplayEvent;
-    this.ingestMemoryEvent = options.ingestMemoryEvent;
+    this.ingestProjectionEvent = options.ingestProjectionEvent;
     this.maybeRecordTapeCheckpoint = options.maybeRecordTapeCheckpoint;
   }
 
@@ -137,7 +137,7 @@ export class EventPipelineService {
       listener(structured);
     }
 
-    this.ingestMemoryEvent(row);
+    this.ingestProjectionEvent(row);
     if (!input.skipTapeCheckpoint) {
       this.maybeRecordTapeCheckpoint(row);
     }

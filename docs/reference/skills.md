@@ -16,10 +16,12 @@ Skill frontmatter supports dispatch-focused metadata:
 
 Selector execution is governance-first for runtime routing:
 
-1. `registerContextTransform` does not run model translation or semantic ranking in default path.
-2. Routing telemetry (`skill_routing_translation`, `skill_routing_semantic`) is emitted as deterministic `skipped` state with reason `governance_only`.
-3. Runtime dispatch consumes only explicit preselection inputs (for example control-plane injected selections), otherwise it falls back to deterministic no-skill decision.
-4. Runtime does not run lexical selector fallback or adaptive routing inference loops.
+1. Runtime kernel routing is deterministic and contract-aware when `skills.selector.mode=deterministic`.
+2. Explicit preselection (for example control-plane `setNextSelection`) is consumed before runtime routing and wins when present.
+3. Routing telemetry keeps `skill_routing_translation` as deterministic `skipped` because there is no model translation stage; `skill_routing_semantic` reflects `selected | empty | failed` from the deterministic router.
+4. `skills.selector.mode=external_only` disables kernel routing and keeps explicit preselection as the only selection source.
+5. Activation remains explicit: routing may produce `suggest/gate/auto` dispatch decisions, but actual skill entry still happens through `skill_load`.
+6. Runtime does not run adaptive inference loops or online model reranking in the kernel path.
 
 `skills_index.json` now carries normalized contract metadata for each skill entry (including `outputs`, `consumes`, and `dispatch`).
 
@@ -103,7 +105,7 @@ emits `sourceDecision` in cascade event payloads with stable reason codes:
 - `brewva-project` orchestrates source-lane analysis, process-evidence diagnosis,
   and delivery flows for runtime-facing work in this monorepo.
 - `brewva-session-logs` provides artifact-centric inspection across event store,
-  evidence ledger, memory, snapshots, cost traces, and schedule projections.
+  evidence ledger, working projection, snapshots, cost traces, and schedule projections.
 - `brewva-self-improve` captures reusable learnings and errors, then promotes
   validated patterns into durable assets such as `AGENTS.md`, skills, and docs.
 

@@ -3,6 +3,7 @@ import type {
   SkillDispatchDecision,
   SkillOutputRecord,
   SkillPreselection,
+  SkillRoutingTrace,
 } from "../types.js";
 
 export class RuntimeSessionStateStore {
@@ -19,6 +20,7 @@ export class RuntimeSessionStateStore {
   readonly skillOutputsBySession = new Map<string, Map<string, SkillOutputRecord>>();
   readonly pendingDispatchBySession = new Map<string, SkillDispatchDecision>();
   readonly nextSkillSelectionsBySession = new Map<string, SkillPreselection>();
+  readonly lastSkillRoutingBySession = new Map<string, SkillRoutingTrace>();
   readonly skillChainIntentsBySession = new Map<string, SkillChainIntent>();
   readonly tapeCheckpointWriteInProgressBySession = new Set<string>();
   readonly tapeCheckpointCounterInitializedBySession = new Set<string>();
@@ -73,6 +75,7 @@ export class RuntimeSessionStateStore {
     this.skillOutputsBySession.delete(sessionId);
     this.pendingDispatchBySession.delete(sessionId);
     this.nextSkillSelectionsBySession.delete(sessionId);
+    this.lastSkillRoutingBySession.delete(sessionId);
     this.skillChainIntentsBySession.delete(sessionId);
     this.clearInjectionFingerprintsForSession(sessionId);
     this.clearReservedInjectionTokensForSession(sessionId);

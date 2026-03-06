@@ -24,9 +24,9 @@
 
 - On `SIGINT`/`SIGTERM`, CLI records `session_interrupted`, waits for agent idle (bounded by graceful timeout), then exits.
 - Next startup reconstructs foldable replay state from event tape (`checkpoint + delta` replay),
-  including task/truth/cost/evidence/memory fold slices.
+  including task/truth/cost/evidence/projection fold slices.
 - First `onTurnStart()` hydrates session-local runtime state from tape events
   (skill/budget/cost counters, warning dedupe, ledger compaction cooldown).
 - Note: upstream `turnIndex` can reset to `0` on `agent_start` boundaries. Brewva normalizes turns to be monotonic per session (for example `effectiveTurn = max(current, turnIndex)`) and uses the normalized value for gating/reconciliation.
-- If memory projection artifacts are missing, runtime can rebuild memory
-  projection files from tape-backed `memory_*` snapshots.
+- If projection artifacts are missing, runtime can rebuild projection files from
+  tape-backed `projection_*` snapshots.

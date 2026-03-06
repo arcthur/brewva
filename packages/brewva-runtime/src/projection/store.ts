@@ -1,42 +1,35 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ensureDir, writeFileAtomic } from "../utils/fs.js";
 import { sha256 } from "../utils/hash.js";
 import type {
-  MemoryExtractionResult,
-  MemoryStoreState,
-  MemoryUnit,
-  MemoryUnitCandidate,
-  MemoryUnitResolveDirective,
-  WorkingMemorySnapshot,
+  ProjectionExtractionResult,
+  ProjectionStoreState,
+  ProjectionUnit,
+  ProjectionUnitCandidate,
+  ProjectionUnitResolveDirective,
+  WorkingProjectionSnapshot,
 } from "./types.js";
 import { mergeSourceRefs, normalizeText } from "./utils.js";
 
-const MEMORY_STATE_SCHEMA_VERSION = 4;
+const PROJECTION_STATE_SCHEMA_VERSION = 5;
+const WORKING_SNAPSHOTS_DIR = "sessions";
+const ENCODED_SESSION_PREFIX = "sess_";
 
 function nowId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function normalizeConfidence(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(1, value));
-}
-
-function fingerprintForUnit(input: {
-  type: MemoryUnitCandidate["type"];
-  topic: string;
-  statement: string;
-}): string {
-  return sha256(`${input.type}::${normalizeText(input.topic)}::${normalizeText(input.statement)}`);
+function fingerprintForUnit(input: { projectionKey: string }): string {
+  return sha256(normalizeText(input.projectionKey));
 }
 
 function nextUpdatedAt(currentUpdatedAt: number, proposedAt: number): number {
   return Math.max(proposedAt, currentUpdatedAt + 1);
 }
 
-function isValidMemoryUnitType(value: unknown): value is MemoryUnit["type"] {
-  return value === "fact" || value === "decision" || value === "constraint" || value === "risk";
+function isValidProjectionUnitStatus(value: unknown): value is ProjectionUnit["status"] {
+  return value === "active" || value === "resolved";
 }
 
 function parseJsonLines<T>(path: string): T[] {
@@ -57,41 +50,51 @@ function parseJsonLines<T>(path: string): T[] {
   return out;
 }
 
-function defaultState(): MemoryStoreState {
+function encodeSessionIdForFileName(sessionId: string): string {
+  return Buffer.from(sessionId, "utf8").toString("base64url");
+}
+
+function defaultState(): ProjectionStoreState {
   return {
-    schemaVersion: MEMORY_STATE_SCHEMA_VERSION,
+    schemaVersion: PROJECTION_STATE_SCHEMA_VERSION,
     lastProjectedAt: null,
   };
 }
 
-export interface MemoryStoreOptions {
+export interface ProjectionStoreOptions {
   rootDir: string;
   workingFile: string;
 }
 
-export class MemoryStore {
+export class ProjectionStore {
   private readonly rootDir: string;
   private readonly unitsPath: string;
   private readonly statePath: string;
-  private readonly workingPath: string;
+  private readonly workingFile: string;
+  private readonly workingLegacyPath: string;
+  private readonly workingSessionsRoot: string;
 
   private unitsLoaded = false;
-  private unitsById = new Map<string, MemoryUnit>();
+  private unitsById = new Map<string, ProjectionUnit>();
   private unitIdBySessionFingerprint = new Map<string, string>();
-  private workingBySession = new Map<string, WorkingMemorySnapshot>();
-  private state: MemoryStoreState = defaultState();
+  private workingBySession = new Map<string, WorkingProjectionSnapshot>();
+  private state: ProjectionStoreState = defaultState();
   private incompatibleOnDisk = false;
 
-  constructor(options: MemoryStoreOptions) {
+  constructor(options: ProjectionStoreOptions) {
     this.rootDir = resolve(options.rootDir);
     ensureDir(this.rootDir);
     this.unitsPath = join(this.rootDir, "units.jsonl");
     this.statePath = join(this.rootDir, "state.json");
-    this.workingPath = join(this.rootDir, options.workingFile);
+    this.workingFile = options.workingFile;
+    this.workingLegacyPath = join(this.rootDir, options.workingFile);
+    this.workingSessionsRoot = join(this.rootDir, WORKING_SNAPSHOTS_DIR);
     this.ensureStateLoaded();
     if (this.incompatibleOnDisk) {
       this.resetOnDisk();
+      return;
     }
+    this.removeLegacyWorkingSnapshotFile();
   }
 
   hasUnits(sessionId: string): boolean {
@@ -103,21 +106,20 @@ export class MemoryStore {
   }
 
   upsertUnit(
-    input: MemoryUnitCandidate,
+    input: ProjectionUnitCandidate,
     observedAt = Date.now(),
-  ): { unit: MemoryUnit; created: boolean } {
+  ): { unit: ProjectionUnit; created: boolean } {
     this.ensureUnitsLoaded();
 
-    const topic = input.topic.trim();
+    const projectionKey = input.projectionKey.trim();
+    const label = input.label.trim();
     const statement = input.statement.trim();
-    if (!topic || !statement) {
-      throw new Error("Memory unit topic/statement cannot be empty.");
+    if (!projectionKey || !label || !statement) {
+      throw new Error("Projection unit projectionKey/label/statement cannot be empty.");
     }
 
     const fingerprint = fingerprintForUnit({
-      type: input.type,
-      topic,
-      statement,
+      projectionKey,
     });
     const key = `${input.sessionId}:${fingerprint}`;
     const existingId = this.unitIdBySessionFingerprint.get(key);
@@ -125,12 +127,13 @@ export class MemoryStore {
 
     if (existing) {
       const updatedAt = nextUpdatedAt(existing.updatedAt, observedAt);
-      const nextStatus =
-        existing.status === "resolved" || input.status === "resolved" ? "resolved" : "active";
-      const merged: MemoryUnit = {
+      const nextStatus = input.status;
+      const merged: ProjectionUnit = {
         ...existing,
+        projectionKey,
+        label,
         status: nextStatus,
-        confidence: Math.max(existing.confidence, normalizeConfidence(input.confidence)),
+        statement,
         sourceRefs: mergeSourceRefs(existing.sourceRefs, input.sourceRefs),
         metadata:
           input.metadata && existing.metadata
@@ -138,7 +141,7 @@ export class MemoryStore {
             : (input.metadata ?? existing.metadata),
         updatedAt,
         lastSeenAt: updatedAt,
-        resolvedAt: nextStatus === "resolved" ? (existing.resolvedAt ?? updatedAt) : undefined,
+        resolvedAt: nextStatus === "resolved" ? updatedAt : undefined,
       };
       this.unitsById.set(merged.id, merged);
       this.appendJsonLine(this.unitsPath, merged);
@@ -146,14 +149,13 @@ export class MemoryStore {
     }
 
     const timestamp = observedAt;
-    const created: MemoryUnit = {
-      id: nowId("memu"),
+    const created: ProjectionUnit = {
+      id: nowId("prju"),
       sessionId: input.sessionId,
-      type: input.type,
       status: input.status,
-      topic,
+      projectionKey,
+      label,
       statement,
-      confidence: normalizeConfidence(input.confidence),
       fingerprint,
       sourceRefs: mergeSourceRefs([], input.sourceRefs),
       metadata: input.metadata,
@@ -168,7 +170,7 @@ export class MemoryStore {
     return { unit: created, created: true };
   }
 
-  resolveUnits(directive: MemoryUnitResolveDirective): number {
+  resolveUnits(directive: ProjectionUnitResolveDirective): number {
     this.ensureUnitsLoaded();
     let resolved = 0;
 
@@ -183,13 +185,19 @@ export class MemoryStore {
         if (directive.sourceType === "task_blocker") {
           return unit.metadata?.taskBlockerId === directive.sourceId;
         }
+        if (directive.sourceType === "projection_group") {
+          const keep = new Set(directive.keepProjectionKeys);
+          return (
+            unit.metadata?.projectionGroup === directive.groupKey && !keep.has(unit.projectionKey)
+          );
+        }
         return false;
       })();
 
       if (!matched) continue;
 
       const resolvedAt = nextUpdatedAt(unit.updatedAt, directive.resolvedAt);
-      const updated: MemoryUnit = {
+      const updated: ProjectionUnit = {
         ...unit,
         status: "resolved",
         updatedAt: resolvedAt,
@@ -205,7 +213,7 @@ export class MemoryStore {
   }
 
   ingestExtraction(
-    input: MemoryExtractionResult,
+    input: ProjectionExtractionResult,
     observedAt = Date.now(),
   ): {
     upsertedUnits: number;
@@ -228,25 +236,28 @@ export class MemoryStore {
     };
   }
 
-  listUnits(sessionId?: string): MemoryUnit[] {
+  listUnits(sessionId?: string): ProjectionUnit[] {
     this.ensureUnitsLoaded();
     const units = [...this.unitsById.values()];
     const filtered = sessionId ? units.filter((unit) => unit.sessionId === sessionId) : units;
-    return filtered.toSorted((left, right) => right.updatedAt - left.updatedAt);
+    return filtered.toSorted(
+      (left, right) =>
+        right.updatedAt - left.updatedAt || left.projectionKey.localeCompare(right.projectionKey),
+    );
   }
 
-  getWorkingSnapshot(sessionId: string): WorkingMemorySnapshot | undefined {
+  getWorkingSnapshot(sessionId: string): WorkingProjectionSnapshot | undefined {
     return this.workingBySession.get(sessionId);
   }
 
-  setWorkingSnapshot(snapshot: WorkingMemorySnapshot): void {
+  setWorkingSnapshot(snapshot: WorkingProjectionSnapshot): void {
     this.workingBySession.set(snapshot.sessionId, snapshot);
     this.state = {
       ...this.state,
       lastProjectedAt: snapshot.generatedAt,
     };
     this.writeState();
-    writeFileAtomic(this.workingPath, `${snapshot.content}\n`);
+    writeFileAtomic(this.workingPathForSession(snapshot.sessionId), `${snapshot.content}\n`);
   }
 
   clearWorkingSnapshot(sessionId: string): void {
@@ -264,12 +275,17 @@ export class MemoryStore {
       if (!row || typeof row !== "object") continue;
       const record = row as Record<string, unknown>;
       if (typeof record.id !== "string" || typeof record.sessionId !== "string") continue;
-      if (!isValidMemoryUnitType(record.type)) {
+      if (
+        !isValidProjectionUnitStatus(record.status) ||
+        typeof record.projectionKey !== "string" ||
+        typeof record.label !== "string" ||
+        typeof record.statement !== "string" ||
+        typeof record.fingerprint !== "string"
+      ) {
         invalid = true;
         break;
       }
-      if (typeof record.fingerprint !== "string") continue;
-      const unit = record as unknown as MemoryUnit;
+      const unit = record as unknown as ProjectionUnit;
       const existing = this.unitsById.get(unit.id);
       if (!existing || unit.updatedAt >= existing.updatedAt) {
         this.unitsById.set(unit.id, unit);
@@ -293,10 +309,10 @@ export class MemoryStore {
   private ensureStateLoaded(): void {
     if (!existsSync(this.statePath)) return;
     try {
-      const raw = JSON.parse(readFileSync(this.statePath, "utf8")) as Partial<MemoryStoreState>;
+      const raw = JSON.parse(readFileSync(this.statePath, "utf8")) as Partial<ProjectionStoreState>;
       if (
         typeof raw.schemaVersion === "number" &&
-        raw.schemaVersion === MEMORY_STATE_SCHEMA_VERSION &&
+        raw.schemaVersion === PROJECTION_STATE_SCHEMA_VERSION &&
         (raw.lastProjectedAt === null ||
           (typeof raw.lastProjectedAt === "number" && Number.isFinite(raw.lastProjectedAt)))
       ) {
@@ -322,11 +338,7 @@ export class MemoryStore {
     } catch {
       // ignore
     }
-    try {
-      writeFileAtomic(this.workingPath, "");
-    } catch {
-      // ignore
-    }
+    this.clearWorkingSnapshotsOnDisk();
     this.unitsLoaded = true;
     this.unitsById.clear();
     this.unitIdBySessionFingerprint.clear();
@@ -347,5 +359,33 @@ export class MemoryStore {
 
   private writeState(): void {
     writeFileAtomic(this.statePath, `${JSON.stringify(this.state, null, 2)}\n`);
+  }
+
+  private workingPathForSession(sessionId: string): string {
+    return join(
+      this.workingSessionsRoot,
+      `${ENCODED_SESSION_PREFIX}${encodeSessionIdForFileName(sessionId)}`,
+      this.workingFile,
+    );
+  }
+
+  private clearWorkingSnapshotsOnDisk(): void {
+    try {
+      rmSync(this.workingSessionsRoot, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+    this.removeLegacyWorkingSnapshotFile();
+  }
+
+  private removeLegacyWorkingSnapshotFile(): void {
+    if (!existsSync(this.workingLegacyPath)) return;
+    try {
+      const stat = statSync(this.workingLegacyPath);
+      if (!stat.isFile()) return;
+      rmSync(this.workingLegacyPath, { force: true });
+    } catch {
+      // ignore
+    }
   }
 }

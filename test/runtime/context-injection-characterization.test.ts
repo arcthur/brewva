@@ -7,9 +7,9 @@ describe("ContextInjectionCollector characterization", () => {
     const sessionId = "ctx-char-priority";
 
     collector.register(sessionId, {
-      source: "brewva.memory-working",
-      id: "memory-working",
-      content: "memory content",
+      source: "brewva.projection-working",
+      id: "projection-working",
+      content: "projection content",
     });
     collector.register(sessionId, {
       source: "brewva.truth-facts",
@@ -19,7 +19,7 @@ describe("ContextInjectionCollector characterization", () => {
 
     const planned = collector.plan(sessionId, 10_000);
     expect(planned.entries).toHaveLength(2);
-    expect(planned.entries[0]?.source).toBe("brewva.memory-working");
+    expect(planned.entries[0]?.source).toBe("brewva.projection-working");
     expect(planned.entries[1]?.source).toBe("brewva.truth-facts");
   });
 
@@ -43,14 +43,14 @@ describe("ContextInjectionCollector characterization", () => {
   test("sourceTokenLimits truncates individual source entries deterministically", () => {
     const collector = new ContextInjectionCollector({
       sourceTokenLimits: {
-        "brewva.memory-working": 5,
+        "brewva.projection-working": 5,
       },
     });
     const sessionId = "ctx-char-source-limit";
 
     collector.register(sessionId, {
-      source: "brewva.memory-working",
-      id: "memory-working",
+      source: "brewva.projection-working",
+      id: "projection-working",
       content: "x".repeat(5_000),
     });
     const plan = collector.plan(sessionId, 10_000);

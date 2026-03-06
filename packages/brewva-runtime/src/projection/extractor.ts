@@ -2,24 +2,28 @@ import { TASK_EVENT_TYPE, coerceTaskLedgerPayload } from "../task/ledger.js";
 import { TRUTH_EVENT_TYPE, coerceTruthLedgerPayload } from "../truth/ledger.js";
 import type { BrewvaEventRecord } from "../types.js";
 import type {
-  MemoryExtractionResult,
-  MemorySourceRef,
-  MemoryUnitCandidate,
-  MemoryUnitType,
+  ProjectionExtractionResult,
+  ProjectionSourceRef,
+  ProjectionUnitCandidate,
 } from "./types.js";
+import { normalizeText } from "./utils.js";
 
-function emptyResult(): MemoryExtractionResult {
+function emptyResult(): ProjectionExtractionResult {
   return {
     upserts: [],
     resolves: [],
   };
 }
 
-function normalizeTopic(value: string): string {
-  return value.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+function normalizeLabelSegment(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
-function createSourceRef(event: BrewvaEventRecord, evidenceId?: string): MemorySourceRef {
+function createSourceRef(event: BrewvaEventRecord, evidenceId?: string): ProjectionSourceRef {
   return {
     eventId: event.id,
     eventType: event.type,
@@ -30,10 +34,10 @@ function createSourceRef(event: BrewvaEventRecord, evidenceId?: string): MemoryS
   };
 }
 
-function dedupeCandidates(candidates: MemoryUnitCandidate[]): MemoryUnitCandidate[] {
-  const merged = new Map<string, MemoryUnitCandidate>();
+function dedupeCandidates(candidates: ProjectionUnitCandidate[]): ProjectionUnitCandidate[] {
+  const merged = new Map<string, ProjectionUnitCandidate>();
   for (const candidate of candidates) {
-    const key = `${candidate.sessionId}::${candidate.type}::${candidate.topic.toLowerCase()}::${candidate.statement.toLowerCase()}`;
+    const key = `${candidate.sessionId}::${candidate.projectionKey}`;
     const existing = merged.get(key);
     if (!existing) {
       merged.set(key, candidate);
@@ -41,38 +45,20 @@ function dedupeCandidates(candidates: MemoryUnitCandidate[]): MemoryUnitCandidat
     }
     merged.set(key, {
       ...existing,
-      confidence: Math.max(existing.confidence, candidate.confidence),
+      label: candidate.label,
+      statement: candidate.statement,
       sourceRefs: [...existing.sourceRefs, ...candidate.sourceRefs],
       metadata:
         existing.metadata && candidate.metadata
           ? { ...existing.metadata, ...candidate.metadata }
           : (candidate.metadata ?? existing.metadata),
-      status: candidate.status === "resolved" ? "resolved" : existing.status,
+      status: candidate.status,
     });
   }
   return [...merged.values()];
 }
 
-function inferTruthUnitType(input: { kind: string; severity: string }): MemoryUnitType {
-  const normalizedKind = input.kind.toLowerCase();
-  if (
-    normalizedKind.includes("failure") ||
-    normalizedKind.includes("diagnostic") ||
-    normalizedKind.includes("verifier") ||
-    normalizedKind.includes("blocker")
-  ) {
-    return "risk";
-  }
-  if (input.severity === "error" || input.severity === "warn") {
-    return "risk";
-  }
-  if (normalizedKind.includes("constraint")) {
-    return "constraint";
-  }
-  return "fact";
-}
-
-function extractTruth(event: BrewvaEventRecord): MemoryExtractionResult {
+function extractTruth(event: BrewvaEventRecord): ProjectionExtractionResult {
   const payload = coerceTruthLedgerPayload(event.payload);
   if (!payload) return emptyResult();
 
@@ -91,30 +77,21 @@ function extractTruth(event: BrewvaEventRecord): MemoryExtractionResult {
   }
 
   const fact = payload.fact;
-  const topic = normalizeTopic(fact.kind);
   const baseRef = createSourceRef(event);
   const evidenceRefs = fact.evidenceIds.map((evidenceId) => createSourceRef(event, evidenceId));
-  const confidence =
-    fact.severity === "error"
-      ? 0.92
-      : fact.severity === "warn"
-        ? 0.8
-        : fact.status === "resolved"
-          ? 0.6
-          : 0.72;
-  const candidate: MemoryUnitCandidate = {
+  const candidate: ProjectionUnitCandidate = {
     sessionId: event.sessionId,
-    type: inferTruthUnitType({ kind: fact.kind, severity: fact.severity }),
     status: fact.status === "resolved" ? "resolved" : "active",
-    topic: topic || "truth",
+    projectionKey: `truth_fact:${fact.id}`,
+    label: `truth.${normalizeLabelSegment(fact.kind) || "fact"}`,
     statement: fact.summary.trim(),
-    confidence,
     sourceRefs: [baseRef, ...evidenceRefs],
     metadata: {
       truthFactId: fact.id,
       truthKind: fact.kind,
       severity: fact.severity,
       source: "truth_event",
+      projectionGroup: "truth_fact",
     },
   };
   return {
@@ -123,7 +100,7 @@ function extractTruth(event: BrewvaEventRecord): MemoryExtractionResult {
   };
 }
 
-function extractTask(event: BrewvaEventRecord): MemoryExtractionResult {
+function extractTask(event: BrewvaEventRecord): ProjectionExtractionResult {
   const payload = coerceTaskLedgerPayload(event.payload);
   if (!payload) return emptyResult();
 
@@ -142,74 +119,89 @@ function extractTask(event: BrewvaEventRecord): MemoryExtractionResult {
   }
 
   const sourceRef = createSourceRef(event);
-  const upserts: MemoryUnitCandidate[] = [];
+  const upserts: ProjectionUnitCandidate[] = [];
+  const resolves = [];
   switch (payload.kind) {
     case "spec_set": {
+      const keepProjectionKeys: string[] = [];
       const goal = payload.spec.goal.trim();
       if (goal) {
+        keepProjectionKeys.push("task_spec.goal");
         upserts.push({
           sessionId: event.sessionId,
-          type: "decision",
           status: "active",
-          topic: "task goal",
+          projectionKey: "task_spec.goal",
+          label: "task.goal",
           statement: goal,
-          confidence: 0.88,
           sourceRefs: [sourceRef],
           metadata: {
             source: "task_event",
             taskKind: "spec_set",
+            projectionGroup: "task_spec",
           },
         });
       }
       for (const constraint of payload.spec.constraints ?? []) {
         const normalized = constraint.trim();
         if (!normalized) continue;
+        const projectionKey = `task_spec.constraint:${normalizeText(normalized)}`;
+        keepProjectionKeys.push(projectionKey);
         upserts.push({
           sessionId: event.sessionId,
-          type: "constraint",
           status: "active",
-          topic: "task constraint",
+          projectionKey,
+          label: "task.constraint",
           statement: normalized,
-          confidence: 0.84,
           sourceRefs: [sourceRef],
           metadata: {
             source: "task_event",
             taskKind: "spec_set",
+            projectionGroup: "task_spec",
           },
         });
       }
       if (payload.spec.verification?.level) {
+        keepProjectionKeys.push("task_spec.verification.level");
         upserts.push({
           sessionId: event.sessionId,
-          type: "constraint",
           status: "active",
-          topic: "verification",
-          statement: `verification.level=${payload.spec.verification.level}`,
-          confidence: 0.78,
+          projectionKey: "task_spec.verification.level",
+          label: "task.verification.level",
+          statement: payload.spec.verification.level,
           sourceRefs: [sourceRef],
           metadata: {
             source: "task_event",
             taskKind: "spec_set",
+            projectionGroup: "task_spec",
           },
         });
       }
-      if (payload.spec.verification?.commands && payload.spec.verification.commands.length > 0) {
+      for (const command of payload.spec.verification?.commands ?? []) {
+        const normalized = command.trim();
+        if (!normalized) continue;
+        const projectionKey = `task_spec.verification.command:${normalizeText(normalized)}`;
+        keepProjectionKeys.push(projectionKey);
         upserts.push({
           sessionId: event.sessionId,
-          type: "constraint",
           status: "active",
-          topic: "verification",
-          statement: `verification.commands=${payload.spec.verification.commands
-            .slice(0, 4)
-            .join(" | ")}`,
-          confidence: 0.74,
+          projectionKey,
+          label: "task.verification.command",
+          statement: normalized,
           sourceRefs: [sourceRef],
           metadata: {
             source: "task_event",
             taskKind: "spec_set",
+            projectionGroup: "task_spec",
           },
         });
       }
+      resolves.push({
+        sessionId: event.sessionId,
+        sourceType: "projection_group" as const,
+        groupKey: "task_spec",
+        keepProjectionKeys,
+        resolvedAt: event.timestamp,
+      });
       break;
     }
     case "blocker_recorded": {
@@ -218,17 +210,17 @@ function extractTask(event: BrewvaEventRecord): MemoryExtractionResult {
 
       upserts.push({
         sessionId: event.sessionId,
-        type: "risk",
         status: "active",
-        topic: "task blocker",
+        projectionKey: `task_blocker:${payload.blocker.id}`,
+        label: "task.blocker",
         statement: message,
-        confidence: 0.9,
         sourceRefs: [sourceRef],
         metadata: {
           source: "task_event",
           taskKind: "blocker_recorded",
           taskBlockerId: payload.blocker.id,
           truthFactId: payload.blocker.truthFactId ?? null,
+          projectionGroup: "task_blocker",
         },
       });
       break;
@@ -239,11 +231,11 @@ function extractTask(event: BrewvaEventRecord): MemoryExtractionResult {
 
   return {
     upserts: dedupeCandidates(upserts),
-    resolves: [],
+    resolves,
   };
 }
 
-export function extractMemoryFromEvent(event: BrewvaEventRecord): MemoryExtractionResult {
+export function extractProjectionFromEvent(event: BrewvaEventRecord): ProjectionExtractionResult {
   if (event.type === TRUTH_EVENT_TYPE) return extractTruth(event);
   if (event.type === TASK_EVENT_TYPE) return extractTask(event);
   return emptyResult();

@@ -67,7 +67,7 @@ describe("getSourceTrustTier", () => {
     expect(getSourceTrustTier("brewva.skill-candidates")).toBe("internal");
     expect(getSourceTrustTier("brewva.tool-failures")).toBe("internal");
     expect(getSourceTrustTier("brewva.tool-outputs-distilled")).toBe("internal");
-    expect(getSourceTrustTier("brewva.memory-working")).toBe("internal");
+    expect(getSourceTrustTier("brewva.projection-working")).toBe("internal");
   });
 
   test("classifies external sources", () => {

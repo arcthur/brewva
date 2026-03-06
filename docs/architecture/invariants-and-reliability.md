@@ -28,7 +28,7 @@ Relevant implementation:
 ## 3) Recovery Consistency Invariant
 
 - Runtime recovery state must be derivable from persisted event tape only
-  (`checkpoint + delta` replay for task/truth/cost/evidence/memory, plus
+  (`checkpoint + delta` replay for task/truth/cost/evidence/projection, plus
   event-fold hydration for runtime session counters/budgets/compaction state).
 - Process restart must not require opaque runtime snapshot blobs.
 
@@ -85,20 +85,20 @@ Relevant implementation:
 - `packages/brewva-cli/src/session-event-bridge.ts`
 - `packages/brewva-extensions/src/index.ts`
 
-## 8) Memory Projection Integrity Invariant
+## 8) Working Projection Integrity Invariant
 
-- Memory must remain projection-derived and auditable:
+- Working projection must remain tape-derived and auditable:
   units and working snapshot are derived from event tape semantics, not an
   independent mutable source of truth.
-- Memory projection events (`memory_*`) should carry sufficient snapshot fields
-  to rebuild projection artifacts when `.orchestrator/memory/*` is missing.
-- Working-memory injection must be reproducible from persisted projection
+- Projection events (`projection_*`) should carry sufficient snapshot fields
+  to rebuild projection artifacts when `.orchestrator/projection/*` is missing.
+- Working-projection injection must be reproducible from persisted projection
   artifacts (or tape-driven rebuild outputs) and bounded by context-budget policy.
 
 Relevant implementation:
 
-- `packages/brewva-runtime/src/memory/engine.ts`
-- `packages/brewva-runtime/src/memory/store.ts`
+- `packages/brewva-runtime/src/projection/engine.ts`
+- `packages/brewva-runtime/src/projection/store.ts`
 - `packages/brewva-runtime/src/runtime.ts`
 - `packages/brewva-tools/src/task-ledger.ts`
 

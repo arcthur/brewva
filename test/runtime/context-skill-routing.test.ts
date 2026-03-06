@@ -11,9 +11,9 @@ function createWorkspace(name: string): string {
 }
 
 describe("context skill routing", () => {
-  test("without semantic preselection, context injection does not include skill candidates", async () => {
+  test("deterministic routing injects skill candidates for strong skill prompts", async () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.memory.enabled = false;
+    config.projection.enabled = false;
     config.infrastructure.toolFailureInjection.enabled = false;
 
     const runtime = new BrewvaRuntime({
@@ -25,24 +25,24 @@ describe("context skill routing", () => {
 
     const injection = await runtime.context.buildInjection(
       sessionId,
-      "Review architecture risks in this project",
+      "Review architecture risks, merge safety, and quality audit gaps in this project",
       { tokens: 640, contextWindow: 4096, percent: 0.16 },
       "leaf-a",
     );
 
     expect(injection.accepted).toBe(true);
-    expect(injection.text.includes("Top-K Skill Candidates:")).toBe(false);
+    expect(injection.text.includes("Top-K Skill Candidates:")).toBe(true);
 
     const routed = runtime.events.query(sessionId, { type: "skill_routing_decided", last: 1 })[0];
     expect(routed).toBeDefined();
     const payload = routed?.payload as { mode?: string; selectedCount?: number } | undefined;
-    expect(payload?.mode).toBe("none");
-    expect(payload?.selectedCount).toBe(0);
+    expect(payload?.mode).toBe("auto");
+    expect((payload?.selectedCount ?? 0) > 0).toBe(true);
   });
 
   test("still emits deterministic no-skill decision in low-signal prompt", async () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.memory.enabled = false;
+    config.projection.enabled = false;
     config.infrastructure.toolFailureInjection.enabled = false;
 
     const runtime = new BrewvaRuntime({

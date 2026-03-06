@@ -3,9 +3,9 @@ import type { ContextInjectionCollector } from "../context/injection.js";
 import type { SessionCostTracker } from "../cost/tracker.js";
 import type { BrewvaEventStore } from "../events/store.js";
 import type { EvidenceLedger } from "../ledger/evidence-ledger.js";
-import type { MemoryEngine } from "../memory/engine.js";
 import type { ParallelBudgetManager } from "../parallel/budget.js";
 import type { ParallelResultStore } from "../parallel/results.js";
+import type { ProjectionEngine } from "../projection/engine.js";
 import type { FileChangeTracker } from "../state/file-change-tracker.js";
 import { TAPE_CHECKPOINT_EVENT_TYPE, coerceTapeCheckpointPayload } from "../tape/events.js";
 import type { TurnReplayEngine } from "../tape/replay-engine.js";
@@ -35,7 +35,7 @@ export interface SessionLifecycleServiceOptions {
   parallel: ParallelBudgetManager;
   parallelResults: ParallelResultStore;
   costTracker: SessionCostTracker;
-  memory: MemoryEngine;
+  projectionEngine: ProjectionEngine;
   turnReplay: TurnReplayEngine;
   events: BrewvaEventStore;
   ledger: EvidenceLedger;
@@ -51,7 +51,7 @@ export class SessionLifecycleService {
   private readonly parallel: ParallelBudgetManager;
   private readonly parallelResults: ParallelResultStore;
   private readonly costTracker: SessionCostTracker;
-  private readonly memory: MemoryEngine;
+  private readonly projectionEngine: ProjectionEngine;
   private readonly turnReplay: TurnReplayEngine;
   private readonly events: BrewvaEventStore;
   private readonly ledger: EvidenceLedger;
@@ -67,7 +67,7 @@ export class SessionLifecycleService {
     this.parallel = options.parallel;
     this.parallelResults = options.parallelResults;
     this.costTracker = options.costTracker;
-    this.memory = options.memory;
+    this.projectionEngine = options.projectionEngine;
     this.turnReplay = options.turnReplay;
     this.events = options.events;
     this.ledger = options.ledger;
@@ -100,7 +100,7 @@ export class SessionLifecycleService {
     this.costTracker.clear(sessionId);
 
     this.contextInjection.clearSession(sessionId);
-    this.memory.clearSessionCache(sessionId);
+    this.projectionEngine.clearSessionCache(sessionId);
 
     this.turnReplay.clear(sessionId);
 
@@ -127,7 +127,7 @@ export class SessionLifecycleService {
       );
     }
 
-    this.memory.rebuildSessionFromTape({
+    this.projectionEngine.rebuildSessionFromTape({
       sessionId,
       events,
       mode: "missing_only",

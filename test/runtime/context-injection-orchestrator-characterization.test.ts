@@ -76,7 +76,7 @@ describe("Context injection orchestrator characterization", () => {
     expect(injection.text.includes("[TruthFacts]")).toBe(true);
     expect(injection.text.includes("[TaskLedger]")).toBe(true);
     expect(injection.text.includes("[RecentToolFailures]")).toBe(true);
-    expect(injection.text.includes("[WorkingMemory]")).toBe(true);
+    expect(injection.text.includes("[WorkingProjection]")).toBe(true);
     expect(injection.text.includes("\n\n")).toBe(true);
 
     const injectedEvent = runtime.events.query(sessionId, { type: "context_injected", last: 1 })[0];
@@ -99,7 +99,7 @@ describe("Context injection orchestrator characterization", () => {
   test("drops duplicate fingerprint in same scope and emits context_injection_dropped", async () => {
     const workspace = createWorkspace("ctx-orchestrator-duplicate");
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.memory.enabled = false;
+    config.projection.enabled = false;
     config.infrastructure.toolFailureInjection.enabled = false;
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
     const sessionId = "ctx-orchestrator-duplicate-1";

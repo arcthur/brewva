@@ -17,7 +17,7 @@ import { clearRuntimeTurnClock, observeRuntimeTurnStart } from "./runtime-turn-c
 
 const CONTEXT_INJECTION_MESSAGE_TYPE = "brewva-context-injection";
 const CONTEXT_CONTRACT_MARKER = "[Brewva Context Contract]";
-const GOVERNANCE_ONLY_ROUTING_REASON = "governance_only";
+const MISSING_ROUTING_TRACE_REASON = "routing_trace_unavailable";
 
 export interface ContextTransformOptions {
   autoCompactionWatchdogMs?: number;
@@ -28,6 +28,7 @@ interface CompactionGateState {
   lastRuntimeGateRequired: boolean;
   autoCompactionInFlight: boolean;
   autoCompactionWatchdog: ReturnType<typeof setTimeout> | null;
+  deferredAutoCompactionReason: string | null;
 }
 
 const DEFAULT_AUTO_COMPACTION_WATCHDOG_MS = 30_000;
@@ -44,6 +45,7 @@ function getOrCreateGateState(
     lastRuntimeGateRequired: false,
     autoCompactionInFlight: false,
     autoCompactionWatchdog: null,
+    deferredAutoCompactionReason: null,
   };
   store.set(sessionId, created);
   return created;
@@ -51,6 +53,7 @@ function getOrCreateGateState(
 
 function clearAutoCompactionState(state: CompactionGateState): void {
   state.autoCompactionInFlight = false;
+  state.deferredAutoCompactionReason = null;
   if (state.autoCompactionWatchdog) {
     clearTimeout(state.autoCompactionWatchdog);
     state.autoCompactionWatchdog = null;
@@ -103,6 +106,56 @@ async function resolveContextInjection(
   );
 }
 
+function resolveRoutingProjection(
+  runtime: BrewvaRuntime,
+  sessionId: string,
+): {
+  translation: {
+    status: string;
+    reason: string;
+    translated: boolean;
+  };
+  semantic: {
+    status: string;
+    reason: string;
+    selectedCount: number;
+    selectedSkills: string[];
+  };
+  error: string | null;
+} {
+  const trace = runtime.skills.getLastRouting(sessionId);
+  if (!trace) {
+    return {
+      translation: {
+        status: "skipped",
+        reason: MISSING_ROUTING_TRACE_REASON,
+        translated: false,
+      },
+      semantic: {
+        status: "skipped",
+        reason: MISSING_ROUTING_TRACE_REASON,
+        selectedCount: 0,
+        selectedSkills: [],
+      },
+      error: null,
+    };
+  }
+  return {
+    translation: {
+      status: trace.translation.status,
+      reason: trace.translation.reason,
+      translated: trace.translation.translated,
+    },
+    semantic: {
+      status: trace.semantic.status,
+      reason: trace.semantic.reason,
+      selectedCount: trace.semantic.selectedCount,
+      selectedSkills: [...trace.semantic.selectedSkills],
+    },
+    error: trace.error ?? null,
+  };
+}
+
 function buildCompactionGateMessage(input: { pressure: ContextPressureStatus }): string {
   const usagePercent = formatPercent(input.pressure.usageRatio);
   const hardLimitPercent = formatPercent(input.pressure.hardLimitRatio);
@@ -120,11 +173,17 @@ function buildTapeStatusBlock(input: {
   runtime: BrewvaRuntime;
   sessionId: string;
   gateStatus: ContextCompactionGateStatus;
+  pendingCompactionReason?: string | null;
 }): string {
   const tapeStatus = input.runtime.events.getTapeStatus(input.sessionId);
   const usagePercent = formatPercent(input.gateStatus.pressure.usageRatio);
   const hardLimitPercent = formatPercent(input.gateStatus.pressure.hardLimitRatio);
-  const action = input.gateStatus.required ? "session_compact_now" : "none";
+  const pendingReason = input.pendingCompactionReason ?? null;
+  const action = input.gateStatus.required
+    ? "session_compact_now"
+    : pendingReason
+      ? "session_compact_recommended"
+      : "none";
   const tapePressure = tapeStatus.tapePressure;
   const totalEntries = String(tapeStatus.totalEntries);
   const entriesSinceAnchor = String(tapeStatus.entriesSinceAnchor);
@@ -144,10 +203,26 @@ function buildTapeStatusBlock(input: {
     `context_usage: ${usagePercent}`,
     `context_hard_limit: ${hardLimitPercent}`,
     `compaction_gate_reason: ${input.gateStatus.reason ?? "none"}`,
+    `pending_compaction_reason: ${pendingReason ?? "none"}`,
     `recent_compact_performed: ${input.gateStatus.recentCompaction ? "true" : "false"}`,
     `turns_since_compaction: ${input.gateStatus.turnsSinceCompaction ?? "none"}`,
     `recent_compaction_window_turns: ${input.gateStatus.windowTurns}`,
     `required_action: ${action}`,
+  ].join("\n");
+}
+
+function buildCompactionAdvisoryMessage(input: {
+  reason: string;
+  pressure: ContextPressureStatus;
+}): string {
+  const usagePercent = formatPercent(input.pressure.usageRatio);
+  const thresholdPercent = formatPercent(input.pressure.compactionThresholdRatio);
+  return [
+    "[ContextCompactionAdvisory]",
+    `Pending compaction request: ${input.reason}.`,
+    `Current usage: ${usagePercent} (compact-soon threshold: ${thresholdPercent}).`,
+    "Prefer calling tool `session_compact` before long tool chains or broad repository scans.",
+    "If no further tool work is needed, answer directly instead of compacting first.",
   ].join("\n");
 }
 
@@ -217,6 +292,29 @@ export function registerContextTransform(
     }
 
     if (ctx.hasUI) {
+      // Missing UI-idle telemetry is unsafe for live-turn manual compaction.
+      const idle = typeof ctx.isIdle === "function" ? ctx.isIdle() : false;
+      if (!idle) {
+        const pendingReason =
+          runtime.context.getPendingCompactionReason(sessionId) ?? "usage_threshold";
+        if (state.deferredAutoCompactionReason === pendingReason) {
+          return undefined;
+        }
+        state.deferredAutoCompactionReason = pendingReason;
+        // `ctx.compact()` maps to manual compaction and aborts the active agent run.
+        // Triggering it from a live context hook can strand the current turn without auto-resume.
+        emitRuntimeEvent(runtime, {
+          sessionId,
+          turn: state.turnIndex,
+          type: "context_compaction_skipped",
+          payload: {
+            reason: "agent_active_manual_compaction_unsafe",
+          },
+        });
+        return undefined;
+      }
+      state.deferredAutoCompactionReason = null;
+
       if (state.autoCompactionInFlight) {
         emitRuntimeEvent(runtime, {
           sessionId,
@@ -398,6 +496,7 @@ export function registerContextTransform(
     };
 
     let gateStatus = runtime.context.getCompactionGateStatus(sessionId, usage);
+    const pendingCompactionReason = runtime.context.getPendingCompactionReason(sessionId);
     if (gateStatus.required) {
       emitGateEvents(gateStatus, "hard_limit");
     }
@@ -469,6 +568,7 @@ export function registerContextTransform(
           runtime,
           sessionId,
           gateStatus,
+          pendingCompactionReason,
         }),
       ];
       if (capabilityView.block) {
@@ -511,56 +611,13 @@ export function registerContextTransform(
       };
     }
 
-    runtime.skills.clearNextSelection(sessionId);
-    const routingTranslation = {
-      status: "skipped",
-      reason: GOVERNANCE_ONLY_ROUTING_REASON,
-      translated: false,
-    } as const;
-    const semanticRouting = {
-      status: "skipped",
-      reason: GOVERNANCE_ONLY_ROUTING_REASON,
-      selectedCount: 0,
-    } as const;
-    emitRuntimeEvent(runtime, {
-      sessionId,
-      turn: state.turnIndex,
-      type: "skill_routing_translation",
-      payload: {
-        status: routingTranslation.status,
-        reason: routingTranslation.reason,
-        translated: routingTranslation.translated,
-        inputChars: originalPrompt.length,
-        outputChars: originalPrompt.length,
-        provider: null,
-        model: null,
-        stopReason: null,
-        error: null,
-      },
-    });
-    emitRuntimeEvent(runtime, {
-      sessionId,
-      turn: state.turnIndex,
-      type: "skill_routing_semantic",
-      payload: {
-        status: semanticRouting.status,
-        reason: semanticRouting.reason,
-        selectedCount: semanticRouting.selectedCount,
-        selectedSkills: [],
-        inputChars: originalPrompt.length,
-        provider: null,
-        model: null,
-        stopReason: null,
-        error: null,
-      },
-    });
-
     const injection = await resolveContextInjection(runtime, {
       sessionId,
       prompt: originalPrompt,
       usage,
       injectionScopeId,
     });
+    const routingProjection = resolveRoutingProjection(runtime, sessionId);
     const gateStatusAfterInjection = runtime.context.getCompactionGateStatus(sessionId, usage);
     if (!gateStatus.required && gateStatusAfterInjection.required) {
       emitGateEvents(gateStatusAfterInjection, "hard_limit");
@@ -568,11 +625,45 @@ export function registerContextTransform(
     gateStatus = gateStatusAfterInjection;
     state.lastRuntimeGateRequired = gateStatus.required;
 
+    emitRuntimeEvent(runtime, {
+      sessionId,
+      turn: state.turnIndex,
+      type: "skill_routing_translation",
+      payload: {
+        status: routingProjection.translation.status,
+        reason: routingProjection.translation.reason,
+        translated: routingProjection.translation.translated,
+        inputChars: originalPrompt.length,
+        outputChars: originalPrompt.length,
+        provider: null,
+        model: null,
+        stopReason: null,
+        error: routingProjection.error,
+      },
+    });
+    emitRuntimeEvent(runtime, {
+      sessionId,
+      turn: state.turnIndex,
+      type: "skill_routing_semantic",
+      payload: {
+        status: routingProjection.semantic.status,
+        reason: routingProjection.semantic.reason,
+        selectedCount: routingProjection.semantic.selectedCount,
+        selectedSkills: routingProjection.semantic.selectedSkills,
+        inputChars: originalPrompt.length,
+        provider: null,
+        model: null,
+        stopReason: null,
+        error: routingProjection.error,
+      },
+    });
+
     const blocks: string[] = [
       buildTapeStatusBlock({
         runtime,
         sessionId,
         gateStatus,
+        pendingCompactionReason,
       }),
     ];
     if (capabilityView.block) {
@@ -581,6 +672,27 @@ export function registerContextTransform(
     if (gateStatus.required) {
       blocks.push(
         buildCompactionGateMessage({
+          pressure: gateStatus.pressure,
+        }),
+      );
+    }
+    if (pendingCompactionReason && !gateStatus.required) {
+      emitRuntimeEvent(runtime, {
+        sessionId,
+        turn: state.turnIndex,
+        type: "context_compaction_advisory",
+        payload: {
+          reason: pendingCompactionReason,
+          usagePercent: gateStatus.pressure.usageRatio,
+          compactionThresholdPercent: gateStatus.pressure.compactionThresholdRatio,
+          hardLimitPercent: gateStatus.pressure.hardLimitRatio,
+          contextPressure: gateStatus.pressure.level,
+          requiredTool: "session_compact",
+        },
+      });
+      blocks.push(
+        buildCompactionAdvisoryMessage({
+          reason: pendingCompactionReason,
           pressure: gateStatus.pressure,
         }),
       );
@@ -601,14 +713,14 @@ export function registerContextTransform(
           truncated: injection.truncated,
           gateRequired: gateStatus.required,
           routingTranslation: {
-            status: routingTranslation.status,
-            reason: routingTranslation.reason,
-            translated: routingTranslation.translated,
+            status: routingProjection.translation.status,
+            reason: routingProjection.translation.reason,
+            translated: routingProjection.translation.translated,
           },
           semanticRouting: {
-            status: semanticRouting.status,
-            reason: semanticRouting.reason,
-            selectedCount: semanticRouting.selectedCount,
+            status: routingProjection.semantic.status,
+            reason: routingProjection.semantic.reason,
+            selectedCount: routingProjection.semantic.selectedCount,
           },
           capabilityView: {
             requested: capabilityView.requested,

@@ -58,7 +58,7 @@ consumes: [architecture_map, execution_steps, findings, verification, runtime_ar
 Enable evidence-led diagnosis and delivery for Brewva across two complementary analysis surfaces:
 
 1. **Source surface** — understand the codebase: package boundaries, call paths, contracts, and minimal edit points.
-2. **Process surface** — reconstruct runtime behavior from session artifacts (event store JSONL, evidence ledger, memory projection files, tape checkpoints, file snapshots, schedule projections) to confirm or refute hypotheses that source inspection alone cannot resolve.
+2. **Process surface** — reconstruct runtime behavior from session artifacts (event store JSONL, evidence ledger, working projection artifacts, tape checkpoints, file snapshots, schedule projections) to confirm or refute hypotheses that source inspection alone cannot resolve.
 
 Findings from both surfaces converge into a single delivery action: a well-evidenced issue, a reviewable PR, or an explicit "blocked" signal.
 This skill is an orchestrator: it routes work across source analysis, process evidence analysis, and delivery actions without duplicating specialized pack/base skills.

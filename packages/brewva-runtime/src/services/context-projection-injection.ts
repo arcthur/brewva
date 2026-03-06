@@ -1,15 +1,15 @@
 import { readIdentityProfile } from "../context/identity.js";
 import type { ContextInjectionRegisterResult } from "../context/injection.js";
 import { CONTEXT_SOURCES } from "../context/sources.js";
-import { MemoryEngine } from "../memory/engine.js";
+import { ProjectionEngine } from "../projection/engine.js";
 import type { BrewvaConfig, BrewvaEventRecord, ContextBudgetUsage } from "../types.js";
 import type { RuntimeCallback } from "./callback.js";
 
-interface ContextMemoryInjectionServiceOptions {
+interface ContextProjectionInjectionServiceOptions {
   workspaceRoot: string;
   agentId: string;
   config: BrewvaConfig;
-  memory: MemoryEngine;
+  projectionEngine: ProjectionEngine;
   sanitizeInput: RuntimeCallback<[text: string], string>;
   registerContextInjection: RuntimeCallback<
     [
@@ -39,20 +39,20 @@ interface ContextMemoryInjectionServiceOptions {
   >;
 }
 
-export class ContextMemoryInjectionService {
+export class ContextProjectionInjectionService {
   private readonly workspaceRoot: string;
   private readonly agentId: string;
   private readonly config: BrewvaConfig;
-  private readonly memory: MemoryEngine;
-  private readonly sanitizeInput: ContextMemoryInjectionServiceOptions["sanitizeInput"];
-  private readonly registerContextInjection: ContextMemoryInjectionServiceOptions["registerContextInjection"];
-  private readonly recordEvent: ContextMemoryInjectionServiceOptions["recordEvent"];
+  private readonly projectionEngine: ProjectionEngine;
+  private readonly sanitizeInput: ContextProjectionInjectionServiceOptions["sanitizeInput"];
+  private readonly registerContextInjection: ContextProjectionInjectionServiceOptions["registerContextInjection"];
+  private readonly recordEvent: ContextProjectionInjectionServiceOptions["recordEvent"];
 
-  constructor(options: ContextMemoryInjectionServiceOptions) {
+  constructor(options: ContextProjectionInjectionServiceOptions) {
     this.workspaceRoot = options.workspaceRoot;
     this.agentId = options.agentId;
     this.config = options.config;
-    this.memory = options.memory;
+    this.projectionEngine = options.projectionEngine;
     this.sanitizeInput = options.sanitizeInput;
     this.registerContextInjection = options.registerContextInjection;
     this.recordEvent = options.recordEvent;
@@ -88,22 +88,22 @@ export class ContextMemoryInjectionService {
     });
   }
 
-  async registerMemoryContextInjection(
+  registerProjectionContextInjection(
     sessionId: string,
     _prompt: string,
     _usage?: ContextBudgetUsage,
-  ): Promise<void> {
-    if (!this.config.memory.enabled) return;
+  ): void {
+    if (!this.config.projection.enabled) return;
 
-    this.memory.refreshIfNeeded({ sessionId });
+    this.projectionEngine.refreshIfNeeded({ sessionId });
 
-    const working = this.memory.getWorkingMemory(sessionId);
+    const working = this.projectionEngine.getWorkingProjection(sessionId);
     const workingContent = this.sanitizeInput(working?.content ?? "").trim();
     if (!workingContent) return;
 
     this.registerContextInjection(sessionId, {
-      source: CONTEXT_SOURCES.memoryWorking,
-      id: "memory-working",
+      source: CONTEXT_SOURCES.projectionWorking,
+      id: "projection-working",
       content: workingContent,
     });
   }

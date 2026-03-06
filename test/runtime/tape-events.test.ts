@@ -60,7 +60,7 @@ function buildValidCheckpointPayload() {
       anchorEpoch: 0,
       recentFailures: [],
     },
-    memoryState: {
+    projectionState: {
       updatedAt: 3,
       unitCount: 0,
     },
@@ -136,14 +136,14 @@ describe("tape checkpoint payload coercion", () => {
       state: {
         cost?: unknown;
         evidence?: unknown;
-        memory?: unknown;
+        projection?: unknown;
         costSkillLastTurnByName?: unknown;
       };
     };
     delete payload.state.cost;
     delete payload.state.costSkillLastTurnByName;
     delete payload.state.evidence;
-    delete payload.state.memory;
+    delete payload.state.projection;
 
     expect(coerceTapeCheckpointPayload(payload)).toBeNull();
   });
@@ -151,14 +151,14 @@ describe("tape checkpoint payload coercion", () => {
   test("given checkpoint payload with legacy memory crystals, when coercing payload, then payload is rejected", () => {
     const payload = buildValidCheckpointPayload() as unknown as {
       state: {
-        memory: {
+        projection: {
           updatedAt: number | null;
           unitCount?: number;
           crystals?: unknown[];
         };
       };
     };
-    payload.state.memory = {
+    payload.state.projection = {
       updatedAt: 3,
       crystals: [],
     };

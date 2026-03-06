@@ -6,9 +6,9 @@ import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, type BrewvaConfig } from "@brewva
 
 type RuntimeWithInternals = {
   contextService: {
-    memory: {
+    projectionEngine: {
       refreshIfNeeded(input: { sessionId: string }): void;
-      getWorkingMemory(sessionId: string): { content: string } | null;
+      getWorkingProjection(sessionId: string): { content: string } | null;
     };
   };
 };
@@ -16,36 +16,39 @@ type RuntimeWithInternals = {
 function createConfig(): BrewvaConfig {
   const config = structuredClone(DEFAULT_BREWVA_CONFIG);
   config.infrastructure.toolFailureInjection.enabled = false;
-  config.memory.enabled = true;
+  config.projection.enabled = true;
   return config;
 }
 
-function patchMemory(runtime: BrewvaRuntime): void {
+function patchProjection(runtime: BrewvaRuntime): void {
   const runtimeWithInternals = runtime as unknown as RuntimeWithInternals;
-  runtimeWithInternals.contextService.memory.refreshIfNeeded = () => undefined;
-  runtimeWithInternals.contextService.memory.getWorkingMemory = () => ({
-    content: "[WorkingMemory]\nsummary: deterministic working memory",
+  runtimeWithInternals.contextService.projectionEngine.refreshIfNeeded = () => undefined;
+  runtimeWithInternals.contextService.projectionEngine.getWorkingProjection = () => ({
+    content: "[WorkingProjection]\nsummary: deterministic working projection",
   });
 }
 
-describe("context memory split", () => {
-  test("injects working-memory source only", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-memory-split-"));
-    const sessionId = "memory-split";
+describe("context projection split", () => {
+  test("injects working-projection source only", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-projection-split-"));
+    const sessionId = "projection-split";
 
     const runtime = new BrewvaRuntime({
       cwd: workspace,
       config: createConfig(),
     });
-    patchMemory(runtime);
+    patchProjection(runtime);
     runtime.task.setSpec(sessionId, {
       schema: "brewva.task.v1",
       goal: "baseline task state",
     });
 
-    const injection = await runtime.context.buildInjection(sessionId, "deterministic memory split");
+    const injection = await runtime.context.buildInjection(
+      sessionId,
+      "deterministic projection split",
+    );
     expect(injection.accepted).toBe(true);
-    expect(injection.text.includes("[WorkingMemory]")).toBe(true);
+    expect(injection.text.includes("[WorkingProjection]")).toBe(true);
     expect(injection.text.includes("[MemoryRecall]")).toBe(false);
   });
 });

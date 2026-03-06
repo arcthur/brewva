@@ -1,4 +1,5 @@
 import type { ToolFailureEntry } from "../context/tool-failures.js";
+import { PROJECTION_REFRESHED_EVENT_TYPE } from "../events/event-types.js";
 import {
   TASK_EVENT_TYPE,
   coerceTaskLedgerPayload,
@@ -18,7 +19,7 @@ import {
   coerceTapeCheckpointPayload,
   type TapeCheckpointFailureClassCounts,
   type TapeCheckpointEvidenceState,
-  type TapeCheckpointMemoryState,
+  type TapeCheckpointProjectionState,
 } from "./events.js";
 
 const TOOL_FAILURE_ANCHOR_TTL = 3;
@@ -44,7 +45,7 @@ export interface ReplayEvidenceState {
   failureClassCounts: TapeCheckpointFailureClassCounts;
 }
 
-export interface ReplayMemoryState {
+export interface ReplayProjectionState {
   updatedAt: number | null;
   unitCount: number;
 }
@@ -63,7 +64,7 @@ export interface TurnReplayView {
   truthState: TruthState;
   costState: ReplayCostState;
   evidenceState: ReplayEvidenceState;
-  memoryState: ReplayMemoryState;
+  projectionState: ReplayProjectionState;
 }
 
 interface TurnReplayEngineOptions {
@@ -213,7 +214,7 @@ function cloneToolFailureEntry(entry: ReplayToolFailureEntry): ReplayToolFailure
   };
 }
 
-function createEmptyMemoryState(): ReplayMemoryState {
+function createEmptyProjectionState(): ReplayProjectionState {
   return {
     updatedAt: null,
     unitCount: 0,
@@ -486,11 +487,11 @@ function reduceEvidenceState(
   return next;
 }
 
-function reduceMemoryState(
-  state: ReplayMemoryState,
+function reduceProjectionState(
+  state: ReplayProjectionState,
   payload: JsonRecord,
   timestamp: number,
-): ReplayMemoryState {
+): ReplayProjectionState {
   const unitCount = normalizeNonNegativeInteger(payload.unitCount, -1);
   if (unitCount < 0) return state;
   const updatedAt = normalizeNonNegativeNumber(payload.updatedAt, timestamp);
@@ -532,7 +533,7 @@ function checkpointEvidenceToReplay(state: TapeCheckpointEvidenceState): ReplayE
   return base;
 }
 
-function checkpointMemoryToReplay(state: TapeCheckpointMemoryState): ReplayMemoryState {
+function checkpointProjectionToReplay(state: TapeCheckpointProjectionState): ReplayProjectionState {
   return {
     updatedAt: state.updatedAt,
     unitCount: state.unitCount,
@@ -562,7 +563,7 @@ function replayEvidenceToCheckpoint(state: ReplayEvidenceState): TapeCheckpointE
   };
 }
 
-function replayMemoryToCheckpoint(state: ReplayMemoryState): TapeCheckpointMemoryState {
+function replayProjectionToCheckpoint(state: ReplayProjectionState): TapeCheckpointProjectionState {
   return {
     updatedAt: state.updatedAt,
     unitCount: state.unitCount,
@@ -595,7 +596,7 @@ function applyEventToView(
         skillLastTurnByName: cloneCostSkillLastTurnByName(payload.state.costSkillLastTurnByName),
       },
       evidenceState: checkpointEvidenceToReplay(payload.state.evidence),
-      memoryState: checkpointMemoryToReplay(payload.state.memory),
+      projectionState: checkpointProjectionToReplay(payload.state.projection),
     };
   }
 
@@ -603,7 +604,7 @@ function applyEventToView(
   let truthState = previous.truthState;
   let costState = previous.costState;
   let evidenceState = previous.evidenceState;
-  let memoryState = previous.memoryState;
+  let projectionState = previous.projectionState;
 
   if (event.type === TASK_EVENT_TYPE) {
     const payload = coerceTaskLedgerPayload(event.payload);
@@ -647,9 +648,9 @@ function applyEventToView(
     if (isRecord(event.payload)) {
       costState = reduceCostAlert(costState, event.payload, event.timestamp);
     }
-  } else if (event.type === "memory_projection_refreshed") {
+  } else if (event.type === PROJECTION_REFRESHED_EVENT_TYPE) {
     if (isRecord(event.payload)) {
-      memoryState = reduceMemoryState(memoryState, event.payload, event.timestamp);
+      projectionState = reduceProjectionState(projectionState, event.payload, event.timestamp);
     }
   }
 
@@ -661,7 +662,7 @@ function applyEventToView(
     truthState,
     costState,
     evidenceState,
-    memoryState,
+    projectionState,
   };
 }
 
@@ -735,8 +736,8 @@ export class TurnReplayEngine {
     return replayEvidenceToCheckpoint(this.replay(sessionId).evidenceState);
   }
 
-  getCheckpointMemoryState(sessionId: string): TapeCheckpointMemoryState {
-    return replayMemoryToCheckpoint(this.replay(sessionId).memoryState);
+  getCheckpointProjectionState(sessionId: string): TapeCheckpointProjectionState {
+    return replayProjectionToCheckpoint(this.replay(sessionId).projectionState);
   }
 
   invalidate(sessionId: string): void {
@@ -758,7 +759,7 @@ export class TurnReplayEngine {
     let truthState: TruthState = createEmptyTruthState();
     let costState: ReplayCostState = createEmptyCostState();
     let evidenceState: ReplayEvidenceState = createEmptyEvidenceState();
-    let memoryState: ReplayMemoryState = createEmptyMemoryState();
+    let projectionState: ReplayProjectionState = createEmptyProjectionState();
 
     for (let index = events.length - 1; index >= 0; index -= 1) {
       const event = events[index];
@@ -775,7 +776,7 @@ export class TurnReplayEngine {
         skillLastTurnByName: cloneCostSkillLastTurnByName(payload.state.costSkillLastTurnByName),
       };
       evidenceState = checkpointEvidenceToReplay(payload.state.evidence);
-      memoryState = checkpointMemoryToReplay(payload.state.memory);
+      projectionState = checkpointProjectionToReplay(payload.state.projection);
       break;
     }
 
@@ -787,7 +788,7 @@ export class TurnReplayEngine {
       truthState,
       costState,
       evidenceState,
-      memoryState,
+      projectionState,
     };
 
     const replayStartIndex = checkpointIndex >= 0 ? checkpointIndex + 1 : 0;

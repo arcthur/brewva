@@ -5,7 +5,7 @@ import {
   buildTapeCheckpointPayload,
   coerceTapeAnchorPayload,
   type TapeCheckpointEvidenceState,
-  type TapeCheckpointMemoryState,
+  type TapeCheckpointProjectionState,
 } from "../tape/events.js";
 import type {
   BrewvaConfig,
@@ -42,7 +42,7 @@ export interface TapeServiceOptions {
   getCostSummary: RuntimeCallback<[sessionId: string], SessionCostSummary>;
   getCostSkillLastTurnByName: RuntimeCallback<[sessionId: string], Record<string, number>>;
   getCheckpointEvidenceState: RuntimeCallback<[sessionId: string], TapeCheckpointEvidenceState>;
-  getCheckpointMemoryState: RuntimeCallback<[sessionId: string], TapeCheckpointMemoryState>;
+  getCheckpointProjectionState: RuntimeCallback<[sessionId: string], TapeCheckpointProjectionState>;
   recordEvent: RuntimeCallback<
     [
       input: {
@@ -78,7 +78,9 @@ export class TapeService {
   private readonly getCostSummary: (sessionId: string) => SessionCostSummary;
   private readonly getCostSkillLastTurnByName: (sessionId: string) => Record<string, number>;
   private readonly getCheckpointEvidenceState: (sessionId: string) => TapeCheckpointEvidenceState;
-  private readonly getCheckpointMemoryState: (sessionId: string) => TapeCheckpointMemoryState;
+  private readonly getCheckpointProjectionState: (
+    sessionId: string,
+  ) => TapeCheckpointProjectionState;
   private readonly recordEvent: TapeServiceOptions["recordEvent"];
 
   constructor(options: TapeServiceOptions) {
@@ -91,7 +93,7 @@ export class TapeService {
     this.getCostSummary = options.getCostSummary;
     this.getCostSkillLastTurnByName = options.getCostSkillLastTurnByName;
     this.getCheckpointEvidenceState = options.getCheckpointEvidenceState;
-    this.getCheckpointMemoryState = options.getCheckpointMemoryState;
+    this.getCheckpointProjectionState = options.getCheckpointProjectionState;
     this.recordEvent = options.recordEvent;
   }
 
@@ -448,7 +450,7 @@ export class TapeService {
         break;
       }
       processedEventIds.add(event.id);
-      if (event.type.startsWith("memory_")) {
+      if (event.type.startsWith("projection_")) {
         continue;
       }
       entriesSinceCheckpoint += 1;
@@ -495,7 +497,7 @@ export class TapeService {
     if (event.type === TAPE_ANCHOR_EVENT_TYPE) {
       state.latestAnchorEventId = event.id;
     }
-    if (event.type.startsWith("memory_")) {
+    if (event.type.startsWith("projection_")) {
       return;
     }
     state.entriesSinceCheckpoint += 1;
@@ -516,7 +518,7 @@ export class TapeService {
     this.applyEventToTapeCheckpointCounter(counterState, lastEvent);
     this.writeTapeCheckpointCounter(sessionId, counterState);
 
-    if (lastEvent.type === TAPE_CHECKPOINT_EVENT_TYPE || lastEvent.type.startsWith("memory_")) {
+    if (lastEvent.type === TAPE_CHECKPOINT_EVENT_TYPE || lastEvent.type.startsWith("projection_")) {
       return;
     }
 
@@ -532,7 +534,7 @@ export class TapeService {
         costSummary: this.getCostSummary(sessionId),
         costSkillLastTurnByName: this.getCostSkillLastTurnByName(sessionId),
         evidenceState: this.getCheckpointEvidenceState(sessionId),
-        memoryState: this.getCheckpointMemoryState(sessionId),
+        projectionState: this.getCheckpointProjectionState(sessionId),
         basedOnEventId: lastEvent.id,
         latestAnchorEventId: counterState.latestAnchorEventId,
         reason: `interval_entries_${intervalEntries}`,

@@ -24,7 +24,7 @@ Design principles:
 2. **Tape-first replayability** — event tape + checkpoint replay is the recovery source of truth; behavior is reconstructable after failure.
 3. **Bounded autonomy** — context, tools, cost, and parallelism all have explicit limits and fail-closed behavior under pressure.
 4. **Evidence-first contracts** — verification, ledger, task/truth updates, and skill lifecycle are explicit contract boundaries.
-5. **Projection-only memory** — memory is deterministic projection from tape (`units` + `working.md`), not adaptive cognition.
+5. **Working projection only** — projection state is a deterministic fold from tape (`units` + `working.md`), not adaptive cognition.
 6. **Governance hooks, not cognition loops** — optional governance checks (`verifySpec`, cost anomaly, compaction integrity) enrich auditability without changing core decision semantics.
 
 ## Architecture
@@ -38,24 +38,24 @@ flowchart TD
   BOUNDARY["Boundary Layer<br/>Tool Gate + Cost Gate + Context Compaction Gate"]
   CONTRACT["Contract Layer<br/>Skill Lifecycle + Cascade + Task State"]
   DURABILITY["Durability Layer<br/>Event Tape + Checkpoint Replay + Turn WAL"]
-  MEMORY["Projection Memory<br/>units.jsonl + working.md"]
+  PROJECTION["Working Projection<br/>units.jsonl + working.md"]
   UX["Operator Surfaces<br/>CLI / Gateway / Extensions"]
 
   AGENT --> BOUNDARY
   BOUNDARY --> CONTRACT
   CONTRACT --> TRUST
   TRUST --> DURABILITY
-  DURABILITY --> MEMORY
+  DURABILITY --> PROJECTION
   UX --> BOUNDARY
   UX --> DURABILITY
 ```
 
 Implementation-level architecture (package DAG, execution profiles, hook wiring):
-`docs/architecture/system-architecture.md` · `docs/architecture/control-and-data-flow.md` · `docs/journeys/memory-projection-and-recall.md`
+`docs/architecture/system-architecture.md` · `docs/architecture/control-and-data-flow.md` · `docs/journeys/working-projection.md`
 
 Primary package surfaces:
 
-- `@brewva/brewva-runtime`: governance runtime contracts, tape replay, verification, memory projection, cost.
+- `@brewva/brewva-runtime`: governance runtime contracts, tape replay, verification, working projection, cost.
 - `@brewva/brewva-tools`: runtime-aware tools (ledger/task/tape/skill/cost/governance flows).
 - `@brewva/brewva-extensions`: lifecycle hook wiring and runtime integration guards.
 - `@brewva/brewva-cli`: user entrypoint and session bootstrap (`interactive` / `--print` / `--json` / replay/undo).
@@ -101,8 +101,8 @@ For complete CLI modes and gateway/onboard operations:
 - Execution routing defaults to `security.execution.backend=best_available` with
   `security.execution.fallbackToHost=false`.
 - Read-only verification is explicitly reported as `skipped` (not `pass`).
-- Routing translation/semantic stages are governance-only skipped by default
-  (`skill_routing_translation` / `skill_routing_semantic` with `reason=governance_only`).
+- Skill routing defaults to deterministic governance-first selection
+  (`skills.selector.mode=deterministic`); translation stays skipped and semantic telemetry reflects runtime routing outcome.
 - Cascade missing consumes is deterministic pause (`reason=missing_consumes`);
   runtime no longer auto-replans dependency chains.
 - `compose` is planning-only and now has a higher read budget (`max_tool_calls: 120`).
@@ -113,7 +113,7 @@ For complete CLI modes and gateway/onboard operations:
 bun run check              # Full quality gate (format + lint + typecheck + typecheck:test)
 bun test                   # Run unit + integration tests
 bun run test:docs          # Validate documentation quality
-bun run analyze:memory-projection  # Project memory projection quality from tape events (offline)
+bun run analyze:projection  # Project working-projection quality from tape events (offline)
 ```
 
 For distribution/release verification:

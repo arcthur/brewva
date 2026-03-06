@@ -43,7 +43,7 @@ Promotion criteria:
 ### 2) Context budget behavior in long-running sessions
 
 Goal:
-Keep memory/context injection bounded and deterministic under large histories.
+Keep projection injection bounded and deterministic under large histories.
 
 Source anchors:
 

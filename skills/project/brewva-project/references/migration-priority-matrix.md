@@ -24,7 +24,7 @@ Completion criteria:
 | ------------------------------------------------------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------- |
 | Harden deterministic context boundary path (compaction gate + arena SLO + governance integrity checks) | Medium-High | deterministic context behavior under pressure and long sessions               |
 | Align evidence quality labeling with actual tool semantics                                             | Medium      | evidence can distinguish deterministic/native output from heuristic fallbacks |
-| Complete memory projection + replay lifecycle                                                          | Medium      | projection state and replay checkpoints stay consistent across long sessions  |
+| Complete working projection + replay lifecycle                                                         | Medium      | projection state and replay checkpoints stay consistent across long sessions  |
 
 Completion criteria:
 

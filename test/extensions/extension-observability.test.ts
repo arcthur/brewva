@@ -28,7 +28,7 @@ describe("Extension integration: observability", () => {
       join(workspace, ".brewva/brewva.json"),
       JSON.stringify(
         {
-          memory: {
+          projection: {
             enabled: true,
           },
         },

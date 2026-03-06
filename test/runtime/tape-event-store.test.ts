@@ -63,7 +63,7 @@ describe("BrewvaEventStore tape helpers", () => {
           anchorEpoch: 0,
           recentFailures: [],
         },
-        memoryState: {
+        projectionState: {
           updatedAt: null,
           unitCount: 0,
         },

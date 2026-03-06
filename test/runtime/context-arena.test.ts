@@ -107,9 +107,9 @@ describe("ContextArena", () => {
   test("plan preserves deterministic append order", () => {
     const arena = new ContextArena();
     arena.append(sessionId, {
-      source: "brewva.memory-working",
-      id: "memory-working",
-      content: "memory",
+      source: "brewva.projection-working",
+      id: "projection-working",
+      content: "projection",
     });
     arena.append(sessionId, {
       source: "brewva.truth-facts",
@@ -124,7 +124,11 @@ describe("ContextArena", () => {
 
     const planned = arena.plan(sessionId, 10_000);
     const sources = planned.entries.map((entry) => entry.source);
-    expect(sources).toEqual(["brewva.memory-working", "brewva.truth-facts", "brewva.task-state"]);
+    expect(sources).toEqual([
+      "brewva.projection-working",
+      "brewva.truth-facts",
+      "brewva.task-state",
+    ]);
   });
 
   test("clearSession clears the whole session arena", () => {
@@ -179,6 +183,36 @@ describe("ContextArena", () => {
     });
     expect(dropped.accepted).toBe(false);
     expect(dropped.sloEnforced?.dropped).toBe(true);
+  });
+
+  test("allows refreshing an existing key when arena is at capacity", () => {
+    const arena = new ContextArena({
+      maxEntriesPerSession: 2,
+    });
+    const fullSessionId = "context-arena-refresh-at-capacity";
+
+    arena.append(fullSessionId, {
+      source: "brewva.truth-facts",
+      id: "truth-facts",
+      content: "truth-v1",
+    });
+    arena.append(fullSessionId, {
+      source: "brewva.task-state",
+      id: "task-state",
+      content: "task-v1",
+    });
+
+    const refreshed = arena.append(fullSessionId, {
+      source: "brewva.truth-facts",
+      id: "truth-facts",
+      content: "truth-v2",
+    });
+    const planned = arena.plan(fullSessionId, 10_000);
+
+    expect(refreshed.accepted).toBe(true);
+    expect(planned.entries).toHaveLength(2);
+    expect(planned.entries[0]?.content).toBe("truth-v2");
+    expect(planned.entries[1]?.content).toBe("task-v1");
   });
 
   test("snapshot exposes append-only arena counters", () => {

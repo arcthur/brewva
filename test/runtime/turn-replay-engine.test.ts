@@ -103,7 +103,7 @@ function checkpointEvent(input: {
         anchorEpoch: 0,
         recentFailures: [],
       },
-      memoryState: {
+      projectionState: {
         updatedAt: null,
         unitCount: 0,
       },
@@ -461,7 +461,7 @@ describe("TurnReplayEngine", () => {
         evidence?: {
           totalRecords?: number;
         };
-        memory?: {
+        projection?: {
           unitCount?: number;
         };
       };
@@ -469,13 +469,13 @@ describe("TurnReplayEngine", () => {
     if (
       !checkpointPayload.state?.cost ||
       !checkpointPayload.state.evidence ||
-      !checkpointPayload.state.memory
+      !checkpointPayload.state.projection
     ) {
       throw new Error("expected checkpoint payload state");
     }
     checkpointPayload.state.cost.totalTokens = 7;
     checkpointPayload.state.evidence.totalRecords = 2;
-    checkpointPayload.state.memory.unitCount = 1;
+    checkpointPayload.state.projection.unitCount = 1;
 
     events.push(checkpoint);
     engine.observeEvent(checkpoint);
@@ -486,10 +486,10 @@ describe("TurnReplayEngine", () => {
     expect(second.taskState.items.map((item) => item.text)).toEqual(["after"]);
     expect(second.costState.summary.totalTokens).toBe(7);
     expect(second.evidenceState.totalRecords).toBe(2);
-    expect(second.memoryState.unitCount).toBe(1);
+    expect(second.projectionState.unitCount).toBe(1);
   });
 
-  test("folds cost/evidence/memory state and prunes stale failures after 3 anchors", () => {
+  test("folds cost/evidence/projection state and prunes stale failures after 3 anchors", () => {
     const sessionId = "replay-engine-folded-extended";
     const events: BrewvaEventRecord[] = [
       {
@@ -522,9 +522,9 @@ describe("TurnReplayEngine", () => {
         toolName: "exec",
       }),
       {
-        id: "evt-memory-projection-1",
+        id: "evt-projection-refresh-1",
         sessionId,
-        type: "memory_projection_refreshed",
+        type: "projection_refreshed",
         timestamp: 3,
         payload: {
           unitCount: 2,
@@ -555,7 +555,7 @@ describe("TurnReplayEngine", () => {
     const view = engine.replay(sessionId);
     expect(view.costState.summary.totalTokens).toBe(15);
     expect(view.costState.summary.totalCostUsd).toBeCloseTo(0.001, 8);
-    expect(view.memoryState.unitCount).toBe(2);
+    expect(view.projectionState.unitCount).toBe(2);
     expect(view.evidenceState.failureRecords).toBe(1);
     expect(view.evidenceState.failureClassCounts.execution).toBe(1);
     expect(view.evidenceState.recentFailures).toHaveLength(0);
@@ -732,7 +732,7 @@ describe("TurnReplayEngine", () => {
             anchorEpoch: 0,
             recentFailures: [],
           },
-          memoryState: {
+          projectionState: {
             updatedAt: null,
             unitCount: 0,
           },

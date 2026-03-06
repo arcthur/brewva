@@ -10,7 +10,6 @@ It exposes domain APIs instead of a flat method bag:
 - `runtime.tools`
 - `runtime.task`
 - `runtime.truth`
-- `runtime.memory`
 - `runtime.schedule`
 - `runtime.turnWal`
 - `runtime.events`
@@ -40,7 +39,7 @@ Session runtime maps are managed by
 Cross-process reconstruction is tape-first:
 
 - `TurnReplayEngine` rebuilds state via checkpoint + delta
-- folded slices include task/truth/cost/evidence/memory projection state
+- folded slices include task/truth/cost/evidence/projection state
 - runtime bootstrap hydration restores control-plane state from persisted events
 
 ## Scheduling Boundary
@@ -57,7 +56,7 @@ Core contracts are defined in `packages/brewva-runtime/src/types.ts`, including:
 - ledger and truth/task payload contracts
 - event/replay/wal contracts
 - verification and cost summary contracts
-- memory projection contracts
+- context, cost, and governance contracts
 
 ## Configuration Boundary
 

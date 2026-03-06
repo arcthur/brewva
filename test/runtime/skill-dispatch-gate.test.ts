@@ -13,7 +13,7 @@ function createWorkspace(name: string): string {
 function createConfig(mode: BrewvaConfig["security"]["mode"]): BrewvaConfig {
   const config = structuredClone(DEFAULT_BREWVA_CONFIG);
   config.security.mode = mode;
-  config.memory.enabled = false;
+  config.projection.enabled = false;
   config.infrastructure.toolFailureInjection.enabled = false;
   config.skills.overrides.review = {
     dispatch: {

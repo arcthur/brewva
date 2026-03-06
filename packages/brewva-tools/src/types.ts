@@ -134,9 +134,6 @@ export interface BrewvaToolRuntime {
     ): { ok: boolean; blockerId?: string; error?: string };
     resolveBlocker(sessionId: string, blockerId: string): { ok: boolean; error?: string };
   };
-  memory: {
-    getWorking?(sessionId: string): unknown;
-  };
   schedule: {
     createIntent(
       sessionId: string,

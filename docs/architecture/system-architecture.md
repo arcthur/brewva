@@ -41,14 +41,14 @@ Design priority:
 - checkpoint + delta replay (`TurnReplayEngine`)
 - turn WAL (`TurnWALStore`, `TurnWALRecovery`)
 
-## Memory Model
+## Projection Model
 
-Memory is projection-only:
+Projection state is working-only:
 
 - source-of-truth: event tape
-- projection: `.orchestrator/memory/units.jsonl`
-- working snapshot: `.orchestrator/memory/working.md`
-- injected source: `brewva.memory-working` only
+- projection: `.orchestrator/projection/units.jsonl`
+- working snapshot: `.orchestrator/projection/sessions/sess_<base64url(sessionId)>/working.md`
+- injected source: `brewva.projection-working` only
 
 No recall lane and no external recall runtime branch are part of the kernel.
 
@@ -81,5 +81,5 @@ governance decisions remain in runtime services.
 ## Non-goals
 
 - runtime-managed model routing inference
-- multi-tier adaptive memory structures
+- multi-tier adaptive projection structures
 - multi-branch context retrieval heuristics

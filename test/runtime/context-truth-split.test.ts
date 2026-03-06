@@ -24,7 +24,7 @@ function createWorkspace(name: string): string {
 function createConfig(): BrewvaConfig {
   const config = structuredClone(DEFAULT_BREWVA_CONFIG);
   config.infrastructure.toolFailureInjection.enabled = false;
-  config.memory.enabled = false;
+  config.projection.enabled = false;
   return config;
 }
 

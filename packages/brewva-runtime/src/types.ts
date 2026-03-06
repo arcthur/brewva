@@ -7,6 +7,7 @@ export type SkillCostHint = "low" | "medium" | "high";
 export type SkillDispatchMode = "suggest" | "gate" | "auto";
 export type SkillCascadeMode = "off" | "assist" | "auto";
 export type SkillCascadeSource = "dispatch" | "compose" | "explicit";
+export type SkillSelectorMode = "deterministic" | "external_only";
 
 export interface SkillDispatchPolicy {
   gateThreshold: number;
@@ -76,12 +77,30 @@ export interface SkillSelection {
 }
 
 export interface SkillSelectorConfig {
+  mode: SkillSelectorMode;
   k: number;
 }
 
-export type SkillSelectionSignal = "semantic_match";
+export type SkillSelectionSignal =
+  | "semantic_match"
+  | "name_exact"
+  | "name_token"
+  | "description_token"
+  | "output_token"
+  | "consume_token"
+  | "tool_token"
+  | "available_output";
 
-export const SKILL_SELECTION_SIGNALS: SkillSelectionSignal[] = ["semantic_match"];
+export const SKILL_SELECTION_SIGNALS: SkillSelectionSignal[] = [
+  "semantic_match",
+  "name_exact",
+  "name_token",
+  "description_token",
+  "output_token",
+  "consume_token",
+  "tool_token",
+  "available_output",
+];
 
 export interface SkillSelectionBreakdownEntry {
   signal: SkillSelectionSignal;
@@ -92,6 +111,45 @@ export interface SkillSelectionBreakdownEntry {
 export type SkillDispatchDecisionMode = "none" | SkillDispatchMode;
 
 export type SkillRoutingOutcome = "selected" | "empty" | "failed";
+export type SkillRoutingSource = "deterministic_router" | "external_preselection";
+export type SkillRoutingTranslationStatus = "skipped";
+export type SkillRoutingSemanticStatus = "selected" | "empty" | "failed" | "skipped";
+
+export interface SkillRoutingTranslationTrace {
+  status: SkillRoutingTranslationStatus;
+  reason: string;
+  translated: false;
+}
+
+export interface SkillRoutingSemanticTrace {
+  status: SkillRoutingSemanticStatus;
+  reason: string;
+  selectedCount: number;
+  selectedSkills: string[];
+}
+
+export interface SkillRoutingTrace {
+  routerVersion: string;
+  selectorMode: SkillSelectorMode;
+  source: SkillRoutingSource;
+  promptHash: string;
+  skillsIndexHash: string;
+  configHash: string;
+  latencyMs: number;
+  routingOutcome: SkillRoutingOutcome;
+  translation: SkillRoutingTranslationTrace;
+  semantic: SkillRoutingSemanticTrace;
+  candidates: SkillSelection[];
+  activeSkillName: string | null;
+  availableOutputs: string[];
+  error?: string;
+}
+
+export interface SkillRoutingResult {
+  selected: SkillSelection[];
+  routingOutcome: SkillRoutingOutcome;
+  trace: SkillRoutingTrace;
+}
 
 export interface SkillPreselection {
   selected: SkillSelection[];
@@ -509,7 +567,7 @@ export interface BrewvaConfig {
   tape: {
     checkpointIntervalEntries: number;
   };
-  memory: {
+  projection: {
     enabled: boolean;
     dir: string;
     workingFile: string;
@@ -645,7 +703,7 @@ export interface BrewvaConfigFile {
   };
   ledger?: Partial<BrewvaConfig["ledger"]>;
   tape?: Partial<BrewvaConfig["tape"]>;
-  memory?: DeepPartial<BrewvaConfig["memory"]>;
+  projection?: DeepPartial<BrewvaConfig["projection"]>;
   security?: Partial<Omit<BrewvaConfig["security"], "execution">> & {
     execution?: Partial<Omit<BrewvaConfig["security"]["execution"], "sandbox">> & {
       sandbox?: Partial<BrewvaConfig["security"]["execution"]["sandbox"]>;

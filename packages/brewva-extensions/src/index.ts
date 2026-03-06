@@ -5,9 +5,9 @@ import { registerCompletionGuard } from "./completion-guard.js";
 import { registerContextTransform } from "./context-transform.js";
 import { registerEventStream } from "./event-stream.js";
 import { registerLedgerWriter } from "./ledger-writer.js";
-import { registerMemoryBridge } from "./memory-bridge.js";
 import { registerNotification } from "./notification.js";
 import { registerQualityGate } from "./quality-gate.js";
+import { registerScanConvergenceGuard } from "./scan-convergence-guard.js";
 
 export interface CreateBrewvaExtensionOptions extends BrewvaRuntimeOptions {
   runtime?: BrewvaRuntime;
@@ -17,11 +17,11 @@ export interface CreateBrewvaExtensionOptions extends BrewvaRuntimeOptions {
 function registerAllHandlers(pi: ExtensionAPI, runtime: BrewvaRuntime): void {
   registerEventStream(pi, runtime);
   registerContextTransform(pi, runtime);
+  registerScanConvergenceGuard(pi, runtime);
   registerQualityGate(pi, runtime);
   registerLedgerWriter(pi, runtime);
   registerCompletionGuard(pi, runtime);
   registerNotification(pi, runtime);
-  registerMemoryBridge(pi, runtime);
 }
 
 export function createBrewvaExtension(
@@ -58,9 +58,9 @@ export {
 } from "./capability-view.js";
 export { registerEventStream } from "./event-stream.js";
 export { registerQualityGate } from "./quality-gate.js";
+export { registerScanConvergenceGuard } from "./scan-convergence-guard.js";
 export { registerLedgerWriter } from "./ledger-writer.js";
 export { registerCompletionGuard } from "./completion-guard.js";
-export { registerMemoryBridge } from "./memory-bridge.js";
 export { registerNotification } from "./notification.js";
 export { createRuntimeChannelTurnBridge } from "./channel-turn-bridge.js";
 export { createRuntimeTelegramChannelBridge } from "./telegram-channel-bridge.js";

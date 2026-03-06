@@ -234,7 +234,19 @@
             }
           }
         },
-        "memory": {
+        "parallel": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "maxConcurrent": {
+              "type": "number"
+            }
+          }
+        },
+        "projection": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
@@ -249,18 +261,6 @@
             },
             "workingFile": {
               "type": "string"
-            }
-          }
-        },
-        "parallel": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "maxConcurrent": {
-              "type": "number"
             }
           }
         },
@@ -437,6 +437,10 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": ["deterministic", "external_only"]
+                },
                 "k": {
                   "type": "number"
                 }

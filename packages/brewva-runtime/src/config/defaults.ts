@@ -10,6 +10,7 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     disabled: [],
     overrides: {},
     selector: {
+      mode: "deterministic",
       k: 4,
     },
     cascade: {
@@ -40,9 +41,9 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
   tape: {
     checkpointIntervalEntries: 120,
   },
-  memory: {
+  projection: {
     enabled: true,
-    dir: ".orchestrator/memory",
+    dir: ".orchestrator/projection",
     workingFile: "working.md",
     maxWorkingChars: 2400,
   },

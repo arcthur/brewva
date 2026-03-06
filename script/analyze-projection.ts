@@ -65,14 +65,14 @@ function analyze(events: EventRow[]): Record<string, SessionProjectionStats> {
     const row = getOrCreate(sessionId);
     const payload = event.payload ?? {};
 
-    if (event.type === "memory_projection_ingested") {
+    if (event.type === "projection_ingested") {
       row.ingestedEvents += 1;
       row.upsertedUnits += toNumber(payload["upsertedUnits"]);
       row.resolvedUnits += toNumber(payload["resolvedUnits"]);
       continue;
     }
 
-    if (event.type === "memory_projection_refreshed") {
+    if (event.type === "projection_refreshed") {
       row.refreshEvents += 1;
       row.latestUnitCount = Math.max(0, Math.floor(toNumber(payload["unitCount"])));
       row.latestRefreshAt = event.timestamp;
@@ -86,7 +86,7 @@ function analyze(events: EventRow[]): Record<string, SessionProjectionStats> {
 function main(): void {
   const filePathArg = process.argv[2];
   if (!filePathArg) {
-    console.error("Usage: bun run script/analyze-memory-projection.ts <events-jsonl-path>");
+    console.error("Usage: bun run script/analyze-projection.ts <events-jsonl-path>");
     process.exit(1);
   }
 
@@ -94,7 +94,7 @@ function main(): void {
   const events = parseJsonLines(eventsPath);
   const analyzed = analyze(events);
   const output = {
-    schema: "brewva.memory.projection.analysis.v1",
+    schema: "brewva.projection.analysis.v1",
     generatedAt: new Date().toISOString(),
     file: eventsPath,
     sessions: analyzed,

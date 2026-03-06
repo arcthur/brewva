@@ -1,10 +1,14 @@
+import {
+  PROJECTION_INGESTED_EVENT_TYPE,
+  PROJECTION_REFRESHED_EVENT_TYPE,
+} from "../events/event-types.js";
 import type { BrewvaEventRecord } from "../types.js";
-import { extractMemoryFromEvent } from "./extractor.js";
-import { MemoryStore } from "./store.js";
-import type { WorkingMemorySnapshot } from "./types.js";
-import { buildWorkingMemorySnapshot } from "./working-memory.js";
+import { extractProjectionFromEvent } from "./extractor.js";
+import { ProjectionStore } from "./store.js";
+import type { WorkingProjectionSnapshot } from "./types.js";
+import { buildWorkingProjectionSnapshot } from "./working-projection.js";
 
-export interface MemoryEngineOptions {
+export interface ProjectionEngineOptions {
   enabled: boolean;
   rootDir: string;
   workingFile: string;
@@ -17,7 +21,7 @@ export interface MemoryEngineOptions {
   }) => void;
 }
 
-export interface MemoryRebuildFromTapeResult {
+export interface ProjectionRebuildFromTapeResult {
   rebuilt: boolean;
   reason: "disabled" | "already_present" | "no_replayable_events" | "replayed";
   scannedEvents: number;
@@ -26,16 +30,16 @@ export interface MemoryRebuildFromTapeResult {
   resolvedUnits: number;
 }
 
-export class MemoryEngine {
+export class ProjectionEngine {
   private readonly enabled: boolean;
   private readonly rootDir: string;
   private readonly workingFile: string;
   private readonly maxWorkingChars: number;
-  private readonly recordEvent?: MemoryEngineOptions["recordEvent"];
-  private store: MemoryStore | null = null;
+  private readonly recordEvent?: ProjectionEngineOptions["recordEvent"];
+  private store: ProjectionStore | null = null;
   private readonly dirtySessions = new Set<string>();
 
-  constructor(options: MemoryEngineOptions) {
+  constructor(options: ProjectionEngineOptions) {
     this.enabled = options.enabled;
     this.rootDir = options.rootDir;
     this.workingFile = options.workingFile;
@@ -46,7 +50,7 @@ export class MemoryEngine {
   ingestEvent(event: BrewvaEventRecord): void {
     if (!this.enabled) return;
 
-    const extraction = extractMemoryFromEvent(event);
+    const extraction = extractProjectionFromEvent(event);
     if (extraction.upserts.length === 0 && extraction.resolves.length === 0) return;
 
     const result = this.getStore().ingestExtraction(extraction, event.timestamp);
@@ -54,7 +58,7 @@ export class MemoryEngine {
 
     this.recordEvent?.({
       sessionId: event.sessionId,
-      type: "memory_projection_ingested",
+      type: PROJECTION_INGESTED_EVENT_TYPE,
       turn: event.turn,
       payload: {
         sourceEventId: event.id,
@@ -65,7 +69,7 @@ export class MemoryEngine {
     });
   }
 
-  getWorkingMemory(sessionId: string): WorkingMemorySnapshot | undefined {
+  getWorkingProjection(sessionId: string): WorkingProjectionSnapshot | undefined {
     if (!this.enabled) return undefined;
     return this.getStore().getWorkingSnapshot(sessionId);
   }
@@ -73,17 +77,20 @@ export class MemoryEngine {
   refreshIfNeeded(input: {
     sessionId: string;
     force?: boolean;
-  }): WorkingMemorySnapshot | undefined {
+  }): WorkingProjectionSnapshot | undefined {
     if (!this.enabled) return undefined;
 
     const force = input.force === true;
     const store = this.getStore();
+    const cached = store.getWorkingSnapshot(input.sessionId);
     if (!force && !this.dirtySessions.has(input.sessionId)) {
-      return store.getWorkingSnapshot(input.sessionId);
+      if (cached) return cached;
+      if (!store.hasUnits(input.sessionId)) return undefined;
     }
 
     const units = store.listUnits(input.sessionId);
-    const snapshot = buildWorkingMemorySnapshot({
+    const activeUnitCount = units.filter((unit) => unit.status === "active").length;
+    const snapshot = buildWorkingProjectionSnapshot({
       sessionId: input.sessionId,
       units,
       maxChars: this.maxWorkingChars,
@@ -93,9 +100,9 @@ export class MemoryEngine {
     this.dirtySessions.delete(input.sessionId);
     this.recordEvent?.({
       sessionId: input.sessionId,
-      type: "memory_projection_refreshed",
+      type: PROJECTION_REFRESHED_EVENT_TYPE,
       payload: {
-        unitCount: units.length,
+        unitCount: activeUnitCount,
         chars: snapshot.content.length,
       },
     });
@@ -112,7 +119,7 @@ export class MemoryEngine {
     sessionId: string;
     events: BrewvaEventRecord[];
     mode?: "missing_only" | "always";
-  }): MemoryRebuildFromTapeResult {
+  }): ProjectionRebuildFromTapeResult {
     if (!this.enabled) {
       return {
         rebuilt: false,
@@ -142,7 +149,7 @@ export class MemoryEngine {
     let resolvedUnits = 0;
 
     for (const event of input.events) {
-      const extraction = extractMemoryFromEvent(event);
+      const extraction = extractProjectionFromEvent(event);
       if (extraction.upserts.length === 0 && extraction.resolves.length === 0) continue;
       replayedEvents += 1;
       const ingested = store.ingestExtraction(extraction, event.timestamp);
@@ -174,9 +181,9 @@ export class MemoryEngine {
     };
   }
 
-  private getStore(): MemoryStore {
+  private getStore(): ProjectionStore {
     if (!this.store) {
-      this.store = new MemoryStore({
+      this.store = new ProjectionStore({
         rootDir: this.rootDir,
         workingFile: this.workingFile,
       });

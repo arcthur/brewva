@@ -10,6 +10,7 @@ const VALID_CHANNEL_SCOPE_STRATEGIES = new Set(["chat", "thread"]);
 const VALID_CHANNEL_ACL_MODES = new Set(["open", "closed"]);
 const VALID_SKILL_CASCADE_MODES = new Set(["off", "assist", "auto"]);
 const VALID_SKILL_CASCADE_SOURCES = new Set(["compose", "dispatch", "explicit"]);
+const VALID_SKILL_SELECTOR_MODES = new Set(["deterministic", "external_only"]);
 
 type AnyRecord = Record<string, unknown>;
 
@@ -154,7 +155,7 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
     : {};
   const ledgerInput = isRecord(input.ledger) ? input.ledger : {};
   const tapeInput = isRecord(input.tape) ? input.tape : {};
-  const memoryInput = isRecord(input.memory) ? input.memory : {};
+  const projectionInput = isRecord(input.projection) ? input.projection : {};
   const securityInput = isRecord(input.security) ? input.security : {};
   const securityEnforcementInput = isRecord(securityInput.enforcement)
     ? securityInput.enforcement
@@ -272,6 +273,12 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
       disabled: normalizeStringArray(skillsInput.disabled, defaults.skills.disabled),
       overrides: normalizeSkillOverrides(skillsInput.overrides, defaults.skills.overrides),
       selector: {
+        mode: normalizeStrictStringEnum(
+          skillsSelectorInput.mode,
+          defaults.skills.selector.mode,
+          VALID_SKILL_SELECTOR_MODES,
+          "skills.selector.mode",
+        ),
         k: normalizePositiveInteger(skillsSelectorInput.k, defaults.skills.selector.k),
       },
       cascade: {
@@ -323,13 +330,16 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
         defaults.tape.checkpointIntervalEntries,
       ),
     },
-    memory: {
-      enabled: normalizeBoolean(memoryInput.enabled, defaults.memory.enabled),
-      dir: normalizeNonEmptyString(memoryInput.dir, defaults.memory.dir),
-      workingFile: normalizeNonEmptyString(memoryInput.workingFile, defaults.memory.workingFile),
+    projection: {
+      enabled: normalizeBoolean(projectionInput.enabled, defaults.projection.enabled),
+      dir: normalizeNonEmptyString(projectionInput.dir, defaults.projection.dir),
+      workingFile: normalizeNonEmptyString(
+        projectionInput.workingFile,
+        defaults.projection.workingFile,
+      ),
       maxWorkingChars: normalizePositiveInteger(
-        memoryInput.maxWorkingChars,
-        defaults.memory.maxWorkingChars,
+        projectionInput.maxWorkingChars,
+        defaults.projection.maxWorkingChars,
       ),
     },
     security: {

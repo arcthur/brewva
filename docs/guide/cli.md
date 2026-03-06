@@ -123,8 +123,7 @@ Retained: `before_agent_start` core status/context block, `tool_call`,
 `tool_result`, `session_compact`, `session_shutdown`.
 
 Disabled: `registerContextTransform` (`turn_start`/`context` governance lifecycle),
-`registerCompletionGuard`, `registerEventStream`, `registerNotification`,
-`registerMemoryBridge`.
+`registerCompletionGuard`, `registerEventStream`, `registerNotification`.
 
 `--backend` selects the primary session backend:
 

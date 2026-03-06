@@ -192,7 +192,7 @@ describe("skill output registry", () => {
 
     runtime.skills.activate(sessionId, "exploration");
     const completion = runtime.skills.complete(sessionId, {
-      architecture_map: "runtime, tools, memory",
+      architecture_map: "runtime, tools, projection",
       key_modules: "verification, skill lifecycle",
       unknowns: "none",
       task_spec: {

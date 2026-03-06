@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { BrewvaConfigFile } from "@brewva/brewva-runtime";
 
 describe("BrewvaConfigFile typing", () => {
-  test("supports minimal memory overlay shape", () => {
+  test("supports minimal projection overlay shape", () => {
     const config: BrewvaConfigFile = {
-      memory: {
+      projection: {
         enabled: true,
-        dir: ".orchestrator/memory",
+        dir: ".orchestrator/projection",
         workingFile: "working.md",
         maxWorkingChars: 3200,
       },
@@ -19,8 +19,8 @@ describe("BrewvaConfigFile typing", () => {
       },
     };
 
-    expect(config.memory?.enabled).toBe(true);
-    expect(config.memory?.workingFile).toBe("working.md");
+    expect(config.projection?.enabled).toBe(true);
+    expect(config.projection?.workingFile).toBe("working.md");
     expect(config.infrastructure?.toolFailureInjection?.enabled).toBe(false);
   });
 });

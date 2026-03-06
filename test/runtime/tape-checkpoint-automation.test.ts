@@ -81,7 +81,7 @@ describe("tape checkpoint automation", () => {
         truth?: { facts?: Array<{ id?: string }> };
       };
     };
-    expect(checkpointPayload.schema).toBe("brewva.tape.checkpoint.v2");
+    expect(checkpointPayload.schema).toBe("brewva.tape.checkpoint.v3");
     expect(checkpointPayload.state?.task?.items?.some((item) => item.text === "item-1")).toBe(true);
     expect(checkpointPayload.state?.truth?.facts?.some((fact) => fact.id === "truth-1")).toBe(true);
 
@@ -184,7 +184,7 @@ describe("tape checkpoint automation", () => {
       runtime as unknown as {
         turnReplay: {
           getCheckpointEvidenceState: (sessionId: string) => unknown;
-          getCheckpointMemoryState: (sessionId: string) => unknown;
+          getCheckpointProjectionState: (sessionId: string) => unknown;
         };
       }
     ).turnReplay;
@@ -196,9 +196,9 @@ describe("tape checkpoint automation", () => {
       evidenceState: replay.getCheckpointEvidenceState(sessionId) as Parameters<
         typeof buildTapeCheckpointPayload
       >[0]["evidenceState"],
-      memoryState: replay.getCheckpointMemoryState(sessionId) as Parameters<
+      projectionState: replay.getCheckpointProjectionState(sessionId) as Parameters<
         typeof buildTapeCheckpointPayload
-      >[0]["memoryState"],
+      >[0]["projectionState"],
       reason: "manual_test",
     });
     runtime.events.record({
@@ -309,15 +309,15 @@ describe("tape checkpoint automation", () => {
     expect(reloaded.events.query(sessionId, { type: "ledger_compacted" })).toHaveLength(1);
   });
 
-  test("rebuilds memory projection from tape after memory files are removed", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-memory-rebuild-"));
-    const sessionId = "memory-rebuild-1";
+  test("rebuilds working projection from tape after projection files are removed", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-projection-rebuild-"));
+    const sessionId = "projection-rebuild-1";
 
     const runtime = new BrewvaRuntime({ cwd: workspace });
     runtime.context.onTurnStart(sessionId, 1);
     runtime.task.setSpec(sessionId, {
       schema: "brewva.task.v1",
-      goal: "Recover memory projection from tape",
+      goal: "Recover working projection from tape",
       constraints: ["rebuild projection when files are missing"],
     });
     runtime.task.recordBlocker(sessionId, {
@@ -325,20 +325,20 @@ describe("tape checkpoint automation", () => {
       source: "test",
     });
     const before = await runtime.context.buildInjection(sessionId, "continue");
-    expect(before.text.includes("[WorkingMemory]")).toBe(true);
+    expect(before.text.includes("[WorkingProjection]")).toBe(true);
 
-    const memoryDir = join(workspace, ".orchestrator/memory");
-    rmSync(join(memoryDir, "units.jsonl"), { force: true });
-    rmSync(join(memoryDir, "state.json"), { force: true });
-    rmSync(join(memoryDir, "working.md"), { force: true });
+    const projectionDir = join(workspace, ".orchestrator/projection");
+    rmSync(join(projectionDir, "units.jsonl"), { force: true });
+    rmSync(join(projectionDir, "state.json"), { force: true });
+    rmSync(join(projectionDir, "sessions"), { recursive: true, force: true });
 
     const reloaded = new BrewvaRuntime({ cwd: workspace });
     reloaded.context.onTurnStart(sessionId, 2);
     const after = await reloaded.context.buildInjection(sessionId, "continue");
-    expect(after.text.includes("[WorkingMemory]")).toBe(true);
-    expect(after.text.includes("Recover memory projection from tape")).toBe(true);
+    expect(after.text.includes("[WorkingProjection]")).toBe(true);
+    expect(after.text.includes("Recover working projection from tape")).toBe(true);
 
-    const unitsPath = join(memoryDir, "units.jsonl");
+    const unitsPath = join(projectionDir, "units.jsonl");
     expect(existsSync(unitsPath)).toBe(true);
     const lines = readFileSync(unitsPath, "utf8")
       .split("\n")

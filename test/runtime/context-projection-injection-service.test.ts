@@ -1,36 +1,36 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { CONTEXT_SOURCES } from "../../packages/brewva-runtime/src/context/sources.js";
-import type { MemoryEngine } from "../../packages/brewva-runtime/src/memory/engine.js";
-import { ContextMemoryInjectionService } from "../../packages/brewva-runtime/src/services/context-memory-injection.js";
+import type { ProjectionEngine } from "../../packages/brewva-runtime/src/projection/engine.js";
+import { ContextProjectionInjectionService } from "../../packages/brewva-runtime/src/services/context-projection-injection.js";
 
-function createMemoryStub(content: string | null): MemoryEngine {
+function createProjectionStub(content: string | null): ProjectionEngine {
   return {
     refreshIfNeeded: () => undefined,
-    getWorkingMemory: () =>
+    getWorkingProjection: () =>
       content
         ? {
             sessionId: "session-1",
             generatedAt: Date.now(),
             sourceUnitIds: [],
-            sections: [],
+            entries: [],
             content,
           }
         : undefined,
-  } as unknown as MemoryEngine;
+  } as unknown as ProjectionEngine;
 }
 
-describe("ContextMemoryInjectionService", () => {
-  test("registers working memory injection when snapshot is available", async () => {
+describe("ContextProjectionInjectionService", () => {
+  test("registers working projection injection when snapshot is available", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.memory.enabled = true;
+    config.projection.enabled = true;
     const injected: Array<{ source: string; id: string; content: string }> = [];
 
-    const service = new ContextMemoryInjectionService({
+    const service = new ContextProjectionInjectionService({
       workspaceRoot: "/tmp",
       agentId: "brewva",
       config,
-      memory: createMemoryStub("[WorkingMemory]\nsummary: ready"),
+      projectionEngine: createProjectionStub("[WorkingProjection]\nsummary: ready"),
       sanitizeInput: (text) => text,
       registerContextInjection: (_sessionId, input) => {
         injected.push({ source: input.source, id: input.id, content: input.content });
@@ -39,23 +39,23 @@ describe("ContextMemoryInjectionService", () => {
       recordEvent: () => undefined,
     });
 
-    await service.registerMemoryContextInjection("session-1", "prompt");
+    service.registerProjectionContextInjection("session-1", "prompt");
     expect(injected).toHaveLength(1);
-    expect(injected[0]?.source).toBe(CONTEXT_SOURCES.memoryWorking);
-    expect(injected[0]?.id).toBe("memory-working");
-    expect(injected[0]?.content.includes("[WorkingMemory]")).toBe(true);
+    expect(injected[0]?.source).toBe(CONTEXT_SOURCES.projectionWorking);
+    expect(injected[0]?.id).toBe("projection-working");
+    expect(injected[0]?.content.includes("[WorkingProjection]")).toBe(true);
   });
 
-  test("skips injection when working snapshot is empty", async () => {
+  test("skips injection when working snapshot is empty", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.memory.enabled = true;
+    config.projection.enabled = true;
     let called = false;
 
-    const service = new ContextMemoryInjectionService({
+    const service = new ContextProjectionInjectionService({
       workspaceRoot: "/tmp",
       agentId: "brewva",
       config,
-      memory: createMemoryStub(null),
+      projectionEngine: createProjectionStub(null),
       sanitizeInput: (text) => text,
       registerContextInjection: () => {
         called = true;
@@ -64,20 +64,20 @@ describe("ContextMemoryInjectionService", () => {
       recordEvent: () => undefined,
     });
 
-    await service.registerMemoryContextInjection("session-1", "prompt");
+    service.registerProjectionContextInjection("session-1", "prompt");
     expect(called).toBe(false);
   });
 
-  test("skips memory injection when memory is disabled", async () => {
+  test("skips projection injection when projection is disabled", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.memory.enabled = false;
+    config.projection.enabled = false;
     let called = false;
 
-    const service = new ContextMemoryInjectionService({
+    const service = new ContextProjectionInjectionService({
       workspaceRoot: "/tmp",
       agentId: "brewva",
       config,
-      memory: createMemoryStub("[WorkingMemory]\nsummary: ready"),
+      projectionEngine: createProjectionStub("[WorkingProjection]\nsummary: ready"),
       sanitizeInput: (text) => text,
       registerContextInjection: () => {
         called = true;
@@ -86,20 +86,20 @@ describe("ContextMemoryInjectionService", () => {
       recordEvent: () => undefined,
     });
 
-    await service.registerMemoryContextInjection("session-1", "prompt");
+    service.registerProjectionContextInjection("session-1", "prompt");
     expect(called).toBe(false);
   });
 
-  test("skips injection when sanitized working snapshot becomes empty", async () => {
+  test("skips injection when sanitized working snapshot becomes empty", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.memory.enabled = true;
+    config.projection.enabled = true;
     let called = false;
 
-    const service = new ContextMemoryInjectionService({
+    const service = new ContextProjectionInjectionService({
       workspaceRoot: "/tmp",
       agentId: "brewva",
       config,
-      memory: createMemoryStub("[WorkingMemory]\nsummary: ready"),
+      projectionEngine: createProjectionStub("[WorkingProjection]\nsummary: ready"),
       sanitizeInput: () => "   ",
       registerContextInjection: () => {
         called = true;
@@ -108,7 +108,7 @@ describe("ContextMemoryInjectionService", () => {
       recordEvent: () => undefined,
     });
 
-    await service.registerMemoryContextInjection("session-1", "prompt");
+    service.registerProjectionContextInjection("session-1", "prompt");
     expect(called).toBe(false);
   });
 });
