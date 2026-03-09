@@ -150,6 +150,9 @@ export interface BrewvaToolRuntime {
     listIntents(query?: ScheduleIntentListQuery): Promise<ScheduleIntentProjectionRecord[]>;
     getProjectionSnapshot(): Promise<ScheduleProjectionSnapshot>;
   };
+  session?: {
+    onClearState?(listener: (sessionId: string) => void): () => void;
+  };
   orchestration?: {
     a2a: {
       send(input: {

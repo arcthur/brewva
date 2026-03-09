@@ -11,6 +11,7 @@ import { createObsSloAssertTool } from "./observability/obs-slo-assert.js";
 import { createObsSnapshotTool } from "./observability/obs-snapshot.js";
 import { createOutputSearchTool } from "./output-search.js";
 import { createProcessTool } from "./process.js";
+import { createReadSpansTool } from "./read-spans.js";
 import { createRollbackLastPatchTool } from "./rollback-last-patch.js";
 import { createScheduleIntentTool } from "./schedule-intent.js";
 import { createSessionCompactTool } from "./session-compact.js";
@@ -20,6 +21,7 @@ import { createSkillLoadTool } from "./skill-load.js";
 import { createSkillRouteOverrideTool } from "./skill-route-override.js";
 import { createTapeTools } from "./tape.js";
 import { createTaskLedgerTools } from "./task-ledger.js";
+import { createTocTools } from "./toc.js";
 import type { BrewvaToolRuntime } from "./types.js";
 
 export interface BuildBrewvaToolsOptions {
@@ -29,7 +31,9 @@ export interface BuildBrewvaToolsOptions {
 export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefinition[] {
   return [
     ...createLspTools({ runtime: options.runtime }),
+    ...createTocTools({ runtime: options.runtime }),
     ...createAstGrepTools(),
+    createReadSpansTool(),
     createLookAtTool(),
     createGrepTool({ runtime: options.runtime }),
     createExecTool({ runtime: options.runtime }),
@@ -61,12 +65,14 @@ export { createLookAtTool } from "./look-at.js";
 export { createGrepTool } from "./grep.js";
 export { createExecTool } from "./exec.js";
 export { createProcessTool } from "./process.js";
+export { createReadSpansTool } from "./read-spans.js";
 export { createCostViewTool } from "./cost-view.js";
 export { createObsQueryTool } from "./observability/obs-query.js";
 export { createObsSloAssertTool } from "./observability/obs-slo-assert.js";
 export { createObsSnapshotTool } from "./observability/obs-snapshot.js";
 export { createLedgerQueryTool } from "./ledger-query.js";
 export { createOutputSearchTool } from "./output-search.js";
+export { createTocTools } from "./toc.js";
 export { createTapeTools } from "./tape.js";
 export { createSessionCompactTool } from "./session-compact.js";
 export { createRollbackLastPatchTool } from "./rollback-last-patch.js";

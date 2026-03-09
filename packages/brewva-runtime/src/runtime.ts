@@ -495,6 +495,7 @@ export class BrewvaRuntime {
     mergeWorkerResults(sessionId: string): WorkerMergeReport;
     clearWorkerResults(sessionId: string): void;
     clearState(sessionId: string): void;
+    onClearState(listener: (sessionId: string) => void): () => void;
   };
 
   private readonly evidenceLedger: EvidenceLedger;
@@ -1162,6 +1163,7 @@ export class BrewvaRuntime {
         mergeWorkerResults: (sessionId) => this.parallelService.mergeWorkerResults(sessionId),
         clearWorkerResults: (sessionId) => this.parallelService.clearWorkerResults(sessionId),
         clearState: (sessionId) => this.sessionLifecycleService.clearSessionState(sessionId),
+        onClearState: (listener) => this.sessionLifecycleService.onClearState(listener),
       },
     };
   }

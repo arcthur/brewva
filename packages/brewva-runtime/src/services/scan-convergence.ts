@@ -18,7 +18,10 @@ import {
 const RAW_SCAN_TOOL_NAMES = new Set(["read", "grep"]);
 const LOW_SIGNAL_TOOL_NAMES = new Set([
   "look_at",
+  "read_spans",
   "ast_grep_search",
+  "toc_document",
+  "toc_search",
   "lsp_goto_definition",
   "lsp_find_references",
   "lsp_symbols",

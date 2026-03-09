@@ -20,9 +20,12 @@
 - `lsp_diagnostics`
 - `lsp_prepare_rename`
 - `lsp_rename`
+- `toc_document`
+- `toc_search`
 - `ast_grep_search`
 - `ast_grep_replace`
 - `look_at`
+- `read_spans`
 - `grep`
 - `exec`
 - `process`

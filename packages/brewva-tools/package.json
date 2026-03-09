@@ -17,7 +17,8 @@
     "@mariozechner/pi-coding-agent": "^0.55.0",
     "@sinclair/typebox": "^0.34.48",
     "date-fns": "^4.1.0",
-    "microsandbox": "^0.1.1"
+    "microsandbox": "^0.1.1",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

@@ -88,6 +88,7 @@ export class SessionLifecycleService {
   private readonly resolveTaskBlocker: SessionLifecycleServiceOptions["resolveTaskBlocker"];
   private readonly recordEvent: SessionLifecycleServiceOptions["recordEvent"];
   private readonly hydratedSessions = new Set<string>();
+  private readonly clearStateListeners = new Set<(sessionId: string) => void>();
 
   constructor(options: SessionLifecycleServiceOptions) {
     this.sessionState = options.sessionState;
@@ -123,7 +124,22 @@ export class SessionLifecycleService {
     this.hydrateSessionStateFromEvents(sessionId);
   }
 
+  onClearState(listener: (sessionId: string) => void): () => void {
+    this.clearStateListeners.add(listener);
+    return () => {
+      this.clearStateListeners.delete(listener);
+    };
+  }
+
   clearSessionState(sessionId: string): void {
+    for (const listener of this.clearStateListeners) {
+      try {
+        listener(sessionId);
+      } catch {
+        // Session cleanup listeners must never block runtime state teardown.
+      }
+    }
+
     this.hydratedSessions.delete(sessionId);
     this.sessionState.clearSession(sessionId);
 

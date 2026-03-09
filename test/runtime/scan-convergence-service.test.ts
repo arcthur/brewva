@@ -183,6 +183,44 @@ describe("scan convergence service", () => {
     expect(reset?.payload?.toolStrategy).toBe("evidence_reuse");
   });
 
+  test("toc tools are classified as low-signal investigation and arm the guard", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-scan-runtime-toc-"));
+    const runtime = createRuntime(workspace);
+    const sessionId = "scan-runtime-toc-1";
+
+    runtime.context.onUserInput(sessionId);
+
+    for (let turn = 1; turn <= 6; turn += 1) {
+      runtime.context.onTurnStart(sessionId, turn);
+      const started = startAndFinishTool({
+        runtime,
+        sessionId,
+        toolCallId: `tc-toc-${turn}`,
+        toolName: "toc_document",
+        args: { filePath: `src/file-${turn}.ts` },
+        outputText: "[TOCDocument]",
+      });
+      expect(started.allowed).toBe(true);
+      runtime.context.onTurnEnd(sessionId);
+    }
+
+    runtime.context.onTurnStart(sessionId, 7);
+    const blocked = runtime.tools.start({
+      sessionId,
+      toolCallId: "tc-toc-search-blocked",
+      toolName: "toc_search",
+      args: { query: "runtime facade" },
+    });
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.reason?.includes("Stop low-signal investigation")).toBe(true);
+
+    const blockedEvent = runtime.events.query(sessionId, {
+      type: "scan_convergence_blocked_tool",
+      last: 1,
+    })[0];
+    expect(blockedEvent?.payload?.toolStrategy).toBe("low_signal");
+  });
+
   test("obs_query is classified as evidence reuse and clears the guard", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-scan-runtime-obs-query-"));
     const runtime = createRuntime(workspace);

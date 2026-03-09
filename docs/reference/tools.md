@@ -22,6 +22,37 @@ Defined in `packages/brewva-tools/src/lsp.ts`.
 `reason=diagnostics_scope_mismatch` when `tsc` fails but no diagnostics match
 the requested file/severity scope.
 
+## TOC Tools
+
+- `toc_document`
+- `toc_search`
+
+Defined in `packages/brewva-tools/src/toc.ts`.
+
+Current scope is TS/JS only (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`).
+The tools use TypeScript parser-based structural extraction, not regex-only
+symbol scans.
+
+`toc_document` returns:
+
+- parameter: `file_path`
+- module summary (top-of-file comment, first line only)
+- imports
+- top-level functions
+- top-level interfaces, type aliases, and enums
+- classes plus public methods/getters/setters
+- line spans for targeted follow-up reads
+
+`toc_search` supports:
+
+- `paths` (optional): one or more files/directories under the current workspace
+- `limit` (optional): cap ranked matches
+- broad-query fallback: returns `status=unavailable` with `reason=broad_query`
+  when structural matches are too diffuse to be useful; preferred next step is
+  a narrower symbol/import query or `grep`
+- follow-up contract: prefer `read_spans` for exact line ranges instead of
+  whole-file reads
+
 ## AST Tools
 
 - `ast_grep_search`
@@ -41,7 +72,18 @@ Parameter surface is intentionally minimal:
 
 Default tool bundle (registered by `buildBrewvaTools()`):
 
+- `lsp_goto_definition`
+- `lsp_find_references`
+- `lsp_symbols`
+- `lsp_diagnostics`
+- `lsp_prepare_rename`
+- `lsp_rename`
+- `toc_document`
+- `toc_search`
+- `ast_grep_search`
+- `ast_grep_replace`
 - `look_at`
+- `read_spans`
 - `grep`
 - `exec`
 - `process`
@@ -77,8 +119,9 @@ Optional A2A tools (registered by channel orchestration extensions when an A2A a
 Notes:
 
 - `grep` is a read-only workspace search tool intended to replace ad-hoc `exec` usage for text search in read-only skills.
+- `read_spans` is the preferred targeted follow-up after `toc_document` / `toc_search`; it reads bounded line ranges from one file instead of replaying a whole file.
 - `skill_route_override` and `skill_chain_control` are control-plane tools for steering dispatch gating and cascade progression.
-- Repeated `read`, `grep`, `look_at`, navigation-only `lsp_*`, `ast_grep_search`, or low-signal `exec` turns can trigger the scan convergence guard. Preferred recovery tools are `output_search`, `ledger_query`, `tape_search`, `task_view_state`, and `task_*` ledger actions before resuming more retrieval.
+- Repeated `read`, `grep`, `read_spans`, `look_at`, `toc_*`, navigation-only `lsp_*`, `ast_grep_search`, or low-signal `exec` turns can trigger the scan convergence guard. Preferred recovery tools are `output_search`, `ledger_query`, `tape_search`, `task_view_state`, and `task_*` ledger actions before resuming more retrieval.
 - `obs_query`, `obs_slo_assert`, and `obs_snapshot` are evidence-reuse tools. They inspect current-session runtime events and do not count as low-signal retrieval for scan-convergence reset.
 
 ### `grep`
@@ -97,6 +140,25 @@ Parameters:
 - `workdir` (string, optional): working directory (resolved relative to runtime `cwd`)
 
 If `rg` is not found, the tool returns a hint to install ripgrep.
+
+### `read_spans`
+
+Reads exact line ranges from one file with bounded output.
+
+Parameters:
+
+- `file_path` (string, required): file to read
+- `spans` (array, required, max 16): line ranges with `start_line` / `end_line`
+
+Behavior:
+
+- overlapping or adjacent spans are merged before reading
+- ranges are clipped to file length
+- when all requested ranges are outside the file, returns `status=unavailable`
+  with `reason=out_of_bounds`
+- when output is capped, the tool returns `last_line_returned` and
+  `truncated_at_line` so follow-up calls can resume without recounting lines
+- output is capped to avoid whole-file replay; use multiple narrower calls if needed
 
 ### `skill_route_override`
 
@@ -177,7 +239,9 @@ For cron intents, runtime defaults `maxRuns` to `10000` when omitted.
 
 Definitions:
 
+- `packages/brewva-tools/src/toc.ts`
 - `packages/brewva-tools/src/look-at.ts`
+- `packages/brewva-tools/src/read-spans.ts`
 - `packages/brewva-tools/src/a2a.ts`
 - `packages/brewva-tools/src/exec.ts`
 - `packages/brewva-tools/src/grep.ts`

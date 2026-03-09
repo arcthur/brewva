@@ -161,6 +161,7 @@ Read-only verification semantics:
 - `mergeWorkerResults(sessionId)`
 - `clearWorkerResults(sessionId)`
 - `clearState(sessionId)`
+- `onClearState(listener)`
 
 ## Async-Only API Direction
 

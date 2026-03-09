@@ -48,7 +48,7 @@ runtime services (`runtime.tools.start(...)`, `runtime.tools.finish(...)`,
 The runtime service classifies retrieval behavior into four tool strategies:
 
 - `raw_scan`: `read`, `grep`
-- `low_signal`: `look_at`, `ast_grep_search`, selected `lsp_*` navigation tools, and low-signal `exec` commands such as `ls`/`find`/`cat`/`rg`
+- `low_signal`: `look_at`, `read_spans`, `toc_document`, `toc_search`, `ast_grep_search`, selected `lsp_*` navigation tools, and low-signal `exec` commands such as `ls`/`find`/`cat`/`rg`
 - `evidence_reuse`: `output_search`, `ledger_query`, `obs_query`, `obs_slo_assert`, `obs_snapshot`, `tape_info`, `tape_search`, `task_view_state`, `cost_view`
 - `progress`: task mutation tools, skill lifecycle tools, handoff/mutation tools, and the remaining non-retrieval surface
 

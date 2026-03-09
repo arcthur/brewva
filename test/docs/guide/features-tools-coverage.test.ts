@@ -11,6 +11,7 @@ function collectToolNames(sourceRoot: string): string[] {
     "ledger-query.ts",
     "look-at.ts",
     "lsp.ts",
+    "read-spans.ts",
     "observability/obs-query.ts",
     "observability/obs-slo-assert.ts",
     "observability/obs-snapshot.ts",
@@ -25,6 +26,7 @@ function collectToolNames(sourceRoot: string): string[] {
     "skill-route-override.ts",
     "tape.ts",
     "task-ledger.ts",
+    "toc.ts",
   ];
 
   const names = new Set<string>();
