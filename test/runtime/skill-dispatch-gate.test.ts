@@ -176,7 +176,7 @@ describe("skill dispatch gate", () => {
 
     const override = runtime.skills.overridePendingDispatch(sessionId, {
       reason: "human_operator_override",
-      targetSkillName: "planning",
+      targetSkillName: "design",
     });
     expect(override.ok).toBe(true);
     expect(runtime.skills.getPendingDispatch(sessionId)).toBeUndefined();
@@ -216,7 +216,7 @@ describe("skill dispatch gate", () => {
     const sessionId = "skill-dispatch-deferred-1";
 
     runtime.context.onTurnStart(sessionId, 1);
-    expect(runtime.skills.activate(sessionId, "execution").ok).toBe(true);
+    expect(runtime.skills.activate(sessionId, "implementation").ok).toBe(true);
     runtime.skills.setNextSelection(sessionId, [
       {
         name: "review",
@@ -233,7 +233,7 @@ describe("skill dispatch gate", () => {
     })[0];
     expect(deferred).toBeDefined();
     expect((deferred?.payload as { deferredBy?: string } | undefined)?.deferredBy).toBe(
-      "execution",
+      "implementation",
     );
   });
 

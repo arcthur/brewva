@@ -23,11 +23,11 @@ function runInitSkill(input: {
   }
 }
 
-describe("skill-creator init script default paths", () => {
+describe("skill-authoring init script default paths", () => {
   const repoRoot = resolve(import.meta.dir, "../..");
-  const scriptPath = join(repoRoot, "skills/packs/skill-creator/scripts/init_skill.py");
+  const scriptPath = join(repoRoot, "skills/meta/skill-authoring/scripts/init_skill.py");
 
-  test("writes into project .brewva skills packs when .brewva exists", () => {
+  test("writes into project .brewva domain skills when .brewva exists", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-init-project-"));
     try {
       mkdirSync(join(workspace, ".brewva"), { recursive: true });
@@ -38,7 +38,7 @@ describe("skill-creator init script default paths", () => {
         args: [skillName],
       });
 
-      const skillPath = join(workspace, ".brewva/skills/packs", skillName);
+      const skillPath = join(workspace, ".brewva/skills/domain", skillName);
       expect(existsSync(join(skillPath, "SKILL.md"))).toBe(true);
       expect(existsSync(join(skillPath, "scripts/example.py"))).toBe(true);
       expect(existsSync(join(skillPath, "references/api_reference.md"))).toBe(true);
@@ -48,7 +48,7 @@ describe("skill-creator init script default paths", () => {
     }
   });
 
-  test("falls back to global skills packs when project .brewva is missing", () => {
+  test("falls back to global domain skills when project .brewva is missing", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-init-global-workspace-"));
     const xdgRoot = mkdtempSync(join(tmpdir(), "brewva-skill-init-global-xdg-"));
     try {
@@ -63,9 +63,9 @@ describe("skill-creator init script default paths", () => {
         },
       });
 
-      const globalSkillPath = join(xdgRoot, "brewva/skills/packs", skillName);
+      const globalSkillPath = join(xdgRoot, "brewva/skills/domain", skillName);
       expect(existsSync(join(globalSkillPath, "SKILL.md"))).toBe(true);
-      expect(existsSync(join(workspace, ".brewva/skills/packs", skillName))).toBe(false);
+      expect(existsSync(join(workspace, ".brewva/skills/domain", skillName))).toBe(false);
     } finally {
       rmSync(workspace, { recursive: true, force: true });
       rmSync(xdgRoot, { recursive: true, force: true });
@@ -82,9 +82,9 @@ describe("skill-creator init script default paths", () => {
         args: [skillName, "--path", "./custom-target"],
       });
 
-      const explicitPath = join(workspace, "custom-target", skillName);
+      const explicitPath = join(workspace, "custom-target/skills/domain", skillName);
       expect(existsSync(join(explicitPath, "SKILL.md"))).toBe(true);
-      expect(existsSync(join(workspace, ".brewva/skills/packs", skillName))).toBe(false);
+      expect(existsSync(join(workspace, ".brewva/skills/domain", skillName))).toBe(false);
     } finally {
       rmSync(workspace, { recursive: true, force: true });
     }

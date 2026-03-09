@@ -41,10 +41,8 @@ flowchart TD
 
 ## Telegram Skill Policy Path
 
-Telegram channel behavior/UI skill policy is built-in and always injected as:
-
-- behavior: `telegram-channel-behavior`
-- interactive: `telegram-interactive-components`
+Telegram channel behavior and interactive payload policy is built-in and always
+injected as the unified `telegram` skill.
 
 Start channel mode:
 
@@ -56,7 +54,8 @@ Flow:
 
 1. CLI starts channel mode with Telegram transport settings.
 2. Channel loop builds a fixed `[Brewva Channel Skill Policy]` prompt block.
-3. Runtime prompt asks the agent to call `skill_load` for built-in behavior/interactive skills before composing channel replies.
+3. Runtime prompt asks the agent to call `skill_load` for the built-in `telegram`
+   skill before composing channel replies.
 
 ### Boundary Rationale
 

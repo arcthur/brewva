@@ -1,31 +1,69 @@
 # Category And Skills
 
-Skills are loaded by tier with increasing precedence: `base` -> `pack` -> `project`.
+Skills are loaded by category, not by lifecycle tier.
 
-## Tier Layout
+## V2 Layout
 
-- Base tier: `skills/base`
-- Pack tier: `skills/packs`
-- Project tier: `skills/project`
+- Core capability skills: `skills/core`
+- Domain capability skills: `skills/domain`
+- Operator skills: `skills/operator`
+- Meta skills: `skills/meta`
+- Reserved internal skills: `skills/internal`
+- Shared project context: `skills/project/shared`
+- Project overlays: `skills/project/overlays`
 
-## Pack Filtering (`skills.packs`)
+The important distinction is semantic:
 
-`skills.packs` (default: `[]`) is an optional allowlist for pack directories across all discovered skill roots.
+- public skill = routable capability boundary
+- runtime phase = workflow owned by runtime/control plane
+- project overlay = project-specific tightening plus shared context
+- operator/meta = loaded, but hidden from standard routing by default
 
-- empty array: no pack filter, load all discovered packs
-- non-empty array: strict allowlist; packs not listed are skipped (reported in `skillLoad.skippedPacks`)
+## Routing Profiles
 
-## Current Skill Inventory
+`skills.routing.profile` controls which routable scopes participate in auto routing:
 
-- Base: `brainstorming`, `cartography`, `compose`, `debugging`, `execution`, `exploration`, `finishing`, `git`, `patching`, `planning`, `review`, `tdd`, `verification`
-- Packs: `agent-browser`, `frontend-design`, `goal-loop`, `gh-issues`, `github`, `skill-creator`, `telegram-channel-behavior`, `telegram-interactive-components`, `zca-structured-output`
-- Project: `brewva-project`, `brewva-self-improve`, `brewva-session-logs`
+- `standard` (default): `core`, `domain`
+- `operator`: `core`, `domain`, `operator`
+- `full`: `core`, `domain`, `operator`, `meta`
 
-Skill configuration contract is defined in `packages/brewva-runtime/src/types.ts` (`BrewvaConfig.skills`).
+`skills.routing.scopes` can further narrow or widen the active scopes explicitly.
 
-## Contract Tightening
+Continuity-required skills are still gated by dispatch context. For example,
+`goal-loop` is not auto-routed for ordinary one-shot implementation prompts.
 
-Higher-tier skills cannot relax lower-tier constraints. Merge and tightening logic:
+## Current Inventory
 
-- `packages/brewva-runtime/src/skills/contract.ts`
-- `packages/brewva-runtime/src/skills/registry.ts`
+- Core: `repository-analysis`, `design`, `implementation`, `debugging`, `review`
+- Domain: `agent-browser`, `frontend-design`, `github`, `telegram`, `structured-extraction`, `goal-loop`
+- Operator: `runtime-forensics`, `git-ops`
+- Meta: `skill-authoring`, `self-improve`
+- Overlays: `repository-analysis`, `design`, `implementation`, `debugging`, `review`, `runtime-forensics`
+- Shared project context: `critical-rules`, `migration-priority-matrix`, `package-boundaries`, `runtime-artifacts`
+
+## Overlay Semantics
+
+Project overlays do not create new semantic territory. They:
+
+- can add project-required tools and additive resources
+- tighten denied tools, budgets, and dispatch/routing constraints
+- keep base outputs/consumes unless the overlay explicitly replaces them
+- prepend shared project context from `skills/project/shared`
+
+This keeps project knowledge centralized without turning every project into a new
+catalog of public super-skills.
+
+## Runtime-Owned Phases
+
+These are no longer public skills:
+
+- verification
+- finishing
+- recovery
+- compose-style chain planning
+
+`skills/internal/` is intentionally reserved for future structured phase docs.
+Today those runtime-owned phases are implemented in code, not as routable skills.
+
+Skill configuration contract is defined in `packages/brewva-runtime/src/types.ts`
+(`BrewvaConfig.skills`).

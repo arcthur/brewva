@@ -24,6 +24,7 @@ Every runtime event follows the same envelope shape:
   Tool-result payloads now use `channelSuccess` for execution-channel success and `verdict` for semantic outcome.
 - `observability_assertion_recorded`
 - `verification_outcome_recorded`
+- `debug_loop_*`
 - schedule lifecycle events
 - execution routing/isolation events
 
@@ -68,6 +69,20 @@ Governance events are available at `ops` and `debug` levels and remain replayabl
 Projection events describe deterministic projection state only.
 They are observational telemetry and do not carry a full semantic projection
 snapshot that can replace source-event replay.
+
+## Debug Loop Families
+
+- `debug_loop_transition` records extension-owned state changes such as
+  `forensics`, `debugging`, `implementing`, `blocked`, or `exhausted`, plus
+  `retryCount` for the current loop state
+- `debug_loop_failure_case_persisted` records the on-disk failure snapshot used
+  for retry and handoff
+- `debug_loop_retry_scheduled` records the explicit cascade retry intent and the
+  next skill that should be loaded, including the post-failure `retryCount`
+- `debug_loop_handoff_persisted` records the deterministic handoff packet path
+
+These events are audit-visible because they describe controller decisions and
+cross-turn recovery artifacts, not presentation-only UI behavior.
 
 ## Skill Routing Notes
 

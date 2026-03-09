@@ -2,12 +2,14 @@ import type { TurnEnvelope } from "./channels/turn.js";
 import type { JsonValue } from "./utils/json.js";
 
 export type VerificationLevel = "quick" | "standard" | "strict";
-export type SkillTier = "base" | "pack" | "project";
+export type SkillCategory = "core" | "domain" | "operator" | "meta" | "internal" | "overlay";
+export type SkillRoutingScope = "core" | "domain" | "operator" | "meta";
+export type SkillRoutingProfile = "standard" | "operator" | "full";
 export type SkillCostHint = "low" | "medium" | "high";
 export type SkillEffectLevel = "read_only" | "execute" | "mutation";
 export type SkillDispatchMode = "suggest" | "gate" | "auto";
 export type SkillCascadeMode = "off" | "assist" | "auto";
-export type SkillCascadeSource = "dispatch" | "compose" | "explicit";
+export type SkillCascadeSource = "dispatch" | "explicit";
 export type SkillSelectorMode = "deterministic" | "external_only";
 export type SkillBrokerJudgeMode = "heuristic" | "llm";
 
@@ -17,10 +19,23 @@ export interface SkillDispatchPolicy {
   defaultMode: SkillDispatchMode;
 }
 
+export interface SkillRoutingPolicy {
+  scope: SkillRoutingScope;
+  continuityRequired?: boolean;
+}
+
+export interface SkillResourceSet {
+  references: string[];
+  scripts: string[];
+  heuristics: string[];
+  invariants: string[];
+}
+
 export interface SkillContract {
   name: string;
-  tier: SkillTier;
+  category: SkillCategory;
   dispatch?: SkillDispatchPolicy;
+  routing?: SkillRoutingPolicy;
   tools: {
     required: string[];
     optional: string[];
@@ -41,9 +56,13 @@ export interface SkillContract {
   effectLevel?: SkillEffectLevel;
 }
 
-export interface SkillContractOverride extends Omit<Partial<SkillContract>, "tools" | "budget"> {
+export interface SkillContractOverride extends Omit<
+  Partial<SkillContract>,
+  "tools" | "budget" | "routing"
+> {
   tools?: Partial<SkillContract["tools"]>;
   budget?: Partial<SkillContract["budget"]>;
+  routing?: Partial<SkillRoutingPolicy>;
 }
 
 export type SecurityEnforcementMode = "off" | "warn" | "enforce";
@@ -53,16 +72,19 @@ export type SecurityEnforcementPreference = SecurityEnforcementMode | "inherit";
 export interface SkillDocument {
   name: string;
   description: string;
-  tier: SkillTier;
+  category: SkillCategory;
   filePath: string;
   baseDir: string;
   markdown: string;
   contract: SkillContract;
+  resources: SkillResourceSet;
+  sharedContextFiles: string[];
+  overlayFiles: string[];
 }
 
 export interface SkillsIndexEntry {
   name: string;
-  tier: SkillTier;
+  category: SkillCategory;
   description: string;
   outputs: string[];
   toolsRequired: string[];
@@ -73,6 +95,8 @@ export interface SkillsIndexEntry {
   requires: string[];
   effectLevel: SkillEffectLevel;
   dispatch?: SkillDispatchPolicy;
+  routingScope?: SkillRoutingScope;
+  continuityRequired: boolean;
 }
 
 export interface SkillSelection {
@@ -220,11 +244,6 @@ export interface SkillCascadeDispatchSourceInput {
   maxStepsPerRun: number;
 }
 
-export interface SkillCascadeComposeSourceInput {
-  outputs: Record<string, unknown>;
-  maxStepsPerRun: number;
-}
-
 export interface SkillCascadeExplicitSourceInput {
   steps: Array<{
     skill: string;
@@ -237,7 +256,6 @@ export interface SkillCascadeExplicitSourceInput {
 export interface SkillCascadeChainSource {
   readonly source: SkillCascadeSource;
   fromDispatch?(input: SkillCascadeDispatchSourceInput): SkillCascadeChainCandidate | null;
-  fromCompose?(input: SkillCascadeComposeSourceInput): SkillCascadeChainCandidate | null;
   fromExplicit?(input: SkillCascadeExplicitSourceInput): SkillCascadeChainCandidate | null;
 }
 
@@ -274,7 +292,8 @@ export interface CreateBrewvaSessionOptions {
   configPath?: string;
   model?: string;
   agentId?: string;
-  activePacks?: string[];
+  routingProfile?: SkillRoutingProfile;
+  routingScopes?: SkillRoutingScope[];
   enableExtensions?: boolean;
 }
 
@@ -550,10 +569,15 @@ export interface BrewvaConfig {
   };
   skills: {
     roots?: string[];
-    packs: string[];
     disabled: string[];
     overrides: Record<string, SkillContractOverride>;
     selector: SkillSelectorConfig;
+    routing: {
+      profile: SkillRoutingProfile;
+      scopes: SkillRoutingScope[];
+      continuityPhrases?: string[];
+      continuityContinuePattern?: string;
+    };
     cascade: {
       mode: SkillCascadeMode;
       enabledSources: SkillCascadeSource[];
@@ -695,9 +719,12 @@ type DeepPartial<T> = T extends readonly (infer U)[]
 export interface BrewvaConfigFile {
   $schema?: string;
   ui?: Partial<BrewvaConfig["ui"]>;
-  skills?: Partial<Omit<BrewvaConfig["skills"], "selector" | "overrides" | "cascade">> & {
+  skills?: Partial<
+    Omit<BrewvaConfig["skills"], "selector" | "overrides" | "cascade" | "routing">
+  > & {
     overrides?: BrewvaConfig["skills"]["overrides"];
     selector?: Partial<BrewvaConfig["skills"]["selector"]>;
+    routing?: Partial<BrewvaConfig["skills"]["routing"]>;
     cascade?: Partial<BrewvaConfig["skills"]["cascade"]>;
   };
   verification?: Partial<Omit<BrewvaConfig["verification"], "checks" | "commands">> & {

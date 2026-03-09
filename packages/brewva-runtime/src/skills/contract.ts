@@ -3,11 +3,13 @@ import { basename, dirname } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { CONTROL_PLANE_TOOLS } from "../security/control-plane-tools.js";
 import type {
+  SkillCategory,
   SkillContract,
   SkillContractOverride,
   SkillDocument,
   SkillEffectLevel,
-  SkillTier,
+  SkillResourceSet,
+  SkillRoutingPolicy,
 } from "../types.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 
@@ -88,6 +90,17 @@ function readOptionalStringArrayField(
 ): string[] {
   if (!Object.prototype.hasOwnProperty.call(data, key)) {
     return [];
+  }
+  return requireStringArrayField(data, key, filePath);
+}
+
+function readNullableStringArrayField(
+  data: Record<string, unknown>,
+  key: string,
+  filePath: string,
+): string[] | undefined {
+  if (!Object.prototype.hasOwnProperty.call(data, key)) {
+    return undefined;
   }
   return requireStringArrayField(data, key, filePath);
 }
@@ -207,6 +220,94 @@ function normalizeDispatchPolicy(
   };
 }
 
+function resolveRoutingScope(category: SkillCategory): SkillRoutingPolicy["scope"] | undefined {
+  if (
+    category === "core" ||
+    category === "domain" ||
+    category === "operator" ||
+    category === "meta"
+  ) {
+    return category;
+  }
+  return undefined;
+}
+
+function normalizeRoutingPolicy(
+  category: SkillCategory,
+  data: Record<string, unknown>,
+  filePath: string,
+): SkillRoutingPolicy | undefined {
+  const derivedScope = resolveRoutingScope(category);
+  if (!derivedScope) {
+    if (Object.prototype.hasOwnProperty.call(data, "routing")) {
+      failSkillContract(
+        filePath,
+        "frontmatter field 'routing' is only supported for core/domain/operator/meta skills.",
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(data, "continuity_required")) {
+      failSkillContract(
+        filePath,
+        "frontmatter field 'continuity_required' is only supported for routable skills.",
+      );
+    }
+    return undefined;
+  }
+
+  let continuityRequired = false;
+  if (Object.prototype.hasOwnProperty.call(data, "continuity_required")) {
+    if (typeof data.continuity_required !== "boolean") {
+      failSkillContract(filePath, "continuity_required must be a boolean.");
+    }
+    continuityRequired = data.continuity_required;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(data, "routing")) {
+    return {
+      scope: derivedScope,
+      continuityRequired,
+    };
+  }
+
+  const routing = requireRecordField(data, "routing", filePath);
+  if (Object.prototype.hasOwnProperty.call(routing, "scope")) {
+    if (routing.scope !== derivedScope) {
+      failSkillContract(
+        filePath,
+        `routing.scope must match the directory-derived scope '${derivedScope}'.`,
+      );
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(routing, "continuityRequired")) {
+    failSkillContract(
+      filePath,
+      "routing.continuityRequired is not supported. Use routing.continuity_required.",
+    );
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(routing, "continuity_required") &&
+    typeof routing.continuity_required !== "boolean"
+  ) {
+    failSkillContract(filePath, "routing.continuity_required must be a boolean.");
+  }
+
+  return {
+    scope: derivedScope,
+    continuityRequired:
+      continuityRequired ||
+      (typeof routing.continuity_required === "boolean" ? routing.continuity_required : false),
+  };
+}
+
+function normalizeResourceSet(data: Record<string, unknown>, filePath: string): SkillResourceSet {
+  return {
+    references: readOptionalStringArrayField(data, "references", filePath),
+    scripts: readOptionalStringArrayField(data, "scripts", filePath),
+    heuristics: readOptionalStringArrayField(data, "heuristics", filePath),
+    invariants: readOptionalStringArrayField(data, "invariants", filePath),
+  };
+}
+
 const EFFECT_LEVEL_RANK: Record<SkillEffectLevel, number> = {
   read_only: 0,
   execute: 1,
@@ -249,7 +350,7 @@ function normalizeEffectLevel(
 
 function normalizeContract(
   name: string,
-  tier: SkillTier,
+  category: SkillCategory,
   data: Record<string, unknown>,
   filePath: string,
 ): SkillContract {
@@ -295,7 +396,10 @@ function normalizeContract(
     failSkillContract(filePath, "budget.max_tokens must be >= 1000.");
   }
 
-  const outputs = requireStringArrayField(data, "outputs", filePath);
+  const outputs =
+    category === "overlay"
+      ? readNullableStringArrayField(data, "outputs", filePath)
+      : requireStringArrayField(data, "outputs", filePath);
   if (Object.prototype.hasOwnProperty.call(data, "composableWith")) {
     failSkillContract(
       filePath,
@@ -304,8 +408,13 @@ function normalizeContract(
   }
   const composableWith = Object.prototype.hasOwnProperty.call(data, "composable_with")
     ? requireStringArrayField(data, "composable_with", filePath)
-    : [];
-  const consumes = requireStringArrayField(data, "consumes", filePath);
+    : category === "overlay"
+      ? undefined
+      : [];
+  const consumes =
+    category === "overlay"
+      ? readNullableStringArrayField(data, "consumes", filePath)
+      : requireStringArrayField(data, "consumes", filePath);
   const requires = readOptionalStringArrayField(data, "requires", filePath);
   const effectLevel = normalizeEffectLevel(
     data,
@@ -313,12 +422,14 @@ function normalizeContract(
     resolveDefaultEffectLevel({ required, optional, denied }),
   );
   const dispatch = normalizeDispatchPolicy(data, filePath);
+  const routing = normalizeRoutingPolicy(category, data, filePath);
 
   return {
     name,
-    tier,
+    category,
     description: typeof data.description === "string" ? data.description : undefined,
     dispatch,
+    routing,
     tools: {
       required,
       optional,
@@ -431,10 +542,23 @@ export function tightenContract(
       defaultMode,
     };
   })();
+  const routing = (() => {
+    const baseRouting = base.routing;
+    const overrideRouting = override.routing;
+    if (!baseRouting || !overrideRouting) {
+      return baseRouting;
+    }
+    return {
+      scope: baseRouting.scope,
+      continuityRequired:
+        baseRouting.continuityRequired === true || overrideRouting.continuityRequired === true,
+    };
+  })();
 
   return {
     ...base,
     dispatch,
+    routing,
     outputs: override.outputs ?? base.outputs,
     composableWith: override.composableWith ?? base.composableWith,
     consumes: override.consumes ?? base.consumes,
@@ -453,27 +577,164 @@ export function tightenContract(
   };
 }
 
-export function parseSkillDocument(filePath: string, tier: SkillTier): SkillDocument {
+export function mergeOverlayContract(
+  base: SkillContract,
+  overlay: SkillContractOverride,
+): SkillContract {
+  const denied = new Set(
+    [...base.tools.denied, ...(overlay.tools?.denied ?? [])]
+      .map((tool) => normalizeToolName(tool))
+      .filter((tool) => tool.length > 0),
+  );
+  const required = new Set(
+    [...base.tools.required, ...(overlay.tools?.required ?? [])]
+      .map((tool) => normalizeToolName(tool))
+      .filter((tool) => tool.length > 0)
+      .filter((tool) => !denied.has(tool)),
+  );
+  const optional = new Set(
+    [...base.tools.optional, ...(overlay.tools?.optional ?? [])]
+      .map((tool) => normalizeToolName(tool))
+      .filter((tool) => tool.length > 0)
+      .filter((tool) => !denied.has(tool))
+      .filter((tool) => !required.has(tool)),
+  );
+
+  const maxToolCalls =
+    typeof overlay.budget?.maxToolCalls === "number"
+      ? Math.min(base.budget.maxToolCalls, overlay.budget.maxToolCalls)
+      : base.budget.maxToolCalls;
+  const maxTokens =
+    typeof overlay.budget?.maxTokens === "number"
+      ? Math.min(base.budget.maxTokens, overlay.budget.maxTokens)
+      : base.budget.maxTokens;
+  const maxParallel =
+    typeof overlay.maxParallel === "number"
+      ? Math.min(base.maxParallel ?? overlay.maxParallel, overlay.maxParallel)
+      : base.maxParallel;
+  const effectLevel =
+    overlay.effectLevel &&
+    EFFECT_LEVEL_RANK[overlay.effectLevel] > EFFECT_LEVEL_RANK[base.effectLevel ?? "read_only"]
+      ? overlay.effectLevel
+      : (base.effectLevel ?? "read_only");
+
+  const dispatch = (() => {
+    const baseDispatch = base.dispatch ?? {
+      gateThreshold: 10,
+      autoThreshold: 16,
+      defaultMode: "suggest" as const,
+    };
+    const overlayDispatch = overlay.dispatch;
+    if (!overlayDispatch) return base.dispatch;
+    const gateThreshold =
+      typeof overlayDispatch.gateThreshold === "number"
+        ? Math.max(baseDispatch.gateThreshold, Math.floor(overlayDispatch.gateThreshold))
+        : baseDispatch.gateThreshold;
+    const autoThreshold =
+      typeof overlayDispatch.autoThreshold === "number"
+        ? Math.max(baseDispatch.autoThreshold, Math.floor(overlayDispatch.autoThreshold))
+        : baseDispatch.autoThreshold;
+    const defaultMode =
+      overlayDispatch.defaultMode === "auto" ||
+      overlayDispatch.defaultMode === "gate" ||
+      overlayDispatch.defaultMode === "suggest"
+        ? overlayDispatch.defaultMode
+        : baseDispatch.defaultMode;
+    return {
+      gateThreshold,
+      autoThreshold: Math.max(gateThreshold, autoThreshold),
+      defaultMode,
+    };
+  })();
+  const routing = (() => {
+    const baseRouting = base.routing;
+    const overlayRouting = overlay.routing;
+    if (!baseRouting || !overlayRouting) {
+      return baseRouting;
+    }
+    return {
+      scope: baseRouting.scope,
+      continuityRequired:
+        baseRouting.continuityRequired === true || overlayRouting.continuityRequired === true,
+    };
+  })();
+
+  return {
+    ...base,
+    dispatch,
+    routing,
+    outputs: [...new Set([...(base.outputs ?? []), ...(overlay.outputs ?? [])])],
+    composableWith: [
+      ...new Set([...(base.composableWith ?? []), ...(overlay.composableWith ?? [])]),
+    ],
+    consumes: [...new Set([...(base.consumes ?? []), ...(overlay.consumes ?? [])])],
+    requires: [...new Set([...(base.requires ?? []), ...(overlay.requires ?? [])])],
+    maxParallel,
+    effectLevel,
+    tools: {
+      required: [...required],
+      optional: [...optional],
+      denied: [...denied],
+    },
+    budget: {
+      maxToolCalls,
+      maxTokens,
+    },
+  };
+}
+
+export function mergeSkillResources(
+  base: SkillResourceSet,
+  overlay: SkillResourceSet,
+): SkillResourceSet {
+  return {
+    references: [...new Set([...base.references, ...overlay.references])],
+    scripts: [...new Set([...base.scripts, ...overlay.scripts])],
+    heuristics: [...new Set([...base.heuristics, ...overlay.heuristics])],
+    invariants: [...new Set([...base.invariants, ...overlay.invariants])],
+  };
+}
+
+export function createEmptySkillResources(): SkillResourceSet {
+  return {
+    references: [],
+    scripts: [],
+    heuristics: [],
+    invariants: [],
+  };
+}
+
+export function parseSkillDocument(filePath: string, category: SkillCategory): SkillDocument {
   const raw = readFileSync(filePath, "utf8");
   const { body, data } = parseFrontmatter(raw);
   if (Object.prototype.hasOwnProperty.call(data, "tier")) {
     failSkillContract(
       filePath,
-      "frontmatter field 'tier' is not allowed. Tier is derived from skill directory layout.",
+      "frontmatter field 'tier' is not allowed. Category is derived from skill directory layout.",
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(data, "category")) {
+    failSkillContract(
+      filePath,
+      "frontmatter field 'category' is not allowed. Category is derived from skill directory layout.",
     );
   }
 
   const inferredName = toString(data.name, basename(dirname(filePath)) ?? "skill");
   const description = toString(data.description, `${inferredName} skill`);
-  const contract = normalizeContract(inferredName, tier, data, filePath);
+  const contract = normalizeContract(inferredName, category, data, filePath);
+  const resources = normalizeResourceSet(data, filePath);
 
   return {
     name: inferredName,
     description,
-    tier,
+    category,
     filePath,
     baseDir: dirname(filePath),
     markdown: body.trim(),
     contract,
+    resources,
+    sharedContextFiles: [],
+    overlayFiles: [],
   };
 }

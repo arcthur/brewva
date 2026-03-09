@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  buildChannelSkillPolicyBlock,
-  DEFAULT_TELEGRAM_CHANNEL_BEHAVIOR_SKILL_NAME,
-  DEFAULT_TELEGRAM_INTERACTIVE_SKILL_NAME,
-} from "@brewva/brewva-cli";
+import { buildChannelSkillPolicyBlock, DEFAULT_TELEGRAM_SKILL_NAME } from "@brewva/brewva-cli";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 
 function createTurn(channel: string): TurnEnvelope {
@@ -25,57 +21,23 @@ describe("channel skill policy block", () => {
     expect(block).toBe("");
   });
 
-  test("renders telegram policy with behavior and interactive skills", () => {
+  test("renders telegram policy with the unified telegram skill", () => {
     const block = buildChannelSkillPolicyBlock(createTurn("telegram"));
     expect(block).toContain("Channel: telegram");
-    expect(block).toContain(
-      `Primary behavior skill: ${DEFAULT_TELEGRAM_CHANNEL_BEHAVIOR_SKILL_NAME}`,
-    );
-    expect(block).toContain(`Interactive skill: ${DEFAULT_TELEGRAM_INTERACTIVE_SKILL_NAME}`);
-    expect(block).toContain(
-      `call tool 'skill_load' with name='${DEFAULT_TELEGRAM_CHANNEL_BEHAVIOR_SKILL_NAME}'`,
-    );
-    expect(block).toContain(
-      `call tool 'skill_load' with name='${DEFAULT_TELEGRAM_INTERACTIVE_SKILL_NAME}'`,
-    );
+    expect(block).toContain(`Primary channel skill: ${DEFAULT_TELEGRAM_SKILL_NAME}`);
+    expect(block).toContain(`call tool 'skill_load' with name='${DEFAULT_TELEGRAM_SKILL_NAME}'`);
   });
 
-  test("falls back to text-only interactive guidance when interactive skill is unavailable", () => {
+  test("falls back to plain-text policy when telegram skill is unavailable", () => {
     const block = buildChannelSkillPolicyBlock(createTurn("telegram"), {
-      behaviorSkillName: DEFAULT_TELEGRAM_CHANNEL_BEHAVIOR_SKILL_NAME,
-      interactiveSkillName: DEFAULT_TELEGRAM_INTERACTIVE_SKILL_NAME,
-      hasBehaviorSkill: true,
-      hasInteractiveSkill: false,
-      missingSkillNames: [DEFAULT_TELEGRAM_INTERACTIVE_SKILL_NAME],
-    });
-
-    expect(block).toContain(
-      `call tool 'skill_load' with name='${DEFAULT_TELEGRAM_CHANNEL_BEHAVIOR_SKILL_NAME}'`,
-    );
-    expect(block).not.toContain(
-      `call tool 'skill_load' with name='${DEFAULT_TELEGRAM_INTERACTIVE_SKILL_NAME}'`,
-    );
-    expect(block).toContain("provide text commands instead of `telegram-ui` code blocks");
-  });
-
-  test("falls back to plain text when behavior skill is unavailable", () => {
-    const block = buildChannelSkillPolicyBlock(createTurn("telegram"), {
-      behaviorSkillName: DEFAULT_TELEGRAM_CHANNEL_BEHAVIOR_SKILL_NAME,
-      interactiveSkillName: DEFAULT_TELEGRAM_INTERACTIVE_SKILL_NAME,
-      hasBehaviorSkill: false,
-      hasInteractiveSkill: false,
-      missingSkillNames: [
-        DEFAULT_TELEGRAM_CHANNEL_BEHAVIOR_SKILL_NAME,
-        DEFAULT_TELEGRAM_INTERACTIVE_SKILL_NAME,
-      ],
+      skillName: DEFAULT_TELEGRAM_SKILL_NAME,
+      hasSkill: false,
+      missingSkillNames: [DEFAULT_TELEGRAM_SKILL_NAME],
     });
 
     expect(block).not.toContain(
-      `call tool 'skill_load' with name='${DEFAULT_TELEGRAM_CHANNEL_BEHAVIOR_SKILL_NAME}'`,
+      `call tool 'skill_load' with name='${DEFAULT_TELEGRAM_SKILL_NAME}'`,
     );
-    expect(block).not.toContain(
-      `call tool 'skill_load' with name='${DEFAULT_TELEGRAM_INTERACTIVE_SKILL_NAME}'`,
-    );
-    expect(block).toContain("Use plain text response policy for this turn.");
+    expect(block).toContain("Fallback to plain-text response policy for this turn.");
   });
 });

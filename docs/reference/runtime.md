@@ -25,7 +25,6 @@ The runtime no longer exposes a large flat method list. Public access is organiz
 - `activate(sessionId, name)`
 - `getActive(sessionId)`
 - `validateOutputs(sessionId, outputs)`
-- `validateComposePlan(plan)`
 - `complete(sessionId, output)`
 - `getOutputs(sessionId, skillName)`
 - `getConsumedOutputs(sessionId, targetSkillName)`
@@ -144,6 +143,11 @@ Read-only verification semantics:
 - `evaluate(...)` / `verify(...)` return `report.readOnly=true`, `report.skipped=true`,
   `report.reason="read_only"` when no write was observed in session.
 - In that case, outcome events are recorded as `outcome="skipped"` (not `pass`).
+- Verification failures may be consumed by extension-side controllers such as the
+  debug loop, but runtime kernel semantics stay limited to evidence generation
+  and replayable event emission.
+- The debug loop's persisted `retryCount` is a post-failure retry counter, not a
+  total implementation-attempt counter.
 
 ### `runtime.cost.*`
 
@@ -211,13 +215,16 @@ Identity source behavior:
 Skill cascade source extension behavior:
 
 - `BrewvaRuntimeOptions.skillCascadeChainSources` allows injecting custom chain
-  sources for `dispatch/compose/explicit`.
+  sources for `dispatch/explicit`.
 - Runtime always starts from built-in sources, then overrides by `source` key with
   injected entries (partial injection keeps unspecified built-in sources active).
 - Source replacement decisions are policy-governed and emitted in event payloads
   as `sourceDecision` for audit/replay explainability.
 - Cascade source arbitration uses `skills.cascade.enabledSources` as allowlist and
   `skills.cascade.sourcePriority` as ordering among enabled sources.
+- Skills with `routing.continuity_required=true` are filtered out by
+  `prepareDispatch(...)` unless prompt or session context indicates genuine
+  multi-run continuity intent.
 
 Context budget behavior:
 
@@ -230,6 +237,8 @@ Context budget behavior:
 Execution profile note:
 
 - Extension-enabled profile (`createBrewvaExtension`) uses full governance lifecycle hooks and projects runtime routing telemetry.
+- The full extension profile also owns extension-side closed loops such as automatic
+  debug retry and deterministic handoff packet synthesis.
 - Runtime-core profile (`--no-extensions`) injects only `[CoreTapeStatus]` + core autonomy contract.
 
 ## Event Emission Levels

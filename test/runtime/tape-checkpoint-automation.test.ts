@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -8,10 +8,6 @@ import {
   TAPE_CHECKPOINT_EVENT_TYPE,
   buildTapeCheckpointPayload,
 } from "@brewva/brewva-runtime";
-
-function repoRoot(): string {
-  return process.cwd();
-}
 
 describe("tape checkpoint automation", () => {
   test("uses session-local checkpoint counters instead of per-event tape rescans", async () => {
@@ -103,15 +99,36 @@ describe("tape checkpoint automation", () => {
 
   test("rehydrates active skill and tool-call budget state from tape after restart", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-budget-rehydrate-"));
+    mkdirSync(join(workspace, "skills/core/budgetcraft"), { recursive: true });
+    writeFileSync(
+      join(workspace, "skills/core/budgetcraft/SKILL.md"),
+      `---
+name: budgetcraft
+description: budget test skill
+tools:
+  required: [read]
+  optional: [look_at]
+  denied: []
+budget:
+  max_tool_calls: 1
+  max_tokens: 10000
+outputs: []
+consumes: []
+requires: []
+---
+# budgetcraft
+`,
+      "utf8",
+    );
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.tape.checkpointIntervalEntries = 0;
     config.security.mode = "strict";
-    config.skills.roots = [join(repoRoot(), "skills")];
+    config.skills.roots = ["./skills"];
     const sessionId = "budget-rehydrate-1";
 
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
     runtime.context.onTurnStart(sessionId, 1);
-    const activated = runtime.skills.activate(sessionId, "exploration");
+    const activated = runtime.skills.activate(sessionId, "budgetcraft");
     expect(activated.ok).toBe(true);
     const maxToolCalls = activated.skill?.contract.budget.maxToolCalls ?? 0;
     const consumed = Math.max(1, maxToolCalls);

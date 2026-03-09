@@ -407,7 +407,7 @@ describe("TurnReplayEngine", () => {
         turn: 1,
         payload: {
           model: "test/model",
-          skill: "exploration",
+          skill: "repository-analysis",
           inputTokens: 10,
           outputTokens: 5,
           cacheReadTokens: 0,
@@ -500,7 +500,7 @@ describe("TurnReplayEngine", () => {
         turn: 1,
         payload: {
           model: "test/model",
-          skill: "exploration",
+          skill: "repository-analysis",
           inputTokens: 10,
           outputTokens: 5,
           cacheReadTokens: 0,

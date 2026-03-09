@@ -28,7 +28,7 @@ function writeCatalog(
         generatedAt: "2026-03-06T00:00:00.000Z",
         skills: input.skills.map((entry) => ({
           name: entry.name,
-          tier: "pack",
+          category: "domain",
           description: entry.description,
           outputs: entry.outputs ?? [],
           toolsRequired: entry.toolsRequired ?? ["read"],
@@ -38,6 +38,8 @@ function writeCatalog(
           consumes: entry.consumes ?? [],
           requires: entry.requires ?? [],
           effectLevel: "read_only",
+          routingScope: "domain",
+          continuityRequired: false,
           dispatch: {
             gateThreshold: 10,
             autoThreshold: 16,
@@ -73,7 +75,7 @@ describe("catalog skill broker", () => {
       {
         name: "generic-reviewer",
         description: "General workflow for merge safety and quality work.",
-        tier: "pack",
+        category: "domain",
         filePath: "/tmp/generic-reviewer/SKILL.md",
         baseDir: "/tmp/generic-reviewer",
         markdown: [
@@ -90,15 +92,18 @@ describe("catalog skill broker", () => {
         ].join("\n"),
         contract: {
           name: "generic-reviewer",
-          tier: "pack",
+          category: "domain",
           tools: { required: ["read"], optional: [], denied: [] },
           budget: { maxToolCalls: 10, maxTokens: 1000 },
         },
+        resources: { references: [], scripts: [], heuristics: [], invariants: [] },
+        sharedContextFiles: [],
+        overlayFiles: [],
       },
       {
         name: "generic-planner",
         description: "General workflow for merge safety and quality work.",
-        tier: "pack",
+        category: "domain",
         filePath: "/tmp/generic-planner/SKILL.md",
         baseDir: "/tmp/generic-planner",
         markdown: [
@@ -115,10 +120,13 @@ describe("catalog skill broker", () => {
         ].join("\n"),
         contract: {
           name: "generic-planner",
-          tier: "pack",
+          category: "domain",
           tools: { required: ["read"], optional: [], denied: [] },
           budget: { maxToolCalls: 10, maxTokens: 1000 },
         },
+        resources: { references: [], scripts: [], heuristics: [], invariants: [] },
+        sharedContextFiles: [],
+        overlayFiles: [],
       },
     ];
 
@@ -133,19 +141,19 @@ describe("catalog skill broker", () => {
     expect(decision.trace.shortlisted[0]?.previewScore).toBeGreaterThan(0);
   });
 
-  test("rejects generic skill token collisions such as skill-creator", async () => {
+  test("rejects generic skill token collisions such as skill-authoring", async () => {
     const workspace = createTestWorkspace("skill-broker-generic");
     writeCatalog(workspace, {
       skills: [
         {
-          name: "skill-creator",
+          name: "skill-authoring",
           description: "Create or update reusable skills for the agent.",
-          outputs: ["skill_package", "skill_spec"],
+          outputs: ["skill_contract", "skill_spec"],
         },
         {
-          name: "planning",
-          description: "Break implementation work into executable steps.",
-          outputs: ["execution_steps"],
+          name: "design",
+          description: "Shape a design spec and execution plan for multi-step engineering work.",
+          outputs: ["execution_plan"],
         },
       ],
     });
@@ -170,9 +178,9 @@ describe("catalog skill broker", () => {
           description: "Analyze project mechanism problems and issue summaries.",
         },
         {
-          name: "planning",
-          description: "Break implementation work into executable steps.",
-          outputs: ["execution_steps"],
+          name: "design",
+          description: "Shape a design spec and execution plan for multi-step engineering work.",
+          outputs: ["execution_plan"],
         },
       ],
     });
@@ -198,9 +206,9 @@ describe("catalog skill broker", () => {
           outputs: ["findings", "review_decision"],
         },
         {
-          name: "planning",
-          description: "Break implementation work into executable steps.",
-          outputs: ["execution_steps"],
+          name: "design",
+          description: "Shape a design spec and execution plan for multi-step engineering work.",
+          outputs: ["execution_plan"],
         },
       ],
     });
@@ -226,16 +234,16 @@ describe("catalog skill broker", () => {
           outputs: ["findings", "review_decision"],
         },
         {
-          name: "planning",
-          description: "Break engineering work into executable steps.",
-          outputs: ["execution_steps"],
+          name: "design",
+          description: "Shape a design spec and execution plan for engineering work.",
+          outputs: ["execution_plan"],
         },
       ],
     });
 
     const judge: SkillBrokerJudge = {
       async judge(input) {
-        expect(input.candidates.map((entry) => entry.name)).toEqual(["review", "planning"]);
+        expect(input.candidates.map((entry) => entry.name)).toEqual(["review", "design"]);
         return {
           strategy: "mock_judge",
           status: "selected",
@@ -331,9 +339,9 @@ describe("catalog skill broker", () => {
           outputs: ["findings"],
         },
         {
-          name: "planning",
-          description: "Break implementation work into executable steps.",
-          outputs: ["execution_steps"],
+          name: "design",
+          description: "Shape a design spec and execution plan for multi-step engineering work.",
+          outputs: ["execution_plan"],
         },
       ],
     });

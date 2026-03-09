@@ -13,6 +13,11 @@ Runtime artifact paths are resolved from the workspace root (`nearest .brewva/br
 - Working projection markdown: `.orchestrator/projection/sessions/sess_<base64url(sessionId)>/working.md`
 - Projection state: `.orchestrator/projection/state.json`
 - Projection refresh advisory lock (ephemeral): `.orchestrator/projection/.refresh.lock`
+- Debug-loop state: `.orchestrator/artifacts/sessions/sess_<base64url(sessionId)>/debug-loop.json`
+  - `retryCount` records scheduled retries after the first failed implementation verification
+- Debug-loop failure snapshot: `.orchestrator/artifacts/sessions/sess_<base64url(sessionId)>/failure-case.json`
+- Deterministic handoff packet: `.orchestrator/artifacts/sessions/sess_<base64url(sessionId)>/handoff.json`
+  - latest-wins snapshot; later `agent_end`, `session_shutdown`, or terminal debug-loop persistence overwrites the same file
 - Tape checkpoints: `checkpoint` events embedded in the per-session event tape (`.orchestrator/events/sess_<base64url(sessionId)>.jsonl`)
 - Runtime recovery source: event tape replay (`checkpoint + delta`); no standalone runtime session-state snapshot file
 - Rollback snapshots: `.orchestrator/snapshots/<session>/*.snap`

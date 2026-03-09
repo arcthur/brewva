@@ -98,7 +98,7 @@ describe("Context injection collector", () => {
     const collector = new ContextInjectionCollector();
     const sessionId = "collector-deterministic-truncate";
     const structured = JSON.stringify({
-      skills: ["debugging", "patching", "review"],
+      skills: ["debugging", "implementation", "review"],
       objective: "Fix flaky test and preserve context format",
       notes: "x".repeat(200),
     });
@@ -115,7 +115,7 @@ describe("Context injection collector", () => {
     expect(consumed.entries[0]?.estimatedTokens).toBeLessThanOrEqual(10);
   });
 
-  test("planning stops after the first truncated oversized entry", () => {
+  test("collector stops after the first truncated oversized entry", () => {
     const collector = new ContextInjectionCollector();
     const sessionId = "collector-deterministic-tail-stop";
 

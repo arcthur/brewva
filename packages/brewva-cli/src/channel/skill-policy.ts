@@ -1,13 +1,10 @@
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 
-export const DEFAULT_TELEGRAM_CHANNEL_BEHAVIOR_SKILL_NAME = "telegram-channel-behavior";
-export const DEFAULT_TELEGRAM_INTERACTIVE_SKILL_NAME = "telegram-interactive-components";
+export const DEFAULT_TELEGRAM_SKILL_NAME = "telegram";
 
 export interface TelegramChannelSkillPolicyState {
-  behaviorSkillName: string;
-  interactiveSkillName: string;
-  hasBehaviorSkill: boolean;
-  hasInteractiveSkill: boolean;
+  skillName: string;
+  hasSkill: boolean;
   missingSkillNames: string[];
 }
 
@@ -34,39 +31,18 @@ function normalizeAvailableSkillNames(
 
 export function resolveTelegramChannelSkillPolicyState(
   input: {
-    behaviorSkillName?: string;
-    interactiveSkillName?: string;
+    skillName?: string;
     availableSkillNames?: Iterable<string>;
   } = {},
 ): TelegramChannelSkillPolicyState {
-  const behaviorSkillName = normalizeSkillName(
-    input.behaviorSkillName,
-    DEFAULT_TELEGRAM_CHANNEL_BEHAVIOR_SKILL_NAME,
-  );
-  const interactiveSkillName = normalizeSkillName(
-    input.interactiveSkillName,
-    DEFAULT_TELEGRAM_INTERACTIVE_SKILL_NAME,
-  );
+  const skillName = normalizeSkillName(input.skillName, DEFAULT_TELEGRAM_SKILL_NAME);
   const availableSkillNames = normalizeAvailableSkillNames(input.availableSkillNames);
-  const hasBehaviorSkill = availableSkillNames ? availableSkillNames.has(behaviorSkillName) : true;
-  const hasInteractiveSkill = availableSkillNames
-    ? availableSkillNames.has(interactiveSkillName)
-    : true;
-  const missingSkillNames = [
-    ...new Set(
-      [
-        hasBehaviorSkill ? "" : behaviorSkillName,
-        hasInteractiveSkill ? "" : interactiveSkillName,
-      ].filter(Boolean),
-    ),
-  ];
+  const hasSkill = availableSkillNames ? availableSkillNames.has(skillName) : true;
 
   return {
-    behaviorSkillName,
-    interactiveSkillName,
-    hasBehaviorSkill,
-    hasInteractiveSkill,
-    missingSkillNames,
+    skillName,
+    hasSkill,
+    missingSkillNames: hasSkill ? [] : [skillName],
   };
 }
 
@@ -81,32 +57,18 @@ export function buildChannelSkillPolicyBlock(
   const lines = [
     "[Brewva Channel Skill Policy]",
     "Channel: telegram",
-    `Primary behavior skill: ${state.behaviorSkillName}`,
-    `Interactive skill: ${state.interactiveSkillName}`,
+    `Primary channel skill: ${state.skillName}`,
   ];
 
-  if (state.hasBehaviorSkill) {
-    lines.push(
-      `Before composing a reply, call tool 'skill_load' with name='${state.behaviorSkillName}'.`,
-    );
+  if (state.hasSkill) {
+    lines.push(`Before composing a reply, call tool 'skill_load' with name='${state.skillName}'.`);
   } else {
     lines.push(
-      `Behavior skill '${state.behaviorSkillName}' is unavailable in the current skill registry; do not call it.`,
-      "Use plain text response policy for this turn.",
+      `Telegram skill '${state.skillName}' is unavailable in the current skill registry; do not call it.`,
+      "Fallback to plain-text response policy for this turn.",
     );
   }
 
-  if (state.hasBehaviorSkill && state.hasInteractiveSkill) {
-    lines.push(
-      `If interactive components are required, call tool 'skill_load' with name='${state.interactiveSkillName}' before composing output.`,
-    );
-  } else if (!state.hasInteractiveSkill) {
-    lines.push(
-      `Interactive skill '${state.interactiveSkillName}' is unavailable in the current skill registry; do not call it.`,
-      "If interaction is needed, provide text commands instead of `telegram-ui` code blocks.",
-    );
-  }
-
-  lines.push("If interaction is not needed, respond with plain text.");
+  lines.push("Use the loaded skill to decide both message strategy and interactive payload shape.");
   return lines.join("\n");
 }

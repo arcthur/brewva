@@ -1,4 +1,9 @@
-import type { BrewvaConfig, VerificationLevel } from "../types.js";
+import type {
+  BrewvaConfig,
+  SkillRoutingProfile,
+  SkillRoutingScope,
+  VerificationLevel,
+} from "../types.js";
 
 const VALID_COST_ACTIONS = new Set(["warn", "block_tools"]);
 const VALID_SECURITY_MODES = new Set(["permissive", "standard", "strict"]);
@@ -9,9 +14,17 @@ const VALID_VERIFICATION_LEVELS = new Set<VerificationLevel>(["quick", "standard
 const VALID_CHANNEL_SCOPE_STRATEGIES = new Set(["chat", "thread"]);
 const VALID_CHANNEL_ACL_MODES = new Set(["open", "closed"]);
 const VALID_SKILL_CASCADE_MODES = new Set(["off", "assist", "auto"]);
-const VALID_SKILL_CASCADE_SOURCES = new Set(["compose", "dispatch", "explicit"]);
+const VALID_SKILL_CASCADE_SOURCES = new Set(["dispatch", "explicit"]);
 const VALID_SKILL_SELECTOR_MODES = new Set(["deterministic", "external_only"]);
 const VALID_SKILL_BROKER_JUDGE_MODES = new Set(["heuristic", "llm"]);
+const VALID_SKILL_ROUTING_PROFILES = new Set(["standard", "operator", "full"]);
+const VALID_SKILL_ROUTING_SCOPES = new Set(["core", "domain", "operator", "meta"]);
+
+const DEFAULT_ROUTING_SCOPES_BY_PROFILE: Record<SkillRoutingProfile, SkillRoutingScope[]> = {
+  standard: ["core", "domain"],
+  operator: ["core", "domain", "operator"],
+  full: ["core", "domain", "operator", "meta"],
+};
 
 type AnyRecord = Record<string, unknown>;
 
@@ -69,6 +82,21 @@ function normalizeLowercaseStringArray(value: unknown, fallback: string[]): stri
     .map((entry) => entry.toLowerCase())
     .filter((entry) => entry.length > 0);
   return [...new Set(normalized)];
+}
+
+function normalizeOptionalStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const result = value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  return result.length > 0 ? result : undefined;
+}
+
+function normalizeOptionalString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 function normalizeVerificationLevel(
@@ -144,11 +172,27 @@ function normalizeSkillCascadeSourceList(
   return out.length > 0 ? out : [...fallback];
 }
 
+function normalizeSkillRoutingScopeList(
+  value: unknown,
+  fallback: SkillRoutingScope[],
+): SkillRoutingScope[] {
+  if (!Array.isArray(value)) return [...fallback];
+  const out: SkillRoutingScope[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string" || !VALID_SKILL_ROUTING_SCOPES.has(entry)) continue;
+    const normalizedEntry = entry as SkillRoutingScope;
+    if (out.includes(normalizedEntry)) continue;
+    out.push(normalizedEntry);
+  }
+  return out.length > 0 ? out : [...fallback];
+}
+
 export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): BrewvaConfig {
   const input = isRecord(config) ? config : {};
   const uiInput = isRecord(input.ui) ? input.ui : {};
   const skillsInput = isRecord(input.skills) ? input.skills : {};
   const skillsSelectorInput = isRecord(skillsInput.selector) ? skillsInput.selector : {};
+  const skillsRoutingInput = isRecord(skillsInput.routing) ? skillsInput.routing : {};
   const skillsCascadeInput = isRecord(skillsInput.cascade) ? skillsInput.cascade : {};
   const verificationInput = isRecord(input.verification) ? input.verification : {};
   const verificationChecksInput = isRecord(verificationInput.checks)
@@ -255,6 +299,16 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
     skillsCascadeInput.enabledSources,
     defaults.skills.cascade.enabledSources,
   );
+  const normalizedRoutingProfile = normalizeStrictStringEnum(
+    skillsRoutingInput.profile,
+    defaults.skills.routing.profile,
+    VALID_SKILL_ROUTING_PROFILES,
+    "skills.routing.profile",
+  );
+  const normalizedRoutingScopes = normalizeSkillRoutingScopeList(
+    skillsRoutingInput.scopes,
+    DEFAULT_ROUTING_SCOPES_BY_PROFILE[normalizedRoutingProfile],
+  );
   const effectiveCascadeSourcePriority = [
     ...normalizedCascadeSourcePriority.filter((source) =>
       normalizedCascadeEnabledSources.includes(source),
@@ -270,7 +324,6 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
     },
     skills: {
       roots: normalizeStringArray(skillsInput.roots, defaults.skills.roots ?? []),
-      packs: normalizeStringArray(skillsInput.packs, defaults.skills.packs),
       disabled: normalizeStringArray(skillsInput.disabled, defaults.skills.disabled),
       overrides: normalizeSkillOverrides(skillsInput.overrides, defaults.skills.overrides),
       selector: {
@@ -286,6 +339,14 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
           defaults.skills.selector.brokerJudgeMode,
           VALID_SKILL_BROKER_JUDGE_MODES,
           "skills.selector.brokerJudgeMode",
+        ),
+      },
+      routing: {
+        profile: normalizedRoutingProfile,
+        scopes: normalizedRoutingScopes,
+        continuityPhrases: normalizeOptionalStringArray(skillsRoutingInput.continuityPhrases),
+        continuityContinuePattern: normalizeOptionalString(
+          skillsRoutingInput.continuityContinuePattern,
         ),
       },
       cascade: {

@@ -6,27 +6,69 @@ import {
   DEFAULT_BREWVA_CONFIG,
   BrewvaRuntime,
   discoverSkillRegistryRoots,
-  emitSkippedPackFilterWarning,
-  resetSkippedPackFilterWarningCache,
 } from "@brewva/brewva-runtime";
 
-function writeSkill(filePath: string, input: { name: string }): void {
+function writeSkill(filePath: string, input: { name: string; continuityRequired?: boolean }): void {
   mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(
     filePath,
-    `---\nname: ${input.name}\ndescription: ${input.name} skill\ntools:\n  required: [read]\n  optional: []\n  denied: []\nbudget:\n  max_tool_calls: 10\n  max_tokens: 10000\noutputs: []\nconsumes: []\n---\n# ${input.name}\n`,
+    [
+      "---",
+      `name: ${input.name}`,
+      `description: ${input.name} skill`,
+      ...(input.continuityRequired ? ["routing:", "  continuity_required: true"] : []),
+      "tools:",
+      "  required: [read]",
+      "  optional: []",
+      "  denied: []",
+      "budget:",
+      "  max_tool_calls: 10",
+      "  max_tokens: 10000",
+      "outputs: []",
+      "consumes: []",
+      "---",
+      `# ${input.name}`,
+      "",
+      "## Intent",
+      "",
+      "Test skill.",
+      "",
+      "## Trigger",
+      "",
+      "Use for tests.",
+      "",
+      "## Workflow",
+      "",
+      "### Step 1",
+      "",
+      "Do the work.",
+      "",
+      "## Stop Conditions",
+      "",
+      "- none",
+      "",
+      "## Anti-Patterns",
+      "",
+      "- none",
+      "",
+      "## Example",
+      "",
+      "Input: test",
+    ].join("\n"),
     "utf8",
   );
 }
 
 describe("skill discovery and loading", () => {
-  test("loads project skills from cwd .brewva root", () => {
+  test("loads project skills from cwd .brewva root using v2 category layout", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-project-"));
-    writeSkill(join(workspace, ".brewva/skills/base/commitcraft/SKILL.md"), {
+    writeSkill(join(workspace, ".brewva/skills/core/commitcraft/SKILL.md"), {
       name: "commitcraft",
     });
+
     const runtime = new BrewvaRuntime({ cwd: workspace });
     expect(runtime.skills.get("commitcraft")).toBeDefined();
+
     const roots = discoverSkillRegistryRoots({
       cwd: workspace,
       configuredRoots: runtime.config.skills.roots ?? [],
@@ -42,7 +84,7 @@ describe("skill discovery and loading", () => {
 
   test("does not load ancestor .brewva skills when running from nested cwd", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-ancestor-disabled-"));
-    writeSkill(join(workspace, ".brewva/skills/base/commitcraft/SKILL.md"), {
+    writeSkill(join(workspace, ".brewva/skills/core/commitcraft/SKILL.md"), {
       name: "commitcraft",
     });
     const nested = join(workspace, "apps/api");
@@ -60,10 +102,10 @@ describe("skill discovery and loading", () => {
     );
   });
 
-  test("loads skills from config.skills.roots when cwd has no local skill tree", () => {
+  test("loads skills from config roots that use direct category layout", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-config-root-workspace-"));
     const external = mkdtempSync(join(tmpdir(), "brewva-skill-config-root-external-"));
-    writeSkill(join(external, "skills/base/externalcraft/SKILL.md"), {
+    writeSkill(join(external, "core/externalcraft/SKILL.md"), {
       name: "externalcraft",
     });
 
@@ -72,166 +114,172 @@ describe("skill discovery and loading", () => {
 
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
     expect(runtime.skills.get("externalcraft")).toBeDefined();
-    const roots = discoverSkillRegistryRoots({
-      cwd: workspace,
-      configuredRoots: runtime.config.skills.roots ?? [],
+  });
+
+  test("fails fast when two non-overlay skills share the same name", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-duplicate-name-"));
+    writeSkill(join(workspace, ".brewva/skills/core/git/SKILL.md"), {
+      name: "git",
     });
-    expect(
-      roots.some(
-        (entry) => entry.source === "config_root" && entry.skillDir === resolve(external, "skills"),
-      ),
-    ).toBe(true);
+    writeSkill(join(workspace, ".brewva/skills/domain/git/SKILL.md"), {
+      name: "git",
+    });
+
+    expect(() => new BrewvaRuntime({ cwd: workspace })).toThrow("duplicate skill name 'git'");
   });
 
-  test("loads skills from global .config/brewva root", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-global-workspace-"));
-    const xdgRoot = mkdtempSync(join(tmpdir(), "brewva-skill-global-xdg-"));
-    const previousXdg = process.env.XDG_CONFIG_HOME;
-    process.env.XDG_CONFIG_HOME = xdgRoot;
+  test("standard routing hides operator skills from routable index but still loads them", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-operator-hidden-"));
+    writeSkill(join(workspace, ".brewva/skills/operator/ops-helper/SKILL.md"), {
+      name: "ops-helper",
+    });
 
-    try {
-      writeSkill(join(xdgRoot, "brewva/skills/base/globalcraft/SKILL.md"), {
-        name: "globalcraft",
-      });
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    expect(runtime.skills.get("ops-helper")).toBeDefined();
 
-      const runtime = new BrewvaRuntime({ cwd: workspace });
-      expect(runtime.skills.get("globalcraft")).toBeDefined();
-
-      const roots = discoverSkillRegistryRoots({
-        cwd: workspace,
-        configuredRoots: runtime.config.skills.roots ?? [],
-      });
-      expect(
-        roots.some(
-          (entry) =>
-            entry.source === "global_root" && entry.skillDir === resolve(xdgRoot, "brewva/skills"),
-        ),
-      ).toBe(true);
-    } finally {
-      if (previousXdg === undefined) {
-        delete process.env.XDG_CONFIG_HOME;
-      } else {
-        process.env.XDG_CONFIG_HOME = previousXdg;
-      }
-    }
+    const report = runtime.skills.getLoadReport();
+    expect(report.hiddenSkills).toContain("ops-helper");
+    expect(report.routableSkills).not.toContain("ops-helper");
   });
 
-  test("loads config skill roots that use direct tier layout", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-direct-layout-workspace-"));
-    const directRoot = mkdtempSync(join(tmpdir(), "brewva-skill-direct-layout-root-"));
-    writeSkill(join(directRoot, "base/directcraft/SKILL.md"), {
-      name: "directcraft",
+  test("routing scope override can expose operator skills", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-operator-visible-"));
+    writeSkill(join(workspace, ".brewva/skills/operator/ops-helper/SKILL.md"), {
+      name: "ops-helper",
     });
 
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.skills.roots = [directRoot];
+    config.skills.routing.profile = "operator";
+    config.skills.routing.scopes = ["core", "domain", "operator"];
 
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
-    expect(runtime.skills.get("directcraft")).toBeDefined();
+    const report = runtime.skills.getLoadReport();
+    expect(report.routableSkills).toContain("ops-helper");
   });
 
-  test("resolves relative config.skills.roots from cwd", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-relative-root-workspace-"));
-    writeSkill(join(workspace, "vendor-skills/skills/base/relativecraft/SKILL.md"), {
-      name: "relativecraft",
+  test("applies project overlays and shared context to an existing skill", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-overlay-"));
+    const sharedContextPath = join(workspace, ".brewva/skills/project/shared/project-rules.md");
+    const overlayPath = join(workspace, ".brewva/skills/project/overlays/foo/SKILL.md");
+    writeSkill(join(workspace, ".brewva/skills/core/foo/SKILL.md"), {
+      name: "foo",
     });
+    mkdirSync(join(workspace, ".brewva/skills/project/shared"), { recursive: true });
+    writeFileSync(sharedContextPath, "# Project Rules\n\n- keep it deterministic\n", "utf8");
+    mkdirSync(join(workspace, ".brewva/skills/project/overlays/foo"), { recursive: true });
+    writeFileSync(
+      overlayPath,
+      [
+        "---",
+        "tools:",
+        "  required: [read]",
+        "  optional: []",
+        "  denied: []",
+        "budget:",
+        "  max_tool_calls: 5",
+        "  max_tokens: 8000",
+        "outputs: []",
+        "consumes: []",
+        "requires: []",
+        "---",
+        "# Foo Overlay",
+        "",
+        "## Intent",
+        "",
+        "Overlay for tests.",
+        "",
+        "## Trigger",
+        "",
+        "Use for tests.",
+        "",
+        "## Workflow",
+        "",
+        "### Step 1",
+        "",
+        "Do overlay work.",
+        "",
+        "## Stop Conditions",
+        "",
+        "- none",
+        "",
+        "## Anti-Patterns",
+        "",
+        "- none",
+        "",
+        "## Example",
+        "",
+        "Input: overlay test",
+      ].join("\n"),
+      "utf8",
+    );
 
-    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.skills.roots = ["./vendor-skills"];
-
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
-    expect(runtime.skills.get("relativecraft")).toBeDefined();
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const skill = runtime.skills.get("foo");
+    expect(skill).toBeDefined();
+    expect(skill?.markdown).toContain("Project Context: project-rules");
+    expect(skill?.overlayFiles).toContain(resolve(overlayPath));
+    expect(skill?.sharedContextFiles).toContain(resolve(sharedContextPath));
+    expect(skill?.contract.budget.maxToolCalls).toBe(5);
   });
 
-  test("loads workspace pack skills when skills.packs is empty (no filter)", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-workspace-pack-"));
-    writeSkill(join(workspace, ".brewva/skills/packs/custom-pack/SKILL.md"), {
-      name: "packcraft",
+  test("project overlays can extend the base tool contract with project-only tools", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-overlay-tools-"));
+    const overlayPath = join(workspace, ".brewva/skills/project/overlays/foo/SKILL.md");
+    writeSkill(join(workspace, ".brewva/skills/core/foo/SKILL.md"), {
+      name: "foo",
     });
+    mkdirSync(join(workspace, ".brewva/skills/project/overlays/foo"), { recursive: true });
+    writeFileSync(
+      overlayPath,
+      [
+        "---",
+        "tools:",
+        "  required: [read, tape_search]",
+        "  optional: [ledger_query]",
+        "  denied: [process]",
+        "budget:",
+        "  max_tool_calls: 5",
+        "  max_tokens: 8000",
+        "outputs: []",
+        "consumes: []",
+        "requires: []",
+        "---",
+        "# Foo Overlay",
+        "",
+        "## Intent",
+        "",
+        "Overlay for tests.",
+        "",
+        "## Trigger",
+        "",
+        "Use for tests.",
+        "",
+        "## Workflow",
+        "",
+        "### Step 1",
+        "",
+        "Do overlay work.",
+        "",
+        "## Stop Conditions",
+        "",
+        "- none",
+        "",
+        "## Anti-Patterns",
+        "",
+        "- none",
+        "",
+        "## Example",
+        "",
+        "Input: overlay test",
+      ].join("\n"),
+      "utf8",
+    );
 
-    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.skills.packs = [];
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const skill = runtime.skills.get("foo");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
-    expect(runtime.skills.get("packcraft")).toBeDefined();
-    const loadReport = runtime.skills.getLoadReport();
-    expect(loadReport.skippedPacks.some((entry) => entry.pack === "custom-pack")).toBe(false);
-    expect(loadReport.activePacks).toContain("custom-pack");
-  });
-
-  test("does not load config_root pack skills when not listed in non-empty skills.packs", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-config-pack-workspace-"));
-    const external = mkdtempSync(join(tmpdir(), "brewva-skill-config-pack-external-"));
-    writeSkill(join(external, "skills/packs/custom-pack/SKILL.md"), {
-      name: "external-packcraft",
-    });
-
-    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.skills.roots = [external];
-    config.skills.packs = ["skill-creator"];
-
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
-    expect(runtime.skills.get("external-packcraft")).toBeUndefined();
-    const loadReport = runtime.skills.getLoadReport();
-    expect(
-      loadReport.skippedPacks.some(
-        (entry) => entry.pack === "custom-pack" && entry.source === "config_root",
-      ),
-    ).toBe(true);
-  });
-
-  test("emits skipped-pack warning only once for the same skipped set", () => {
-    resetSkippedPackFilterWarningCache();
-    const logs: string[] = [];
-    const report = {
-      roots: [],
-      activePacks: [],
-      skippedPacks: [
-        {
-          pack: "custom-pack",
-          source: "project_root" as const,
-          rootDir: "/tmp/project",
-          skillDir: "/tmp/project/.brewva/skills",
-          reason: "not_in_skills.packs" as const,
-        },
-      ],
-    };
-
-    const first = emitSkippedPackFilterWarning(report, {
-      log: (message) => logs.push(message),
-    });
-    const second = emitSkippedPackFilterWarning(report, {
-      log: (message) => logs.push(message),
-    });
-
-    expect(first).toBe(true);
-    expect(second).toBe(false);
-    expect(logs).toHaveLength(1);
-    expect(logs[0]?.includes("custom-pack")).toBe(true);
-  });
-
-  test("project skills override global skills when names collide", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-precedence-workspace-"));
-    const xdgRoot = mkdtempSync(join(tmpdir(), "brewva-skill-precedence-xdg-"));
-    const previousXdg = process.env.XDG_CONFIG_HOME;
-    process.env.XDG_CONFIG_HOME = xdgRoot;
-
-    try {
-      writeSkill(join(xdgRoot, "brewva/skills/base/chaincraft/SKILL.md"), {
-        name: "chaincraft",
-      });
-      writeSkill(join(workspace, ".brewva/skills/base/chaincraft/SKILL.md"), {
-        name: "chaincraft",
-      });
-
-      const runtime = new BrewvaRuntime({ cwd: workspace });
-      expect(runtime.skills.get("chaincraft")).toBeDefined();
-    } finally {
-      if (previousXdg === undefined) {
-        delete process.env.XDG_CONFIG_HOME;
-      } else {
-        process.env.XDG_CONFIG_HOME = previousXdg;
-      }
-    }
+    expect(skill?.contract.tools.required).toEqual(expect.arrayContaining(["read", "tape_search"]));
+    expect(skill?.contract.tools.optional).toContain("ledger_query");
+    expect(skill?.contract.tools.denied).toContain("process");
   });
 });

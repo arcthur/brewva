@@ -98,13 +98,13 @@ describe("Gap remediation: cost view and budget linkage", () => {
         },
       }),
     );
-    mkdirSync(join(workspace, "skills/base/patching"), { recursive: true });
+    mkdirSync(join(workspace, "skills/core/implementation"), { recursive: true });
     writeFileSync(
-      join(workspace, "skills/base/patching/SKILL.md"),
+      join(workspace, "skills/core/implementation/SKILL.md"),
       `---
-name: patching
-description: test patching skill
-tags: [patching]
+name: implementation
+description: test implementation skill
+tags: [implementation]
 tools:
   required: [read]
   optional: [edit]
@@ -112,10 +112,11 @@ tools:
 budget:
   max_tool_calls: 20
   max_tokens: 20000
-outputs: [change_summary]
+outputs: [change_set]
 consumes: []
+requires: []
 ---
-patching`,
+implementation`,
       "utf8",
     );
 
@@ -133,7 +134,7 @@ patching`,
       totalTokens: 60,
       costUsd: 0.002,
     });
-    expect(runtime.skills.activate(sessionId, "patching").ok).toBe(true);
+    expect(runtime.skills.activate(sessionId, "implementation").ok).toBe(true);
 
     const summary = runtime.cost.getSummary(sessionId);
     expect(summary.budget.blocked).toBe(true);

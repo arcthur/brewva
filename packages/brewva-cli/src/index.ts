@@ -1107,8 +1107,7 @@ export { buildAgentScopedConversationKey, buildRoutingScopeKey } from "./channel
 export {
   buildChannelSkillPolicyBlock,
   resolveTelegramChannelSkillPolicyState,
-  DEFAULT_TELEGRAM_CHANNEL_BEHAVIOR_SKILL_NAME,
-  DEFAULT_TELEGRAM_INTERACTIVE_SKILL_NAME,
+  DEFAULT_TELEGRAM_SKILL_NAME,
 } from "./channel/skill-policy.js";
 export type { TelegramChannelSkillPolicyState } from "./channel/skill-policy.js";
 export { JsonLineWriter, type JsonLineWritable, writeJsonLine } from "./json-lines.js";

@@ -627,9 +627,7 @@ export class SessionLifecycleService {
     const id = typeof intentPayload.id === "string" ? intentPayload.id.trim() : "";
     if (!id) return undefined;
     const source =
-      intentPayload.source === "dispatch" ||
-      intentPayload.source === "compose" ||
-      intentPayload.source === "explicit"
+      intentPayload.source === "dispatch" || intentPayload.source === "explicit"
         ? intentPayload.source
         : null;
     if (!source) return undefined;

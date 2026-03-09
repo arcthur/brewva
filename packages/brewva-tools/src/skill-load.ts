@@ -7,6 +7,7 @@ import { defineTool } from "./utils/tool.js";
 
 function formatSkillOutput(input: {
   name: string;
+  category: string;
   baseDir: string;
   markdown: string;
   contract: {
@@ -16,6 +17,16 @@ function formatSkillOutput(input: {
     consumes?: string[];
     requires?: string[];
     effectLevel?: string;
+    routing?: {
+      scope: string;
+      continuityRequired?: boolean;
+    };
+  };
+  resources?: {
+    references: string[];
+    scripts: string[];
+    heuristics: string[];
+    invariants: string[];
   };
   availableConsumedOutputs?: Record<string, unknown>;
 }): string {
@@ -25,6 +36,7 @@ function formatSkillOutput(input: {
 
   const lines = [
     `# Skill Loaded: ${input.name}`,
+    `Category: ${input.category}`,
     `Base directory: ${input.baseDir}`,
     "",
     "## Contract",
@@ -37,7 +49,18 @@ function formatSkillOutput(input: {
     `- required outputs: ${outputs}`,
     `- required inputs: ${requires}`,
     `- optional inputs: ${consumes}`,
+    `- routing scope: ${input.contract.routing?.scope ?? "(not routable)"}`,
+    `- continuity required: ${input.contract.routing?.continuityRequired === true ? "yes" : "no"}`,
   ];
+
+  if (input.resources) {
+    lines.push("");
+    lines.push("## Resources");
+    lines.push(`- references: ${input.resources.references.join(", ") || "(none)"}`);
+    lines.push(`- scripts: ${input.resources.scripts.join(", ") || "(none)"}`);
+    lines.push(`- heuristics: ${input.resources.heuristics.join(", ") || "(none)"}`);
+    lines.push(`- invariants: ${input.resources.invariants.join(", ") || "(none)"}`);
+  }
 
   if (input.availableConsumedOutputs && Object.keys(input.availableConsumedOutputs).length > 0) {
     lines.push("");
@@ -81,9 +104,11 @@ export function createSkillLoadTool(options: BrewvaToolOptions): ToolDefinition 
       return textResult(
         formatSkillOutput({
           name: result.skill.name,
+          category: result.skill.category,
           baseDir: result.skill.baseDir,
           markdown: result.skill.markdown,
           contract: result.skill.contract,
+          resources: result.skill.resources,
           availableConsumedOutputs,
         }),
         {

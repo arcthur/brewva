@@ -85,4 +85,30 @@ describe("S-001 skill routing selector", () => {
     expect(decision.routingOutcome).toBe("failed");
     expect(decision.reason).toBe("routing-failed");
   });
+
+  test("plain implementation continuations do not unlock continuity routing", () => {
+    const runtime = new BrewvaRuntime({ cwd: repoRoot(), config: deterministicConfig() });
+
+    expect(
+      (
+        runtime as unknown as { isContinuityDispatchAllowed: (s: string, p: string) => boolean }
+      ).isContinuityDispatchAllowed(
+        "continuity-gate-plain",
+        "Continue with the implementation after you inspect the affected modules.",
+      ),
+    ).toBe(false);
+  });
+
+  test("explicit multi-run language still unlocks continuity routing", () => {
+    const runtime = new BrewvaRuntime({ cwd: repoRoot(), config: deterministicConfig() });
+
+    expect(
+      (
+        runtime as unknown as { isContinuityDispatchAllowed: (s: string, p: string) => boolean }
+      ).isContinuityDispatchAllowed(
+        "continuity-gate-explicit",
+        "Keep working on this over the next few days and stop when convergence is proven.",
+      ),
+    ).toBe(true);
+  });
 });

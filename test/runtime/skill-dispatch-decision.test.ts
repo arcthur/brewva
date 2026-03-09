@@ -6,7 +6,7 @@ function createEntry(
 ): SkillsIndexEntry {
   return {
     name: input.name,
-    tier: input.tier ?? "base",
+    category: input.category ?? "core",
     description: input.description ?? `${input.name} skill`,
     outputs: input.outputs ?? [],
     toolsRequired: input.toolsRequired ?? [],
@@ -17,11 +17,13 @@ function createEntry(
     requires: input.requires ?? [],
     effectLevel: input.effectLevel ?? "read_only",
     dispatch: input.dispatch,
+    routingScope: input.routingScope ?? "core",
+    continuityRequired: input.continuityRequired ?? false,
   };
 }
 
 describe("skill dispatch decision", () => {
-  test("falls back to default dispatch thresholds when dispatch metadata is absent", () => {
+  test("falls back to default dispatch thresholds when metadata is absent", () => {
     const decision = resolveSkillDispatchDecision({
       selected: [{ name: "review", score: 12, reason: "semantic:review", breakdown: [] }],
       index: [createEntry({ name: "review" })],
@@ -32,38 +34,18 @@ describe("skill dispatch decision", () => {
     expect(decision.reason).toContain("gate_threshold(10)");
   });
 
-  test("normalizes malformed dispatch metadata from external index entries", () => {
-    const decision = resolveSkillDispatchDecision({
-      selected: [{ name: "review", score: 0, reason: "none", breakdown: [] }],
-      index: [
-        createEntry({
-          name: "review",
-          dispatch: {
-            gateThreshold: Number.NaN,
-            autoThreshold: Number.NaN,
-            defaultMode: "invalid-mode" as unknown as "suggest",
-          },
-        }),
-      ],
-      turn: 6,
-    });
-
-    expect(decision.mode).toBe("suggest");
-    expect(decision.reason).toContain("gate_threshold(10)");
-  });
-
-  test("read_only dispatch does not expand into mutation prerequisites", () => {
+  test("read_only skills do not auto-chain mutation producers", () => {
     const decision = resolveSkillDispatchDecision({
       selected: [{ name: "review", score: 22, reason: "semantic:review", breakdown: [] }],
       index: [
         createEntry({
           name: "review",
-          requires: ["change_summary"],
+          requires: ["change_set"],
           effectLevel: "read_only",
         }),
         createEntry({
-          name: "patching",
-          outputs: ["change_summary"],
+          name: "implementation",
+          outputs: ["change_set"],
           effectLevel: "mutation",
         }),
       ],
@@ -71,31 +53,33 @@ describe("skill dispatch decision", () => {
     });
 
     expect(decision.chain).toEqual(["review"]);
-    expect(decision.unresolvedConsumes).toEqual(["change_summary"]);
+    expect(decision.unresolvedConsumes).toEqual(["change_set"]);
   });
 
-  test("collapses to the primary skill when a planned chain would still be invalid", () => {
+  test("collapses to the primary skill when prerequisite chain is still invalid", () => {
     const decision = resolveSkillDispatchDecision({
-      selected: [{ name: "patching", score: 22, reason: "semantic:patching", breakdown: [] }],
+      selected: [
+        { name: "implementation", score: 22, reason: "semantic:implementation", breakdown: [] },
+      ],
       index: [
         createEntry({
-          name: "patching",
-          requires: ["change_summary"],
+          name: "implementation",
+          requires: ["execution_plan"],
           effectLevel: "mutation",
         }),
         createEntry({
-          name: "planning",
-          requires: ["architecture_map"],
-          outputs: ["change_summary"],
+          name: "design",
+          requires: ["repository_snapshot"],
+          outputs: ["execution_plan"],
           effectLevel: "read_only",
         }),
       ],
       turn: 8,
     });
 
-    expect(decision.chain).toEqual(["patching"]);
+    expect(decision.chain).toEqual(["implementation"]);
     expect(decision.unresolvedConsumes).toEqual(
-      expect.arrayContaining(["architecture_map", "change_summary"]),
+      expect.arrayContaining(["execution_plan", "repository_snapshot"]),
     );
   });
 });

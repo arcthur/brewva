@@ -21,6 +21,7 @@ Default extension composition wires:
 - `registerContextTransform`
 - `registerScanConvergenceGuard`
 - `registerQualityGate`
+- `registerDebugLoop`
 - `registerLedgerWriter`
 - `registerCompletionGuard`
 - `registerNotification`
@@ -31,6 +32,7 @@ Implementation files:
 - `packages/brewva-extensions/src/context-transform.ts`
 - `packages/brewva-extensions/src/scan-convergence-guard.ts`
 - `packages/brewva-extensions/src/quality-gate.ts`
+- `packages/brewva-extensions/src/debug-loop.ts`
 - `packages/brewva-extensions/src/ledger-writer.ts`
 - `packages/brewva-extensions/src/completion-guard.ts`
 - `packages/brewva-extensions/src/notification.ts`
@@ -69,6 +71,31 @@ This keeps the runtime aligned with the working-projection/task-ledger model: su
 - `tool_output_observed`
 - `tool_output_artifact_persisted`
 - `tool_output_distilled`
+
+## Automatic Debug Loop
+
+`registerDebugLoop` is an extension-side controller, not a runtime-kernel
+service.
+
+Its current responsibilities are:
+
+- observe `skill_complete` inputs for active `implementation` sessions
+- react to `verification_outcome_recorded` failures from `runtime.verification.*`
+- persist deterministic debug-loop artifacts under `.orchestrator/artifacts/`
+- create explicit cascade intents for `runtime-forensics -> debugging -> implementation`
+  (or `debugging -> implementation` when `runtime_trace` already exists)
+- synthesize deterministic `handoff.json` packets on `agent_end` and `session_shutdown`
+
+The controller deliberately does not mutate `skill_complete` validation rules.
+Minimum artifact-shape enforcement happens inside the controller before it
+schedules the next retry or writes terminal handoff state.
+
+`retryCount` is the number of scheduled retries after the first failed
+implementation verification. The initial failure snapshot therefore persists
+with `retryCount=0`.
+
+`handoff.json` is latest-wins. Repeated lifecycle persistence overwrites the
+previous handoff packet for the same session instead of keeping a history log.
 
 ## Runtime Integration Contract
 

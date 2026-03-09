@@ -4,88 +4,12 @@ import type { SkillDispatchDecision, SkillDocument, TaskSpec, TaskState } from "
 import type { RuntimeCallback } from "./callback.js";
 import { RuntimeSessionStateStore } from "./session-state.js";
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readNonEmptyString(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : null;
-}
-
-function compactText(value: string, maxChars = 2000): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxChars) return normalized;
-  return `${normalized.slice(0, Math.max(1, maxChars - 3))}...`;
-}
-
-function deriveComposeGoal(outputs: Record<string, unknown>): string | null {
-  const analysis = outputs.compose_analysis;
-  if (typeof analysis === "string") {
-    const summaryMatch = analysis.match(/request_summary:\s*["']?(.+?)["']?(?:$|\r?\n)/i);
-    if (summaryMatch?.[1]) {
-      return compactText(summaryMatch[1], 500);
-    }
-    const firstLine = analysis
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find((line) => line.length > 0 && !/^compose_analysis$/i.test(line));
-    if (firstLine) {
-      return compactText(firstLine, 500);
-    }
-  }
-
-  if (isRecord(analysis)) {
-    const summary =
-      readNonEmptyString(analysis.request_summary) ??
-      readNonEmptyString(analysis.requestSummary) ??
-      readNonEmptyString(analysis.goal) ??
-      readNonEmptyString(analysis.summary);
-    if (summary) return compactText(summary, 500);
-  }
-
-  const composePlan = outputs.compose_plan;
-  if (isRecord(composePlan)) {
-    const summary =
-      readNonEmptyString(composePlan.goal) ??
-      readNonEmptyString(composePlan.summary) ??
-      readNonEmptyString(composePlan.intent);
-    if (summary) return compactText(summary, 500);
-  }
-
-  if (readNonEmptyString(composePlan)) {
-    return "Execute composed multi-step plan";
-  }
-  if (Array.isArray(outputs.skill_sequence) && outputs.skill_sequence.length > 0) {
-    return "Execute composed multi-step plan";
-  }
-  return null;
-}
-
-function deriveTaskSpecFromOutputs(
-  activeSkillName: string,
-  outputs: Record<string, unknown>,
-): TaskSpec | null {
+function deriveTaskSpecFromOutputs(outputs: Record<string, unknown>): TaskSpec | null {
   if (Object.prototype.hasOwnProperty.call(outputs, "task_spec")) {
     const parsed = parseTaskSpec(outputs.task_spec);
     if (parsed.ok) return parsed.spec;
   }
-
-  if (activeSkillName !== "compose") return null;
-  const hasComposeSignals =
-    Object.prototype.hasOwnProperty.call(outputs, "compose_analysis") ||
-    Object.prototype.hasOwnProperty.call(outputs, "compose_plan") ||
-    Object.prototype.hasOwnProperty.call(outputs, "skill_sequence");
-  if (!hasComposeSignals) return null;
-
-  const goal = deriveComposeGoal(outputs) ?? "Execute composed multi-step plan";
-  const expectedBehavior = readNonEmptyString(outputs.compose_plan);
-  return {
-    schema: "brewva.task.v1",
-    goal,
-    expectedBehavior: expectedBehavior ? compactText(expectedBehavior, 2000) : undefined,
-  };
+  return null;
 }
 
 export interface SkillLifecycleServiceOptions {
@@ -305,36 +229,6 @@ export class SkillLifecycleService {
     return { ok: false, missing };
   }
 
-  validateComposePlan(plan: {
-    steps: Array<{ skill: string; consumes?: string[]; produces?: string[] }>;
-  }): { valid: boolean; errors: string[]; warnings: string[] } {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-    const availableOutputs = new Set<string>();
-
-    for (const [i, step] of plan.steps.entries()) {
-      const skill = this.skills.get(step.skill);
-      if (!skill) {
-        errors.push(`Step ${i + 1}: skill '${step.skill}' not found in registry.`);
-        continue;
-      }
-
-      for (const consumed of step.consumes ?? []) {
-        if (!availableOutputs.has(consumed)) {
-          warnings.push(
-            `Step ${i + 1} (${step.skill}): consumes '${consumed}' but no prior step produces it.`,
-          );
-        }
-      }
-
-      for (const produced of step.produces ?? []) {
-        availableOutputs.add(produced);
-      }
-    }
-
-    return { valid: errors.length === 0, errors, warnings };
-  }
-
   completeSkill(
     sessionId: string,
     outputs: Record<string, unknown>,
@@ -374,7 +268,7 @@ export class SkillLifecycleService {
         },
       });
 
-      this.maybePromoteTaskSpec(sessionId, activeSkillName, outputs);
+      this.maybePromoteTaskSpec(sessionId, outputs);
     }
     return validation;
   }
@@ -454,18 +348,14 @@ export class SkillLifecycleService {
     };
   }
 
-  private maybePromoteTaskSpec(
-    sessionId: string,
-    activeSkillName: string,
-    outputs: Record<string, unknown>,
-  ): void {
+  private maybePromoteTaskSpec(sessionId: string, outputs: Record<string, unknown>): void {
     if (!this.setTaskSpec || !this.getTaskState) return;
     const taskState = this.getTaskState(sessionId);
     if (taskState.spec) return;
     const phase = taskState.status?.phase;
     if (phase && phase !== "align") return;
 
-    const nextSpec = deriveTaskSpecFromOutputs(activeSkillName, outputs);
+    const nextSpec = deriveTaskSpecFromOutputs(outputs);
     if (!nextSpec) return;
     this.setTaskSpec(sessionId, nextSpec);
   }
