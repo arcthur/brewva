@@ -10,77 +10,48 @@ describe("skill output registry", () => {
     const runtime = new BrewvaRuntime({ cwd: repoRoot() });
     const sessionId = "output-reg-1";
 
-    runtime.skills.activate(sessionId, "exploration");
+    runtime.skills.activate(sessionId, "repository-analysis");
     const outputs = {
-      architecture_map: "monorepo with 4 packages",
-      key_modules: "runtime, tools, extensions, cli",
+      repository_snapshot: "monorepo with runtime, tools, cli, gateway",
+      impact_map: "routing, registry, docs",
       unknowns: "none",
     };
     runtime.skills.complete(sessionId, outputs);
 
-    const stored = runtime.skills.getOutputs(sessionId, "exploration");
+    const stored = runtime.skills.getOutputs(sessionId, "repository-analysis");
     expect(stored).toBeDefined();
-    expect(stored!.architecture_map).toBe("monorepo with 4 packages");
+    expect(stored?.repository_snapshot).toContain("monorepo");
   });
 
-  test("review completion stores findings output", async () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
-    const sessionId = "output-reg-review-alias-1";
-
-    runtime.skills.activate(sessionId, "review");
-    const completion = runtime.skills.complete(sessionId, {
-      review_context: "context",
-      plan_conformance: "aligned",
-      risk_profile: "low",
-      oracle_brief: "brief",
-      oracle_synthesis: "synthesis",
-      findings: "one finding",
-      failure_modes: "none",
-      review_decision: "approve_with_followups",
-      testing_gaps: "none",
-    });
-    expect(completion).toEqual({ ok: true, missing: [] });
-
-    const stored = runtime.skills.getOutputs(sessionId, "review");
-    expect(stored?.findings).toBe("one finding");
-  });
-
-  test("getAvailableConsumedOutputs returns matching outputs for skill consumes", async () => {
+  test("getConsumedOutputs returns matching outputs for downstream skills", async () => {
     const runtime = new BrewvaRuntime({ cwd: repoRoot() });
     const sessionId = "output-reg-2";
 
-    // debugging consumes: [architecture_map, execution_steps]
-    // exploration outputs architecture_map — IS in debugging's consumes
-    // but first test with no matching outputs
-    runtime.skills.activate(sessionId, "exploration");
+    runtime.skills.activate(sessionId, "repository-analysis");
     runtime.skills.complete(sessionId, {
-      architecture_map: "module map here",
-      key_modules: "runtime",
+      repository_snapshot: "module map here",
+      impact_map: "routing and cascade",
       unknowns: "none",
     });
 
-    // exploration produces architecture_map which debugging consumes — should match
-    const available = runtime.skills.getConsumedOutputs(sessionId, "debugging");
-    expect(available.architecture_map).toBe("module map here");
+    const debuggingAvailable = runtime.skills.getConsumedOutputs(sessionId, "debugging");
+    expect(debuggingAvailable.repository_snapshot).toBe("module map here");
+    expect(debuggingAvailable.impact_map).toBe("routing and cascade");
 
-    // planning consumes: [architecture_map, key_modules, unknowns, root_cause]
-    // debugging produces root_cause — IS a match
     runtime.skills.activate(sessionId, "debugging");
     const completion = runtime.skills.complete(sessionId, {
-      oracle_brief: "Investigate recent callback handler changes",
-      oracle_synthesis: "Null guard is missing in callback parsing path",
-      root_cause: "null ref in handler",
-      fix_description: "added guard",
-      evidence: "test passes",
-      verification: "pass",
+      root_cause: "continuity gate was missing",
+      fix_strategy: "add continuity-aware filtering",
+      failure_evidence: "repro + failing route selection",
     });
     expect(completion).toEqual({ ok: true, missing: [] });
 
-    const planningAvailable = runtime.skills.getConsumedOutputs(sessionId, "planning");
-    expect(planningAvailable.root_cause).toBe("null ref in handler");
+    const implementationAvailable = runtime.skills.getConsumedOutputs(sessionId, "implementation");
+    expect(implementationAvailable.root_cause).toBe("continuity gate was missing");
+    expect(implementationAvailable.fix_strategy).toBe("add continuity-aware filtering");
   });
 
-  test("getAvailableConsumedOutputs returns empty for unknown skill", async () => {
+  test("getConsumedOutputs returns empty for unknown skill", async () => {
     const runtime = new BrewvaRuntime({ cwd: repoRoot() });
     const result = runtime.skills.getConsumedOutputs("any-session", "nonexistent");
     expect(result).toEqual({});
@@ -89,50 +60,27 @@ describe("skill output registry", () => {
   test("replays skill outputs from skill_completed events after runtime restart", async () => {
     const sessionId = `skill-output-replay-${Date.now()}`;
     const runtimeA = new BrewvaRuntime({ cwd: repoRoot() });
-    runtimeA.skills.activate(sessionId, "exploration");
+    runtimeA.skills.activate(sessionId, "repository-analysis");
     runtimeA.skills.complete(sessionId, {
-      architecture_map: "replayed module map",
-      key_modules: "runtime",
+      repository_snapshot: "replayed module map",
+      impact_map: "registry and router",
       unknowns: "none",
     });
 
     const runtimeB = new BrewvaRuntime({ cwd: repoRoot() });
     runtimeB.context.onTurnStart(sessionId, 1);
     const replayed = runtimeB.skills.getConsumedOutputs(sessionId, "debugging");
-    expect(replayed.architecture_map).toBe("replayed module map");
-  });
-
-  test("replay restores review findings outputs", async () => {
-    const sessionId = `skill-output-review-replay-${Date.now()}`;
-    const runtimeA = new BrewvaRuntime({ cwd: repoRoot() });
-    runtimeA.events.record({
-      sessionId,
-      type: "skill_completed",
-      turn: 1,
-      payload: {
-        skillName: "review",
-        outputKeys: ["findings"],
-        outputs: {
-          findings: "legacy replay finding",
-        },
-        completedAt: Date.now(),
-      },
-    });
-
-    const runtimeB = new BrewvaRuntime({ cwd: repoRoot() });
-    runtimeB.context.onTurnStart(sessionId, 1);
-    const replayed = runtimeB.skills.getOutputs(sessionId, "review");
-    expect(replayed?.findings).toBe("legacy replay finding");
+    expect(replayed.repository_snapshot).toBe("replayed module map");
   });
 
   test("emits skill_completed event with outputs and output keys", async () => {
     const runtime = new BrewvaRuntime({ cwd: repoRoot() });
     const sessionId = `skill-complete-event-${Date.now()}`;
-    runtime.skills.activate(sessionId, "exploration");
+    runtime.skills.activate(sessionId, "repository-analysis");
     const outputs = {
-      architecture_map: "map",
+      repository_snapshot: "map",
+      impact_map: "router",
       unknowns: "none",
-      key_modules: "runtime",
     };
     runtime.skills.complete(sessionId, outputs);
 
@@ -143,57 +91,32 @@ describe("skill output registry", () => {
       outputKeys?: string[];
       outputs?: Record<string, unknown>;
     };
-    expect(payload.skillName).toBe("exploration");
-    expect(payload.outputKeys).toEqual(["architecture_map", "key_modules", "unknowns"]);
+    expect(payload.skillName).toBe("repository-analysis");
+    expect(payload.outputKeys).toEqual(["impact_map", "repository_snapshot", "unknowns"]);
     expect(payload.outputs).toEqual(outputs);
   });
 
   test("emits skill_activated event when a skill is loaded", async () => {
     const runtime = new BrewvaRuntime({ cwd: repoRoot() });
     const sessionId = `skill-activated-event-${Date.now()}`;
-    runtime.skills.activate(sessionId, "exploration");
+    runtime.skills.activate(sessionId, "repository-analysis");
 
     const event = runtime.events.query(sessionId, { type: "skill_activated", last: 1 })[0];
     expect(event).toBeDefined();
     const payload = (event?.payload ?? {}) as {
       skillName?: string;
     };
-    expect(payload.skillName).toBe("exploration");
+    expect(payload.skillName).toBe("repository-analysis");
   });
 
-  test("promotes task spec from compose outputs when task is still in align state", async () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
-    const sessionId = `compose-task-promote-${Date.now()}`;
-
-    runtime.skills.activate(sessionId, "compose");
-    const completion = runtime.skills.complete(sessionId, {
-      compose_analysis:
-        "request_summary: Refactor verification routing and align fallback semantics",
-      skill_sequence: [
-        {
-          step: 1,
-          skill: "exploration",
-          intent: "inspect current flow",
-        },
-      ],
-      compose_plan: "Run exploration, then planning, then patching and verification.",
-    });
-    expect(completion).toEqual({ ok: true, missing: [] });
-
-    const taskState = runtime.task.getState(sessionId);
-    expect(taskState.spec?.goal).toContain("Refactor verification routing");
-    expect(taskState.status?.phase).toBe("investigate");
-    expect(taskState.status?.health).toBe("ok");
-  });
-
-  test("promotes task spec from task_spec output for non-compose skills", async () => {
+  test("promotes task spec from task_spec output", async () => {
     const runtime = new BrewvaRuntime({ cwd: repoRoot() });
     const sessionId = `task-spec-output-${Date.now()}`;
 
-    runtime.skills.activate(sessionId, "exploration");
+    runtime.skills.activate(sessionId, "repository-analysis");
     const completion = runtime.skills.complete(sessionId, {
-      architecture_map: "runtime, tools, projection",
-      key_modules: "verification, skill lifecycle",
+      repository_snapshot: "runtime, tools, projection",
+      impact_map: "verification, skill lifecycle",
       unknowns: "none",
       task_spec: {
         schema: "brewva.task.v1",

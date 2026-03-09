@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createBrewvaSession } from "@brewva/brewva-cli";
 
 function createWorkspace(name: string): string {
@@ -10,8 +10,58 @@ function createWorkspace(name: string): string {
   return workspace;
 }
 
+function writeSkill(filePath: string, name: string): void {
+  mkdirSync(dirname(filePath), { recursive: true });
+  writeFileSync(
+    filePath,
+    [
+      "---",
+      `name: ${name}`,
+      `description: ${name} skill`,
+      "tools:",
+      "  required: [read]",
+      "  optional: []",
+      "  denied: []",
+      "budget:",
+      "  max_tool_calls: 5",
+      "  max_tokens: 2000",
+      "outputs: []",
+      "consumes: []",
+      "---",
+      `# ${name}`,
+      "",
+      "## Intent",
+      "",
+      "test skill",
+      "",
+      "## Trigger",
+      "",
+      "test",
+      "",
+      "## Workflow",
+      "",
+      "### Step 1",
+      "",
+      "test",
+      "",
+      "## Stop Conditions",
+      "",
+      "- none",
+      "",
+      "## Anti-Patterns",
+      "",
+      "- none",
+      "",
+      "## Example",
+      "",
+      "Input: test",
+    ].join("\n"),
+    "utf8",
+  );
+}
+
 describe("brewva session ui settings wiring", () => {
-  test("given agentId option, when creating brewva session, then runtime identity agent id is normalized", async () => {
+  test("normalizes agentId into runtime identity", async () => {
     const workspace = createWorkspace("agent-id");
     const result = await createBrewvaSession({
       cwd: workspace,
@@ -24,7 +74,7 @@ describe("brewva session ui settings wiring", () => {
     }
   });
 
-  test("given ui quietStartup override in config, when creating brewva session, then runtime and session settings apply override", async () => {
+  test("applies ui quietStartup override from config", async () => {
     const workspace = createWorkspace("explicit");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
@@ -45,24 +95,24 @@ describe("brewva session ui settings wiring", () => {
       configPath: ".brewva/brewva.json",
     });
     try {
-      const activeTools = result.session.getActiveToolNames();
       expect(result.runtime.config.ui.quietStartup).toBe(false);
       expect(result.session.settingsManager.getQuietStartup()).toBe(false);
-      expect(activeTools.includes("exec")).toBe(true);
-      expect(activeTools.includes("process")).toBe(true);
     } finally {
       result.session.dispose();
     }
   });
 
-  test("given config without ui override, when creating brewva session, then runtime ui defaults are preserved", async () => {
+  test("preserves runtime ui defaults when config only changes skills routing", async () => {
     const workspace = createWorkspace("default");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
       JSON.stringify(
         {
           skills: {
-            packs: ["typescript", "react", "bun"],
+            routing: {
+              profile: "operator",
+              scopes: ["core", "domain", "operator"],
+            },
           },
         },
         null,
@@ -76,57 +126,19 @@ describe("brewva session ui settings wiring", () => {
       configPath: ".brewva/brewva.json",
     });
     try {
-      const activeTools = result.session.getActiveToolNames();
       expect(result.runtime.config.ui.quietStartup).toBe(true);
       expect(result.session.settingsManager.getQuietStartup()).toBe(true);
-      expect(activeTools.includes("exec")).toBe(true);
-      expect(activeTools.includes("process")).toBe(true);
     } finally {
       result.session.dispose();
     }
   });
 
-  test("session_bootstrap payload includes skipped skill packs filtered by skills.packs", async () => {
+  test("session_bootstrap payload records routing load report", async () => {
     const workspace = createWorkspace("skill-load-report");
-    mkdirSync(join(workspace, ".brewva/skills/packs/custom-pack"), { recursive: true });
-    writeFileSync(
-      join(workspace, ".brewva/skills/packs/custom-pack/SKILL.md"),
-      [
-        "---",
-        "name: custom-pack-skill",
-        "description: custom",
-        "tags: [custom]",
-        "tools:",
-        "  required: [read]",
-        "  optional: []",
-        "  denied: []",
-        "budget:",
-        "  max_tool_calls: 5",
-        "  max_tokens: 2000",
-        "outputs: []",
-        "consumes: []",
-        "---",
-        "# custom-pack-skill",
-      ].join("\n"),
-      "utf8",
-    );
-    writeFileSync(
-      join(workspace, ".brewva/brewva.json"),
-      JSON.stringify(
-        {
-          skills: {
-            packs: ["skill-creator"],
-          },
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
+    writeSkill(join(workspace, ".brewva/skills/operator/custom-ops/SKILL.md"), "custom-ops");
 
     const result = await createBrewvaSession({
       cwd: workspace,
-      configPath: ".brewva/brewva.json",
     });
     try {
       const sessionId = result.session.sessionManager.getSessionId();
@@ -137,59 +149,29 @@ describe("brewva session ui settings wiring", () => {
       const payload = (bootstrap?.payload as
         | {
             skillLoad?: {
-              skippedPacks?: Array<{ pack?: string }>;
+              routingProfile?: string;
+              routingScopes?: string[];
+              hiddenSkills?: string[];
             };
           }
-        | undefined) ?? { skillLoad: { skippedPacks: [] } };
-      const skippedPacks = payload.skillLoad?.skippedPacks ?? [];
-      expect(skippedPacks.some((entry) => entry.pack === "custom-pack")).toBe(true);
+        | undefined) ?? { skillLoad: {} };
+
+      expect(payload.skillLoad?.routingProfile).toBe("standard");
+      expect(payload.skillLoad?.routingScopes).toEqual(["core", "domain"]);
+      expect(payload.skillLoad?.hiddenSkills).toContain("custom-ops");
     } finally {
       result.session.dispose();
     }
   });
 
-  test("activePacks option merges with configured skills.packs instead of replacing it", async () => {
-    const workspace = createWorkspace("skill-pack-merge");
-    mkdirSync(join(workspace, ".brewva/skills/packs/custom-pack"), { recursive: true });
-    writeFileSync(
-      join(workspace, ".brewva/skills/packs/custom-pack/SKILL.md"),
-      [
-        "---",
-        "name: custom-pack-skill-merge",
-        "description: custom merge",
-        "tags: [custom]",
-        "tools:",
-        "  required: [read]",
-        "  optional: []",
-        "  denied: []",
-        "budget:",
-        "  max_tool_calls: 5",
-        "  max_tokens: 2000",
-        "outputs: []",
-        "consumes: []",
-        "---",
-        "# custom-pack-skill-merge",
-      ].join("\n"),
-      "utf8",
-    );
-    writeFileSync(
-      join(workspace, ".brewva/brewva.json"),
-      JSON.stringify(
-        {
-          skills: {
-            packs: ["skill-creator"],
-          },
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
+  test("routingProfile and routingScopes options override skill routing exposure", async () => {
+    const workspace = createWorkspace("skill-routing-override");
+    writeSkill(join(workspace, ".brewva/skills/operator/custom-ops/SKILL.md"), "custom-ops");
 
     const result = await createBrewvaSession({
       cwd: workspace,
-      configPath: ".brewva/brewva.json",
-      activePacks: ["custom-pack"],
+      routingProfile: "operator",
+      routingScopes: ["core", "domain", "operator"],
     });
     try {
       const sessionId = result.session.sessionManager.getSessionId();
@@ -200,12 +182,16 @@ describe("brewva session ui settings wiring", () => {
       const payload = (bootstrap?.payload as
         | {
             skillLoad?: {
-              activePacks?: string[];
+              routingProfile?: string;
+              routingScopes?: string[];
+              routableSkills?: string[];
             };
           }
-        | undefined) ?? { skillLoad: { activePacks: [] } };
-      const activePacks = payload.skillLoad?.activePacks ?? [];
-      expect(activePacks).toEqual(expect.arrayContaining(["skill-creator", "custom-pack"]));
+        | undefined) ?? { skillLoad: {} };
+
+      expect(payload.skillLoad?.routingProfile).toBe("operator");
+      expect(payload.skillLoad?.routingScopes).toEqual(["core", "domain", "operator"]);
+      expect(payload.skillLoad?.routableSkills).toContain("custom-ops");
     } finally {
       result.session.dispose();
     }

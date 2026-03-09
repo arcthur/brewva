@@ -7,13 +7,13 @@ function buildInput(): SkillBrokerJudgeInput {
     prompt: "看下现在项目的 skill 触发机制是否合理",
     candidates: [
       {
-        name: "skill-creator",
+        name: "skill-authoring",
         description: "Create or update reusable skills for the agent.",
-        outputs: ["skill_package", "skill_spec"],
+        outputs: ["skill_contract", "skill_spec"],
         consumes: ["objective"],
         requires: [],
-        effectLevel: "mutation",
-        toolsRequired: ["read", "edit"],
+        effectLevel: "execute",
+        toolsRequired: ["read", "exec"],
         score: 12,
         stageOneScore: 12,
         previewScore: 0,
@@ -28,9 +28,9 @@ function buildInput(): SkillBrokerJudgeInput {
         },
       },
       {
-        name: "planning",
-        description: "Break implementation work into executable steps.",
-        outputs: ["execution_steps"],
+        name: "design",
+        description: "Shape a design spec and execution plan for multi-step engineering work.",
+        outputs: ["execution_plan"],
         consumes: ["objective"],
         requires: [],
         effectLevel: "read_only",
@@ -93,7 +93,7 @@ describe("pi-ai skill broker judge", () => {
               type: "text",
               text: JSON.stringify({
                 decision: "select",
-                selectedName: "planning",
+                selectedName: "design",
                 confidence: "medium",
                 reason:
                   "The prompt is about deciding next implementation steps, not skill authoring.",
@@ -106,7 +106,7 @@ describe("pi-ai skill broker judge", () => {
 
     const result = await judge.judge(buildInput());
     expect(result.status).toBe("selected");
-    expect(result.selectedName).toBe("planning");
+    expect(result.selectedName).toBe("design");
     expect(result.model).toBe("openai/gpt-5.3-codex");
   });
 

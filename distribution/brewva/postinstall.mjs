@@ -54,21 +54,29 @@ assertSupportedNodeRuntime();
 
 const require = createRequire(import.meta.url);
 
-const FALLBACK_DEFAULT_PACKS = ["skill-creator", "telegram-interactive-components"];
-
-function buildDefaultGlobalBrewvaConfig(bundledPacks = []) {
-  const packs = bundledPacks.length > 0 ? bundledPacks : FALLBACK_DEFAULT_PACKS;
+function buildDefaultGlobalBrewvaConfig() {
   return {
     ui: {
       quietStartup: true,
     },
     skills: {
       roots: [],
-      packs: [...packs],
       disabled: [],
       overrides: {},
       selector: {
+        mode: "deterministic",
         k: 4,
+        brokerJudgeMode: "llm",
+      },
+      routing: {
+        profile: "standard",
+        scopes: ["core", "domain"],
+      },
+      cascade: {
+        mode: "auto",
+        enabledSources: ["explicit", "dispatch"],
+        sourcePriority: ["explicit", "dispatch"],
+        maxStepsPerRun: 8,
       },
     },
   };
@@ -199,16 +207,6 @@ function listBundledSkillFiles(sourceSkillsDir) {
   return out.toSorted((a, b) => a.localeCompare(b));
 }
 
-function listBundledPackNames(sourceSkillsDir) {
-  const packsDir = join(sourceSkillsDir, "packs");
-  if (!existsSync(packsDir)) return [];
-  const entries = readdirSync(packsDir, { withFileTypes: true });
-  return entries
-    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
-    .map((entry) => entry.name)
-    .toSorted((a, b) => a.localeCompare(b));
-}
-
 function readSkillsManifest(manifestPath) {
   if (!existsSync(manifestPath)) return undefined;
   try {
@@ -270,12 +268,8 @@ function main() {
     console.warn("brewva: platform binary is unavailable on this system.");
   }
 
-  const bundledPacks = runtimeBinaryPath
-    ? listBundledPackNames(join(dirname(runtimeBinaryPath), "skills"))
-    : [];
-
   try {
-    seedGlobalConfig(globalRoot, buildDefaultGlobalBrewvaConfig(bundledPacks));
+    seedGlobalConfig(globalRoot, buildDefaultGlobalBrewvaConfig());
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`brewva: failed to seed global config: ${message}`);

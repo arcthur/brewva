@@ -421,32 +421,50 @@
                 "$ref": "#/definitions/SkillContractOverride"
               }
             },
-            "packs": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
             "roots": {
               "type": "array",
               "items": {
                 "type": "string"
               }
             },
+            "routing": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "profile": {
+                  "$ref": "#/definitions/SkillRoutingProfile"
+                },
+                "scopes": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/SkillRoutingScope"
+                  }
+                },
+                "continuityPhrases": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Custom phrases that trigger continuity-aware skill routing. Overrides the built-in default list when provided."
+                },
+                "continuityContinuePattern": {
+                  "type": "string",
+                  "description": "Custom regex pattern for detecting continuity cues containing 'continue'. Overrides the built-in default pattern when provided."
+                }
+              }
+            },
             "selector": {
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "mode": {
-                  "type": "string",
-                  "enum": ["deterministic", "external_only"]
+                "brokerJudgeMode": {
+                  "$ref": "#/definitions/SkillBrokerJudgeMode"
                 },
                 "k": {
                   "type": "number"
                 },
-                "brokerJudgeMode": {
-                  "type": "string",
-                  "enum": ["heuristic", "llm"]
+                "mode": {
+                  "$ref": "#/definitions/SkillSelectorMode"
                 }
               }
             }
@@ -526,13 +544,21 @@
         }
       ]
     },
+    "SkillBrokerJudgeMode": {
+      "type": "string",
+      "enum": ["heuristic", "llm"]
+    },
     "SkillCascadeMode": {
       "type": "string",
       "enum": ["off", "assist", "auto"]
     },
     "SkillCascadeSource": {
       "type": "string",
-      "enum": ["dispatch", "compose", "explicit"]
+      "enum": ["dispatch", "explicit"]
+    },
+    "SkillCategory": {
+      "type": "string",
+      "enum": ["core", "domain", "operator", "meta", "internal", "overlay"]
     },
     "SkillContractOverride": {
       "type": "object",
@@ -553,6 +579,9 @@
             }
           }
         },
+        "category": {
+          "$ref": "#/definitions/SkillCategory"
+        },
         "composableWith": {
           "type": "array",
           "items": {
@@ -571,6 +600,9 @@
         "dispatch": {
           "$ref": "#/definitions/SkillDispatchPolicy"
         },
+        "effectLevel": {
+          "$ref": "#/definitions/SkillEffectLevel"
+        },
         "maxParallel": {
           "type": "number"
         },
@@ -583,12 +615,27 @@
             "type": "string"
           }
         },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "routing": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "continuityRequired": {
+              "type": "boolean"
+            },
+            "scope": {
+              "$ref": "#/definitions/SkillRoutingScope"
+            }
+          }
+        },
         "stability": {
           "type": "string",
           "enum": ["experimental", "stable", "deprecated"]
-        },
-        "tier": {
-          "$ref": "#/definitions/SkillTier"
         },
         "tools": {
           "type": "object",
@@ -640,9 +687,21 @@
       },
       "required": ["gateThreshold", "autoThreshold", "defaultMode"]
     },
-    "SkillTier": {
+    "SkillEffectLevel": {
       "type": "string",
-      "enum": ["base", "pack", "project"]
+      "enum": ["read_only", "execute", "mutation"]
+    },
+    "SkillRoutingProfile": {
+      "type": "string",
+      "enum": ["standard", "operator", "full"]
+    },
+    "SkillRoutingScope": {
+      "type": "string",
+      "enum": ["core", "domain", "operator", "meta"]
+    },
+    "SkillSelectorMode": {
+      "type": "string",
+      "enum": ["deterministic", "external_only"]
     },
     "VerificationLevel": {
       "type": "string",

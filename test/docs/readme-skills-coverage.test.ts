@@ -24,10 +24,11 @@ describe("README skill coverage", () => {
     const repoRoot = resolve(import.meta.dirname, "../..");
     const readme = readFileSync(resolve(repoRoot, "README.md"), "utf-8");
 
-    const baseSkills = listSkillNames(resolve(repoRoot, "skills/base"));
-    const packSkills = listSkillNames(resolve(repoRoot, "skills/packs"));
-    const projectSkills = listSkillNames(resolve(repoRoot, "skills/project"));
-    const allSkills = [...baseSkills, ...packSkills, ...projectSkills];
+    const coreSkills = listSkillNames(resolve(repoRoot, "skills/core"));
+    const domainSkills = listSkillNames(resolve(repoRoot, "skills/domain"));
+    const operatorSkills = listSkillNames(resolve(repoRoot, "skills/operator"));
+    const metaSkills = listSkillNames(resolve(repoRoot, "skills/meta"));
+    const allSkills = [...coreSkills, ...domainSkills, ...operatorSkills, ...metaSkills];
 
     const missing = allSkills.filter((name) => !readme.includes(`\`${name}\``));
 

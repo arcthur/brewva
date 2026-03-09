@@ -44,7 +44,7 @@ describe("context-compaction module", () => {
       getCurrentTurn: () => 17,
       getActiveSkill: () =>
         ({
-          name: "patching",
+          name: "implementation",
         }) as SkillDocument,
       recordEvent: (input) => {
         events.push(input);
@@ -86,7 +86,7 @@ describe("context-compaction module", () => {
         sessionId: "session-a",
         turn: 17,
         tool: "brewva_context_compaction",
-        skill: "patching",
+        skill: "implementation",
       }),
     );
     expect(ledgerRows[0]?.metadata).toEqual(

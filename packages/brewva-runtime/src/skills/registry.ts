@@ -1,16 +1,37 @@
-import { existsSync, mkdirSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { formatISO } from "date-fns";
 import { resolveGlobalBrewvaRootDir, resolveProjectBrewvaRootDir } from "../config/paths.js";
-import type { BrewvaConfig, SkillDocument, SkillTier, SkillsIndexEntry } from "../types.js";
-import { parseSkillDocument, tightenContract } from "./contract.js";
-
-const TIER_PRIORITY: Record<SkillTier, number> = {
-  base: 1,
-  pack: 2,
-  project: 3,
-};
+import type {
+  BrewvaConfig,
+  SkillCategory,
+  SkillDocument,
+  SkillRoutingScope,
+  SkillsIndexEntry,
+} from "../types.js";
+import {
+  createEmptySkillResources,
+  mergeOverlayContract,
+  mergeSkillResources,
+  parseSkillDocument,
+  tightenContract,
+} from "./contract.js";
+const LOADABLE_SKILL_CATEGORIES: SkillCategory[] = [
+  "core",
+  "domain",
+  "operator",
+  "meta",
+  "internal",
+];
 
 export type SkillRootSource =
   | "module_ancestor"
@@ -25,62 +46,20 @@ export interface SkillRegistryRoot {
   source: SkillRootSource;
 }
 
-export interface SkillRegistrySkippedPack {
-  pack: string;
-  source: SkillRootSource;
-  rootDir: string;
-  skillDir: string;
-  reason: "not_in_skills.packs";
-}
-
 export interface SkillRegistryLoadReport {
   roots: SkillRegistryRoot[];
-  activePacks: string[];
-  skippedPacks: SkillRegistrySkippedPack[];
+  routingProfile: BrewvaConfig["skills"]["routing"]["profile"];
+  routingScopes: SkillRoutingScope[];
+  routableSkills: string[];
+  hiddenSkills: string[];
+  overlaySkills: string[];
+  sharedContextFiles: string[];
+  categories: Partial<Record<SkillCategory, string[]>>;
 }
 
-const emittedSkippedPackWarningKeys = new Set<string>();
-
-function skippedPackWarningKey(report: SkillRegistryLoadReport): string {
-  return report.skippedPacks
-    .map((entry) => `${entry.pack}|${entry.source}|${entry.rootDir}|${entry.reason}`)
-    .toSorted((left, right) => left.localeCompare(right))
-    .join("||");
-}
-
-function uniqueSkippedPackNames(report: SkillRegistryLoadReport): string[] {
-  return [...new Set(report.skippedPacks.map((entry) => entry.pack))].toSorted((left, right) =>
-    left.localeCompare(right),
-  );
-}
-
-export function resetSkippedPackFilterWarningCache(): void {
-  emittedSkippedPackWarningKeys.clear();
-}
-
-export function emitSkippedPackFilterWarning(
-  report: SkillRegistryLoadReport,
-  options: { log?: (message: string) => void; maxPreview?: number } = {},
-): boolean {
-  const uniquePacks = uniqueSkippedPackNames(report);
-  if (uniquePacks.length === 0) return false;
-
-  const dedupeKey = skippedPackWarningKey(report);
-  if (dedupeKey.length === 0 || emittedSkippedPackWarningKeys.has(dedupeKey)) {
-    return false;
-  }
-  if (emittedSkippedPackWarningKeys.size >= 1024) {
-    emittedSkippedPackWarningKeys.clear();
-  }
-  emittedSkippedPackWarningKeys.add(dedupeKey);
-
-  const maxPreview = Number.isFinite(options.maxPreview) ? Math.max(1, options.maxPreview ?? 6) : 6;
-  const preview = uniquePacks.slice(0, maxPreview).join(", ");
-  const suffix = uniquePacks.length > maxPreview ? ", ..." : "";
-  const log = options.log ?? (() => undefined);
-  const message = `[skills:warn] ${uniquePacks.length} pack(s) skipped by skills.packs filter: ${preview}${suffix}`;
-  log(message);
-  return true;
+interface SharedContextEntry {
+  filePath: string;
+  markdown: string;
 }
 
 function cloneSkillRegistryRoot(entry: SkillRegistryRoot): SkillRegistryRoot {
@@ -88,16 +67,6 @@ function cloneSkillRegistryRoot(entry: SkillRegistryRoot): SkillRegistryRoot {
     rootDir: entry.rootDir,
     skillDir: entry.skillDir,
     source: entry.source,
-  };
-}
-
-function cloneSkippedPack(entry: SkillRegistrySkippedPack): SkillRegistrySkippedPack {
-  return {
-    pack: entry.pack,
-    source: entry.source,
-    rootDir: entry.rootDir,
-    skillDir: entry.skillDir,
-    reason: entry.reason,
   };
 }
 
@@ -109,10 +78,9 @@ function isDirectory(path: string): boolean {
   }
 }
 
-function hasTierDirectories(skillDir: string): boolean {
+function hasSkillCategoryDirectories(skillDir: string): boolean {
   return (
-    isDirectory(join(skillDir, "base")) ||
-    isDirectory(join(skillDir, "packs")) ||
+    LOADABLE_SKILL_CATEGORIES.some((category) => isDirectory(join(skillDir, category))) ||
     isDirectory(join(skillDir, "project"))
   );
 }
@@ -121,8 +89,8 @@ function resolveSkillDirectory(rootDir: string): string | undefined {
   const normalizedRoot = resolve(rootDir);
   const direct = normalizedRoot;
   const nested = join(normalizedRoot, "skills");
-  if (hasTierDirectories(direct)) return direct;
-  if (hasTierDirectories(nested)) return nested;
+  if (hasSkillCategoryDirectories(direct)) return direct;
+  if (hasSkillCategoryDirectories(nested)) return nested;
   return undefined;
 }
 
@@ -131,7 +99,7 @@ const MAX_ANCESTOR_DEPTH = 10;
 function collectBoundedAncestors(startDir: string): string[] {
   const out: string[] = [];
   let current = resolve(startDir);
-  for (let depth = 0; depth < MAX_ANCESTOR_DEPTH; depth++) {
+  for (let depth = 0; depth < MAX_ANCESTOR_DEPTH; depth += 1) {
     out.push(current);
     const parent = dirname(current);
     if (parent === current) break;
@@ -233,7 +201,10 @@ function isContainedWithin(candidate: string, container: string): boolean {
   return resolved === base || resolved.startsWith(base + "/");
 }
 
-function listSkillFiles(rootDir: string): string[] {
+function walkFiles(
+  rootDir: string,
+  predicate: (path: string, allowRootMarkdown: boolean) => boolean,
+): string[] {
   if (!isDirectory(rootDir)) return [];
   const resolvedRoot = resolve(rootDir);
   const out: string[] = [];
@@ -245,6 +216,7 @@ function listSkillFiles(rootDir: string): string[] {
     } catch {
       return;
     }
+
     for (const entry of entries) {
       if (entry.name.startsWith(".")) continue;
       const full = join(dir, entry.name);
@@ -267,9 +239,7 @@ function listSkillFiles(rootDir: string): string[] {
         continue;
       }
       if (!isFile) continue;
-      const isRootMd = allowRootMarkdown && entry.name.endsWith(".md");
-      const isSkillMd = !allowRootMarkdown && entry.name === "SKILL.md";
-      if (isRootMd || isSkillMd) {
+      if (predicate(full, allowRootMarkdown)) {
         out.push(full);
       }
     }
@@ -277,6 +247,45 @@ function listSkillFiles(rootDir: string): string[] {
 
   walk(resolvedRoot, true);
   return out;
+}
+
+function listSkillFiles(rootDir: string): string[] {
+  return walkFiles(rootDir, (path) => basename(path) === "SKILL.md");
+}
+
+function listMarkdownFiles(rootDir: string): string[] {
+  return walkFiles(rootDir, (path) => path.endsWith(".md"));
+}
+
+function joinMarkdownSections(sections: string[]): string {
+  return sections
+    .map((section) => section.trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function renderSharedContext(entries: SharedContextEntry[]): string {
+  if (entries.length === 0) return "";
+  const sections = entries.map((entry) => {
+    const title = basename(entry.filePath).replace(/\.md$/i, "");
+    return `## Project Context: ${title}\n\n${entry.markdown.trim()}`;
+  });
+  return joinMarkdownSections(sections);
+}
+
+function cloneLoadReport(report: SkillRegistryLoadReport): SkillRegistryLoadReport {
+  return {
+    roots: report.roots.map(cloneSkillRegistryRoot),
+    routingProfile: report.routingProfile,
+    routingScopes: [...report.routingScopes],
+    routableSkills: [...report.routableSkills],
+    hiddenSkills: [...report.hiddenSkills],
+    overlaySkills: [...report.overlaySkills],
+    sharedContextFiles: [...report.sharedContextFiles],
+    categories: Object.fromEntries(
+      Object.entries(report.categories).map(([key, value]) => [key, [...(value ?? [])]]),
+    ) as SkillRegistryLoadReport["categories"],
+  };
 }
 
 export interface SkillRegistryOptions {
@@ -292,10 +301,16 @@ export class SkillRegistry {
   private loadedRoots: SkillRegistryRoot[] = [];
   private lastLoadReport: SkillRegistryLoadReport = {
     roots: [],
-    activePacks: [],
-    skippedPacks: [],
+    routingProfile: "standard",
+    routingScopes: ["core", "domain"],
+    routableSkills: [],
+    hiddenSkills: [],
+    overlaySkills: [],
+    sharedContextFiles: [],
+    categories: {},
   };
   private skills = new Map<string, SkillDocument>();
+  private sharedContextEntries: SharedContextEntry[] = [];
 
   constructor(options: SkillRegistryOptions) {
     this.rootDir = options.rootDir;
@@ -305,6 +320,7 @@ export class SkillRegistry {
 
   load(): void {
     this.skills.clear();
+    this.sharedContextEntries = [];
 
     const discoveredRoots =
       this.rootsOverride ??
@@ -314,18 +330,8 @@ export class SkillRegistry {
       });
     this.loadedRoots = discoveredRoots.map(cloneSkillRegistryRoot);
 
-    const configuredPackAllowlist = new Set(this.config.skills.packs);
-    const packFilterEnabled = configuredPackAllowlist.size > 0;
-    const loadedPackNames = new Set<string>();
-    const skippedPacks: SkillRegistrySkippedPack[] = [];
     for (const root of discoveredRoots) {
-      this.loadRoot(
-        root,
-        configuredPackAllowlist,
-        packFilterEnabled,
-        skippedPacks,
-        loadedPackNames,
-      );
+      this.loadRoot(root);
     }
 
     for (const disabled of this.config.skills.disabled) {
@@ -338,16 +344,11 @@ export class SkillRegistry {
       skill.contract = tightenContract(skill.contract, override);
     }
 
-    const activePacks = packFilterEnabled ? configuredPackAllowlist : loadedPackNames;
-    this.lastLoadReport = {
-      roots: this.getLoadedRoots(),
-      activePacks: [...activePacks].toSorted((a, b) => a.localeCompare(b)),
-      skippedPacks: skippedPacks.map(cloneSkippedPack),
-    };
+    this.lastLoadReport = this.buildLoadReport();
   }
 
   list(): SkillDocument[] {
-    return [...this.skills.values()].toSorted((a, b) => a.name.localeCompare(b.name));
+    return [...this.skills.values()].toSorted((left, right) => left.name.localeCompare(right.name));
   }
 
   get(name: string): SkillDocument | undefined {
@@ -359,32 +360,32 @@ export class SkillRegistry {
   }
 
   getLoadReport(): SkillRegistryLoadReport {
-    return {
-      roots: this.lastLoadReport.roots.map(cloneSkillRegistryRoot),
-      activePacks: [...this.lastLoadReport.activePacks],
-      skippedPacks: this.lastLoadReport.skippedPacks.map(cloneSkippedPack),
-    };
+    return cloneLoadReport(this.lastLoadReport);
   }
 
-  buildIndex(): SkillsIndexEntry[] {
-    return this.list().map((skill) => ({
-      name: skill.name,
-      tier: skill.tier,
-      description: skill.description,
-      outputs: skill.contract.outputs ?? [],
-      toolsRequired: skill.contract.tools.required,
-      costHint: skill.contract.costHint ?? "medium",
-      stability: skill.contract.stability ?? "stable",
-      composableWith: skill.contract.composableWith ?? [],
-      consumes: skill.contract.consumes ?? [],
-      requires: skill.contract.requires ?? [],
-      effectLevel: skill.contract.effectLevel ?? "read_only",
-      dispatch: {
-        gateThreshold: skill.contract.dispatch?.gateThreshold ?? 10,
-        autoThreshold: skill.contract.dispatch?.autoThreshold ?? 16,
-        defaultMode: skill.contract.dispatch?.defaultMode ?? "suggest",
-      },
-    }));
+  buildIndex(options: { includeHidden?: boolean } = {}): SkillsIndexEntry[] {
+    return this.list()
+      .filter((skill) => options.includeHidden === true || this.isRoutable(skill))
+      .map((skill) => ({
+        name: skill.name,
+        category: skill.category,
+        description: skill.description,
+        outputs: skill.contract.outputs ?? [],
+        toolsRequired: skill.contract.tools.required,
+        costHint: skill.contract.costHint ?? "medium",
+        stability: skill.contract.stability ?? "stable",
+        composableWith: skill.contract.composableWith ?? [],
+        consumes: skill.contract.consumes ?? [],
+        requires: skill.contract.requires ?? [],
+        effectLevel: skill.contract.effectLevel ?? "read_only",
+        dispatch: {
+          gateThreshold: skill.contract.dispatch?.gateThreshold ?? 10,
+          autoThreshold: skill.contract.dispatch?.autoThreshold ?? 16,
+          defaultMode: skill.contract.dispatch?.defaultMode ?? "suggest",
+        },
+        routingScope: skill.contract.routing?.scope,
+        continuityRequired: skill.contract.routing?.continuityRequired === true,
+      }));
   }
 
   writeIndex(
@@ -397,63 +398,134 @@ export class SkillRegistry {
     const payload = {
       generatedAt: formatISO(Date.now()),
       roots: this.getLoadedRoots(),
+      routing: {
+        profile: this.config.skills.routing.profile,
+        scopes: this.config.skills.routing.scopes,
+      },
       skills: this.buildIndex(),
     };
     writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf8");
     return filePath;
   }
 
-  private loadRoot(
-    root: SkillRegistryRoot,
-    activePacks: Set<string>,
-    packFilterEnabled: boolean,
-    skippedPacks: SkillRegistrySkippedPack[],
-    loadedPackNames: Set<string>,
-  ): void {
-    const { skillDir, source, rootDir } = root;
-    this.loadTier("base", join(skillDir, "base"));
+  private isRoutable(skill: SkillDocument): boolean {
+    const scope = skill.contract.routing?.scope;
+    if (!scope) return false;
+    return this.config.skills.routing.scopes.includes(scope);
+  }
 
-    const packsDir = join(skillDir, "packs");
-    if (isDirectory(packsDir)) {
-      let entries: Array<import("node:fs").Dirent>;
-      try {
-        entries = readdirSync(packsDir, { withFileTypes: true });
-      } catch {
-        entries = [];
+  private buildLoadReport(): SkillRegistryLoadReport {
+    const categories: SkillRegistryLoadReport["categories"] = {};
+    const routableSkills: string[] = [];
+    const hiddenSkills: string[] = [];
+    const overlaySkills: string[] = [];
+
+    for (const skill of this.list()) {
+      const categoryBucket = categories[skill.category] ?? [];
+      categoryBucket.push(skill.name);
+      categories[skill.category] = categoryBucket;
+      if (this.isRoutable(skill)) {
+        routableSkills.push(skill.name);
+      } else {
+        hiddenSkills.push(skill.name);
       }
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        if (packFilterEnabled && !activePacks.has(entry.name)) {
-          skippedPacks.push({
-            pack: entry.name,
-            source,
-            rootDir,
-            skillDir,
-            reason: "not_in_skills.packs",
-          });
-          continue;
-        }
-        this.loadTier("pack", join(packsDir, entry.name));
-        loadedPackNames.add(entry.name);
+      if (skill.overlayFiles.length > 0) {
+        overlaySkills.push(skill.name);
       }
     }
 
-    this.loadTier("project", join(skillDir, "project"));
+    for (const category of Object.keys(categories) as SkillCategory[]) {
+      categories[category] = [...new Set(categories[category] ?? [])].toSorted((a, b) =>
+        a.localeCompare(b),
+      );
+    }
+
+    return {
+      roots: this.getLoadedRoots(),
+      routingProfile: this.config.skills.routing.profile,
+      routingScopes: [...this.config.skills.routing.scopes],
+      routableSkills: [...new Set(routableSkills)].toSorted((a, b) => a.localeCompare(b)),
+      hiddenSkills: [...new Set(hiddenSkills)].toSorted((a, b) => a.localeCompare(b)),
+      overlaySkills: [...new Set(overlaySkills)].toSorted((a, b) => a.localeCompare(b)),
+      sharedContextFiles: [
+        ...new Set(this.sharedContextEntries.map((entry) => entry.filePath)),
+      ].toSorted((a, b) => a.localeCompare(b)),
+      categories,
+    };
   }
 
-  private loadTier(tier: SkillTier, dir: string): void {
+  private loadRoot(root: SkillRegistryRoot): void {
+    const { skillDir } = root;
+    for (const category of LOADABLE_SKILL_CATEGORIES) {
+      this.loadCategory(category, join(skillDir, category));
+    }
+
+    const sharedEntries = this.loadSharedContext(join(skillDir, "project", "shared"));
+    if (sharedEntries.length > 0) {
+      this.sharedContextEntries.push(...sharedEntries);
+    }
+    this.loadOverlays(join(skillDir, "project", "overlays"));
+  }
+
+  private loadCategory(category: SkillCategory, dir: string): void {
     const files = listSkillFiles(dir);
     for (const filePath of files) {
-      const parsed = parseSkillDocument(filePath, tier);
+      const parsed = parseSkillDocument(filePath, category);
       const existing = this.skills.get(parsed.name);
-      if (!existing) {
-        this.skills.set(parsed.name, parsed);
-        continue;
+      if (existing) {
+        throw new Error(
+          `[skill_registry] ${filePath}: duplicate skill name '${parsed.name}' conflicts with '${existing.filePath}'. Skill names must be globally unique across loaded roots and categories; use a project overlay for same-name specialization.`,
+        );
       }
-      if (TIER_PRIORITY[parsed.tier] >= TIER_PRIORITY[existing.tier]) {
-        parsed.contract = tightenContract(existing.contract, parsed.contract);
-        this.skills.set(parsed.name, parsed);
+      this.skills.set(parsed.name, parsed);
+    }
+  }
+
+  private loadSharedContext(dir: string): SharedContextEntry[] {
+    return listMarkdownFiles(dir).map((filePath) => ({
+      filePath,
+      markdown: readFileSync(filePath, "utf8").trim(),
+    }));
+  }
+
+  private loadOverlays(dir: string): void {
+    const overlayFiles = listSkillFiles(dir);
+    for (const filePath of overlayFiles) {
+      const overlay = parseSkillDocument(filePath, "overlay");
+      const baseSkill = this.skills.get(overlay.name);
+      if (!baseSkill) {
+        throw new Error(
+          `[skill_overlay] ${filePath}: overlay target '${overlay.name}' was not loaded before overlay application.`,
+        );
       }
+
+      const sharedMarkdown = renderSharedContext(this.sharedContextEntries);
+      const mergedMarkdown = joinMarkdownSections([
+        sharedMarkdown,
+        baseSkill.markdown,
+        overlay.markdown,
+      ]);
+      const mergedResources = mergeSkillResources(
+        mergeSkillResources(baseSkill.resources, overlay.resources),
+        {
+          ...createEmptySkillResources(),
+          references: this.sharedContextEntries.map((entry) => entry.filePath),
+        },
+      );
+
+      this.skills.set(overlay.name, {
+        ...baseSkill,
+        markdown: mergedMarkdown,
+        contract: mergeOverlayContract(baseSkill.contract, overlay.contract),
+        resources: mergedResources,
+        sharedContextFiles: [
+          ...new Set([
+            ...baseSkill.sharedContextFiles,
+            ...this.sharedContextEntries.map((entry) => entry.filePath),
+          ]),
+        ],
+        overlayFiles: [...new Set([...baseSkill.overlayFiles, filePath])],
+      });
     }
   }
 }

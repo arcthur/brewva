@@ -6,7 +6,6 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
   },
   skills: {
     roots: [],
-    packs: [],
     disabled: [],
     overrides: {},
     selector: {
@@ -14,10 +13,14 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
       k: 4,
       brokerJudgeMode: "llm",
     },
+    routing: {
+      profile: "standard",
+      scopes: ["core", "domain"],
+    },
     cascade: {
       mode: "auto",
-      enabledSources: ["compose", "dispatch"],
-      sourcePriority: ["compose", "dispatch"],
+      enabledSources: ["explicit", "dispatch"],
+      sourcePriority: ["explicit", "dispatch"],
       maxStepsPerRun: 8,
     },
   },

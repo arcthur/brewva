@@ -15,6 +15,11 @@ export const VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE = "verification_outcome_re
 export const VERIFICATION_STATE_RESET_EVENT_TYPE = "verification_state_reset" as const;
 export const TASK_STUCK_DETECTED_EVENT_TYPE = "task_stuck_detected" as const;
 export const TASK_STUCK_CLEARED_EVENT_TYPE = "task_stuck_cleared" as const;
+export const DEBUG_LOOP_TRANSITION_EVENT_TYPE = "debug_loop_transition" as const;
+export const DEBUG_LOOP_FAILURE_CASE_PERSISTED_EVENT_TYPE =
+  "debug_loop_failure_case_persisted" as const;
+export const DEBUG_LOOP_RETRY_SCHEDULED_EVENT_TYPE = "debug_loop_retry_scheduled" as const;
+export const DEBUG_LOOP_HANDOFF_PERSISTED_EVENT_TYPE = "debug_loop_handoff_persisted" as const;
 
 export const PROJECTION_INGESTED_EVENT_TYPE = "projection_ingested" as const;
 export const PROJECTION_REFRESHED_EVENT_TYPE = "projection_refreshed" as const;

@@ -11,7 +11,7 @@ function buildIntent(
     id: "intent-1",
     source,
     sourceTurn: 1,
-    steps: [{ id: "step-1", skill: "planning", consumes: [], produces: ["execution_steps"] }],
+    steps: [{ id: "step-1", skill: "design", consumes: [], produces: ["execution_plan"] }],
     cursor: 0,
     status,
     unresolvedConsumes: [],
@@ -22,78 +22,57 @@ function buildIntent(
 }
 
 describe("skill cascade source policy", () => {
-  test("replaces when no existing intent", () => {
+  test("replaces when there is no existing intent", () => {
     const decision = evaluateSkillCascadeSourceDecision({
-      enabledSources: ["compose", "dispatch"],
-      sourcePriority: ["compose", "dispatch"],
+      enabledSources: ["explicit", "dispatch"],
+      sourcePriority: ["explicit", "dispatch"],
       incomingSource: "dispatch",
     });
     expect(decision.replace).toBe(true);
     expect(decision.reason).toBe("no_existing_intent");
   });
 
-  test("keeps explicit intent when explicit source is not configured", () => {
+  test("keeps explicit intent when explicit source is not configured for replacement", () => {
     const decision = evaluateSkillCascadeSourceDecision({
-      enabledSources: ["compose", "dispatch"],
-      sourcePriority: ["compose", "dispatch"],
-      incomingSource: "compose",
+      enabledSources: ["dispatch"],
+      sourcePriority: ["dispatch", "explicit"],
+      incomingSource: "dispatch",
       existingIntent: buildIntent("explicit", "running"),
     });
     expect(decision.replace).toBe(false);
     expect(decision.reason).toBe("explicit_source_locked");
   });
 
-  test("replaces explicit intent when explicit is configured and incoming has higher priority", () => {
+  test("replaces explicit intent when explicit source is configured and lower priority", () => {
     const decision = evaluateSkillCascadeSourceDecision({
-      enabledSources: ["compose", "explicit", "dispatch"],
-      sourcePriority: ["compose", "explicit", "dispatch"],
-      incomingSource: "compose",
+      enabledSources: ["dispatch", "explicit"],
+      sourcePriority: ["dispatch", "explicit"],
+      incomingSource: "dispatch",
       existingIntent: buildIntent("explicit", "running"),
     });
     expect(decision.replace).toBe(true);
     expect(decision.reason).toBe("incoming_higher_or_equal_priority");
   });
 
-  test("keeps existing intent when incoming source has lower priority", () => {
+  test("keeps existing dispatch intent when incoming source is disabled", () => {
     const decision = evaluateSkillCascadeSourceDecision({
-      enabledSources: ["compose", "dispatch"],
-      sourcePriority: ["compose", "dispatch"],
+      enabledSources: ["explicit"],
+      sourcePriority: ["explicit", "dispatch"],
       incomingSource: "dispatch",
-      existingIntent: buildIntent("compose", "running"),
-    });
-    expect(decision.replace).toBe(false);
-    expect(decision.reason).toBe("incoming_lower_priority");
-  });
-
-  test("replaces terminal intent regardless of source rank", () => {
-    const decision = evaluateSkillCascadeSourceDecision({
-      enabledSources: ["compose", "dispatch"],
-      sourcePriority: ["compose", "dispatch"],
-      incomingSource: "dispatch",
-      existingIntent: buildIntent("compose", "completed"),
-    });
-    expect(decision.replace).toBe(true);
-    expect(decision.reason).toBe("existing_terminal");
-  });
-
-  test("rejects incoming source when source is disabled", () => {
-    const decision = evaluateSkillCascadeSourceDecision({
-      enabledSources: ["compose"],
-      sourcePriority: ["compose", "dispatch"],
-      incomingSource: "dispatch",
+      existingIntent: buildIntent("dispatch", "running"),
     });
     expect(decision.replace).toBe(false);
     expect(decision.reason).toBe("incoming_source_disabled");
   });
 
-  test("replaces existing non-explicit intent when existing source is disabled", () => {
+  test("replaces terminal intent regardless of source rank", () => {
     const decision = evaluateSkillCascadeSourceDecision({
-      enabledSources: ["compose"],
-      sourcePriority: ["compose", "dispatch"],
-      incomingSource: "compose",
-      existingIntent: buildIntent("dispatch", "running"),
+      enabledSources: ["explicit", "dispatch"],
+      sourcePriority: ["explicit", "dispatch"],
+      incomingSource: "dispatch",
+      existingIntent: buildIntent("explicit", "completed"),
     });
     expect(decision.replace).toBe(true);
-    expect(decision.reason).toBe("existing_source_disabled");
+    expect(decision.reason).toBe("existing_terminal");
   });
 });

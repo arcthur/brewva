@@ -250,7 +250,7 @@ export class SkillCascadeService {
         payload && isRecord(payload.outputs)
           ? (payload.outputs as Record<string, unknown>)
           : (this.getSkillOutputs(event.sessionId, skillName) ?? {});
-      this.onSkillCompleted(event.sessionId, skillName, outputs, event.id);
+      this.onSkillCompleted(event.sessionId, skillName, outputs);
       return;
     }
 
@@ -424,7 +424,6 @@ export class SkillCascadeService {
     sessionId: string,
     skillName: string,
     outputs: Record<string, unknown>,
-    sourceEventId?: string,
   ): void {
     const intent = this.sessionState.skillChainIntentsBySession.get(sessionId);
     if (intent && !this.isTerminal(intent.status)) {
@@ -459,63 +458,6 @@ export class SkillCascadeService {
         }
       }
     }
-
-    if (this.config.mode === "off" || skillName !== "compose") return;
-    const sourceDecision = evaluateSkillCascadeSourceDecision({
-      enabledSources: this.config.enabledSources,
-      sourcePriority: this.config.sourcePriority,
-      existingIntent: intent,
-      incomingSource: "compose",
-    });
-    if (!sourceDecision.replace) {
-      if (intent) {
-        this.emitSourceDecisionKeep(sessionId, intent, sourceDecision, "compose");
-      } else {
-        this.emitSourceDecisionRejected(sessionId, sourceDecision, "compose");
-      }
-      return;
-    }
-    const composeSource = this.chainSourcesBySource.get("compose");
-    const parsed =
-      composeSource?.fromCompose?.({
-        outputs,
-        maxStepsPerRun: this.config.maxStepsPerRun,
-      }) ?? null;
-    if (!parsed || parsed.steps.length === 0) return;
-
-    const composeIntent = this.createIntent({
-      source: parsed.source,
-      sourceEventId,
-      sourceTurn: this.getCurrentTurn(sessionId),
-      steps: parsed.steps,
-      unresolvedConsumes: parsed.unresolvedConsumes,
-      retries: intent?.retries ?? 0,
-    });
-    this.autoActivationBySession.delete(sessionId);
-    this.persistIntent(sessionId, composeIntent);
-    this.emitIntentEvent(SKILL_CASCADE_REPLANNED_EVENT_TYPE, sessionId, composeIntent, {
-      reason: "compose_sequence_promoted",
-      replacedSource: intent?.source ?? null,
-      sourceDecision,
-    });
-
-    if (this.config.mode === "auto") {
-      void this.processCurrentStep(sessionId, composeIntent, {
-        reason: "compose_auto",
-        forceAutoActivation: true,
-      });
-      return;
-    }
-
-    composeIntent.status = "paused";
-    composeIntent.updatedAt = Date.now();
-    composeIntent.lastError = "await_manual_activation";
-    this.persistIntent(sessionId, composeIntent);
-    this.emitIntentEvent(SKILL_CASCADE_PAUSED_EVENT_TYPE, sessionId, composeIntent, {
-      reason: "await_manual_activation",
-      cursor: composeIntent.cursor,
-      nextSkill: composeIntent.steps[composeIntent.cursor]?.skill ?? null,
-    });
   }
 
   private processCurrentStep(
@@ -601,18 +543,6 @@ export class SkillCascadeService {
       }
       return { ok: true, intent: cloneIntent(intent), activatedSkill: step.skill };
     }
-    if (activeSkill && activeSkill !== step.skill) {
-      intent.status = "paused";
-      intent.updatedAt = Date.now();
-      intent.lastError = `active_skill_conflict:${activeSkill}`;
-      this.persistIntent(sessionId, intent);
-      this.emitIntentEvent(SKILL_CASCADE_PAUSED_EVENT_TYPE, sessionId, intent, {
-        reason: "active_skill_conflict",
-        activeSkill,
-        requestedSkill: step.skill,
-      });
-      return { ok: false, reason: "active_skill_conflict", intent: cloneIntent(intent) };
-    }
 
     this.autoActivationBySession.set(sessionId, step.skill);
     const activated = this.activateSkill(sessionId, step.skill);
@@ -678,7 +608,7 @@ export class SkillCascadeService {
     sessionId: string,
     intent: SkillChainIntent,
     sourceDecision: SkillCascadeSourceDecision,
-    trigger: "dispatch" | "compose",
+    trigger: "dispatch",
   ): void {
     this.emitIntentEvent(SKILL_CASCADE_OVERRIDDEN_EVENT_TYPE, sessionId, intent, {
       reason: "source_decision_keep",
@@ -692,7 +622,7 @@ export class SkillCascadeService {
   private emitSourceDecisionRejected(
     sessionId: string,
     sourceDecision: SkillCascadeSourceDecision,
-    trigger: "dispatch" | "compose",
+    trigger: "dispatch",
   ): void {
     this.recordEvent({
       sessionId,
@@ -711,7 +641,7 @@ export class SkillCascadeService {
   }
 
   private createIntent(input: {
-    source: "dispatch" | "compose" | "explicit";
+    source: "dispatch" | "explicit";
     sourceEventId?: string;
     sourceTurn: number;
     steps: SkillChainIntentStep[];

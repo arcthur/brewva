@@ -47,7 +47,7 @@ describe("tool contract policy modes", () => {
     const runtime = createRuntime(workspace, { security: { mode: "standard" } });
     const sessionId = "tool-contract-warn-1";
 
-    expect(runtime.skills.activate(sessionId, "patching").ok).toBe(true);
+    expect(runtime.skills.activate(sessionId, "implementation").ok).toBe(true);
 
     expect(runtime.tools.checkAccess(sessionId, "look_at").allowed).toBe(true);
     expect(runtime.events.query(sessionId, { type: "tool_contract_warning" })).toHaveLength(1);
@@ -66,7 +66,7 @@ describe("tool contract policy modes", () => {
 
     const runtime = createRuntime(workspace, options);
     runtime.context.onTurnStart(sessionId, 1);
-    expect(runtime.skills.activate(sessionId, "patching").ok).toBe(true);
+    expect(runtime.skills.activate(sessionId, "implementation").ok).toBe(true);
     expect(runtime.tools.checkAccess(sessionId, "look_at").allowed).toBe(true);
     expect(runtime.events.query(sessionId, { type: "tool_contract_warning" })).toHaveLength(1);
 
@@ -76,12 +76,34 @@ describe("tool contract policy modes", () => {
     expect(reloaded.events.query(sessionId, { type: "tool_contract_warning" })).toHaveLength(1);
   });
 
+  test("given security mode permissive, when tool is denied by the skill contract, then access is still blocked", () => {
+    const workspace = createWorkspace("tool-contract-permissive-denied");
+    const runtime = createRuntime(workspace, {
+      security: { mode: "permissive" },
+      skillOverrides: {
+        implementation: {
+          tools: {
+            denied: ["grep"],
+          },
+        },
+      },
+    });
+    const sessionId = "tool-contract-permissive-denied-1";
+
+    expect(runtime.skills.activate(sessionId, "implementation").ok).toBe(true);
+
+    const blocked = runtime.tools.checkAccess(sessionId, "grep");
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.reason?.includes("denied by skill")).toBe(true);
+    expect(runtime.events.query(sessionId, { type: "tool_call_blocked" })).toHaveLength(1);
+  });
+
   test("given security mode strict, when disallowed tool is checked, then tool is blocked while lifecycle tools stay allowed", () => {
     const workspace = createWorkspace("tool-contract-enforce");
     const runtime = createRuntime(workspace, { security: { mode: "strict" } });
     const sessionId = "tool-contract-enforce-1";
 
-    expect(runtime.skills.activate(sessionId, "patching").ok).toBe(true);
+    expect(runtime.skills.activate(sessionId, "implementation").ok).toBe(true);
 
     const blocked = runtime.tools.checkAccess(sessionId, "look_at");
     expect(blocked.allowed).toBe(false);
@@ -113,7 +135,7 @@ describe("tool contract policy modes", () => {
     });
     const sessionId = "tool-contract-standard-override-1";
 
-    expect(runtime.skills.activate(sessionId, "patching").ok).toBe(true);
+    expect(runtime.skills.activate(sessionId, "implementation").ok).toBe(true);
     const blocked = runtime.tools.checkAccess(sessionId, "look_at");
     expect(blocked.allowed).toBe(false);
     expect(blocked.reason?.includes("not allowed")).toBe(true);
@@ -125,11 +147,11 @@ describe("skill maxTokens contract modes", () => {
     const workspace = createWorkspace("skill-max-tokens-warn");
     const runtime = createRuntime(workspace, {
       security: { mode: "standard" },
-      skillOverrides: { patching: { budget: { maxToolCalls: 1_000_000, maxTokens: 10 } } },
+      skillOverrides: { implementation: { budget: { maxToolCalls: 1_000_000, maxTokens: 10 } } },
     });
     const sessionId = "skill-max-tokens-warn-1";
 
-    expect(runtime.skills.activate(sessionId, "patching").ok).toBe(true);
+    expect(runtime.skills.activate(sessionId, "implementation").ok).toBe(true);
 
     runtime.cost.recordAssistantUsage({
       sessionId,
@@ -153,11 +175,11 @@ describe("skill maxTokens contract modes", () => {
     const workspace = createWorkspace("skill-max-tokens-enforce");
     const runtime = createRuntime(workspace, {
       security: { mode: "strict" },
-      skillOverrides: { patching: { budget: { maxToolCalls: 1_000_000, maxTokens: 10 } } },
+      skillOverrides: { implementation: { budget: { maxToolCalls: 1_000_000, maxTokens: 10 } } },
     });
     const sessionId = "skill-max-tokens-enforce-1";
 
-    expect(runtime.skills.activate(sessionId, "patching").ok).toBe(true);
+    expect(runtime.skills.activate(sessionId, "implementation").ok).toBe(true);
 
     runtime.cost.recordAssistantUsage({
       sessionId,
@@ -187,11 +209,11 @@ describe("skill maxToolCalls contract modes", () => {
     const workspace = createWorkspace("skill-max-tool-calls-warn");
     const runtime = createRuntime(workspace, {
       security: { mode: "standard" },
-      skillOverrides: { patching: { budget: { maxToolCalls: 1 } } },
+      skillOverrides: { implementation: { budget: { maxToolCalls: 1 } } },
     });
     const sessionId = "skill-max-tool-calls-warn-1";
 
-    expect(runtime.skills.activate(sessionId, "patching").ok).toBe(true);
+    expect(runtime.skills.activate(sessionId, "implementation").ok).toBe(true);
     runtime.tools.markCall(sessionId, "read");
 
     expect(runtime.tools.checkAccess(sessionId, "grep").allowed).toBe(true);
@@ -205,13 +227,13 @@ describe("skill maxToolCalls contract modes", () => {
     const workspace = createWorkspace("skill-max-tool-calls-warn-restart");
     const options = {
       security: { mode: "standard" as const },
-      skillOverrides: { patching: { budget: { maxToolCalls: 1 } } },
+      skillOverrides: { implementation: { budget: { maxToolCalls: 1 } } },
     };
     const sessionId = "skill-max-tool-calls-warn-restart-1";
 
     const runtime = createRuntime(workspace, options);
     runtime.context.onTurnStart(sessionId, 1);
-    expect(runtime.skills.activate(sessionId, "patching").ok).toBe(true);
+    expect(runtime.skills.activate(sessionId, "implementation").ok).toBe(true);
     runtime.tools.markCall(sessionId, "read");
     expect(runtime.tools.checkAccess(sessionId, "grep").allowed).toBe(true);
     expect(runtime.events.query(sessionId, { type: "skill_budget_warning" })).toHaveLength(1);
@@ -226,11 +248,11 @@ describe("skill maxToolCalls contract modes", () => {
     const workspace = createWorkspace("skill-max-tool-calls-enforce");
     const runtime = createRuntime(workspace, {
       security: { mode: "strict" },
-      skillOverrides: { patching: { budget: { maxToolCalls: 1 } } },
+      skillOverrides: { implementation: { budget: { maxToolCalls: 1 } } },
     });
     const sessionId = "skill-max-tool-calls-enforce-1";
 
-    expect(runtime.skills.activate(sessionId, "patching").ok).toBe(true);
+    expect(runtime.skills.activate(sessionId, "implementation").ok).toBe(true);
     runtime.tools.markCall(sessionId, "read");
 
     const blocked = runtime.tools.checkAccess(sessionId, "grep");
@@ -242,11 +264,11 @@ describe("skill maxToolCalls contract modes", () => {
     const workspace = createWorkspace("skill-max-tool-calls-lifecycle");
     const runtime = createRuntime(workspace, {
       security: { mode: "strict" },
-      skillOverrides: { patching: { budget: { maxToolCalls: 1 } } },
+      skillOverrides: { implementation: { budget: { maxToolCalls: 1 } } },
     });
     const sessionId = "skill-max-tool-calls-lifecycle-1";
 
-    expect(runtime.skills.activate(sessionId, "patching").ok).toBe(true);
+    expect(runtime.skills.activate(sessionId, "implementation").ok).toBe(true);
     runtime.tools.markCall(sessionId, "read");
 
     expect(runtime.tools.checkAccess(sessionId, "skill_complete").allowed).toBe(true);
@@ -259,11 +281,11 @@ describe("skill maxParallel contract modes", () => {
     const workspace = createWorkspace("skill-max-parallel-warn");
     const runtime = createRuntime(workspace, {
       security: { mode: "standard" },
-      skillOverrides: { patching: { maxParallel: 1 } },
+      skillOverrides: { implementation: { maxParallel: 1 } },
     });
     const sessionId = "skill-max-parallel-warn-1";
 
-    expect(runtime.skills.activate(sessionId, "patching").ok).toBe(true);
+    expect(runtime.skills.activate(sessionId, "implementation").ok).toBe(true);
 
     expect(runtime.tools.acquireParallelSlot(sessionId, "run-1").accepted).toBe(true);
     expect(runtime.tools.acquireParallelSlot(sessionId, "run-2").accepted).toBe(true);
@@ -274,11 +296,11 @@ describe("skill maxParallel contract modes", () => {
     const workspace = createWorkspace("skill-max-parallel-enforce");
     const runtime = createRuntime(workspace, {
       security: { mode: "strict" },
-      skillOverrides: { patching: { maxParallel: 1 } },
+      skillOverrides: { implementation: { maxParallel: 1 } },
     });
     const sessionId = "skill-max-parallel-enforce-1";
 
-    expect(runtime.skills.activate(sessionId, "patching").ok).toBe(true);
+    expect(runtime.skills.activate(sessionId, "implementation").ok).toBe(true);
 
     expect(runtime.tools.acquireParallelSlot(sessionId, "run-1").accepted).toBe(true);
     const rejected = runtime.tools.acquireParallelSlot(sessionId, "run-2");

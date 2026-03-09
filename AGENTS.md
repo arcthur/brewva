@@ -33,7 +33,7 @@ brewva/
 ├── distribution/                  # launcher + per-platform binary packages
 ├── script/                        # build-binaries.ts, verify-dist.ts, schema generator
 ├── docs/                          # index / guide / architecture / journeys / reference / troubleshooting / research
-├── skills/                        # base / packs / project skills
+├── skills/                        # core / domain / operator / meta / internal + project shared/overlays
 └── test/                          # runtime / cli / extensions / gateway / docs coverage
 ```
 
@@ -160,6 +160,7 @@ brewva/
 | Turn WAL durability/recovery   | `packages/brewva-runtime/src/channels/turn-wal*.ts`                    | append/recover/compact turn WAL rows            |
 | Tool registry                  | `packages/brewva-tools/src/index.ts`                                   | assembled tool surface                          |
 | Extension composition          | `packages/brewva-extensions/src/index.ts`                              | runtime hook wiring and bridge helpers          |
+| Debug-loop controller          | `packages/brewva-extensions/src/debug-loop.ts`                         | extension-side retry + handoff orchestration    |
 | Telegram ingress               | `packages/brewva-ingress/src/index.ts`                                 | webhook ingress worker/server bootstrap         |
 | CLI command surface            | `packages/brewva-cli/src/index.ts`                                     | mode routing, args, entrypoint behavior         |
 | CLI session bootstrap          | `packages/brewva-cli/src/session.ts`                                   | runtime/session creation and options            |

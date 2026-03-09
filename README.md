@@ -62,17 +62,24 @@ Primary package surfaces:
 
 - `@brewva/brewva-runtime`: governance runtime contracts, tape replay, verification, working projection, cost.
 - `@brewva/brewva-tools`: runtime-aware tools (ledger/task/tape/skill/cost/governance flows).
-- `@brewva/brewva-extensions`: lifecycle hook wiring and runtime integration guards.
+- `@brewva/brewva-extensions`: lifecycle hook wiring, runtime integration guards, deterministic handoff, and extension-side debug loops.
 - `@brewva/brewva-cli`: user entrypoint and session bootstrap (`interactive` / `--print` / `--json` / replay/undo).
 - `@brewva/brewva-gateway`: local control-plane daemon and worker supervision.
 - `@brewva/brewva-channels-telegram`: Telegram channel adapter and transport.
 - `@brewva/brewva-ingress`: webhook worker/server ingress for Telegram edge delivery.
 
-Skill tiers (higher tiers can tighten but never relax lower-tier contracts):
+Skills v2 taxonomy:
 
-- Base (`skills/base/`): `brainstorming`, `cartography`, `compose`, `debugging`, `execution`, `exploration`, `finishing`, `git`, `patching`, `planning`, `recovery`, `review`, `tdd`, `verification`
-- Pack (`skills/packs/`): `agent-browser`, `frontend-design`, `goal-loop`, `gh-issues`, `github`, `skill-creator`, `telegram-channel-behavior`, `telegram-interactive-components`, `zca-structured-output`
-- Project (`skills/project/`): `brewva-project`, `brewva-self-improve`, `brewva-session-logs`
+- Core capability skills (`skills/core/`): `repository-analysis`, `design`, `implementation`, `debugging`, `review`
+- Domain capability skills (`skills/domain/`): `agent-browser`, `frontend-design`, `github`, `telegram`, `structured-extraction`
+- Continuity-gated domain skill: `goal-loop`
+- Operator skills (`skills/operator/`): `runtime-forensics`, `git-ops`
+- Meta skills (`skills/meta/`): `skill-authoring`, `self-improve`
+- Project context (`skills/project/`):
+  - shared context: `critical-rules`, `migration-priority-matrix`, `package-boundaries`, `runtime-artifacts`
+  - overlays: `repository-analysis`, `design`, `implementation`, `debugging`, `review`, `runtime-forensics`
+
+Lifecycle choreography such as verification, finishing, recovery, and compose-style planning is now runtime/control-plane behavior, not public routable skill surface.
 
 ## Quick Start
 
@@ -114,9 +121,20 @@ For complete CLI modes and gateway/onboard operations:
   missing credentials, or parse failures mark broker routing as failed instead
   of silently falling back to heuristic scoring. This model-assisted judgment
   happens in the optional control plane, not inside the runtime kernel.
+- Standard routing profile defaults to `skills.routing.profile=standard` with
+  `skills.routing.scopes=["core","domain"]`, so operator/meta skills are
+  loaded but hidden from normal auto routing.
+- Continuity-required skills such as `goal-loop` are filtered out unless the
+  prompt or session context explicitly implies multi-run continuity.
+- Cascade source defaults are now `["explicit", "dispatch"]`; compose-originated
+  chain plans are no longer a public runtime source.
 - Cascade missing consumes is deterministic pause (`reason=missing_consumes`);
   runtime no longer auto-replans dependency chains.
-- `compose` is planning-only and now has a higher read budget (`max_tool_calls: 120`).
+- Verification failures can now arm an extension-side debug loop that persists
+  `debug-loop.json`, `failure-case.json`, and `handoff.json` under
+  `.orchestrator/artifacts/` while reusing explicit cascade for retry.
+  `retryCount` tracks scheduled retries after the first failed implementation
+  verification, and `handoff.json` is the latest-wins session handoff snapshot.
 
 ## Development
 

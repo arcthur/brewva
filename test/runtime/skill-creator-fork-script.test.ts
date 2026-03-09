@@ -41,18 +41,18 @@ function assertSuccess(result: ReturnType<typeof spawnSync>): void {
   }
 }
 
-describe("skill-creator fork script", () => {
+describe("skill-authoring fork script", () => {
   const repoRoot = resolve(import.meta.dir, "../..");
-  const scriptPath = join(repoRoot, "skills/packs/skill-creator/scripts/fork_skill.py");
+  const scriptPath = join(repoRoot, "skills/meta/skill-authoring/scripts/fork_skill.py");
 
-  test("forks global base skill into project .brewva and becomes effective", () => {
+  test("forks a global v2 skill into a project overlay and becomes effective", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-fork-project-"));
     const xdgRoot = mkdtempSync(join(tmpdir(), "brewva-skill-fork-xdg-"));
     const previousXdg = process.env.XDG_CONFIG_HOME;
 
     try {
       mkdirSync(join(workspace, ".brewva"), { recursive: true });
-      writeSkill(join(xdgRoot, "brewva/skills/base/chaincraft/SKILL.md"), {
+      writeSkill(join(xdgRoot, "brewva/skills/domain/chaincraft/SKILL.md"), {
         name: "chaincraft",
         description: "global chaincraft",
       });
@@ -68,15 +68,17 @@ describe("skill-creator fork script", () => {
       });
       assertSuccess(result);
 
-      const destination = join(workspace, ".brewva/skills/base/chaincraft/SKILL.md");
+      const destination = join(workspace, ".brewva/skills/project/overlays/chaincraft/SKILL.md");
       expect(existsSync(destination)).toBe(true);
       const forked = readFileSync(destination, "utf8");
       expect(forked.includes("source_name: chaincraft")).toBe(true);
-      expect(forked.includes("tool: skill-creator/scripts/fork_skill.py")).toBe(true);
+      expect(forked.includes("tool: skill-authoring/scripts/fork_skill.py")).toBe(true);
+      expect(forked.includes("source_category: domain")).toBe(true);
+      expect(forked.includes("routing:")).toBe(false);
 
       process.env.XDG_CONFIG_HOME = xdgRoot;
       const runtime = new BrewvaRuntime({ cwd: workspace });
-      expect(runtime.skills.get("chaincraft")?.filePath).toBe(resolve(destination));
+      expect(runtime.skills.get("chaincraft")?.overlayFiles).toContain(resolve(destination));
     } finally {
       if (previousXdg === undefined) {
         delete process.env.XDG_CONFIG_HOME;
@@ -94,7 +96,7 @@ describe("skill-creator fork script", () => {
 
     try {
       mkdirSync(join(workspace, ".brewva"), { recursive: true });
-      writeSkill(join(xdgRoot, "brewva/skills/base/forcecraft/SKILL.md"), {
+      writeSkill(join(xdgRoot, "brewva/skills/domain/forcecraft/SKILL.md"), {
         name: "forcecraft",
         description: "global forcecraft",
       });
@@ -140,7 +142,7 @@ describe("skill-creator fork script", () => {
 
     try {
       mkdirSync(join(workspace, ".brewva"), { recursive: true });
-      writeSkill(join(xdgRoot, "brewva/skills/base/inactivecraft/SKILL.md"), {
+      writeSkill(join(xdgRoot, "brewva/skills/domain/inactivecraft/SKILL.md"), {
         name: "inactivecraft",
         description: "global inactivecraft",
       });
@@ -158,7 +160,10 @@ describe("skill-creator fork script", () => {
       });
       expect(inactive.status).toBe(2);
 
-      const destination = join(workspace, "vendor-skills/skills/base/inactivecraft/SKILL.md");
+      const destination = join(
+        workspace,
+        "vendor-skills/skills/project/overlays/inactivecraft/SKILL.md",
+      );
       expect(existsSync(destination)).toBe(true);
 
       const allowed = runForkSkill({
@@ -180,7 +185,7 @@ describe("skill-creator fork script", () => {
 
     try {
       mkdirSync(join(workspace, ".brewva"), { recursive: true });
-      writeSkill(join(xdgRoot, "brewva/skills/base/disabledcraft/SKILL.md"), {
+      writeSkill(join(xdgRoot, "brewva/skills/domain/disabledcraft/SKILL.md"), {
         name: "disabledcraft",
         description: "global disabledcraft",
       });
@@ -215,7 +220,7 @@ describe("skill-creator fork script", () => {
         env,
       });
       assertSuccess(allowed);
-      expect(allowed.stdout.includes("currently inactive at runtime")).toBe(true);
+      expect(allowed.stdout.includes("skills.disabled")).toBe(true);
     } finally {
       rmSync(workspace, { recursive: true, force: true });
       rmSync(xdgRoot, { recursive: true, force: true });

@@ -117,6 +117,45 @@ export interface VerifyCompletionOptions {
   timeoutMs?: number;
 }
 
+const DEFAULT_CONTINUITY_PHRASES: readonly string[] = [
+  "keep working on",
+  "resume",
+  "follow up",
+  "follow-up",
+  "pick this back up",
+  "over the next",
+  "check back",
+  "next few days",
+  "next few weeks",
+  "next session",
+  "next few sessions",
+  "multi run",
+  "multi-run",
+  "ongoing",
+  "iterative delivery",
+  "across runs",
+  "over multiple runs",
+];
+
+const DEFAULT_CONTINUITY_CONTINUE_PATTERN =
+  /\bcontinue\b[\s\S]{0,48}\b(?:tomorrow|later|again|next|session|sessions|run|runs|day|days|week|weeks|month|months|over time)\b/;
+
+function hasExplicitContinuityCue(
+  text: string,
+  phrases?: string[],
+  continuePattern?: string,
+): boolean {
+  const normalized = text.toLowerCase();
+  const effectivePhrases = phrases ?? DEFAULT_CONTINUITY_PHRASES;
+  const effectivePattern = continuePattern
+    ? new RegExp(continuePattern, "i")
+    : DEFAULT_CONTINUITY_CONTINUE_PATTERN;
+  return (
+    effectivePhrases.some((phrase) => normalized.includes(phrase)) ||
+    effectivePattern.test(normalized)
+  );
+}
+
 type RuntimeConfigState = {
   config: BrewvaConfig;
 };
@@ -190,9 +229,6 @@ export class BrewvaRuntime {
       sessionId: string,
       outputs: Record<string, unknown>,
     ): { ok: boolean; missing: string[] };
-    validateComposePlan(plan: {
-      steps: Array<{ skill: string; consumes?: string[]; produces?: string[] }>;
-    }): { valid: boolean; warnings: string[]; errors: string[] };
     complete(
       sessionId: string,
       output: Record<string, unknown>,
@@ -921,7 +957,6 @@ export class BrewvaRuntime {
         getActive: (sessionId) => this.skillLifecycleService.getActiveSkill(sessionId),
         validateOutputs: (sessionId, outputs) =>
           this.skillLifecycleService.validateSkillOutputs(sessionId, outputs),
-        validateComposePlan: (plan) => this.skillLifecycleService.validateComposePlan(plan),
         complete: (sessionId, output) =>
           this.skillLifecycleService.completeSkill(sessionId, output),
         getOutputs: (sessionId, skillName) =>
@@ -1237,6 +1272,7 @@ export class BrewvaRuntime {
       activeSkillName: this.skillLifecycleService.getActiveSkill(sessionId)?.name ?? null,
       availableOutputs: this.skillLifecycleService.listProducedOutputKeys(sessionId),
       preselection: this.consumeNextSkillSelections(sessionId),
+      continuityAllowed: this.isContinuityDispatchAllowed(sessionId, message),
     });
     const selected = this.normalizeSkillSelections(routing.selected);
     const routingOutcome =
@@ -1249,6 +1285,30 @@ export class BrewvaRuntime {
       routingOutcome,
       trace,
     };
+  }
+
+  private isContinuityDispatchAllowed(sessionId: string, promptText: string): boolean {
+    const { continuityPhrases, continuityContinuePattern } = this.config.skills.routing;
+    if (hasExplicitContinuityCue(promptText, continuityPhrases, continuityContinuePattern)) {
+      return true;
+    }
+
+    const activeSkill = this.skillLifecycleService.getActiveSkill(sessionId);
+    if (activeSkill?.contract.routing?.continuityRequired === true) {
+      return true;
+    }
+
+    const taskState = this.getTaskState(sessionId);
+    const expectedBehavior = taskState.spec?.expectedBehavior?.toLowerCase() ?? "";
+    if (
+      expectedBehavior.includes("multi-run") ||
+      expectedBehavior.includes("ongoing") ||
+      hasExplicitContinuityCue(expectedBehavior, continuityPhrases, continuityContinuePattern)
+    ) {
+      return true;
+    }
+
+    return false;
   }
 
   private prepareSkillDispatch(input: {

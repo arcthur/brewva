@@ -2,7 +2,6 @@ import { join, resolve } from "node:path";
 import { createBrewvaExtension, createRuntimeCoreBridgeExtension } from "@brewva/brewva-extensions";
 import {
   BrewvaRuntime,
-  emitSkippedPackFilterWarning,
   resolveBrewvaAgentDir,
   type CreateBrewvaSessionOptions as RuntimeCreateBrewvaSessionOptions,
   recordAssistantUsageFromMessage,
@@ -131,17 +130,16 @@ export async function createGatewaySession(
       agentId: options.agentId,
     });
 
-  if (options.activePacks && options.activePacks.length > 0) {
-    const mergedActivePacks = [
-      ...new Set([...runtime.config.skills.packs, ...options.activePacks]),
-    ];
-    runtime.config.skills.packs = mergedActivePacks;
+  if (options.routingProfile) {
+    runtime.config.skills.routing.profile = options.routingProfile;
+  }
+  if (options.routingScopes && options.routingScopes.length > 0) {
+    runtime.config.skills.routing.scopes = [...new Set(options.routingScopes)];
+  }
+  if (options.routingProfile || (options.routingScopes && options.routingScopes.length > 0)) {
     runtime.skills.refresh();
   }
   const skillLoadReport = runtime.skills.getLoadReport();
-  emitSkippedPackFilterWarning(skillLoadReport, {
-    log: (message) => console.error(message),
-  });
 
   const settingsManager = SettingsManager.create(cwd, agentDir);
   applyRuntimeUiSettings(settingsManager, runtime.config.ui);
@@ -198,8 +196,11 @@ export async function createGatewaySession(
         judgeMode: runtime.config.skills.selector.brokerJudgeMode,
       },
       skillLoad: {
-        activePacks: skillLoadReport.activePacks,
-        skippedPacks: skillLoadReport.skippedPacks,
+        routingProfile: skillLoadReport.routingProfile,
+        routingScopes: skillLoadReport.routingScopes,
+        routableSkills: skillLoadReport.routableSkills,
+        hiddenSkills: skillLoadReport.hiddenSkills,
+        overlaySkills: skillLoadReport.overlaySkills,
       },
     },
   });

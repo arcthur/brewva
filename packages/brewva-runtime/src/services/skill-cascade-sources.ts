@@ -2,15 +2,10 @@ import type { SkillRegistry } from "../skills/registry.js";
 import type {
   SkillCascadeChainCandidate,
   SkillCascadeChainSource,
-  SkillCascadeComposeSourceInput,
   SkillCascadeDispatchSourceInput,
   SkillCascadeExplicitSourceInput,
   SkillChainIntentStep,
 } from "../types.js";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function normalizeStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -89,69 +84,6 @@ export class DispatchSkillCascadeChainSource implements SkillCascadeChainSource 
   }
 }
 
-export class ComposeSkillCascadeChainSource implements SkillCascadeChainSource {
-  readonly source = "compose" as const;
-  private readonly skills: SkillRegistry;
-
-  constructor(skills: SkillRegistry) {
-    this.skills = skills;
-  }
-
-  fromCompose(input: SkillCascadeComposeSourceInput): SkillCascadeChainCandidate | null {
-    const sequence = input.outputs.skill_sequence;
-    if (!Array.isArray(sequence) || sequence.length === 0) {
-      return null;
-    }
-    const steps: SkillChainIntentStep[] = [];
-    const unresolved: string[] = [];
-    for (let index = 0; index < sequence.length; index += 1) {
-      if (steps.length >= input.maxStepsPerRun) {
-        unresolved.push("max_steps_per_run");
-        break;
-      }
-      const entry = sequence[index];
-      if (!isRecord(entry)) continue;
-      const skillName =
-        typeof entry.skill === "string" && entry.skill.trim().length > 0 ? entry.skill.trim() : "";
-      if (!skillName || skillName === "compose") continue;
-      const skill = this.skills.get(skillName);
-      if (!skill) {
-        unresolved.push(`missing_skill:${skillName}`);
-        continue;
-      }
-      const consumes = normalizeStringArray(entry.consumes ?? entry.inputs)
-        .map((item) => normalizeConsumeRef(item))
-        .filter((item) => item.length > 0);
-      const produces = normalizeStringArray(
-        entry.expected_outputs ?? entry.produces ?? entry.outputs,
-      )
-        .map((item) => normalizeConsumeRef(item))
-        .filter((item) => item.length > 0);
-      const lane =
-        typeof entry.lane === "string" && entry.lane.trim().length > 0
-          ? entry.lane.trim()
-          : undefined;
-      const stepId =
-        typeof entry.id === "string" && entry.id.trim().length > 0
-          ? entry.id.trim()
-          : `compose-${index + 1}:${skillName}`;
-      steps.push({
-        id: stepId,
-        skill: skillName,
-        consumes: consumes.length > 0 ? consumes : [...(skill.contract.requires ?? [])],
-        produces: produces.length > 0 ? produces : [...(skill.contract.outputs ?? [])],
-        lane,
-      });
-    }
-    if (steps.length === 0) return null;
-    return {
-      source: this.source,
-      steps,
-      unresolvedConsumes: unresolved,
-    };
-  }
-}
-
 export class ExplicitSkillCascadeChainSource implements SkillCascadeChainSource {
   readonly source = "explicit" as const;
 
@@ -189,9 +121,5 @@ export class ExplicitSkillCascadeChainSource implements SkillCascadeChainSource 
 export function createDefaultSkillCascadeChainSources(
   skills: SkillRegistry,
 ): SkillCascadeChainSource[] {
-  return [
-    new DispatchSkillCascadeChainSource(skills),
-    new ComposeSkillCascadeChainSource(skills),
-    new ExplicitSkillCascadeChainSource(),
-  ];
+  return [new DispatchSkillCascadeChainSource(skills), new ExplicitSkillCascadeChainSource()];
 }

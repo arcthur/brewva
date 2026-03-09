@@ -35,7 +35,7 @@ function fakeContext(sessionId: string): any {
   };
 }
 
-describe("S-008 patching e2e loop", () => {
+describe("S-008 implementation e2e loop", () => {
   test("skill_load -> edit -> verify -> skill_complete", async () => {
     const runtime = new BrewvaRuntime({ cwd: process.cwd() });
     const sessionId = "s8";
@@ -48,13 +48,13 @@ describe("S-008 patching e2e loop", () => {
 
     const loaded = await loadTool.execute(
       "tc-1",
-      { name: "patching" },
+      { name: "implementation" },
       undefined,
       undefined,
       fakeContext(sessionId),
     );
     const loadedText = extractTextContent(loaded);
-    expect(loadedText.includes("Skill Loaded: patching")).toBe(true);
+    expect(loadedText.includes("Skill Loaded: implementation")).toBe(true);
 
     runtime.tools.markCall(sessionId, "edit");
     runtime.tools.recordResult({
@@ -76,9 +76,9 @@ describe("S-008 patching e2e loop", () => {
       "tc-2",
       {
         outputs: {
-          change_summary: "updated one line",
+          change_set: "updated one line",
           files_changed: ["src/example.ts"],
-          verification: "pass",
+          verification_evidence: "PASS 3 tests; no diagnostics found",
         },
       },
       undefined,
@@ -103,7 +103,7 @@ describe("S-008 patching e2e loop", () => {
 
     await loadTool.execute(
       "tc-1",
-      { name: "patching" },
+      { name: "implementation" },
       undefined,
       undefined,
       fakeContext(sessionId),
@@ -114,9 +114,9 @@ describe("S-008 patching e2e loop", () => {
       "tc-2",
       {
         outputs: {
-          change_summary: "updated one line",
+          change_set: "updated one line",
           files_changed: ["src/example.ts"],
-          verification: "pass",
+          verification_evidence: "pending verification",
         },
       },
       undefined,
@@ -127,7 +127,7 @@ describe("S-008 patching e2e loop", () => {
     const completedText = extractTextContent(completed);
     expect(completedText.includes("Verification gate blocked")).toBe(true);
     expect((completed.details as { verdict?: string } | undefined)?.verdict).toBe("inconclusive");
-    expect(runtime.skills.getActive(sessionId)?.name).toBe("patching");
+    expect(runtime.skills.getActive(sessionId)?.name).toBe("implementation");
   });
 });
 
@@ -469,7 +469,7 @@ describe("S-015 skill chain control tool flow", () => {
       "tc-s15-start",
       {
         action: "start",
-        steps: [{ skill: "exploration", consumes: [], produces: ["architecture_map"] }],
+        steps: [{ skill: "repository-analysis", consumes: [], produces: ["repository_snapshot"] }],
       },
       undefined,
       undefined,

@@ -33,7 +33,7 @@ function writeCatalog(
         generatedAt: "2026-03-06T00:00:00.000Z",
         skills: input.skills.map((entry) => ({
           name: entry.name,
-          tier: "pack",
+          category: "domain",
           description: entry.description,
           outputs: entry.outputs ?? [],
           toolsRequired: entry.toolsRequired ?? ["read"],
@@ -43,6 +43,8 @@ function writeCatalog(
           consumes: entry.consumes ?? [],
           requires: entry.requires ?? [],
           effectLevel: "read_only",
+          routingScope: "domain",
+          continuityRequired: false,
           dispatch: {
             gateThreshold: 10,
             autoThreshold: 16,

@@ -1,0 +1,82 @@
+---
+name: review
+description: Assess change risk, plan conformance, and merge safety with findings-first output and explicit residual risk.
+stability: stable
+effect_level: read_only
+dispatch:
+  gate_threshold: 10
+  auto_threshold: 18
+  default_mode: suggest
+tools:
+  required: [read, grep]
+  optional:
+    [
+      lsp_diagnostics,
+      lsp_symbols,
+      lsp_find_references,
+      ast_grep_search,
+      ledger_query,
+      skill_complete,
+    ]
+  denied: [write, edit, exec, process]
+budget:
+  max_tool_calls: 80
+  max_tokens: 160000
+references:
+  - references/boundary-failure.md
+  - references/contract-drift.md
+  - references/security-concurrency.md
+outputs: [review_report, review_findings, merge_decision]
+consumes: [change_set, design_spec, verification_evidence, impact_map]
+requires: []
+---
+
+# Review Skill
+
+## Intent
+
+Judge risk, not style. Surface the highest-value findings first and make merge safety explicit.
+
+## Trigger
+
+Use this skill when:
+
+- reviewing a diff or change plan
+- checking merge readiness
+- assessing regression, compatibility, or operational risk
+
+## Workflow
+
+### Step 1: Build review context
+
+Summarize scope, intent, critical paths, and available evidence.
+
+### Step 2: Evaluate risk lanes
+
+Inspect correctness, compatibility, data mutation, external exposure, and operational failure modes.
+
+### Step 3: Emit findings-first output
+
+Produce:
+
+- `review_findings`: ordered issues with evidence
+- `review_report`: scope, assumptions, gaps, residual risk
+- `merge_decision`: `ready`, `needs_changes`, or `blocked`
+
+## Stop Conditions
+
+- there is no concrete review target
+- verification evidence is too weak to support a merge decision
+- the real work is debugging or repository analysis, not review
+
+## Anti-Patterns
+
+- leading with summaries before findings
+- focusing on style while skipping behavior risk
+- claiming merge safety without evidence or assumptions
+
+## Example
+
+Input: "Review the skills v2 runtime refactor for regressions and missing tests."
+
+Output: `review_findings`, `review_report`, `merge_decision`.

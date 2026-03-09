@@ -167,7 +167,7 @@ Other Telegram flags are optional and mapped into channel-scoped config:
 `channelConfig.telegram.pollLimit`,
 `channelConfig.telegram.pollRetryMs`.
 Telegram channel skill policy does not currently have dedicated CLI flags; it is read from
-built-in defaults (`telegram-channel-behavior` and `telegram-interactive-components`).
+built-in default skill `telegram`.
 
 Webhook ingress can be enabled via environment variables (no additional CLI flags):
 

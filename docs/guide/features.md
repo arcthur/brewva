@@ -7,6 +7,7 @@
 - Evidence ledger and digest injection
 - Task/truth state management with event-sourced replay
 - Verification gates (`quick`, `standard`, `strict`)
+- Extension-side automatic debug loop with deterministic failure snapshots and handoff packets
 - Context budget tracking and compaction events
 - Event-first runtime persistence and replay
 - Cost observability and threshold-based budget alerts
@@ -52,12 +53,25 @@ Tool registry source: `packages/brewva-tools/src/index.ts`
 
 ## Skill Surface
 
-- Base: `brainstorming`, `cartography`, `compose`, `debugging`, `execution`, `exploration`, `finishing`, `git`, `patching`, `planning`, `recovery`, `review`, `tdd`, `verification`
-- Packs: `agent-browser`, `frontend-design`, `goal-loop`, `gh-issues`, `github`, `skill-creator`, `telegram-channel-behavior`, `telegram-interactive-components`, `zca-structured-output`
-- Project: `brewva-project`, `brewva-self-improve`, `brewva-session-logs`
+- Core capability skills: `repository-analysis`, `design`, `implementation`, `debugging`, `review`
+- Domain capability skills: `agent-browser`, `frontend-design`, `github`, `telegram`, `structured-extraction`, `goal-loop`
+- Operator skills: `runtime-forensics`, `git-ops`
+- Meta skills: `skill-authoring`, `self-improve`
+- Project overlays: `repository-analysis`, `design`, `implementation`, `debugging`, `review`, `runtime-forensics`
+- Shared project context: `critical-rules`, `migration-priority-matrix`, `package-boundaries`, `runtime-artifacts`
+
+Runtime-owned phases, not public skills:
+
+- verification
+- finishing
+- recovery
+- compose-style chain planning
 
 Skill roots:
 
-- `skills/base`
-- `skills/packs`
-- `skills/project`
+- `skills/core`
+- `skills/domain`
+- `skills/operator`
+- `skills/meta`
+- `skills/project/shared`
+- `skills/project/overlays`

@@ -769,13 +769,13 @@ describe("Extension integration: observability", () => {
 
   test("given blocked tool_call, when handlers run with stopOnBlock, then tool_call is recorded and tool_call_marked is omitted", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-blocked-"));
-    mkdirSync(join(workspace, "skills/base/patching"), { recursive: true });
+    mkdirSync(join(workspace, ".brewva/skills/core/blocktool"), { recursive: true });
     writeFileSync(
-      join(workspace, "skills/base/patching/SKILL.md"),
+      join(workspace, ".brewva/skills/core/blocktool/SKILL.md"),
       `---
-name: patching
-description: patching skill
-tags: [patching]
+name: blocktool
+description: blocktool skill
+tags: [blocktool]
 tools:
   required: [read]
   optional: [edit]
@@ -785,14 +785,15 @@ budget:
   max_tokens: 10000
 outputs: []
 consumes: []
+requires: []
 ---
-patching`,
+blocktool`,
       "utf8",
     );
 
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "ext-blocked-1";
-    expect(runtime.skills.activate(sessionId, "patching").ok).toBe(true);
+    expect(runtime.skills.activate(sessionId, "blocktool").ok).toBe(true);
 
     const { api, handlers } = createMockExtensionAPI();
     registerEventStream(api, runtime);
@@ -828,9 +829,9 @@ patching`,
 
   test("given max_tool_calls exceeded, when normal and lifecycle tools are invoked, then normal tool is blocked and skill_complete is allowed", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-max-tool-calls-"));
-    mkdirSync(join(workspace, ".brewva/skills/base/maxcalls"), { recursive: true });
+    mkdirSync(join(workspace, ".brewva/skills/core/maxcalls"), { recursive: true });
     writeFileSync(
-      join(workspace, ".brewva/skills/base/maxcalls/SKILL.md"),
+      join(workspace, ".brewva/skills/core/maxcalls/SKILL.md"),
       `---
 name: maxcalls
 description: maxcalls skill
@@ -844,6 +845,7 @@ budget:
   max_tokens: 10000
 outputs: []
 consumes: []
+requires: []
 ---
 maxcalls`,
       "utf8",

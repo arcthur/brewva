@@ -59,6 +59,7 @@ interface RouteSkillsInput {
   activeSkillName?: string | null;
   availableOutputs?: Iterable<string>;
   preselection?: SkillPreselection;
+  continuityAllowed?: boolean;
 }
 
 interface ScoreTermsInput {
@@ -222,7 +223,7 @@ function stableIndexHash(index: SkillsIndexEntry[]): string {
     JSON.stringify(
       index.map((entry) => ({
         name: entry.name,
-        tier: entry.tier,
+        category: entry.category,
         description: entry.description,
         outputs: entry.outputs,
         toolsRequired: entry.toolsRequired,
@@ -230,9 +231,18 @@ function stableIndexHash(index: SkillsIndexEntry[]): string {
         requires: entry.requires,
         effectLevel: entry.effectLevel,
         dispatch: entry.dispatch,
+        routingScope: entry.routingScope,
+        continuityRequired: entry.continuityRequired,
       })),
     ),
   );
+}
+
+function isEligibleForRoute(entry: SkillsIndexEntry, continuityAllowed: boolean): boolean {
+  if (entry.continuityRequired && !continuityAllowed) {
+    return false;
+  }
+  return true;
 }
 
 export class SkillRouterService {
@@ -245,12 +255,19 @@ export class SkillRouterService {
     const configHash = stableConfigHash(this.config);
     const activeSkillName = input.activeSkillName?.trim() || null;
     const availableOutputs = [...(input.availableOutputs ?? [])];
+    const continuityAllowed = input.continuityAllowed === true;
+    const eligibleIndex = input.index.filter((entry) =>
+      isEligibleForRoute(entry, continuityAllowed),
+    );
 
     try {
       if (input.preselection) {
+        const allowedPreselection = input.preselection.selected.filter((selection) =>
+          eligibleIndex.some((entry) => entry.name === selection.name),
+        );
         const routingOutcome =
           input.preselection.routingOutcome ??
-          (input.preselection.selected.length > 0 ? "selected" : "empty");
+          (allowedPreselection.length > 0 ? "selected" : "empty");
         const trace = this.buildTrace({
           selectorMode: this.config.mode,
           source: "external_preselection",
@@ -262,15 +279,15 @@ export class SkillRouterService {
           selectionReason:
             routingOutcome === "failed"
               ? "external_preselection_failed"
-              : input.preselection.selected.length > 0
+              : allowedPreselection.length > 0
                 ? "external_preselection_selected"
                 : "external_preselection_empty",
-          selected: input.preselection.selected,
+          selected: allowedPreselection,
           activeSkillName,
           availableOutputs,
         });
         return {
-          selected: input.preselection.selected,
+          selected: allowedPreselection,
           routingOutcome,
           trace,
         };
@@ -299,7 +316,7 @@ export class SkillRouterService {
 
       const promptTokens = new Set(extractTokens(input.promptText));
       const candidates: SkillSelection[] = [];
-      for (const entry of input.index) {
+      for (const entry of eligibleIndex) {
         if (activeSkillName && entry.name === activeSkillName) {
           continue;
         }
