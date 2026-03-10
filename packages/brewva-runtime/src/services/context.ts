@@ -440,6 +440,7 @@ export class ContextService {
         compressionRatio: entry.compressionRatio,
         artifactRef: entry.artifactRef ? this.sanitizeInput(entry.artifactRef) : null,
         isError: entry.isError,
+        verdict: entry.verdict,
         turn: entry.turn,
         timestamp: entry.timestamp,
       }))

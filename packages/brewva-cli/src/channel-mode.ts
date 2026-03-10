@@ -2,7 +2,10 @@ import type { Server } from "node:http";
 import { TelegramWebhookTransport } from "@brewva/brewva-channels-telegram";
 import {
   createRuntimeTelegramChannelBridge,
+  resolveToolDisplayStatus,
   resolveToolDisplayText,
+  resolveToolDisplayVerdict,
+  type ToolDisplayVerdict,
 } from "@brewva/brewva-extensions";
 import { createTelegramIngressServer, type TelegramIngressAuth } from "@brewva/brewva-ingress";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
@@ -97,6 +100,7 @@ interface ToolTurnOutput {
   toolCallId: string;
   toolName: string;
   isError: boolean;
+  verdict: ToolDisplayVerdict;
   text: string;
 }
 
@@ -579,7 +583,14 @@ function formatToolTurnOutput(input: {
   isError: boolean;
   result: unknown;
 }): ToolTurnOutput {
-  const status = input.isError ? "failed" : "completed";
+  const verdict = resolveToolDisplayVerdict({
+    isError: input.isError,
+    result: input.result,
+  });
+  const status = resolveToolDisplayStatus({
+    isError: input.isError,
+    result: input.result,
+  });
   const detail = clampText(
     resolveToolDisplayText({
       toolName: input.toolName,
@@ -595,6 +606,7 @@ function formatToolTurnOutput(input: {
     toolCallId: input.toolCallId,
     toolName: input.toolName,
     isError: input.isError,
+    verdict,
     text,
   };
 }
@@ -1285,6 +1297,7 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
           toolCallId: toolOutput.toolCallId,
           toolName: toolOutput.toolName,
           toolError: toolOutput.isError,
+          toolVerdict: toolOutput.verdict,
           agentId: state.agentId,
         },
       });

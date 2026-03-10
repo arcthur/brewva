@@ -160,6 +160,9 @@ export {
 } from "./tool-output-distiller.js";
 export {
   extractToolResultText,
+  resolveToolDisplayStatus,
   resolveToolDisplayText,
+  resolveToolDisplayVerdict,
   type ResolveToolDisplayTextInput,
+  type ToolDisplayVerdict,
 } from "./tool-output-display.js";

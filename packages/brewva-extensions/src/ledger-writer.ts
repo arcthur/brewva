@@ -265,6 +265,7 @@ function recordToolOutcome(
     toolName: input.toolName,
     isError: input.isError,
     outputText: input.outputText,
+    verdict: input.verdict,
   });
 
   runtime.events.record({
@@ -274,6 +275,7 @@ function recordToolOutcome(
       toolCallId: input.toolCallId,
       toolName: input.toolName,
       isError: input.isError,
+      verdict: input.verdict,
       ...outputObservation,
       artifactRef: outputArtifact?.artifactRef ?? null,
     },
@@ -301,6 +303,7 @@ function recordToolOutcome(
         toolCallId: input.toolCallId,
         toolName: input.toolName,
         isError: input.isError,
+        verdict: input.verdict,
         strategy: outputDistillation.strategy,
         rawChars: outputDistillation.rawChars,
         rawBytes: outputDistillation.rawBytes,

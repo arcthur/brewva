@@ -19,6 +19,21 @@ describe("tool output distiller", () => {
     expect(distillation.summaryText.includes("[ExecDistilled]")).toBe(true);
   });
 
+  test("uses explicit fail verdict for exec summaries even when the channel succeeds", () => {
+    const output = Array.from({ length: 120 }, (_value, index) =>
+      index % 15 === 0 ? `error: failed at step ${index}` : `trace line ${index}`,
+    ).join("\n");
+    const distillation = distillToolOutput({
+      toolName: "exec",
+      isError: false,
+      verdict: "fail",
+      outputText: output,
+    });
+
+    expect(distillation.distillationApplied).toBe(true);
+    expect(distillation.summaryText.includes("status: failed")).toBe(true);
+  });
+
   test("applies lsp heuristic for lsp tool family", () => {
     const output = Array.from({ length: 90 }, (_value, index) =>
       index % 9 === 0

@@ -7,6 +7,7 @@ export interface ToolOutputDistillationEntry {
   compressionRatio: number | null;
   artifactRef?: string | null;
   isError: boolean;
+  verdict?: "pass" | "fail" | "inconclusive";
   turn?: number;
   timestamp: number;
 }
@@ -40,6 +41,14 @@ function formatCompression(value: number | null): string {
   return normalized.toFixed(3);
 }
 
+function formatChannelStatus(isError: boolean): "error" | "ok" {
+  return isError ? "error" : "ok";
+}
+
+function formatOutcomeStatus(entry: ToolOutputDistillationEntry): string {
+  return entry.verdict ?? formatChannelStatus(entry.isError);
+}
+
 export function buildRecentToolOutputDistillationBlock(
   entries: ToolOutputDistillationEntry[],
   options: BuildToolOutputDistillationBlockOptions = {},
@@ -56,7 +65,8 @@ export function buildRecentToolOutputDistillationBlock(
   const lines: string[] = ["[RecentToolOutputsDistilled]"];
   for (const entry of recent) {
     const toolName = entry.toolName.trim() || "(unknown)";
-    const status = entry.isError ? "error" : "ok";
+    const status = formatOutcomeStatus(entry);
+    const channel = formatChannelStatus(entry.isError);
     const strategy = entry.strategy.trim() || "unknown";
     const artifactRef =
       typeof entry.artifactRef === "string" && entry.artifactRef.trim().length > 0
@@ -66,7 +76,7 @@ export function buildRecentToolOutputDistillationBlock(
     const summary = truncate(compactWhitespace(entry.summaryText), maxSummaryChars) || "(none)";
 
     lines.push(
-      `- tool=${toolName} status=${status} strategy=${strategy} turn=${turn ?? "n/a"} raw_tokens=${formatMetric(entry.rawTokens)} summary_tokens=${formatMetric(entry.summaryTokens)} compression=${formatCompression(entry.compressionRatio)} artifact=${artifactRef}`,
+      `- tool=${toolName} status=${status} channel=${channel} strategy=${strategy} turn=${turn ?? "n/a"} raw_tokens=${formatMetric(entry.rawTokens)} summary_tokens=${formatMetric(entry.summaryTokens)} compression=${formatCompression(entry.compressionRatio)} artifact=${artifactRef}`,
       `  summary: ${summary}`,
     );
   }

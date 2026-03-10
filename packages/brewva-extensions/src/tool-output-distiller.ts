@@ -8,6 +8,7 @@ export interface ToolOutputDistillationInput {
   toolName: string;
   isError: boolean;
   outputText: string;
+  verdict?: "pass" | "fail" | "inconclusive";
   maxSummaryTokens?: number;
 }
 
@@ -130,9 +131,29 @@ function countPattern(text: string, pattern: RegExp): number {
   return matches ? matches.length : 0;
 }
 
-function buildExecSummary(input: { isError: boolean; lines: string[] }): string {
+function resolveExecStatus(input: {
+  isError: boolean;
+  verdict?: "pass" | "fail" | "inconclusive";
+}): "failed" | "inconclusive" | "completed" {
+  if (input.verdict === "fail" || input.isError) {
+    return "failed";
+  }
+  if (input.verdict === "inconclusive") {
+    return "inconclusive";
+  }
+  return "completed";
+}
+
+function buildExecSummary(input: {
+  isError: boolean;
+  verdict?: "pass" | "fail" | "inconclusive";
+  lines: string[];
+}): string {
   const highlights = selectExecHighlights(input.lines);
-  const status = input.isError ? "failed" : "completed";
+  const status = resolveExecStatus({
+    isError: input.isError,
+    verdict: input.verdict,
+  });
   const body =
     highlights.length > 0 ? highlights.map((line) => `- ${line}`).join("\n") : "- (no output)";
   return ["[ExecDistilled]", `status: ${status}`, body].join("\n");
@@ -153,6 +174,7 @@ function shouldKeepDistillation(input: {
   rawTokens: number;
   summaryTokens: number;
   isError: boolean;
+  verdict?: "pass" | "fail" | "inconclusive";
 }): boolean {
   if (input.strategy === "none") return false;
   if (input.rawTokens <= 0 || input.summaryTokens <= 0) return false;
@@ -160,7 +182,9 @@ function shouldKeepDistillation(input: {
 
   const compressionRatio = input.summaryTokens / input.rawTokens;
   if (compressionRatio >= 1) return false;
-  if (!input.isError && compressionRatio > 1 - MIN_COMPRESSION_GAIN) return false;
+  const importantOutcome =
+    input.isError || input.verdict === "fail" || input.verdict === "inconclusive";
+  if (!importantOutcome && compressionRatio > 1 - MIN_COMPRESSION_GAIN) return false;
   return true;
 }
 
@@ -184,6 +208,7 @@ export function distillToolOutput(input: ToolOutputDistillationInput): ToolOutpu
     strategy = "exec_heuristic";
     rawSummaryText = buildExecSummary({
       isError: input.isError,
+      verdict: input.verdict,
       lines,
     });
   } else if (normalizedToolName.startsWith("lsp_")) {
@@ -205,6 +230,7 @@ export function distillToolOutput(input: ToolOutputDistillationInput): ToolOutpu
     rawTokens,
     summaryTokens,
     isError: input.isError,
+    verdict: input.verdict,
   });
 
   if (!keepDistillation) {
