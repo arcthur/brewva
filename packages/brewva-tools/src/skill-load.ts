@@ -85,7 +85,9 @@ export function createSkillLoadTool(options: BrewvaToolOptions): ToolDefinition 
     label: "Skill Load",
     description: "Load a skill by name, activate its contract, and return full skill instructions.",
     parameters: Type.Object({
-      name: Type.String({ description: "Skill name from selector candidates" }),
+      name: Type.String({
+        description: "Skill name from an accepted proposal or explicit operator choice",
+      }),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);

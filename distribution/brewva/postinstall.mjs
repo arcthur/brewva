@@ -10,6 +10,7 @@ import {
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getBinaryPath, getPlatformPackage } from "./bin/platform.js";
 
 const NODE_VERSION_RANGE = "^20.19.0 || >=22.12.0";
@@ -54,7 +55,7 @@ assertSupportedNodeRuntime();
 
 const require = createRequire(import.meta.url);
 
-function buildDefaultGlobalBrewvaConfig() {
+export function buildDefaultGlobalBrewvaConfig() {
   return {
     ui: {
       quietStartup: true,
@@ -63,11 +64,6 @@ function buildDefaultGlobalBrewvaConfig() {
       roots: [],
       disabled: [],
       overrides: {},
-      selector: {
-        mode: "deterministic",
-        k: 4,
-        brokerJudgeMode: "llm",
-      },
       routing: {
         profile: "standard",
         scopes: ["core", "domain"],
@@ -252,7 +248,7 @@ function seedGlobalSkills(globalRoot, runtimeBinaryPath) {
   console.log(`brewva: renewed global skills at ${targetSkillsDir}`);
 }
 
-function main() {
+export function main() {
   const { platform, arch } = process;
   const libcFamily = getLibcFamily();
   const globalRoot = resolveGlobalBrewvaRootDir(process.env);
@@ -288,4 +284,12 @@ function main() {
   }
 }
 
-main();
+function shouldRunMain() {
+  const entryArg = typeof process.argv[1] === "string" ? process.argv[1] : "";
+  if (!entryArg) return false;
+  return resolve(entryArg) === fileURLToPath(import.meta.url);
+}
+
+if (shouldRunMain()) {
+  main();
+}

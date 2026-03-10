@@ -10,6 +10,12 @@ function getObject(value: unknown): SchemaObject | undefined {
   return value as SchemaObject;
 }
 
+function resolveSchemaRef(schema: SchemaObject, ref: unknown): SchemaObject | undefined {
+  if (typeof ref !== "string" || !ref.startsWith("#/definitions/")) return undefined;
+  const definitionKey = ref.slice("#/definitions/".length);
+  return getObject(getObject(schema.definitions)?.[definitionKey]);
+}
+
 describe("brewva config schema", () => {
   it("covers all top-level BrewvaConfig keys", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
@@ -36,5 +42,27 @@ describe("brewva config schema", () => {
       missing,
       `Missing keys in packages/brewva-runtime/schema/brewva.schema.json: ${missing.join(", ")}`,
     ).toEqual([]);
+  });
+
+  it("does not expose removed selector or continuity override config under skills", () => {
+    const repoRoot = resolve(import.meta.dirname, "../../..");
+    const schemaPath = resolve(repoRoot, "packages/brewva-runtime/schema/brewva.schema.json");
+    const schema = JSON.parse(readFileSync(schemaPath, "utf-8")) as SchemaObject;
+    const definitions = getObject(schema.definitions);
+    expect(definitions).toBeDefined();
+
+    const brewvaConfig =
+      getObject(definitions?.BrewvaConfigFile) ?? getObject(definitions?.BrewvaConfig);
+    const brewvaConfigProperties = getObject(brewvaConfig?.properties);
+    const skillsProperty = getObject(brewvaConfigProperties?.skills);
+    const skillsConfig = resolveSchemaRef(schema, skillsProperty?.$ref);
+    const skillsProperties = getObject(skillsConfig?.properties);
+    expect(skillsProperties?.selector).toBeUndefined();
+
+    const routingProperty = getObject(skillsProperties?.routing);
+    const routingConfig = resolveSchemaRef(schema, routingProperty?.$ref);
+    const routingProperties = getObject(routingConfig?.properties);
+    expect(routingProperties?.continuityPhrases).toBeUndefined();
+    expect(routingProperties?.continuityContinuePattern).toBeUndefined();
   });
 });

@@ -1,5 +1,4 @@
 import { resolve } from "node:path";
-import { TurnWALRecovery } from "./channels/turn-wal-recovery.js";
 import { TurnWALStore } from "./channels/turn-wal.js";
 import type { TurnEnvelope } from "./channels/turn.js";
 import { loadBrewvaConfig } from "./config/loader.js";
@@ -9,13 +8,17 @@ import { normalizeAgentId } from "./context/identity.js";
 import { ContextInjectionCollector } from "./context/injection.js";
 import type { ToolOutputDistillationEntry } from "./context/tool-output-distilled.js";
 import { SessionCostTracker } from "./cost/tracker.js";
-import { TOOL_OUTPUT_DISTILLED_EVENT_TYPE } from "./events/event-types.js";
+import {
+  DECISION_RECEIPT_RECORDED_EVENT_TYPE,
+  TOOL_OUTPUT_DISTILLED_EVENT_TYPE,
+} from "./events/event-types.js";
 import { BrewvaEventStore } from "./events/store.js";
 import type { GovernancePort } from "./governance/port.js";
 import { EvidenceLedger } from "./ledger/evidence-ledger.js";
 import { ParallelBudgetManager } from "./parallel/budget.js";
 import { ParallelResultStore } from "./parallel/results.js";
 import { ProjectionEngine } from "./projection/engine.js";
+import { createRuntimeDomainApis, type RuntimeDomainApis } from "./runtime-domains.js";
 import {
   buildSkillCandidateBlock,
   buildSkillCascadeGateBlock,
@@ -35,19 +38,18 @@ import { EventPipelineService, type RuntimeRecordEventInput } from "./services/e
 import { FileChangeService } from "./services/file-change.js";
 import { LedgerService } from "./services/ledger.js";
 import { ParallelService } from "./services/parallel.js";
+import { ProposalAdmissionService } from "./services/proposal-admission.js";
 import { ScanConvergenceService } from "./services/scan-convergence.js";
 import { ScheduleIntentService } from "./services/schedule-intent.js";
 import { SessionLifecycleService } from "./services/session-lifecycle.js";
 import { RuntimeSessionStateStore } from "./services/session-state.js";
 import { SkillCascadeService } from "./services/skill-cascade.js";
 import { SkillLifecycleService } from "./services/skill-lifecycle.js";
-import { SkillRouterService } from "./services/skill-router.js";
 import { TapeService } from "./services/tape.js";
 import { TaskService } from "./services/task.js";
 import { ToolGateService } from "./services/tool-gate.js";
 import { TruthService } from "./services/truth.js";
 import { VerificationService } from "./services/verification.js";
-import { resolveSkillDispatchDecision } from "./skills/dispatch.js";
 import { SkillRegistry, type SkillRegistryLoadReport } from "./skills/registry.js";
 import { FileChangeTracker } from "./state/file-change-tracker.js";
 import { TurnReplayEngine } from "./tape/replay-engine.js";
@@ -75,16 +77,16 @@ import type {
   BrewvaReplaySession,
   BrewvaConfig,
   BrewvaStructuredEvent,
+  DecisionReceipt,
   SkillDocument,
   SkillDispatchDecision,
   SkillChainIntent,
   SkillCascadeChainSource,
   SkillCascadeControlResult,
-  SkillPreselection,
-  SkillRoutingResult,
-  SkillRoutingOutcome,
-  SkillRoutingTrace,
-  SkillSelection,
+  ProposalEnvelope,
+  ProposalKind,
+  ProposalListQuery,
+  ProposalRecord,
   SessionCostSummary,
   TapeSearchResult,
   TapeSearchScope,
@@ -117,45 +119,6 @@ export interface VerifyCompletionOptions {
   timeoutMs?: number;
 }
 
-const DEFAULT_CONTINUITY_PHRASES: readonly string[] = [
-  "keep working on",
-  "resume",
-  "follow up",
-  "follow-up",
-  "pick this back up",
-  "over the next",
-  "check back",
-  "next few days",
-  "next few weeks",
-  "next session",
-  "next few sessions",
-  "multi run",
-  "multi-run",
-  "ongoing",
-  "iterative delivery",
-  "across runs",
-  "over multiple runs",
-];
-
-const DEFAULT_CONTINUITY_CONTINUE_PATTERN =
-  /\bcontinue\b[\s\S]{0,48}\b(?:tomorrow|later|again|next|session|sessions|run|runs|day|days|week|weeks|month|months|over time)\b/;
-
-function hasExplicitContinuityCue(
-  text: string,
-  phrases?: string[],
-  continuePattern?: string,
-): boolean {
-  const normalized = text.toLowerCase();
-  const effectivePhrases = phrases ?? DEFAULT_CONTINUITY_PHRASES;
-  const effectivePattern = continuePattern
-    ? new RegExp(continuePattern, "i")
-    : DEFAULT_CONTINUITY_CONTINUE_PATTERN;
-  return (
-    effectivePhrases.some((phrase) => normalized.includes(phrase)) ||
-    effectivePattern.test(normalized)
-  );
-}
-
 type RuntimeConfigState = {
   config: BrewvaConfig;
 };
@@ -177,6 +140,7 @@ type RuntimeCoreDependencies = {
 };
 
 type RuntimeServiceDependencies = {
+  proposalAdmissionService: ProposalAdmissionService;
   skillLifecycleService: SkillLifecycleService;
   skillCascadeService: SkillCascadeService;
   taskService: TaskService;
@@ -205,14 +169,6 @@ export class BrewvaRuntime {
     getLoadReport(): SkillRegistryLoadReport;
     list(): SkillDocument[];
     get(name: string): SkillDocument | undefined;
-    setNextSelection(
-      sessionId: string,
-      selected: SkillSelection[],
-      input?: { routingOutcome?: SkillRoutingOutcome },
-    ): void;
-    clearNextSelection(sessionId: string): SkillPreselection | undefined;
-    prepareDispatch(sessionId: string, message: string): SkillDispatchDecision;
-    getLastRouting(sessionId: string): SkillRoutingTrace | undefined;
     getPendingDispatch(sessionId: string): SkillDispatchDecision | undefined;
     clearPendingDispatch(sessionId: string): SkillDispatchDecision | undefined;
     overridePendingDispatch(
@@ -251,6 +207,13 @@ export class BrewvaRuntime {
         }>;
       },
     ): SkillCascadeControlResult;
+  };
+  readonly proposals: {
+    submit<K extends ProposalKind>(
+      sessionId: string,
+      proposal: ProposalEnvelope<K>,
+    ): DecisionReceipt;
+    list(sessionId: string, query?: ProposalListQuery): ProposalRecord[];
   };
   readonly context: {
     onTurnStart(sessionId: string, turnIndex: number): void;
@@ -507,7 +470,6 @@ export class BrewvaRuntime {
   private readonly costTracker: SessionCostTracker;
 
   private readonly skillRegistry: SkillRegistry;
-  private readonly skillRouterService: SkillRouterService;
   private readonly verificationGate: VerificationGate;
   private readonly eventStore: BrewvaEventStore;
   private readonly turnWalStore: TurnWALStore;
@@ -520,6 +482,7 @@ export class BrewvaRuntime {
   private readonly fileChangeService: FileChangeService;
   private readonly ledgerService: LedgerService;
   private readonly parallelService: ParallelService;
+  private readonly proposalAdmissionService: ProposalAdmissionService;
   private readonly scanConvergenceService: ScanConvergenceService;
   private readonly scheduleIntentService: ScheduleIntentService;
   private readonly sessionLifecycleService: SessionLifecycleService;
@@ -540,7 +503,6 @@ export class BrewvaRuntime {
     this.config = configState.config;
     const coreDependencies = this.createCoreDependencies(options);
     this.skillRegistry = coreDependencies.skillRegistry;
-    this.skillRouterService = new SkillRouterService(this.config.skills.selector);
     this.evidenceLedger = coreDependencies.evidenceLedger;
     this.verificationGate = coreDependencies.verificationGate;
     this.parallel = coreDependencies.parallel;
@@ -555,6 +517,7 @@ export class BrewvaRuntime {
     this.projectionEngine = coreDependencies.projectionEngine;
 
     const serviceDependencies = this.createServiceDependencies(options);
+    this.proposalAdmissionService = serviceDependencies.proposalAdmissionService;
     this.skillLifecycleService = serviceDependencies.skillLifecycleService;
     this.skillCascadeService = serviceDependencies.skillCascadeService;
     this.taskService = serviceDependencies.taskService;
@@ -577,6 +540,7 @@ export class BrewvaRuntime {
 
     const domainApis = this.createDomainApis();
     this.skills = domainApis.skills;
+    this.proposals = domainApis.proposals;
     this.context = domainApis.context;
     this.tools = domainApis.tools;
     this.task = domainApis.task;
@@ -755,6 +719,19 @@ export class BrewvaRuntime {
         taskService.resolveTaskBlocker(sessionId, blockerId),
       recordToolResult: (input) => ledgerService.recordToolResult(input),
     });
+    const proposalAdmissionService = new ProposalAdmissionService({
+      listDecisionReceiptEvents: (sessionId) =>
+        this.eventStore.list(sessionId, { type: DECISION_RECEIPT_RECORDED_EVENT_TYPE }),
+      recordEvent: (input) => this.recordEvent(input),
+      getCurrentTurn: (sessionId) => this.getCurrentTurn(sessionId),
+      getSkill: (name) => this.skillRegistry.get(name),
+      setPendingDispatch: (sessionId, decision) =>
+        this.skillLifecycleService.setPendingDispatch(sessionId, decision, { emitEvent: true }),
+      createExplicitIntent: (sessionId, input) =>
+        this.skillCascadeService.createExplicitIntent(sessionId, input),
+      listProducedOutputKeys: (sessionId) =>
+        this.skillLifecycleService.listProducedOutputKeys(sessionId),
+    });
     const contextService = new ContextService({
       cwd: this.cwd,
       workspaceRoot: this.workspaceRoot,
@@ -768,7 +745,14 @@ export class BrewvaRuntime {
       sessionState: this.sessionState,
       getTaskState: (sessionId) => this.getTaskState(sessionId),
       getTruthState: (sessionId) => this.getTruthState(sessionId),
-      prepareSkillDispatch: (dispatchInput) => this.prepareSkillDispatch(dispatchInput),
+      getLatestSkillSelectionProposal: (sessionId) =>
+        proposalAdmissionService.getLatestProposalRecord(sessionId, "skill_selection", "accept") as
+          | ProposalRecord<"skill_selection">
+          | undefined,
+      getAcceptedContextPackets: (sessionId, injectionScopeId) =>
+        proposalAdmissionService.listInjectableContextPackets(sessionId, injectionScopeId),
+      getPendingSkillDispatch: (sessionId) =>
+        this.skillLifecycleService.getPendingDispatch(sessionId),
       buildSkillCandidateBlock: (selected) => buildSkillCandidateBlock(selected),
       buildSkillDispatchGateBlock: (decision) => buildSkillDispatchGateBlock(decision),
       getSkillCascadeIntent: (sessionId) => skillCascadeService.getIntent(sessionId),
@@ -895,6 +879,7 @@ export class BrewvaRuntime {
     });
 
     return {
+      proposalAdmissionService,
       skillLifecycleService,
       skillCascadeService,
       taskService,
@@ -914,421 +899,35 @@ export class BrewvaRuntime {
     };
   }
 
-  private createDomainApis(): {
-    skills: BrewvaRuntime["skills"];
-    context: BrewvaRuntime["context"];
-    tools: BrewvaRuntime["tools"];
-    task: BrewvaRuntime["task"];
-    truth: BrewvaRuntime["truth"];
-    ledger: BrewvaRuntime["ledger"];
-    schedule: BrewvaRuntime["schedule"];
-    turnWal: BrewvaRuntime["turnWal"];
-    events: BrewvaRuntime["events"];
-    verification: BrewvaRuntime["verification"];
-    cost: BrewvaRuntime["cost"];
-    session: BrewvaRuntime["session"];
-  } {
-    return {
-      skills: {
-        refresh: () => {
-          this.skillRegistry.load();
-          this.skillRegistry.writeIndex();
-        },
-        getLoadReport: () => this.skillRegistry.getLoadReport(),
-        list: () => this.skillRegistry.list(),
-        get: (name) => this.skillRegistry.get(name),
-        setNextSelection: (sessionId, selected, input) =>
-          this.setNextSkillSelections(sessionId, selected, input),
-        clearNextSelection: (sessionId) => this.clearNextSkillSelections(sessionId),
-        prepareDispatch: (sessionId, message) =>
-          this.prepareSkillDispatch({
-            sessionId,
-            promptText: message,
-            turn: this.getCurrentTurn(sessionId),
-          }),
-        getLastRouting: (sessionId) => this.getLastSkillRouting(sessionId),
-        getPendingDispatch: (sessionId) => this.skillLifecycleService.getPendingDispatch(sessionId),
-        clearPendingDispatch: (sessionId) =>
-          this.skillLifecycleService.clearPendingDispatch(sessionId),
-        overridePendingDispatch: (sessionId, input) =>
-          this.skillLifecycleService.overridePendingDispatch(sessionId, input),
-        reconcilePendingDispatch: (sessionId, turn) =>
-          this.skillLifecycleService.reconcilePendingDispatchOnTurnEnd(sessionId, turn),
-        activate: (sessionId, name) => this.skillLifecycleService.activateSkill(sessionId, name),
-        getActive: (sessionId) => this.skillLifecycleService.getActiveSkill(sessionId),
-        validateOutputs: (sessionId, outputs) =>
-          this.skillLifecycleService.validateSkillOutputs(sessionId, outputs),
-        complete: (sessionId, output) =>
-          this.skillLifecycleService.completeSkill(sessionId, output),
-        getOutputs: (sessionId, skillName) =>
-          this.skillLifecycleService.getSkillOutputs(sessionId, skillName),
-        getConsumedOutputs: (sessionId, targetSkillName) =>
-          this.skillLifecycleService.getAvailableConsumedOutputs(sessionId, targetSkillName),
-        getCascadeIntent: (sessionId) => this.skillCascadeService.getIntent(sessionId),
-        pauseCascade: (sessionId, reason) =>
-          this.skillCascadeService.pauseIntent(sessionId, reason),
-        resumeCascade: (sessionId, reason) =>
-          this.skillCascadeService.resumeIntent(sessionId, reason),
-        cancelCascade: (sessionId, reason) =>
-          this.skillCascadeService.cancelIntent(sessionId, reason),
-        startCascade: (sessionId, input) =>
-          this.skillCascadeService.createExplicitIntent(sessionId, input),
-      },
-      context: {
-        onTurnStart: (sessionId, turnIndex) =>
-          this.sessionLifecycleService.onTurnStart(sessionId, turnIndex),
-        onTurnEnd: (sessionId) => this.scanConvergenceService.onTurnEnd(sessionId),
-        onUserInput: (sessionId) => this.scanConvergenceService.onUserInput(sessionId),
-        sanitizeInput: (text) => this.sanitizeInput(text),
-        observeUsage: (sessionId, usage) =>
-          this.contextService.observeContextUsage(sessionId, usage),
-        getUsage: (sessionId) => this.contextService.getContextUsage(sessionId),
-        getUsageRatio: (usage) => this.contextService.getContextUsageRatio(usage),
-        getHardLimitRatio: () => this.contextService.getContextHardLimitRatio(),
-        getCompactionThresholdRatio: () => this.contextService.getContextCompactionThresholdRatio(),
-        getPressureStatus: (sessionId, usage) =>
-          this.contextService.getContextPressureStatus(sessionId, usage),
-        getPressureLevel: (sessionId, usage) =>
-          this.contextService.getContextPressureLevel(sessionId, usage),
-        getCompactionGateStatus: (sessionId, usage) =>
-          this.contextService.getContextCompactionGateStatus(sessionId, usage),
-        checkCompactionGate: (sessionId, toolName, usage) =>
-          this.contextService.checkContextCompactionGate(sessionId, toolName, usage),
-        buildInjection: (sessionId, prompt, usage, injectionScopeId) =>
-          this.contextService.buildContextInjection(sessionId, prompt, usage, injectionScopeId),
-        appendSupplementalInjection: (sessionId, inputText, usage, injectionScopeId) =>
-          this.contextService.appendSupplementalContextInjection(
-            sessionId,
-            inputText,
-            usage,
-            injectionScopeId,
-          ),
-        checkAndRequestCompaction: (sessionId, usage) =>
-          this.contextService.checkAndRequestCompaction(sessionId, usage),
-        requestCompaction: (sessionId, reason) =>
-          this.contextService.requestCompaction(sessionId, reason),
-        getPendingCompactionReason: (sessionId) =>
-          this.contextService.getPendingCompactionReason(sessionId),
-        getCompactionInstructions: () => this.contextService.getCompactionInstructions(),
-        getCompactionWindowTurns: () => this.contextService.getRecentCompactionWindowTurns(),
-        markCompacted: (sessionId, input) =>
-          this.contextService.markContextCompacted(sessionId, input),
-      },
-      tools: {
-        checkAccess: (sessionId, toolName) =>
-          this.toolGateService.checkToolAccess(sessionId, toolName),
-        explainAccess: (input) => {
-          const access = this.toolGateService.explainToolAccess(input.sessionId, input.toolName);
-          if (!access.allowed) {
-            return {
-              allowed: false,
-              reason: access.reason,
-              warning: access.warning,
-            };
-          }
-
-          const compaction = this.contextService.explainContextCompactionGate(
-            input.sessionId,
-            input.toolName,
-            input.usage,
-          );
-          if (!compaction.allowed) {
-            return {
-              allowed: false,
-              reason: compaction.reason,
-            };
-          }
-
-          const dispatchGate = this.toolGateService.explainSkillDispatchGate(
-            input.sessionId,
-            input.toolName,
-          );
-          if (!dispatchGate.allowed) {
-            return {
-              allowed: false,
-              reason: dispatchGate.reason,
-              warning: dispatchGate.warning,
-            };
-          }
-
-          const warnings = [access.warning, dispatchGate.warning].filter(
-            (value): value is string => typeof value === "string" && value.trim().length > 0,
-          );
-          return warnings.length > 0
-            ? { allowed: true, warning: warnings.join("; ") }
-            : { allowed: true };
-        },
-        start: (input) => this.toolGateService.startToolCall(input),
-        finish: (input) => {
-          this.toolGateService.finishToolCall(input);
-        },
-        acquireParallelSlot: (sessionId, runId) =>
-          this.parallelService.acquireParallelSlot(sessionId, runId),
-        releaseParallelSlot: (sessionId, runId) =>
-          this.parallelService.releaseParallelSlot(sessionId, runId),
-        markCall: (sessionId, toolName) => this.fileChangeService.markToolCall(sessionId, toolName),
-        trackCallStart: (input) => this.fileChangeService.trackToolCallStart(input),
-        trackCallEnd: (input) => this.fileChangeService.trackToolCallEnd(input),
-        rollbackLastPatchSet: (sessionId) => this.fileChangeService.rollbackLastPatchSet(sessionId),
-        resolveUndoSessionId: (preferredSessionId) =>
-          this.fileChangeService.resolveUndoSessionId(preferredSessionId),
-        recordResult: (input) => this.ledgerService.recordToolResult(input),
-      },
-      task: {
-        setSpec: (sessionId, spec) => this.taskService.setTaskSpec(sessionId, spec),
-        addItem: (sessionId, input) => this.taskService.addTaskItem(sessionId, input),
-        updateItem: (sessionId, input) => this.taskService.updateTaskItem(sessionId, input),
-        recordBlocker: (sessionId, input) => this.taskService.recordTaskBlocker(sessionId, input),
-        resolveBlocker: (sessionId, blockerId) =>
-          this.taskService.resolveTaskBlocker(sessionId, blockerId),
-        getState: (sessionId) => this.turnReplay.getTaskState(sessionId),
-      },
-      truth: {
-        getState: (sessionId) => this.turnReplay.getTruthState(sessionId),
-        upsertFact: (sessionId, input) => this.truthService.upsertTruthFact(sessionId, input),
-        resolveFact: (sessionId, truthFactId) =>
-          this.truthService.resolveTruthFact(sessionId, truthFactId),
-      },
-      ledger: {
-        getDigest: (sessionId) => this.ledgerService.getLedgerDigest(sessionId),
-        query: (sessionId, query) => this.ledgerService.queryLedger(sessionId, query),
-        listRows: (sessionId) => this.ledgerService.listLedgerRows(sessionId),
-        verifyChain: (sessionId) => this.ledgerService.verifyLedgerChain(sessionId),
-        getPath: () => this.ledgerService.getLedgerPath(),
-      },
-      schedule: {
-        createIntent: (sessionId, input) =>
-          this.scheduleIntentService.createScheduleIntent(sessionId, input),
-        cancelIntent: (sessionId, input) =>
-          this.scheduleIntentService.cancelScheduleIntent(sessionId, input),
-        updateIntent: (sessionId, input) =>
-          this.scheduleIntentService.updateScheduleIntent(sessionId, input),
-        listIntents: (query) => this.scheduleIntentService.listScheduleIntents(query),
-        getProjectionSnapshot: () => this.scheduleIntentService.getScheduleProjectionSnapshot(),
-      },
-      turnWal: {
-        appendPending: (envelope, source, options) =>
-          this.turnWalStore.appendPending(envelope, source, options),
-        markInflight: (walId) => this.turnWalStore.markInflight(walId),
-        markDone: (walId) => this.turnWalStore.markDone(walId),
-        markFailed: (walId, error) => this.turnWalStore.markFailed(walId, error),
-        markExpired: (walId) => this.turnWalStore.markExpired(walId),
-        listPending: () => this.turnWalStore.listPending(),
-        recover: async () => {
-          const recovery = new TurnWALRecovery({
-            workspaceRoot: this.workspaceRoot,
-            config: this.config.infrastructure.turnWal,
-            recordEvent: (input) => {
-              this.recordEvent({
-                sessionId: input.sessionId,
-                type: input.type,
-                payload: input.payload,
-                skipTapeCheckpoint: true,
-              });
-            },
-          });
-          return await recovery.recover();
-        },
-        compact: () => this.turnWalStore.compact(),
-      },
-      events: {
-        record: (input) => this.eventPipeline.recordEvent(input),
-        query: (sessionId, query) => this.eventPipeline.queryEvents(sessionId, query),
-        queryStructured: (sessionId, query) =>
-          this.eventPipeline.queryStructuredEvents(sessionId, query),
-        getTapeStatus: (sessionId) => this.tapeService.getTapeStatus(sessionId),
-        getTapePressureThresholds: () => this.tapeService.getPressureThresholds(),
-        recordTapeHandoff: (sessionId, input) =>
-          this.tapeService.recordTapeHandoff(sessionId, input),
-        searchTape: (sessionId, input) => this.tapeService.searchTape(sessionId, input),
-        listReplaySessions: (limit) => this.eventPipeline.listReplaySessions(limit),
-        subscribe: (listener) => this.eventPipeline.subscribeEvents(listener),
-        toStructured: (event) => this.eventPipeline.toStructuredEvent(event),
-        list: (sessionId, query) => this.eventStore.list(sessionId, query),
-        listSessionIds: () => this.eventStore.listSessionIds(),
-      },
-      verification: {
-        evaluate: (sessionId, level) => this.verificationGate.evaluate(sessionId, level),
-        verify: (sessionId, level, options) =>
-          this.verificationService.verifyCompletion(sessionId, level, options ?? {}),
-      },
-      cost: {
-        recordAssistantUsage: (input) => this.costService.recordAssistantUsage(input),
-        getSummary: (sessionId) => this.costService.getCostSummary(sessionId),
-      },
-      session: {
-        recordWorkerResult: (sessionId, result) =>
-          this.parallelService.recordWorkerResult(sessionId, result),
-        listWorkerResults: (sessionId) => this.parallelService.listWorkerResults(sessionId),
-        mergeWorkerResults: (sessionId) => this.parallelService.mergeWorkerResults(sessionId),
-        clearWorkerResults: (sessionId) => this.parallelService.clearWorkerResults(sessionId),
-        clearState: (sessionId) => this.sessionLifecycleService.clearSessionState(sessionId),
-        onClearState: (listener) => this.sessionLifecycleService.onClearState(listener),
-      },
-    };
-  }
-
-  private normalizeSkillSelections(selected: SkillSelection[]): SkillSelection[] {
-    return selected
-      .filter(
-        (entry) =>
-          typeof entry.name === "string" &&
-          entry.name.trim().length > 0 &&
-          typeof entry.score === "number" &&
-          Number.isFinite(entry.score) &&
-          entry.score > 0,
-      )
-      .map((entry) => ({
-        name: entry.name.trim(),
-        score: Math.max(1, Math.floor(entry.score)),
-        reason: typeof entry.reason === "string" ? entry.reason : "",
-        breakdown: Array.isArray(entry.breakdown) ? entry.breakdown : [],
-      }))
-      .toSorted((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        return a.name.localeCompare(b.name);
-      })
-      .slice(0, Math.max(1, this.config.skills.selector.k));
-  }
-
-  private normalizeRoutingOutcome(value: unknown): SkillRoutingOutcome | undefined {
-    return value === "selected" || value === "empty" || value === "failed" ? value : undefined;
-  }
-
-  private setNextSkillSelections(
-    sessionId: string,
-    selected: SkillSelection[],
-    input?: { routingOutcome?: SkillRoutingOutcome },
-  ): void {
-    this.sessionState.nextSkillSelectionsBySession.set(sessionId, {
-      selected: this.normalizeSkillSelections(selected),
-      routingOutcome: this.normalizeRoutingOutcome(input?.routingOutcome),
+  private createDomainApis(): RuntimeDomainApis {
+    return createRuntimeDomainApis({
+      workspaceRoot: this.workspaceRoot,
+      config: this.config,
+      skillRegistry: this.skillRegistry,
+      verificationGate: this.verificationGate,
+      turnWalStore: this.turnWalStore,
+      eventStore: this.eventStore,
+      proposalAdmissionService: this.proposalAdmissionService,
+      skillLifecycleService: this.skillLifecycleService,
+      skillCascadeService: this.skillCascadeService,
+      taskService: this.taskService,
+      truthService: this.truthService,
+      ledgerService: this.ledgerService,
+      parallelService: this.parallelService,
+      costService: this.costService,
+      verificationService: this.verificationService,
+      contextService: this.contextService,
+      scanConvergenceService: this.scanConvergenceService,
+      tapeService: this.tapeService,
+      eventPipeline: this.eventPipeline,
+      scheduleIntentService: this.scheduleIntentService,
+      fileChangeService: this.fileChangeService,
+      sessionLifecycleService: this.sessionLifecycleService,
+      toolGateService: this.toolGateService,
+      getTaskState: (sessionId) => this.getTaskState(sessionId),
+      getTruthState: (sessionId) => this.getTruthState(sessionId),
+      sanitizeInput: (text) => this.sanitizeInput(text),
     });
-  }
-
-  private clearNextSkillSelections(sessionId: string): SkillPreselection | undefined {
-    const preselection = this.sessionState.nextSkillSelectionsBySession.get(sessionId);
-    this.sessionState.nextSkillSelectionsBySession.delete(sessionId);
-    return preselection;
-  }
-
-  private consumeNextSkillSelections(sessionId: string): SkillPreselection | undefined {
-    if (!this.sessionState.nextSkillSelectionsBySession.has(sessionId)) {
-      return undefined;
-    }
-    return (
-      this.clearNextSkillSelections(sessionId) ?? {
-        selected: [],
-      }
-    );
-  }
-
-  private normalizeSkillRoutingTrace(
-    trace: SkillRoutingTrace,
-    selected: SkillSelection[],
-    routingOutcome: SkillRoutingOutcome,
-  ): SkillRoutingTrace {
-    const selection =
-      routingOutcome === "failed"
-        ? {
-            ...trace.selection,
-            status: "failed" as const,
-            selectedCount: 0,
-            selectedSkills: [],
-          }
-        : selected.length === 0
-          ? {
-              ...trace.selection,
-              status: "empty" as const,
-              selectedCount: 0,
-              selectedSkills: [],
-            }
-          : {
-              ...trace.selection,
-              status: "selected" as const,
-              selectedCount: selected.length,
-              selectedSkills: selected.map((entry) => entry.name),
-            };
-    return {
-      ...trace,
-      routingOutcome,
-      selection,
-      candidates: selected,
-      availableOutputs: [...trace.availableOutputs],
-    };
-  }
-
-  private getLastSkillRouting(sessionId: string): SkillRoutingTrace | undefined {
-    const trace = this.sessionState.lastSkillRoutingBySession.get(sessionId);
-    return trace ? structuredClone(trace) : undefined;
-  }
-
-  private selectSkillsForDispatch(
-    sessionId: string,
-    message: string,
-    index: ReturnType<SkillRegistry["buildIndex"]>,
-  ): SkillRoutingResult {
-    const routing = this.skillRouterService.route({
-      promptText: message,
-      index,
-      activeSkillName: this.skillLifecycleService.getActiveSkill(sessionId)?.name ?? null,
-      availableOutputs: this.skillLifecycleService.listProducedOutputKeys(sessionId),
-      preselection: this.consumeNextSkillSelections(sessionId),
-      continuityAllowed: this.isContinuityDispatchAllowed(sessionId, message),
-    });
-    const selected = this.normalizeSkillSelections(routing.selected);
-    const routingOutcome =
-      this.normalizeRoutingOutcome(routing.routingOutcome) ??
-      (selected.length > 0 ? "selected" : "empty");
-    const trace = this.normalizeSkillRoutingTrace(routing.trace, selected, routingOutcome);
-    this.sessionState.lastSkillRoutingBySession.set(sessionId, trace);
-    return {
-      selected,
-      routingOutcome,
-      trace,
-    };
-  }
-
-  private isContinuityDispatchAllowed(sessionId: string, promptText: string): boolean {
-    const { continuityPhrases, continuityContinuePattern } = this.config.skills.routing;
-    if (hasExplicitContinuityCue(promptText, continuityPhrases, continuityContinuePattern)) {
-      return true;
-    }
-
-    const activeSkill = this.skillLifecycleService.getActiveSkill(sessionId);
-    if (activeSkill?.contract.routing?.continuityRequired === true) {
-      return true;
-    }
-
-    const taskState = this.getTaskState(sessionId);
-    const expectedBehavior = taskState.spec?.expectedBehavior?.toLowerCase() ?? "";
-    if (
-      expectedBehavior.includes("multi-run") ||
-      expectedBehavior.includes("ongoing") ||
-      hasExplicitContinuityCue(expectedBehavior, continuityPhrases, continuityContinuePattern)
-    ) {
-      return true;
-    }
-
-    return false;
-  }
-
-  private prepareSkillDispatch(input: {
-    sessionId: string;
-    promptText: string;
-    turn: number;
-  }): SkillDispatchDecision {
-    const index = this.skillRegistry.buildIndex();
-    const routing = this.selectSkillsForDispatch(input.sessionId, input.promptText, index);
-    const decision = resolveSkillDispatchDecision({
-      selected: routing.selected,
-      routingOutcome: routing.routingOutcome,
-      index,
-      turn: input.turn,
-      availableOutputs: this.skillLifecycleService.listProducedOutputKeys(input.sessionId),
-    });
-    this.skillLifecycleService.setPendingDispatch(input.sessionId, decision, { emitEvent: true });
-    return decision;
   }
 
   private getTaskState(sessionId: string): TaskState {

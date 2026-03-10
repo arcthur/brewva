@@ -7,6 +7,7 @@
       "devDependencies": {
         "@brewva/brewva-channels-telegram": "workspace:*",
         "@brewva/brewva-cli": "workspace:*",
+        "@brewva/brewva-deliberation": "workspace:*",
         "@brewva/brewva-extensions": "workspace:*",
         "@brewva/brewva-gateway": "workspace:*",
         "@brewva/brewva-ingress": "workspace:*",
@@ -117,11 +118,19 @@
         "date-fns": "^4.1.0",
       },
     },
+    "packages/brewva-deliberation": {
+      "name": "@brewva/brewva-deliberation",
+      "version": "0.1.0",
+      "dependencies": {
+        "@brewva/brewva-runtime": "workspace:*",
+      },
+    },
     "packages/brewva-extensions": {
       "name": "@brewva/brewva-extensions",
       "version": "0.1.0",
       "dependencies": {
         "@brewva/brewva-channels-telegram": "workspace:*",
+        "@brewva/brewva-deliberation": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
         "@brewva/brewva-tools": "workspace:*",
         "@mariozechner/pi-ai": "^0.55.0",
@@ -162,6 +171,7 @@
       "name": "@brewva/brewva-skill-broker",
       "version": "0.1.0",
       "dependencies": {
+        "@brewva/brewva-deliberation": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
         "@mariozechner/pi-ai": "^0.55.0",
         "@mariozechner/pi-coding-agent": "^0.55.0",
@@ -176,6 +186,7 @@
         "@sinclair/typebox": "^0.34.48",
         "date-fns": "^4.1.0",
         "microsandbox": "^0.1.1",
+        "typescript": "^5.9.3",
       },
     },
   },
@@ -263,6 +274,8 @@
     "@brewva/brewva-darwin-arm64": ["@brewva/brewva-darwin-arm64@workspace:distribution/brewva-darwin-arm64"],
 
     "@brewva/brewva-darwin-x64": ["@brewva/brewva-darwin-x64@workspace:distribution/brewva-darwin-x64"],
+
+    "@brewva/brewva-deliberation": ["@brewva/brewva-deliberation@workspace:packages/brewva-deliberation"],
 
     "@brewva/brewva-extensions": ["@brewva/brewva-extensions@workspace:packages/brewva-extensions"],
 

@@ -10,8 +10,6 @@ export type SkillEffectLevel = "read_only" | "execute" | "mutation";
 export type SkillDispatchMode = "suggest" | "gate" | "auto";
 export type SkillCascadeMode = "off" | "assist" | "auto";
 export type SkillCascadeSource = "dispatch" | "explicit";
-export type SkillSelectorMode = "deterministic" | "external_only";
-export type SkillBrokerJudgeMode = "heuristic" | "llm";
 
 export interface SkillDispatchPolicy {
   gateThreshold: number;
@@ -106,12 +104,6 @@ export interface SkillSelection {
   breakdown: SkillSelectionBreakdownEntry[];
 }
 
-export interface SkillSelectorConfig {
-  mode: SkillSelectorMode;
-  k: number;
-  brokerJudgeMode: SkillBrokerJudgeMode;
-}
-
 export type SkillSelectionSignal =
   | "semantic_match"
   | "name_exact"
@@ -137,6 +129,107 @@ export const SKILL_SELECTION_SIGNALS: SkillSelectionSignal[] = [
   "available_output",
 ];
 
+export type ProposalKind = "skill_selection" | "skill_chain_intent" | "context_packet";
+
+export type ProposalDecision = "accept" | "reject" | "defer";
+export type ContextPacketAction = "upsert" | "revoke";
+export type ContextPacketProfile = "status_summary";
+
+export type EvidenceSourceType =
+  | "broker_trace"
+  | "event"
+  | "ledger"
+  | "task"
+  | "truth"
+  | "workspace_artifact"
+  | "operator_note"
+  | "verification"
+  | "tool_result";
+
+export interface EvidenceRef {
+  id: string;
+  sourceType: EvidenceSourceType;
+  locator: string;
+  hash?: string;
+  createdAt: number;
+}
+
+export interface SkillSelectionProposalPayload {
+  selected: SkillSelection[];
+  routingOutcome?: SkillRoutingOutcome;
+  reason?: string;
+  confidence?: number;
+  source?: string;
+  prompt?: string;
+}
+
+export interface SkillChainIntentProposalPayload {
+  steps: Array<{
+    skill: string;
+    consumes?: string[];
+    produces?: string[];
+    lane?: string;
+  }>;
+  reason?: string;
+  source?: string;
+}
+
+export interface ContextPacketProposalPayload {
+  label: string;
+  content: string;
+  scopeId?: string;
+  packetKey?: string;
+  action?: ContextPacketAction;
+  profile?: ContextPacketProfile;
+}
+
+export type ProposalPayloadByKind = {
+  skill_selection: SkillSelectionProposalPayload;
+  skill_chain_intent: SkillChainIntentProposalPayload;
+  context_packet: ContextPacketProposalPayload;
+};
+
+export type ProposalPayload = ProposalPayloadByKind[ProposalKind];
+
+export interface ProposalEnvelope<K extends ProposalKind = ProposalKind> {
+  id: string;
+  kind: K;
+  issuer: string;
+  subject: string;
+  payload: ProposalPayloadByKind[K];
+  evidenceRefs: EvidenceRef[];
+  confidence?: number;
+  expiresAt?: number;
+  createdAt: number;
+}
+
+export interface DecisionEffect {
+  kind: string;
+  details: Record<string, unknown>;
+}
+
+export interface DecisionReceipt {
+  proposalId: string;
+  decision: ProposalDecision;
+  policyBasis: string[];
+  reasons: string[];
+  committedEffects: DecisionEffect[];
+  evidenceRefs: EvidenceRef[];
+  turn: number;
+  timestamp: number;
+}
+
+export interface ProposalRecord<K extends ProposalKind = ProposalKind> {
+  proposal: ProposalEnvelope<K>;
+  receipt: DecisionReceipt;
+}
+
+export interface ProposalListQuery {
+  kind?: ProposalKind;
+  decision?: ProposalDecision;
+  limit?: number;
+}
+
 export interface SkillSelectionBreakdownEntry {
   signal: SkillSelectionSignal;
   term: string;
@@ -146,42 +239,6 @@ export interface SkillSelectionBreakdownEntry {
 export type SkillDispatchDecisionMode = "none" | SkillDispatchMode;
 
 export type SkillRoutingOutcome = "selected" | "empty" | "failed";
-export type SkillRoutingSource = "deterministic_router" | "external_preselection";
-export type SkillRoutingSelectionStatus = "selected" | "empty" | "failed" | "skipped";
-
-export interface SkillRoutingSelectionTrace {
-  status: SkillRoutingSelectionStatus;
-  reason: string;
-  selectedCount: number;
-  selectedSkills: string[];
-}
-
-export interface SkillRoutingTrace {
-  routerVersion: string;
-  selectorMode: SkillSelectorMode;
-  source: SkillRoutingSource;
-  promptHash: string;
-  skillsIndexHash: string;
-  configHash: string;
-  latencyMs: number;
-  routingOutcome: SkillRoutingOutcome;
-  selection: SkillRoutingSelectionTrace;
-  candidates: SkillSelection[];
-  activeSkillName: string | null;
-  availableOutputs: string[];
-  error?: string;
-}
-
-export interface SkillRoutingResult {
-  selected: SkillSelection[];
-  routingOutcome: SkillRoutingOutcome;
-  trace: SkillRoutingTrace;
-}
-
-export interface SkillPreselection {
-  selected: SkillSelection[];
-  routingOutcome?: SkillRoutingOutcome;
-}
 
 export interface SkillDispatchDecision {
   mode: SkillDispatchDecisionMode;
@@ -571,12 +628,9 @@ export interface BrewvaConfig {
     roots?: string[];
     disabled: string[];
     overrides: Record<string, SkillContractOverride>;
-    selector: SkillSelectorConfig;
     routing: {
       profile: SkillRoutingProfile;
       scopes: SkillRoutingScope[];
-      continuityPhrases?: string[];
-      continuityContinuePattern?: string;
     };
     cascade: {
       mode: SkillCascadeMode;
@@ -719,11 +773,8 @@ type DeepPartial<T> = T extends readonly (infer U)[]
 export interface BrewvaConfigFile {
   $schema?: string;
   ui?: Partial<BrewvaConfig["ui"]>;
-  skills?: Partial<
-    Omit<BrewvaConfig["skills"], "selector" | "overrides" | "cascade" | "routing">
-  > & {
+  skills?: Partial<Omit<BrewvaConfig["skills"], "overrides" | "cascade" | "routing">> & {
     overrides?: BrewvaConfig["skills"]["overrides"];
-    selector?: Partial<BrewvaConfig["skills"]["selector"]>;
     routing?: Partial<BrewvaConfig["skills"]["routing"]>;
     cascade?: Partial<BrewvaConfig["skills"]["cascade"]>;
   };

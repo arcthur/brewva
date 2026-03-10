@@ -5,6 +5,9 @@ export const TOOL_OUTPUT_ARTIFACT_PERSISTED_EVENT_TYPE = "tool_output_artifact_p
 export const OBSERVABILITY_QUERY_EXECUTED_EVENT_TYPE = "observability_query_executed" as const;
 export const OBSERVABILITY_ASSERTION_RECORDED_EVENT_TYPE =
   "observability_assertion_recorded" as const;
+export const PROPOSAL_RECEIVED_EVENT_TYPE = "proposal_received" as const;
+export const PROPOSAL_DECIDED_EVENT_TYPE = "proposal_decided" as const;
+export const DECISION_RECEIPT_RECORDED_EVENT_TYPE = "decision_receipt_recorded" as const;
 
 export const EXEC_ROUTED_EVENT_TYPE = "exec_routed" as const;
 export const EXEC_FALLBACK_HOST_EVENT_TYPE = "exec_fallback_host" as const;
@@ -18,6 +21,8 @@ export const TASK_STUCK_CLEARED_EVENT_TYPE = "task_stuck_cleared" as const;
 export const DEBUG_LOOP_TRANSITION_EVENT_TYPE = "debug_loop_transition" as const;
 export const DEBUG_LOOP_FAILURE_CASE_PERSISTED_EVENT_TYPE =
   "debug_loop_failure_case_persisted" as const;
+export const DEBUG_LOOP_ARTIFACT_PERSIST_FAILED_EVENT_TYPE =
+  "debug_loop_artifact_persist_failed" as const;
 export const DEBUG_LOOP_RETRY_SCHEDULED_EVENT_TYPE = "debug_loop_retry_scheduled" as const;
 export const DEBUG_LOOP_HANDOFF_PERSISTED_EVENT_TYPE = "debug_loop_handoff_persisted" as const;
 

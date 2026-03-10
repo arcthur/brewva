@@ -25,7 +25,20 @@ Runtime artifact paths are resolved from the workspace root (`nearest .brewva/br
 - Rollback patch history: `.orchestrator/snapshots/<session>/patchsets.json`
 - Generated skill index: `.brewva/skills_index.json`
   - External broker traces: `.brewva/skill-broker/<sessionId>/*.json`
-  - includes selected skill roots (`roots`) and the merged selector index (`skills`)
+  - includes selected skill roots (`roots`) and the merged skill index (`skills`)
+- Deliberation-side cognitive artifacts (non-kernel, not auto-injected): `.brewva/cognition/reference/` and `.brewva/cognition/summaries/`
+  - these directories are operator/control-plane owned
+  - runtime kernel does not read them implicitly; they must cross the boundary as `context_packet` proposals
+  - helper surface: `packages/brewva-deliberation/src/cognition.ts`
+  - debug-loop may publish scoped retry/handoff summaries here with a stable
+    `packetKey=debug-loop:status`
+  - terminal debug-loop handoff persistence may also publish
+    `debug-loop-reference.md` under `reference/` for later cross-session
+    rehydration
+  - repeated packets can share a stable `packetKey` so the latest accepted
+    cognition packet replaces earlier ones for injection without erasing tape history
+  - `registerCognitionSediment` may rehydrate selected `reference/` artifacts
+    into accepted `context_packet` proposals for future sessions
 - Agent identity profile (per-agent): `.brewva/agents/<agent-id>/identity.md`
   - `<agent-id>` comes from runtime option `agentId` (or `BREWVA_AGENT_ID`, fallback `default`)
   - id normalization: lowercase slug (`[a-z0-9._-]`, invalid separators mapped to `-`)
@@ -49,6 +62,7 @@ Runtime artifact paths are resolved from the workspace root (`nearest .brewva/br
 ## Source Paths
 
 - Runtime: `packages/brewva-runtime/src`
+- Deliberation: `packages/brewva-deliberation/src`
 - Tools: `packages/brewva-tools/src`
 - Extensions: `packages/brewva-extensions/src`
 - CLI: `packages/brewva-cli/src`

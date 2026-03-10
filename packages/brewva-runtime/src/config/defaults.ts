@@ -8,11 +8,6 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     roots: [],
     disabled: [],
     overrides: {},
-    selector: {
-      mode: "deterministic",
-      k: 4,
-      brokerJudgeMode: "llm",
-    },
     routing: {
       profile: "standard",
       scopes: ["core", "domain"],

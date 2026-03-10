@@ -6,18 +6,17 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache-blue.svg?style=for-the-badge" alt="Apache License"></a>
 </p>
 
-Brewva is a runtime for AI coding agents that makes governance explicit, evented, and recoverable — every decision is recorded in an append-only tape that serves as both audit trail and recovery source.
+Brewva is a commitment runtime for AI coding agents. It keeps governance explicit, evented, and recoverable, and records every accepted commitment in an append-only tape that doubles as audit trail and recovery source.
 
-**Runtime may govern, but governance must be inspectable and replayable.**
+**Intelligence proposes. Kernel commits. Tape remembers.**
 
 ## Core Position
 
-**Brewva's runtime kernel does not try to make the agent smarter. Brewva makes agent behavior trustworthy.**
+**Brewva's kernel does not try to make the agent smarter. Brewva decides what is allowed to become a system commitment.**
 
-Optional control-plane helpers may assist operator workflows or preselection
-(for example the external skill broker judge), but those helpers sit outside the
-kernel path. The runtime kernel only governs, records, and replays the resulting
-execution path.
+Optional control-plane helpers may rank, plan, summarize, or judge. Those
+deliberation paths stay outside the kernel. The kernel only accepts proposals,
+commits or rejects them, and records the resulting execution path.
 
 The runtime is optimized for one question:
 
@@ -30,7 +29,7 @@ Design principles:
 3. **Bounded autonomy** — context, tools, cost, and parallelism all have explicit limits and fail-closed behavior under pressure.
 4. **Evidence-first contracts** — verification, ledger, task/truth updates, and skill lifecycle are explicit contract boundaries.
 5. **Working projection only** — projection state is a deterministic fold from tape (`units` + `working.md`), not adaptive cognition.
-6. **Governance hooks, not cognition loops** — optional governance checks (`verifySpec`, cost anomaly, compaction integrity) enrich auditability without changing core decision semantics.
+6. **Proposal, not power** — cognition can happen anywhere, but only kernel commitments may mutate authoritative state.
 
 ## Architecture
 
@@ -56,11 +55,12 @@ flowchart TD
 ```
 
 Implementation-level architecture (package DAG, execution profiles, hook wiring):
-`docs/architecture/system-architecture.md` · `docs/architecture/control-and-data-flow.md` · `docs/journeys/working-projection.md`
+`docs/architecture/system-architecture.md` · `docs/architecture/design-axioms.md` · `docs/architecture/control-and-data-flow.md` · `docs/reference/proposal-boundary.md` · `docs/journeys/working-projection.md`
 
 Primary package surfaces:
 
 - `@brewva/brewva-runtime`: governance runtime contracts, tape replay, verification, working projection, cost.
+- `@brewva/brewva-deliberation`: proposal producers, evidence/query helpers, cognition artifact bridges, and control-plane planning helpers.
 - `@brewva/brewva-tools`: runtime-aware tools (ledger/task/tape/skill/cost/governance flows).
 - `@brewva/brewva-extensions`: lifecycle hook wiring, runtime integration guards, deterministic handoff, and extension-side debug loops.
 - `@brewva/brewva-cli`: user entrypoint and session bootstrap (`interactive` / `--print` / `--json` / replay/undo).
@@ -113,19 +113,16 @@ For complete CLI modes and gateway/onboard operations:
 - Execution routing defaults to `security.execution.backend=best_available` with
   `security.execution.fallbackToHost=false`.
 - Read-only verification is explicitly reported as `skipped` (not `pass`).
-- Skill routing defaults to deterministic governance-first selection
-  (`skills.selector.mode=deterministic`), while broker-enabled sessions force
-  `external_only`; runtime `skill_routing_selection` telemetry reflects the
-  final runtime routing result, and broker judge mode defaults to `llm`.
-  In `llm` mode the control-plane judge is authoritative: judge unavailability,
-  missing credentials, or parse failures mark broker routing as failed instead
-  of silently falling back to heuristic scoring. This model-assisted judgment
-  happens in the optional control plane, not inside the runtime kernel.
+- Skill selection now crosses an explicit proposal boundary:
+  `runtime.proposals.submit(sessionId, proposal) -> DecisionReceipt`.
+  The kernel no longer exposes public selector/preselection APIs and no longer
+  performs implicit cognition-side skill routing on its own.
+- Broker- or planner-produced selection/chain intents are deliberation-layer
+  proposals. Kernel acceptance creates pending dispatch gates, cascade intents,
+  receipts, and replayable tape evidence.
 - Standard routing profile defaults to `skills.routing.profile=standard` with
   `skills.routing.scopes=["core","domain"]`, so operator/meta skills are
-  loaded but hidden from normal auto routing.
-- Continuity-required skills such as `goal-loop` are filtered out unless the
-  prompt or session context explicitly implies multi-run continuity.
+  loaded but hidden from standard deliberation profiles.
 - Cascade source defaults are now `["explicit", "dispatch"]`; compose-originated
   chain plans are no longer a public runtime source.
 - Cascade missing consumes is deterministic pause (`reason=missing_consumes`);

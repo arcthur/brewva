@@ -56,14 +56,13 @@ optional context for loading and scoring.
 
 ## Routing Scopes And Profiles
 
-Selector execution is governance-first for runtime routing:
+Skill discovery and deliberation are now separated from kernel commitment:
 
-1. Runtime kernel routing is deterministic and contract-aware when `skills.selector.mode=deterministic`.
-2. Explicit preselection (for example control-plane `setNextSelection`) is consumed before runtime routing and wins when present.
-3. Routing telemetry emits `skill_routing_selection` and reflects the final runtime routing result (`selected | empty | failed`), plus `skipped` under the critical compaction gate.
-4. `skills.selector.mode=external_only` disables kernel routing and keeps explicit preselection as the only selection source.
-5. Activation remains explicit: routing may produce `suggest/gate/auto` dispatch decisions, but actual skill entry still happens through `skill_load`.
-6. Runtime does not run adaptive inference loops or online model reranking in the kernel path.
+1. Deliberation layers may rank skills, judge candidates, and build chains.
+2. The kernel accepts only proposals (`skill_selection`, `skill_chain_intent`, `context_packet`).
+3. Proposal telemetry still emits `skill_routing_selection` as a projection of the latest accepted/deferred selection outcome (`selected | empty | failed | skipped`).
+4. Activation remains explicit: accepted proposals may arm `suggest/gate/auto` dispatch decisions, but actual skill entry still happens through `skill_load`.
+5. Runtime does not run adaptive inference loops or online model reranking in the kernel path.
 
 Routing scope defaults are driven by `skills.routing.profile`:
 
@@ -71,20 +70,20 @@ Routing scope defaults are driven by `skills.routing.profile`:
 - `operator`: `core`, `domain`, `operator`
 - `full`: `core`, `domain`, `operator`, `meta`
 
-Skills marked `routing.continuity_required=true` are additionally gated by
-continuity-aware dispatch context. This is how `goal-loop` avoids colliding with
-ordinary single-run implementation work.
+Skills marked `routing.continuity_required=true` are intended for external
+deliberation layers to filter appropriately. The runtime kernel does not expose
+its own public continuity-routing API anymore.
 
 ## Kernel vs Control Plane
 
 The runtime kernel and the optional control plane have different jobs:
 
-- kernel/runtime: deterministic routing, dispatch gates, evidence, replay, and policy enforcement
-- control plane: optional preselection assistance such as the external catalog broker and its lexical or `llm` judge
+- kernel/runtime: dispatch gates, evidence, replay, policy enforcement, and proposal commitment
+- control plane: optional candidate generation, selection assistance, chain planning, and model-assisted judging
 
-When the broker path is enabled, runtime is forced to `external_only` and
-consumes explicit preselection as an input. The model-assisted judge therefore
-does not make the kernel "smarter"; it is a separate control-plane assist path.
+When the broker path is enabled, it submits explicit proposals into the kernel
+boundary. The model-assisted judge therefore does not make the kernel
+"smarter"; it is a separate deliberation/control-plane path.
 
 `skills_index.json` carries normalized contract metadata for each routable skill
 entry, including `category`, `routingScope`, `continuityRequired`, `outputs`,
@@ -100,7 +99,7 @@ Skill cascading is policy-driven via `skills.cascade.*`:
 
 Chain intent can come from:
 
-- dispatch planning
+- deliberation-side `skill_chain_intent` proposals
 - explicit `startCascade(...)` / `skill_chain_control`
 
 Source arbitration uses:
@@ -127,7 +126,10 @@ plans as a public source.
 
 The debug loop reuses explicit cascade rather than introducing a second step
 engine. Its failure snapshot and handoff packet are extension-owned artifacts,
-not public skill outputs.
+not public skill outputs. The latest retry/handoff summary may also be mirrored
+into Deliberation-side cognition artifacts and cross back as a scoped
+`context_packet`, but it still remains non-authoritative context rather than
+skill output or kernel state.
 
 ## Public Capability Skills
 
@@ -181,6 +183,9 @@ Overlays merge onto the base skill contract with project semantics:
 - project-required tools may be added
 - denied tools and budgets still only tighten, never relax
 - outputs/consumes remain base-derived unless the overlay explicitly replaces them
+- multiple overlays apply in deterministic root load order; within one root,
+  overlay files are applied in lexical path order, and later overlays only
+  tighten or replace fields according to the merge contract
 
 Config-layer `skills.overrides` remain tightening-only. Shared project context is
 prepended from:

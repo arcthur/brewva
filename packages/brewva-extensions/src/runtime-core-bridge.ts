@@ -1,5 +1,6 @@
 import { coerceContextBudgetUsage, type BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { ExtensionAPI, ExtensionFactory } from "@mariozechner/pi-coding-agent";
+import { registerCognitionSediment } from "./cognition-sediment.js";
 import {
   extractCompactionEntryId,
   extractCompactionSummary,
@@ -8,6 +9,7 @@ import {
 } from "./context-shared.js";
 import { registerLedgerWriter } from "./ledger-writer.js";
 import { registerQualityGate } from "./quality-gate.js";
+import { registerToolSurface } from "./tool-surface.js";
 
 const CORE_CONTEXT_INJECTION_MESSAGE_TYPE = "brewva-core-context-injection";
 const CORE_CONTEXT_CONTRACT_MARKER = "[Brewva Core Context Contract]";
@@ -67,6 +69,8 @@ function buildCoreStatusBlock(runtime: BrewvaRuntime, sessionId: string): string
 }
 
 export function registerRuntimeCoreBridge(pi: ExtensionAPI, runtime: BrewvaRuntime): void {
+  registerToolSurface(pi, runtime);
+  registerCognitionSediment(pi, runtime);
   registerQualityGate(pi, runtime);
   registerLedgerWriter(pi, runtime);
 

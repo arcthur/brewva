@@ -5,6 +5,7 @@ export const CONTEXT_SOURCES = {
   skillCandidates: "brewva.skill-candidates",
   skillDispatchGate: "brewva.skill-dispatch-gate",
   skillCascadeGate: "brewva.skill-cascade-gate",
+  contextPackets: "brewva.context-packets",
   taskState: "brewva.task-state",
   toolFailures: "brewva.tool-failures",
   toolOutputsDistilled: "brewva.tool-outputs-distilled",

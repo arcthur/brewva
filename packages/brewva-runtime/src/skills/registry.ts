@@ -250,11 +250,13 @@ function walkFiles(
 }
 
 function listSkillFiles(rootDir: string): string[] {
-  return walkFiles(rootDir, (path) => basename(path) === "SKILL.md");
+  return walkFiles(rootDir, (path) => basename(path) === "SKILL.md").toSorted((a, b) =>
+    a.localeCompare(b),
+  );
 }
 
 function listMarkdownFiles(rootDir: string): string[] {
-  return walkFiles(rootDir, (path) => path.endsWith(".md"));
+  return walkFiles(rootDir, (path) => path.endsWith(".md")).toSorted((a, b) => a.localeCompare(b));
 }
 
 function joinMarkdownSections(sections: string[]): string {

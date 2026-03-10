@@ -44,8 +44,10 @@ describe("capability view", () => {
 
     expect(result.block.includes("[CapabilityView]")).toBe(true);
     expect(result.block.includes("available_total: 3")).toBe(true);
-    expect(result.block.includes("active_count: 1")).toBe(true);
-    expect(result.block.indexOf("$session_compact")).toBeLessThan(result.block.indexOf("$exec"));
+    expect(result.block.includes("visible_now_count: 1")).toBe(true);
+    expect(result.block.includes("visible_now: $exec")).toBe(true);
+    expect(result.block.includes("hidden_skill_count: 0")).toBe(true);
+    expect(result.block.includes("hidden_operator_count: 0")).toBe(true);
   });
 
   test("expands capability details from $name requests", () => {
@@ -76,6 +78,8 @@ describe("capability view", () => {
     expect(result.missing).toEqual(["not_exists"]);
     expect(result.block.includes("[CapabilityDetail:$exec]")).toBe(true);
     expect(result.block.includes("parameters: args, command")).toBe(true);
+    expect(result.block.includes("surface: skill")).toBe(true);
+    expect(result.block.includes("visible_now: false")).toBe(true);
     expect(result.block.includes("unknown: $not_exists")).toBe(true);
   });
 
@@ -131,5 +135,49 @@ describe("capability view", () => {
 
     expect(result.block.includes("allowed_now: false")).toBe(true);
     expect(result.block.includes("deny_reason: blocked-for-test")).toBe(true);
+  });
+
+  test("describes hidden operator tools and one-turn activation hint", () => {
+    const result = buildCapabilityView({
+      prompt: "continue",
+      allTools: [
+        {
+          name: "skill_load",
+          description: "Load a skill.",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          name: "obs_query",
+          description: "Query runtime events.",
+          parameters: { type: "object", properties: {} },
+        },
+      ],
+      activeToolNames: ["skill_load"],
+    });
+
+    expect(result.block.includes("hidden_operator_count: 1")).toBe(true);
+    expect(result.block.includes("operator_hint: requesting a hidden operator tool")).toBe(true);
+  });
+
+  test("describes hidden skill tools when no skill-scoped tool is visible", () => {
+    const result = buildCapabilityView({
+      prompt: "continue",
+      allTools: [
+        {
+          name: "skill_load",
+          description: "Load a skill.",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          name: "exec",
+          description: "Run a shell command.",
+          parameters: { type: "object", properties: { command: { type: "string" } } },
+        },
+      ],
+      activeToolNames: ["skill_load"],
+    });
+
+    expect(result.block.includes("hidden_skill_count: 1")).toBe(true);
+    expect(result.block.includes("skill_hint: load or accept a skill")).toBe(true);
   });
 });

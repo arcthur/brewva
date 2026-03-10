@@ -1,7 +1,10 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { readSourceTextWithCache, registerTocSourceCacheRuntime } from "./toc-cache.js";
+import type { BrewvaToolRuntime } from "./types.js";
+import { getToolSessionId } from "./utils/parallel-read.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
 import { defineTool } from "./utils/tool.js";
 
@@ -43,7 +46,8 @@ function formatSpan(startLine: number, endLine: number): string {
   return startLine === endLine ? `L${startLine}` : `L${startLine}-L${endLine}`;
 }
 
-export function createReadSpansTool(): ToolDefinition {
+export function createReadSpansTool(options?: { runtime?: BrewvaToolRuntime }): ToolDefinition {
+  registerTocSourceCacheRuntime(options?.runtime);
   return defineTool({
     name: "read_spans",
     label: "Read Spans",
@@ -74,7 +78,12 @@ export function createReadSpansTool(): ToolDefinition {
         return failTextResult(`Error: Path is not a file: ${absolutePath}`);
       }
 
-      const lines = readFileSync(absolutePath, "utf8").split("\n");
+      const source = readSourceTextWithCache({
+        sessionId: getToolSessionId(ctx),
+        absolutePath,
+        signature: `${stats.mtimeMs}:${stats.size}`,
+      });
+      const lines = source.lines;
       const normalized = normalizeSpans(params.spans);
       if (normalized.length === 0) {
         return inconclusiveTextResult(
@@ -156,6 +165,7 @@ export function createReadSpansTool(): ToolDefinition {
       return textResult(output.join("\n"), {
         status: "ok",
         filePath: absolutePath,
+        sourceCacheHit: source.cacheHit,
         totalLines: lines.length,
         spansRequested: normalized.length,
         spansReturned: bounded.length,

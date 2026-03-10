@@ -20,6 +20,7 @@ import type {
   ContextCompactionGateStatus,
   ContextPressureLevel,
   ContextPressureStatus,
+  ProposalRecord,
   SkillChainIntent,
   SkillDispatchDecision,
   SkillDocument,
@@ -50,16 +51,15 @@ export interface ContextServiceOptions {
   sessionState: RuntimeSessionStateStore;
   getTaskState: RuntimeCallback<[sessionId: string], TaskState>;
   getTruthState: RuntimeCallback<[sessionId: string], TruthState>;
-  prepareSkillDispatch: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        promptText: string;
-        turn: number;
-      },
-    ],
-    SkillDispatchDecision
+  getLatestSkillSelectionProposal: RuntimeCallback<
+    [sessionId: string],
+    ProposalRecord<"skill_selection"> | undefined
   >;
+  getAcceptedContextPackets: RuntimeCallback<
+    [sessionId: string, injectionScopeId?: string],
+    ProposalRecord<"context_packet">[]
+  >;
+  getPendingSkillDispatch: RuntimeCallback<[sessionId: string], SkillDispatchDecision | undefined>;
   buildSkillCandidateBlock: RuntimeCallback<[selected: SkillDispatchDecision["selected"]], string>;
   buildSkillDispatchGateBlock: RuntimeCallback<[decision: SkillDispatchDecision], string>;
   getSkillCascadeIntent: RuntimeCallback<[sessionId: string], SkillChainIntent | undefined>;
@@ -108,11 +108,16 @@ export class ContextService {
   private readonly sessionState: RuntimeSessionStateStore;
   private readonly getTaskState: (sessionId: string) => TaskState;
   private readonly getTruthState: (sessionId: string) => TruthState;
-  private readonly prepareSkillDispatch: (input: {
-    sessionId: string;
-    promptText: string;
-    turn: number;
-  }) => SkillDispatchDecision;
+  private readonly getLatestSkillSelectionProposal: (
+    sessionId: string,
+  ) => ProposalRecord<"skill_selection"> | undefined;
+  private readonly getAcceptedContextPackets: (
+    sessionId: string,
+    injectionScopeId?: string,
+  ) => ProposalRecord<"context_packet">[];
+  private readonly getPendingSkillDispatch: (
+    sessionId: string,
+  ) => SkillDispatchDecision | undefined;
   private readonly buildSkillCandidateBlock: (
     selected: SkillDispatchDecision["selected"],
   ) => string;
@@ -144,7 +149,9 @@ export class ContextService {
     this.sessionState = options.sessionState;
     this.getTaskState = options.getTaskState;
     this.getTruthState = options.getTruthState;
-    this.prepareSkillDispatch = options.prepareSkillDispatch;
+    this.getLatestSkillSelectionProposal = options.getLatestSkillSelectionProposal;
+    this.getAcceptedContextPackets = options.getAcceptedContextPackets;
+    this.getPendingSkillDispatch = options.getPendingSkillDispatch;
     this.buildSkillCandidateBlock = options.buildSkillCandidateBlock;
     this.buildSkillDispatchGateBlock = options.buildSkillDispatchGateBlock;
     this.getSkillCascadeIntent = options.getSkillCascadeIntent;
@@ -208,7 +215,10 @@ export class ContextService {
       getRecentToolOutputDistillations: (id) => this.getRecentToolOutputDistillationsBlock(id),
       getTaskState: (id) => this.getTaskState(id),
       buildTaskStateBlock: (state) => this.buildTaskStateBlock(state),
-      prepareSkillDispatch: (dispatchInput) => this.prepareSkillDispatch(dispatchInput),
+      getLatestSkillSelectionProposal: (id) => this.getLatestSkillSelectionProposal(id),
+      getAcceptedContextPackets: (id, injectionScopeId) =>
+        this.getAcceptedContextPackets(id, injectionScopeId),
+      getPendingSkillDispatch: (id) => this.getPendingSkillDispatch(id),
       buildSkillCandidateBlock: (selected) => this.buildSkillCandidateBlock(selected),
       buildSkillDispatchGateBlock: (decision) => this.buildSkillDispatchGateBlock(decision),
       getActiveSkillName: (id) => this.getActiveSkill(id)?.name ?? null,

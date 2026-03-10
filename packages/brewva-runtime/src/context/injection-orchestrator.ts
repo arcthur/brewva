@@ -1,6 +1,7 @@
 import type {
   ContextBudgetUsage,
   ContextInjectionDecision,
+  ProposalRecord,
   SkillChainIntent,
   SkillDispatchDecision,
   SkillSelection,
@@ -61,11 +62,12 @@ export interface ContextInjectionOrchestratorDeps {
   getRecentToolOutputDistillations(sessionId: string): ToolOutputDistillationEntry[];
   getTaskState(sessionId: string): TaskState;
   buildTaskStateBlock(state: TaskState): string;
-  prepareSkillDispatch(input: {
-    sessionId: string;
-    promptText: string;
-    turn: number;
-  }): SkillDispatchDecision;
+  getLatestSkillSelectionProposal(sessionId: string): ProposalRecord<"skill_selection"> | undefined;
+  getAcceptedContextPackets(
+    sessionId: string,
+    injectionScopeId?: string,
+  ): ProposalRecord<"context_packet">[];
+  getPendingSkillDispatch(sessionId: string): SkillDispatchDecision | undefined;
   buildSkillCandidateBlock(selected: SkillSelection[]): string;
   buildSkillDispatchGateBlock(decision: SkillDispatchDecision): string;
   getActiveSkillName(sessionId: string): string | null;
@@ -130,16 +132,15 @@ export function buildContextInjection(
     truthState,
     usage: input.usage,
   });
-  const currentTurn = deps.getCurrentTurn(input.sessionId);
-  const dispatchDecision = deps.prepareSkillDispatch({
-    sessionId: input.sessionId,
-    promptText,
-    turn: currentTurn,
-  });
-  const selectedSkills = dispatchDecision.selected;
+  const latestSkillSelection = deps.getLatestSkillSelectionProposal(input.sessionId);
+  const selectedSkills = latestSkillSelection?.proposal.payload.selected ?? [];
+  const selectionConfidence =
+    latestSkillSelection?.proposal.confidence ??
+    latestSkillSelection?.proposal.payload.confidence ??
+    0;
   if (
     selectedSkills.length > 0 &&
-    dispatchDecision.confidence >= MIN_SKILL_CANDIDATE_INJECTION_CONFIDENCE
+    selectionConfidence >= MIN_SKILL_CANDIDATE_INJECTION_CONFIDENCE
   ) {
     deps.registerContextInjection(input.sessionId, {
       source: CONTEXT_SOURCES.skillCandidates,
@@ -147,7 +148,8 @@ export function buildContextInjection(
       content: deps.buildSkillCandidateBlock(selectedSkills),
     });
   }
-  if (dispatchDecision.mode === "gate" || dispatchDecision.mode === "auto") {
+  const dispatchDecision = deps.getPendingSkillDispatch(input.sessionId);
+  if (dispatchDecision && (dispatchDecision.mode === "gate" || dispatchDecision.mode === "auto")) {
     deps.registerContextInjection(input.sessionId, {
       source: CONTEXT_SOURCES.skillDispatchGate,
       id: "skill-dispatch-gate",
@@ -165,6 +167,17 @@ export function buildContextInjection(
         content: deps.buildSkillCascadeGateBlock(intent),
       });
     }
+  }
+  for (const packet of deps.getAcceptedContextPackets(input.sessionId, input.injectionScopeId)) {
+    deps.registerContextInjection(input.sessionId, {
+      source: CONTEXT_SOURCES.contextPackets,
+      id:
+        typeof packet.proposal.payload.packetKey === "string" &&
+        packet.proposal.payload.packetKey.trim().length > 0
+          ? `context-packet:${packet.proposal.issuer}:${packet.proposal.payload.scopeId ?? "global"}:${packet.proposal.payload.packetKey.trim()}`
+          : `context-packet:${packet.proposal.id}`,
+      content: `[ContextPacket:${packet.proposal.payload.label}]\n${packet.proposal.payload.content}`,
+    });
   }
 
   const toolFailureConfig = deps.getToolFailureInjectionConfig();

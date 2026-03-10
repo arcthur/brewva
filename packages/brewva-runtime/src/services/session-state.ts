@@ -1,10 +1,4 @@
-import type {
-  SkillChainIntent,
-  SkillDispatchDecision,
-  SkillOutputRecord,
-  SkillPreselection,
-  SkillRoutingTrace,
-} from "../types.js";
+import type { SkillChainIntent, SkillDispatchDecision, SkillOutputRecord } from "../types.js";
 
 export type ScanConvergenceReason =
   | "scan_only_turns"
@@ -39,8 +33,6 @@ export class RuntimeSessionStateStore {
   readonly skillDispatchGateWarningsBySession = new Map<string, Set<string>>();
   readonly skillOutputsBySession = new Map<string, Map<string, SkillOutputRecord>>();
   readonly pendingDispatchBySession = new Map<string, SkillDispatchDecision>();
-  readonly nextSkillSelectionsBySession = new Map<string, SkillPreselection>();
-  readonly lastSkillRoutingBySession = new Map<string, SkillRoutingTrace>();
   readonly skillChainIntentsBySession = new Map<string, SkillChainIntent>();
   readonly tapeCheckpointWriteInProgressBySession = new Set<string>();
   readonly tapeCheckpointCounterInitializedBySession = new Set<string>();
@@ -98,8 +90,6 @@ export class RuntimeSessionStateStore {
     this.skillDispatchGateWarningsBySession.delete(sessionId);
     this.skillOutputsBySession.delete(sessionId);
     this.pendingDispatchBySession.delete(sessionId);
-    this.nextSkillSelectionsBySession.delete(sessionId);
-    this.lastSkillRoutingBySession.delete(sessionId);
     this.skillChainIntentsBySession.delete(sessionId);
     this.clearInjectionFingerprintsForSession(sessionId);
     this.clearReservedInjectionTokensForSession(sessionId);

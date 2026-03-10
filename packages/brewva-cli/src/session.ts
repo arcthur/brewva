@@ -87,7 +87,6 @@ export async function createBrewvaSession(
   const settingsManager = SettingsManager.create(cwd, agentDir);
   applyRuntimeUiSettings(settingsManager, runtime.config.ui);
 
-  runtime.config.skills.selector.mode = "external_only";
   const extensionsEnabled = options.enableExtensions !== false;
   const extensionFactories = [
     createSkillBrokerExtension({ runtime }),
@@ -139,8 +138,7 @@ export async function createBrewvaSession(
       extensionsEnabled,
       skillBroker: {
         enabled: true,
-        selectorMode: runtime.config.skills.selector.mode,
-        judgeMode: runtime.config.skills.selector.brokerJudgeMode,
+        proposalBoundary: "runtime.proposals.submit",
       },
       skillLoad: {
         routingProfile: skillLoadReport.routingProfile,

@@ -3,7 +3,7 @@ import { registerRuntimeCoreBridge } from "@brewva/brewva-extensions";
 import {
   createMockExtensionAPI,
   invokeHandler,
-  invokeHandlerAsync,
+  invokeHandlersAsync,
   invokeHandlers,
 } from "../helpers/extension.js";
 
@@ -153,7 +153,7 @@ describe("runtime core bridge extension", () => {
     const { runtime, calls } = createRuntimeFixture();
     registerRuntimeCoreBridge(api, runtime as any);
 
-    const beforeStart = await invokeHandlerAsync<{
+    const results = await invokeHandlersAsync<{
       systemPrompt?: string;
       message?: { content?: string; details?: Record<string, unknown> };
     }>(
@@ -166,6 +166,13 @@ describe("runtime core bridge extension", () => {
       },
       createSessionContext("core-before-start"),
     );
+    const beforeStart = results.find(
+      (result) =>
+        typeof result?.systemPrompt === "string" || typeof result?.message?.content === "string",
+    );
+    if (!beforeStart) {
+      throw new Error("Expected runtime core bridge before_agent_start output.");
+    }
     expect(beforeStart.systemPrompt?.includes("[Brewva Core Context Contract]")).toBe(true);
     expect(beforeStart.message?.content?.includes("[CoreTapeStatus]")).toBe(true);
     expect(beforeStart.message?.content?.includes("required_action: session_compact_now")).toBe(

@@ -24,112 +24,102 @@ function createConfig(
   return config;
 }
 
+function buildEvidenceRef(sessionId: string) {
+  return {
+    id: `${sessionId}:broker-trace`,
+    sourceType: "broker_trace" as const,
+    locator: "broker://test",
+    createdAt: Date.now(),
+  };
+}
+
+function submitSelection(runtime: BrewvaRuntime, sessionId: string, skillName: string) {
+  runtime.context.onTurnStart(sessionId, 1);
+  return runtime.proposals.submit(sessionId, {
+    id: `${sessionId}:selection`,
+    kind: "skill_selection",
+    issuer: "test.broker",
+    subject: `select:${skillName}`,
+    payload: {
+      selected: [
+        {
+          name: skillName,
+          score: 30,
+          reason: `semantic:${skillName}`,
+          breakdown: [{ signal: "semantic_match", term: skillName, delta: 30 }],
+        },
+      ],
+      routingOutcome: "selected",
+    },
+    evidenceRefs: [buildEvidenceRef(sessionId)],
+    createdAt: Date.now(),
+  });
+}
+
+function submitChain(runtime: BrewvaRuntime, sessionId: string, steps: string[]) {
+  return runtime.proposals.submit(sessionId, {
+    id: `${sessionId}:chain`,
+    kind: "skill_chain_intent",
+    issuer: "test.broker",
+    subject: `chain:${steps.join("->")}`,
+    payload: {
+      steps: steps.map((skill) => ({ skill })),
+      source: "test",
+    },
+    evidenceRefs: [buildEvidenceRef(sessionId)],
+    createdAt: Date.now(),
+  });
+}
+
 function buildSkillOutputs(runtime: BrewvaRuntime, skillName: string): Record<string, unknown> {
   const skill = runtime.skills.get(skillName);
   const outputs = skill?.contract.outputs ?? [];
   return Object.fromEntries(outputs.map((output) => [output, `${output}:ok`]));
 }
 
-function seedSelection(runtime: BrewvaRuntime, sessionId: string, skillName: string): void {
-  runtime.context.onTurnStart(sessionId, 1);
-  runtime.skills.setNextSelection(sessionId, [
-    {
-      name: skillName,
-      score: 30,
-      reason: `semantic:${skillName}`,
-      breakdown: [{ signal: "semantic_match", term: skillName, delta: 30 }],
-    },
-  ]);
-}
-
 describe("skill cascade orchestration", () => {
-  test("auto mode activates the routed skill immediately when no prerequisites are missing", () => {
+  test("accepted skill_selection proposals still arm the dispatch gate", () => {
     const runtime = new BrewvaRuntime({
-      cwd: createWorkspace("auto"),
+      cwd: createWorkspace("selection-commitment"),
       config: createConfig("auto"),
     });
-    const sessionId = "skill-cascade-auto-1";
+    const sessionId = "skill-cascade-selection-1";
 
-    seedSelection(runtime, sessionId, "repository-analysis");
-    runtime.skills.prepareDispatch(sessionId, "Map the repository structure");
-
-    const intent = runtime.skills.getCascadeIntent(sessionId);
-    expect(intent?.source).toBe("dispatch");
-    expect(intent?.status).toBe("running");
-    expect(intent?.steps.map((step) => step.skill)).toEqual(["repository-analysis"]);
+    const receipt = submitSelection(runtime, sessionId, "repository-analysis");
+    expect(receipt.decision).toBe("accept");
     expect(runtime.skills.getActive(sessionId)?.name).toBe("repository-analysis");
+    expect(runtime.skills.getCascadeIntent(sessionId)?.source).toBe("dispatch");
   });
 
-  test("assist mode plans a dispatch chain but waits for manual activation", () => {
+  test("accepted chain proposals create runtime cascade intent", () => {
     const runtime = new BrewvaRuntime({
-      cwd: createWorkspace("assist"),
+      cwd: createWorkspace("chain-commitment"),
       config: createConfig("assist"),
     });
-    const sessionId = "skill-cascade-assist-1";
+    const sessionId = "skill-cascade-chain-1";
 
-    seedSelection(runtime, sessionId, "review");
-    runtime.skills.prepareDispatch(sessionId, "Review this change for risk");
-
-    const intent = runtime.skills.getCascadeIntent(sessionId);
-    expect(intent?.source).toBe("dispatch");
-    expect(intent?.status).toBe("paused");
-    expect(runtime.skills.getActive(sessionId)).toBeUndefined();
-  });
-
-  test("off mode keeps dispatch routing out of cascade", () => {
-    const runtime = new BrewvaRuntime({
-      cwd: createWorkspace("off"),
-      config: createConfig("off"),
-    });
-    const sessionId = "skill-cascade-off-1";
-
-    seedSelection(runtime, sessionId, "design");
-    runtime.skills.prepareDispatch(sessionId, "Design the taxonomy refactor");
-
-    expect(runtime.skills.getCascadeIntent(sessionId)).toBeUndefined();
-    expect(runtime.events.query(sessionId, { type: "skill_cascade_planned" })).toHaveLength(0);
-  });
-
-  test("explicit intents remain authoritative over dispatch reroutes", () => {
-    const runtime = new BrewvaRuntime({
-      cwd: createWorkspace("explicit-priority"),
-      config: createConfig("auto"),
-    });
-    const sessionId = "skill-cascade-explicit-1";
-
-    const explicit = runtime.skills.startCascade(sessionId, {
-      steps: [{ skill: "design" }],
-    });
-    expect(explicit.ok).toBe(true);
-    expect(runtime.skills.getCascadeIntent(sessionId)?.source).toBe("explicit");
-
-    seedSelection(runtime, sessionId, "review");
-    runtime.skills.prepareDispatch(sessionId, "Review the current plan");
-
+    const receipt = submitChain(runtime, sessionId, ["repository-analysis", "review"]);
+    expect(receipt.decision).toBe("accept");
     const intent = runtime.skills.getCascadeIntent(sessionId);
     expect(intent?.source).toBe("explicit");
-    expect(intent?.steps.map((step) => step.skill)).toEqual(["design"]);
+    expect(intent?.steps.map((step) => step.skill)).toEqual(["repository-analysis", "review"]);
   });
 
-  test("dispatch source can be disabled explicitly", () => {
+  test("dispatch-disabled cascade source does not block explicit proposal chains", () => {
     const runtime = new BrewvaRuntime({
-      cwd: createWorkspace("dispatch-disabled"),
+      cwd: createWorkspace("explicit-priority"),
       config: createConfig("auto", ["explicit", "dispatch"], ["explicit"]),
     });
-    const sessionId = "skill-cascade-dispatch-disabled-1";
+    const sessionId = "skill-cascade-explicit-priority";
 
-    seedSelection(runtime, sessionId, "review");
-    runtime.skills.prepareDispatch(sessionId, "Review the current plan");
-
-    expect(runtime.skills.getCascadeIntent(sessionId)).toBeUndefined();
-    const latest = runtime.events.query(sessionId, {
-      type: "skill_cascade_overridden",
-      last: 1,
-    })[0];
-    expect(latest?.payload?.reason).toBe("source_decision_rejected");
+    const receipt = submitChain(runtime, sessionId, ["design"]);
+    expect(receipt.decision).toBe("accept");
+    expect(runtime.skills.getCascadeIntent(sessionId)?.steps.map((step) => step.skill)).toEqual([
+      "design",
+    ]);
   });
 
-  test("explicit intent advances after manual completion", () => {
+  test("explicit intents still advance after manual completion", () => {
     const runtime = new BrewvaRuntime({
       cwd: createWorkspace("explicit-complete"),
       config: createConfig("auto"),

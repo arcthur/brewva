@@ -34,6 +34,7 @@ This repository uses a layered documentation system:
 ## Architecture
 
 - System architecture: `docs/architecture/system-architecture.md`
+- Design axioms: `docs/architecture/design-axioms.md`
 - Control and data flow: `docs/architecture/control-and-data-flow.md`
 - Invariants and reliability: `docs/architecture/invariants-and-reliability.md`
 
@@ -43,6 +44,7 @@ This repository uses a layered documentation system:
 - Tools: `docs/reference/tools.md`
 - Skills: `docs/reference/skills.md`
 - Runtime API: `docs/reference/runtime.md`
+- Proposal boundary: `docs/reference/proposal-boundary.md`
 - Events: `docs/reference/events.md`
 - Extensions: `docs/reference/extensions.md`
 - Commands (CLI surface): `docs/reference/commands.md`
@@ -65,6 +67,7 @@ This repository uses a layered documentation system:
 ## Source of Truth
 
 - Runtime package: `packages/brewva-runtime/src/index.ts`
+- Deliberation package: `packages/brewva-deliberation/src/index.ts`
 - Telegram channel package: `packages/brewva-channels-telegram/src/index.ts`
 - Telegram ingress package: `packages/brewva-ingress/src/index.ts`
 - Tool package: `packages/brewva-tools/src/index.ts`

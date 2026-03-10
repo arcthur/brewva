@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { registerContextTransform } from "@brewva/brewva-extensions";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, type ProposalRecord } from "@brewva/brewva-runtime";
 import { createSkillBrokerExtension, type SkillBroker } from "@brewva/brewva-skill-broker";
 import { createMockExtensionAPI } from "../helpers/extension.js";
 import { createTestWorkspace } from "../helpers/workspace.js";
@@ -75,7 +75,7 @@ function readLatestBrokerTrace(
 }
 
 describe("external skill broker extension", () => {
-  test("injects external preselection before context transform routing", async () => {
+  test("submits broker-selected skill proposals before context transform injection", async () => {
     const { api, handlers } = createMockExtensionAPI();
     const runtime = new BrewvaRuntime({ cwd: repoRoot() });
     const sessionId = "skill-broker-ext";
@@ -86,7 +86,7 @@ describe("external skill broker extension", () => {
             {
               name: "review",
               score: 24,
-              reason: "test_preselection",
+              reason: "test_selection",
               breakdown: [],
             },
           ],
@@ -102,7 +102,7 @@ describe("external skill broker extension", () => {
               {
                 name: "review",
                 score: 24,
-                reason: "test_preselection",
+                reason: "test_selection",
                 breakdown: [],
               },
             ],
@@ -135,14 +135,17 @@ describe("external skill broker extension", () => {
       );
     }
 
-    const trace = runtime.skills.getLastRouting(sessionId);
-    expect(trace?.source).toBe("external_preselection");
-    expect(trace?.selection.reason).toBe("external_preselection_selected");
-    expect(trace?.selection.selectedSkills).toContain("review");
+    const record = runtime.proposals.list(sessionId, { kind: "skill_selection", limit: 1 })[0] as
+      | ProposalRecord<"skill_selection">
+      | undefined;
+    expect(record?.receipt.decision).toBe("accept");
+    expect(
+      record?.proposal.payload.selected.map((entry: { name: string }) => entry.name),
+    ).toContain("review");
     expect(
       (result as { message?: { details?: { routingSelection?: { reason?: string } } } }).message
         ?.details?.routingSelection?.reason,
-    ).toBe("external_preselection_selected");
+    ).toBe("skill_selection_committed");
   });
 
   test("forwards current model and model registry to broker judge context", async () => {
@@ -204,7 +207,7 @@ describe("external skill broker extension", () => {
     expect(seenModelRegistry).toBe(true);
   });
 
-  test("uses preview-only broker path when brokerJudgeMode is heuristic", async () => {
+  test("uses preview-only broker path when judge is disabled", async () => {
     const { api, handlers } = createMockExtensionAPI();
     const workspace = createTestWorkspace("skill-broker-heuristic");
     writeCatalog(workspace, {
@@ -217,10 +220,9 @@ describe("external skill broker extension", () => {
       ],
     });
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    runtime.config.skills.selector.brokerJudgeMode = "heuristic";
     const sessionId = "heuristic-session";
 
-    await createSkillBrokerExtension({ runtime })(api);
+    await createSkillBrokerExtension({ runtime, brokerOptions: { judge: null } })(api);
 
     const beforeHandlers = handlers.get("before_agent_start") ?? [];
     expect(beforeHandlers).toHaveLength(1);
@@ -251,7 +253,7 @@ describe("external skill broker extension", () => {
     expect(trace.judge).toBeUndefined();
   });
 
-  test("records judge trace when brokerJudgeMode is llm", async () => {
+  test("records judge trace when default llm judge is active", async () => {
     const { api, handlers } = createMockExtensionAPI();
     const workspace = createTestWorkspace("skill-broker-llm");
     writeCatalog(workspace, {
@@ -264,7 +266,6 @@ describe("external skill broker extension", () => {
       ],
     });
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    runtime.config.skills.selector.brokerJudgeMode = "llm";
     const sessionId = "llm-session";
 
     await createSkillBrokerExtension({ runtime })(api);

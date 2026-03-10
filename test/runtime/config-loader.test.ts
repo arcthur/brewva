@@ -112,17 +112,16 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.projection.maxWorkingChars).toBe(2400);
   });
 
-  test("normalizes skills.selector.mode deterministically", () => {
-    const workspace = createWorkspace("selector-mode");
+  test("normalizes skills.routing profile and scopes", () => {
+    const workspace = createWorkspace("routing-profile");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
       JSON.stringify(
         {
           skills: {
-            selector: {
-              mode: "external_only",
-              k: 6.9,
-              brokerJudgeMode: "llm",
+            routing: {
+              profile: "operator",
+              scopes: ["domain", "operator", "domain"],
             },
           },
         },
@@ -133,13 +132,12 @@ describe("Brewva config loader normalization", () => {
     );
 
     const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
-    expect(loaded.skills.selector.mode).toBe("external_only");
-    expect(loaded.skills.selector.k).toBe(6);
-    expect(loaded.skills.selector.brokerJudgeMode).toBe("llm");
+    expect(loaded.skills.routing.profile).toBe("operator");
+    expect(loaded.skills.routing.scopes).toEqual(["domain", "operator"]);
   });
 
-  test("fails fast on invalid skills.selector.mode", () => {
-    const workspace = createWorkspace("selector-mode-invalid");
+  test("fails fast on removed skills.selector config", () => {
+    const workspace = createWorkspace("selector-config-removed");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
       JSON.stringify(
@@ -161,15 +159,15 @@ describe("Brewva config loader normalization", () => {
     );
   });
 
-  test("fails fast on invalid skills.selector.brokerJudgeMode", () => {
-    const workspace = createWorkspace("selector-broker-judge-mode-invalid");
+  test("fails fast on removed skills.routing continuity override config", () => {
+    const workspace = createWorkspace("routing-continuity-config-removed");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
       JSON.stringify(
         {
           skills: {
-            selector: {
-              brokerJudgeMode: "always_on",
+            routing: {
+              continuityPhrases: ["keep going"],
             },
           },
         },

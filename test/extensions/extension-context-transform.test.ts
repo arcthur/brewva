@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { createBrewvaExtension, registerContextTransform } from "@brewva/brewva-extensions";
-import { createMockExtensionAPI, invokeHandler, invokeHandlerAsync } from "../helpers/extension.js";
+import {
+  createMockExtensionAPI,
+  invokeHandler,
+  invokeHandlerAsync,
+  invokeHandlersAsync,
+} from "../helpers/extension.js";
 import { createRuntimeConfig, createRuntimeFixture } from "./fixtures/runtime.js";
 
 describe("Extension gaps: context transform", () => {
@@ -254,7 +259,7 @@ describe("Extension gaps: context transform", () => {
 
     registerContextTransform(api, runtime);
 
-    const result = await invokeHandlerAsync<{
+    const results = await invokeHandlersAsync<{
       message: {
         content: string;
       };
@@ -273,6 +278,10 @@ describe("Extension gaps: context transform", () => {
         getContextUsage: () => undefined,
       },
     );
+    const result = results.find((candidate) => candidate?.message?.content?.includes("[async]"));
+    if (!result) {
+      throw new Error("Expected context-transform result from createBrewvaExtension.");
+    }
 
     expect(calls).toEqual(["async"]);
     expect(result.message.content.includes("[async]")).toBe(true);
@@ -323,13 +332,12 @@ describe("Extension gaps: context transform", () => {
       last: 1,
     })[0]?.payload as { status?: string; reason?: string; selectedCount?: number } | undefined;
 
-    expect(selectionPayload?.status).toBe("selected");
-    expect(selectionPayload?.reason).toBe("deterministic_router_selected");
-    expect((selectionPayload?.selectedCount ?? 0) > 0).toBe(true);
-    expect(result.message.details?.routingSelection?.status).toBe("selected");
-    expect(result.message.details?.routingSelection?.reason).toBe("deterministic_router_selected");
-    expect((result.message.details?.routingSelection?.selectedCount ?? 0) > 0).toBe(true);
-    expect(runtime.skills.clearNextSelection(sessionId)).toBeUndefined();
+    expect(selectionPayload?.status).toBe("skipped");
+    expect(selectionPayload?.reason).toBe("selection_proposal_unavailable");
+    expect(selectionPayload?.selectedCount).toBe(0);
+    expect(result.message.details?.routingSelection?.status).toBe("skipped");
+    expect(result.message.details?.routingSelection?.reason).toBe("selection_proposal_unavailable");
+    expect(result.message.details?.routingSelection?.selectedCount).toBe(0);
 
     const summary = runtime.cost.getSummary(sessionId);
     expect(summary.totalTokens).toBe(0);
@@ -364,7 +372,7 @@ describe("Extension gaps: context transform", () => {
     });
     await extension(api);
 
-    const result = await invokeHandlerAsync<{
+    const results = await invokeHandlersAsync<{
       message: {
         content: string;
       };
@@ -383,9 +391,16 @@ describe("Extension gaps: context transform", () => {
         getContextUsage: () => undefined,
       },
     );
+    const result = results.find(
+      (value): value is { message: { content: string } } =>
+        typeof value === "object" &&
+        value !== null &&
+        "message" in value &&
+        typeof (value as { message?: { content?: unknown } }).message?.content === "string",
+    );
 
     expect(calls).toEqual(["async"]);
-    expect(result.message.content.includes("[async]")).toBe(true);
+    expect(result?.message.content.includes("[async]")).toBe(true);
   });
 
   test("given non-interactive mode and compaction requested, when context hook runs, then context_compaction_skipped is recorded", () => {
@@ -822,19 +837,6 @@ describe("Extension gaps: context transform", () => {
       },
     });
 
-    runtime.skills.setNextSelection(
-      "s-critical-short-circuit",
-      [
-        {
-          name: "review",
-          score: 20,
-          reason: "semantic:stale",
-          breakdown: [{ signal: "semantic_match", term: "stale", delta: 20 }],
-        },
-      ],
-      { routingOutcome: "selected" },
-    );
-
     registerContextTransform(api, runtime);
 
     const result = await invokeHandlerAsync<{
@@ -865,7 +867,6 @@ describe("Extension gaps: context transform", () => {
     expect(result.message?.details?.routingSelection?.status).toBe("skipped");
     expect(result.message?.details?.routingSelection?.reason).toBe("critical_compaction_gate");
     expect(result.message?.details?.routingSelection?.selectedCount).toBe(0);
-    expect(runtime.skills.clearNextSelection("s-critical-short-circuit")).toBeUndefined();
 
     const selectionEvent = eventPayloads.find((event) => event.type === "skill_routing_selection");
     expect(selectionEvent?.payload?.status).toBe("skipped");

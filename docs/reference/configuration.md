@@ -33,9 +33,6 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 - `skills.roots`: `[]`
 - `skills.disabled`: `[]`
 - `skills.overrides`: `{}`
-- `skills.selector.mode`: `deterministic` (`deterministic | external_only`)
-- `skills.selector.k`: `4`
-- `skills.selector.brokerJudgeMode`: `llm` (`heuristic | llm`)
 - `skills.routing.profile`: `standard` (`standard | operator | full`)
 - `skills.routing.scopes`: `["core", "domain"]`
 - `skills.cascade.mode`: `auto` (`off | assist | auto`)
@@ -45,28 +42,17 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 
 `skills.cascade.enabledSources` controls which sources are allowed to produce chain intents.
 `skills.cascade.sourcePriority` only controls arbitration order among enabled sources.
-`skills.selector.mode` controls skill candidate sourcing:
-
-- `deterministic` (default): runtime kernel performs deterministic contract-aware routing before dispatch
-- `external_only`: runtime consumes only explicit preselection (for example control-plane `setNextSelection`)
-
-CLI/gateway sessions that enable the external skill broker currently force `skills.selector.mode=external_only` at bootstrap time.
-Use `deterministic` only when running without that broker path.
-
-`skills.selector.k` caps the number of stored/returned candidates for both runtime deterministic routing and externally injected preselection.
 
 `skills.overrides` are runtime config tightenings only. They can reduce budgets,
 raise dispatch gates, and deny tools, but they do not add new tool access. Use
 project overlays for project-specific tool/resource extension.
 
-`skills.selector.brokerJudgeMode` controls stage-two broker behavior for broker-enabled sessions:
+There is no longer a public `skills.selector.*` config surface. Candidate
+generation, broker judging, and chain planning belong to the deliberation ring,
+not the kernel. Kernel admission now happens through proposal submission:
 
-- `heuristic`: shortlist only; no control-plane model completion
-- `llm` (default): run the control-plane judge and allow full-catalog semantic selection when shortlist confidence is low or empty
-
-`llm` is an explicit cost/latency trade-off and is authoritative. If model resolution, credentials, or parsing fail, broker routing is marked failed instead of silently falling back to heuristic scoring. Use `heuristic` only when you intentionally want lexical-only routing.
-This judge runs in the optional control-plane broker path, not inside the
-runtime kernel.
+- `runtime.proposals.submit(sessionId, proposal)`
+- `DecisionReceipt.decision = accept | reject | defer`
 
 `skills.routing.profile` controls which category-derived routing scopes are auto-routable:
 
@@ -74,9 +60,9 @@ runtime kernel.
 - `operator`: `core`, `domain`, `operator`
 - `full`: `core`, `domain`, `operator`, `meta`
 
-`skills.routing.scopes` is the explicit scope allowlist used by the runtime after
-profile normalization. Operator/meta skills may still be loaded while remaining
-hidden from standard routing.
+`skills.routing.scopes` is the explicit scope allowlist used by skill discovery
+and external deliberation layers. Operator/meta skills may still be loaded while
+remaining hidden from standard proposal producers.
 
 Skill discovery accepts either:
 
@@ -340,7 +326,9 @@ Several low-level tuning knobs were intentionally internalized and are no longer
 
 Examples:
 
-- `skills.selector.maxDigestTokens`
+- `skills.selector.*`
+- `skills.routing.continuityPhrases`
+- `skills.routing.continuityContinuePattern`
 - `ledger.digestWindow`
 - `tape.tapePressureThresholds.*`
 - `parallel.maxTotal`

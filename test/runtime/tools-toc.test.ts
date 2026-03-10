@@ -272,6 +272,29 @@ describe("TOC tools", () => {
     expect(details?.declarationsCount).toBe(3);
   });
 
+  test("toc_document returns inconclusive for oversized files", async () => {
+    const workspace = createWorkspace("brewva-toc-document-large-");
+    const filePath = join(workspace, "src/huge.ts");
+    writeFileSync(filePath, `export const payload = "${"x".repeat(1_100_000)}";\n`, "utf8");
+    const tool = createTocTools().find((entry) => entry.name === "toc_document");
+    expect(tool).toBeDefined();
+
+    const result = await tool!.execute(
+      "tc-toc-document-large",
+      { file_path: filePath },
+      undefined,
+      undefined,
+      fakeContext("toc-document-large-session", workspace),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    const details = (result as { details?: Record<string, unknown> }).details;
+    expect(text.includes("reason=file_too_large")).toBe(true);
+    expect(details?.status).toBe("unavailable");
+    expect(details?.reason).toBe("file_too_large");
+    expect(details?.verdict).toBe("inconclusive");
+  });
+
   test("toc_search returns focused matches with line spans and telemetry", async () => {
     const workspace = createWorkspace("brewva-toc-search-");
     sampleFile(workspace);
@@ -362,6 +385,37 @@ describe("TOC tools", () => {
     expect(details?.status).toBe("ok");
     expect(details?.indexedFiles).toBe(1);
     expect(details?.candidateFiles).toBe(1);
+  });
+
+  test("toc_search returns inconclusive when search scope exceeds the file walk budget", async () => {
+    const workspace = createWorkspace("brewva-toc-scope-overflow-");
+    for (let index = 0; index < 2_050; index += 1) {
+      writeFileSync(
+        join(workspace, "src", `file-${index}.ts`),
+        `export const item${index} = ${index};\n`,
+        "utf8",
+      );
+    }
+    const tool = createTocTools().find((entry) => entry.name === "toc_search");
+    expect(tool).toBeDefined();
+
+    const result = await tool!.execute(
+      "tc-toc-scope-overflow",
+      {
+        query: "item",
+        paths: ["src"],
+      },
+      undefined,
+      undefined,
+      fakeContext("toc-scope-overflow-session", workspace),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    const details = (result as { details?: Record<string, unknown> }).details;
+    expect(text.includes("reason: search_scope_too_large")).toBe(true);
+    expect(details?.status).toBe("unavailable");
+    expect(details?.reason).toBe("search_scope_too_large");
+    expect(details?.verdict).toBe("inconclusive");
   });
 
   test("toc_search returns broad_query for generic structural queries", async () => {
@@ -458,6 +512,38 @@ describe("TOC tools", () => {
     expect(text.includes("L4:")).toBe(false);
     expect(details?.status).toBe("ok");
     expect(details?.spansReturned).toBe(1);
+  });
+
+  test("read_spans reuses the TOC source cache for the same session and file", async () => {
+    const workspace = createWorkspace("brewva-read-spans-cache-");
+    const runtime = createRuntime(workspace);
+    const filePath = sampleFile(workspace);
+    const sessionId = "read-spans-cache-session";
+    const tocTool = createTocTools({ runtime }).find((entry) => entry.name === "toc_document");
+    const readTool = createReadSpansTool({ runtime });
+    expect(tocTool).toBeDefined();
+
+    await tocTool!.execute(
+      "tc-toc-before-read-spans",
+      { file_path: filePath },
+      undefined,
+      undefined,
+      fakeContext(sessionId, workspace),
+    );
+    const result = await readTool.execute(
+      "tc-read-spans-cache",
+      {
+        file_path: filePath,
+        spans: [{ start_line: 5, end_line: 8 }],
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId, workspace),
+    );
+
+    const details = (result as { details?: Record<string, unknown> }).details;
+    expect(details?.status).toBe("ok");
+    expect(details?.sourceCacheHit).toBe(true);
   });
 
   test("read_spans reports where truncation happened for resume", async () => {

@@ -1,8 +1,13 @@
-import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { basename, extname, join, relative, resolve } from "node:path";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import ts from "typescript";
+import {
+  readSourceTextWithCache,
+  registerTocSourceCacheRuntime,
+  resolveTocSessionKey,
+} from "./toc-cache.js";
 import type { BrewvaToolRuntime } from "./types.js";
 import { getToolSessionId } from "./utils/parallel-read.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
@@ -15,6 +20,9 @@ const MAX_CACHE_SESSIONS = 64;
 const MAX_CACHE_ENTRIES_PER_SESSION = 512;
 const DEFAULT_TOC_SEARCH_LIMIT = 8;
 const MAX_TOC_SEARCH_LIMIT = 50;
+const MAX_TOC_FILE_BYTES = 1_000_000;
+const MAX_TOC_SEARCH_CANDIDATE_FILES = 2_000;
+const MAX_TOC_SEARCH_INDEXED_BYTES = 8_000_000;
 const BROAD_QUERY_MIN_FILE_COUNT = 3;
 const BROAD_QUERY_SINGLE_TOKEN_RATIO = 0.35;
 const BROAD_QUERY_MULTI_TOKEN_RATIO = 0.6;
@@ -119,6 +127,8 @@ interface TocSearchSummary {
   cacheHits: number;
   cacheMisses: number;
   skippedFiles: number;
+  oversizedFiles: number;
+  indexedBytes: number;
 }
 
 type TocSessionCacheStore = Map<string, Map<string, TocCacheEntry>>;
@@ -619,10 +629,12 @@ function resolveAbsolutePath(baseDir: string, target: string): string {
   return resolve(baseDir, target);
 }
 
-function walkTocFiles(paths: string[]): string[] {
+function walkTocFiles(paths: string[]): { files: string[]; scopeOverflow: boolean } {
   const seen = new Set<string>();
   const files: string[] = [];
+  let scopeOverflow = false;
   const visit = (target: string): void => {
+    if (scopeOverflow) return;
     let canonicalTarget = target;
     try {
       canonicalTarget = realpathSync(target);
@@ -647,6 +659,7 @@ function walkTocFiles(paths: string[]): string[] {
         return;
       }
       for (const entry of entries) {
+        if (scopeOverflow) return;
         if (entry.name.startsWith(".") && entry.name !== ".config") continue;
         if (entry.isDirectory() && SKIP_DIRS.has(entry.name)) continue;
         visit(join(canonicalTarget, entry.name));
@@ -655,6 +668,10 @@ function walkTocFiles(paths: string[]): string[] {
     }
 
     if (stats.isFile() && supportsToc(canonicalTarget)) {
+      if (files.length >= MAX_TOC_SEARCH_CANDIDATE_FILES) {
+        scopeOverflow = true;
+        return;
+      }
       files.push(canonicalTarget);
     }
   };
@@ -662,7 +679,7 @@ function walkTocFiles(paths: string[]): string[] {
   for (const path of paths) {
     visit(path);
   }
-  return files.toSorted();
+  return { files: files.toSorted(), scopeOverflow };
 }
 
 function tokenizeQuery(query: string): string[] {
@@ -677,15 +694,50 @@ function tokenizeQuery(query: string): string[] {
   ];
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+function splitSearchTerms(value: string): string[] {
+  return [
+    ...new Set(
+      value
+        .replace(/([a-z0-9])([A-Z])/gu, "$1 $2")
+        .toLowerCase()
+        .split(/[^\p{L}\p{N}_-]+/u)
+        .map((token) => token.trim())
+        .filter((token) => token.length >= 2),
+    ),
+  ];
+}
+
+function hasWordBoundaryMatch(value: string, token: string): boolean {
+  if (!value || !token) return false;
+  return new RegExp(`(^|[^\\p{L}\\p{N}_-])${escapeRegex(token)}($|[^\\p{L}\\p{N}_-])`, "iu").test(
+    value,
+  );
+}
+
 function scoreField(query: string, tokens: string[], field: string | null | undefined): number {
   if (!field) return 0;
   const lower = field.toLowerCase();
+  const fieldTerms = new Set(splitSearchTerms(field));
   let score = 0;
   if (lower === query) score += 30;
+  if (fieldTerms.has(query)) score += 20;
+  if (hasWordBoundaryMatch(lower, query)) score += 10;
   if (lower.includes(query)) score += 12;
   for (const token of tokens) {
     if (lower === token) {
       score += 12;
+      continue;
+    }
+    if (fieldTerms.has(token)) {
+      score += Math.max(4, token.length + 2);
+      continue;
+    }
+    if (hasWordBoundaryMatch(lower, token)) {
+      score += Math.max(3, token.length + 1);
       continue;
     }
     if (lower.includes(token)) {
@@ -914,6 +966,8 @@ function summarizeSearch(
     `cache_hits: ${summary.cacheHits}`,
     `cache_misses: ${summary.cacheMisses}`,
     `skipped_files: ${summary.skippedFiles}`,
+    `oversized_files: ${summary.oversizedFiles}`,
+    `indexed_bytes: ${summary.indexedBytes}`,
     "follow_up_hint: Prefer read_spans for exact line ranges; use grep for broad text search.",
     "",
   ];
@@ -944,11 +998,64 @@ function summarizeBroadQuery(input: {
     `cache_hits: ${input.summary.cacheHits}`,
     `cache_misses: ${input.summary.cacheMisses}`,
     `skipped_files: ${input.summary.skippedFiles}`,
+    `oversized_files: ${input.summary.oversizedFiles}`,
+    `indexed_bytes: ${input.summary.indexedBytes}`,
     "next_step: Narrow the query to a symbol/import name or switch to grep for broad text search.",
   ];
 
   if (input.preview.length > 0) {
     lines.push("", "[TopCandidates]");
+    for (const match of input.preview) {
+      lines.push(
+        `- file=${normalizeRelativePath(input.baseDir, match.filePath)} kind=${match.kind} name=${match.name} lines=${formatLineSpan(match.lineStart, match.lineEnd)} score=${match.score}`,
+      );
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function summarizeScopeOverflow(input: {
+  query: string;
+  candidateFiles: number;
+  baseDir: string;
+}): string {
+  return [
+    "[TOCSearch]",
+    `query: ${input.query}`,
+    `status: ${UNAVAILABLE_STATUS}`,
+    "reason: search_scope_too_large",
+    `candidate_files_scanned: ${input.candidateFiles}`,
+    `walk_limit: ${MAX_TOC_SEARCH_CANDIDATE_FILES}`,
+    `workspace_root: ${input.baseDir}`,
+    "next_step: Narrow paths to a package/folder first, then retry toc_search.",
+  ].join("\n");
+}
+
+function summarizeIndexBudgetExceeded(input: {
+  query: string;
+  preview: TocSearchMatch[];
+  summary: TocSearchSummary;
+  baseDir: string;
+}): string {
+  const lines: string[] = [
+    "[TOCSearch]",
+    `query: ${input.query}`,
+    `status: ${UNAVAILABLE_STATUS}`,
+    "reason: indexing_budget_exceeded",
+    `indexed_files: ${input.summary.indexedFiles}`,
+    `candidate_files: ${input.summary.candidateFiles}`,
+    `cache_hits: ${input.summary.cacheHits}`,
+    `cache_misses: ${input.summary.cacheMisses}`,
+    `skipped_files: ${input.summary.skippedFiles}`,
+    `oversized_files: ${input.summary.oversizedFiles}`,
+    `indexed_bytes: ${input.summary.indexedBytes}`,
+    `indexed_bytes_limit: ${MAX_TOC_SEARCH_INDEXED_BYTES}`,
+    "next_step: Narrow paths or query terms before retrying toc_search.",
+  ];
+
+  if (input.preview.length > 0) {
+    lines.push("", "[IndexedPreview]");
     for (const match of input.preview) {
       lines.push(
         `- file=${normalizeRelativePath(input.baseDir, match.filePath)} kind=${match.kind} name=${match.name} lines=${formatLineSpan(match.lineStart, match.lineEnd)} score=${match.score}`,
@@ -990,14 +1097,11 @@ function resolveBroadQuery(input: {
   return input.candidateFiles >= BROAD_QUERY_MIN_FILE_COUNT && ratio >= ratioThreshold;
 }
 
-function resolveSessionKey(sessionId: string | undefined): string {
-  return sessionId && sessionId.length > 0 ? sessionId : "__anonymous__";
-}
-
 export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolDefinition[] {
   const sessionCache = new Map<string, Map<string, TocCacheEntry>>();
+  registerTocSourceCacheRuntime(options?.runtime);
   options?.runtime?.session?.onClearState?.((sessionId) => {
-    sessionCache.delete(resolveSessionKey(sessionId));
+    sessionCache.delete(resolveTocSessionKey(sessionId));
   });
 
   const tocDocument = defineTool({
@@ -1039,23 +1143,48 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
           },
         );
       }
+      if (stats.size > MAX_TOC_FILE_BYTES) {
+        return inconclusiveTextResult(
+          [
+            "toc_document unavailable: file exceeds structural parse budget.",
+            `file: ${absolutePath}`,
+            "reason=file_too_large",
+            `file_bytes: ${stats.size}`,
+            `max_file_bytes: ${MAX_TOC_FILE_BYTES}`,
+            "next_step=Use read_spans on a focused line range or grep for targeted text search.",
+          ].join("\n"),
+          {
+            status: UNAVAILABLE_STATUS,
+            reason: "file_too_large",
+            filePath: absolutePath,
+            fileBytes: stats.size,
+            maxFileBytes: MAX_TOC_FILE_BYTES,
+            nextStep: "Use read_spans on a focused line range or grep for targeted text search.",
+          },
+        );
+      }
 
-      const sourceText = readFileSync(absolutePath, "utf8");
       const signature = `${stats.mtimeMs}:${stats.size}`;
       const sessionId = getToolSessionId(ctx);
+      const source = readSourceTextWithCache({
+        sessionId,
+        absolutePath,
+        signature,
+      });
       const startedAt = Date.now();
       const lookup = cacheLookup({
         cacheStore: sessionCache,
-        sessionKey: resolveSessionKey(sessionId),
+        sessionKey: resolveTocSessionKey(sessionId),
         absolutePath,
         signature,
-        sourceText,
+        sourceText: source.sourceText,
       });
       recordTocEvent(options?.runtime, sessionId, {
         toolName: "toc_document",
         operation: "document",
         filePath: absolutePath,
         cacheHit: lookup.cacheHit,
+        sourceCacheHit: source.cacheHit,
         durationMs: Date.now() - startedAt,
       });
 
@@ -1063,6 +1192,7 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
         status: "ok",
         filePath: absolutePath,
         cacheHit: lookup.cacheHit,
+        sourceCacheHit: source.cacheHit,
         language: lookup.toc.language,
         importsCount: lookup.toc.imports.length,
         functionsCount: lookup.toc.functions.length,
@@ -1091,9 +1221,8 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const baseDir = resolveBaseDir(ctx, options?.runtime);
       const roots = (params.paths ?? ["."]).map((entry) => resolveAbsolutePath(baseDir, entry));
-      const files = walkTocFiles(roots);
       const sessionId = getToolSessionId(ctx);
-      const sessionKey = resolveSessionKey(sessionId);
+      const sessionKey = resolveTocSessionKey(sessionId);
       const query = params.query.trim().toLowerCase();
       const tokens = tokenizeQuery(query);
       const limit = params.limit ?? DEFAULT_TOC_SEARCH_LIMIT;
@@ -1113,6 +1242,34 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
           },
         );
       }
+
+      const walk = walkTocFiles(roots);
+      if (walk.scopeOverflow) {
+        recordTocEvent(options?.runtime, sessionId, {
+          toolName: "toc_search",
+          operation: "search",
+          broadQuery: false,
+          scopeOverflow: true,
+          candidateFilesScanned: walk.files.length,
+          durationMs: 0,
+        });
+        return inconclusiveTextResult(
+          summarizeScopeOverflow({
+            query: params.query.trim(),
+            candidateFiles: walk.files.length,
+            baseDir,
+          }),
+          {
+            status: UNAVAILABLE_STATUS,
+            reason: "search_scope_too_large",
+            candidateFiles: walk.files.length,
+            walkLimit: MAX_TOC_SEARCH_CANDIDATE_FILES,
+            nextStep: "Narrow paths to a package/folder first, then retry toc_search.",
+          },
+        );
+      }
+
+      const files = walk.files;
 
       if (files.length === 0) {
         return inconclusiveTextResult(
@@ -1135,18 +1292,34 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
       let cacheHits = 0;
       let cacheMisses = 0;
       let skippedFiles = 0;
+      let oversizedFiles = 0;
+      let indexedBytes = 0;
+      let budgetExceeded = false;
       for (const filePath of files) {
         try {
           const stats = statSync(filePath);
-          const sourceText = readFileSync(filePath, "utf8");
+          if (stats.size > MAX_TOC_FILE_BYTES) {
+            oversizedFiles += 1;
+            continue;
+          }
+          if (indexedBytes + stats.size > MAX_TOC_SEARCH_INDEXED_BYTES) {
+            budgetExceeded = true;
+            break;
+          }
+          const source = readSourceTextWithCache({
+            sessionId,
+            absolutePath: filePath,
+            signature: `${stats.mtimeMs}:${stats.size}`,
+          });
           const lookup = cacheLookup({
             cacheStore: sessionCache,
             sessionKey,
             absolutePath: filePath,
             signature: `${stats.mtimeMs}:${stats.size}`,
-            sourceText,
+            sourceText: source.sourceText,
           });
           indexedFiles += 1;
+          indexedBytes += stats.size;
           if (lookup.cacheHit) {
             cacheHits += 1;
           } else {
@@ -1163,17 +1336,19 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
         return inconclusiveTextResult(
           [
             "toc_search unavailable: no accessible TS/JS files could be indexed.",
-            "reason=no_accessible_files",
+            `reason=${oversizedFiles > 0 ? "no_indexable_files" : "no_accessible_files"}`,
             `candidate_files: ${files.length}`,
             `skipped_files: ${skippedFiles}`,
-            "next_step=Check file permissions or narrow paths to readable files.",
+            `oversized_files: ${oversizedFiles}`,
+            "next_step=Check file permissions, narrow paths, or use read_spans on a specific file.",
           ].join("\n"),
           {
             status: UNAVAILABLE_STATUS,
-            reason: "no_accessible_files",
+            reason: oversizedFiles > 0 ? "no_indexable_files" : "no_accessible_files",
             candidateFiles: files.length,
             skippedFiles,
-            nextStep: "Check file permissions or narrow paths to readable files.",
+            oversizedFiles,
+            nextStep: "Check file permissions, narrow paths, or use read_spans on a specific file.",
           },
         );
       }
@@ -1192,6 +1367,8 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
         cacheHits,
         cacheMisses,
         skippedFiles,
+        oversizedFiles,
+        indexedBytes,
       };
 
       const broadQuery = resolveBroadQuery({
@@ -1210,9 +1387,37 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
         cacheHits,
         cacheMisses,
         skippedFiles,
+        oversizedFiles,
+        indexedBytes,
         broadQuery,
+        budgetExceeded,
         durationMs,
       });
+
+      if (budgetExceeded) {
+        const preview = allMatches.slice(0, Math.min(5, limit));
+        return inconclusiveTextResult(
+          summarizeIndexBudgetExceeded({
+            query: params.query.trim(),
+            preview,
+            summary: searchSummary,
+            baseDir,
+          }),
+          {
+            status: UNAVAILABLE_STATUS,
+            reason: "indexing_budget_exceeded",
+            indexedFiles,
+            candidateFiles,
+            cacheHits,
+            cacheMisses,
+            skippedFiles,
+            oversizedFiles,
+            indexedBytes,
+            indexedBytesLimit: MAX_TOC_SEARCH_INDEXED_BYTES,
+            nextStep: "Narrow paths or query terms before retrying toc_search.",
+          },
+        );
+      }
 
       if (allMatches.length === 0) {
         return inconclusiveTextResult(
@@ -1225,6 +1430,8 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
             `cache_hits: ${cacheHits}`,
             `cache_misses: ${cacheMisses}`,
             `skipped_files: ${skippedFiles}`,
+            `oversized_files: ${oversizedFiles}`,
+            `indexed_bytes: ${indexedBytes}`,
             "next_step: Try a symbol name, import path, or use grep for raw text search.",
           ].join("\n"),
           {
@@ -1234,6 +1441,8 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
             cacheHits,
             cacheMisses,
             skippedFiles,
+            oversizedFiles,
+            indexedBytes,
             nextStep: "Try a symbol name, import path, or use grep for raw text search.",
           },
         );
@@ -1256,6 +1465,8 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
             cacheHits,
             cacheMisses,
             skippedFiles,
+            oversizedFiles,
+            indexedBytes,
             nextStep:
               "Narrow the query to a symbol/import name or switch to grep for broad text search.",
           },
@@ -1270,6 +1481,8 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
         cacheHits,
         cacheMisses,
         skippedFiles,
+        oversizedFiles,
+        indexedBytes,
         matchesReturned: matches.length,
       });
     },

@@ -41,6 +41,12 @@ These are retained under `infrastructure.events.level=audit`.
 - `observability_query_executed`
 - `scan_convergence_*`
 - `task_stuck_*`
+- `proposal_received`
+- `proposal_decided`
+- `decision_receipt_recorded`
+- `tool_surface_resolved`
+- `cognition_reference_rehydrated`
+- `cognition_reference_rehydration_failed`
 - `skill_*` lifecycle and cascade events
 - `skill_routing_selection`
 - `skill_routing_decided`
@@ -75,19 +81,30 @@ snapshot that can replace source-event replay.
 - `debug_loop_transition` records extension-owned state changes such as
   `forensics`, `debugging`, `implementing`, `blocked`, or `exhausted`, plus
   `retryCount` for the current loop state
+- `debug_loop_artifact_persist_failed` records failed debug-loop durability
+  writes, including artifact kind and absolute path
 - `debug_loop_failure_case_persisted` records the on-disk failure snapshot used
   for retry and handoff
-- `debug_loop_retry_scheduled` records the explicit cascade retry intent and the
-  next skill that should be loaded, including the post-failure `retryCount`
+- `debug_loop_retry_scheduled` records the proposal-backed retry commitment and
+  the next skill that should be loaded, including the post-failure `retryCount`
 - `debug_loop_handoff_persisted` records the deterministic handoff packet path
+- `debug_loop_reference_persisted` records the persisted cross-session
+  cognition reference artifact path when terminal debug-loop state is promoted
+  into deliberation-side sediment
 
 These events are audit-visible because they describe controller decisions and
 cross-turn recovery artifacts, not presentation-only UI behavior.
 
-## Skill Routing Notes
+## Proposal Boundary Notes
 
-- `skill_routing_selection` records the runtime routing result projection as `selected`, `empty`, `failed`, or `skipped` (critical compaction gate), regardless of whether the source was the deterministic kernel selector or external preselection.
-- `skill_routing_decided` records the dispatch decision after routing and before explicit `skill_load` activation.
+- `proposal_received` records the proposal envelope crossing from deliberation into the kernel boundary.
+- `proposal_decided` records the kernel verdict: `accept`, `reject`, or `defer`.
+- `decision_receipt_recorded` persists the full `proposal + receipt` pair into replayable tape.
+- `skill_routing_selection` remains as projection telemetry for the latest
+  `skill_selection` proposal outcome (`selected | empty | failed | skipped`),
+  including `critical_compaction_gate` short-circuit paths.
+- `skill_routing_decided` remains an internal commitment event for dispatch-gate
+  state and recovery, not a public cognition API.
 
 ## Scan Convergence Guard Events
 

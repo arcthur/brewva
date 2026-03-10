@@ -16,8 +16,6 @@ The runtime no longer exposes a large flat method list. Public access is organiz
 - `getLoadReport()`
 - `list()`
 - `get(name)`
-- `prepareDispatch(sessionId, message)`
-- `getLastRouting(sessionId)`
 - `getPendingDispatch(sessionId)`
 - `clearPendingDispatch(sessionId)`
 - `overridePendingDispatch(sessionId, input?)`
@@ -28,13 +26,27 @@ The runtime no longer exposes a large flat method list. Public access is organiz
 - `complete(sessionId, output)`
 - `getOutputs(sessionId, skillName)`
 - `getConsumedOutputs(sessionId, targetSkillName)`
-- `setNextSelection(sessionId, selected, input?)`
-- `clearNextSelection(sessionId)`
 - `getCascadeIntent(sessionId)`
 - `pauseCascade(sessionId, reason?)`
 - `resumeCascade(sessionId, reason?)`
 - `cancelCascade(sessionId, reason?)`
 - `startCascade(sessionId, input)`
+
+### `runtime.proposals.*`
+
+- `submit(sessionId, proposal)`
+- `list(sessionId, query?)`
+
+Proposal boundary semantics:
+
+- Deliberation-layer components submit `ProposalEnvelope`.
+- Kernel returns `DecisionReceipt` with `accept | reject | defer`.
+- `list(sessionId, query?)` returns `ProposalRecord[]` in newest-first order by
+  receipt timestamp; `limit: 1` is therefore the latest committed proposal.
+- Accepted proposals may arm dispatch gates, create explicit cascade intents, or
+  admit replayable context packets.
+
+Reference: `docs/reference/proposal-boundary.md`.
 
 ### `runtime.context.*`
 
@@ -188,6 +200,7 @@ The default injection path is organized around deterministic governance sources:
 - `brewva.skill-candidates`
 - `brewva.skill-dispatch-gate`
 - `brewva.skill-cascade-gate`
+- `brewva.context-packets`
 - `brewva.task-state`
 - `brewva.tool-failures`
 - `brewva.tool-outputs-distilled`
@@ -203,6 +216,18 @@ Projection split behavior:
 
 - `brewva.projection-working` carries the latest working projection snapshot.
 - Projection runtime is working-only: no recall source, no external recall branch.
+
+Context packet behavior:
+
+- accepted `context_packet` proposals inject through `brewva.context-packets`
+- packets with `scopeId` inject only when the current injection scope matches
+- packets with the same `issuer + scopeId + packetKey` collapse to the latest
+  accepted packet
+- accepted `revoke` packets suppress the matching packet from future injection
+  while keeping tape history intact
+- built-in `brewva.extensions.debug-loop` packets are constrained to the
+  `status_summary` profile with scoped, TTL-bound injection
+- packets stop injecting after `expiresAt`
 
 Identity source behavior:
 
@@ -223,9 +248,8 @@ Skill cascade source extension behavior:
   as `sourceDecision` for audit/replay explainability.
 - Cascade source arbitration uses `skills.cascade.enabledSources` as allowlist and
   `skills.cascade.sourcePriority` as ordering among enabled sources.
-- Skills with `routing.continuity_required=true` are filtered out by
-  `prepareDispatch(...)` unless prompt or session context indicates genuine
-  multi-run continuity intent.
+- Continuity-aware selection is now a deliberation concern. The runtime kernel
+  only consumes the resulting proposals and does not expose a public routing API.
 
 Context budget behavior:
 
@@ -237,7 +261,7 @@ Context budget behavior:
 
 Execution profile note:
 
-- Extension-enabled profile (`createBrewvaExtension`) uses full governance lifecycle hooks and projects runtime routing telemetry.
+- Extension-enabled profile (`createBrewvaExtension`) uses full governance lifecycle hooks and projects proposal-derived selection telemetry.
 - The full extension profile also owns extension-side closed loops such as automatic
   debug retry and deterministic handoff packet synthesis.
 - Runtime-core profile (`--no-extensions`) injects only `[CoreTapeStatus]` + core autonomy contract.

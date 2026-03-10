@@ -8,6 +8,7 @@ built on top of `@mariozechner/pi-coding-agent`.
 Primary deliverables:
 
 - Runtime core (`@brewva/brewva-runtime`)
+- Deliberation/control-plane helpers (`@brewva/brewva-deliberation`)
 - Channel adapter package (`@brewva/brewva-channels-telegram`)
 - Telegram edge ingress package (`@brewva/brewva-ingress`)
 - Tool registry (`@brewva/brewva-tools`)
@@ -24,6 +25,7 @@ Primary deliverables:
 brewva/
 ├── packages/
 │   ├── brewva-runtime/            # runtime facade, services, replay, projection, schedule, policy
+│   ├── brewva-deliberation/       # proposal producers, evidence builders, control-plane planning
 │   ├── brewva-channels-telegram/  # telegram adapter, transport, projector
 │   ├── brewva-ingress/            # edge ingress server + worker adapters for webhook delivery
 │   ├── brewva-tools/              # runtime-aware tools (lsp/ast/ledger/task/schedule/tape)
@@ -51,6 +53,7 @@ brewva/
 
 - Use workspace package imports across package boundaries:
   - `@brewva/brewva-runtime`
+  - `@brewva/brewva-deliberation`
   - `@brewva/brewva-runtime/channels`
   - `@brewva/brewva-tools`
   - `@brewva/brewva-extensions`
@@ -64,6 +67,7 @@ brewva/
 - `BrewvaRuntime` is domain-based, not a flat method bag.
 - Public surface is organized as:
   - `runtime.skills.*`
+  - `runtime.proposals.*`
   - `runtime.context.*`
   - `runtime.tools.*`
   - `runtime.task.*`
@@ -100,6 +104,7 @@ brewva/
   - `brewva.identity`
   - `brewva.truth-static` / `brewva.truth-facts`
   - `brewva.skill-candidates` / `brewva.skill-dispatch-gate` / `brewva.skill-cascade-gate`
+  - `brewva.context-packets`
   - `brewva.task-state`
   - `brewva.tool-failures`
   - `brewva.tool-outputs-distilled`
@@ -143,6 +148,7 @@ brewva/
 | Task                           | Location                                                               | Notes                                           |
 | ------------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------- |
 | Runtime facade/API shape       | `packages/brewva-runtime/src/runtime.ts`                               | domain API surface and dependency wiring        |
+| Deliberation helpers           | `packages/brewva-deliberation/src/index.ts`                            | proposal/evidence/control-plane helper surface  |
 | Runtime contracts              | `packages/brewva-runtime/src/types.ts`                                 | shared config/event/runtime types               |
 | Runtime event filtering        | `packages/brewva-runtime/src/services/event-pipeline.ts`               | audit/ops/debug level classification            |
 | Security mode mapping          | `packages/brewva-runtime/src/security/mode.ts`                         | `security.mode` -> effective enforcement policy |

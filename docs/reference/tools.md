@@ -42,6 +42,8 @@ symbol scans.
 - top-level interfaces, type aliases, and enums
 - classes plus public methods/getters/setters
 - line spans for targeted follow-up reads
+- `status=unavailable` with `reason=file_too_large` when the file exceeds the
+  structural parse budget; preferred follow-up is `read_spans` or `grep`
 
 `toc_search` supports:
 
@@ -50,6 +52,10 @@ symbol scans.
 - broad-query fallback: returns `status=unavailable` with `reason=broad_query`
   when structural matches are too diffuse to be useful; preferred next step is
   a narrower symbol/import query or `grep`
+- search-scope guard: returns `reason=search_scope_too_large` when the walk
+  would index too many candidate files
+- indexing-budget guard: returns `reason=indexing_budget_exceeded` when the
+  current search would exceed the structural indexing byte budget
 - follow-up contract: prefer `read_spans` for exact line ranges instead of
   whole-file reads
 
@@ -116,6 +122,39 @@ Optional A2A tools (registered by channel orchestration extensions when an A2A a
 - `agent_broadcast`
 - `agent_list`
 
+## Tool Surface Layers
+
+The static registry is larger than the per-turn visible tool surface.
+
+Current extension composition resolves three layers before `before_agent_start`:
+
+- `base tools`
+  - built-in core tools plus Brewva base governance tools
+- `active-skill tools`
+  - tools named in the current active, pending-dispatch, or cascade-step skill
+    contracts
+- `operator tools`
+  - operator-facing observability and control tools shown only for operator/full
+    routing profiles or explicit `$tool_name` capability requests
+
+Default product behavior:
+
+- the capability block shows only the tools that are visible now
+- hidden skill tools stay hidden until the current skill/pending dispatch/cascade
+  commitment exposes them
+- hidden operator tools can be surfaced for one turn by explicitly requesting
+  `$tool_name`
+- `$tool_name` is therefore not a general bypass for hidden skill tools
+
+This is enforced through active-tool selection, not by mutating kernel policy:
+
+- runtime/skill contracts determine the desired surface
+- extensions narrow the visible tool list for the current turn
+- runtime gates still remain the fail-closed backstop for actual execution
+
+`tool_surface_resolved` records the resolved visible surface for audit/ops
+telemetry.
+
 Notes:
 
 - `grep` is a read-only workspace search tool intended to replace ad-hoc `exec` usage for text search in read-only skills.
@@ -159,6 +198,8 @@ Behavior:
 - when output is capped, the tool returns `last_line_returned` and
   `truncated_at_line` so follow-up calls can resume without recounting lines
 - output is capped to avoid whole-file replay; use multiple narrower calls if needed
+- when called after `toc_document` / `toc_search` in the same session, it
+  reuses the same source-text cache instead of rereading the file immediately
 
 ### `skill_route_override`
 

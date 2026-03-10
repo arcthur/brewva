@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { registerContextTransform, registerRuntimeCoreBridge } from "@brewva/brewva-extensions";
-import { createMockExtensionAPI, invokeHandler, invokeHandlerAsync } from "../helpers/extension.js";
+import {
+  createMockExtensionAPI,
+  invokeHandler,
+  invokeHandlerAsync,
+  invokeHandlersAsync,
+} from "../helpers/extension.js";
 import { createRuntimeConfig, createRuntimeFixture } from "./fixtures/runtime.js";
 
 type StatusBlock = {
@@ -148,7 +153,7 @@ describe("context gate parity", () => {
         },
       );
 
-      const after = await invokeHandlerAsync<{ message?: { content?: string } }>(
+      const afterResults = await invokeHandlersAsync<{ message?: { content?: string } }>(
         handlers,
         "before_agent_start",
         {
@@ -161,7 +166,14 @@ describe("context gate parity", () => {
           getContextUsage: () => ({ tokens: 150, contextWindow: 1000, percent: 0.15 }),
         },
       );
-      return parseStatusBlock(after.message?.content ?? "", "[CoreTapeStatus]");
+      const after = afterResults.find(
+        (value): value is { message: { content: string } } =>
+          typeof value === "object" &&
+          value !== null &&
+          "message" in value &&
+          typeof (value as { message?: { content?: unknown } }).message?.content === "string",
+      );
+      return parseStatusBlock(after?.message.content ?? "", "[CoreTapeStatus]");
     };
 
     const extensionStatus = await runExtensionFlow();

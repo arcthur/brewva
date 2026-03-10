@@ -197,15 +197,15 @@ describe("brewva session ui settings wiring", () => {
     }
   });
 
-  test("session bootstrap records external_only selector mode and configured broker judge mode", async () => {
-    const workspace = createWorkspace("skill-broker-selector-mode");
+  test("session bootstrap records proposal boundary for the skill broker", async () => {
+    const workspace = createWorkspace("skill-broker-bootstrap");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
       JSON.stringify(
         {
           skills: {
-            selector: {
-              brokerJudgeMode: "llm",
+            routing: {
+              profile: "standard",
             },
           },
         },
@@ -219,8 +219,6 @@ describe("brewva session ui settings wiring", () => {
       configPath: ".brewva/brewva.json",
     });
     try {
-      expect(result.runtime.config.skills.selector.mode).toBe("external_only");
-      expect(result.runtime.config.skills.selector.brokerJudgeMode).toBe("llm");
       const sessionId = result.session.sessionManager.getSessionId();
       const bootstrap = result.runtime.events.query(sessionId, {
         type: "session_bootstrap",
@@ -230,28 +228,24 @@ describe("brewva session ui settings wiring", () => {
         | {
             skillBroker?: {
               enabled?: boolean;
-              selectorMode?: string;
-              judgeMode?: string;
+              proposalBoundary?: string;
             };
           }
         | undefined) ?? { skillBroker: { enabled: false } };
       expect(payload.skillBroker?.enabled).toBe(true);
-      expect(payload.skillBroker?.selectorMode).toBe("external_only");
-      expect(payload.skillBroker?.judgeMode).toBe("llm");
+      expect(payload.skillBroker?.proposalBoundary).toBe("runtime.proposals.submit");
     } finally {
       result.session.dispose();
     }
   });
 
-  test("no-extensions session bootstrap still enables broker with llm judge by default", async () => {
+  test("no-extensions session bootstrap still exposes the proposal boundary", async () => {
     const workspace = createWorkspace("skill-broker-no-extensions");
     const result = await createBrewvaSession({
       cwd: workspace,
       enableExtensions: false,
     });
     try {
-      expect(result.runtime.config.skills.selector.mode).toBe("external_only");
-      expect(result.runtime.config.skills.selector.brokerJudgeMode).toBe("llm");
       const sessionId = result.session.sessionManager.getSessionId();
       const bootstrap = result.runtime.events.query(sessionId, {
         type: "session_bootstrap",
@@ -262,15 +256,13 @@ describe("brewva session ui settings wiring", () => {
             extensionsEnabled?: boolean;
             skillBroker?: {
               enabled?: boolean;
-              selectorMode?: string;
-              judgeMode?: string;
+              proposalBoundary?: string;
             };
           }
         | undefined) ?? { extensionsEnabled: true, skillBroker: { enabled: false } };
       expect(payload.extensionsEnabled).toBe(false);
       expect(payload.skillBroker?.enabled).toBe(true);
-      expect(payload.skillBroker?.selectorMode).toBe("external_only");
-      expect(payload.skillBroker?.judgeMode).toBe("llm");
+      expect(payload.skillBroker?.proposalBoundary).toBe("runtime.proposals.submit");
     } finally {
       result.session.dispose();
     }

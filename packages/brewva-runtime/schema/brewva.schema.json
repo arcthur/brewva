@@ -439,32 +439,6 @@
                   "items": {
                     "$ref": "#/definitions/SkillRoutingScope"
                   }
-                },
-                "continuityPhrases": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "description": "Custom phrases that trigger continuity-aware skill routing. Overrides the built-in default list when provided."
-                },
-                "continuityContinuePattern": {
-                  "type": "string",
-                  "description": "Custom regex pattern for detecting continuity cues containing 'continue'. Overrides the built-in default pattern when provided."
-                }
-              }
-            },
-            "selector": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "brokerJudgeMode": {
-                  "$ref": "#/definitions/SkillBrokerJudgeMode"
-                },
-                "k": {
-                  "type": "number"
-                },
-                "mode": {
-                  "$ref": "#/definitions/SkillSelectorMode"
                 }
               }
             }
@@ -543,10 +517,6 @@
           "const": "inherit"
         }
       ]
-    },
-    "SkillBrokerJudgeMode": {
-      "type": "string",
-      "enum": ["heuristic", "llm"]
     },
     "SkillCascadeMode": {
       "type": "string",
@@ -698,10 +668,6 @@
     "SkillRoutingScope": {
       "type": "string",
       "enum": ["core", "domain", "operator", "meta"]
-    },
-    "SkillSelectorMode": {
-      "type": "string",
-      "enum": ["deterministic", "external_only"]
     },
     "VerificationLevel": {
       "type": "string",

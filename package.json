@@ -39,6 +39,7 @@
   "devDependencies": {
     "@brewva/brewva-channels-telegram": "workspace:*",
     "@brewva/brewva-cli": "workspace:*",
+    "@brewva/brewva-deliberation": "workspace:*",
     "@brewva/brewva-extensions": "workspace:*",
     "@brewva/brewva-gateway": "workspace:*",
     "@brewva/brewva-ingress": "workspace:*",

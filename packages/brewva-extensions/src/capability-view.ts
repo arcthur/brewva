@@ -1,15 +1,20 @@
+import { getBrewvaToolSurface, type BrewvaToolSurface } from "@brewva/brewva-tools";
+
 interface ToolLike {
   name: string;
   description: string;
   parameters?: unknown;
 }
 
+type CapabilitySurface = BrewvaToolSurface | "external";
+
 interface CapabilityEntry {
   name: string;
   description: string;
   parameterKeys: string[];
-  active: boolean;
+  visible: boolean;
   governance: boolean;
+  surface: CapabilitySurface;
 }
 
 export interface CapabilityAccessDecision {
@@ -50,6 +55,12 @@ const GOVERNANCE_TOOL_NAMES = new Set<string>([
 const CAPABILITY_REQUEST_PATTERN = /\$([a-z][a-z0-9_]*)/g;
 const DEFAULT_MAX_COMPACT_CAPABILITIES = 12;
 const DEFAULT_MAX_EXPANDED_DETAILS = 4;
+const SURFACE_ORDER: Record<CapabilitySurface, number> = {
+  base: 0,
+  skill: 1,
+  operator: 2,
+  external: 3,
+};
 
 function normalizeToolName(name: string): string {
   return name.trim().toLowerCase();
@@ -73,6 +84,10 @@ function extractParameterKeys(parameters: unknown): string[] {
   return Object.keys(schema.properties as Record<string, unknown>).toSorted();
 }
 
+function resolveCapabilitySurface(name: string): CapabilitySurface {
+  return getBrewvaToolSurface(name) ?? "external";
+}
+
 function toCapabilityEntries(input: BuildCapabilityViewInput): CapabilityEntry[] {
   const activeToolNames = new Set(
     input.activeToolNames.map((name) => normalizeToolName(name)).filter((name) => name.length > 0),
@@ -85,11 +100,18 @@ function toCapabilityEntries(input: BuildCapabilityViewInput): CapabilityEntry[]
       name,
       description: tool.description.trim(),
       parameterKeys: extractParameterKeys(tool.parameters),
-      active: activeToolNames.has(name),
+      visible: activeToolNames.has(name),
       governance: GOVERNANCE_TOOL_NAMES.has(name),
+      surface: resolveCapabilitySurface(name),
     });
   }
   entries.sort((left, right) => {
+    if (left.visible !== right.visible) {
+      return left.visible ? -1 : 1;
+    }
+    if (left.surface !== right.surface) {
+      return SURFACE_ORDER[left.surface] - SURFACE_ORDER[right.surface];
+    }
     if (left.governance !== right.governance) {
       return left.governance ? -1 : 1;
     }
@@ -127,7 +149,8 @@ function formatDetailBlock(
     `[CapabilityDetail:$${entry.name}]`,
     `description: ${description}`,
     `parameters: ${parameters}`,
-    `active: ${entry.active ? "true" : "false"}`,
+    `surface: ${entry.surface}`,
+    `visible_now: ${entry.visible ? "true" : "false"}`,
     `governance: ${entry.governance ? "true" : "false"}`,
   ];
 
@@ -155,6 +178,17 @@ export function buildCapabilityView(input: BuildCapabilityViewInput): BuildCapab
     };
   }
 
+  const visibleEntries = entries.filter((entry) => entry.visible);
+  const visibleSkillCount = visibleEntries.filter((entry) => entry.surface === "skill").length;
+  const hiddenSkillCount = entries.filter(
+    (entry) => !entry.visible && entry.surface === "skill",
+  ).length;
+  const hiddenOperatorCount = entries.filter(
+    (entry) => !entry.visible && entry.surface === "operator",
+  ).length;
+  const hiddenExternalCount = entries.filter(
+    (entry) => !entry.visible && entry.surface === "external",
+  ).length;
   const requested = extractRequestedCapabilities(input.prompt);
   const byName = new Map(entries.map((entry) => [entry.name, entry]));
   const maxExpandedDetails = Math.max(
@@ -174,16 +208,28 @@ export function buildCapabilityView(input: BuildCapabilityViewInput): BuildCapab
   }
 
   const compactList = formatCompactList(
-    entries,
+    visibleEntries,
     Math.max(1, Math.floor(input.maxCompactCapabilities ?? DEFAULT_MAX_COMPACT_CAPABILITIES)),
   );
   const lines: string[] = [
     "[CapabilityView]",
     `available_total: ${entries.length}`,
-    `active_count: ${entries.filter((entry) => entry.active).length}`,
-    `compact_list: ${compactList}`,
+    `visible_now_count: ${visibleEntries.length}`,
+    `visible_now: ${compactList}`,
+    `hidden_skill_count: ${hiddenSkillCount}`,
+    `hidden_operator_count: ${hiddenOperatorCount}`,
+    `hidden_external_count: ${hiddenExternalCount}`,
+    "surface_policy: base tools stay visible; skill tools follow current skill commitments; operator tools require operator/full profile or an explicit $name request.",
     "expand_hint: include `$name` in your turn to reveal one capability detail.",
   ];
+  if (hiddenSkillCount > 0 && visibleSkillCount === 0) {
+    lines.push("skill_hint: load or accept a skill to expose task-specific tools.");
+  }
+  if (hiddenOperatorCount > 0) {
+    lines.push(
+      "operator_hint: requesting a hidden operator tool via `$name` makes it visible for the current turn.",
+    );
+  }
 
   if (expandedEntries.length > 0) {
     lines.push(

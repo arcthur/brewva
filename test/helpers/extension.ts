@@ -9,20 +9,49 @@ export function createMockExtensionAPI(): {
   api: ExtensionAPI;
   handlers: Map<string, ExtensionTestHandler[]>;
   sentMessages: Array<Record<string, unknown>>;
+  activeTools: string[];
 } {
   const handlers = new Map<string, ExtensionTestHandler[]>();
   const sentMessages: Array<Record<string, unknown>> = [];
+  let allTools: Array<{ name: string; description: string; parameters?: unknown }> = [];
+  let activeTools: string[] = [];
   const api = {
     on(event: string, handler: ExtensionTestHandler) {
       const list = handlers.get(event) ?? [];
       list.push(handler);
       handlers.set(event, list);
     },
+    registerTool(tool: { name: string; description: string; parameters?: unknown }) {
+      allTools.push({
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+      });
+      if (!activeTools.includes(tool.name)) {
+        activeTools = [...activeTools, tool.name];
+      }
+    },
+    getAllTools() {
+      return [...allTools];
+    },
+    getActiveTools() {
+      return [...activeTools];
+    },
+    setActiveTools(toolNames: string[]) {
+      activeTools = [...toolNames];
+    },
     sendMessage(message: Record<string, unknown>) {
       sentMessages.push(message);
     },
   } as unknown as ExtensionAPI;
-  return { api, handlers, sentMessages };
+  return {
+    api,
+    handlers,
+    sentMessages,
+    get activeTools() {
+      return [...activeTools];
+    },
+  };
 }
 
 export function invokeHandler<T = unknown>(
@@ -51,6 +80,20 @@ export async function invokeHandlerAsync<T = unknown>(
     throw new Error(`Missing handler for event: ${eventName}`);
   }
   return (await handler(event, ctx)) as T;
+}
+
+export async function invokeHandlersAsync<T = unknown>(
+  handlers: Map<string, ExtensionTestHandler[]>,
+  eventName: string,
+  event: Record<string, unknown>,
+  ctx: Record<string, unknown>,
+): Promise<T[]> {
+  const list = handlers.get(eventName) ?? [];
+  const results: T[] = [];
+  for (const handler of list) {
+    results.push((await handler(event, ctx)) as T);
+  }
+  return results;
 }
 
 export function invokeHandlers<T = unknown>(

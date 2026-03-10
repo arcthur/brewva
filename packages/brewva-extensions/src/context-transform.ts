@@ -1,9 +1,10 @@
-import {
-  coerceContextBudgetUsage,
-  type ContextCompactionGateStatus,
-  type ContextPressureStatus,
-  type BrewvaRuntime,
+import { resolveSkillSelectionProjection } from "@brewva/brewva-deliberation";
+import type {
+  BrewvaRuntime,
+  ContextCompactionGateStatus,
+  ContextPressureStatus,
 } from "@brewva/brewva-runtime";
+import { coerceContextBudgetUsage } from "@brewva/brewva-runtime";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import type { ToolInfo } from "@mariozechner/pi-coding-agent";
 import { buildCapabilityView } from "./capability-view.js";
@@ -17,7 +18,6 @@ import { clearRuntimeTurnClock, observeRuntimeTurnStart } from "./runtime-turn-c
 
 const CONTEXT_INJECTION_MESSAGE_TYPE = "brewva-context-injection";
 const CONTEXT_CONTRACT_MARKER = "[Brewva Context Contract]";
-const MISSING_ROUTING_TRACE_REASON = "routing_trace_unavailable";
 
 export interface ContextTransformOptions {
   autoCompactionWatchdogMs?: number;
@@ -118,27 +118,7 @@ function resolveRoutingProjection(
   };
   error: string | null;
 } {
-  const trace = runtime.skills.getLastRouting(sessionId);
-  if (!trace) {
-    return {
-      selection: {
-        status: "skipped",
-        reason: MISSING_ROUTING_TRACE_REASON,
-        selectedCount: 0,
-        selectedSkills: [],
-      },
-      error: null,
-    };
-  }
-  return {
-    selection: {
-      status: trace.selection.status,
-      reason: trace.selection.reason,
-      selectedCount: trace.selection.selectedCount,
-      selectedSkills: [...trace.selection.selectedSkills],
-    },
-    error: trace.error ?? null,
-  };
+  return resolveSkillSelectionProjection(runtime, sessionId);
 }
 
 function buildCompactionGateMessage(input: { pressure: ContextPressureStatus }): string {
@@ -513,7 +493,6 @@ export function registerContextTransform(
 
     if (gateStatus.required) {
       state.lastRuntimeGateRequired = true;
-      runtime.skills.clearNextSelection(sessionId);
       const skippedReason = "critical_compaction_gate";
       emitRuntimeEvent(runtime, {
         sessionId,

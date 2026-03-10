@@ -1,114 +1,176 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
 
 function repoRoot(): string {
   return process.cwd();
 }
 
-function deterministicConfig() {
-  const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-  config.skills.selector.mode = "deterministic";
-  return config;
+function buildEvidenceRef(sessionId: string) {
+  return {
+    id: `${sessionId}:broker-trace`,
+    sourceType: "broker_trace" as const,
+    locator: "broker://test",
+    createdAt: Date.now(),
+  };
 }
 
-describe("S-001 skill routing selector", () => {
-  test("prepareDispatch routes deterministically by default", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot(), config: deterministicConfig() });
-    const sessionId = "deterministic-route-1";
+describe("S-001 proposal boundary", () => {
+  test("skill_selection proposals become pending kernel commitments", () => {
+    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const sessionId = "proposal-route-1";
 
-    const decision = runtime.skills.prepareDispatch(
-      sessionId,
-      "Review architecture risks, merge safety, and quality audit gaps",
-    );
-
-    expect(decision.primary?.name).toBe("review");
-    expect(decision.mode).toBe("auto");
-    expect(decision.selected.length).toBeGreaterThan(0);
-    const trace = runtime.skills.getLastRouting(sessionId);
-    expect(trace?.source).toBe("deterministic_router");
-    expect(trace?.selection.status).toBe("selected");
-    expect(trace?.selection.selectedSkills).toContain("review");
-  });
-
-  test("prepareDispatch stays empty in external_only mode without preselection", () => {
-    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.skills.selector.mode = "external_only";
-    const runtime = new BrewvaRuntime({ cwd: repoRoot(), config });
-    const sessionId = "external-only-1";
-
-    const decision = runtime.skills.prepareDispatch(sessionId, "review architecture risks");
-    expect(decision.mode).toBe("none");
-    expect(decision.selected).toEqual([]);
-    const trace = runtime.skills.getLastRouting(sessionId);
-    expect(trace?.source).toBe("external_preselection");
-    expect(trace?.selection.status).toBe("empty");
-    expect(trace?.selection.reason).toBe("external_only_no_preselection");
-  });
-
-  test("prepareDispatch consumes injected preselection before deterministic routing", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot(), config: deterministicConfig() });
-    const sessionId = "semantic-preselect-1";
-
-    runtime.skills.setNextSelection(sessionId, [
-      {
-        name: "review",
-        score: 20,
-        reason: "semantic:review request",
-        breakdown: [{ signal: "semantic_match", term: "semantic", delta: 20 }],
+    const receipt = runtime.proposals.submit(sessionId, {
+      id: `${sessionId}:selection`,
+      kind: "skill_selection",
+      issuer: "test.broker",
+      subject: "review architecture risks",
+      payload: {
+        selected: [
+          {
+            name: "review",
+            score: 24,
+            reason: "test_selection",
+            breakdown: [],
+          },
+        ],
+        routingOutcome: "selected",
       },
-    ]);
-
-    const decision = runtime.skills.prepareDispatch(
-      sessionId,
-      "this text should not override explicit routing",
-    );
-
-    expect(decision.primary?.name).toBe("review");
-    expect(decision.selected.length).toBe(1);
-    expect(decision.mode).toBe("auto");
-    const trace = runtime.skills.getLastRouting(sessionId);
-    expect(trace?.source).toBe("external_preselection");
-    expect(trace?.selection.reason).toBe("external_preselection_selected");
-  });
-
-  test("prepareDispatch enters conservative gate when routing failed", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot(), config: deterministicConfig() });
-    const sessionId = "semantic-preselect-failed";
-
-    runtime.skills.setNextSelection(sessionId, [], {
-      routingOutcome: "failed",
+      evidenceRefs: [buildEvidenceRef(sessionId)],
+      createdAt: Date.now(),
     });
 
-    const decision = runtime.skills.prepareDispatch(sessionId, "review architecture risks");
-    expect(decision.mode).toBe("gate");
-    expect(decision.primary).toBeNull();
-    expect(decision.routingOutcome).toBe("failed");
-    expect(decision.reason).toBe("routing-failed");
+    expect(receipt.decision).toBe("accept");
+    expect(runtime.skills.getPendingDispatch(sessionId)?.primary?.name).toBe("review");
+    expect(runtime.skills.getPendingDispatch(sessionId)?.mode).toBe("auto");
+    expect(runtime.proposals.list(sessionId, { kind: "skill_selection", limit: 1 })).toHaveLength(
+      1,
+    );
   });
 
-  test("plain implementation continuations do not unlock continuity routing", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot(), config: deterministicConfig() });
+  test("missing evidence rejects the proposal at the boundary", () => {
+    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const sessionId = "proposal-route-missing-evidence";
 
-    expect(
-      (
-        runtime as unknown as { isContinuityDispatchAllowed: (s: string, p: string) => boolean }
-      ).isContinuityDispatchAllowed(
-        "continuity-gate-plain",
-        "Continue with the implementation after you inspect the affected modules.",
-      ),
-    ).toBe(false);
+    const receipt = runtime.proposals.submit(sessionId, {
+      id: `${sessionId}:selection`,
+      kind: "skill_selection",
+      issuer: "test.broker",
+      subject: "review architecture risks",
+      payload: {
+        selected: [
+          {
+            name: "review",
+            score: 24,
+            reason: "test_selection",
+            breakdown: [],
+          },
+        ],
+        routingOutcome: "selected",
+      },
+      evidenceRefs: [],
+      createdAt: Date.now(),
+    });
+
+    expect(receipt.decision).toBe("reject");
+    expect(receipt.reasons).toContain("proposal_missing_evidence");
+    expect(runtime.skills.getPendingDispatch(sessionId)).toBeUndefined();
   });
 
-  test("explicit multi-run language still unlocks continuity routing", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot(), config: deterministicConfig() });
+  test("empty selection proposals defer instead of fabricating kernel routing", () => {
+    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const sessionId = "proposal-route-empty";
 
-    expect(
-      (
-        runtime as unknown as { isContinuityDispatchAllowed: (s: string, p: string) => boolean }
-      ).isContinuityDispatchAllowed(
-        "continuity-gate-explicit",
-        "Keep working on this over the next few days and stop when convergence is proven.",
-      ),
-    ).toBe(true);
+    const receipt = runtime.proposals.submit(sessionId, {
+      id: `${sessionId}:selection`,
+      kind: "skill_selection",
+      issuer: "test.broker",
+      subject: "review architecture risks",
+      payload: {
+        selected: [],
+        routingOutcome: "failed",
+      },
+      evidenceRefs: [buildEvidenceRef(sessionId)],
+      createdAt: Date.now(),
+    });
+
+    expect(receipt.decision).toBe("defer");
+    expect(receipt.reasons).toContain("selection_failed_without_commitment");
+    expect(runtime.skills.getPendingDispatch(sessionId)).toBeUndefined();
+  });
+
+  test("context_packet proposals are admitted without mutating kernel state directly", () => {
+    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const sessionId = "proposal-context-packet";
+
+    const receipt = runtime.proposals.submit(sessionId, {
+      id: `${sessionId}:context`,
+      kind: "context_packet",
+      issuer: "test.operator",
+      subject: "operator context",
+      payload: {
+        label: "OperatorMemo",
+        content: "Prefer evidence-backed review findings.",
+      },
+      evidenceRefs: [buildEvidenceRef(sessionId)],
+      createdAt: Date.now(),
+    });
+
+    expect(receipt.decision).toBe("accept");
+    expect(runtime.proposals.list(sessionId, { kind: "context_packet", limit: 1 })).toHaveLength(1);
+    expect(runtime.skills.getPendingDispatch(sessionId)).toBeUndefined();
+  });
+
+  test("reserved issuers cannot submit disallowed proposal kinds", () => {
+    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const sessionId = "proposal-reserved-issuer";
+
+    const receipt = runtime.proposals.submit(sessionId, {
+      id: `${sessionId}:context`,
+      kind: "context_packet",
+      issuer: "brewva.skill-broker",
+      subject: "broker context",
+      payload: {
+        label: "BrokerMemo",
+        content: "This should not be allowed.",
+      },
+      evidenceRefs: [buildEvidenceRef(sessionId)],
+      createdAt: Date.now(),
+    });
+
+    expect(receipt.decision).toBe("reject");
+    expect(receipt.reasons).toContain(
+      "reserved_issuer_kind_disallowed:brewva.skill-broker:context_packet",
+    );
+  });
+
+  test("reserved debug-loop context packets require scoped status-summary policy fields", () => {
+    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const sessionId = "proposal-debug-loop-policy";
+
+    const receipt = runtime.proposals.submit(sessionId, {
+      id: `${sessionId}:context`,
+      kind: "context_packet",
+      issuer: "brewva.extensions.debug-loop",
+      subject: "debug loop status",
+      payload: {
+        label: "DebugLoopStatus",
+        content: "[StatusSummary]\nprofile: status_summary",
+        packetKey: "debug-loop:status",
+      },
+      evidenceRefs: [
+        {
+          id: `${sessionId}:event`,
+          sourceType: "event",
+          locator: "event://verification",
+          createdAt: Date.now(),
+        },
+      ],
+      createdAt: Date.now(),
+    });
+
+    expect(receipt.decision).toBe("reject");
+    expect(receipt.reasons).toContain(
+      "reserved_context_packet_missing_scope:brewva.extensions.debug-loop",
+    );
   });
 });

@@ -1,4 +1,16 @@
 import {
+  DELIBERATION_ISSUERS,
+  type StatusSummaryField,
+  buildEventEvidenceRef,
+  buildOperatorNoteEvidenceRef,
+  buildWorkspaceArtifactEvidenceRef,
+  resolveCognitionArtifactsDir,
+  submitStatusSummaryContextPacket,
+  submitSkillChainIntentProposal,
+  writeCognitionArtifact,
+} from "@brewva/brewva-deliberation";
+import {
+  DEBUG_LOOP_ARTIFACT_PERSIST_FAILED_EVENT_TYPE,
   DEBUG_LOOP_FAILURE_CASE_PERSISTED_EVENT_TYPE,
   DEBUG_LOOP_HANDOFF_PERSISTED_EVENT_TYPE,
   DEBUG_LOOP_RETRY_SCHEDULED_EVENT_TYPE,
@@ -6,15 +18,21 @@ import {
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   type BrewvaRuntime,
   type BrewvaStructuredEvent,
+  type EvidenceRef,
   type SkillChainIntent,
   type TaskState,
 } from "@brewva/brewva-runtime";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { resolveInjectionScopeId } from "./context-shared.js";
 import { persistSessionJsonArtifact, readSessionJsonArtifact } from "./debug-loop-artifacts.js";
 
 const DEBUG_LOOP_STATE_FILE = "debug-loop.json";
 const FAILURE_CASE_FILE = "failure-case.json";
 const HANDOFF_FILE = "handoff.json";
+const DEBUG_LOOP_SUMMARY_FILE = "debug-loop-status.md";
+const DEBUG_LOOP_REFERENCE_FILE = "debug-loop-reference.md";
+const DEBUG_LOOP_SUMMARY_PACKET_KEY = "debug-loop:status";
+const DEBUG_LOOP_SUMMARY_PACKET_TTL_MS = 30 * 60_000;
 const MAX_HYPOTHESES = 3;
 const MAX_RETRIES = 2;
 
@@ -50,6 +68,7 @@ export interface DebugLoopState {
   updatedAt: number;
   activeSkillName: string | null;
   activeIntentId?: string;
+  scopeId?: string;
   lastVerification?: DebugLoopVerificationSummary;
   lastFailureCaseRef?: string;
   lastHandoffRef?: string;
@@ -61,6 +80,7 @@ interface PendingSkillCompletion {
   skillName: string;
   outputs: Record<string, unknown>;
   observedAt: number;
+  scopeId?: string;
 }
 
 interface VerificationEventPayload {
@@ -201,6 +221,7 @@ class DebugLoopController {
   private readonly runtime: BrewvaRuntime;
   private readonly pendingCompletionsBySession = new Map<string, PendingSkillCompletion>();
   private readonly stateBySession = new Map<string, DebugLoopState>();
+  private readonly summaryFlushBySession = new Map<string, Promise<void>>();
 
   constructor(runtime: BrewvaRuntime) {
     this.runtime = runtime;
@@ -209,6 +230,7 @@ class DebugLoopController {
   onToolCall(
     event: { toolName?: unknown; toolCallId?: unknown; input?: unknown },
     sessionId: string,
+    scopeId?: string,
   ): void {
     if (event.toolName !== "skill_complete") return;
     if (typeof event.toolCallId !== "string" || event.toolCallId.trim().length === 0) return;
@@ -221,12 +243,14 @@ class DebugLoopController {
       skillName: activeSkill.name,
       outputs,
       observedAt: Date.now(),
+      scopeId,
     });
   }
 
   handleRuntimeEvent(event: BrewvaStructuredEvent): void {
     if (
       event.type === DEBUG_LOOP_TRANSITION_EVENT_TYPE ||
+      event.type === DEBUG_LOOP_ARTIFACT_PERSIST_FAILED_EVENT_TYPE ||
       event.type === DEBUG_LOOP_FAILURE_CASE_PERSISTED_EVENT_TYPE ||
       event.type === DEBUG_LOOP_RETRY_SCHEDULED_EVENT_TYPE ||
       event.type === DEBUG_LOOP_HANDOFF_PERSISTED_EVENT_TYPE
@@ -254,6 +278,7 @@ class DebugLoopController {
       this.persistHandoff(event.sessionId, "session_shutdown");
       this.pendingCompletionsBySession.delete(event.sessionId);
       this.stateBySession.delete(event.sessionId);
+      this.summaryFlushBySession.delete(event.sessionId);
     }
   }
 
@@ -345,6 +370,7 @@ class DebugLoopController {
       currentState && !isTerminalStatus(currentState.status) ? currentState.retryCount + 1 : 0;
 
     const baseState = this.buildNextFailureState(event, payload, nextRetryCount);
+    baseState.scopeId = pendingCompletion?.scopeId ?? baseState.scopeId;
     const failureCaseRef = this.persistFailureCase(
       event.sessionId,
       payload,
@@ -387,6 +413,25 @@ class DebugLoopController {
       this.persistHandoff(event.sessionId, "debug_loop_terminal");
       return;
     }
+    const retryState = retryResult.state ?? baseState;
+
+    this.enqueueDebugLoopSummaryPacket({
+      sessionId: event.sessionId,
+      createdAt: event.timestamp,
+      state: retryState,
+      subject: `debug_loop_status:${event.sessionId}:retry`,
+      summaryKind: "debug_loop_retry",
+      fields: this.buildRetrySummaryFields({
+        state: retryState,
+        payload,
+        failureCaseRef,
+      }),
+      evidenceRefs: this.buildDebugLoopSummaryEvidenceRefs({
+        sessionId: event.sessionId,
+        state: retryState,
+        failureCaseRef,
+      }),
+    });
 
     this.pendingCompletionsBySession.delete(event.sessionId);
   }
@@ -412,6 +457,7 @@ class DebugLoopController {
       updatedAt: event.timestamp,
       activeSkillName: this.runtime.skills.getActive(event.sessionId)?.name ?? payload.activeSkill,
       activeIntentId: currentState?.activeIntentId,
+      scopeId: currentState?.scopeId,
       lastFailureCaseRef: currentState?.lastFailureCaseRef,
       lastHandoffRef: currentState?.lastHandoffRef,
       blockedReason: undefined,
@@ -435,10 +481,72 @@ class DebugLoopController {
     };
   }
 
+  private buildRetryEvidenceRefs(sessionId: string, state: DebugLoopState) {
+    const refs: Array<ReturnType<typeof buildEventEvidenceRef>> = [];
+
+    if (state.lastVerification) {
+      refs.push(
+        buildEventEvidenceRef({
+          id: `${state.loopId}:verification:${state.lastVerification.eventId}`,
+          eventId: state.lastVerification.eventId,
+          createdAt: state.lastVerification.recordedAt,
+        }),
+      );
+    }
+    if (state.lastFailureCaseRef) {
+      refs.push(
+        buildWorkspaceArtifactEvidenceRef({
+          id: `${state.loopId}:failure_case:${state.retryCount}`,
+          locator: state.lastFailureCaseRef,
+          createdAt: state.updatedAt,
+        }),
+      );
+    }
+    if (refs.length === 0) {
+      refs.push(
+        buildOperatorNoteEvidenceRef({
+          id: `${state.loopId}:debug_loop_state:${state.retryCount}`,
+          locator: `session://${sessionId}/debug-loop`,
+          createdAt: state.updatedAt,
+        }),
+      );
+    }
+
+    return refs;
+  }
+
+  private recordArtifactPersistFailure(input: {
+    sessionId: string;
+    artifactKind:
+      | "state"
+      | "failure_case"
+      | "handoff"
+      | "cognition_summary"
+      | "cognition_reference";
+    fileName: string;
+    absolutePath: string;
+    error: string;
+    loopId?: string;
+    status?: DebugLoopStatus;
+  }): void {
+    this.runtime.events.record({
+      sessionId: input.sessionId,
+      type: DEBUG_LOOP_ARTIFACT_PERSIST_FAILED_EVENT_TYPE,
+      payload: {
+        artifactKind: input.artifactKind,
+        fileName: input.fileName,
+        absolutePath: input.absolutePath,
+        error: input.error,
+        loopId: input.loopId ?? null,
+        status: input.status ?? null,
+      },
+    });
+  }
+
   private scheduleRetry(
     sessionId: string,
     state: DebugLoopState,
-  ): { ok: boolean; reason?: string } {
+  ): { ok: boolean; reason?: string; state?: DebugLoopState } {
     const existingIntent = this.runtime.skills.getCascadeIntent(sessionId);
     if (
       existingIntent &&
@@ -481,19 +589,36 @@ class DebugLoopController {
           },
         ];
 
-    const cascade = this.runtime.skills.startCascade(sessionId, { steps });
-    if (!cascade.ok || !cascade.intent) {
-      return { ok: false, reason: cascade.reason ?? "cascade_start_failed" };
+    const { receipt } = submitSkillChainIntentProposal({
+      runtime: this.runtime,
+      sessionId,
+      issuer: DELIBERATION_ISSUERS.debugLoop,
+      subject: `debug_loop_retry:${sessionId}`,
+      steps,
+      reason: "debug_loop_retry",
+      source: "debug_loop",
+      evidenceRefs: this.buildRetryEvidenceRefs(sessionId, state),
+      seed: state.loopId,
+    });
+    if (receipt.decision !== "accept") {
+      return {
+        ok: false,
+        reason: receipt.reasons[0] ?? `debug_loop_retry_${receipt.decision}`,
+      };
     }
 
+    const cascade = this.runtime.skills.getCascadeIntent(sessionId);
+    if (!cascade) {
+      return { ok: false, reason: "cascade_intent_missing_after_commit" };
+    }
     const nextSkill =
       this.runtime.skills.getActive(sessionId)?.name ??
-      cascade.intent.steps[cascade.intent.cursor]?.skill ??
+      cascade.steps[cascade.cursor]?.skill ??
       null;
     const nextState: DebugLoopState = {
       ...state,
       status: nextSkill === "runtime-forensics" ? "forensics" : "debugging",
-      activeIntentId: cascade.intent.id,
+      activeIntentId: cascade.id,
       activeSkillName: nextSkill,
       blockedReason: undefined,
       updatedAt: Date.now(),
@@ -504,7 +629,9 @@ class DebugLoopController {
       type: DEBUG_LOOP_RETRY_SCHEDULED_EVENT_TYPE,
       payload: {
         loopId: nextState.loopId,
-        intentId: cascade.intent.id,
+        proposalId: receipt.proposalId,
+        decision: receipt.decision,
+        intentId: cascade.id,
         nextSkill,
         debugLoopRef: persisted ?? null,
         failureCaseRef: nextState.lastFailureCaseRef ?? null,
@@ -512,7 +639,7 @@ class DebugLoopController {
         hypothesisCount: nextState.hypothesisCount,
       },
     });
-    return { ok: true };
+    return { ok: true, state: nextState };
   }
 
   private persistFailureCase(
@@ -546,7 +673,18 @@ class DebugLoopController {
       fileName: FAILURE_CASE_FILE,
       data: failureCase,
     });
-    if (!persisted) return null;
+    if (!persisted.ok || !persisted.artifactRef) {
+      this.recordArtifactPersistFailure({
+        sessionId,
+        artifactKind: "failure_case",
+        fileName: FAILURE_CASE_FILE,
+        absolutePath: persisted.absolutePath,
+        error: persisted.error ?? "artifact_persist_failed",
+        loopId: this.getState(sessionId)?.loopId,
+        status: this.getState(sessionId)?.status,
+      });
+      return null;
+    }
     this.runtime.events.record({
       sessionId,
       type: DEBUG_LOOP_FAILURE_CASE_PERSISTED_EVENT_TYPE,
@@ -568,7 +706,18 @@ class DebugLoopController {
       fileName: HANDOFF_FILE,
       data: packet,
     });
-    if (!persisted) return null;
+    if (!persisted.ok || !persisted.artifactRef) {
+      this.recordArtifactPersistFailure({
+        sessionId,
+        artifactKind: "handoff",
+        fileName: HANDOFF_FILE,
+        absolutePath: persisted.absolutePath,
+        error: persisted.error ?? "artifact_persist_failed",
+        loopId: this.getState(sessionId)?.loopId,
+        status: this.getState(sessionId)?.status,
+      });
+      return null;
+    }
 
     const state = this.getState(sessionId);
     if (state) {
@@ -577,6 +726,40 @@ class DebugLoopController {
         lastHandoffRef: persisted.artifactRef,
         updatedAt: Date.now(),
       });
+      this.enqueueDebugLoopSummaryPacket({
+        sessionId,
+        createdAt: packet.generatedAt,
+        state: {
+          ...state,
+          lastHandoffRef: persisted.artifactRef,
+          updatedAt: packet.generatedAt,
+        },
+        subject: `debug_loop_status:${sessionId}:handoff`,
+        summaryKind: "debug_loop_handoff",
+        fields: this.buildHandoffSummaryFields({
+          packet,
+          artifactRef: persisted.artifactRef,
+          state,
+        }),
+        evidenceRefs: this.buildDebugLoopSummaryEvidenceRefs({
+          sessionId,
+          state,
+          failureCaseRef: state.lastFailureCaseRef,
+          handoffRef: persisted.artifactRef,
+        }),
+      });
+      if (reason === "debug_loop_terminal" && isTerminalStatus(state.status)) {
+        void this.persistTerminalReferenceArtifact({
+          sessionId,
+          createdAt: packet.generatedAt,
+          packet,
+          state: {
+            ...state,
+            lastHandoffRef: persisted.artifactRef,
+            updatedAt: packet.generatedAt,
+          },
+        });
+      }
     }
 
     this.runtime.events.record({
@@ -709,6 +892,231 @@ class DebugLoopController {
     return summary;
   }
 
+  private buildRetrySummaryFields(input: {
+    state: DebugLoopState;
+    payload: VerificationEventPayload;
+    failureCaseRef: string | null;
+  }): StatusSummaryField[] {
+    return [
+      { key: "mode", value: "retry_scheduled" },
+      {
+        key: "next_action",
+        value: input.state.activeSkillName ? `load:${input.state.activeSkillName}` : null,
+      },
+      { key: "next_skill", value: input.state.activeSkillName },
+      { key: "retry_count", value: String(input.state.retryCount) },
+      { key: "hypothesis_count", value: String(input.state.hypothesisCount) },
+      { key: "symptom", value: summarizeFailureSymptom(input.payload) },
+      { key: "failed_checks", value: input.payload.failedChecks },
+      { key: "missing_evidence", value: input.payload.missingEvidence },
+      { key: "root_cause", value: input.payload.rootCause },
+      { key: "recommendation", value: input.payload.recommendation },
+      { key: "references", value: input.failureCaseRef ? [input.failureCaseRef] : [] },
+    ];
+  }
+
+  private buildHandoffSummaryFields(input: {
+    packet: HandoffPacket;
+    artifactRef: string;
+    state: DebugLoopState;
+  }): StatusSummaryField[] {
+    return [
+      { key: "mode", value: "handoff" },
+      { key: "reason", value: input.packet.reason },
+      { key: "active_skill", value: input.packet.activeSkill },
+      { key: "next_action", value: input.packet.nextAction },
+      { key: "blocked_on", value: input.packet.blockedOn },
+      { key: "resume_conditions", value: input.packet.resumeConditions },
+      {
+        key: "references",
+        value: [
+          ...(input.state.lastFailureCaseRef ? [input.state.lastFailureCaseRef] : []),
+          input.artifactRef,
+        ],
+      },
+    ];
+  }
+
+  private buildReferenceSedimentContent(input: {
+    packet: HandoffPacket;
+    state: DebugLoopState;
+  }): string {
+    return [
+      "[ReferenceSediment]",
+      "kind: debug_loop_terminal",
+      `status: ${input.state.status}`,
+      `reason: ${input.packet.reason}`,
+      `active_skill: ${input.packet.activeSkill ?? "none"}`,
+      `next_action: ${input.packet.nextAction}`,
+      `blocked_on: ${input.packet.blockedOn.join("; ") || "none"}`,
+      `resume_conditions: ${input.packet.resumeConditions.join("; ") || "none"}`,
+      `available_outputs: ${Object.keys(input.packet.availableOutputs).join(", ") || "none"}`,
+      `failure_case_ref: ${input.state.lastFailureCaseRef ?? "none"}`,
+      `handoff_ref: ${input.state.lastHandoffRef ?? "none"}`,
+    ].join("\n");
+  }
+
+  private buildDebugLoopSummaryEvidenceRefs(input: {
+    sessionId: string;
+    state: DebugLoopState;
+    failureCaseRef?: string | null;
+    handoffRef?: string | null;
+  }): EvidenceRef[] {
+    const seed = input.state.loopId || input.sessionId;
+    const refs: EvidenceRef[] = [];
+
+    if (input.state.lastVerification) {
+      refs.push(
+        buildEventEvidenceRef({
+          id: `${seed}:summary:verification:${input.state.lastVerification.eventId}`,
+          eventId: input.state.lastVerification.eventId,
+          createdAt: input.state.lastVerification.recordedAt,
+        }),
+      );
+    }
+
+    if (input.failureCaseRef) {
+      refs.push(
+        buildWorkspaceArtifactEvidenceRef({
+          id: `${seed}:summary:failure_case`,
+          locator: input.failureCaseRef,
+          createdAt: input.state.updatedAt,
+        }),
+      );
+    }
+
+    if (input.handoffRef) {
+      refs.push(
+        buildWorkspaceArtifactEvidenceRef({
+          id: `${seed}:summary:handoff`,
+          locator: input.handoffRef,
+          createdAt: input.state.updatedAt,
+        }),
+      );
+    }
+
+    if (refs.length === 0) {
+      refs.push(
+        buildOperatorNoteEvidenceRef({
+          id: `${seed}:summary:state`,
+          locator: `session://${input.sessionId}/debug-loop-summary`,
+          createdAt: input.state.updatedAt,
+        }),
+      );
+    }
+
+    return refs;
+  }
+
+  private enqueueDebugLoopSummaryPacket(input: {
+    sessionId: string;
+    createdAt: number;
+    state: DebugLoopState;
+    subject: string;
+    summaryKind: string;
+    fields: StatusSummaryField[];
+    evidenceRefs: EvidenceRef[];
+  }): void {
+    const previous = this.summaryFlushBySession.get(input.sessionId) ?? Promise.resolve();
+    const next = previous
+      .catch(() => undefined)
+      .then(() => this.publishDebugLoopSummaryPacket(input));
+    const settled = next.finally(() => {
+      if (this.summaryFlushBySession.get(input.sessionId) === settled) {
+        this.summaryFlushBySession.delete(input.sessionId);
+      }
+    });
+    this.summaryFlushBySession.set(input.sessionId, settled);
+  }
+
+  private async persistTerminalReferenceArtifact(input: {
+    sessionId: string;
+    createdAt: number;
+    packet: HandoffPacket;
+    state: DebugLoopState;
+  }): Promise<void> {
+    try {
+      const artifact = await writeCognitionArtifact({
+        workspaceRoot: this.runtime.workspaceRoot,
+        lane: "reference",
+        name: `debug-loop-${input.state.status}-handoff`,
+        content: this.buildReferenceSedimentContent(input),
+        createdAt: input.createdAt,
+      });
+      this.runtime.events.record({
+        sessionId: input.sessionId,
+        type: "debug_loop_reference_persisted",
+        payload: {
+          artifactRef: artifact.artifactRef,
+          status: input.state.status,
+          loopId: input.state.loopId,
+        },
+      });
+    } catch (error) {
+      this.recordArtifactPersistFailure({
+        sessionId: input.sessionId,
+        artifactKind: "cognition_reference",
+        fileName: DEBUG_LOOP_REFERENCE_FILE,
+        absolutePath: resolveCognitionArtifactsDir(this.runtime.workspaceRoot, "reference"),
+        error: error instanceof Error ? error.message : String(error),
+        loopId: input.state.loopId,
+        status: input.state.status,
+      });
+    }
+  }
+
+  private async publishDebugLoopSummaryPacket(input: {
+    sessionId: string;
+    createdAt: number;
+    state: DebugLoopState;
+    subject: string;
+    summaryKind: string;
+    fields: StatusSummaryField[];
+    evidenceRefs: EvidenceRef[];
+  }): Promise<void> {
+    try {
+      const submitted = await submitStatusSummaryContextPacket({
+        runtime: this.runtime,
+        sessionId: input.sessionId,
+        issuer: DELIBERATION_ISSUERS.debugLoop,
+        name: "Debug Loop Status",
+        label: "DebugLoopStatus",
+        subject: input.subject,
+        summaryKind: input.summaryKind,
+        status: input.state.status,
+        fields: input.fields,
+        scopeId: input.state.scopeId,
+        packetKey: DEBUG_LOOP_SUMMARY_PACKET_KEY,
+        createdAt: input.createdAt,
+        expiresAt: input.createdAt + DEBUG_LOOP_SUMMARY_PACKET_TTL_MS,
+        evidenceRefs: input.evidenceRefs,
+      });
+      if (submitted.receipt.decision !== "accept") {
+        this.recordArtifactPersistFailure({
+          sessionId: input.sessionId,
+          artifactKind: "cognition_summary",
+          fileName: DEBUG_LOOP_SUMMARY_FILE,
+          absolutePath: resolveCognitionArtifactsDir(this.runtime.workspaceRoot, "summaries"),
+          error: `context_packet_${submitted.receipt.decision}: ${
+            submitted.receipt.reasons.join(", ") || "no_reason_provided"
+          }`,
+          loopId: input.state.loopId,
+          status: input.state.status,
+        });
+      }
+    } catch (error) {
+      this.recordArtifactPersistFailure({
+        sessionId: input.sessionId,
+        artifactKind: "cognition_summary",
+        fileName: DEBUG_LOOP_SUMMARY_FILE,
+        absolutePath: resolveCognitionArtifactsDir(this.runtime.workspaceRoot, "summaries"),
+        error: error instanceof Error ? error.message : String(error),
+        loopId: input.state.loopId,
+        status: input.state.status,
+      });
+    }
+  }
+
   private transitionState(sessionId: string, state: DebugLoopState): void {
     const artifactRef = this.saveState(state);
     this.runtime.events.record({
@@ -733,10 +1141,19 @@ class DebugLoopController {
       fileName: DEBUG_LOOP_STATE_FILE,
       data: state,
     });
-    if (persisted) {
+    if (persisted.ok && persisted.artifactRef) {
       this.stateBySession.set(state.sessionId, state);
       return persisted.artifactRef;
     }
+    this.recordArtifactPersistFailure({
+      sessionId: state.sessionId,
+      artifactKind: "state",
+      fileName: DEBUG_LOOP_STATE_FILE,
+      absolutePath: persisted.absolutePath,
+      error: persisted.error ?? "artifact_persist_failed",
+      loopId: state.loopId,
+      status: state.status,
+    });
     this.stateBySession.set(state.sessionId, state);
     return null;
   }
@@ -780,6 +1197,10 @@ export function registerDebugLoop(pi: ExtensionAPI, runtime: BrewvaRuntime): voi
     controller.onToolCall(
       event as { toolName?: unknown; toolCallId?: unknown; input?: unknown },
       sessionId,
+      resolveInjectionScopeId(
+        (ctx as { sessionManager?: { getLeafId?: () => string | null | undefined } })
+          .sessionManager,
+      ),
     );
     return undefined;
   });

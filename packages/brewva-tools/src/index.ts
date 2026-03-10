@@ -33,7 +33,7 @@ export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefiniti
     ...createLspTools({ runtime: options.runtime }),
     ...createTocTools({ runtime: options.runtime }),
     ...createAstGrepTools(),
-    createReadSpansTool(),
+    createReadSpansTool({ runtime: options.runtime }),
     createLookAtTool(),
     createGrepTool({ runtime: options.runtime }),
     createExecTool({ runtime: options.runtime }),
@@ -82,6 +82,16 @@ export { createSkillRouteOverrideTool } from "./skill-route-override.js";
 export { createSkillCompleteTool } from "./skill-complete.js";
 export { createSkillChainControlTool } from "./skill-chain-control.js";
 export { createTaskLedgerTools } from "./task-ledger.js";
+export {
+  BASE_BREWVA_TOOL_NAMES,
+  BREWVA_TOOL_SURFACE_BY_NAME,
+  MANAGED_BREWVA_TOOL_NAMES,
+  OPERATOR_BREWVA_TOOL_NAMES,
+  SKILL_BREWVA_TOOL_NAMES,
+  getBrewvaToolSurface,
+  isManagedBrewvaToolName,
+  type BrewvaToolSurface,
+} from "./surface.js";
 export type { BrewvaToolRuntime } from "./types.js";
 export {
   getToolSessionId,

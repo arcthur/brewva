@@ -23,24 +23,31 @@ export interface PersistSessionJsonArtifactInput<T> {
 }
 
 export interface PersistSessionJsonArtifactResult {
-  artifactRef: string;
   absolutePath: string;
+  artifactRef?: string;
+  ok: boolean;
+  error?: string;
 }
 
 export function persistSessionJsonArtifact<T>(
   input: PersistSessionJsonArtifactInput<T>,
-): PersistSessionJsonArtifactResult | null {
+): PersistSessionJsonArtifactResult {
+  const artifactDir = resolveSessionArtifactDir(input.workspaceRoot, input.sessionId);
+  const absolutePath = resolve(artifactDir, input.fileName);
   try {
-    const artifactDir = resolveSessionArtifactDir(input.workspaceRoot, input.sessionId);
-    const absolutePath = resolve(artifactDir, input.fileName);
     mkdirSync(artifactDir, { recursive: true });
     writeFileSync(absolutePath, `${JSON.stringify(input.data, null, 2)}\n`, "utf8");
     return {
+      ok: true,
       artifactRef: normalizeRelativePath(relative(input.workspaceRoot, absolutePath)),
       absolutePath,
     };
-  } catch {
-    return null;
+  } catch (error) {
+    return {
+      ok: false,
+      absolutePath,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 

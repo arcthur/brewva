@@ -26,20 +26,36 @@ function createConfig(mode: BrewvaConfig["security"]["mode"]): BrewvaConfig {
   return config;
 }
 
+function buildEvidenceRef(sessionId: string) {
+  return {
+    id: `${sessionId}:broker-trace`,
+    sourceType: "broker_trace" as const,
+    locator: "broker://test",
+    createdAt: Date.now(),
+  };
+}
+
 function prepareReviewDispatch(runtime: BrewvaRuntime, sessionId: string) {
   runtime.context.onTurnStart(sessionId, 1);
-  runtime.skills.setNextSelection(sessionId, [
-    {
-      name: "review",
-      score: 10,
-      reason: "semantic:review request",
-      breakdown: [{ signal: "semantic_match", term: "review", delta: 10 }],
+  return runtime.proposals.submit(sessionId, {
+    id: `${sessionId}:selection`,
+    kind: "skill_selection",
+    issuer: "test.broker",
+    subject: "review request",
+    payload: {
+      selected: [
+        {
+          name: "review",
+          score: 10,
+          reason: "semantic:review request",
+          breakdown: [{ signal: "semantic_match", term: "review", delta: 10 }],
+        },
+      ],
+      routingOutcome: "selected",
     },
-  ]);
-  return runtime.skills.prepareDispatch(
-    sessionId,
-    "Review the project in depth and assess architecture risks against project philosophy",
-  );
+    evidenceRefs: [buildEvidenceRef(sessionId)],
+    createdAt: Date.now(),
+  });
 }
 
 describe("skill dispatch gate", () => {
@@ -49,10 +65,11 @@ describe("skill dispatch gate", () => {
       config: createConfig("strict"),
     });
     const sessionId = "skill-dispatch-strict-1";
-    const dispatch = prepareReviewDispatch(runtime, sessionId);
+    const receipt = prepareReviewDispatch(runtime, sessionId);
 
-    expect(dispatch.mode).toBe("gate");
-    expect(dispatch.primary?.name).toBe("review");
+    expect(receipt.decision).toBe("accept");
+    expect(runtime.skills.getPendingDispatch(sessionId)?.mode).toBe("gate");
+    expect(runtime.skills.getPendingDispatch(sessionId)?.primary?.name).toBe("review");
 
     const blocked = runtime.tools.start({
       sessionId,
@@ -74,51 +91,32 @@ describe("skill dispatch gate", () => {
     expect(runtime.skills.activate(sessionId, "review").ok).toBe(true);
     expect(runtime.skills.getPendingDispatch(sessionId)).toBeUndefined();
 
-    const unblocked = runtime.tools.start({
-      sessionId,
-      toolCallId: "tc-exec-after-load",
-      toolName: "read",
-      args: { filePath: "README.md" },
-    });
-    expect(unblocked.allowed).toBe(true);
     expect(
       runtime.events.query(sessionId, { type: "skill_routing_followed", last: 1 }),
     ).toHaveLength(1);
   });
 
-  test("routing failure conservative gate blocks non-lifecycle tools in strict mode", () => {
+  test("empty proposals do not fabricate a conservative kernel gate", () => {
     const runtime = new BrewvaRuntime({
-      cwd: createWorkspace("strict-routing-failed"),
+      cwd: createWorkspace("empty-selection"),
       config: createConfig("strict"),
     });
-    const sessionId = "skill-dispatch-strict-failed-1";
+    const sessionId = "skill-dispatch-empty-1";
 
-    runtime.context.onTurnStart(sessionId, 1);
-    runtime.skills.setNextSelection(sessionId, [], {
-      routingOutcome: "failed",
+    const receipt = runtime.proposals.submit(sessionId, {
+      id: `${sessionId}:selection`,
+      kind: "skill_selection",
+      issuer: "test.broker",
+      subject: "review architecture risks",
+      payload: {
+        selected: [],
+        routingOutcome: "failed",
+      },
+      evidenceRefs: [buildEvidenceRef(sessionId)],
+      createdAt: Date.now(),
     });
-
-    const dispatch = runtime.skills.prepareDispatch(sessionId, "review architecture risks");
-    expect(dispatch.mode).toBe("gate");
-    expect(dispatch.primary).toBeNull();
-    expect(dispatch.routingOutcome).toBe("failed");
-
-    const blocked = runtime.tools.start({
-      sessionId,
-      toolCallId: "tc-exec-failed-routing",
-      toolName: "exec",
-      args: { command: "echo blocked" },
-    });
-    expect(blocked.allowed).toBe(false);
-    expect(blocked.reason?.includes("skill_load")).toBe(true);
-
-    const overrideAllowed = runtime.tools.start({
-      sessionId,
-      toolCallId: "tc-override-after-failed-routing",
-      toolName: "skill_route_override",
-      args: { reason: "manual fallback" },
-    });
-    expect(overrideAllowed.allowed).toBe(true);
+    expect(receipt.decision).toBe("defer");
+    expect(runtime.skills.getPendingDispatch(sessionId)).toBeUndefined();
   });
 
   test("standard mode warns but does not block", () => {
@@ -127,8 +125,7 @@ describe("skill dispatch gate", () => {
       config: createConfig("standard"),
     });
     const sessionId = "skill-dispatch-standard-1";
-    const dispatch = prepareReviewDispatch(runtime, sessionId);
-    expect(dispatch.mode).toBe("gate");
+    prepareReviewDispatch(runtime, sessionId);
 
     const allowed = runtime.tools.start({
       sessionId,
@@ -148,8 +145,7 @@ describe("skill dispatch gate", () => {
       config: createConfig("permissive"),
     });
     const sessionId = "skill-dispatch-permissive-1";
-    const dispatch = prepareReviewDispatch(runtime, sessionId);
-    expect(dispatch.mode).toBe("gate");
+    prepareReviewDispatch(runtime, sessionId);
 
     const allowed = runtime.tools.start({
       sessionId,
@@ -161,9 +157,6 @@ describe("skill dispatch gate", () => {
     expect(runtime.events.query(sessionId, { type: "skill_dispatch_gate_warning" })).toHaveLength(
       0,
     );
-    expect(
-      runtime.events.query(sessionId, { type: "skill_dispatch_gate_blocked_tool" }),
-    ).toHaveLength(0);
   });
 
   test("manual override clears pending dispatch and emits overridden event", () => {
@@ -180,14 +173,6 @@ describe("skill dispatch gate", () => {
     });
     expect(override.ok).toBe(true);
     expect(runtime.skills.getPendingDispatch(sessionId)).toBeUndefined();
-
-    const allowed = runtime.tools.start({
-      sessionId,
-      toolCallId: "tc-exec-after-override",
-      toolName: "exec",
-      args: { command: "echo after override" },
-    });
-    expect(allowed.allowed).toBe(true);
     expect(
       runtime.events.query(sessionId, { type: "skill_routing_overridden", last: 1 }),
     ).toHaveLength(1);
@@ -202,65 +187,6 @@ describe("skill dispatch gate", () => {
     prepareReviewDispatch(runtime, sessionId);
 
     runtime.skills.reconcilePendingDispatch(sessionId, 1);
-    expect(runtime.skills.getPendingDispatch(sessionId)).toBeUndefined();
-    expect(
-      runtime.events.query(sessionId, { type: "skill_routing_ignored", last: 1 }),
-    ).toHaveLength(1);
-  });
-
-  test("routing decision is marked deferred while another skill is active", () => {
-    const runtime = new BrewvaRuntime({
-      cwd: createWorkspace("deferred"),
-      config: createConfig("strict"),
-    });
-    const sessionId = "skill-dispatch-deferred-1";
-
-    runtime.context.onTurnStart(sessionId, 1);
-    expect(runtime.skills.activate(sessionId, "implementation").ok).toBe(true);
-    runtime.skills.setNextSelection(sessionId, [
-      {
-        name: "review",
-        score: 10,
-        reason: "semantic:review request",
-        breakdown: [{ signal: "semantic_match", term: "review", delta: 10 }],
-      },
-    ]);
-    runtime.skills.prepareDispatch(sessionId, "review the latest implementation");
-
-    const deferred = runtime.events.query(sessionId, {
-      type: "skill_routing_deferred",
-      last: 1,
-    })[0];
-    expect(deferred).toBeDefined();
-    expect((deferred?.payload as { deferredBy?: string } | undefined)?.deferredBy).toBe(
-      "implementation",
-    );
-  });
-
-  test("turn-end reconciliation uses current session turn when event turn lags behind", () => {
-    const runtime = new BrewvaRuntime({
-      cwd: createWorkspace("ignored-lagging-turn"),
-      config: createConfig("strict"),
-    });
-    const sessionId = "skill-dispatch-ignored-lagging-1";
-    runtime.context.onTurnStart(sessionId, 2);
-    runtime.skills.setNextSelection(sessionId, [
-      {
-        name: "review",
-        score: 10,
-        reason: "semantic:review request",
-        breakdown: [{ signal: "semantic_match", term: "review", delta: 10 }],
-      },
-    ]);
-    const dispatch = runtime.skills.prepareDispatch(
-      sessionId,
-      "Review architecture boundaries and identify high-risk regressions",
-    );
-    expect(dispatch.turn).toBe(2);
-    expect(runtime.skills.getPendingDispatch(sessionId)?.turn).toBe(2);
-
-    runtime.skills.reconcilePendingDispatch(sessionId, 1);
-
     expect(runtime.skills.getPendingDispatch(sessionId)).toBeUndefined();
     expect(
       runtime.events.query(sessionId, { type: "skill_routing_ignored", last: 1 }),

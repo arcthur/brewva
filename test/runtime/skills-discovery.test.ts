@@ -282,4 +282,73 @@ describe("skill discovery and loading", () => {
     expect(skill?.contract.tools.optional).toContain("ledger_query");
     expect(skill?.contract.tools.denied).toContain("process");
   });
+
+  test("multiple overlays apply in deterministic root order", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-overlay-order-project-"));
+    const external = mkdtempSync(join(tmpdir(), "brewva-skill-overlay-order-external-"));
+    const projectOverlayPath = join(workspace, ".brewva/skills/project/overlays/foo/SKILL.md");
+    const externalOverlayPath = join(external, "project/overlays/foo/SKILL.md");
+
+    writeSkill(join(workspace, ".brewva/skills/core/foo/SKILL.md"), {
+      name: "foo",
+    });
+
+    mkdirSync(dirname(projectOverlayPath), { recursive: true });
+    writeFileSync(
+      projectOverlayPath,
+      [
+        "---",
+        "dispatch:",
+        "  default_mode: suggest",
+        "  gate_threshold: 12",
+        "tools:",
+        "  required: [read]",
+        "  optional: []",
+        "  denied: []",
+        "budget:",
+        "  max_tool_calls: 7",
+        "  max_tokens: 9000",
+        "---",
+        "# project overlay",
+      ].join("\n"),
+      "utf8",
+    );
+
+    mkdirSync(dirname(externalOverlayPath), { recursive: true });
+    writeFileSync(
+      externalOverlayPath,
+      [
+        "---",
+        "dispatch:",
+        "  default_mode: gate",
+        "  gate_threshold: 14",
+        "tools:",
+        "  required: [read, tape_search]",
+        "  optional: []",
+        "  denied: [process]",
+        "budget:",
+        "  max_tool_calls: 5",
+        "  max_tokens: 7000",
+        "---",
+        "# external overlay",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.skills.roots = [external];
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const skill = runtime.skills.get("foo");
+
+    expect(skill?.overlayFiles).toEqual([
+      resolve(projectOverlayPath),
+      resolve(externalOverlayPath),
+    ]);
+    expect(skill?.contract.dispatch?.defaultMode).toBe("gate");
+    expect(skill?.contract.dispatch?.gateThreshold).toBe(14);
+    expect(skill?.contract.budget.maxToolCalls).toBe(5);
+    expect(skill?.contract.tools.required).toContain("tape_search");
+    expect(skill?.contract.tools.denied).toContain("process");
+  });
 });
