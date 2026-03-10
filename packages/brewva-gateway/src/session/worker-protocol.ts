@@ -1,3 +1,4 @@
+import type { SendPromptTrigger } from "../daemon/session-backend.js";
 import type { GatewayToolOutput, SessionStreamChunk } from "./collect-output.js";
 
 export type WorkerResultErrorCode = "session_busy";
@@ -22,6 +23,7 @@ export type ParentToWorkerMessage =
       payload: {
         prompt: string;
         turnId: string;
+        trigger?: SendPromptTrigger;
       };
     }
   | {

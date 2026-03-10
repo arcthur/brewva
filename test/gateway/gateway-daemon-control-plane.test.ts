@@ -13,6 +13,8 @@ interface PolicyRule {
   intervalMinutes: number;
   prompt: string;
   sessionId?: string;
+  objective?: string;
+  contextHints?: string[];
 }
 
 interface ReloadPayload {
@@ -224,6 +226,84 @@ describe("gateway daemon control-plane methods", () => {
         workerPid: 4321,
         agentSessionId: "agent-open",
         requestedSessionId: "session-open",
+      });
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  test("heartbeat fire forwards proactive trigger metadata to the session backend", async () => {
+    const harness = createDaemonHarness([
+      {
+        id: "nightly-release",
+        intervalMinutes: 15,
+        prompt: "Check project status.",
+        objective: "Review release readiness.",
+        contextHints: ["release readiness", "backlog risk"],
+      },
+    ]);
+    try {
+      const supervisor = Reflect.get(harness.daemon, "supervisor") as {
+        openSession: (input: { sessionId: string }) => Promise<unknown>;
+        sendPrompt: (
+          sessionId: string,
+          prompt: string,
+          options?: {
+            waitForCompletion?: boolean;
+            source?: "gateway" | "heartbeat";
+            trigger?: {
+              kind: "heartbeat";
+              ruleId: string;
+              objective?: string;
+              contextHints?: string[];
+            };
+          },
+        ) => Promise<{ output?: unknown }>;
+      };
+      let captured:
+        | {
+            sessionId: string;
+            prompt: string;
+            options?: {
+              waitForCompletion?: boolean;
+              source?: "gateway" | "heartbeat";
+              trigger?: {
+                kind: "heartbeat";
+                ruleId: string;
+                objective?: string;
+                contextHints?: string[];
+              };
+            };
+          }
+        | undefined;
+      supervisor.openSession = async () => ({});
+      supervisor.sendPrompt = async (sessionId, prompt, options) => {
+        captured = {
+          sessionId,
+          prompt,
+          options,
+        };
+        return { output: {} };
+      };
+
+      const fireHeartbeat = Reflect.get(harness.daemon, "fireHeartbeat") as (
+        rule: PolicyRule,
+      ) => Promise<void>;
+      await fireHeartbeat.call(harness.daemon, {
+        id: "nightly-release",
+        intervalMinutes: 15,
+        prompt: "Check project status.",
+        objective: "Review release readiness.",
+        contextHints: ["release readiness", "backlog risk"],
+      });
+
+      expect(captured).toBeDefined();
+      expect(captured?.options?.source).toBe("heartbeat");
+      expect(captured?.options?.trigger).toEqual({
+        kind: "heartbeat",
+        ruleId: "nightly-release",
+        objective: "Review release readiness.",
+        contextHints: ["release readiness", "backlog risk"],
       });
     } finally {
       harness.dispose();

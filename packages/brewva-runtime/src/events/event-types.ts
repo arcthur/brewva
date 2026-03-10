@@ -25,6 +25,27 @@ export const DEBUG_LOOP_ARTIFACT_PERSIST_FAILED_EVENT_TYPE =
   "debug_loop_artifact_persist_failed" as const;
 export const DEBUG_LOOP_RETRY_SCHEDULED_EVENT_TYPE = "debug_loop_retry_scheduled" as const;
 export const DEBUG_LOOP_HANDOFF_PERSISTED_EVENT_TYPE = "debug_loop_handoff_persisted" as const;
+export const MEMORY_SUMMARY_WRITTEN_EVENT_TYPE = "memory_summary_written" as const;
+export const MEMORY_SUMMARY_WRITE_FAILED_EVENT_TYPE = "memory_summary_write_failed" as const;
+export const MEMORY_PROCEDURE_NOTE_WRITTEN_EVENT_TYPE = "memory_procedure_note_written" as const;
+export const MEMORY_PROCEDURE_NOTE_WRITE_FAILED_EVENT_TYPE =
+  "memory_procedure_note_write_failed" as const;
+export const MEMORY_REFERENCE_REHYDRATED_EVENT_TYPE = "memory_reference_rehydrated" as const;
+export const MEMORY_REFERENCE_REHYDRATION_FAILED_EVENT_TYPE =
+  "memory_reference_rehydration_failed" as const;
+export const MEMORY_PROCEDURE_REHYDRATED_EVENT_TYPE = "memory_procedure_rehydrated" as const;
+export const MEMORY_PROCEDURE_REHYDRATION_FAILED_EVENT_TYPE =
+  "memory_procedure_rehydration_failed" as const;
+export const MEMORY_SUMMARY_REHYDRATED_EVENT_TYPE = "memory_summary_rehydrated" as const;
+export const MEMORY_SUMMARY_REHYDRATION_FAILED_EVENT_TYPE =
+  "memory_summary_rehydration_failed" as const;
+export const MEMORY_OPEN_LOOP_REHYDRATED_EVENT_TYPE = "memory_open_loop_rehydrated" as const;
+export const MEMORY_OPEN_LOOP_REHYDRATION_FAILED_EVENT_TYPE =
+  "memory_open_loop_rehydration_failed" as const;
+export const MEMORY_ADAPTATION_UPDATED_EVENT_TYPE = "memory_adaptation_updated" as const;
+export const MEMORY_ADAPTATION_UPDATE_FAILED_EVENT_TYPE =
+  "memory_adaptation_update_failed" as const;
+export const PROACTIVITY_WAKEUP_PREPARED_EVENT_TYPE = "proactivity_wakeup_prepared" as const;
 export const COGNITIVE_METRIC_FIRST_PRODUCTIVE_ACTION_EVENT_TYPE =
   "cognitive_metric_first_productive_action" as const;
 export const COGNITIVE_METRIC_RESUMPTION_PROGRESS_EVENT_TYPE =

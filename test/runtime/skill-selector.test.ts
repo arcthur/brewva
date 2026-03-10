@@ -1,8 +1,72 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { createTestWorkspace } from "../helpers/workspace.js";
 
-function repoRoot(): string {
-  return process.cwd();
+const FIXTURE_REVIEW_SKILL = "boundary-review-fixture";
+
+function writeSkill(filePath: string, input: { name: string }): void {
+  mkdirSync(dirname(filePath), { recursive: true });
+  writeFileSync(
+    filePath,
+    [
+      "---",
+      `name: ${input.name}`,
+      `description: ${input.name} skill`,
+      "tools:",
+      "  required: [read]",
+      "  optional: []",
+      "  denied: []",
+      "budget:",
+      "  max_tool_calls: 10",
+      "  max_tokens: 10000",
+      "outputs: []",
+      "consumes: []",
+      "---",
+      `# ${input.name}`,
+      "",
+      "## Intent",
+      "",
+      "Test skill.",
+      "",
+      "## Trigger",
+      "",
+      "Use for tests.",
+      "",
+      "## Workflow",
+      "",
+      "### Step 1",
+      "",
+      "Do the work.",
+      "",
+      "## Stop Conditions",
+      "",
+      "- none",
+      "",
+      "## Anti-Patterns",
+      "",
+      "- none",
+      "",
+      "## Example",
+      "",
+      "Input: test",
+    ].join("\n"),
+    "utf8",
+  );
+}
+
+function createBoundaryRuntime(): BrewvaRuntime {
+  const workspace = createTestWorkspace("proposal-boundary");
+  writeSkill(join(workspace, ".brewva/skills/core", FIXTURE_REVIEW_SKILL, "SKILL.md"), {
+    name: FIXTURE_REVIEW_SKILL,
+  });
+  const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+  config.skills.cascade.mode = "assist";
+  return new BrewvaRuntime({
+    cwd: workspace,
+    config,
+  });
 }
 
 function buildEvidenceRef(sessionId: string) {
@@ -16,7 +80,7 @@ function buildEvidenceRef(sessionId: string) {
 
 describe("S-001 proposal boundary", () => {
   test("skill_selection proposals become pending kernel commitments", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createBoundaryRuntime();
     const sessionId = "proposal-route-1";
 
     const receipt = runtime.proposals.submit(sessionId, {
@@ -27,7 +91,7 @@ describe("S-001 proposal boundary", () => {
       payload: {
         selected: [
           {
-            name: "review",
+            name: FIXTURE_REVIEW_SKILL,
             score: 24,
             reason: "test_selection",
             breakdown: [],
@@ -40,7 +104,7 @@ describe("S-001 proposal boundary", () => {
     });
 
     expect(receipt.decision).toBe("accept");
-    expect(runtime.skills.getPendingDispatch(sessionId)?.primary?.name).toBe("review");
+    expect(runtime.skills.getPendingDispatch(sessionId)?.primary?.name).toBe(FIXTURE_REVIEW_SKILL);
     expect(runtime.skills.getPendingDispatch(sessionId)?.mode).toBe("auto");
     expect(runtime.proposals.list(sessionId, { kind: "skill_selection", limit: 1 })).toHaveLength(
       1,
@@ -48,7 +112,7 @@ describe("S-001 proposal boundary", () => {
   });
 
   test("missing evidence rejects the proposal at the boundary", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createBoundaryRuntime();
     const sessionId = "proposal-route-missing-evidence";
 
     const receipt = runtime.proposals.submit(sessionId, {
@@ -59,7 +123,7 @@ describe("S-001 proposal boundary", () => {
       payload: {
         selected: [
           {
-            name: "review",
+            name: FIXTURE_REVIEW_SKILL,
             score: 24,
             reason: "test_selection",
             breakdown: [],
@@ -77,7 +141,7 @@ describe("S-001 proposal boundary", () => {
   });
 
   test("empty selection proposals defer instead of fabricating kernel routing", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createBoundaryRuntime();
     const sessionId = "proposal-route-empty";
 
     const receipt = runtime.proposals.submit(sessionId, {
@@ -99,7 +163,7 @@ describe("S-001 proposal boundary", () => {
   });
 
   test("context_packet proposals are admitted without mutating kernel state directly", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createBoundaryRuntime();
     const sessionId = "proposal-context-packet";
 
     const receipt = runtime.proposals.submit(sessionId, {
@@ -121,7 +185,7 @@ describe("S-001 proposal boundary", () => {
   });
 
   test("reserved issuers cannot submit disallowed proposal kinds", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createBoundaryRuntime();
     const sessionId = "proposal-reserved-issuer";
 
     const receipt = runtime.proposals.submit(sessionId, {
@@ -144,7 +208,7 @@ describe("S-001 proposal boundary", () => {
   });
 
   test("reserved debug-loop context packets require scoped status-summary policy fields", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createBoundaryRuntime();
     const sessionId = "proposal-debug-loop-policy";
 
     const receipt = runtime.proposals.submit(sessionId, {

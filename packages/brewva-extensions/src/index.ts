@@ -7,7 +7,9 @@ import { registerContextTransform } from "./context-transform.js";
 import { registerDebugLoop } from "./debug-loop.js";
 import { registerEventStream } from "./event-stream.js";
 import { registerLedgerWriter } from "./ledger-writer.js";
+import { registerMemoryAdaptation } from "./memory-adaptation.js";
 import { registerMemoryCurator } from "./memory-curator.js";
+import { registerMemoryFormation } from "./memory-formation.js";
 import { registerNotification } from "./notification.js";
 import { registerQualityGate } from "./quality-gate.js";
 import { registerScanConvergenceGuard } from "./scan-convergence-guard.js";
@@ -22,8 +24,10 @@ function registerAllHandlers(pi: ExtensionAPI, runtime: BrewvaRuntime): void {
   registerEventStream(pi, runtime);
   registerToolSurface(pi, runtime);
   registerMemoryCurator(pi, runtime);
+  registerMemoryFormation(pi, runtime);
   registerContextTransform(pi, runtime);
   registerCognitiveMetrics(pi, runtime);
+  registerMemoryAdaptation(pi, runtime);
   registerScanConvergenceGuard(pi, runtime);
   registerQualityGate(pi, runtime);
   registerDebugLoop(pi, runtime);
@@ -58,8 +62,29 @@ export {
   registerRuntimeCoreBridge,
 } from "./runtime-core-bridge.js";
 export { registerMemoryCurator } from "./memory-curator.js";
+export { registerMemoryFormation } from "./memory-formation.js";
 export { registerCognitiveMetrics } from "./cognitive-metrics.js";
+export {
+  createEmptyMemoryAdaptationPolicy,
+  flushMemoryAdaptationPolicy,
+  rankMemoryHydrationCandidates,
+  readMemoryAdaptationPolicy,
+  registerMemoryAdaptation,
+  resolveMemoryAdaptationPolicyPath,
+  type MemoryAdaptationCandidate,
+  type MemoryAdaptationPacketStats,
+  type MemoryAdaptationPolicy,
+  type MemoryAdaptationStats,
+  type MemoryHydrationStrategy,
+} from "./memory-adaptation.js";
 export { registerContextTransform } from "./context-transform.js";
+export {
+  buildProactivitySelectionText,
+  readLatestProactivityWakeup,
+  recordProactivityWakeup,
+  type ProactivityTriggerContext,
+  type ProactivityTriggerSource,
+} from "./proactivity-context.js";
 export {
   composeContextBlocks,
   type ComposedContextBlock,

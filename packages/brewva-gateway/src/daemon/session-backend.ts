@@ -16,6 +16,13 @@ export interface OpenSessionResult {
   agentSessionId?: string;
 }
 
+export interface SendPromptTrigger {
+  kind: "heartbeat";
+  ruleId: string;
+  objective?: string;
+  contextHints?: string[];
+}
+
 export interface SessionWorkerInfo {
   sessionId: string;
   pid: number;
@@ -32,6 +39,7 @@ export interface SendPromptOptions {
   waitForCompletion?: boolean;
   source?: "gateway" | "heartbeat";
   walReplayId?: string;
+  trigger?: SendPromptTrigger;
 }
 
 export interface SendPromptOutput {

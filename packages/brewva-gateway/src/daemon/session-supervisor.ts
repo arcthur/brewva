@@ -29,6 +29,7 @@ import {
   type SendPromptOptions,
   type SendPromptOutput,
   type SendPromptResult,
+  type SendPromptTrigger,
   type SessionWorkerInfo,
 } from "./session-backend.js";
 
@@ -94,6 +95,7 @@ function buildGatewayTurnEnvelope(input: {
   turnId: string;
   prompt: string;
   source: "gateway" | "heartbeat";
+  trigger?: SendPromptTrigger;
 }): TurnEnvelope {
   return {
     schema: "brewva.turn.v1",
@@ -106,6 +108,7 @@ function buildGatewayTurnEnvelope(input: {
     parts: [{ type: "text", text: input.prompt }],
     meta: {
       source: input.source,
+      proactivityTrigger: input.trigger ?? null,
     },
   };
 }
@@ -116,6 +119,51 @@ function extractPromptFromEnvelope(envelope: TurnEnvelope): string {
     .map((part) => part.text.trim())
     .filter((part) => part.length > 0);
   return parts.join("\n");
+}
+
+function extractTriggerFromEnvelope(envelope: TurnEnvelope): SendPromptTrigger | undefined {
+  const meta = envelope.meta;
+  if (!meta || typeof meta !== "object") {
+    return undefined;
+  }
+  const raw = meta.proactivityTrigger;
+  if (!raw || typeof raw !== "object") {
+    return undefined;
+  }
+  const kind =
+    typeof (raw as { kind?: unknown }).kind === "string" ? (raw as { kind: string }).kind : "";
+  if (kind !== "heartbeat") {
+    return undefined;
+  }
+  const ruleId =
+    typeof (raw as { ruleId?: unknown }).ruleId === "string" &&
+    (raw as { ruleId: string }).ruleId.trim().length > 0
+      ? (raw as { ruleId: string }).ruleId.trim()
+      : "";
+  if (!ruleId) {
+    return undefined;
+  }
+  const objective =
+    typeof (raw as { objective?: unknown }).objective === "string" &&
+    (raw as { objective: string }).objective.trim().length > 0
+      ? (raw as { objective: string }).objective.trim()
+      : undefined;
+  const contextHints = Array.isArray((raw as { contextHints?: unknown }).contextHints)
+    ? [
+        ...new Set(
+          ((raw as { contextHints: unknown[] }).contextHints ?? [])
+            .filter((value): value is string => typeof value === "string")
+            .map((value) => value.trim())
+            .filter((value) => value.length > 0),
+        ),
+      ]
+    : undefined;
+  return {
+    kind: "heartbeat",
+    ruleId,
+    objective,
+    contextHints: contextHints && contextHints.length > 0 ? contextHints : undefined,
+  };
 }
 
 function toWorkerResultError(input: { error: string; errorCode?: WorkerResultErrorCode }): Error {
@@ -482,6 +530,7 @@ export class SessionSupervisor implements SessionBackend {
             turnId: requestedTurnId,
             prompt,
             source,
+            trigger: options.trigger,
           }),
           source,
           {
@@ -509,6 +558,7 @@ export class SessionSupervisor implements SessionBackend {
         payload: {
           prompt,
           turnId: requestedTurnId,
+          trigger: options.trigger,
         },
       });
 
@@ -1091,6 +1141,7 @@ export class SessionSupervisor implements SessionBackend {
     const source = record.source === "heartbeat" ? "heartbeat" : "gateway";
     const sessionId = normalizeOptionalString(record.envelope.sessionId) ?? record.sessionId;
     const prompt = extractPromptFromEnvelope(record.envelope);
+    const trigger = extractTriggerFromEnvelope(record.envelope);
     if (!sessionId || !prompt) {
       this.turnWalStore?.markFailed(record.walId, "recovery_missing_prompt_or_session");
       return;
@@ -1102,6 +1153,7 @@ export class SessionSupervisor implements SessionBackend {
       source,
       walReplayId: record.walId,
       waitForCompletion: false,
+      trigger,
     });
   }
 

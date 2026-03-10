@@ -1,13 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildProcedureNoteContent,
   buildStatusSummaryPacketContent,
   buildOperatorNoteEvidenceRef,
   COGNITION_ARTIFACT_EXTENSIONS,
   ensureCognitionArtifactsDirs,
   listCognitionArtifacts,
+  parseProcedureNoteContent,
   parseStatusSummaryPacketContent,
   readCognitionArtifact,
   resolveCognitionArtifactsDir,
+  selectCognitionArtifactsForPrompt,
   submitCognitionContextPacket,
   submitStatusSummaryContextPacket,
   writeCognitionArtifact,
@@ -229,5 +232,83 @@ describe("deliberation cognition artifacts", () => {
         blocked_on: "verification evidence",
       },
     });
+  });
+
+  test("buildProcedureNoteContent normalizes reusable procedural notes", () => {
+    expect(
+      buildProcedureNoteContent({
+        noteKind: "verification_outcome",
+        lessonKey: "verification:standard:implementation",
+        pattern: "reuse verification profile standard for implementation work",
+        recommendation: "reuse verification profile standard for similar tasks",
+        fields: [
+          { key: "active_skill", value: "implementation" },
+          { key: "failed_checks", value: [] },
+        ],
+      }),
+    ).toContain("failed_checks: none");
+  });
+
+  test("parseProcedureNoteContent exposes stable fields for curator strategies", () => {
+    const parsed = parseProcedureNoteContent(
+      [
+        "[ProcedureNote]",
+        "profile: procedure_note",
+        "note_kind: verification_outcome",
+        "lesson_key: verification:standard:implementation",
+        "pattern: reuse verification profile standard for implementation work",
+        "recommendation: reuse verification profile standard for similar tasks",
+        "active_skill: implementation",
+      ].join("\n"),
+    );
+
+    expect(parsed).toEqual({
+      profile: "procedure_note",
+      noteKind: "verification_outcome",
+      lessonKey: "verification:standard:implementation",
+      pattern: "reuse verification profile standard for implementation work",
+      recommendation: "reuse verification profile standard for similar tasks",
+      fields: {
+        profile: "procedure_note",
+        note_kind: "verification_outcome",
+        lesson_key: "verification:standard:implementation",
+        pattern: "reuse verification profile standard for implementation work",
+        recommendation: "reuse verification profile standard for similar tasks",
+        active_skill: "implementation",
+      },
+    });
+  });
+
+  test("selectCognitionArtifactsForPrompt uses BM25-style local ranking instead of raw overlap count", async () => {
+    const workspace = createTestWorkspace("deliberation-cognition-ranking");
+
+    await writeCognitionArtifact({
+      workspaceRoot: workspace,
+      lane: "summaries",
+      name: "release-readiness-primary",
+      content:
+        "Release readiness review tracks release readiness blockers and backlog risk in detail.",
+      createdAt: 1_731_000_000_500,
+    });
+    await writeCognitionArtifact({
+      workspaceRoot: workspace,
+      lane: "summaries",
+      name: "generic-status-note",
+      content: "Status review note with a single backlog mention.",
+      createdAt: 1_731_000_000_600,
+    });
+
+    const selected = await selectCognitionArtifactsForPrompt({
+      workspaceRoot: workspace,
+      lane: "summaries",
+      prompt: "Review release readiness and backlog risk before shipping.",
+      maxArtifacts: 1,
+      scanLimit: 6,
+    });
+
+    expect(selected).toHaveLength(1);
+    expect(selected[0]?.artifact.fileName).toContain("release-readiness-primary");
+    expect(selected[0]?.matchedTerms).toContain("release");
+    expect(selected[0]?.matchedTerms).toContain("readiness");
   });
 });

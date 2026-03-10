@@ -25,6 +25,24 @@ Every runtime event follows the same envelope shape:
 - `observability_assertion_recorded`
 - `verification_outcome_recorded`
 - `debug_loop_*`
+- `memory_summary_written`
+- `memory_summary_write_failed`
+- `memory_procedure_note_written`
+- `memory_procedure_note_write_failed`
+- `memory_reference_rehydrated`
+- `memory_reference_rehydration_failed`
+- `memory_procedure_rehydrated`
+- `memory_procedure_rehydration_failed`
+- `memory_summary_rehydrated`
+- `memory_summary_rehydration_failed`
+- `memory_open_loop_rehydrated`
+- `memory_open_loop_rehydration_failed`
+- `memory_adaptation_updated`
+- `memory_adaptation_update_failed`
+- `proactivity_wakeup_prepared`
+- `cognitive_metric_first_productive_action`
+- `cognitive_metric_resumption_progress`
+- `cognitive_metric_rehydration_usefulness`
 - schedule lifecycle events
 - execution routing/isolation events
 
@@ -46,15 +64,6 @@ These are retained under `infrastructure.events.level=audit`.
 - `decision_receipt_recorded`
 - `tool_surface_resolved`
 - `context_composed`
-- `memory_reference_rehydrated`
-- `memory_reference_rehydration_failed`
-- `memory_summary_rehydrated`
-- `memory_summary_rehydration_failed`
-- `memory_open_loop_rehydrated`
-- `memory_open_loop_rehydration_failed`
-- `cognitive_metric_first_productive_action`
-- `cognitive_metric_resumption_progress`
-- `cognitive_metric_rehydration_usefulness`
 - `skill_*` lifecycle and cascade events
 - `skill_routing_selection`
 - `skill_routing_decided`
@@ -108,8 +117,17 @@ cross-turn recovery artifacts, not presentation-only UI behavior.
 - `context_composed` records the model-facing composition summary:
   narrative/constraint/diagnostic block counts plus token totals and the
   resulting narrative ratio
+- `memory_summary_written` / `memory_summary_write_failed` record the write-side
+  cognition sediment loop at session boundaries
+- `memory_procedure_note_written` / `memory_procedure_note_write_failed`
+  record the write-side formation of reusable verification-backed work patterns
 - `memory_*_rehydrated` / `memory_*_rehydration_failed` record whether
   cross-session cognition artifacts crossed the proposal boundary successfully
+- `memory_adaptation_updated` / `memory_adaptation_update_failed` record
+  whether usefulness telemetry successfully updated the control-plane ranking
+  policy under `.brewva/cognition/adaptation.json`
+- `proactivity_wakeup_prepared` records control-plane wake-up metadata that may
+  later influence memory selection before the model starts
 - `cognitive_metric_first_productive_action` records the first non-operator
   semantic `pass` tool result in a session
 - `cognitive_metric_resumption_progress` records the first productive action

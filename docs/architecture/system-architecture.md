@@ -41,8 +41,8 @@ Boundary rule:
 ## Operational Planes
 
 - `Working State Plane`: projection, context arena, pending dispatch, active tool surface
-- `Cognitive Product Plane`: context composition, memory curation, persona/profile rendering
-- `Control Plane`: broker, debug-loop, heartbeat policy, scheduling triggers, future planners
+- `Cognitive Product Plane`: context composition, memory formation, memory curation, persona/profile rendering
+- `Control Plane`: broker, debug-loop, heartbeat policy, proactive wake context, scheduling triggers, future planners
 
 Rings define authority. Planes define product behavior.
 
