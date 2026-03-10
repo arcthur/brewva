@@ -15,7 +15,7 @@ describe("heartbeat policy loader", () => {
           "# HEARTBEAT",
           "",
           "```heartbeat",
-          '{"rules":[{"id":"nightly","intervalMinutes":15,"prompt":"Check backlog","sessionId":"ops"}]}',
+          '{"rules":[{"id":"nightly","intervalMinutes":15,"prompt":"Check backlog","sessionId":"ops","objective":"Review release readiness","contextHints":["release readiness","backlog risk"]}]}',
           "```",
           "",
         ].join("\n"),
@@ -28,6 +28,8 @@ describe("heartbeat policy loader", () => {
       expect(policy.rules[0]?.intervalMinutes).toBe(15);
       expect(policy.rules[0]?.prompt).toBe("Check backlog");
       expect(policy.rules[0]?.sessionId).toBe("ops");
+      expect(policy.rules[0]?.objective).toBe("Review release readiness");
+      expect(policy.rules[0]?.contextHints).toEqual(["release readiness", "backlog risk"]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

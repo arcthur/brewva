@@ -66,6 +66,27 @@ Parameter summary (current semantics):
 - `gateway.rotate-token`: `{}`
 - `gateway.stop`: `{ reason? }`
 
+## Heartbeat Policy Surface
+
+`HEARTBEAT.md` rules are control-plane policy, not gateway RPC methods.
+
+Current JSON-block rule shape:
+
+- `id`
+- `intervalMinutes`
+- `prompt`
+- `sessionId?`
+- `objective?`
+- `contextHints?` (`string[]`)
+
+Rule semantics:
+
+- `prompt` is the model-facing wake-up instruction.
+- `objective` is durable control-plane intent used for retrieval and wake-up
+  explainability.
+- `contextHints` are retrieval hints for the cognitive layer. They do not
+  bypass the proposal boundary.
+
 ## Response Semantics (Key Methods)
 
 - `connect`: `hello-ok` payload with `protocol`, `server`, `features`, and `policy`.

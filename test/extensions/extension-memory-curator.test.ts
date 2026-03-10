@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { writeCognitionArtifact } from "@brewva/brewva-deliberation";
-import { registerMemoryCurator } from "@brewva/brewva-extensions";
+import { recordProactivityWakeup, registerMemoryCurator } from "@brewva/brewva-extensions";
 import type { ProposalRecord } from "@brewva/brewva-runtime";
 import {
   createMockExtensionAPI,
@@ -98,6 +98,56 @@ describe("memory curator extension", () => {
     ).toHaveLength(1);
   });
 
+  test("rehydrates procedural notes as a distinct reference-lane strategy", async () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const runtime = createRuntimeFixture();
+    const sessionId = "memory-curator-procedure";
+
+    await writeCognitionArtifact({
+      workspaceRoot: runtime.workspaceRoot,
+      lane: "reference",
+      name: "verification-standard-implementation",
+      content: [
+        "[ProcedureNote]",
+        "profile: procedure_note",
+        "note_kind: verification_outcome",
+        "lesson_key: verification:standard:implementation",
+        "pattern: reuse verification profile standard for implementation work",
+        "recommendation: reuse verification profile standard for similar tasks",
+        "active_skill: implementation",
+      ].join("\n"),
+      createdAt: 1731000000250,
+    });
+
+    registerMemoryCurator(api, runtime);
+
+    await invokeHandlerAsync(
+      handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "Continue implementation work and reuse the standard verification path.",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => sessionId,
+        },
+      },
+    );
+
+    const records = runtime.proposals.list(sessionId, {
+      kind: "context_packet",
+    }) as ProposalRecord<"context_packet">[];
+    const procedureRecord = records.find((record) =>
+      (record.proposal.payload.packetKey ?? "").startsWith("procedure:"),
+    );
+    expect(procedureRecord?.receipt.decision).toBe("accept");
+    expect(procedureRecord?.proposal.payload.content).toContain("[ProcedureNote]");
+    expect(runtime.events.query(sessionId).map((event) => event.type)).toContain(
+      "memory_procedure_rehydrated",
+    );
+  });
+
   test("rehydrates prompt-matched summary artifacts through the same curator boundary", async () => {
     const { api, handlers } = createMockExtensionAPI();
     const runtime = createRuntimeFixture();
@@ -111,7 +161,7 @@ describe("memory curator extension", () => {
         "[StatusSummary]",
         "profile: status_summary",
         "summary_kind: session_summary",
-        "status: in_progress",
+        "status: done",
         "focus: proposal boundary rollout",
       ].join("\n"),
       createdAt: 1731000000300,
@@ -209,5 +259,113 @@ describe("memory curator extension", () => {
 
     const events = runtime.events.query(sessionId);
     expect(events.map((event) => event.type)).toContain("memory_open_loop_rehydrated");
+  });
+
+  test("uses proactivity wake-up objective and hints to rehydrate relevant memory for generic heartbeat prompts", async () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const runtime = createRuntimeFixture();
+    const sessionId = "memory-curator-proactivity";
+
+    await writeCognitionArtifact({
+      workspaceRoot: runtime.workspaceRoot,
+      lane: "summaries",
+      name: "release-readiness-summary",
+      content: [
+        "[StatusSummary]",
+        "profile: status_summary",
+        "summary_kind: session_summary",
+        "status: in_progress",
+        "goal: release readiness review",
+        "next_action: inspect release readiness blockers and backlog risk",
+      ].join("\n"),
+      createdAt: 1731000000500,
+    });
+
+    registerMemoryCurator(api, runtime);
+    recordProactivityWakeup(runtime, sessionId, {
+      source: "heartbeat",
+      ruleId: "nightly-release-readiness",
+      prompt: "Check project status.",
+      objective: "Review release readiness and backlog risk.",
+      contextHints: ["release readiness", "backlog risk"],
+    });
+
+    await invokeHandlerAsync(
+      handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "Check project status.",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => sessionId,
+        },
+      },
+    );
+
+    const records = runtime.proposals.list(sessionId, {
+      kind: "context_packet",
+    }) as ProposalRecord<"context_packet">[];
+    const summaryRecord = records.find((record) =>
+      (record.proposal.payload.packetKey ?? "").startsWith("summary:"),
+    );
+    expect(summaryRecord?.receipt.decision).toBe("accept");
+    const successEvent = runtime.events
+      .query(sessionId)
+      .find((event) => event.type === "memory_summary_rehydrated");
+    expect(successEvent?.payload?.triggerSource).toBe("heartbeat");
+    expect(successEvent?.payload?.triggerRuleId).toBe("nightly-release-readiness");
+  });
+
+  test("ignores stale proactivity wake-up metadata after the wake-up TTL expires", async () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const runtime = createRuntimeFixture();
+    const sessionId = "memory-curator-stale-proactivity";
+
+    await writeCognitionArtifact({
+      workspaceRoot: runtime.workspaceRoot,
+      lane: "summaries",
+      name: "stale-release-readiness-summary",
+      content: [
+        "[StatusSummary]",
+        "profile: status_summary",
+        "summary_kind: session_summary",
+        "status: in_progress",
+        "goal: release readiness review",
+        "next_action: inspect release readiness blockers and backlog risk",
+      ].join("\n"),
+      createdAt: 1731000000600,
+    });
+
+    registerMemoryCurator(api, runtime);
+    recordProactivityWakeup(runtime, sessionId, {
+      source: "heartbeat",
+      ruleId: "nightly-release-readiness",
+      prompt: "Check project status.",
+      objective: "Review release readiness and backlog risk.",
+      contextHints: ["release readiness", "backlog risk"],
+      preparedAt: Date.now() - 120_000,
+    });
+
+    await invokeHandlerAsync(
+      handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "Check project status.",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => sessionId,
+        },
+      },
+    );
+
+    expect(
+      runtime.proposals.list(sessionId, {
+        kind: "context_packet",
+      }),
+    ).toHaveLength(0);
   });
 });

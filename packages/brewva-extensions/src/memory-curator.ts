@@ -1,30 +1,44 @@
 import {
   DELIBERATION_ISSUERS,
   listCognitionArtifacts,
+  parseProcedureNoteContent,
   parseStatusSummaryPacketContent,
   readCognitionArtifact,
   resolveCognitionArtifactsDir,
   selectCognitionArtifactsForPrompt,
+  stripArtifactExtension,
   submitExistingCognitionArtifactContextPacket,
 } from "@brewva/brewva-deliberation";
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  MEMORY_OPEN_LOOP_REHYDRATED_EVENT_TYPE,
+  MEMORY_OPEN_LOOP_REHYDRATION_FAILED_EVENT_TYPE,
+  MEMORY_PROCEDURE_REHYDRATED_EVENT_TYPE,
+  MEMORY_PROCEDURE_REHYDRATION_FAILED_EVENT_TYPE,
+  MEMORY_REFERENCE_REHYDRATED_EVENT_TYPE,
+  MEMORY_REFERENCE_REHYDRATION_FAILED_EVENT_TYPE,
+  MEMORY_SUMMARY_REHYDRATED_EVENT_TYPE,
+  MEMORY_SUMMARY_REHYDRATION_FAILED_EVENT_TYPE,
+  type BrewvaRuntime,
+} from "@brewva/brewva-runtime";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import {
+  rankMemoryHydrationCandidates,
+  readMemoryAdaptationPolicy,
+  type MemoryHydrationStrategy,
+} from "./memory-adaptation.js";
+import {
+  buildProactivitySelectionText,
+  readLatestProactivityWakeup,
+} from "./proactivity-context.js";
 
 const MEMORY_REFERENCE_PACKET_TTL_MS = 6 * 60 * 60 * 1000;
+const MEMORY_PROCEDURE_PACKET_TTL_MS = 8 * 60 * 60 * 1000;
 const MEMORY_SUMMARY_PACKET_TTL_MS = 3 * 60 * 60 * 1000;
 const MEMORY_OPEN_LOOP_PACKET_TTL_MS = 4 * 60 * 60 * 1000;
-const MEMORY_REFERENCE_REHYDRATED_EVENT_TYPE = "memory_reference_rehydrated";
-const MEMORY_REFERENCE_REHYDRATION_FAILED_EVENT_TYPE = "memory_reference_rehydration_failed";
-const MEMORY_SUMMARY_REHYDRATED_EVENT_TYPE = "memory_summary_rehydrated";
-const MEMORY_SUMMARY_REHYDRATION_FAILED_EVENT_TYPE = "memory_summary_rehydration_failed";
-const MEMORY_OPEN_LOOP_REHYDRATED_EVENT_TYPE = "memory_open_loop_rehydrated";
-const MEMORY_OPEN_LOOP_REHYDRATION_FAILED_EVENT_TYPE = "memory_open_loop_rehydration_failed";
 const CONTINUATION_PROMPT_REGEX =
   /\b(continue|resume|pick up|pick-up|follow up|follow-up|what next|next step|where were|blocked|carry on)\b/iu;
 const OPEN_LOOP_STATUSES = new Set(["blocked", "in_progress", "pending", "retrying", "open"]);
 const EMPTY_STATUS_SUMMARY_VALUES = new Set(["", "none", "null", "n/a", "unknown"]);
-
-type MemoryHydrationStrategy = "reference" | "summary" | "open_loop";
 
 interface HydrationCandidate {
   strategy: MemoryHydrationStrategy;
@@ -35,6 +49,7 @@ interface HydrationCandidate {
   artifactRef: string;
   artifact: Awaited<ReturnType<typeof listCognitionArtifacts>>[number];
   content: string;
+  baseScore: number;
   metadata: Record<string, unknown>;
 }
 
@@ -57,16 +72,12 @@ function getOrCreateHydratedState(
   return created;
 }
 
-function stripArtifactExtension(fileName: string): string {
-  return fileName.replace(/\.(?:md|txt|json)$/u, "");
-}
-
 function buildPacketKey(fileName: string): string {
-  return `reference:${fileName.replace(/\.(?:md|txt|json)$/u, "")}`;
+  return `reference:${stripArtifactExtension(fileName)}`;
 }
 
 function buildLabel(fileName: string): string {
-  return `Reference:${fileName.replace(/\.(?:md|txt|json)$/u, "")}`;
+  return `Reference:${stripArtifactExtension(fileName)}`;
 }
 
 function buildSummaryPacketKey(fileName: string): string {
@@ -83,6 +94,14 @@ function buildOpenLoopPacketKey(fileName: string): string {
 
 function buildOpenLoopLabel(fileName: string): string {
   return `OpenLoop:${stripArtifactExtension(fileName)}`;
+}
+
+function buildProcedurePacketKey(fileName: string): string {
+  return `procedure:${stripArtifactExtension(fileName)}`;
+}
+
+function buildProcedureLabel(fileName: string): string {
+  return `Procedure:${stripArtifactExtension(fileName)}`;
 }
 
 function normalizeStatusSummaryValue(value: string | null | undefined): string | null {
@@ -126,12 +145,12 @@ function isOpenLoopSummary(content: string): {
 
 async function selectSummaryCandidates(
   runtime: BrewvaRuntime,
-  prompt: string,
+  selectionText: string,
 ): Promise<HydrationCandidate[]> {
   const selected = await selectCognitionArtifactsForPrompt({
     workspaceRoot: runtime.workspaceRoot,
     lane: "summaries",
-    prompt,
+    prompt: selectionText,
     maxArtifacts: 1,
     scanLimit: 12,
   });
@@ -148,6 +167,7 @@ async function selectSummaryCandidates(
       score: match.score,
       matchedTerms: match.matchedTerms,
     },
+    baseScore: match.score,
   }));
 }
 
@@ -182,6 +202,7 @@ async function selectOpenLoopCandidates(
       label: buildOpenLoopLabel(artifact.fileName),
       subject: `memory_open_loop:${artifact.fileName}`,
       expiresAt: Date.now() + MEMORY_OPEN_LOOP_PACKET_TTL_MS,
+      baseScore: Number((1.5 + artifact.createdAt / 1_000_000_000_000).toFixed(6)),
       metadata: {
         summaryKind: openLoop.summaryKind,
         status: openLoop.status,
@@ -203,6 +224,11 @@ function eventTypesForStrategy(strategy: MemoryHydrationStrategy): {
       return {
         success: MEMORY_SUMMARY_REHYDRATED_EVENT_TYPE,
         failure: MEMORY_SUMMARY_REHYDRATION_FAILED_EVENT_TYPE,
+      };
+    case "procedure":
+      return {
+        success: MEMORY_PROCEDURE_REHYDRATED_EVENT_TYPE,
+        failure: MEMORY_PROCEDURE_REHYDRATION_FAILED_EVENT_TYPE,
       };
     case "open_loop":
       return {
@@ -285,37 +311,90 @@ export function registerMemoryCurator(pi: ExtensionAPI, runtime: BrewvaRuntime):
   pi.on("before_agent_start", async (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
     const prompt = typeof (event as { prompt?: unknown }).prompt === "string" ? event.prompt : "";
+    const proactivityTrigger = readLatestProactivityWakeup(runtime, sessionId, prompt);
+    const selectionText = buildProactivitySelectionText({
+      prompt,
+      trigger: proactivityTrigger,
+    });
     const selectedReferences = await selectCognitionArtifactsForPrompt({
       workspaceRoot: runtime.workspaceRoot,
       lane: "reference",
-      prompt,
+      prompt: selectionText,
+      maxArtifacts: 3,
     });
+    const summaryCandidates = await selectSummaryCandidates(runtime, selectionText);
+    const openLoopCandidates = await selectOpenLoopCandidates(runtime, prompt);
+    const candidates: HydrationCandidate[] = [];
 
-    const candidates: HydrationCandidate[] = [
-      ...selectedReferences.map((match) => ({
-        strategy: "reference" as const,
+    for (const match of selectedReferences) {
+      // Procedure notes are stored in the reference lane on purpose. They are
+      // reusable, non-authoritative operator/control-plane sediment, not a
+      // separate storage authority that the kernel would need to understand.
+      const procedure = parseProcedureNoteContent(match.content);
+      candidates.push({
+        strategy: procedure ? "procedure" : "reference",
         artifact: match.artifact,
         artifactRef: match.artifact.artifactRef,
         content: match.content,
-        packetKey: buildPacketKey(match.artifact.fileName),
-        label: buildLabel(match.artifact.fileName),
-        subject: `memory_reference:${match.artifact.fileName}`,
-        expiresAt: Date.now() + MEMORY_REFERENCE_PACKET_TTL_MS,
+        packetKey: procedure
+          ? buildProcedurePacketKey(match.artifact.fileName)
+          : buildPacketKey(match.artifact.fileName),
+        label: procedure
+          ? buildProcedureLabel(match.artifact.fileName)
+          : buildLabel(match.artifact.fileName),
+        subject: procedure
+          ? `memory_procedure:${match.artifact.fileName}`
+          : `memory_reference:${match.artifact.fileName}`,
+        expiresAt:
+          Date.now() +
+          (procedure ? MEMORY_PROCEDURE_PACKET_TTL_MS : MEMORY_REFERENCE_PACKET_TTL_MS),
         metadata: {
           score: match.score,
           matchedTerms: match.matchedTerms,
+          noteKind: procedure?.noteKind ?? null,
+          lessonKey: procedure?.lessonKey ?? null,
+          pattern: procedure?.pattern ?? null,
+          triggerSource: proactivityTrigger?.source ?? null,
+          triggerRuleId: proactivityTrigger?.ruleId ?? null,
         },
-      })),
-      ...(await selectSummaryCandidates(runtime, prompt)),
-      ...(await selectOpenLoopCandidates(runtime, prompt)),
-    ];
+        baseScore: match.score,
+      });
+    }
+    for (const candidate of summaryCandidates) {
+      candidates.push({
+        strategy: candidate.strategy,
+        artifact: candidate.artifact,
+        artifactRef: candidate.artifactRef,
+        content: candidate.content,
+        packetKey: candidate.packetKey,
+        label: candidate.label,
+        subject: candidate.subject,
+        expiresAt: candidate.expiresAt,
+        metadata: {
+          ...candidate.metadata,
+          triggerSource: proactivityTrigger?.source ?? null,
+          triggerRuleId: proactivityTrigger?.ruleId ?? null,
+        },
+        baseScore: candidate.baseScore,
+      });
+    }
+    candidates.push(...openLoopCandidates);
     if (candidates.length === 0) {
       return undefined;
     }
 
+    const adaptationPolicy = await readMemoryAdaptationPolicy(runtime.workspaceRoot);
+    const rankedCandidates = [
+      ...candidates.filter((candidate) => candidate.strategy === "open_loop"),
+      ...rankMemoryHydrationCandidates(
+        candidates.filter((candidate) => candidate.strategy !== "open_loop"),
+        adaptationPolicy,
+      ),
+    ];
+
     const hydratedState = getOrCreateHydratedState(hydratedBySession, sessionId);
 
-    for (const candidate of candidates) {
+    for (const candidate of rankedCandidates) {
       if (
         hydratedState.packetKeys.has(candidate.packetKey) ||
         hydratedState.artifactRefs.has(candidate.artifactRef)

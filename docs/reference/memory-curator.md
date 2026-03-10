@@ -24,11 +24,17 @@ Current built-in strategies:
 
 - `reference match`
   - scan `.brewva/cognition/reference/`
-  - select prompt-relevant artifacts by term overlap and recency
+  - select prompt-relevant artifacts by local BM25-style ranking and recency
   - submit evidence-backed `context_packet` proposals with TTL-bound packet keys
+- `procedure match`
+  - scan the same `.brewva/cognition/reference/` lane
+  - detect `ProcedureNote` artifacts as a semantic subset of reference memory
+  - rehydrate reusable verification-backed work patterns through dedicated
+    `procedure:*` packet keys
 - `summary resume`
   - scan `.brewva/cognition/summaries/`
-  - select prompt-relevant status summaries by term overlap and recency
+  - select prompt-relevant status summaries by local BM25-style ranking and
+    recency
   - re-enter them through the same proposal/receipt path
 - `open-loop resume`
   - scan recent `.brewva/cognition/summaries/` status summaries
@@ -38,6 +44,23 @@ Current built-in strategies:
     lane
   - rehydrate it as a scoped `context_packet` instead of mutating kernel state
 
+Storage lane mapping:
+
+- `reference` lane
+  - may produce `reference:*` packets
+  - may also produce `procedure:*` packets when the artifact parses as a
+    `ProcedureNote`
+- `summaries` lane
+  - may produce `summary:*` packets
+  - may also produce `open-loop:*` packets when the artifact parses as an
+    unresolved `StatusSummary`
+
+Trigger-aware ranking:
+
+- the curator may expand its query with control-plane wake-up metadata
+- current wake-up sources may provide an `objective` and `contextHints`
+- these hints improve retrieval quality without bypassing proposal admission
+
 Current issuer:
 
 - `brewva.extensions.memory-curator`
@@ -46,10 +69,25 @@ Current telemetry:
 
 - `memory_reference_rehydrated`
 - `memory_reference_rehydration_failed`
+- `memory_procedure_rehydrated`
+- `memory_procedure_rehydration_failed`
 - `memory_summary_rehydrated`
 - `memory_summary_rehydration_failed`
 - `memory_open_loop_rehydrated`
 - `memory_open_loop_rehydration_failed`
+- `memory_adaptation_updated`
+- `memory_adaptation_update_failed`
+
+Current ranking feedback:
+
+- the curator reads `.brewva/cognition/adaptation.json` before each
+  `before_agent_start`
+- packet-level and strategy-level usefulness observations may reorder
+  reference/procedure/summary candidates
+- `open_loop` remains a continuation-first semantic path and is still pinned
+  ahead of generic ranking when present
+- packet-level bias is intentionally stronger than strategy-level bias because
+  a concrete packet history is more predictive than a coarse strategy average
 
 ## Boundary Rules
 
@@ -70,3 +108,8 @@ Current telemetry:
 Future strategies must still be added under the same curator entry point. The
 goal is to avoid multiple independent rehydration hooks competing for the same
 context budget with incompatible policies.
+
+`MemoryCurator` is intentionally paired with `MemoryFormation`:
+
+- `MemoryFormation` creates summaries, open loops, and procedural notes.
+- `MemoryCurator` decides which of them should come back.

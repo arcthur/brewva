@@ -83,6 +83,8 @@ Key files:
 - `gateway.log`: structured logs (with rotation).
 - `gateway.token`: control plane auth token.
 - `HEARTBEAT.md`: externalized heartbeat policy file.
+  - JSON heartbeat rules may include `objective` and `contextHints` so wake-up
+    sessions can rehydrate better cognition before the model starts.
 - `children.json`: child-process registry used for orphan cleanup during restart.
 
 Optional HTTP probe endpoint:

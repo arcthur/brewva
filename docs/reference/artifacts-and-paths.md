@@ -37,9 +37,20 @@ Runtime artifact paths are resolved from the workspace root (`nearest .brewva/br
     rehydration
   - repeated packets can share a stable `packetKey` so the latest accepted
     cognition packet replaces earlier ones for injection without erasing tape history
+  - `MemoryFormation` writes resumable `status_summary` artifacts here at
+    lifecycle boundaries such as `agent_end`, `session_compact`, and
+    `session_shutdown`
+  - `MemoryFormation` also writes verified `ProcedureNote` artifacts into the
+    `reference/` lane when verification outcomes expose a reusable pattern and
+    recommendation
   - `registerMemoryCurator` may rehydrate selected `reference/` artifacts,
-    prompt-matched `summaries/` artifacts, and continuation-oriented open-loop
-    summaries into accepted `context_packet` proposals for future sessions
+    prompt-matched `summaries/` artifacts, verification-backed procedural
+    notes, and continuation-oriented open-loop summaries into accepted
+    `context_packet` proposals for future sessions
+  - control-plane ranking bias is persisted separately at
+    `.brewva/cognition/adaptation.json`
+  - that policy is owned by `registerMemoryAdaptation`; it does not define a
+    new artifact lane and it never becomes kernel authority
 - Agent identity profile (per-agent): `.brewva/agents/<agent-id>/identity.md`
   - `<agent-id>` comes from runtime option `agentId` (or `BREWVA_AGENT_ID`, fallback `default`)
   - id normalization: lowercase slug (`[a-z0-9._-]`, invalid separators mapped to `-`)

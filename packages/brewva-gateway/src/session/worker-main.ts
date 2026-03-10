@@ -1,3 +1,4 @@
+import { recordProactivityWakeup } from "@brewva/brewva-extensions";
 import { collectSessionPromptOutput } from "./collect-output.js";
 import { createGatewaySession, type GatewaySessionResult } from "./create-session.js";
 import {
@@ -257,6 +258,7 @@ async function handleSend(
     turnId,
     prompt: message.payload.prompt,
     agentSessionId,
+    trigger: message.payload.trigger,
   });
 }
 
@@ -264,6 +266,7 @@ async function runTurn(input: {
   turnId: string;
   prompt: string;
   agentSessionId: string;
+  trigger?: Extract<ParentToWorkerMessage, { kind: "send" }>["payload"]["trigger"];
 }): Promise<void> {
   if (!sessionResult) {
     activeTurnId = null;
@@ -282,6 +285,15 @@ async function runTurn(input: {
   });
 
   try {
+    if (input.trigger?.kind === "heartbeat") {
+      recordProactivityWakeup(sessionResult.runtime, input.agentSessionId, {
+        source: "heartbeat",
+        ruleId: input.trigger.ruleId,
+        prompt: input.prompt,
+        objective: input.trigger.objective,
+        contextHints: input.trigger.contextHints,
+      });
+    }
     const output = await collectSessionPromptOutput(sessionResult.session, input.prompt, {
       onChunk: (chunk) => {
         send({

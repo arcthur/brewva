@@ -34,6 +34,15 @@ export interface ParsedStatusSummaryPacket {
   fields: Record<string, string>;
 }
 
+export interface ParsedProcedureNotePacket {
+  profile: string | null;
+  noteKind: string | null;
+  lessonKey: string | null;
+  pattern: string | null;
+  recommendation: string | null;
+  fields: Record<string, string>;
+}
+
 export interface CognitionArtifactSelection {
   artifact: CognitionArtifactRecord;
   content: string;
@@ -132,7 +141,7 @@ function compareCognitionArtifactFileNames(left: string, right: string): number 
   return left.localeCompare(right);
 }
 
-function stripArtifactExtension(fileName: string): string {
+export function stripArtifactExtension(fileName: string): string {
   return fileName.replace(/\.(?:md|txt|json)$/u, "");
 }
 
@@ -179,18 +188,29 @@ const COGNITION_SELECTION_STOP_WORDS = new Set<string>([
   "work",
 ]);
 
-function extractSelectionTerms(text: string): string[] {
-  const terms = new Set<string>();
+function normalizeSelectionToken(value: string): string | null {
+  const normalized = value.toLowerCase().replace(/[-_]+/g, "");
+  if (normalized.length < 4 || COGNITION_SELECTION_STOP_WORDS.has(normalized)) {
+    return null;
+  }
+  return normalized;
+}
+
+function extractSelectionTerms(text: string, options: { dedupe?: boolean } = {}): string[] {
+  const terms: string[] = [];
+  const seen = new Set<string>();
   for (const match of text.toLowerCase().matchAll(/[a-z][a-z0-9_-]{3,}/g)) {
     const raw = match[0];
     if (!raw) continue;
-    const normalized = raw.replace(/[-_]+/g, "");
-    if (normalized.length < 4 || COGNITION_SELECTION_STOP_WORDS.has(normalized)) {
-      continue;
+    const normalized = normalizeSelectionToken(raw);
+    if (!normalized) continue;
+    if (options.dedupe !== false) {
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
     }
-    terms.add(normalized);
+    terms.push(normalized);
   }
-  return [...terms];
+  return terms;
 }
 
 export function buildStatusSummaryPacketContent(input: {
@@ -203,6 +223,31 @@ export function buildStatusSummaryPacketContent(input: {
     "profile: status_summary",
     `summary_kind: ${normalizeSummaryValue(input.summaryKind)}`,
     `status: ${normalizeSummaryValue(input.status)}`,
+  ];
+
+  for (const field of input.fields ?? []) {
+    const key = field.key.trim();
+    if (key.length === 0) continue;
+    lines.push(`${key}: ${normalizeSummaryValue(field.value)}`);
+  }
+
+  return lines.join("\n");
+}
+
+export function buildProcedureNoteContent(input: {
+  noteKind: string;
+  lessonKey?: string | null;
+  pattern?: string | null;
+  recommendation: string;
+  fields?: StatusSummaryField[];
+}): string {
+  const lines = [
+    "[ProcedureNote]",
+    "profile: procedure_note",
+    `note_kind: ${normalizeSummaryValue(input.noteKind)}`,
+    `lesson_key: ${normalizeSummaryValue(input.lessonKey ?? null)}`,
+    `pattern: ${normalizeSummaryValue(input.pattern ?? null)}`,
+    `recommendation: ${normalizeSummaryValue(input.recommendation)}`,
   ];
 
   for (const field of input.fields ?? []) {
@@ -241,6 +286,43 @@ export function parseStatusSummaryPacketContent(content: string): ParsedStatusSu
     profile,
     summaryKind,
     status,
+    fields,
+  };
+}
+
+export function parseProcedureNoteContent(content: string): ParsedProcedureNotePacket | null {
+  const text = content.trim();
+  if (!text.startsWith("[ProcedureNote]")) {
+    return null;
+  }
+
+  const fields: Record<string, string> = {};
+  let profile: string | null = null;
+  let noteKind: string | null = null;
+  let lessonKey: string | null = null;
+  let pattern: string | null = null;
+  let recommendation: string | null = null;
+
+  for (const line of text.split("\n").slice(1)) {
+    const separatorIndex = line.indexOf(":");
+    if (separatorIndex <= 0) continue;
+    const key = line.slice(0, separatorIndex).trim();
+    const value = line.slice(separatorIndex + 1).trim();
+    if (!key) continue;
+    fields[key] = value;
+    if (key === "profile") profile = value || null;
+    if (key === "note_kind") noteKind = value || null;
+    if (key === "lesson_key") lessonKey = value || null;
+    if (key === "pattern") pattern = value || null;
+    if (key === "recommendation") recommendation = value || null;
+  }
+
+  return {
+    profile,
+    noteKind,
+    lessonKey,
+    pattern,
+    recommendation,
     fields,
   };
 }
@@ -414,17 +496,58 @@ export async function selectCognitionArtifactsForPrompt(input: {
     .toReversed()
     .slice(0, Math.max(1, input.scanLimit ?? 24));
   const selected: CognitionArtifactSelection[] = [];
-  for (const [index, artifact] of artifacts.entries()) {
-    const content = await readFile(artifact.absolutePath, "utf8");
-    const haystack = `${artifact.fileName}\n${content}`.toLowerCase().replace(/[-_]+/g, "");
-    const matchedTerms = terms.filter((term) => haystack.includes(term));
+  const documents = await Promise.all(
+    artifacts.map(async (artifact, index) => {
+      const content = await readFile(artifact.absolutePath, "utf8");
+      const tokens = extractSelectionTerms(`${artifact.fileName}\n${content}`, { dedupe: false });
+      const termCounts = new Map<string, number>();
+      for (const token of tokens) {
+        termCounts.set(token, (termCounts.get(token) ?? 0) + 1);
+      }
+      return {
+        artifact,
+        content,
+        index,
+        tokenCount: Math.max(1, tokens.length),
+        termCounts,
+      };
+    }),
+  );
+  const averageDocumentLength =
+    documents.reduce((sum, document) => sum + document.tokenCount, 0) /
+    Math.max(1, documents.length);
+  const documentFrequency = new Map<string, number>();
+  for (const term of terms) {
+    let frequency = 0;
+    for (const document of documents) {
+      if (document.termCounts.has(term)) {
+        frequency += 1;
+      }
+    }
+    documentFrequency.set(term, frequency);
+  }
+
+  const k1 = 1.2;
+  const b = 0.75;
+  for (const document of documents) {
+    const matchedTerms = terms.filter((term) => document.termCounts.has(term));
     if (matchedTerms.length === 0) continue;
-    const recencyBonus = Math.max(0, artifacts.length - index);
+
+    let score = 0;
+    for (const term of matchedTerms) {
+      const tf = document.termCounts.get(term) ?? 0;
+      const df = documentFrequency.get(term) ?? 0;
+      const idf = Math.log(1 + (documents.length - df + 0.5) / (df + 0.5));
+      const denominator =
+        tf + k1 * (1 - b + b * (document.tokenCount / Math.max(1, averageDocumentLength)));
+      score += idf * ((tf * (k1 + 1)) / Math.max(1e-9, denominator));
+    }
+    const recencyBonus = Math.max(0, documents.length - document.index) * 0.05;
     selected.push({
-      artifact,
-      content,
+      artifact: document.artifact,
+      content: document.content,
       matchedTerms,
-      score: matchedTerms.length * 10 + recencyBonus,
+      score: Number((score + recencyBonus).toFixed(6)),
     });
   }
 

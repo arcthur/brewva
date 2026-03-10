@@ -1115,6 +1115,12 @@ export class GatewayDaemon {
     const result = await this.supervisor.sendPrompt(sessionId, rule.prompt, {
       waitForCompletion: true,
       source: "heartbeat",
+      trigger: {
+        kind: "heartbeat",
+        ruleId: rule.id,
+        objective: rule.objective,
+        contextHints: rule.contextHints,
+      },
     });
 
     this.broadcastEvent("heartbeat.fired", {

@@ -66,10 +66,12 @@ gaining their authority:
   - active tool surface
 - `Cognitive Product Plane`
   - context composition
+  - memory formation
   - memory curation
   - persona/profile rendering
 - `Control Plane`
-  - broker, debug-loop, heartbeat, scheduling triggers, future planners
+  - broker, debug-loop, heartbeat, proactive wake context, scheduling triggers,
+    future planners
 
 Current module anchors:
 
@@ -80,12 +82,15 @@ Current module anchors:
   - `packages/brewva-extensions/src/tool-surface.ts`
 - `Cognitive Product Plane`
   - `packages/brewva-extensions/src/context-composer.ts`
+  - `packages/brewva-extensions/src/memory-formation.ts`
   - `packages/brewva-extensions/src/memory-curator.ts`
   - `packages/brewva-runtime/src/context/identity.ts`
 - `Control Plane`
   - `packages/brewva-skill-broker/src/*`
   - `packages/brewva-extensions/src/debug-loop.ts`
+  - `packages/brewva-extensions/src/proactivity-context.ts`
   - `packages/brewva-extensions/src/cognitive-metrics.ts`
+  - `packages/brewva-extensions/src/memory-adaptation.ts`
   - gateway heartbeat / scheduler policy code
 
 Rings answer "who may commit". Planes answer "what concern is this code

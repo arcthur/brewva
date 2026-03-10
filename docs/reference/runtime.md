@@ -296,6 +296,9 @@ Execution profile note:
 - Runtime-core keeps the reduced lifecycle surface by omitting the `context`
   hook, event streaming, completion guard, notification, and debug-loop
   orchestration.
+- Both profiles still participate in the same cognitive-product loops:
+  model-facing composition, memory formation, memory rehydration, and
+  control-plane wake-up metadata.
 
 ## Event Emission Levels
 

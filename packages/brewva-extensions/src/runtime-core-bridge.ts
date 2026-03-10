@@ -10,7 +10,9 @@ import {
   resolveInjectionScopeId,
 } from "./context-shared.js";
 import { registerLedgerWriter } from "./ledger-writer.js";
+import { registerMemoryAdaptation } from "./memory-adaptation.js";
 import { registerMemoryCurator } from "./memory-curator.js";
+import { registerMemoryFormation } from "./memory-formation.js";
 import { registerQualityGate } from "./quality-gate.js";
 import { registerToolSurface } from "./tool-surface.js";
 
@@ -19,7 +21,9 @@ const CORE_CONTEXT_INJECTION_MESSAGE_TYPE = "brewva-context-injection";
 export function registerRuntimeCoreBridge(pi: ExtensionAPI, runtime: BrewvaRuntime): void {
   registerToolSurface(pi, runtime);
   registerMemoryCurator(pi, runtime);
+  registerMemoryFormation(pi, runtime);
   registerCognitiveMetrics(pi, runtime);
+  registerMemoryAdaptation(pi, runtime);
   registerQualityGate(pi, runtime);
   registerLedgerWriter(pi, runtime);
 

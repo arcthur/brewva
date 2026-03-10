@@ -8,6 +8,19 @@ import {
   SessionSupervisor,
 } from "@brewva/brewva-gateway";
 
+interface SentPromptMessage {
+  kind: "send";
+  requestId: string;
+  payload: {
+    trigger?: {
+      kind: "heartbeat";
+      ruleId: string;
+      objective?: string;
+      contextHints?: string[];
+    };
+  };
+}
+
 describe("session supervisor safeguards", () => {
   test("given worker limit reached and queue disabled, when openSession is called, then capacity error is raised", async () => {
     const root = mkdtempSync(join(tmpdir(), "brewva-session-supervisor-"));
@@ -211,6 +224,78 @@ describe("session supervisor safeguards", () => {
         .find((worker) => worker.sessionId === "busy-session")?.pendingRequests;
       expect(pendingRequests).toBe(0);
       clearTimeout(pendingTimer);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("given sendPrompt trigger metadata, when supervisor forwards to worker, then trigger payload is preserved", async () => {
+    const root = mkdtempSync(join(tmpdir(), "brewva-session-supervisor-"));
+    const stateDir = join(root, "state");
+    const supervisor = new SessionSupervisor({
+      stateDir,
+      logger: {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        log: () => {},
+      },
+      defaultCwd: root,
+    });
+    try {
+      supervisor.testHooks.seedWorker({
+        sessionId: "trigger-session",
+        pid: 10041,
+      });
+
+      const workers = Reflect.get(supervisor, "workers") as Map<
+        string,
+        {
+          child: {
+            send: (message: unknown) => boolean;
+          };
+        }
+      >;
+      const handle = workers.get("trigger-session");
+      expect(handle).toBeDefined();
+
+      let sentMessage: SentPromptMessage | undefined;
+      handle!.child.send = (message: unknown) => {
+        sentMessage = message as SentPromptMessage;
+        setTimeout(() => {
+          supervisor.testHooks.dispatchWorkerMessage("trigger-session", {
+            kind: "result",
+            requestId: sentMessage!.requestId,
+            ok: true,
+            payload: {
+              sessionId: "trigger-session",
+              turnId: "turn-1",
+              accepted: true,
+            },
+          });
+        }, 0).unref?.();
+        return true;
+      };
+
+      await supervisor.sendPrompt("trigger-session", "Check project status.", {
+        source: "heartbeat",
+        trigger: {
+          kind: "heartbeat",
+          ruleId: "nightly-release",
+          objective: "Review release readiness.",
+          contextHints: ["release readiness", "backlog risk"],
+        },
+      });
+
+      expect(sentMessage).toBeDefined();
+      expect(sentMessage?.kind).toBe("send");
+      expect(sentMessage?.payload.trigger).toEqual({
+        kind: "heartbeat",
+        ruleId: "nightly-release",
+        objective: "Review release readiness.",
+        contextHints: ["release readiness", "backlog risk"],
+      });
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

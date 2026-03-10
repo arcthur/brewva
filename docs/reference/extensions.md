@@ -22,6 +22,8 @@ Default extension composition wires:
 - `registerEventStream`
 - `registerToolSurface`
 - `registerMemoryCurator`
+- `registerMemoryFormation`
+- `registerMemoryAdaptation`
 - `registerContextTransform`
 - `registerCognitiveMetrics`
 - `registerScanConvergenceGuard`
@@ -36,10 +38,12 @@ Implementation files:
 - `packages/brewva-extensions/src/event-stream.ts`
 - `packages/brewva-extensions/src/tool-surface.ts`
 - `packages/brewva-extensions/src/memory-curator.ts`
+- `packages/brewva-extensions/src/memory-formation.ts`
 - `packages/brewva-extensions/src/context-composer.ts`
 - `packages/brewva-extensions/src/context-contract.ts`
 - `packages/brewva-extensions/src/context-transform.ts`
 - `packages/brewva-extensions/src/cognitive-metrics.ts`
+- `packages/brewva-extensions/src/proactivity-context.ts`
 - `packages/brewva-extensions/src/scan-convergence-guard.ts`
 - `packages/brewva-extensions/src/quality-gate.ts`
 - `packages/brewva-extensions/src/debug-loop.ts`
@@ -168,6 +172,9 @@ memory rehydration.
 It does not turn cognition artifacts into kernel memory. Instead it:
 
 - scans `.brewva/cognition/reference/` for prompt-relevant artifacts
+- treats `ProcedureNote` artifacts as a semantic subset of the same
+  `reference/` lane and rehydrates them with dedicated `procedure:*` packet
+  keys
 - scans `.brewva/cognition/summaries/` for prompt-relevant summaries and
   continuation-oriented open loops
 - wraps selected artifacts as evidence-backed `context_packet` proposals
@@ -178,10 +185,33 @@ Telemetry:
 
 - `memory_reference_rehydrated`
 - `memory_reference_rehydration_failed`
+- `memory_procedure_rehydrated`
+- `memory_procedure_rehydration_failed`
 - `memory_summary_rehydrated`
 - `memory_summary_rehydration_failed`
 - `memory_open_loop_rehydrated`
 - `memory_open_loop_rehydration_failed`
+
+The curator may also consume recent proactivity wake-up metadata so heartbeat
+or scheduler-triggered sessions can retrieve better artifacts than a raw prompt
+match alone.
+
+## Memory Formation
+
+`registerMemoryFormation` is the write-side counterpart to `registerMemoryCurator`.
+
+It:
+
+- observes resumable lifecycle boundaries such as `agent_end`,
+  `session_compact`, and `session_shutdown`
+- writes status-summary cognition artifacts into `.brewva/cognition/summaries/`
+- writes verification-backed `ProcedureNote` artifacts into
+  `.brewva/cognition/reference/`
+- records `memory_summary_written` / `memory_summary_write_failed`
+- records `memory_procedure_note_written` /
+  `memory_procedure_note_write_failed`
+- keeps the write path outside the kernel so replayable commitments remain in
+  tape while resumable cognition remains in deliberation-side artifacts
 
 ## Cognitive Metrics
 
@@ -197,6 +227,31 @@ Current derived metrics:
 These metrics are derived from existing runtime evidence such as
 `tool_result_recorded` and `memory_*_rehydrated` events. They do not introduce
 new kernel authority.
+
+## Memory Adaptation
+
+`registerMemoryAdaptation` closes the control-plane feedback loop for memory
+rehydration.
+
+It:
+
+- subscribes to replayable `cognitive_metric_rehydration_usefulness` events
+- persists a small ranking policy under `.brewva/cognition/adaptation.json`
+- records `memory_adaptation_updated` / `memory_adaptation_update_failed`
+- leaves proposal admission, packet TTL, and scope semantics in the kernel
+
+The adaptation policy affects future `registerMemoryCurator` ordering, not
+kernel truth or task state.
+
+## Proactivity Trigger Context
+
+The current proactivity bridge is not an extension hook that mutates runtime
+state. Instead:
+
+- gateway/session workers record `proactivity_wakeup_prepared`
+- `registerMemoryCurator` reads the latest wake-up metadata on
+  `before_agent_start`
+- the same proposal boundary and context-packet rules still apply
 
 ## Runtime Integration Contract
 

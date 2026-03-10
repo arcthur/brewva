@@ -2,10 +2,15 @@ import {
   COGNITIVE_METRIC_FIRST_PRODUCTIVE_ACTION_EVENT_TYPE,
   COGNITIVE_METRIC_REHYDRATION_USEFULNESS_EVENT_TYPE,
   COGNITIVE_METRIC_RESUMPTION_PROGRESS_EVENT_TYPE,
+  MEMORY_OPEN_LOOP_REHYDRATED_EVENT_TYPE,
+  MEMORY_PROCEDURE_REHYDRATED_EVENT_TYPE,
+  MEMORY_REFERENCE_REHYDRATED_EVENT_TYPE,
+  MEMORY_SUMMARY_REHYDRATED_EVENT_TYPE,
   type BrewvaRuntime,
 } from "@brewva/brewva-runtime";
 import { getBrewvaToolSurface } from "@brewva/brewva-tools";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { normalizeOptionalString } from "./context-shared.js";
 import {
   clearRuntimeTurnClock,
   getCurrentRuntimeTurn,
@@ -18,10 +23,11 @@ import {
 const FIRST_PRODUCTIVE_ACTION_EVENT_TYPE = COGNITIVE_METRIC_FIRST_PRODUCTIVE_ACTION_EVENT_TYPE;
 const RESUMPTION_PROGRESS_EVENT_TYPE = COGNITIVE_METRIC_RESUMPTION_PROGRESS_EVENT_TYPE;
 const REHYDRATION_USEFULNESS_EVENT_TYPE = COGNITIVE_METRIC_REHYDRATION_USEFULNESS_EVENT_TYPE;
-const REHYDRATION_EVENT_TYPES = new Set([
-  "memory_reference_rehydrated",
-  "memory_summary_rehydrated",
-  "memory_open_loop_rehydrated",
+const REHYDRATION_EVENT_TYPES = new Set<string>([
+  MEMORY_PROCEDURE_REHYDRATED_EVENT_TYPE,
+  MEMORY_REFERENCE_REHYDRATED_EVENT_TYPE,
+  MEMORY_SUMMARY_REHYDRATED_EVENT_TYPE,
+  MEMORY_OPEN_LOOP_REHYDRATED_EVENT_TYPE,
 ]);
 const NON_PRODUCTIVE_TOOL_NAMES = new Set([
   "cost_view",
@@ -39,13 +45,24 @@ interface MetricState {
   processedToolCallIds: Set<string>;
   seenRehydrationEventIds: Set<string>;
   pendingResumeAnchorTurn: number | null;
-  pendingRehydrationKinds: string[];
+  pendingRehydrations: RehydrationSignal[];
 }
 
 interface ToolResultRecordedPayload {
   toolCallId?: string;
   toolName?: string;
   verdict?: string;
+}
+
+interface RehydrationSignal {
+  kind: string;
+  packetKey: string | null;
+  artifactRef: string | null;
+}
+
+interface RehydrationEventPayload {
+  packetKey?: string;
+  artifactRef?: string;
 }
 
 function getOrCreateState(store: Map<string, MetricState>, sessionId: string): MetricState {
@@ -56,7 +73,7 @@ function getOrCreateState(store: Map<string, MetricState>, sessionId: string): M
     processedToolCallIds: new Set<string>(),
     seenRehydrationEventIds: new Set<string>(),
     pendingResumeAnchorTurn: null,
-    pendingRehydrationKinds: [],
+    pendingRehydrations: [],
   };
   store.set(sessionId, created);
   return created;
@@ -74,10 +91,26 @@ function isProductiveTool(toolName: string | undefined): boolean {
 }
 
 function normalizeRehydrationKind(type: string): string {
-  if (type === "memory_reference_rehydrated") return "reference";
-  if (type === "memory_summary_rehydrated") return "summary";
-  if (type === "memory_open_loop_rehydrated") return "open_loop";
+  if (type === MEMORY_PROCEDURE_REHYDRATED_EVENT_TYPE) return "procedure";
+  if (type === MEMORY_REFERENCE_REHYDRATED_EVENT_TYPE) return "reference";
+  if (type === MEMORY_SUMMARY_REHYDRATED_EVENT_TYPE) return "summary";
+  if (type === MEMORY_OPEN_LOOP_REHYDRATED_EVENT_TYPE) return "open_loop";
   return "unknown";
+}
+
+function summarizeRehydrationKinds(rehydrations: RehydrationSignal[]): string[] {
+  return [...new Set(rehydrations.map((rehydration) => rehydration.kind))];
+}
+
+function extractRehydrationSignal(
+  type: string,
+  payload: RehydrationEventPayload | undefined,
+): RehydrationSignal {
+  return {
+    kind: normalizeRehydrationKind(type),
+    packetKey: normalizeOptionalString(payload?.packetKey),
+    artifactRef: normalizeOptionalString(payload?.artifactRef),
+  };
 }
 
 function extractLatestRecordedToolResult(
@@ -121,12 +154,17 @@ function recordRehydrationUsefulness(
       useful: input.useful,
       reason: input.reason,
       turnsFromResume,
-      rehydrationKinds: [...state.pendingRehydrationKinds],
+      rehydrationKinds: summarizeRehydrationKinds(state.pendingRehydrations),
+      rehydrationPackets: state.pendingRehydrations.map((rehydration) => ({
+        kind: rehydration.kind,
+        packetKey: rehydration.packetKey,
+        artifactRef: rehydration.artifactRef,
+      })),
       toolName: input.toolName ?? null,
     },
   });
   state.pendingResumeAnchorTurn = null;
-  state.pendingRehydrationKinds = [];
+  state.pendingRehydrations = [];
 }
 
 function maybeFlushExpiredRehydrationWindow(
@@ -150,14 +188,16 @@ function maybeFlushExpiredRehydrationWindow(
 
 function refreshResumeAnchor(runtime: BrewvaRuntime, sessionId: string, state: MetricState): void {
   const events = runtime.events.query(sessionId, { last: 16 });
-  const freshKinds: string[] = [];
+  const freshRehydrations: RehydrationSignal[] = [];
   for (const event of events) {
     if (!REHYDRATION_EVENT_TYPES.has(event.type)) continue;
     if (state.seenRehydrationEventIds.has(event.id)) continue;
     state.seenRehydrationEventIds.add(event.id);
-    freshKinds.push(normalizeRehydrationKind(event.type));
+    freshRehydrations.push(
+      extractRehydrationSignal(event.type, event.payload as RehydrationEventPayload | undefined),
+    );
   }
-  if (freshKinds.length === 0) {
+  if (freshRehydrations.length === 0) {
     return;
   }
   const currentTurn = getCurrentRuntimeTurn(sessionId);
@@ -169,7 +209,7 @@ function refreshResumeAnchor(runtime: BrewvaRuntime, sessionId: string, state: M
     });
   }
   state.pendingResumeAnchorTurn = currentTurn;
-  state.pendingRehydrationKinds = [...new Set(freshKinds)];
+  state.pendingRehydrations = freshRehydrations;
 }
 
 function recordProductiveToolMetrics(
@@ -212,7 +252,12 @@ function recordProductiveToolMetrics(
         turnsFromResume,
         toolName,
         toolSurface,
-        rehydrationKinds: [...state.pendingRehydrationKinds],
+        rehydrationKinds: summarizeRehydrationKinds(state.pendingRehydrations),
+        rehydrationPackets: state.pendingRehydrations.map((rehydration) => ({
+          kind: rehydration.kind,
+          packetKey: rehydration.packetKey,
+          artifactRef: rehydration.artifactRef,
+        })),
       },
     });
     recordRehydrationUsefulness(runtime, sessionId, state, {

@@ -15,6 +15,7 @@ interface RuntimeCalls {
   finished: Array<Record<string, unknown>>;
   compacted: Array<{ sessionId: string; input: Record<string, unknown> }>;
   events: Array<Record<string, unknown>>;
+  subscriptions: Array<(event: Record<string, unknown>) => void>;
   cleared: string[];
   observedContext: Array<{ sessionId: string; usage: unknown }>;
 }
@@ -30,6 +31,7 @@ function createRuntimeFixture(
     finished: [],
     compacted: [],
     events: [],
+    subscriptions: [],
     cleared: [],
     observedContext: [],
   };
@@ -106,7 +108,19 @@ function createRuntimeFixture(
       record(payload: Record<string, unknown>) {
         calls.events.push(payload);
       },
+      subscribe(handler: (event: Record<string, unknown>) => void) {
+        calls.subscriptions.push(handler);
+        return () => {
+          const index = calls.subscriptions.indexOf(handler);
+          if (index >= 0) {
+            calls.subscriptions.splice(index, 1);
+          }
+        };
+      },
       query() {
+        return [];
+      },
+      queryStructured() {
         return [];
       },
       getTapeStatus() {
@@ -121,6 +135,25 @@ function createRuntimeFixture(
       },
       getTapePressureThresholds() {
         return { low: 5, medium: 20, high: 50 };
+      },
+    },
+    task: {
+      getState() {
+        return {
+          spec: {
+            goal: "Stabilize runtime core bridge behavior.",
+          },
+          status: {
+            phase: "execute",
+          },
+          items: [],
+          blockers: [],
+        };
+      },
+    },
+    skills: {
+      getActive() {
+        return null;
       },
     },
     session: {
@@ -255,7 +288,7 @@ describe("runtime core bridge extension", () => {
     const { api, handlers } = createMockExtensionAPI();
     const { runtime, calls } = createRuntimeFixture();
     registerRuntimeCoreBridge(api, runtime as any);
-    invokeHandler(
+    invokeHandlers(
       handlers,
       "session_compact",
       {

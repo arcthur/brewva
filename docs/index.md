@@ -46,7 +46,10 @@ This repository uses a layered documentation system:
 - Skills: `docs/reference/skills.md`
 - Runtime API: `docs/reference/runtime.md`
 - Context composer: `docs/reference/context-composer.md`
+- Memory formation: `docs/reference/memory-formation.md`
 - Memory curator: `docs/reference/memory-curator.md`
+- Memory adaptation: `docs/reference/memory-adaptation.md`
+- Proactivity engine: `docs/reference/proactivity-engine.md`
 - Proposal boundary: `docs/reference/proposal-boundary.md`
 - Events: `docs/reference/events.md`
 - Extensions: `docs/reference/extensions.md`

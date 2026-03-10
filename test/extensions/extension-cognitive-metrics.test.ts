@@ -135,6 +135,13 @@ describe("cognitive metrics extension", () => {
       turnsFromResume: 1,
       toolName: "exec",
       rehydrationKinds: ["summary"],
+      rehydrationPackets: [
+        {
+          kind: "summary",
+          packetKey: "summary:resume",
+          artifactRef: ".brewva/cognition/summaries/resume.md",
+        },
+      ],
     });
 
     const usefulnessEvents = runtime.events.query(sessionId, {
@@ -146,6 +153,13 @@ describe("cognitive metrics extension", () => {
       reason: "productive_action",
       toolName: "exec",
       rehydrationKinds: ["summary"],
+      rehydrationPackets: [
+        {
+          kind: "summary",
+          packetKey: "summary:resume",
+          artifactRef: ".brewva/cognition/summaries/resume.md",
+        },
+      ],
     });
   });
 
@@ -199,6 +213,13 @@ describe("cognitive metrics extension", () => {
       useful: false,
       reason: "window_elapsed",
       rehydrationKinds: ["reference"],
+      rehydrationPackets: [
+        {
+          kind: "reference",
+          packetKey: "reference:runtime",
+          artifactRef: ".brewva/cognition/reference/runtime.md",
+        },
+      ],
     });
   });
 
@@ -241,6 +262,13 @@ describe("cognitive metrics extension", () => {
       useful: false,
       reason: "session_shutdown",
       rehydrationKinds: ["open_loop"],
+      rehydrationPackets: [
+        {
+          kind: "open_loop",
+          packetKey: "open-loop:resume",
+          artifactRef: ".brewva/cognition/summaries/open-loop.md",
+        },
+      ],
     });
   });
 
@@ -281,5 +309,59 @@ describe("cognitive metrics extension", () => {
         type: "cognitive_metric_resumption_progress",
       }),
     ).toHaveLength(0);
+  });
+
+  test("records procedure rehydration kind when procedural memory leads to progress", () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const runtime = createRuntimeFixture();
+    const sessionId = "metrics-procedure-rehydration";
+
+    registerCognitiveMetrics(api, runtime);
+
+    invokeHandler(
+      handlers,
+      "turn_start",
+      { turnIndex: 0, timestamp: 50 },
+      createSessionContext(sessionId),
+    );
+    runtime.events.record({
+      sessionId,
+      type: "memory_procedure_rehydrated",
+      payload: {
+        artifactRef: ".brewva/cognition/reference/procedure-note.md",
+        packetKey: "procedure:verification-standard",
+      },
+    });
+
+    invokeHandler(
+      handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "Continue implementation with the known verification flow.",
+      },
+      createSessionContext(sessionId),
+    );
+
+    recordToolResult(runtime, {
+      sessionId,
+      toolCallId: "tc-procedure-1",
+      toolName: "exec",
+      verdict: "pass",
+    });
+    invokeHandler(
+      handlers,
+      "tool_result",
+      { toolCallId: "tc-procedure-1", toolName: "exec" },
+      createSessionContext(sessionId),
+    );
+
+    const progressEvents = runtime.events.query(sessionId, {
+      type: "cognitive_metric_resumption_progress",
+    });
+    expect(progressEvents).toHaveLength(1);
+    expect(progressEvents[0]?.payload).toMatchObject({
+      rehydrationKinds: ["procedure"],
+    });
   });
 });
