@@ -56,18 +56,9 @@ function submitSelection(runtime: BrewvaRuntime, sessionId: string, skillName: s
   });
 }
 
-function submitChain(runtime: BrewvaRuntime, sessionId: string, steps: string[]) {
-  return runtime.proposals.submit(sessionId, {
-    id: `${sessionId}:chain`,
-    kind: "skill_chain_intent",
-    issuer: "test.broker",
-    subject: `chain:${steps.join("->")}`,
-    payload: {
-      steps: steps.map((skill) => ({ skill })),
-      source: "test",
-    },
-    evidenceRefs: [buildEvidenceRef(sessionId)],
-    createdAt: Date.now(),
+function startExplicitChain(runtime: BrewvaRuntime, sessionId: string, steps: string[]) {
+  return runtime.skills.startCascade(sessionId, {
+    steps: steps.map((skill) => ({ skill })),
   });
 }
 
@@ -91,29 +82,29 @@ describe("skill cascade orchestration", () => {
     expect(runtime.skills.getCascadeIntent(sessionId)?.source).toBe("dispatch");
   });
 
-  test("accepted chain proposals create runtime cascade intent", () => {
+  test("explicit cascade starts create runtime cascade intent", () => {
     const runtime = new BrewvaRuntime({
       cwd: createWorkspace("chain-commitment"),
       config: createConfig("assist"),
     });
     const sessionId = "skill-cascade-chain-1";
 
-    const receipt = submitChain(runtime, sessionId, ["repository-analysis", "review"]);
-    expect(receipt.decision).toBe("accept");
+    const started = startExplicitChain(runtime, sessionId, ["repository-analysis", "review"]);
+    expect(started.ok).toBe(true);
     const intent = runtime.skills.getCascadeIntent(sessionId);
     expect(intent?.source).toBe("explicit");
     expect(intent?.steps.map((step) => step.skill)).toEqual(["repository-analysis", "review"]);
   });
 
-  test("dispatch-disabled cascade source does not block explicit proposal chains", () => {
+  test("dispatch-disabled cascade source does not block explicit cascade starts", () => {
     const runtime = new BrewvaRuntime({
       cwd: createWorkspace("explicit-priority"),
       config: createConfig("auto", ["explicit", "dispatch"], ["explicit"]),
     });
     const sessionId = "skill-cascade-explicit-priority";
 
-    const receipt = submitChain(runtime, sessionId, ["design"]);
-    expect(receipt.decision).toBe("accept");
+    const started = startExplicitChain(runtime, sessionId, ["design"]);
+    expect(started.ok).toBe(true);
     expect(runtime.skills.getCascadeIntent(sessionId)?.steps.map((step) => step.skill)).toEqual([
       "design",
     ]);

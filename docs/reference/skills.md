@@ -59,7 +59,7 @@ optional context for loading and scoring.
 Skill discovery and deliberation are now separated from kernel commitment:
 
 1. Deliberation layers may rank skills, judge candidates, and build chains.
-2. The kernel accepts only proposals (`skill_selection`, `skill_chain_intent`, `context_packet`).
+2. The kernel accepts only proposals that cross an admission boundary (`skill_selection`, `context_packet`).
 3. Proposal telemetry still emits `skill_routing_selection` as a projection of the latest accepted/deferred selection outcome (`selected | empty | failed | skipped`).
 4. Activation remains explicit: accepted proposals may arm `suggest/gate/auto` dispatch decisions, but actual skill entry still happens through `skill_load`.
 5. Runtime does not run adaptive inference loops or online model reranking in the kernel path.
@@ -99,8 +99,8 @@ Skill cascading is policy-driven via `skills.cascade.*`:
 
 Chain intent can come from:
 
-- deliberation-side `skill_chain_intent` proposals
 - explicit `startCascade(...)` / `skill_chain_control`
+- broker-owned or extension-owned direct cascade starts
 
 Source arbitration uses:
 

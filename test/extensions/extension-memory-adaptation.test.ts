@@ -49,14 +49,14 @@ function recordToolResult(
 }
 
 describe("memory adaptation extension", () => {
-  test("persists usefulness observations and remains available under audit event level", async () => {
+  test("persists usefulness observations under ops event level", async () => {
     const { api, handlers } = createMockExtensionAPI();
     const runtime = createRuntimeFixture({
       config: createRuntimeConfig((config) => {
-        config.infrastructure.events.level = "audit";
+        config.infrastructure.events.level = "ops";
       }),
     });
-    const sessionId = "memory-adaptation-audit";
+    const sessionId = "memory-adaptation-ops";
 
     registerCognitiveMetrics(api, runtime);
     registerMemoryAdaptation(api, runtime);

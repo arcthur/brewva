@@ -644,21 +644,20 @@ export function registerMemoryFormation(pi: ExtensionAPI, runtime: BrewvaRuntime
     return undefined;
   });
 
-  pi.on("session_shutdown", (_event, ctx) => {
+  pi.on("session_shutdown", async (_event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
     const writes = [
       writeSummaryIfChanged(runtime, sessionId, "session_shutdown", lastSummaryBySession),
       writeEpisodeIfChanged(runtime, sessionId, "session_shutdown", lastEpisodeBySession),
     ];
-    void Promise.allSettled(writes).then(() => {
-      lastSummaryBySession.delete(sessionId);
-      lastEpisodeBySession.delete(sessionId);
-      for (const key of lastProcedureByKey.keys()) {
-        if (key.startsWith(`${sessionId}:`)) {
-          lastProcedureByKey.delete(key);
-        }
+    await Promise.allSettled(writes);
+    lastSummaryBySession.delete(sessionId);
+    lastEpisodeBySession.delete(sessionId);
+    for (const key of lastProcedureByKey.keys()) {
+      if (key.startsWith(`${sessionId}:`)) {
+        lastProcedureByKey.delete(key);
       }
-    });
+    }
     return undefined;
   });
 }

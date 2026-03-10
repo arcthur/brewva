@@ -141,7 +141,7 @@ The runtime/extension stack now treats tool surface as three layers:
 - `active-skill tools`: tools required or optionally allowed by the current
   active/pending/cascade skill contracts
 - `operator tools`: observability and operator-facing controls exposed only for
-  operator profiles or explicit capability requests
+  operator profiles by default, or per-turn explicit capability requests
 
 This keeps the visible action surface aligned with the current commitment
 context instead of exposing the entire static tool bundle on every turn.
@@ -160,8 +160,8 @@ These checks enrich auditability; they do not introduce adaptive inference paths
 
 Optional control-plane components may provide operator-facing assistance outside
 the kernel path. For example, a skill broker or planner may produce
-`skill_selection` or `skill_chain_intent` proposals. Shared proposal/evidence
-helpers live in `@brewva/brewva-deliberation`.
+`skill_selection` proposals or direct cascade intents. Shared proposal/evidence
+helpers for the remaining boundary live in `@brewva/brewva-deliberation`.
 
 Cross-session cognition sediment follows the same rule:
 

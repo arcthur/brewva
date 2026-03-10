@@ -129,7 +129,7 @@ export const SKILL_SELECTION_SIGNALS: SkillSelectionSignal[] = [
   "available_output",
 ];
 
-export type ProposalKind = "skill_selection" | "skill_chain_intent" | "context_packet";
+export type ProposalKind = "skill_selection" | "context_packet";
 
 export type ProposalDecision = "accept" | "reject" | "defer";
 export type ContextPacketAction = "upsert" | "revoke";
@@ -163,17 +163,6 @@ export interface SkillSelectionProposalPayload {
   prompt?: string;
 }
 
-export interface SkillChainIntentProposalPayload {
-  steps: Array<{
-    skill: string;
-    consumes?: string[];
-    produces?: string[];
-    lane?: string;
-  }>;
-  reason?: string;
-  source?: string;
-}
-
 export interface ContextPacketProposalPayload {
   label: string;
   content: string;
@@ -185,7 +174,6 @@ export interface ContextPacketProposalPayload {
 
 export type ProposalPayloadByKind = {
   skill_selection: SkillSelectionProposalPayload;
-  skill_chain_intent: SkillChainIntentProposalPayload;
   context_packet: ContextPacketProposalPayload;
 };
 

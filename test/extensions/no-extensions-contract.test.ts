@@ -8,14 +8,14 @@ function handlerNames(handlers: Map<string, unknown[]>): string[] {
 }
 
 describe("no-extensions contract", () => {
-  test("full extension and runtime-core bridge register different handler surfaces", async () => {
-    const fullRuntime = createRuntimeFixture();
-    const full = createMockExtensionAPI();
-    const fullExtension = createBrewvaExtension({
-      runtime: fullRuntime,
+  test("default extension and runtime-core bridge register different handler surfaces", async () => {
+    const defaultRuntime = createRuntimeFixture();
+    const defaultApi = createMockExtensionAPI();
+    const defaultExtension = createBrewvaExtension({
+      runtime: defaultRuntime,
       registerTools: false,
     });
-    await fullExtension(full.api);
+    await defaultExtension(defaultApi.api);
 
     const coreRuntime = createRuntimeFixture();
     const core = createMockExtensionAPI();
@@ -24,30 +24,32 @@ describe("no-extensions contract", () => {
     });
     await coreExtension(core.api);
 
-    const fullHandlers = handlerNames(full.handlers);
+    const defaultHandlers = handlerNames(defaultApi.handlers);
     const coreHandlers = handlerNames(core.handlers);
 
-    expect(fullHandlers).toContain("before_agent_start");
-    expect(fullHandlers).toContain("context");
-    expect(fullHandlers).toContain("session_start");
-    expect(fullHandlers).toContain("turn_start");
-    expect(fullHandlers).toContain("session_compact");
-    expect(fullHandlers).toContain("session_shutdown");
-    expect(fullHandlers).toContain("tool_call");
-    expect(fullHandlers).toContain("tool_result");
-    expect(fullHandlers).toContain("tool_execution_end");
-    expect(fullHandlers).toContain("agent_end");
+    expect(defaultHandlers).toContain("before_agent_start");
+    expect(defaultHandlers).toContain("context");
+    expect(defaultHandlers).toContain("session_start");
+    expect(defaultHandlers).toContain("turn_start");
+    expect(defaultHandlers).toContain("session_compact");
+    expect(defaultHandlers).toContain("session_shutdown");
+    expect(defaultHandlers).toContain("tool_call");
+    expect(defaultHandlers).toContain("tool_result");
+    expect(defaultHandlers).toContain("tool_execution_end");
+    expect(defaultHandlers).toContain("agent_end");
 
     expect(coreHandlers).toContain("before_agent_start");
-    expect(coreHandlers).toContain("session_start");
     expect(coreHandlers).toContain("session_compact");
     expect(coreHandlers).toContain("session_shutdown");
+    expect(coreHandlers).toContain("input");
     expect(coreHandlers).toContain("tool_call");
     expect(coreHandlers).toContain("tool_result");
+    expect(coreHandlers).toContain("tool_execution_start");
     expect(coreHandlers).toContain("tool_execution_end");
-    expect(coreHandlers).toContain("turn_start");
+    expect(coreHandlers).toContain("agent_end");
 
     expect(coreHandlers).not.toContain("context");
-    expect(coreHandlers).not.toContain("agent_end");
+    expect(coreHandlers).not.toContain("session_start");
+    expect(coreHandlers).not.toContain("turn_start");
   });
 });

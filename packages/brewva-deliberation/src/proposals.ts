@@ -92,19 +92,6 @@ export function buildEventEvidenceRef(input: {
   });
 }
 
-export function buildProposalReceiptEvidenceRef(input: {
-  sessionId: string;
-  proposalId: string;
-  createdAt?: number;
-}): EvidenceRef {
-  return buildEvidenceRef({
-    id: `${input.sessionId}:proposal_receipt:${input.proposalId}`,
-    sourceType: "event",
-    locator: `proposal-receipt://${input.proposalId}`,
-    createdAt: input.createdAt,
-  });
-}
-
 export function buildWorkspaceArtifactEvidenceRef(input: {
   id: string;
   locator: string;
@@ -170,53 +157,6 @@ export function submitSkillSelectionProposal(input: {
     },
     evidenceRefs: input.evidenceRefs,
     confidence: clampConfidence(input.confidence),
-    expiresAt: input.expiresAt,
-    createdAt,
-  };
-  return {
-    proposal,
-    receipt: input.runtime.proposals.submit(input.sessionId, proposal),
-  };
-}
-
-export function submitSkillChainIntentProposal(input: {
-  runtime: ProposalRuntime;
-  sessionId: string;
-  issuer: string;
-  subject: string;
-  steps: Array<{
-    skill: string;
-    consumes?: string[];
-    produces?: string[];
-    lane?: string;
-  }>;
-  evidenceRefs: EvidenceRef[];
-  reason?: string;
-  source?: string;
-  createdAt?: number;
-  expiresAt?: number;
-  id?: string;
-  seed?: string;
-}): SubmittedProposal<"skill_chain_intent"> {
-  const createdAt = Math.max(0, Math.floor(input.createdAt ?? Date.now()));
-  const proposal: ProposalEnvelope<"skill_chain_intent"> = {
-    id:
-      input.id ??
-      createProposalId({
-        sessionId: input.sessionId,
-        seed: input.seed,
-        kind: "skill_chain_intent",
-        createdAt,
-      }),
-    kind: "skill_chain_intent",
-    issuer: input.issuer,
-    subject: normalizeSubject(input.subject, "skill chain intent"),
-    payload: {
-      steps: input.steps,
-      reason: input.reason,
-      source: input.source,
-    },
-    evidenceRefs: input.evidenceRefs,
     expiresAt: input.expiresAt,
     createdAt,
   };

@@ -16,9 +16,9 @@ import type {
   ProposalRecord,
   SkillDispatchDecision,
   SkillDocument,
-  SkillRoutingOutcome,
-  SkillSelection,
 } from "../types.js";
+import { commitContextPacketProposal } from "./proposal-admission-context-packet.js";
+import { commitSkillSelectionProposal } from "./proposal-admission-skill-selection.js";
 
 const RESERVED_PROPOSAL_ISSUER_POLICIES = {
   "brewva.skill-broker": {
@@ -27,9 +27,6 @@ const RESERVED_PROPOSAL_ISSUER_POLICIES = {
     },
   },
   "brewva.extensions.debug-loop": {
-    skill_chain_intent: {
-      requiredEvidenceSourceTypes: ["event", "workspace_artifact", "operator_note"],
-    },
     context_packet: {
       requiredEvidenceSourceTypes: ["event", "workspace_artifact", "operator_note"],
       requirePacketKey: true,
@@ -47,8 +44,6 @@ const RESERVED_PROPOSAL_ISSUER_POLICIES = {
   },
 } as const;
 
-const DEFAULT_PROPOSAL_SELECTION_LIMIT = 4;
-
 interface RuntimeRecordEventInput {
   sessionId: string;
   type: string;
@@ -58,28 +53,12 @@ interface RuntimeRecordEventInput {
   skipTapeCheckpoint?: boolean;
 }
 
-interface SkillChainIntentCommitResult {
-  ok: boolean;
-  reason?: string;
-  intent?: {
-    status: string;
-    cursor: number;
-    steps: Array<{ skill: string }>;
-  };
-}
-
 export interface ProposalAdmissionServiceOptions {
   listDecisionReceiptEvents(sessionId: string): BrewvaEventRecord[];
   recordEvent(input: RuntimeRecordEventInput): BrewvaEventRecord | undefined;
   getCurrentTurn(sessionId: string): number;
   getSkill(name: string): SkillDocument | undefined;
   setPendingDispatch(sessionId: string, decision: SkillDispatchDecision): void;
-  createExplicitIntent(
-    sessionId: string,
-    input: {
-      steps: Array<{ skill: string; consumes?: string[]; produces?: string[]; lane?: string }>;
-    },
-  ): SkillChainIntentCommitResult;
   listProducedOutputKeys(sessionId: string): string[];
 }
 
@@ -89,7 +68,6 @@ export class ProposalAdmissionService {
   private readonly getCurrentTurn: ProposalAdmissionServiceOptions["getCurrentTurn"];
   private readonly getSkill: ProposalAdmissionServiceOptions["getSkill"];
   private readonly setPendingDispatch: ProposalAdmissionServiceOptions["setPendingDispatch"];
-  private readonly createExplicitIntent: ProposalAdmissionServiceOptions["createExplicitIntent"];
   private readonly listProducedOutputKeys: ProposalAdmissionServiceOptions["listProducedOutputKeys"];
 
   constructor(options: ProposalAdmissionServiceOptions) {
@@ -99,8 +77,6 @@ export class ProposalAdmissionService {
     this.getSkill = (name) => options.getSkill(name);
     this.setPendingDispatch = (sessionId, decision) =>
       options.setPendingDispatch(sessionId, decision);
-    this.createExplicitIntent = (sessionId, input) =>
-      options.createExplicitIntent(sessionId, input);
     this.listProducedOutputKeys = (sessionId) => options.listProducedOutputKeys(sessionId);
   }
 
@@ -282,33 +258,6 @@ export class ProposalAdmissionService {
     };
   }
 
-  private normalizeSkillSelections(selected: SkillSelection[]): SkillSelection[] {
-    return selected
-      .filter(
-        (entry) =>
-          typeof entry.name === "string" &&
-          entry.name.trim().length > 0 &&
-          typeof entry.score === "number" &&
-          Number.isFinite(entry.score) &&
-          entry.score > 0,
-      )
-      .map((entry) => ({
-        name: entry.name.trim(),
-        score: Math.max(1, Math.floor(entry.score)),
-        reason: typeof entry.reason === "string" ? entry.reason : "",
-        breakdown: Array.isArray(entry.breakdown) ? entry.breakdown : [],
-      }))
-      .toSorted((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        return a.name.localeCompare(b.name);
-      })
-      .slice(0, DEFAULT_PROPOSAL_SELECTION_LIMIT);
-  }
-
-  private normalizeRoutingOutcome(value: unknown): SkillRoutingOutcome | undefined {
-    return value === "selected" || value === "empty" || value === "failed" ? value : undefined;
-  }
-
   private normalizeEvidenceRefs(evidenceRefs: EvidenceRef[]): EvidenceRef[] {
     return evidenceRefs
       .filter(
@@ -370,20 +319,52 @@ export class ProposalAdmissionService {
     }
 
     if (proposal.kind === "skill_selection") {
-      return this.commitSkillSelectionProposal(
+      return commitSkillSelectionProposal({
         sessionId,
-        proposal as ProposalEnvelope<"skill_selection">,
+        proposal: proposal as ProposalEnvelope<"skill_selection">,
         turn,
-      );
+        getSkill: (name) => this.getSkill(name),
+        setPendingDispatch: (nextSessionId, decision) =>
+          this.setPendingDispatch(nextSessionId, decision),
+        listProducedOutputKeys: (nextSessionId) => this.listProducedOutputKeys(nextSessionId),
+        buildDecisionReceipt: (
+          nextProposal,
+          decision,
+          policyBasis,
+          reasons,
+          nextTurn,
+          committedEffects = [],
+        ) =>
+          this.buildDecisionReceipt(
+            nextProposal,
+            decision,
+            policyBasis,
+            reasons,
+            nextTurn,
+            committedEffects,
+          ),
+      });
     }
-    if (proposal.kind === "skill_chain_intent") {
-      return this.commitSkillChainIntentProposal(
-        sessionId,
-        proposal as ProposalEnvelope<"skill_chain_intent">,
-        turn,
-      );
-    }
-    return this.commitContextPacketProposal(proposal as ProposalEnvelope<"context_packet">, turn);
+    return commitContextPacketProposal({
+      proposal: proposal as ProposalEnvelope<"context_packet">,
+      turn,
+      buildDecisionReceipt: (
+        nextProposal,
+        decision,
+        policyBasis,
+        reasons,
+        nextTurn,
+        committedEffects = [],
+      ) =>
+        this.buildDecisionReceipt(
+          nextProposal,
+          decision,
+          policyBasis,
+          reasons,
+          nextTurn,
+          committedEffects,
+        ),
+    });
   }
 
   private buildDecisionReceipt(
@@ -404,194 +385,6 @@ export class ProposalAdmissionService {
       turn,
       timestamp: Date.now(),
     };
-  }
-
-  private commitSkillSelectionProposal(
-    sessionId: string,
-    proposal: ProposalEnvelope<"skill_selection">,
-    turn: number,
-  ): DecisionReceipt {
-    const selected = this.normalizeSkillSelections(proposal.payload.selected);
-    const routingOutcome = this.normalizeRoutingOutcome(proposal.payload.routingOutcome);
-    if (selected.length === 0) {
-      return this.buildDecisionReceipt(
-        proposal,
-        routingOutcome === "failed" ? "defer" : "reject",
-        ["selection_candidates"],
-        [routingOutcome === "failed" ? "selection_failed_without_commitment" : "selection_empty"],
-        turn,
-      );
-    }
-
-    const primary = selected[0]!;
-    const skill = this.getSkill(primary.name);
-    if (!skill) {
-      return this.buildDecisionReceipt(
-        proposal,
-        "reject",
-        ["skill_catalog"],
-        [`unknown_skill:${primary.name}`],
-        turn,
-      );
-    }
-
-    const decision = this.buildSkillSelectionDecision({
-      sessionId,
-      selected,
-      routingOutcome,
-      turn,
-    });
-    this.setPendingDispatch(sessionId, decision);
-
-    return this.buildDecisionReceipt(
-      proposal,
-      "accept",
-      ["skill_contract_admission", "tool_gate_ready"],
-      ["skill_selection_committed"],
-      turn,
-      [
-        {
-          kind: "skill_dispatch_gate",
-          details: {
-            primarySkill: decision.primary?.name ?? null,
-            mode: decision.mode,
-            chain: [...decision.chain],
-            routingOutcome: decision.routingOutcome ?? null,
-          },
-        },
-      ],
-    );
-  }
-
-  private commitSkillChainIntentProposal(
-    sessionId: string,
-    proposal: ProposalEnvelope<"skill_chain_intent">,
-    turn: number,
-  ): DecisionReceipt {
-    if (proposal.payload.steps.length === 0) {
-      return this.buildDecisionReceipt(proposal, "reject", ["chain_steps"], ["empty_steps"], turn);
-    }
-    const missingSkill = proposal.payload.steps.find((step) => !this.getSkill(step.skill.trim()));
-    if (missingSkill) {
-      return this.buildDecisionReceipt(
-        proposal,
-        "reject",
-        ["skill_catalog"],
-        [`unknown_chain_skill:${missingSkill.skill}`],
-        turn,
-      );
-    }
-
-    const result = this.createExplicitIntent(sessionId, {
-      steps: proposal.payload.steps,
-    });
-    if (!result.ok) {
-      return this.buildDecisionReceipt(
-        proposal,
-        "defer",
-        ["cascade_policy"],
-        [result.reason ?? "cascade_intent_rejected"],
-        turn,
-      );
-    }
-
-    return this.buildDecisionReceipt(
-      proposal,
-      "accept",
-      ["cascade_commitment"],
-      ["skill_chain_intent_committed"],
-      turn,
-      [
-        {
-          kind: "skill_chain_intent",
-          details: {
-            status: result.intent?.status ?? null,
-            cursor: result.intent?.cursor ?? null,
-            nextSkill: result.intent?.steps[result.intent?.cursor ?? 0]?.skill ?? null,
-          },
-        },
-      ],
-    );
-  }
-
-  private commitContextPacketProposal(
-    proposal: ProposalEnvelope<"context_packet">,
-    turn: number,
-  ): DecisionReceipt {
-    const label = proposal.payload.label.trim();
-    const content = proposal.payload.content.trim();
-    const action = proposal.payload.action ?? "upsert";
-    if (!label) {
-      return this.buildDecisionReceipt(
-        proposal,
-        "reject",
-        ["context_packet_shape"],
-        ["context_packet_missing_label"],
-        turn,
-      );
-    }
-    if (action === "revoke") {
-      if (!proposal.payload.packetKey) {
-        return this.buildDecisionReceipt(
-          proposal,
-          "reject",
-          ["context_packet_shape"],
-          ["context_packet_revoke_requires_packet_key"],
-          turn,
-        );
-      }
-
-      return this.buildDecisionReceipt(
-        proposal,
-        "accept",
-        ["context_packet_admitted"],
-        ["context_packet_revoked_for_injection"],
-        turn,
-        [
-          {
-            kind: "context_packet",
-            details: {
-              label,
-              action,
-              profile: proposal.payload.profile ?? null,
-              scopeId: proposal.payload.scopeId ?? null,
-              packetKey: proposal.payload.packetKey ?? null,
-              expiresAt: proposal.expiresAt ?? null,
-            },
-          },
-        ],
-      );
-    }
-    if (!content) {
-      return this.buildDecisionReceipt(
-        proposal,
-        "reject",
-        ["context_packet_shape"],
-        ["context_packet_missing_content"],
-        turn,
-      );
-    }
-
-    return this.buildDecisionReceipt(
-      proposal,
-      "accept",
-      ["context_packet_admitted"],
-      ["context_packet_available_for_injection"],
-      turn,
-      [
-        {
-          kind: "context_packet",
-          details: {
-            label,
-            action,
-            profile: proposal.payload.profile ?? null,
-            scopeId: proposal.payload.scopeId ?? null,
-            packetKey: proposal.payload.packetKey ?? null,
-            expiresAt: proposal.expiresAt ?? null,
-          },
-        },
-      ],
-    );
   }
 
   private validateReservedProposalIssuerPolicy(
@@ -681,86 +474,5 @@ export class ProposalAdmissionService {
       );
     }
     return null;
-  }
-
-  private buildSkillSelectionDecision(input: {
-    sessionId: string;
-    selected: SkillSelection[];
-    routingOutcome?: SkillRoutingOutcome;
-    turn: number;
-  }): SkillDispatchDecision {
-    const primary = input.selected[0] ?? null;
-    const skill = primary ? this.getSkill(primary.name) : undefined;
-    const dispatch = skill?.contract.dispatch ?? {
-      gateThreshold: 10,
-      autoThreshold: 16,
-      defaultMode: "suggest" as const,
-    };
-    const gateThreshold = Math.max(1, Math.floor(dispatch.gateThreshold));
-    const autoThreshold = Math.max(gateThreshold, Math.floor(dispatch.autoThreshold));
-    const score = primary?.score ?? 0;
-    let mode: SkillDispatchDecision["mode"] = "none";
-    if (primary) {
-      if (score >= autoThreshold) {
-        mode = "auto";
-      } else if (score >= gateThreshold) {
-        mode = "gate";
-      } else {
-        mode =
-          dispatch.defaultMode === "gate" || dispatch.defaultMode === "auto"
-            ? "suggest"
-            : dispatch.defaultMode;
-      }
-    }
-    const unresolvedConsumes = primary
-      ? this.collectPrimaryUnresolvedConsumes(input.sessionId, primary.name)
-      : [];
-
-    return {
-      mode,
-      primary,
-      selected: input.selected,
-      chain: primary ? [primary.name] : [],
-      unresolvedConsumes,
-      confidence: Number(
-        this.resolveSelectionConfidence(score, gateThreshold, autoThreshold).toFixed(3),
-      ),
-      reason: primary
-        ? score >= autoThreshold
-          ? `score(${score})>=auto_threshold(${autoThreshold})`
-          : score >= gateThreshold
-            ? `score(${score})>=gate_threshold(${gateThreshold})`
-            : `score(${score})<gate_threshold(${gateThreshold})`
-        : "no-skill-match",
-      turn: input.turn,
-      routingOutcome: input.routingOutcome,
-    };
-  }
-
-  private collectPrimaryUnresolvedConsumes(sessionId: string, skillName: string): string[] {
-    const skill = this.getSkill(skillName);
-    if (!skill) return [];
-    const availableOutputs = new Set(this.listProducedOutputKeys(sessionId));
-    return [...new Set(skill.contract.requires ?? [])]
-      .filter((outputName) => !availableOutputs.has(outputName))
-      .toSorted((left, right) => left.localeCompare(right));
-  }
-
-  private resolveSelectionConfidence(
-    score: number,
-    gateThreshold: number,
-    autoThreshold: number,
-  ): number {
-    if (score <= 0) return 0;
-    if (score >= autoThreshold) {
-      const extra = (score - autoThreshold) / Math.max(1, autoThreshold);
-      return Math.min(1, 0.85 + extra * 0.15);
-    }
-    if (score >= gateThreshold) {
-      const span = Math.max(1, autoThreshold - gateThreshold);
-      const progress = (score - gateThreshold) / span;
-      return 0.55 + Math.max(0, Math.min(1, progress)) * 0.3;
-    }
-    return Math.max(0.1, Math.min(0.5, score / Math.max(1, gateThreshold)));
   }
 }

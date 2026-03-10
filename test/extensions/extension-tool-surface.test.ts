@@ -108,7 +108,7 @@ describe("tool surface extension", () => {
     expect(events.some((event) => event.type === "tool_surface_resolved")).toBe(true);
   });
 
-  test("explicit capability requests can surface operator tools for one turn", async () => {
+  test("explicit capability requests can surface managed tools for one turn", async () => {
     const extensionApi = createMockExtensionAPI();
     registerTools(extensionApi.api, [
       "read",
@@ -116,6 +116,7 @@ describe("tool surface extension", () => {
       "write",
       "session_compact",
       "skill_load",
+      "task_view_state",
       "obs_query",
     ]);
 
@@ -145,7 +146,7 @@ describe("tool surface extension", () => {
       "before_agent_start",
       {
         type: "before_agent_start",
-        prompt: "Use $obs_query to inspect current runtime events.",
+        prompt: "Use $task_view_state and $obs_query to inspect current runtime events.",
       },
       {
         sessionManager: {
@@ -154,10 +155,11 @@ describe("tool surface extension", () => {
       },
     );
 
+    expect(extensionApi.activeTools).toContain("task_view_state");
     expect(extensionApi.activeTools).toContain("obs_query");
   });
 
-  test("explicit capability requests do not surface hidden skill tools without a skill commitment", async () => {
+  test("tool surface records which requested managed tools were activated", async () => {
     const extensionApi = createMockExtensionAPI();
     registerTools(extensionApi.api, [
       "read",
@@ -165,7 +167,7 @@ describe("tool surface extension", () => {
       "write",
       "session_compact",
       "skill_load",
-      "exec",
+      "task_view_state",
       "obs_query",
     ]);
 
@@ -198,7 +200,7 @@ describe("tool surface extension", () => {
       "before_agent_start",
       {
         type: "before_agent_start",
-        prompt: "Use $exec and $obs_query to inspect the current state.",
+        prompt: "Use $task_view_state and $obs_query to inspect the current state.",
       },
       {
         sessionManager: {
@@ -207,12 +209,12 @@ describe("tool surface extension", () => {
       },
     );
 
+    expect(extensionApi.activeTools).toContain("task_view_state");
     expect(extensionApi.activeTools).toContain("obs_query");
-    expect(extensionApi.activeTools).not.toContain("exec");
     const event = events.find((input) => input.type === "tool_surface_resolved") as
       | { payload?: Record<string, unknown> }
       | undefined;
-    expect(event?.payload?.requestedOperatorToolNames).toEqual(["obs_query"]);
-    expect(event?.payload?.ignoredRequestedToolNames).toEqual(["exec"]);
+    expect(event?.payload?.requestedActivatedToolNames).toEqual(["task_view_state", "obs_query"]);
+    expect(event?.payload?.ignoredRequestedToolNames).toEqual([]);
   });
 });

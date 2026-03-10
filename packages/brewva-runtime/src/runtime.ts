@@ -728,8 +728,6 @@ export class BrewvaRuntime {
       getSkill: (name) => this.skillRegistry.get(name),
       setPendingDispatch: (sessionId, decision) =>
         this.skillLifecycleService.setPendingDispatch(sessionId, decision, { emitEvent: true }),
-      createExplicitIntent: (sessionId, input) =>
-        this.skillCascadeService.createExplicitIntent(sessionId, input),
       listProducedOutputKeys: (sessionId) =>
         this.skillLifecycleService.listProducedOutputKeys(sessionId),
     });

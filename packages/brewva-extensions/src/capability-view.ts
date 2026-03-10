@@ -219,7 +219,7 @@ export function buildCapabilityView(input: BuildCapabilityViewInput): BuildCapab
     `hidden_skill_count: ${hiddenSkillCount}`,
     `hidden_operator_count: ${hiddenOperatorCount}`,
     `hidden_external_count: ${hiddenExternalCount}`,
-    "surface_policy: base tools stay visible; skill tools follow current skill commitments; operator tools require operator/full profile or an explicit $name request.",
+    "surface_policy: base tools stay visible; skill tools follow current skill commitments; any managed tool can be surfaced for one turn with an explicit $name request; operator/full profile keeps operator tools visible by default.",
     "expand_hint: include `$name` in your turn to reveal one capability detail.",
   ];
   if (hiddenSkillCount > 0 && visibleSkillCount === 0) {
@@ -227,7 +227,7 @@ export function buildCapabilityView(input: BuildCapabilityViewInput): BuildCapab
   }
   if (hiddenOperatorCount > 0) {
     lines.push(
-      "operator_hint: requesting a hidden operator tool via `$name` makes it visible for the current turn.",
+      "operator_hint: operator/full profile keeps these tools visible; otherwise request one via `$name` for the current turn.",
     );
   }
 

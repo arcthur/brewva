@@ -11,7 +11,6 @@ Boundary contract sources:
 - Context composition bridge: `packages/brewva-extensions/src/context-transform.ts`
 - Memory curator producer: `packages/brewva-extensions/src/memory-curator.ts`
 - Broker proposal producer: `packages/brewva-skill-broker/src/extension.ts`
-- Debug-loop proposal producer: `packages/brewva-extensions/src/debug-loop.ts`
 
 The proposal boundary is the public handoff between deliberation and kernel
 commitment.
@@ -73,7 +72,6 @@ Fields:
 Current proposal kinds:
 
 - `skill_selection`
-- `skill_chain_intent`
 - `context_packet`
 
 ### `DecisionReceipt`
@@ -108,18 +106,6 @@ Accepted effect:
 - kernel creates a pending dispatch commitment
 - dispatch gate remains explicit; actual skill entry still happens via
   `skill_load`
-
-### `skill_chain_intent`
-
-Producer intent:
-
-- planner/debug-loop chain proposal
-- explicit multi-step continuation
-
-Accepted effect:
-
-- kernel creates an explicit cascade intent
-- later lifecycle events advance or pause the chain under kernel policy
 
 ### `context_packet`
 
@@ -159,7 +145,6 @@ Current admission rules are intentionally conservative:
 - expired proposals are rejected
 - unknown skills are rejected
 - empty `skill_selection` proposals are rejected or deferred, not fabricated
-- empty `skill_chain_intent` proposals are rejected
 - malformed `context_packet` proposals are rejected
 - reserved built-in issuers must obey their declared boundary policy
 
@@ -169,9 +154,7 @@ Current reserved issuer policy:
   - allowed kinds: `skill_selection`
   - requires `broker_trace` evidence
 - `brewva.extensions.debug-loop`
-  - allowed kinds: `skill_chain_intent`, `context_packet`
-  - `skill_chain_intent` requires `event`, `workspace_artifact`, or
-    `operator_note` evidence
+  - allowed kinds: `context_packet`
   - `context_packet` requires scoped `status_summary` packets with `packetKey`,
     `expiresAt`, and `event` / `workspace_artifact` / `operator_note` evidence
 - `brewva.extensions.memory-curator`
@@ -185,6 +168,20 @@ Decision meanings:
 - `reject`: proposal invalid or disallowed
 - `defer`: proposal is well-formed enough to record, but commitment is not made
   yet
+
+## Direct Commit Boundary
+
+Not every cross-module decision is a proposal.
+
+Current direct-commit paths include:
+
+- explicit cascade starts (`runtime.skills.startCascade(...)`)
+- debug-loop retry scheduling
+- broker-owned cascade planning after accepted `skill_selection`
+
+Use the proposal boundary only when the action crosses a real admission/audit
+boundary: broker skill selection or external/non-authoritative context
+injection.
 
 ## Tape And Event Mapping
 

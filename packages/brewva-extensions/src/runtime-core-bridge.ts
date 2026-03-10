@@ -1,6 +1,6 @@
 import { coerceContextBudgetUsage, type BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { ExtensionAPI, ExtensionFactory } from "@mariozechner/pi-coding-agent";
-import { registerCognitiveMetrics } from "./cognitive-metrics.js";
+import { registerCompletionGuard } from "./completion-guard.js";
 import { prepareContextComposerSupport } from "./context-composer-support.js";
 import { buildContextComposedEventPayload, composeContextBlocks } from "./context-composer.js";
 import { applyContextContract } from "./context-contract.js";
@@ -10,9 +10,6 @@ import {
   resolveInjectionScopeId,
 } from "./context-shared.js";
 import { registerLedgerWriter } from "./ledger-writer.js";
-import { registerMemoryAdaptation } from "./memory-adaptation.js";
-import { registerMemoryCurator } from "./memory-curator.js";
-import { registerMemoryFormation } from "./memory-formation.js";
 import { registerQualityGate } from "./quality-gate.js";
 import { registerToolSurface } from "./tool-surface.js";
 
@@ -20,12 +17,9 @@ const CORE_CONTEXT_INJECTION_MESSAGE_TYPE = "brewva-context-injection";
 
 export function registerRuntimeCoreBridge(pi: ExtensionAPI, runtime: BrewvaRuntime): void {
   registerToolSurface(pi, runtime);
-  registerMemoryCurator(pi, runtime);
-  registerMemoryFormation(pi, runtime);
-  registerCognitiveMetrics(pi, runtime);
-  registerMemoryAdaptation(pi, runtime);
   registerQualityGate(pi, runtime);
   registerLedgerWriter(pi, runtime);
+  registerCompletionGuard(pi, runtime);
 
   pi.on("before_agent_start", async (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();

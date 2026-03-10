@@ -23,34 +23,12 @@ Every runtime event follows the same envelope shape:
 - `tool_result_recorded`
   Tool-result payloads now use `channelSuccess` for execution-channel success and `verdict` for semantic outcome.
 - `observability_assertion_recorded`
+- `proposal_received`
+- `proposal_decided`
+- `decision_receipt_recorded`
 - `verification_outcome_recorded`
-- `debug_loop_*`
-- `memory_summary_written`
-- `memory_summary_write_failed`
-- `memory_episode_written`
-- `memory_episode_write_failed`
-- `memory_procedure_note_written`
-- `memory_procedure_note_write_failed`
-- `memory_reference_rehydrated`
-- `memory_reference_rehydration_failed`
-- `memory_procedure_rehydrated`
-- `memory_procedure_rehydration_failed`
-- `memory_summary_rehydrated`
-- `memory_summary_rehydration_failed`
-- `memory_episode_rehydrated`
-- `memory_episode_rehydration_failed`
-- `memory_open_loop_rehydrated`
-- `memory_open_loop_rehydration_failed`
-- `memory_adaptation_updated`
-- `memory_adaptation_update_failed`
-- `proactivity_wakeup_prepared`
-- `cognition_note_written`
-- `cognition_note_write_failed`
-- `cognitive_metric_first_productive_action`
-- `cognitive_metric_resumption_progress`
-- `cognitive_metric_rehydration_usefulness`
 - schedule lifecycle events
-- execution routing/isolation events
+- skill cascade lifecycle events
 
 These are retained under `infrastructure.events.level=audit`.
 
@@ -65,14 +43,20 @@ These are retained under `infrastructure.events.level=audit`.
 - `observability_query_executed`
 - `scan_convergence_*`
 - `task_stuck_*`
-- `proposal_received`
-- `proposal_decided`
-- `decision_receipt_recorded`
 - `tool_surface_resolved`
 - `context_composed`
-- `skill_*` lifecycle and cascade events
+- `skill_*` lifecycle events outside cascade durability
 - `skill_routing_selection`
 - `skill_routing_decided`
+- `debug_loop_*`
+- `memory_*`
+- `cognition_note_*`
+- `cognitive_metric_*`
+- `proactivity_wakeup_prepared`
+- execution routing/isolation events
+- `tool_output_observed`
+- `tool_output_distilled`
+- `tool_output_artifact_persisted`
 - `turn_wal_*`
 
 These are retained under `ops` and `debug`.
@@ -108,15 +92,15 @@ snapshot that can replace source-event replay.
   writes, including artifact kind and absolute path
 - `debug_loop_failure_case_persisted` records the on-disk failure snapshot used
   for retry and handoff
-- `debug_loop_retry_scheduled` records the proposal-backed retry commitment and
+- `debug_loop_retry_scheduled` records the direct cascade retry commitment and
   the next skill that should be loaded, including the post-failure `retryCount`
 - `debug_loop_handoff_persisted` records the deterministic handoff packet path
 - `debug_loop_reference_persisted` records the persisted cross-session
   cognition reference artifact path when terminal debug-loop state is promoted
   into deliberation-side sediment
 
-These events are audit-visible because they describe controller decisions and
-cross-turn recovery artifacts, not presentation-only UI behavior.
+These events are operational telemetry. They remain queryable at `ops`/`debug`
+levels, but they no longer inflate audit-level tape retention.
 
 ## Cognitive Product Families
 

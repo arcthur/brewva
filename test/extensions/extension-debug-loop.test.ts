@@ -290,6 +290,14 @@ describe("extension debug loop", () => {
     expect(
       runtime.events.query(sessionId, { type: DEBUG_LOOP_RETRY_SCHEDULED_EVENT_TYPE, last: 1 }),
     ).toHaveLength(1);
+    const retryScheduledEvent = runtime.events.query(sessionId, {
+      type: DEBUG_LOOP_RETRY_SCHEDULED_EVENT_TYPE,
+      last: 1,
+    })[0];
+    expect(retryScheduledEvent?.payload?.committedBy).toBe("direct_cascade_start");
+    expect(retryScheduledEvent?.payload?.intentId).toBe(
+      runtime.skills.getCascadeIntent(sessionId)?.id,
+    );
 
     const failureCase = readJsonFile<{
       attemptedOutputs?: Record<string, unknown>;
@@ -302,14 +310,6 @@ describe("extension debug loop", () => {
     );
     expect(debugLoop.status).toBe("forensics");
     expect(debugLoop.retryCount).toBe(0);
-    expect(
-      runtime.proposals.list(sessionId, { kind: "skill_chain_intent", limit: 1 })[0]?.receipt
-        .decision,
-    ).toBe("accept");
-    expect(
-      runtime.proposals.list(sessionId, { kind: "skill_chain_intent", limit: 1 })[0]?.proposal
-        .issuer,
-    ).toBe("brewva.extensions.debug-loop");
     const latestContextPacket = await waitFor(
       () =>
         runtime.proposals.list(sessionId, {
@@ -680,41 +680,32 @@ describe("extension debug loop", () => {
     ).toHaveLength(1);
   });
 
-  test("proposal admission failures push debug loop into blocked terminal state", async () => {
+  test("cascade start failures push debug loop into blocked terminal state", async () => {
     const fixture = createDebugLoopFixture(
       "ext-debug-loop-blocked",
       "ext-debug-loop-9",
       "leaf-debug-loop-9",
     );
-    const originalSubmit = fixture.runtime.proposals.submit.bind(fixture.runtime.proposals);
+    const originalStartCascade = fixture.runtime.skills.startCascade.bind(fixture.runtime.skills);
     (
-      fixture.runtime.proposals as unknown as {
-        submit: typeof originalSubmit;
+      fixture.runtime.skills as unknown as {
+        startCascade: typeof originalStartCascade;
       }
-    ).submit = (sessionId, proposal) => {
-      if (proposal.kind === "skill_chain_intent") {
-        return {
-          proposalId: proposal.id,
-          decision: "reject",
-          policyBasis: ["test_override"],
-          reasons: ["forced_blocked_path"],
-          committedEffects: [],
-          evidenceRefs: proposal.evidenceRefs,
-          turn: 0,
-          timestamp: 7_000,
-        };
-      }
-      return originalSubmit(sessionId, proposal);
+    ).startCascade = () => {
+      return {
+        ok: false,
+        reason: "forced_blocked_path",
+      };
     };
 
     try {
       await scheduleInitialRetry(fixture);
     } finally {
       (
-        fixture.runtime.proposals as unknown as {
-          submit: typeof originalSubmit;
+        fixture.runtime.skills as unknown as {
+          startCascade: typeof originalStartCascade;
         }
-      ).submit = originalSubmit;
+      ).startCascade = originalStartCascade;
     }
 
     const debugLoop = readJsonFile<{

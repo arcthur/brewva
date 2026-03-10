@@ -12,28 +12,61 @@ import { registerMemoryCurator } from "./memory-curator.js";
 import { registerMemoryFormation } from "./memory-formation.js";
 import { registerNotification } from "./notification.js";
 import { registerQualityGate } from "./quality-gate.js";
-import { registerScanConvergenceGuard } from "./scan-convergence-guard.js";
 import { registerToolSurface } from "./tool-surface.js";
 
 export interface CreateBrewvaExtensionOptions extends BrewvaRuntimeOptions {
   runtime?: BrewvaRuntime;
   registerTools?: boolean;
+  profile?: BrewvaExtensionProfile;
 }
 
-function registerAllHandlers(pi: ExtensionAPI, runtime: BrewvaRuntime): void {
+export type BrewvaExtensionProfile = "core" | "memory" | "debug" | "full";
+
+function resolveProfile(profile: BrewvaExtensionProfile | undefined): {
+  memory: boolean;
+  debug: boolean;
+  cognitive: boolean;
+} {
+  switch (profile ?? "core") {
+    case "memory":
+      return { memory: true, debug: false, cognitive: false };
+    case "debug":
+      return { memory: false, debug: true, cognitive: false };
+    case "full":
+      return { memory: true, debug: true, cognitive: true };
+    case "core":
+    default:
+      return { memory: false, debug: false, cognitive: false };
+  }
+}
+
+function registerCoreHandlers(pi: ExtensionAPI, runtime: BrewvaRuntime): void {
   registerEventStream(pi, runtime);
   registerToolSurface(pi, runtime);
-  registerMemoryCurator(pi, runtime);
-  registerMemoryFormation(pi, runtime);
   registerContextTransform(pi, runtime);
-  registerCognitiveMetrics(pi, runtime);
-  registerMemoryAdaptation(pi, runtime);
-  registerScanConvergenceGuard(pi, runtime);
   registerQualityGate(pi, runtime);
-  registerDebugLoop(pi, runtime);
   registerLedgerWriter(pi, runtime);
   registerCompletionGuard(pi, runtime);
-  registerNotification(pi, runtime);
+}
+
+function registerOptionalHandlers(
+  pi: ExtensionAPI,
+  runtime: BrewvaRuntime,
+  profile: BrewvaExtensionProfile | undefined,
+): void {
+  const features = resolveProfile(profile);
+  if (features.memory) {
+    registerMemoryCurator(pi, runtime);
+    registerMemoryFormation(pi, runtime);
+    registerMemoryAdaptation(pi, runtime);
+  }
+  if (features.debug) {
+    registerDebugLoop(pi, runtime);
+  }
+  if (features.cognitive) {
+    registerCognitiveMetrics(pi, runtime);
+    registerNotification(pi, runtime);
+  }
 }
 
 export function createBrewvaExtension(
@@ -49,7 +82,8 @@ export function createBrewvaExtension(
       }
     }
 
-    registerAllHandlers(pi, runtime);
+    registerCoreHandlers(pi, runtime);
+    registerOptionalHandlers(pi, runtime, options.profile);
   };
 }
 
@@ -110,7 +144,6 @@ export {
 } from "./capability-view.js";
 export { registerEventStream } from "./event-stream.js";
 export { registerQualityGate } from "./quality-gate.js";
-export { registerScanConvergenceGuard } from "./scan-convergence-guard.js";
 export { registerLedgerWriter } from "./ledger-writer.js";
 export { registerDebugLoop } from "./debug-loop.js";
 export { registerCompletionGuard } from "./completion-guard.js";

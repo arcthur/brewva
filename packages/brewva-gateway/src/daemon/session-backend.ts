@@ -1,3 +1,4 @@
+import type { ScheduleContinuityMode, TaskSpec, TruthFact } from "@brewva/brewva-runtime";
 import type { GatewayToolOutput } from "../session/collect-output.js";
 
 export interface OpenSessionInput {
@@ -16,7 +17,7 @@ export interface OpenSessionResult {
   agentSessionId?: string;
 }
 
-export interface SendPromptTrigger {
+export interface HeartbeatPromptTrigger {
   kind: "heartbeat";
   ruleId: string;
   objective?: string;
@@ -26,6 +27,29 @@ export interface SendPromptTrigger {
   selectionText?: string;
   signalArtifactRefs?: string[];
 }
+
+export interface SchedulePromptAnchor {
+  id: string;
+  name?: string;
+  summary?: string;
+  nextSteps?: string;
+}
+
+export interface SchedulePromptTrigger {
+  kind: "schedule";
+  intentId: string;
+  parentSessionId: string;
+  runIndex: number;
+  reason: string;
+  continuityMode: ScheduleContinuityMode;
+  timeZone?: string;
+  goalRef?: string;
+  taskSpec?: TaskSpec | null;
+  truthFacts?: TruthFact[];
+  parentAnchor?: SchedulePromptAnchor | null;
+}
+
+export type SendPromptTrigger = HeartbeatPromptTrigger | SchedulePromptTrigger;
 
 export interface SessionWorkerInfo {
   sessionId: string;
@@ -41,7 +65,7 @@ export interface SessionWorkerInfo {
 export interface SendPromptOptions {
   turnId?: string;
   waitForCompletion?: boolean;
-  source?: "gateway" | "heartbeat";
+  source?: "gateway" | "heartbeat" | "schedule";
   walReplayId?: string;
   trigger?: SendPromptTrigger;
 }

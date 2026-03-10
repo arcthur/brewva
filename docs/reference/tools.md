@@ -136,16 +136,16 @@ Current extension composition resolves three layers before `before_agent_start`:
     contracts
 - `operator tools`
   - operator-facing observability and control tools shown only for operator/full
-    routing profiles or explicit `$tool_name` capability requests
+    routing profiles by default or explicit `$tool_name` capability requests
 
 Default product behavior:
 
 - the capability block shows only the tools that are visible now
-- hidden skill tools stay hidden until the current skill/pending dispatch/cascade
-  commitment exposes them
-- hidden operator tools can be surfaced for one turn by explicitly requesting
-  `$tool_name`
-- `$tool_name` is therefore not a general bypass for hidden skill tools
+- hidden managed Brewva tools can be surfaced for one turn by explicitly
+  requesting `$tool_name`
+- current skill/pending dispatch/cascade commitment still exposes its normal
+  task-specific tool surface without needing `$tool_name`
+- operator/full profile keeps operator tools visible by default
 
 This is enforced through active-tool selection, not by mutating kernel policy:
 

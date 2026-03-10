@@ -74,13 +74,13 @@ function collectSkillToolNames(skills: SkillDocument[]): string[] {
   return [...names];
 }
 
-function resolveRequestedOperatorToolNames(
+function resolveRequestedManagedToolNames(
   requestedToolNames: string[],
   knownToolNames: Set<string>,
 ): string[] {
   return requestedToolNames.filter((toolName) => {
     if (!knownToolNames.has(toolName)) return false;
-    return getBrewvaToolSurface(toolName) === "operator";
+    return isManagedBrewvaToolName(toolName);
   });
 }
 
@@ -94,7 +94,7 @@ function resolveActiveToolNames(input: {
   activeToolNames: string[];
   managedActiveCount: number;
   requestedToolNames: string[];
-  requestedOperatorToolNames: string[];
+  requestedActivatedToolNames: string[];
   ignoredRequestedToolNames: string[];
   skillNames: string[];
   operatorProfile: boolean;
@@ -131,11 +131,11 @@ function resolveActiveToolNames(input: {
   const requestedToolNames = extractRequestedToolNames(input.prompt).filter((toolName) =>
     knownToolNames.has(toolName),
   );
-  const requestedOperatorToolNames = resolveRequestedOperatorToolNames(
+  const requestedActivatedToolNames = resolveRequestedManagedToolNames(
     requestedToolNames,
     knownToolNames,
   );
-  for (const toolName of requestedOperatorToolNames) {
+  for (const toolName of requestedActivatedToolNames) {
     active.add(toolName);
   }
 
@@ -148,6 +148,12 @@ function resolveActiveToolNames(input: {
 
   if (surfaceSkills.length > 0 && knownToolNames.has("skill_complete")) {
     active.add("skill_complete");
+  }
+  if (
+    input.runtime.skills.getPendingDispatch(input.sessionId) &&
+    knownToolNames.has("skill_load")
+  ) {
+    active.add("skill_load");
   }
   if (
     input.runtime.skills.getPendingDispatch(input.sessionId) &&
@@ -195,9 +201,9 @@ function resolveActiveToolNames(input: {
     activeToolNames,
     managedActiveCount: [...active].filter((toolName) => isManagedBrewvaToolName(toolName)).length,
     requestedToolNames,
-    requestedOperatorToolNames,
+    requestedActivatedToolNames,
     ignoredRequestedToolNames: requestedToolNames.filter(
-      (toolName) => !requestedOperatorToolNames.includes(toolName),
+      (toolName) => !requestedActivatedToolNames.includes(toolName),
     ),
     skillNames: surfaceSkills.map((skill) => skill.name),
     operatorProfile,
@@ -249,7 +255,7 @@ export function registerToolSurface(pi: ExtensionAPI, runtime: BrewvaRuntime): v
         managedCount: MANAGED_BREWVA_TOOL_NAMES.length,
         managedActiveCount: resolved.managedActiveCount,
         requestedToolNames: resolved.requestedToolNames,
-        requestedOperatorToolNames: resolved.requestedOperatorToolNames,
+        requestedActivatedToolNames: resolved.requestedActivatedToolNames,
         ignoredRequestedToolNames: resolved.ignoredRequestedToolNames,
         skillNames: resolved.skillNames,
         operatorProfile: resolved.operatorProfile,

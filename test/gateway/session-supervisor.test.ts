@@ -12,16 +12,47 @@ interface SentPromptMessage {
   kind: "send";
   requestId: string;
   payload: {
-    trigger?: {
-      kind: "heartbeat";
-      ruleId: string;
-      objective?: string;
-      contextHints?: string[];
-      wakeMode?: "always" | "if_signal" | "if_open_loop";
-      planReason?: string;
-      selectionText?: string;
-      signalArtifactRefs?: string[];
-    };
+    trigger?:
+      | {
+          kind: "heartbeat";
+          ruleId: string;
+          objective?: string;
+          contextHints?: string[];
+          wakeMode?: "always" | "if_signal" | "if_open_loop";
+          planReason?: string;
+          selectionText?: string;
+          signalArtifactRefs?: string[];
+        }
+      | {
+          kind: "schedule";
+          intentId: string;
+          parentSessionId: string;
+          runIndex: number;
+          reason: string;
+          continuityMode: "inherit" | "fresh";
+          timeZone?: string;
+          goalRef?: string;
+          taskSpec?: {
+            schema: "brewva.task.v1";
+            goal: string;
+          } | null;
+          truthFacts?: Array<{
+            id: string;
+            kind: string;
+            severity: "info" | "warn" | "error";
+            status: "active" | "resolved";
+            summary: string;
+            evidenceIds: string[];
+            firstSeenAt: number;
+            lastSeenAt: number;
+          }>;
+          parentAnchor?: {
+            id: string;
+            name?: string;
+            summary?: string;
+            nextSteps?: string;
+          } | null;
+        };
   };
 }
 
@@ -299,6 +330,126 @@ describe("session supervisor safeguards", () => {
         ruleId: "nightly-release",
         objective: "Review release readiness.",
         contextHints: ["release readiness", "backlog risk"],
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("given schedule trigger metadata, when supervisor forwards to worker, then schedule payload is preserved", async () => {
+    const root = mkdtempSync(join(tmpdir(), "brewva-session-supervisor-"));
+    const stateDir = join(root, "state");
+    const supervisor = new SessionSupervisor({
+      stateDir,
+      logger: {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        log: () => {},
+      },
+      defaultCwd: root,
+    });
+    try {
+      supervisor.testHooks.seedWorker({
+        sessionId: "schedule-session",
+        pid: 10051,
+      });
+
+      const workers = Reflect.get(supervisor, "workers") as Map<
+        string,
+        {
+          child: {
+            send: (message: unknown) => boolean;
+          };
+        }
+      >;
+      const handle = workers.get("schedule-session");
+      expect(handle).toBeDefined();
+
+      let sentMessage: SentPromptMessage | undefined;
+      handle!.child.send = (message: unknown) => {
+        sentMessage = message as SentPromptMessage;
+        setTimeout(() => {
+          supervisor.testHooks.dispatchWorkerMessage("schedule-session", {
+            kind: "result",
+            requestId: sentMessage!.requestId,
+            ok: true,
+            payload: {
+              sessionId: "schedule-session",
+              turnId: "turn-2",
+              accepted: true,
+            },
+          });
+        }, 0).unref?.();
+        return true;
+      };
+
+      await supervisor.sendPrompt("schedule-session", "Continue the task.", {
+        source: "schedule",
+        trigger: {
+          kind: "schedule",
+          intentId: "intent-1",
+          parentSessionId: "parent-1",
+          runIndex: 2,
+          reason: "nightly follow-up",
+          continuityMode: "inherit",
+          timeZone: "Asia/Singapore",
+          goalRef: "goal-1",
+          taskSpec: {
+            schema: "brewva.task.v1",
+            goal: "Finish the release checklist",
+          },
+          truthFacts: [
+            {
+              id: "fact-1",
+              kind: "status",
+              severity: "warn",
+              status: "active",
+              summary: "The release note draft is incomplete.",
+              evidenceIds: [],
+              firstSeenAt: 1,
+              lastSeenAt: 1,
+            },
+          ],
+          parentAnchor: {
+            id: "anchor-1",
+            name: "release-checkpoint",
+            summary: "Release prep is half done.",
+          },
+        },
+      });
+
+      expect(sentMessage?.payload.trigger).toEqual({
+        kind: "schedule",
+        intentId: "intent-1",
+        parentSessionId: "parent-1",
+        runIndex: 2,
+        reason: "nightly follow-up",
+        continuityMode: "inherit",
+        timeZone: "Asia/Singapore",
+        goalRef: "goal-1",
+        taskSpec: {
+          schema: "brewva.task.v1",
+          goal: "Finish the release checklist",
+        },
+        truthFacts: [
+          {
+            id: "fact-1",
+            kind: "status",
+            severity: "warn",
+            status: "active",
+            summary: "The release note draft is incomplete.",
+            evidenceIds: [],
+            firstSeenAt: 1,
+            lastSeenAt: 1,
+          },
+        ],
+        parentAnchor: {
+          id: "anchor-1",
+          name: "release-checkpoint",
+          summary: "Release prep is half done.",
+        },
       });
     } finally {
       rmSync(root, { recursive: true, force: true });

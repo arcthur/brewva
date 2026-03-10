@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionSupervisor } from "@brewva/brewva-gateway";
 import { BrewvaRuntime, WATCHDOG_BLOCKER_ID } from "@brewva/brewva-runtime";
+import {
+  buildWorkerTestHarnessEnv,
+  WORKER_TEST_HARNESS_ENV_KEYS,
+} from "../../packages/brewva-gateway/src/session/worker-test-harness.js";
 
 function createWorkspace(name: string): string {
   const workspace = mkdtempSync(join(tmpdir(), `brewva-supervisor-watchdog-${name}-`));
@@ -49,13 +53,35 @@ function createWorkerTestEnv(overrides: {
   pollIntervalMs: number;
   investigateMs: number;
 }): Record<string, string | undefined> {
-  return {
-    BREWVA_INTERNAL_GATEWAY_TEST_OVERRIDES: "1",
-    BREWVA_INTERNAL_GATEWAY_WATCHDOG_TASK_GOAL: overrides.taskGoal,
-    BREWVA_INTERNAL_GATEWAY_WATCHDOG_POLL_MS: String(overrides.pollIntervalMs),
-    BREWVA_INTERNAL_GATEWAY_WATCHDOG_INVESTIGATE_MS: String(overrides.investigateMs),
-    BREWVA_INTERNAL_GATEWAY_WATCHDOG_EXECUTE_MS: undefined,
-    BREWVA_INTERNAL_GATEWAY_WATCHDOG_VERIFY_MS: undefined,
+  return buildWorkerTestHarnessEnv({
+    watchdog: {
+      taskGoal: overrides.taskGoal,
+      pollIntervalMs: overrides.pollIntervalMs,
+      investigateMs: overrides.investigateMs,
+    },
+  });
+}
+
+function applyProcessEnv(overrides: Record<string, string | undefined>): () => void {
+  const previous = new Map<string, string | undefined>();
+  for (const key of WORKER_TEST_HARNESS_ENV_KEYS) {
+    previous.set(key, process.env[key]);
+    const value = overrides[key];
+    if (typeof value === "string") {
+      process.env[key] = value;
+      continue;
+    }
+    delete process.env[key];
+  }
+
+  return () => {
+    for (const [key, value] of previous) {
+      if (typeof value === "string") {
+        process.env[key] = value;
+        continue;
+      }
+      delete process.env[key];
+    }
   };
 }
 
@@ -172,15 +198,16 @@ describe("session supervisor watchdog bridge", () => {
 
   test("ambient watchdog env is ignored without explicit worker test overrides", async () => {
     const workspace = createWorkspace("worker-ambient-env");
-    const previousGoal = process.env.BREWVA_INTERNAL_GATEWAY_WATCHDOG_TASK_GOAL;
-    const previousPoll = process.env.BREWVA_INTERNAL_GATEWAY_WATCHDOG_POLL_MS;
-    const previousInvestigate = process.env.BREWVA_INTERNAL_GATEWAY_WATCHDOG_INVESTIGATE_MS;
-    const previousTestFlag = process.env.BREWVA_INTERNAL_GATEWAY_TEST_OVERRIDES;
-    process.env.BREWVA_INTERNAL_GATEWAY_WATCHDOG_TASK_GOAL =
-      "This ambient env should not bootstrap worker task state";
-    process.env.BREWVA_INTERNAL_GATEWAY_WATCHDOG_POLL_MS = "1000";
-    process.env.BREWVA_INTERNAL_GATEWAY_WATCHDOG_INVESTIGATE_MS = "1000";
-    delete process.env.BREWVA_INTERNAL_GATEWAY_TEST_OVERRIDES;
+    const restoreEnv = applyProcessEnv(
+      buildWorkerTestHarnessEnv({
+        enabled: false,
+        watchdog: {
+          taskGoal: "This ambient env should not bootstrap worker task state",
+          pollIntervalMs: 1_000,
+          investigateMs: 1_000,
+        },
+      }),
+    );
 
     const supervisor = new SessionSupervisor({
       stateDir: join(workspace, "state"),
@@ -212,26 +239,7 @@ describe("session supervisor watchdog bridge", () => {
       expect(observer.task.getState(agentSessionId!).spec).toBeUndefined();
     } finally {
       await supervisor.stop();
-      if (typeof previousGoal === "string") {
-        process.env.BREWVA_INTERNAL_GATEWAY_WATCHDOG_TASK_GOAL = previousGoal;
-      } else {
-        delete process.env.BREWVA_INTERNAL_GATEWAY_WATCHDOG_TASK_GOAL;
-      }
-      if (typeof previousPoll === "string") {
-        process.env.BREWVA_INTERNAL_GATEWAY_WATCHDOG_POLL_MS = previousPoll;
-      } else {
-        delete process.env.BREWVA_INTERNAL_GATEWAY_WATCHDOG_POLL_MS;
-      }
-      if (typeof previousInvestigate === "string") {
-        process.env.BREWVA_INTERNAL_GATEWAY_WATCHDOG_INVESTIGATE_MS = previousInvestigate;
-      } else {
-        delete process.env.BREWVA_INTERNAL_GATEWAY_WATCHDOG_INVESTIGATE_MS;
-      }
-      if (typeof previousTestFlag === "string") {
-        process.env.BREWVA_INTERNAL_GATEWAY_TEST_OVERRIDES = previousTestFlag;
-      } else {
-        delete process.env.BREWVA_INTERNAL_GATEWAY_TEST_OVERRIDES;
-      }
+      restoreEnv();
       rmSync(workspace, { recursive: true, force: true });
     }
   });

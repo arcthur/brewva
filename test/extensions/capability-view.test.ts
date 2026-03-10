@@ -46,25 +46,22 @@ describe("capability view", () => {
     expect(result.block.includes("available_total: 3")).toBe(true);
     expect(result.block.includes("visible_now_count: 1")).toBe(true);
     expect(result.block.includes("visible_now: $exec")).toBe(true);
-    expect(result.block.includes("hidden_skill_count: 0")).toBe(true);
+    expect(result.block.includes("hidden_skill_count: 1")).toBe(true);
     expect(result.block.includes("hidden_operator_count: 0")).toBe(true);
   });
 
   test("expands capability details from $name requests", () => {
     const result = buildCapabilityView({
-      prompt: "inspect $exec and $not_exists",
+      prompt: "inspect $tape_search and $not_exists",
       allTools: [
         {
-          name: "exec",
-          description: "Run a shell command.",
+          name: "tape_search",
+          description: "Search tape entries.",
           parameters: {
             type: "object",
             properties: {
-              command: {
+              query: {
                 type: "string",
-              },
-              args: {
-                type: "array",
               },
             },
           },
@@ -73,11 +70,11 @@ describe("capability view", () => {
       activeToolNames: [],
     });
 
-    expect(result.requested).toEqual(["exec", "not_exists"]);
-    expect(result.expanded).toEqual(["exec"]);
+    expect(result.requested).toEqual(["tape_search", "not_exists"]);
+    expect(result.expanded).toEqual(["tape_search"]);
     expect(result.missing).toEqual(["not_exists"]);
-    expect(result.block.includes("[CapabilityDetail:$exec]")).toBe(true);
-    expect(result.block.includes("parameters: args, command")).toBe(true);
+    expect(result.block.includes("[CapabilityDetail:$tape_search]")).toBe(true);
+    expect(result.block.includes("parameters: query")).toBe(true);
     expect(result.block.includes("surface: skill")).toBe(true);
     expect(result.block.includes("visible_now: false")).toBe(true);
     expect(result.block.includes("unknown: $not_exists")).toBe(true);
@@ -137,7 +134,7 @@ describe("capability view", () => {
     expect(result.block.includes("deny_reason: blocked-for-test")).toBe(true);
   });
 
-  test("describes hidden operator tools and one-turn activation hint", () => {
+  test("describes hidden operator tools and explicit request hint", () => {
     const result = buildCapabilityView({
       prompt: "continue",
       allTools: [
@@ -156,7 +153,9 @@ describe("capability view", () => {
     });
 
     expect(result.block.includes("hidden_operator_count: 1")).toBe(true);
-    expect(result.block.includes("operator_hint: requesting a hidden operator tool")).toBe(true);
+    expect(
+      result.block.includes("operator_hint: operator/full profile keeps these tools visible"),
+    ).toBe(true);
   });
 
   test("describes hidden skill tools when no skill-scoped tool is visible", () => {
@@ -164,17 +163,17 @@ describe("capability view", () => {
       prompt: "continue",
       allTools: [
         {
-          name: "skill_load",
-          description: "Load a skill.",
+          name: "session_compact",
+          description: "Compact session context.",
           parameters: { type: "object", properties: {} },
         },
         {
-          name: "exec",
-          description: "Run a shell command.",
-          parameters: { type: "object", properties: { command: { type: "string" } } },
+          name: "tape_search",
+          description: "Search tape entries.",
+          parameters: { type: "object", properties: { query: { type: "string" } } },
         },
       ],
-      activeToolNames: ["skill_load"],
+      activeToolNames: ["session_compact"],
     });
 
     expect(result.block.includes("hidden_skill_count: 1")).toBe(true);

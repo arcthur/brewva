@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { TurnWALRecord } from "@brewva/brewva-runtime";
+import type { TruthFact, TurnWALRecord } from "@brewva/brewva-runtime";
 import { TurnWALRecovery, TurnWALStore, type TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import type {
   ParentToWorkerMessage,
@@ -21,8 +21,11 @@ import { toErrorMessage } from "../utils/errors.js";
 import type { StructuredLogger } from "./logger.js";
 import { isProcessAlive } from "./pid.js";
 import {
+  type HeartbeatPromptTrigger,
   type OpenSessionInput,
   type OpenSessionResult,
+  type SchedulePromptAnchor,
+  type SchedulePromptTrigger,
   type SessionBackend,
   SessionBackendCapacityError,
   SessionBackendStateError,
@@ -90,11 +93,21 @@ function normalizeOptionalString(value: string | undefined): string | undefined 
   return normalized.length > 0 ? normalized : undefined;
 }
 
-function buildGatewayTurnEnvelope(input: {
+function mapPromptSourceToChannel(source: "gateway" | "heartbeat" | "schedule"): string {
+  if (source === "heartbeat") {
+    return "heartbeat";
+  }
+  if (source === "schedule") {
+    return "schedule";
+  }
+  return "gateway";
+}
+
+function buildSessionTurnEnvelope(input: {
   sessionId: string;
   turnId: string;
   prompt: string;
-  source: "gateway" | "heartbeat";
+  source: "gateway" | "heartbeat" | "schedule";
   trigger?: SendPromptTrigger;
 }): TurnEnvelope {
   return {
@@ -102,13 +115,13 @@ function buildGatewayTurnEnvelope(input: {
     kind: "user",
     sessionId: input.sessionId,
     turnId: input.turnId,
-    channel: input.source === "heartbeat" ? "heartbeat" : "gateway",
+    channel: mapPromptSourceToChannel(input.source),
     conversationId: input.sessionId,
     timestamp: Date.now(),
     parts: [{ type: "text", text: input.prompt }],
     meta: {
       source: input.source,
-      proactivityTrigger: input.trigger ?? null,
+      trigger: input.trigger ?? null,
     },
   };
 }
@@ -126,77 +139,141 @@ function extractTriggerFromEnvelope(envelope: TurnEnvelope): SendPromptTrigger |
   if (!meta || typeof meta !== "object") {
     return undefined;
   }
-  const raw = meta.proactivityTrigger;
+  const raw = "trigger" in meta ? meta.trigger : undefined;
   if (!raw || typeof raw !== "object") {
     return undefined;
   }
   const kind =
     typeof (raw as { kind?: unknown }).kind === "string" ? (raw as { kind: string }).kind : "";
-  if (kind !== "heartbeat") {
+  if (kind === "heartbeat") {
+    const ruleId =
+      typeof (raw as { ruleId?: unknown }).ruleId === "string" &&
+      (raw as { ruleId: string }).ruleId.trim().length > 0
+        ? (raw as { ruleId: string }).ruleId.trim()
+        : "";
+    if (!ruleId) {
+      return undefined;
+    }
+    const objective =
+      typeof (raw as { objective?: unknown }).objective === "string" &&
+      (raw as { objective: string }).objective.trim().length > 0
+        ? (raw as { objective: string }).objective.trim()
+        : undefined;
+    const contextHints = Array.isArray((raw as { contextHints?: unknown }).contextHints)
+      ? [
+          ...new Set(
+            ((raw as { contextHints: unknown[] }).contextHints ?? [])
+              .filter((value): value is string => typeof value === "string")
+              .map((value) => value.trim())
+              .filter((value) => value.length > 0),
+          ),
+        ]
+      : undefined;
+    const wakeMode =
+      (raw as { wakeMode?: unknown }).wakeMode === "always" ||
+      (raw as { wakeMode?: unknown }).wakeMode === "if_signal" ||
+      (raw as { wakeMode?: unknown }).wakeMode === "if_open_loop"
+        ? ((raw as { wakeMode: "always" | "if_signal" | "if_open_loop" }).wakeMode ?? undefined)
+        : undefined;
+    const planReason =
+      typeof (raw as { planReason?: unknown }).planReason === "string" &&
+      (raw as { planReason: string }).planReason.trim().length > 0
+        ? (raw as { planReason: string }).planReason.trim()
+        : undefined;
+    const selectionText =
+      typeof (raw as { selectionText?: unknown }).selectionText === "string" &&
+      (raw as { selectionText: string }).selectionText.trim().length > 0
+        ? (raw as { selectionText: string }).selectionText.trim()
+        : undefined;
+    const signalArtifactRefs = Array.isArray(
+      (raw as { signalArtifactRefs?: unknown }).signalArtifactRefs,
+    )
+      ? [
+          ...new Set(
+            ((raw as { signalArtifactRefs: unknown[] }).signalArtifactRefs ?? [])
+              .filter((value): value is string => typeof value === "string")
+              .map((value) => value.trim())
+              .filter((value) => value.length > 0),
+          ),
+        ]
+      : undefined;
+    const trigger: HeartbeatPromptTrigger = {
+      kind: "heartbeat",
+      ruleId,
+      objective,
+      contextHints: contextHints && contextHints.length > 0 ? contextHints : undefined,
+      wakeMode,
+      planReason,
+      selectionText,
+      signalArtifactRefs:
+        signalArtifactRefs && signalArtifactRefs.length > 0 ? signalArtifactRefs : undefined,
+    };
+    return trigger;
+  }
+  if (kind !== "schedule") {
     return undefined;
   }
-  const ruleId =
-    typeof (raw as { ruleId?: unknown }).ruleId === "string" &&
-    (raw as { ruleId: string }).ruleId.trim().length > 0
-      ? (raw as { ruleId: string }).ruleId.trim()
-      : "";
-  if (!ruleId) {
+
+  const intentId = normalizeOptionalString((raw as { intentId?: string }).intentId);
+  const parentSessionId = normalizeOptionalString(
+    (raw as { parentSessionId?: string }).parentSessionId,
+  );
+  const runIndexRaw = (raw as { runIndex?: unknown }).runIndex;
+  const runIndex =
+    typeof runIndexRaw === "number" && Number.isFinite(runIndexRaw) && runIndexRaw > 0
+      ? Math.floor(runIndexRaw)
+      : undefined;
+  const reason = normalizeOptionalString((raw as { reason?: string }).reason);
+  const continuityMode =
+    (raw as { continuityMode?: unknown }).continuityMode === "inherit" ||
+    (raw as { continuityMode?: unknown }).continuityMode === "fresh"
+      ? ((raw as { continuityMode: "inherit" | "fresh" }).continuityMode ?? undefined)
+      : undefined;
+  if (!intentId || !parentSessionId || !runIndex || !reason || !continuityMode) {
     return undefined;
   }
-  const objective =
-    typeof (raw as { objective?: unknown }).objective === "string" &&
-    (raw as { objective: string }).objective.trim().length > 0
-      ? (raw as { objective: string }).objective.trim()
+
+  const timeZone = normalizeOptionalString((raw as { timeZone?: string }).timeZone);
+  const goalRef = normalizeOptionalString((raw as { goalRef?: string }).goalRef);
+  const taskSpec =
+    "taskSpec" in (raw as Record<string, unknown>)
+      ? (((raw as { taskSpec?: unknown }).taskSpec ?? null) as SchedulePromptTrigger["taskSpec"])
       : undefined;
-  const contextHints = Array.isArray((raw as { contextHints?: unknown }).contextHints)
-    ? [
-        ...new Set(
-          ((raw as { contextHints: unknown[] }).contextHints ?? [])
-            .filter((value): value is string => typeof value === "string")
-            .map((value) => value.trim())
-            .filter((value) => value.length > 0),
-        ),
-      ]
+  const truthFacts = Array.isArray((raw as { truthFacts?: unknown }).truthFacts)
+    ? ((raw as { truthFacts: unknown[] }).truthFacts.filter(
+        (value): value is TruthFact => Boolean(value) && typeof value === "object",
+      ) as SchedulePromptTrigger["truthFacts"])
     : undefined;
-  const wakeMode =
-    (raw as { wakeMode?: unknown }).wakeMode === "always" ||
-    (raw as { wakeMode?: unknown }).wakeMode === "if_signal" ||
-    (raw as { wakeMode?: unknown }).wakeMode === "if_open_loop"
-      ? ((raw as { wakeMode: "always" | "if_signal" | "if_open_loop" }).wakeMode ?? undefined)
-      : undefined;
-  const planReason =
-    typeof (raw as { planReason?: unknown }).planReason === "string" &&
-    (raw as { planReason: string }).planReason.trim().length > 0
-      ? (raw as { planReason: string }).planReason.trim()
-      : undefined;
-  const selectionText =
-    typeof (raw as { selectionText?: unknown }).selectionText === "string" &&
-    (raw as { selectionText: string }).selectionText.trim().length > 0
-      ? (raw as { selectionText: string }).selectionText.trim()
-      : undefined;
-  const signalArtifactRefs = Array.isArray(
-    (raw as { signalArtifactRefs?: unknown }).signalArtifactRefs,
-  )
-    ? [
-        ...new Set(
-          ((raw as { signalArtifactRefs: unknown[] }).signalArtifactRefs ?? [])
-            .filter((value): value is string => typeof value === "string")
-            .map((value) => value.trim())
-            .filter((value) => value.length > 0),
-        ),
-      ]
-    : undefined;
-  return {
-    kind: "heartbeat",
-    ruleId,
-    objective,
-    contextHints: contextHints && contextHints.length > 0 ? contextHints : undefined,
-    wakeMode,
-    planReason,
-    selectionText,
-    signalArtifactRefs:
-      signalArtifactRefs && signalArtifactRefs.length > 0 ? signalArtifactRefs : undefined,
+  const parentAnchorRaw = (raw as { parentAnchor?: unknown }).parentAnchor;
+  const parentAnchor: SchedulePromptAnchor | null | undefined =
+    parentAnchorRaw && typeof parentAnchorRaw === "object"
+      ? {
+          id: normalizeOptionalString((parentAnchorRaw as { id?: string }).id) ?? "",
+          name: normalizeOptionalString((parentAnchorRaw as { name?: string }).name),
+          summary: normalizeOptionalString((parentAnchorRaw as { summary?: string }).summary),
+          nextSteps: normalizeOptionalString((parentAnchorRaw as { nextSteps?: string }).nextSteps),
+        }
+      : parentAnchorRaw === null
+        ? null
+        : undefined;
+  if (parentAnchor && !parentAnchor.id) {
+    return undefined;
+  }
+
+  const trigger: SchedulePromptTrigger = {
+    kind: "schedule",
+    intentId,
+    parentSessionId,
+    runIndex,
+    reason,
+    continuityMode,
+    timeZone,
+    goalRef,
+    taskSpec,
+    truthFacts,
+    parentAnchor,
   };
+  return trigger;
 }
 
 function toWorkerResultError(input: { error: string; errorCode?: WorkerResultErrorCode }): Error {
@@ -548,7 +625,7 @@ export class SessionSupervisor implements SessionBackend {
         `duplicate active turn id: ${requestedTurnId}`,
       );
     }
-    const source = options.source === "heartbeat" ? "heartbeat" : "gateway";
+    const source = options.source ?? "gateway";
     const replayWalId = normalizeOptionalString(options.walReplayId);
     const waitForCompletion = options.waitForCompletion === true;
     const completionPromise = waitForCompletion
@@ -558,7 +635,7 @@ export class SessionSupervisor implements SessionBackend {
     try {
       if (!walId && this.turnWalStore?.isEnabled) {
         const walRecord = this.turnWalStore.appendPending(
-          buildGatewayTurnEnvelope({
+          buildSessionTurnEnvelope({
             sessionId,
             turnId: requestedTurnId,
             prompt,
@@ -1154,6 +1231,9 @@ export class SessionSupervisor implements SessionBackend {
         heartbeat: async ({ record }) => {
           await this.replayRecoveredTurn(record);
         },
+        schedule: async ({ record }) => {
+          await this.replayRecoveredTurn(record);
+        },
       },
     });
 
@@ -1171,7 +1251,12 @@ export class SessionSupervisor implements SessionBackend {
   }
 
   private async replayRecoveredTurn(record: TurnWALRecord): Promise<void> {
-    const source = record.source === "heartbeat" ? "heartbeat" : "gateway";
+    const source =
+      record.source === "heartbeat"
+        ? "heartbeat"
+        : record.source === "schedule"
+          ? "schedule"
+          : "gateway";
     const sessionId = normalizeOptionalString(record.envelope.sessionId) ?? record.sessionId;
     const prompt = extractPromptFromEnvelope(record.envelope);
     const trigger = extractTriggerFromEnvelope(record.envelope);

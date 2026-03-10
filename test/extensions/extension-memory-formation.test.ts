@@ -7,7 +7,7 @@ import {
   registerMemoryFormation,
   resolveMemoryAdaptationPolicyPath,
 } from "@brewva/brewva-extensions";
-import { createMockExtensionAPI, invokeHandlers } from "../helpers/extension.js";
+import { createMockExtensionAPI, invokeHandlersAsync } from "../helpers/extension.js";
 import { createRuntimeFixture } from "./fixtures/runtime.js";
 
 function createSessionContext(sessionId: string): {
@@ -132,7 +132,7 @@ describe("memory formation extension", () => {
     });
     await waitForSummaryArtifacts(runtime, 2);
 
-    invokeHandlers(handlers, "session_shutdown", {}, createSessionContext(sessionId));
+    await invokeHandlersAsync(handlers, "session_shutdown", {}, createSessionContext(sessionId));
     await waitForSummaryArtifacts(runtime, 2);
 
     expect(await listCognitionArtifacts(runtime.workspaceRoot, "summaries")).toHaveLength(2);
@@ -204,7 +204,7 @@ describe("memory formation extension", () => {
     });
 
     registerMemoryFormation(api, runtime);
-    invokeHandlers(handlers, "session_shutdown", {}, createSessionContext(sessionId));
+    await invokeHandlersAsync(handlers, "session_shutdown", {}, createSessionContext(sessionId));
 
     await waitForSummaryArtifacts(runtime, 2);
     const artifacts = await listCognitionArtifacts(runtime.workspaceRoot, "summaries");

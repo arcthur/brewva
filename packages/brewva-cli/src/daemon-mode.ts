@@ -1,5 +1,10 @@
 import { join } from "node:path";
-import { writePidRecord, removePidRecord } from "@brewva/brewva-gateway";
+import {
+  SessionSupervisor,
+  executeScheduleIntentRun,
+  removePidRecord,
+  writePidRecord,
+} from "@brewva/brewva-gateway";
 import {
   BrewvaRuntime,
   SCHEDULE_EVENT_TYPE,
@@ -7,14 +12,11 @@ import {
   SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
   SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE,
-  SCHEDULE_WAKEUP_EVENT_TYPE,
   SchedulerService,
   parseScheduleIntentEvent,
-  type ScheduleIntentProjectionRecord,
 } from "@brewva/brewva-runtime";
+import { TurnWALStore } from "@brewva/brewva-runtime/channels";
 import { differenceInSeconds, formatISO } from "date-fns";
-import { clampText, ensureSessionShutdownRecorded } from "./runtime-utils.js";
-import { createBrewvaSession, type BrewvaSessionResult } from "./session.js";
 
 export interface RunDaemonOptions {
   cwd?: string;
@@ -26,92 +28,36 @@ export interface RunDaemonOptions {
   onRuntimeReady?: (runtime: BrewvaRuntime) => void;
 }
 
-function inheritScheduleContext(
-  runtime: BrewvaRuntime,
-  input: { parentSessionId: string; childSessionId: string; continuityMode: "inherit" | "fresh" },
-): {
-  taskSpecCopied: boolean;
-  truthFactsCopied: number;
-  parentAnchor?: { id: string; name?: string; summary?: string; nextSteps?: string };
-} {
-  const parentAnchor = runtime.events.getTapeStatus(input.parentSessionId).lastAnchor;
-  if (input.continuityMode !== "inherit") {
-    return {
-      taskSpecCopied: false,
-      truthFactsCopied: 0,
-      parentAnchor,
-    };
-  }
-
-  const parentTask = runtime.task.getState(input.parentSessionId);
-  if (parentTask.spec) {
-    runtime.task.setSpec(input.childSessionId, parentTask.spec);
-  }
-
-  const parentTruth = runtime.truth.getState(input.parentSessionId);
-  let copied = 0;
-  for (const fact of parentTruth.facts) {
-    const result = runtime.truth.upsertFact(input.childSessionId, {
-      id: fact.id,
-      kind: fact.kind,
-      severity: fact.severity,
-      summary: fact.summary,
-      details: fact.details as Record<string, unknown> | undefined,
-      evidenceIds: fact.evidenceIds,
-      status: fact.status,
-    });
-    if (result.ok) {
-      copied += 1;
-    }
-  }
-
-  if (parentAnchor) {
-    runtime.events.recordTapeHandoff(input.childSessionId, {
-      name: `schedule:inherit:${parentAnchor.name ?? "parent"}`,
-      summary: parentAnchor.summary,
-      nextSteps: parentAnchor.nextSteps,
-    });
-  }
-
-  return {
-    taskSpecCopied: Boolean(parentTask.spec),
-    truthFactsCopied: copied,
-    parentAnchor,
-  };
+interface DaemonLogger {
+  debug(message: string, fields?: Record<string, unknown>): void;
+  info(message: string, fields?: Record<string, unknown>): void;
+  warn(message: string, fields?: Record<string, unknown>): void;
+  error(message: string, fields?: Record<string, unknown>): void;
+  log(
+    level: "debug" | "info" | "warn" | "error",
+    message: string,
+    fields?: Record<string, unknown>,
+  ): void;
 }
 
-function buildScheduleWakeupMessage(input: {
-  intent: ScheduleIntentProjectionRecord;
-  runIndex: number;
-  inherited: {
-    taskSpecCopied: boolean;
-    truthFactsCopied: number;
-    parentAnchor?: { id: string; name?: string; summary?: string; nextSteps?: string };
+function createDaemonLogger(verbose: boolean): DaemonLogger {
+  const write =
+    (emit: boolean, level: "debug" | "info" | "warn" | "error" | "log") =>
+    (message: string, fields?: Record<string, unknown>): void => {
+      if (!emit) {
+        return;
+      }
+      const suffix = fields ? ` ${JSON.stringify(fields)}` : "";
+      console.error(`[scheduler:${level}] ${message}${suffix}`);
+    };
+
+  return {
+    debug: write(verbose, "debug"),
+    info: write(verbose, "info"),
+    warn: write(true, "warn"),
+    error: write(true, "error"),
+    log: (level, message, fields) => write(verbose, level)(message, fields),
   };
-}): string {
-  const anchor = input.inherited.parentAnchor;
-  const lines = [
-    "[Schedule Wakeup]",
-    `intent_id: ${input.intent.intentId}`,
-    `parent_session_id: ${input.intent.parentSessionId}`,
-    `run_index: ${input.runIndex}`,
-    `reason: ${input.intent.reason}`,
-    `continuity_mode: ${input.intent.continuityMode}`,
-    `time_zone: ${input.intent.timeZone ?? "none"}`,
-    `goal_ref: ${input.intent.goalRef ?? "none"}`,
-    `inherited_task_spec: ${input.inherited.taskSpecCopied ? "yes" : "no"}`,
-    `inherited_truth_facts: ${input.inherited.truthFactsCopied}`,
-    `parent_anchor_id: ${anchor?.id ?? "none"}`,
-    `parent_anchor_name: ${anchor?.name ?? "none"}`,
-  ];
-
-  const anchorSummary = clampText(anchor?.summary, 320);
-  if (anchorSummary) lines.push(`parent_anchor_summary: ${anchorSummary}`);
-  const nextSteps = clampText(anchor?.nextSteps, 320);
-  if (nextSteps) lines.push(`parent_anchor_next_steps: ${nextSteps}`);
-
-  lines.push("Please continue the task from this wakeup context and produce concrete progress.");
-  return lines.join("\n");
 }
 
 export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
@@ -121,6 +67,19 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
     agentId: parsed.agentId,
   });
   parsed.onRuntimeReady?.(runtime);
+
+  if (!runtime.config.schedule.enabled) {
+    console.error("brewva scheduler daemon: disabled by config (schedule.enabled=false).");
+    process.exitCode = 1;
+    return;
+  }
+  if (!runtime.config.infrastructure.events.enabled) {
+    console.error(
+      "brewva scheduler daemon: requires infrastructure.events.enabled=true for durable event replay.",
+    );
+    process.exitCode = 1;
+    return;
+  }
 
   const pidFilePath = join(runtime.workspaceRoot, ".brewva", "scheduler.pid");
   try {
@@ -139,20 +98,24 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
     return;
   }
 
-  if (!runtime.config.schedule.enabled) {
-    console.error("brewva scheduler daemon: disabled by config (schedule.enabled=false).");
-    process.exitCode = 1;
-    return;
-  }
-  if (!runtime.config.infrastructure.events.enabled) {
-    console.error(
-      "brewva scheduler daemon: requires infrastructure.events.enabled=true for durable event replay.",
-    );
-    process.exitCode = 1;
-    return;
-  }
-
-  const activeRuns = new Map<string, BrewvaSessionResult["session"]>();
+  const turnWalStore = new TurnWALStore({
+    workspaceRoot: runtime.workspaceRoot,
+    config: runtime.config.infrastructure.turnWal,
+    scope: "scheduler",
+  });
+  const supervisor = new SessionSupervisor({
+    stateDir: join(runtime.workspaceRoot, ".brewva", "scheduler-state"),
+    logger: createDaemonLogger(parsed.verbose),
+    defaultCwd: runtime.cwd,
+    defaultConfigPath: parsed.configPath,
+    defaultModel: parsed.model,
+    defaultEnableExtensions: parsed.enableExtensions,
+    turnWalStore,
+    turnWalCompactIntervalMs: Math.max(
+      30_000,
+      Math.floor(runtime.config.infrastructure.turnWal.compactAfterMs / 2),
+    ),
+  });
   const summaryWindow = {
     startedAtMs: Date.now(),
     firedIntents: 0,
@@ -222,182 +185,102 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
     ? setInterval(() => emitSummaryWindow("tick"), 60_000)
     : null;
   summaryInterval?.unref?.();
-  const turnWalCompactIntervalMs = Math.max(
-    30_000,
-    Math.floor(runtime.config.infrastructure.turnWal.compactAfterMs / 2),
-  );
-  const turnWalCompactTimer = runtime.config.infrastructure.turnWal.enabled
-    ? setInterval(() => {
-        try {
-          runtime.turnWal.compact();
-        } catch (error) {
-          if (parsed.verbose) {
-            const text = error instanceof Error ? error.message : String(error);
-            console.error(`[daemon] turn wal compact failed: ${text}`);
-          }
-        }
-      }, turnWalCompactIntervalMs)
-    : null;
-  turnWalCompactTimer?.unref?.();
-  const scheduler = new SchedulerService({
-    runtime: {
-      workspaceRoot: runtime.workspaceRoot,
-      scheduleConfig: runtime.config.schedule,
-      listSessionIds: () => runtime.events.listSessionIds(),
-      listEvents: (sessionId, query) => runtime.events.list(sessionId, query),
-      recordEvent: (input) => runtime.events.record(input),
-      subscribeEvents: (listener) => runtime.events.subscribe(listener),
-      getTruthState: (sessionId) => runtime.truth.getState(sessionId),
-      getTaskState: (sessionId) => runtime.task.getState(sessionId),
-      turnWal: {
-        appendPending: (envelope, source, options) =>
-          runtime.turnWal.appendPending(envelope, source, options),
-        markInflight: (walId) => runtime.turnWal.markInflight(walId),
-        markDone: (walId) => runtime.turnWal.markDone(walId),
-        markFailed: (walId, error) => runtime.turnWal.markFailed(walId, error),
-        markExpired: (walId) => runtime.turnWal.markExpired(walId),
-        listPending: () => runtime.turnWal.listPending(),
+  let scheduler: SchedulerService | null = null;
+  let supervisorStarted = false;
+  try {
+    await supervisor.start();
+    supervisorStarted = true;
+    scheduler = new SchedulerService({
+      runtime: {
+        workspaceRoot: runtime.workspaceRoot,
+        scheduleConfig: runtime.config.schedule,
+        listSessionIds: () => runtime.events.listSessionIds(),
+        listEvents: (sessionId, query) => runtime.events.list(sessionId, query),
+        recordEvent: (input) => runtime.events.record(input),
+        subscribeEvents: (listener) => runtime.events.subscribe(listener),
+        getTruthState: (sessionId) => runtime.truth.getState(sessionId),
+        getTaskState: (sessionId) => runtime.task.getState(sessionId),
+        turnWal: {
+          appendPending: (envelope, source, options) =>
+            runtime.turnWal.appendPending(envelope, source, options),
+          markInflight: (walId) => runtime.turnWal.markInflight(walId),
+          markDone: (walId) => runtime.turnWal.markDone(walId),
+          markFailed: (walId, error) => runtime.turnWal.markFailed(walId, error),
+          markExpired: (walId) => runtime.turnWal.markExpired(walId),
+          listPending: () => runtime.turnWal.listPending(),
+        },
       },
-    },
-    executeIntent: async (intent) => {
-      const runIndex = intent.runCount + 1;
-      const child = await createBrewvaSession({
-        cwd: parsed.cwd,
-        configPath: parsed.configPath,
-        model: parsed.model,
-        enableExtensions: parsed.enableExtensions,
-        runtime,
-      });
-      const childSessionId = child.session.sessionManager.getSessionId();
-      activeRuns.set(childSessionId, child.session);
-
-      const inherited = inheritScheduleContext(runtime, {
-        parentSessionId: intent.parentSessionId,
-        childSessionId,
-        continuityMode: intent.continuityMode,
-      });
-      const wakeupMessage = buildScheduleWakeupMessage({
-        intent,
-        runIndex,
-        inherited,
-      });
-
-      runtime.events.record({
-        sessionId: childSessionId,
-        type: SCHEDULE_WAKEUP_EVENT_TYPE,
-        payload: {
-          schema: "brewva.schedule-wakeup.v1",
-          intentId: intent.intentId,
-          parentSessionId: intent.parentSessionId,
-          runIndex,
-          reason: intent.reason,
-          continuityMode: intent.continuityMode,
-          timeZone: intent.timeZone ?? null,
-          goalRef: intent.goalRef ?? null,
-          inheritedTaskSpec: inherited.taskSpecCopied,
-          inheritedTruthFacts: inherited.truthFactsCopied,
-          parentAnchorId: inherited.parentAnchor?.id ?? null,
-        },
-      });
-      runtime.events.record({
-        sessionId: intent.parentSessionId,
-        type: SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
-        payload: {
-          intentId: intent.intentId,
-          childSessionId,
-          runIndex,
-        },
-      });
-
-      try {
-        await child.session.sendUserMessage(wakeupMessage);
-        await child.session.agent.waitForIdle();
-        runtime.events.record({
-          sessionId: intent.parentSessionId,
-          type: SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
-          payload: {
-            intentId: intent.intentId,
-            childSessionId,
-            runIndex,
-          },
+      executeIntent: async (intent) => {
+        return await executeScheduleIntentRun({
+          runtime,
+          backend: supervisor,
+          intent,
+          cwd: parsed.cwd,
+          configPath: parsed.configPath,
+          model: parsed.model,
+          enableExtensions: parsed.enableExtensions,
         });
-        return { evaluationSessionId: childSessionId };
-      } catch (error) {
-        runtime.events.record({
-          sessionId: intent.parentSessionId,
-          type: SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
-          payload: {
-            intentId: intent.intentId,
-            childSessionId,
-            runIndex,
-            error: error instanceof Error ? error.message : String(error),
-          },
-        });
-        throw error;
-      } finally {
-        ensureSessionShutdownRecorded(runtime, childSessionId);
-        activeRuns.delete(childSessionId);
-        child.session.dispose();
-      }
-    },
-  });
-  const recovered = await scheduler.recover();
-  const stats = scheduler.getStats();
-  if (!stats.executionEnabled) {
-    console.error(
-      "brewva scheduler daemon: execution is disabled because no intent executor is configured.",
-    );
-    scheduler.stop();
-    process.exitCode = 1;
-    return;
-  }
-  if (parsed.verbose) {
-    console.error(
-      `[daemon] projection=${stats.projectionPath} active=${stats.intentsActive}/${stats.intentsTotal} timers=${stats.timersArmed} events=${recovered.rebuiltFromEvents} matched=${recovered.projectionMatched} catchup_due=${recovered.catchUp.dueIntents} catchup_fired=${recovered.catchUp.firedIntents} catchup_deferred=${recovered.catchUp.deferredIntents} catchup_sessions=${recovered.catchUp.sessions.length}`,
-    );
-  }
-
-  await new Promise<void>((complete) => {
-    let resolved = false;
-    const shutdown = (signal: NodeJS.Signals): void => {
-      if (resolved) return;
-      resolved = true;
+      },
+    });
+    const recovered = await scheduler.recover();
+    const stats = scheduler.getStats();
+    if (!stats.executionEnabled) {
+      console.error(
+        "brewva scheduler daemon: execution is disabled because no intent executor is configured.",
+      );
       scheduler.stop();
       if (summaryInterval) {
         clearInterval(summaryInterval);
       }
-      if (turnWalCompactTimer) {
-        clearInterval(turnWalCompactTimer);
-      }
+      unsubscribeEvents();
+      await supervisor.stop();
+      removePidRecord(pidFilePath);
+      process.exitCode = 1;
+      return;
+    }
+    if (parsed.verbose) {
+      console.error(
+        `[daemon] projection=${stats.projectionPath} active=${stats.intentsActive}/${stats.intentsTotal} timers=${stats.timersArmed} events=${recovered.rebuiltFromEvents} matched=${recovered.projectionMatched} catchup_due=${recovered.catchUp.dueIntents} catchup_fired=${recovered.catchUp.firedIntents} catchup_deferred=${recovered.catchUp.deferredIntents} catchup_sessions=${recovered.catchUp.sessions.length}`,
+      );
+    }
 
-      const abortAll = async (): Promise<void> => {
-        await Promise.allSettled(
-          [...activeRuns.values()].map(async (session) => {
-            try {
-              await session.abort();
-            } catch {
-              // Best effort abort during daemon shutdown.
-            }
-          }),
-        );
+    await new Promise<void>((complete) => {
+      let resolved = false;
+      const shutdown = (signal: NodeJS.Signals): void => {
+        if (resolved) return;
+        resolved = true;
+        scheduler?.stop();
+        if (summaryInterval) {
+          clearInterval(summaryInterval);
+        }
+        void supervisor.stop().finally(() => {
+          emitSummaryWindow("shutdown");
+          unsubscribeEvents();
+          removePidRecord(pidFilePath);
+          if (parsed.verbose) {
+            console.error(`[daemon] received ${signal}, scheduler stopped.`);
+          }
+          process.off("SIGINT", onSigInt);
+          process.off("SIGTERM", onSigTerm);
+          complete();
+        });
       };
 
-      void abortAll().finally(() => {
-        emitSummaryWindow("shutdown");
-        unsubscribeEvents();
-        removePidRecord(pidFilePath);
-        if (parsed.verbose) {
-          console.error(`[daemon] received ${signal}, scheduler stopped.`);
-        }
-        process.off("SIGINT", onSigInt);
-        process.off("SIGTERM", onSigTerm);
-        complete();
-      });
-    };
-
-    const onSigInt = (): void => shutdown("SIGINT");
-    const onSigTerm = (): void => shutdown("SIGTERM");
-    process.on("SIGINT", onSigInt);
-    process.on("SIGTERM", onSigTerm);
-  });
+      const onSigInt = (): void => shutdown("SIGINT");
+      const onSigTerm = (): void => shutdown("SIGTERM");
+      process.on("SIGINT", onSigInt);
+      process.on("SIGTERM", onSigTerm);
+    });
+  } catch (error) {
+    scheduler?.stop();
+    if (summaryInterval) {
+      clearInterval(summaryInterval);
+    }
+    unsubscribeEvents();
+    if (supervisorStarted) {
+      await supervisor.stop().catch(() => undefined);
+    }
+    removePidRecord(pidFilePath);
+    throw error;
+  }
 }

@@ -17,7 +17,7 @@ function createOpsConfig(): BrewvaConfig {
 }
 
 describe("event pipeline level classification", () => {
-  test("keeps assertion evidence visible at audit level but drops query telemetry", () => {
+  test("keeps recovery-grade evidence visible at audit level but drops telemetry", () => {
     const runtime = new BrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-")),
       config: createAuditConfig(),
@@ -82,11 +82,11 @@ describe("event pipeline level classification", () => {
       },
     });
 
-    expect(runtime.events.query(sessionId, { type: "tool_output_observed" })).toHaveLength(1);
-    expect(runtime.events.query(sessionId, { type: "tool_output_distilled" })).toHaveLength(1);
+    expect(runtime.events.query(sessionId, { type: "tool_output_observed" })).toHaveLength(0);
+    expect(runtime.events.query(sessionId, { type: "tool_output_distilled" })).toHaveLength(0);
     expect(
       runtime.events.query(sessionId, { type: "tool_output_artifact_persisted" }),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
     expect(runtime.events.query(sessionId, { type: "observability_query_executed" })).toHaveLength(
       0,
     );

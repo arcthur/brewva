@@ -1,9 +1,7 @@
 import {
   DELIBERATION_ISSUERS,
   buildBrokerTraceEvidenceRef,
-  buildProposalReceiptEvidenceRef,
   planChainForRuntimeSelection,
-  submitSkillChainIntentProposal,
   submitSkillSelectionProposal,
 } from "@brewva/brewva-deliberation";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
@@ -112,21 +110,8 @@ function registerSkillBrokerHandler(
       return undefined;
     }
 
-    submitSkillChainIntentProposal({
-      runtime,
-      sessionId,
-      issuer: DELIBERATION_ISSUERS.skillBroker,
-      subject: `chain:${primary.name}`,
+    runtime.skills.startCascade(sessionId, {
       steps: planned.result.chain.map((skill) => ({ skill })),
-      reason: `planned_from_selection:${primary.name}`,
-      source: "catalog_broker",
-      evidenceRefs: [
-        ...evidenceRefs,
-        buildProposalReceiptEvidenceRef({
-          sessionId,
-          proposalId: receipt.proposalId,
-        }),
-      ],
     });
     return undefined;
   });

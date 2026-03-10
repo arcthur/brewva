@@ -14,24 +14,32 @@ Shared deliberation helpers: `packages/brewva-deliberation/src/index.ts`.
 Factory options:
 
 - `registerTools?: boolean` (default `true`)
+- `profile?: "core" | "memory" | "debug" | "full"` (default `"core"`)
 
 ## Registered Handlers
 
-Default extension composition wires:
+Default extension composition (`profile="core"`) wires:
 
 - `registerEventStream`
 - `registerToolSurface`
-- `registerMemoryCurator`
-- `registerMemoryFormation`
-- `registerMemoryAdaptation`
 - `registerContextTransform`
-- `registerCognitiveMetrics`
-- `registerScanConvergenceGuard`
 - `registerQualityGate`
-- `registerDebugLoop`
 - `registerLedgerWriter`
 - `registerCompletionGuard`
-- `registerNotification`
+
+Optional profiles add:
+
+- `memory`
+  - `registerMemoryCurator`
+  - `registerMemoryFormation`
+  - `registerMemoryAdaptation`
+- `debug`
+  - `registerDebugLoop`
+- `full`
+  - all `memory` handlers
+  - `registerDebugLoop`
+  - `registerCognitiveMetrics`
+  - `registerNotification`
 
 Implementation files:
 
@@ -44,7 +52,6 @@ Implementation files:
 - `packages/brewva-extensions/src/context-transform.ts`
 - `packages/brewva-extensions/src/cognitive-metrics.ts`
 - `packages/brewva-extensions/src/proactivity-context.ts`
-- `packages/brewva-extensions/src/scan-convergence-guard.ts`
 - `packages/brewva-extensions/src/quality-gate.ts`
 - `packages/brewva-extensions/src/debug-loop.ts`
 - `packages/brewva-extensions/src/ledger-writer.ts`
@@ -62,20 +69,18 @@ Resolution inputs:
 - Brewva base governance tools
 - tools declared by the current active/pending/cascade skill contracts
 - operator/full routing profiles
-- explicit capability requests such as `$obs_query`
+- explicit capability requests such as `$task_view_state` or `$obs_query`
 
 The extension updates only the active tool surface. Runtime policy, contract,
 and compaction gates still decide whether execution is actually allowed.
 
-Default behavior is intentionally asymmetric:
+Default behavior is intentionally narrow:
 
 - explicit `$name` requests always expand capability details in the context block
-- only hidden operator tools are surfaced by that request path
-- hidden skill tools still require an actual skill commitment (active, pending,
-  or cascade) before they become visible
-
-This keeps capability disclosure useful without turning `$name` into a hidden
-tool-activation bypass.
+- any managed Brewva tool can be surfaced for the current turn by that request path
+- skill commitments still activate the normal task-specific tool surface without
+  requiring `$name`
+- operator/full routing profiles keep operator tools visible by default
 
 Telemetry:
 
@@ -83,10 +88,11 @@ Telemetry:
 
 ## Scan Convergence Guard
 
-Scan convergence is now a runtime governance service. The extension bridge only
-forwards turn-end lifecycle into runtime; the actual classification, blocker
-writes, event emission, restart hydration, and tool-call blocking happen inside
-runtime services (`runtime.tools.start(...)`, `runtime.tools.finish(...)`,
+Scan convergence is a runtime governance service. There is no dedicated
+`registerScanConvergenceGuard` extension anymore; `registerEventStream`
+forwards turn-end lifecycle into runtime, while classification, blocker writes,
+event emission, restart hydration, and tool-call blocking stay inside runtime
+services (`runtime.tools.start(...)`, `runtime.tools.finish(...)`,
 `runtime.context.onUserInput(...)`, `runtime.context.onTurnEnd(...)`).
 
 The runtime service classifies retrieval behavior into four tool strategies:
@@ -126,9 +132,8 @@ Its current responsibilities are:
 - observe `skill_complete` inputs for active `implementation` sessions
 - react to `verification_outcome_recorded` failures from `runtime.verification.*`
 - persist deterministic debug-loop artifacts under `.orchestrator/artifacts/`
-- submit `skill_chain_intent` proposals for `runtime-forensics -> debugging -> implementation`
-  (or `debugging -> implementation` when `runtime_trace` already exists), then
-  react to the kernel receipt instead of mutating cascade state directly
+- start explicit cascade intents for `runtime-forensics -> debugging -> implementation`
+  (or `debugging -> implementation` when `runtime_trace` already exists)
 - publish short-lived `context_packet` summaries under `.brewva/cognition/summaries/`
   with a stable `packetKey=debug-loop:status`, so the latest retry/handoff
   summary can cross the proposal boundary without becoming kernel-owned memory
@@ -166,8 +171,8 @@ When debug-loop emits a cognition summary packet:
 
 ## Memory Curator
 
-`registerMemoryCurator` is the control-plane entry point for cross-session
-memory rehydration.
+`registerMemoryCurator` is the optional control-plane entry point for
+cross-session memory rehydration.
 
 It does not turn cognition artifacts into kernel memory. Instead it:
 
@@ -215,7 +220,7 @@ It:
 
 ## Cognitive Metrics
 
-`registerCognitiveMetrics` emits control-plane telemetry about cognitive
+`registerCognitiveMetrics` is `full`-profile-only telemetry about cognitive
 product outcomes.
 
 Current derived metrics:
@@ -290,9 +295,10 @@ That broker:
 - reranks the shortlist against candidate skill previews (`Intent` / `Trigger` / boundary sections)
 - optionally runs a control-plane `pi-ai complete()` judge over the shortlist or full catalog candidate set before selecting
 - writes control-plane traces under `.brewva/skill-broker/<sessionId>/`
-- submits `skill_selection` and `skill_chain_intent` proposals through
-  `@brewva/brewva-deliberation` helpers, which then cross the kernel boundary
-  through `runtime.proposals.submit(...)` before `registerContextTransform` runs
+- submits `skill_selection` proposals through `@brewva/brewva-deliberation`
+  helpers
+- may start explicit cascade intents directly after accepted selection when a
+  multi-step chain is already known
 
 This broker path is an optional control-plane assist layer. Runtime kernel
 selection remains outside the kernel, so kernel governance semantics stay
@@ -322,21 +328,19 @@ Retained hooks in this profile:
 
 - `tool_call` (`registerQualityGate`) for runtime policy + compaction gate checks
 - `tool_result` / `tool_execution_*` ledger persistence (`registerLedgerWriter`)
+- `registerCompletionGuard`
 - `before_agent_start` narrative-first context composition over admitted runtime
   entries (`ContextComposer` + standard Brewva context contract)
-- cross-session memory rehydration (`registerMemoryCurator`)
-- outcome metrics (`registerCognitiveMetrics`)
-- `session_start` / `turn_start` / `session_shutdown` support for metric state
-  and reduced lifecycle bookkeeping
 - `session_compact` lifecycle bookkeeping
+- `session_shutdown` lifecycle cleanup
 
 Disabled full-extension hooks in this profile:
 
 - `registerContextTransform` (`context` hook, auto-compaction lifecycle, full
   before-agent context adapter)
-- `registerCompletionGuard`
 - `registerEventStream`
-- `registerScanConvergenceGuard`
+- all memory handlers
+- `registerCognitiveMetrics`
 - `registerDebugLoop`
 - `registerNotification`
 

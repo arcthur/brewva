@@ -6,7 +6,6 @@ import {
   buildWorkspaceArtifactEvidenceRef,
   resolveCognitionArtifactsDir,
   submitStatusSummaryContextPacket,
-  submitSkillChainIntentProposal,
   writeCognitionArtifact,
 } from "@brewva/brewva-deliberation";
 import {
@@ -589,25 +588,16 @@ class DebugLoopController {
           },
         ];
 
-    const { receipt } = submitSkillChainIntentProposal({
-      runtime: this.runtime,
-      sessionId,
-      issuer: DELIBERATION_ISSUERS.debugLoop,
-      subject: `debug_loop_retry:${sessionId}`,
-      steps,
-      reason: "debug_loop_retry",
-      source: "debug_loop",
-      evidenceRefs: this.buildRetryEvidenceRefs(sessionId, state),
-      seed: state.loopId,
-    });
-    if (receipt.decision !== "accept") {
+    const evidenceRefs = this.buildRetryEvidenceRefs(sessionId, state);
+    const cascadeResult = this.runtime.skills.startCascade(sessionId, { steps });
+    if (!cascadeResult.ok) {
       return {
         ok: false,
-        reason: receipt.reasons[0] ?? `debug_loop_retry_${receipt.decision}`,
+        reason: cascadeResult.reason ?? "debug_loop_retry_rejected",
       };
     }
 
-    const cascade = this.runtime.skills.getCascadeIntent(sessionId);
+    const cascade = cascadeResult.intent ?? this.runtime.skills.getCascadeIntent(sessionId);
     if (!cascade) {
       return { ok: false, reason: "cascade_intent_missing_after_commit" };
     }
@@ -629,14 +619,14 @@ class DebugLoopController {
       type: DEBUG_LOOP_RETRY_SCHEDULED_EVENT_TYPE,
       payload: {
         loopId: nextState.loopId,
-        proposalId: receipt.proposalId,
-        decision: receipt.decision,
         intentId: cascade.id,
         nextSkill,
         debugLoopRef: persisted ?? null,
         failureCaseRef: nextState.lastFailureCaseRef ?? null,
         retryCount: nextState.retryCount,
         hypothesisCount: nextState.hypothesisCount,
+        committedBy: "direct_cascade_start",
+        evidenceRefs,
       },
     });
     return { ok: true, state: nextState };

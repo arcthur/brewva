@@ -1,11 +1,10 @@
 import { recordProactivityWakeup } from "@brewva/brewva-extensions";
 import { collectSessionPromptOutput } from "./collect-output.js";
 import { createGatewaySession, type GatewaySessionResult } from "./create-session.js";
-import {
-  TaskProgressWatchdog,
-  type TaskProgressWatchdogOptions,
-} from "./task-progress-watchdog.js";
+import { applySchedulePromptTrigger } from "./schedule-trigger.js";
+import { TaskProgressWatchdog } from "./task-progress-watchdog.js";
 import type { ParentToWorkerMessage, WorkerToParentMessage } from "./worker-protocol.js";
+import { resolveWorkerTestHarness, type ResolvedWorkerTestHarness } from "./worker-test-harness.js";
 
 const BRIDGE_TIMEOUT_MS = 15_000;
 const BRIDGE_HEARTBEAT_INTERVAL_MS = 4_000;
@@ -20,13 +19,11 @@ let heartbeatTicker: ReturnType<typeof setInterval> | null = null;
 let taskProgressWatchdog: TaskProgressWatchdog | null = null;
 let shuttingDown = false;
 let activeTurnId: string | null = null;
-type WorkerLogLevel = Extract<WorkerToParentMessage, { kind: "log" }>["level"];
-type WorkerWatchdogOverrides = Pick<
-  TaskProgressWatchdogOptions,
-  "pollIntervalMs" | "thresholdsMs"
-> & {
-  taskGoal?: string;
+let workerTestHarness: ResolvedWorkerTestHarness = {
+  enabled: false,
+  watchdog: {},
 };
+type WorkerLogLevel = Extract<WorkerToParentMessage, { kind: "log" }>["level"];
 
 function send(message: WorkerToParentMessage): void {
   if (typeof process.send !== "function") {
@@ -42,50 +39,6 @@ function log(level: WorkerLogLevel, message: string, fields?: Record<string, unk
     message,
     fields,
   });
-}
-
-function normalizeOptionalString(value: string | undefined): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : undefined;
-}
-
-function readPositiveDurationEnv(name: string): number | undefined {
-  const raw = normalizeOptionalString(process.env[name]);
-  if (!raw) return undefined;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return undefined;
-  }
-  return Math.floor(parsed);
-}
-
-function areWorkerTestOverridesEnabled(): boolean {
-  return process.env.BREWVA_INTERNAL_GATEWAY_TEST_OVERRIDES === "1";
-}
-
-function readWorkerWatchdogOverrides(): WorkerWatchdogOverrides {
-  if (!areWorkerTestOverridesEnabled()) {
-    return {};
-  }
-
-  const investigate = readPositiveDurationEnv("BREWVA_INTERNAL_GATEWAY_WATCHDOG_INVESTIGATE_MS");
-  const execute = readPositiveDurationEnv("BREWVA_INTERNAL_GATEWAY_WATCHDOG_EXECUTE_MS");
-  const verify = readPositiveDurationEnv("BREWVA_INTERNAL_GATEWAY_WATCHDOG_VERIFY_MS");
-  const thresholdsMs =
-    investigate || execute || verify
-      ? {
-          investigate,
-          execute,
-          verify,
-        }
-      : undefined;
-
-  return {
-    taskGoal: normalizeOptionalString(process.env.BREWVA_INTERNAL_GATEWAY_WATCHDOG_TASK_GOAL),
-    pollIntervalMs: readPositiveDurationEnv("BREWVA_INTERNAL_GATEWAY_WATCHDOG_POLL_MS"),
-    thresholdsMs,
-  };
 }
 
 async function shutdown(exitCode = 0, reason = "shutdown"): Promise<void> {
@@ -160,6 +113,7 @@ async function handleInit(
   initialized = true;
   requestedSessionId = message.payload.sessionId;
   expectedParentPid = message.payload.parentPid;
+  workerTestHarness = resolveWorkerTestHarness();
 
   try {
     sessionResult = await createGatewaySession({
@@ -170,7 +124,7 @@ async function handleInit(
       enableExtensions: message.payload.enableExtensions,
     });
     const agentSessionId = sessionResult.session.sessionManager.getSessionId();
-    const watchdogOverrides = readWorkerWatchdogOverrides();
+    const watchdogOverrides = workerTestHarness.watchdog;
     if (watchdogOverrides.taskGoal) {
       sessionResult.runtime.task.setSpec(agentSessionId, {
         schema: "brewva.task.v1",
@@ -297,6 +251,25 @@ async function runTurn(input: {
         selectionText: input.trigger.selectionText,
         signalArtifactRefs: input.trigger.signalArtifactRefs,
       });
+    }
+    if (input.trigger?.kind === "schedule") {
+      applySchedulePromptTrigger(sessionResult.runtime, input.agentSessionId, input.trigger);
+    }
+    const fakeAssistantText = workerTestHarness.fakeAssistantText;
+    if (fakeAssistantText) {
+      send({
+        kind: "event",
+        event: "session.turn.end",
+        payload: {
+          sessionId: requestedSessionId,
+          agentSessionId: input.agentSessionId,
+          turnId: input.turnId,
+          assistantText: fakeAssistantText,
+          toolOutputs: [],
+          ts: Date.now(),
+        },
+      });
+      return;
     }
     const output = await collectSessionPromptOutput(sessionResult.session, input.prompt, {
       onChunk: (chunk) => {

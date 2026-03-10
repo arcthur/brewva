@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+  registerEventStream,
   registerLedgerWriter,
   registerQualityGate,
-  registerScanConvergenceGuard,
 } from "@brewva/brewva-extensions";
 import { createMockExtensionAPI, invokeHandler, invokeHandlers } from "../helpers/extension.js";
 import { createRuntimeFixture } from "./fixtures/runtime.js";
@@ -77,7 +77,7 @@ function completeToolTurn(input: {
   return results;
 }
 
-describe("extension scan convergence guard bridge", () => {
+describe("event stream turn-end bridge", () => {
   test("forwards turn_end into runtime context lifecycle", () => {
     const { api, handlers } = createMockExtensionAPI();
     const turnEnds: string[] = [];
@@ -89,7 +89,7 @@ describe("extension scan convergence guard bridge", () => {
       },
     });
 
-    registerScanConvergenceGuard(api, runtime);
+    registerEventStream(api, runtime);
     invokeHandlers(
       handlers,
       "turn_end",
@@ -104,15 +104,15 @@ describe("extension scan convergence guard bridge", () => {
     expect(turnEnds).toEqual(["scan-bridge-turn-end"]);
   });
 
-  test("delegates blocking to runtime after repeated scan-only turns", () => {
+  test("delegates scan-only turn blocking to runtime after repeated low-signal turns", () => {
     const runtime = createRuntimeFixture();
     const { api, handlers } = createMockExtensionAPI();
     const sessionId = "scan-bridge-runtime-1";
     const ctx = createContext(sessionId, runtime.cwd);
 
+    registerEventStream(api, runtime);
     registerQualityGate(api, runtime);
     registerLedgerWriter(api, runtime);
-    registerScanConvergenceGuard(api, runtime);
 
     runtime.context.onUserInput(sessionId);
 
