@@ -1,4 +1,5 @@
-import { resolveToolDisplayText } from "@brewva/brewva-extensions";
+import { resolveToolDisplayText, resolveToolDisplayVerdict } from "@brewva/brewva-extensions";
+import type { ToolDisplayVerdict } from "@brewva/brewva-extensions";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import type { GatewaySessionResult } from "./create-session.js";
 
@@ -6,6 +7,7 @@ export interface GatewayToolOutput {
   toolCallId: string;
   toolName: string;
   isError: boolean;
+  verdict: ToolDisplayVerdict;
   text: string;
 }
 
@@ -28,6 +30,7 @@ export type SessionStreamChunk =
       toolCallId: string;
       toolName: string;
       isError: boolean;
+      verdict: ToolDisplayVerdict;
       text: string;
     };
 
@@ -187,6 +190,10 @@ export async function collectSessionPromptOutput(
         isError: false,
         result: toolUpdateEvent.partialResult,
       });
+      const streamedVerdict = resolveToolDisplayVerdict({
+        isError: false,
+        result: toolUpdateEvent.partialResult,
+      });
       const previousText = latestToolStreamTextByCall.get(toolUpdateEvent.toolCallId);
       if (streamedText && streamedText !== previousText) {
         latestToolStreamTextByCall.set(toolUpdateEvent.toolCallId, streamedText);
@@ -195,6 +202,7 @@ export async function collectSessionPromptOutput(
           toolCallId: toolUpdateEvent.toolCallId,
           toolName: toolUpdateEvent.toolName,
           isError: false,
+          verdict: streamedVerdict,
           text: streamedText,
         });
       }
@@ -206,10 +214,15 @@ export async function collectSessionPromptOutput(
         return;
       }
       seenToolCallIds.add(toolEvent.toolCallId);
+      const verdict = resolveToolDisplayVerdict({
+        isError: toolEvent.isError,
+        result: toolEvent.result,
+      });
       toolOutputs.push({
         toolCallId: toolEvent.toolCallId,
         toolName: toolEvent.toolName,
         isError: toolEvent.isError,
+        verdict,
         text: resolveToolDisplayText({
           toolName: toolEvent.toolName,
           isError: toolEvent.isError,
@@ -225,6 +238,7 @@ export async function collectSessionPromptOutput(
           toolCallId: toolEvent.toolCallId,
           toolName: toolEvent.toolName,
           isError: toolEvent.isError,
+          verdict,
           text: finalText,
         });
       }

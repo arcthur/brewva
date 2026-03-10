@@ -103,6 +103,7 @@ import type {
 } from "./types.js";
 import type { TaskItemStatus } from "./types.js";
 import type { TruthFact, TruthFactSeverity, TruthFactStatus, TruthState } from "./types.js";
+import { normalizeToolResultVerdict } from "./utils/tool-result.js";
 import { VerificationGate } from "./verification/gate.js";
 
 export interface BrewvaRuntimeOptions {
@@ -1068,6 +1069,7 @@ export class BrewvaRuntime {
           ? Math.max(0, Math.min(1, payload.compressionRatio))
           : null;
       const isError = payload.isError === true;
+      const verdict = normalizeToolResultVerdict(payload.verdict);
       const turn =
         typeof event.turn === "number" && Number.isFinite(event.turn)
           ? Math.max(0, Math.floor(event.turn))
@@ -1083,6 +1085,7 @@ export class BrewvaRuntime {
         compressionRatio,
         artifactRef,
         isError,
+        verdict,
         turn,
         timestamp,
       });

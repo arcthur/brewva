@@ -97,6 +97,29 @@ describe("channel mode prompt output collector", () => {
     expect(outputs.toolOutputs).toHaveLength(1);
   });
 
+  test("marks explicit fail verdict tool outputs as failed even when the channel succeeds", async () => {
+    const session = createSessionMock([
+      {
+        type: "tool_execution_end",
+        toolCallId: "tc-2",
+        toolName: "exec",
+        result: {
+          content: [{ type: "text", text: "FAIL src/foo.test.ts" }],
+          details: { verdict: "fail" },
+        },
+        isError: false,
+      } as AgentSessionEvent,
+    ]);
+
+    const outputs = await collectPromptTurnOutputs(
+      session as unknown as Parameters<typeof collectPromptTurnOutputs>[0],
+      "hello",
+    );
+
+    expect(outputs.toolOutputs).toHaveLength(1);
+    expect(outputs.toolOutputs[0]?.text).toContain("Tool exec (tc-2) failed");
+  });
+
   test("builds telegram dispatch prompt with the unified skill policy", () => {
     const turn: TurnEnvelope = {
       schema: "brewva.turn.v1",

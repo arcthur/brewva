@@ -276,7 +276,7 @@ describe("Extension integration: observability", () => {
     expect(reloaded.ledger.listRows(sessionId)).toHaveLength(1);
   });
 
-  test("given high-volume exec tool output, when ledger writer handles tool_result, then distilled event and metadata are recorded", () => {
+  test("given high-volume exec tool output with explicit fail verdict, when ledger writer handles tool_result, then verdict propagates into observed and distilled telemetry", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-distill-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "ext-distill-1";
@@ -305,12 +305,26 @@ describe("Extension integration: observability", () => {
         toolCallId: "tc-exec-distill",
         toolName: "exec",
         input: { command: "echo test" },
-        isError: true,
+        isError: false,
         content: [{ type: "text", text: noisyOutput }],
-        details: { durationMs: 12 },
+        details: { durationMs: 12, verdict: "fail" },
       },
       ctx,
     );
+
+    const observed = runtime.events.query(sessionId, {
+      type: "tool_output_observed",
+      last: 1,
+    })[0];
+    expect(observed).toBeDefined();
+    const observedPayload = observed?.payload as
+      | {
+          isError?: boolean;
+          verdict?: string;
+        }
+      | undefined;
+    expect(observedPayload?.isError).toBe(false);
+    expect(observedPayload?.verdict).toBe("fail");
 
     const distilled = runtime.events.query(sessionId, {
       type: "tool_output_distilled",
@@ -325,11 +339,14 @@ describe("Extension integration: observability", () => {
           compressionRatio?: number;
           summaryText?: string;
           artifactRef?: string | null;
+          verdict?: string;
         }
       | undefined;
     expect(distilledPayload?.strategy).toBe("exec_heuristic");
+    expect(distilledPayload?.verdict).toBe("fail");
     expect((distilledPayload?.rawTokens ?? 0) > (distilledPayload?.summaryTokens ?? 0)).toBe(true);
     expect((distilledPayload?.compressionRatio ?? 1) < 1).toBe(true);
+    expect((distilledPayload?.summaryText ?? "").includes("status: failed")).toBe(true);
     expect((distilledPayload?.summaryText ?? "").includes("[ExecDistilled]")).toBe(true);
     expect(typeof distilledPayload?.artifactRef).toBe("string");
 

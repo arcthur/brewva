@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
@@ -8,12 +8,13 @@ import { defineTool } from "./utils/tool.js";
 
 type GrepCase = "smart" | "ignore" | "sensitive";
 
-type GrepRunResult = {
+export type GrepRunResult = {
   exitCode: number;
   lines: string[];
   stderr: string;
   truncated: boolean;
   timedOut: boolean;
+  terminationReason: "process_exit" | "truncate" | "timeout" | "abort";
 };
 
 function clampInt(value: unknown, fallback: number, options: { min: number; max: number }): number {
@@ -21,15 +22,22 @@ function clampInt(value: unknown, fallback: number, options: { min: number; max:
   return Math.max(options.min, Math.min(options.max, Math.trunc(value)));
 }
 
-async function runRipgrep(input: {
-  cwd: string;
-  args: string[];
-  maxLines: number;
-  timeoutMs: number;
-  signal?: AbortSignal | null;
-}): Promise<GrepRunResult> {
+export async function runRipgrep(
+  input: {
+    cwd: string;
+    args: string[];
+    maxLines: number;
+    timeoutMs: number;
+    signal?: AbortSignal | null;
+  },
+  options: {
+    command?: string;
+    spawnImpl?: typeof spawn;
+  } = {},
+): Promise<GrepRunResult> {
   return await new Promise<GrepRunResult>((resolvePromise, rejectPromise) => {
-    const child = spawn("rg", input.args, {
+    const spawnImpl = options.spawnImpl ?? spawn;
+    const child = spawnImpl(options.command ?? "rg", input.args, {
       cwd: input.cwd,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -40,11 +48,13 @@ async function runRipgrep(input: {
     let stderr = "";
     let truncated = false;
     let timedOut = false;
+    let terminationReason: "truncate" | "timeout" | "abort" | null = null;
 
     const killChild = (reason: "truncate" | "timeout" | "abort"): void => {
       if (child.exitCode !== null || child.killed) return;
       if (reason === "truncate") truncated = true;
       if (reason === "timeout") timedOut = true;
+      terminationReason = reason;
       try {
         child.kill("SIGTERM");
       } catch {
@@ -109,7 +119,7 @@ async function runRipgrep(input: {
         input.signal.removeEventListener("abort", onAbort);
       }
 
-      const exitCode = typeof code === "number" ? code : -1;
+      const exitCode = resolveRipgrepExitCode(code, terminationReason);
       const tail = stdoutBuffer.trimEnd();
       if (tail.length > 0 && lines.length < input.maxLines) {
         lines.push(tail);
@@ -121,9 +131,44 @@ async function runRipgrep(input: {
         stderr: stderr.trimEnd(),
         truncated,
         timedOut,
+        terminationReason: terminationReason ?? "process_exit",
       });
     });
   });
+}
+
+function resolveRipgrepExitCode(
+  code: number | null,
+  terminationReason: "truncate" | "timeout" | "abort" | null,
+): number {
+  if (typeof code === "number") return code;
+  if (terminationReason === "truncate") return 0;
+  if (terminationReason === "timeout") return 124;
+  if (terminationReason === "abort") return 130;
+  return -1;
+}
+
+function isPathInsideRoot(path: string, root: string): boolean {
+  const resolvedPath = resolve(path);
+  const resolvedRoot = resolve(root);
+  if (resolvedPath === resolvedRoot) return true;
+  const rootPrefix = resolvedRoot.endsWith(sep) ? resolvedRoot : `${resolvedRoot}${sep}`;
+  return resolvedPath.startsWith(rootPrefix);
+}
+
+function normalizeSearchPath(input: {
+  value: string;
+  cwd: string;
+  workspaceRoot: string;
+}): string | null {
+  const absolutePath = isAbsolute(input.value)
+    ? resolve(input.value)
+    : resolve(input.cwd, input.value);
+  if (!isPathInsideRoot(absolutePath, input.workspaceRoot)) {
+    return null;
+  }
+  const relativePath = relative(input.cwd, absolutePath);
+  return relativePath.length > 0 ? relativePath : ".";
 }
 
 export function createGrepTool(options: BrewvaToolOptions): ToolDefinition {
@@ -146,13 +191,39 @@ export function createGrepTool(options: BrewvaToolOptions): ToolDefinition {
       workdir: Type.Optional(Type.String()),
     }),
     async execute(_toolCallId, params, signal) {
-      const baseCwd = options.runtime.cwd ?? process.cwd();
+      const baseCwd = resolve(options.runtime.cwd ?? process.cwd());
+      const workspaceRoot = resolve(options.runtime.workspaceRoot ?? baseCwd);
       const cwd = params.workdir ? resolve(baseCwd, params.workdir) : baseCwd;
+      if (!isPathInsideRoot(cwd, workspaceRoot)) {
+        return failTextResult(`grep rejected: workdir escapes workspace root (${workspaceRoot}).`, {
+          ok: false,
+          reason: "workdir_outside_workspace",
+          workdir: cwd,
+          workspaceRoot,
+        });
+      }
       const maxLines = clampInt(params.max_lines, 200, { min: 1, max: 500 });
       const timeoutMs = clampInt(params.timeout_ms, 30_000, { min: 100, max: 120_000 });
 
       const query = params.query.trim();
-      const paths = (params.paths ?? ["."]).map((entry) => entry.trim()).filter(Boolean);
+      const requestedPaths = (params.paths ?? ["."]).map((entry) => entry.trim()).filter(Boolean);
+      const paths: string[] = [];
+      for (const entry of requestedPaths.length > 0 ? requestedPaths : ["."]) {
+        const normalized = normalizeSearchPath({
+          value: entry,
+          cwd,
+          workspaceRoot,
+        });
+        if (!normalized) {
+          return failTextResult(`grep rejected: path escapes workspace root (${entry}).`, {
+            ok: false,
+            reason: "path_outside_workspace",
+            path: entry,
+            workspaceRoot,
+          });
+        }
+        paths.push(normalized);
+      }
       const globs = (params.glob ?? []).map((entry) => entry.trim()).filter(Boolean);
       const caseMode: GrepCase = params.case ?? "smart";
 

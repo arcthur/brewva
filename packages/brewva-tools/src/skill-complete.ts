@@ -78,11 +78,11 @@ export function createSkillCompleteTool(options: BrewvaToolOptions): ToolDefinit
     label: "Skill Complete",
     description: "Validate skill outputs against contract and complete the active skill.",
     parameters: Type.Object({
-      outputs: Type.Record(Type.String(), Type.Unknown()),
+      outputs: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const outputs = params.outputs;
+      const outputs = isRecord(params.outputs) ? params.outputs : {};
 
       const completion = options.runtime.skills.validateOutputs(sessionId, outputs);
       if (!completion.ok) {

@@ -125,6 +125,32 @@ describe("Tool failure context injection", () => {
     expect(injection.text.includes("summary: [ExecDistilled] status: failed")).toBe(true);
   });
 
+  test("uses explicit verdicts when rendering distilled output status", async () => {
+    const workspace = createWorkspace("tool-output-distilled-verdict");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "tool-output-distilled-verdict-1";
+
+    runtime.events.record({
+      sessionId,
+      type: "tool_output_distilled",
+      payload: {
+        toolName: "exec",
+        strategy: "exec_heuristic",
+        summaryText: "[ExecDistilled]\nstatus: failed\n- FAIL src/foo.test.ts",
+        rawTokens: 120,
+        summaryTokens: 24,
+        compressionRatio: 0.2,
+        artifactRef: ".orchestrator/tool-output-artifacts/sess/tc-exec-verdict.txt",
+        isError: false,
+        verdict: "fail",
+      },
+    });
+
+    const injection = await runtime.context.buildInjection(sessionId, "continue");
+    expect(injection.text.includes("tool=exec status=fail channel=ok")).toBe(true);
+    expect(injection.text.includes("summary: [ExecDistilled] status: failed")).toBe(true);
+  });
+
   test("respects distilled output maxEntries and maxOutputChars from config", async () => {
     const workspace = createWorkspace("tool-output-distilled-limits");
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);

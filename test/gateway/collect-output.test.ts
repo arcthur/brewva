@@ -100,4 +100,31 @@ describe("gateway collect output", () => {
     }
     expect(toolUpdateChunk.text).toContain("[ExecDistilled]");
   });
+
+  test("given explicit fail verdict with successful tool channel, when collecting output, then gateway preserves the verdict", async () => {
+    const noisyOutput = Array.from({ length: 180 }, (_value, index) =>
+      index % 25 === 0 ? `error at step ${index}: timeout` : `line ${index}: working`,
+    ).join("\n");
+    const session = createSessionMock([
+      {
+        type: "tool_execution_end",
+        toolCallId: "tc-gw-fail-verdict",
+        toolName: "exec",
+        result: {
+          content: [{ type: "text", text: noisyOutput }],
+          details: { verdict: "fail" },
+        },
+        isError: false,
+      } as AgentSessionEvent,
+    ]);
+
+    const output = await collectSessionPromptOutput(
+      session as unknown as Parameters<typeof collectSessionPromptOutput>[0],
+      "hello",
+    );
+
+    expect(output.toolOutputs).toHaveLength(1);
+    expect(output.toolOutputs[0]?.verdict).toBe("fail");
+    expect(output.toolOutputs[0]?.text).toContain("status: failed");
+  });
 });
