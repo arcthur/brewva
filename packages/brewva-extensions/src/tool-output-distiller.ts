@@ -14,7 +14,7 @@ export interface ToolOutputDistillationInput {
 
 export interface ToolOutputDistillation {
   distillationApplied: boolean;
-  strategy: "none" | "exec_heuristic" | "lsp_heuristic";
+  strategy: "none" | "exec_heuristic" | "grep_heuristic" | "lsp_heuristic";
   summaryText: string;
   rawChars: number;
   rawBytes: number;
@@ -126,6 +126,29 @@ function selectLspHighlights(lines: string[]): string[] {
   return selected;
 }
 
+function selectGrepHighlights(lines: string[]): string[] {
+  const selected: string[] = [];
+  const locationPattern = /(?:^|[\s(])[./\\A-Za-z0-9_-]+\.[A-Za-z0-9]+:\d+:/u;
+
+  for (const line of lines) {
+    if (locationPattern.test(line)) {
+      pushUniqueLimited(selected, line, 18);
+    }
+  }
+
+  if (selected.length === 0) {
+    for (const line of lines.slice(0, 18)) {
+      pushUniqueLimited(selected, line, 18);
+    }
+  }
+  if (lines.length > 18) {
+    for (const line of lines.slice(Math.max(0, lines.length - 6))) {
+      pushUniqueLimited(selected, line, 24);
+    }
+  }
+  return selected;
+}
+
 function countPattern(text: string, pattern: RegExp): number {
   const matches = text.match(pattern);
   return matches ? matches.length : 0;
@@ -167,6 +190,18 @@ function buildLspSummary(lines: string[], rawText: string): string {
   const body =
     highlights.length > 0 ? highlights.map((line) => `- ${line}`).join("\n") : "- (no output)";
   return [header, body].join("\n");
+}
+
+function buildGrepSummary(lines: string[]): string {
+  const headerLines = lines.filter((line) => line.startsWith("- ")).slice(0, 8);
+  const matchLines = lines.filter(
+    (line) => line.length > 0 && !line.startsWith("#") && !line.startsWith("- "),
+  );
+  const highlights = selectGrepHighlights(matchLines);
+  const body =
+    highlights.length > 0 ? highlights.map((line) => `- ${line}`).join("\n") : "- (no matches)";
+
+  return ["[GrepDistilled]", ...headerLines, body].join("\n");
 }
 
 function shouldKeepDistillation(input: {
@@ -211,6 +246,9 @@ export function distillToolOutput(input: ToolOutputDistillationInput): ToolOutpu
       verdict: input.verdict,
       lines,
     });
+  } else if (normalizedToolName === "grep") {
+    strategy = "grep_heuristic";
+    rawSummaryText = buildGrepSummary(lines);
   } else if (normalizedToolName.startsWith("lsp_")) {
     strategy = "lsp_heuristic";
     rawSummaryText = buildLspSummary(lines, rawText);

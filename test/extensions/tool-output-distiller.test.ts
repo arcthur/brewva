@@ -52,6 +52,35 @@ describe("tool output distiller", () => {
     expect(distillation.summaryText.includes("src/main.ts:10:3")).toBe(true);
   });
 
+  test("applies grep heuristic for large bounded grep output", () => {
+    const output = [
+      "# Grep",
+      "- query: TODO",
+      "- workdir: /repo",
+      "- paths: src",
+      "- exit_code: 0",
+      "- matches_shown: 200",
+      "- truncated: true",
+      "- timed_out: false",
+      "",
+      ...Array.from(
+        { length: 200 },
+        (_value, index) => `src/file-${Math.floor(index / 20)}.ts:${index + 1}: TODO item ${index}`,
+      ),
+    ].join("\n");
+    const distillation = distillToolOutput({
+      toolName: "grep",
+      isError: false,
+      outputText: output,
+    });
+
+    expect(distillation.distillationApplied).toBe(true);
+    expect(distillation.strategy).toBe("grep_heuristic");
+    expect(distillation.summaryText.includes("[GrepDistilled]")).toBe(true);
+    expect(distillation.summaryText.includes("- query: TODO")).toBe(true);
+    expect(distillation.summaryText.includes("src/file-0.ts:1: TODO item 0")).toBe(true);
+  });
+
   test("skips low-value distillation when output is too small", () => {
     const distillation = distillToolOutput({
       toolName: "exec",

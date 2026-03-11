@@ -44,6 +44,12 @@ export function createSkillChainControlTool(options: BrewvaToolOptions): ToolDef
     label: "Skill Chain Control",
     description:
       "Inspect or control skill cascade intent lifecycle (status, pause, resume, cancel, start explicit chain).",
+    promptSnippet:
+      "Inspect or control an active skill cascade when status, pause, resume, cancel, or explicit chaining is needed.",
+    promptGuidelines: [
+      "Use status before altering an unclear cascade state.",
+      "Use start only for an explicit multi-step skill plan.",
+    ],
     parameters: Type.Object({
       action: SkillChainControlActionSchema,
       reason: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),

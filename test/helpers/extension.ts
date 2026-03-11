@@ -40,6 +40,9 @@ export function createMockExtensionAPI(): {
     setActiveTools(toolNames: string[]) {
       activeTools = [...toolNames];
     },
+    refreshTools() {
+      return undefined;
+    },
     sendMessage(message: Record<string, unknown>) {
       sentMessages.push(message);
     },

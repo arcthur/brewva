@@ -25,6 +25,7 @@ Default extension composition (`profile="core"`) wires:
 - `registerContextTransform`
 - `registerQualityGate`
 - `registerLedgerWriter`
+- `registerToolResultDistiller`
 - `registerCompletionGuard`
 
 Optional profiles add:
@@ -55,6 +56,7 @@ Implementation files:
 - `packages/brewva-extensions/src/quality-gate.ts`
 - `packages/brewva-extensions/src/debug-loop.ts`
 - `packages/brewva-extensions/src/ledger-writer.ts`
+- `packages/brewva-extensions/src/tool-result-distiller.ts`
 - `packages/brewva-extensions/src/completion-guard.ts`
 - `packages/brewva-extensions/src/notification.ts`
 
@@ -121,6 +123,11 @@ This keeps the runtime aligned with the working-projection/task-ledger model: su
 - `tool_output_observed`
 - `tool_output_artifact_persisted`
 - `tool_output_distilled`
+
+`registerToolResultDistiller` runs after `registerLedgerWriter` and only patches
+the current-turn `tool_result` content returned to the model. Raw evidence,
+artifact persistence, and runtime ledger/truth writes still see the original
+tool output first.
 
 ## Automatic Debug Loop
 
@@ -328,6 +335,7 @@ Retained hooks in this profile:
 
 - `tool_call` (`registerQualityGate`) for runtime policy + compaction gate checks
 - `tool_result` / `tool_execution_*` ledger persistence (`registerLedgerWriter`)
+- same-turn pure-text `tool_result` distillation (`registerToolResultDistiller`)
 - `registerCompletionGuard`
 - `before_agent_start` narrative-first context composition over admitted runtime
   entries (`ContextComposer` + standard Brewva context contract)

@@ -10,6 +10,11 @@ export function createLedgerQueryTool(options: BrewvaToolOptions): ToolDefinitio
     name: "ledger_query",
     label: "Ledger Query",
     description: "Query evidence ledger by file, skill, verdict, tool, or last N entries.",
+    promptSnippet:
+      "Query the evidence ledger for recent tool outcomes, files, skills, and verdicts.",
+    promptGuidelines: [
+      "Use this to confirm prior evidence or verdict history before repeating work.",
+    ],
     parameters: Type.Object({
       file: Type.Optional(Type.String()),
       skill: Type.Optional(Type.String()),

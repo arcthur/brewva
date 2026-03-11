@@ -7,7 +7,7 @@ import {
   recordAssistantUsageFromMessage,
 } from "@brewva/brewva-runtime";
 import { createSkillBrokerExtension } from "@brewva/brewva-skill-broker";
-import { buildBrewvaTools } from "@brewva/brewva-tools";
+import { buildBrewvaTools, resolveBrewvaModelSelection } from "@brewva/brewva-tools";
 import {
   AuthStorage,
   createAgentSession,
@@ -27,21 +27,6 @@ export interface GatewaySessionResult extends CreateAgentSessionResult {
 
 export interface CreateGatewaySessionOptions extends RuntimeCreateBrewvaSessionOptions {
   runtime?: BrewvaRuntime;
-}
-
-function resolveModel(
-  modelText: string | undefined,
-  registry: ModelRegistry,
-): ReturnType<ModelRegistry["find"]> {
-  if (!modelText) return undefined;
-  const parts = modelText.split("/");
-  if (parts.length !== 2) return undefined;
-
-  const provider = parts[0];
-  const modelId = parts[1];
-  if (!provider || !modelId) return undefined;
-
-  return registry.find(provider, modelId);
 }
 
 function applyRuntimeUiSettings(
@@ -119,7 +104,7 @@ export async function createGatewaySession(
 
   const authStorage = AuthStorage.create(join(agentDir, "auth.json"));
   const modelRegistry = new ModelRegistry(authStorage, join(agentDir, "models.json"));
-  const selectedModel = resolveModel(options.model, modelRegistry);
+  const selectedModel = resolveBrewvaModelSelection(options.model, modelRegistry);
 
   const runtime =
     options.runtime ??
@@ -167,7 +152,8 @@ export async function createGatewaySession(
     modelRegistry,
     settingsManager,
     resourceLoader,
-    model: selectedModel,
+    model: selectedModel.model,
+    thinkingLevel: selectedModel.thinkingLevel,
     tools: [readTool, editTool, writeTool],
     customTools,
   });

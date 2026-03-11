@@ -6,11 +6,12 @@ import {
   OPERATOR_BREWVA_TOOL_NAMES,
   isManagedBrewvaToolName,
 } from "@brewva/brewva-tools";
-import type { ExtensionAPI, ToolInfo } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ToolDefinition, ToolInfo } from "@mariozechner/pi-coding-agent";
 
 const CAPABILITY_REQUEST_PATTERN = /\$([a-z][a-z0-9_]*)/g;
 const BUILTIN_ALWAYS_ON_TOOL_NAMES = ["read", "edit", "write"] as const;
 const TOOL_SURFACE_RESOLVED_EVENT_TYPE = "tool_surface_resolved";
+const MANAGED_TOOL_NAME_SET = new Set(MANAGED_BREWVA_TOOL_NAMES);
 
 function normalizeToolName(name: string): string {
   return name.trim().toLowerCase();
@@ -82,6 +83,47 @@ function resolveRequestedManagedToolNames(
     if (!knownToolNames.has(toolName)) return false;
     return isManagedBrewvaToolName(toolName);
   });
+}
+
+function resolveManagedToolNamesForTurn(input: {
+  runtime: BrewvaRuntime;
+  sessionId: string;
+  prompt: string;
+}): {
+  requestedManagedToolNames: string[];
+  skillManagedToolNames: string[];
+  lifecycleManagedToolNames: string[];
+  operatorManagedToolNames: string[];
+} {
+  const requestedManagedToolNames = extractRequestedToolNames(input.prompt).filter((toolName) =>
+    MANAGED_TOOL_NAME_SET.has(toolName),
+  );
+  const surfaceSkills = resolveSurfaceSkills(input.runtime, input.sessionId);
+  const skillManagedToolNames = collectSkillToolNames(surfaceSkills).filter((toolName) =>
+    MANAGED_TOOL_NAME_SET.has(toolName),
+  );
+  const lifecycleManagedToolNames: string[] = [];
+
+  if (surfaceSkills.length > 0) {
+    lifecycleManagedToolNames.push("skill_complete");
+  }
+  if (input.runtime.skills.getPendingDispatch(input.sessionId)) {
+    lifecycleManagedToolNames.push("skill_load", "skill_route_override");
+  }
+  if (input.runtime.skills.getCascadeIntent(input.sessionId)) {
+    lifecycleManagedToolNames.push("skill_chain_control");
+  }
+
+  const operatorManagedToolNames = isOperatorProfile(input.runtime)
+    ? OPERATOR_BREWVA_TOOL_NAMES
+    : [];
+
+  return {
+    requestedManagedToolNames,
+    skillManagedToolNames,
+    lifecycleManagedToolNames: [...new Set(lifecycleManagedToolNames)],
+    operatorManagedToolNames,
+  };
 }
 
 function resolveActiveToolNames(input: {
@@ -216,7 +258,46 @@ function resolveActiveToolNames(input: {
   };
 }
 
-export function registerToolSurface(pi: ExtensionAPI, runtime: BrewvaRuntime): void {
+export interface RegisterToolSurfaceOptions {
+  dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
+}
+
+function registerMissingManagedTools(input: {
+  pi: ExtensionAPI;
+  runtime: BrewvaRuntime;
+  sessionId: string;
+  prompt: string;
+  dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
+  knownToolNames: Set<string>;
+}): void {
+  if (!input.dynamicToolDefinitions || input.dynamicToolDefinitions.size === 0) return;
+
+  const dynamic = resolveManagedToolNamesForTurn({
+    runtime: input.runtime,
+    sessionId: input.sessionId,
+    prompt: input.prompt,
+  });
+  const namesToEnsure = [
+    ...dynamic.requestedManagedToolNames,
+    ...dynamic.skillManagedToolNames,
+    ...dynamic.lifecycleManagedToolNames,
+    ...dynamic.operatorManagedToolNames,
+  ];
+
+  for (const toolName of new Set(namesToEnsure)) {
+    if (input.knownToolNames.has(toolName)) continue;
+    const toolDefinition = input.dynamicToolDefinitions.get(toolName);
+    if (!toolDefinition) continue;
+    input.pi.registerTool(toolDefinition);
+    input.knownToolNames.add(toolName);
+  }
+}
+
+export function registerToolSurface(
+  pi: ExtensionAPI,
+  runtime: BrewvaRuntime,
+  options: RegisterToolSurfaceOptions = {},
+): void {
   pi.on("before_agent_start", (event, ctx) => {
     const allToolsGetter = (pi as { getAllTools?: () => ToolInfo[] }).getAllTools;
     const activeToolsGetter = (pi as { getActiveTools?: () => string[] }).getActiveTools;
@@ -237,11 +318,24 @@ export function registerToolSurface(pi: ExtensionAPI, runtime: BrewvaRuntime): v
 
     const prompt = typeof (event as { prompt?: unknown }).prompt === "string" ? event.prompt : "";
     const sessionId = ctx.sessionManager.getSessionId();
+    const knownToolNames = new Set(allTools.map((tool) => normalizeToolName(tool.name)));
+    registerMissingManagedTools({
+      pi,
+      runtime,
+      sessionId,
+      prompt,
+      dynamicToolDefinitions: options.dynamicToolDefinitions,
+      knownToolNames,
+    });
+    const refreshedTools = allToolsGetter.call(pi);
+    if (!Array.isArray(refreshedTools) || refreshedTools.length === 0) {
+      return undefined;
+    }
     const resolved = resolveActiveToolNames({
       runtime,
       sessionId,
       prompt,
-      allTools,
+      allTools: refreshedTools,
       activeToolNames: activeToolsGetter.call(pi),
     });
     setActiveTools.call(pi, resolved.activeToolNames);
@@ -250,7 +344,7 @@ export function registerToolSurface(pi: ExtensionAPI, runtime: BrewvaRuntime): v
       sessionId,
       type: TOOL_SURFACE_RESOLVED_EVENT_TYPE,
       payload: {
-        availableCount: allTools.length,
+        availableCount: refreshedTools.length,
         activeCount: resolved.activeToolNames.length,
         managedCount: MANAGED_BREWVA_TOOL_NAMES.length,
         managedActiveCount: resolved.managedActiveCount,

@@ -42,6 +42,10 @@ export function createObsQueryTool(options: BrewvaToolOptions): ToolDefinition {
     label: "Observability Query",
     description:
       "Query current-session runtime events with structured filters and optional metrics.",
+    promptSnippet: "Query current-session runtime events with filters or aggregate metrics.",
+    promptGuidelines: [
+      "Use this for session telemetry and event analysis, not for filesystem or source inspection.",
+    ],
     parameters: Type.Object({
       types: OBS_TYPES_SCHEMA,
       where: OBS_WHERE_SCHEMA,

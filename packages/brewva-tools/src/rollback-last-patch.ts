@@ -35,6 +35,10 @@ export function createRollbackLastPatchTool(options: BrewvaToolOptions): ToolDef
     name: "rollback_last_patch",
     label: "Rollback Last Patch",
     description: "Roll back the most recently tracked file mutation patch set for this session.",
+    promptSnippet: "Restore the most recent tracked mutation patch set for the session.",
+    promptGuidelines: [
+      "Use this when the latest tracked file mutation should be reverted, especially after a failed edit path.",
+    ],
     parameters: Type.Object({}, { additionalProperties: false }),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);

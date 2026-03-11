@@ -82,7 +82,7 @@ export class CommandRouter {
 
     if (command === "/new-agent") {
       if (!body)
-        return { kind: "error", message: "Usage: /new-agent <name> [model=<provider/id>]" };
+        return { kind: "error", message: "Usage: /new-agent <name> [model=<pattern[:thinking]>]" };
 
       const nameIs = /^name\s+is\s+(\S+)(?:\s+|$)/iu.exec(body);
       let agentId = nameIs?.[1] ? parseAgentRef(nameIs[1]) : undefined;

@@ -77,6 +77,12 @@ export function createSkillCompleteTool(options: BrewvaToolOptions): ToolDefinit
     name: "skill_complete",
     label: "Skill Complete",
     description: "Validate skill outputs against contract and complete the active skill.",
+    promptSnippet:
+      "Validate and complete the active skill after required outputs and verification evidence are ready.",
+    promptGuidelines: [
+      "Do not call this until required outputs are prepared.",
+      "Verification must pass or be intentionally read-only before completion.",
+    ],
     parameters: Type.Object({
       outputs: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
     }),

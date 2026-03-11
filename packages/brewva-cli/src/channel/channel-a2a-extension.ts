@@ -57,8 +57,17 @@ export function createChannelA2AExtension(options: {
         },
       },
     });
-    for (const tool of tools) {
-      pi.registerTool(tool);
-    }
+    const ensureRegistered = () => {
+      const currentNames = new Set(pi.getAllTools().map((tool) => tool.name));
+      for (const tool of tools) {
+        if (currentNames.has(tool.name)) continue;
+        pi.registerTool(tool);
+      }
+    };
+
+    pi.on("session_start", () => {
+      ensureRegistered();
+      return undefined;
+    });
   };
 }

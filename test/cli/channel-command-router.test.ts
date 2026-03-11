@@ -35,6 +35,11 @@ describe("channel command router", () => {
       agentId: "jack",
       model: "openai/gpt-5.3-codex",
     });
+    expect(router.match("/new-agent name=Jack model=openai/gpt-5.3-codex:high")).toEqual({
+      kind: "new-agent",
+      agentId: "jack",
+      model: "openai/gpt-5.3-codex:high",
+    });
   });
 
   test("parses run and discuss targets", () => {
@@ -68,6 +73,10 @@ describe("channel command router", () => {
   });
 
   test("returns syntax error for invalid command shapes", () => {
+    expect(router.match("/new-agent")).toEqual({
+      kind: "error",
+      message: "Usage: /new-agent <name> [model=<pattern[:thinking]>]",
+    });
     expect(router.match("/run @jack")).toEqual({
       kind: "error",
       message: "Usage: /run @a,@b <task>",

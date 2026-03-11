@@ -11,6 +11,7 @@ import {
 } from "./context-shared.js";
 import { registerLedgerWriter } from "./ledger-writer.js";
 import { registerQualityGate } from "./quality-gate.js";
+import { registerToolResultDistiller } from "./tool-result-distiller.js";
 import { registerToolSurface } from "./tool-surface.js";
 
 const CORE_CONTEXT_INJECTION_MESSAGE_TYPE = "brewva-context-injection";
@@ -19,6 +20,7 @@ export function registerRuntimeCoreBridge(pi: ExtensionAPI, runtime: BrewvaRunti
   registerToolSurface(pi, runtime);
   registerQualityGate(pi, runtime);
   registerLedgerWriter(pi, runtime);
+  registerToolResultDistiller(pi, runtime);
   registerCompletionGuard(pi, runtime);
 
   pi.on("before_agent_start", async (event, ctx) => {

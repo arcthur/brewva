@@ -86,6 +86,11 @@ export { createSkillCompleteTool } from "./skill-complete.js";
 export { createSkillChainControlTool } from "./skill-chain-control.js";
 export { createTaskLedgerTools } from "./task-ledger.js";
 export {
+  resolveBrewvaModelSelection,
+  type BrewvaModelSelection,
+  type BrewvaThinkingLevel,
+} from "./model-selection.js";
+export {
   BASE_BREWVA_TOOL_NAMES,
   BREWVA_TOOL_SURFACE_BY_NAME,
   MANAGED_BREWVA_TOOL_NAMES,

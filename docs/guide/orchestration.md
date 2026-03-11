@@ -12,18 +12,20 @@ Orchestration is driven by runtime state management plus extension lifecycle han
 3. `before_agent_start` runs lifecycle plumbing (`context-transform`) and model-facing composition (`context-composer`)
 4. `tool_call` passes quality/security/budget gates (`quality-gate`)
 5. `ledger-writer` records durable tool outcomes (normally from SDK `tool_result`; can fallback to `tool_execution_end` when `tool_result` is missing). Persisted governance event is `tool_result_recorded`.
-6. `agent_end` records summary events and runs completion guard / notification hooks
+6. `tool-result-distiller` may replace large pure-text `tool_result` payloads with bounded same-turn summaries after raw evidence is recorded.
+7. `agent_end` records summary events and runs completion guard / notification hooks
 
 ## Direct-Tool Profile (`--no-extensions`)
 
 1. CLI registers tools directly (`buildBrewvaTools`)
-2. CLI installs `createRuntimeCoreBridgeExtension` (tool surface + memory curator + cognitive metrics + quality gate + ledger writer + reduced lifecycle bridge)
+2. CLI installs `createRuntimeCoreBridgeExtension` (tool surface + quality gate + ledger writer + tool-result distiller + completion guard + reduced lifecycle bridge)
 3. `tool_call` passes quality/security/budget gates (`quality-gate`)
 4. `ledger-writer` records durable tool outcomes and closes the runtime tool lifecycle (`tool_result_recorded` + `runtime.tools.finish(...)`)
-5. CLI installs `registerRuntimeCoreEventBridge` for lifecycle and assistant-usage telemetry
-6. Extension-only presentation hooks remain disabled (`context` hook auto-compaction lifecycle,
-   completion guard, notification, debug-loop, streaming message-health events)
-7. Runtime core bridge still runs `before_agent_start`, but now uses the same
+5. `tool-result-distiller` may replace large pure-text `tool_result` payloads with bounded same-turn summaries after raw evidence is recorded.
+6. CLI installs `registerRuntimeCoreEventBridge` for lifecycle and assistant-usage telemetry
+7. Extension-only presentation hooks remain disabled (`context` hook auto-compaction lifecycle,
+   event streaming, memory handlers, cognitive metrics, notification, debug-loop, streaming message-health events)
+8. Runtime core bridge still runs `before_agent_start`, but now uses the same
    narrative-first `ContextComposer` and standard Brewva context contract as
    the full profile
 

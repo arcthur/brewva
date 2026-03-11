@@ -6,7 +6,7 @@ import {
   type CreateBrewvaSessionOptions as RuntimeCreateBrewvaSessionOptions,
 } from "@brewva/brewva-runtime";
 import { createSkillBrokerExtension } from "@brewva/brewva-skill-broker";
-import { buildBrewvaTools } from "@brewva/brewva-tools";
+import { buildBrewvaTools, resolveBrewvaModelSelection } from "@brewva/brewva-tools";
 import {
   AuthStorage,
   createAgentSession,
@@ -30,21 +30,6 @@ export interface CreateBrewvaSessionOptions extends RuntimeCreateBrewvaSessionOp
   extensionFactories?: ExtensionFactory[];
 }
 
-function resolveModel(
-  modelText: string | undefined,
-  registry: ModelRegistry,
-): ReturnType<ModelRegistry["find"]> {
-  if (!modelText) return undefined;
-  const parts = modelText.split("/");
-  if (parts.length !== 2) return undefined;
-
-  const provider = parts[0];
-  const modelId = parts[1];
-  if (!provider || !modelId) return undefined;
-
-  return registry.find(provider, modelId);
-}
-
 function applyRuntimeUiSettings(
   settingsManager: SettingsManager,
   uiConfig: BrewvaRuntime["config"]["ui"],
@@ -62,7 +47,7 @@ export async function createBrewvaSession(
 
   const authStorage = AuthStorage.create(join(agentDir, "auth.json"));
   const modelRegistry = new ModelRegistry(authStorage, join(agentDir, "models.json"));
-  const selectedModel = resolveModel(options.model, modelRegistry);
+  const selectedModel = resolveBrewvaModelSelection(options.model, modelRegistry);
 
   const runtime =
     options.runtime ??
@@ -114,7 +99,8 @@ export async function createBrewvaSession(
     modelRegistry,
     settingsManager,
     resourceLoader,
-    model: selectedModel,
+    model: selectedModel.model,
+    thinkingLevel: selectedModel.thinkingLevel,
     tools: [readTool, editTool, writeTool],
     customTools,
   });

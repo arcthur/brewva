@@ -240,7 +240,7 @@ For Cloudflare Worker + Fly ingress deployment steps, see:
 
 With channel orchestration enabled (default `channels.orchestration.enabled=true`), channel text commands are available:
 
-- `/new-agent <name>` or `/new-agent name=<name> model=<provider/id>`
+- `/new-agent <name>` or `/new-agent name=<name> model=<pattern[:thinking]>`
 - `/del-agent <name>` (soft delete)
 - `/agents`
 - `/focus @<agent>`

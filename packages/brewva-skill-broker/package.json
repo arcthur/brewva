@@ -15,8 +15,8 @@
   "dependencies": {
     "@brewva/brewva-deliberation": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
-    "@mariozechner/pi-ai": "^0.55.0",
-    "@mariozechner/pi-coding-agent": "^0.55.0"
+    "@mariozechner/pi-ai": "^0.57.1",
+    "@mariozechner/pi-coding-agent": "^0.57.1"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

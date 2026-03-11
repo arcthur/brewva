@@ -24,6 +24,10 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
     name: "task_set_spec",
     label: "Task Set Spec",
     description: "Set or update the TaskSpec (event-sourced Task Ledger).",
+    promptSnippet: "Record or refine the task goal, constraints, targets, and verification plan.",
+    promptGuidelines: [
+      "Use this early when the objective, constraints, or verification plan need to be made explicit.",
+    ],
     parameters: Type.Object({
       goal: Type.String(),
       targets: Type.Optional(
@@ -59,6 +63,8 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
     name: "task_add_item",
     label: "Task Add Item",
     description: "Add a task item to the Task Ledger.",
+    promptSnippet:
+      "Add a concrete task item to the Task Ledger instead of tracking it only in prose.",
     parameters: Type.Object({
       id: Type.Optional(Type.String()),
       text: Type.String(),
@@ -82,6 +88,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
     name: "task_update_item",
     label: "Task Update Item",
     description: "Update a task item in the Task Ledger.",
+    promptSnippet: "Update task item text or status as work progresses.",
     parameters: Type.Object({
       id: Type.String(),
       text: Type.Optional(Type.String()),
@@ -108,6 +115,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
     name: "task_record_blocker",
     label: "Task Record Blocker",
     description: "Record a blocker in the Task Ledger.",
+    promptSnippet: "Record a concrete blocker so task state and risk stay explicit.",
     parameters: Type.Object({
       id: Type.Optional(Type.String()),
       message: Type.String(),
@@ -133,6 +141,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
     name: "task_resolve_blocker",
     label: "Task Resolve Blocker",
     description: "Resolve (remove) a blocker from the Task Ledger.",
+    promptSnippet: "Clear a blocker once the blocking condition is resolved.",
     parameters: Type.Object({
       id: Type.String(),
     }),
@@ -153,6 +162,10 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
     name: "task_view_state",
     label: "Task View State",
     description: "Show the current folded Task Ledger state.",
+    promptSnippet: "Show the current folded task state before planning or resuming work.",
+    promptGuidelines: [
+      "Use this to resync with the recorded plan before adding or changing task items.",
+    ],
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);

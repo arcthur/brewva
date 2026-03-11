@@ -203,6 +203,10 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
     label: "Schedule Intent",
     description:
       "Create, update, cancel, or list schedule intents. Supports one-shot runAt/delayMs and recurring cron.",
+    promptSnippet: "Create, update, cancel, or list deferred and recurring execution intents.",
+    promptGuidelines: [
+      "Use this only when the user explicitly wants future or recurring execution.",
+    ],
     parameters: Type.Object({
       action: ScheduleActionSchema,
       reason: Type.Optional(Type.String({ minLength: 1, maxLength: 800 })),

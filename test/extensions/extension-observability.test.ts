@@ -91,6 +91,7 @@ describe("Extension integration: observability", () => {
         getActiveTools: () => [],
         getAllTools: () => [],
         setActiveTools: () => undefined,
+        refreshTools: () => undefined,
         getCommands: () => [],
         setModel: async () => true,
         getThinkingLevel: () => "medium",

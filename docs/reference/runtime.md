@@ -289,11 +289,13 @@ Execution profile note:
 - The full extension profile also owns extension-side closed loops such as automatic
   debug retry and deterministic handoff packet synthesis.
 - Runtime-core profile (`--no-extensions`) still composes model-facing context
-  through `ContextComposer`, applies the standard Brewva context contract, and
-  may rehydrate accepted memory context packets through `MemoryCurator`.
+  through `ContextComposer`, applies the standard Brewva context contract,
+  persists tool outcomes through `registerLedgerWriter`, distills large
+  same-turn pure-text tool results through `registerToolResultDistiller`, and
+  keeps `registerCompletionGuard`.
 - Runtime-core keeps the reduced lifecycle surface by omitting the `context`
-  hook, event streaming, completion guard, notification, and debug-loop
-  orchestration.
+  hook, event streaming, memory handlers, cognitive metrics, notification, and
+  debug-loop orchestration.
 - Both profiles still participate in the same cognitive-product loops:
   model-facing composition, memory formation, memory rehydration, and
   control-plane wake-up metadata.

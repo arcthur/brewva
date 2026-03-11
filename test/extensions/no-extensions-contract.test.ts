@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createBrewvaExtension, createRuntimeCoreBridgeExtension } from "@brewva/brewva-extensions";
-import { createMockExtensionAPI } from "../helpers/extension.js";
+import { createMockExtensionAPI, invokeHandlerAsync } from "../helpers/extension.js";
 import { createRuntimeFixture } from "./fixtures/runtime.js";
 
 function handlerNames(handlers: Map<string, unknown[]>): string[] {
@@ -51,5 +51,38 @@ describe("no-extensions contract", () => {
     expect(coreHandlers).not.toContain("context");
     expect(coreHandlers).not.toContain("session_start");
     expect(coreHandlers).not.toContain("turn_start");
+  });
+
+  test("registerTools=false does not late-register managed Brewva tools", async () => {
+    const runtime = createRuntimeFixture();
+    const api = createMockExtensionAPI();
+    api.api.registerTool({
+      name: "foreign_tool",
+      label: "Foreign Tool",
+      description: "Foreign tool",
+    } as any);
+
+    const extension = createBrewvaExtension({
+      runtime,
+      registerTools: false,
+    });
+    await extension(api.api);
+
+    await invokeHandlerAsync(
+      api.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "Use $obs_query if needed.",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "no-ext-register-tools-false",
+        },
+      },
+    );
+
+    expect(api.api.getAllTools().map((tool) => tool.name)).toEqual(["foreign_tool"]);
+    expect(api.activeTools).not.toContain("obs_query");
   });
 });

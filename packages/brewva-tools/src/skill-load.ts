@@ -84,6 +84,12 @@ export function createSkillLoadTool(options: BrewvaToolOptions): ToolDefinition 
     name: "skill_load",
     label: "Skill Load",
     description: "Load a skill by name, activate its contract, and return full skill instructions.",
+    promptSnippet:
+      "Load the selected skill contract and working instructions before executing the skill.",
+    promptGuidelines: [
+      "When a pending skill dispatch exists, load the selected skill before implementation unless you are intentionally overriding routing.",
+      "Use the exact selected skill name.",
+    ],
     parameters: Type.Object({
       name: Type.String({
         description: "Skill name from an accepted proposal or explicit operator choice",

@@ -1,5 +1,5 @@
 import { BrewvaRuntime, type BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
-import { buildBrewvaTools } from "@brewva/brewva-tools";
+import { buildBrewvaTools, getBrewvaToolSurface } from "@brewva/brewva-tools";
 import type { ExtensionAPI, ExtensionFactory } from "@mariozechner/pi-coding-agent";
 import { registerCognitiveMetrics } from "./cognitive-metrics.js";
 import { registerCompletionGuard } from "./completion-guard.js";
@@ -12,6 +12,7 @@ import { registerMemoryCurator } from "./memory-curator.js";
 import { registerMemoryFormation } from "./memory-formation.js";
 import { registerNotification } from "./notification.js";
 import { registerQualityGate } from "./quality-gate.js";
+import { registerToolResultDistiller } from "./tool-result-distiller.js";
 import { registerToolSurface } from "./tool-surface.js";
 
 export interface CreateBrewvaExtensionOptions extends BrewvaRuntimeOptions {
@@ -40,12 +41,19 @@ function resolveProfile(profile: BrewvaExtensionProfile | undefined): {
   }
 }
 
-function registerCoreHandlers(pi: ExtensionAPI, runtime: BrewvaRuntime): void {
+function registerCoreHandlers(
+  pi: ExtensionAPI,
+  runtime: BrewvaRuntime,
+  toolDefinitionsByName?: ReadonlyMap<string, ReturnType<typeof buildBrewvaTools>[number]>,
+): void {
   registerEventStream(pi, runtime);
-  registerToolSurface(pi, runtime);
+  registerToolSurface(pi, runtime, {
+    dynamicToolDefinitions: toolDefinitionsByName,
+  });
   registerContextTransform(pi, runtime);
   registerQualityGate(pi, runtime);
   registerLedgerWriter(pi, runtime);
+  registerToolResultDistiller(pi, runtime);
   registerCompletionGuard(pi, runtime);
 }
 
@@ -74,15 +82,20 @@ export function createBrewvaExtension(
 ): ExtensionFactory {
   return (pi) => {
     const runtime = options.runtime ?? new BrewvaRuntime(options);
+    const shouldRegisterTools = options.registerTools !== false;
+    const allTools = shouldRegisterTools ? buildBrewvaTools({ runtime }) : [];
+    const toolDefinitionsByName = shouldRegisterTools
+      ? new Map(allTools.map((tool) => [tool.name, tool] as const))
+      : undefined;
 
-    if (options.registerTools !== false) {
-      const tools = buildBrewvaTools({ runtime });
-      for (const tool of tools) {
+    if (shouldRegisterTools) {
+      for (const tool of allTools) {
+        if (getBrewvaToolSurface(tool.name) !== "base") continue;
         pi.registerTool(tool);
       }
     }
 
-    registerCoreHandlers(pi, runtime);
+    registerCoreHandlers(pi, runtime, toolDefinitionsByName);
     registerOptionalHandlers(pi, runtime, options.profile);
   };
 }
@@ -149,6 +162,7 @@ export { registerDebugLoop } from "./debug-loop.js";
 export { registerCompletionGuard } from "./completion-guard.js";
 export { registerNotification } from "./notification.js";
 export { registerToolSurface } from "./tool-surface.js";
+export { registerToolResultDistiller } from "./tool-result-distiller.js";
 export { applyContextContract, buildContextContractBlock } from "./context-contract.js";
 export { createRuntimeChannelTurnBridge } from "./channel-turn-bridge.js";
 export { createRuntimeTelegramChannelBridge } from "./telegram-channel-bridge.js";

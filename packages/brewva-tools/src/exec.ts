@@ -993,6 +993,13 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
     label: "Exec",
     description:
       "Execute shell commands with optional background continuation. Pair with process tool for list/poll/log/kill.",
+    promptSnippet:
+      "Run a bounded shell command when real workspace execution or verification is required.",
+    promptGuidelines: [
+      "Prefer read-only inspection before mutation or long-running execution.",
+      "Use explicit workdir and bounded output for broad commands.",
+      "After mutating commands, collect verification evidence before concluding.",
+    ],
     parameters: ExecSchema,
     async execute(toolCallId, params, signal, _onUpdate, ctx) {
       const ownerSessionId = getSessionId(ctx);

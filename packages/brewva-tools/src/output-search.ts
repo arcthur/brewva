@@ -581,6 +581,10 @@ export function createOutputSearchTool(options: BrewvaToolOptions): ToolDefiniti
     label: "Output Search",
     description:
       "Search persisted tool output artifacts for the current session and return compact snippets by query.",
+    promptSnippet: "Search persisted tool-output artifacts before rerunning expensive commands.",
+    promptGuidelines: [
+      "Prefer this when prior command output, logs, or verification artifacts may already exist in the session.",
+    ],
     parameters: Type.Object({
       query: Type.Optional(Type.String({ minLength: 1 })),
       queries: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { minItems: 1 })),

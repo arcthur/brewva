@@ -9,6 +9,7 @@ const EXPECTED_SYMBOLS = [
   "registerEventStream",
   "registerQualityGate",
   "registerLedgerWriter",
+  "registerToolResultDistiller",
   "registerCompletionGuard",
   "registerNotification",
 ];

@@ -46,7 +46,7 @@
     "@brewva/brewva-runtime": "workspace:*",
     "@brewva/brewva-skill-broker": "workspace:*",
     "@brewva/brewva-tools": "workspace:*",
-    "@mariozechner/pi-coding-agent": "^0.55.0",
+    "@mariozechner/pi-coding-agent": "^0.57.1",
     "@types/node": "^25.2.3",
     "@types/ws": "^8.18.1",
     "bun-types": "^1.3.9",

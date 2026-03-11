@@ -16,6 +16,11 @@ export function createSkillRouteOverrideTool(options: BrewvaToolOptions): ToolDe
     name: "skill_route_override",
     label: "Skill Route Override",
     description: "Explicitly bypass pending skill dispatch gate when intentional.",
+    promptSnippet:
+      "Bypass a pending skill dispatch only when you intentionally want to continue without the recommended skill.",
+    promptGuidelines: [
+      "Use this rarely and provide a concrete reason when bypassing the dispatch recommendation.",
+    ],
     parameters: Type.Object({
       reason: Type.Optional(
         Type.String({
