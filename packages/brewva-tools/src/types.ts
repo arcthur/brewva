@@ -84,6 +84,13 @@ export interface BrewvaToolRuntime {
     ): Promise<VerificationReport>;
   };
   tools: {
+    acquireParallelSlot?(sessionId: string, runId: string): { accepted: boolean; reason?: string };
+    acquireParallelSlotAsync?(
+      sessionId: string,
+      runId: string,
+      options?: { timeoutMs?: number },
+    ): Promise<{ accepted: boolean; reason?: string }>;
+    releaseParallelSlot?(sessionId: string, runId: string): void;
     rollbackLastPatchSet(sessionId: string): RollbackResult;
   };
   ledger: {

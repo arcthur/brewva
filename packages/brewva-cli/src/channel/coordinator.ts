@@ -88,6 +88,9 @@ export interface CoordinatorDiscussResult {
   reason?: string;
 }
 
+const MAX_CONCURRENT_FANOUT_DISPATCHES = 4;
+
+// Cap burst fan-out so coordinator-level dispatches do not stampede the session layer.
 export class ChannelCoordinator {
   private readonly deps: CoordinatorDependencies;
 
@@ -108,8 +111,10 @@ export class ChannelCoordinator {
       };
     }
 
-    const results = await Promise.all(
-      uniqueAgentIds.map(async (agentId) => {
+    const results = await mapWithConcurrencyLimit(
+      uniqueAgentIds,
+      MAX_CONCURRENT_FANOUT_DISPATCHES,
+      async (agentId) => {
         if (!this.deps.isAgentActive(agentId)) {
           return {
             ok: false,
@@ -124,7 +129,7 @@ export class ChannelCoordinator {
           reason: "run",
           scopeKey: input.scopeKey,
         });
-      }),
+      },
     );
 
     return {
@@ -299,13 +304,14 @@ export class ChannelCoordinator {
         results: [],
       };
     }
-    const results = await Promise.all(
-      targetIds.map((toAgentId) =>
+    const results = await mapWithConcurrencyLimit(
+      targetIds,
+      MAX_CONCURRENT_FANOUT_DISPATCHES,
+      (toAgentId) =>
         this.a2aSend({
           ...input,
           toAgentId,
         }),
-      ),
     );
     return {
       ok: results.every((entry) => entry.ok),
@@ -325,4 +331,31 @@ function isDiscussionStopSignal(text: string): boolean {
   if (!normalized) return true;
   const upper = normalized.toUpperCase();
   return upper.includes("[DONE]") || upper.includes("REPLY_SKIP");
+}
+
+async function mapWithConcurrencyLimit<TInput, TOutput>(
+  inputs: readonly TInput[],
+  maxConcurrent: number,
+  worker: (input: TInput) => Promise<TOutput>,
+): Promise<TOutput[]> {
+  if (inputs.length === 0) return [];
+
+  const results: TOutput[] = [];
+  results.length = inputs.length;
+  const concurrency = Math.max(1, Math.min(maxConcurrent, inputs.length));
+  let nextIndex = 0;
+
+  const runWorker = async (): Promise<void> => {
+    while (true) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      if (currentIndex >= inputs.length) {
+        return;
+      }
+      results[currentIndex] = await worker(inputs[currentIndex] as TInput);
+    }
+  };
+
+  await Promise.all(Array.from({ length: concurrency }, () => runWorker()));
+  return results;
 }

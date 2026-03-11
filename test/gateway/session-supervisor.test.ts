@@ -264,6 +264,116 @@ describe("session supervisor safeguards", () => {
     }
   });
 
+  test("given an active turn, when a second prompt arrives, then it waits in the session queue until the first turn ends", async () => {
+    const root = mkdtempSync(join(tmpdir(), "brewva-session-supervisor-"));
+    const stateDir = join(root, "state");
+    const supervisor = new SessionSupervisor({
+      stateDir,
+      logger: {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        log: () => {},
+      },
+      defaultCwd: root,
+    });
+    try {
+      supervisor.testHooks.seedWorker({
+        sessionId: "queued-session",
+        pid: 10035,
+      });
+
+      const workers = Reflect.get(supervisor, "workers") as Map<
+        string,
+        {
+          child: {
+            send: (message: unknown) => boolean;
+          };
+          turnQueue: Array<unknown>;
+          activeTurnId: string | null;
+        }
+      >;
+      const handle = workers.get("queued-session");
+      expect(handle).toBeDefined();
+
+      const sentMessages: SentPromptMessage[] = [];
+      handle!.child.send = (message: unknown) => {
+        if ((message as { kind?: string }).kind === "send") {
+          sentMessages.push(message as SentPromptMessage);
+        }
+        return true;
+      };
+
+      const firstSend = supervisor.sendPrompt("queued-session", "first prompt", {
+        turnId: "turn-1",
+      });
+      expect(sentMessages).toHaveLength(1);
+
+      const secondSend = supervisor.sendPrompt("queued-session", "second prompt", {
+        turnId: "turn-2",
+      });
+      expect(sentMessages).toHaveLength(1);
+      expect(handle!.turnQueue).toHaveLength(1);
+      expect(handle!.activeTurnId).toBe("turn-1");
+
+      supervisor.testHooks.dispatchWorkerMessage("queued-session", {
+        kind: "result",
+        requestId: sentMessages[0]!.requestId,
+        ok: true,
+        payload: {
+          sessionId: "queued-session",
+          turnId: "turn-1",
+          accepted: true,
+        },
+      });
+      const firstResult = await firstSend;
+      expect(firstResult).toMatchObject({
+        sessionId: "queued-session",
+        turnId: "turn-1",
+        accepted: true,
+      });
+      expect(sentMessages).toHaveLength(1);
+
+      supervisor.testHooks.dispatchWorkerMessage("queued-session", {
+        kind: "event",
+        event: "session.turn.end",
+        payload: {
+          sessionId: "queued-session",
+          agentSessionId: "agent-queued",
+          turnId: "turn-1",
+          assistantText: "done",
+          toolOutputs: [],
+          ts: Date.now(),
+        },
+      });
+
+      await Promise.resolve();
+      expect(sentMessages).toHaveLength(2);
+      expect(handle!.turnQueue).toHaveLength(0);
+      expect(handle!.activeTurnId).toBe("turn-2");
+
+      supervisor.testHooks.dispatchWorkerMessage("queued-session", {
+        kind: "result",
+        requestId: sentMessages[1]!.requestId,
+        ok: true,
+        payload: {
+          sessionId: "queued-session",
+          turnId: "turn-2",
+          accepted: true,
+        },
+      });
+      const secondResult = await secondSend;
+      expect(secondResult).toMatchObject({
+        sessionId: "queued-session",
+        turnId: "turn-2",
+        accepted: true,
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("given sendPrompt trigger metadata, when supervisor forwards to worker, then trigger payload is preserved", async () => {
     const root = mkdtempSync(join(tmpdir(), "brewva-session-supervisor-"));
     const stateDir = join(root, "state");

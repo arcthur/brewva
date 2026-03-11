@@ -1,9 +1,12 @@
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { BrewvaToolRuntime } from "../types.js";
 
 const DEFAULT_PARALLEL_READ_BATCH_SIZE = 16;
 const MAX_PARALLEL_READ_BATCH_SIZE = 64;
 const PARALLEL_READ_MULTIPLIER = 4;
+const DEFAULT_READ_FILE_TIMEOUT_MS = 5_000;
+const DEFAULT_PARALLEL_READ_SLOT_TIMEOUT_MS = 30_000;
 
 export type ParallelReadMode = "parallel" | "sequential";
 export type ParallelReadReason =
@@ -39,6 +42,15 @@ export interface ReadBatchSummary {
   scannedFiles: number;
   loadedFiles: number;
   failedFiles: number;
+}
+
+export interface ReadTextBatchOptions {
+  timeoutMs?: number;
+}
+
+export interface ParallelReadSlotOptions {
+  runId?: string;
+  timeoutMs?: number;
 }
 
 function toPositiveInteger(value: unknown): number {
@@ -139,11 +151,71 @@ export function recordParallelReadTelemetry(
   });
 }
 
-export async function readTextBatch(files: string[]): Promise<ReadBatchItem[]> {
+function normalizeTimeoutMs(value: number | undefined, fallbackMs: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallbackMs;
+  }
+  return Math.max(0, Math.trunc(value));
+}
+
+async function readTextFile(file: string, timeoutMs: number): Promise<string> {
+  if (timeoutMs <= 0) {
+    return readFile(file, "utf8");
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort(new Error(`read timeout after ${timeoutMs}ms`));
+  }, timeoutMs);
+  timer.unref?.();
+
+  try {
+    return await readFile(file, {
+      encoding: "utf8",
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function withParallelReadSlot<T>(
+  runtime: BrewvaToolRuntime | undefined,
+  sessionId: string | undefined,
+  operation: string,
+  work: () => Promise<T>,
+  options: ParallelReadSlotOptions = {},
+): Promise<T> {
+  const tools = runtime?.tools;
+  if (!sessionId || !tools?.acquireParallelSlotAsync || !tools.releaseParallelSlot) {
+    return work();
+  }
+
+  const runId =
+    options.runId?.trim() || `tool_parallel_read:${operation}:${randomUUID().slice(0, 8)}`;
+  const acquired = await tools.acquireParallelSlotAsync(sessionId, runId, {
+    timeoutMs: normalizeTimeoutMs(options.timeoutMs, DEFAULT_PARALLEL_READ_SLOT_TIMEOUT_MS),
+  });
+  if (!acquired.accepted) {
+    return work();
+  }
+
+  try {
+    return await work();
+  } finally {
+    tools.releaseParallelSlot(sessionId, runId);
+  }
+}
+
+export async function readTextBatch(
+  files: string[],
+  options: ReadTextBatchOptions = {},
+): Promise<ReadBatchItem[]> {
+  const timeoutMs = normalizeTimeoutMs(options.timeoutMs, DEFAULT_READ_FILE_TIMEOUT_MS);
   return Promise.all(
     files.map(async (file) => {
       try {
-        return { file, content: await readFile(file, "utf8") };
+        return { file, content: await readTextFile(file, timeoutMs) };
       } catch {
         return { file, content: null };
       }

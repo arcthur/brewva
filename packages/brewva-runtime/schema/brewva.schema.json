@@ -243,6 +243,9 @@
             },
             "maxConcurrent": {
               "type": "number"
+            },
+            "maxTotalPerSession": {
+              "type": "number"
             }
           }
         },

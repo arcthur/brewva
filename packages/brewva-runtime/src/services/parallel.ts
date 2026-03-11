@@ -53,6 +53,55 @@ export class ParallelService {
   }
 
   acquireParallelSlot(sessionId: string, runId: string): ParallelAcquireResult {
+    return this.tryAcquireParallelSlot(sessionId, runId, { recordRejection: true });
+  }
+
+  async acquireParallelSlotAsync(
+    sessionId: string,
+    runId: string,
+    options: { timeoutMs?: number } = {},
+  ): Promise<ParallelAcquireResult> {
+    const immediate = this.tryAcquireParallelSlot(sessionId, runId, { recordRejection: false });
+    if (immediate.accepted || immediate.reason !== "max_concurrent") {
+      if (!immediate.accepted) {
+        this.recordParallelRejection(sessionId, runId, immediate.reason);
+      }
+      return immediate;
+    }
+
+    const acquired = await this.parallel.acquireAsync(sessionId, runId, options);
+    if (!acquired.accepted) {
+      this.recordParallelRejection(sessionId, runId, acquired.reason);
+    }
+    return acquired;
+  }
+
+  releaseParallelSlot(sessionId: string, runId: string): void {
+    this.parallel.release(sessionId, runId);
+  }
+
+  recordWorkerResult(sessionId: string, result: WorkerResult): void {
+    this.parallelResults.record(sessionId, result);
+    this.parallel.release(sessionId, result.workerId);
+  }
+
+  listWorkerResults(sessionId: string): WorkerResult[] {
+    return this.parallelResults.list(sessionId);
+  }
+
+  mergeWorkerResults(sessionId: string): WorkerMergeReport {
+    return this.parallelResults.merge(sessionId);
+  }
+
+  clearWorkerResults(sessionId: string): void {
+    this.parallelResults.clear(sessionId);
+  }
+
+  private tryAcquireParallelSlot(
+    sessionId: string,
+    runId: string,
+    options: { recordRejection: boolean },
+  ): ParallelAcquireResult {
     const skill = this.getActiveSkill(sessionId);
     const maxParallel = skill?.contract.maxParallel;
 
@@ -85,57 +134,47 @@ export class ParallelService {
             });
           }
         } else if (mode === "enforce") {
-          this.recordEvent({
-            sessionId,
-            type: "parallel_slot_rejected",
-            turn: this.getCurrentTurn(sessionId),
-            payload: {
-              runId,
-              skill: skill.name,
-              reason: "skill_max_parallel",
-              activeRuns,
-              maxParallel,
-            },
-          });
+          if (options.recordRejection) {
+            this.recordEvent({
+              sessionId,
+              type: "parallel_slot_rejected",
+              turn: this.getCurrentTurn(sessionId),
+              payload: {
+                runId,
+                skill: skill.name,
+                reason: "skill_max_parallel",
+                activeRuns,
+                maxParallel,
+              },
+            });
+          }
           return { accepted: false, reason: "skill_max_parallel" };
         }
       }
     }
 
     const acquired = this.parallel.acquire(sessionId, runId);
-    if (!acquired.accepted) {
-      this.recordEvent({
-        sessionId,
-        type: "parallel_slot_rejected",
-        turn: this.getCurrentTurn(sessionId),
-        payload: {
-          runId,
-          skill: skill?.name ?? null,
-          reason: acquired.reason ?? "unknown",
-        },
-      });
+    if (!acquired.accepted && options.recordRejection) {
+      this.recordParallelRejection(sessionId, runId, acquired.reason, skill?.name);
     }
     return acquired;
   }
 
-  releaseParallelSlot(sessionId: string, runId: string): void {
-    this.parallel.release(sessionId, runId);
-  }
-
-  recordWorkerResult(sessionId: string, result: WorkerResult): void {
-    this.parallelResults.record(sessionId, result);
-    this.parallel.release(sessionId, result.workerId);
-  }
-
-  listWorkerResults(sessionId: string): WorkerResult[] {
-    return this.parallelResults.list(sessionId);
-  }
-
-  mergeWorkerResults(sessionId: string): WorkerMergeReport {
-    return this.parallelResults.merge(sessionId);
-  }
-
-  clearWorkerResults(sessionId: string): void {
-    this.parallelResults.clear(sessionId);
+  private recordParallelRejection(
+    sessionId: string,
+    runId: string,
+    reason: ParallelAcquireResult["reason"],
+    skillName?: string,
+  ): void {
+    this.recordEvent({
+      sessionId,
+      type: "parallel_slot_rejected",
+      turn: this.getCurrentTurn(sessionId),
+      payload: {
+        runId,
+        skill: skillName ?? this.getActiveSkill(sessionId)?.name ?? null,
+        reason: reason ?? "unknown",
+      },
+    });
   }
 }

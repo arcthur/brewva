@@ -6,6 +6,7 @@ describe("S-007 parallel budget control", () => {
     const manager = new ParallelBudgetManager({
       enabled: true,
       maxConcurrent: 1,
+      maxTotalPerSession: 10,
     });
 
     expect(manager.acquire("s7", "run-a").accepted).toBe(true);
@@ -24,5 +25,58 @@ describe("S-007 parallel budget control", () => {
     const totalBlocked = manager.acquire("s7", "run-c");
     expect(totalBlocked.accepted).toBe(false);
     expect(totalBlocked.reason).toBe("max_total");
+  });
+
+  test("given custom maxTotalPerSession, when limit is reached, then max_total is returned", async () => {
+    const manager = new ParallelBudgetManager({
+      enabled: true,
+      maxConcurrent: 5,
+      maxTotalPerSession: 3,
+    });
+
+    for (let i = 0; i < 3; i += 1) {
+      const result = manager.acquire("s7b", `run-${i}`);
+      expect(result.accepted).toBe(true);
+      manager.release("s7b", `run-${i}`);
+    }
+    const blocked = manager.acquire("s7b", "run-over");
+    expect(blocked.accepted).toBe(false);
+    expect(blocked.reason).toBe("max_total");
+  });
+
+  test("given maxConcurrent is saturated, when acquireAsync waits and a slot is released, then the waiter is resumed", async () => {
+    const manager = new ParallelBudgetManager({
+      enabled: true,
+      maxConcurrent: 1,
+      maxTotalPerSession: 10,
+    });
+
+    expect(manager.acquire("s7c", "run-a").accepted).toBe(true);
+    const waiting = manager.acquireAsync("s7c", "run-b");
+
+    manager.release("s7c", "run-a");
+    const acquired = await waiting;
+    expect(acquired).toEqual({ accepted: true });
+    manager.release("s7c", "run-b");
+  });
+
+  test("given queued waiters exist, when the session is cleared, then acquireAsync is cancelled", async () => {
+    const manager = new ParallelBudgetManager({
+      enabled: true,
+      maxConcurrent: 1,
+      maxTotalPerSession: 10,
+    });
+
+    expect(manager.acquire("s7d", "run-a").accepted).toBe(true);
+    const waiting = manager.acquireAsync("s7d", "run-b");
+
+    manager.clear("s7d");
+    try {
+      await waiting;
+      throw new Error("expected acquireAsync to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("parallel slot wait cancelled for run-b");
+    }
   });
 });

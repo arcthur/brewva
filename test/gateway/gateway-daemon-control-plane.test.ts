@@ -41,6 +41,8 @@ interface SupervisorTestHandle {
   lastActivityAt: number;
   pending: Map<string, unknown>;
   pendingTurns: Map<string, unknown>;
+  turnQueue: unknown[];
+  activeTurnId: string | null;
   readyRequestId?: string;
   lastHeartbeatAt: number;
 }
@@ -153,6 +155,8 @@ function createSupervisorWorker(input: {
     lastActivityAt: input.now - input.lastActivityOffsetMs,
     pending,
     pendingTurns: new Map<string, unknown>(),
+    turnQueue: [],
+    activeTurnId: null,
     readyRequestId: input.readyRequestId,
     lastHeartbeatAt: input.now,
   };

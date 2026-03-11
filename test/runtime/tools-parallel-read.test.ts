@@ -10,6 +10,7 @@ import {
   createLspTools,
   resolveParallelReadConfig,
 } from "@brewva/brewva-tools";
+import type { BrewvaToolRuntime } from "@brewva/brewva-tools";
 
 function extractTextContent(result: { content: Array<{ type: string; text?: string }> }): string {
   const textPart = result.content.find(
@@ -173,6 +174,55 @@ describe("tool parallel read runtime integration", () => {
     if (telemetry) {
       expectTelemetryCountersConsistent(telemetry as unknown as Record<string, unknown>);
     }
+  });
+
+  test("lsp workspace scan acquires and releases runtime parallel slots when available", async () => {
+    const workspace = workspaceWithSampleFiles("brewva-tools-slot-integration-");
+    const calls: string[] = [];
+    const runtime = {
+      config: {
+        parallel: {
+          enabled: true,
+          maxConcurrent: 2,
+          maxTotalPerSession: 100,
+        },
+      },
+      events: {
+        record: () => undefined,
+      },
+      tools: {
+        async acquireParallelSlotAsync(sessionId: string, runId: string) {
+          calls.push(`acquire:${sessionId}:${runId}`);
+          return { accepted: true };
+        },
+        releaseParallelSlot(sessionId: string, runId: string) {
+          calls.push(`release:${sessionId}:${runId}`);
+        },
+      },
+    } as unknown as BrewvaToolRuntime;
+    const sessionId = "parallel-read-slot-integration";
+    const tools = createLspTools({ runtime });
+    const lspSymbols = tools.find((tool) => tool.name === "lsp_symbols");
+    expect(lspSymbols).toBeDefined();
+
+    await lspSymbols!.execute(
+      "tc-lsp-symbols-slot-integration",
+      {
+        filePath: join(workspace, "src/a.ts"),
+        scope: "workspace",
+        query: "valueA",
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId, workspace),
+    );
+
+    expect(
+      calls.some((entry) => entry.startsWith(`acquire:${sessionId}:tool_parallel_read:`)),
+    ).toBe(true);
+    expect(
+      calls.some((entry) => entry.startsWith(`release:${sessionId}:tool_parallel_read:`)),
+    ).toBe(true);
   });
 
   test("lsp workspace low-limit scan avoids eager over-read", async () => {
@@ -581,57 +631,63 @@ describe("tool parallel read runtime integration", () => {
     expect(getParallelReadPayloads(runtime, sessionId)).toHaveLength(0);
   });
 
-  test("lsp_diagnostics returns unavailable for same-basename scope mismatch", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-lsp-diag-scope-mismatch-"));
-    const runtime = createRuntime(workspace);
-    const sessionId = "parallel-read-lsp-diagnostics-scope-mismatch";
-    mkdirSync(join(workspace, "src/a"), { recursive: true });
-    mkdirSync(join(workspace, "src/b"), { recursive: true });
-    writeFileSync(
-      join(workspace, "tsconfig.json"),
-      JSON.stringify(
-        {
-          compilerOptions: {
-            strict: true,
-            noEmit: true,
-            target: "ES2022",
-            module: "NodeNext",
-            moduleResolution: "NodeNext",
+  test(
+    "lsp_diagnostics returns unavailable for same-basename scope mismatch",
+    async () => {
+      const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-lsp-diag-scope-mismatch-"));
+      const runtime = createRuntime(workspace);
+      const sessionId = "parallel-read-lsp-diagnostics-scope-mismatch";
+      mkdirSync(join(workspace, "src/a"), { recursive: true });
+      mkdirSync(join(workspace, "src/b"), { recursive: true });
+      writeFileSync(
+        join(workspace, "tsconfig.json"),
+        JSON.stringify(
+          {
+            compilerOptions: {
+              strict: true,
+              noEmit: true,
+              target: "ES2022",
+              module: "NodeNext",
+              moduleResolution: "NodeNext",
+            },
+            include: ["src/**/*.ts"],
           },
-          include: ["src/**/*.ts"],
+          null,
+          2,
+        ),
+        "utf8",
+      );
+      writeFileSync(join(workspace, "src/a/foo.ts"), "export const ok: string = 'ok';\n", "utf8");
+      writeFileSync(join(workspace, "src/b/foo.ts"), "export const broken: string = 1;\n", "utf8");
+
+      const tools = createLspTools({ runtime });
+      const lspDiagnostics = tools.find((tool) => tool.name === "lsp_diagnostics");
+      expect(lspDiagnostics).toBeDefined();
+
+      const result = await lspDiagnostics!.execute(
+        "tc-lsp-diagnostics-scope-mismatch",
+        {
+          filePath: join(workspace, "src/a/foo.ts"),
+          severity: "all",
         },
-        null,
-        2,
-      ),
-      "utf8",
-    );
-    writeFileSync(join(workspace, "src/a/foo.ts"), "export const ok: string = 'ok';\n", "utf8");
-    writeFileSync(join(workspace, "src/b/foo.ts"), "export const broken: string = 1;\n", "utf8");
+        undefined,
+        undefined,
+        fakeContext(sessionId, workspace),
+      );
 
-    const tools = createLspTools({ runtime });
-    const lspDiagnostics = tools.find((tool) => tool.name === "lsp_diagnostics");
-    expect(lspDiagnostics).toBeDefined();
-
-    const result = await lspDiagnostics!.execute(
-      "tc-lsp-diagnostics-scope-mismatch",
-      {
-        filePath: join(workspace, "src/a/foo.ts"),
-        severity: "all",
-      },
-      undefined,
-      undefined,
-      fakeContext(sessionId, workspace),
-    );
-
-    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
-    expect(text).toContain("No matching diagnostics for the requested file/severity scope.");
-    const details = (result as { details?: Record<string, unknown> }).details;
-    expect(details?.status).toBe("unavailable");
-    expect(details?.verdict).toBe("inconclusive");
-    expect(details?.reason).toBe("diagnostics_scope_mismatch");
-    expect(typeof details?.exitCode).toBe("number");
-    expect((details?.exitCode as number) !== 0).toBe(true);
-  });
+      const text = extractTextContent(
+        result as { content: Array<{ type: string; text?: string }> },
+      );
+      expect(text).toContain("No matching diagnostics for the requested file/severity scope.");
+      const details = (result as { details?: Record<string, unknown> }).details;
+      expect(details?.status).toBe("unavailable");
+      expect(details?.verdict).toBe("inconclusive");
+      expect(details?.reason).toBe("diagnostics_scope_mismatch");
+      expect(typeof details?.exitCode).toBe("number");
+      expect((details?.exitCode as number) !== 0).toBe(true);
+    },
+    { timeout: 15_000 },
+  );
 
   test("resolveParallelReadConfig falls back to runtime_unavailable defaults", () => {
     const config = resolveParallelReadConfig(undefined);

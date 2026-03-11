@@ -323,6 +323,11 @@ export class BrewvaRuntime {
       metadata?: Record<string, unknown>;
     }): void;
     acquireParallelSlot(sessionId: string, runId: string): ParallelAcquireResult;
+    acquireParallelSlotAsync(
+      sessionId: string,
+      runId: string,
+      options?: { timeoutMs?: number },
+    ): Promise<ParallelAcquireResult>;
     releaseParallelSlot(sessionId: string, runId: string): void;
     markCall(sessionId: string, toolName: string): void;
     trackCallStart(input: {

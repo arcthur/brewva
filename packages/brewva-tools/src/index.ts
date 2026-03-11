@@ -108,4 +108,5 @@ export {
   resolveAdaptiveBatchSize,
   resolveParallelReadConfig,
   summarizeReadBatch,
+  withParallelReadSlot,
 } from "./utils/parallel-read.js";

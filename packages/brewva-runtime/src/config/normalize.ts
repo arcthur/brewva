@@ -663,6 +663,10 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
         parallelInput.maxConcurrent,
         defaults.parallel.maxConcurrent,
       ),
+      maxTotalPerSession: normalizePositiveInteger(
+        parallelInput.maxTotalPerSession,
+        defaults.parallel.maxTotalPerSession,
+      ),
     },
     channels: normalizeChannelsConfig(channelsInput, defaults.channels),
     infrastructure: normalizeInfrastructureConfig(infrastructureInput, defaults.infrastructure),

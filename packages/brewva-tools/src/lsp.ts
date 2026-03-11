@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { basename, dirname, extname, resolve } from "node:path";
 import { parseTscDiagnostics, type TscDiagnostic } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
@@ -16,6 +17,7 @@ import {
   resolveAdaptiveBatchSize,
   resolveParallelReadConfig,
   summarizeReadBatch,
+  withParallelReadSlot,
 } from "./utils/parallel-read.js";
 import { failTextResult, inconclusiveTextResult, textResult, withVerdict } from "./utils/result.js";
 import { defineTool } from "./utils/tool.js";
@@ -32,6 +34,10 @@ const CODE_EXTENSIONS = new Set([
   ".rs",
   ".java",
 ]);
+
+const require = createRequire(import.meta.url);
+const TSC_BIN_PATH = require.resolve("typescript/bin/tsc");
+
 interface LspParallelReadContext {
   runtime?: BrewvaToolRuntime;
   sessionId?: string;
@@ -90,87 +96,94 @@ async function findDefinition(
   hintFile?: string,
   limit = 20,
 ): Promise<string[]> {
-  const targetLimit = Math.max(1, Math.trunc(limit));
-  const patterns = [
-    new RegExp(`\\bfunction\\s+${escapeRegExp(symbol)}\\b`),
-    new RegExp(`\\b(class|interface|type|enum)\\s+${escapeRegExp(symbol)}\\b`),
-    new RegExp(`\\b(const|let|var)\\s+${escapeRegExp(symbol)}\\b`),
-    new RegExp(`\\bdef\\s+${escapeRegExp(symbol)}\\b`),
-  ];
+  return withParallelReadSlot(
+    scan.runtime,
+    scan.sessionId,
+    `${scan.toolName}:find_definition`,
+    async () => {
+      const targetLimit = Math.max(1, Math.trunc(limit));
+      const patterns = [
+        new RegExp(`\\bfunction\\s+${escapeRegExp(symbol)}\\b`),
+        new RegExp(`\\b(class|interface|type|enum)\\s+${escapeRegExp(symbol)}\\b`),
+        new RegExp(`\\b(const|let|var)\\s+${escapeRegExp(symbol)}\\b`),
+        new RegExp(`\\bdef\\s+${escapeRegExp(symbol)}\\b`),
+      ];
 
-  const files = walkCodeFiles(rootDir);
-  const ordered = hintFile ? [hintFile, ...files.filter((file) => file !== hintFile)] : files;
+      const files = walkCodeFiles(rootDir);
+      const ordered = hintFile ? [hintFile, ...files.filter((file) => file !== hintFile)] : files;
 
-  const startedAt = Date.now();
-  let scannedFiles = 0;
-  let loadedFiles = 0;
-  let failedFiles = 0;
-  let batches = 0;
-  const matches: string[] = [];
+      const startedAt = Date.now();
+      let scannedFiles = 0;
+      let loadedFiles = 0;
+      let failedFiles = 0;
+      let batches = 0;
+      const matches: string[] = [];
 
-  const emitTelemetry = () => {
-    recordParallelReadTelemetry(scan.runtime, scan.sessionId, {
-      toolName: scan.toolName,
-      operation: "find_definition",
-      batchSize: scan.config.batchSize,
-      mode: scan.config.mode,
-      reason: scan.config.reason,
-      scannedFiles,
-      loadedFiles,
-      failedFiles,
-      batches,
-      durationMs: differenceInMilliseconds(Date.now(), startedAt),
-    });
-  };
+      const emitTelemetry = () => {
+        recordParallelReadTelemetry(scan.runtime, scan.sessionId, {
+          toolName: scan.toolName,
+          operation: "find_definition",
+          batchSize: scan.config.batchSize,
+          mode: scan.config.mode,
+          reason: scan.config.reason,
+          scannedFiles,
+          loadedFiles,
+          failedFiles,
+          batches,
+          durationMs: differenceInMilliseconds(Date.now(), startedAt),
+        });
+      };
 
-  const scanBatch = async (batch: string[]): Promise<boolean> => {
-    if (batch.length === 0) return false;
-    const loaded = await readTextBatch(batch);
-    const summary = summarizeReadBatch(loaded);
-    scannedFiles += summary.scannedFiles;
-    loadedFiles += summary.loadedFiles;
-    failedFiles += summary.failedFiles;
-    batches += 1;
+      const scanBatch = async (batch: string[]): Promise<boolean> => {
+        if (batch.length === 0) return false;
+        const loaded = await readTextBatch(batch);
+        const summary = summarizeReadBatch(loaded);
+        scannedFiles += summary.scannedFiles;
+        loadedFiles += summary.loadedFiles;
+        failedFiles += summary.failedFiles;
+        batches += 1;
 
-    for (const item of loaded) {
-      if (item.content === null) continue;
-      const lines = item.content.split("\n");
-      for (let i = 0; i < lines.length; i += 1) {
-        const line = lines[i] ?? "";
-        if (patterns.some((pattern) => pattern.test(line))) {
-          matches.push(`${item.file}:${i + 1}:0 -> ${line.trim()}`);
+        for (const item of loaded) {
+          if (item.content === null) continue;
+          const lines = item.content.split("\n");
+          for (let i = 0; i < lines.length; i += 1) {
+            const line = lines[i] ?? "";
+            if (patterns.some((pattern) => pattern.test(line))) {
+              matches.push(`${item.file}:${i + 1}:0 -> ${line.trim()}`);
+            }
+            if (matches.length >= targetLimit) return true;
+          }
         }
-        if (matches.length >= targetLimit) return true;
+        return false;
+      };
+
+      let cursor = 0;
+
+      // Warm up with the hinted file first to avoid eager multi-file reads on
+      // common goto-definition paths that resolve immediately.
+      if (hintFile && ordered.length > 0) {
+        if (await scanBatch([ordered[0]!])) {
+          emitTelemetry();
+          return matches;
+        }
+        cursor = 1;
       }
-    }
-    return false;
-  };
 
-  let cursor = 0;
+      while (cursor < ordered.length && matches.length < targetLimit) {
+        const remaining = targetLimit - matches.length;
+        const batchSize = resolveAdaptiveBatchSize(scan.config.batchSize, remaining);
+        const batch = ordered.slice(cursor, cursor + batchSize);
+        cursor += batch.length;
+        if (await scanBatch(batch)) {
+          emitTelemetry();
+          return matches;
+        }
+      }
 
-  // Warm up with the hinted file first to avoid eager multi-file reads on
-  // common goto-definition paths that resolve immediately.
-  if (hintFile && ordered.length > 0) {
-    if (await scanBatch([ordered[0]!])) {
       emitTelemetry();
       return matches;
-    }
-    cursor = 1;
-  }
-
-  while (cursor < ordered.length && matches.length < targetLimit) {
-    const remaining = targetLimit - matches.length;
-    const batchSize = resolveAdaptiveBatchSize(scan.config.batchSize, remaining);
-    const batch = ordered.slice(cursor, cursor + batchSize);
-    cursor += batch.length;
-    if (await scanBatch(batch)) {
-      emitTelemetry();
-      return matches;
-    }
-  }
-
-  emitTelemetry();
-  return matches;
+    },
+  );
 }
 
 async function findReferences(
@@ -179,63 +192,70 @@ async function findReferences(
   scan: LspParallelReadContext,
   limit = 200,
 ): Promise<string[]> {
-  const targetLimit = Math.max(1, Math.trunc(limit));
-  const pattern = new RegExp(`\\b${escapeRegExp(symbol)}\\b`);
-  const files = walkCodeFiles(rootDir);
-  const startedAt = Date.now();
-  let scannedFiles = 0;
-  let loadedFiles = 0;
-  let failedFiles = 0;
-  let batches = 0;
-  const matches: string[] = [];
+  return withParallelReadSlot(
+    scan.runtime,
+    scan.sessionId,
+    `${scan.toolName}:find_references`,
+    async () => {
+      const targetLimit = Math.max(1, Math.trunc(limit));
+      const pattern = new RegExp(`\\b${escapeRegExp(symbol)}\\b`);
+      const files = walkCodeFiles(rootDir);
+      const startedAt = Date.now();
+      let scannedFiles = 0;
+      let loadedFiles = 0;
+      let failedFiles = 0;
+      let batches = 0;
+      const matches: string[] = [];
 
-  const emitTelemetry = () => {
-    recordParallelReadTelemetry(scan.runtime, scan.sessionId, {
-      toolName: scan.toolName,
-      operation: "find_references",
-      batchSize: scan.config.batchSize,
-      mode: scan.config.mode,
-      reason: scan.config.reason,
-      scannedFiles,
-      loadedFiles,
-      failedFiles,
-      batches,
-      durationMs: differenceInMilliseconds(Date.now(), startedAt),
-    });
-  };
+      const emitTelemetry = () => {
+        recordParallelReadTelemetry(scan.runtime, scan.sessionId, {
+          toolName: scan.toolName,
+          operation: "find_references",
+          batchSize: scan.config.batchSize,
+          mode: scan.config.mode,
+          reason: scan.config.reason,
+          scannedFiles,
+          loadedFiles,
+          failedFiles,
+          batches,
+          durationMs: differenceInMilliseconds(Date.now(), startedAt),
+        });
+      };
 
-  let cursor = 0;
-  while (cursor < files.length && matches.length < targetLimit) {
-    const remaining = targetLimit - matches.length;
-    const batchSize = resolveAdaptiveBatchSize(scan.config.batchSize, remaining);
-    const batch = files.slice(cursor, cursor + batchSize);
-    cursor += batch.length;
+      let cursor = 0;
+      while (cursor < files.length && matches.length < targetLimit) {
+        const remaining = targetLimit - matches.length;
+        const batchSize = resolveAdaptiveBatchSize(scan.config.batchSize, remaining);
+        const batch = files.slice(cursor, cursor + batchSize);
+        cursor += batch.length;
 
-    const loaded = await readTextBatch(batch);
-    const summary = summarizeReadBatch(loaded);
-    scannedFiles += summary.scannedFiles;
-    loadedFiles += summary.loadedFiles;
-    failedFiles += summary.failedFiles;
-    batches += 1;
+        const loaded = await readTextBatch(batch);
+        const summary = summarizeReadBatch(loaded);
+        scannedFiles += summary.scannedFiles;
+        loadedFiles += summary.loadedFiles;
+        failedFiles += summary.failedFiles;
+        batches += 1;
 
-    for (const item of loaded) {
-      if (item.content === null) continue;
-      const lines = item.content.split("\n");
-      for (let i = 0; i < lines.length; i += 1) {
-        const line = lines[i] ?? "";
-        if (pattern.test(line)) {
-          matches.push(`${item.file}:${i + 1}:0 -> ${line.trim()}`);
-        }
-        if (matches.length >= targetLimit) {
-          emitTelemetry();
-          return matches;
+        for (const item of loaded) {
+          if (item.content === null) continue;
+          const lines = item.content.split("\n");
+          for (let i = 0; i < lines.length; i += 1) {
+            const line = lines[i] ?? "";
+            if (pattern.test(line)) {
+              matches.push(`${item.file}:${i + 1}:0 -> ${line.trim()}`);
+            }
+            if (matches.length >= targetLimit) {
+              emitTelemetry();
+              return matches;
+            }
+          }
         }
       }
-    }
-  }
 
-  emitTelemetry();
-  return matches;
+      emitTelemetry();
+      return matches;
+    },
+  );
 }
 
 function listSymbolsInFile(filePath: string, limit = 100): string[] {
@@ -280,7 +300,13 @@ async function diagnostics(
   filePath: string,
   severity?: string,
 ): Promise<DiagnosticsRun> {
-  const result = await runCommand("bunx", ["tsc", "--noEmit", "--pretty", "false"], {
+  const tsconfigPath = resolve(cwd, "tsconfig.json");
+  const args = [TSC_BIN_PATH, "--noEmit", "--pretty", "false"];
+  if (existsSync(tsconfigPath)) {
+    args.push("--project", tsconfigPath);
+  }
+
+  const result = await runCommand(process.execPath, args, {
     cwd,
     timeoutMs: 120000,
   });

@@ -740,7 +740,7 @@ export interface BrewvaConfig {
     maxConsecutiveErrors: number;
     maxRecoveryCatchUps: number;
   };
-  parallel: { enabled: boolean; maxConcurrent: number };
+  parallel: { enabled: boolean; maxConcurrent: number; maxTotalPerSession: number };
   channels: {
     orchestration: {
       enabled: boolean;

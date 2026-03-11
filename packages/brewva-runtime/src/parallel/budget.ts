@@ -8,9 +8,15 @@ import type {
 interface SessionParallelState {
   active: Set<string>;
   totalStarted: number;
+  waiters: ParallelSlotWaiter[];
 }
 
-const PARALLEL_MAX_TOTAL_PER_SESSION = 10;
+interface ParallelSlotWaiter {
+  runId: string;
+  resolve: (result: ParallelAcquireResult) => void;
+  reject: (error: Error) => void;
+  timer?: ReturnType<typeof setTimeout>;
+}
 
 export class ParallelBudgetManager {
   private readonly config: BrewvaConfig["parallel"];
@@ -34,7 +40,7 @@ export class ParallelBudgetManager {
       return { accepted: false, reason: "max_concurrent" };
     }
 
-    if (state.totalStarted >= PARALLEL_MAX_TOTAL_PER_SESSION) {
+    if (state.totalStarted >= this.config.maxTotalPerSession) {
       return { accepted: false, reason: "max_total" };
     }
 
@@ -43,10 +49,45 @@ export class ParallelBudgetManager {
     return { accepted: true };
   }
 
+  acquireAsync(
+    sessionId: string,
+    runId: string,
+    options: { timeoutMs?: number } = {},
+  ): Promise<ParallelAcquireResult> {
+    const immediate = this.acquire(sessionId, runId);
+    if (immediate.accepted || immediate.reason === "disabled" || immediate.reason === "max_total") {
+      return Promise.resolve(immediate);
+    }
+
+    return new Promise<ParallelAcquireResult>((resolve, reject) => {
+      const state = this.getOrCreate(sessionId);
+      const waiter: ParallelSlotWaiter = {
+        runId,
+        resolve,
+        reject,
+      };
+
+      const timeoutMs =
+        typeof options.timeoutMs === "number" && Number.isFinite(options.timeoutMs)
+          ? Math.max(1, Math.trunc(options.timeoutMs))
+          : 0;
+      if (timeoutMs > 0) {
+        waiter.timer = setTimeout(() => {
+          this.removeWaiter(sessionId, waiter);
+          reject(new Error(`parallel slot wait timed out for ${runId}`));
+        }, timeoutMs);
+        waiter.timer.unref?.();
+      }
+
+      state.waiters.push(waiter);
+    });
+  }
+
   release(sessionId: string, runId: string): void {
     const state = this.sessions.get(sessionId);
     if (!state) return;
     state.active.delete(runId);
+    this.drainWaiters(sessionId, state);
   }
 
   snapshotSession(sessionId: string): ParallelSessionSnapshot | undefined {
@@ -65,11 +106,21 @@ export class ParallelBudgetManager {
       // Active workers do not survive process restarts, so restoring them would leak maxConcurrent slots.
       active: new Set<string>(),
       totalStarted: Math.max(0, snapshot.totalStarted),
+      waiters: [],
     });
     return droppedActiveRuns;
   }
 
   clear(sessionId: string): void {
+    const state = this.sessions.get(sessionId);
+    if (state) {
+      for (const waiter of state.waiters) {
+        if (waiter.timer) {
+          clearTimeout(waiter.timer);
+        }
+        waiter.reject(new Error(`parallel slot wait cancelled for ${waiter.runId}`));
+      }
+    }
     this.sessions.delete(sessionId);
   }
 
@@ -100,8 +151,42 @@ export class ParallelBudgetManager {
     const created: SessionParallelState = {
       active: new Set<string>(),
       totalStarted: 0,
+      waiters: [],
     };
     this.sessions.set(sessionId, created);
     return created;
+  }
+
+  private drainWaiters(sessionId: string, state: SessionParallelState): void {
+    while (state.waiters.length > 0) {
+      const next = state.waiters[0];
+      if (!next) return;
+
+      const acquired = this.acquire(sessionId, next.runId);
+      if (!acquired.accepted && acquired.reason === "max_concurrent") {
+        return;
+      }
+
+      state.waiters.shift();
+      if (next.timer) {
+        clearTimeout(next.timer);
+      }
+
+      if (acquired.accepted || acquired.reason === "disabled" || acquired.reason === "max_total") {
+        next.resolve(acquired);
+        continue;
+      }
+
+      next.reject(new Error(`parallel slot acquisition failed for ${next.runId}`));
+    }
+  }
+
+  private removeWaiter(sessionId: string, waiter: ParallelSlotWaiter): void {
+    const state = this.sessions.get(sessionId);
+    if (!state) return;
+    const index = state.waiters.indexOf(waiter);
+    if (index >= 0) {
+      state.waiters.splice(index, 1);
+    }
   }
 }

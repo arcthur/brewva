@@ -2,6 +2,59 @@ import { describe, expect, test } from "bun:test";
 import { ChannelCoordinator } from "@brewva/brewva-cli";
 
 describe("channel coordinator", () => {
+  test("fanOut limits concurrent dispatch bursts while preserving result order", async () => {
+    const agentIds = ["jack", "mike", "rose", "jill", "nina", "omar"];
+    const releaseQueue: Array<() => void> = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+
+    const coordinator = new ChannelCoordinator({
+      limits: {
+        fanoutMaxAgents: agentIds.length,
+        maxDiscussionRounds: 3,
+        a2aMaxDepth: 4,
+        a2aMaxHops: 6,
+      },
+      dispatch: async (input) =>
+        new Promise((resolve) => {
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          releaseQueue.push(() => {
+            inFlight -= 1;
+            resolve({
+              ok: true,
+              agentId: input.agentId,
+              responseText: input.agentId,
+            });
+          });
+        }),
+      isAgentActive: () => true,
+      listAgents: () => [],
+    });
+
+    const resultPromise = coordinator.fanOut({
+      agentIds,
+      task: "review this",
+    });
+
+    await flushMicrotasks();
+    expect(releaseQueue).toHaveLength(4);
+    expect(maxInFlight).toBe(4);
+
+    while (releaseQueue.length > 0) {
+      const batch = releaseQueue.splice(0);
+      for (const release of batch) {
+        release();
+      }
+      await flushMicrotasks();
+    }
+
+    const result = await resultPromise;
+    expect(result.ok).toBe(true);
+    expect(maxInFlight).toBe(4);
+    expect(result.results.map((entry) => entry.agentId)).toEqual(agentIds);
+  });
+
   test("enforces fanout max agents", async () => {
     const coordinator = new ChannelCoordinator({
       limits: {
@@ -121,3 +174,8 @@ describe("channel coordinator", () => {
     expect(result.results).toEqual([]);
   });
 });
+
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}

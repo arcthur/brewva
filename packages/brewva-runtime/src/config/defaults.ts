@@ -83,6 +83,7 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
   parallel: {
     enabled: true,
     maxConcurrent: 3,
+    maxTotalPerSession: 10,
   },
   channels: {
     orchestration: {

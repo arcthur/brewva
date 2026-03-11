@@ -10,6 +10,7 @@ import {
   resolveAdaptiveBatchSize,
   resolveParallelReadConfig,
   summarizeReadBatch,
+  withParallelReadSlot,
 } from "@brewva/brewva-tools";
 
 describe("parallel-read utils", () => {
@@ -190,5 +191,55 @@ describe("parallel-read utils", () => {
     expect(loaded[0]).toEqual({ file: fileB, content: "export const b = 2;\n" });
     expect(loaded[1]).toEqual({ file: missing, content: null });
     expect(loaded[2]).toEqual({ file: fileA, content: "export const a = 1;\n" });
+  });
+
+  test("withParallelReadSlot acquires and releases runtime slots when session context is available", async () => {
+    const calls: string[] = [];
+    const runtime = {
+      tools: {
+        async acquireParallelSlotAsync(sessionId: string, runId: string) {
+          calls.push(`acquire:${sessionId}:${runId}`);
+          return { accepted: true };
+        },
+        releaseParallelSlot(sessionId: string, runId: string) {
+          calls.push(`release:${sessionId}:${runId}`);
+        },
+      },
+    } as unknown as BrewvaToolRuntime;
+
+    const result = await withParallelReadSlot(runtime, "session-1", "find_references", async () => {
+      calls.push("work");
+      return "ok";
+    });
+
+    expect(result).toBe("ok");
+    expect(calls[0]?.startsWith("acquire:session-1:tool_parallel_read:find_references:")).toBe(
+      true,
+    );
+    expect(calls).toContain("work");
+    expect(calls[2]?.startsWith("release:session-1:tool_parallel_read:find_references:")).toBe(
+      true,
+    );
+  });
+
+  test("withParallelReadSlot falls back to local execution when runtime slot is rejected", async () => {
+    let released = false;
+    const runtime = {
+      tools: {
+        async acquireParallelSlotAsync() {
+          return { accepted: false, reason: "max_total" };
+        },
+        releaseParallelSlot() {
+          released = true;
+        },
+      },
+    } as unknown as BrewvaToolRuntime;
+
+    const result = await withParallelReadSlot(runtime, "session-2", "find_definition", async () => {
+      return 42;
+    });
+
+    expect(result).toBe(42);
+    expect(released).toBe(false);
   });
 });

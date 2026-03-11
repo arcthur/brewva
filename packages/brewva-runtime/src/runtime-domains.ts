@@ -207,6 +207,8 @@ export function createRuntimeDomainApis(deps: RuntimeDomainApiDependencies): Run
       },
       acquireParallelSlot: (sessionId, runId) =>
         deps.parallelService.acquireParallelSlot(sessionId, runId),
+      acquireParallelSlotAsync: (sessionId, runId, options) =>
+        deps.parallelService.acquireParallelSlotAsync(sessionId, runId, options),
       releaseParallelSlot: (sessionId, runId) =>
         deps.parallelService.releaseParallelSlot(sessionId, runId),
       markCall: (sessionId, toolName) => deps.fileChangeService.markToolCall(sessionId, toolName),

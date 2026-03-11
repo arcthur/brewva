@@ -804,10 +804,16 @@ async function waitForAllSettledWithTimeout(
   timeoutMs: number,
 ): Promise<void> {
   if (promises.length === 0) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<void>((resolve) => {
-    setTimeout(resolve, Math.max(0, timeoutMs));
+    timer = setTimeout(resolve, Math.max(0, timeoutMs));
   });
-  await Promise.race([Promise.allSettled(promises).then(() => undefined), timeoutPromise]);
+  await Promise.race([
+    Promise.allSettled(promises).then(() => {
+      clearTimeout(timer);
+    }),
+    timeoutPromise,
+  ]);
 }
 
 export function createSerializedAsyncTaskRunner(task: () => Promise<void>): {
@@ -1841,13 +1847,16 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
       .then(async () => {
         await processInboundTurn(turn, walId, scopeKey);
       });
-    scopeQueues.set(
-      scopeKey,
-      next.then(
-        () => undefined,
-        () => undefined,
-      ),
+    const settled = next.then(
+      () => undefined,
+      () => undefined,
     );
+    scopeQueues.set(scopeKey, settled);
+    void settled.finally(() => {
+      if (scopeQueues.get(scopeKey) === settled) {
+        scopeQueues.delete(scopeKey);
+      }
+    });
 
     if (enqueueOptions.awaitCompletion) {
       await next;

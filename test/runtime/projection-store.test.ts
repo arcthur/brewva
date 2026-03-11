@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ProjectionStore } from "../../packages/brewva-runtime/src/projection/store.js";
@@ -198,6 +198,45 @@ describe("projection store", () => {
     expect(store.getWorkingSnapshot("projection-store-session")).toBeUndefined();
     expect(store.getWorkingSnapshot("projection-store-session-b")).toBeDefined();
     expect(existsSync(sessionAPath)).toBe(true);
+  });
+
+  test("appends projection unit rows without rereading the existing log", () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    const rootDir = mkdtempSync(join(tmpdir(), "brewva-projection-store-append-only-"));
+    const store = new ProjectionStore({
+      rootDir,
+      workingFile: "working.md",
+    });
+
+    store.upsertUnit(
+      candidate({
+        projectionKey: "task_spec.goal",
+        label: "task.goal",
+        statement: "append-only baseline",
+      }),
+    );
+
+    const unitsPath = join(rootDir, "units.jsonl");
+    chmodSync(unitsPath, 0o200);
+    try {
+      const updated = store.upsertUnit(
+        candidate({
+          projectionKey: "task_spec.goal",
+          label: "task.goal",
+          statement: "append-only update",
+        }),
+      );
+
+      expect(updated.created).toBe(false);
+      expect(store.listUnits("projection-store-session")).toHaveLength(1);
+      chmodSync(unitsPath, 0o600);
+      expect(readFileSync(unitsPath, "utf8")).toContain("append-only update");
+    } finally {
+      chmodSync(unitsPath, 0o600);
+    }
   });
 
   test("purges incompatible on-disk units when removed unit types are encountered", () => {

@@ -44,6 +44,7 @@ const DEFAULT_SESSION_IDLE_TTL_MS = 30 * 60_000;
 const DEFAULT_SESSION_IDLE_SWEEP_INTERVAL_MS = 30_000;
 const DEFAULT_MAX_WORKERS = 16;
 const DEFAULT_MAX_PENDING_SESSION_OPENS = 64;
+const DEFAULT_MAX_PENDING_TURNS_PER_SESSION = 32;
 const DEFAULT_TURN_WAL_COMPACT_INTERVAL_MS = 120_000;
 
 type LoggerLike = Pick<StructuredLogger, "debug" | "info" | "warn" | "error" | "log">;
@@ -61,6 +62,17 @@ interface PendingTurn {
   walId?: string;
 }
 
+interface QueuedTurn {
+  requestedTurnId: string;
+  prompt: string;
+  source: "gateway" | "heartbeat" | "schedule";
+  trigger?: SendPromptTrigger;
+  waitForCompletion: boolean;
+  walId?: string;
+  resolve: (result: SendPromptResult) => void;
+  reject: (error: Error) => void;
+}
+
 interface WorkerHandle {
   sessionId: string;
   child: ChildProcess;
@@ -74,6 +86,8 @@ interface WorkerHandle {
   requestedAgentSessionId?: string;
   pending: Map<string, PendingRequest>;
   pendingTurns: Map<string, PendingTurn>;
+  turnQueue: QueuedTurn[];
+  activeTurnId: string | null;
   activeTurnWalIds: Map<string, string>;
   readyRequestId?: string;
   readyResolve?: (payload: WorkerReadyPayload) => void;
@@ -283,6 +297,15 @@ function toWorkerResultError(input: { error: string; errorCode?: WorkerResultErr
   return new Error(input.error);
 }
 
+function extractBusyTurnId(error: unknown): string | undefined {
+  if (!(error instanceof SessionBackendStateError) || error.code !== "session_busy") {
+    return undefined;
+  }
+  const match = error.message.match(/active turn:\s*(.+)$/i);
+  const value = match?.[1]?.trim();
+  return value && value.length > 0 ? value : undefined;
+}
+
 async function terminatePid(pid: number): Promise<void> {
   if (!isProcessAlive(pid)) {
     return;
@@ -435,6 +458,8 @@ export class SessionSupervisor implements SessionBackend {
       requestedAgentSessionId: input.agentSessionId,
       pending,
       pendingTurns: new Map<string, PendingTurn>(),
+      turnQueue: [],
+      activeTurnId: null,
       activeTurnWalIds: new Map<string, string>(),
       lastHeartbeatAt: input.lastHeartbeatAt ?? now,
     });
@@ -542,6 +567,8 @@ export class SessionSupervisor implements SessionBackend {
         enableExtensions: input.enableExtensions,
         pending: new Map<string, PendingRequest>(),
         pendingTurns: new Map<string, PendingTurn>(),
+        turnQueue: [],
+        activeTurnId: null,
         activeTurnWalIds: new Map<string, string>(),
         lastHeartbeatAt: Date.now(),
       };
@@ -619,109 +646,53 @@ export class SessionSupervisor implements SessionBackend {
     this.touchActivity(handle);
 
     const requestedTurnId = options.turnId?.trim() || randomUUID();
-    if (handle.activeTurnWalIds.has(requestedTurnId)) {
+    if (this.hasOutstandingTurn(handle, requestedTurnId)) {
       throw new SessionBackendStateError(
         "duplicate_active_turn_id",
         `duplicate active turn id: ${requestedTurnId}`,
       );
     }
+    if (handle.turnQueue.length >= DEFAULT_MAX_PENDING_TURNS_PER_SESSION) {
+      throw new SessionBackendStateError(
+        "session_busy",
+        `session queue full for ${sessionId}: ${DEFAULT_MAX_PENDING_TURNS_PER_SESSION}`,
+      );
+    }
     const source = options.source ?? "gateway";
     const replayWalId = normalizeOptionalString(options.walReplayId);
     const waitForCompletion = options.waitForCompletion === true;
-    const completionPromise = waitForCompletion
-      ? this.registerPendingTurn(handle, requestedTurnId, WORKER_RPC_TIMEOUT_MS)
-      : undefined;
     let walId = replayWalId;
-    try {
-      if (!walId && this.turnWalStore?.isEnabled) {
-        const walRecord = this.turnWalStore.appendPending(
-          buildSessionTurnEnvelope({
-            sessionId,
-            turnId: requestedTurnId,
-            prompt,
-            source,
-            trigger: options.trigger,
-          }),
-          source,
-          {
-            dedupeKey: `${source}:${sessionId}:${requestedTurnId}`,
-          },
-        );
-        walId = walRecord.walId;
-      }
-      if (walId) {
-        this.turnWalStore?.markInflight(walId);
-        this.trackTurnWalId(handle, requestedTurnId, walId);
-      }
-    } catch (error) {
-      this.untrackTurnWalId(handle, requestedTurnId);
-      this.rejectPendingTurn(handle, requestedTurnId, error);
-      throw error;
-    }
-
-    let acknowledgedTurnId = requestedTurnId;
-    let agentSessionId = handle.requestedAgentSessionId;
-    try {
-      const ackPayload = await this.request(handle, {
-        kind: "send",
-        requestId: randomUUID(),
-        payload: {
-          prompt,
+    if (!walId && this.turnWalStore?.isEnabled) {
+      const walRecord = this.turnWalStore.appendPending(
+        buildSessionTurnEnvelope({
+          sessionId,
           turnId: requestedTurnId,
+          prompt,
+          source,
           trigger: options.trigger,
+        }),
+        source,
+        {
+          dedupeKey: `${source}:${sessionId}:${requestedTurnId}`,
         },
+      );
+      walId = walRecord.walId;
+    }
+
+    const queued = new Promise<SendPromptResult>((resolveQueued, rejectQueued) => {
+      handle.turnQueue.push({
+        requestedTurnId,
+        prompt,
+        source,
+        trigger: options.trigger,
+        waitForCompletion,
+        walId,
+        resolve: resolveQueued,
+        reject: rejectQueued,
       });
-
-      if (
-        ackPayload &&
-        typeof ackPayload === "object" &&
-        typeof ackPayload.turnId === "string" &&
-        ackPayload.turnId.trim()
-      ) {
-        acknowledgedTurnId = ackPayload.turnId.trim();
-      }
-      if (
-        ackPayload &&
-        typeof ackPayload === "object" &&
-        typeof ackPayload.agentSessionId === "string" &&
-        ackPayload.agentSessionId.trim()
-      ) {
-        agentSessionId = ackPayload.agentSessionId.trim();
-        handle.requestedAgentSessionId = agentSessionId;
-      }
-    } catch (error) {
-      if (walId) {
-        this.turnWalStore?.markFailed(walId, toErrorMessage(error));
-      }
-      this.untrackTurnWalId(handle, requestedTurnId);
-      this.rejectPendingTurn(handle, requestedTurnId, error);
-      throw error;
-    }
-
-    if (acknowledgedTurnId !== requestedTurnId) {
-      this.rekeyTurnWalId(handle, requestedTurnId, acknowledgedTurnId);
-      if (waitForCompletion && completionPromise) {
-        this.rekeyPendingTurn(handle, requestedTurnId, acknowledgedTurnId);
-      }
-    }
-
-    if (waitForCompletion && completionPromise) {
-      const output = await completionPromise;
-      return {
-        sessionId,
-        agentSessionId,
-        turnId: acknowledgedTurnId,
-        accepted: true,
-        output,
-      };
-    }
-
-    return {
-      sessionId,
-      agentSessionId,
-      turnId: acknowledgedTurnId,
-      accepted: true,
-    };
+    });
+    void this.pumpTurnQueue(handle);
+    return queued;
   }
 
   async abortSession(sessionId: string): Promise<boolean> {
@@ -773,10 +744,149 @@ export class SessionSupervisor implements SessionBackend {
       startedAt: handle.startedAt,
       lastHeartbeatAt: handle.lastHeartbeatAt,
       lastActivityAt: handle.lastActivityAt,
-      pendingRequests: handle.pending.size + handle.pendingTurns.size,
+      pendingRequests: handle.pending.size + handle.pendingTurns.size + handle.turnQueue.length,
       agentSessionId: handle.requestedAgentSessionId,
       cwd: handle.cwd,
     }));
+  }
+
+  private hasOutstandingTurn(handle: WorkerHandle, turnId: string): boolean {
+    if (handle.activeTurnId === turnId) {
+      return true;
+    }
+    if (handle.activeTurnWalIds.has(turnId) || handle.pendingTurns.has(turnId)) {
+      return true;
+    }
+    return handle.turnQueue.some((queued) => queued.requestedTurnId === turnId);
+  }
+
+  private async pumpTurnQueue(handle: WorkerHandle): Promise<void> {
+    if (handle.activeTurnId || handle.turnQueue.length === 0) {
+      return;
+    }
+
+    const queued = handle.turnQueue.shift();
+    if (!queued) {
+      return;
+    }
+
+    handle.activeTurnId = queued.requestedTurnId;
+    let completionPromise: Promise<SendPromptOutput> | undefined;
+    try {
+      completionPromise = queued.waitForCompletion
+        ? this.registerPendingTurn(handle, queued.requestedTurnId, WORKER_RPC_TIMEOUT_MS)
+        : undefined;
+    } catch (error) {
+      handle.activeTurnId = null;
+      queued.reject(error instanceof Error ? error : new Error(String(error)));
+      void this.pumpTurnQueue(handle);
+      return;
+    }
+    if (completionPromise) {
+      void completionPromise.catch(() => undefined);
+    }
+
+    try {
+      if (queued.walId) {
+        this.turnWalStore?.markInflight(queued.walId);
+        this.trackTurnWalId(handle, queued.requestedTurnId, queued.walId);
+      }
+    } catch (error) {
+      this.rejectPendingTurn(handle, queued.requestedTurnId, error);
+      queued.reject(error instanceof Error ? error : new Error(String(error)));
+      handle.activeTurnId = null;
+      void this.pumpTurnQueue(handle);
+      return;
+    }
+
+    let acknowledgedTurnId = queued.requestedTurnId;
+    let agentSessionId = handle.requestedAgentSessionId;
+
+    try {
+      const ackPayload = await this.request(handle, {
+        kind: "send",
+        requestId: randomUUID(),
+        payload: {
+          prompt: queued.prompt,
+          turnId: queued.requestedTurnId,
+          trigger: queued.trigger,
+        },
+      });
+
+      if (
+        ackPayload &&
+        typeof ackPayload === "object" &&
+        typeof ackPayload.turnId === "string" &&
+        ackPayload.turnId.trim()
+      ) {
+        acknowledgedTurnId = ackPayload.turnId.trim();
+      }
+      if (
+        ackPayload &&
+        typeof ackPayload === "object" &&
+        typeof ackPayload.agentSessionId === "string" &&
+        ackPayload.agentSessionId.trim()
+      ) {
+        agentSessionId = ackPayload.agentSessionId.trim();
+        handle.requestedAgentSessionId = agentSessionId;
+      }
+    } catch (error) {
+      const busyTurnId = extractBusyTurnId(error);
+      if (busyTurnId && busyTurnId !== queued.requestedTurnId) {
+        this.untrackTurnWalId(handle, queued.requestedTurnId);
+        this.rejectPendingTurn(handle, queued.requestedTurnId, new Error("turn requeued"));
+        handle.activeTurnId = busyTurnId;
+        handle.turnQueue.unshift(queued);
+        return;
+      }
+
+      if (queued.walId) {
+        this.turnWalStore?.markFailed(queued.walId, toErrorMessage(error));
+      }
+      this.untrackTurnWalId(handle, queued.requestedTurnId);
+      this.rejectPendingTurn(handle, queued.requestedTurnId, error);
+      queued.reject(error instanceof Error ? error : new Error(String(error)));
+      handle.activeTurnId = null;
+      void this.pumpTurnQueue(handle);
+      return;
+    }
+
+    if (acknowledgedTurnId !== queued.requestedTurnId) {
+      this.rekeyTurnWalId(handle, queued.requestedTurnId, acknowledgedTurnId);
+      if (completionPromise) {
+        this.rekeyPendingTurn(handle, queued.requestedTurnId, acknowledgedTurnId);
+      }
+    }
+    handle.activeTurnId = acknowledgedTurnId;
+
+    if (!queued.waitForCompletion) {
+      queued.resolve({
+        sessionId: handle.sessionId,
+        agentSessionId,
+        turnId: acknowledgedTurnId,
+        accepted: true,
+      });
+      return;
+    }
+
+    if (!completionPromise) {
+      queued.reject(new Error(`missing completion promise for ${acknowledgedTurnId}`));
+      return;
+    }
+
+    void completionPromise
+      .then((output) => {
+        queued.resolve({
+          sessionId: handle.sessionId,
+          agentSessionId,
+          turnId: acknowledgedTurnId,
+          accepted: true,
+          output,
+        });
+      })
+      .catch((error: unknown) => {
+        queued.reject(error instanceof Error ? error : new Error(String(error)));
+      });
   }
 
   private request(
@@ -996,15 +1106,26 @@ export class SessionSupervisor implements SessionBackend {
     }
 
     if (message.kind === "event") {
-      if (message.event === "session.turn.end") {
+      if (message.event === "session.turn.start") {
+        handle.activeTurnId = message.payload.turnId;
+        this.touchActivity(handle);
+      } else if (message.event === "session.turn.end") {
         this.markTurnWalDone(handle, message.payload.turnId);
         this.resolvePendingTurn(handle, message.payload.turnId, {
           assistantText: message.payload.assistantText,
           toolOutputs: message.payload.toolOutputs,
         });
+        if (handle.activeTurnId === message.payload.turnId) {
+          handle.activeTurnId = null;
+        }
+        void this.pumpTurnQueue(handle);
       } else if (message.event === "session.turn.error") {
         this.markTurnWalFailed(handle, message.payload.turnId, message.payload.message);
         this.rejectPendingTurn(handle, message.payload.turnId, message.payload.message);
+        if (handle.activeTurnId === message.payload.turnId) {
+          handle.activeTurnId = null;
+        }
+        void this.pumpTurnQueue(handle);
       }
       this.options.onWorkerEvent?.(message);
       return;
@@ -1064,10 +1185,19 @@ export class SessionSupervisor implements SessionBackend {
     }
     handle.pendingTurns.clear();
 
+    for (const queued of handle.turnQueue) {
+      queued.reject(error);
+      if (queued.walId) {
+        this.turnWalStore?.markFailed(queued.walId, `worker_crash:${error.message}`);
+      }
+    }
+    handle.turnQueue = [];
+
     for (const [, walId] of handle.activeTurnWalIds) {
       this.turnWalStore?.markFailed(walId, `worker_crash:${error.message}`);
     }
     handle.activeTurnWalIds.clear();
+    handle.activeTurnId = null;
   }
 
   private sendToWorker(handle: WorkerHandle, message: ParentToWorkerMessage): void {
@@ -1190,7 +1320,13 @@ export class SessionSupervisor implements SessionBackend {
   private async sweepIdleSessions(): Promise<void> {
     const now = Date.now();
     for (const handle of this.workers.values()) {
-      if (handle.pending.size > 0 || handle.pendingTurns.size > 0 || handle.readyRequestId) {
+      if (
+        handle.pending.size > 0 ||
+        handle.pendingTurns.size > 0 ||
+        handle.turnQueue.length > 0 ||
+        handle.activeTurnId ||
+        handle.readyRequestId
+      ) {
         continue;
       }
       const idleMs = now - handle.lastActivityAt;

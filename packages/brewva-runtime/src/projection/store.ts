@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ensureDir, writeFileAtomic } from "../utils/fs.js";
 import { sha256 } from "../utils/hash.js";
@@ -350,11 +350,9 @@ export class ProjectionStore {
 
   private appendJsonLine(path: string, value: unknown): void {
     const line = `${JSON.stringify(value)}\n`;
-    let current = "";
-    if (existsSync(path)) {
-      current = readFileSync(path, "utf8");
-    }
-    writeFileAtomic(path, `${current}${line}`);
+    // Projection units are an append-only recovery log. Keep writes O(1) on the
+    // event hot path and rely on replay/latest-write-wins to rebuild state.
+    appendFileSync(path, line, "utf8");
   }
 
   private writeState(): void {
