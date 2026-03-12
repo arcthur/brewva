@@ -28,8 +28,7 @@ Current engine inputs may include:
 - target session id
 - current workspace cognition artifacts
 - existing `objective` and `contextHints`
-- recent unresolved `StatusSummary` open loops
-- recent `EpisodeNote` artifacts
+- latest same-session `StatusSummary`
 
 Resumable process-memory signals are filtered by target session scope before
 they can influence wake decisions.
@@ -41,7 +40,7 @@ Current engine output is a `wake` or `skip` plan with:
 - normalized `objective`
 - normalized `contextHints`
 - a bounded retrieval text used for curator query expansion
-- optional semantic anchors from unresolved open loops or recent episodes
+- optional anchors from recent same-session summaries
 - a skip reason when wake-up is suppressed
 
 ## Current Trigger Path
@@ -71,7 +70,7 @@ Heartbeat rules may optionally declare:
 - `contextHints`
   - additional retrieval hints for the memory curator
 - `wakeMode`
-  - `always`, `if_signal`, or `if_open_loop`
+  - `always` or `if_signal`
   - controls when the engine may suppress a wake-up
 - `staleAfterMinutes`
   - optional freshness limit for wake context signals
@@ -86,20 +85,16 @@ Current wake policy is evaluated entirely outside the kernel:
 - `always`
   - always wake the target session
 - `if_signal`
-  - wake only when the engine finds a relevant unresolved or recent cognition
-    signal worth rehydrating
-- `if_open_loop`
-  - wake only when the engine finds an unresolved open loop
+  - wake only when the engine finds a relevant same-session summary signal
 
-For `summary`, `episode`, and `open_loop` signals, relevance also requires a
+For summary signals, relevance also requires a
 matching target `session_scope`.
 
 ## Skip Policy
 
 Current skip policy may suppress a trigger when:
 
-- the rule requests `if_signal` but no relevant summary or episode signal exists
-- the rule requests `if_open_loop` but no unresolved status summary exists
+- the rule requests `if_signal` but no relevant summary signal exists
 - the only available signals are stale beyond the configured freshness budget
 
 Skipping is still explicit control-plane telemetry. It is not a silent drop.
@@ -111,7 +106,7 @@ The engine assembles wake context from:
 - the raw heartbeat prompt
 - the normalized objective
 - normalized context hints
-- bounded unresolved open-loop or episode anchors
+- bounded summary anchors
 
 This text is not injected directly into the model. It is used to help
 `MemoryCurator` retrieve better cognition artifacts before the model starts.

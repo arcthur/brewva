@@ -7,8 +7,10 @@ function makeEntry(
   id: string,
   content: string,
   estimatedTokens = 8,
+  category: ContextInjectionEntry["category"] = "narrative",
 ): ContextInjectionEntry {
   return {
+    category,
     source,
     id,
     content,
@@ -57,7 +59,13 @@ describe("context composer", () => {
       },
       injectionAccepted: true,
       admittedEntries: [
-        makeEntry(CONTEXT_SOURCES.truthStatic, "truth-static", "[TruthLedger]\nrule: stable"),
+        makeEntry(
+          CONTEXT_SOURCES.skillCascadeGate,
+          "skill-cascade-gate",
+          "[SkillCascadeGate]\nstatus: pending",
+          8,
+          "constraint",
+        ),
         makeEntry(CONTEXT_SOURCES.taskState, "task-state", "[TaskState]\nstatus: active"),
         makeEntry(
           CONTEXT_SOURCES.projectionWorking,
@@ -74,7 +82,7 @@ describe("context composer", () => {
       "constraint",
     ]);
     expect(result.content.indexOf("[TaskState]")).toBeLessThan(
-      result.content.indexOf("[TruthLedger]"),
+      result.content.indexOf("[SkillCascadeGate]"),
     );
     expect(result.metrics.narrativeRatio).toBeGreaterThan(0.4);
   });

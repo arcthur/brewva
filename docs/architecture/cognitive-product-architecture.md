@@ -38,7 +38,6 @@ Brewva uses two architectural taxonomies and keeps them separate:
   - persona/profile rendering
 - `Control Plane`
   - broker, debug-loop, heartbeat, wake planning, future planners, scheduling triggers
-  - adaptation telemetry and formation/ranking feedback
 
 Planes may span rings. For example, context composition reads kernel-approved
 working state, deliberation artifacts, and current tool surface, then emits a
@@ -75,13 +74,11 @@ authority:
   - files without those headings are ignored by the persona renderer
 - `MemoryFormation`
   - writes non-authoritative status summaries to `.brewva/cognition/summaries/`
-  - writes non-authoritative episode artifacts to `.brewva/cognition/summaries/`
-  - writes verified procedural notes to `.brewva/cognition/reference/`
+  - persists only latest-wins session summaries on the default path
   - captures resumable state at session boundaries instead of promoting it into
     kernel truth/task state
-  - stamps resumable summaries and episodes with `session_scope` so process
-    memory stays bound to the target live session while reference/procedure
-    notes remain workspace-scoped
+  - stamps summaries with `session_scope` so resumable state stays bound to the
+    target live session
 
 This plane may read kernel state, but it does not mutate kernel state directly.
 All commitment changes still cross the proposal boundary.
@@ -139,14 +136,7 @@ Current strategy set:
 
 - `reference match`
   - BM25-style local ranking over `.brewva/cognition/reference/`
-- `procedure match`
-  - semantic subset of the `reference/` lane
-  - rehydrates verified `ProcedureNote` artifacts as reusable work patterns
-- `episode resume`
-  - semantic subset of the `summaries/` lane
-  - rehydrates bounded process history from `EpisodeNote` artifacts
 - summary resume
-- open-loop resume
   - trigger-aware query expansion may add heartbeat objective/hints before local
     ranking runs
 
@@ -157,28 +147,19 @@ Storage and retrieval are intentionally not one-to-one:
   - `summaries`
 - retrieval strategies:
   - `reference`
-  - `procedure`
-  - `episode`
   - `summary`
-  - `open_loop`
 
 Current mapping:
 
-- `reference` lane -> `reference` or `procedure`
-  - `procedure` is a semantic subset identified from `ProcedureNote` content
-- `summaries` lane -> `summary`, `episode`, or `open_loop`
-  - `episode` is a semantic subset identified from `EpisodeNote` content
-  - `open_loop` is a semantic filter over unresolved `StatusSummary` content
+- `reference` lane -> `reference`
+- `summaries` lane -> latest same-session `summary`
 
 Scope model is intentionally split:
 
 - workspace-scoped cognition knowledge
   - `reference`
-  - `procedure`
 - session-scoped process memory
   - `summary`
-  - `episode`
-  - `open_loop`
 
 Stable knowledge may travel across sessions in the same workspace. Resumable
 process state stays bound to the target live session through `session_scope`.
@@ -187,8 +168,8 @@ This is an intentional design rule:
 
 `storage authority != retrieval semantics`
 
-The kernel only needs two storage roots. The curator may expose richer
-rehydration strategies without creating new kernel-owned lanes.
+The kernel only needs two storage roots. The default curator stays intentionally
+small instead of rebuilding a large retrieval taxonomy.
 
 All strategies must converge through the same curator so they do not compete
 silently for context budget.
@@ -203,16 +184,9 @@ Responsibilities:
   `session_compact`, and `session_shutdown`
 - write replay-independent cognition summaries into
   `.brewva/cognition/summaries/`
-- write replay-independent episode artifacts into
-  `.brewva/cognition/summaries/`
-- write replay-independent verified procedural notes into
-  `.brewva/cognition/reference/`
 - record non-authoritative resumable fields such as `phase`, `next_action`,
   `blocked_on`, and recent completed skill outputs
-- distill reusable verification guidance from replayable
-  `verification_outcome_recorded` evidence
-- apply control-plane quality guidance before persisting low-signal summaries,
-  episodes, or procedures
+- apply control-plane quality guidance before persisting low-signal summaries
 - avoid duplicate sediment by skipping repeated snapshots with the same
   semantic fingerprint within the same live session
 
@@ -259,7 +233,7 @@ Current module anchors:
     is likely to benefit from wake-up
 - `wake context assembly`
   - bounded trigger text assembled from prompt, objective, hints, and recent
-    open-loop or episode signals before `MemoryCurator` runs
+    same-session summary signals before `MemoryCurator` runs
 
 `ProactivityEngine` remains control-plane only:
 
@@ -273,16 +247,18 @@ Memory quality governance also belongs to the `Control Plane`.
 
 Current module anchors:
 
-- `packages/brewva-gateway/src/runtime-plugins/memory-adaptation.ts`
+- `packages/brewva-gateway/src/runtime-plugins/memory-curator.ts`
 - `packages/brewva-gateway/src/runtime-plugins/memory-formation.ts`
+- `packages/brewva-gateway/src/runtime-plugins/cognitive-metrics.ts`
 
 This loop now has two effects:
 
 - retrieval-side
-  - strategy-level and packet-level usefulness bias changes curator ranking
+  - `MemoryCurator` keeps default rehydration limited to `reference` plus the
+    latest same-session summary
 - formation-side
-  - adaptation guidance can suppress low-signal writes or require stronger
-    formation evidence before persisting an artifact
+  - `MemoryFormation` only persists a summary when the semantic session summary
+    changed
 
 This keeps quality control outside the kernel while letting the cognitive layer
 become more selective over time.
@@ -309,10 +285,13 @@ Rules:
 - those artifacts remain non-authoritative until `MemoryCurator` later proposes
   them as `context_packet` inputs
 - operator teaching does not write truth/task/ledger state directly
+- default rehydration only consumes `reference` artifacts plus the latest
+  same-session summary; `procedure` and `episode` stay operator-facing unless a
+  future explicit policy promotes them
 
 ## Closure Loops
 
-The cognitive architecture is evaluated as four explicit loops rather than a
+The cognitive architecture is evaluated as three explicit loops rather than a
 bag of isolated features.
 
 ### 1. Sedimentation Loop
@@ -332,17 +311,6 @@ This loop answers: which non-authoritative artifacts are worth showing again.
 `heartbeat/schedule trigger -> proactivity engine -> wake plan/context -> memory curator -> wake prompt`
 
 This loop answers: when intelligence wakes up and what it wakes up with.
-
-### 4. Adaptation Loop
-
-`cognitive metrics -> ranking/writer policy adjustments -> better future selection`
-
-This loop answers: whether the cognitive layer improves from observed outcomes.
-The current implementation persists a small control-plane policy at
-`.brewva/cognition/adaptation.json`, updates it from
-`cognitive_metric_rehydration_usefulness`, and feeds that policy back into
-`MemoryCurator` ranking and `MemoryFormation` quality gates without changing
-kernel authority.
 
 ## Outcomes And Metrics
 

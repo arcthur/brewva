@@ -44,11 +44,9 @@ function writeCatalog(
           requires: entry.requires ?? [],
           effectLevel: "read_only",
           routingScope: "domain",
-          continuityRequired: false,
           dispatch: {
-            gateThreshold: 10,
+            suggestThreshold: 10,
             autoThreshold: 16,
-            defaultMode: "suggest",
           },
         })),
       },
@@ -220,6 +218,7 @@ describe("external skill broker extension", () => {
       ],
     });
     const runtime = new BrewvaRuntime({ cwd: workspace });
+    runtime.config.skills.routing.enabled = true;
     const sessionId = "heuristic-session";
 
     await createSkillBrokerExtension({ runtime, brokerOptions: { judge: null } })(api);
@@ -266,6 +265,7 @@ describe("external skill broker extension", () => {
       ],
     });
     const runtime = new BrewvaRuntime({ cwd: workspace });
+    runtime.config.skills.routing.enabled = true;
     const sessionId = "llm-session";
 
     await createSkillBrokerExtension({ runtime })(api);
@@ -288,6 +288,6 @@ describe("external skill broker extension", () => {
 
     const trace = readLatestBrokerTrace(workspace, sessionId);
     expect(trace.judge?.status).toBe("skipped");
-    expect(trace.judge?.reason).toBe("no_model");
+    expect(trace.judge?.reason).toBe("empty_shortlist");
   });
 });

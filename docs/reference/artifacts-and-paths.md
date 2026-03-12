@@ -40,31 +40,20 @@ Runtime artifact paths are resolved from the workspace root (`nearest .brewva/br
   - `MemoryFormation` writes resumable `status_summary` artifacts here at
     lifecycle boundaries such as `agent_end`, `session_compact`, and
     `session_shutdown`
-  - resumable `status_summary` and `EpisodeNote` artifacts carry a
-    `session_scope` field so process memory stays tied to the target live
-    session
-  - `MemoryFormation` may also write bounded `EpisodeNote` artifacts under the
-    same `summaries/` lane to preserve process memory without creating a new
-    kernel-owned storage authority
-  - `MemoryFormation` also writes verified `ProcedureNote` artifacts into the
-    `reference/` lane when verification outcomes expose a reusable pattern and
-    recommendation
+  - resumable `status_summary` artifacts carry a `session_scope` field so
+    resumability stays tied to the target live session
   - operator teaching may append or supersede `ReferenceNote`,
     `ProcedureNote`, and `EpisodeNote` artifacts through the `cognition_note`
-    operator tool
+    operator tool; these are deliberation-side artifacts, not part of the
+    default memory path
   - operator-teaching supersede remains append-only on disk, but retrieval and
     listing collapse older versions by semantic key
-  - `registerMemoryCurator` may rehydrate selected `reference/` artifacts,
-    prompt-matched `summaries/` artifacts, verification-backed procedural
-    notes, and continuation-oriented open-loop summaries into accepted
-    `context_packet` proposals for future sessions
-  - control-plane ranking bias is persisted separately at
-    `.brewva/cognition/adaptation.json`
-  - that policy is owned by `registerMemoryAdaptation`; it does not define a
-    new artifact lane and it never becomes kernel authority
+  - `registerMemoryCurator` may rehydrate selected `reference/` artifacts and
+    the latest same-session `status_summary` into accepted `context_packet`
+    proposals for future sessions
   - storage lanes and retrieval strategies are intentionally not one-to-one:
-    `reference` lane may yield `reference` or `procedure` hydration, and
-    `summaries` lane may yield `summary`, `episode`, or `open_loop` hydration
+    `reference` lane yields default cross-session reference hydration, while
+    `summaries` yields the latest same-session summary hydration
 - Agent identity profile (per-agent): `.brewva/agents/<agent-id>/identity.md`
   - `<agent-id>` comes from runtime option `agentId` (or `BREWVA_AGENT_ID`, fallback `default`)
   - id normalization: lowercase slug (`[a-z0-9._-]`, invalid separators mapped to `-`)

@@ -21,19 +21,19 @@ Factory options:
 Default extension composition (`profile="core"`) wires:
 
 - `registerEventStream`
-- `registerToolSurface`
-- `registerContextTransform`
-- `registerQualityGate`
 - `registerLedgerWriter`
 - `registerToolResultDistiller`
-- `registerCompletionGuard`
+- ordered turn-lifecycle phases for:
+  - `registerToolSurface`
+  - `registerContextTransform`
+  - `registerQualityGate`
+  - `registerCompletionGuard`
 
 Optional profiles add:
 
 - `memory`
   - `registerMemoryCurator`
   - `registerMemoryFormation`
-  - `registerMemoryAdaptation`
 - `debug`
   - `registerDebugLoop`
 - `full`
@@ -41,6 +41,17 @@ Optional profiles add:
   - `registerDebugLoop`
   - `registerCognitiveMetrics`
   - `registerNotification`
+
+`createBrewvaExtension()` now assembles one ordered lifecycle adapter for the
+turn-shaping path. The fixed phase order is:
+
+1. memory hydrate (optional)
+2. tool surface resolution
+3. context transform
+4. cognitive metrics anchor refresh (optional)
+5. quality gate on `input` / `tool_call`
+6. completion guard and summary persistence on `agent_end`
+7. lifecycle cleanup on `session_compact` / `session_shutdown`
 
 Implementation files:
 
@@ -70,7 +81,7 @@ Resolution inputs:
 - built-in always-on tools
 - Brewva base governance tools
 - tools declared by the current active/pending/cascade skill contracts
-- operator/full routing profiles
+- routing scopes
 - explicit capability requests such as `$task_view_state` or `$obs_query`
 
 The extension updates only the active tool surface. Runtime policy, contract,
@@ -82,7 +93,7 @@ Default behavior is intentionally narrow:
 - any managed Brewva tool can be surfaced for the current turn by that request path
 - skill commitments still activate the normal task-specific tool surface without
   requiring `$name`
-- operator/full routing profiles keep operator tools visible by default
+- operator and meta tools stay hidden unless routing scopes explicitly include them
 
 Telemetry:
 
@@ -184,11 +195,8 @@ cross-session memory rehydration.
 It does not turn cognition artifacts into kernel memory. Instead it:
 
 - scans `.brewva/cognition/reference/` for prompt-relevant artifacts
-- treats `ProcedureNote` artifacts as a semantic subset of the same
-  `reference/` lane and rehydrates them with dedicated `procedure:*` packet
-  keys
-- scans `.brewva/cognition/summaries/` for prompt-relevant summaries and
-  continuation-oriented open loops
+- scans `.brewva/cognition/summaries/` for the latest same-session
+  `status_summary`
 - wraps selected artifacts as evidence-backed `context_packet` proposals
 - relies on kernel receipts before those artifacts become visible as
   `brewva.context-packets`
@@ -197,12 +205,8 @@ Telemetry:
 
 - `memory_reference_rehydrated`
 - `memory_reference_rehydration_failed`
-- `memory_procedure_rehydrated`
-- `memory_procedure_rehydration_failed`
 - `memory_summary_rehydrated`
 - `memory_summary_rehydration_failed`
-- `memory_open_loop_rehydrated`
-- `memory_open_loop_rehydration_failed`
 
 The curator may also consume recent proactivity wake-up metadata so heartbeat
 or scheduler-triggered sessions can retrieve better artifacts than a raw prompt
@@ -217,11 +221,7 @@ It:
 - observes resumable lifecycle boundaries such as `agent_end`,
   `session_compact`, and `session_shutdown`
 - writes status-summary cognition artifacts into `.brewva/cognition/summaries/`
-- writes verification-backed `ProcedureNote` artifacts into
-  `.brewva/cognition/reference/`
 - records `memory_summary_written` / `memory_summary_write_failed`
-- records `memory_procedure_note_written` /
-  `memory_procedure_note_write_failed`
 - keeps the write path outside the kernel so replayable commitments remain in
   tape while resumable cognition remains in deliberation-side artifacts
 
@@ -239,21 +239,6 @@ Current derived metrics:
 These metrics are derived from existing runtime evidence such as
 `tool_result_recorded` and `memory_*_rehydrated` events. They do not introduce
 new kernel authority.
-
-## Memory Adaptation
-
-`registerMemoryAdaptation` closes the control-plane feedback loop for memory
-rehydration.
-
-It:
-
-- subscribes to replayable `cognitive_metric_rehydration_usefulness` events
-- persists a small ranking policy under `.brewva/cognition/adaptation.json`
-- records `memory_adaptation_updated` / `memory_adaptation_update_failed`
-- leaves proposal admission, packet TTL, and scope semantics in the kernel
-
-The adaptation policy affects future `registerMemoryCurator` ordering, not
-kernel truth or task state.
 
 ## Proactivity Trigger Context
 
@@ -314,18 +299,18 @@ deterministic and replayable.
 Default context injection sources are:
 
 - `brewva.identity`
-- `brewva.truth-static`
-- `brewva.truth-facts`
-- `brewva.skill-candidates`
-- `brewva.skill-dispatch-gate`
-- `brewva.skill-cascade-gate`
 - `brewva.context-packets`
   - packets are scoped by `scopeId`, collapse by latest `packetKey`, and stop
     injecting after `expiresAt`
+- `brewva.runtime-status`
 - `brewva.task-state`
-- `brewva.tool-failures`
-- `brewva.tool-outputs-distilled`
 - `brewva.projection-working`
+
+Optional sources remain available behind explicit config:
+
+- `brewva.skill-candidates`
+- `brewva.skill-cascade-gate`
+- `brewva.tool-outputs-distilled`
 
 ## Runtime Core Bridge (`--no-addons`)
 

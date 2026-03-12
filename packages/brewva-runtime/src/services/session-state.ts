@@ -35,7 +35,6 @@ export class RuntimeSessionStateStore {
   readonly toolContractWarningsBySession = new Map<string, Set<string>>();
   readonly skillBudgetWarningsBySession = new Map<string, Set<string>>();
   readonly skillParallelWarningsBySession = new Map<string, Set<string>>();
-  readonly skillDispatchGateWarningsBySession = new Map<string, Set<string>>();
   readonly skillOutputsBySession = new Map<string, Map<string, SkillOutputRecord>>();
   readonly pendingDispatchBySession = new Map<string, SkillDispatchDecision>();
   readonly skillChainIntentsBySession = new Map<string, SkillChainIntent>();
@@ -92,7 +91,6 @@ export class RuntimeSessionStateStore {
     this.toolContractWarningsBySession.delete(sessionId);
     this.skillBudgetWarningsBySession.delete(sessionId);
     this.skillParallelWarningsBySession.delete(sessionId);
-    this.skillDispatchGateWarningsBySession.delete(sessionId);
     this.skillOutputsBySession.delete(sessionId);
     this.pendingDispatchBySession.delete(sessionId);
     this.skillChainIntentsBySession.delete(sessionId);

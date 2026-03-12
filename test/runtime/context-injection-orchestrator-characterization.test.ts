@@ -76,10 +76,10 @@ describe("Context injection orchestrator characterization", () => {
     );
     expect(injection.accepted).toBe(true);
     expect(injection.text.includes("[PersonaProfile]")).toBe(true);
-    expect(injection.text.includes("[TruthLedger]")).toBe(true);
-    expect(injection.text.includes("[TruthFacts]")).toBe(true);
+    expect(injection.text.includes("[TruthLedger]")).toBe(false);
+    expect(injection.text.includes("[TruthFacts]")).toBe(false);
+    expect(injection.text.includes("[RuntimeStatus]")).toBe(true);
     expect(injection.text.includes("[TaskLedger]")).toBe(true);
-    expect(injection.text.includes("[RecentToolFailures]")).toBe(true);
     expect(injection.text.includes("[WorkingProjection]")).toBe(true);
     expect(injection.text.includes("\n\n")).toBe(true);
 
@@ -94,7 +94,7 @@ describe("Context injection orchestrator characterization", () => {
         }
       | undefined;
     expect(typeof payload?.sourceCount).toBe("number");
-    expect((payload?.sourceCount ?? 0) >= 5).toBe(true);
+    expect((payload?.sourceCount ?? 0) >= 4).toBe(true);
     expect((payload?.finalTokens ?? 0) > 0).toBe(true);
     expect((payload?.originalTokens ?? 0) >= (payload?.finalTokens ?? 0)).toBe(true);
     expect(payload?.degradationApplied).toBe(false);

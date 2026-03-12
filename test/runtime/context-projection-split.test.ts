@@ -5,11 +5,9 @@ import { join } from "node:path";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, type BrewvaConfig } from "@brewva/brewva-runtime";
 
 type RuntimeWithInternals = {
-  contextService: {
-    projectionEngine: {
-      refreshIfNeeded(input: { sessionId: string }): void;
-      getWorkingProjection(sessionId: string): { content: string } | null;
-    };
+  projectionEngine: {
+    refreshIfNeeded(input: { sessionId: string }): void;
+    getWorkingProjection(sessionId: string): { content: string } | null;
   };
 };
 
@@ -22,8 +20,8 @@ function createConfig(): BrewvaConfig {
 
 function patchProjection(runtime: BrewvaRuntime): void {
   const runtimeWithInternals = runtime as unknown as RuntimeWithInternals;
-  runtimeWithInternals.contextService.projectionEngine.refreshIfNeeded = () => undefined;
-  runtimeWithInternals.contextService.projectionEngine.getWorkingProjection = () => ({
+  runtimeWithInternals.projectionEngine.refreshIfNeeded = () => undefined;
+  runtimeWithInternals.projectionEngine.getWorkingProjection = () => ({
     content: "[WorkingProjection]\nsummary: deterministic working projection",
   });
 }

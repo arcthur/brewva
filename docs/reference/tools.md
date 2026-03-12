@@ -107,7 +107,6 @@ Default tool bundle (registered by `buildBrewvaTools()`):
 - `rollback_last_patch`
 - `cognition_note`
 - `skill_load`
-- `skill_route_override`
 - `skill_complete`
 - `skill_chain_control`
 - `task_set_spec`
@@ -145,7 +144,8 @@ Default product behavior:
   requesting `$tool_name`
 - current skill/pending dispatch/cascade commitment still exposes its normal
   task-specific tool surface without needing `$tool_name`
-- operator/full profile keeps operator tools visible by default
+- routing scopes that include `operator` or `meta` keep operator tools visible
+  by default
 
 This is enforced through active-tool selection, not by mutating kernel policy:
 
@@ -160,7 +160,7 @@ Notes:
 
 - `grep` is a read-only workspace search tool intended to replace ad-hoc `exec` usage for text search in read-only skills.
 - `read_spans` is the preferred targeted follow-up after `toc_document` / `toc_search`; it reads bounded line ranges from one file instead of replaying a whole file.
-- `skill_route_override` and `skill_chain_control` are control-plane tools for steering dispatch gating and cascade progression.
+- `skill_chain_control` is the control-plane tool for inspecting and steering explicit cascade progression.
 - Repeated `read`, `grep`, `read_spans`, `look_at`, `toc_*`, navigation-only `lsp_*`, `ast_grep_search`, or low-signal `exec` turns can trigger the scan convergence guard. Preferred recovery tools are `output_search`, `ledger_query`, `tape_search`, `task_view_state`, and `task_*` ledger actions before resuming more retrieval.
 - `obs_query`, `obs_slo_assert`, and `obs_snapshot` are evidence-reuse tools. They inspect current-session runtime events and do not count as low-signal retrieval for scan-convergence reset.
 - `cognition_note` is an operator teaching tool. It writes append-only
@@ -214,8 +214,8 @@ Storage mapping:
 Scope model:
 
 - operator-authored `reference` and `procedure` notes are workspace-scoped
-- resumable `summary`, `episode`, and `open_loop` process memory remains
-  session-scoped through `session_scope`
+- resumable `summary` process memory remains session-scoped through
+  `session_scope`
 - `cognition_note` may attach `sessionScope` to operator-authored `episode`
   notes when the note should participate in same-session rehydration
 
@@ -259,17 +259,6 @@ Behavior:
 - output is capped to avoid whole-file replay; use multiple narrower calls if needed
 - when called after `toc_document` / `toc_search` in the same session, it
   reuses the same source-text cache instead of rereading the file immediately
-
-### `skill_route_override`
-
-Explicitly bypasses a pending skill dispatch gate.
-
-Parameters:
-
-- `reason` (string, optional, max 280 chars): why the override is intentional
-- `targetSkillName` (string, optional, max 120 chars): skill to follow after the override
-
-Returns the previous primary skill name on success.
 
 ### `skill_chain_control`
 
@@ -357,7 +346,6 @@ Definitions:
 - `packages/brewva-tools/src/session-compact.ts`
 - `packages/brewva-tools/src/rollback-last-patch.ts`
 - `packages/brewva-tools/src/skill-load.ts`
-- `packages/brewva-tools/src/skill-route-override.ts`
 - `packages/brewva-tools/src/skill-complete.ts`
 - `packages/brewva-tools/src/skill-chain-control.ts`
 - `packages/brewva-tools/src/task-ledger.ts`

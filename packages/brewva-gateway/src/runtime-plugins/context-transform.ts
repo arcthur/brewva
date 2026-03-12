@@ -23,6 +23,14 @@ export interface ContextTransformOptions {
   autoCompactionWatchdogMs?: number;
 }
 
+export interface ContextTransformLifecycle {
+  turnStart: (event: unknown, ctx: unknown) => undefined;
+  context: (event: unknown, ctx: unknown) => undefined;
+  sessionCompact: (event: unknown, ctx: unknown) => undefined;
+  sessionShutdown: (event: unknown, ctx: unknown) => undefined;
+  beforeAgentStart: (event: unknown, ctx: unknown) => Promise<Record<string, unknown>>;
+}
+
 interface CompactionGateState {
   turnIndex: number;
   lastRuntimeGateRequired: boolean;
@@ -139,287 +147,420 @@ function resolveRoutingProjection(
   return resolveSkillSelectionProjection(runtime, sessionId);
 }
 
-export function registerContextTransform(
+export function createContextTransformLifecycle(
   pi: ExtensionAPI,
   runtime: BrewvaRuntime,
   options: ContextTransformOptions = {},
-): void {
+): ContextTransformLifecycle {
   const gateStateBySession = new Map<string, CompactionGateState>();
   const autoCompactionWatchdogMs = Math.max(
     1,
     Math.trunc(options.autoCompactionWatchdogMs ?? DEFAULT_AUTO_COMPACTION_WATCHDOG_MS),
   );
 
-  pi.on("turn_start", (event, ctx) => {
-    const sessionId = ctx.sessionManager.getSessionId();
-    const state = getOrCreateGateState(gateStateBySession, sessionId);
-    const runtimeTurn = observeRuntimeTurnStart(sessionId, event.turnIndex, event.timestamp);
-    state.turnIndex = runtimeTurn;
-    runtime.context.onTurnStart(sessionId, runtimeTurn);
-    return undefined;
-  });
-
-  pi.on("context", (_event, ctx) => {
-    const sessionId = ctx.sessionManager.getSessionId();
-    const state = getOrCreateGateState(gateStateBySession, sessionId);
-    const usage = coerceContextBudgetUsage(ctx.getContextUsage());
-    runtime.context.observeUsage(sessionId, usage);
-
-    if (!runtime.context.checkAndRequestCompaction(sessionId, usage)) {
+  return {
+    turnStart(event, ctx) {
+      const rawEvent = event as { turnIndex?: unknown; timestamp?: unknown };
+      const sessionId = (
+        ctx as { sessionManager: { getSessionId: () => string } }
+      ).sessionManager.getSessionId();
+      const state = getOrCreateGateState(gateStateBySession, sessionId);
+      const runtimeTurn = observeRuntimeTurnStart(
+        sessionId,
+        Number(rawEvent.turnIndex ?? 0),
+        Number(rawEvent.timestamp ?? Date.now()),
+      );
+      state.turnIndex = runtimeTurn;
+      runtime.context.onTurnStart(sessionId, runtimeTurn);
       return undefined;
-    }
+    },
+    context(_event, ctx) {
+      const sessionId = (
+        ctx as {
+          sessionManager: { getSessionId: () => string };
+          hasUI?: boolean;
+          isIdle?: () => boolean;
+          getContextUsage?: () => unknown;
+          compact?: (options: Record<string, unknown>) => void;
+        }
+      ).sessionManager.getSessionId();
+      const state = getOrCreateGateState(gateStateBySession, sessionId);
+      const usage = coerceContextBudgetUsage(
+        typeof (ctx as { getContextUsage?: () => unknown }).getContextUsage === "function"
+          ? (ctx as { getContextUsage: () => unknown }).getContextUsage()
+          : undefined,
+      );
+      runtime.context.observeUsage(sessionId, usage);
 
-    if (ctx.hasUI) {
-      // Missing UI-idle telemetry is unsafe for live-turn manual compaction.
-      const idle = typeof ctx.isIdle === "function" ? ctx.isIdle() : false;
-      if (!idle) {
-        const pendingReason =
-          runtime.context.getPendingCompactionReason(sessionId) ?? "usage_threshold";
-        if (state.deferredAutoCompactionReason === pendingReason) {
+      if (!runtime.context.checkAndRequestCompaction(sessionId, usage)) {
+        return undefined;
+      }
+
+      if ((ctx as { hasUI?: boolean }).hasUI) {
+        const idle =
+          typeof (ctx as { isIdle?: () => boolean }).isIdle === "function"
+            ? (ctx as { isIdle: () => boolean }).isIdle()
+            : false;
+        if (!idle) {
+          const pendingReason =
+            runtime.context.getPendingCompactionReason(sessionId) ?? "usage_threshold";
+          if (state.deferredAutoCompactionReason === pendingReason) {
+            return undefined;
+          }
+          state.deferredAutoCompactionReason = pendingReason;
+          emitRuntimeEvent(runtime, {
+            sessionId,
+            turn: state.turnIndex,
+            type: "context_compaction_skipped",
+            payload: {
+              reason: "agent_active_manual_compaction_unsafe",
+            },
+          });
           return undefined;
         }
-        state.deferredAutoCompactionReason = pendingReason;
-        // `ctx.compact()` maps to manual compaction and aborts the active agent run.
-        // Triggering it from a live context hook can strand the current turn without auto-resume.
-        emitRuntimeEvent(runtime, {
-          sessionId,
-          turn: state.turnIndex,
-          type: "context_compaction_skipped",
-          payload: {
-            reason: "agent_active_manual_compaction_unsafe",
-          },
-        });
-        return undefined;
-      }
-      state.deferredAutoCompactionReason = null;
+        state.deferredAutoCompactionReason = null;
 
-      if (state.autoCompactionInFlight) {
-        emitRuntimeEvent(runtime, {
-          sessionId,
-          turn: state.turnIndex,
-          type: "context_compaction_skipped",
-          payload: {
-            reason: "auto_compaction_in_flight",
-          },
-        });
-        return undefined;
-      }
+        if (state.autoCompactionInFlight) {
+          emitRuntimeEvent(runtime, {
+            sessionId,
+            turn: state.turnIndex,
+            type: "context_compaction_skipped",
+            payload: {
+              reason: "auto_compaction_in_flight",
+            },
+          });
+          return undefined;
+        }
 
-      const pendingReason = runtime.context.getPendingCompactionReason(sessionId);
-      const compactionReason = pendingReason ?? "usage_threshold";
-      state.autoCompactionInFlight = true;
-      if (state.autoCompactionWatchdog) {
-        clearTimeout(state.autoCompactionWatchdog);
-      }
-      state.autoCompactionWatchdog = setTimeout(() => {
-        if (!state.autoCompactionInFlight) return;
-        clearAutoCompactionState(state);
+        const pendingReason = runtime.context.getPendingCompactionReason(sessionId);
+        const compactionReason = pendingReason ?? "usage_threshold";
+        state.autoCompactionInFlight = true;
+        if (state.autoCompactionWatchdog) {
+          clearTimeout(state.autoCompactionWatchdog);
+        }
+        state.autoCompactionWatchdog = setTimeout(() => {
+          if (!state.autoCompactionInFlight) return;
+          clearAutoCompactionState(state);
+          emitRuntimeEvent(runtime, {
+            sessionId,
+            turn: state.turnIndex,
+            type: "context_compaction_auto_failed",
+            payload: {
+              reason: compactionReason,
+              error: AUTO_COMPACTION_WATCHDOG_ERROR,
+              watchdogMs: autoCompactionWatchdogMs,
+            },
+          });
+        }, autoCompactionWatchdogMs);
+
         emitRuntimeEvent(runtime, {
           sessionId,
           turn: state.turnIndex,
-          type: "context_compaction_auto_failed",
+          type: "context_compaction_auto_requested",
           payload: {
             reason: compactionReason,
-            error: AUTO_COMPACTION_WATCHDOG_ERROR,
-            watchdogMs: autoCompactionWatchdogMs,
+            usagePercent: usage?.percent ?? null,
+            tokens: usage?.tokens ?? null,
           },
         });
-      }, autoCompactionWatchdogMs);
+
+        const clearInFlight = () => {
+          clearAutoCompactionState(state);
+        };
+        const recordAutoFailure = (error: unknown) => {
+          emitRuntimeEvent(runtime, {
+            sessionId,
+            turn: state.turnIndex,
+            type: "context_compaction_auto_failed",
+            payload: {
+              reason: compactionReason,
+              error: normalizeRuntimeError(error),
+            },
+          });
+        };
+
+        try {
+          (ctx as { compact: (options: Record<string, unknown>) => void }).compact({
+            customInstructions: runtime.context.getCompactionInstructions(),
+            onComplete: () => {
+              clearInFlight();
+              emitRuntimeEvent(runtime, {
+                sessionId,
+                turn: state.turnIndex,
+                type: "context_compaction_auto_completed",
+                payload: {
+                  reason: compactionReason,
+                },
+              });
+            },
+            onError: (error: unknown) => {
+              clearInFlight();
+              recordAutoFailure(error);
+            },
+          });
+        } catch (error) {
+          clearInFlight();
+          recordAutoFailure(error);
+        }
+
+        return undefined;
+      }
 
       emitRuntimeEvent(runtime, {
         sessionId,
         turn: state.turnIndex,
-        type: "context_compaction_auto_requested",
+        type: "context_compaction_skipped",
         payload: {
-          reason: compactionReason,
-          usagePercent: usage?.percent ?? null,
-          tokens: usage?.tokens ?? null,
+          reason: "non_interactive_mode",
         },
       });
-
-      const clearInFlight = () => {
-        clearAutoCompactionState(state);
-      };
-      const recordAutoFailure = (error: unknown) => {
-        emitRuntimeEvent(runtime, {
-          sessionId,
-          turn: state.turnIndex,
-          type: "context_compaction_auto_failed",
-          payload: {
-            reason: compactionReason,
-            error: normalizeRuntimeError(error),
-          },
-        });
-      };
-
-      try {
-        ctx.compact({
-          customInstructions: runtime.context.getCompactionInstructions(),
-          onComplete: () => {
-            clearInFlight();
-            emitRuntimeEvent(runtime, {
-              sessionId,
-              turn: state.turnIndex,
-              type: "context_compaction_auto_completed",
-              payload: {
-                reason: compactionReason,
-              },
-            });
-          },
-          onError: (error) => {
-            clearInFlight();
-            recordAutoFailure(error);
-          },
-        });
-      } catch (error) {
-        clearInFlight();
-        recordAutoFailure(error);
-      }
 
       return undefined;
-    }
-
-    emitRuntimeEvent(runtime, {
-      sessionId,
-      turn: state.turnIndex,
-      type: "context_compaction_skipped",
-      payload: {
-        reason: "non_interactive_mode",
-      },
-    });
-
-    return undefined;
-  });
-
-  pi.on("session_compact", (event, ctx) => {
-    const sessionId = ctx.sessionManager.getSessionId();
-    const state = getOrCreateGateState(gateStateBySession, sessionId);
-    const usage = coerceContextBudgetUsage(ctx.getContextUsage());
-    const wasGated = state.lastRuntimeGateRequired;
-    state.lastRuntimeGateRequired = false;
-    clearAutoCompactionState(state);
-
-    runtime.context.markCompacted(sessionId, {
-      fromTokens: null,
-      toTokens: usage?.tokens ?? null,
-      summary: extractCompactionSummary(event),
-      entryId: extractCompactionEntryId(event),
-    });
-    emitRuntimeEvent(runtime, {
-      sessionId,
-      turn: state.turnIndex,
-      type: "session_compact",
-      payload: {
-        entryId: event.compactionEntry.id,
-        fromExtension: event.fromExtension,
-      },
-    });
-
-    if (wasGated) {
-      emitRuntimeEvent(runtime, {
-        sessionId,
-        turn: state.turnIndex,
-        type: "context_compaction_gate_cleared",
-        payload: {
-          reason: "session_compact_performed",
-        },
-      });
-    }
-    return undefined;
-  });
-
-  pi.on("session_shutdown", (_event, ctx) => {
-    const sessionId = ctx.sessionManager.getSessionId();
-    const state = gateStateBySession.get(sessionId);
-    if (state) {
+    },
+    sessionCompact(event, ctx) {
+      const sessionId = (
+        ctx as { sessionManager: { getSessionId: () => string }; getContextUsage?: () => unknown }
+      ).sessionManager.getSessionId();
+      const state = getOrCreateGateState(gateStateBySession, sessionId);
+      const usage = coerceContextBudgetUsage(
+        typeof (ctx as { getContextUsage?: () => unknown }).getContextUsage === "function"
+          ? (ctx as { getContextUsage: () => unknown }).getContextUsage()
+          : undefined,
+      );
+      const wasGated = state.lastRuntimeGateRequired;
+      state.lastRuntimeGateRequired = false;
       clearAutoCompactionState(state);
-    }
-    gateStateBySession.delete(sessionId);
-    clearRuntimeTurnClock(sessionId);
-    return undefined;
-  });
 
-  pi.on("before_agent_start", async (event, ctx) => {
-    const sessionId = ctx.sessionManager.getSessionId();
-    const state = getOrCreateGateState(gateStateBySession, sessionId);
-    const injectionScopeId = resolveInjectionScopeId(ctx.sessionManager);
-    const usage = coerceContextBudgetUsage(ctx.getContextUsage());
-    runtime.context.observeUsage(sessionId, usage);
-    const emitGateEvents = (
-      gateStatus: ContextCompactionGateStatus,
-      reason: "hard_limit",
-    ): void => {
+      runtime.context.markCompacted(sessionId, {
+        fromTokens: null,
+        toTokens: usage?.tokens ?? null,
+        summary: extractCompactionSummary(event as { compactionEntry?: unknown }),
+        entryId: extractCompactionEntryId(event as { compactionEntry?: unknown }),
+      });
+      const compactionEntry = (event as { compactionEntry?: { id?: unknown } }).compactionEntry;
       emitRuntimeEvent(runtime, {
         sessionId,
         turn: state.turnIndex,
-        type: "context_compaction_gate_armed",
+        type: "session_compact",
         payload: {
-          reason,
-          usagePercent: gateStatus.pressure.usageRatio,
-          hardLimitPercent: gateStatus.pressure.hardLimitRatio,
+          entryId: typeof compactionEntry?.id === "string" ? compactionEntry.id : null,
+          fromExtension:
+            (event as { fromExtension?: unknown }).fromExtension === true ? true : undefined,
         },
       });
-      emitRuntimeEvent(runtime, {
+
+      if (wasGated) {
+        emitRuntimeEvent(runtime, {
+          sessionId,
+          turn: state.turnIndex,
+          type: "context_compaction_gate_cleared",
+          payload: {
+            reason: "session_compact_performed",
+          },
+        });
+      }
+      return undefined;
+    },
+    sessionShutdown(_event, ctx) {
+      const sessionId = (
+        ctx as { sessionManager: { getSessionId: () => string } }
+      ).sessionManager.getSessionId();
+      const state = gateStateBySession.get(sessionId);
+      if (state) {
+        clearAutoCompactionState(state);
+      }
+      gateStateBySession.delete(sessionId);
+      clearRuntimeTurnClock(sessionId);
+      return undefined;
+    },
+    async beforeAgentStart(event, ctx) {
+      const rawEvent = event as { prompt?: unknown; systemPrompt?: unknown };
+      const sessionId = (
+        ctx as { sessionManager: { getSessionId: () => string }; getContextUsage?: () => unknown }
+      ).sessionManager.getSessionId();
+      const state = getOrCreateGateState(gateStateBySession, sessionId);
+      const sessionManager = (ctx as { sessionManager: { getSessionId: () => string } })
+        .sessionManager as Parameters<typeof resolveInjectionScopeId>[0];
+      const injectionScopeId = resolveInjectionScopeId(sessionManager);
+      const usage = coerceContextBudgetUsage(
+        typeof (ctx as { getContextUsage?: () => unknown }).getContextUsage === "function"
+          ? (ctx as { getContextUsage: () => unknown }).getContextUsage()
+          : undefined,
+      );
+      runtime.context.observeUsage(sessionId, usage);
+      const emitGateEvents = (
+        gateStatus: ContextCompactionGateStatus,
+        reason: "hard_limit",
+      ): void => {
+        emitRuntimeEvent(runtime, {
+          sessionId,
+          turn: state.turnIndex,
+          type: "context_compaction_gate_armed",
+          payload: {
+            reason,
+            usagePercent: gateStatus.pressure.usageRatio,
+            hardLimitPercent: gateStatus.pressure.hardLimitRatio,
+          },
+        });
+        emitRuntimeEvent(runtime, {
+          sessionId,
+          turn: state.turnIndex,
+          type: "critical_without_compact",
+          payload: {
+            reason,
+            usagePercent: gateStatus.pressure.usageRatio,
+            hardLimitPercent: gateStatus.pressure.hardLimitRatio,
+            contextPressure: gateStatus.pressure.level,
+            requiredTool: "session_compact",
+          },
+        });
+      };
+
+      const prompt = typeof rawEvent.prompt === "string" ? rawEvent.prompt : "";
+      let { gateStatus, pendingCompactionReason, capabilityView } = prepareContextComposerSupport({
+        runtime,
+        pi,
         sessionId,
-        turn: state.turnIndex,
-        type: "critical_without_compact",
-        payload: {
-          reason,
-          usagePercent: gateStatus.pressure.usageRatio,
-          hardLimitPercent: gateStatus.pressure.hardLimitRatio,
-          contextPressure: gateStatus.pressure.level,
-          requiredTool: "session_compact",
-        },
+        prompt,
+        usage,
       });
-    };
+      if (gateStatus.required) {
+        emitGateEvents(gateStatus, "hard_limit");
+      }
+      const systemPromptWithContract = applyContextContract(rawEvent.systemPrompt, runtime);
+      const originalPrompt = prompt;
 
-    let { gateStatus, pendingCompactionReason, capabilityView } = prepareContextComposerSupport({
-      runtime,
-      pi,
-      sessionId,
-      prompt: event.prompt,
-      usage,
-    });
-    if (gateStatus.required) {
-      emitGateEvents(gateStatus, "hard_limit");
-    }
-    const systemPromptWithContract = applyContextContract(
-      (event as { systemPrompt?: unknown }).systemPrompt,
-      runtime,
-    );
-    const originalPrompt = event.prompt;
+      if (gateStatus.required) {
+        state.lastRuntimeGateRequired = true;
+        const skippedReason = "critical_compaction_gate";
+        emitRuntimeEvent(runtime, {
+          sessionId,
+          turn: state.turnIndex,
+          type: "skill_routing_selection",
+          payload: {
+            status: "skipped",
+            reason: skippedReason,
+            selectedCount: 0,
+            selectedSkills: [],
+            inputChars: originalPrompt.length,
+            error: null,
+          },
+        });
 
-    if (gateStatus.required) {
-      state.lastRuntimeGateRequired = true;
-      const skippedReason = "critical_compaction_gate";
+        const composed = composeContextBlocks({
+          runtime,
+          sessionId,
+          gateStatus,
+          pendingCompactionReason,
+          capabilityView,
+          admittedEntries: [],
+          injectionAccepted: false,
+        });
+        emitContextComposedEvent(runtime, {
+          sessionId,
+          turn: state.turnIndex,
+          composed,
+          injectionAccepted: false,
+        });
+
+        return {
+          systemPrompt: systemPromptWithContract,
+          message: {
+            customType: CONTEXT_INJECTION_MESSAGE_TYPE,
+            content: composed.content,
+            display: false,
+            details: {
+              originalTokens: 0,
+              finalTokens: 0,
+              truncated: false,
+              gateRequired: true,
+              contextComposition: {
+                narrativeRatio: composed.metrics.narrativeRatio,
+                narrativeTokens: composed.metrics.narrativeTokens,
+                constraintTokens: composed.metrics.constraintTokens,
+                diagnosticTokens: composed.metrics.diagnosticTokens,
+              },
+              routingSelection: {
+                status: "skipped",
+                reason: skippedReason,
+                selectedCount: 0,
+              },
+              capabilityView: {
+                requested: capabilityView.requested,
+                expanded: capabilityView.expanded,
+                missing: capabilityView.missing,
+              },
+            },
+          },
+        };
+      }
+
+      const injection = await resolveContextInjection(runtime, {
+        sessionId,
+        prompt: originalPrompt,
+        usage,
+        injectionScopeId,
+      });
+      const routingProjection = resolveRoutingProjection(runtime, sessionId);
+      const supportAfterInjection = prepareContextComposerSupport({
+        runtime,
+        pi,
+        sessionId,
+        prompt: originalPrompt,
+        usage,
+      });
+      const gateStatusAfterInjection = supportAfterInjection.gateStatus;
+      if (!gateStatus.required && gateStatusAfterInjection.required) {
+        emitGateEvents(gateStatusAfterInjection, "hard_limit");
+      }
+      gateStatus = gateStatusAfterInjection;
+      pendingCompactionReason = supportAfterInjection.pendingCompactionReason;
+      capabilityView = supportAfterInjection.capabilityView;
+      state.lastRuntimeGateRequired = gateStatus.required;
+
       emitRuntimeEvent(runtime, {
         sessionId,
         turn: state.turnIndex,
         type: "skill_routing_selection",
         payload: {
-          status: "skipped",
-          reason: skippedReason,
-          selectedCount: 0,
-          selectedSkills: [],
+          status: routingProjection.selection.status,
+          reason: routingProjection.selection.reason,
+          selectedCount: routingProjection.selection.selectedCount,
+          selectedSkills: routingProjection.selection.selectedSkills,
           inputChars: originalPrompt.length,
-          error: null,
+          error: routingProjection.error,
         },
       });
 
+      if (pendingCompactionReason && !gateStatus.required) {
+        emitRuntimeEvent(runtime, {
+          sessionId,
+          turn: state.turnIndex,
+          type: "context_compaction_advisory",
+          payload: {
+            reason: pendingCompactionReason,
+            usagePercent: gateStatus.pressure.usageRatio,
+            compactionThresholdPercent: gateStatus.pressure.compactionThresholdRatio,
+            hardLimitPercent: gateStatus.pressure.hardLimitRatio,
+            contextPressure: gateStatus.pressure.level,
+            requiredTool: "session_compact",
+          },
+        });
+      }
       const composed = composeContextBlocks({
         runtime,
         sessionId,
         gateStatus,
         pendingCompactionReason,
         capabilityView,
-        admittedEntries: [],
-        injectionAccepted: false,
+        admittedEntries: injection.entries,
+        injectionAccepted: injection.accepted,
       });
       emitContextComposedEvent(runtime, {
         sessionId,
         turn: state.turnIndex,
         composed,
-        injectionAccepted: false,
+        injectionAccepted: injection.accepted,
       });
 
       return {
@@ -429,10 +570,10 @@ export function registerContextTransform(
           content: composed.content,
           display: false,
           details: {
-            originalTokens: 0,
-            finalTokens: 0,
-            truncated: false,
-            gateRequired: true,
+            originalTokens: injection.originalTokens,
+            finalTokens: injection.finalTokens,
+            truncated: injection.truncated,
+            gateRequired: gateStatus.required,
             contextComposition: {
               narrativeRatio: composed.metrics.narrativeRatio,
               narrativeTokens: composed.metrics.narrativeTokens,
@@ -440,9 +581,9 @@ export function registerContextTransform(
               diagnosticTokens: composed.metrics.diagnosticTokens,
             },
             routingSelection: {
-              status: "skipped",
-              reason: skippedReason,
-              selectedCount: 0,
+              status: routingProjection.selection.status,
+              reason: routingProjection.selection.reason,
+              selectedCount: routingProjection.selection.selectedCount,
             },
             capabilityView: {
               requested: capabilityView.requested,
@@ -452,105 +593,22 @@ export function registerContextTransform(
           },
         },
       };
-    }
+    },
+  };
+}
 
-    const injection = await resolveContextInjection(runtime, {
-      sessionId,
-      prompt: originalPrompt,
-      usage,
-      injectionScopeId,
-    });
-    const routingProjection = resolveRoutingProjection(runtime, sessionId);
-    const supportAfterInjection = prepareContextComposerSupport({
-      runtime,
-      pi,
-      sessionId,
-      prompt: originalPrompt,
-      usage,
-    });
-    const gateStatusAfterInjection = supportAfterInjection.gateStatus;
-    if (!gateStatus.required && gateStatusAfterInjection.required) {
-      emitGateEvents(gateStatusAfterInjection, "hard_limit");
-    }
-    gateStatus = gateStatusAfterInjection;
-    pendingCompactionReason = supportAfterInjection.pendingCompactionReason;
-    capabilityView = supportAfterInjection.capabilityView;
-    state.lastRuntimeGateRequired = gateStatus.required;
-
-    emitRuntimeEvent(runtime, {
-      sessionId,
-      turn: state.turnIndex,
-      type: "skill_routing_selection",
-      payload: {
-        status: routingProjection.selection.status,
-        reason: routingProjection.selection.reason,
-        selectedCount: routingProjection.selection.selectedCount,
-        selectedSkills: routingProjection.selection.selectedSkills,
-        inputChars: originalPrompt.length,
-        error: routingProjection.error,
-      },
-    });
-
-    if (pendingCompactionReason && !gateStatus.required) {
-      emitRuntimeEvent(runtime, {
-        sessionId,
-        turn: state.turnIndex,
-        type: "context_compaction_advisory",
-        payload: {
-          reason: pendingCompactionReason,
-          usagePercent: gateStatus.pressure.usageRatio,
-          compactionThresholdPercent: gateStatus.pressure.compactionThresholdRatio,
-          hardLimitPercent: gateStatus.pressure.hardLimitRatio,
-          contextPressure: gateStatus.pressure.level,
-          requiredTool: "session_compact",
-        },
-      });
-    }
-    const composed = composeContextBlocks({
-      runtime,
-      sessionId,
-      gateStatus,
-      pendingCompactionReason,
-      capabilityView,
-      admittedEntries: injection.entries,
-      injectionAccepted: injection.accepted,
-    });
-    emitContextComposedEvent(runtime, {
-      sessionId,
-      turn: state.turnIndex,
-      composed,
-      injectionAccepted: injection.accepted,
-    });
-
-    return {
-      systemPrompt: systemPromptWithContract,
-      message: {
-        customType: CONTEXT_INJECTION_MESSAGE_TYPE,
-        content: composed.content,
-        display: false,
-        details: {
-          originalTokens: injection.originalTokens,
-          finalTokens: injection.finalTokens,
-          truncated: injection.truncated,
-          gateRequired: gateStatus.required,
-          contextComposition: {
-            narrativeRatio: composed.metrics.narrativeRatio,
-            narrativeTokens: composed.metrics.narrativeTokens,
-            constraintTokens: composed.metrics.constraintTokens,
-            diagnosticTokens: composed.metrics.diagnosticTokens,
-          },
-          routingSelection: {
-            status: routingProjection.selection.status,
-            reason: routingProjection.selection.reason,
-            selectedCount: routingProjection.selection.selectedCount,
-          },
-          capabilityView: {
-            requested: capabilityView.requested,
-            expanded: capabilityView.expanded,
-            missing: capabilityView.missing,
-          },
-        },
-      },
-    };
-  });
+export function registerContextTransform(
+  pi: ExtensionAPI,
+  runtime: BrewvaRuntime,
+  options: ContextTransformOptions = {},
+): void {
+  const hooks = pi as unknown as {
+    on(event: string, handler: (event: unknown, ctx: unknown) => unknown): void;
+  };
+  const lifecycle = createContextTransformLifecycle(pi, runtime, options);
+  hooks.on("turn_start", lifecycle.turnStart);
+  hooks.on("context", lifecycle.context);
+  hooks.on("session_compact", lifecycle.sessionCompact);
+  hooks.on("session_shutdown", lifecycle.sessionShutdown);
+  hooks.on("before_agent_start", lifecycle.beforeAgentStart);
 }

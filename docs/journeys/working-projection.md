@@ -22,7 +22,7 @@ There is no recall lane and no external recall branch in the default runtime.
    - `ProjectionEngine.refreshIfNeeded(...)` rebuilds working snapshot from active projection records
    - output is persisted to `.orchestrator/projection/sessions/sess_<base64url(sessionId)>/working.md`
 3. Context injection:
-   - `ContextProjectionInjectionService` injects only `brewva.projection-working`
+   - the built-in `brewva.projection-working` context provider injects only the working snapshot
    - injection still respects global context budget and compaction gate
 4. Replay/recovery:
    - on restart, runtime rebuilds projection from source tape events when projection files are missing

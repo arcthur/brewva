@@ -175,6 +175,78 @@ requires: []
     expect(blockedAfterRestart.reason?.includes("Session cost exceeded")).toBe(true);
   });
 
+  test("rehydrates verification evidence state from tape after restart", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-verification-evidence-rehydrate-"));
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.verification.defaultLevel = "quick";
+    config.verification.checks.quick = ["type-check"];
+    config.verification.checks.standard = ["type-check"];
+    config.verification.checks.strict = ["type-check"];
+    const sessionId = "verification-evidence-rehydrate-1";
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    runtime.tools.markCall(sessionId, "edit");
+    runtime.tools.recordResult({
+      sessionId,
+      toolName: "lsp_diagnostics",
+      args: {
+        filePath: "src/app.ts",
+        severity: "all",
+      },
+      outputText: "No diagnostics found",
+      channelSuccess: true,
+    });
+    runtime.tools.recordResult({
+      sessionId,
+      toolName: "exec",
+      args: {
+        command: "bun test",
+      },
+      outputText: "All tests passed",
+      channelSuccess: true,
+    });
+    const beforeRestart = await runtime.verification.verify(sessionId, "quick", {
+      executeCommands: false,
+    });
+    expect(beforeRestart.passed).toBe(true);
+    expect(beforeRestart.skipped).toBe(false);
+
+    const reloaded = new BrewvaRuntime({ cwd: workspace, config });
+    const afterRestart = await reloaded.verification.verify(sessionId, "quick", {
+      executeCommands: false,
+    });
+    expect(afterRestart.passed).toBe(true);
+    expect(afterRestart.skipped).toBe(false);
+  });
+
+  test("rehydrates verification command runs from tape before rerunning checks", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-verification-command-rehydrate-"));
+    const baseConfig = structuredClone(DEFAULT_BREWVA_CONFIG);
+    baseConfig.verification.defaultLevel = "standard";
+    baseConfig.verification.checks.quick = ["tests"];
+    baseConfig.verification.checks.standard = ["tests"];
+    baseConfig.verification.checks.strict = ["tests"];
+    baseConfig.verification.commands.tests = "true";
+    const sessionId = "verification-command-rehydrate-1";
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, config: baseConfig });
+    runtime.tools.markCall(sessionId, "edit");
+    const beforeRestart = await runtime.verification.verify(sessionId, "standard", {
+      executeCommands: true,
+      timeoutMs: 5_000,
+    });
+    expect(beforeRestart.passed).toBe(true);
+
+    const changedConfig = structuredClone(baseConfig);
+    changedConfig.verification.commands.tests = "false";
+    const reloaded = new BrewvaRuntime({ cwd: workspace, config: changedConfig });
+    const afterRestart = await reloaded.verification.verify(sessionId, "standard", {
+      executeCommands: true,
+      timeoutMs: 5_000,
+    });
+    expect(afterRestart.passed).toBe(true);
+  });
+
   test("resets checkpoint counter state when a checkpoint is manually recorded", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-manual-checkpoint-counter-"));
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);

@@ -99,31 +99,18 @@ describe("skill_complete tool", () => {
       outputs: ["design_spec", "execution_plan", "execution_mode_hint", "risk_register"],
       outputContracts: [
         "  design_spec:",
-        "    kind: informative_text",
+        "    kind: text",
         "    min_words: 4",
         "    min_length: 24",
         "  execution_plan:",
-        "    kind: informative_list",
+        "    kind: json",
         "    min_items: 2",
-        "    allow_objects: true",
-        "    min_words: 2",
-        "    min_length: 12",
         "  execution_mode_hint:",
         "    kind: enum",
         "    values: [direct_patch, test_first, coordinated_rollout]",
         "  risk_register:",
-        "    kind: record_list",
+        "    kind: json",
         "    min_items: 1",
-        "    required: [risk, mitigation]",
-        "    properties:",
-        "      risk:",
-        "        kind: informative_text",
-        "        min_words: 2",
-        "        min_length: 12",
-        "      mitigation:",
-        "        kind: informative_text",
-        "        min_words: 2",
-        "        min_length: 12",
       ],
     });
 
@@ -150,7 +137,7 @@ describe("skill_complete tool", () => {
           design_spec: "test",
           execution_plan: ["a"],
           execution_mode_hint: "direct_patch",
-          risk_register: [{ risk: "x", mitigation: "y" }],
+          risk_register: [],
         },
       },
       undefined,
@@ -160,7 +147,8 @@ describe("skill_complete tool", () => {
 
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toContain("Skill completion rejected.");
-    expect(text).toContain("Invalid required outputs: design_spec, execution_plan, risk_register");
+    expect(text).toContain("Missing required outputs: risk_register");
+    expect(text).toContain("Invalid required outputs: design_spec, execution_plan");
     expect(runtime.skills.getActive(sessionId)?.name).toBe("design-contract");
   });
 
@@ -171,31 +159,18 @@ describe("skill_complete tool", () => {
       outputs: ["design_spec", "execution_plan", "execution_mode_hint", "risk_register"],
       outputContracts: [
         "  design_spec:",
-        "    kind: informative_text",
+        "    kind: text",
         "    min_words: 4",
         "    min_length: 24",
         "  execution_plan:",
-        "    kind: informative_list",
+        "    kind: json",
         "    min_items: 2",
-        "    allow_objects: true",
-        "    min_words: 2",
-        "    min_length: 12",
         "  execution_mode_hint:",
         "    kind: enum",
         "    values: [direct_patch, test_first, coordinated_rollout]",
         "  risk_register:",
-        "    kind: record_list",
+        "    kind: json",
         "    min_items: 1",
-        "    required: [risk, mitigation]",
-        "    properties:",
-        "      risk:",
-        "        kind: informative_text",
-        "        min_words: 2",
-        "        min_length: 12",
-        "      mitigation:",
-        "        kind: informative_text",
-        "        min_words: 2",
-        "        min_length: 12",
       ],
     });
 
@@ -252,20 +227,12 @@ describe("skill_complete tool", () => {
       outputs: ["review_report", "review_findings", "merge_decision"],
       outputContracts: [
         "  review_report:",
-        "    kind: informative_text",
+        "    kind: text",
         "    min_words: 3",
         "    min_length: 18",
         "  review_findings:",
-        "    kind: one_of",
-        "    variants:",
-        "      - kind: informative_text",
-        "        min_words: 2",
-        "        min_length: 12",
-        "      - kind: informative_list",
-        "        min_items: 1",
-        "        allow_objects: true",
-        "        min_words: 2",
-        "        min_length: 12",
+        "    kind: json",
+        "    min_items: 1",
         "  merge_decision:",
         "    kind: enum",
         "    values: [ready, needs_changes, blocked]",
@@ -315,23 +282,15 @@ describe("skill_complete tool", () => {
       outputs: ["change_set", "files_changed", "verification_evidence"],
       outputContracts: [
         "  change_set:",
-        "    kind: informative_text",
+        "    kind: text",
         "    min_words: 3",
         "    min_length: 18",
         "  files_changed:",
-        "    kind: path_list",
+        "    kind: json",
         "    min_items: 1",
         "  verification_evidence:",
-        "    kind: one_of",
-        "    variants:",
-        "      - kind: informative_text",
-        "        min_words: 2",
-        "        min_length: 12",
-        "      - kind: informative_list",
-        "        min_items: 1",
-        "        allow_objects: true",
-        "        min_words: 2",
-        "        min_length: 12",
+        "    kind: json",
+        "    min_items: 1",
       ],
     });
 
@@ -356,7 +315,7 @@ describe("skill_complete tool", () => {
       {
         outputs: {
           change_set: "test",
-          files_changed: ["summary"],
+          files_changed: [],
           verification_evidence: "todo",
         },
       },
@@ -367,9 +326,8 @@ describe("skill_complete tool", () => {
 
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toContain("Skill completion rejected.");
-    expect(text).toContain(
-      "Invalid required outputs: change_set, files_changed, verification_evidence",
-    );
+    expect(text).toContain("Missing required outputs: files_changed");
+    expect(text).toContain("Invalid required outputs: change_set, verification_evidence");
     expect(runtime.skills.getActive(sessionId)?.name).toBe("implementation-contract");
   });
 });

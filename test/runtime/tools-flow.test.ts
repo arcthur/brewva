@@ -41,6 +41,25 @@ function fakeContext(sessionId: string): any {
   };
 }
 
+function createScheduleToolRuntime(prefix: string): BrewvaRuntime {
+  const workspace = mkdtempSync(join(tmpdir(), prefix));
+  mkdirSync(join(workspace, ".brewva"), { recursive: true });
+  writeFileSync(
+    join(workspace, ".brewva", "brewva.json"),
+    JSON.stringify(
+      {
+        schedule: {
+          enabled: true,
+        },
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+  return new BrewvaRuntime({ cwd: workspace });
+}
+
 describe("S-008 implementation e2e loop", () => {
   test("skill_load -> edit -> verify -> skill_complete", async () => {
     const runtime = new BrewvaRuntime({ cwd: process.cwd() });
@@ -84,7 +103,7 @@ describe("S-008 implementation e2e loop", () => {
         outputs: {
           change_set: "updated one line",
           files_changed: ["src/example.ts"],
-          verification_evidence: "PASS 3 tests; no diagnostics found",
+          verification_evidence: ["PASS 3 tests", "No diagnostics found"],
         },
       },
       undefined,
@@ -122,7 +141,7 @@ describe("S-008 implementation e2e loop", () => {
         outputs: {
           change_set: "updated one line",
           files_changed: ["src/example.ts"],
-          verification_evidence: "pending verification",
+          verification_evidence: ["pending verification"],
         },
       },
       undefined,
@@ -946,8 +965,7 @@ describe("S-012b output search tool flow", () => {
 
 describe("S-014 schedule intent tool flow", () => {
   test("schedule_intent supports create/list/cancel", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-schedule-intent-tool-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createScheduleToolRuntime("brewva-schedule-intent-tool-");
     const sessionId = "s14";
     const tool = createScheduleIntentTool({ runtime });
 
@@ -1008,8 +1026,7 @@ describe("S-014 schedule intent tool flow", () => {
   });
 
   test("schedule_intent create accepts structured convergenceCondition", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-schedule-intent-predicate-tool-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createScheduleToolRuntime("brewva-schedule-intent-predicate-tool-");
     const sessionId = "s14-predicate";
     const tool = createScheduleIntentTool({ runtime });
 
@@ -1041,8 +1058,7 @@ describe("S-014 schedule intent tool flow", () => {
   });
 
   test("schedule_intent create supports cron targets", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-schedule-intent-cron-tool-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createScheduleToolRuntime("brewva-schedule-intent-cron-tool-");
     const sessionId = "s14-cron";
     const tool = createScheduleIntentTool({ runtime });
 
@@ -1074,8 +1090,7 @@ describe("S-014 schedule intent tool flow", () => {
   });
 
   test("schedule_intent supports update action", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-schedule-intent-update-tool-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createScheduleToolRuntime("brewva-schedule-intent-update-tool-");
     const sessionId = "s14-update";
     const tool = createScheduleIntentTool({ runtime });
 
@@ -1133,8 +1148,7 @@ describe("S-014 schedule intent tool flow", () => {
   });
 
   test("schedule_intent update rejects blank reason/goalRef", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-schedule-intent-update-blank-tool-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createScheduleToolRuntime("brewva-schedule-intent-update-blank-tool-");
     const sessionId = "s14-update-blank";
     const tool = createScheduleIntentTool({ runtime });
 
@@ -1193,10 +1207,7 @@ describe("S-014 schedule intent tool flow", () => {
   });
 
   test("schedule_intent update supports timezone-only patch for cron intent", async () => {
-    const workspace = mkdtempSync(
-      join(tmpdir(), "brewva-schedule-intent-update-timezone-only-tool-"),
-    );
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createScheduleToolRuntime("brewva-schedule-intent-update-timezone-only-tool-");
     const sessionId = "s14-update-timezone-only";
     const tool = createScheduleIntentTool({ runtime });
 
@@ -1242,8 +1253,7 @@ describe("S-014 schedule intent tool flow", () => {
   });
 
   test("schedule_intent rejects timeZone without cron", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-schedule-intent-timezone-guard-tool-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createScheduleToolRuntime("brewva-schedule-intent-timezone-guard-tool-");
     const sessionId = "s14-timezone-guard";
     const tool = createScheduleIntentTool({ runtime });
 

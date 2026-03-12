@@ -2,14 +2,18 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, type BrewvaConfig } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  CONTEXT_SOURCES,
+  DEFAULT_BREWVA_CONFIG,
+  type BrewvaConfig,
+  type ContextSourceProvider,
+} from "@brewva/brewva-runtime";
 
 type RuntimeWithInternals = {
-  contextService: {
-    projectionEngine: {
-      refreshIfNeeded(input: { sessionId: string }): void;
-      getWorkingProjection(sessionId: string): { content: string } | null;
-    };
+  projectionEngine: {
+    refreshIfNeeded(input: { sessionId: string }): void;
+    getWorkingProjection(sessionId: string): { content: string } | null;
   };
 };
 
@@ -40,14 +44,29 @@ function createWorkspace(name: string): string {
 
 function patchProjection(runtime: BrewvaRuntime): void {
   const runtimeWithInternals = runtime as unknown as RuntimeWithInternals;
-  runtimeWithInternals.contextService.projectionEngine.refreshIfNeeded = () => undefined;
-  runtimeWithInternals.contextService.projectionEngine.getWorkingProjection = () => ({
+  runtimeWithInternals.projectionEngine.refreshIfNeeded = () => undefined;
+  runtimeWithInternals.projectionEngine.getWorkingProjection = () => ({
     content: "[WorkingProjection]\nsummary: deterministic working projection block",
   });
 }
 
 function blockIndex(text: string, block: string): number {
   return text.indexOf(`[${block}]`);
+}
+
+function registerCustomContextProvider(runtime: BrewvaRuntime): void {
+  const provider: ContextSourceProvider = {
+    source: "brewva.custom-operator-note",
+    category: "constraint",
+    order: 55,
+    collect: (input) => {
+      input.register({
+        id: `custom-operator-note:${input.sessionId}`,
+        content: "[CustomOperatorNote]\nstatus: custom provider registered through runtime.context",
+      });
+    },
+  };
+  runtime.context.registerProvider(provider);
 }
 
 describe("context source order integration", () => {
@@ -83,6 +102,13 @@ describe("context source order integration", () => {
       severity: "warn",
       summary: "deterministic truth fact",
     });
+    expect(runtime.context.listProviders()).toEqual([
+      { source: CONTEXT_SOURCES.identity, category: "narrative", order: 10 },
+      { source: CONTEXT_SOURCES.contextPackets, category: "narrative", order: 30 },
+      { source: CONTEXT_SOURCES.runtimeStatus, category: "narrative", order: 40 },
+      { source: CONTEXT_SOURCES.taskState, category: "narrative", order: 60 },
+      { source: CONTEXT_SOURCES.projectionWorking, category: "narrative", order: 70 },
+    ]);
 
     const injected = await runtime.context.buildInjection(
       sessionId,
@@ -92,16 +118,131 @@ describe("context source order integration", () => {
     );
     expect(injected.accepted).toBe(true);
     expect(injected.text.length).toBeGreaterThan(0);
-    const truthLedgerPosition = blockIndex(injected.text, "TruthLedger");
-    const truthFactsPosition = blockIndex(injected.text, "TruthFacts");
-    const toolFailuresPosition = blockIndex(injected.text, "RecentToolFailures");
+    const runtimeStatusPosition = blockIndex(injected.text, "RuntimeStatus");
     const taskLedgerPosition = blockIndex(injected.text, "TaskLedger");
     const workingProjectionPosition = blockIndex(injected.text, "WorkingProjection");
-    expect(truthLedgerPosition).toBeGreaterThanOrEqual(0);
-    expect(truthFactsPosition).toBeGreaterThan(truthLedgerPosition);
-    expect(toolFailuresPosition).toBeGreaterThan(truthFactsPosition);
-    expect(taskLedgerPosition).toBeGreaterThan(toolFailuresPosition);
+    expect(injected.text.includes("[TruthLedger]")).toBe(false);
+    expect(injected.text.includes("[TruthFacts]")).toBe(false);
+    expect(runtimeStatusPosition).toBeGreaterThanOrEqual(0);
+    expect(taskLedgerPosition).toBeGreaterThan(runtimeStatusPosition);
     expect(workingProjectionPosition).toBeGreaterThan(taskLedgerPosition);
     expect(injected.text.includes("[MemoryRecall]")).toBe(false);
+  });
+
+  test("allows runtime callers to register and unregister context providers", async () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createWorkspace("custom-provider"),
+      config: createConfig(),
+      agentId: "default",
+    });
+    patchProjection(runtime);
+    registerCustomContextProvider(runtime);
+
+    const sessionId = "context-source-custom-provider";
+    runtime.context.onTurnStart(sessionId, 1);
+    runtime.task.setSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Validate externally registered provider order",
+    });
+    runtime.tools.recordResult({
+      sessionId,
+      toolName: "exec",
+      args: { command: "bun test" },
+      outputText: "Error: runtime status block should be present",
+      channelSuccess: false,
+    });
+
+    const providers = runtime.context.listProviders();
+    expect(providers.some((provider) => provider.source === "brewva.custom-operator-note")).toBe(
+      true,
+    );
+    expect(providers.find((provider) => provider.source === "brewva.custom-operator-note")).toEqual(
+      {
+        source: "brewva.custom-operator-note",
+        category: "constraint",
+        order: 55,
+      },
+    );
+
+    const injected = await runtime.context.buildInjection(
+      sessionId,
+      "verify externally registered provider order",
+      { tokens: 320, contextWindow: 16_000, percent: 0.02 },
+      "leaf-custom-provider",
+    );
+
+    const runtimeStatusPosition = blockIndex(injected.text, "RuntimeStatus");
+    const customProviderPosition = blockIndex(injected.text, "CustomOperatorNote");
+    const taskLedgerPosition = blockIndex(injected.text, "TaskLedger");
+    expect(runtimeStatusPosition).toBeGreaterThanOrEqual(0);
+    expect(customProviderPosition).toBeGreaterThan(runtimeStatusPosition);
+    expect(taskLedgerPosition).toBeGreaterThan(customProviderPosition);
+
+    expect(runtime.context.unregisterProvider("brewva.custom-operator-note")).toBe(true);
+    expect(runtime.context.unregisterProvider("brewva.custom-operator-note")).toBe(false);
+    expect(
+      runtime.context
+        .listProviders()
+        .some((provider) => provider.source === "brewva.custom-operator-note"),
+    ).toBe(false);
+
+    const otherSessionId = "context-source-custom-provider-removed";
+    runtime.context.onTurnStart(otherSessionId, 1);
+    runtime.task.setSpec(otherSessionId, {
+      schema: "brewva.task.v1",
+      goal: "Validate provider removal",
+    });
+    runtime.tools.recordResult({
+      sessionId: otherSessionId,
+      toolName: "exec",
+      args: { command: "bun test" },
+      outputText: "Error: runtime status block should still be present",
+      channelSuccess: false,
+    });
+
+    const afterRemoval = await runtime.context.buildInjection(
+      otherSessionId,
+      "verify provider removal",
+      { tokens: 320, contextWindow: 16_000, percent: 0.02 },
+      "leaf-custom-provider-removed",
+    );
+    expect(afterRemoval.text.includes("[CustomOperatorNote]")).toBe(false);
+  });
+
+  test("rejects duplicate context provider sources", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createWorkspace("custom-provider-duplicate"),
+      config: createConfig(),
+      agentId: "default",
+    });
+    registerCustomContextProvider(runtime);
+
+    expect(() => registerCustomContextProvider(runtime)).toThrow(
+      "Context source provider already registered: brewva.custom-operator-note",
+    );
+  });
+
+  test("registers optional built-in providers only when config enables them", () => {
+    const config = createConfig();
+    config.skills.routing.enabled = true;
+    config.skills.cascade.mode = "assist";
+    config.infrastructure.toolOutputDistillationInjection.enabled = true;
+
+    const runtime = new BrewvaRuntime({
+      cwd: createWorkspace("optional-builtins"),
+      config,
+      agentId: "default",
+    });
+
+    expect(runtime.context.listProviders()).toEqual([
+      { source: CONTEXT_SOURCES.identity, category: "narrative", order: 10 },
+      { source: CONTEXT_SOURCES.skillCandidates, category: "narrative", order: 20 },
+      { source: CONTEXT_SOURCES.skillCascadeGate, category: "constraint", order: 25 },
+      { source: CONTEXT_SOURCES.contextPackets, category: "narrative", order: 30 },
+      { source: CONTEXT_SOURCES.runtimeStatus, category: "narrative", order: 40 },
+      { source: CONTEXT_SOURCES.toolOutputsDistilled, category: "narrative", order: 50 },
+      { source: CONTEXT_SOURCES.taskState, category: "narrative", order: 60 },
+      { source: CONTEXT_SOURCES.projectionWorking, category: "narrative", order: 70 },
+    ]);
   });
 });

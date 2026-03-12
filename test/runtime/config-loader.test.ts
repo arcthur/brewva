@@ -112,15 +112,14 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.projection.maxWorkingChars).toBe(2400);
   });
 
-  test("normalizes skills.routing profile and scopes", () => {
-    const workspace = createWorkspace("routing-profile");
+  test("normalizes skills.routing scopes", () => {
+    const workspace = createWorkspace("routing-scopes");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
       JSON.stringify(
         {
           skills: {
             routing: {
-              profile: "operator",
               scopes: ["domain", "operator", "domain"],
             },
           },
@@ -132,7 +131,6 @@ describe("Brewva config loader normalization", () => {
     );
 
     const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
-    expect(loaded.skills.routing.profile).toBe("operator");
     expect(loaded.skills.routing.scopes).toEqual(["domain", "operator"]);
   });
 

@@ -20,13 +20,19 @@ Every runtime event follows the same envelope shape:
 - `checkpoint`
 - `task_event`
 - `truth_event`
+- `verification_write_marked`
 - `tool_result_recorded`
   Tool-result payloads now use `channelSuccess` for execution-channel success and `verdict` for semantic outcome.
+  When present, `truthProjection` and `verificationProjection` are replayable
+  derivation inputs, not second authority channels.
 - `observability_assertion_recorded`
 - `proposal_received`
 - `proposal_decided`
 - `decision_receipt_recorded`
 - `verification_outcome_recorded`
+- `governance_verify_spec_passed`
+- `governance_verify_spec_failed`
+- `governance_verify_spec_error`
 - schedule lifecycle events
 - skill cascade lifecycle events
 
@@ -72,7 +78,9 @@ These are retained under `ops` and `debug`.
 - `governance_compaction_integrity_failed`
 - `governance_compaction_integrity_error`
 
-Governance events are available at `ops` and `debug` levels and remain replayable from tape.
+`governance_verify_spec_*` is audit-retained because verifier/governance blockers
+are now projected from that event family.
+Other governance telemetry remains available at `ops` and `debug`.
 
 ## Projection Families
 
@@ -109,15 +117,8 @@ levels, but they no longer inflate audit-level tape retention.
   resulting narrative ratio
 - `memory_summary_written` / `memory_summary_write_failed` record the write-side
   cognition sediment loop at session boundaries
-- `memory_episode_written` / `memory_episode_write_failed` record bounded
-  process-memory sediment written for future resumability
-- `memory_procedure_note_written` / `memory_procedure_note_write_failed`
-  record the write-side formation of reusable verification-backed work patterns
 - `memory_*_rehydrated` / `memory_*_rehydration_failed` record whether
   cross-session cognition artifacts crossed the proposal boundary successfully
-- `memory_adaptation_updated` / `memory_adaptation_update_failed` record
-  whether usefulness telemetry successfully updated the control-plane ranking
-  policy under `.brewva/cognition/adaptation.json`
 - `proactivity_wakeup_prepared` records control-plane wake-up metadata that may
   later influence memory selection before the model starts
 - `cognition_note_written` / `cognition_note_write_failed` record explicit
@@ -137,8 +138,8 @@ levels, but they no longer inflate audit-level tape retention.
 - `skill_routing_selection` remains as projection telemetry for the latest
   `skill_selection` proposal outcome (`selected | empty | failed | skipped`),
   including `critical_compaction_gate` short-circuit paths.
-- `skill_routing_decided` remains an internal commitment event for dispatch-gate
-  state and recovery, not a public cognition API.
+- `skill_routing_decided` remains an internal commitment event for pending
+  dispatch recommendation state and recovery, not a public cognition API.
 
 ## Scan Convergence Guard Events
 

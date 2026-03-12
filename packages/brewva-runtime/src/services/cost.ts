@@ -1,59 +1,49 @@
 import type { SessionCostTracker } from "../cost/tracker.js";
 import type { GovernancePort } from "../governance/port.js";
+import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type { SessionCostSummary, SkillDocument } from "../types.js";
-import type { RuntimeCallback } from "./callback.js";
+import type { LedgerService } from "./ledger.js";
+import type { SkillLifecycleService } from "./skill-lifecycle.js";
 
 export interface CostServiceOptions {
-  costTracker: SessionCostTracker;
-  recordInfrastructureRow: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        tool: string;
-        argsSummary: string;
-        outputSummary: string;
-        fullOutput?: string;
-        verdict?: "pass" | "fail" | "inconclusive";
-        metadata?: Record<string, unknown>;
-        turn?: number;
-        skill?: string | null;
-      },
-    ],
-    string
-  >;
+  kernel: RuntimeKernelContext;
+  ledgerService: Pick<LedgerService, "recordInfrastructureRow">;
+  skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
   governancePort?: GovernancePort;
-  getCurrentTurn: RuntimeCallback<[sessionId: string], number>;
-  getActiveSkill: RuntimeCallback<[sessionId: string], SkillDocument | undefined>;
-  recordEvent: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        type: string;
-        turn?: number;
-        payload?: Record<string, unknown>;
-        timestamp?: number;
-        skipTapeCheckpoint?: boolean;
-      },
-    ],
-    unknown
-  >;
 }
 
 export class CostService {
   private readonly costTracker: SessionCostTracker;
-  private readonly recordInfrastructureRow: CostServiceOptions["recordInfrastructureRow"];
+  private readonly recordInfrastructureRow: (input: {
+    sessionId: string;
+    tool: string;
+    argsSummary: string;
+    outputSummary: string;
+    fullOutput?: string;
+    verdict?: "pass" | "fail" | "inconclusive";
+    metadata?: Record<string, unknown>;
+    turn?: number;
+    skill?: string | null;
+  }) => string;
   private readonly governancePort?: GovernancePort;
   private readonly getCurrentTurn: (sessionId: string) => number;
   private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
-  private readonly recordEvent: CostServiceOptions["recordEvent"];
+  private readonly recordEvent: (input: {
+    sessionId: string;
+    type: string;
+    turn?: number;
+    payload?: Record<string, unknown>;
+    timestamp?: number;
+    skipTapeCheckpoint?: boolean;
+  }) => unknown;
 
   constructor(options: CostServiceOptions) {
-    this.costTracker = options.costTracker;
-    this.recordInfrastructureRow = options.recordInfrastructureRow;
+    this.costTracker = options.kernel.costTracker;
+    this.recordInfrastructureRow = (input) => options.ledgerService.recordInfrastructureRow(input);
     this.governancePort = options.governancePort;
-    this.getCurrentTurn = options.getCurrentTurn;
-    this.getActiveSkill = options.getActiveSkill;
-    this.recordEvent = options.recordEvent;
+    this.getCurrentTurn = (sessionId) => options.kernel.getCurrentTurn(sessionId);
+    this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
+    this.recordEvent = (input) => options.kernel.recordEvent(input);
   }
 
   recordAssistantUsage(input: {

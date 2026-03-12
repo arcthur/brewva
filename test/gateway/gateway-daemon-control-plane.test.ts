@@ -15,7 +15,7 @@ interface PolicyRule {
   sessionId?: string;
   objective?: string;
   contextHints?: string[];
-  wakeMode?: "always" | "if_signal" | "if_open_loop";
+  wakeMode?: "always" | "if_signal";
   staleAfterMinutes?: number;
 }
 
@@ -262,7 +262,7 @@ describe("gateway daemon control-plane methods", () => {
               ruleId: string;
               objective?: string;
               contextHints?: string[];
-              wakeMode?: "always" | "if_signal" | "if_open_loop";
+              wakeMode?: "always" | "if_signal";
               planReason?: string;
               selectionText?: string;
               signalArtifactRefs?: string[];
@@ -282,7 +282,7 @@ describe("gateway daemon control-plane methods", () => {
                 ruleId: string;
                 objective?: string;
                 contextHints?: string[];
-                wakeMode?: "always" | "if_signal" | "if_open_loop";
+                wakeMode?: "always" | "if_signal";
                 planReason?: string;
                 selectionText?: string;
                 signalArtifactRefs?: string[];

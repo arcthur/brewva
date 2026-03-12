@@ -48,7 +48,7 @@ export interface SkillRegistryRoot {
 
 export interface SkillRegistryLoadReport {
   roots: SkillRegistryRoot[];
-  routingProfile: BrewvaConfig["skills"]["routing"]["profile"];
+  routingEnabled: boolean;
   routingScopes: SkillRoutingScope[];
   routableSkills: string[];
   hiddenSkills: string[];
@@ -278,7 +278,7 @@ function renderSharedContext(entries: SharedContextEntry[]): string {
 function cloneLoadReport(report: SkillRegistryLoadReport): SkillRegistryLoadReport {
   return {
     roots: report.roots.map(cloneSkillRegistryRoot),
-    routingProfile: report.routingProfile,
+    routingEnabled: report.routingEnabled,
     routingScopes: [...report.routingScopes],
     routableSkills: [...report.routableSkills],
     hiddenSkills: [...report.hiddenSkills],
@@ -303,7 +303,7 @@ export class SkillRegistry {
   private loadedRoots: SkillRegistryRoot[] = [];
   private lastLoadReport: SkillRegistryLoadReport = {
     roots: [],
-    routingProfile: "standard",
+    routingEnabled: false,
     routingScopes: ["core", "domain"],
     routableSkills: [],
     hiddenSkills: [],
@@ -381,12 +381,10 @@ export class SkillRegistry {
         requires: skill.contract.requires ?? [],
         effectLevel: skill.contract.effectLevel ?? "read_only",
         dispatch: {
-          gateThreshold: skill.contract.dispatch?.gateThreshold ?? 10,
+          suggestThreshold: skill.contract.dispatch?.suggestThreshold ?? 10,
           autoThreshold: skill.contract.dispatch?.autoThreshold ?? 16,
-          defaultMode: skill.contract.dispatch?.defaultMode ?? "suggest",
         },
         routingScope: skill.contract.routing?.scope,
-        continuityRequired: skill.contract.routing?.continuityRequired === true,
       }));
   }
 
@@ -401,7 +399,7 @@ export class SkillRegistry {
       generatedAt: formatISO(Date.now()),
       roots: this.getLoadedRoots(),
       routing: {
-        profile: this.config.skills.routing.profile,
+        enabled: this.config.skills.routing.enabled,
         scopes: this.config.skills.routing.scopes,
       },
       skills: this.buildIndex(),
@@ -411,6 +409,7 @@ export class SkillRegistry {
   }
 
   private isRoutable(skill: SkillDocument): boolean {
+    if (!this.config.skills.routing.enabled) return false;
     const scope = skill.contract.routing?.scope;
     if (!scope) return false;
     return this.config.skills.routing.scopes.includes(scope);
@@ -444,7 +443,7 @@ export class SkillRegistry {
 
     return {
       roots: this.getLoadedRoots(),
-      routingProfile: this.config.skills.routing.profile,
+      routingEnabled: this.config.skills.routing.enabled,
       routingScopes: [...this.config.skills.routing.scopes],
       routableSkills: [...new Set(routableSkills)].toSorted((a, b) => a.localeCompare(b)),
       hiddenSkills: [...new Set(hiddenSkills)].toSorted((a, b) => a.localeCompare(b)),

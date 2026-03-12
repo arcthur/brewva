@@ -29,10 +29,6 @@ function createRuntimeForExecTests(input?: {
 }) {
   const mode = input?.mode ?? "standard";
   const enforceIsolation = input?.enforceIsolation ?? false;
-  const normalizedBackend =
-    enforceIsolation || mode === "strict" ? "sandbox" : (input?.backend ?? "best_available");
-  const normalizedFallbackToHost =
-    enforceIsolation || mode === "strict" ? false : (input?.fallbackToHost ?? false);
   const events: Array<{ type?: string; payload?: Record<string, unknown> }> = [];
   const runtime = {
     config: {
@@ -40,9 +36,9 @@ function createRuntimeForExecTests(input?: {
         mode,
         sanitizeContext: true,
         execution: {
-          backend: normalizedBackend,
+          backend: input?.backend ?? "best_available",
           enforceIsolation,
-          fallbackToHost: normalizedFallbackToHost,
+          fallbackToHost: input?.fallbackToHost ?? false,
           commandDenyList: input?.commandDenyList ?? [],
           sandbox: {
             serverUrl: input?.serverUrl ?? "http://127.0.0.1:5555",
@@ -555,7 +551,7 @@ describe("exec/process tool flow", () => {
 
     const routed = events.find((event) => event.type === "exec_routed");
     expect(routed).toBeDefined();
-    expect(routed?.payload?.configuredBackend).toBe("sandbox");
+    expect(routed?.payload?.configuredBackend).toBe("host");
     expect(routed?.payload?.resolvedBackend).toBe("sandbox");
     expect(routed?.payload?.routingPolicy).toBe("fail_closed");
     expect(routed?.payload?.fallbackToHost).toBe(false);

@@ -1,29 +1,11 @@
-import type {
-  ContextBudgetUsage,
-  ContextInjectionDecision,
-  ProposalRecord,
-  SkillChainIntent,
-  SkillDispatchDecision,
-  SkillSelection,
-  TaskState,
-  TruthState,
-} from "../types.js";
+import type { ContextBudgetUsage, TruthState } from "../types.js";
 import { sha256 } from "../utils/hash.js";
 import type {
   ContextInjectionEntry,
   ContextInjectionPlanResult,
   RegisterContextInjectionInput,
 } from "./injection.js";
-import { CONTEXT_SOURCES } from "./sources.js";
-import { buildRecentToolFailuresBlock, type ToolFailureEntry } from "./tool-failures.js";
-import {
-  buildRecentToolOutputDistillationBlock,
-  type ToolOutputDistillationEntry,
-} from "./tool-output-distilled.js";
-import { buildTruthFactsBlock } from "./truth-facts.js";
-import { buildTruthLedgerBlock } from "./truth.js";
-
-const MIN_SKILL_CANDIDATE_INJECTION_CONFIDENCE = 0.55;
+import type { ContextSourceProviderRegistry } from "./provider.js";
 
 export interface BuildContextInjectionInput {
   sessionId: string;
@@ -42,19 +24,9 @@ export interface BuildContextInjectionResult {
 }
 
 export interface ContextInjectionOrchestratorDeps {
-  cwd: string;
+  providers: ContextSourceProviderRegistry;
   maxInjectionTokens: number;
   isContextBudgetEnabled(): boolean;
-  getToolFailureInjectionConfig(): {
-    enabled: boolean;
-    maxEntries: number;
-    maxOutputChars: number;
-  };
-  getToolOutputDistillationInjectionConfig(): {
-    enabled: boolean;
-    maxEntries: number;
-    maxOutputChars: number;
-  };
   sanitizeInput(text: string): string;
   getTruthState(sessionId: string): TruthState;
   maybeAlignTaskStatus(input: {
@@ -63,26 +35,6 @@ export interface ContextInjectionOrchestratorDeps {
     truthState: TruthState;
     usage?: ContextBudgetUsage;
   }): void;
-  getRecentToolFailures(sessionId: string): ToolFailureEntry[];
-  getRecentToolOutputDistillations(sessionId: string): ToolOutputDistillationEntry[];
-  getTaskState(sessionId: string): TaskState;
-  buildTaskStateBlock(state: TaskState): string;
-  getLatestSkillSelectionProposal(sessionId: string): ProposalRecord<"skill_selection"> | undefined;
-  getAcceptedContextPackets(
-    sessionId: string,
-    injectionScopeId?: string,
-  ): ProposalRecord<"context_packet">[];
-  getPendingSkillDispatch(sessionId: string): SkillDispatchDecision | undefined;
-  buildSkillCandidateBlock(selected: SkillSelection[]): string;
-  buildSkillDispatchGateBlock(decision: SkillDispatchDecision): string;
-  getActiveSkillName(sessionId: string): string | null;
-  getSkillCascadeIntent(sessionId: string): SkillChainIntent | undefined;
-  buildSkillCascadeGateBlock(intent: SkillChainIntent): string;
-  registerLateContextInjection(
-    sessionId: string,
-    promptText: string,
-    usage?: ContextBudgetUsage,
-  ): void;
   registerContextInjection(sessionId: string, input: RegisterContextInjectionInput): void;
   recordEvent(input: {
     sessionId: string;
@@ -96,12 +48,17 @@ export interface ContextInjectionOrchestratorDeps {
     sessionId: string,
     inputText: string,
     usage?: ContextBudgetUsage,
-  ): ContextInjectionDecision;
+  ): {
+    accepted: boolean;
+    finalText: string;
+    originalTokens: number;
+    finalTokens: number;
+    truncated: boolean;
+  };
   buildInjectionScopeKey(sessionId: string, injectionScopeId?: string): string;
   setReservedTokens(scopeKey: string, tokens: number): void;
   getLastInjectedFingerprint(scopeKey: string): string | undefined;
   setLastInjectedFingerprint(scopeKey: string, fingerprint: string): void;
-  getCurrentTurn(sessionId: string): number;
 }
 
 export function buildContextInjection(
@@ -109,27 +66,7 @@ export function buildContextInjection(
   input: BuildContextInjectionInput,
 ): BuildContextInjectionResult {
   const promptText = deps.sanitizeInput(input.prompt);
-  const truthLedgerBlock = buildTruthLedgerBlock({ cwd: deps.cwd });
   const truthState = deps.getTruthState(input.sessionId);
-  const truthFactsBlock = truthState.facts.some((fact) => fact.status === "active")
-    ? buildTruthFactsBlock({ state: truthState })
-    : "";
-
-  if (truthLedgerBlock) {
-    deps.registerContextInjection(input.sessionId, {
-      source: CONTEXT_SOURCES.truthStatic,
-      id: "truth-static",
-      oncePerSession: true,
-      content: truthLedgerBlock,
-    });
-  }
-  if (truthFactsBlock) {
-    deps.registerContextInjection(input.sessionId, {
-      source: CONTEXT_SOURCES.truthFacts,
-      id: "truth-facts",
-      content: truthFactsBlock,
-    });
-  }
 
   deps.maybeAlignTaskStatus({
     sessionId: input.sessionId,
@@ -137,104 +74,14 @@ export function buildContextInjection(
     truthState,
     usage: input.usage,
   });
-  const latestSkillSelection = deps.getLatestSkillSelectionProposal(input.sessionId);
-  const selectedSkills = latestSkillSelection?.proposal.payload.selected ?? [];
-  const selectionConfidence =
-    latestSkillSelection?.proposal.confidence ??
-    latestSkillSelection?.proposal.payload.confidence ??
-    0;
-  if (
-    selectedSkills.length > 0 &&
-    selectionConfidence >= MIN_SKILL_CANDIDATE_INJECTION_CONFIDENCE
-  ) {
-    deps.registerContextInjection(input.sessionId, {
-      source: CONTEXT_SOURCES.skillCandidates,
-      id: "top-k-skills",
-      content: deps.buildSkillCandidateBlock(selectedSkills),
-    });
-  }
-  const dispatchDecision = deps.getPendingSkillDispatch(input.sessionId);
-  if (dispatchDecision && (dispatchDecision.mode === "gate" || dispatchDecision.mode === "auto")) {
-    deps.registerContextInjection(input.sessionId, {
-      source: CONTEXT_SOURCES.skillDispatchGate,
-      id: "skill-dispatch-gate",
-      content: deps.buildSkillDispatchGateBlock(dispatchDecision),
-    });
-  }
 
-  const activeSkillName = deps.getActiveSkillName(input.sessionId);
-  if (!activeSkillName) {
-    const intent = deps.getSkillCascadeIntent(input.sessionId);
-    if (intent && (intent.status === "paused" || intent.status === "pending")) {
-      deps.registerContextInjection(input.sessionId, {
-        source: CONTEXT_SOURCES.skillCascadeGate,
-        id: "skill-cascade-gate",
-        content: deps.buildSkillCascadeGateBlock(intent),
-      });
-    }
-  }
-  for (const packet of deps.getAcceptedContextPackets(input.sessionId, input.injectionScopeId)) {
-    deps.registerContextInjection(input.sessionId, {
-      source: CONTEXT_SOURCES.contextPackets,
-      id:
-        typeof packet.proposal.payload.packetKey === "string" &&
-        packet.proposal.payload.packetKey.trim().length > 0
-          ? `context-packet:${packet.proposal.issuer}:${packet.proposal.payload.scopeId ?? "global"}:${packet.proposal.payload.packetKey.trim()}`
-          : `context-packet:${packet.proposal.id}`,
-      content: `[ContextPacket:${packet.proposal.payload.label}]\n${packet.proposal.payload.content}`,
-    });
-  }
-
-  const toolFailureConfig = deps.getToolFailureInjectionConfig();
-  if (toolFailureConfig.enabled) {
-    const recentFailures = deps.getRecentToolFailures(input.sessionId);
-    const failureBlock = buildRecentToolFailuresBlock(recentFailures, {
-      maxEntries: toolFailureConfig.maxEntries,
-      maxOutputChars: toolFailureConfig.maxOutputChars,
-    });
-    if (failureBlock) {
-      deps.registerContextInjection(input.sessionId, {
-        source: CONTEXT_SOURCES.toolFailures,
-        id: "recent-failures",
-        content: failureBlock,
-      });
-    }
-  }
-
-  const toolOutputDistillationConfig = deps.getToolOutputDistillationInjectionConfig();
-  if (toolOutputDistillationConfig.enabled) {
-    const distilledOutputs = deps.getRecentToolOutputDistillations(input.sessionId);
-    const distilledBlock = buildRecentToolOutputDistillationBlock(distilledOutputs, {
-      maxEntries: toolOutputDistillationConfig.maxEntries,
-      maxSummaryChars: toolOutputDistillationConfig.maxOutputChars,
-    });
-    if (distilledBlock) {
-      deps.registerContextInjection(input.sessionId, {
-        source: CONTEXT_SOURCES.toolOutputsDistilled,
-        id: "recent-tool-output-distilled",
-        content: distilledBlock,
-      });
-    }
-  }
-
-  const taskState = deps.getTaskState(input.sessionId);
-  if (
-    taskState.spec ||
-    taskState.status ||
-    taskState.items.length > 0 ||
-    taskState.blockers.length > 0
-  ) {
-    const taskBlock = deps.buildTaskStateBlock(taskState);
-    if (taskBlock) {
-      deps.registerContextInjection(input.sessionId, {
-        source: CONTEXT_SOURCES.taskState,
-        id: "task-state",
-        content: taskBlock,
-      });
-    }
-  }
-
-  deps.registerLateContextInjection(input.sessionId, promptText, input.usage);
+  deps.providers.collect({
+    sessionId: input.sessionId,
+    promptText,
+    usage: input.usage,
+    injectionScopeId: input.injectionScopeId,
+    register: (registration) => deps.registerContextInjection(input.sessionId, registration),
+  });
 
   const merged = deps.planContextInjection(
     input.sessionId,
@@ -278,10 +125,9 @@ export function buildContextInjection(
         originalTokens: decision.originalTokens,
         finalTokens: decision.finalTokens,
         truncated: wasTruncated,
+        degradationApplied: merged.planTelemetry.degradationApplied,
         usagePercent: input.usage?.percent ?? null,
         sourceCount: merged.entries.length,
-        sourceTokens: merged.estimatedTokens,
-        degradationApplied: merged.planTelemetry.degradationApplied,
       },
     });
     return {
@@ -294,16 +140,13 @@ export function buildContextInjection(
     };
   }
 
-  const rejectedScopeKey = deps.buildInjectionScopeKey(input.sessionId, input.injectionScopeId);
-  deps.setReservedTokens(rejectedScopeKey, 0);
-  const droppedReason = decision.droppedReason ?? "unknown";
+  deps.setReservedTokens(deps.buildInjectionScopeKey(input.sessionId, input.injectionScopeId), 0);
   deps.recordEvent({
     sessionId: input.sessionId,
     type: "context_injection_dropped",
     payload: {
-      reason: droppedReason,
+      reason: "hard_limit",
       originalTokens: decision.originalTokens,
-      degradationApplied: merged.planTelemetry.degradationApplied,
     },
   });
   return {

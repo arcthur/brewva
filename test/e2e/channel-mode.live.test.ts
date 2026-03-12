@@ -245,7 +245,13 @@ describe("e2e: channel mode live", () => {
     "polling channel mode processes /agents command through fake telegram api and emits outbound reply",
     async () => {
       const workspace = createWorkspace("channel-mode-live");
-      writeMinimalConfig(workspace);
+      writeMinimalConfig(workspace, {
+        channels: {
+          orchestration: {
+            enabled: true,
+          },
+        },
+      });
 
       const token = "bot-token";
       const fakeApi = createFakeTelegramApiServer(token);

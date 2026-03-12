@@ -15,6 +15,7 @@ describe("context skill routing", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.projection.enabled = false;
     config.infrastructure.toolFailureInjection.enabled = false;
+    config.skills.routing.enabled = true;
 
     const runtime = new BrewvaRuntime({
       cwd: createWorkspace("ctx-skill-routing"),
@@ -72,6 +73,7 @@ describe("context skill routing", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.projection.enabled = false;
     config.infrastructure.toolFailureInjection.enabled = false;
+    config.skills.routing.enabled = true;
 
     const runtime = new BrewvaRuntime({
       cwd: createWorkspace("ctx-skill-routing-low-confidence"),

@@ -16,7 +16,7 @@ import {
   type ToolResultVerdict,
 } from "../utils/tool-result.js";
 
-export interface TruthSyncContext {
+export interface TruthToolResultProjectorContext {
   cwd: string;
   getTaskState(sessionId: string): TaskState;
   getTruthState(sessionId: string): TruthState;
@@ -162,7 +162,11 @@ function isBenignSearchNoMatchFailure(input: {
   return isSearchCommand;
 }
 
-function resolveCommandFailureFact(ctx: TruthSyncContext, sessionId: string, factId: string): void {
+function resolveCommandFailureFact(
+  ctx: TruthToolResultProjectorContext,
+  sessionId: string,
+  factId: string,
+): void {
   const truthState = ctx.getTruthState(sessionId);
   const active = truthState.facts.find((fact) => fact.id === factId && fact.status === "active");
   if (active) {
@@ -253,7 +257,7 @@ function dedupeArtifacts(artifacts: EvidenceArtifact[]): EvidenceArtifact[] {
 }
 
 function recordTruthBackedBlocker(
-  ctx: TruthSyncContext,
+  ctx: TruthToolResultProjectorContext,
   sessionId: string,
   input: {
     blockerId: string;
@@ -281,7 +285,7 @@ function recordTruthBackedBlocker(
 }
 
 function resolveTruthBackedBlocker(
-  ctx: TruthSyncContext,
+  ctx: TruthToolResultProjectorContext,
   sessionId: string,
   blockerId: string,
 ): void {
@@ -292,7 +296,7 @@ function resolveTruthBackedBlocker(
   ctx.resolveTaskBlocker(sessionId, blockerId);
 }
 
-export interface TruthSyncInput {
+export interface ToolResultTruthProjectionInput {
   sessionId: string;
   toolName: string;
   args: Record<string, unknown>;
@@ -393,7 +397,7 @@ function normalizeObservabilityAssertionSpec(
 }
 
 function normalizeObservabilityAssertion(
-  input: TruthSyncInput,
+  input: ToolResultTruthProjectionInput,
 ): ObservabilityAssertionRecord | undefined {
   if (input.toolName !== "obs_slo_assert") {
     return undefined;
@@ -462,7 +466,10 @@ function observabilityAssertionFactId(assertion: ObservabilityAssertionRecord): 
   return `truth:observability:${digest}`;
 }
 
-function syncObservabilityAssertionTruth(ctx: TruthSyncContext, input: TruthSyncInput): void {
+function projectObservabilityAssertionTruth(
+  ctx: TruthToolResultProjectorContext,
+  input: ToolResultTruthProjectionInput,
+): void {
   const assertion = normalizeObservabilityAssertion(input);
   if (!assertion) {
     return;
@@ -525,7 +532,10 @@ function syncObservabilityAssertionTruth(ctx: TruthSyncContext, input: TruthSync
   });
 }
 
-export function syncTruthFromToolResult(ctx: TruthSyncContext, input: TruthSyncInput): void {
+export function projectTruthFromToolResult(
+  ctx: TruthToolResultProjectorContext,
+  input: ToolResultTruthProjectionInput,
+): void {
   const normalizedTool = normalizeToolName(input.toolName);
 
   const metadataArtifacts = coerceEvidenceArtifacts(input.metadata?.artifacts);
@@ -539,23 +549,23 @@ export function syncTruthFromToolResult(ctx: TruthSyncContext, input: TruthSyncI
   const artifacts = dedupeArtifacts([...metadataArtifacts, ...extractedArtifacts]);
 
   if (normalizedTool === "exec") {
-    syncExecTruth(ctx, input, artifacts);
+    projectExecTruth(ctx, input, artifacts);
     return;
   }
 
   if (normalizedTool === "lsp_diagnostics") {
-    syncDiagnosticsTruth(ctx, input);
+    projectDiagnosticsTruth(ctx, input);
     return;
   }
 
   if (normalizedTool === "obs_slo_assert") {
-    syncObservabilityAssertionTruth(ctx, input);
+    projectObservabilityAssertionTruth(ctx, input);
   }
 }
 
-function syncExecTruth(
-  ctx: TruthSyncContext,
-  input: TruthSyncInput,
+function projectExecTruth(
+  ctx: TruthToolResultProjectorContext,
+  input: ToolResultTruthProjectionInput,
   artifacts: EvidenceArtifact[],
 ): void {
   const commandFromArgs = extractShellCommandFromArgs(input.args);
@@ -637,7 +647,10 @@ function syncExecTruth(
   });
 }
 
-function syncDiagnosticsTruth(ctx: TruthSyncContext, input: TruthSyncInput): void {
+function projectDiagnosticsTruth(
+  ctx: TruthToolResultProjectorContext,
+  input: ToolResultTruthProjectionInput,
+): void {
   const rawSeverity = input.args.severity;
   const severityFilter = typeof rawSeverity === "string" ? rawSeverity.trim() : "";
   const unfiltered = severityFilter === "" || severityFilter.toLowerCase() === "all";

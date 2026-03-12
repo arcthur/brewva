@@ -115,7 +115,7 @@ budget:
 outputs: [change_set]
 output_contracts:
   change_set:
-    kind: informative_text
+    kind: text
     min_words: 3
     min_length: 18
 consumes: []

@@ -25,6 +25,7 @@ import {
   tryGatewayPrint,
   writeGatewayAssistantText,
 } from "./gateway-print.js";
+import { runInspectCli } from "./inspect.js";
 import { writeJsonLine } from "./json-lines.js";
 import { createBrewvaSession } from "./session.js";
 
@@ -97,6 +98,7 @@ Usage:
 
 Subcommands:
   brewva gateway ...   Local control-plane daemon commands
+  brewva inspect ...   Replay-first session inspection
   brewva onboard ...   One-shot onboarding helpers (daemon install/uninstall)
 
 Modes:
@@ -143,6 +145,7 @@ Examples:
   brewva --agent code-reviewer --print "Review recent diff"
   brewva --mode json "Summarize recent changes"
   brewva --task-file ./task.json
+  brewva inspect --session <session-id>
   brewva --undo --session <session-id>
   brewva --replay --mode json --session <session-id>
   brewva onboard --install-daemon
@@ -725,6 +728,10 @@ async function run(): Promise<void> {
   }
   if (rawArgs[0] === "onboard") {
     process.exitCode = await runOnboardCli(rawArgs.slice(1));
+    return;
+  }
+  if (rawArgs[0] === "inspect") {
+    process.exitCode = await runInspectCli(rawArgs.slice(1));
     return;
   }
 

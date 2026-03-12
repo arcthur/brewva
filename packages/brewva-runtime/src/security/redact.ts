@@ -21,18 +21,23 @@ export function redactSecrets(text: string): string {
 }
 
 export function redactUnknown(value: unknown): unknown {
-  const seen = new WeakSet();
+  const inProgress = new WeakSet<object>();
+  const cached = new WeakMap<object, unknown>();
 
   const visit = (input: unknown): unknown => {
     if (typeof input === "string") return redactSecrets(input);
     if (Array.isArray(input)) return input.map((item) => visit(item));
     if (!input || typeof input !== "object") return input;
-    if (seen.has(input)) return "[redacted]";
-    seen.add(input);
+    const cachedValue = cached.get(input);
+    if (cachedValue !== undefined) return cachedValue;
+    if (inProgress.has(input)) return "[redacted]";
+    inProgress.add(input);
     const out: Record<string, unknown> = {};
+    cached.set(input, out);
     for (const [key, item] of Object.entries(input as Record<string, unknown>)) {
       out[key] = visit(item);
     }
+    inProgress.delete(input);
     return out;
   };
 

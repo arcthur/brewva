@@ -1,36 +1,19 @@
 import type { ParallelBudgetManager } from "../parallel/budget.js";
 import type { ParallelResultStore } from "../parallel/results.js";
+import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import { resolveSecurityPolicy } from "../security/mode.js";
 import type {
-  BrewvaConfig,
   ParallelAcquireResult,
   SkillDocument,
   WorkerMergeReport,
   WorkerResult,
 } from "../types.js";
-import type { RuntimeCallback } from "./callback.js";
 import { RuntimeSessionStateStore } from "./session-state.js";
+import type { SkillLifecycleService } from "./skill-lifecycle.js";
 
 export interface ParallelServiceOptions {
-  securityConfig: BrewvaConfig["security"];
-  parallel: ParallelBudgetManager;
-  parallelResults: ParallelResultStore;
-  sessionState: RuntimeSessionStateStore;
-  getActiveSkill: RuntimeCallback<[sessionId: string], SkillDocument | undefined>;
-  getCurrentTurn: RuntimeCallback<[sessionId: string], number>;
-  recordEvent: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        type: string;
-        turn?: number;
-        payload?: Record<string, unknown>;
-        timestamp?: number;
-        skipTapeCheckpoint?: boolean;
-      },
-    ],
-    unknown
-  >;
+  kernel: RuntimeKernelContext;
+  skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
 }
 
 export class ParallelService {
@@ -40,16 +23,23 @@ export class ParallelService {
   private readonly sessionState: RuntimeSessionStateStore;
   private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
   private readonly getCurrentTurn: (sessionId: string) => number;
-  private readonly recordEvent: ParallelServiceOptions["recordEvent"];
+  private readonly recordEvent: (input: {
+    sessionId: string;
+    type: string;
+    turn?: number;
+    payload?: Record<string, unknown>;
+    timestamp?: number;
+    skipTapeCheckpoint?: boolean;
+  }) => unknown;
 
   constructor(options: ParallelServiceOptions) {
-    this.securityPolicy = resolveSecurityPolicy(options.securityConfig);
-    this.parallel = options.parallel;
-    this.parallelResults = options.parallelResults;
-    this.sessionState = options.sessionState;
-    this.getActiveSkill = options.getActiveSkill;
-    this.getCurrentTurn = options.getCurrentTurn;
-    this.recordEvent = options.recordEvent;
+    this.securityPolicy = resolveSecurityPolicy(options.kernel.config.security);
+    this.parallel = options.kernel.parallel;
+    this.parallelResults = options.kernel.parallelResults;
+    this.sessionState = options.kernel.sessionState;
+    this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
+    this.getCurrentTurn = (sessionId) => options.kernel.getCurrentTurn(sessionId);
+    this.recordEvent = (input) => options.kernel.recordEvent(input);
   }
 
   acquireParallelSlot(sessionId: string, runId: string): ParallelAcquireResult {
@@ -111,7 +101,7 @@ export class ParallelService {
       maxParallel > 0 &&
       this.securityPolicy.skillMaxParallelMode !== "off"
     ) {
-      const activeRuns = this.parallel.snapshotSession(sessionId)?.activeRunIds.length ?? 0;
+      const activeRuns = this.parallel.getActiveRunCount(sessionId);
       if (activeRuns >= maxParallel) {
         const mode = this.securityPolicy.skillMaxParallelMode;
         if (mode === "warn") {

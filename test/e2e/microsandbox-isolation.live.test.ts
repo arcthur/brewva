@@ -262,7 +262,7 @@ describe("e2e: microsandbox isolation live", () => {
 
         const routedEvent = events.find((event) => event.type === "exec_routed");
         expect(routedEvent).toBeDefined();
-        expect(routedEvent?.payload?.configuredBackend).toBe("sandbox");
+        expect(routedEvent?.payload?.configuredBackend).toBe("host");
         expect(routedEvent?.payload?.resolvedBackend).toBe("sandbox");
         expect(routedEvent?.payload?.fallbackToHost).toBe(false);
         expect(routedEvent?.payload?.enforceIsolation).toBe(true);

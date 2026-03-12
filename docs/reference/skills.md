@@ -26,9 +26,8 @@ public skill and not a runtime-kernel planner.
 
 Skill frontmatter supports routing- and artifact-focused metadata:
 
-- `dispatch.gate_threshold/auto_threshold/default_mode`
-- `routing.continuity_required`
-- `outputs/output_contracts/requires/consumes/composable_with`
+- `dispatch.suggest_threshold/auto_threshold`
+- `outputs/output_contracts`
 - `effect_level`
 - resource lists: `references`, `scripts`, `heuristics`, `invariants`
 
@@ -51,14 +50,14 @@ not in a second base skill definition that relies on load order.
 phases. Verification, finishing, recovery, and compose-style planning live in
 runtime/control-plane code today rather than structured `SKILL.md` documents.
 
-Dispatch planning uses only `requires` as hard prerequisites; `consumes` remain
-optional context for loading and scoring.
-
 `output_contracts` make artifact quality explicit in the skill contract instead
 of hiding it inside runtime heuristics. Non-overlay skills with declared outputs
 must define a contract for every output. Overlays may inherit base
 `output_contracts`, but they cannot silently replace an existing base output
 contract.
+
+Current output contract kinds are intentionally limited to `text`, `enum`, and
+`json`.
 
 ## Routing Scopes And Profiles
 
@@ -67,24 +66,17 @@ Skill discovery and deliberation are now separated from kernel commitment:
 1. Deliberation layers may rank skills, judge candidates, and build chains.
 2. The kernel accepts only proposals that cross an admission boundary (`skill_selection`, `context_packet`).
 3. Proposal telemetry still emits `skill_routing_selection` as a projection of the latest accepted/deferred selection outcome (`selected | empty | failed | skipped`).
-4. Activation remains explicit: accepted proposals may arm `suggest/gate/auto` dispatch decisions, but actual skill entry still happens through `skill_load`.
+4. Activation remains explicit: accepted proposals may arm `suggest/auto` dispatch decisions, but actual skill entry still happens through `skill_load`.
 5. Runtime does not run adaptive inference loops or online model reranking in the kernel path.
 
-Routing scope defaults are driven by `skills.routing.profile`:
-
-- `standard`: `core`, `domain`
-- `operator`: `core`, `domain`, `operator`
-- `full`: `core`, `domain`, `operator`, `meta`
-
-Skills marked `routing.continuity_required=true` are intended for external
-deliberation layers to filter appropriately. The runtime kernel does not expose
-its own public continuity-routing API anymore.
+Routing is disabled by default (`skills.routing.enabled=false`). When enabled,
+`skills.routing.scopes` is the single explicit routing allowlist.
 
 ## Kernel vs Control Plane
 
 The runtime kernel and the optional control plane have different jobs:
 
-- kernel/runtime: dispatch gates, evidence, replay, policy enforcement, and proposal commitment
+- kernel/runtime: dispatch commitments, evidence, replay, policy enforcement, and proposal commitment
 - control plane: optional candidate generation, selection assistance, chain planning, and model-assisted judging
 
 When the broker path is enabled, it submits explicit proposals into the kernel
@@ -92,8 +84,8 @@ boundary. The model-assisted judge therefore does not make the kernel
 "smarter"; it is a separate deliberation/control-plane path.
 
 `skills_index.json` carries normalized contract metadata for each routable skill
-entry, including `category`, `routingScope`, `continuityRequired`, `outputs`,
-`requires`, `consumes`, `effectLevel`, and `dispatch`.
+entry, including `category`, `routingScope`, `outputs`, `requires`, `consumes`,
+`effectLevel`, and `dispatch`.
 
 ## Cascade Orchestration
 
@@ -156,7 +148,7 @@ skill output or kernel state.
 - `structured-extraction`
 - `goal-loop`
 
-`goal-loop` is continuity-gated and should be treated as a bounded multi-run
+`goal-loop` should be treated as a bounded multi-run
 capability, not a general-purpose implementation skill.
 
 ## Hidden-By-Default Skills
@@ -172,7 +164,7 @@ capability, not a general-purpose implementation skill.
 - `self-improve`
 
 These skills are loaded by the registry but excluded from standard routing
-unless the routing profile/scopes explicitly include them.
+unless routing scopes explicitly include them.
 
 ## Project Overlays
 
@@ -188,7 +180,7 @@ Overlays merge onto the base skill contract with project semantics:
 - resources are additive
 - project-required tools may be added
 - denied tools and budgets still only tighten, never relax
-- outputs/consumes/requires merge additively with the base contract
+- outputs merge additively with the base contract
 - output contracts remain base-derived unless the overlay adds a brand-new output
 - multiple overlays apply in deterministic root load order; within one root,
   overlay files are applied in lexical path order, and later overlays only

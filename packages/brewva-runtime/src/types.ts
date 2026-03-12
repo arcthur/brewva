@@ -4,22 +4,19 @@ import type { JsonValue } from "./utils/json.js";
 export type VerificationLevel = "quick" | "standard" | "strict";
 export type SkillCategory = "core" | "domain" | "operator" | "meta" | "internal" | "overlay";
 export type SkillRoutingScope = "core" | "domain" | "operator" | "meta";
-export type SkillRoutingProfile = "standard" | "operator" | "full";
 export type SkillCostHint = "low" | "medium" | "high";
 export type SkillEffectLevel = "read_only" | "execute" | "mutation";
-export type SkillDispatchMode = "suggest" | "gate" | "auto";
+export type SkillDispatchMode = "suggest" | "auto";
 export type SkillCascadeMode = "off" | "assist" | "auto";
 export type SkillCascadeSource = "dispatch" | "explicit";
 
 export interface SkillDispatchPolicy {
-  gateThreshold: number;
+  suggestThreshold: number;
   autoThreshold: number;
-  defaultMode: SkillDispatchMode;
 }
 
 export interface SkillRoutingPolicy {
   scope: SkillRoutingScope;
-  continuityRequired?: boolean;
 }
 
 export interface SkillResourceSet {
@@ -29,8 +26,8 @@ export interface SkillResourceSet {
   invariants: string[];
 }
 
-export interface SkillOutputInformativeTextContract {
-  kind: "informative_text";
+export interface SkillOutputTextContract {
+  kind: "text";
   minWords?: number;
   minLength?: number;
 }
@@ -41,55 +38,16 @@ export interface SkillOutputEnumContract {
   caseSensitive?: boolean;
 }
 
-export interface SkillOutputInformativeListContract {
-  kind: "informative_list";
-  minItems?: number;
-  allowObjects?: boolean;
-  minWords?: number;
-  minLength?: number;
-}
-
-export interface SkillOutputPathListContract {
-  kind: "path_list";
-  minItems?: number;
-}
-
-export interface SkillOutputObjectContract {
-  kind: "object";
-  minKeys?: number;
-  required?: string[];
-  properties?: Record<string, SkillOutputContract>;
-  requireAnyInformativeField?: boolean;
-}
-
-export interface SkillOutputRecordListContract {
-  kind: "record_list";
-  minItems?: number;
-  required?: string[];
-  properties: Record<string, SkillOutputContract>;
-  requireAnyInformativeField?: boolean;
-}
-
 export interface SkillOutputJsonContract {
   kind: "json";
   minKeys?: number;
   minItems?: number;
 }
 
-export interface SkillOutputOneOfContract {
-  kind: "one_of";
-  variants: SkillOutputContract[];
-}
-
 export type SkillOutputContract =
-  | SkillOutputInformativeTextContract
+  | SkillOutputTextContract
   | SkillOutputEnumContract
-  | SkillOutputInformativeListContract
-  | SkillOutputPathListContract
-  | SkillOutputObjectContract
-  | SkillOutputRecordListContract
-  | SkillOutputJsonContract
-  | SkillOutputOneOfContract;
+  | SkillOutputJsonContract;
 
 export interface SkillContract {
   name: string;
@@ -157,7 +115,6 @@ export interface SkillsIndexEntry {
   effectLevel: SkillEffectLevel;
   dispatch?: SkillDispatchPolicy;
   routingScope?: SkillRoutingScope;
-  continuityRequired: boolean;
 }
 
 export interface SkillSelection {
@@ -400,7 +357,6 @@ export interface CreateBrewvaSessionOptions {
   configPath?: string;
   model?: string;
   agentId?: string;
-  routingProfile?: SkillRoutingProfile;
   routingScopes?: SkillRoutingScope[];
   enableExtensions?: boolean;
 }
@@ -680,7 +636,7 @@ export interface BrewvaConfig {
     disabled: string[];
     overrides: Record<string, SkillContractOverride>;
     routing: {
-      profile: SkillRoutingProfile;
+      enabled: boolean;
       scopes: SkillRoutingScope[];
     };
     cascade: {
@@ -713,7 +669,6 @@ export interface BrewvaConfig {
       skillMaxTokensMode: SecurityEnforcementPreference;
       skillMaxToolCallsMode: SecurityEnforcementPreference;
       skillMaxParallelMode: SecurityEnforcementPreference;
-      skillDispatchGateMode: SecurityEnforcementPreference;
     };
     execution: {
       backend: "host" | "sandbox" | "best_available";
@@ -1086,14 +1041,6 @@ export interface TapeSearchResult {
   matches: TapeSearchMatch[];
 }
 
-export interface ContextBudgetSessionState {
-  turnIndex: number;
-  lastCompactionTurn: number;
-  lastCompactionAtMs?: number;
-  lastContextUsage?: ContextBudgetUsage;
-  pendingCompactionReason?: ContextCompactionReason;
-}
-
 export interface ContextInjectionDecision {
   accepted: boolean;
   finalText: string;
@@ -1124,12 +1071,6 @@ export interface ParallelAcquireResult {
     | "skill_max_parallel"
     | "timeout"
     | "cancelled";
-}
-
-export interface ParallelSnapshot {
-  active: number;
-  totalStarted: number;
-  sessions: Record<string, { active: number; totalStarted: number }>;
 }
 
 export type PatchFileAction = "add" | "modify" | "delete";
@@ -1222,11 +1163,6 @@ export interface BrewvaReplaySession {
   sessionId: string;
   eventCount: number;
   lastEventAt: number;
-}
-
-export interface ParallelSessionSnapshot {
-  activeRunIds: string[];
-  totalStarted: number;
 }
 
 export interface SessionCostTotals {

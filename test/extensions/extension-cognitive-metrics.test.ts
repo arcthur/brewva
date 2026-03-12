@@ -223,7 +223,7 @@ describe("cognitive metrics extension", () => {
     });
   });
 
-  test("records failed rehydration usefulness on session shutdown when progress never happens", () => {
+  test("records failed rehydration usefulness on session shutdown when summary rehydration never leads to progress", () => {
     const { api, handlers } = createMockExtensionAPI();
     const runtime = createRuntimeFixture();
     const sessionId = "metrics-session-shutdown";
@@ -238,17 +238,17 @@ describe("cognitive metrics extension", () => {
     );
     runtime.events.record({
       sessionId,
-      type: "memory_open_loop_rehydrated",
+      type: "memory_summary_rehydrated",
       payload: {
-        artifactRef: ".brewva/cognition/summaries/open-loop.md",
-        packetKey: "open-loop:resume",
+        artifactRef: ".brewva/cognition/summaries/status-summary.md",
+        packetKey: "summary:resume",
       },
     });
 
     invokeHandler(
       handlers,
       "before_agent_start",
-      { type: "before_agent_start", prompt: "Continue from the open loop." },
+      { type: "before_agent_start", prompt: "Continue from the latest session summary." },
       createSessionContext(sessionId),
     );
 
@@ -261,12 +261,12 @@ describe("cognitive metrics extension", () => {
     expect(usefulnessEvents[0]?.payload).toMatchObject({
       useful: false,
       reason: "session_shutdown",
-      rehydrationKinds: ["open_loop"],
+      rehydrationKinds: ["summary"],
       rehydrationPackets: [
         {
-          kind: "open_loop",
-          packetKey: "open-loop:resume",
-          artifactRef: ".brewva/cognition/summaries/open-loop.md",
+          kind: "summary",
+          packetKey: "summary:resume",
+          artifactRef: ".brewva/cognition/summaries/status-summary.md",
         },
       ],
     });
@@ -311,10 +311,10 @@ describe("cognitive metrics extension", () => {
     ).toHaveLength(0);
   });
 
-  test("records procedure rehydration kind when procedural memory leads to progress", () => {
+  test("records reference rehydration kind when reusable reference memory leads to progress", () => {
     const { api, handlers } = createMockExtensionAPI();
     const runtime = createRuntimeFixture();
-    const sessionId = "metrics-procedure-rehydration";
+    const sessionId = "metrics-reference-rehydration";
 
     registerCognitiveMetrics(api, runtime);
 
@@ -326,10 +326,10 @@ describe("cognitive metrics extension", () => {
     );
     runtime.events.record({
       sessionId,
-      type: "memory_procedure_rehydrated",
+      type: "memory_reference_rehydrated",
       payload: {
-        artifactRef: ".brewva/cognition/reference/procedure-note.md",
-        packetKey: "procedure:verification-standard",
+        artifactRef: ".brewva/cognition/reference/runtime-note.md",
+        packetKey: "reference:runtime-note",
       },
     });
 
@@ -338,7 +338,7 @@ describe("cognitive metrics extension", () => {
       "before_agent_start",
       {
         type: "before_agent_start",
-        prompt: "Continue implementation with the known verification flow.",
+        prompt: "Continue implementation with the reusable runtime note.",
       },
       createSessionContext(sessionId),
     );
@@ -361,7 +361,7 @@ describe("cognitive metrics extension", () => {
     });
     expect(progressEvents).toHaveLength(1);
     expect(progressEvents[0]?.payload).toMatchObject({
-      rehydrationKinds: ["procedure"],
+      rehydrationKinds: ["reference"],
     });
   });
 

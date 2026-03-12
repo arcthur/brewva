@@ -21,9 +21,8 @@ import type {
   VerificationReport,
 } from "../types.js";
 import { normalizePercent } from "../utils/token.js";
+import { VERIFIER_BLOCKER_PREFIX } from "../verification/verifier-blockers.js";
 import type { RuntimeCallback } from "./callback.js";
-
-const VERIFIER_BLOCKER_PREFIX = "verifier:" as const;
 
 export interface TaskStatusAlignmentInput {
   sessionId: string;

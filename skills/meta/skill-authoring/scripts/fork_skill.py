@@ -324,7 +324,6 @@ def resolve_destination_parent(base_root: Path) -> Path:
 def annotate_frontmatter(raw: str, entry: SkillEntry) -> str:
     frontmatter, body = parse_frontmatter(raw)
     frontmatter.pop("routing", None)
-    frontmatter.pop("continuity_required", None)
     frontmatter["source_name"] = entry.name
     frontmatter["source_category"] = entry.category
     frontmatter["forked_from"] = str(entry.file_path)

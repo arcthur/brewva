@@ -667,6 +667,76 @@ describe("TurnReplayEngine", () => {
     expect(view.costState.summary.skills.analysis?.turns).toBe(2);
   });
 
+  test("folds tool cost allocation from tool_call_marked plus cost_update", () => {
+    const sessionId = "replay-engine-cost-tools";
+    const events: BrewvaEventRecord[] = [
+      {
+        id: "evt-tool-call-1",
+        sessionId,
+        type: "tool_call_marked",
+        timestamp: 1,
+        turn: 4,
+        payload: {
+          toolName: "read",
+        } as BrewvaEventRecord["payload"],
+      },
+      {
+        id: "evt-tool-call-2",
+        sessionId,
+        type: "tool_call_marked",
+        timestamp: 2,
+        turn: 4,
+        payload: {
+          toolName: "grep",
+        } as BrewvaEventRecord["payload"],
+      },
+      {
+        id: "evt-tool-call-3",
+        sessionId,
+        type: "tool_call_marked",
+        timestamp: 3,
+        turn: 4,
+        payload: {
+          toolName: "read",
+        } as BrewvaEventRecord["payload"],
+      },
+      {
+        id: "evt-cost-tools",
+        sessionId,
+        type: "cost_update",
+        timestamp: 4,
+        turn: 4,
+        payload: {
+          model: "test/model",
+          skill: "analysis",
+          inputTokens: 40,
+          outputTokens: 20,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 60,
+          costUsd: 0.006,
+          budget: {
+            action: "warn",
+            sessionExceeded: false,
+            blocked: false,
+          },
+        } as BrewvaEventRecord["payload"],
+      },
+    ];
+    const engine = new TurnReplayEngine({
+      listEvents: () => events,
+      getTurn: () => 4,
+    });
+
+    const view = engine.replay(sessionId);
+    expect(view.costState.summary.tools.read?.callCount).toBe(2);
+    expect(view.costState.summary.tools.grep?.callCount).toBe(1);
+    expect(view.costState.summary.tools.read?.allocatedTokens).toBeCloseTo(40, 3);
+    expect(view.costState.summary.tools.grep?.allocatedTokens).toBeCloseTo(20, 3);
+    expect(view.costState.summary.tools.read?.allocatedCostUsd).toBeCloseTo(0.004, 6);
+    expect(view.costState.summary.tools.grep?.allocatedCostUsd).toBeCloseTo(0.002, 6);
+  });
+
   test("checkpoint skill turn map prevents same-turn double count after checkpoint", () => {
     const sessionId = "replay-engine-checkpoint-cost-turn-map";
     const events: BrewvaEventRecord[] = [

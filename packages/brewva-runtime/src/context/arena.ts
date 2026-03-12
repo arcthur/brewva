@@ -71,6 +71,7 @@ export class ContextArena {
 
     let entry: ContextInjectionEntry = {
       source,
+      category: input.category,
       id,
       content,
       estimatedTokens: estimateTokenCount(content),
@@ -307,6 +308,7 @@ export class ContextArena {
   private toPublicEntry(entry: ContextInjectionEntry): ContextInjectionEntry {
     return {
       source: entry.source,
+      category: entry.category,
       id: entry.id,
       content: entry.content,
       estimatedTokens: entry.estimatedTokens,

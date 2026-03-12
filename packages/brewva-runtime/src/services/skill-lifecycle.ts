@@ -89,19 +89,6 @@ function validateInformativeText(
   return `${label} must be an informative artifact, not a placeholder value`;
 }
 
-function hasInformativeValue(value: unknown, options: InformativeTextOptions = {}): boolean {
-  if (isInformativeText(value, options)) {
-    return true;
-  }
-  if (Array.isArray(value)) {
-    return value.some((entry) => hasInformativeValue(entry, options));
-  }
-  if (isRecord(value)) {
-    return Object.values(value).some((entry) => hasInformativeValue(entry, options));
-  }
-  return false;
-}
-
 function isSatisfied(value: unknown): boolean {
   if (value === undefined || value === null) return false;
   if (typeof value === "string") return value.trim().length > 0;
@@ -114,75 +101,13 @@ function isSatisfied(value: unknown): boolean {
   return true;
 }
 
-function isPathLikeText(text: string): boolean {
-  const normalized = text.trim();
-  if (normalized.length === 0 || isPlaceholderText(normalized)) {
-    return false;
-  }
-  if (!/^[A-Za-z0-9._@/-]+$/u.test(normalized)) {
-    return false;
-  }
-  return (
-    /[\\/]/u.test(normalized) ||
-    /\./u.test(normalized) ||
-    /[A-Z]/u.test(normalized) ||
-    /(?:^|[\\/])[a-z0-9._-]*file$/u.test(normalized)
-  );
-}
-
-function validateObjectContract(
-  value: unknown,
-  contract: Extract<SkillOutputContract, { kind: "object" }>,
-  label: string,
-): string | null {
-  if (!isRecord(value)) {
-    return `${label} must be an object`;
-  }
-  const keys = Object.keys(value);
-  const minKeys = contract.minKeys ?? 1;
-  if (keys.length < minKeys) {
-    return `${label} must contain at least ${minKeys} field${minKeys === 1 ? "" : "s"}`;
-  }
-  const required = contract.required ?? [];
-  for (const requiredField of required) {
-    if (
-      !Object.prototype.hasOwnProperty.call(value, requiredField) ||
-      !isSatisfied(value[requiredField])
-    ) {
-      return `${label} must include '${requiredField}'`;
-    }
-  }
-  for (const [propertyName, propertyContract] of Object.entries(contract.properties ?? {})) {
-    if (!Object.prototype.hasOwnProperty.call(value, propertyName)) {
-      continue;
-    }
-    const reason = validateOutputContract(
-      value[propertyName],
-      propertyContract,
-      `${label}.${propertyName}`,
-    );
-    if (reason) {
-      return reason;
-    }
-  }
-  if (
-    contract.requireAnyInformativeField === true &&
-    !Object.values(value).some((entry) =>
-      hasInformativeValue(entry, { minWords: 2, minLength: 12 }),
-    )
-  ) {
-    return `${label} must include at least one informative field`;
-  }
-  return null;
-}
-
 function validateOutputContract(
   value: unknown,
   contract: SkillOutputContract,
   label: string,
 ): string | null {
   switch (contract.kind) {
-    case "informative_text":
+    case "text":
       return validateInformativeText(value, label, {
         minWords: contract.minWords,
         minLength: contract.minLength,
@@ -199,69 +124,6 @@ function validateOutputContract(
       }
       return `${label} must be one of: ${contract.values.join(", ")}`;
     }
-    case "informative_list": {
-      const minItems = contract.minItems ?? 1;
-      if (!Array.isArray(value) || value.length < minItems) {
-        return `${label} must contain at least ${minItems} informative item${minItems === 1 ? "" : "s"}`;
-      }
-      const textOptions = {
-        minWords: contract.minWords,
-        minLength: contract.minLength,
-      };
-      for (const [index, entry] of value.entries()) {
-        if (typeof entry === "string" && isInformativeText(entry, textOptions)) {
-          continue;
-        }
-        if (
-          contract.allowObjects === true &&
-          isRecord(entry) &&
-          Object.values(entry).some((field) => hasInformativeValue(field, textOptions))
-        ) {
-          continue;
-        }
-        return `${label} item ${index + 1} must be informative`;
-      }
-      return null;
-    }
-    case "path_list": {
-      const minItems = contract.minItems ?? 1;
-      if (!Array.isArray(value) || value.length < minItems) {
-        return `${label} must contain at least ${minItems} path${minItems === 1 ? "" : "s"}`;
-      }
-      for (const [index, entry] of value.entries()) {
-        const text = normalizeText(entry);
-        if (text && isPathLikeText(text)) {
-          continue;
-        }
-        return `${label} item ${index + 1} must be a concrete relative path`;
-      }
-      return null;
-    }
-    case "object":
-      return validateObjectContract(value, contract, label);
-    case "record_list": {
-      const minItems = contract.minItems ?? 1;
-      if (!Array.isArray(value) || value.length < minItems) {
-        return `${label} must contain at least ${minItems} record${minItems === 1 ? "" : "s"}`;
-      }
-      for (const [index, entry] of value.entries()) {
-        const reason = validateObjectContract(
-          entry,
-          {
-            kind: "object",
-            minKeys: 1,
-            required: contract.required,
-            properties: contract.properties,
-            requireAnyInformativeField: contract.requireAnyInformativeField,
-          },
-          `${label} entry ${index + 1}`,
-        );
-        if (reason) {
-          return reason;
-        }
-      }
-      return null;
-    }
     case "json": {
       if (Array.isArray(value)) {
         const minItems = contract.minItems ?? 1;
@@ -276,14 +138,6 @@ function validateOutputContract(
           : `${label} must contain at least ${minKeys} field${minKeys === 1 ? "" : "s"}`;
       }
       return `${label} must be a non-empty object or array`;
-    }
-    case "one_of": {
-      for (const variant of contract.variants) {
-        if (!validateOutputContract(value, variant, label)) {
-          return null;
-        }
-      }
-      return `${label} does not satisfy any declared output contract variant`;
     }
   }
 }
@@ -409,7 +263,7 @@ export class SkillLifecycleService {
     options: { emitEvent?: boolean } = {},
   ): void {
     const activeSkillName = this.sessionState.activeSkillsBySession.get(sessionId) ?? null;
-    const shouldStorePending = decision.mode === "gate" || decision.mode === "auto";
+    const shouldStorePending = decision.mode !== "none";
     if (!shouldStorePending) {
       this.sessionState.pendingDispatchBySession.delete(sessionId);
     } else {
@@ -443,28 +297,6 @@ export class SkillLifecycleService {
     const pending = this.sessionState.pendingDispatchBySession.get(sessionId);
     this.sessionState.pendingDispatchBySession.delete(sessionId);
     return pending;
-  }
-
-  overridePendingDispatch(
-    sessionId: string,
-    input: { reason?: string; targetSkillName?: string } = {},
-  ): { ok: boolean; reason?: string; decision?: SkillDispatchDecision } {
-    const pending = this.getPendingDispatch(sessionId);
-    if (!pending || pending.mode === "none") {
-      return { ok: false, reason: "No pending skill dispatch gate." };
-    }
-    this.recordEvent({
-      sessionId,
-      type: "skill_routing_overridden",
-      turn: this.getCurrentTurn(sessionId),
-      payload: this.buildDispatchPayload(pending, {
-        reason: input.reason ?? "manual_override",
-        targetSkillName: input.targetSkillName ?? null,
-        resolvedBy: "skill_route_override",
-      }),
-    });
-    this.clearPendingDispatch(sessionId);
-    return { ok: true, decision: pending };
   }
 
   reconcilePendingDispatchOnTurnEnd(sessionId: string, turn: number): void {

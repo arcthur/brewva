@@ -41,9 +41,6 @@ describe("skill contract tightening", () => {
         maxToolCalls: 10,
         maxTokens: 50000,
       },
-      routing: {
-        continuityRequired: true,
-      },
     });
 
     expect(merged.tools.optional).toContain("edit");
@@ -51,7 +48,7 @@ describe("skill contract tightening", () => {
     expect(merged.tools.denied).toEqual(expect.arrayContaining(["write", "exec"]));
     expect(merged.budget.maxToolCalls).toBe(10);
     expect(merged.budget.maxTokens).toBe(50000);
-    expect(merged.routing?.continuityRequired).toBe(true);
+    expect(merged.routing).toEqual({ scope: "core" });
   });
 
   test("project overlays can add project-required tools without relaxing denials", () => {
@@ -93,11 +90,10 @@ describe("skill contract tightening", () => {
     const base: SkillContract = {
       name: "implementation",
       category: "core",
-      routing: { scope: "core", continuityRequired: false },
+      routing: { scope: "core" },
       dispatch: {
-        gateThreshold: 10,
+        suggestThreshold: 10,
         autoThreshold: 20,
-        defaultMode: "suggest",
       },
       tools: {
         required: ["read"],
@@ -118,12 +114,8 @@ describe("skill contract tightening", () => {
         maxTokens: 20000,
       },
       dispatch: {
-        gateThreshold: 14,
+        suggestThreshold: 14,
         autoThreshold: 18,
-        defaultMode: "gate" as const,
-      },
-      routing: {
-        continuityRequired: true,
       },
       maxParallel: 3,
       effectLevel: "execute" as const,
@@ -142,11 +134,10 @@ describe("skill contract tightening", () => {
     for (const result of [tightened, merged]) {
       expect(result.budget).toEqual({ maxToolCalls: 12, maxTokens: 20000 });
       expect(result.dispatch).toEqual({
-        gateThreshold: 14,
+        suggestThreshold: 14,
         autoThreshold: 20,
-        defaultMode: "gate",
       });
-      expect(result.routing).toEqual({ scope: "core", continuityRequired: true });
+      expect(result.routing).toEqual({ scope: "core" });
       expect(result.maxParallel).toBe(3);
       expect(result.effectLevel).toBe("execute");
     }
@@ -212,15 +203,34 @@ describe("skill document parsing", () => {
     expect(() => parseSkillDocument(filePath, "core")).toThrow("category");
   });
 
-  test("parses continuity-required routing for goal-loop", () => {
-    const parsed = parseSkillDocument(
-      join(repoRoot(), "skills/domain/goal-loop/SKILL.md"),
-      "domain",
+  test("rejects removed continuity routing metadata", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-continuity-removed-"));
+    const filePath = join(workspace, "skills", "domain", "goal-loop", "SKILL.md");
+    mkdirSync(dirname(filePath), { recursive: true });
+    writeFileSync(
+      filePath,
+      [
+        "---",
+        "name: goal-loop",
+        "description: goal loop skill",
+        "routing:",
+        "  continuity_required: true",
+        "tools:",
+        "  required: [read]",
+        "  optional: []",
+        "  denied: []",
+        "budget:",
+        "  max_tool_calls: 10",
+        "  max_tokens: 10000",
+        "outputs: []",
+        "consumes: []",
+        "---",
+        "# goal-loop",
+      ].join("\n"),
+      "utf8",
     );
 
-    expect(parsed.category).toBe("domain");
-    expect(parsed.contract.routing?.scope).toBe("domain");
-    expect(parsed.contract.routing?.continuityRequired).toBe(true);
+    expect(() => parseSkillDocument(filePath, "domain")).toThrow("continuity_required");
   });
 
   test("parses overlay resources without exposing routing scope", () => {
@@ -277,7 +287,7 @@ describe("skill document parsing", () => {
         outputs: ["change_set"],
         outputContracts: {
           change_set: {
-            kind: "informative_text",
+            kind: "text",
             minWords: 3,
             minLength: 18,
           },
@@ -291,7 +301,7 @@ describe("skill document parsing", () => {
     expect(merged.outputs).toEqual(["change_set"]);
     expect(merged.outputContracts).toEqual({
       change_set: {
-        kind: "informative_text",
+        kind: "text",
         minWords: 3,
         minLength: 18,
       },
@@ -345,7 +355,7 @@ describe("skill document parsing", () => {
       outputs: ["review_report"],
       outputContracts: {
         review_report: {
-          kind: "informative_text",
+          kind: "text",
           minWords: 3,
           minLength: 18,
         },
@@ -357,7 +367,7 @@ describe("skill document parsing", () => {
         outputs: ["review_report"],
         outputContracts: {
           review_report: {
-            kind: "informative_text",
+            kind: "text",
             minWords: 2,
             minLength: 12,
           },
@@ -366,7 +376,7 @@ describe("skill document parsing", () => {
     ).toThrow("cannot replace the base contract");
   });
 
-  test("accepts equivalent nested output contracts even when object key order differs", () => {
+  test("accepts equivalent json output contracts even when object key order differs", () => {
     const base: SkillContract = {
       name: "review",
       category: "core",
@@ -383,18 +393,9 @@ describe("skill document parsing", () => {
       outputs: ["review_report"],
       outputContracts: {
         review_report: {
-          kind: "object",
-          required: ["summary", "decision"],
-          properties: {
-            summary: { kind: "informative_text", minWords: 3, minLength: 18 },
-            decision: {
-              kind: "one_of",
-              variants: [
-                { kind: "enum", values: ["approve", "reject"] },
-                { kind: "informative_text", minWords: 2 },
-              ],
-            },
-          },
+          kind: "json",
+          minKeys: 1,
+          minItems: 1,
         },
       },
     };
@@ -404,18 +405,9 @@ describe("skill document parsing", () => {
         outputs: ["review_report"],
         outputContracts: {
           review_report: {
-            properties: {
-              decision: {
-                variants: [
-                  { values: ["approve", "reject"], kind: "enum" },
-                  { minWords: 2, kind: "informative_text" },
-                ],
-                kind: "one_of",
-              },
-              summary: { minLength: 18, kind: "informative_text", minWords: 3 },
-            },
-            kind: "object",
-            required: ["summary", "decision"],
+            minItems: 1,
+            kind: "json",
+            minKeys: 1,
           },
         },
       }),

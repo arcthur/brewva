@@ -90,7 +90,7 @@ Current module anchors:
   - `packages/brewva-gateway/src/runtime-plugins/debug-loop.ts`
   - `packages/brewva-gateway/src/runtime-plugins/proactivity-context.ts`
   - `packages/brewva-gateway/src/runtime-plugins/cognitive-metrics.ts`
-  - `packages/brewva-gateway/src/runtime-plugins/memory-adaptation.ts`
+  - `packages/brewva-gateway/src/runtime-plugins/memory-curator.ts`
   - gateway heartbeat / scheduler policy code
 
 Rings answer "who may commit". Planes answer "what concern is this code

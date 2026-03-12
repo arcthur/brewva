@@ -1,16 +1,23 @@
 import { resolve } from "node:path";
+import { TurnWALRecovery } from "./channels/turn-wal-recovery.js";
 import { TurnWALStore } from "./channels/turn-wal.js";
 import type { TurnEnvelope } from "./channels/turn.js";
 import { loadBrewvaConfig } from "./config/loader.js";
 import { resolveWorkspaceRootDir } from "./config/paths.js";
 import { ContextBudgetManager } from "./context/budget.js";
+import { registerBuiltInContextSourceProviders } from "./context/builtins.js";
 import { normalizeAgentId } from "./context/identity.js";
 import { ContextInjectionCollector, type ContextInjectionEntry } from "./context/injection.js";
+import {
+  ContextSourceProviderRegistry,
+  type ContextSourceProvider,
+  type ContextSourceProviderDescriptor,
+} from "./context/provider.js";
 import type { ToolOutputDistillationEntry } from "./context/tool-output-distilled.js";
 import { SessionCostTracker } from "./cost/tracker.js";
 import {
-  DECISION_RECEIPT_RECORDED_EVENT_TYPE,
   TOOL_OUTPUT_DISTILLED_EVENT_TYPE,
+  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
 } from "./events/event-types.js";
 import { BrewvaEventStore } from "./events/store.js";
 import type { GovernancePort } from "./governance/port.js";
@@ -18,14 +25,8 @@ import { EvidenceLedger } from "./ledger/evidence-ledger.js";
 import { ParallelBudgetManager } from "./parallel/budget.js";
 import { ParallelResultStore } from "./parallel/results.js";
 import { ProjectionEngine } from "./projection/engine.js";
-import { createRuntimeDomainApis, type RuntimeDomainApis } from "./runtime-domains.js";
-import {
-  buildSkillCandidateBlock,
-  buildSkillCascadeGateBlock,
-  buildSkillDispatchGateBlock,
-  buildTaskStateBlock,
-  inferEventCategory,
-} from "./runtime-helpers.js";
+import { inferEventCategory } from "./runtime-helpers.js";
+import type { RuntimeKernelContext } from "./runtime-kernel.js";
 import { SchedulerService } from "./schedule/service.js";
 import {
   CONTEXT_CRITICAL_ALLOWED_TOOLS,
@@ -39,16 +40,18 @@ import { FileChangeService } from "./services/file-change.js";
 import { LedgerService } from "./services/ledger.js";
 import { ParallelService } from "./services/parallel.js";
 import { ProposalAdmissionService } from "./services/proposal-admission.js";
-import { ScanConvergenceService } from "./services/scan-convergence.js";
 import { ScheduleIntentService } from "./services/schedule-intent.js";
 import { SessionLifecycleService } from "./services/session-lifecycle.js";
 import { RuntimeSessionStateStore } from "./services/session-state.js";
 import { SkillCascadeService } from "./services/skill-cascade.js";
 import { SkillLifecycleService } from "./services/skill-lifecycle.js";
+import { StallDetectorService } from "./services/stall-detector.js";
 import { TapeService } from "./services/tape.js";
 import { TaskService } from "./services/task.js";
 import { ToolGateService } from "./services/tool-gate.js";
+import { TruthProjectorService } from "./services/truth-projector.js";
 import { TruthService } from "./services/truth.js";
+import { VerificationProjectorService } from "./services/verification-projector.js";
 import { VerificationService } from "./services/verification.js";
 import { SkillRegistry, type SkillRegistryLoadReport } from "./skills/registry.js";
 import { FileChangeTracker } from "./state/file-change-tracker.js";
@@ -151,24 +154,15 @@ type RuntimeServiceDependencies = {
   costService: CostService;
   verificationService: VerificationService;
   contextService: ContextService;
-  scanConvergenceService: ScanConvergenceService;
+  stallDetectorService: StallDetectorService;
   tapeService: TapeService;
   eventPipeline: EventPipelineService;
+  truthProjectorService: TruthProjectorService;
+  verificationProjectorService: VerificationProjectorService;
   scheduleIntentService: ScheduleIntentService;
   fileChangeService: FileChangeService;
   sessionLifecycleService: SessionLifecycleService;
   toolGateService: ToolGateService;
-};
-
-type BaseServiceContext = {
-  getCurrentTurn(this: void, sessionId: string): number;
-  getTaskState(this: void, sessionId: string): TaskState;
-  getTruthState(this: void, sessionId: string): TruthState;
-  recordEvent(this: void, input: RuntimeRecordEventInput): BrewvaEventRecord | undefined;
-};
-
-type SkillAwareServiceContext = BaseServiceContext & {
-  getActiveSkill(this: void, sessionId: string): SkillDocument | undefined;
 };
 
 export class BrewvaRuntime {
@@ -183,10 +177,6 @@ export class BrewvaRuntime {
     get(name: string): SkillDocument | undefined;
     getPendingDispatch(sessionId: string): SkillDispatchDecision | undefined;
     clearPendingDispatch(sessionId: string): SkillDispatchDecision | undefined;
-    overridePendingDispatch(
-      sessionId: string,
-      input?: { reason?: string; targetSkillName?: string },
-    ): { ok: boolean; reason?: string; decision?: SkillDispatchDecision };
     reconcilePendingDispatch(sessionId: string, turn: number): void;
     activate(
       sessionId: string,
@@ -256,6 +246,9 @@ export class BrewvaRuntime {
       toolName: string,
       usage?: ContextBudgetUsage,
     ): { allowed: boolean; reason?: string };
+    registerProvider(provider: ContextSourceProvider): void;
+    unregisterProvider(source: string): boolean;
+    listProviders(): readonly ContextSourceProviderDescriptor[];
     buildInjection(
       sessionId: string,
       prompt: string,
@@ -483,6 +476,13 @@ export class BrewvaRuntime {
     listWorkerResults(sessionId: string): WorkerResult[];
     mergeWorkerResults(sessionId: string): WorkerMergeReport;
     clearWorkerResults(sessionId: string): void;
+    pollStall(
+      sessionId: string,
+      input?: {
+        now?: number;
+        thresholdsMs?: Partial<Record<"investigate" | "execute" | "verify", number>>;
+      },
+    ): void;
     clearState(sessionId: string): void;
     onClearState(listener: (sessionId: string) => void): () => void;
   };
@@ -502,6 +502,7 @@ export class BrewvaRuntime {
   private readonly projectionEngine: ProjectionEngine;
 
   private readonly sessionState = new RuntimeSessionStateStore();
+  private readonly kernel: RuntimeKernelContext;
   private readonly contextService: ContextService;
   private readonly costService: CostService;
   private readonly eventPipeline: EventPipelineService;
@@ -509,7 +510,7 @@ export class BrewvaRuntime {
   private readonly ledgerService: LedgerService;
   private readonly parallelService: ParallelService;
   private readonly proposalAdmissionService: ProposalAdmissionService;
-  private readonly scanConvergenceService: ScanConvergenceService;
+  private readonly stallDetectorService: StallDetectorService;
   private readonly scheduleIntentService: ScheduleIntentService;
   private readonly sessionLifecycleService: SessionLifecycleService;
   private readonly skillLifecycleService: SkillLifecycleService;
@@ -517,7 +518,9 @@ export class BrewvaRuntime {
   private readonly taskService: TaskService;
   private readonly tapeService: TapeService;
   private readonly truthService: TruthService;
+  private readonly truthProjectorService: TruthProjectorService;
   private readonly toolGateService: ToolGateService;
+  private readonly verificationProjectorService: VerificationProjectorService;
   private readonly verificationService: VerificationService;
   private turnReplay: TurnReplayEngine;
 
@@ -541,6 +544,7 @@ export class BrewvaRuntime {
     this.fileChanges = coreDependencies.fileChanges;
     this.costTracker = coreDependencies.costTracker;
     this.projectionEngine = coreDependencies.projectionEngine;
+    this.kernel = this.createKernelContext(options);
 
     const serviceDependencies = this.createServiceDependencies(options);
     this.proposalAdmissionService = serviceDependencies.proposalAdmissionService;
@@ -553,9 +557,11 @@ export class BrewvaRuntime {
     this.costService = serviceDependencies.costService;
     this.verificationService = serviceDependencies.verificationService;
     this.contextService = serviceDependencies.contextService;
-    this.scanConvergenceService = serviceDependencies.scanConvergenceService;
+    this.stallDetectorService = serviceDependencies.stallDetectorService;
     this.tapeService = serviceDependencies.tapeService;
     this.eventPipeline = serviceDependencies.eventPipeline;
+    this.truthProjectorService = serviceDependencies.truthProjectorService;
+    this.verificationProjectorService = serviceDependencies.verificationProjectorService;
     this.scheduleIntentService = serviceDependencies.scheduleIntentService;
     this.fileChangeService = serviceDependencies.fileChangeService;
     this.sessionLifecycleService = serviceDependencies.sessionLifecycleService;
@@ -658,182 +664,126 @@ export class BrewvaRuntime {
     };
   }
 
-  private createBaseServiceContext(): BaseServiceContext {
+  private createKernelContext(options: BrewvaRuntimeOptions): RuntimeKernelContext {
     return {
+      cwd: this.cwd,
+      workspaceRoot: this.workspaceRoot,
+      agentId: this.agentId,
+      config: this.config,
+      governancePort: options.governancePort,
+      sessionState: this.sessionState,
+      contextBudget: this.contextBudget,
+      contextInjection: this.contextInjection,
+      projectionEngine: this.projectionEngine,
+      turnReplay: this.turnReplay,
+      eventStore: this.eventStore,
+      evidenceLedger: this.evidenceLedger,
+      verificationGate: this.verificationGate,
+      parallel: this.parallel,
+      parallelResults: this.parallelResults,
+      fileChanges: this.fileChanges,
+      costTracker: this.costTracker,
       getCurrentTurn: (sessionId) => this.getCurrentTurn(sessionId),
       getTaskState: (sessionId) => this.getTaskState(sessionId),
       getTruthState: (sessionId) => this.getTruthState(sessionId),
       recordEvent: (input) => this.recordEvent(input),
-    };
-  }
-
-  private withActiveSkillServiceContext(
-    context: BaseServiceContext,
-    getActiveSkill: (sessionId: string) => SkillDocument | undefined,
-  ): SkillAwareServiceContext {
-    return {
-      ...context,
-      getActiveSkill,
+      sanitizeInput: (text) => this.sanitizeInput(text),
+      getRecentToolOutputDistillations: (sessionId, maxEntries) =>
+        this.getRecentToolOutputDistillations(sessionId, maxEntries),
+      getLatestVerificationOutcome: (sessionId) => this.getLatestVerificationOutcome(sessionId),
+      isContextBudgetEnabled: () => this.isContextBudgetEnabled(),
     };
   }
 
   private createServiceDependencies(options: BrewvaRuntimeOptions): RuntimeServiceDependencies {
-    const baseServiceContext = this.createBaseServiceContext();
     const taskService = new TaskService({
       config: this.config,
-      isContextBudgetEnabled: () => this.isContextBudgetEnabled(),
-      getTaskState: baseServiceContext.getTaskState,
-      getTruthState: baseServiceContext.getTruthState,
+      isContextBudgetEnabled: () => this.kernel.isContextBudgetEnabled(),
+      getTaskState: (sessionId) => this.kernel.getTaskState(sessionId),
+      getTruthState: (sessionId) => this.kernel.getTruthState(sessionId),
       evaluateCompletion: (sessionId, level) => this.evaluateCompletion(sessionId, level),
-      recordEvent: baseServiceContext.recordEvent,
+      recordEvent: (input) => this.kernel.recordEvent(input),
     });
     const skillLifecycleService = new SkillLifecycleService({
       skills: this.skillRegistry,
       sessionState: this.sessionState,
-      getCurrentTurn: baseServiceContext.getCurrentTurn,
-      getTaskState: baseServiceContext.getTaskState,
-      recordEvent: baseServiceContext.recordEvent,
+      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
+      getTaskState: (sessionId) => this.kernel.getTaskState(sessionId),
+      recordEvent: (input) => this.kernel.recordEvent(input),
       setTaskSpec: (sessionId, spec) => taskService.setTaskSpec(sessionId, spec),
     });
-    const skillAwareServiceContext = this.withActiveSkillServiceContext(
-      baseServiceContext,
-      (sessionId) => skillLifecycleService.getActiveSkill(sessionId),
-    );
     const skillCascadeService = new SkillCascadeService({
       config: this.config.skills.cascade,
       skills: this.skillRegistry,
       sessionState: this.sessionState,
-      getCurrentTurn: baseServiceContext.getCurrentTurn,
-      getActiveSkill: skillAwareServiceContext.getActiveSkill,
+      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
+      getActiveSkill: (sessionId) => skillLifecycleService.getActiveSkill(sessionId),
       activateSkill: (sessionId, name) => skillLifecycleService.activateSkill(sessionId, name),
       getSkillOutputs: (sessionId, skillName) =>
         skillLifecycleService.getSkillOutputs(sessionId, skillName),
       listProducedOutputKeys: (sessionId) =>
         skillLifecycleService.listProducedOutputKeys(sessionId),
-      recordEvent: baseServiceContext.recordEvent,
+      recordEvent: (input) => this.kernel.recordEvent(input),
       chainSources: options.skillCascadeChainSources,
     });
     const truthService = new TruthService({
-      getTruthState: baseServiceContext.getTruthState,
-      recordEvent: baseServiceContext.recordEvent,
+      kernel: this.kernel,
     });
     const ledgerService = new LedgerService({
-      cwd: this.cwd,
-      config: this.config,
-      ledger: this.evidenceLedger,
-      verification: this.verificationGate,
-      sessionState: this.sessionState,
-      getCurrentTurn: baseServiceContext.getCurrentTurn,
-      getActiveSkill: skillAwareServiceContext.getActiveSkill,
-      getTaskState: baseServiceContext.getTaskState,
-      getTruthState: baseServiceContext.getTruthState,
-      upsertTruthFact: (sessionId, input) => truthService.upsertTruthFact(sessionId, input),
-      resolveTruthFact: (sessionId, truthFactId) =>
-        truthService.resolveTruthFact(sessionId, truthFactId),
-      recordTaskBlocker: (sessionId, input) => taskService.recordTaskBlocker(sessionId, input),
-      resolveTaskBlocker: (sessionId, blockerId) =>
-        taskService.resolveTaskBlocker(sessionId, blockerId),
-      recordEvent: baseServiceContext.recordEvent,
+      kernel: this.kernel,
+      skillLifecycleService,
     });
     const parallelService = new ParallelService({
-      securityConfig: this.config.security,
-      parallel: this.parallel,
-      parallelResults: this.parallelResults,
-      sessionState: this.sessionState,
-      getActiveSkill: skillAwareServiceContext.getActiveSkill,
-      getCurrentTurn: baseServiceContext.getCurrentTurn,
-      recordEvent: baseServiceContext.recordEvent,
+      kernel: this.kernel,
+      skillLifecycleService,
     });
     const costService = new CostService({
-      costTracker: this.costTracker,
-      recordInfrastructureRow: (input) => ledgerService.recordInfrastructureRow(input),
+      kernel: this.kernel,
+      ledgerService,
+      skillLifecycleService,
       governancePort: options.governancePort,
-      getCurrentTurn: baseServiceContext.getCurrentTurn,
-      getActiveSkill: skillAwareServiceContext.getActiveSkill,
-      recordEvent: baseServiceContext.recordEvent,
     });
     const verificationService = new VerificationService({
-      cwd: this.cwd,
-      config: this.config,
-      verification: this.verificationGate,
+      kernel: this.kernel,
       governancePort: options.governancePort,
-      getTaskState: baseServiceContext.getTaskState,
-      getTruthState: baseServiceContext.getTruthState,
-      getActiveSkillName: (sessionId) => skillAwareServiceContext.getActiveSkill(sessionId)?.name,
-      recordEvent: baseServiceContext.recordEvent,
-      upsertTruthFact: (sessionId, input) => truthService.upsertTruthFact(sessionId, input),
-      resolveTruthFact: (sessionId, truthFactId) =>
-        truthService.resolveTruthFact(sessionId, truthFactId),
-      recordTaskBlocker: (sessionId, input) => taskService.recordTaskBlocker(sessionId, input),
-      resolveTaskBlocker: (sessionId, blockerId) =>
-        taskService.resolveTaskBlocker(sessionId, blockerId),
-      recordToolResult: (input) => ledgerService.recordToolResult(input),
+      skillLifecycleService,
+      ledgerService,
     });
     const proposalAdmissionService = new ProposalAdmissionService({
-      listDecisionReceiptEvents: (sessionId) =>
-        this.eventStore.list(sessionId, { type: DECISION_RECEIPT_RECORDED_EVENT_TYPE }),
-      recordEvent: baseServiceContext.recordEvent,
-      getCurrentTurn: baseServiceContext.getCurrentTurn,
-      getSkill: (name) => this.skillRegistry.get(name),
-      setPendingDispatch: (sessionId, decision) =>
-        this.skillLifecycleService.setPendingDispatch(sessionId, decision, { emitEvent: true }),
-      listProducedOutputKeys: (sessionId) =>
-        this.skillLifecycleService.listProducedOutputKeys(sessionId),
+      kernel: this.kernel,
+      skillRegistry: this.skillRegistry,
+      skillLifecycleService,
     });
-    const contextService = new ContextService({
-      cwd: this.cwd,
+    const contextSourceProviders = new ContextSourceProviderRegistry();
+    registerBuiltInContextSourceProviders(contextSourceProviders, {
       workspaceRoot: this.workspaceRoot,
       agentId: this.agentId,
-      config: this.config,
+      kernel: this.kernel,
+      proposalAdmissionService,
+      skillLifecycleService,
+      skillCascadeService,
+    });
+    const contextService = new ContextService({
+      kernel: this.kernel,
       alwaysAllowedTools: CONTEXT_CRITICAL_ALLOWED_TOOLS,
-      contextBudget: this.contextBudget,
-      contextInjection: this.contextInjection,
-      projectionEngine: this.projectionEngine,
-      recordInfrastructureRow: (input) => ledgerService.recordInfrastructureRow(input),
-      sessionState: this.sessionState,
-      getTaskState: baseServiceContext.getTaskState,
-      getTruthState: baseServiceContext.getTruthState,
-      getLatestSkillSelectionProposal: (sessionId) =>
-        proposalAdmissionService.getLatestProposalRecord(sessionId, "skill_selection", "accept") as
-          | ProposalRecord<"skill_selection">
-          | undefined,
-      getAcceptedContextPackets: (sessionId, injectionScopeId) =>
-        proposalAdmissionService.listInjectableContextPackets(sessionId, injectionScopeId),
-      getPendingSkillDispatch: (sessionId) =>
-        this.skillLifecycleService.getPendingDispatch(sessionId),
-      buildSkillCandidateBlock: (selected) => buildSkillCandidateBlock(selected),
-      buildSkillDispatchGateBlock: (decision) => buildSkillDispatchGateBlock(decision),
-      getSkillCascadeIntent: (sessionId) => skillCascadeService.getIntent(sessionId),
-      buildSkillCascadeGateBlock: (intent) => buildSkillCascadeGateBlock(intent),
-      buildTaskStateBlock: (state) => buildTaskStateBlock(state),
-      maybeAlignTaskStatus: (input) => taskService.maybeAlignTaskStatus(input),
-      getCurrentTurn: baseServiceContext.getCurrentTurn,
-      getActiveSkill: skillAwareServiceContext.getActiveSkill,
-      sanitizeInput: (text) => this.sanitizeInput(text),
-      getFoldedToolFailures: (sessionId) => this.turnReplay.getRecentToolFailures(sessionId, 12),
-      getRecentToolOutputDistillations: (sessionId) =>
-        this.getRecentToolOutputDistillations(sessionId, 12),
-      recordEvent: baseServiceContext.recordEvent,
+      contextSourceProviders,
+      ledgerService,
+      skillLifecycleService,
+      taskService,
       governancePort: options.governancePort,
     });
-    const scanConvergenceService = new ScanConvergenceService({
-      sessionState: this.sessionState,
-      listEvents: (sessionId, query) => this.eventStore.list(sessionId, query),
-      getTaskState: baseServiceContext.getTaskState,
-      getCurrentTurn: baseServiceContext.getCurrentTurn,
-      getActiveSkillName: (sessionId) => skillAwareServiceContext.getActiveSkill(sessionId)?.name,
-      recordTaskBlocker: (sessionId, input) => taskService.recordTaskBlocker(sessionId, input),
-      resolveTaskBlocker: (sessionId, blockerId) =>
-        taskService.resolveTaskBlocker(sessionId, blockerId),
-      recordEvent: baseServiceContext.recordEvent,
+    const stallDetectorService = new StallDetectorService({
+      kernel: this.kernel,
+      taskService,
+      skillLifecycleService,
     });
     const tapeService = new TapeService({
       tapeConfig: this.config.tape,
       sessionState: this.sessionState,
       queryEvents: (sessionId, query) => this.eventStore.list(sessionId, query),
-      getCurrentTurn: baseServiceContext.getCurrentTurn,
-      getTaskState: baseServiceContext.getTaskState,
-      getTruthState: baseServiceContext.getTruthState,
+      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
+      getTaskState: (sessionId) => this.kernel.getTaskState(sessionId),
+      getTruthState: (sessionId) => this.kernel.getTruthState(sessionId),
       getCostSummary: (sessionId) => this.resolveCheckpointCostSummary(sessionId),
       getCostSkillLastTurnByName: (sessionId) =>
         this.resolveCheckpointCostSkillLastTurnByName(sessionId),
@@ -841,7 +791,7 @@ export class BrewvaRuntime {
         this.turnReplay.getCheckpointEvidenceState(sessionId),
       getCheckpointProjectionState: (sessionId) =>
         this.turnReplay.getCheckpointProjectionState(sessionId),
-      recordEvent: baseServiceContext.recordEvent,
+      recordEvent: (input) => this.kernel.recordEvent(input),
     });
     const eventPipeline = new EventPipelineService({
       events: this.eventStore,
@@ -850,6 +800,18 @@ export class BrewvaRuntime {
       observeReplayEvent: (event) => this.turnReplay.observeEvent(event),
       ingestProjectionEvent: (event) => this.projectionEngine.ingestEvent(event),
       maybeRecordTapeCheckpoint: (event) => tapeService.maybeRecordTapeCheckpoint(event),
+    });
+    const truthProjectorService = new TruthProjectorService({
+      kernel: this.kernel,
+      eventPipeline,
+      taskService,
+      truthService,
+    });
+    const verificationProjectorService = new VerificationProjectorService({
+      kernel: this.kernel,
+      eventPipeline,
+      taskService,
+      truthService,
     });
     const scheduleIntentService = new ScheduleIntentService({
       createManager: () =>
@@ -861,8 +823,8 @@ export class BrewvaRuntime {
             listEvents: (sessionId, query) => this.eventStore.list(sessionId, query),
             recordEvent: (input) => eventPipeline.recordEvent(input),
             subscribeEvents: (listener) => eventPipeline.subscribeEvents(listener),
-            getTruthState: baseServiceContext.getTruthState,
-            getTaskState: baseServiceContext.getTaskState,
+            getTruthState: (sessionId) => this.kernel.getTruthState(sessionId),
+            getTaskState: (sessionId) => this.kernel.getTaskState(sessionId),
             turnWal: {
               appendPending: (envelope, source, walOptions) =>
                 this.turnWalStore.appendPending(envelope, source, walOptions),
@@ -877,53 +839,22 @@ export class BrewvaRuntime {
         }),
     });
     const fileChangeService = new FileChangeService({
-      sessionState: this.sessionState,
-      fileChanges: this.fileChanges,
-      costTracker: this.costTracker,
-      verification: this.verificationGate,
-      recordInfrastructureRow: (input) => ledgerService.recordInfrastructureRow(input),
-      getActiveSkill: skillAwareServiceContext.getActiveSkill,
-      getCurrentTurn: baseServiceContext.getCurrentTurn,
-      recordEvent: baseServiceContext.recordEvent,
+      kernel: this.kernel,
+      ledgerService,
+      skillLifecycleService,
     });
     const sessionLifecycleService = new SessionLifecycleService({
-      sessionState: this.sessionState,
-      contextBudget: this.contextBudget,
-      contextInjection: this.contextInjection,
-      clearReservedInjectionTokensForSession: (sessionId) =>
-        contextService.clearReservedInjectionTokensForSession(sessionId),
-      fileChanges: this.fileChanges,
-      verification: this.verificationGate,
-      parallel: this.parallel,
-      parallelResults: this.parallelResults,
-      costTracker: this.costTracker,
-      projectionEngine: this.projectionEngine,
-      turnReplay: this.turnReplay,
-      events: this.eventStore,
-      ledger: this.evidenceLedger,
-      resolveTaskBlocker: (sessionId, blockerId) =>
-        taskService.resolveTaskBlocker(sessionId, blockerId),
-      recordEvent: baseServiceContext.recordEvent,
+      kernel: this.kernel,
+      contextService,
     });
     const toolGateService = new ToolGateService({
-      securityConfig: this.config.security,
-      costTracker: this.costTracker,
-      sessionState: this.sessionState,
+      kernel: this.kernel,
       alwaysAllowedTools: CONTROL_PLANE_TOOLS,
-      getActiveSkill: skillAwareServiceContext.getActiveSkill,
-      getPendingDispatch: (sessionId) => skillLifecycleService.getPendingDispatch(sessionId),
-      getCurrentTurn: baseServiceContext.getCurrentTurn,
-      recordEvent: baseServiceContext.recordEvent,
-      checkContextCompactionGate: (sessionId, toolName, usage) =>
-        contextService.checkContextCompactionGate(sessionId, toolName, usage),
-      observeContextUsage: (sessionId, usage) =>
-        contextService.observeContextUsage(sessionId, usage),
-      markToolCall: (sessionId, toolName) => fileChangeService.markToolCall(sessionId, toolName),
-      trackToolCallStart: (input) => fileChangeService.trackToolCallStart(input),
-      recordToolResult: (input) => ledgerService.recordToolResult(input),
-      trackToolCallEnd: (input) => fileChangeService.trackToolCallEnd(input),
-      checkScanConvergence: (input) => scanConvergenceService.checkToolCall(input),
-      observeScanConvergenceToolResult: (input) => scanConvergenceService.observeToolResult(input),
+      skillLifecycleService,
+      contextService,
+      fileChangeService,
+      ledgerService,
+      stallDetectorService,
     });
 
     return {
@@ -937,9 +868,11 @@ export class BrewvaRuntime {
       costService,
       verificationService,
       contextService,
-      scanConvergenceService,
+      stallDetectorService,
       tapeService,
       eventPipeline,
+      truthProjectorService,
+      verificationProjectorService,
       scheduleIntentService,
       fileChangeService,
       sessionLifecycleService,
@@ -947,35 +880,258 @@ export class BrewvaRuntime {
     };
   }
 
-  private createDomainApis(): RuntimeDomainApis {
-    return createRuntimeDomainApis({
-      workspaceRoot: this.workspaceRoot,
-      config: this.config,
-      skillRegistry: this.skillRegistry,
-      verificationGate: this.verificationGate,
-      turnWalStore: this.turnWalStore,
-      eventStore: this.eventStore,
-      proposalAdmissionService: this.proposalAdmissionService,
-      skillLifecycleService: this.skillLifecycleService,
-      skillCascadeService: this.skillCascadeService,
-      taskService: this.taskService,
-      truthService: this.truthService,
-      ledgerService: this.ledgerService,
-      parallelService: this.parallelService,
-      costService: this.costService,
-      verificationService: this.verificationService,
-      contextService: this.contextService,
-      scanConvergenceService: this.scanConvergenceService,
-      tapeService: this.tapeService,
-      eventPipeline: this.eventPipeline,
-      scheduleIntentService: this.scheduleIntentService,
-      fileChangeService: this.fileChangeService,
-      sessionLifecycleService: this.sessionLifecycleService,
-      toolGateService: this.toolGateService,
-      getTaskState: (sessionId) => this.getTaskState(sessionId),
-      getTruthState: (sessionId) => this.getTruthState(sessionId),
-      sanitizeInput: (text) => this.sanitizeInput(text),
-    });
+  private createDomainApis(): {
+    skills: BrewvaRuntime["skills"];
+    proposals: BrewvaRuntime["proposals"];
+    context: BrewvaRuntime["context"];
+    tools: BrewvaRuntime["tools"];
+    task: BrewvaRuntime["task"];
+    truth: BrewvaRuntime["truth"];
+    ledger: BrewvaRuntime["ledger"];
+    schedule: BrewvaRuntime["schedule"];
+    turnWal: BrewvaRuntime["turnWal"];
+    events: BrewvaRuntime["events"];
+    verification: BrewvaRuntime["verification"];
+    cost: BrewvaRuntime["cost"];
+    session: BrewvaRuntime["session"];
+  } {
+    return {
+      skills: {
+        refresh: () => {
+          this.skillRegistry.load();
+          this.skillRegistry.writeIndex();
+        },
+        getLoadReport: () => this.skillRegistry.getLoadReport(),
+        list: () => this.skillRegistry.list(),
+        get: (name) => this.skillRegistry.get(name),
+        getPendingDispatch: (sessionId) => this.skillLifecycleService.getPendingDispatch(sessionId),
+        clearPendingDispatch: (sessionId) =>
+          this.skillLifecycleService.clearPendingDispatch(sessionId),
+        reconcilePendingDispatch: (sessionId, turn) =>
+          this.skillLifecycleService.reconcilePendingDispatchOnTurnEnd(sessionId, turn),
+        activate: (sessionId, name) => this.skillLifecycleService.activateSkill(sessionId, name),
+        getActive: (sessionId) => this.skillLifecycleService.getActiveSkill(sessionId),
+        validateOutputs: (sessionId, outputs) =>
+          this.skillLifecycleService.validateSkillOutputs(sessionId, outputs),
+        complete: (sessionId, output) =>
+          this.skillLifecycleService.completeSkill(sessionId, output),
+        getOutputs: (sessionId, skillName) =>
+          this.skillLifecycleService.getSkillOutputs(sessionId, skillName),
+        getConsumedOutputs: (sessionId, targetSkillName) =>
+          this.skillLifecycleService.getAvailableConsumedOutputs(sessionId, targetSkillName),
+        getCascadeIntent: (sessionId) => this.skillCascadeService.getIntent(sessionId),
+        pauseCascade: (sessionId, reason) =>
+          this.skillCascadeService.pauseIntent(sessionId, reason),
+        resumeCascade: (sessionId, reason) =>
+          this.skillCascadeService.resumeIntent(sessionId, reason),
+        cancelCascade: (sessionId, reason) =>
+          this.skillCascadeService.cancelIntent(sessionId, reason),
+        startCascade: (sessionId, input) =>
+          this.skillCascadeService.createExplicitIntent(sessionId, input),
+      },
+      proposals: {
+        submit: (sessionId, proposal) =>
+          this.proposalAdmissionService.submitProposal(sessionId, proposal),
+        list: (sessionId, query) =>
+          this.proposalAdmissionService.listProposalRecords(sessionId, query),
+      },
+      context: {
+        onTurnStart: (sessionId, turnIndex) => {
+          this.sessionLifecycleService.onTurnStart(sessionId, turnIndex);
+          this.stallDetectorService.onTurnStart(sessionId);
+        },
+        onTurnEnd: (sessionId) => this.stallDetectorService.onTurnEnd(sessionId),
+        onUserInput: (sessionId) => this.stallDetectorService.onUserInput(sessionId),
+        sanitizeInput: (text) => this.sanitizeInput(text),
+        observeUsage: (sessionId, usage) =>
+          this.contextService.observeContextUsage(sessionId, usage),
+        getUsage: (sessionId) => this.contextService.getContextUsage(sessionId),
+        getUsageRatio: (usage) => this.contextService.getContextUsageRatio(usage),
+        getHardLimitRatio: () => this.contextService.getContextHardLimitRatio(),
+        getCompactionThresholdRatio: () => this.contextService.getContextCompactionThresholdRatio(),
+        getPressureStatus: (sessionId, usage) =>
+          this.contextService.getContextPressureStatus(sessionId, usage),
+        getPressureLevel: (sessionId, usage) =>
+          this.contextService.getContextPressureLevel(sessionId, usage),
+        getCompactionGateStatus: (sessionId, usage) =>
+          this.contextService.getContextCompactionGateStatus(sessionId, usage),
+        checkCompactionGate: (sessionId, toolName, usage) =>
+          this.contextService.checkContextCompactionGate(sessionId, toolName, usage),
+        registerProvider: (provider) => this.contextService.registerContextSourceProvider(provider),
+        unregisterProvider: (source) => this.contextService.unregisterContextSourceProvider(source),
+        listProviders: () => this.contextService.listContextSourceProviders(),
+        buildInjection: (sessionId, prompt, usage, injectionScopeId) =>
+          this.contextService.buildContextInjection(sessionId, prompt, usage, injectionScopeId),
+        appendSupplementalInjection: (sessionId, inputText, usage, injectionScopeId) =>
+          this.contextService.appendSupplementalContextInjection(
+            sessionId,
+            inputText,
+            usage,
+            injectionScopeId,
+          ),
+        checkAndRequestCompaction: (sessionId, usage) =>
+          this.contextService.checkAndRequestCompaction(sessionId, usage),
+        requestCompaction: (sessionId, reason) =>
+          this.contextService.requestCompaction(sessionId, reason),
+        getPendingCompactionReason: (sessionId) =>
+          this.contextService.getPendingCompactionReason(sessionId),
+        getCompactionInstructions: () => this.contextService.getCompactionInstructions(),
+        getCompactionWindowTurns: () => this.contextService.getRecentCompactionWindowTurns(),
+        markCompacted: (sessionId, input) =>
+          this.contextService.markContextCompacted(sessionId, input),
+      },
+      tools: {
+        checkAccess: (sessionId, toolName) =>
+          this.toolGateService.checkToolAccess(sessionId, toolName),
+        explainAccess: (input) => {
+          const access = this.toolGateService.explainToolAccess(input.sessionId, input.toolName);
+          if (!access.allowed) {
+            return {
+              allowed: false,
+              reason: access.reason,
+              warning: access.warning,
+            };
+          }
+          const compaction = this.contextService.explainContextCompactionGate(
+            input.sessionId,
+            input.toolName,
+            input.usage,
+          );
+          if (!compaction.allowed) {
+            return {
+              allowed: false,
+              reason: compaction.reason,
+            };
+          }
+          const warnings = [access.warning].filter(
+            (value): value is string => typeof value === "string" && value.trim().length > 0,
+          );
+          return warnings.length > 0
+            ? { allowed: true, warning: warnings.join("; ") }
+            : { allowed: true };
+        },
+        start: (input) => this.toolGateService.startToolCall(input),
+        finish: (input) => {
+          this.toolGateService.finishToolCall(input);
+        },
+        acquireParallelSlot: (sessionId, runId) =>
+          this.parallelService.acquireParallelSlot(sessionId, runId),
+        acquireParallelSlotAsync: (sessionId, runId, options) =>
+          this.parallelService.acquireParallelSlotAsync(sessionId, runId, options),
+        releaseParallelSlot: (sessionId, runId) =>
+          this.parallelService.releaseParallelSlot(sessionId, runId),
+        markCall: (sessionId, toolName) => this.fileChangeService.markToolCall(sessionId, toolName),
+        trackCallStart: (input) => this.fileChangeService.trackToolCallStart(input),
+        trackCallEnd: (input) => this.fileChangeService.trackToolCallEnd(input),
+        rollbackLastPatchSet: (sessionId) => this.fileChangeService.rollbackLastPatchSet(sessionId),
+        resolveUndoSessionId: (preferredSessionId) =>
+          this.fileChangeService.resolveUndoSessionId(preferredSessionId),
+        recordResult: (input) => this.ledgerService.recordToolResult(input),
+      },
+      task: {
+        setSpec: (sessionId, spec) => this.taskService.setTaskSpec(sessionId, spec),
+        addItem: (sessionId, input) => this.taskService.addTaskItem(sessionId, input),
+        updateItem: (sessionId, input) => this.taskService.updateTaskItem(sessionId, input),
+        recordBlocker: (sessionId, input) => this.taskService.recordTaskBlocker(sessionId, input),
+        resolveBlocker: (sessionId, blockerId) =>
+          this.taskService.resolveTaskBlocker(sessionId, blockerId),
+        getState: (sessionId) => this.getTaskState(sessionId),
+      },
+      truth: {
+        getState: (sessionId) => this.getTruthState(sessionId),
+        upsertFact: (sessionId, input) => this.truthService.upsertTruthFact(sessionId, input),
+        resolveFact: (sessionId, truthFactId) =>
+          this.truthService.resolveTruthFact(sessionId, truthFactId),
+      },
+      ledger: {
+        getDigest: (sessionId) => this.ledgerService.getLedgerDigest(sessionId),
+        query: (sessionId, query) => this.ledgerService.queryLedger(sessionId, query),
+        listRows: (sessionId) => this.ledgerService.listLedgerRows(sessionId),
+        verifyChain: (sessionId) => this.ledgerService.verifyLedgerChain(sessionId),
+        getPath: () => this.ledgerService.getLedgerPath(),
+      },
+      schedule: {
+        createIntent: (sessionId, input) =>
+          this.scheduleIntentService.createScheduleIntent(sessionId, input),
+        cancelIntent: (sessionId, input) =>
+          this.scheduleIntentService.cancelScheduleIntent(sessionId, input),
+        updateIntent: (sessionId, input) =>
+          this.scheduleIntentService.updateScheduleIntent(sessionId, input),
+        listIntents: (query) => this.scheduleIntentService.listScheduleIntents(query),
+        getProjectionSnapshot: () => this.scheduleIntentService.getScheduleProjectionSnapshot(),
+      },
+      turnWal: {
+        appendPending: (envelope, source, options) =>
+          this.turnWalStore.appendPending(envelope, source, options),
+        markInflight: (walId) => this.turnWalStore.markInflight(walId),
+        markDone: (walId) => this.turnWalStore.markDone(walId),
+        markFailed: (walId, error) => this.turnWalStore.markFailed(walId, error),
+        markExpired: (walId) => this.turnWalStore.markExpired(walId),
+        listPending: () => this.turnWalStore.listPending(),
+        recover: async () => {
+          const recovery = new TurnWALRecovery({
+            workspaceRoot: this.workspaceRoot,
+            config: this.config.infrastructure.turnWal,
+            recordEvent: (input: {
+              sessionId: string;
+              type: string;
+              payload?: Record<string, unknown>;
+            }) => {
+              this.eventPipeline.recordEvent({
+                sessionId: input.sessionId,
+                type: input.type,
+                payload: input.payload,
+                skipTapeCheckpoint: true,
+              });
+            },
+          });
+          return await recovery.recover();
+        },
+        compact: () => this.turnWalStore.compact(),
+      },
+      events: {
+        record: (input) => this.eventPipeline.recordEvent(input),
+        query: (sessionId, query) => this.eventPipeline.queryEvents(sessionId, query),
+        queryStructured: (sessionId, query) =>
+          this.eventPipeline.queryStructuredEvents(sessionId, query),
+        getTapeStatus: (sessionId) => this.tapeService.getTapeStatus(sessionId),
+        getTapePressureThresholds: () => this.tapeService.getPressureThresholds(),
+        recordTapeHandoff: (sessionId, input) =>
+          this.tapeService.recordTapeHandoff(sessionId, input),
+        searchTape: (sessionId, input) => this.tapeService.searchTape(sessionId, input),
+        listReplaySessions: (limit) => this.eventPipeline.listReplaySessions(limit),
+        subscribe: (listener) => this.eventPipeline.subscribeEvents(listener),
+        toStructured: (event) => this.eventPipeline.toStructuredEvent(event),
+        list: (sessionId, query) => this.eventStore.list(sessionId, query),
+        listSessionIds: () => this.eventStore.listSessionIds(),
+      },
+      verification: {
+        evaluate: (sessionId, level) => this.evaluateCompletion(sessionId, level),
+        verify: (sessionId, level, options) => {
+          this.sessionLifecycleService.ensureHydrated(sessionId);
+          return this.verificationService.verifyCompletion(sessionId, level, options);
+        },
+      },
+      cost: {
+        recordAssistantUsage: (input) => this.costService.recordAssistantUsage(input),
+        getSummary: (sessionId) => this.costService.getCostSummary(sessionId),
+      },
+      session: {
+        recordWorkerResult: (sessionId, result) =>
+          this.parallelService.recordWorkerResult(sessionId, result),
+        listWorkerResults: (sessionId) => this.parallelService.listWorkerResults(sessionId),
+        mergeWorkerResults: (sessionId) => this.parallelService.mergeWorkerResults(sessionId),
+        clearWorkerResults: (sessionId) => this.parallelService.clearWorkerResults(sessionId),
+        pollStall: (sessionId, input) =>
+          this.stallDetectorService.pollTaskProgress({
+            sessionId,
+            now: input?.now,
+            thresholdsMs: input?.thresholdsMs,
+          }),
+        clearState: (sessionId) => this.sessionLifecycleService.clearSessionState(sessionId),
+        onClearState: (listener) => this.sessionLifecycleService.onClearState(listener),
+      },
+    };
   }
 
   private getTaskState(sessionId: string): TaskState {
@@ -991,6 +1147,7 @@ export class BrewvaRuntime {
   }
 
   private evaluateCompletion(sessionId: string, level?: VerificationLevel): VerificationReport {
+    this.sessionLifecycleService.ensureHydrated(sessionId);
     return this.verificationGate.evaluate(sessionId, level);
   }
 
@@ -1003,31 +1160,12 @@ export class BrewvaRuntime {
 
   private resolveCheckpointCostSummary(sessionId: string): SessionCostSummary {
     this.sessionLifecycleService.ensureHydrated(sessionId);
-    const liveSummary = this.costService.getCostSummary(sessionId);
-    if (this.hasCostSummaryData(liveSummary)) {
-      return liveSummary;
-    }
-    return this.turnReplay.getCostSummary(sessionId);
+    return this.costService.getCostSummary(sessionId);
   }
 
   private resolveCheckpointCostSkillLastTurnByName(sessionId: string): Record<string, number> {
     this.sessionLifecycleService.ensureHydrated(sessionId);
-    const liveSummary = this.costService.getCostSummary(sessionId);
-    if (this.hasCostSummaryData(liveSummary)) {
-      return this.costTracker.getSkillLastTurnByName(sessionId);
-    }
-    return this.turnReplay.getCostSkillLastTurnByName(sessionId);
-  }
-
-  private hasCostSummaryData(summary: SessionCostSummary): boolean {
-    return (
-      summary.totalTokens > 0 ||
-      summary.totalCostUsd > 0 ||
-      summary.alerts.length > 0 ||
-      Object.keys(summary.models).length > 0 ||
-      Object.keys(summary.skills).length > 0 ||
-      Object.keys(summary.tools).length > 0
-    );
+    return this.costTracker.getSkillLastTurnByName(sessionId);
   }
 
   private getCurrentTurn(sessionId: string): number {
@@ -1105,6 +1243,53 @@ export class BrewvaRuntime {
     }
 
     return entries.slice(-limit);
+  }
+
+  private getLatestVerificationOutcome(sessionId: string):
+    | {
+        timestamp: number;
+        level?: string;
+        outcome?: string;
+        failedChecks?: string[];
+        missingEvidence?: string[];
+        reason?: string | null;
+        commandsFresh?: string[];
+        commandsStale?: string[];
+      }
+    | undefined {
+    const event = this.eventStore.list(sessionId, {
+      type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+      last: 1,
+    })[0];
+    if (!event?.payload) return undefined;
+
+    const payload = event.payload;
+    const failedChecks = Array.isArray(payload.failedChecks)
+      ? payload.failedChecks.filter((value): value is string => typeof value === "string")
+      : [];
+    const missingEvidence = Array.isArray(payload.missingEvidence)
+      ? payload.missingEvidence.filter((value): value is string => typeof value === "string")
+      : [];
+    const commandsFresh = Array.isArray(payload.commandsFresh)
+      ? payload.commandsFresh.filter((value): value is string => typeof value === "string")
+      : [];
+    const commandsStale = Array.isArray(payload.commandsStale)
+      ? payload.commandsStale.filter((value): value is string => typeof value === "string")
+      : [];
+
+    return {
+      timestamp: event.timestamp,
+      level: typeof payload.level === "string" ? payload.level : undefined,
+      outcome: typeof payload.outcome === "string" ? payload.outcome : undefined,
+      failedChecks,
+      missingEvidence,
+      reason:
+        typeof payload.reason === "string" && payload.reason.trim().length > 0
+          ? payload.reason
+          : null,
+      commandsFresh,
+      commandsStale,
+    };
   }
 
   private isContextBudgetEnabled(): boolean {

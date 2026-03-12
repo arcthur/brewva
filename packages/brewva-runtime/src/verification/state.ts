@@ -16,8 +16,12 @@ export class VerificationStateStore {
   }
 
   markWrite(sessionId: string): void {
+    this.markWriteAt(sessionId, Date.now());
+  }
+
+  markWriteAt(sessionId: string, timestamp: number): void {
     const state = this.getOrCreate(sessionId);
-    state.lastWriteAt = Date.now();
+    state.lastWriteAt = Math.max(0, Math.floor(timestamp));
   }
 
   appendEvidence(sessionId: string, evidence: VerificationEvidence[]): void {

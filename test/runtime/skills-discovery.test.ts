@@ -8,7 +8,7 @@ import {
   discoverSkillRegistryRoots,
 } from "@brewva/brewva-runtime";
 
-function writeSkill(filePath: string, input: { name: string; continuityRequired?: boolean }): void {
+function writeSkill(filePath: string, input: { name: string }): void {
   mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(
     filePath,
@@ -16,7 +16,6 @@ function writeSkill(filePath: string, input: { name: string; continuityRequired?
       "---",
       `name: ${input.name}`,
       `description: ${input.name} skill`,
-      ...(input.continuityRequired ? ["routing:", "  continuity_required: true"] : []),
       "tools:",
       "  required: [read]",
       "  optional: []",
@@ -149,7 +148,7 @@ describe("skill discovery and loading", () => {
     });
 
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.skills.routing.profile = "operator";
+    config.skills.routing.enabled = true;
     config.skills.routing.scopes = ["core", "domain", "operator"];
 
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
@@ -299,8 +298,7 @@ describe("skill discovery and loading", () => {
       [
         "---",
         "dispatch:",
-        "  default_mode: suggest",
-        "  gate_threshold: 12",
+        "  suggest_threshold: 12",
         "tools:",
         "  required: [read]",
         "  optional: []",
@@ -320,8 +318,7 @@ describe("skill discovery and loading", () => {
       [
         "---",
         "dispatch:",
-        "  default_mode: gate",
-        "  gate_threshold: 14",
+        "  suggest_threshold: 14",
         "tools:",
         "  required: [read, tape_search]",
         "  optional: []",
@@ -345,8 +342,7 @@ describe("skill discovery and loading", () => {
       resolve(projectOverlayPath),
       resolve(externalOverlayPath),
     ]);
-    expect(skill?.contract.dispatch?.defaultMode).toBe("gate");
-    expect(skill?.contract.dispatch?.gateThreshold).toBe(14);
+    expect(skill?.contract.dispatch?.suggestThreshold).toBe(14);
     expect(skill?.contract.budget.maxToolCalls).toBe(5);
     expect(skill?.contract.tools.required).toContain("tape_search");
     expect(skill?.contract.tools.denied).toContain("process");

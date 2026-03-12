@@ -110,7 +110,6 @@ describe("brewva session ui settings wiring", () => {
         {
           skills: {
             routing: {
-              profile: "operator",
               scopes: ["core", "domain", "operator"],
             },
           },
@@ -149,28 +148,29 @@ describe("brewva session ui settings wiring", () => {
       const payload = (bootstrap?.payload as
         | {
             skillLoad?: {
-              routingProfile?: string;
+              routingEnabled?: boolean;
               routingScopes?: string[];
+              routableSkills?: string[];
               hiddenSkills?: string[];
             };
           }
         | undefined) ?? { skillLoad: {} };
 
-      expect(payload.skillLoad?.routingProfile).toBe("standard");
+      expect(payload.skillLoad?.routingEnabled).toBe(false);
       expect(payload.skillLoad?.routingScopes).toEqual(["core", "domain"]);
+      expect(payload.skillLoad?.routableSkills).toEqual([]);
       expect(payload.skillLoad?.hiddenSkills).toContain("custom-ops");
     } finally {
       result.session.dispose();
     }
   });
 
-  test("routingProfile and routingScopes options override skill routing exposure", async () => {
+  test("routingScopes option overrides skill routing exposure", async () => {
     const workspace = createWorkspace("skill-routing-override");
     writeSkill(join(workspace, ".brewva/skills/operator/custom-ops/SKILL.md"), "custom-ops");
 
     const result = await createBrewvaSession({
       cwd: workspace,
-      routingProfile: "operator",
       routingScopes: ["core", "domain", "operator"],
     });
     try {
@@ -182,14 +182,14 @@ describe("brewva session ui settings wiring", () => {
       const payload = (bootstrap?.payload as
         | {
             skillLoad?: {
-              routingProfile?: string;
+              routingEnabled?: boolean;
               routingScopes?: string[];
               routableSkills?: string[];
             };
           }
         | undefined) ?? { skillLoad: {} };
 
-      expect(payload.skillLoad?.routingProfile).toBe("operator");
+      expect(payload.skillLoad?.routingEnabled).toBe(true);
       expect(payload.skillLoad?.routingScopes).toEqual(["core", "domain", "operator"]);
       expect(payload.skillLoad?.routableSkills).toContain("custom-ops");
     } finally {
@@ -205,7 +205,8 @@ describe("brewva session ui settings wiring", () => {
         {
           skills: {
             routing: {
-              profile: "standard",
+              enabled: true,
+              scopes: ["core", "domain"],
             },
           },
         },
@@ -241,8 +242,24 @@ describe("brewva session ui settings wiring", () => {
 
   test("no-addons session bootstrap still exposes the proposal boundary", async () => {
     const workspace = createWorkspace("skill-broker-no-addons");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          skills: {
+            routing: {
+              enabled: true,
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
     const result = await createBrewvaSession({
       cwd: workspace,
+      configPath: ".brewva/brewva.json",
       enableExtensions: false,
     });
     try {

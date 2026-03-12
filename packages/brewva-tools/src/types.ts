@@ -55,10 +55,6 @@ export interface BrewvaToolRuntime {
       invalid: Array<{ name: string; reason: string }>;
     };
     getConsumedOutputs(sessionId: string, targetSkillName: string): Record<string, unknown>;
-    overridePendingDispatch(
-      sessionId: string,
-      input?: { reason?: string; targetSkillName?: string },
-    ): { ok: boolean; reason?: string; decision?: SkillDispatchDecision };
     getPendingDispatch?(sessionId: string): SkillDispatchDecision | undefined;
     getCascadeIntent?(sessionId: string): SkillChainIntent | undefined;
     pauseCascade?(sessionId: string, reason?: string): { ok: boolean; reason?: string };

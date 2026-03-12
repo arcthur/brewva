@@ -154,6 +154,9 @@ describe("e2e: scheduler daemon", () => {
   test("daemon catch-up executes a scheduled run through the shared session backend", async () => {
     const workspace = createWorkspace("scheduler-daemon");
     writeMinimalConfig(workspace, {
+      schedule: {
+        enabled: true,
+      },
       infrastructure: {
         events: {
           enabled: true,

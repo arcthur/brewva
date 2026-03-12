@@ -28,6 +28,23 @@ In addition to `brewva [flags]` primary modes, the CLI exposes control-plane sub
 `brewva gateway` and `--channel` are different execution paths: the former is the local control-plane daemon, while the latter is channel ingress/egress orchestration.
 For operational details, see `docs/guide/gateway-control-plane-daemon.md`.
 
+## Inspect Subcommand (`brewva inspect`)
+
+`brewva inspect` is the replay-first operator view for a persisted session.
+It summarizes:
+
+- tape/event volume and tape pressure
+- folded task/truth state
+- latest verification outcome
+- ledger chain status
+- projection/WAL/snapshot artifact paths
+
+Typical usage:
+
+- `brewva inspect`
+- `brewva inspect --session <session-id>`
+- `brewva inspect --json --session <session-id>`
+
 ## Onboard Subcommand (`brewva onboard`)
 
 `brewva onboard` is a wrapper around gateway service lifecycle:
@@ -123,7 +140,8 @@ Retained: `before_agent_start` core status/context block, `tool_call`,
 `tool_result`, `session_compact`, `session_shutdown`.
 
 Disabled: `registerContextTransform` (`turn_start`/`context` governance lifecycle),
-`registerCompletionGuard`, `registerEventStream`, `registerNotification`.
+`registerEventStream`, memory handlers, `registerNotification`,
+`registerDebugLoop`, and cognitive metrics.
 
 `--backend` selects the primary session backend:
 
@@ -202,6 +220,7 @@ bun run start
 bun run start -- --print "Refactor runtime cost tracker"
 bun run start -- --mode json "Summarize recent changes"
 bun run start -- --print --task-file ./task.json
+bun run start -- inspect --session <session-id>
 bun run start -- --undo --session <session-id>
 bun run start -- --replay --mode json --session <session-id>
 bun run start -- --version

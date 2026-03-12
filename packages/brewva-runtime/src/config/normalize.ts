@@ -1,9 +1,4 @@
-import type {
-  BrewvaConfig,
-  SkillRoutingProfile,
-  SkillRoutingScope,
-  VerificationLevel,
-} from "../types.js";
+import type { BrewvaConfig, SkillRoutingScope, VerificationLevel } from "../types.js";
 
 const VALID_COST_ACTIONS = new Set(["warn", "block_tools"]);
 const VALID_SECURITY_MODES = new Set(["permissive", "standard", "strict"]);
@@ -15,14 +10,7 @@ const VALID_CHANNEL_SCOPE_STRATEGIES = new Set(["chat", "thread"]);
 const VALID_CHANNEL_ACL_MODES = new Set(["open", "closed"]);
 const VALID_SKILL_CASCADE_MODES = new Set(["off", "assist", "auto"]);
 const VALID_SKILL_CASCADE_SOURCES = new Set(["dispatch", "explicit"]);
-const VALID_SKILL_ROUTING_PROFILES = new Set(["standard", "operator", "full"]);
 const VALID_SKILL_ROUTING_SCOPES = new Set(["core", "domain", "operator", "meta"]);
-
-const DEFAULT_ROUTING_SCOPES_BY_PROFILE: Record<SkillRoutingProfile, SkillRoutingScope[]> = {
-  standard: ["core", "domain"],
-  operator: ["core", "domain", "operator"],
-  full: ["core", "domain", "operator", "meta"],
-};
 
 type AnyRecord = Record<string, unknown>;
 
@@ -190,15 +178,9 @@ function normalizeSkillsConfig(
     skillsCascadeInput.enabledSources,
     defaults.cascade.enabledSources,
   );
-  const normalizedRoutingProfile = normalizeStrictStringEnum(
-    skillsRoutingInput.profile,
-    defaults.routing.profile,
-    VALID_SKILL_ROUTING_PROFILES,
-    "skills.routing.profile",
-  );
   const normalizedRoutingScopes = normalizeSkillRoutingScopeList(
     skillsRoutingInput.scopes,
-    DEFAULT_ROUTING_SCOPES_BY_PROFILE[normalizedRoutingProfile],
+    defaults.routing.scopes,
   );
   const effectiveCascadeSourcePriority = [
     ...normalizedCascadeSourcePriority.filter((source) =>
@@ -214,7 +196,7 @@ function normalizeSkillsConfig(
     disabled: normalizeStringArray(skillsInput.disabled, defaults.disabled),
     overrides: normalizeSkillOverrides(skillsInput.overrides, defaults.overrides),
     routing: {
-      profile: normalizedRoutingProfile,
+      enabled: normalizeBoolean(skillsRoutingInput.enabled, defaults.routing.enabled),
       scopes: normalizedRoutingScopes,
     },
     cascade: {
@@ -328,12 +310,6 @@ function normalizeSecurityConfig(
         defaults.enforcement.skillMaxParallelMode,
         VALID_SECURITY_ENFORCEMENT_MODES,
         "security.enforcement.skillMaxParallelMode",
-      ),
-      skillDispatchGateMode: normalizeStrictStringEnum(
-        securityEnforcementInput.skillDispatchGateMode,
-        defaults.enforcement.skillDispatchGateMode,
-        VALID_SECURITY_ENFORCEMENT_MODES,
-        "security.enforcement.skillDispatchGateMode",
       ),
     },
     execution: {

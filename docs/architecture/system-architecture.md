@@ -174,7 +174,7 @@ When that path is enabled:
 
 - selection and planning happen before kernel commitment
 - proposals cross the boundary through `runtime.proposals.submit(...)`
-- the kernel remains governance-only for dispatch gates, cascade activation,
+- the kernel remains governance-only for dispatch commitments, cascade activation,
   evidence, and replay
 
 This preserves the kernel promise: the kernel governs execution, but adaptive

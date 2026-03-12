@@ -3,6 +3,8 @@ import {
   PROPOSAL_DECIDED_EVENT_TYPE,
   PROPOSAL_RECEIVED_EVENT_TYPE,
 } from "../events/event-types.js";
+import type { RuntimeKernelContext } from "../runtime-kernel.js";
+import type { SkillRegistry } from "../skills/registry.js";
 import type {
   BrewvaEventRecord,
   ContextPacketProposalPayload,
@@ -14,11 +16,10 @@ import type {
   ProposalListQuery,
   ProposalPayloadByKind,
   ProposalRecord,
-  SkillDispatchDecision,
-  SkillDocument,
 } from "../types.js";
 import { commitContextPacketProposal } from "./proposal-admission-context-packet.js";
 import { commitSkillSelectionProposal } from "./proposal-admission-skill-selection.js";
+import type { SkillLifecycleService } from "./skill-lifecycle.js";
 
 const RESERVED_PROPOSAL_ISSUER_POLICIES = {
   "brewva.skill-broker": {
@@ -44,40 +45,36 @@ const RESERVED_PROPOSAL_ISSUER_POLICIES = {
   },
 } as const;
 
-interface RuntimeRecordEventInput {
-  sessionId: string;
-  type: string;
-  turn?: number;
-  payload?: Record<string, unknown>;
-  timestamp?: number;
-  skipTapeCheckpoint?: boolean;
-}
-
 export interface ProposalAdmissionServiceOptions {
-  listDecisionReceiptEvents(sessionId: string): BrewvaEventRecord[];
-  recordEvent(input: RuntimeRecordEventInput): BrewvaEventRecord | undefined;
-  getCurrentTurn(sessionId: string): number;
-  getSkill(name: string): SkillDocument | undefined;
-  setPendingDispatch(sessionId: string, decision: SkillDispatchDecision): void;
-  listProducedOutputKeys(sessionId: string): string[];
+  kernel: RuntimeKernelContext;
+  skillRegistry: Pick<SkillRegistry, "get">;
+  skillLifecycleService: Pick<
+    SkillLifecycleService,
+    "setPendingDispatch" | "listProducedOutputKeys"
+  >;
 }
 
 export class ProposalAdmissionService {
-  private readonly listDecisionReceiptEvents: ProposalAdmissionServiceOptions["listDecisionReceiptEvents"];
-  private readonly recordEvent: ProposalAdmissionServiceOptions["recordEvent"];
-  private readonly getCurrentTurn: ProposalAdmissionServiceOptions["getCurrentTurn"];
-  private readonly getSkill: ProposalAdmissionServiceOptions["getSkill"];
-  private readonly setPendingDispatch: ProposalAdmissionServiceOptions["setPendingDispatch"];
-  private readonly listProducedOutputKeys: ProposalAdmissionServiceOptions["listProducedOutputKeys"];
+  private readonly listDecisionReceiptEvents: (sessionId: string) => BrewvaEventRecord[];
+  private readonly recordEvent: RuntimeKernelContext["recordEvent"];
+  private readonly getCurrentTurn: (sessionId: string) => number;
+  private readonly getSkill: (name: string) => ReturnType<SkillRegistry["get"]>;
+  private readonly setPendingDispatch: (
+    sessionId: string,
+    decision: Parameters<SkillLifecycleService["setPendingDispatch"]>[1],
+  ) => void;
+  private readonly listProducedOutputKeys: (sessionId: string) => string[];
 
   constructor(options: ProposalAdmissionServiceOptions) {
-    this.listDecisionReceiptEvents = (sessionId) => options.listDecisionReceiptEvents(sessionId);
-    this.recordEvent = (input) => options.recordEvent(input);
-    this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
-    this.getSkill = (name) => options.getSkill(name);
+    this.listDecisionReceiptEvents = (sessionId) =>
+      options.kernel.eventStore.list(sessionId, { type: DECISION_RECEIPT_RECORDED_EVENT_TYPE });
+    this.recordEvent = (input) => options.kernel.recordEvent(input);
+    this.getCurrentTurn = (sessionId) => options.kernel.getCurrentTurn(sessionId);
+    this.getSkill = (name) => options.skillRegistry.get(name);
     this.setPendingDispatch = (sessionId, decision) =>
-      options.setPendingDispatch(sessionId, decision);
-    this.listProducedOutputKeys = (sessionId) => options.listProducedOutputKeys(sessionId);
+      options.skillLifecycleService.setPendingDispatch(sessionId, decision, { emitEvent: true });
+    this.listProducedOutputKeys = (sessionId) =>
+      options.skillLifecycleService.listProducedOutputKeys(sessionId);
   }
 
   submitProposal<K extends ProposalKind>(

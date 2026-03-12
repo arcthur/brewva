@@ -1,5 +1,4 @@
 import type {
-  ContextBudgetSessionState,
   ContextBudgetUsage,
   ContextCompactionDecision,
   ContextCompactionReason,
@@ -171,43 +170,20 @@ export class ContextBudgetManager {
     return state.pendingCompactionReason;
   }
 
-  snapshotSession(sessionId: string): ContextBudgetSessionState | undefined {
+  getLastContextUsage(sessionId: string): ContextBudgetUsage | undefined {
     const state = this.sessions.get(sessionId);
-    if (!state) return undefined;
+    if (!state?.lastContextUsage) return undefined;
     return {
-      turnIndex: state.turnIndex,
-      lastCompactionTurn: state.lastCompactionTurn,
-      lastCompactionAtMs: state.lastCompactionAtMs,
-      lastContextUsage: state.lastContextUsage
-        ? {
-            tokens: state.lastContextUsage.tokens,
-            contextWindow: state.lastContextUsage.contextWindow,
-            percent: state.lastContextUsage.percent,
-          }
-        : undefined,
-      pendingCompactionReason: state.pendingCompactionReason,
+      tokens: state.lastContextUsage.tokens,
+      contextWindow: state.lastContextUsage.contextWindow,
+      percent: state.lastContextUsage.percent,
     };
   }
 
-  restoreSession(sessionId: string, snapshot: ContextBudgetSessionState | undefined): void {
-    if (!snapshot) return;
-    this.sessions.set(sessionId, {
-      turnIndex: snapshot.turnIndex,
-      lastCompactionTurn: snapshot.lastCompactionTurn,
-      lastCompactionAtMs:
-        typeof snapshot.lastCompactionAtMs === "number" &&
-        Number.isFinite(snapshot.lastCompactionAtMs)
-          ? snapshot.lastCompactionAtMs
-          : undefined,
-      lastContextUsage: snapshot.lastContextUsage
-        ? {
-            tokens: snapshot.lastContextUsage.tokens,
-            contextWindow: snapshot.lastContextUsage.contextWindow,
-            percent: normalizePercent(snapshot.lastContextUsage.percent),
-          }
-        : undefined,
-      pendingCompactionReason: snapshot.pendingCompactionReason,
-    });
+  getLastCompactionTurn(sessionId: string): number | null {
+    const state = this.sessions.get(sessionId);
+    if (!state || !Number.isFinite(state.lastCompactionTurn)) return null;
+    return Math.floor(state.lastCompactionTurn);
   }
 
   clear(sessionId: string): void {

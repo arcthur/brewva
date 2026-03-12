@@ -24,7 +24,6 @@ function collectToolNames(sourceRoot: string): string[] {
     "skill-chain-control.ts",
     "skill-load.ts",
     "skill-complete.ts",
-    "skill-route-override.ts",
     "tape.ts",
     "task-ledger.ts",
     "toc.ts",

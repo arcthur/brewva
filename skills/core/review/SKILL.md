@@ -4,9 +4,8 @@ description: Assess change risk, plan conformance, and merge safety with finding
 stability: stable
 effect_level: read_only
 dispatch:
-  gate_threshold: 10
+  suggest_threshold: 10
   auto_threshold: 18
-  default_mode: suggest
 tools:
   required: [read, grep]
   optional:
@@ -29,20 +28,12 @@ references:
 outputs: [review_report, review_findings, merge_decision]
 output_contracts:
   review_report:
-    kind: informative_text
+    kind: text
     min_words: 3
     min_length: 18
   review_findings:
-    kind: one_of
-    variants:
-      - kind: informative_text
-        min_words: 2
-        min_length: 12
-      - kind: informative_list
-        min_items: 1
-        allow_objects: true
-        min_words: 2
-        min_length: 12
+    kind: json
+    min_items: 1
   merge_decision:
     kind: enum
     values: [ready, needs_changes, blocked]

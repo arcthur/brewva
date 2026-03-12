@@ -9,11 +9,11 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     disabled: [],
     overrides: {},
     routing: {
-      profile: "standard",
+      enabled: false,
       scopes: ["core", "domain"],
     },
     cascade: {
-      mode: "auto",
+      mode: "off",
       enabledSources: ["explicit", "dispatch"],
       sourcePriority: ["explicit", "dispatch"],
       maxStepsPerRun: 8,
@@ -54,7 +54,6 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
       skillMaxTokensMode: "inherit",
       skillMaxToolCallsMode: "inherit",
       skillMaxParallelMode: "inherit",
-      skillDispatchGateMode: "inherit",
     },
     execution: {
       backend: "best_available",
@@ -71,7 +70,7 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     },
   },
   schedule: {
-    enabled: true,
+    enabled: false,
     projectionPath: ".brewva/schedule/intents.jsonl",
     leaseDurationMs: 60_000,
     maxActiveIntentsPerSession: 5,
@@ -87,7 +86,7 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
   },
   channels: {
     orchestration: {
-      enabled: true,
+      enabled: false,
       scopeStrategy: "chat",
       aclModeWhenOwnersEmpty: "open",
       owners: {
@@ -131,7 +130,7 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
       maxOutputChars: 300,
     },
     toolOutputDistillationInjection: {
-      enabled: true,
+      enabled: false,
       maxEntries: 3,
       maxOutputChars: 300,
     },

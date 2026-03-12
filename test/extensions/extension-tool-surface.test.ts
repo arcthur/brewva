@@ -46,7 +46,6 @@ describe("tool surface extension", () => {
       "toc_document",
       "exec",
       "skill_complete",
-      "skill_route_override",
       "obs_query",
     ]);
 
@@ -108,7 +107,6 @@ describe("tool surface extension", () => {
     expect(extensionApi.activeTools).toContain("grep");
     expect(extensionApi.activeTools).toContain("exec");
     expect(extensionApi.activeTools).toContain("skill_complete");
-    expect(extensionApi.activeTools).toContain("skill_route_override");
     expect(extensionApi.activeTools).not.toContain("obs_query");
     expect(events.some((event) => event.type === "tool_surface_resolved")).toBe(true);
   });
@@ -353,7 +351,7 @@ describe("tool surface extension", () => {
     };
 
     const dynamicToolDefinitions = new Map(
-      ["skill_load", "skill_complete", "skill_route_override", "obs_query"].map((name) => [
+      ["skill_load", "skill_complete", "obs_query"].map((name) => [
         name,
         createToolDefinition(name),
       ]),
@@ -378,13 +376,9 @@ describe("tool surface extension", () => {
 
     expect(extensionApi.api.getAllTools().map((tool) => tool.name)).toContain("skill_load");
     expect(extensionApi.api.getAllTools().map((tool) => tool.name)).toContain("skill_complete");
-    expect(extensionApi.api.getAllTools().map((tool) => tool.name)).toContain(
-      "skill_route_override",
-    );
     expect(extensionApi.api.getAllTools().map((tool) => tool.name)).toContain("obs_query");
     expect(extensionApi.activeTools).toContain("skill_load");
     expect(extensionApi.activeTools).toContain("skill_complete");
-    expect(extensionApi.activeTools).toContain("skill_route_override");
     expect(extensionApi.activeTools).toContain("obs_query");
   });
 });

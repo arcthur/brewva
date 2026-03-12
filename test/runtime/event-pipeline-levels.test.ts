@@ -155,7 +155,7 @@ describe("event pipeline level classification", () => {
     );
   });
 
-  test("drops governance events at audit level", () => {
+  test("keeps verification governance verdicts at audit level", () => {
     const runtime = new BrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-governance-")),
       config: createAuditConfig(),
@@ -171,8 +171,32 @@ describe("event pipeline level classification", () => {
     });
 
     expect(runtime.events.query(sessionId, { type: "governance_verify_spec_failed" })).toHaveLength(
-      0,
+      1,
     );
+    expect(
+      runtime.events.queryStructured(sessionId, { type: "governance_verify_spec_failed" })[0]
+        ?.category,
+    ).toBe("governance");
+  });
+
+  test("drops non-authoritative governance telemetry at audit level", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-governance-telemetry-")),
+      config: createAuditConfig(),
+    });
+    const sessionId = "audit-level-governance-telemetry-session";
+
+    runtime.events.record({
+      sessionId,
+      type: "governance_cost_anomaly_detected",
+      payload: {
+        reason: "unit-test",
+      },
+    });
+
+    expect(
+      runtime.events.query(sessionId, { type: "governance_cost_anomaly_detected" }),
+    ).toHaveLength(0);
   });
 
   test("keeps task watchdog events at ops level and drops them at audit level", () => {

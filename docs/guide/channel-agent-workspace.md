@@ -1,7 +1,9 @@
 # Guide: Channel Agent Workspace
 
-`brewva --channel telegram` runs with workspace-first orchestration by default (`channels.orchestration.enabled=true`).
-Set `channels.orchestration.enabled=false` to disable orchestration and route turns to a single default agent session.
+`brewva --channel telegram` can run with workspace-first orchestration when
+`channels.orchestration.enabled=true`.
+The default is now `false`; set it explicitly to enable multi-agent workspace
+orchestration. Leaving it `false` routes turns to a single default agent session.
 
 ## What It Enables
 

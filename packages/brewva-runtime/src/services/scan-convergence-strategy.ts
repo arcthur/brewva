@@ -46,7 +46,6 @@ export const SCAN_CONVERGENCE_TOOL_RULES_BY_NAME = {
   process: staticRule("progress"),
   schedule_intent: staticRule("progress"),
   skill_complete: staticRule("progress"),
-  skill_route_override: staticRule("progress"),
   task_add_item: staticRule("progress"),
   task_record_blocker: staticRule("progress"),
   task_resolve_blocker: staticRule("progress"),

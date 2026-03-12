@@ -18,7 +18,6 @@ The runtime no longer exposes a large flat method list. Public access is organiz
 - `get(name)`
 - `getPendingDispatch(sessionId)`
 - `clearPendingDispatch(sessionId)`
-- `overridePendingDispatch(sessionId, input?)`
 - `reconcilePendingDispatch(sessionId, turn)`
 - `activate(sessionId, name)`
 - `getActive(sessionId)`
@@ -43,7 +42,7 @@ Proposal boundary semantics:
 - Kernel returns `DecisionReceipt` with `accept | reject | defer`.
 - `list(sessionId, query?)` returns `ProposalRecord[]` in newest-first order by
   receipt timestamp; `limit: 1` is therefore the latest committed proposal.
-- Accepted proposals may arm dispatch gates, create explicit cascade intents, or
+- Accepted proposals may arm pending dispatch recommendations, create explicit cascade intents, or
   admit replayable context packets.
 
 Reference: `docs/reference/proposal-boundary.md`.
@@ -63,6 +62,9 @@ Reference: `docs/reference/proposal-boundary.md`.
 - `getPressureLevel(sessionId, usage?)`
 - `getCompactionGateStatus(sessionId, usage?)`
 - `checkCompactionGate(sessionId, toolName, usage?)`
+- `registerProvider(provider)`
+- `unregisterProvider(source)`
+- `listProviders()`
 - `buildInjection(sessionId, prompt, usage?, injectionScopeId?)`
 - `appendSupplementalInjection(sessionId, inputText, usage?, injectionScopeId?)`
 - `checkAndRequestCompaction(sessionId, usage)`
@@ -155,9 +157,11 @@ Read-only verification semantics:
 - `evaluate(...)` / `verify(...)` return `report.readOnly=true`, `report.skipped=true`,
   `report.reason="read_only"` when no write was observed in session.
 - In that case, outcome events are recorded as `outcome="skipped"` (not `pass`).
-- Verification failures may be consumed by extension-side controllers such as the
-  debug loop, but runtime kernel semantics stay limited to evidence generation
-  and replayable event emission.
+- Verification evidence is replayed from tape via `verification_write_marked`
+  and `tool_result_recorded.verificationProjection`.
+- Verification outcomes may project replayable verifier truth facts and task
+  blockers inside the kernel; extension-side controllers such as the debug loop
+  consume the same outcome stream as higher-level remediation.
 - The debug loop's persisted `retryCount` is a post-failure retry counter, not a
   total implementation-attempt counter.
 
@@ -201,27 +205,32 @@ Those entries represent kernel-admitted sources after deterministic budget,
 deduplication, and fingerprint checks. Extension profiles may compose those
 entries into model-facing blocks, but they do not bypass kernel admission.
 
+Custom provider behavior:
+
+- `runtime.context.registerProvider(...)` admits additional providers without
+  changing the runtime orchestrator.
+- providers must declare `source`, `category`, and optional `order`; collector
+  registrations contribute only entry-level fields such as `id`, `content`, and
+  `oncePerSession`.
+- provider `source` values are unique within a runtime instance; duplicate or
+  untrimmed sources fail fast.
+- `runtime.context.unregisterProvider(source)` removes the provider from future
+  injections, and `runtime.context.listProviders()` returns the currently
+  ordered active provider set for that runtime instance.
+
 ## Default Context Injection Semantics
 
 The default injection path is organized around deterministic governance sources:
 
 - `brewva.identity`
-- `brewva.truth-static`
-- `brewva.truth-facts`
-- `brewva.skill-candidates`
-- `brewva.skill-dispatch-gate`
-- `brewva.skill-cascade-gate`
 - `brewva.context-packets`
+- `brewva.runtime-status`
 - `brewva.task-state`
-- `brewva.tool-failures`
-- `brewva.tool-outputs-distilled`
 - `brewva.projection-working`
 
-Truth split behavior:
-
-- `brewva.truth-static` carries the workspace truth-ledger contract block and is
-  registered as `oncePerSession`.
-- `brewva.truth-facts` carries active truth facts and is refreshed across turns.
+`brewva.runtime-status` carries the latest verification outcome (when present)
+plus recent tool failures. This replaces the older split between separate truth
+and failure-oriented default injections.
 
 Projection split behavior:
 
@@ -275,6 +284,15 @@ Skill cascade source extension behavior:
 - Continuity-aware selection is now a deliberation concern. The runtime kernel
   only consumes the resulting proposals and does not expose a public routing API.
 
+Optional context sources:
+
+- `brewva.skill-candidates` is installed only when
+  `skills.routing.enabled=true`.
+- `brewva.skill-cascade-gate` is installed only when cascade is enabled
+  (`skills.cascade.mode != off`).
+- `brewva.tool-outputs-distilled` is installed only when
+  `infrastructure.toolOutputDistillationInjection.enabled=true`.
+
 Context budget behavior:
 
 - Runtime uses a single deterministic injection path:
@@ -285,9 +303,13 @@ Context budget behavior:
 
 Execution profile note:
 
-- Extension-enabled profile (`createBrewvaExtension`) uses full governance lifecycle hooks and projects proposal-derived selection telemetry.
-- The full extension profile also owns extension-side closed loops such as automatic
-  debug retry and deterministic handoff packet synthesis.
+- Extension-enabled sessions default to `createBrewvaExtension({ profile: "core" })`.
+  That path keeps the ordered lifecycle adapter, proposal-derived routing
+  telemetry, context composition, evidence persistence, and completion guard.
+- `profile="memory"` and `profile="full"` additionally install the memory
+  curator / memory formation loop.
+- `profile="full"` additionally owns extension-side closed loops such as
+  automatic debug retry, cognitive metrics, and notification.
 - Runtime-core profile (`--no-addons`) still composes model-facing context
   through `ContextComposer`, applies the standard Brewva context contract,
   persists tool outcomes through `registerLedgerWriter`, distills large
@@ -296,9 +318,9 @@ Execution profile note:
 - Runtime-core keeps the reduced lifecycle surface by omitting the `context`
   hook, event streaming, memory handlers, cognitive metrics, notification, and
   debug-loop orchestration.
-- Both profiles still participate in the same cognitive-product loops:
-  model-facing composition, memory formation, memory rehydration, and
-  control-plane wake-up metadata.
+- Memory rehydration, memory formation, and wake-metadata consumption are not
+  universal runtime behaviors. They are present only when the memory-curator
+  path is installed (`profile="memory"` or `profile="full"`).
 
 ## Event Emission Levels
 

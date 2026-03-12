@@ -41,9 +41,8 @@ function createSkillDocument(input: {
       costHint: "medium",
       effectLevel: "read_only",
       dispatch: {
-        gateThreshold: 12,
+        suggestThreshold: 12,
         autoThreshold: 18,
-        defaultMode: "suggest",
       },
       routing: {
         scope: "core",
@@ -74,7 +73,6 @@ describe("deliberation runtime skill helpers", () => {
     expect(entry.name).toBe("implementation");
     expect(entry.outputs).toEqual(["change_set", "files_changed"]);
     expect(entry.requires).toEqual(["root_cause"]);
-    expect(entry.continuityRequired).toBe(false);
     expect(entry.routingScope).toBe("core");
   });
 

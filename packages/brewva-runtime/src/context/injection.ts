@@ -1,7 +1,9 @@
 import { ContextArena } from "./arena.js";
+import type { ContextInjectionCategory } from "./sources.js";
 
 export interface RegisterContextInjectionInput {
   source: string;
+  category: ContextInjectionCategory;
   id: string;
   content: string;
   estimatedTokens?: number;
@@ -10,6 +12,7 @@ export interface RegisterContextInjectionInput {
 
 export interface ContextInjectionEntry {
   source: string;
+  category: ContextInjectionCategory;
   id: string;
   content: string;
   estimatedTokens: number;

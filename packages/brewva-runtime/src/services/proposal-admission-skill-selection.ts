@@ -63,7 +63,7 @@ function collectPrimaryUnresolvedConsumes(
 
 function resolveSelectionConfidence(
   score: number,
-  gateThreshold: number,
+  suggestThreshold: number,
   autoThreshold: number,
 ): number {
   if (score <= 0) return 0;
@@ -71,12 +71,12 @@ function resolveSelectionConfidence(
     const extra = (score - autoThreshold) / Math.max(1, autoThreshold);
     return Math.min(1, 0.85 + extra * 0.15);
   }
-  if (score >= gateThreshold) {
-    const span = Math.max(1, autoThreshold - gateThreshold);
-    const progress = (score - gateThreshold) / span;
+  if (score >= suggestThreshold) {
+    const span = Math.max(1, autoThreshold - suggestThreshold);
+    const progress = (score - suggestThreshold) / span;
     return 0.55 + Math.max(0, Math.min(1, progress)) * 0.3;
   }
-  return Math.max(0.1, Math.min(0.5, score / Math.max(1, gateThreshold)));
+  return Math.max(0.1, Math.min(0.5, score / Math.max(1, suggestThreshold)));
 }
 
 function buildSkillSelectionDecision(input: {
@@ -90,25 +90,15 @@ function buildSkillSelectionDecision(input: {
   const primary = input.selected[0] ?? null;
   const skill = primary ? input.getSkill(primary.name) : undefined;
   const dispatch = skill?.contract.dispatch ?? {
-    gateThreshold: 10,
+    suggestThreshold: 10,
     autoThreshold: 16,
-    defaultMode: "suggest" as const,
   };
-  const gateThreshold = Math.max(1, Math.floor(dispatch.gateThreshold));
-  const autoThreshold = Math.max(gateThreshold, Math.floor(dispatch.autoThreshold));
+  const suggestThreshold = Math.max(1, Math.floor(dispatch.suggestThreshold));
+  const autoThreshold = Math.max(suggestThreshold, Math.floor(dispatch.autoThreshold));
   const score = primary?.score ?? 0;
   let mode: SkillDispatchDecision["mode"] = "none";
   if (primary) {
-    if (score >= autoThreshold) {
-      mode = "auto";
-    } else if (score >= gateThreshold) {
-      mode = "gate";
-    } else {
-      mode =
-        dispatch.defaultMode === "gate" || dispatch.defaultMode === "auto"
-          ? "suggest"
-          : dispatch.defaultMode;
-    }
+    mode = score >= autoThreshold ? "auto" : "suggest";
   }
   const unresolvedConsumes = primary
     ? collectPrimaryUnresolvedConsumes(
@@ -125,13 +115,15 @@ function buildSkillSelectionDecision(input: {
     selected: input.selected,
     chain: primary ? [primary.name] : [],
     unresolvedConsumes,
-    confidence: Number(resolveSelectionConfidence(score, gateThreshold, autoThreshold).toFixed(3)),
+    confidence: Number(
+      resolveSelectionConfidence(score, suggestThreshold, autoThreshold).toFixed(3),
+    ),
     reason: primary
       ? score >= autoThreshold
         ? `score(${score})>=auto_threshold(${autoThreshold})`
-        : score >= gateThreshold
-          ? `score(${score})>=gate_threshold(${gateThreshold})`
-          : `score(${score})<gate_threshold(${gateThreshold})`
+        : score >= suggestThreshold
+          ? `score(${score})>=suggest_threshold(${suggestThreshold})`
+          : `score(${score})<suggest_threshold(${suggestThreshold})`
       : "no-skill-match",
     turn: input.turn,
     routingOutcome: input.routingOutcome,
@@ -189,7 +181,7 @@ export function commitSkillSelectionProposal({
     turn,
     [
       {
-        kind: "skill_dispatch_gate",
+        kind: "skill_dispatch",
         details: {
           primarySkill: decision.primary?.name ?? null,
           mode: decision.mode,

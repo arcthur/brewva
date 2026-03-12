@@ -104,7 +104,7 @@ Producer intent:
 Accepted effect:
 
 - kernel creates a pending dispatch commitment
-- dispatch gate remains explicit; actual skill entry still happens via
+- actual skill entry still happens via
   `skill_load`
 
 ### `context_packet`

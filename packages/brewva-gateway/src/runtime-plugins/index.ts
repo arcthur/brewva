@@ -1,19 +1,19 @@
 import { BrewvaRuntime, type BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { buildBrewvaTools, getBrewvaToolSurface } from "@brewva/brewva-tools";
 import type { ExtensionAPI, ExtensionFactory } from "@mariozechner/pi-coding-agent";
-import { registerCognitiveMetrics } from "./cognitive-metrics.js";
-import { registerCompletionGuard } from "./completion-guard.js";
-import { registerContextTransform } from "./context-transform.js";
+import { createCognitiveMetricsLifecycle, registerCognitiveMetrics } from "./cognitive-metrics.js";
+import { createCompletionGuardLifecycle, registerCompletionGuard } from "./completion-guard.js";
+import { createContextTransformLifecycle, registerContextTransform } from "./context-transform.js";
 import { registerDebugLoop } from "./debug-loop.js";
 import { registerEventStream } from "./event-stream.js";
 import { registerLedgerWriter } from "./ledger-writer.js";
-import { registerMemoryAdaptation } from "./memory-adaptation.js";
-import { registerMemoryCurator } from "./memory-curator.js";
-import { registerMemoryFormation } from "./memory-formation.js";
-import { registerNotification } from "./notification.js";
-import { registerQualityGate } from "./quality-gate.js";
+import { createMemoryCuratorLifecycle, registerMemoryCurator } from "./memory-curator.js";
+import { createMemoryFormationLifecycle, registerMemoryFormation } from "./memory-formation.js";
+import { createNotificationLifecycle, registerNotification } from "./notification.js";
+import { createQualityGateLifecycle, registerQualityGate } from "./quality-gate.js";
 import { registerToolResultDistiller } from "./tool-result-distiller.js";
-import { registerToolSurface } from "./tool-surface.js";
+import { createToolSurfaceLifecycle, registerToolSurface } from "./tool-surface.js";
+import { registerTurnLifecycleAdapter } from "./turn-lifecycle-adapter.js";
 
 export interface CreateBrewvaExtensionOptions extends BrewvaRuntimeOptions {
   runtime?: BrewvaRuntime;
@@ -41,39 +41,63 @@ function resolveProfile(profile: BrewvaExtensionProfile | undefined): {
   }
 }
 
-function registerCoreHandlers(
-  pi: ExtensionAPI,
-  runtime: BrewvaRuntime,
-  toolDefinitionsByName?: ReadonlyMap<string, ReturnType<typeof buildBrewvaTools>[number]>,
-): void {
-  registerEventStream(pi, runtime);
-  registerToolSurface(pi, runtime, {
-    dynamicToolDefinitions: toolDefinitionsByName,
-  });
-  registerContextTransform(pi, runtime);
-  registerQualityGate(pi, runtime);
-  registerLedgerWriter(pi, runtime);
-  registerToolResultDistiller(pi, runtime);
-  registerCompletionGuard(pi, runtime);
-}
-
-function registerOptionalHandlers(
+function registerLifecycleHandlers(
   pi: ExtensionAPI,
   runtime: BrewvaRuntime,
   profile: BrewvaExtensionProfile | undefined,
+  toolDefinitionsByName?: ReadonlyMap<string, ReturnType<typeof buildBrewvaTools>[number]>,
 ): void {
   const features = resolveProfile(profile);
-  if (features.memory) {
-    registerMemoryCurator(pi, runtime);
-    registerMemoryFormation(pi, runtime);
-    registerMemoryAdaptation(pi, runtime);
-  }
+  const contextTransform = createContextTransformLifecycle(pi, runtime);
+  const qualityGate = createQualityGateLifecycle(runtime);
+  const toolSurface = createToolSurfaceLifecycle(pi, runtime, {
+    dynamicToolDefinitions: toolDefinitionsByName,
+  });
+  const completionGuard = createCompletionGuardLifecycle(pi, runtime);
+  const memoryCurator = features.memory ? createMemoryCuratorLifecycle(runtime) : null;
+  const memoryFormation = features.memory ? createMemoryFormationLifecycle(runtime) : null;
+  const cognitiveMetrics = features.cognitive ? createCognitiveMetricsLifecycle(runtime) : null;
+  const notification = features.cognitive ? createNotificationLifecycle(runtime) : null;
+
+  registerEventStream(pi, runtime);
+  registerTurnLifecycleAdapter(pi, {
+    sessionStart: cognitiveMetrics ? [cognitiveMetrics.sessionStart] : undefined,
+    turnStart: [
+      contextTransform.turnStart,
+      ...(cognitiveMetrics ? [cognitiveMetrics.turnStart] : []),
+    ],
+    input: [qualityGate.input],
+    context: [contextTransform.context],
+    beforeAgentStart: [
+      ...(memoryCurator ? [memoryCurator.beforeAgentStart] : []),
+      toolSurface.beforeAgentStart,
+      contextTransform.beforeAgentStart,
+      ...(cognitiveMetrics ? [cognitiveMetrics.beforeAgentStart] : []),
+    ],
+    toolCall: [qualityGate.toolCall],
+    toolResult: cognitiveMetrics ? [cognitiveMetrics.toolResult] : undefined,
+    toolExecutionEnd: cognitiveMetrics ? [cognitiveMetrics.toolExecutionEnd] : undefined,
+    agentEnd: [
+      completionGuard.agentEnd,
+      ...(memoryFormation ? [memoryFormation.agentEnd] : []),
+      ...(notification ? [notification.agentEnd] : []),
+    ],
+    sessionCompact: [
+      contextTransform.sessionCompact,
+      ...(memoryFormation ? [memoryFormation.sessionCompact] : []),
+    ],
+    sessionShutdown: [
+      contextTransform.sessionShutdown,
+      ...(memoryCurator ? [memoryCurator.sessionShutdown] : []),
+      ...(memoryFormation ? [memoryFormation.sessionShutdown] : []),
+      completionGuard.sessionShutdown,
+      ...(cognitiveMetrics ? [cognitiveMetrics.sessionShutdown] : []),
+    ],
+  });
+  registerLedgerWriter(pi, runtime);
+  registerToolResultDistiller(pi, runtime);
   if (features.debug) {
     registerDebugLoop(pi, runtime);
-  }
-  if (features.cognitive) {
-    registerCognitiveMetrics(pi, runtime);
-    registerNotification(pi, runtime);
   }
 }
 
@@ -95,8 +119,7 @@ export function createBrewvaExtension(
       }
     }
 
-    registerCoreHandlers(pi, runtime, toolDefinitionsByName);
-    registerOptionalHandlers(pi, runtime, options.profile);
+    registerLifecycleHandlers(pi, runtime, options.profile, toolDefinitionsByName);
   };
 }
 
@@ -111,22 +134,8 @@ export {
 export { registerMemoryCurator } from "./memory-curator.js";
 export { registerMemoryFormation } from "./memory-formation.js";
 export { registerCognitiveMetrics } from "./cognitive-metrics.js";
-export {
-  deriveMemoryFormationGuidance,
-  createEmptyMemoryAdaptationPolicy,
-  flushMemoryAdaptationPolicy,
-  rankMemoryHydrationCandidates,
-  readMemoryAdaptationPolicy,
-  registerMemoryAdaptation,
-  resolveMemoryAdaptationPolicyPath,
-  type MemoryAdaptationCandidate,
-  type MemoryAdaptationPacketStats,
-  type MemoryAdaptationPolicy,
-  type MemoryAdaptationStats,
-  type MemoryFormationGuidance,
-  type MemoryHydrationStrategy,
-} from "./memory-adaptation.js";
 export { registerContextTransform } from "./context-transform.js";
+export { registerTurnLifecycleAdapter } from "./turn-lifecycle-adapter.js";
 export {
   buildProactivitySelectionText,
   readLatestProactivityWakeup,

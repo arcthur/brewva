@@ -15,6 +15,19 @@ import {
 function createWorkspace(name: string): string {
   const workspace = mkdtempSync(join(tmpdir(), `brewva-scheduler-${name}-`));
   mkdirSync(join(workspace, ".brewva"), { recursive: true });
+  writeFileSync(
+    join(workspace, ".brewva", "brewva.json"),
+    JSON.stringify(
+      {
+        schedule: {
+          enabled: true,
+        },
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
   return workspace;
 }
 

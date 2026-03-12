@@ -1,17 +1,5 @@
 import {
   SCAN_CONVERGENCE_BLOCKER_ID,
-  TASK_EVENT_TYPE,
-  TASK_STUCK_DETECTED_EVENT_TYPE,
-  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-  WATCHDOG_BLOCKER_ID,
-  WATCHDOG_BLOCKER_SOURCE,
-  buildTaskStuckBlockerMessage,
-  buildTaskStuckDetectedPayload,
-  coerceTaskStuckDetectedPayload,
-  computeTaskSemanticProgressAt,
-  evaluateTaskWatchdogEligibility,
-  getTaskWatchdogOpenItemCount,
-  toTaskWatchdogEventPayload,
   type BrewvaRuntime,
   type TaskWatchdogPhase,
 } from "@brewva/brewva-runtime";
@@ -69,9 +57,6 @@ export class TaskProgressWatchdog {
   private readonly setIntervalFn: TaskProgressWatchdogOptions["setIntervalFn"];
   private readonly clearIntervalFn: TaskProgressWatchdogOptions["clearIntervalFn"];
   private timer: IntervalHandle | null = null;
-  // This is a per-process dedupe hint, not a distributed lock. The design assumes
-  // one watchdog instance per session worker; event-store lookup covers restarts.
-  private lastDetectionKey: string | null = null;
 
   constructor(options: TaskProgressWatchdogOptions) {
     this.runtime = options.runtime;
@@ -100,98 +85,10 @@ export class TaskProgressWatchdog {
   }
 
   poll(): void {
-    const taskState = this.runtime.task.getState(this.sessionId);
-    const eligibility = evaluateTaskWatchdogEligibility(taskState);
-    if (!eligibility.eligible || !eligibility.phase) {
-      return;
-    }
-
-    const taskEvents = this.runtime.events.list(this.sessionId, { type: TASK_EVENT_TYPE });
-    const lastVerificationAt =
-      this.runtime.events.query(this.sessionId, {
-        type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-        last: 1,
-      })[0]?.timestamp ?? null;
-    const baselineProgressAt = computeTaskSemanticProgressAt({
-      state: taskState,
-      taskEvents,
-      lastVerificationAt,
+    this.runtime.session.pollStall(this.sessionId, {
+      now: this.now(),
+      thresholdsMs: this.thresholdPolicy,
     });
-    if (baselineProgressAt === null) {
-      return;
-    }
-
-    const thresholdMs = this.thresholdPolicy[eligibility.phase];
-    const detectedAt = this.now();
-    const idleMs = Math.max(0, detectedAt - baselineProgressAt);
-    if (idleMs < thresholdMs) {
-      return;
-    }
-
-    const suppressedBy = eligibility.suppressedByBlockerId ?? null;
-    if (suppressedBy === SCAN_CONVERGENCE_BLOCKER_ID && eligibility.hasWatchdogBlocker) {
-      this.runtime.task.resolveBlocker(this.sessionId, WATCHDOG_BLOCKER_ID);
-    }
-    const detectionKey = buildDetectionKey({
-      phase: eligibility.phase,
-      baselineProgressAt,
-      suppressedBy,
-    });
-    if (this.lastDetectionKey === detectionKey) {
-      return;
-    }
-
-    const latestDetected = this.runtime.events.query(this.sessionId, {
-      type: TASK_STUCK_DETECTED_EVENT_TYPE,
-      last: 1,
-    })[0];
-    const latestPayload = coerceTaskStuckDetectedPayload(latestDetected?.payload);
-    if (
-      latestPayload &&
-      buildDetectionKey({
-        phase: latestPayload.phase,
-        baselineProgressAt: latestPayload.baselineProgressAt,
-        suppressedBy: latestPayload.suppressedBy,
-      }) === detectionKey
-    ) {
-      this.lastDetectionKey = detectionKey;
-      return;
-    }
-
-    let blockerWritten = false;
-    if (!suppressedBy && !eligibility.hasWatchdogBlocker) {
-      const result = this.runtime.task.recordBlocker(this.sessionId, {
-        id: WATCHDOG_BLOCKER_ID,
-        message: buildTaskStuckBlockerMessage({
-          phase: eligibility.phase,
-          idleMs,
-          thresholdMs,
-          baselineProgressAt,
-          openItemCount: getTaskWatchdogOpenItemCount(taskState),
-        }),
-        source: WATCHDOG_BLOCKER_SOURCE,
-      });
-      blockerWritten = result.ok;
-    }
-
-    const detectedPayload = buildTaskStuckDetectedPayload({
-      phase: eligibility.phase,
-      thresholdMs,
-      baselineProgressAt,
-      detectedAt,
-      idleMs,
-      openItemCount: getTaskWatchdogOpenItemCount(taskState),
-      blockerId: blockerWritten ? WATCHDOG_BLOCKER_ID : null,
-      blockerWritten,
-      suppressedBy,
-    });
-
-    this.runtime.events.record({
-      sessionId: this.sessionId,
-      type: TASK_STUCK_DETECTED_EVENT_TYPE,
-      payload: toTaskWatchdogEventPayload(detectedPayload),
-    });
-    this.lastDetectionKey = detectionKey;
   }
 }
 

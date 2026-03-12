@@ -27,7 +27,6 @@ export const BREWVA_TOOL_SURFACE_BY_NAME = {
   schedule_intent: "skill",
   skill_chain_control: "skill",
   skill_complete: "skill",
-  skill_route_override: "skill",
   task_add_item: "skill",
   task_record_blocker: "skill",
   task_resolve_blocker: "skill",

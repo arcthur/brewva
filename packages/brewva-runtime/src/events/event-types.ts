@@ -14,6 +14,7 @@ export const EXEC_FALLBACK_HOST_EVENT_TYPE = "exec_fallback_host" as const;
 export const EXEC_BLOCKED_ISOLATION_EVENT_TYPE = "exec_blocked_isolation" as const;
 export const EXEC_SANDBOX_ERROR_EVENT_TYPE = "exec_sandbox_error" as const;
 
+export const VERIFICATION_WRITE_MARKED_EVENT_TYPE = "verification_write_marked" as const;
 export const VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE = "verification_outcome_recorded" as const;
 export const VERIFICATION_STATE_RESET_EVENT_TYPE = "verification_state_reset" as const;
 export const TASK_STUCK_DETECTED_EVENT_TYPE = "task_stuck_detected" as const;
@@ -27,29 +28,12 @@ export const DEBUG_LOOP_RETRY_SCHEDULED_EVENT_TYPE = "debug_loop_retry_scheduled
 export const DEBUG_LOOP_HANDOFF_PERSISTED_EVENT_TYPE = "debug_loop_handoff_persisted" as const;
 export const MEMORY_SUMMARY_WRITTEN_EVENT_TYPE = "memory_summary_written" as const;
 export const MEMORY_SUMMARY_WRITE_FAILED_EVENT_TYPE = "memory_summary_write_failed" as const;
-export const MEMORY_EPISODE_WRITTEN_EVENT_TYPE = "memory_episode_written" as const;
-export const MEMORY_EPISODE_WRITE_FAILED_EVENT_TYPE = "memory_episode_write_failed" as const;
-export const MEMORY_PROCEDURE_NOTE_WRITTEN_EVENT_TYPE = "memory_procedure_note_written" as const;
-export const MEMORY_PROCEDURE_NOTE_WRITE_FAILED_EVENT_TYPE =
-  "memory_procedure_note_write_failed" as const;
 export const MEMORY_REFERENCE_REHYDRATED_EVENT_TYPE = "memory_reference_rehydrated" as const;
 export const MEMORY_REFERENCE_REHYDRATION_FAILED_EVENT_TYPE =
   "memory_reference_rehydration_failed" as const;
-export const MEMORY_PROCEDURE_REHYDRATED_EVENT_TYPE = "memory_procedure_rehydrated" as const;
-export const MEMORY_PROCEDURE_REHYDRATION_FAILED_EVENT_TYPE =
-  "memory_procedure_rehydration_failed" as const;
 export const MEMORY_SUMMARY_REHYDRATED_EVENT_TYPE = "memory_summary_rehydrated" as const;
 export const MEMORY_SUMMARY_REHYDRATION_FAILED_EVENT_TYPE =
   "memory_summary_rehydration_failed" as const;
-export const MEMORY_EPISODE_REHYDRATED_EVENT_TYPE = "memory_episode_rehydrated" as const;
-export const MEMORY_EPISODE_REHYDRATION_FAILED_EVENT_TYPE =
-  "memory_episode_rehydration_failed" as const;
-export const MEMORY_OPEN_LOOP_REHYDRATED_EVENT_TYPE = "memory_open_loop_rehydrated" as const;
-export const MEMORY_OPEN_LOOP_REHYDRATION_FAILED_EVENT_TYPE =
-  "memory_open_loop_rehydration_failed" as const;
-export const MEMORY_ADAPTATION_UPDATED_EVENT_TYPE = "memory_adaptation_updated" as const;
-export const MEMORY_ADAPTATION_UPDATE_FAILED_EVENT_TYPE =
-  "memory_adaptation_update_failed" as const;
 export const PROACTIVITY_WAKEUP_PREPARED_EVENT_TYPE = "proactivity_wakeup_prepared" as const;
 export const COGNITION_NOTE_WRITTEN_EVENT_TYPE = "cognition_note_written" as const;
 export const COGNITION_NOTE_WRITE_FAILED_EVENT_TYPE = "cognition_note_write_failed" as const;

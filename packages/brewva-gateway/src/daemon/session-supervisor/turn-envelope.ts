@@ -167,7 +167,7 @@ export function extractTriggerFromEnvelope(envelope: TurnEnvelope): SendPromptTr
       ruleId,
       objective: readStringField(raw, "objective"),
       contextHints: readStringArrayField(raw, "contextHints"),
-      wakeMode: readEnumField(raw, "wakeMode", ["always", "if_signal", "if_open_loop"] as const),
+      wakeMode: readEnumField(raw, "wakeMode", ["always", "if_signal"] as const),
       planReason: readStringField(raw, "planReason"),
       selectionText: readStringField(raw, "selectionText"),
       signalArtifactRefs: readStringArrayField(raw, "signalArtifactRefs"),

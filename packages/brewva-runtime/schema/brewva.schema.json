@@ -308,9 +308,6 @@
                 "allowedToolsMode": {
                   "$ref": "#/definitions/SecurityEnforcementPreference"
                 },
-                "skillDispatchGateMode": {
-                  "$ref": "#/definitions/SecurityEnforcementPreference"
-                },
                 "skillMaxParallelMode": {
                   "$ref": "#/definitions/SecurityEnforcementPreference"
                 },
@@ -325,8 +322,7 @@
                 "allowedToolsMode",
                 "skillMaxTokensMode",
                 "skillMaxToolCallsMode",
-                "skillMaxParallelMode",
-                "skillDispatchGateMode"
+                "skillMaxParallelMode"
               ]
             },
             "execution": {
@@ -434,8 +430,8 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "profile": {
-                  "$ref": "#/definitions/SkillRoutingProfile"
+                "enabled": {
+                  "type": "boolean"
                 },
                 "scopes": {
                   "type": "array",
@@ -582,6 +578,12 @@
         "name": {
           "type": "string"
         },
+        "outputContracts": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/SkillOutputContract"
+          }
+        },
         "outputs": {
           "type": "array",
           "items": {
@@ -598,9 +600,6 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "continuityRequired": {
-              "type": "boolean"
-            },
             "scope": {
               "$ref": "#/definitions/SkillRoutingScope"
             }
@@ -642,7 +641,7 @@
     },
     "SkillDispatchMode": {
       "type": "string",
-      "enum": ["suggest", "gate", "auto"]
+      "enum": ["suggest", "auto"]
     },
     "SkillDispatchPolicy": {
       "type": "object",
@@ -651,22 +650,82 @@
         "autoThreshold": {
           "type": "number"
         },
-        "defaultMode": {
-          "$ref": "#/definitions/SkillDispatchMode"
-        },
-        "gateThreshold": {
+        "suggestThreshold": {
           "type": "number"
         }
       },
-      "required": ["gateThreshold", "autoThreshold", "defaultMode"]
+      "required": ["suggestThreshold", "autoThreshold"]
     },
     "SkillEffectLevel": {
       "type": "string",
       "enum": ["read_only", "execute", "mutation"]
     },
-    "SkillRoutingProfile": {
-      "type": "string",
-      "enum": ["standard", "operator", "full"]
+    "SkillOutputContract": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SkillOutputTextContract"
+        },
+        {
+          "$ref": "#/definitions/SkillOutputEnumContract"
+        },
+        {
+          "$ref": "#/definitions/SkillOutputJsonContract"
+        }
+      ]
+    },
+    "SkillOutputEnumContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "caseSensitive": {
+          "type": "boolean"
+        },
+        "kind": {
+          "type": "string",
+          "const": "enum"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["kind", "values"]
+    },
+    "SkillOutputJsonContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "json"
+        },
+        "minItems": {
+          "type": "number"
+        },
+        "minKeys": {
+          "type": "number"
+        }
+      },
+      "required": ["kind"]
+    },
+    "SkillOutputTextContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "text"
+        },
+        "minLength": {
+          "type": "number"
+        },
+        "minWords": {
+          "type": "number"
+        }
+      },
+      "required": ["kind"]
     },
     "SkillRoutingScope": {
       "type": "string",

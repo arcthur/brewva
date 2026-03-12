@@ -1,12 +1,6 @@
 import { TAPE_ANCHOR_EVENT_TYPE, TAPE_CHECKPOINT_EVENT_TYPE } from "./tape/events.js";
 import { formatTaskStateBlock } from "./task/ledger.js";
-import type {
-  BrewvaEventCategory,
-  SkillChainIntent,
-  SkillDispatchDecision,
-  SkillSelection,
-  TaskState,
-} from "./types.js";
+import type { BrewvaEventCategory, SkillChainIntent, SkillSelection, TaskState } from "./types.js";
 
 export function inferEventCategory(type: string): BrewvaEventCategory {
   if (type === TAPE_ANCHOR_EVENT_TYPE || type === TAPE_CHECKPOINT_EVENT_TYPE) {
@@ -48,48 +42,6 @@ export function buildSkillCandidateBlock(selected: SkillSelection[]): string {
 
 export function buildTaskStateBlock(state: TaskState): string {
   return formatTaskStateBlock(state);
-}
-
-export function buildSkillDispatchGateBlock(decision: SkillDispatchDecision): string {
-  const primary = decision.primary?.name ?? "(none)";
-  const chainText =
-    decision.chain.length > 0
-      ? decision.chain.join(" -> ")
-      : decision.routingOutcome === "failed"
-        ? "(unavailable — routing failed)"
-        : primary;
-  const requiredSkillName =
-    decision.chain.length > 0
-      ? decision.chain[0]
-      : decision.primary?.name
-        ? decision.primary.name
-        : null;
-  const unresolvedConsumes =
-    decision.unresolvedConsumes.length > 0 ? decision.unresolvedConsumes.join(", ") : "(none)";
-  const requiredActionLine = requiredSkillName
-    ? `- call tool \`skill_load\` with name=\`${requiredSkillName}\` before non-lifecycle tools`
-    : "- call tool `skill_load` with an explicit skill name before non-lifecycle tools";
-  const chainContinuationLine =
-    decision.chain.length > 1
-      ? `- after completing each step, continue with \`skill_load\`: ${decision.chain
-          .slice(1)
-          .map((name) => `\`${name}\``)
-          .join(" -> ")}`
-      : null;
-  return [
-    "[SkillDispatchGate]",
-    `mode: ${decision.mode}`,
-    `primary: ${primary}`,
-    `confidence: ${decision.confidence.toFixed(3)}`,
-    `reason: ${decision.reason}`,
-    `routing_outcome: ${decision.routingOutcome ?? "unknown"}`,
-    `chain: ${chainText}`,
-    `unresolved_consumes: ${unresolvedConsumes}`,
-    "Required action:",
-    requiredActionLine,
-    ...(chainContinuationLine ? [chainContinuationLine] : []),
-    "- if intentional bypass, call `skill_route_override` with reason first",
-  ].join("\n");
 }
 
 export function buildSkillCascadeGateBlock(intent: SkillChainIntent): string {

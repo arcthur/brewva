@@ -1,3 +1,4 @@
+import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import {
   TRUTH_EVENT_TYPE,
   buildTruthFactResolvedEvent,
@@ -5,32 +6,25 @@ import {
 } from "../truth/ledger.js";
 import type { TruthFact, TruthFactSeverity, TruthFactStatus, TruthState } from "../types.js";
 import { normalizeJsonRecord } from "../utils/json.js";
-import type { RuntimeCallback } from "./callback.js";
 
 export interface TruthServiceOptions {
-  getTruthState: RuntimeCallback<[sessionId: string], TruthState>;
-  recordEvent: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        type: string;
-        turn?: number;
-        payload?: Record<string, unknown>;
-        timestamp?: number;
-        skipTapeCheckpoint?: boolean;
-      },
-    ],
-    unknown
-  >;
+  kernel: RuntimeKernelContext;
 }
 
 export class TruthService {
   private readonly getTruthState: (sessionId: string) => TruthState;
-  private readonly recordEvent: TruthServiceOptions["recordEvent"];
+  private readonly recordEvent: (input: {
+    sessionId: string;
+    type: string;
+    turn?: number;
+    payload?: Record<string, unknown>;
+    timestamp?: number;
+    skipTapeCheckpoint?: boolean;
+  }) => unknown;
 
   constructor(options: TruthServiceOptions) {
-    this.getTruthState = options.getTruthState;
-    this.recordEvent = options.recordEvent;
+    this.getTruthState = (sessionId) => options.kernel.getTruthState(sessionId);
+    this.recordEvent = (input) => options.kernel.recordEvent(input);
   }
 
   upsertTruthFact(

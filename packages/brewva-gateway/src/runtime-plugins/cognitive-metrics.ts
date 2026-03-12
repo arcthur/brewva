@@ -2,9 +2,6 @@ import {
   COGNITIVE_METRIC_FIRST_PRODUCTIVE_ACTION_EVENT_TYPE,
   COGNITIVE_METRIC_REHYDRATION_USEFULNESS_EVENT_TYPE,
   COGNITIVE_METRIC_RESUMPTION_PROGRESS_EVENT_TYPE,
-  MEMORY_EPISODE_REHYDRATED_EVENT_TYPE,
-  MEMORY_OPEN_LOOP_REHYDRATED_EVENT_TYPE,
-  MEMORY_PROCEDURE_REHYDRATED_EVENT_TYPE,
   MEMORY_REFERENCE_REHYDRATED_EVENT_TYPE,
   MEMORY_SUMMARY_REHYDRATED_EVENT_TYPE,
   type BrewvaRuntime,
@@ -25,11 +22,8 @@ const FIRST_PRODUCTIVE_ACTION_EVENT_TYPE = COGNITIVE_METRIC_FIRST_PRODUCTIVE_ACT
 const RESUMPTION_PROGRESS_EVENT_TYPE = COGNITIVE_METRIC_RESUMPTION_PROGRESS_EVENT_TYPE;
 const REHYDRATION_USEFULNESS_EVENT_TYPE = COGNITIVE_METRIC_REHYDRATION_USEFULNESS_EVENT_TYPE;
 const REHYDRATION_EVENT_TYPES = new Set<string>([
-  MEMORY_PROCEDURE_REHYDRATED_EVENT_TYPE,
   MEMORY_REFERENCE_REHYDRATED_EVENT_TYPE,
   MEMORY_SUMMARY_REHYDRATED_EVENT_TYPE,
-  MEMORY_EPISODE_REHYDRATED_EVENT_TYPE,
-  MEMORY_OPEN_LOOP_REHYDRATED_EVENT_TYPE,
 ]);
 const NON_PRODUCTIVE_TOOL_NAMES = new Set([
   "cost_view",
@@ -118,11 +112,8 @@ function isProductiveTool(toolName: string | undefined): boolean {
 }
 
 function normalizeRehydrationKind(type: string): string {
-  if (type === MEMORY_PROCEDURE_REHYDRATED_EVENT_TYPE) return "procedure";
   if (type === MEMORY_REFERENCE_REHYDRATED_EVENT_TYPE) return "reference";
   if (type === MEMORY_SUMMARY_REHYDRATED_EVENT_TYPE) return "summary";
-  if (type === MEMORY_EPISODE_REHYDRATED_EVENT_TYPE) return "episode";
-  if (type === MEMORY_OPEN_LOOP_REHYDRATED_EVENT_TYPE) return "open_loop";
   return "unknown";
 }
 
@@ -327,65 +318,104 @@ function processRecordedToolResult(
   recordProductiveToolMetrics(runtime, sessionId, state, payload);
 }
 
-export function registerCognitiveMetrics(pi: ExtensionAPI, runtime: BrewvaRuntime): void {
+export interface CognitiveMetricsLifecycle {
+  sessionStart: (event: unknown, ctx: unknown) => undefined;
+  turnStart: (event: unknown, ctx: unknown) => undefined;
+  beforeAgentStart: (event: unknown, ctx: unknown) => undefined;
+  toolResult: (event: unknown, ctx: unknown) => undefined;
+  toolExecutionEnd: (event: unknown, ctx: unknown) => undefined;
+  sessionShutdown: (event: unknown, ctx: unknown) => undefined;
+}
+
+export function createCognitiveMetricsLifecycle(runtime: BrewvaRuntime): CognitiveMetricsLifecycle {
   const stateBySession = new Map<string, MetricState>();
 
-  pi.on("session_start", (_event, ctx) => {
-    getOrCreateState(stateBySession, ctx.sessionManager.getSessionId());
-    return undefined;
-  });
+  return {
+    sessionStart(_event, ctx) {
+      getOrCreateState(
+        stateBySession,
+        (ctx as { sessionManager: { getSessionId: () => string } }).sessionManager.getSessionId(),
+      );
+      return undefined;
+    },
+    turnStart(event, ctx) {
+      const rawEvent = event as { turnIndex?: unknown; timestamp?: unknown };
+      const sessionId = (
+        ctx as { sessionManager: { getSessionId: () => string } }
+      ).sessionManager.getSessionId();
+      const state = getOrCreateState(stateBySession, sessionId);
+      const currentTurn = observeRuntimeTurnStart(
+        sessionId,
+        Number(rawEvent.turnIndex ?? 0),
+        Number(rawEvent.timestamp ?? Date.now()),
+      );
+      maybeFlushExpiredRehydrationWindow(runtime, sessionId, state, currentTurn);
+      return undefined;
+    },
+    beforeAgentStart(_event, ctx) {
+      const sessionId = (
+        ctx as { sessionManager: { getSessionId: () => string } }
+      ).sessionManager.getSessionId();
+      const state = getOrCreateState(stateBySession, sessionId);
+      refreshResumeAnchor(runtime, sessionId, state);
+      return undefined;
+    },
+    toolResult(event, ctx) {
+      const rawEvent = event as { toolCallId?: unknown };
+      const sessionId = (
+        ctx as { sessionManager: { getSessionId: () => string } }
+      ).sessionManager.getSessionId();
+      const state = getOrCreateState(stateBySession, sessionId);
+      processRecordedToolResult(
+        runtime,
+        sessionId,
+        state,
+        typeof rawEvent.toolCallId === "string" ? rawEvent.toolCallId : undefined,
+      );
+      return undefined;
+    },
+    toolExecutionEnd(event, ctx) {
+      const rawEvent = event as { toolCallId?: unknown };
+      const sessionId = (
+        ctx as { sessionManager: { getSessionId: () => string } }
+      ).sessionManager.getSessionId();
+      const state = getOrCreateState(stateBySession, sessionId);
+      processRecordedToolResult(
+        runtime,
+        sessionId,
+        state,
+        typeof rawEvent.toolCallId === "string" ? rawEvent.toolCallId : undefined,
+      );
+      return undefined;
+    },
+    sessionShutdown(_event, ctx) {
+      const sessionId = (
+        ctx as { sessionManager: { getSessionId: () => string } }
+      ).sessionManager.getSessionId();
+      const state = stateBySession.get(sessionId);
+      if (state) {
+        recordRehydrationUsefulness(runtime, sessionId, state, {
+          useful: false,
+          reason: "session_shutdown",
+          turnIndex: getCurrentRuntimeTurn(sessionId),
+        });
+      }
+      stateBySession.delete(sessionId);
+      clearRuntimeTurnClock(sessionId);
+      return undefined;
+    },
+  };
+}
 
-  pi.on("turn_start", (event, ctx) => {
-    const sessionId = ctx.sessionManager.getSessionId();
-    const state = getOrCreateState(stateBySession, sessionId);
-    const currentTurn = observeRuntimeTurnStart(sessionId, event.turnIndex, event.timestamp);
-    maybeFlushExpiredRehydrationWindow(runtime, sessionId, state, currentTurn);
-    return undefined;
-  });
-
-  pi.on("before_agent_start", (_event, ctx) => {
-    const sessionId = ctx.sessionManager.getSessionId();
-    const state = getOrCreateState(stateBySession, sessionId);
-    refreshResumeAnchor(runtime, sessionId, state);
-    return undefined;
-  });
-
-  pi.on("tool_result", (event, ctx) => {
-    const sessionId = ctx.sessionManager.getSessionId();
-    const state = getOrCreateState(stateBySession, sessionId);
-    processRecordedToolResult(
-      runtime,
-      sessionId,
-      state,
-      typeof event.toolCallId === "string" ? event.toolCallId : undefined,
-    );
-    return undefined;
-  });
-
-  pi.on("tool_execution_end", (event, ctx) => {
-    const sessionId = ctx.sessionManager.getSessionId();
-    const state = getOrCreateState(stateBySession, sessionId);
-    processRecordedToolResult(
-      runtime,
-      sessionId,
-      state,
-      typeof event.toolCallId === "string" ? event.toolCallId : undefined,
-    );
-    return undefined;
-  });
-
-  pi.on("session_shutdown", (_event, ctx) => {
-    const sessionId = ctx.sessionManager.getSessionId();
-    const state = stateBySession.get(sessionId);
-    if (state) {
-      recordRehydrationUsefulness(runtime, sessionId, state, {
-        useful: false,
-        reason: "session_shutdown",
-        turnIndex: getCurrentRuntimeTurn(sessionId),
-      });
-    }
-    stateBySession.delete(sessionId);
-    clearRuntimeTurnClock(sessionId);
-    return undefined;
-  });
+export function registerCognitiveMetrics(pi: ExtensionAPI, runtime: BrewvaRuntime): void {
+  const hooks = pi as unknown as {
+    on(event: string, handler: (event: unknown, ctx: unknown) => unknown): void;
+  };
+  const lifecycle = createCognitiveMetricsLifecycle(runtime);
+  hooks.on("session_start", lifecycle.sessionStart);
+  hooks.on("turn_start", lifecycle.turnStart);
+  hooks.on("before_agent_start", lifecycle.beforeAgentStart);
+  hooks.on("tool_result", lifecycle.toolResult);
+  hooks.on("tool_execution_end", lifecycle.toolExecutionEnd);
+  hooks.on("session_shutdown", lifecycle.sessionShutdown);
 }

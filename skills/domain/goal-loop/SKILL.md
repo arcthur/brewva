@@ -4,11 +4,8 @@ description: Use bounded multi-run continuity when progress must span repeated e
 stability: experimental
 effect_level: read_only
 dispatch:
-  gate_threshold: 12
+  suggest_threshold: 12
   auto_threshold: 24
-  default_mode: suggest
-routing:
-  continuity_required: true
 tools:
   required: [read]
   optional: [schedule_intent, task_view_state, ledger_query, skill_chain_control, skill_complete]
@@ -22,28 +19,20 @@ references:
 outputs: [loop_contract, iteration_report, convergence_report, continuation_plan]
 output_contracts:
   loop_contract:
-    kind: informative_text
+    kind: text
     min_words: 3
     min_length: 18
   iteration_report:
-    kind: informative_text
+    kind: text
     min_words: 3
     min_length: 18
   convergence_report:
-    kind: informative_text
+    kind: text
     min_words: 2
     min_length: 12
   continuation_plan:
-    kind: one_of
-    variants:
-      - kind: informative_text
-        min_words: 3
-        min_length: 18
-      - kind: informative_list
-        min_items: 1
-        allow_objects: true
-        min_words: 2
-        min_length: 12
+    kind: json
+    min_items: 1
 consumes: [design_spec, execution_plan, verification_evidence]
 requires: []
 ---

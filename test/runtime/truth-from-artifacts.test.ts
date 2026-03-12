@@ -61,8 +61,11 @@ describe("Truth extraction from evidence artifacts", () => {
     expect(recordedPayload1?.failureContext?.failureClass).toBe("execution");
 
     const injection1 = await runtime.context.buildInjection(sessionId, "next");
-    expect(injection1.text.includes("[TruthFacts]")).toBe(true);
+    expect(injection1.text.includes("[TruthFacts]")).toBe(false);
+    expect(injection1.text.includes("[RuntimeStatus]")).toBe(true);
+    expect(injection1.text.includes("[TaskLedger]")).toBe(true);
     expect(injection1.text.includes(fact1?.id ?? "")).toBe(true);
+    expect(injection1.text.includes("command failed: bun test")).toBe(true);
 
     runtime.tools.recordResult({
       sessionId,

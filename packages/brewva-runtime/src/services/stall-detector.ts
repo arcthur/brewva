@@ -1,4 +1,26 @@
-import { SCAN_CONVERGENCE_BLOCKER_ID } from "../task/watchdog.js";
+import {
+  TASK_STUCK_CLEARED_EVENT_TYPE,
+  TASK_STUCK_DETECTED_EVENT_TYPE,
+  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+} from "../events/event-types.js";
+import type { RuntimeKernelContext } from "../runtime-kernel.js";
+import { TASK_EVENT_TYPE } from "../task/ledger.js";
+import {
+  SCAN_CONVERGENCE_BLOCKER_ID,
+  WATCHDOG_BLOCKER_ID,
+  WATCHDOG_BLOCKER_SOURCE,
+  buildTaskStuckBlockerMessage,
+  buildTaskStuckClearedPayload,
+  buildTaskStuckDetectedPayload,
+  coerceTaskStuckDetectedPayload,
+  computeTaskSemanticProgressAt,
+  evaluateTaskWatchdogEligibility,
+  getTaskWatchdogBlocker,
+  getTaskWatchdogOpenItemCount,
+  resolveTaskWatchdogPhase,
+  toTaskWatchdogEventPayload,
+  type TaskWatchdogPhase,
+} from "../task/watchdog.js";
 import type { BrewvaEventQuery, BrewvaEventRecord, TaskBlocker, TaskState } from "../types.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import {
@@ -6,7 +28,6 @@ import {
   isToolResultPass,
   type ToolResultVerdict,
 } from "../utils/tool-result.js";
-import type { RuntimeCallback } from "./callback.js";
 import {
   classifyScanConvergenceToolStrategy,
   listBlockedScanConvergenceTools,
@@ -18,6 +39,8 @@ import {
   type ScanConvergenceRuntimeState,
   type ScanConvergenceToolStrategy,
 } from "./session-state.js";
+import type { SkillLifecycleService } from "./skill-lifecycle.js";
+import type { TaskService } from "./task.js";
 
 const CONSECUTIVE_SCAN_ONLY_TURNS_THRESHOLD = 3;
 const CONSECUTIVE_INVESTIGATION_ONLY_TURNS_THRESHOLD = 6;
@@ -28,6 +51,11 @@ const SCAN_CONVERGENCE_BLOCKED_EVENT_TYPE = "scan_convergence_blocked_tool";
 const SCAN_CONVERGENCE_RESET_EVENT_TYPE = "scan_convergence_reset";
 
 const GUARD_BLOCKER_SOURCE = "runtime.scan_convergence" as const;
+const DEFAULT_THRESHOLDS_MS: Record<TaskWatchdogPhase, number> = {
+  investigate: 5 * 60_000,
+  execute: 10 * 60_000,
+  verify: 5 * 60_000,
+};
 
 const EMPTY_STATE = (): ScanConvergenceRuntimeState => ({
   currentTurnRawScanToolCalls: 0,
@@ -40,57 +68,28 @@ const EMPTY_STATE = (): ScanConvergenceRuntimeState => ({
   toolStrategyByCallId: new Map<string, ScanConvergenceToolStrategy>(),
 });
 
-export interface ScanConvergenceDecision {
-  allowed: boolean;
-  reason?: string;
+function sanitizeDelayMs(value: number | undefined, fallbackMs: number): number {
+  const candidate =
+    typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : fallbackMs;
+  return Math.max(1_000, candidate);
 }
 
-export interface CheckScanConvergenceToolCallInput {
-  sessionId: string;
-  toolCallId: string;
-  toolName: string;
-  args?: Record<string, unknown>;
+function createThresholdPolicy(
+  overrides?: Partial<Record<TaskWatchdogPhase, number>>,
+): Readonly<Record<TaskWatchdogPhase, number>> {
+  return {
+    investigate: sanitizeDelayMs(overrides?.investigate, DEFAULT_THRESHOLDS_MS.investigate),
+    execute: sanitizeDelayMs(overrides?.execute, DEFAULT_THRESHOLDS_MS.execute),
+    verify: sanitizeDelayMs(overrides?.verify, DEFAULT_THRESHOLDS_MS.verify),
+  };
 }
 
-export interface ObserveScanConvergenceToolResultInput {
-  sessionId: string;
-  toolCallId: string;
-  toolName: string;
-  args?: Record<string, unknown>;
-  verdict: ToolResultVerdict;
-  outputText: string;
-}
-
-export interface ScanConvergenceServiceOptions {
-  sessionState: RuntimeSessionStateStore;
-  listEvents: RuntimeCallback<[sessionId: string, query?: BrewvaEventQuery], BrewvaEventRecord[]>;
-  getTaskState: RuntimeCallback<[sessionId: string], TaskState>;
-  getCurrentTurn: RuntimeCallback<[sessionId: string], number>;
-  getActiveSkillName: RuntimeCallback<[sessionId: string], string | undefined>;
-  recordTaskBlocker: RuntimeCallback<
-    [
-      sessionId: string,
-      input: { id?: string; message: string; source?: string; truthFactId?: string },
-    ],
-    { ok: boolean; blockerId?: string; error?: string }
-  >;
-  resolveTaskBlocker: RuntimeCallback<
-    [sessionId: string, blockerId: string],
-    { ok: boolean; error?: string }
-  >;
-  recordEvent: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        type: string;
-        turn?: number;
-        payload?: Record<string, unknown>;
-        timestamp?: number;
-        skipTapeCheckpoint?: boolean;
-      },
-    ],
-    unknown
-  >;
+function buildDetectionKey(input: {
+  phase: TaskWatchdogPhase;
+  baselineProgressAt: number;
+  suppressedBy: string | null;
+}): string {
+  return `${input.phase}:${input.baselineProgressAt}:${input.suppressedBy ?? ""}`;
 }
 
 function readNonNegativeInteger(value: unknown): number {
@@ -189,34 +188,88 @@ function hasActiveGuardBlocker(state: TaskState): TaskBlocker | undefined {
   return state.blockers.find((blocker) => blocker.id === SCAN_CONVERGENCE_BLOCKER_ID);
 }
 
-export class ScanConvergenceService {
-  private readonly sessionState: RuntimeSessionStateStore;
-  private readonly listEvents: ScanConvergenceServiceOptions["listEvents"];
-  private readonly getTaskState: ScanConvergenceServiceOptions["getTaskState"];
-  private readonly getCurrentTurn: ScanConvergenceServiceOptions["getCurrentTurn"];
-  private readonly getActiveSkillName: ScanConvergenceServiceOptions["getActiveSkillName"];
-  private readonly recordTaskBlocker: ScanConvergenceServiceOptions["recordTaskBlocker"];
-  private readonly resolveTaskBlocker: ScanConvergenceServiceOptions["resolveTaskBlocker"];
-  private readonly recordEvent: ScanConvergenceServiceOptions["recordEvent"];
+export interface ScanConvergenceDecision {
+  allowed: boolean;
+  reason?: string;
+}
 
-  constructor(options: ScanConvergenceServiceOptions) {
-    this.sessionState = options.sessionState;
-    this.listEvents = options.listEvents;
-    this.getTaskState = options.getTaskState;
-    this.getCurrentTurn = options.getCurrentTurn;
-    this.getActiveSkillName = options.getActiveSkillName;
-    this.recordTaskBlocker = options.recordTaskBlocker;
-    this.resolveTaskBlocker = options.resolveTaskBlocker;
-    this.recordEvent = options.recordEvent;
+export interface CheckScanConvergenceToolCallInput {
+  sessionId: string;
+  toolCallId: string;
+  toolName: string;
+  args?: Record<string, unknown>;
+}
+
+export interface ObserveScanConvergenceToolResultInput {
+  sessionId: string;
+  toolCallId: string;
+  toolName: string;
+  args?: Record<string, unknown>;
+  verdict: ToolResultVerdict;
+  outputText: string;
+}
+
+export interface PollTaskProgressInput {
+  sessionId: string;
+  now?: number;
+  thresholdsMs?: Partial<Record<TaskWatchdogPhase, number>>;
+}
+
+export interface StallDetectorServiceOptions {
+  kernel: RuntimeKernelContext;
+  taskService: Pick<TaskService, "recordTaskBlocker" | "resolveTaskBlocker">;
+  skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
+}
+
+export class StallDetectorService {
+  private readonly sessionState: RuntimeSessionStateStore;
+  private readonly listEvents: (sessionId: string, query?: BrewvaEventQuery) => BrewvaEventRecord[];
+  private readonly getTaskState: (sessionId: string) => TaskState;
+  private readonly getCurrentTurn: (sessionId: string) => number;
+  private readonly getActiveSkillName: (sessionId: string) => string | undefined;
+  private readonly recordTaskBlocker: (
+    sessionId: string,
+    input: { id?: string; message: string; source?: string; truthFactId?: string },
+  ) => { ok: boolean; blockerId?: string; error?: string };
+  private readonly resolveTaskBlocker: (
+    sessionId: string,
+    blockerId: string,
+  ) => { ok: boolean; error?: string };
+  private readonly recordEvent: (input: {
+    sessionId: string;
+    type: string;
+    turn?: number;
+    payload?: Record<string, unknown>;
+    timestamp?: number;
+    skipTapeCheckpoint?: boolean;
+  }) => unknown;
+  private readonly taskDetectionKeyBySession = new Map<string, string>();
+
+  constructor(options: StallDetectorServiceOptions) {
+    this.sessionState = options.kernel.sessionState;
+    this.listEvents = (sessionId, query) => options.kernel.eventStore.list(sessionId, query);
+    this.getTaskState = (sessionId) => options.kernel.getTaskState(sessionId);
+    this.getCurrentTurn = (sessionId) => options.kernel.getCurrentTurn(sessionId);
+    this.getActiveSkillName = (sessionId) =>
+      options.skillLifecycleService.getActiveSkill(sessionId)?.name;
+    this.recordTaskBlocker = (sessionId, input) =>
+      options.taskService.recordTaskBlocker(sessionId, input);
+    this.resolveTaskBlocker = (sessionId, blockerId) =>
+      options.taskService.resolveTaskBlocker(sessionId, blockerId);
+    this.recordEvent = (input) => options.kernel.recordEvent(input);
+  }
+
+  onTurnStart(sessionId: string): void {
+    this.maybeClearTaskProgressStall(sessionId);
   }
 
   onUserInput(sessionId: string): void {
-    const state = this.getState(sessionId);
-    this.resetGuard(sessionId, state, "input_reset");
+    const state = this.getScanState(sessionId);
+    this.resetScanGuard(sessionId, state, "input_reset");
   }
 
   onTurnEnd(sessionId: string): void {
-    const state = this.getState(sessionId);
+    const state = this.getScanState(sessionId);
 
     if (state.currentTurnConvergenceToolCalls > 0) {
       if (state.armedReason === null) {
@@ -237,7 +290,7 @@ export class ScanConvergenceService {
       if (scanOnlyTurn) {
         state.consecutiveScanOnlyTurns += 1;
         if (state.consecutiveScanOnlyTurns >= CONSECUTIVE_SCAN_ONLY_TURNS_THRESHOLD) {
-          this.armGuard(sessionId, state, "scan_only_turns");
+          this.armScanGuard(sessionId, state, "scan_only_turns");
         }
       } else {
         state.consecutiveScanOnlyTurns = 0;
@@ -246,7 +299,7 @@ export class ScanConvergenceService {
       if (
         state.consecutiveInvestigationOnlyTurns >= CONSECUTIVE_INVESTIGATION_ONLY_TURNS_THRESHOLD
       ) {
-        this.armGuard(sessionId, state, "investigation_only_turns");
+        this.armScanGuard(sessionId, state, "investigation_only_turns");
       }
     }
 
@@ -254,7 +307,7 @@ export class ScanConvergenceService {
   }
 
   checkToolCall(input: CheckScanConvergenceToolCallInput): ScanConvergenceDecision {
-    const state = this.getState(input.sessionId);
+    const state = this.getScanState(input.sessionId);
     const normalizedToolName = normalizeToolName(input.toolName);
     if (!normalizedToolName) {
       return { allowed: true };
@@ -309,7 +362,7 @@ export class ScanConvergenceService {
   }
 
   observeToolResult(input: ObserveScanConvergenceToolResultInput): void {
-    const state = this.getState(input.sessionId);
+    const state = this.getScanState(input.sessionId);
     const normalizedToolName = normalizeToolName(input.toolName);
     if (!normalizedToolName) return;
     const verdict = input.verdict;
@@ -325,7 +378,7 @@ export class ScanConvergenceService {
 
     if (isToolResultPass(verdict) && strategy === "progress") {
       if (state.armedReason !== null) {
-        this.resetGuard(input.sessionId, state, "strategy_shift", strategy);
+        this.resetScanGuard(input.sessionId, state, "strategy_shift", strategy);
       }
       state.currentTurnConvergenceToolCalls += 1;
       state.consecutiveScanFailures = 0;
@@ -350,26 +403,169 @@ export class ScanConvergenceService {
 
     state.consecutiveScanFailures += 1;
     if (state.consecutiveScanFailures >= CONSECUTIVE_SCAN_FAILURES_THRESHOLD) {
-      this.armGuard(input.sessionId, state, "scan_failures");
+      this.armScanGuard(input.sessionId, state, "scan_failures");
     }
   }
 
-  private getState(sessionId: string): ScanConvergenceRuntimeState {
+  pollTaskProgress(input: PollTaskProgressInput): void {
+    const taskState = this.getTaskState(input.sessionId);
+    const eligibility = evaluateTaskWatchdogEligibility(taskState);
+    if (!eligibility.eligible || !eligibility.phase) {
+      return;
+    }
+
+    const taskEvents = this.listEvents(input.sessionId, { type: TASK_EVENT_TYPE });
+    const lastVerificationAt =
+      this.listEvents(input.sessionId, {
+        type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+        last: 1,
+      })[0]?.timestamp ?? null;
+    const baselineProgressAt = computeTaskSemanticProgressAt({
+      state: taskState,
+      taskEvents,
+      lastVerificationAt,
+    });
+    if (baselineProgressAt === null) {
+      return;
+    }
+
+    const thresholdPolicy = createThresholdPolicy(input.thresholdsMs);
+    const thresholdMs = thresholdPolicy[eligibility.phase];
+    const detectedAt = input.now ?? Date.now();
+    const idleMs = Math.max(0, detectedAt - baselineProgressAt);
+    if (idleMs < thresholdMs) {
+      return;
+    }
+
+    const suppressedBy = eligibility.suppressedByBlockerId ?? null;
+    if (suppressedBy === SCAN_CONVERGENCE_BLOCKER_ID && eligibility.hasWatchdogBlocker) {
+      this.resolveTaskBlocker(input.sessionId, WATCHDOG_BLOCKER_ID);
+    }
+    const detectionKey = buildDetectionKey({
+      phase: eligibility.phase,
+      baselineProgressAt,
+      suppressedBy,
+    });
+    if (this.taskDetectionKeyBySession.get(input.sessionId) === detectionKey) {
+      return;
+    }
+
+    const latestDetected = this.listEvents(input.sessionId, {
+      type: TASK_STUCK_DETECTED_EVENT_TYPE,
+      last: 1,
+    })[0];
+    const latestPayload = coerceTaskStuckDetectedPayload(latestDetected?.payload);
+    if (
+      latestPayload &&
+      buildDetectionKey({
+        phase: latestPayload.phase,
+        baselineProgressAt: latestPayload.baselineProgressAt,
+        suppressedBy: latestPayload.suppressedBy,
+      }) === detectionKey
+    ) {
+      this.taskDetectionKeyBySession.set(input.sessionId, detectionKey);
+      return;
+    }
+
+    let blockerWritten = false;
+    if (!suppressedBy && !eligibility.hasWatchdogBlocker) {
+      const result = this.recordTaskBlocker(input.sessionId, {
+        id: WATCHDOG_BLOCKER_ID,
+        message: buildTaskStuckBlockerMessage({
+          phase: eligibility.phase,
+          idleMs,
+          thresholdMs,
+          baselineProgressAt,
+          openItemCount: getTaskWatchdogOpenItemCount(taskState),
+        }),
+        source: WATCHDOG_BLOCKER_SOURCE,
+      });
+      blockerWritten = result.ok;
+    }
+
+    const detectedPayload = buildTaskStuckDetectedPayload({
+      phase: eligibility.phase,
+      thresholdMs,
+      baselineProgressAt,
+      detectedAt,
+      idleMs,
+      openItemCount: getTaskWatchdogOpenItemCount(taskState),
+      blockerId: blockerWritten ? WATCHDOG_BLOCKER_ID : null,
+      blockerWritten,
+      suppressedBy,
+    });
+
+    this.recordEvent({
+      sessionId: input.sessionId,
+      type: TASK_STUCK_DETECTED_EVENT_TYPE,
+      turn: this.getCurrentTurn(input.sessionId),
+      payload: toTaskWatchdogEventPayload(detectedPayload),
+    });
+    this.taskDetectionKeyBySession.set(input.sessionId, detectionKey);
+  }
+
+  private maybeClearTaskProgressStall(sessionId: string): void {
+    const taskState = this.getTaskState(sessionId);
+    const watchdogBlocker = getTaskWatchdogBlocker(taskState);
+    if (!watchdogBlocker) {
+      return;
+    }
+
+    const taskEvents = this.listEvents(sessionId, { type: TASK_EVENT_TYPE });
+    const lastVerificationAt =
+      this.listEvents(sessionId, {
+        type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+        last: 1,
+      })[0]?.timestamp ?? null;
+    const semanticProgressAt = computeTaskSemanticProgressAt({
+      state: taskState,
+      taskEvents,
+      lastVerificationAt,
+    });
+    if (semanticProgressAt === null || semanticProgressAt <= watchdogBlocker.createdAt) {
+      return;
+    }
+
+    const resolved = this.resolveTaskBlocker(sessionId, WATCHDOG_BLOCKER_ID);
+    if (!resolved.ok) {
+      return;
+    }
+    const clearedAt = Date.now();
+    const clearedPayload = buildTaskStuckClearedPayload({
+      phase: resolveTaskWatchdogPhase(taskState) ?? "investigate",
+      blockerId: WATCHDOG_BLOCKER_ID,
+      detectedAt: watchdogBlocker.createdAt,
+      clearedAt,
+      resumedProgressAt: semanticProgressAt,
+      openItemCount: getTaskWatchdogOpenItemCount(taskState),
+    });
+
+    this.recordEvent({
+      sessionId,
+      type: TASK_STUCK_CLEARED_EVENT_TYPE,
+      turn: this.getCurrentTurn(sessionId),
+      timestamp: clearedAt,
+      payload: toTaskWatchdogEventPayload(clearedPayload),
+    });
+    this.taskDetectionKeyBySession.delete(sessionId);
+  }
+
+  private getScanState(sessionId: string): ScanConvergenceRuntimeState {
     const existing = this.sessionState.scanConvergenceBySession.get(sessionId);
     if (existing) {
       if (!this.sessionState.scanConvergenceHydratedBySession.has(sessionId)) {
-        this.hydrateState(sessionId, existing);
+        this.hydrateScanState(sessionId, existing);
       }
       return existing;
     }
 
     const created = EMPTY_STATE();
     this.sessionState.scanConvergenceBySession.set(sessionId, created);
-    this.hydrateState(sessionId, created);
+    this.hydrateScanState(sessionId, created);
     return created;
   }
 
-  private hydrateState(sessionId: string, state: ScanConvergenceRuntimeState): void {
+  private hydrateScanState(sessionId: string, state: ScanConvergenceRuntimeState): void {
     if (this.sessionState.scanConvergenceHydratedBySession.has(sessionId)) {
       return;
     }
@@ -417,7 +613,7 @@ export class ScanConvergenceService {
     return event.payload as Record<string, unknown>;
   }
 
-  private armGuard(
+  private armScanGuard(
     sessionId: string,
     state: ScanConvergenceRuntimeState,
     reason: ScanConvergenceReason,
@@ -464,7 +660,7 @@ export class ScanConvergenceService {
     });
   }
 
-  private resetGuard(
+  private resetScanGuard(
     sessionId: string,
     state: ScanConvergenceRuntimeState,
     reason: ScanConvergenceResetReason,

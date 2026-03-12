@@ -38,7 +38,7 @@ describe("proactivity engine", () => {
     expect(plan.reason).toBe("no_relevant_signal");
   });
 
-  test("uses same-session open-loop signals to wake continuation work", async () => {
+  test("uses same-session summary signals to wake continuation work", async () => {
     const workspace = createTestWorkspace("proactivity-engine-same-session");
 
     await writeCognitionArtifact({
@@ -69,7 +69,7 @@ describe("proactivity engine", () => {
     });
 
     expect(plan.decision).toBe("wake");
-    expect(plan.reason).toBe("open_loop_signal");
+    expect(plan.reason).toBe("memory_signal");
     expect(plan.signalArtifactRefs).toHaveLength(1);
   });
 });

@@ -63,7 +63,7 @@ flowchart TD
 flowchart TD
   A["startup"] --> B["load event tape"]
   B --> C["TurnReplayEngine (checkpoint + delta)"]
-  C --> D["hydrate task/truth/cost/evidence/projection state"]
+  C --> D["hydrate task/truth/cost/verification/projection state"]
   D --> E["if projection files missing: rebuild projection from tape"]
 ```
 

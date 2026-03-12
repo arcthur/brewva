@@ -18,7 +18,7 @@ interface SentPromptMessage {
           ruleId: string;
           objective?: string;
           contextHints?: string[];
-          wakeMode?: "always" | "if_signal" | "if_open_loop";
+          wakeMode?: "always" | "if_signal";
           planReason?: string;
           selectionText?: string;
           signalArtifactRefs?: string[];

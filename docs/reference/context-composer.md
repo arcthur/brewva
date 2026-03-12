@@ -38,21 +38,23 @@ reads. There is no raw-text fallback path in the composer contract.
 The composer returns an ordered list of blocks:
 
 - `narrative`
-  - task state
-  - truth facts
-  - context packets
-  - working projection
-  - distilled failures/output summaries
+  - kernel-admitted narrative entries from `runtime.context.buildInjection(...)`
+  - on the default path this typically means `brewva.identity`,
+    `brewva.context-packets`, `brewva.runtime-status`, `brewva.task-state`, and
+    `brewva.projection-working`
+  - optional narrative providers may add `brewva.skill-candidates` or
+    `brewva.tool-outputs-distilled`
 - `constraint`
-  - truth-ledger/static guardrails
-  - dispatch or cascade gates
   - capability surface explanation
   - compaction gate/advisory blocks
+  - any admitted constraint-category provider blocks such as
+    `brewva.skill-cascade-gate`
 - `diagnostic`
   - concise operational diagnostics only when explicitly requested or when
     compaction pressure requires additional explanation
-  - compaction-triggered diagnostics stay minimal by default and do not include
-    deep tape telemetry unless the model explicitly asked for diagnostic tools
+  - tape telemetry appears only for explicit diagnostic capability requests such
+    as `$tape_info`, `$tape_search`, `$obs_query`, `$obs_slo_assert`, or
+    `$obs_snapshot`
 
 Each block carries:
 

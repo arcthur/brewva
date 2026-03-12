@@ -13,7 +13,6 @@ function toBaseSecurityPolicy(mode: BrewvaConfig["security"]["mode"]): Effective
       skillMaxTokensMode: "enforce",
       skillMaxToolCallsMode: "enforce",
       skillMaxParallelMode: "enforce",
-      skillDispatchGateMode: "enforce",
     };
   }
 
@@ -24,7 +23,6 @@ function toBaseSecurityPolicy(mode: BrewvaConfig["security"]["mode"]): Effective
       skillMaxTokensMode: "off",
       skillMaxToolCallsMode: "off",
       skillMaxParallelMode: "off",
-      skillDispatchGateMode: "off",
     };
   }
 
@@ -34,7 +32,6 @@ function toBaseSecurityPolicy(mode: BrewvaConfig["security"]["mode"]): Effective
     skillMaxTokensMode: "warn",
     skillMaxToolCallsMode: "warn",
     skillMaxParallelMode: "warn",
-    skillDispatchGateMode: "warn",
   };
 }
 
@@ -54,7 +51,6 @@ export interface EffectiveSecurityPolicy {
   skillMaxTokensMode: SecurityEnforcementMode;
   skillMaxToolCallsMode: SecurityEnforcementMode;
   skillMaxParallelMode: SecurityEnforcementMode;
-  skillDispatchGateMode: SecurityEnforcementMode;
 }
 
 export function resolveSecurityPolicy(
@@ -86,10 +82,6 @@ export function resolveSecurityPolicy(
     skillMaxParallelMode: applyEnforcementPreference(
       base.skillMaxParallelMode,
       enforcement.skillMaxParallelMode,
-    ),
-    skillDispatchGateMode: applyEnforcementPreference(
-      base.skillDispatchGateMode,
-      enforcement.skillDispatchGateMode,
     ),
   };
 }

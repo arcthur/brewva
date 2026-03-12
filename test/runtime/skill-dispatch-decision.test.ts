@@ -18,7 +18,6 @@ function createEntry(
     effectLevel: input.effectLevel ?? "read_only",
     dispatch: input.dispatch,
     routingScope: input.routingScope ?? "core",
-    continuityRequired: input.continuityRequired ?? false,
   };
 }
 
@@ -30,8 +29,8 @@ describe("skill dispatch decision", () => {
       turn: 5,
     });
 
-    expect(decision.mode).toBe("gate");
-    expect(decision.reason).toContain("gate_threshold(10)");
+    expect(decision.mode).toBe("suggest");
+    expect(decision.reason).toContain("suggest_threshold(10)");
   });
 
   test("read_only skills do not auto-chain mutation producers", () => {

@@ -55,21 +55,18 @@ export function sanitizeContextText(text: string): string {
 /**
  * Trust tiers for context injection sources.
  *
- * - `system`:   Runtime-generated, trusted content (identity, truth, task state).
- * - `internal`: Runtime-derived but from LLM outputs (skill candidates, tool distillation).
+ * - `system`:   Runtime-generated, trusted content (identity, task state, gates).
+ * - `internal`: Runtime-derived status and routing context.
  * - `external`: Content that originated outside the runtime boundary.
  */
 export type SourceTrustTier = "system" | "internal" | "external";
 
 const SOURCE_TRUST_MAP: Record<string, SourceTrustTier> = {
   [CONTEXT_SOURCES.identity]: "system",
-  [CONTEXT_SOURCES.truthStatic]: "system",
-  [CONTEXT_SOURCES.truthFacts]: "system",
   [CONTEXT_SOURCES.taskState]: "system",
-  [CONTEXT_SOURCES.skillDispatchGate]: "system",
+  [CONTEXT_SOURCES.runtimeStatus]: "internal",
   [CONTEXT_SOURCES.skillCascadeGate]: "system",
   [CONTEXT_SOURCES.skillCandidates]: "internal",
-  [CONTEXT_SOURCES.toolFailures]: "internal",
   [CONTEXT_SOURCES.toolOutputsDistilled]: "internal",
   [CONTEXT_SOURCES.projectionWorking]: "internal",
 };

@@ -19,15 +19,12 @@ The important distinction is semantic:
 - project overlay = project-specific tightening plus shared context
 - operator/meta = loaded, but hidden from standard routing by default
 
-## Routing Profiles
+## Routing Scopes
 
-`skills.routing.profile` controls which routable scopes participate in auto routing:
-
-- `standard` (default): `core`, `domain`
-- `operator`: `core`, `domain`, `operator`
-- `full`: `core`, `domain`, `operator`, `meta`
-
-`skills.routing.scopes` can further narrow or widen the active scopes explicitly.
+`skills.routing.enabled=false` by default. When enabled,
+`skills.routing.scopes` is the only allowlist for auto routing visibility.
+Typical defaults are `core` and `domain`; operator/meta stay loaded but hidden
+unless scopes explicitly opt in.
 
 Continuity-required skills are still gated by dispatch context. For example,
 `goal-loop` is not auto-routed for ordinary one-shot implementation prompts.

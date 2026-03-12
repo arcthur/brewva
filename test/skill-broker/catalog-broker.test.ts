@@ -39,11 +39,9 @@ function writeCatalog(
           requires: entry.requires ?? [],
           effectLevel: "read_only",
           routingScope: "domain",
-          continuityRequired: false,
           dispatch: {
-            gateThreshold: 10,
+            suggestThreshold: 10,
             autoThreshold: 16,
-            defaultMode: "suggest",
           },
         })),
       },

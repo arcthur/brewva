@@ -2,26 +2,19 @@ import type { ContextBudgetManager } from "../context/budget.js";
 import type { ContextInjectionCollector } from "../context/injection.js";
 import type { SessionCostTracker } from "../cost/tracker.js";
 import {
-  TASK_STUCK_CLEARED_EVENT_TYPE,
-  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+  TOOL_RESULT_RECORDED_EVENT_TYPE,
+  VERIFICATION_STATE_RESET_EVENT_TYPE,
+  VERIFICATION_WRITE_MARKED_EVENT_TYPE,
 } from "../events/event-types.js";
 import type { BrewvaEventStore } from "../events/store.js";
 import type { EvidenceLedger } from "../ledger/evidence-ledger.js";
 import type { ParallelBudgetManager } from "../parallel/budget.js";
 import type { ParallelResultStore } from "../parallel/results.js";
 import type { ProjectionEngine } from "../projection/engine.js";
+import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type { FileChangeTracker } from "../state/file-change-tracker.js";
 import { TAPE_CHECKPOINT_EVENT_TYPE, coerceTapeCheckpointPayload } from "../tape/events.js";
 import type { TurnReplayEngine } from "../tape/replay-engine.js";
-import {
-  WATCHDOG_BLOCKER_ID,
-  buildTaskStuckClearedPayload,
-  computeTaskSemanticProgressAt,
-  getTaskWatchdogOpenItemCount,
-  getTaskWatchdogBlocker,
-  resolveTaskWatchdogPhase,
-  toTaskWatchdogEventPayload,
-} from "../task/watchdog.js";
 import type {
   BrewvaEventRecord,
   SkillChainIntent,
@@ -33,42 +26,17 @@ import type {
 import { SKILL_SELECTION_SIGNALS as SKILL_SELECTION_SIGNALS_LIST } from "../types.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import type { VerificationGate } from "../verification/gate.js";
-import type { RuntimeCallback } from "./callback.js";
+import {
+  coerceVerificationWriteMarkedPayload,
+  readVerificationToolResultProjectionPayload,
+} from "../verification/projector-payloads.js";
+import type { ContextService } from "./context.js";
 import { RuntimeSessionStateStore } from "./session-state.js";
-
 const SKILL_SELECTION_SIGNALS = new Set<SkillSelectionSignal>(SKILL_SELECTION_SIGNALS_LIST);
 
 export interface SessionLifecycleServiceOptions {
-  sessionState: RuntimeSessionStateStore;
-  contextBudget: ContextBudgetManager;
-  contextInjection: ContextInjectionCollector;
-  clearReservedInjectionTokensForSession: RuntimeCallback<[sessionId: string]>;
-  fileChanges: FileChangeTracker;
-  verification: VerificationGate;
-  parallel: ParallelBudgetManager;
-  parallelResults: ParallelResultStore;
-  costTracker: SessionCostTracker;
-  projectionEngine: ProjectionEngine;
-  turnReplay: TurnReplayEngine;
-  events: BrewvaEventStore;
-  ledger: EvidenceLedger;
-  resolveTaskBlocker: RuntimeCallback<
-    [sessionId: string, blockerId: string],
-    { ok: boolean; error?: string }
-  >;
-  recordEvent: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        type: string;
-        turn?: number;
-        payload?: Record<string, unknown>;
-        timestamp?: number;
-        skipTapeCheckpoint?: boolean;
-      },
-    ],
-    unknown
-  >;
+  kernel: RuntimeKernelContext;
+  contextService: Pick<ContextService, "clearReservedInjectionTokensForSession">;
 }
 
 export class SessionLifecycleService {
@@ -85,27 +53,34 @@ export class SessionLifecycleService {
   private readonly turnReplay: TurnReplayEngine;
   private readonly events: BrewvaEventStore;
   private readonly ledger: EvidenceLedger;
-  private readonly resolveTaskBlocker: SessionLifecycleServiceOptions["resolveTaskBlocker"];
-  private readonly recordEvent: SessionLifecycleServiceOptions["recordEvent"];
+  private readonly recordEvent: (input: {
+    sessionId: string;
+    type: string;
+    turn?: number;
+    payload?: Record<string, unknown>;
+    timestamp?: number;
+    skipTapeCheckpoint?: boolean;
+  }) => unknown;
   private readonly hydratedSessions = new Set<string>();
   private readonly clearStateListeners = new Set<(sessionId: string) => void>();
 
   constructor(options: SessionLifecycleServiceOptions) {
-    this.sessionState = options.sessionState;
-    this.contextBudget = options.contextBudget;
-    this.contextInjection = options.contextInjection;
-    this.clearReservedInjectionTokensForSession = options.clearReservedInjectionTokensForSession;
-    this.fileChanges = options.fileChanges;
-    this.verification = options.verification;
-    this.parallel = options.parallel;
-    this.parallelResults = options.parallelResults;
-    this.costTracker = options.costTracker;
-    this.projectionEngine = options.projectionEngine;
-    this.turnReplay = options.turnReplay;
-    this.events = options.events;
-    this.ledger = options.ledger;
-    this.resolveTaskBlocker = options.resolveTaskBlocker;
-    this.recordEvent = options.recordEvent;
+    const { kernel } = options;
+    this.sessionState = kernel.sessionState;
+    this.contextBudget = kernel.contextBudget;
+    this.contextInjection = kernel.contextInjection;
+    this.clearReservedInjectionTokensForSession = (sessionId) =>
+      options.contextService.clearReservedInjectionTokensForSession(sessionId);
+    this.fileChanges = kernel.fileChanges;
+    this.verification = kernel.verificationGate;
+    this.parallel = kernel.parallel;
+    this.parallelResults = kernel.parallelResults;
+    this.costTracker = kernel.costTracker;
+    this.projectionEngine = kernel.projectionEngine;
+    this.turnReplay = kernel.turnReplay;
+    this.events = kernel.eventStore;
+    this.ledger = kernel.evidenceLedger;
+    this.recordEvent = (input) => kernel.recordEvent(input);
   }
 
   onTurnStart(sessionId: string, turnIndex: number): void {
@@ -113,8 +88,6 @@ export class SessionLifecycleService {
     const current = this.sessionState.turnsBySession.get(sessionId) ?? 0;
     const effectiveTurn = Math.max(current, turnIndex);
     this.sessionState.turnsBySession.set(sessionId, effectiveTurn);
-    this.maybeClearTaskStuckWatchdog(sessionId, effectiveTurn);
-    this.sessionState.skillDispatchGateWarningsBySession.delete(sessionId);
     this.contextBudget.beginTurn(sessionId, effectiveTurn);
     this.contextInjection.clearPending(sessionId);
     this.clearReservedInjectionTokensForSession(sessionId);
@@ -159,57 +132,13 @@ export class SessionLifecycleService {
     this.ledger.clearSessionCache(sessionId);
   }
 
-  private maybeClearTaskStuckWatchdog(sessionId: string, turn: number): void {
-    const taskState = this.turnReplay.getTaskState(sessionId);
-    const watchdogBlocker = getTaskWatchdogBlocker(taskState);
-    if (!watchdogBlocker) {
-      return;
-    }
-
-    const taskEvents = this.events.list(sessionId, { type: "task_event" });
-    const lastVerificationAt =
-      this.events.list(sessionId, {
-        type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-        last: 1,
-      })[0]?.timestamp ?? null;
-    const semanticProgressAt = computeTaskSemanticProgressAt({
-      state: taskState,
-      taskEvents,
-      lastVerificationAt,
-    });
-    if (semanticProgressAt === null || semanticProgressAt <= watchdogBlocker.createdAt) {
-      return;
-    }
-
-    const resolved = this.resolveTaskBlocker(sessionId, WATCHDOG_BLOCKER_ID);
-    if (!resolved.ok) {
-      return;
-    }
-    const clearedAt = Date.now();
-    const clearedPayload = buildTaskStuckClearedPayload({
-      phase: resolveTaskWatchdogPhase(taskState) ?? "investigate",
-      blockerId: WATCHDOG_BLOCKER_ID,
-      detectedAt: watchdogBlocker.createdAt,
-      clearedAt,
-      resumedProgressAt: semanticProgressAt,
-      openItemCount: getTaskWatchdogOpenItemCount(taskState),
-    });
-
-    this.recordEvent({
-      sessionId,
-      type: TASK_STUCK_CLEARED_EVENT_TYPE,
-      turn,
-      timestamp: clearedAt,
-      payload: toTaskWatchdogEventPayload(clearedPayload),
-    });
-  }
-
   private hydrateSessionStateFromEvents(sessionId: string): void {
     if (this.hydratedSessions.has(sessionId)) return;
     this.hydratedSessions.add(sessionId);
 
     const events = this.events.list(sessionId);
     this.costTracker.clear(sessionId);
+    this.verification.stateStore.clear(sessionId);
     if (events.length === 0) return;
 
     const latestCheckpoint = this.findLatestCheckpoint(events);
@@ -244,9 +173,6 @@ export class SessionLifecycleService {
     const skillParallelWarnings = new Set(
       this.sessionState.skillParallelWarningsBySession.get(sessionId) ?? [],
     );
-    const skillDispatchGateWarnings = new Set(
-      this.sessionState.skillDispatchGateWarningsBySession.get(sessionId) ?? [],
-    );
     const skillOutputs = new Map<string, SkillOutputRecord>();
     let pendingDispatch = this.sessionState.pendingDispatchBySession.get(sessionId);
     let skillChainIntent = this.sessionState.skillChainIntentsBySession.get(sessionId);
@@ -274,6 +200,35 @@ export class SessionLifecycleService {
         this.replayCostStateEvent(sessionId, event, payload, {
           checkpointTurnTransient: replayCheckpointTurnTransient,
         });
+      }
+
+      if (event.type === VERIFICATION_WRITE_MARKED_EVENT_TYPE) {
+        const writePayload = coerceVerificationWriteMarkedPayload(payload);
+        if (writePayload) {
+          this.verification.stateStore.markWriteAt(sessionId, event.timestamp);
+        }
+        continue;
+      }
+
+      if (event.type === TOOL_RESULT_RECORDED_EVENT_TYPE) {
+        const projection = readVerificationToolResultProjectionPayload(
+          payload?.verificationProjection,
+        );
+        if (projection?.evidence.length) {
+          this.verification.stateStore.appendEvidence(sessionId, projection.evidence);
+        }
+        if (projection?.checkRun) {
+          this.verification.stateStore.setCheckRun(
+            sessionId,
+            projection.checkRun.checkName,
+            projection.checkRun.run,
+          );
+        }
+      }
+
+      if (event.type === VERIFICATION_STATE_RESET_EVENT_TYPE) {
+        this.verification.stateStore.clear(sessionId);
+        continue;
       }
 
       if (event.type === "skill_activated") {
@@ -332,17 +287,6 @@ export class SessionLifecycleService {
         const skillName = this.readSkillName(payload);
         if (skillName) {
           skillParallelWarnings.add(`maxParallel:${skillName}`);
-        }
-        continue;
-      }
-
-      if (event.type === "skill_dispatch_gate_warning") {
-        const warningKey =
-          typeof payload?.warningKey === "string" && payload.warningKey.trim().length > 0
-            ? payload.warningKey.trim()
-            : null;
-        if (warningKey) {
-          skillDispatchGateWarnings.add(warningKey);
         }
         continue;
       }
@@ -411,13 +355,7 @@ export class SessionLifecycleService {
     if (skillParallelWarnings.size > 0) {
       this.sessionState.skillParallelWarningsBySession.set(sessionId, skillParallelWarnings);
     }
-    if (skillDispatchGateWarnings.size > 0) {
-      this.sessionState.skillDispatchGateWarningsBySession.set(
-        sessionId,
-        skillDispatchGateWarnings,
-      );
-    }
-    if (pendingDispatch && (pendingDispatch.mode === "gate" || pendingDispatch.mode === "auto")) {
+    if (pendingDispatch && pendingDispatch.mode !== "none") {
       this.sessionState.pendingDispatchBySession.set(sessionId, pendingDispatch);
     } else {
       this.sessionState.pendingDispatchBySession.delete(sessionId);
@@ -515,10 +453,7 @@ export class SessionLifecycleService {
     if (!payload) return undefined;
 
     const modeCandidate = payload.mode;
-    const mode =
-      modeCandidate === "suggest" || modeCandidate === "gate" || modeCandidate === "auto"
-        ? modeCandidate
-        : null;
+    const mode = modeCandidate === "suggest" || modeCandidate === "auto" ? modeCandidate : null;
     if (!mode) return undefined;
 
     const primaryPayload =
@@ -767,47 +702,7 @@ export class SessionLifecycleService {
     }
 
     if (event.type !== "cost_update" || !payload) return;
-
-    const model = typeof payload.model === "string" ? payload.model.trim() : "";
-    const inputTokens = this.readNonNegativeNumber(payload.inputTokens);
-    const outputTokens = this.readNonNegativeNumber(payload.outputTokens);
-    const cacheReadTokens = this.readNonNegativeNumber(payload.cacheReadTokens);
-    const cacheWriteTokens = this.readNonNegativeNumber(payload.cacheWriteTokens);
-    const totalTokens = this.readNonNegativeNumber(payload.totalTokens);
-    const costUsd = this.readNonNegativeNumber(payload.costUsd);
-    if (
-      !model ||
-      inputTokens === null ||
-      outputTokens === null ||
-      cacheReadTokens === null ||
-      cacheWriteTokens === null ||
-      totalTokens === null ||
-      costUsd === null
-    ) {
-      return;
-    }
-
-    const skillName =
-      typeof payload.skill === "string" && payload.skill.trim().length > 0
-        ? payload.skill.trim()
-        : undefined;
-
-    this.costTracker.recordUsage(
-      sessionId,
-      {
-        model,
-        inputTokens,
-        outputTokens,
-        cacheReadTokens,
-        cacheWriteTokens,
-        totalTokens,
-        costUsd,
-      },
-      {
-        turn,
-        skill: skillName,
-      },
-    );
+    this.costTracker.applyCostUpdateEvent(sessionId, payload, turn, event.timestamp);
   }
 
   private normalizeTurn(value: unknown): number {

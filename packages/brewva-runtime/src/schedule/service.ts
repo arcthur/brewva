@@ -186,49 +186,8 @@ export interface SchedulerRuntimePort {
   };
 }
 
-interface SchedulerLegacyRuntimePort {
-  workspaceRoot: string;
-  config: Pick<BrewvaConfig, "schedule">;
-  events: {
-    listSessionIds(): string[];
-    list(sessionId: string, query?: BrewvaEventQuery): BrewvaEventRecord[];
-  };
-  recordEvent(input: {
-    sessionId: string;
-    type: string;
-    turn?: number;
-    payload?: Record<string, unknown>;
-    timestamp?: number;
-    skipTapeCheckpoint?: boolean;
-  }): BrewvaEventRecord | undefined;
-  subscribeEvents(listener: (event: BrewvaStructuredEvent) => void): () => void;
-  getTruthState(sessionId: string): TruthState;
-  getTaskState(sessionId: string): TaskState;
-  turnWal?: SchedulerRuntimePort["turnWal"];
-}
-
-function toSchedulerRuntimePort(
-  runtime: SchedulerRuntimePort | SchedulerLegacyRuntimePort,
-): SchedulerRuntimePort {
-  if ("scheduleConfig" in runtime) {
-    return runtime;
-  }
-
-  return {
-    workspaceRoot: runtime.workspaceRoot,
-    scheduleConfig: runtime.config.schedule,
-    listSessionIds: () => runtime.events.listSessionIds(),
-    listEvents: (sessionId, query) => runtime.events.list(sessionId, query),
-    recordEvent: (input) => runtime.recordEvent(input),
-    subscribeEvents: (listener) => runtime.subscribeEvents(listener),
-    getTruthState: (sessionId) => runtime.getTruthState(sessionId),
-    getTaskState: (sessionId) => runtime.getTaskState(sessionId),
-    turnWal: runtime.turnWal,
-  };
-}
-
 export interface SchedulerServiceOptions {
-  runtime: SchedulerRuntimePort | SchedulerLegacyRuntimePort;
+  runtime: SchedulerRuntimePort;
   enableExecution?: boolean;
   now?: () => number;
   setTimer?: (callback: () => void, delayMs: number) => TimerHandle;
@@ -273,7 +232,7 @@ export class SchedulerService {
   private unsubscribeRuntimeEvents: (() => void) | null = null;
 
   constructor(options: SchedulerServiceOptions) {
-    this.runtimePort = toSchedulerRuntimePort(options.runtime);
+    this.runtimePort = options.runtime;
     this.enableExecution =
       options.enableExecution !== false && typeof options.executeIntent === "function";
     this.now = options.now ?? (() => Date.now());

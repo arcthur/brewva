@@ -1,4 +1,16 @@
 import type { ToolFailureEntry } from "../context/tool-failures.js";
+import {
+  applyBudgetAlertPayload,
+  applyCostUpdatePayload,
+  buildCostSummary,
+  cloneCostFoldState,
+  cloneCostSummary,
+  cloneCostSkillLastTurnByName,
+  createEmptyCostFoldState,
+  recordCostToolCall,
+  restoreCostFoldStateFromSummary,
+  type CostFoldState,
+} from "../cost/fold.js";
 import { PROJECTION_REFRESHED_EVENT_TYPE } from "../events/event-types.js";
 import {
   TASK_EVENT_TYPE,
@@ -72,6 +84,10 @@ interface TurnReplayEngineOptions {
   getTurn: (sessionId: string) => number;
 }
 
+interface InternalTurnReplayView extends TurnReplayView {
+  costFoldState: CostFoldState;
+}
+
 type JsonRecord = Record<string, unknown>;
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -132,64 +148,16 @@ function cloneTruthState(state: TruthState): TruthState {
   };
 }
 
-function createEmptyCostSummary(): SessionCostSummary {
+function toReplayCostState(costFoldState: CostFoldState): ReplayCostState {
   return {
-    inputTokens: 0,
-    outputTokens: 0,
-    cacheReadTokens: 0,
-    cacheWriteTokens: 0,
-    totalTokens: 0,
-    totalCostUsd: 0,
-    models: {},
-    skills: {},
-    tools: {},
-    alerts: [],
-    budget: {
-      action: "warn",
-      sessionExceeded: false,
-      blocked: false,
-    },
+    summary: buildCostSummary(costFoldState),
+    updatedAt: costFoldState.updatedAt,
+    skillLastTurnByName: cloneCostSkillLastTurnByName(costFoldState.skillLastTurnByName),
   };
 }
 
-function cloneCostSummary(summary: SessionCostSummary): SessionCostSummary {
-  const models: SessionCostSummary["models"] = {};
-  for (const [model, totals] of Object.entries(summary.models)) {
-    models[model] = { ...totals };
-  }
-  const skills: SessionCostSummary["skills"] = {};
-  for (const [skill, totals] of Object.entries(summary.skills)) {
-    skills[skill] = { ...totals };
-  }
-  const tools: SessionCostSummary["tools"] = {};
-  for (const [tool, entry] of Object.entries(summary.tools)) {
-    tools[tool] = { ...entry };
-  }
-  return {
-    inputTokens: summary.inputTokens,
-    outputTokens: summary.outputTokens,
-    cacheReadTokens: summary.cacheReadTokens,
-    cacheWriteTokens: summary.cacheWriteTokens,
-    totalTokens: summary.totalTokens,
-    totalCostUsd: summary.totalCostUsd,
-    models,
-    skills,
-    tools,
-    alerts: summary.alerts.map((alert) => ({ ...alert })),
-    budget: { ...summary.budget },
-  };
-}
-
-function createEmptyCostState(): ReplayCostState {
-  return {
-    summary: createEmptyCostSummary(),
-    updatedAt: null,
-    skillLastTurnByName: {},
-  };
-}
-
-function cloneCostSkillLastTurnByName(input: Record<string, number>): Record<string, number> {
-  return { ...input };
+function createEmptyCostState(): CostFoldState {
+  return createEmptyCostFoldState("warn");
 }
 
 function createEmptyEvidenceState(): ReplayEvidenceState {
@@ -258,20 +226,6 @@ function normalizeNonNegativeInteger(value: unknown, fallback = 0): number {
   return Math.max(0, Math.floor(value));
 }
 
-function parseBudget(
-  value: unknown,
-  fallback: SessionCostSummary["budget"],
-): SessionCostSummary["budget"] {
-  if (!isRecord(value)) return fallback;
-  const action =
-    value.action === "warn" || value.action === "block_tools" ? value.action : fallback.action;
-  return {
-    action,
-    sessionExceeded: value.sessionExceeded === true,
-    blocked: value.blocked === true,
-  };
-}
-
 function parseFailureContext(
   payload: JsonRecord,
   fallbackTurn: number,
@@ -310,139 +264,6 @@ function pruneToolFailures(
   );
   if (pruned.length <= MAX_RECENT_TOOL_FAILURES) return pruned;
   return pruned.slice(-MAX_RECENT_TOOL_FAILURES);
-}
-
-function reduceCostState(
-  state: ReplayCostState,
-  payload: JsonRecord,
-  timestamp: number,
-  eventTurn: number,
-): ReplayCostState {
-  const model = typeof payload.model === "string" ? payload.model.trim() : "";
-  if (!model) return state;
-
-  const inputTokens = normalizeNonNegativeNumber(payload.inputTokens, -1);
-  const outputTokens = normalizeNonNegativeNumber(payload.outputTokens, -1);
-  const cacheReadTokens = normalizeNonNegativeNumber(payload.cacheReadTokens, -1);
-  const cacheWriteTokens = normalizeNonNegativeNumber(payload.cacheWriteTokens, -1);
-  const totalTokens = normalizeNonNegativeNumber(payload.totalTokens, -1);
-  const costUsd = normalizeNonNegativeNumber(payload.costUsd, -1);
-  if (
-    inputTokens < 0 ||
-    outputTokens < 0 ||
-    cacheReadTokens < 0 ||
-    cacheWriteTokens < 0 ||
-    totalTokens < 0 ||
-    costUsd < 0
-  ) {
-    return state;
-  }
-
-  const summary = cloneCostSummary(state.summary);
-  summary.inputTokens += inputTokens;
-  summary.outputTokens += outputTokens;
-  summary.cacheReadTokens += cacheReadTokens;
-  summary.cacheWriteTokens += cacheWriteTokens;
-  summary.totalTokens += totalTokens;
-  summary.totalCostUsd += costUsd;
-
-  const modelTotals = summary.models[model] ?? {
-    inputTokens: 0,
-    outputTokens: 0,
-    cacheReadTokens: 0,
-    cacheWriteTokens: 0,
-    totalTokens: 0,
-    totalCostUsd: 0,
-  };
-  modelTotals.inputTokens += inputTokens;
-  modelTotals.outputTokens += outputTokens;
-  modelTotals.cacheReadTokens += cacheReadTokens;
-  modelTotals.cacheWriteTokens += cacheWriteTokens;
-  modelTotals.totalTokens += totalTokens;
-  modelTotals.totalCostUsd += costUsd;
-  summary.models[model] = modelTotals;
-
-  const skillName =
-    typeof payload.skill === "string" && payload.skill.trim().length > 0
-      ? payload.skill.trim()
-      : "(none)";
-  const skillTotals = summary.skills[skillName] ?? {
-    inputTokens: 0,
-    outputTokens: 0,
-    cacheReadTokens: 0,
-    cacheWriteTokens: 0,
-    totalTokens: 0,
-    totalCostUsd: 0,
-    usageCount: 0,
-    turns: 0,
-  };
-  skillTotals.inputTokens += inputTokens;
-  skillTotals.outputTokens += outputTokens;
-  skillTotals.cacheReadTokens += cacheReadTokens;
-  skillTotals.cacheWriteTokens += cacheWriteTokens;
-  skillTotals.totalTokens += totalTokens;
-  skillTotals.totalCostUsd += costUsd;
-  skillTotals.usageCount += 1;
-  if (eventTurn > 0) {
-    const lastTurn = state.skillLastTurnByName[skillName];
-    if (lastTurn !== eventTurn) {
-      skillTotals.turns += 1;
-    }
-  }
-  summary.skills[skillName] = skillTotals;
-
-  summary.budget = parseBudget(payload.budget, summary.budget);
-
-  const skillLastTurnByName = { ...state.skillLastTurnByName };
-  if (eventTurn > 0) {
-    skillLastTurnByName[skillName] = eventTurn;
-  }
-
-  return {
-    summary,
-    updatedAt: Math.max(state.updatedAt ?? 0, timestamp),
-    skillLastTurnByName,
-  };
-}
-
-function reduceCostAlert(
-  state: ReplayCostState,
-  payload: JsonRecord,
-  timestamp: number,
-): ReplayCostState {
-  const kind =
-    payload.kind === "session_threshold" || payload.kind === "session_cap" ? payload.kind : null;
-  const scope = payload.scope === "session" ? payload.scope : null;
-  if (!kind || !scope) return state;
-
-  const costUsd = normalizeNonNegativeNumber(payload.costUsd, -1);
-  const thresholdUsd = normalizeNonNegativeNumber(payload.thresholdUsd, -1);
-  if (costUsd < 0 || thresholdUsd < 0) return state;
-
-  const summary = cloneCostSummary(state.summary);
-  summary.alerts.push({
-    kind,
-    scope,
-    costUsd,
-    thresholdUsd,
-    timestamp,
-  });
-
-  const nextBudget = parseBudget(payload.budget, summary.budget);
-  const action =
-    payload.action === "warn" || payload.action === "block_tools"
-      ? payload.action
-      : nextBudget.action;
-  nextBudget.action = action;
-  if (kind === "session_cap") {
-    nextBudget.sessionExceeded = true;
-  }
-  nextBudget.blocked = nextBudget.action === "block_tools" && nextBudget.sessionExceeded;
-  summary.budget = nextBudget;
-  return {
-    ...state,
-    summary,
-  };
 }
 
 function reduceEvidenceState(
@@ -540,6 +361,13 @@ function checkpointProjectionToReplay(state: TapeCheckpointProjectionState): Rep
   };
 }
 
+function checkpointCostToReplay(
+  summary: SessionCostSummary,
+  skillLastTurnByName: Record<string, number>,
+): CostFoldState {
+  return restoreCostFoldStateFromSummary(summary, skillLastTurnByName);
+}
+
 function replayEvidenceToCheckpoint(state: ReplayEvidenceState): TapeCheckpointEvidenceState {
   return {
     totalRecords: state.totalRecords,
@@ -571,10 +399,10 @@ function replayProjectionToCheckpoint(state: ReplayProjectionState): TapeCheckpo
 }
 
 function applyEventToView(
-  previous: TurnReplayView,
+  previous: InternalTurnReplayView,
   event: BrewvaEventRecord,
   getTurn: (sessionId: string) => number,
-): TurnReplayView {
+): InternalTurnReplayView {
   if (event.type === TAPE_CHECKPOINT_EVENT_TYPE) {
     const payload = coerceTapeCheckpointPayload(event.payload);
     if (!payload) {
@@ -584,17 +412,18 @@ function applyEventToView(
         latestEventId: event.id,
       };
     }
+    const costFoldState = checkpointCostToReplay(
+      payload.state.cost,
+      payload.state.costSkillLastTurnByName,
+    );
     return {
       turn: getTurn(event.sessionId),
       latestEventId: event.id,
       checkpointEventId: event.id,
       taskState: cloneTaskState(payload.state.task),
       truthState: cloneTruthState(payload.state.truth),
-      costState: {
-        summary: cloneCostSummary(payload.state.cost),
-        updatedAt: event.timestamp,
-        skillLastTurnByName: cloneCostSkillLastTurnByName(payload.state.costSkillLastTurnByName),
-      },
+      costState: toReplayCostState(costFoldState),
+      costFoldState,
       evidenceState: checkpointEvidenceToReplay(payload.state.evidence),
       projectionState: checkpointProjectionToReplay(payload.state.projection),
     };
@@ -603,6 +432,7 @@ function applyEventToView(
   let taskState = previous.taskState;
   let truthState = previous.truthState;
   let costState = previous.costState;
+  let costFoldState = cloneCostFoldState(previous.costFoldState);
   let evidenceState = previous.evidenceState;
   let projectionState = previous.projectionState;
 
@@ -635,18 +465,30 @@ function applyEventToView(
         normalizeToolFailureTurn(event.turn, 0),
       );
     }
+  } else if (event.type === "tool_call_marked") {
+    const payload = isRecord(event.payload) ? event.payload : null;
+    const toolName = typeof payload?.toolName === "string" ? payload.toolName.trim() : "";
+    if (toolName) {
+      recordCostToolCall(costFoldState, {
+        toolName,
+        turn: normalizeToolFailureTurn(event.turn, 0),
+      });
+      costState = toReplayCostState(costFoldState);
+    }
   } else if (event.type === "cost_update") {
-    if (isRecord(event.payload)) {
-      costState = reduceCostState(
-        costState,
+    if (
+      applyCostUpdatePayload(
+        costFoldState,
         event.payload,
         event.timestamp,
         normalizeToolFailureTurn(event.turn, 0),
-      );
+      )
+    ) {
+      costState = toReplayCostState(costFoldState);
     }
   } else if (event.type === "budget_alert") {
-    if (isRecord(event.payload)) {
-      costState = reduceCostAlert(costState, event.payload, event.timestamp);
+    if (applyBudgetAlertPayload(costFoldState, event.payload, event.timestamp)) {
+      costState = toReplayCostState(costFoldState);
     }
   } else if (event.type === PROJECTION_REFRESHED_EVENT_TYPE) {
     if (isRecord(event.payload)) {
@@ -661,6 +503,7 @@ function applyEventToView(
     taskState,
     truthState,
     costState,
+    costFoldState,
     evidenceState,
     projectionState,
   };
@@ -669,7 +512,7 @@ function applyEventToView(
 export class TurnReplayEngine {
   private readonly listEvents: (sessionId: string) => BrewvaEventRecord[];
   private readonly getTurn: (sessionId: string) => number;
-  private readonly viewBySession = new Map<string, TurnReplayView>();
+  private readonly viewBySession = new Map<string, InternalTurnReplayView>();
 
   constructor(options: TurnReplayEngineOptions) {
     this.listEvents = options.listEvents;
@@ -752,12 +595,13 @@ export class TurnReplayEngine {
     return this.viewBySession.has(sessionId);
   }
 
-  private buildView(sessionId: string, events: BrewvaEventRecord[]): TurnReplayView {
+  private buildView(sessionId: string, events: BrewvaEventRecord[]): InternalTurnReplayView {
     let checkpointIndex = -1;
     let checkpointEventId: string | null = null;
     let taskState: TaskState = createEmptyTaskState();
     let truthState: TruthState = createEmptyTruthState();
-    let costState: ReplayCostState = createEmptyCostState();
+    let costFoldState: CostFoldState = createEmptyCostState();
+    let costState: ReplayCostState = toReplayCostState(costFoldState);
     let evidenceState: ReplayEvidenceState = createEmptyEvidenceState();
     let projectionState: ReplayProjectionState = createEmptyProjectionState();
 
@@ -770,23 +614,24 @@ export class TurnReplayEngine {
       checkpointEventId = event.id;
       taskState = cloneTaskState(payload.state.task);
       truthState = cloneTruthState(payload.state.truth);
-      costState = {
-        summary: cloneCostSummary(payload.state.cost),
-        updatedAt: event.timestamp,
-        skillLastTurnByName: cloneCostSkillLastTurnByName(payload.state.costSkillLastTurnByName),
-      };
+      costFoldState = checkpointCostToReplay(
+        payload.state.cost,
+        payload.state.costSkillLastTurnByName,
+      );
+      costState = toReplayCostState(costFoldState);
       evidenceState = checkpointEvidenceToReplay(payload.state.evidence);
       projectionState = checkpointProjectionToReplay(payload.state.projection);
       break;
     }
 
-    let view: TurnReplayView = {
+    let view: InternalTurnReplayView = {
       turn: this.getTurn(sessionId),
       latestEventId: checkpointEventId,
       checkpointEventId,
       taskState,
       truthState,
       costState,
+      costFoldState,
       evidenceState,
       projectionState,
     };

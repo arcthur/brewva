@@ -9,7 +9,7 @@ export interface HeartbeatRule {
   sessionId?: string;
   objective?: string;
   contextHints?: string[];
-  wakeMode?: "always" | "if_signal" | "if_open_loop";
+  wakeMode?: "always" | "if_signal";
   staleAfterMinutes?: number;
 }
 
@@ -50,11 +50,7 @@ function normalizeRule(
       ]
     : undefined;
   const wakeMode =
-    input.wakeMode === "always" ||
-    input.wakeMode === "if_signal" ||
-    input.wakeMode === "if_open_loop"
-      ? input.wakeMode
-      : undefined;
+    input.wakeMode === "always" || input.wakeMode === "if_signal" ? input.wakeMode : undefined;
   const staleAfterMinutes =
     typeof input.staleAfterMinutes === "number" && Number.isFinite(input.staleAfterMinutes)
       ? Math.max(1, Math.floor(input.staleAfterMinutes))

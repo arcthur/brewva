@@ -33,9 +33,9 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 - `skills.roots`: `[]`
 - `skills.disabled`: `[]`
 - `skills.overrides`: `{}`
-- `skills.routing.profile`: `standard` (`standard | operator | full`)
+- `skills.routing.enabled`: `false`
 - `skills.routing.scopes`: `["core", "domain"]`
-- `skills.cascade.mode`: `auto` (`off | assist | auto`)
+- `skills.cascade.mode`: `off` (`off | assist | auto`)
 - `skills.cascade.enabledSources`: `["explicit", "dispatch"]`
 - `skills.cascade.sourcePriority`: `["explicit", "dispatch"]`
 - `skills.cascade.maxStepsPerRun`: `8`
@@ -44,7 +44,7 @@ Configuration files are patch overlays: omitted fields inherit defaults/lower-pr
 `skills.cascade.sourcePriority` only controls arbitration order among enabled sources.
 
 `skills.overrides` are runtime config tightenings only. They can reduce budgets,
-raise dispatch gates, and deny tools, but they do not add new tool access. Use
+tighten dispatch thresholds, and deny tools, but they do not add new tool access. Use
 project overlays for project-specific tool/resource extension.
 
 There is no longer a public `skills.selector.*` config surface. Candidate
@@ -54,15 +54,13 @@ not the kernel. Kernel admission now happens through proposal submission:
 - `runtime.proposals.submit(sessionId, proposal)`
 - `DecisionReceipt.decision = accept | reject | defer`
 
-`skills.routing.profile` controls which category-derived routing scopes are auto-routable:
+`skills.routing.enabled=false` keeps skills loadable but disables default broker
+registration and auto-routing surfaces. Explicit `routingScopes` overrides or
+direct `skill_load` usage can still activate skills.
 
-- `standard`: `core`, `domain`
-- `operator`: `core`, `domain`, `operator`
-- `full`: `core`, `domain`, `operator`, `meta`
-
-`skills.routing.scopes` is the explicit scope allowlist used by skill discovery
-and external deliberation layers. Operator/meta skills may still be loaded while
-remaining hidden from standard proposal producers.
+When routing is enabled, `skills.routing.scopes` is the explicit scope allowlist
+used by skill discovery and external deliberation layers. Operator/meta skills
+may still be loaded while remaining hidden from standard proposal producers.
 
 Skill discovery accepts either:
 
@@ -110,7 +108,6 @@ Project-specific shared context and overlays are discovered from:
 - `security.enforcement.skillMaxTokensMode`: `inherit`
 - `security.enforcement.skillMaxToolCallsMode`: `inherit`
 - `security.enforcement.skillMaxParallelMode`: `inherit`
-- `security.enforcement.skillDispatchGateMode`: `inherit`
 - `security.execution.backend`: `best_available`
 - `security.execution.enforceIsolation`: `false`
 - `security.execution.fallbackToHost`: `false`
@@ -130,7 +127,7 @@ Project-specific shared context and overlays are discovered from:
 
 ### `schedule`
 
-- `schedule.enabled`: `true`
+- `schedule.enabled`: `false`
 - `schedule.projectionPath`: `.brewva/schedule/intents.jsonl`
 - `schedule.leaseDurationMs`: `60000`
 - `schedule.maxActiveIntentsPerSession`: `5`
@@ -146,7 +143,7 @@ Project-specific shared context and overlays are discovered from:
 
 ### `channels`
 
-- `channels.orchestration.enabled`: `true`
+- `channels.orchestration.enabled`: `false`
 - `channels.orchestration.scopeStrategy`: `chat`
 - `channels.orchestration.aclModeWhenOwnersEmpty`: `open`
 - `channels.orchestration.owners.telegram`: `[]`
@@ -177,7 +174,7 @@ Telegram channel skill policy is now built-in and no longer configurable via
 - `infrastructure.toolFailureInjection.enabled`: `true`
 - `infrastructure.toolFailureInjection.maxEntries`: `3`
 - `infrastructure.toolFailureInjection.maxOutputChars`: `300`
-- `infrastructure.toolOutputDistillationInjection.enabled`: `true`
+- `infrastructure.toolOutputDistillationInjection.enabled`: `false`
 - `infrastructure.toolOutputDistillationInjection.maxEntries`: `3`
 - `infrastructure.toolOutputDistillationInjection.maxOutputChars`: `300`
 - `infrastructure.interruptRecovery.enabled`: `true`

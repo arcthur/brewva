@@ -42,7 +42,6 @@
 - `session_compact`
 - `rollback_last_patch`
 - `skill_load`
-- `skill_route_override`
 - `skill_complete`
 - `skill_chain_control`
 - `task_set_spec`

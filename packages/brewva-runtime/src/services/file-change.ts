@@ -1,12 +1,17 @@
 import { SessionCostTracker } from "../cost/tracker.js";
-import { VERIFICATION_STATE_RESET_EVENT_TYPE } from "../events/event-types.js";
+import {
+  VERIFICATION_STATE_RESET_EVENT_TYPE,
+  VERIFICATION_WRITE_MARKED_EVENT_TYPE,
+} from "../events/event-types.js";
+import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import { FileChangeTracker } from "../state/file-change-tracker.js";
 import type { SkillDocument } from "../types.js";
 import type { RollbackResult } from "../types.js";
 import { isMutationTool } from "../verification/classifier.js";
-import { VerificationGate } from "../verification/gate.js";
-import type { RuntimeCallback } from "./callback.js";
+import { buildVerificationWriteMarkedPayload } from "../verification/projector-payloads.js";
+import type { LedgerService } from "./ledger.js";
 import { RuntimeSessionStateStore } from "./session-state.js";
+import type { SkillLifecycleService } from "./skill-lifecycle.js";
 
 export interface TrackToolCallInput {
   sessionId: string;
@@ -23,62 +28,45 @@ export interface TrackToolCallEndInput {
 }
 
 export interface FileChangeServiceOptions {
-  sessionState: RuntimeSessionStateStore;
-  fileChanges: FileChangeTracker;
-  costTracker: SessionCostTracker;
-  verification: VerificationGate;
-  recordInfrastructureRow: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        tool: string;
-        argsSummary: string;
-        outputSummary: string;
-        fullOutput?: string;
-        verdict?: "pass" | "fail" | "inconclusive";
-        metadata?: Record<string, unknown>;
-        turn?: number;
-        skill?: string | null;
-      },
-    ],
-    string
-  >;
-  getActiveSkill: RuntimeCallback<[sessionId: string], SkillDocument | undefined>;
-  getCurrentTurn: RuntimeCallback<[sessionId: string], number>;
-  recordEvent: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        type: string;
-        turn?: number;
-        payload?: Record<string, unknown>;
-        timestamp?: number;
-        skipTapeCheckpoint?: boolean;
-      },
-    ],
-    unknown
-  >;
+  kernel: RuntimeKernelContext;
+  ledgerService: Pick<LedgerService, "recordInfrastructureRow">;
+  skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
 }
 
 export class FileChangeService {
   private readonly sessionState: RuntimeSessionStateStore;
   private readonly fileChanges: FileChangeTracker;
   private readonly costTracker: SessionCostTracker;
-  private readonly verification: VerificationGate;
-  private readonly recordInfrastructureRow: FileChangeServiceOptions["recordInfrastructureRow"];
+  private readonly recordInfrastructureRow: (input: {
+    sessionId: string;
+    tool: string;
+    argsSummary: string;
+    outputSummary: string;
+    fullOutput?: string;
+    verdict?: "pass" | "fail" | "inconclusive";
+    metadata?: Record<string, unknown>;
+    turn?: number;
+    skill?: string | null;
+  }) => string;
   private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
   private readonly getCurrentTurn: (sessionId: string) => number;
-  private readonly recordEvent: FileChangeServiceOptions["recordEvent"];
+  private readonly recordEvent: (input: {
+    sessionId: string;
+    type: string;
+    turn?: number;
+    payload?: Record<string, unknown>;
+    timestamp?: number;
+    skipTapeCheckpoint?: boolean;
+  }) => unknown;
 
   constructor(options: FileChangeServiceOptions) {
-    this.sessionState = options.sessionState;
-    this.fileChanges = options.fileChanges;
-    this.costTracker = options.costTracker;
-    this.verification = options.verification;
-    this.recordInfrastructureRow = options.recordInfrastructureRow;
-    this.getActiveSkill = options.getActiveSkill;
-    this.getCurrentTurn = options.getCurrentTurn;
-    this.recordEvent = options.recordEvent;
+    this.sessionState = options.kernel.sessionState;
+    this.fileChanges = options.kernel.fileChanges;
+    this.costTracker = options.kernel.costTracker;
+    this.recordInfrastructureRow = (input) => options.ledgerService.recordInfrastructureRow(input);
+    this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
+    this.getCurrentTurn = (sessionId) => options.kernel.getCurrentTurn(sessionId);
+    this.recordEvent = (input) => options.kernel.recordEvent(input);
   }
 
   markToolCall(sessionId: string, toolName: string): void {
@@ -90,7 +78,14 @@ export class FileChangeService {
       turn: this.getCurrentTurn(sessionId),
     });
     if (isMutationTool(toolName)) {
-      this.verification.stateStore.markWrite(sessionId);
+      this.recordEvent({
+        sessionId,
+        type: VERIFICATION_WRITE_MARKED_EVENT_TYPE,
+        turn: this.getCurrentTurn(sessionId),
+        payload: buildVerificationWriteMarkedPayload({
+          toolName,
+        }),
+      });
     }
     this.recordEvent({
       sessionId,
@@ -168,7 +163,6 @@ export class FileChangeService {
       return rollback;
     }
 
-    this.verification.stateStore.clear(sessionId);
     this.recordEvent({
       sessionId,
       type: VERIFICATION_STATE_RESET_EVENT_TYPE,

@@ -9,12 +9,14 @@ describe("Context injection collector", () => {
     const sessionId = "collector-oversized-estimate";
 
     collector.register(sessionId, {
+      category: "narrative",
       source: "source-a",
       id: "a",
       content: "first",
       estimatedTokens: 1000,
     });
     collector.register(sessionId, {
+      category: "narrative",
       source: "source-b",
       id: "b",
       content: "second",
@@ -33,6 +35,7 @@ describe("Context injection collector", () => {
     const sessionId = "collector-once-before-commit";
 
     collector.register(sessionId, {
+      category: "narrative",
       source: "source-once",
       id: "once-id",
       content: "first pass",
@@ -44,6 +47,7 @@ describe("Context injection collector", () => {
     collector.clearPending(sessionId);
 
     collector.register(sessionId, {
+      category: "narrative",
       source: "source-once",
       id: "once-id",
       content: "second pass",
@@ -60,6 +64,7 @@ describe("Context injection collector", () => {
     const sessionId = "collector-once-after-commit";
 
     collector.register(sessionId, {
+      category: "narrative",
       source: "source-once",
       id: "once-id",
       content: "only once",
@@ -69,6 +74,7 @@ describe("Context injection collector", () => {
     expect(first.entries).toHaveLength(1);
 
     collector.register(sessionId, {
+      category: "narrative",
       source: "source-once",
       id: "once-id",
       content: "should be skipped",
@@ -84,6 +90,7 @@ describe("Context injection collector", () => {
     const dense = "x".repeat(15);
 
     collector.register(sessionId, {
+      category: "narrative",
       source: "source-dense",
       id: "dense",
       content: dense,
@@ -104,6 +111,7 @@ describe("Context injection collector", () => {
     });
 
     collector.register(sessionId, {
+      category: "narrative",
       source: "source-structured",
       id: "structured",
       content: structured,
@@ -120,11 +128,13 @@ describe("Context injection collector", () => {
     const sessionId = "collector-deterministic-tail-stop";
 
     collector.register(sessionId, {
+      category: "narrative",
       source: "source-large",
       id: "large",
       content: "x".repeat(200),
     });
     collector.register(sessionId, {
+      category: "narrative",
       source: "source-small",
       id: "small",
       content: "small-context",
@@ -143,11 +153,13 @@ describe("Context injection collector", () => {
     const block = "x".repeat(35);
 
     collector.register(sessionId, {
+      category: "narrative",
       source: "source-a",
       id: "a",
       content: block,
     });
     collector.register(sessionId, {
+      category: "narrative",
       source: "source-b",
       id: "b",
       content: block,

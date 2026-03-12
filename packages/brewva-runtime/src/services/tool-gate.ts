@@ -1,16 +1,16 @@
 import type { SessionCostTracker } from "../cost/tracker.js";
+import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import { resolveSecurityPolicy } from "../security/mode.js";
 import { checkToolAccess as evaluateSkillToolAccess } from "../security/tool-policy.js";
-import type {
-  BrewvaConfig,
-  ContextBudgetUsage,
-  SkillDispatchDecision,
-  SkillDocument,
-} from "../types.js";
+import type { ContextBudgetUsage, SkillDocument } from "../types.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import { resolveToolResultVerdict } from "../utils/tool-result.js";
-import type { RuntimeCallback } from "./callback.js";
+import type { ContextService } from "./context.js";
+import type { FileChangeService } from "./file-change.js";
+import type { LedgerService } from "./ledger.js";
 import { RuntimeSessionStateStore } from "./session-state.js";
+import type { SkillLifecycleService } from "./skill-lifecycle.js";
+import type { StallDetectorService } from "./stall-detector.js";
 
 export interface ToolAccessDecision {
   allowed: boolean;
@@ -42,89 +42,21 @@ export interface FinishToolCallInput {
 }
 
 export interface ToolGateServiceOptions {
-  securityConfig: BrewvaConfig["security"];
-  costTracker: SessionCostTracker;
-  sessionState: RuntimeSessionStateStore;
+  kernel: RuntimeKernelContext;
   alwaysAllowedTools: string[];
-  getActiveSkill: RuntimeCallback<[sessionId: string], SkillDocument | undefined>;
-  getPendingDispatch: RuntimeCallback<[sessionId: string], SkillDispatchDecision | undefined>;
-  getCurrentTurn: RuntimeCallback<[sessionId: string], number>;
-  recordEvent: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        type: string;
-        turn?: number;
-        payload?: Record<string, unknown>;
-        timestamp?: number;
-        skipTapeCheckpoint?: boolean;
-      },
-    ],
-    unknown
+  skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
+  contextService: Pick<ContextService, "checkContextCompactionGate" | "observeContextUsage">;
+  fileChangeService: Pick<
+    FileChangeService,
+    "markToolCall" | "trackToolCallStart" | "trackToolCallEnd"
   >;
-  checkContextCompactionGate: RuntimeCallback<
-    [sessionId: string, toolName: string, usage?: ContextBudgetUsage],
-    ToolAccessDecision
-  >;
-  observeContextUsage: RuntimeCallback<[sessionId: string, usage: ContextBudgetUsage | undefined]>;
-  markToolCall: RuntimeCallback<[sessionId: string, toolName: string]>;
-  trackToolCallStart: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        toolCallId: string;
-        toolName: string;
-        args?: Record<string, unknown>;
-      },
-    ]
-  >;
-  recordToolResult: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        toolName: string;
-        args: Record<string, unknown>;
-        outputText: string;
-        channelSuccess: boolean;
-        verdict?: "pass" | "fail" | "inconclusive";
-        metadata?: Record<string, unknown>;
-      },
-    ],
-    string
-  >;
-  trackToolCallEnd: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        toolCallId: string;
-        toolName: string;
-        channelSuccess: boolean;
-      },
-    ]
-  >;
-  checkScanConvergence: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        toolCallId: string;
-        toolName: string;
-        args?: Record<string, unknown>;
-      },
-    ],
-    ToolAccessDecision
-  >;
-  observeScanConvergenceToolResult: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        toolCallId: string;
-        toolName: string;
-        args?: Record<string, unknown>;
-        verdict: "pass" | "fail" | "inconclusive";
-        outputText: string;
-      },
-    ]
-  >;
+  ledgerService: Pick<LedgerService, "recordToolResult">;
+  stallDetectorService: Pick<StallDetectorService, "checkToolCall" | "observeToolResult">;
+}
+
+interface ToolStartGate {
+  id: "stall_detection" | "tool_access" | "context_compaction";
+  evaluate(input: StartToolCallInput): ToolAccessDecision;
 }
 
 export class ToolGateService {
@@ -134,40 +66,107 @@ export class ToolGateService {
   private readonly alwaysAllowedTools: string[];
   private readonly alwaysAllowedToolSet: Set<string>;
   private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
-  private readonly getPendingDispatch: (sessionId: string) => SkillDispatchDecision | undefined;
   private readonly getCurrentTurn: (sessionId: string) => number;
-  private readonly recordEvent: ToolGateServiceOptions["recordEvent"];
-  private readonly checkContextCompactionGate: ToolGateServiceOptions["checkContextCompactionGate"];
-  private readonly observeContextUsage: ToolGateServiceOptions["observeContextUsage"];
-  private readonly markToolCall: ToolGateServiceOptions["markToolCall"];
-  private readonly trackToolCallStart: ToolGateServiceOptions["trackToolCallStart"];
-  private readonly recordToolResult: ToolGateServiceOptions["recordToolResult"];
-  private readonly trackToolCallEnd: ToolGateServiceOptions["trackToolCallEnd"];
-  private readonly checkScanConvergence: ToolGateServiceOptions["checkScanConvergence"];
-  private readonly observeScanConvergenceToolResult: ToolGateServiceOptions["observeScanConvergenceToolResult"];
+  private readonly recordEvent: (input: {
+    sessionId: string;
+    type: string;
+    turn?: number;
+    payload?: Record<string, unknown>;
+    timestamp?: number;
+    skipTapeCheckpoint?: boolean;
+  }) => unknown;
+  private readonly checkContextCompactionGate: (
+    sessionId: string,
+    toolName: string,
+    usage?: ContextBudgetUsage,
+  ) => ToolAccessDecision;
+  private readonly observeContextUsage: (
+    sessionId: string,
+    usage: ContextBudgetUsage | undefined,
+  ) => void;
+  private readonly markToolCall: (sessionId: string, toolName: string) => void;
+  private readonly trackToolCallStart: (input: {
+    sessionId: string;
+    toolCallId: string;
+    toolName: string;
+    args?: Record<string, unknown>;
+  }) => void;
+  private readonly recordToolResult: (input: {
+    sessionId: string;
+    toolName: string;
+    args: Record<string, unknown>;
+    outputText: string;
+    channelSuccess: boolean;
+    verdict?: "pass" | "fail" | "inconclusive";
+    metadata?: Record<string, unknown>;
+  }) => string;
+  private readonly trackToolCallEnd: (input: {
+    sessionId: string;
+    toolCallId: string;
+    toolName: string;
+    channelSuccess: boolean;
+  }) => void;
+  private readonly checkStallDetection: (input: {
+    sessionId: string;
+    toolCallId: string;
+    toolName: string;
+    args?: Record<string, unknown>;
+  }) => ToolAccessDecision;
+  private readonly observeStallToolResult: (input: {
+    sessionId: string;
+    toolCallId: string;
+    toolName: string;
+    args?: Record<string, unknown>;
+    verdict: "pass" | "fail" | "inconclusive";
+    outputText: string;
+  }) => void;
+  private readonly startGateChain: ReadonlyArray<ToolStartGate>;
 
   constructor(options: ToolGateServiceOptions) {
-    this.securityPolicy = resolveSecurityPolicy(options.securityConfig);
-    this.costTracker = options.costTracker;
-    this.sessionState = options.sessionState;
+    this.securityPolicy = resolveSecurityPolicy(options.kernel.config.security);
+    this.costTracker = options.kernel.costTracker;
+    this.sessionState = options.kernel.sessionState;
     this.alwaysAllowedTools = options.alwaysAllowedTools;
     this.alwaysAllowedToolSet = new Set(
       options.alwaysAllowedTools
         .map((toolName) => normalizeToolName(toolName))
         .filter((toolName) => toolName.length > 0),
     );
-    this.getActiveSkill = options.getActiveSkill;
-    this.getPendingDispatch = options.getPendingDispatch;
-    this.getCurrentTurn = options.getCurrentTurn;
-    this.recordEvent = options.recordEvent;
-    this.checkContextCompactionGate = options.checkContextCompactionGate;
-    this.observeContextUsage = options.observeContextUsage;
-    this.markToolCall = options.markToolCall;
-    this.trackToolCallStart = options.trackToolCallStart;
-    this.recordToolResult = options.recordToolResult;
-    this.trackToolCallEnd = options.trackToolCallEnd;
-    this.checkScanConvergence = options.checkScanConvergence;
-    this.observeScanConvergenceToolResult = options.observeScanConvergenceToolResult;
+    this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
+    this.getCurrentTurn = (sessionId) => options.kernel.getCurrentTurn(sessionId);
+    this.recordEvent = (input) => options.kernel.recordEvent(input);
+    this.checkContextCompactionGate = (sessionId, toolName, usage) =>
+      options.contextService.checkContextCompactionGate(sessionId, toolName, usage);
+    this.observeContextUsage = (sessionId, usage) =>
+      options.contextService.observeContextUsage(sessionId, usage);
+    this.markToolCall = (sessionId, toolName) =>
+      options.fileChangeService.markToolCall(sessionId, toolName);
+    this.trackToolCallStart = (input) => options.fileChangeService.trackToolCallStart(input);
+    this.recordToolResult = (input) => options.ledgerService.recordToolResult(input);
+    this.trackToolCallEnd = (input) => options.fileChangeService.trackToolCallEnd(input);
+    this.checkStallDetection = (input) => options.stallDetectorService.checkToolCall(input);
+    this.observeStallToolResult = (input) => options.stallDetectorService.observeToolResult(input);
+    this.startGateChain = [
+      {
+        id: "stall_detection",
+        evaluate: (input) =>
+          this.checkStallDetection({
+            sessionId: input.sessionId,
+            toolCallId: input.toolCallId,
+            toolName: input.toolName,
+            args: input.args,
+          }),
+      },
+      {
+        id: "tool_access",
+        evaluate: (input) => this.checkToolAccess(input.sessionId, input.toolName),
+      },
+      {
+        id: "context_compaction",
+        evaluate: (input) =>
+          this.checkContextCompactionGate(input.sessionId, input.toolName, input.usage),
+      },
+    ];
   }
 
   checkToolAccess(sessionId: string, toolName: string): ToolAccessDecision {
@@ -417,43 +416,6 @@ export class ToolGateService {
     };
   }
 
-  explainSkillDispatchGate(sessionId: string, toolName: string): ToolAccessExplanation {
-    const pendingDispatch = this.getPendingDispatch(sessionId);
-    if (!pendingDispatch) return { allowed: true };
-    if (pendingDispatch.mode === "none" || pendingDispatch.mode === "suggest") {
-      return { allowed: true };
-    }
-
-    const normalizedToolName = normalizeToolName(toolName);
-    if (!normalizedToolName) {
-      return { allowed: true };
-    }
-    if (this.alwaysAllowedToolSet.has(normalizedToolName)) {
-      return { allowed: true };
-    }
-
-    const primarySkillName = pendingDispatch.primary?.name ?? null;
-    const requiredSkillName =
-      pendingDispatch.chain.length > 0 ? pendingDispatch.chain[0] : primarySkillName;
-    const chainPreview =
-      pendingDispatch.chain.length > 1 ? ` (chain=${pendingDispatch.chain.join(" -> ")})` : "";
-    const reason = requiredSkillName
-      ? `Skill dispatch gate active. Load '${requiredSkillName}' via skill_load or explicitly bypass via skill_route_override.${chainPreview}`
-      : pendingDispatch.routingOutcome === "failed"
-        ? "Skill routing failed and conservative dispatch gate is active. Load a target skill via skill_load or explicitly bypass via skill_route_override."
-        : "Skill dispatch gate active. Load an explicit skill via skill_load or bypass via skill_route_override.";
-
-    if (this.securityPolicy.skillDispatchGateMode === "off") {
-      return { allowed: true };
-    }
-
-    if (this.securityPolicy.skillDispatchGateMode === "warn") {
-      return { allowed: true, warning: reason };
-    }
-
-    return { allowed: false, reason };
-  }
-
   startToolCall(input: StartToolCallInput): ToolAccessDecision {
     if (input.usage) {
       this.observeContextUsage(input.sessionId, input.usage);
@@ -471,26 +433,8 @@ export class ToolGateService {
       });
     }
 
-    const convergence = this.checkScanConvergence({
-      sessionId: input.sessionId,
-      toolCallId: input.toolCallId,
-      toolName: input.toolName,
-      args: input.args,
-    });
-    if (!convergence.allowed) return convergence;
-
-    const access = this.checkToolAccess(input.sessionId, input.toolName);
-    if (!access.allowed) return access;
-
-    const compaction = this.checkContextCompactionGate(
-      input.sessionId,
-      input.toolName,
-      input.usage,
-    );
-    if (!compaction.allowed) return compaction;
-
-    const skillDispatchGate = this.checkSkillDispatchGate(input.sessionId, input.toolName);
-    if (!skillDispatchGate.allowed) return skillDispatchGate;
+    const gateDecision = this.evaluateStartGateChain(input);
+    if (!gateDecision.allowed) return gateDecision;
 
     this.markToolCall(input.sessionId, input.toolName);
     this.trackToolCallStart({
@@ -502,85 +446,14 @@ export class ToolGateService {
     return { allowed: true };
   }
 
-  private checkSkillDispatchGate(sessionId: string, toolName: string): ToolAccessDecision {
-    const pendingDispatch = this.getPendingDispatch(sessionId);
-    if (!pendingDispatch) return { allowed: true };
-    if (pendingDispatch.mode === "none" || pendingDispatch.mode === "suggest") {
-      return { allowed: true };
-    }
-
-    const normalizedToolName = normalizeToolName(toolName);
-    if (!normalizedToolName) {
-      return { allowed: true };
-    }
-    if (this.alwaysAllowedToolSet.has(normalizedToolName)) {
-      return { allowed: true };
-    }
-
-    const primarySkillName = pendingDispatch.primary?.name ?? null;
-    const requiredSkillName =
-      pendingDispatch.chain.length > 0 ? pendingDispatch.chain[0] : primarySkillName;
-    const chainPreview =
-      pendingDispatch.chain.length > 1 ? ` (chain=${pendingDispatch.chain.join(" -> ")})` : "";
-    const reason = requiredSkillName
-      ? `Skill dispatch gate active. Load '${requiredSkillName}' via skill_load or explicitly bypass via skill_route_override.${chainPreview}`
-      : pendingDispatch.routingOutcome === "failed"
-        ? "Skill routing failed and conservative dispatch gate is active. Load a target skill via skill_load or explicitly bypass via skill_route_override."
-        : "Skill dispatch gate active. Load an explicit skill via skill_load or bypass via skill_route_override.";
-
-    if (this.securityPolicy.skillDispatchGateMode === "off") {
-      return { allowed: true };
-    }
-
-    if (this.securityPolicy.skillDispatchGateMode === "warn") {
-      const warningKey = `${pendingDispatch.turn}:${normalizedToolName}`;
-      const seen =
-        this.sessionState.skillDispatchGateWarningsBySession.get(sessionId) ?? new Set<string>();
-      if (!seen.has(warningKey)) {
-        seen.add(warningKey);
-        this.sessionState.skillDispatchGateWarningsBySession.set(sessionId, seen);
-        this.recordEvent({
-          sessionId,
-          type: "skill_dispatch_gate_warning",
-          turn: this.getCurrentTurn(sessionId),
-          payload: {
-            warningKey,
-            toolName: normalizedToolName,
-            mode: pendingDispatch.mode,
-            primarySkill: primarySkillName,
-            routingOutcome: pendingDispatch.routingOutcome ?? null,
-            decisionTurn: pendingDispatch.turn,
-            reason,
-          },
-        });
+  private evaluateStartGateChain(input: StartToolCallInput): ToolAccessDecision {
+    for (const gate of this.startGateChain) {
+      const decision = gate.evaluate(input);
+      if (!decision.allowed) {
+        return decision;
       }
-      return { allowed: true };
     }
-
-    this.recordEvent({
-      sessionId,
-      type: "skill_dispatch_gate_blocked_tool",
-      turn: this.getCurrentTurn(sessionId),
-      payload: {
-        toolName: normalizedToolName,
-        mode: pendingDispatch.mode,
-        primarySkill: primarySkillName,
-        routingOutcome: pendingDispatch.routingOutcome ?? null,
-        decisionTurn: pendingDispatch.turn,
-        reason,
-      },
-    });
-    this.recordEvent({
-      sessionId,
-      type: "tool_call_blocked",
-      turn: this.getCurrentTurn(sessionId),
-      payload: {
-        toolName: normalizedToolName,
-        skill: this.getActiveSkill(sessionId)?.name ?? null,
-        reason,
-      },
-    });
-    return { allowed: false, reason };
+    return { allowed: true };
   }
 
   finishToolCall(input: FinishToolCallInput): string {
@@ -597,7 +470,7 @@ export class ToolGateService {
       verdict,
       metadata: input.metadata,
     });
-    this.observeScanConvergenceToolResult({
+    this.observeStallToolResult({
       sessionId: input.sessionId,
       toolCallId: input.toolCallId,
       toolName: input.toolName,

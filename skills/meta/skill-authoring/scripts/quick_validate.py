@@ -15,7 +15,6 @@ ALLOWED_PROPERTIES = {
     "description",
     "dispatch",
     "routing",
-    "continuity_required",
     "tools",
     "budget",
     "outputs",

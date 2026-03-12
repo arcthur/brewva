@@ -14,7 +14,7 @@ describe("skill output registry", () => {
     const outputs = {
       repository_snapshot: "monorepo with runtime, tools, cli, gateway",
       impact_map: "routing, registry, docs",
-      unknowns: "No blocking unknowns remain after the repository inventory pass.",
+      unknowns: ["No blocking unknowns remain after the repository inventory pass."],
     };
     runtime.skills.complete(sessionId, outputs);
 
@@ -31,7 +31,7 @@ describe("skill output registry", () => {
     runtime.skills.complete(sessionId, {
       repository_snapshot: "module map here",
       impact_map: "routing and cascade",
-      unknowns: "No blocking unknowns remain after validating the main code path.",
+      unknowns: ["No blocking unknowns remain after validating the main code path."],
     });
 
     const debuggingAvailable = runtime.skills.getConsumedOutputs(sessionId, "debugging");
@@ -64,7 +64,7 @@ describe("skill output registry", () => {
     runtimeA.skills.complete(sessionId, {
       repository_snapshot: "replayed module map",
       impact_map: "registry and router",
-      unknowns: "No unresolved repository gaps remained at replay capture time.",
+      unknowns: ["No unresolved repository gaps remained at replay capture time."],
     });
 
     const runtimeB = new BrewvaRuntime({ cwd: repoRoot() });
@@ -80,7 +80,7 @@ describe("skill output registry", () => {
     const outputs = {
       repository_snapshot: "repository layout for runtime, tools, and gateway modules",
       impact_map: "routing flow and registry boundaries touched by the change",
-      unknowns: "No blocking repository blind spots remained after the analysis pass.",
+      unknowns: ["No blocking repository blind spots remained after the analysis pass."],
     };
     runtime.skills.complete(sessionId, outputs);
 
@@ -117,7 +117,7 @@ describe("skill output registry", () => {
     const completion = runtime.skills.complete(sessionId, {
       repository_snapshot: "runtime, tools, projection",
       impact_map: "verification, skill lifecycle",
-      unknowns: "No blocking unknowns remain after mapping runtime and projection ownership.",
+      unknowns: ["No blocking unknowns remain after mapping runtime and projection ownership."],
       task_spec: {
         schema: "brewva.task.v1",
         goal: "Stabilize verification outcome semantics",

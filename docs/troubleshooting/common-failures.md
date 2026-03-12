@@ -1,27 +1,31 @@
 # Troubleshooting: Common Failures
 
+Start with `brewva inspect` for any persisted-session issue. It rebuilds the
+authoritative replay state first, then reports which derived layer is stale or
+inconsistent.
+
 ## `skill_complete` Is Rejected
 
 - Cause: missing required outputs or missing verification evidence.
-- Check: `packages/brewva-tools/src/skill-complete.ts`
+- Check: `brewva inspect --session <id>` for latest verification outcome and active skill output requirements.
 - Action: provide all required outputs and run required verification checks.
 
 ## `tool_call` Is Blocked
 
 - Cause: denied tool by active contract, allowlist enforcement, token/tool-call budget enforcement, or cost budget violation.
-- Check: `packages/brewva-runtime/src/runtime.ts`
+- Check: `brewva inspect --session <id>` for active skill, cost summary, and latest verification/task state.
 - Action: switch active skill, adjust `security.mode` (`permissive`/`standard`/`strict`) to change effective enforcement strategy, or resolve budget policy constraints.
 
 ## `--replay` Returns No Session
 
 - Cause: no persisted event file for any session.
-- Check: `packages/brewva-runtime/src/events/store.ts`
+- Check: `brewva inspect` to confirm whether any replayable session exists for the current workspace.
 - Action: run at least one normal session to generate event artifacts.
 
 ## `--undo` Has No Recoverable Patch
 
 - Cause: no tracked mutation exists in the target session.
-- Check: `packages/brewva-runtime/src/state/file-change-tracker.ts`
+- Check: `brewva inspect --session <id>` for rollback snapshot availability and recent mutation history.
 - Action: ensure edits occur through tracked tool paths and retry.
 
 ## Workspace Scan Is Slow Or Incomplete
@@ -33,7 +37,7 @@
   - `packages/brewva-tools/src/ast-grep.ts`
   - `docs/reference/events.md` (`tool_parallel_read`)
 - Action:
-  - Inspect session events and locate `tool_parallel_read` payloads.
+  - Start with `brewva inspect --session <id>` to confirm tape/projection health, then inspect session events for `tool_parallel_read` payloads.
   - If `mode=sequential` with `reason=parallel_disabled`, enable runtime `parallel.enabled`.
   - If `failedFiles` is consistently high, verify file permissions and path stability.
   - If `durationMs` and `batches` are high for large scans, tune `parallel.maxConcurrent`.

@@ -19,6 +19,7 @@ function makeInjectedEntry(
   estimatedTokens = 8,
 ): ContextInjectionEntry {
   return {
+    category: "narrative",
     source,
     id,
     content,

@@ -130,7 +130,6 @@ describe("tool contract policy modes", () => {
           skillMaxTokensMode: "inherit",
           skillMaxToolCallsMode: "inherit",
           skillMaxParallelMode: "inherit",
-          skillDispatchGateMode: "inherit",
         },
       },
     });

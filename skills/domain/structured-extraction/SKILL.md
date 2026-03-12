@@ -22,7 +22,7 @@ output_contracts:
     min_keys: 1
     min_items: 1
   extraction_report:
-    kind: informative_text
+    kind: text
     min_words: 3
     min_length: 18
 consumes: [browser_observations]

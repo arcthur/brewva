@@ -32,7 +32,8 @@ to miss when reading individual module docs.
 - `--no-addons` keeps runtime safety hooks (`before_agent_start` core block,
   `tool_call`, `tool_result`, `session_compact`, `session_shutdown`), but disables
   full-extension presentation/lifecycle hooks (`registerContextTransform`,
-  `registerCompletionGuard`, `registerEventStream`, `registerNotification`).
+  `registerEventStream`, memory handlers, `registerNotification`,
+  `registerDebugLoop`, cognitive metrics).
 
 ## Schedule Runtime
 

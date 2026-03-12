@@ -31,14 +31,9 @@ Guarantee bounded context behavior with explicit stop/compact semantics:
 Default governance sources:
 
 - `brewva.identity`
-- `brewva.truth-static`
-- `brewva.truth-facts`
-- `brewva.skill-candidates`
-- `brewva.skill-dispatch-gate`
-- `brewva.skill-cascade-gate`
+- `brewva.context-packets`
+- `brewva.runtime-status`
 - `brewva.task-state`
-- `brewva.tool-failures`
-- `brewva.tool-outputs-distilled`
 - `brewva.projection-working`
 
 ## SLO And Degradation

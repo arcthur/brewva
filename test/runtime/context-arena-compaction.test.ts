@@ -7,6 +7,7 @@ describe("ContextInjectionCollector compaction lifecycle", () => {
     const sessionId = "ctx-arena-compaction";
 
     collector.register(sessionId, {
+      category: "narrative",
       source: "brewva.identity",
       id: "identity-default",
       content: "identity-v1",
@@ -17,6 +18,7 @@ describe("ContextInjectionCollector compaction lifecycle", () => {
     collector.commit(sessionId, first.consumedKeys);
 
     collector.register(sessionId, {
+      category: "narrative",
       source: "brewva.identity",
       id: "identity-default",
       content: "identity-v2",
@@ -28,6 +30,7 @@ describe("ContextInjectionCollector compaction lifecycle", () => {
     collector.onCompaction(sessionId);
 
     collector.register(sessionId, {
+      category: "narrative",
       source: "brewva.identity",
       id: "identity-default",
       content: "identity-v3",

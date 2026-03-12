@@ -19,7 +19,6 @@ import { createSessionCompactTool } from "./session-compact.js";
 import { createSkillChainControlTool } from "./skill-chain-control.js";
 import { createSkillCompleteTool } from "./skill-complete.js";
 import { createSkillLoadTool } from "./skill-load.js";
-import { createSkillRouteOverrideTool } from "./skill-route-override.js";
 import { createTapeTools } from "./tape.js";
 import { createTaskLedgerTools } from "./task-ledger.js";
 import { createTocTools } from "./toc.js";
@@ -51,7 +50,6 @@ export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefiniti
     createSessionCompactTool({ runtime: options.runtime }),
     createRollbackLastPatchTool({ runtime: options.runtime }),
     createSkillLoadTool({ runtime: options.runtime }),
-    createSkillRouteOverrideTool({ runtime: options.runtime }),
     createSkillCompleteTool({ runtime: options.runtime }),
     createSkillChainControlTool({ runtime: options.runtime }),
     ...createTaskLedgerTools({ runtime: options.runtime }),
@@ -81,7 +79,6 @@ export { createSessionCompactTool } from "./session-compact.js";
 export { createRollbackLastPatchTool } from "./rollback-last-patch.js";
 export { createScheduleIntentTool } from "./schedule-intent.js";
 export { createSkillLoadTool } from "./skill-load.js";
-export { createSkillRouteOverrideTool } from "./skill-route-override.js";
 export { createSkillCompleteTool } from "./skill-complete.js";
 export { createSkillChainControlTool } from "./skill-chain-control.js";
 export { createTaskLedgerTools } from "./task-ledger.js";

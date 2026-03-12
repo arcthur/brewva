@@ -13,15 +13,15 @@ budget:
 outputs: [skill_spec, skill_contract, skill_scaffold]
 output_contracts:
   skill_spec:
-    kind: informative_text
+    kind: text
     min_words: 3
     min_length: 18
   skill_contract:
-    kind: informative_text
+    kind: text
     min_words: 3
     min_length: 18
   skill_scaffold:
-    kind: informative_text
+    kind: text
     min_words: 3
     min_length: 18
 consumes: [repository_snapshot, design_spec]

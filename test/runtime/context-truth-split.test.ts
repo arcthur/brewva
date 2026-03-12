@@ -29,7 +29,7 @@ function createConfig(): BrewvaConfig {
 }
 
 describe("truth split channels", () => {
-  test("keeps truth ledger once-per-session and refreshes dynamic facts across turns", async () => {
+  test("keeps truth details out of default context injection while task ledger tracks active fact ids", async () => {
     const runtime = new BrewvaRuntime({
       cwd: createWorkspace("latest"),
       config: createConfig(),
@@ -51,9 +51,11 @@ describe("truth split channels", () => {
       "scope-1",
     );
     expect(first.accepted).toBe(true);
-    expect(first.text.includes("[TruthLedger]")).toBe(true);
-    expect(first.text.includes("[TruthFacts]")).toBe(true);
-    expect(first.text.includes("first dynamic fact")).toBe(true);
+    expect(first.text.includes("[TruthLedger]")).toBe(false);
+    expect(first.text.includes("[TruthFacts]")).toBe(false);
+    expect(first.text.includes("[TaskLedger]")).toBe(true);
+    expect(first.text.includes("truth:1")).toBe(true);
+    expect(first.text.includes("first dynamic fact")).toBe(false);
 
     const second = await runtime.context.buildInjection(
       sessionId,
@@ -63,8 +65,9 @@ describe("truth split channels", () => {
     );
     expect(second.accepted).toBe(true);
     expect(second.text.includes("[TruthLedger]")).toBe(false);
-    expect(second.text.includes("[TruthFacts]")).toBe(true);
-    expect(second.text.includes("first dynamic fact")).toBe(true);
+    expect(second.text.includes("[TruthFacts]")).toBe(false);
+    expect(second.text.includes("truth:1")).toBe(true);
+    expect(second.text.includes("first dynamic fact")).toBe(false);
 
     runtime.truth.upsertFact(sessionId, {
       id: "truth:2",
@@ -81,7 +84,16 @@ describe("truth split channels", () => {
     );
     expect(third.accepted).toBe(true);
     expect(third.text.includes("[TruthLedger]")).toBe(false);
-    expect(third.text.includes("[TruthFacts]")).toBe(true);
-    expect(third.text.includes("second dynamic fact")).toBe(true);
+    expect(third.text.includes("[TruthFacts]")).toBe(false);
+    expect(third.text.includes("truth:1")).toBe(true);
+    expect(third.text.includes("truth:2")).toBe(true);
+    expect(third.text.includes("second dynamic fact")).toBe(false);
+
+    const activeFacts = runtime.truth
+      .getState(sessionId)
+      .facts.filter((fact) => fact.status === "active")
+      .map((fact) => fact.id)
+      .toSorted();
+    expect(activeFacts).toEqual(["truth:1", "truth:2"]);
   });
 });

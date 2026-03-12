@@ -27,7 +27,7 @@ Orchestration is driven by runtime state management plus extension lifecycle han
    event streaming, memory handlers, cognitive metrics, notification, debug-loop, streaming message-health events)
 8. Runtime core bridge still runs `before_agent_start`, but now uses the same
    narrative-first `ContextComposer` and standard Brewva context contract as
-   the full profile
+   the extensions-enabled path
 
 ## Runtime Subsystems
 

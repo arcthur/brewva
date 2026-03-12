@@ -1,5 +1,4 @@
 import {
-  CONTEXT_SOURCES,
   type BrewvaRuntime,
   type ContextCompactionGateStatus,
   type ContextInjectionEntry,
@@ -59,28 +58,6 @@ const DIAGNOSTIC_CAPABILITY_NAMES = new Set<string>([
   "tape_info",
   "tape_search",
 ]);
-
-function categorizeContextEntry(entry: ContextInjectionEntry): ContextBlockCategory {
-  switch (entry.source) {
-    case CONTEXT_SOURCES.truthStatic:
-    case CONTEXT_SOURCES.skillDispatchGate:
-    case CONTEXT_SOURCES.skillCascadeGate:
-      return "constraint";
-    // Recent failures and distilled outputs are part of the model's working
-    // narrative: they explain what was already tried and what evidence exists,
-    // instead of surfacing operator-only telemetry.
-    case CONTEXT_SOURCES.identity:
-    case CONTEXT_SOURCES.truthFacts:
-    case CONTEXT_SOURCES.skillCandidates:
-    case CONTEXT_SOURCES.contextPackets:
-    case CONTEXT_SOURCES.taskState:
-    case CONTEXT_SOURCES.toolFailures:
-    case CONTEXT_SOURCES.toolOutputsDistilled:
-    case CONTEXT_SOURCES.projectionWorking:
-    default:
-      return "narrative";
-  }
-}
 
 function makeBlock(
   id: string,
@@ -203,11 +180,7 @@ export function composeContextBlocks(input: ContextComposerInput): ContextCompos
 
   if (input.injectionAccepted) {
     for (const entry of input.admittedEntries) {
-      const block = makeBlock(
-        `source:${entry.source}:${entry.id}`,
-        categorizeContextEntry(entry),
-        entry.content,
-      );
+      const block = makeBlock(`source:${entry.source}:${entry.id}`, entry.category, entry.content);
       if (block) {
         blocks.push(block);
       }

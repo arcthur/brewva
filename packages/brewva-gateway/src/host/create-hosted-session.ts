@@ -168,13 +168,12 @@ export async function createHostedSession(
       agentId: options.agentId,
     });
 
-  if (options.routingProfile) {
-    runtime.config.skills.routing.profile = options.routingProfile;
-  }
+  const hasRoutingOverride = Boolean(options.routingScopes && options.routingScopes.length > 0);
   if (options.routingScopes && options.routingScopes.length > 0) {
+    runtime.config.skills.routing.enabled = true;
     runtime.config.skills.routing.scopes = [...new Set(options.routingScopes)];
   }
-  if (options.routingProfile || (options.routingScopes && options.routingScopes.length > 0)) {
+  if (hasRoutingOverride) {
     runtime.skills.refresh();
   }
   const skillLoadReport = runtime.skills.getLoadReport();
@@ -183,8 +182,9 @@ export async function createHostedSession(
   applyRuntimeUiSettings(settingsManager, runtime.config.ui);
 
   const extensionsEnabled = options.enableExtensions !== false;
+  const skillBrokerEnabled = runtime.config.skills.routing.enabled || hasRoutingOverride;
   const extensionFactories = [
-    createSkillBrokerExtension({ runtime }),
+    ...(skillBrokerEnabled ? [createSkillBrokerExtension({ runtime })] : []),
     ...(extensionsEnabled
       ? [createBrewvaExtension({ runtime, registerTools: true })]
       : [createRuntimeCoreBridgeExtension({ runtime })]),
@@ -241,11 +241,11 @@ export async function createHostedSession(
       extensionsEnabled,
       addonsEnabled: loadedAddons.length > 0,
       skillBroker: {
-        enabled: true,
-        proposalBoundary: "runtime.proposals.submit",
+        enabled: skillBrokerEnabled,
+        proposalBoundary: skillBrokerEnabled ? "runtime.proposals.submit" : null,
       },
       skillLoad: {
-        routingProfile: skillLoadReport.routingProfile,
+        routingEnabled: skillLoadReport.routingEnabled,
         routingScopes: skillLoadReport.routingScopes,
         routableSkills: skillLoadReport.routableSkills,
         hiddenSkills: skillLoadReport.hiddenSkills,

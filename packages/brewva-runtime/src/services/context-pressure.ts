@@ -65,8 +65,7 @@ export class ContextPressureService {
   }
 
   getContextUsage(sessionId: string): ContextBudgetUsage | undefined {
-    const snapshot = this.contextBudget.snapshotSession(sessionId);
-    const usage = snapshot?.lastContextUsage;
+    const usage = this.contextBudget.getLastContextUsage(sessionId);
     if (!usage) return undefined;
     return {
       tokens: usage.tokens,
@@ -156,11 +155,7 @@ export class ContextPressureService {
     const pressure = this.getContextPressureStatus(sessionId, usage);
     const windowTurns = this.getRecentCompactionWindowTurns();
 
-    const snapshot = this.contextBudget.snapshotSession(sessionId);
-    const lastCompactionTurn =
-      snapshot && Number.isFinite(snapshot.lastCompactionTurn)
-        ? Math.floor(snapshot.lastCompactionTurn)
-        : null;
+    const lastCompactionTurn = this.contextBudget.getLastCompactionTurn(sessionId);
     const turnsSinceCompaction =
       lastCompactionTurn === null
         ? null

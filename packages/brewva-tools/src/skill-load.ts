@@ -19,7 +19,6 @@ function formatSkillOutput(input: {
     effectLevel?: string;
     routing?: {
       scope: string;
-      continuityRequired?: boolean;
     };
   };
   resources?: {
@@ -50,7 +49,6 @@ function formatSkillOutput(input: {
     `- required inputs: ${requires}`,
     `- optional inputs: ${consumes}`,
     `- routing scope: ${input.contract.routing?.scope ?? "(not routable)"}`,
-    `- continuity required: ${input.contract.routing?.continuityRequired === true ? "yes" : "no"}`,
   ];
 
   if (input.resources) {
@@ -87,7 +85,7 @@ export function createSkillLoadTool(options: BrewvaToolOptions): ToolDefinition 
     promptSnippet:
       "Load the selected skill contract and working instructions before executing the skill.",
     promptGuidelines: [
-      "When a pending skill dispatch exists, load the selected skill before implementation unless you are intentionally overriding routing.",
+      "When a pending skill recommendation exists, load the selected skill before implementation.",
       "Use the exact selected skill name.",
     ],
     parameters: Type.Object({

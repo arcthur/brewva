@@ -23,12 +23,10 @@ function createEntry(
     requires: input.requires ?? [],
     effectLevel: input.effectLevel ?? "read_only",
     dispatch: input.dispatch ?? {
-      gateThreshold: 10,
+      suggestThreshold: 10,
       autoThreshold: 16,
-      defaultMode: "suggest",
     },
     routingScope: input.routingScope ?? "core",
-    continuityRequired: input.continuityRequired ?? false,
   };
 }
 
@@ -52,7 +50,6 @@ function loadEntry(relativePath: string, category: SkillCategory): SkillsIndexEn
     effectLevel: skill.contract.effectLevel ?? "read_only",
     dispatch: skill.contract.dispatch,
     routingScope: skill.contract.routing?.scope,
-    continuityRequired: skill.contract.routing?.continuityRequired === true,
   };
 }
 

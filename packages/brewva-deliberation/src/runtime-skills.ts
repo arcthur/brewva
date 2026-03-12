@@ -23,7 +23,6 @@ export function toSkillsIndexEntry(skill: SkillDocument): SkillsIndexEntry {
     effectLevel: skill.contract.effectLevel ?? "read_only",
     dispatch: skill.contract.dispatch,
     routingScope: skill.contract.routing?.scope,
-    continuityRequired: skill.contract.routing?.continuityRequired === true,
   };
 }
 

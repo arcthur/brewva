@@ -7,20 +7,22 @@ describe("ContextInjectionCollector characterization", () => {
     const sessionId = "ctx-char-priority";
 
     collector.register(sessionId, {
+      category: "narrative",
       source: "brewva.projection-working",
       id: "projection-working",
       content: "projection content",
     });
     collector.register(sessionId, {
-      source: "brewva.truth-facts",
-      id: "truth-facts",
-      content: "truth content",
+      category: "narrative",
+      source: "brewva.runtime-status",
+      id: "runtime-status",
+      content: "runtime status content",
     });
 
     const planned = collector.plan(sessionId, 10_000);
     expect(planned.entries).toHaveLength(2);
     expect(planned.entries[0]?.source).toBe("brewva.projection-working");
-    expect(planned.entries[1]?.source).toBe("brewva.truth-facts");
+    expect(planned.entries[1]?.source).toBe("brewva.runtime-status");
   });
 
   test("commit removes consumed entries from next plan", () => {
@@ -28,8 +30,9 @@ describe("ContextInjectionCollector characterization", () => {
     const sessionId = "ctx-char-commit";
 
     collector.register(sessionId, {
-      source: "brewva.truth-facts",
-      id: "truth-facts",
+      category: "narrative",
+      source: "brewva.runtime-status",
+      id: "runtime-status",
       content: "fact A",
     });
     const planned = collector.plan(sessionId, 10_000);
@@ -49,6 +52,7 @@ describe("ContextInjectionCollector characterization", () => {
     const sessionId = "ctx-char-source-limit";
 
     collector.register(sessionId, {
+      category: "narrative",
       source: "brewva.projection-working",
       id: "projection-working",
       content: "x".repeat(5_000),

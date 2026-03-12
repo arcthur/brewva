@@ -180,6 +180,23 @@ Platform notes for supervisor install:
 - `brewva gateway install`: `0` success, `1` invalid input or supervisor operation failure.
 - `brewva gateway uninstall`: `0` success, `1` invalid input.
 
+## Subcommand: `brewva inspect`
+
+`brewva inspect` is the replay-first inspection entrypoint for a persisted
+session. It rebuilds a compact operator view from tape and nearby derived
+artifacts.
+
+- `brewva inspect`: inspect the latest replayable session for the current workspace
+- `brewva inspect --session <id>`: inspect a specific session
+- `brewva inspect --json`: emit machine-readable JSON instead of text
+
+Flags:
+
+- `--cwd`
+- `--config`
+- `--session`
+- `--json`
+
 ## Subcommand: `brewva onboard`
 
 `brewva onboard` is a convenience wrapper over `brewva gateway install/uninstall`.
@@ -238,7 +255,8 @@ Webhook ingress is configured through environment variables (not exposed as CLI 
 For Cloudflare Worker + Fly ingress deployment steps, see:
 `docs/guide/telegram-webhook-edge-ingress.md`
 
-With channel orchestration enabled (default `channels.orchestration.enabled=true`), channel text commands are available:
+When channel orchestration is enabled (`channels.orchestration.enabled=true`),
+channel text commands are available:
 
 - `/new-agent <name>` or `/new-agent name=<name> model=<pattern[:thinking]>`
 - `/del-agent <name>` (soft delete)

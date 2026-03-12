@@ -65,10 +65,11 @@ function startExplicitChain(runtime: BrewvaRuntime, sessionId: string, steps: st
 function buildSkillOutputs(runtime: BrewvaRuntime, skillName: string): Record<string, unknown> {
   const skill = runtime.skills.get(skillName);
   const outputs = skill?.contract.outputs ?? [];
+  const outputContracts = skill?.contract.outputContracts ?? {};
   const fixtures: Record<string, unknown> = {
     repository_snapshot: "Repository snapshot covering runtime, tools, CLI, and gateway ownership.",
     impact_map: "Primary impact lands in routing, skill lifecycle, and orchestration boundaries.",
-    unknowns: "No unresolved repository blind spots remain after the inventory pass.",
+    unknowns: ["No unresolved repository blind spots remain after the inventory pass."],
     root_cause:
       "Cascade completion depended on placeholder artifacts instead of contract-quality outputs.",
     fix_strategy: "Generate contract-shaped artifacts before advancing the cascade.",
@@ -97,15 +98,28 @@ function buildSkillOutputs(runtime: BrewvaRuntime, skillName: string): Record<st
   };
 
   return Object.fromEntries(
-    outputs.map((output) => [
-      output,
-      fixtures[output] ?? `${output} artifact generated for ${skillName}`,
-    ]),
+    outputs.map((output) => {
+      const contract = outputContracts[output];
+      if (!contract) {
+        return [output, fixtures[output] ?? `${output} artifact generated for ${skillName}`];
+      }
+      switch (contract.kind) {
+        case "enum":
+          return [output, fixtures[output] ?? contract.values[0]];
+        case "json":
+          return [
+            output,
+            fixtures[output] ?? [{ item: `${output} artifact generated for ${skillName}` }],
+          ];
+        case "text":
+          return [output, fixtures[output] ?? `${output} artifact generated for ${skillName}`];
+      }
+    }),
   );
 }
 
 describe("skill cascade orchestration", () => {
-  test("accepted skill_selection proposals still arm the dispatch gate", () => {
+  test("accepted skill_selection proposals still arm a pending dispatch commitment", () => {
     const runtime = new BrewvaRuntime({
       cwd: createWorkspace("selection-commitment"),
       config: createConfig("auto"),

@@ -207,18 +207,6 @@ function parseOutputContractMap(
   return parsed;
 }
 
-function parseObjectProperties(
-  data: Record<string, unknown>,
-  key: string,
-  filePath: string,
-  fieldPath: string,
-): Record<string, SkillOutputContract> | undefined {
-  if (!Object.prototype.hasOwnProperty.call(data, key)) {
-    return undefined;
-  }
-  return parseOutputContractMap(data[key], filePath, `${fieldPath}.${key}`);
-}
-
 function parseOutputContract(
   value: unknown,
   filePath: string,
@@ -234,7 +222,7 @@ function parseOutputContract(
   }
 
   switch (kind) {
-    case "informative_text": {
+    case "text": {
       assertAllowedKeys(data, ["kind", "min_words", "min_length"], filePath, fieldPath);
       return {
         kind,
@@ -250,76 +238,6 @@ function parseOutputContract(
         caseSensitive: readOptionalBooleanField(data, "case_sensitive", filePath, fieldPath),
       };
     }
-    case "informative_list": {
-      assertAllowedKeys(
-        data,
-        ["kind", "min_items", "allow_objects", "min_words", "min_length"],
-        filePath,
-        fieldPath,
-      );
-      return {
-        kind,
-        minItems: readOptionalPositiveIntegerField(data, "min_items", filePath, fieldPath),
-        allowObjects: readOptionalBooleanField(data, "allow_objects", filePath, fieldPath),
-        minWords: readOptionalPositiveIntegerField(data, "min_words", filePath, fieldPath),
-        minLength: readOptionalPositiveIntegerField(data, "min_length", filePath, fieldPath),
-      };
-    }
-    case "path_list": {
-      assertAllowedKeys(data, ["kind", "min_items"], filePath, fieldPath);
-      return {
-        kind,
-        minItems: readOptionalPositiveIntegerField(data, "min_items", filePath, fieldPath),
-      };
-    }
-    case "object": {
-      assertAllowedKeys(
-        data,
-        ["kind", "min_keys", "required", "properties", "require_any_informative_field"],
-        filePath,
-        fieldPath,
-      );
-      return {
-        kind,
-        minKeys: readOptionalPositiveIntegerField(data, "min_keys", filePath, fieldPath),
-        required: Object.prototype.hasOwnProperty.call(data, "required")
-          ? requireStringArrayField(data, "required", filePath)
-          : undefined,
-        properties: parseObjectProperties(data, "properties", filePath, fieldPath),
-        requireAnyInformativeField: readOptionalBooleanField(
-          data,
-          "require_any_informative_field",
-          filePath,
-          fieldPath,
-        ),
-      };
-    }
-    case "record_list": {
-      assertAllowedKeys(
-        data,
-        ["kind", "min_items", "required", "properties", "require_any_informative_field"],
-        filePath,
-        fieldPath,
-      );
-      const properties = parseObjectProperties(data, "properties", filePath, fieldPath);
-      if (!properties || Object.keys(properties).length === 0) {
-        failSkillContract(filePath, `${fieldPath}.properties must declare at least one field.`);
-      }
-      return {
-        kind,
-        minItems: readOptionalPositiveIntegerField(data, "min_items", filePath, fieldPath),
-        required: Object.prototype.hasOwnProperty.call(data, "required")
-          ? requireStringArrayField(data, "required", filePath)
-          : undefined,
-        properties,
-        requireAnyInformativeField: readOptionalBooleanField(
-          data,
-          "require_any_informative_field",
-          filePath,
-          fieldPath,
-        ),
-      };
-    }
     case "json": {
       assertAllowedKeys(data, ["kind", "min_keys", "min_items"], filePath, fieldPath);
       return {
@@ -328,24 +246,8 @@ function parseOutputContract(
         minItems: readOptionalPositiveIntegerField(data, "min_items", filePath, fieldPath),
       };
     }
-    case "one_of": {
-      assertAllowedKeys(data, ["kind", "variants"], filePath, fieldPath);
-      const variants = data.variants;
-      if (!Array.isArray(variants) || variants.length === 0) {
-        failSkillContract(filePath, `${fieldPath}.variants must be a non-empty array.`);
-      }
-      return {
-        kind,
-        variants: variants.map((entry, index) =>
-          parseOutputContract(entry, filePath, `${fieldPath}.variants[${index}]`),
-        ),
-      };
-    }
     default:
-      failSkillContract(
-        filePath,
-        `${fieldPath}.kind must be one of: informative_text | enum | informative_list | path_list | object | record_list | json | one_of.`,
-      );
+      failSkillContract(filePath, `${fieldPath}.kind must be one of: text | enum | json.`);
   }
 }
 
@@ -482,9 +384,8 @@ function normalizeDispatchPolicy(
 ): SkillContract["dispatch"] | undefined {
   if (!Object.prototype.hasOwnProperty.call(data, "dispatch")) {
     return {
-      gateThreshold: 10,
+      suggestThreshold: 10,
       autoThreshold: 16,
-      defaultMode: "suggest",
     };
   }
 
@@ -492,7 +393,7 @@ function normalizeDispatchPolicy(
   if (Object.prototype.hasOwnProperty.call(rawDispatch, "gateThreshold")) {
     failSkillContract(
       filePath,
-      "dispatch.gateThreshold is not supported. Use dispatch.gate_threshold.",
+      "dispatch.gateThreshold is not supported. Use dispatch.suggest_threshold.",
     );
   }
   if (Object.prototype.hasOwnProperty.call(rawDispatch, "autoThreshold")) {
@@ -501,17 +402,18 @@ function normalizeDispatchPolicy(
       "dispatch.autoThreshold is not supported. Use dispatch.auto_threshold.",
     );
   }
-  if (Object.prototype.hasOwnProperty.call(rawDispatch, "defaultMode")) {
+  if (Object.prototype.hasOwnProperty.call(rawDispatch, "suggestThreshold")) {
     failSkillContract(
       filePath,
-      "dispatch.defaultMode is not supported. Use dispatch.default_mode.",
+      "dispatch.suggestThreshold is not supported. Use dispatch.suggest_threshold.",
     );
   }
   if (
-    Object.prototype.hasOwnProperty.call(rawDispatch, "gate_threshold") &&
-    (typeof rawDispatch.gate_threshold !== "number" || !Number.isFinite(rawDispatch.gate_threshold))
+    Object.prototype.hasOwnProperty.call(rawDispatch, "suggest_threshold") &&
+    (typeof rawDispatch.suggest_threshold !== "number" ||
+      !Number.isFinite(rawDispatch.suggest_threshold))
   ) {
-    failSkillContract(filePath, "dispatch.gate_threshold must be a finite number.");
+    failSkillContract(filePath, "dispatch.suggest_threshold must be a finite number.");
   }
   if (
     Object.prototype.hasOwnProperty.call(rawDispatch, "auto_threshold") &&
@@ -519,34 +421,28 @@ function normalizeDispatchPolicy(
   ) {
     failSkillContract(filePath, "dispatch.auto_threshold must be a finite number.");
   }
-  if (
-    Object.prototype.hasOwnProperty.call(rawDispatch, "default_mode") &&
-    typeof rawDispatch.default_mode !== "string"
-  ) {
-    failSkillContract(filePath, "dispatch.default_mode must be a string.");
+  if (Object.prototype.hasOwnProperty.call(rawDispatch, "gate_threshold")) {
+    failSkillContract(
+      filePath,
+      "dispatch.gate_threshold has been removed. Use dispatch.suggest_threshold.",
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(rawDispatch, "defaultMode")) {
+    failSkillContract(filePath, "dispatch.defaultMode has been removed.");
+  }
+  if (Object.prototype.hasOwnProperty.call(rawDispatch, "default_mode")) {
+    failSkillContract(filePath, "dispatch.default_mode has been removed.");
   }
 
-  const gateThreshold = normalizePositiveInteger(rawDispatch.gate_threshold, 10);
+  const suggestThreshold = normalizePositiveInteger(rawDispatch.suggest_threshold, 10);
   const autoThreshold = Math.max(
-    gateThreshold,
+    suggestThreshold,
     normalizePositiveInteger(rawDispatch.auto_threshold, 16),
   );
-  const modeCandidate = rawDispatch.default_mode;
-  if (
-    Object.prototype.hasOwnProperty.call(rawDispatch, "default_mode") &&
-    modeCandidate !== "gate" &&
-    modeCandidate !== "auto" &&
-    modeCandidate !== "suggest"
-  ) {
-    failSkillContract(filePath, "dispatch.default_mode must be one of: suggest | gate | auto.");
-  }
-  const defaultMode =
-    modeCandidate === "gate" || modeCandidate === "auto" ? modeCandidate : "suggest";
 
   return {
-    gateThreshold,
+    suggestThreshold,
     autoThreshold,
-    defaultMode,
   };
 }
 
@@ -576,26 +472,17 @@ function normalizeRoutingPolicy(
       );
     }
     if (Object.prototype.hasOwnProperty.call(data, "continuity_required")) {
-      failSkillContract(
-        filePath,
-        "frontmatter field 'continuity_required' is only supported for routable skills.",
-      );
+      failSkillContract(filePath, "frontmatter field 'continuity_required' has been removed.");
     }
     return undefined;
   }
-
-  let continuityRequired = false;
   if (Object.prototype.hasOwnProperty.call(data, "continuity_required")) {
-    if (typeof data.continuity_required !== "boolean") {
-      failSkillContract(filePath, "continuity_required must be a boolean.");
-    }
-    continuityRequired = data.continuity_required;
+    failSkillContract(filePath, "frontmatter field 'continuity_required' has been removed.");
   }
 
   if (!Object.prototype.hasOwnProperty.call(data, "routing")) {
     return {
       scope: derivedScope,
-      continuityRequired,
     };
   }
 
@@ -609,23 +496,14 @@ function normalizeRoutingPolicy(
     }
   }
   if (Object.prototype.hasOwnProperty.call(routing, "continuityRequired")) {
-    failSkillContract(
-      filePath,
-      "routing.continuityRequired is not supported. Use routing.continuity_required.",
-    );
+    failSkillContract(filePath, "routing.continuityRequired has been removed.");
   }
-  if (
-    Object.prototype.hasOwnProperty.call(routing, "continuity_required") &&
-    typeof routing.continuity_required !== "boolean"
-  ) {
-    failSkillContract(filePath, "routing.continuity_required must be a boolean.");
+  if (Object.prototype.hasOwnProperty.call(routing, "continuity_required")) {
+    failSkillContract(filePath, "routing.continuity_required has been removed.");
   }
 
   return {
     scope: derivedScope,
-    continuityRequired:
-      continuityRequired ||
-      (typeof routing.continuity_required === "boolean" ? routing.continuity_required : false),
   };
 }
 
@@ -645,9 +523,8 @@ const EFFECT_LEVEL_RANK: Record<SkillEffectLevel, number> = {
 };
 
 const DEFAULT_DISPATCH_POLICY: NonNullable<SkillContract["dispatch"]> = {
-  gateThreshold: 10,
+  suggestThreshold: 10,
   autoThreshold: 16,
-  defaultMode: "suggest",
 };
 
 function mergeBudgetCaps(
@@ -686,22 +563,17 @@ function mergeDispatchPolicy(
 ): SkillContract["dispatch"] | undefined {
   if (!patch) return base;
   const baseDispatch = base ?? DEFAULT_DISPATCH_POLICY;
-  const gateThreshold =
-    typeof patch.gateThreshold === "number"
-      ? Math.max(baseDispatch.gateThreshold, Math.floor(patch.gateThreshold))
-      : baseDispatch.gateThreshold;
+  const suggestThreshold =
+    typeof patch.suggestThreshold === "number"
+      ? Math.max(baseDispatch.suggestThreshold, Math.floor(patch.suggestThreshold))
+      : baseDispatch.suggestThreshold;
   const autoThreshold =
     typeof patch.autoThreshold === "number"
       ? Math.max(baseDispatch.autoThreshold, Math.floor(patch.autoThreshold))
       : baseDispatch.autoThreshold;
-  const defaultMode =
-    patch.defaultMode === "auto" || patch.defaultMode === "gate" || patch.defaultMode === "suggest"
-      ? patch.defaultMode
-      : baseDispatch.defaultMode;
   return {
-    gateThreshold,
-    autoThreshold: Math.max(gateThreshold, autoThreshold),
-    defaultMode,
+    suggestThreshold,
+    autoThreshold: Math.max(suggestThreshold, autoThreshold),
   };
 }
 
@@ -714,7 +586,6 @@ function mergeRoutingPolicy(
   }
   return {
     scope: base.scope,
-    continuityRequired: base.continuityRequired === true || patch.continuityRequired === true,
   };
 }
 

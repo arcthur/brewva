@@ -13,24 +13,16 @@ budget:
 outputs: [repository_snapshot, impact_map, unknowns]
 output_contracts:
   repository_snapshot:
-    kind: informative_text
+    kind: text
     min_words: 3
     min_length: 18
   impact_map:
-    kind: informative_text
+    kind: text
     min_words: 3
     min_length: 18
   unknowns:
-    kind: one_of
-    variants:
-      - kind: informative_text
-        min_words: 2
-        min_length: 12
-      - kind: informative_list
-        min_items: 1
-        allow_objects: true
-        min_words: 2
-        min_length: 12
+    kind: json
+    min_items: 1
 consumes: []
 requires: []
 ---

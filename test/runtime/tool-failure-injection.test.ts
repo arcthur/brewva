@@ -25,7 +25,8 @@ describe("Tool failure context injection", () => {
     });
 
     const injection = await runtime.context.buildInjection(sessionId, "continue");
-    expect(injection.text.includes("[RecentToolFailures]")).toBe(true);
+    expect(injection.text.includes("[RuntimeStatus]")).toBe(true);
+    expect(injection.text.includes("recent_failures=1")).toBe(true);
     expect(injection.text.includes("tool=exec")).toBe(true);
     expect(injection.text.includes("bun test")).toBe(true);
     expect(injection.text.includes("3 failures")).toBe(true);
@@ -62,7 +63,7 @@ describe("Tool failure context injection", () => {
     });
 
     const injection = await runtime.context.buildInjection(sessionId, "continue");
-    expect(injection.text.includes("[RecentToolFailures]")).toBe(true);
+    expect(injection.text.includes("[RuntimeStatus]")).toBe(true);
     expect(injection.text.includes("tool=tool_1")).toBe(false);
     expect(injection.text.includes("tool=tool_2")).toBe(true);
     expect(injection.text.includes("tool=tool_3")).toBe(true);
@@ -86,13 +87,15 @@ describe("Tool failure context injection", () => {
     });
 
     const injection = await runtime.context.buildInjection(sessionId, "continue");
-    expect(injection.text.includes("[RecentToolFailures]")).toBe(false);
+    expect(injection.text.includes("[RuntimeStatus]")).toBe(false);
     expect(injection.text.includes("[RecentToolOutputsDistilled]")).toBe(false);
   });
 
   test("injects recent distilled tool outputs for compressed execution context", async () => {
     const workspace = createWorkspace("tool-output-distilled-inject");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.infrastructure.toolOutputDistillationInjection.enabled = true;
+    const runtime = new BrewvaRuntime({ cwd: workspace, config });
     const sessionId = "tool-output-distilled-inject-1";
 
     runtime.events.record({
@@ -127,7 +130,9 @@ describe("Tool failure context injection", () => {
 
   test("uses explicit verdicts when rendering distilled output status", async () => {
     const workspace = createWorkspace("tool-output-distilled-verdict");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.infrastructure.toolOutputDistillationInjection.enabled = true;
+    const runtime = new BrewvaRuntime({ cwd: workspace, config });
     const sessionId = "tool-output-distilled-verdict-1";
 
     runtime.events.record({
@@ -154,6 +159,7 @@ describe("Tool failure context injection", () => {
   test("respects distilled output maxEntries and maxOutputChars from config", async () => {
     const workspace = createWorkspace("tool-output-distilled-limits");
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.infrastructure.toolOutputDistillationInjection.enabled = true;
     config.infrastructure.toolOutputDistillationInjection.maxEntries = 1;
     config.infrastructure.toolOutputDistillationInjection.maxOutputChars = 36;
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
@@ -249,7 +255,7 @@ describe("Tool failure context injection", () => {
     });
 
     const injection = await runtime.context.buildInjection(sessionId, "continue");
-    expect(injection.text.includes("[RecentToolFailures]")).toBe(true);
+    expect(injection.text.includes("[RuntimeStatus]")).toBe(true);
     expect(injection.text.includes("TAIL_MARKER_FROM_PERSISTED_CONTEXT")).toBe(true);
   });
 
@@ -274,7 +280,7 @@ describe("Tool failure context injection", () => {
     });
 
     const injection = await runtime.context.buildInjection(sessionId, "continue");
-    expect(injection.text.includes("[RecentToolFailures]")).toBe(true);
+    expect(injection.text.includes("[RuntimeStatus]")).toBe(true);
     expect(injection.text.includes("tool=brewva_custom_exec")).toBe(true);
     expect(injection.text.includes("tool=brewva_verify")).toBe(false);
   });
@@ -342,7 +348,7 @@ describe("Tool failure context injection", () => {
     });
 
     const injection = await runtime.context.buildInjection(sessionId, "continue");
-    expect(injection.text.includes("[RecentToolFailures]")).toBe(true);
+    expect(injection.text.includes("[RuntimeStatus]")).toBe(true);
     expect(injection.text.includes("source=brewva.tool-failures")).toBe(false);
     expect(injection.text.includes("TAIL_MARKER_3")).toBe(true);
   });
@@ -361,14 +367,14 @@ describe("Tool failure context injection", () => {
     });
 
     const before = await runtime.context.buildInjection(sessionId, "continue");
-    expect(before.text.includes("[RecentToolFailures]")).toBe(true);
+    expect(before.text.includes("[RuntimeStatus]")).toBe(true);
 
     runtime.events.recordTapeHandoff(sessionId, { name: "phase-1" });
     runtime.events.recordTapeHandoff(sessionId, { name: "phase-2" });
     runtime.events.recordTapeHandoff(sessionId, { name: "phase-3" });
 
     const after = await runtime.context.buildInjection(sessionId, "continue");
-    expect(after.text.includes("[RecentToolFailures]")).toBe(false);
+    expect(after.text.includes("[RuntimeStatus]")).toBe(false);
     expect(after.text.includes("stale failure")).toBe(false);
   });
 });

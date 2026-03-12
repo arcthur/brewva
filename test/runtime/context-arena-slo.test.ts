@@ -10,19 +10,22 @@ describe("ContextArena SLO enforcement", () => {
     });
 
     const first = arena.append(sessionId, {
+      category: "narrative",
       source: "brewva.identity",
       id: "id-1",
       content: "identity entry 1",
     });
     const second = arena.append(sessionId, {
+      category: "narrative",
       source: "brewva.task-state",
       id: "task-1",
       content: "task entry 1",
     });
     const third = arena.append(sessionId, {
-      source: "brewva.truth-facts",
-      id: "truth-1",
-      content: "truth entry 1",
+      category: "narrative",
+      source: "brewva.runtime-status",
+      id: "runtime-1",
+      content: "runtime entry 1",
     });
 
     expect(first.accepted).toBe(true);

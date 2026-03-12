@@ -4,7 +4,6 @@ export const CONTROL_PLANE_TOOLS = [
   "skill_complete",
   "skill_chain_control",
   "skill_load",
-  "skill_route_override",
   "ledger_query",
   "cost_view",
   "tape_handoff",

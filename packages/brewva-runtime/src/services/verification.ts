@@ -1,44 +1,11 @@
 import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "../events/event-types.js";
 import type { GovernancePort } from "../governance/port.js";
-import type {
-  BrewvaConfig,
-  TaskState,
-  TruthFact,
-  TruthFactSeverity,
-  TruthFactStatus,
-  TruthState,
-  VerificationCheckRun,
-  VerificationLevel,
-  VerificationReport,
-} from "../types.js";
+import type { RuntimeKernelContext } from "../runtime-kernel.js";
+import type { BrewvaConfig, TaskState, VerificationLevel, VerificationReport } from "../types.js";
 import { runShellCommand } from "../utils/exec.js";
 import type { VerificationGate } from "../verification/gate.js";
-import type { RuntimeCallback } from "./callback.js";
-
-const VERIFIER_BLOCKER_PREFIX = "verifier:" as const;
-const GOVERNANCE_BLOCKER_ID = "verifier:governance:verify-spec";
-const GOVERNANCE_TRUTH_FACT_ID = "truth:governance:verify-spec";
-
-function normalizeVerifierCheckForId(name: string): string {
-  const normalized = name.trim().toLowerCase();
-  if (!normalized) return "unknown";
-  return normalized.replace(/[^a-z0-9._-]+/g, "-");
-}
-
-function buildVerifierBlockerMessage(input: {
-  checkName: string;
-  truthFactId: string;
-  run?: VerificationCheckRun;
-}): string {
-  const parts: string[] = [`verification failed: ${input.checkName}`, `truth=${input.truthFactId}`];
-  if (input.run?.ledgerId) {
-    parts.push(`evidence=${input.run.ledgerId}`);
-  }
-  if (input.run && input.run.exitCode !== null && input.run.exitCode !== undefined) {
-    parts.push(`exitCode=${input.run.exitCode}`);
-  }
-  return parts.join(" ");
-}
+import type { LedgerService } from "./ledger.js";
+import type { SkillLifecycleService } from "./skill-lifecycle.js";
 
 function compactText(value: string, maxChars = 800): string {
   const compact = value.replace(/\s+/g, " ").trim();
@@ -69,75 +36,10 @@ function buildVerificationLessonKey(input: {
 }
 
 export interface VerificationServiceOptions {
-  cwd: string;
-  config: BrewvaConfig;
-  verification: VerificationGate;
+  kernel: RuntimeKernelContext;
   governancePort?: GovernancePort;
-  getTaskState: RuntimeCallback<[sessionId: string], TaskState>;
-  getTruthState: RuntimeCallback<[sessionId: string], TruthState>;
-  getActiveSkillName: RuntimeCallback<[sessionId: string], string | undefined>;
-  recordEvent: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        type: string;
-        turn?: number;
-        payload?: Record<string, unknown>;
-        timestamp?: number;
-        skipTapeCheckpoint?: boolean;
-      },
-    ],
-    unknown
-  >;
-  upsertTruthFact: RuntimeCallback<
-    [
-      sessionId: string,
-      input: {
-        id: string;
-        kind: string;
-        severity: TruthFactSeverity;
-        summary: string;
-        details?: Record<string, unknown>;
-        evidenceIds?: string[];
-        status?: TruthFactStatus;
-      },
-    ],
-    { ok: boolean; fact?: TruthFact; error?: string }
-  >;
-  resolveTruthFact: RuntimeCallback<
-    [sessionId: string, truthFactId: string],
-    { ok: boolean; error?: string }
-  >;
-  recordTaskBlocker: RuntimeCallback<
-    [
-      sessionId: string,
-      input: {
-        id?: string;
-        message: string;
-        source?: string;
-        truthFactId?: string;
-      },
-    ],
-    { ok: boolean; blockerId?: string; error?: string }
-  >;
-  resolveTaskBlocker: RuntimeCallback<
-    [sessionId: string, blockerId: string],
-    { ok: boolean; error?: string }
-  >;
-  recordToolResult: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        toolName: string;
-        args: Record<string, unknown>;
-        outputText: string;
-        channelSuccess: boolean;
-        verdict?: "pass" | "fail" | "inconclusive";
-        metadata?: Record<string, unknown>;
-      },
-    ],
-    string
-  >;
+  skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
+  ledgerService: Pick<LedgerService, "recordToolResult">;
 }
 
 export interface VerifyCompletionOptions {
@@ -151,29 +53,35 @@ export class VerificationService {
   private readonly verification: VerificationGate;
   private readonly governancePort?: GovernancePort;
   private readonly getTaskState: (sessionId: string) => TaskState;
-  private readonly getTruthState: (sessionId: string) => TruthState;
   private readonly getActiveSkillName: (sessionId: string) => string | undefined;
-  private readonly recordEvent: VerificationServiceOptions["recordEvent"];
-  private readonly upsertTruthFact: VerificationServiceOptions["upsertTruthFact"];
-  private readonly resolveTruthFact: VerificationServiceOptions["resolveTruthFact"];
-  private readonly recordTaskBlocker: VerificationServiceOptions["recordTaskBlocker"];
-  private readonly resolveTaskBlocker: VerificationServiceOptions["resolveTaskBlocker"];
-  private readonly recordToolResult: VerificationServiceOptions["recordToolResult"];
+  private readonly recordEvent: (input: {
+    sessionId: string;
+    type: string;
+    turn?: number;
+    payload?: Record<string, unknown>;
+    timestamp?: number;
+    skipTapeCheckpoint?: boolean;
+  }) => unknown;
+  private readonly recordToolResult: (input: {
+    sessionId: string;
+    toolName: string;
+    args: Record<string, unknown>;
+    outputText: string;
+    channelSuccess: boolean;
+    verdict?: "pass" | "fail" | "inconclusive";
+    metadata?: Record<string, unknown>;
+  }) => string;
 
   constructor(options: VerificationServiceOptions) {
-    this.cwd = options.cwd;
-    this.config = options.config;
-    this.verification = options.verification;
+    this.cwd = options.kernel.cwd;
+    this.config = options.kernel.config;
+    this.verification = options.kernel.verificationGate;
     this.governancePort = options.governancePort;
-    this.getTaskState = options.getTaskState;
-    this.getTruthState = options.getTruthState;
-    this.getActiveSkillName = options.getActiveSkillName;
-    this.recordEvent = options.recordEvent;
-    this.upsertTruthFact = options.upsertTruthFact;
-    this.resolveTruthFact = options.resolveTruthFact;
-    this.recordTaskBlocker = options.recordTaskBlocker;
-    this.resolveTaskBlocker = options.resolveTaskBlocker;
-    this.recordToolResult = options.recordToolResult;
+    this.getTaskState = (sessionId) => options.kernel.getTaskState(sessionId);
+    this.getActiveSkillName = (sessionId) =>
+      options.skillLifecycleService.getActiveSkill(sessionId)?.name;
+    this.recordEvent = (input) => options.kernel.recordEvent(input);
+    this.recordToolResult = (input) => options.ledgerService.recordToolResult(input);
   }
 
   async verifyCompletion(
@@ -193,7 +101,6 @@ export class VerificationService {
     const report = this.verification.evaluate(sessionId, effectiveLevel, {
       requireCommands: executeCommands,
     });
-    this.syncVerificationBlockers(sessionId, report);
     this.recordVerificationOutcome(sessionId, effectiveLevel, report);
     await this.applyGovernanceVerification(sessionId, effectiveLevel, report);
     return report;
@@ -330,6 +237,11 @@ export class VerificationService {
         reason: report.reason ?? null,
         evidence,
         evidenceIds: [...new Set(evidenceIds)],
+        checkResults: report.checks.map((check) => ({
+          name: check.name,
+          status: check.status,
+          evidence: check.evidence ?? null,
+        })),
         provenanceVersion: "v2",
         activeSkill: activeSkillName ?? null,
         referenceWriteAt: referenceWriteAt > 0 ? referenceWriteAt : null,
@@ -361,21 +273,6 @@ export class VerificationService {
             level,
           },
         });
-
-        const truthState = this.getTruthState(sessionId);
-        const active = truthState.facts.find(
-          (fact) => fact.id === GOVERNANCE_TRUTH_FACT_ID && fact.status === "active",
-        );
-        if (active) {
-          this.resolveTruthFact(sessionId, GOVERNANCE_TRUTH_FACT_ID);
-        }
-        const taskState = this.getTaskState(sessionId);
-        const hasBlocker = taskState.blockers.some(
-          (blocker) => blocker.id === GOVERNANCE_BLOCKER_ID,
-        );
-        if (hasBlocker) {
-          this.resolveTaskBlocker(sessionId, GOVERNANCE_BLOCKER_ID);
-        }
         return;
       }
 
@@ -388,23 +285,6 @@ export class VerificationService {
           reason,
         },
       });
-
-      this.upsertTruthFact(sessionId, {
-        id: GOVERNANCE_TRUTH_FACT_ID,
-        kind: "governance_verify_spec_failed",
-        severity: "error",
-        summary: `governance verification failed: ${reason}`,
-        details: {
-          level,
-          reason,
-        },
-      });
-      this.recordTaskBlocker(sessionId, {
-        id: GOVERNANCE_BLOCKER_ID,
-        message: `governance verification failed: ${reason}`,
-        source: "governance_verify_spec",
-        truthFactId: GOVERNANCE_TRUTH_FACT_ID,
-      });
     } catch (error) {
       this.recordEvent({
         sessionId,
@@ -414,82 +294,6 @@ export class VerificationService {
           error: error instanceof Error ? error.message : String(error),
         },
       });
-    }
-  }
-
-  private syncVerificationBlockers(sessionId: string, report: VerificationReport): void {
-    const verificationState = this.verification.stateStore.get(sessionId);
-    if (!verificationState.lastWriteAt) return;
-
-    const lastWriteAt = verificationState.lastWriteAt ?? 0;
-    const current = this.getTaskState(sessionId);
-    const existingById = new Map(current.blockers.map((blocker) => [blocker.id, blocker]));
-    const failingIds = new Set<string>();
-    const truthFactIdForCheck = (checkName: string): string =>
-      `truth:verifier:${normalizeVerifierCheckForId(checkName)}`;
-
-    for (const check of report.checks) {
-      if (check.status !== "fail") continue;
-
-      const blockerId = `${VERIFIER_BLOCKER_PREFIX}${normalizeVerifierCheckForId(check.name)}`;
-      const truthFactId = truthFactIdForCheck(check.name);
-      failingIds.add(blockerId);
-
-      const run = verificationState.checkRuns[check.name];
-      const freshRun = run && run.timestamp >= lastWriteAt ? run : undefined;
-      const message = buildVerifierBlockerMessage({
-        checkName: check.name,
-        truthFactId,
-        run: freshRun,
-      });
-      const source = "verification_gate";
-
-      const existing = existingById.get(blockerId);
-      if (
-        existing &&
-        existing.message === message &&
-        (existing.source ?? "") === source &&
-        (existing.truthFactId ?? "") === truthFactId
-      ) {
-        continue;
-      }
-
-      const evidenceIds = freshRun?.ledgerId ? [freshRun.ledgerId] : [];
-      this.upsertTruthFact(sessionId, {
-        id: truthFactId,
-        kind: "verification_check_failed",
-        severity: "error",
-        summary: `verification failed: ${check.name}`,
-        evidenceIds,
-        details: {
-          check: check.name,
-          command: freshRun?.command ?? null,
-          exitCode: freshRun?.exitCode ?? null,
-          ledgerId: freshRun?.ledgerId ?? null,
-          evidence: check.evidence ?? null,
-        },
-      });
-      this.recordTaskBlocker(sessionId, {
-        id: blockerId,
-        message,
-        source,
-        truthFactId,
-      });
-    }
-
-    const truthState = this.getTruthState(sessionId);
-    for (const blocker of current.blockers) {
-      if (!blocker.id.startsWith(VERIFIER_BLOCKER_PREFIX)) continue;
-      if (failingIds.has(blocker.id)) continue;
-      this.resolveTaskBlocker(sessionId, blocker.id);
-      const truthFactId =
-        blocker.truthFactId ?? `truth:verifier:${blocker.id.slice(VERIFIER_BLOCKER_PREFIX.length)}`;
-      const active = truthState.facts.find(
-        (fact) => fact.id === truthFactId && fact.status === "active",
-      );
-      if (active) {
-        this.resolveTruthFact(sessionId, truthFactId);
-      }
     }
   }
 
@@ -522,8 +326,7 @@ export class VerificationService {
       const outputSummary =
         outputText.length > 0 ? outputText.slice(0, 2000) : ok ? "(no output)" : "(no output)";
 
-      const timestamp = Date.now();
-      const ledgerId = this.recordToolResult({
+      this.recordToolResult({
         sessionId,
         toolName: "brewva_verify",
         args: { check: checkName, command },
@@ -538,16 +341,6 @@ export class VerificationService {
           durationMs: result.durationMs,
           timedOut: result.timedOut,
         },
-      });
-
-      this.verification.stateStore.setCheckRun(sessionId, checkName, {
-        timestamp,
-        ok,
-        command,
-        exitCode: result.exitCode,
-        durationMs: result.durationMs,
-        ledgerId,
-        outputSummary,
       });
     }
   }

@@ -15,15 +15,15 @@ references:
 outputs: [root_cause, fix_strategy, failure_evidence]
 output_contracts:
   root_cause:
-    kind: informative_text
+    kind: text
     min_words: 3
     min_length: 18
   fix_strategy:
-    kind: informative_text
+    kind: text
     min_words: 3
     min_length: 18
   failure_evidence:
-    kind: informative_text
+    kind: text
     min_words: 2
     min_length: 12
 consumes: [repository_snapshot, impact_map, verification_evidence, runtime_trace]

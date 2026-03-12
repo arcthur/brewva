@@ -1,9 +1,4 @@
-import type {
-  ParallelAcquireResult,
-  ParallelSessionSnapshot,
-  ParallelSnapshot,
-  BrewvaConfig,
-} from "../types.js";
+import type { ParallelAcquireResult, BrewvaConfig } from "../types.js";
 
 interface SessionParallelState {
   active: Set<string>;
@@ -92,25 +87,9 @@ export class ParallelBudgetManager {
     this.drainWaiters(sessionId, state);
   }
 
-  snapshotSession(sessionId: string): ParallelSessionSnapshot | undefined {
+  getActiveRunCount(sessionId: string): number {
     const state = this.sessions.get(sessionId);
-    if (!state) return undefined;
-    return {
-      activeRunIds: [...state.active.values()],
-      totalStarted: state.totalStarted,
-    };
-  }
-
-  restoreSession(sessionId: string, snapshot: ParallelSessionSnapshot | undefined): number {
-    if (!snapshot) return 0;
-    const droppedActiveRuns = new Set(snapshot.activeRunIds).size;
-    this.sessions.set(sessionId, {
-      // Active workers do not survive process restarts, so restoring them would leak maxConcurrent slots.
-      active: new Set<string>(),
-      totalStarted: Math.max(0, snapshot.totalStarted),
-      waiters: [],
-    });
-    return droppedActiveRuns;
+    return state ? state.active.size : 0;
   }
 
   clear(sessionId: string): void {
@@ -125,28 +104,6 @@ export class ParallelBudgetManager {
     }
     this.sessions.delete(sessionId);
   }
-
-  snapshot(): ParallelSnapshot {
-    const sessions: ParallelSnapshot["sessions"] = {};
-    let active = 0;
-    let totalStarted = 0;
-
-    for (const [sessionId, state] of this.sessions.entries()) {
-      sessions[sessionId] = {
-        active: state.active.size,
-        totalStarted: state.totalStarted,
-      };
-      active += state.active.size;
-      totalStarted += state.totalStarted;
-    }
-
-    return {
-      active,
-      totalStarted,
-      sessions,
-    };
-  }
-
   private getOrCreate(sessionId: string): SessionParallelState {
     const existing = this.sessions.get(sessionId);
     if (existing) return existing;

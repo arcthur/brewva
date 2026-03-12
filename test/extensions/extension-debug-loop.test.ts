@@ -165,7 +165,7 @@ async function scheduleInitialRetry(
   outputs: Record<string, unknown> = {
     change_set: "updated one line",
     files_changed: ["src/example.ts"],
-    verification_evidence: "pending verification",
+    verification_evidence: ["pending verification"],
   },
 ): Promise<string> {
   const sessionId = fixture.ctx.sessionManager.getSessionId();
@@ -255,7 +255,7 @@ describe("extension debug loop", () => {
     const outputs = {
       change_set: "updated one line",
       files_changed: ["src/example.ts"],
-      verification_evidence: "pending verification",
+      verification_evidence: ["pending verification"],
     };
 
     invokeHandlers(
@@ -368,7 +368,7 @@ describe("extension debug loop", () => {
       runtime_trace: "Observed repeated guard arming, status polling, and late completion retries.",
       session_summary:
         "The session stayed in analysis mode and never converged on a stable completion contract.",
-      artifact_findings: "No durable artifact explained the repeated guard resets.",
+      artifact_findings: ["No durable artifact explained the repeated guard resets."],
     });
 
     await loadTool.execute("tc-load", { name: "implementation" }, undefined, undefined, toolCtx);
@@ -377,7 +377,7 @@ describe("extension debug loop", () => {
     const outputs = {
       change_set: "updated one line",
       files_changed: ["src/example.ts"],
-      verification_evidence: "pending verification",
+      verification_evidence: ["pending verification"],
     };
 
     invokeHandlers(
@@ -429,7 +429,7 @@ describe("extension debug loop", () => {
     const outputs = {
       change_set: "updated one line",
       files_changed: ["src/example.ts"],
-      verification_evidence: "pending verification",
+      verification_evidence: ["pending verification"],
     };
     invokeHandlers(
       handlers,
@@ -499,7 +499,7 @@ describe("extension debug loop", () => {
       runtime_trace: "Observed repeated guard arming, status polling, and late completion retries.",
       session_summary:
         "The session stayed in analysis mode and never converged on a stable completion contract.",
-      artifact_findings: "No durable artifact explained the repeated guard resets.",
+      artifact_findings: ["No durable artifact explained the repeated guard resets."],
     });
     fixture.runtime.skills.activate("ext-debug-loop-5", "debugging");
     fixture.runtime.skills.complete("ext-debug-loop-5", {
@@ -511,7 +511,7 @@ describe("extension debug loop", () => {
     fixture.runtime.skills.complete("ext-debug-loop-5", {
       change_set: "added null guard",
       files_changed: ["src/example.ts"],
-      verification_evidence: "tests pass",
+      verification_evidence: ["tests pass"],
     });
 
     const debugLoop = readJsonFile<{
@@ -749,7 +749,7 @@ describe("extension debug loop", () => {
     const outputs = {
       change_set: "updated one line",
       files_changed: ["src/example.ts"],
-      verification_evidence: "pending verification",
+      verification_evidence: ["pending verification"],
     };
 
     invokeHandlers(

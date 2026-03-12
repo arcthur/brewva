@@ -13,7 +13,7 @@ budget:
 outputs: [telegram_response_plan, telegram_payload]
 output_contracts:
   telegram_response_plan:
-    kind: informative_text
+    kind: text
     min_words: 3
     min_length: 18
   telegram_payload:
