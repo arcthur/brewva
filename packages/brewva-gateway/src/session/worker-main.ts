@@ -272,6 +272,9 @@ async function runTurn(input: {
       return;
     }
     const output = await collectSessionPromptOutput(sessionResult.session, input.prompt, {
+      runtime: sessionResult.runtime,
+      sessionId: input.agentSessionId,
+      turnId: input.turnId,
       onChunk: (chunk) => {
         send({
           kind: "event",

@@ -634,8 +634,6 @@ export class SkillLifecycleService {
     if (!this.setTaskSpec || !this.getTaskState) return;
     const taskState = this.getTaskState(sessionId);
     if (taskState.spec) return;
-    const phase = taskState.status?.phase;
-    if (phase && phase !== "align") return;
 
     const nextSpec = deriveTaskSpecFromOutputs(outputs);
     if (!nextSpec) return;

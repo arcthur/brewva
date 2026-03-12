@@ -38,7 +38,7 @@ export const SCAN_CONVERGENCE_TOOL_RULES_BY_NAME = {
   obs_query: staticRule("evidence_reuse"),
   obs_slo_assert: staticRule("evidence_reuse"),
   obs_snapshot: staticRule("evidence_reuse"),
-  session_compact: staticRule("progress"),
+  session_compact: staticRule("neutral"),
   skill_load: staticRule("progress"),
   tape_handoff: staticRule("progress"),
   ast_grep_replace: staticRule("progress"),

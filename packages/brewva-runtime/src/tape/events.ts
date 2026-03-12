@@ -11,7 +11,7 @@ const TASK_ITEM_STATUSES = ["todo", "doing", "done", "blocked"] as const;
 const TASK_PHASES = ["align", "investigate", "execute", "verify", "blocked", "done"] as const;
 const TASK_HEALTH_VALUES = [
   "ok",
-  "needs_spec",
+  "exploring",
   "blocked",
   "verification_failed",
   "budget_pressure",

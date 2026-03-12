@@ -21,6 +21,7 @@ import {
   resolveToolDisplayVerdict,
   type ToolDisplayVerdict,
 } from "../runtime-plugins/index.js";
+import { sendPromptWithCompactionRecovery } from "../session/compaction-recovery.js";
 import { clampText, ensureSessionShutdownRecorded } from "../utils/runtime.js";
 import { isOwnerAuthorized } from "./acl.js";
 import { AgentRegistry } from "./agent-registry.js";
@@ -760,6 +761,11 @@ export function canonicalizeInboundTurnSession(
 export async function collectPromptTurnOutputs(
   session: HostedSessionResult["session"],
   prompt: string,
+  options?: {
+    runtime?: BrewvaRuntime;
+    sessionId?: string;
+    turnId?: string;
+  },
 ): Promise<PromptTurnOutputs> {
   let latestAssistantText = "";
   const toolOutputs: ToolTurnOutput[] = [];
@@ -787,8 +793,11 @@ export async function collectPromptTurnOutputs(
   });
 
   try {
-    await session.sendUserMessage(prompt);
-    await session.agent.waitForIdle();
+    await sendPromptWithCompactionRecovery(session, prompt, {
+      runtime: options?.runtime,
+      sessionId: options?.sessionId,
+      turnId: options?.turnId,
+    });
     return {
       assistantText: latestAssistantText,
       toolOutputs,
@@ -1310,7 +1319,11 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
         state.lastUsedAt = Date.now();
         state.lastTurn = input.turn;
         runtimeManager.touchRuntime(state.agentId);
-        return collectPromptOutputs(state.result.session, input.prompt);
+        return collectPromptOutputs(state.result.session, input.prompt, {
+          runtime: state.result.runtime,
+          sessionId: state.agentSessionId,
+          turnId: input.turn.turnId,
+        });
       });
       await registry.touchAgent(input.agentId, Date.now(), true);
       return {
@@ -1357,7 +1370,11 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
       state.lastUsedAt = Date.now();
       state.lastTurn = canonicalTurn;
       runtimeManager.touchRuntime(state.agentId);
-      return collectPromptOutputs(state.result.session, prompt);
+      return collectPromptOutputs(state.result.session, prompt, {
+        runtime: state.result.runtime,
+        sessionId: state.agentSessionId,
+        turnId: canonicalTurn.turnId,
+      });
     });
     await registry.touchAgent(state.agentId, Date.now(), true);
 

@@ -67,6 +67,39 @@ describe("task progress watchdog", () => {
     }
   });
 
+  test("tracks no-spec exploration sessions instead of treating them as ineligible", async () => {
+    const originalNow = Date.now;
+    let now = 1_719_000_000_000;
+
+    Date.now = () => now;
+    try {
+      const runtime = new BrewvaRuntime({ cwd: createWorkspace("watchdog-no-spec") });
+      const sessionId = "watchdog-no-spec-1";
+      await runtime.context.buildInjection(sessionId, "Investigate the current repository state");
+
+      const watchdog = new TaskProgressWatchdog({
+        runtime,
+        sessionId,
+        now: () => now,
+      });
+
+      now += TASK_PROGRESS_WATCHDOG_TEST_ONLY.DEFAULT_THRESHOLDS_MS.investigate + 1;
+      watchdog.poll();
+
+      const detected = runtime.events.query(sessionId, {
+        type: "task_stuck_detected",
+        last: 1,
+      })[0];
+      expect(detected?.payload).toMatchObject({
+        schema: "brewva.task-watchdog.v1",
+        phase: "investigate",
+        blockerWritten: true,
+      });
+    } finally {
+      Date.now = originalNow;
+    }
+  });
+
   test("when scan convergence blocker is active, emits event without writing watchdog blocker", () => {
     const originalNow = Date.now;
     let now = 1_720_000_000_000;

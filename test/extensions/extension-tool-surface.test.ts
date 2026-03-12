@@ -223,6 +223,96 @@ describe("tool surface extension", () => {
     expect(event?.payload?.ignoredRequestedToolNames).toEqual([]);
   });
 
+  test("investigation lifecycle tools stay visible while the session has no task spec", async () => {
+    const extensionApi = createMockExtensionAPI();
+    registerTools(extensionApi.api, [
+      "read",
+      "edit",
+      "write",
+      "session_compact",
+      "task_set_spec",
+      "task_view_state",
+      "task_add_item",
+      "task_record_blocker",
+      "ledger_query",
+      "output_search",
+      "tape_search",
+      "tape_handoff",
+    ]);
+
+    const runtime = {
+      config: {
+        skills: {
+          routing: {
+            profile: "standard",
+            scopes: ["core", "domain"],
+          },
+        },
+      },
+      task: {
+        getState: () => ({
+          items: [],
+          blockers: [],
+          updatedAt: null,
+        }),
+      },
+      skills: {
+        getActive: () => ({
+          name: "repository-analysis",
+          contract: {
+            tools: {
+              required: ["read"],
+              optional: [],
+              denied: [],
+            },
+          },
+        }),
+        getPendingDispatch: () => undefined,
+        getCascadeIntent: () => undefined,
+        get: (name: string) =>
+          name === "repository-analysis"
+            ? {
+                name,
+                contract: {
+                  tools: {
+                    required: ["read"],
+                    optional: [],
+                    denied: [],
+                  },
+                },
+              }
+            : undefined,
+      },
+      events: {
+        record: () => undefined,
+      },
+    };
+
+    registerToolSurface(extensionApi.api, runtime as any);
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "investigate the repository layout",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-s-no-spec",
+        },
+      },
+    );
+
+    expect(extensionApi.activeTools).toContain("task_set_spec");
+    expect(extensionApi.activeTools).toContain("task_view_state");
+    expect(extensionApi.activeTools).toContain("task_add_item");
+    expect(extensionApi.activeTools).toContain("task_record_blocker");
+    expect(extensionApi.activeTools).toContain("ledger_query");
+    expect(extensionApi.activeTools).toContain("output_search");
+    expect(extensionApi.activeTools).toContain("tape_search");
+    expect(extensionApi.activeTools).toContain("tape_handoff");
+  });
+
   test("registers missing managed tools on demand before resolving the turn surface", async () => {
     const extensionApi = createMockExtensionAPI();
     registerTools(extensionApi.api, ["read", "edit", "write", "session_compact", "grep", "exec"]);

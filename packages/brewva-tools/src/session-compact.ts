@@ -34,6 +34,16 @@ export function createSessionCompactTool(options: BrewvaToolOptions): ToolDefini
       try {
         ctx.compact({
           customInstructions,
+          onError: (error) => {
+            options.runtime.events.record?.({
+              sessionId,
+              type: "session_compact_failed",
+              payload: {
+                reason: reason ?? null,
+                error: normalizeErrorMessage(error),
+              },
+            });
+          },
         });
         options.runtime.events.record?.({
           sessionId,
@@ -60,12 +70,15 @@ export function createSessionCompactTool(options: BrewvaToolOptions): ToolDefini
         });
       }
 
-      return textResult("Session compaction requested.", {
-        ok: true,
-        reason: reason ?? null,
-        usageTokens: usage?.tokens ?? null,
-        usagePercent: usage?.percent ?? null,
-      });
+      return textResult(
+        "Session compaction requested; the gateway will resume the interrupted turn after compaction.",
+        {
+          ok: true,
+          reason: reason ?? null,
+          usageTokens: usage?.tokens ?? null,
+          usagePercent: usage?.percent ?? null,
+        },
+      );
     },
   });
 }

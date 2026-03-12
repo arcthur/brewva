@@ -7,7 +7,10 @@ import {
 
 type SessionLike = {
   subscribe: (listener: (event: AgentSessionEvent) => void) => () => void;
-  sendUserMessage: (content: string) => Promise<void>;
+  sendUserMessage: (
+    content: string,
+    options?: { deliverAs?: "steer" | "followUp" },
+  ) => Promise<void>;
   agent: {
     waitForIdle: () => Promise<void>;
   };
@@ -32,6 +35,53 @@ function createSessionMock(eventsToEmit: AgentSessionEvent[]): SessionLike {
         return;
       },
     },
+  };
+}
+
+function createRuntimeEventBridge() {
+  const listeners = new Set<
+    (event: {
+      id: string;
+      sessionId: string;
+      type: string;
+      timestamp: number;
+      payload?: Record<string, unknown>;
+    }) => void
+  >();
+  const events: Array<{
+    id: string;
+    sessionId: string;
+    type: string;
+    timestamp: number;
+    payload?: Record<string, unknown>;
+  }> = [];
+
+  return {
+    runtime: {
+      events: {
+        subscribe(listener: (event: (typeof events)[number]) => void) {
+          listeners.add(listener);
+          return () => {
+            listeners.delete(listener);
+          };
+        },
+        record(input: { sessionId: string; type: string; payload?: Record<string, unknown> }) {
+          const event = {
+            id: `evt-${events.length + 1}`,
+            sessionId: input.sessionId,
+            type: input.type,
+            timestamp: Date.now(),
+            payload: input.payload,
+          };
+          events.push(event);
+          for (const listener of listeners) {
+            listener(event);
+          }
+          return undefined;
+        },
+      },
+    },
+    events,
   };
 }
 
@@ -126,5 +176,75 @@ describe("gateway collect output", () => {
     expect(output.toolOutputs).toHaveLength(1);
     expect(output.toolOutputs[0]?.verdict).toBe("fail");
     expect(output.toolOutputs[0]?.text).toContain("status: failed");
+  });
+
+  test("given session_compact during the turn, when collecting output, then gateway dispatches a follow-up resume turn", async () => {
+    const eventBridge = createRuntimeEventBridge();
+    const sentMessages: string[] = [];
+    let listener: ((event: AgentSessionEvent) => void) | undefined;
+    const session: SessionLike = {
+      subscribe(next) {
+        listener = next;
+        return () => {
+          listener = undefined;
+        };
+      },
+      async sendUserMessage(content): Promise<void> {
+        sentMessages.push(content);
+        if (sentMessages.length === 1) {
+          listener?.({
+            type: "tool_execution_end",
+            toolCallId: "tc-compact",
+            toolName: "session_compact",
+            result: "requested",
+            isError: false,
+          } as AgentSessionEvent);
+          eventBridge.runtime.events.record({
+            sessionId: "agent-session-1",
+            type: "session_compact",
+            payload: {
+              entryId: "comp-1",
+            },
+          });
+          return;
+        }
+
+        listener?.({
+          type: "message_end",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "resumed answer" }],
+          },
+        } as AgentSessionEvent);
+      },
+      agent: {
+        async waitForIdle(): Promise<void> {
+          return;
+        },
+      },
+    };
+
+    const output = await collectSessionPromptOutput(
+      session as unknown as Parameters<typeof collectSessionPromptOutput>[0],
+      "initial prompt",
+      {
+        runtime: eventBridge.runtime as any,
+        sessionId: "agent-session-1",
+        turnId: "turn-1",
+      },
+    );
+
+    expect(sentMessages).toHaveLength(2);
+    expect(sentMessages[0]).toBe("initial prompt");
+    expect(sentMessages[1]).toContain("Resume the interrupted turn");
+    expect(output.assistantText).toBe("resumed answer");
+    expect(
+      eventBridge.events.some((event) => event.type === "session_turn_compaction_resume_requested"),
+    ).toBe(true);
+    expect(
+      eventBridge.events.some(
+        (event) => event.type === "session_turn_compaction_resume_dispatched",
+      ),
+    ).toBe(true);
   });
 });
