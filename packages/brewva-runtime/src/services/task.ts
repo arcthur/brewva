@@ -124,14 +124,17 @@ export class TaskService {
       .slice(0, 6)
       .map((fact) => fact.id);
 
-    let phase: TaskPhase = "align";
+    let phase: TaskPhase = "investigate";
     let health: TaskHealth = "unknown";
     let reason: string | undefined;
 
     if (!hasSpec && blockers.length === 0) {
-      phase = "align";
-      health = "needs_spec";
-      reason = "task_spec_missing";
+      phase = openItems.length > 0 ? "execute" : "investigate";
+      health = "exploring";
+      reason =
+        openItems.length > 0
+          ? `spec_missing_open_items=${openItems.length}`
+          : "exploring_without_spec";
     } else if (!hasSpec && blockers.length > 0) {
       phase = "blocked";
       health = hasVerifierBlocker ? "verification_failed" : "blocked";
@@ -162,7 +165,7 @@ export class TaskService {
           : "verification_missing";
     }
 
-    if (health === "ok") {
+    if (health === "ok" || health === "exploring") {
       const ratio = normalizePercent(input.usage?.percent, {
         tokens: input.usage?.tokens,
         contextWindow: input.usage?.contextWindow,

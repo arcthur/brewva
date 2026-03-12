@@ -47,7 +47,7 @@ function normalizePhase(value: unknown): TaskPhase | undefined {
 function normalizeHealth(value: unknown): TaskHealth | undefined {
   if (
     value === "ok" ||
-    value === "needs_spec" ||
+    value === "exploring" ||
     value === "blocked" ||
     value === "verification_failed" ||
     value === "budget_pressure" ||

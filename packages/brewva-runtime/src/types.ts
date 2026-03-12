@@ -428,7 +428,7 @@ export type TaskPhase = "align" | "investigate" | "execute" | "verify" | "blocke
 
 export type TaskHealth =
   | "ok"
-  | "needs_spec"
+  | "exploring"
   | "blocked"
   | "verification_failed"
   | "budget_pressure"

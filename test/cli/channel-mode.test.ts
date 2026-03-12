@@ -12,7 +12,10 @@ import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 
 type SessionLike = {
   subscribe: (listener: (event: AgentSessionEvent) => void) => () => void;
-  sendUserMessage: (content: string) => Promise<void>;
+  sendUserMessage: (
+    content: string,
+    options?: { deliverAs?: "steer" | "followUp" },
+  ) => Promise<void>;
   agent: {
     waitForIdle: () => Promise<void>;
   };
@@ -118,6 +121,80 @@ describe("channel mode prompt output collector", () => {
 
     expect(outputs.toolOutputs).toHaveLength(1);
     expect(outputs.toolOutputs[0]?.text).toContain("Tool exec (tc-2) failed");
+  });
+
+  test("resumes channel prompt collection after compaction when runtime emits session_compact", async () => {
+    const listeners = new Set<
+      (event: { id: string; sessionId: string; type: string; timestamp: number }) => void
+    >();
+    const sentMessages: string[] = [];
+    let sessionListener: ((event: AgentSessionEvent) => void) | undefined;
+    const session: SessionLike = {
+      subscribe(next) {
+        sessionListener = next;
+        return () => {
+          sessionListener = undefined;
+        };
+      },
+      async sendUserMessage(content): Promise<void> {
+        sentMessages.push(content);
+        if (sentMessages.length === 1) {
+          for (const listener of listeners) {
+            listener({
+              id: "evt-1",
+              sessionId: "agent-session",
+              type: "session_compact",
+              timestamp: Date.now(),
+            });
+          }
+          return;
+        }
+
+        sessionListener?.({
+          type: "message_end",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "telegram resumed" }],
+          },
+        } as AgentSessionEvent);
+      },
+      agent: {
+        async waitForIdle(): Promise<void> {
+          return;
+        },
+      },
+    };
+
+    const outputs = await collectPromptTurnOutputs(
+      session as unknown as Parameters<typeof collectPromptTurnOutputs>[0],
+      "hello",
+      {
+        runtime: {
+          events: {
+            subscribe(
+              listener: (event: {
+                id: string;
+                sessionId: string;
+                type: string;
+                timestamp: number;
+              }) => void,
+            ) {
+              listeners.add(listener);
+              return () => {
+                listeners.delete(listener);
+              };
+            },
+            record: () => undefined,
+          },
+        } as any,
+        sessionId: "agent-session",
+        turnId: "turn-telegram-1",
+      },
+    );
+
+    expect(sentMessages).toHaveLength(2);
+    expect(sentMessages[1]).toContain("Resume the interrupted turn");
+    expect(outputs.assistantText).toBe("telegram resumed");
   });
 
   test("builds telegram dispatch prompt with the unified skill policy", () => {

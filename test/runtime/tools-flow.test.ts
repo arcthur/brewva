@@ -439,11 +439,12 @@ describe("S-010a observability tools flow", () => {
 });
 
 describe("S-011 session compact tool flow", () => {
-  test("session_compact requests SDK compaction with runtime instructions", async () => {
+  test("session_compact requests SDK compaction with runtime instructions without sending hidden follow-up", async () => {
     const runtime = new BrewvaRuntime({ cwd: process.cwd() });
     const sessionId = "s11";
     let compactCalls = 0;
     let capturedInstructions: string | undefined;
+    let hiddenFollowUpCalls = 0;
 
     const tool = createSessionCompactTool({ runtime });
     const result = await tool.execute(
@@ -453,9 +454,15 @@ describe("S-011 session compact tool flow", () => {
       undefined,
       {
         ...fakeContext(sessionId),
-        compact: (options?: { customInstructions?: string }) => {
+        compact: (options?: {
+          customInstructions?: string;
+          onError?: (error: unknown) => void;
+        }) => {
           compactCalls += 1;
           capturedInstructions = options?.customInstructions;
+        },
+        sendUserMessage: () => {
+          hiddenFollowUpCalls += 1;
         },
         getContextUsage: () => ({ tokens: 900, contextWindow: 1000, percent: 0.9 }),
       },
@@ -465,6 +472,7 @@ describe("S-011 session compact tool flow", () => {
     expect(text.includes("Session compaction requested")).toBe(true);
     expect(compactCalls).toBe(1);
     expect(capturedInstructions).toBe(runtime.context.getCompactionInstructions());
+    expect(hiddenFollowUpCalls).toBe(0);
   });
 });
 

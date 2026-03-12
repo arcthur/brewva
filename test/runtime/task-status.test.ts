@@ -18,8 +18,9 @@ describe("Task status alignment", () => {
 
     const injection1 = await runtime.context.buildInjection(sessionId, "hello");
     expect(injection1.text.includes("[TaskLedger]")).toBe(true);
-    expect(injection1.text.includes("status.phase=align")).toBe(true);
-    expect(injection1.text.includes("status.health=needs_spec")).toBe(true);
+    expect(injection1.text.includes("status.phase=investigate")).toBe(true);
+    expect(injection1.text.includes("status.health=exploring")).toBe(true);
+    expect(injection1.text.includes("status.reason=exploring_without_spec")).toBe(true);
 
     runtime.task.setSpec(sessionId, { schema: "brewva.task.v1", goal: "Do a thing" });
     const stateAfterSpec = runtime.task.getState(sessionId);
@@ -73,5 +74,22 @@ describe("Task status alignment", () => {
     const injection = await runtime.context.buildInjection(sessionId, "next");
     expect(injection.text.includes("status.phase=blocked")).toBe(true);
     expect(injection.text.includes("status.health=blocked")).toBe(true);
+  });
+
+  test("keeps execute phase when task items exist before spec is defined", async () => {
+    const workspace = createWorkspace("task-status-no-spec-items");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "task-status-4";
+
+    runtime.task.addItem(sessionId, { text: "Capture the current investigation plan" });
+
+    const state = runtime.task.getState(sessionId);
+    expect(state.status?.phase).toBe("execute");
+    expect(state.status?.health).toBe("exploring");
+    expect(state.status?.reason).toBe("spec_missing_open_items=1");
+
+    const injection = await runtime.context.buildInjection(sessionId, "next");
+    expect(injection.text.includes("status.phase=execute")).toBe(true);
+    expect(injection.text.includes("status.health=exploring")).toBe(true);
   });
 });

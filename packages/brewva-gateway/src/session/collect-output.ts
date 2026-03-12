@@ -3,7 +3,9 @@ import {
   resolveToolDisplayVerdict,
 } from "@brewva/brewva-gateway/runtime-plugins";
 import type { ToolDisplayVerdict } from "@brewva/brewva-gateway/runtime-plugins";
+import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
+import { sendPromptWithCompactionRecovery } from "./compaction-recovery.js";
 import type { GatewaySessionResult } from "./create-session.js";
 
 export interface GatewayToolOutput {
@@ -39,6 +41,9 @@ export type SessionStreamChunk =
 
 export interface CollectSessionPromptOutputOptions {
   onChunk?: (chunk: SessionStreamChunk) => void;
+  runtime?: BrewvaRuntime;
+  sessionId?: string;
+  turnId?: string;
 }
 
 function normalizeText(value: string | undefined): string {
@@ -259,8 +264,11 @@ export async function collectSessionPromptOutput(
   });
 
   try {
-    await session.sendUserMessage(prompt);
-    await session.agent.waitForIdle();
+    await sendPromptWithCompactionRecovery(session, prompt, {
+      runtime: options?.runtime,
+      sessionId: options?.sessionId,
+      turnId: options?.turnId,
+    });
     return {
       assistantText: latestAssistantText,
       toolOutputs,

@@ -180,8 +180,8 @@ function buildTaskBlockerMessage(
     `consecutive_scan_only_turns=${state.consecutiveScanOnlyTurns}`,
     `consecutive_investigation_only_turns=${state.consecutiveInvestigationOnlyTurns}`,
     `consecutive_scan_failures=${state.consecutiveScanFailures}`,
-    "required_next_step=Use task_add_item / task_record_blocker / task_view_state or evidence reuse tools before more low-signal retrieval.",
-    "preferred_tools=task_add_item,task_record_blocker,task_view_state,output_search,ledger_query,tape_search,tape_handoff",
+    "required_next_step=Review current evidence, then record a task mutation, blocker, spec, or handoff before more low-signal retrieval.",
+    "preferred_tools=task_set_spec,task_add_item,task_record_blocker,task_view_state,output_search,ledger_query,tape_search,tape_handoff",
   ].join("\n");
 }
 
@@ -323,7 +323,7 @@ export class ScanConvergenceService {
       return;
     }
 
-    if (isToolResultPass(verdict) && strategy !== "raw_scan" && strategy !== "low_signal") {
+    if (isToolResultPass(verdict) && strategy === "progress") {
       if (state.armedReason !== null) {
         this.resetGuard(input.sessionId, state, "strategy_shift", strategy);
       }
@@ -445,6 +445,7 @@ export class ScanConvergenceService {
         blockedStrategy: "low_signal_investigation",
         blockedTools: listBlockedScanConvergenceTools(),
         recommendedStrategyTools: [
+          "task_set_spec",
           "task_add_item",
           "task_record_blocker",
           "task_view_state",

@@ -40,7 +40,7 @@ export interface TaskWatchdogEligibility {
   phase: TaskWatchdogPhase | null;
   hasWatchdogBlocker: boolean;
   suppressedByBlockerId?: string;
-  reason?: "no_task_spec" | "inactive_phase" | "non_watchdog_blockers_present";
+  reason?: "inactive_phase" | "non_watchdog_blockers_present";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -59,12 +59,11 @@ function countOpenItems(state: TaskState): number {
 }
 
 export function inferUnderlyingTaskPhase(state: TaskState): TaskWatchdogPhase | null {
-  if (!state.spec) return null;
   const openItemCount = countOpenItems(state);
   if (openItemCount > 0) {
     return "execute";
   }
-  if (state.items.length === 0) {
+  if (!state.spec || state.items.length === 0) {
     return "investigate";
   }
   return "verify";
@@ -87,15 +86,6 @@ export function getTaskWatchdogOpenItemCount(state: TaskState): number {
 }
 
 export function evaluateTaskWatchdogEligibility(state: TaskState): TaskWatchdogEligibility {
-  if (!state.spec) {
-    return {
-      eligible: false,
-      phase: null,
-      hasWatchdogBlocker: false,
-      reason: "no_task_spec",
-    };
-  }
-
   const hasWatchdogBlocker = Boolean(getTaskWatchdogBlocker(state));
   const hasScanConvergenceBlocker = state.blockers.some(
     (blocker) => blocker.id === SCAN_CONVERGENCE_BLOCKER_ID,
@@ -113,7 +103,7 @@ export function evaluateTaskWatchdogEligibility(state: TaskState): TaskWatchdogE
   }
 
   const statusPhase = state.status?.phase;
-  if (statusPhase === "align" || statusPhase === "done") {
+  if (statusPhase === "done") {
     return {
       eligible: false,
       phase: null,
