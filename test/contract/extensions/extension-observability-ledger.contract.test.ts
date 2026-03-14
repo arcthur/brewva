@@ -1,0 +1,454 @@
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { registerEventStream, registerLedgerWriter } from "@brewva/brewva-gateway/runtime-plugins";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  createObsQueryTool,
+  createObsSloAssertTool,
+  createOutputSearchTool,
+} from "@brewva/brewva-tools";
+import { createMockExtensionAPI, invokeHandlers } from "../helpers/extension.js";
+
+describe("Extension integration: observability ledger", () => {
+  test("given high-volume exec tool output with explicit fail verdict, when ledger writer handles tool_result, then verdict propagates into observed and distilled telemetry", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-distill-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "ext-distill-1";
+
+    const { api, handlers } = createMockExtensionAPI();
+    registerEventStream(api, runtime);
+    registerLedgerWriter(api, runtime);
+
+    const ctx = {
+      cwd: workspace,
+      sessionManager: {
+        getSessionId: () => sessionId,
+      },
+    };
+
+    const noisyOutput = Array.from({ length: 180 }, (_value, index) =>
+      index % 17 === 0
+        ? `error at step ${index}: timeout while waiting for response`
+        : `line ${index}: working`,
+    ).join("\n");
+
+    invokeHandlers(
+      handlers,
+      "tool_result",
+      {
+        toolCallId: "tc-exec-distill",
+        toolName: "exec",
+        input: { command: "echo test" },
+        isError: false,
+        content: [{ type: "text", text: noisyOutput }],
+        details: { durationMs: 12, verdict: "fail" },
+      },
+      ctx,
+    );
+
+    const observed = runtime.events.query(sessionId, {
+      type: "tool_output_observed",
+      last: 1,
+    })[0];
+    expect(
+      (observed?.payload as { isError?: boolean; verdict?: string } | undefined)?.isError,
+    ).toBe(false);
+    expect(
+      (observed?.payload as { isError?: boolean; verdict?: string } | undefined)?.verdict,
+    ).toBe("fail");
+
+    const distilled = runtime.events.query(sessionId, {
+      type: "tool_output_distilled",
+      last: 1,
+    })[0];
+    const distilledPayload = distilled?.payload as
+      | {
+          strategy?: string;
+          rawTokens?: number;
+          summaryTokens?: number;
+          compressionRatio?: number;
+          summaryText?: string;
+          artifactRef?: string | null;
+          verdict?: string;
+        }
+      | undefined;
+    expect(distilledPayload?.strategy).toBe("exec_heuristic");
+    expect(distilledPayload?.verdict).toBe("fail");
+    expect((distilledPayload?.rawTokens ?? 0) > (distilledPayload?.summaryTokens ?? 0)).toBe(true);
+    expect((distilledPayload?.compressionRatio ?? 1) < 1).toBe(true);
+    expect(distilledPayload?.summaryText ?? "").toContain("status: failed");
+    expect(distilledPayload?.summaryText ?? "").toContain("[ExecDistilled]");
+    expect(typeof distilledPayload?.artifactRef).toBe("string");
+
+    const artifactRef =
+      (
+        runtime.events.query(sessionId, {
+          type: "tool_output_artifact_persisted",
+          last: 1,
+        })[0]?.payload as { artifactRef?: string } | undefined
+      )?.artifactRef ?? "";
+    const artifactPath = join(workspace, artifactRef);
+    expect(existsSync(artifactPath)).toBe(true);
+    expect(readFileSync(artifactPath, "utf8")).toContain("error at step");
+
+    const recordedPayload = runtime.events.query(sessionId, {
+      type: "tool_result_recorded",
+      last: 1,
+    })[0]?.payload as
+      | {
+          outputArtifact?: {
+            artifactRef?: string;
+          } | null;
+          outputDistillation?: {
+            strategy?: string;
+            rawTokens?: number;
+            summaryTokens?: number;
+            artifactRef?: string | null;
+          } | null;
+        }
+      | undefined;
+    expect(recordedPayload?.outputDistillation?.strategy).toBe("exec_heuristic");
+    expect(typeof recordedPayload?.outputDistillation?.artifactRef).toBe("string");
+    expect(typeof recordedPayload?.outputArtifact?.artifactRef).toBe("string");
+    expect(
+      (recordedPayload?.outputDistillation?.rawTokens ?? 0) >
+        (recordedPayload?.outputDistillation?.summaryTokens ?? 0),
+    ).toBe(true);
+  });
+
+  test("given process explicit inconclusive verdict, when tool_result is recorded, then verdict is inconclusive", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-running-inconclusive-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "ext-running-inconclusive-1";
+
+    const { api, handlers } = createMockExtensionAPI();
+    registerEventStream(api, runtime);
+    registerLedgerWriter(api, runtime);
+
+    invokeHandlers(
+      handlers,
+      "tool_result",
+      {
+        toolCallId: "tc-process-running",
+        toolName: "process",
+        input: { action: "poll", sessionId: "exec-1" },
+        isError: false,
+        content: [{ type: "text", text: "Process still running." }],
+        details: { verdict: "inconclusive", sessionId: "exec-1" },
+      },
+      {
+        cwd: workspace,
+        sessionManager: {
+          getSessionId: () => sessionId,
+        },
+      },
+    );
+
+    const recordedPayload = runtime.events.query(sessionId, {
+      type: "tool_result_recorded",
+      last: 1,
+    })[0]?.payload as
+      | {
+          verdict?: string;
+          channelSuccess?: boolean;
+        }
+      | undefined;
+    expect(recordedPayload?.verdict).toBe("inconclusive");
+    expect(recordedPayload?.channelSuccess).toBe(true);
+    expect(runtime.ledger.listRows(sessionId)).toHaveLength(1);
+    expect(runtime.ledger.listRows(sessionId)[0]?.verdict).toBe("inconclusive");
+  });
+
+  test("given obs_query result override, when ledger writer records the tool result, then output_search can reuse the raw artifact", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-obs-query-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "ext-obs-query-1";
+
+    runtime.events.record({
+      sessionId,
+      type: "startup_sample",
+      payload: {
+        service: "api",
+        startupMs: 780,
+      },
+    });
+    runtime.events.record({
+      sessionId,
+      type: "startup_sample",
+      payload: {
+        service: "api",
+        startupMs: 820,
+      },
+    });
+
+    const { api, handlers } = createMockExtensionAPI();
+    registerEventStream(api, runtime);
+    registerLedgerWriter(api, runtime);
+    const ctx = {
+      cwd: workspace,
+      sessionManager: {
+        getSessionId: () => sessionId,
+      },
+    };
+
+    const tool = createObsQueryTool({ runtime });
+    const toolResult = await tool.execute(
+      "tc-obs-query",
+      {
+        types: ["startup_sample"],
+        where: { service: "api" },
+        metric: "startupMs",
+        aggregation: "p95",
+      },
+      undefined,
+      undefined,
+      ctx as never,
+    );
+
+    invokeHandlers(
+      handlers,
+      "tool_result",
+      {
+        toolCallId: "tc-obs-query",
+        toolName: "obs_query",
+        input: {
+          types: ["startup_sample"],
+          where: { service: "api" },
+          metric: "startupMs",
+          aggregation: "p95",
+        },
+        isError: false,
+        content: toolResult.content,
+        details: toolResult.details as Record<string, unknown> | undefined,
+      },
+      ctx,
+    );
+
+    const artifactRef =
+      (
+        runtime.events.query(sessionId, {
+          type: "tool_output_artifact_persisted",
+          last: 1,
+        })[0]?.payload as { artifactRef?: string } | undefined
+      )?.artifactRef ?? "";
+    expect(artifactRef.length).toBeGreaterThan(0);
+    expect(readFileSync(join(workspace, artifactRef), "utf8")).toContain('"toolName": "obs_query"');
+
+    const outputSearchTool = createOutputSearchTool({ runtime });
+    const outputSearchResult = await outputSearchTool.execute(
+      "tc-output-search",
+      { query: "startupMs" },
+      undefined,
+      undefined,
+      ctx as never,
+    );
+    const outputSearchText = outputSearchResult.content
+      .map((part) => ("text" in part && typeof part.text === "string" ? part.text : ""))
+      .join("\n");
+    expect(outputSearchText).toContain(artifactRef);
+
+    const recordedPayload = runtime.events.query(sessionId, {
+      type: "tool_result_recorded",
+      last: 1,
+    })[0]?.payload as
+      | {
+          outputArtifact?: {
+            artifactRef?: string;
+          } | null;
+        }
+      | undefined;
+    expect(recordedPayload?.outputArtifact?.artifactRef).toBe(artifactRef);
+  });
+
+  test("given obs_slo_assert explicit verdicts, when ledger writer records the tool result, then ledger verdicts and truth sync follow the declared verdict", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-obs-assert-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "ext-obs-assert-1";
+
+    runtime.events.record({
+      sessionId,
+      type: "startup_sample",
+      payload: {
+        service: "api",
+        startupMs: 910,
+      },
+    });
+    runtime.events.record({
+      sessionId,
+      type: "startup_sample",
+      payload: {
+        service: "api",
+        startupMs: 930,
+      },
+    });
+
+    const { api, handlers } = createMockExtensionAPI();
+    registerEventStream(api, runtime);
+    registerLedgerWriter(api, runtime);
+    const ctx = {
+      cwd: workspace,
+      sessionManager: {
+        getSessionId: () => sessionId,
+      },
+    };
+    const tool = createObsSloAssertTool({ runtime });
+
+    const failResult = await tool.execute(
+      "tc-obs-assert-fail",
+      {
+        types: ["startup_sample"],
+        where: { service: "api" },
+        metric: "startupMs",
+        aggregation: "p95",
+        operator: "<=",
+        threshold: 800,
+        minSamples: 2,
+      },
+      undefined,
+      undefined,
+      ctx as never,
+    );
+    invokeHandlers(
+      handlers,
+      "tool_result",
+      {
+        toolCallId: "tc-obs-assert-fail",
+        toolName: "obs_slo_assert",
+        input: {
+          types: ["startup_sample"],
+          where: { service: "api" },
+          metric: "startupMs",
+          aggregation: "p95",
+          operator: "<=",
+          threshold: 800,
+          minSamples: 2,
+        },
+        isError: false,
+        content: failResult.content,
+        details: failResult.details as Record<string, unknown> | undefined,
+      },
+      ctx,
+    );
+
+    expect(runtime.ledger.listRows(sessionId).at(-1)?.verdict).toBe("fail");
+    expect(
+      runtime.truth
+        .getState(sessionId)
+        .facts.some(
+          (fact) => fact.kind === "observability_slo_violation" && fact.status === "active",
+        ),
+    ).toBe(true);
+
+    const inconclusiveResult = await tool.execute(
+      "tc-obs-assert-inconclusive",
+      {
+        types: ["startup_sample"],
+        where: { service: "api" },
+        metric: "startupMs",
+        aggregation: "p95",
+        operator: "<=",
+        threshold: 800,
+        minSamples: 3,
+      },
+      undefined,
+      undefined,
+      ctx as never,
+    );
+    invokeHandlers(
+      handlers,
+      "tool_result",
+      {
+        toolCallId: "tc-obs-assert-inconclusive",
+        toolName: "obs_slo_assert",
+        input: {
+          types: ["startup_sample"],
+          where: { service: "api" },
+          metric: "startupMs",
+          aggregation: "p95",
+          operator: "<=",
+          threshold: 800,
+          minSamples: 3,
+        },
+        isError: false,
+        content: inconclusiveResult.content,
+        details: inconclusiveResult.details as Record<string, unknown> | undefined,
+      },
+      ctx,
+    );
+
+    expect(runtime.ledger.listRows(sessionId).at(-1)?.verdict).toBe("inconclusive");
+  });
+
+  test("given failed tool_execution_end without tool_result, when observability handlers run, then fallback output and ledger events are persisted", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-fallback-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "ext-fallback-1";
+
+    const { api, handlers } = createMockExtensionAPI();
+    registerEventStream(api, runtime);
+    registerLedgerWriter(api, runtime);
+    const ctx = {
+      cwd: workspace,
+      sessionManager: {
+        getSessionId: () => sessionId,
+      },
+    };
+
+    invokeHandlers(handlers, "session_start", {}, ctx);
+    invokeHandlers(handlers, "turn_start", { turnIndex: 1, timestamp: Date.now() }, ctx);
+    invokeHandlers(
+      handlers,
+      "tool_execution_start",
+      {
+        toolCallId: "tc-fallback-lsp",
+        toolName: "lsp_symbols",
+      },
+      ctx,
+    );
+    invokeHandlers(
+      handlers,
+      "tool_execution_end",
+      {
+        toolCallId: "tc-fallback-lsp",
+        toolName: "lsp_symbols",
+        isError: true,
+      },
+      ctx,
+    );
+
+    const observedPayload = runtime.events.query(sessionId, {
+      type: "tool_output_observed",
+      last: 1,
+    })[0]?.payload as
+      | {
+          toolCallId?: string;
+          toolName?: string;
+        }
+      | undefined;
+    expect(observedPayload?.toolCallId).toBe("tc-fallback-lsp");
+    expect(observedPayload?.toolName).toBe("lsp_symbols");
+
+    const recordedPayload = runtime.events.query(sessionId, {
+      type: "tool_result_recorded",
+      last: 1,
+    })[0]?.payload as
+      | {
+          verdict?: string;
+        }
+      | undefined;
+    expect(recordedPayload?.verdict).toBe("fail");
+    expect(runtime.ledger.listRows(sessionId)).toHaveLength(1);
+    expect(runtime.ledger.listRows(sessionId)[0]?.tool).toBe("lsp_symbols");
+    expect(
+      (
+        runtime.ledger.listRows(sessionId)[0]?.metadata as
+          | {
+              lifecycleFallbackReason?: string;
+            }
+          | undefined
+      )?.lifecycleFallbackReason,
+    ).toBe("tool_execution_end_without_tool_result");
+  });
+});

@@ -114,12 +114,30 @@ export interface SessionSupervisorTestWorkerInput {
   cwd?: string;
   agentSessionId?: string;
   pendingRequests?: SessionSupervisorTestPendingRequest[];
+  pendingCount?: number;
+  readyRequestId?: string;
+  activeTurnId?: string | null;
+}
+
+export interface SessionSupervisorTestWorkerSnapshot {
+  sessionId: string;
+  pendingRequests: number;
+  pendingTurns: number;
+  turnQueueLength: number;
+  activeTurnId: string | null;
+  readyRequestId?: string;
+  lastActivityAt: number;
+  lastHeartbeatAt: number;
 }
 
 export interface SessionSupervisorTestHooks {
   seedWorker(input: SessionSupervisorTestWorkerInput): void;
+  resetWorkers(): void;
   persistRegistry(): void;
   dispatchWorkerMessage(sessionId: string, message: WorkerToParentMessage): void;
+  replaceWorkerSend(sessionId: string, send: (message: unknown) => boolean): void;
+  getWorkerSnapshot(sessionId: string): SessionSupervisorTestWorkerSnapshot | undefined;
+  sweepIdleSessions(): Promise<void>;
 }
 
 export class SessionSupervisor implements SessionBackend {
@@ -145,11 +163,24 @@ export class SessionSupervisor implements SessionBackend {
     seedWorker: (input) => {
       this.seedWorkerForTest(input);
     },
+    resetWorkers: () => {
+      this.workers.clear();
+      this.persistRegistry();
+    },
     persistRegistry: () => {
       this.persistRegistry();
     },
     dispatchWorkerMessage: (sessionId, message) => {
       this.dispatchWorkerMessageForTest(sessionId, message);
+    },
+    replaceWorkerSend: (sessionId, send) => {
+      this.replaceWorkerSendForTest(sessionId, send);
+    },
+    getWorkerSnapshot: (sessionId) => {
+      return this.getWorkerSnapshotForTest(sessionId);
+    },
+    sweepIdleSessions: async () => {
+      await this.sweepIdleSessions();
     },
   };
 
@@ -502,6 +533,17 @@ export class SessionSupervisor implements SessionBackend {
       request.timer.unref?.();
     }
 
+    const pendingCount = Math.max(0, input.pendingCount ?? 0);
+    for (let index = pending.size; index < pendingCount; index += 1) {
+      const timer = setTimeout(() => undefined, 5 * 60_000);
+      timer.unref?.();
+      pending.set(`pending-${index}`, {
+        resolve: () => undefined,
+        reject: () => undefined,
+        timer,
+      });
+    }
+
     const child = {
       pid: input.pid,
       send: () => true,
@@ -518,8 +560,9 @@ export class SessionSupervisor implements SessionBackend {
       pending,
       pendingTurns: new Map<string, PendingTurn>(),
       turnQueue: [],
-      activeTurnId: null,
+      activeTurnId: input.activeTurnId ?? null,
       activeTurnWalIds: new Map<string, string>(),
+      readyRequestId: input.readyRequestId,
       lastHeartbeatAt: input.lastHeartbeatAt ?? now,
     });
   }
@@ -530,6 +573,33 @@ export class SessionSupervisor implements SessionBackend {
       throw new SessionBackendStateError("session_not_found", `session not found: ${sessionId}`);
     }
     this.workerRpc.handleWorkerMessage(handle, message);
+  }
+
+  private replaceWorkerSendForTest(sessionId: string, send: (message: unknown) => boolean): void {
+    const handle = this.workers.get(sessionId);
+    if (!handle) {
+      throw new SessionBackendStateError("session_not_found", `session not found: ${sessionId}`);
+    }
+    handle.child.send = ((message: unknown) => send(message)) as ChildProcess["send"];
+  }
+
+  private getWorkerSnapshotForTest(
+    sessionId: string,
+  ): SessionSupervisorTestWorkerSnapshot | undefined {
+    const handle = this.workers.get(sessionId);
+    if (!handle) {
+      return undefined;
+    }
+    return {
+      sessionId: handle.sessionId,
+      pendingRequests: handle.pending.size,
+      pendingTurns: handle.pendingTurns.size,
+      turnQueueLength: handle.turnQueue.length,
+      activeTurnId: handle.activeTurnId,
+      readyRequestId: handle.readyRequestId,
+      lastActivityAt: handle.lastActivityAt,
+      lastHeartbeatAt: handle.lastHeartbeatAt,
+    };
   }
 
   private spawnWorker(): ChildProcess {

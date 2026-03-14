@@ -52,7 +52,7 @@ const SESSION_SCOPED_EVENTS = new Set<GatewayEvent>([
   "session.turn.end",
 ]);
 
-type ConnectionPhase = "connected" | "authenticating" | "authenticated" | "closing";
+export type ConnectionPhase = "connected" | "authenticating" | "authenticated" | "closing";
 
 interface ConnectionState {
   connId: string;
@@ -186,6 +186,56 @@ export interface GatewayStatusDeepPayload extends GatewayHealthPayload {
   }>;
 }
 
+export interface GatewayDaemonTestSocket {
+  readyState: number;
+  OPEN: number;
+  CONNECTING: number;
+  close(code: number, reason: string): void;
+  terminate(): void;
+  send(data: string): void;
+}
+
+export interface GatewayDaemonTestConnectionInput {
+  connId?: string;
+  socket?: GatewayDaemonTestSocket;
+  challengeNonce?: string;
+  phase?: ConnectionPhase;
+  authenticatedToken?: string;
+  subscribedSessions?: Iterable<string>;
+  connectedAt?: number;
+  lastSeenAt?: number;
+  client?: {
+    id: string;
+    version: string;
+    mode?: string;
+  };
+}
+
+export interface GatewayDaemonTestConnectionSnapshot {
+  connId: string;
+  phase: ConnectionPhase;
+  authenticatedToken?: string;
+  subscribedSessions: string[];
+  connectedAt: number;
+  lastSeenAt: number;
+}
+
+export interface GatewayDaemonTestHooks {
+  invokeMethod(
+    method: GatewayMethod,
+    params: unknown,
+    state?: GatewayDaemonTestConnectionInput,
+  ): Promise<unknown>;
+  fireHeartbeat(rule: HeartbeatRule): Promise<void>;
+  injectWorkerEvent(event: GatewayEvent, payload: unknown): void;
+  observeBroadcasts(listener: (event: GatewayEvent, payload?: unknown) => void): () => void;
+  getAuthToken(): string;
+  getSessionBackend(): SessionBackend;
+  registerConnection(input: GatewayDaemonTestConnectionInput): GatewayDaemonTestConnectionSnapshot;
+  getConnectionSnapshot(connId: string): GatewayDaemonTestConnectionSnapshot | undefined;
+  getSessionSubscriberIds(sessionId: string): string[];
+}
+
 export class GatewayDaemon {
   private readonly host: string;
   private readonly configuredPort: number;
@@ -206,6 +256,7 @@ export class GatewayDaemon {
   private readonly heartbeatScheduler: HeartbeatScheduler;
   private readonly addonHost: AddonHost;
   private readonly heartbeatSessionByRule = new Map<string, string>();
+  private readonly broadcastObservers = new Set<(event: GatewayEvent, payload?: unknown) => void>();
   private readonly startedAt = Date.now();
   private readonly stopDeferred = createDeferred<void>();
   private readonly connections = new Map<WebSocket, ConnectionState>();
@@ -222,6 +273,44 @@ export class GatewayDaemon {
   private ownsPidRecord = false;
   private onSigInt: (() => void) | null = null;
   private onSigTerm: (() => void) | null = null;
+
+  readonly testHooks: GatewayDaemonTestHooks = {
+    invokeMethod: async (method, params, state) => {
+      return await this.handleMethod(method, params, this.resolveConnectionStateForTest(state));
+    },
+    fireHeartbeat: async (rule) => {
+      await this.fireHeartbeat(rule);
+    },
+    injectWorkerEvent: (event, payload) => {
+      this.handleWorkerEvent(event, payload);
+    },
+    observeBroadcasts: (listener) => {
+      this.broadcastObservers.add(listener);
+      return () => {
+        this.broadcastObservers.delete(listener);
+      };
+    },
+    getAuthToken: () => this.authToken,
+    getSessionBackend: () => this.supervisor,
+    registerConnection: (input) => {
+      const state = this.registerConnectionForTest(input);
+      return {
+        connId: state.connId,
+        phase: state.phase,
+        authenticatedToken: state.authenticatedToken,
+        subscribedSessions: [...state.subscribedSessions],
+        connectedAt: state.connectedAt,
+        lastSeenAt: state.lastSeenAt,
+      };
+    },
+    getConnectionSnapshot: (connId) => {
+      return this.toConnectionSnapshot(this.connectionsById.get(connId));
+    },
+    getSessionSubscriberIds: (sessionId) => {
+      const normalizedSessionId = sessionId.trim();
+      return [...(this.sessionSubscribers.get(normalizedSessionId) ?? new Set<string>())];
+    },
+  };
 
   constructor(private readonly options: GatewayDaemonOptions) {
     this.host = normalizeGatewayHost(options.host);
@@ -1411,6 +1500,16 @@ export class GatewayDaemon {
   }
 
   private broadcastEvent(event: GatewayEvent, payload?: unknown): void {
+    for (const observer of this.broadcastObservers) {
+      try {
+        observer(event, payload);
+      } catch (error) {
+        this.logger.warn("gateway broadcast observer failed", {
+          event,
+          error: toErrorMessage(error),
+        });
+      }
+    }
     if (SESSION_SCOPED_EVENTS.has(event)) {
       const sessionId = this.extractSessionIdFromPayload(payload);
       if (sessionId) {
@@ -1427,6 +1526,71 @@ export class GatewayDaemon {
       }
       this.sendEvent(state, event, payload, seq);
     }
+  }
+
+  private createSocketForTest(socket?: GatewayDaemonTestSocket): WebSocket {
+    const fallback: GatewayDaemonTestSocket = socket ?? {
+      readyState: 1,
+      OPEN: 1,
+      CONNECTING: 0,
+      close: () => undefined,
+      terminate: () => undefined,
+      send: () => undefined,
+    };
+    return fallback as unknown as WebSocket;
+  }
+
+  private createConnectionStateForTest(
+    input: GatewayDaemonTestConnectionInput = {},
+  ): ConnectionState {
+    const now = Date.now();
+    return {
+      connId: input.connId?.trim() || randomUUID(),
+      socket: this.createSocketForTest(input.socket),
+      challengeNonce: input.challengeNonce ?? `test-challenge-${randomUUID()}`,
+      phase: input.phase ?? "authenticated",
+      authenticatedToken: input.authenticatedToken,
+      subscribedSessions: new Set<string>(),
+      connectedAt: input.connectedAt ?? now,
+      lastSeenAt: input.lastSeenAt ?? now,
+      client: input.client,
+    };
+  }
+
+  private registerConnectionForTest(input: GatewayDaemonTestConnectionInput): ConnectionState {
+    const state = this.createConnectionStateForTest(input);
+    this.connections.set(state.socket, state);
+    this.connectionsById.set(state.connId, state);
+    for (const sessionId of input.subscribedSessions ?? []) {
+      this.subscribeConnectionToSession(state, sessionId);
+    }
+    return state;
+  }
+
+  private resolveConnectionStateForTest(input?: GatewayDaemonTestConnectionInput): ConnectionState {
+    if (input?.connId) {
+      const existing = this.connectionsById.get(input.connId.trim());
+      if (existing) {
+        return existing;
+      }
+    }
+    return this.createConnectionStateForTest(input);
+  }
+
+  private toConnectionSnapshot(
+    state: ConnectionState | undefined,
+  ): GatewayDaemonTestConnectionSnapshot | undefined {
+    if (!state) {
+      return undefined;
+    }
+    return {
+      connId: state.connId,
+      phase: state.phase,
+      authenticatedToken: state.authenticatedToken,
+      subscribedSessions: [...state.subscribedSessions],
+      connectedAt: state.connectedAt,
+      lastSeenAt: state.lastSeenAt,
+    };
   }
 }
 
