@@ -1,0 +1,210 @@
+import { describe, expect, test } from "bun:test";
+import { createExecTool, createProcessTool } from "@brewva/brewva-tools";
+import {
+  createRuntimeForExecTests,
+  extractTextContent,
+  fakeContext,
+} from "./tools-exec-process.helpers.js";
+
+describe("exec/process tool flow", () => {
+  test("exec backgrounds and process poll waits for completion", async () => {
+    const { runtime } = createRuntimeForExecTests({
+      mode: "permissive",
+      backend: "host",
+    });
+    const execTool = createExecTool({ runtime });
+    const processTool = createProcessTool();
+    const sessionId = "s13-exec-process";
+
+    const started = await execTool.execute(
+      "tc-exec-start",
+      {
+        command: "node -e \"setTimeout(() => { console.log('done') }, 150)\"",
+        yieldMs: 10,
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    const startDetails = started.details as {
+      status?: string;
+      verdict?: string;
+      sessionId?: string;
+    };
+    expect(startDetails.status).toBe("running");
+    expect(startDetails.verdict).toBe("inconclusive");
+    expect(typeof startDetails.sessionId).toBe("string");
+
+    const sessionHandle = startDetails.sessionId ?? "";
+    let observedDone = false;
+    let finalStatus: string | undefined;
+    let finalVerdict: string | undefined;
+
+    for (const [index, pollCallId] of [
+      "tc-exec-poll",
+      "tc-exec-poll-finished",
+      "tc-exec-poll-final",
+    ].entries()) {
+      const polled = await processTool.execute(
+        pollCallId,
+        {
+          action: "poll",
+          sessionId: sessionHandle,
+          timeout: 2_000,
+        },
+        undefined,
+        undefined,
+        fakeContext(sessionId),
+      );
+      const pollText = extractTextContent(polled);
+      observedDone ||= pollText.includes("done");
+
+      const pollDetails = polled.details as { status?: string; verdict?: string };
+      finalStatus = pollDetails.status;
+      finalVerdict = pollDetails.verdict;
+
+      if (pollDetails.status === "completed") {
+        break;
+      }
+
+      expect(pollDetails.status).toBe("running");
+      expect(pollDetails.verdict).toBe("inconclusive");
+      expect(index).toBeLessThan(2);
+    }
+
+    expect(observedDone).toBe(true);
+    expect(finalStatus).toBe("completed");
+    expect(finalVerdict).toBeUndefined();
+  });
+
+  test("process kill stops a background session", async () => {
+    const { runtime } = createRuntimeForExecTests({
+      mode: "permissive",
+      backend: "host",
+    });
+    const execTool = createExecTool({ runtime });
+    const processTool = createProcessTool();
+    const sessionId = "s13-process-kill";
+
+    const started = await execTool.execute(
+      "tc-exec-start",
+      {
+        command: "node -e \"setInterval(() => process.stdout.write('tick\\\\n'), 40)\"",
+        background: true,
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    const sessionHandle = (started.details as { sessionId?: string }).sessionId;
+    expect(typeof sessionHandle).toBe("string");
+
+    const killed = await processTool.execute(
+      "tc-process-kill",
+      {
+        action: "kill",
+        sessionId: sessionHandle,
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    expect((killed.details as { status?: string; verdict?: string }).status).toBe("failed");
+    expect((killed.details as { status?: string; verdict?: string }).verdict).toBe("fail");
+
+    const polled = await processTool.execute(
+      "tc-process-poll",
+      {
+        action: "poll",
+        sessionId: sessionHandle,
+        timeout: 1_000,
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    const pollStatus = (polled.details as { status?: string }).status;
+    expect(pollStatus === "completed" || pollStatus === "failed").toBe(true);
+  });
+
+  test("exec rejects missing command with explicit fail verdict", async () => {
+    const { runtime } = createRuntimeForExecTests({
+      mode: "permissive",
+      backend: "host",
+    });
+    const execTool = createExecTool({ runtime });
+    const sessionId = "s13-exec-missing-command";
+
+    const rejected = await execTool.execute(
+      "tc-exec-missing-command",
+      {
+        command: "   ",
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const details = rejected.details as { status?: string; verdict?: string };
+    expect(details.status).toBe("failed");
+    expect(details.verdict).toBe("fail");
+  });
+
+  test("exec throws on non-zero exit code", async () => {
+    const { runtime } = createRuntimeForExecTests({
+      mode: "permissive",
+      backend: "host",
+    });
+    const execTool = createExecTool({ runtime });
+    const sessionId = "s13-exec-fail";
+
+    expect(
+      execTool.execute(
+        "tc-exec-fail",
+        {
+          command: 'node -e "process.exit(2)"',
+        },
+        undefined,
+        undefined,
+        fakeContext(sessionId),
+      ),
+    ).rejects.toThrow("Process exited");
+  });
+
+  test("exec accepts timeout_ms and interprets large timeout values as milliseconds", async () => {
+    const { runtime, events } = createRuntimeForExecTests({
+      mode: "permissive",
+      backend: "host",
+    });
+    const execTool = createExecTool({ runtime });
+    const sessionId = "s13-exec-timeout-ms";
+
+    const resultFromTimeoutMs = await execTool.execute(
+      "tc-exec-timeout-ms-1",
+      {
+        command: "echo timeout-ms",
+        timeout_ms: 120_000,
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    expect(extractTextContent(resultFromTimeoutMs)).toContain("timeout-ms");
+
+    const resultFromLargeTimeout = await execTool.execute(
+      "tc-exec-timeout-ms-2",
+      {
+        command: "echo timeout-large",
+        timeout: 120_000,
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    expect(extractTextContent(resultFromLargeTimeout)).toContain("timeout-large");
+
+    const routedEvents = events.filter((event) => event.type === "exec_routed");
+    expect(routedEvents[0]?.payload?.requestedTimeoutSec).toBe(120);
+    expect(routedEvents[1]?.payload?.requestedTimeoutSec).toBe(120);
+  });
+});

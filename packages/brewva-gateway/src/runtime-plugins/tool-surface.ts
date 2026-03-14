@@ -4,8 +4,7 @@ import {
   listSkillDeniedEffects,
   listSkillFallbackTools,
   listSkillPreferredTools,
-  type BrewvaRuntime,
-  type SkillDocument,
+  type SkillContract,
 } from "@brewva/brewva-runtime";
 import {
   BASE_BREWVA_TOOL_NAMES,
@@ -22,6 +21,57 @@ const CAPABILITY_REQUEST_PATTERN = /\$([a-z][a-z0-9_]*)/g;
 const BUILTIN_ALWAYS_ON_TOOL_NAMES = ["read", "edit", "write"] as const;
 const TOOL_SURFACE_RESOLVED_EVENT_TYPE = "tool_surface_resolved";
 const MANAGED_TOOL_NAME_SET = new Set(MANAGED_BREWVA_TOOL_NAMES);
+
+type ToolSurfaceSkill = {
+  name: string;
+  contract: SkillContract;
+};
+
+export interface ToolSurfaceRuntime {
+  config: {
+    skills: {
+      routing: {
+        scopes: string[];
+      };
+    };
+  };
+  skills: {
+    getActive(sessionId: string): ToolSurfaceSkill | null | undefined;
+    getPendingDispatch(sessionId: string):
+      | {
+          primary?: {
+            name?: string | null;
+          } | null;
+          chain?: string[];
+        }
+      | undefined;
+    getCascadeIntent(sessionId: string):
+      | {
+          steps: Array<{
+            skill: string;
+          }>;
+          cursor: number;
+        }
+      | undefined;
+    get(name: string): ToolSurfaceSkill | undefined;
+  };
+  task: {
+    getState(sessionId: string):
+      | {
+          spec?: unknown;
+          status?: {
+            phase?: string;
+          };
+          items?: unknown[];
+          blockers?: unknown[];
+          updatedAt?: unknown;
+        }
+      | undefined;
+  };
+  events: {
+    record(input: { sessionId: string; type: string; payload?: Record<string, unknown> }): unknown;
+  };
+}
 
 function normalizeToolName(name: string): string {
   return name.trim().toLowerCase();
@@ -40,7 +90,7 @@ function extractRequestedToolNames(prompt: string): string[] {
   return [...requested];
 }
 
-function isOperatorProfile(runtime: BrewvaRuntime): boolean {
+function isOperatorProfile(runtime: ToolSurfaceRuntime): boolean {
   const scopes = new Set(runtime.config.skills.routing.scopes);
   return scopes.has("operator") || scopes.has("meta");
 }
@@ -52,7 +102,7 @@ function appendSkillName(names: string[], skillName: string | null | undefined):
   names.push(trimmed);
 }
 
-function resolveSurfaceSkills(runtime: BrewvaRuntime, sessionId: string): SkillDocument[] {
+function resolveSurfaceSkills(runtime: ToolSurfaceRuntime, sessionId: string): ToolSurfaceSkill[] {
   const names: string[] = [];
   const active = runtime.skills.getActive(sessionId);
   const pendingDispatch = runtime.skills.getPendingDispatch(sessionId);
@@ -60,12 +110,12 @@ function resolveSurfaceSkills(runtime: BrewvaRuntime, sessionId: string): SkillD
 
   appendSkillName(names, active?.name);
   appendSkillName(names, pendingDispatch?.primary?.name);
-  appendSkillName(names, pendingDispatch?.chain[0]);
+  appendSkillName(names, pendingDispatch?.chain?.[0]);
   appendSkillName(names, cascadeIntent?.steps[cascadeIntent.cursor]?.skill);
 
   return names
     .map((name) => runtime.skills.get(name))
-    .filter((skill): skill is SkillDocument => skill !== undefined);
+    .filter((skill): skill is ToolSurfaceSkill => skill !== undefined);
 }
 
 function resolveManagedToolGovernanceDescriptor(
@@ -77,7 +127,7 @@ function resolveManagedToolGovernanceDescriptor(
 }
 
 function collectSkillToolNames(
-  skills: SkillDocument[],
+  skills: ToolSurfaceSkill[],
   dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>,
 ): string[] {
   const names = new Set<string>();
@@ -104,7 +154,7 @@ function collectSkillToolNames(
   return [...names];
 }
 
-function getTaskStateSafe(runtime: BrewvaRuntime, sessionId: string) {
+function getTaskStateSafe(runtime: ToolSurfaceRuntime, sessionId: string) {
   try {
     return runtime.task.getState(sessionId);
   } catch {
@@ -113,7 +163,7 @@ function getTaskStateSafe(runtime: BrewvaRuntime, sessionId: string) {
 }
 
 function resolveInvestigationLifecycleToolNames(
-  runtime: BrewvaRuntime,
+  runtime: ToolSurfaceRuntime,
   sessionId: string,
 ): string[] {
   const state = getTaskStateSafe(runtime, sessionId);
@@ -149,7 +199,7 @@ function resolveRequestedManagedToolNames(
 }
 
 function resolveManagedToolNamesForTurn(input: {
-  runtime: BrewvaRuntime;
+  runtime: ToolSurfaceRuntime;
   sessionId: string;
   prompt: string;
   dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
@@ -198,7 +248,7 @@ function resolveManagedToolNamesForTurn(input: {
 }
 
 function resolveActiveToolNames(input: {
-  runtime: BrewvaRuntime;
+  runtime: ToolSurfaceRuntime;
   sessionId: string;
   prompt: string;
   allTools: ToolInfo[];
@@ -339,7 +389,7 @@ export interface ToolSurfaceLifecycle {
 
 function registerMissingManagedTools(input: {
   pi: ExtensionAPI;
-  runtime: BrewvaRuntime;
+  runtime: ToolSurfaceRuntime;
   sessionId: string;
   prompt: string;
   dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
@@ -372,7 +422,7 @@ function registerMissingManagedTools(input: {
 
 export function createToolSurfaceLifecycle(
   pi: ExtensionAPI,
-  runtime: BrewvaRuntime,
+  runtime: ToolSurfaceRuntime,
   options: RegisterToolSurfaceOptions = {},
 ): ToolSurfaceLifecycle {
   return {
@@ -450,7 +500,7 @@ export function createToolSurfaceLifecycle(
 
 export function registerToolSurface(
   pi: ExtensionAPI,
-  runtime: BrewvaRuntime,
+  runtime: ToolSurfaceRuntime,
   options: RegisterToolSurfaceOptions = {},
 ): void {
   const hooks = pi as unknown as {

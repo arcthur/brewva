@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { writeSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
 import {
@@ -71,10 +72,8 @@ export function resolveBackendWorkingCwd(cwd?: string): string {
 }
 
 export function writeGatewayAssistantText(text: string): void {
-  process.stdout.write(text);
-  if (!text.endsWith("\n")) {
-    process.stdout.write("\n");
-  }
+  const output = text.endsWith("\n") ? text : `${text}\n`;
+  writeSync(process.stdout.fd, output, undefined, "utf8");
 }
 
 export function shouldFallbackAfterGatewayFailure(

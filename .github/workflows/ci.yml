@@ -37,11 +37,17 @@ jobs:
       - name: Static Checks (Format, Lint, Typecheck)
         run: bun run check
 
-      - name: Run Unit and Integration Tests
-        run: bun test
+      - name: Run Unit Tests
+        run: bun run test:unit
 
-      - name: Run Docs Quality Checks
-        run: bun run test:docs
+      - name: Run Contract Tests
+        run: bun run test:contract
+
+      - name: Run System Tests
+        run: bun run test:system
+
+      - name: Run Quality Layer Tests
+        run: bun run test:quality
 
       - name: Run Dist Smoke Checks
         run: bun run test:dist

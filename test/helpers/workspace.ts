@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
@@ -17,4 +17,13 @@ export function writeTestConfig(
 ): void {
   const resolved = configPath ?? ".brewva/brewva.json";
   writeFileSync(join(workspace, resolved), JSON.stringify(config, null, 2), "utf8");
+}
+
+export function cleanupTestWorkspace(workspace: string, keep = false): void {
+  if (keep) return;
+  rmSync(workspace, { recursive: true, force: true });
+}
+
+export function writeMinimalConfig(workspace: string, overrides?: Record<string, unknown>): void {
+  writeTestConfig(workspace, (overrides ?? {}) as unknown as BrewvaConfig);
 }

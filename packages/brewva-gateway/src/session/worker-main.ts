@@ -1,4 +1,5 @@
 import { recordProactivityWakeup } from "@brewva/brewva-gateway/runtime-plugins";
+import { observeRuntimeTurnStart } from "../runtime-plugins/runtime-turn-clock.js";
 import { collectSessionPromptOutput } from "./collect-output.js";
 import { createGatewaySession, type GatewaySessionResult } from "./create-session.js";
 import { applySchedulePromptTrigger } from "./schedule-trigger.js";
@@ -24,6 +25,113 @@ let workerTestHarness: ResolvedWorkerTestHarness = {
   watchdog: {},
 };
 type WorkerLogLevel = Extract<WorkerToParentMessage, { kind: "log" }>["level"];
+
+function summarizeFakeAssistantMessage(
+  assistantText: string,
+  timestamp: number,
+): {
+  role: "assistant";
+  timestamp: number;
+  stopReason: "end_turn";
+  provider: null;
+  model: null;
+  usage: null;
+  contentItems: number;
+  contentTextChars: number;
+} {
+  return {
+    role: "assistant",
+    timestamp,
+    stopReason: "end_turn",
+    provider: null,
+    model: null,
+    usage: null,
+    contentItems: assistantText.length > 0 ? 1 : 0,
+    contentTextChars: assistantText.length,
+  };
+}
+
+function recordFakeTurnLifecycle(
+  agentSessionId: string,
+  turnId: string,
+  assistantText: string,
+): void {
+  if (!sessionResult) {
+    return;
+  }
+
+  const runtime = sessionResult.runtime;
+  const existingSessionStart = runtime.events.query(agentSessionId, {
+    type: "session_start",
+  });
+  if (existingSessionStart.length === 0) {
+    runtime.events.record({
+      sessionId: agentSessionId,
+      type: "session_start",
+      payload: {
+        cwd: runtime.workspaceRoot,
+      },
+    });
+  }
+
+  const existingAgentStart = runtime.events.query(agentSessionId, {
+    type: "agent_start",
+  });
+  if (existingAgentStart.length === 0) {
+    runtime.events.record({
+      sessionId: agentSessionId,
+      type: "agent_start",
+    });
+  }
+
+  const timestamp = Date.now();
+  const localTurn = runtime.events.query(agentSessionId, {
+    type: "turn_start",
+  }).length;
+  const runtimeTurn = observeRuntimeTurnStart(agentSessionId, localTurn, timestamp);
+  const message = summarizeFakeAssistantMessage(assistantText, timestamp);
+
+  runtime.context.onTurnStart(agentSessionId, runtimeTurn);
+  runtime.events.record({
+    sessionId: agentSessionId,
+    type: "turn_start",
+    turn: runtimeTurn,
+    payload: {
+      localTurn,
+      timestamp,
+    },
+  });
+  runtime.events.record({
+    sessionId: agentSessionId,
+    type: "message_start",
+    payload: message,
+  });
+  runtime.events.record({
+    sessionId: agentSessionId,
+    type: "message_end",
+    payload: message,
+  });
+  runtime.context.onTurnEnd(agentSessionId);
+  runtime.skills.reconcilePendingDispatch(agentSessionId, runtimeTurn);
+  runtime.events.record({
+    sessionId: agentSessionId,
+    type: "turn_end",
+    turn: runtimeTurn,
+    payload: {
+      localTurn,
+      message,
+      toolResults: 0,
+    },
+  });
+  runtime.events.record({
+    sessionId: agentSessionId,
+    type: "agent_end",
+    payload: {
+      messageCount: 1,
+      costSummary: runtime.cost.getSummary(agentSessionId),
+    },
+  });
+}
 
 function send(message: WorkerToParentMessage): void {
   if (typeof process.send !== "function") {
@@ -257,6 +365,7 @@ async function runTurn(input: {
     }
     const fakeAssistantText = workerTestHarness.fakeAssistantText;
     if (fakeAssistantText) {
+      recordFakeTurnLifecycle(input.agentSessionId, input.turnId, fakeAssistantText);
       send({
         kind: "event",
         event: "session.turn.end",

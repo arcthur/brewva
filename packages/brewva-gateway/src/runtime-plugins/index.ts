@@ -190,7 +190,7 @@ export { registerLedgerWriter } from "./ledger-writer.js";
 export { registerDebugLoop } from "./debug-loop.js";
 export { registerCompletionGuard } from "./completion-guard.js";
 export { registerNotification } from "./notification.js";
-export { registerToolSurface } from "./tool-surface.js";
+export { registerToolSurface, type ToolSurfaceRuntime } from "./tool-surface.js";
 export { registerToolResultDistiller } from "./tool-result-distiller.js";
 export { applyContextContract, buildContextContractBlock } from "./context-contract.js";
 export { createRuntimeChannelTurnBridge } from "./channel-turn-bridge.js";

@@ -1,5 +1,4 @@
 import {
-  type BrewvaRuntime,
   type ContextCompactionGateStatus,
   type ContextInjectionEntry,
 } from "@brewva/brewva-runtime";
@@ -41,7 +40,14 @@ export interface ContextComposedEventPayload extends Record<string, unknown> {
 }
 
 export interface ContextComposerInput {
-  runtime: BrewvaRuntime;
+  runtime: {
+    events: {
+      getTapeStatus(sessionId: string): {
+        tapePressure: string;
+        entriesSinceAnchor: number;
+      };
+    };
+  };
   sessionId: string;
   gateStatus: ContextCompactionGateStatus;
   pendingCompactionReason?: string | null;
@@ -108,7 +114,7 @@ function buildCompactionAdvisoryBlock(input: {
 }
 
 function buildOperationalDiagnosticsBlock(input: {
-  runtime: BrewvaRuntime;
+  runtime: ContextComposerInput["runtime"];
   sessionId: string;
   gateStatus: ContextCompactionGateStatus;
   pendingCompactionReason?: string | null;
