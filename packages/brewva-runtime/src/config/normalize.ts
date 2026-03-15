@@ -13,6 +13,11 @@ const VALID_SKILL_CASCADE_SOURCES = new Set(["dispatch", "explicit"]);
 const VALID_SKILL_ROUTING_SCOPES = new Set(["core", "domain", "operator", "meta"]);
 
 type AnyRecord = Record<string, unknown>;
+const LEGACY_CONTEXT_BUDGET_KEYS = new Set([
+  "hardLimitPercent",
+  "compactionThresholdPercent",
+  "maxInjectionTokens",
+]);
 
 function isRecord(value: unknown): value is AnyRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -451,12 +456,26 @@ function normalizeInfrastructureConfig(
   const contextBudgetInput = isRecord(infrastructureInput.contextBudget)
     ? infrastructureInput.contextBudget
     : {};
+  const contextBudgetInjectionInput = isRecord(contextBudgetInput.injection)
+    ? contextBudgetInput.injection
+    : {};
+  const contextBudgetThresholdsInput = isRecord(contextBudgetInput.thresholds)
+    ? contextBudgetInput.thresholds
+    : {};
   const contextBudgetCompactionInput = isRecord(contextBudgetInput.compaction)
     ? contextBudgetInput.compaction
     : {};
   const contextBudgetArenaInput = isRecord(contextBudgetInput.arena)
     ? contextBudgetInput.arena
     : {};
+  for (const legacyKey of LEGACY_CONTEXT_BUDGET_KEYS) {
+    if (!Object.hasOwn(contextBudgetInput, legacyKey)) {
+      continue;
+    }
+    throw new Error(
+      `infrastructure.contextBudget.${legacyKey} has been replaced. Use infrastructure.contextBudget.thresholds.* and injection.* instead.`,
+    );
+  }
   const toolFailureInjectionInput = isRecord(infrastructureInput.toolFailureInjection)
     ? infrastructureInput.toolFailureInjection
     : {};
@@ -473,20 +492,50 @@ function normalizeInfrastructureConfig(
     : {};
   const turnWalInput = isRecord(infrastructureInput.turnWal) ? infrastructureInput.turnWal : {};
   const defaultContextBudget = defaults.contextBudget;
+  const defaultContextBudgetInjection = defaultContextBudget.injection;
+  const defaultContextBudgetThresholds = defaultContextBudget.thresholds;
   const defaultContextCompaction = defaultContextBudget.compaction;
   const defaultContextArena = defaultContextBudget.arena;
   const defaultToolFailureInjection = defaults.toolFailureInjection;
   const defaultToolOutputDistillationInjection = defaults.toolOutputDistillationInjection;
-  const normalizedHardLimitPercent = normalizeUnitInterval(
-    contextBudgetInput.hardLimitPercent,
-    defaultContextBudget.hardLimitPercent,
+  const normalizedInjectionBaseTokens = normalizePositiveInteger(
+    contextBudgetInjectionInput.baseTokens,
+    defaultContextBudgetInjection.baseTokens,
   );
-  const normalizedCompactionThresholdPercent = Math.min(
-    normalizeUnitInterval(
-      contextBudgetInput.compactionThresholdPercent,
-      defaultContextBudget.compactionThresholdPercent,
+  const normalizedInjectionMaxTokens = Math.max(
+    normalizedInjectionBaseTokens,
+    normalizePositiveInteger(
+      contextBudgetInjectionInput.maxTokens,
+      defaultContextBudgetInjection.maxTokens,
     ),
-    normalizedHardLimitPercent,
+  );
+  const normalizedHardLimitFloorPercent = normalizeUnitInterval(
+    contextBudgetThresholdsInput.hardLimitFloorPercent,
+    defaultContextBudgetThresholds.hardLimitFloorPercent,
+  );
+  const normalizedHardLimitCeilingPercent = Math.max(
+    normalizedHardLimitFloorPercent,
+    normalizeUnitInterval(
+      contextBudgetThresholdsInput.hardLimitCeilingPercent,
+      defaultContextBudgetThresholds.hardLimitCeilingPercent,
+    ),
+  );
+  const normalizedCompactionFloorPercent = Math.min(
+    normalizedHardLimitFloorPercent,
+    normalizeUnitInterval(
+      contextBudgetThresholdsInput.compactionFloorPercent,
+      defaultContextBudgetThresholds.compactionFloorPercent,
+    ),
+  );
+  const normalizedCompactionCeilingPercent = Math.min(
+    normalizedHardLimitCeilingPercent,
+    Math.max(
+      normalizedCompactionFloorPercent,
+      normalizeUnitInterval(
+        contextBudgetThresholdsInput.compactionCeilingPercent,
+        defaultContextBudgetThresholds.compactionCeilingPercent,
+      ),
+    ),
   );
 
   return {
@@ -499,12 +548,28 @@ function normalizeInfrastructureConfig(
     },
     contextBudget: {
       enabled: normalizeBoolean(contextBudgetInput.enabled, defaultContextBudget.enabled),
-      maxInjectionTokens: normalizePositiveInteger(
-        contextBudgetInput.maxInjectionTokens,
-        defaultContextBudget.maxInjectionTokens,
-      ),
-      compactionThresholdPercent: normalizedCompactionThresholdPercent,
-      hardLimitPercent: normalizedHardLimitPercent,
+      injection: {
+        baseTokens: normalizedInjectionBaseTokens,
+        windowFraction: normalizeUnitInterval(
+          contextBudgetInjectionInput.windowFraction,
+          defaultContextBudgetInjection.windowFraction,
+        ),
+        maxTokens: normalizedInjectionMaxTokens,
+      },
+      thresholds: {
+        compactionFloorPercent: normalizedCompactionFloorPercent,
+        compactionCeilingPercent: normalizedCompactionCeilingPercent,
+        compactionHeadroomTokens: normalizePositiveInteger(
+          contextBudgetThresholdsInput.compactionHeadroomTokens,
+          defaultContextBudgetThresholds.compactionHeadroomTokens,
+        ),
+        hardLimitFloorPercent: normalizedHardLimitFloorPercent,
+        hardLimitCeilingPercent: normalizedHardLimitCeilingPercent,
+        hardLimitHeadroomTokens: normalizePositiveInteger(
+          contextBudgetThresholdsInput.hardLimitHeadroomTokens,
+          defaultContextBudgetThresholds.hardLimitHeadroomTokens,
+        ),
+      },
       compactionInstructions: normalizeNonEmptyString(
         contextBudgetInput.compactionInstructions,
         defaultContextBudget.compactionInstructions,

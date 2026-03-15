@@ -67,8 +67,8 @@ Reference: `docs/reference/proposal-boundary.md`.
 - `observeUsage(sessionId, usage)`
 - `getUsage(sessionId)`
 - `getUsageRatio(usage)`
-- `getHardLimitRatio()`
-- `getCompactionThresholdRatio()`
+- `getHardLimitRatio(sessionId, usage?)`
+- `getCompactionThresholdRatio(sessionId, usage?)`
 - `getPressureStatus(sessionId, usage?)`
 - `getPressureLevel(sessionId, usage?)`
 - `getCompactionGateStatus(sessionId, usage?)`

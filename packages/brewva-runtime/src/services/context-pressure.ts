@@ -8,6 +8,7 @@ import type {
   ContextPressureLevel,
   ContextPressureStatus,
 } from "../types.js";
+import { resolveContextUsageRatio } from "../utils/token.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import type { RuntimeCallback } from "./callback.js";
 
@@ -59,7 +60,7 @@ export class ContextPressureService {
       payload: {
         tokens: usage.tokens,
         contextWindow: usage.contextWindow,
-        percent: usage.percent,
+        percent: this.getContextUsageRatio(usage),
       },
     });
   }
@@ -75,28 +76,21 @@ export class ContextPressureService {
   }
 
   getContextUsageRatio(usage: ContextBudgetUsage | undefined): number | null {
-    if (!usage) return null;
-    const normalizedPercent = this.normalizeRatio(usage.percent);
-    if (normalizedPercent !== null) return normalizedPercent;
-    if (typeof usage.tokens !== "number") return null;
-    if (!Number.isFinite(usage.tokens) || usage.tokens < 0) return null;
-    if (!Number.isFinite(usage.contextWindow) || usage.contextWindow <= 0) {
-      return null;
-    }
-    return Math.max(0, Math.min(1, usage.tokens / usage.contextWindow));
+    return resolveContextUsageRatio(usage);
   }
 
-  getContextHardLimitRatio(): number {
-    const ratio = this.normalizeRatio(this.config.infrastructure.contextBudget.hardLimitPercent);
-    if (ratio === null) return 1;
-    return Math.max(0, Math.min(1, ratio));
-  }
-
-  getContextCompactionThresholdRatio(): number {
-    const thresholdRatio = this.normalizeRatio(
-      this.config.infrastructure.contextBudget.compactionThresholdPercent,
+  getContextHardLimitRatio(sessionId: string, usage?: ContextBudgetUsage): number {
+    return Math.max(
+      0,
+      Math.min(1, this.contextBudget.getEffectiveHardLimitPercent(sessionId, usage)),
     );
-    return thresholdRatio ?? this.getContextHardLimitRatio();
+  }
+
+  getContextCompactionThresholdRatio(sessionId: string, usage?: ContextBudgetUsage): number {
+    return Math.max(
+      0,
+      Math.min(1, this.contextBudget.getEffectiveCompactionThresholdPercent(sessionId, usage)),
+    );
   }
 
   getContextPressureStatus(sessionId: string, usage?: ContextBudgetUsage): ContextPressureStatus {
@@ -106,13 +100,19 @@ export class ContextPressureService {
       return {
         level: "unknown",
         usageRatio: null,
-        hardLimitRatio: this.getContextHardLimitRatio(),
-        compactionThresholdRatio: this.getContextCompactionThresholdRatio(),
+        hardLimitRatio: this.getContextHardLimitRatio(sessionId, effectiveUsage),
+        compactionThresholdRatio: this.getContextCompactionThresholdRatio(
+          sessionId,
+          effectiveUsage,
+        ),
       };
     }
 
-    const hardLimitRatio = this.getContextHardLimitRatio();
-    const compactionThresholdRatio = this.getContextCompactionThresholdRatio();
+    const hardLimitRatio = this.getContextHardLimitRatio(sessionId, effectiveUsage);
+    const compactionThresholdRatio = this.getContextCompactionThresholdRatio(
+      sessionId,
+      effectiveUsage,
+    );
 
     let level: ContextPressureLevel = "none";
     if (usageRatio >= hardLimitRatio) {
@@ -270,7 +270,7 @@ export class ContextPressureService {
       type: "context_compaction_requested",
       payload: {
         reason,
-        usagePercent: usage?.percent ?? null,
+        usagePercent: this.getContextUsageRatio(usage),
         tokens: usage?.tokens ?? null,
       },
     });
@@ -286,13 +286,5 @@ export class ContextPressureService {
 
   markCompacted(sessionId: string): void {
     this.contextBudget.markCompacted(sessionId);
-  }
-
-  private normalizeRatio(value: number | null | undefined): number | null {
-    if (typeof value !== "number" || !Number.isFinite(value)) return null;
-    if (value >= 0 && value <= 1) return value;
-    if (value > 1 && value <= 100) return value / 100;
-    if (value < 0) return 0;
-    return 1;
   }
 }

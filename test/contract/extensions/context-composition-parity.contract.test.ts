@@ -3,6 +3,7 @@ import {
   registerContextTransform,
   registerRuntimeCoreBridge,
 } from "@brewva/brewva-gateway/runtime-plugins";
+import { setStaticContextPressureThresholds } from "../../fixtures/config.js";
 import {
   createMockExtensionAPI,
   invokeHandler,
@@ -14,7 +15,7 @@ import { createRuntimeConfig, createRuntimeFixture } from "./fixtures/runtime.js
 describe("context composition parity", () => {
   test("keeps gate-clearing semantics aligned between full extensions and runtime-core profile", async () => {
     const config = createRuntimeConfig((draft) => {
-      draft.infrastructure.contextBudget.hardLimitPercent = 0.8;
+      setStaticContextPressureThresholds(draft, { hardLimitPercent: 0.8 });
     });
 
     const makeRuntime = () =>

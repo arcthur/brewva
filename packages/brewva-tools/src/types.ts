@@ -123,6 +123,7 @@ export interface BrewvaToolRuntime {
   context: {
     getCompactionInstructions?(): string;
     getUsage(sessionId: string): ContextBudgetUsage | undefined;
+    getUsageRatio?(usage: ContextBudgetUsage | undefined): number | null;
     getPressureStatus(sessionId: string, usage?: ContextBudgetUsage): ContextPressureStatus;
   };
   events: {

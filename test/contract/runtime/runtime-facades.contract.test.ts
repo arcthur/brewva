@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { setStaticContextPressureThresholds } from "../../fixtures/config.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 const originalDateNow = Date.now;
@@ -141,8 +142,10 @@ describe("runtime facade coverage", () => {
 
   test("context facade normalizes usage ratios, reads stored pressure, and exposes compaction window turns", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.infrastructure.contextBudget.hardLimitPercent = 0.8;
-    config.infrastructure.contextBudget.compactionThresholdPercent = 0.7;
+    setStaticContextPressureThresholds(config, {
+      hardLimitPercent: 0.8,
+      compactionThresholdPercent: 0.7,
+    });
     config.infrastructure.contextBudget.compaction.minTurnsBetween = 5;
     const runtime = new BrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-context"),

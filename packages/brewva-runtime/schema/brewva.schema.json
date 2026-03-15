@@ -105,17 +105,47 @@
                 "compactionInstructions": {
                   "type": "string"
                 },
-                "compactionThresholdPercent": {
-                  "type": "number"
-                },
                 "enabled": {
                   "type": "boolean"
                 },
-                "hardLimitPercent": {
-                  "type": "number"
+                "injection": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "baseTokens": {
+                      "type": "number"
+                    },
+                    "windowFraction": {
+                      "type": "number"
+                    },
+                    "maxTokens": {
+                      "type": "number"
+                    }
+                  }
                 },
-                "maxInjectionTokens": {
-                  "type": "number"
+                "thresholds": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "compactionCeilingPercent": {
+                      "type": "number"
+                    },
+                    "compactionFloorPercent": {
+                      "type": "number"
+                    },
+                    "compactionHeadroomTokens": {
+                      "type": "number"
+                    },
+                    "hardLimitCeilingPercent": {
+                      "type": "number"
+                    },
+                    "hardLimitFloorPercent": {
+                      "type": "number"
+                    },
+                    "hardLimitHeadroomTokens": {
+                      "type": "number"
+                    }
+                  }
                 }
               }
             },

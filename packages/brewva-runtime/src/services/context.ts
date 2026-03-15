@@ -125,7 +125,8 @@ export class ContextService {
 
     this.contextInjectionOrchestratorDeps = {
       providers: this.contextSourceProviders,
-      maxInjectionTokens: this.config.infrastructure.contextBudget.maxInjectionTokens,
+      getMaxInjectionTokens: (id, usage) =>
+        this.contextBudget.getEffectiveInjectionTokenBudget(id, usage),
       isContextBudgetEnabled: () => this.isContextBudgetEnabled(),
       sanitizeInput: (text) => this.sanitizeInput(text),
       getTruthState: (id) => this.getTruthState(id),
@@ -138,8 +139,8 @@ export class ContextService {
       planBudgetInjection: (id, inputText, budgetUsage) =>
         this.contextBudget.planInjection(id, inputText, budgetUsage),
       buildInjectionScopeKey: (id, scopeId) => this.buildInjectionScopeKey(id, scopeId),
-      setReservedTokens: (scopeKey, tokens) =>
-        this.sessionState.setReservedInjectionTokens(scopeKey, tokens),
+      setReservedPrimaryTokens: (scopeKey, tokens) =>
+        this.sessionState.setReservedPrimaryInjectionTokens(scopeKey, tokens),
       getLastInjectedFingerprint: (scopeKey) =>
         this.sessionState.getLastInjectedFingerprint(scopeKey),
       setLastInjectedFingerprint: (scopeKey, fingerprint) =>
@@ -159,12 +160,12 @@ export class ContextService {
     return this.contextPressure.getContextUsageRatio(usage);
   }
 
-  getContextHardLimitRatio(): number {
-    return this.contextPressure.getContextHardLimitRatio();
+  getContextHardLimitRatio(sessionId: string, usage?: ContextBudgetUsage): number {
+    return this.contextPressure.getContextHardLimitRatio(sessionId, usage);
   }
 
-  getContextCompactionThresholdRatio(): number {
-    return this.contextPressure.getContextCompactionThresholdRatio();
+  getContextCompactionThresholdRatio(sessionId: string, usage?: ContextBudgetUsage): number {
+    return this.contextPressure.getContextCompactionThresholdRatio(sessionId, usage);
   }
 
   getContextPressureStatus(sessionId: string, usage?: ContextBudgetUsage): ContextPressureStatus {
@@ -256,6 +257,7 @@ export class ContextService {
         sessionId,
         plan.finalTokens,
         injectionScopeId,
+        usage,
       );
     }
     return plan;

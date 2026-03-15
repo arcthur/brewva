@@ -19,10 +19,11 @@ describe("Context budget manager", () => {
   });
 
   test("applies conservative truncation at token boundary", () => {
-    const manager = new ContextBudgetManager({
-      ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
-      maxInjectionTokens: 32,
-    });
+    const budgetConfig = structuredClone(DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget);
+    budgetConfig.injection.baseTokens = 32;
+    budgetConfig.injection.windowFraction = 0;
+    budgetConfig.injection.maxTokens = 32;
+    const manager = new ContextBudgetManager(budgetConfig);
 
     const decision = manager.planInjection("budget-conservative-2", "x".repeat(200));
     expect(decision.accepted).toBe(true);
@@ -74,15 +75,12 @@ describe("Context budget manager", () => {
 
   test("bypasses cooldown under high pressure", () => {
     let nowMs = 5_000;
-    const manager = new ContextBudgetManager(
-      {
-        ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
-        hardLimitPercent: 0.98,
-      },
-      {
-        now: () => nowMs,
-      },
-    );
+    const budgetConfig = structuredClone(DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget);
+    budgetConfig.thresholds.hardLimitFloorPercent = 0.98;
+    budgetConfig.thresholds.hardLimitCeilingPercent = 0.98;
+    const manager = new ContextBudgetManager(budgetConfig, {
+      now: () => nowMs,
+    });
     const sessionId = "budget-cooldown-bypass";
 
     manager.beginTurn(sessionId, 1);
@@ -146,6 +144,92 @@ describe("Context budget manager", () => {
       percent: 95,
     });
     expect(highUsage.shouldCompact).toBe(true);
-    expect(highUsage.reason).toBe("hard_limit");
+    expect(highUsage.reason).toBe("usage_threshold");
+
+    const criticalUsage = manager.shouldRequestCompaction(sessionId, {
+      tokens: 266_560,
+      contextWindow: 272_000,
+      // 98% in percentage-point form
+      percent: 98,
+    });
+    expect(criticalUsage.shouldCompact).toBe(true);
+    expect(criticalUsage.reason).toBe("hard_limit");
+  });
+
+  test("scales thresholds and injection budget with larger context windows", () => {
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    const manager = new ContextBudgetManager(config.infrastructure.contextBudget);
+    const sessionId = "adaptive-budget-1";
+
+    const largeWindowUsage = {
+      tokens: 895_000,
+      contextWindow: 1_000_000,
+      percent: 0.895,
+    };
+    expect(manager.getEffectiveCompactionThresholdPercent(sessionId, largeWindowUsage)).toBe(0.9);
+    expect(manager.getEffectiveHardLimitPercent(sessionId, largeWindowUsage)).toBe(0.97);
+    expect(manager.getEffectiveInjectionTokenBudget(sessionId, largeWindowUsage)).toBe(3200);
+
+    const smallWindowUsage = {
+      tokens: 26_000,
+      contextWindow: 32_000,
+      percent: 0.8125,
+    };
+    expect(manager.getEffectiveCompactionThresholdPercent(sessionId, smallWindowUsage)).toBe(0.82);
+    expect(manager.getEffectiveHardLimitPercent(sessionId, smallWindowUsage)).toBe(0.94);
+    expect(manager.getEffectiveInjectionTokenBudget(sessionId, smallWindowUsage)).toBe(1264);
+  });
+
+  test("falls back to tokens/contextWindow when percent telemetry is missing", () => {
+    const manager = new ContextBudgetManager({
+      ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
+    });
+    const sessionId = "adaptive-budget-null-percent";
+
+    const decision = manager.planInjection(sessionId, "hello", {
+      tokens: 195_000,
+      contextWindow: 200_000,
+      percent: null,
+    });
+    expect(decision.accepted).toBe(false);
+    expect(decision.droppedReason).toBe("hard_limit");
+
+    const compaction = manager.shouldRequestCompaction(sessionId, {
+      tokens: 183_000,
+      contextWindow: 200_000,
+      percent: null,
+    });
+    expect(compaction.shouldCompact).toBe(true);
+    expect(compaction.reason).toBe("usage_threshold");
+  });
+
+  test("caps injection to stay below the projected hard limit", () => {
+    const manager = new ContextBudgetManager({
+      ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
+    });
+    const sessionId = "adaptive-budget-projected-hard-limit";
+
+    const decision = manager.planInjection(sessionId, "x".repeat(20_000), {
+      tokens: 969_000,
+      contextWindow: 1_000_000,
+      percent: 0.969,
+    });
+    expect(decision.accepted).toBe(true);
+    expect(decision.finalTokens).toBeLessThanOrEqual(999);
+  });
+
+  test("clamps injection to the remaining hard-limit headroom even when nominal adaptive budget is larger", () => {
+    const manager = new ContextBudgetManager({
+      ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
+    });
+    const sessionId = "adaptive-budget-remaining-headroom";
+
+    const decision = manager.planInjection(sessionId, "x".repeat(20_000), {
+      tokens: 969_500,
+      contextWindow: 1_000_000,
+      percent: 0.9695,
+    });
+    expect(decision.accepted).toBe(true);
+    expect(decision.finalTokens).toBeLessThanOrEqual(499);
   });
 });

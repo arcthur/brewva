@@ -65,7 +65,7 @@ describe("Context injection orchestrator characterization", () => {
     const injection = await runtime.context.buildInjection(
       sessionId,
       "continue context characterization",
-      { tokens: 800, contextWindow: 4000, percent: 0.2 },
+      { tokens: 800, contextWindow: 4000, percent: 20 },
       "leaf-a",
     );
     expect(injection.accepted).toBe(true);
@@ -85,12 +85,14 @@ describe("Context injection orchestrator characterization", () => {
           finalTokens?: number;
           originalTokens?: number;
           degradationApplied?: boolean;
+          usagePercent?: number | null;
         }
       | undefined;
     expect(payload?.sourceCount).toBeGreaterThanOrEqual(4);
     expect(payload?.finalTokens).toBeGreaterThan(0);
     expect(payload?.originalTokens).toBeGreaterThanOrEqual(payload?.finalTokens ?? 0);
     expect(payload?.degradationApplied).toBe(false);
+    expect(payload?.usagePercent).toBe(0.2);
   });
 
   test("drops duplicate fingerprint in same scope and emits context_injection_dropped", async () => {

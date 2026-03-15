@@ -7,13 +7,18 @@ import type {
 import { coerceContextBudgetUsage } from "@brewva/brewva-runtime";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { prepareContextComposerSupport } from "./context-composer-support.js";
-import { buildContextComposedEventPayload, composeContextBlocks } from "./context-composer.js";
+import {
+  buildContextComposedEventPayload,
+  composeContextBlocks,
+  resolveSupplementalContextBlocks,
+} from "./context-composer.js";
 import { applyContextContract } from "./context-contract.js";
 import {
   extractCompactionEntryId,
   extractCompactionSummary,
   resolveInjectionScopeId,
 } from "./context-shared.js";
+import { appendSupplementalContextBlocks } from "./context-supplemental.js";
 import { clearRuntimeTurnClock, observeRuntimeTurnStart } from "./runtime-turn-clock.js";
 
 const CONTEXT_INJECTION_MESSAGE_TYPE = "brewva-context-injection";
@@ -259,7 +264,7 @@ export function createContextTransformLifecycle(
           type: "context_compaction_auto_requested",
           payload: {
             reason: compactionReason,
-            usagePercent: usage?.percent ?? null,
+            usagePercent: runtime.context.getUsageRatio(usage),
             tokens: usage?.tokens ?? null,
           },
         });
@@ -427,7 +432,24 @@ export function createContextTransformLifecycle(
       if (gateStatus.required) {
         emitGateEvents(gateStatus, "hard_limit");
       }
-      const systemPromptWithContract = applyContextContract(rawEvent.systemPrompt, runtime);
+      const initialSupplementalBlocks = appendSupplementalContextBlocks(runtime, {
+        sessionId,
+        usage,
+        injectionScopeId,
+        blocks: resolveSupplementalContextBlocks({
+          runtime,
+          sessionId,
+          gateStatus,
+          pendingCompactionReason,
+          capabilityView,
+        }),
+      });
+      const systemPromptWithContract = applyContextContract(
+        rawEvent.systemPrompt,
+        runtime,
+        sessionId,
+        usage,
+      );
       const originalPrompt = prompt;
 
       if (gateStatus.required) {
@@ -455,6 +477,8 @@ export function createContextTransformLifecycle(
           capabilityView,
           admittedEntries: [],
           injectionAccepted: false,
+          supplementalBlocks: initialSupplementalBlocks,
+          includeDefaultSupplementalBlocks: false,
         });
         emitContextComposedEvent(runtime, {
           sessionId,
@@ -517,6 +541,18 @@ export function createContextTransformLifecycle(
       pendingCompactionReason = supportAfterInjection.pendingCompactionReason;
       capabilityView = supportAfterInjection.capabilityView;
       state.lastRuntimeGateRequired = gateStatus.required;
+      const supplementalBlocks = appendSupplementalContextBlocks(runtime, {
+        sessionId,
+        usage,
+        injectionScopeId,
+        blocks: resolveSupplementalContextBlocks({
+          runtime,
+          sessionId,
+          gateStatus,
+          pendingCompactionReason,
+          capabilityView,
+        }),
+      });
 
       emitRuntimeEvent(runtime, {
         sessionId,
@@ -555,6 +591,8 @@ export function createContextTransformLifecycle(
         capabilityView,
         admittedEntries: injection.entries,
         injectionAccepted: injection.accepted,
+        supplementalBlocks,
+        includeDefaultSupplementalBlocks: false,
       });
       emitContextComposedEvent(runtime, {
         sessionId,

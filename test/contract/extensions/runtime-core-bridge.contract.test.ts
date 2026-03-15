@@ -240,6 +240,43 @@ describe("runtime core bridge extension", () => {
     expect(calls.observedContext[0]?.sessionId).toBe("core-before-start");
   });
 
+  test("given rejected supplemental diagnostics, when bridge composes context, then diagnostic blocks stay out of the prompt", async () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const { runtime } = createRuntimeFixture();
+    runtime.context.appendSupplementalInjection = () => ({
+      accepted: false,
+      text: "",
+      originalTokens: 64,
+      finalTokens: 0,
+      truncated: false,
+      droppedReason: "budget_exhausted",
+    });
+    registerRuntimeCoreBridge(api, runtime);
+
+    const results = await invokeHandlersAsync<{
+      systemPrompt?: string;
+      message?: { content?: string };
+    }>(
+      handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "continue task",
+        systemPrompt: "base prompt",
+      },
+      createSessionContext("core-before-start-supplemental-drop"),
+    );
+    const beforeStart = results.find(
+      (result) =>
+        typeof result?.systemPrompt === "string" || typeof result?.message?.content === "string",
+    );
+    if (!beforeStart) {
+      throw new Error("Expected runtime core bridge before_agent_start output.");
+    }
+    expect(beforeStart.message?.content).toContain("[ContextCompactionGate]");
+    expect(beforeStart.message?.content?.includes("[OperationalDiagnostics]")).toBe(false);
+  });
+
   test("given explicit capability requests, when bridge composes hidden context metadata, then detailNames reflect disclosed details", async () => {
     const { api, handlers } = createMockExtensionAPI();
     const extensionApi = api as unknown as {

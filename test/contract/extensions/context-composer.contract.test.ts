@@ -408,4 +408,44 @@ describe("context composer", () => {
     expect(result.content).not.toContain("hidden_skill_count:");
     expect(result.content).not.toContain("operator_hint:");
   });
+
+  test("uses caller-supplied supplemental blocks when default supplemental blocks are disabled", () => {
+    const result = composeContextBlocks({
+      runtime: createComposerRuntime("low", 1),
+      sessionId: "compose-7",
+      gateStatus: {
+        required: false,
+        reason: null,
+        pressure: {
+          level: "low",
+          usageRatio: 0.18,
+          hardLimitRatio: 0.98,
+          compactionThresholdRatio: 0.8,
+        },
+        recentCompaction: false,
+        lastCompactionTurn: null,
+        turnsSinceCompaction: 1,
+        windowTurns: 4,
+      },
+      pendingCompactionReason: null,
+      capabilityView: buildCapabilityView({
+        prompt: "continue",
+        allTools: [],
+        activeToolNames: [],
+      }),
+      injectionAccepted: false,
+      admittedEntries: [],
+      includeDefaultSupplementalBlocks: false,
+      supplementalBlocks: [
+        {
+          id: "operational-diagnostics",
+          category: "diagnostic",
+          content: "[OperationalDiagnostics]\ncontext_pressure: low",
+          estimatedTokens: 8,
+        },
+      ],
+    });
+
+    expect(result.content).toContain("[OperationalDiagnostics]");
+  });
 });

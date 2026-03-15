@@ -79,6 +79,8 @@ export interface ContextComposerInput {
   capabilityView: BuildCapabilityViewResult;
   admittedEntries: ContextInjectionEntry[];
   injectionAccepted: boolean;
+  supplementalBlocks?: readonly ComposedContextBlock[];
+  includeDefaultSupplementalBlocks?: boolean;
 }
 
 const DIAGNOSTIC_CAPABILITY_NAMES = new Set<string>([
@@ -541,7 +543,9 @@ function applyGovernanceBudgetCap(blocks: InternalContextBlock[]): InternalConte
   return current;
 }
 
-function resolveExplorationAdvisoryBlock(input: ContextComposerInput): ComposedContextBlock | null {
+function resolveExplorationAdvisoryBlock(
+  input: Pick<ContextComposerInput, "runtime" | "sessionId">,
+): ComposedContextBlock | null {
   const advisoryEvent = input.runtime.events.query?.(input.sessionId, {
     type: SCAN_CONVERGENCE_ADVISORY_EVENT_TYPE,
     last: 1,
@@ -567,6 +571,68 @@ function resolveExplorationAdvisoryBlock(input: ContextComposerInput): ComposedC
     return null;
   }
   return makeBlock("exploration-advisory", "diagnostic", content);
+}
+
+function toPublicBlock(block: InternalContextBlock): ComposedContextBlock {
+  const { compactContent: _compactContent, ...publicBlock } = block;
+  return publicBlock;
+}
+
+function normalizeSupplementalBlocks(
+  blocks: readonly ComposedContextBlock[] | undefined,
+): InternalContextBlock[] {
+  if (!blocks || blocks.length === 0) {
+    return [];
+  }
+  return blocks.flatMap((block) => {
+    const normalized = makeBlock(block.id, block.category, block.content);
+    return normalized ? [normalized] : [];
+  });
+}
+
+export function resolveSupplementalContextBlocks(
+  input: Pick<
+    ContextComposerInput,
+    "runtime" | "sessionId" | "gateStatus" | "pendingCompactionReason" | "capabilityView"
+  >,
+): ComposedContextBlock[] {
+  const blocks: InternalContextBlock[] = [];
+  const diagnosticRequests = shouldIncludeOperationalDiagnostics(input.capabilityView.requested);
+  const includeTapeTelemetry = diagnosticRequests.length > 0;
+  if (
+    diagnosticRequests.length > 0 ||
+    input.gateStatus.required ||
+    !!input.pendingCompactionReason
+  ) {
+    const diagnosticBlock = makeBlock(
+      "operational-diagnostics",
+      "diagnostic",
+      buildOperationalDiagnosticsBlock({
+        runtime: input.runtime,
+        sessionId: input.sessionId,
+        gateStatus: input.gateStatus,
+        pendingCompactionReason: input.pendingCompactionReason,
+        requested: diagnosticRequests,
+        includeTapeTelemetry,
+      }),
+    );
+    if (diagnosticBlock) {
+      blocks.push(diagnosticBlock);
+    }
+  }
+
+  const explorationAdvisoryBlock = resolveExplorationAdvisoryBlock(input);
+  if (explorationAdvisoryBlock) {
+    blocks.push(
+      makeBlock(
+        explorationAdvisoryBlock.id,
+        explorationAdvisoryBlock.category,
+        explorationAdvisoryBlock.content,
+      )!,
+    );
+  }
+
+  return blocks.map(toPublicBlock);
 }
 
 export function composeContextBlocks(input: ContextComposerInput): ContextComposerResult {
@@ -608,35 +674,10 @@ export function composeContextBlocks(input: ContextComposerInput): ContextCompos
 
   const preCapabilityMetrics = buildMetrics(blocks);
   blocks.push(...buildCapabilityBlocks(input.capabilityView, preCapabilityMetrics));
-
-  const diagnosticRequests = shouldIncludeOperationalDiagnostics(input.capabilityView.requested);
-  const includeTapeTelemetry = diagnosticRequests.length > 0;
-  if (
-    diagnosticRequests.length > 0 ||
-    input.gateStatus.required ||
-    !!input.pendingCompactionReason
-  ) {
-    const diagnosticBlock = makeBlock(
-      "operational-diagnostics",
-      "diagnostic",
-      buildOperationalDiagnosticsBlock({
-        runtime: input.runtime,
-        sessionId: input.sessionId,
-        gateStatus: input.gateStatus,
-        pendingCompactionReason: input.pendingCompactionReason,
-        requested: diagnosticRequests,
-        includeTapeTelemetry,
-      }),
-    );
-    if (diagnosticBlock) {
-      blocks.push(diagnosticBlock);
-    }
+  if (input.includeDefaultSupplementalBlocks !== false) {
+    blocks.push(...normalizeSupplementalBlocks(resolveSupplementalContextBlocks(input)));
   }
-
-  const explorationAdvisoryBlock = resolveExplorationAdvisoryBlock(input);
-  if (explorationAdvisoryBlock) {
-    blocks.push(explorationAdvisoryBlock);
-  }
+  blocks.push(...normalizeSupplementalBlocks(input.supplementalBlocks));
 
   const ordered = applyGovernanceBudgetCap(
     [...blocks].toSorted((left, right) => {
@@ -644,7 +685,7 @@ export function composeContextBlocks(input: ContextComposerInput): ContextCompos
       return categoryDiff;
     }),
   );
-  const publicBlocks = ordered.map(({ compactContent: _compactContent, ...block }) => block);
+  const publicBlocks = ordered.map(toPublicBlock);
   const metrics = buildMetrics(publicBlocks);
   return {
     blocks: publicBlocks,

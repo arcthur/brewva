@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  BrewvaRuntime,
   DEFAULT_BREWVA_CONFIG,
   loadBrewvaConfig,
   resolveGlobalBrewvaConfigPath,
@@ -30,6 +31,43 @@ describe("Brewva config loader normalization", () => {
     expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
       /Config does not match schema/,
     );
+  });
+
+  test("fails fast on replaced legacy context-budget keys for direct runtime config", () => {
+    const legacyCases = [
+      {
+        key: "hardLimitPercent",
+        value: 0.9,
+      },
+      {
+        key: "compactionThresholdPercent",
+        value: 0.85,
+      },
+      {
+        key: "maxInjectionTokens",
+        value: 2400,
+      },
+    ] as const;
+
+    for (const legacyCase of legacyCases) {
+      const workspace = createTestWorkspace(`legacy-context-budget-${legacyCase.key}`);
+      const config = structuredClone(DEFAULT_BREWVA_CONFIG) as unknown as Record<string, unknown>;
+      config["infrastructure"] = {
+        ...DEFAULT_BREWVA_CONFIG.infrastructure,
+        contextBudget: {
+          ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
+          [legacyCase.key]: legacyCase.value,
+        },
+      };
+
+      expect(
+        () =>
+          new BrewvaRuntime({
+            cwd: workspace,
+            config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+          }),
+      ).toThrow(new RegExp(`infrastructure\\.contextBudget\\.${legacyCase.key} has been replaced`));
+    }
   });
 
   test("fails fast when removed adaptive projection fields are present", () => {

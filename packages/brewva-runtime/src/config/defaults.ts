@@ -110,9 +110,19 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     },
     contextBudget: {
       enabled: true,
-      maxInjectionTokens: 1200,
-      compactionThresholdPercent: 0.82,
-      hardLimitPercent: 0.94,
+      injection: {
+        baseTokens: 1200,
+        windowFraction: 0.002,
+        maxTokens: 4800,
+      },
+      thresholds: {
+        compactionFloorPercent: 0.82,
+        compactionCeilingPercent: 0.9,
+        compactionHeadroomTokens: 24_000,
+        hardLimitFloorPercent: 0.94,
+        hardLimitCeilingPercent: 0.97,
+        hardLimitHeadroomTokens: 8_000,
+      },
       compactionInstructions:
         "Summarize stale tool outputs and keep only active objectives, unresolved failures, and latest verification evidence.",
       compaction: {

@@ -20,7 +20,7 @@ import type {
   VerificationLevel,
   VerificationReport,
 } from "../types.js";
-import { normalizePercent } from "../utils/token.js";
+import { resolveContextUsageRatio } from "../utils/token.js";
 import { VERIFIER_BLOCKER_PREFIX } from "../verification/verifier-blockers.js";
 import type { RuntimeCallback } from "./callback.js";
 
@@ -34,6 +34,13 @@ export interface TaskStatusAlignmentInput {
 export interface TaskServiceOptions {
   config: BrewvaConfig;
   isContextBudgetEnabled: RuntimeCallback<[], boolean>;
+  resolveContextBudgetThresholds: RuntimeCallback<
+    [sessionId: string, usage?: ContextBudgetUsage],
+    {
+      compactionThresholdPercent: number;
+      hardLimitPercent: number;
+    }
+  >;
   getTaskState: RuntimeCallback<[sessionId: string], TaskState>;
   getTruthState: RuntimeCallback<[sessionId: string], TruthState>;
   evaluateCompletion: RuntimeCallback<
@@ -58,6 +65,13 @@ export interface TaskServiceOptions {
 export class TaskService {
   private readonly config: BrewvaConfig;
   private readonly isContextBudgetEnabled: () => boolean;
+  private readonly resolveContextBudgetThresholds: (
+    sessionId: string,
+    usage?: ContextBudgetUsage,
+  ) => {
+    compactionThresholdPercent: number;
+    hardLimitPercent: number;
+  };
   private readonly getTaskState: (sessionId: string) => TaskState;
   private readonly getTruthState: (sessionId: string) => TruthState;
   private readonly evaluateCompletion: (
@@ -69,6 +83,8 @@ export class TaskService {
   constructor(options: TaskServiceOptions) {
     this.config = options.config;
     this.isContextBudgetEnabled = options.isContextBudgetEnabled;
+    this.resolveContextBudgetThresholds = (sessionId, usage) =>
+      options.resolveContextBudgetThresholds(sessionId, usage);
     this.getTaskState = options.getTaskState;
     this.getTruthState = options.getTruthState;
     this.evaluateCompletion = options.evaluateCompletion;
@@ -165,16 +181,12 @@ export class TaskService {
     }
 
     if (health === "ok" || health === "exploring") {
-      const ratio = normalizePercent(input.usage?.percent, {
-        tokens: input.usage?.tokens,
-        contextWindow: input.usage?.contextWindow,
-      });
+      const ratio = resolveContextUsageRatio(input.usage);
       if (ratio !== null && this.isContextBudgetEnabled()) {
-        const threshold =
-          normalizePercent(this.config.infrastructure.contextBudget.compactionThresholdPercent) ??
-          1;
-        const hardLimit =
-          normalizePercent(this.config.infrastructure.contextBudget.hardLimitPercent) ?? 1;
+        const { compactionThresholdPercent, hardLimitPercent } =
+          this.resolveContextBudgetThresholds(input.sessionId, input.usage);
+        const threshold = Math.max(0, Math.min(1, compactionThresholdPercent));
+        const hardLimit = Math.max(0, Math.min(1, hardLimitPercent));
         if (ratio >= hardLimit || ratio >= threshold) {
           health = "budget_pressure";
           reason = ratio >= hardLimit ? "context_hard_limit_pressure" : "context_usage_pressure";

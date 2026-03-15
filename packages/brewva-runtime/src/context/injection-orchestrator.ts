@@ -1,5 +1,6 @@
 import type { ContextBudgetUsage, TruthState } from "../types.js";
 import { sha256 } from "../utils/hash.js";
+import { resolveContextUsageRatio } from "../utils/token.js";
 import type {
   ContextInjectionEntry,
   ContextInjectionPlanResult,
@@ -25,7 +26,7 @@ export interface BuildContextInjectionResult {
 
 export interface ContextInjectionOrchestratorDeps {
   providers: ContextSourceProviderRegistry;
-  maxInjectionTokens: number;
+  getMaxInjectionTokens(sessionId: string, usage?: ContextBudgetUsage): number;
   isContextBudgetEnabled(): boolean;
   sanitizeInput(text: string): string;
   getTruthState(sessionId: string): TruthState;
@@ -56,7 +57,7 @@ export interface ContextInjectionOrchestratorDeps {
     truncated: boolean;
   };
   buildInjectionScopeKey(sessionId: string, injectionScopeId?: string): string;
-  setReservedTokens(scopeKey: string, tokens: number): void;
+  setReservedPrimaryTokens(scopeKey: string, tokens: number): void;
   getLastInjectedFingerprint(scopeKey: string): string | undefined;
   setLastInjectedFingerprint(scopeKey: string, fingerprint: string): void;
 }
@@ -85,7 +86,9 @@ export function buildContextInjection(
 
   const merged = deps.planContextInjection(
     input.sessionId,
-    deps.isContextBudgetEnabled() ? deps.maxInjectionTokens : Number.MAX_SAFE_INTEGER,
+    deps.isContextBudgetEnabled()
+      ? deps.getMaxInjectionTokens(input.sessionId, input.usage)
+      : Number.MAX_SAFE_INTEGER,
   );
 
   const decision = deps.planBudgetInjection(input.sessionId, merged.text, input.usage);
@@ -95,7 +98,7 @@ export function buildContextInjection(
     const scopeKey = deps.buildInjectionScopeKey(input.sessionId, input.injectionScopeId);
     const previous = deps.getLastInjectedFingerprint(scopeKey);
     if (previous === fingerprint) {
-      deps.setReservedTokens(scopeKey, 0);
+      deps.setReservedPrimaryTokens(scopeKey, 0);
       deps.commitContextInjection(input.sessionId, merged.consumedKeys);
       deps.recordEvent({
         sessionId: input.sessionId,
@@ -116,7 +119,10 @@ export function buildContextInjection(
     }
 
     deps.commitContextInjection(input.sessionId, merged.consumedKeys);
-    deps.setReservedTokens(scopeKey, deps.isContextBudgetEnabled() ? decision.finalTokens : 0);
+    deps.setReservedPrimaryTokens(
+      scopeKey,
+      deps.isContextBudgetEnabled() ? decision.finalTokens : 0,
+    );
     deps.setLastInjectedFingerprint(scopeKey, fingerprint);
     deps.recordEvent({
       sessionId: input.sessionId,
@@ -126,7 +132,7 @@ export function buildContextInjection(
         finalTokens: decision.finalTokens,
         truncated: wasTruncated,
         degradationApplied: merged.planTelemetry.degradationApplied,
-        usagePercent: input.usage?.percent ?? null,
+        usagePercent: resolveContextUsageRatio(input.usage),
         sourceCount: merged.entries.length,
       },
     });
@@ -140,7 +146,10 @@ export function buildContextInjection(
     };
   }
 
-  deps.setReservedTokens(deps.buildInjectionScopeKey(input.sessionId, input.injectionScopeId), 0);
+  deps.setReservedPrimaryTokens(
+    deps.buildInjectionScopeKey(input.sessionId, input.injectionScopeId),
+    0,
+  );
   deps.recordEvent({
     sessionId: input.sessionId,
     type: "context_injection_dropped",

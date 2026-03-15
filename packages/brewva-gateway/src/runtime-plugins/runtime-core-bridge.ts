@@ -2,13 +2,18 @@ import { coerceContextBudgetUsage, type BrewvaRuntime } from "@brewva/brewva-run
 import type { ExtensionAPI, ExtensionFactory } from "@mariozechner/pi-coding-agent";
 import { createCompletionGuardLifecycle } from "./completion-guard.js";
 import { prepareContextComposerSupport } from "./context-composer-support.js";
-import { buildContextComposedEventPayload, composeContextBlocks } from "./context-composer.js";
+import {
+  buildContextComposedEventPayload,
+  composeContextBlocks,
+  resolveSupplementalContextBlocks,
+} from "./context-composer.js";
 import { applyContextContract } from "./context-contract.js";
 import {
   extractCompactionEntryId,
   extractCompactionSummary,
   resolveInjectionScopeId,
 } from "./context-shared.js";
+import { appendSupplementalContextBlocks } from "./context-supplemental.js";
 import { registerLedgerWriter } from "./ledger-writer.js";
 import { createQualityGateLifecycle } from "./quality-gate.js";
 import { registerToolResultDistiller } from "./tool-result-distiller.js";
@@ -41,11 +46,12 @@ export function registerRuntimeCoreBridge(pi: ExtensionAPI, runtime: BrewvaRunti
         );
         runtime.context.observeUsage(sessionId, usage);
         const prompt = typeof rawEvent.prompt === "string" ? rawEvent.prompt : "";
+        const injectionScopeId = resolveInjectionScopeId(rawCtx.sessionManager);
         const injection = await runtime.context.buildInjection(
           sessionId,
           prompt,
           usage,
-          resolveInjectionScopeId(rawCtx.sessionManager),
+          injectionScopeId,
         );
         const { gateStatus, pendingCompactionReason, capabilityView } =
           prepareContextComposerSupport({
@@ -55,6 +61,18 @@ export function registerRuntimeCoreBridge(pi: ExtensionAPI, runtime: BrewvaRunti
             prompt,
             usage,
           });
+        const supplementalBlocks = appendSupplementalContextBlocks(runtime, {
+          sessionId,
+          usage,
+          injectionScopeId,
+          blocks: resolveSupplementalContextBlocks({
+            runtime,
+            sessionId,
+            gateStatus,
+            pendingCompactionReason,
+            capabilityView,
+          }),
+        });
         const composed = composeContextBlocks({
           runtime,
           sessionId,
@@ -63,6 +81,8 @@ export function registerRuntimeCoreBridge(pi: ExtensionAPI, runtime: BrewvaRunti
           capabilityView,
           admittedEntries: injection.entries,
           injectionAccepted: injection.accepted,
+          supplementalBlocks,
+          includeDefaultSupplementalBlocks: false,
         });
         runtime.events.record({
           sessionId,
@@ -71,7 +91,7 @@ export function registerRuntimeCoreBridge(pi: ExtensionAPI, runtime: BrewvaRunti
         });
 
         return {
-          systemPrompt: applyContextContract(rawEvent.systemPrompt, runtime),
+          systemPrompt: applyContextContract(rawEvent.systemPrompt, runtime, sessionId, usage),
           message: {
             customType: CORE_CONTEXT_INJECTION_MESSAGE_TYPE,
             content: composed.content,

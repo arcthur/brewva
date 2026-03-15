@@ -2,7 +2,9 @@ import { resolve } from "node:path";
 import { TurnWALRecovery } from "./channels/turn-wal-recovery.js";
 import { TurnWALStore } from "./channels/turn-wal.js";
 import type { TurnEnvelope } from "./channels/turn.js";
+import { DEFAULT_BREWVA_CONFIG } from "./config/defaults.js";
 import { loadBrewvaConfig } from "./config/loader.js";
+import { normalizeBrewvaConfig } from "./config/normalize.js";
 import { resolveWorkspaceRootDir } from "./config/paths.js";
 import { ContextBudgetManager } from "./context/budget.js";
 import { registerBuiltInContextSourceProviders } from "./context/builtins.js";
@@ -321,8 +323,8 @@ export class BrewvaRuntime {
     observeUsage(sessionId: string, usage: ContextBudgetUsage | undefined): void;
     getUsage(sessionId: string): ContextBudgetUsage | undefined;
     getUsageRatio(usage: ContextBudgetUsage | undefined): number | null;
-    getHardLimitRatio(): number;
-    getCompactionThresholdRatio(): number;
+    getHardLimitRatio(sessionId: string, usage?: ContextBudgetUsage): number;
+    getCompactionThresholdRatio(sessionId: string, usage?: ContextBudgetUsage): number;
     getPressureStatus(sessionId: string, usage?: ContextBudgetUsage): ContextPressureStatus;
     getPressureLevel(sessionId: string, usage?: ContextBudgetUsage): ContextPressureLevel;
     getCompactionGateStatus(
@@ -703,7 +705,7 @@ export class BrewvaRuntime {
   private resolveRuntimeConfig(options: BrewvaRuntimeOptions): RuntimeConfigState {
     if (options.config) {
       return {
-        config: options.config,
+        config: normalizeBrewvaConfig(options.config, DEFAULT_BREWVA_CONFIG),
       };
     }
     return {
@@ -813,6 +815,13 @@ export class BrewvaRuntime {
     const taskService = new TaskService({
       config: this.config,
       isContextBudgetEnabled: () => this.kernel.isContextBudgetEnabled(),
+      resolveContextBudgetThresholds: (sessionId, usage) => ({
+        compactionThresholdPercent: this.contextBudget.getEffectiveCompactionThresholdPercent(
+          sessionId,
+          usage,
+        ),
+        hardLimitPercent: this.contextBudget.getEffectiveHardLimitPercent(sessionId, usage),
+      }),
       getTaskState: (sessionId) => this.kernel.getTaskState(sessionId),
       getTruthState: (sessionId) => this.kernel.getTruthState(sessionId),
       evaluateCompletion: (sessionId, level) => this.evaluateCompletion(sessionId, level),
@@ -1216,8 +1225,10 @@ export class BrewvaRuntime {
           this.contextService.observeContextUsage(sessionId, usage),
         getUsage: (sessionId) => this.contextService.getContextUsage(sessionId),
         getUsageRatio: (usage) => this.contextService.getContextUsageRatio(usage),
-        getHardLimitRatio: () => this.contextService.getContextHardLimitRatio(),
-        getCompactionThresholdRatio: () => this.contextService.getContextCompactionThresholdRatio(),
+        getHardLimitRatio: (sessionId, usage) =>
+          this.contextService.getContextHardLimitRatio(sessionId, usage),
+        getCompactionThresholdRatio: (sessionId, usage) =>
+          this.contextService.getContextCompactionThresholdRatio(sessionId, usage),
         getPressureStatus: (sessionId, usage) =>
           this.contextService.getContextPressureStatus(sessionId, usage),
         getPressureLevel: (sessionId, usage) =>

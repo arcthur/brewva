@@ -16,8 +16,14 @@ describe("Gap remediation: runtime core compaction gate", () => {
         infrastructure: {
           contextBudget: {
             enabled: true,
-            compactionThresholdPercent: 0.8,
-            hardLimitPercent: 0.9,
+            thresholds: {
+              compactionFloorPercent: 0.8,
+              compactionCeilingPercent: 0.8,
+              compactionHeadroomTokens: 24_000,
+              hardLimitFloorPercent: 0.9,
+              hardLimitCeilingPercent: 0.9,
+              hardLimitHeadroomTokens: 8_000,
+            },
           },
         },
       }),

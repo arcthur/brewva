@@ -46,6 +46,62 @@ export function normalizePercent(
   return Math.max(0, Math.min(normalized, 1));
 }
 
+interface ContextUsageLike {
+  tokens?: number | null;
+  contextWindow?: number | null;
+  percent?: number | null;
+}
+
+export function resolveContextUsageRatio(
+  input: ContextUsageLike | null | undefined,
+): number | null {
+  if (!input) return null;
+
+  const normalizedPercent = normalizePercent(input.percent, {
+    tokens: input.tokens,
+    contextWindow: input.contextWindow,
+  });
+  if (normalizedPercent !== null) {
+    return normalizedPercent;
+  }
+
+  if (typeof input.tokens !== "number" || !Number.isFinite(input.tokens) || input.tokens < 0) {
+    return null;
+  }
+  if (
+    typeof input.contextWindow !== "number" ||
+    !Number.isFinite(input.contextWindow) ||
+    input.contextWindow <= 0
+  ) {
+    return null;
+  }
+  return Math.max(0, Math.min(1, input.tokens / input.contextWindow));
+}
+
+export function resolveContextUsageTokens(
+  input: ContextUsageLike | null | undefined,
+): number | null {
+  if (!input) return null;
+
+  if (typeof input.tokens === "number" && Number.isFinite(input.tokens) && input.tokens >= 0) {
+    return Math.ceil(input.tokens);
+  }
+
+  if (
+    typeof input.contextWindow !== "number" ||
+    !Number.isFinite(input.contextWindow) ||
+    input.contextWindow <= 0
+  ) {
+    return null;
+  }
+
+  const ratio = resolveContextUsageRatio(input);
+  if (ratio === null) {
+    return null;
+  }
+  return Math.ceil(ratio * input.contextWindow);
+}
+
 export function truncateTextToTokenBudget(
   text: string,
   tokenBudget: number,

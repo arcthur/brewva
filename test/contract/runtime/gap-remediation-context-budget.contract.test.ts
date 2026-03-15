@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { setStaticContextInjectionBudget } from "../../fixtures/config.js";
 import {
   GAP_REMEDIATION_CONFIG_PATH,
   createGapRemediationConfig as createConfig,
@@ -92,16 +93,10 @@ describe("Gap remediation: context budget", () => {
     expect(fourth.text.length).toBeGreaterThan(0);
   });
 
-  test("truncates context injection to maxInjectionTokens", async () => {
+  test("truncates context injection to the configured effective injection budget", async () => {
     const workspace = createWorkspace("context-injection-truncate");
     const config = createConfig({});
-    config.infrastructure = {
-      ...config.infrastructure,
-      contextBudget: {
-        ...config.infrastructure.contextBudget,
-        maxInjectionTokens: 32,
-      },
-    };
+    setStaticContextInjectionBudget(config, 32);
     writeConfig(workspace, config);
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
@@ -130,14 +125,8 @@ describe("Gap remediation: context budget", () => {
   test("disables primary and supplemental token caps when contextBudget.enabled=false", async () => {
     const workspace = createWorkspace("context-budget-disabled");
     const config = createConfig({});
-    config.infrastructure = {
-      ...config.infrastructure,
-      contextBudget: {
-        ...config.infrastructure.contextBudget,
-        enabled: false,
-        maxInjectionTokens: 32,
-      },
-    };
+    config.infrastructure.contextBudget.enabled = false;
+    setStaticContextInjectionBudget(config, 32);
     writeConfig(workspace, config);
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
@@ -185,13 +174,7 @@ describe("Gap remediation: context budget", () => {
   test("coordinates supplemental injection budget with primary context injection per scope", async () => {
     const workspace = createWorkspace("context-supplemental-budget");
     const config = createConfig({});
-    config.infrastructure = {
-      ...config.infrastructure,
-      contextBudget: {
-        ...config.infrastructure.contextBudget,
-        maxInjectionTokens: 48,
-      },
-    };
+    setStaticContextInjectionBudget(config, 48);
     writeConfig(workspace, config);
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
@@ -243,13 +226,7 @@ describe("Gap remediation: context budget", () => {
   test("reserves supplemental budget immediately after append", async () => {
     const workspace = createWorkspace("context-supplemental-commit");
     const config = createConfig({});
-    config.infrastructure = {
-      ...config.infrastructure,
-      contextBudget: {
-        ...config.infrastructure.contextBudget,
-        maxInjectionTokens: 24,
-      },
-    };
+    setStaticContextInjectionBudget(config, 24);
     writeConfig(workspace, config);
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
@@ -303,5 +280,60 @@ describe("Gap remediation: context budget", () => {
       "leaf-a",
     );
     expect(afterTurnReset.accepted).toBe(true);
+  });
+
+  test("keeps supplemental reservation when duplicate primary injection clears only primary tokens", async () => {
+    const workspace = createWorkspace("context-supplemental-duplicate-primary");
+    const config = createConfig({});
+    setStaticContextInjectionBudget(config, 128);
+    writeConfig(workspace, config);
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
+    const sessionId = "context-supplemental-duplicate-primary-1";
+    const usage = {
+      tokens: 320,
+      contextWindow: 4000,
+      percent: 0.08,
+    };
+
+    runtime.task.setSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Preserve supplemental reservation after duplicate primary injection.",
+    });
+
+    runtime.context.onTurnStart(sessionId, 1);
+    const primary = await runtime.context.buildInjection(
+      sessionId,
+      "stabilize duplicate scope budget",
+      usage,
+      "leaf-a",
+    );
+    expect(primary.accepted).toBe(true);
+
+    const firstSupplemental = runtime.context.appendSupplementalInjection(
+      sessionId,
+      "s".repeat(28),
+      usage,
+      "leaf-a",
+    );
+    expect(firstSupplemental.accepted).toBe(true);
+    expect(firstSupplemental.finalTokens).toBeGreaterThan(0);
+
+    const duplicatePrimary = await runtime.context.buildInjection(
+      sessionId,
+      "stabilize duplicate scope budget",
+      usage,
+      "leaf-a",
+    );
+    expect(duplicatePrimary.accepted).toBe(false);
+
+    const secondSupplemental = runtime.context.appendSupplementalInjection(
+      sessionId,
+      "z".repeat(4000),
+      usage,
+      "leaf-a",
+    );
+    expect(secondSupplemental.accepted).toBe(true);
+    expect(secondSupplemental.finalTokens).toBeLessThanOrEqual(128 - firstSupplemental.finalTokens);
   });
 });

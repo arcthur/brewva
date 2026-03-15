@@ -129,4 +129,52 @@ describe("context transform budgeting contract", () => {
     expect(eventTypes).not.toContain("context_compaction_gate_armed");
     expect(eventTypes).not.toContain("critical_without_compact");
   });
+
+  test("drops supplemental diagnostics when supplemental budget rejects them", async () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const runtime = createRuntimeFixture({
+      context: {
+        appendSupplementalInjection: () => ({
+          accepted: false,
+          text: "",
+          originalTokens: 64,
+          finalTokens: 0,
+          truncated: false,
+          droppedReason: "budget_exhausted",
+        }),
+      },
+    });
+
+    registerContextTransform(api, runtime);
+
+    const sessionId = "s-supplemental-drop";
+    runtime.context.observeUsage(sessionId, {
+      tokens: 850,
+      contextWindow: 1000,
+      percent: 0.85,
+    });
+    runtime.context.requestCompaction(sessionId, "usage_threshold");
+
+    const result = await invokeHandlerAsync<{
+      systemPrompt?: string;
+      message?: { content?: string };
+    }>(
+      handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "continue the investigation",
+        systemPrompt: "base prompt",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => sessionId,
+        },
+        getContextUsage: () => ({ tokens: 850, contextWindow: 1000, percent: 0.85 }),
+      },
+    );
+
+    expect(result.message?.content?.includes("[OperationalDiagnostics]")).toBe(false);
+    expect(result.message?.content).toContain("[ContextCompactionAdvisory]");
+  });
 });

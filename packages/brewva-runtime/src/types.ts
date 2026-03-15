@@ -861,9 +861,19 @@ export interface BrewvaConfig {
     };
     contextBudget: {
       enabled: boolean;
-      maxInjectionTokens: number;
-      compactionThresholdPercent: number;
-      hardLimitPercent: number;
+      injection: {
+        baseTokens: number;
+        windowFraction: number;
+        maxTokens: number;
+      };
+      thresholds: {
+        compactionFloorPercent: number;
+        compactionCeilingPercent: number;
+        compactionHeadroomTokens: number;
+        hardLimitFloorPercent: number;
+        hardLimitCeilingPercent: number;
+        hardLimitHeadroomTokens: number;
+      };
       compactionInstructions: string;
       compaction: {
         minTurnsBetween: number;

@@ -35,7 +35,7 @@ describe("session coordination tool contracts", () => {
         sendUserMessage: () => {
           hiddenFollowUpCalls += 1;
         },
-        getContextUsage: () => ({ tokens: 900, contextWindow: 1000, percent: 0.9 }),
+        getContextUsage: () => ({ tokens: 900, contextWindow: 1000, percent: 90 }),
       }),
     );
 
@@ -44,6 +44,77 @@ describe("session coordination tool contracts", () => {
     expect(compactCalls).toBe(1);
     expect(capturedInstructions).toBe(runtime.context.getCompactionInstructions());
     expect(hiddenFollowUpCalls).toBe(0);
+    const requestedEvent = runtime.events.query(sessionId, {
+      type: "session_compact_requested",
+      last: 1,
+    })[0];
+    const payload = requestedEvent?.payload as { usagePercent?: number | null } | undefined;
+    expect(payload?.usagePercent).toBe(0.9);
+  });
+
+  test("session_compact normalizes usagePercent even when runtime getUsageRatio is unavailable", async () => {
+    const events: Array<{
+      sessionId: string;
+      type: string;
+      payload?: Record<string, unknown>;
+    }> = [];
+
+    const tool = createSessionCompactTool({
+      runtime: {
+        context: {
+          getCompactionInstructions: () => "compact-now",
+          getUsage: () => undefined,
+          getPressureStatus: () => ({
+            level: "high",
+            usageRatio: 0.95,
+            hardLimitRatio: 0.97,
+            compactionThresholdRatio: 0.9,
+          }),
+        },
+        events: {
+          list: () => [],
+          getTapeStatus: () => ({
+            totalEntries: 0,
+            entriesSinceAnchor: 0,
+            entriesSinceCheckpoint: 0,
+            tapePressure: "low",
+            thresholds: { low: 10, medium: 20, high: 30 },
+            lastAnchor: null,
+            lastCheckpointId: null,
+            outputSearch: null,
+          }),
+          recordTapeHandoff: () => ({ ok: false, error: "unsupported" }),
+          searchTape: () => ({ matches: [], scannedEvents: 0, scope: "current_phase", query: "" }),
+          record: (event: {
+            sessionId: string;
+            type: string;
+            payload?: Record<string, unknown>;
+          }) => {
+            events.push({
+              sessionId: event.sessionId,
+              type: event.type,
+              payload: event.payload,
+            });
+            return undefined;
+          },
+        },
+      } as unknown as BrewvaRuntime,
+    });
+
+    await tool.execute(
+      "tc-compact-fallback",
+      {},
+      undefined,
+      undefined,
+      mergeContext("s11-fallback", {
+        compact: () => undefined,
+        getContextUsage: () => ({ tokens: 950, contextWindow: 1000, percent: 95 }),
+      }),
+    );
+
+    const requestedEvent = events.find((event) => event.type === "session_compact_requested");
+    const payload = requestedEvent?.payload as { usagePercent?: number | null } | undefined;
+    expect(payload?.usagePercent).toBe(0.95);
   });
 
   test("tape_handoff writes an anchor and tape_info reports tape and context pressure", async () => {

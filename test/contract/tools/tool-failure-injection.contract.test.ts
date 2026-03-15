@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { setStaticContextInjectionBudget } from "../../fixtures/config.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("Tool failure context injection", () => {
@@ -228,7 +229,7 @@ describe("Tool failure context injection", () => {
   test("reads persisted failure context output beyond ledger outputSummary cap", async () => {
     const workspace = createTestWorkspace("tool-failures-long-output");
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.infrastructure.contextBudget.maxInjectionTokens = 4000;
+    setStaticContextInjectionBudget(config, 4000);
     config.infrastructure.toolFailureInjection.maxOutputChars = 900;
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
     const sessionId = "tool-failures-long-output-1";
@@ -309,7 +310,7 @@ describe("Tool failure context injection", () => {
   test("does not summarize recent failures into ContextTruncated under practical defaults", async () => {
     const workspace = createTestWorkspace("tool-failures-budget");
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.infrastructure.contextBudget.maxInjectionTokens = 2400;
+    setStaticContextInjectionBudget(config, 2400);
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
     const sessionId = "tool-failures-budget-1";
 

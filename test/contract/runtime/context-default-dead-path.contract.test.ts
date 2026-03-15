@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, type BrewvaConfig } from "@brewva/brewva-runtime";
+import { setStaticContextInjectionBudget } from "../../fixtures/config.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function createWorkspaceWithAgentsRules(prefix: string): string {
@@ -17,7 +18,7 @@ function createWorkspaceWithAgentsRules(prefix: string): string {
 function createConfig(): BrewvaConfig {
   const config = structuredClone(DEFAULT_BREWVA_CONFIG);
   config.infrastructure.contextBudget.enabled = true;
-  config.infrastructure.contextBudget.maxInjectionTokens = 1200;
+  setStaticContextInjectionBudget(config, 1200);
   config.projection.enabled = false;
   config.infrastructure.toolFailureInjection.enabled = false;
   return config;

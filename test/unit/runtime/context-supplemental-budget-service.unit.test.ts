@@ -7,12 +7,13 @@ import {
   type ContextSupplementalBudgetDeps,
 } from "../../../packages/brewva-runtime/src/services/context-supplemental-budget.js";
 import { RuntimeSessionStateStore } from "../../../packages/brewva-runtime/src/services/session-state.js";
+import { setStaticContextInjectionBudget } from "../../fixtures/config.js";
 
 describe("context-supplemental-budget module", () => {
   test("truncates supplemental injection by remaining per-scope budget", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
-    config.infrastructure.contextBudget.maxInjectionTokens = 24;
+    setStaticContextInjectionBudget(config, 24);
 
     const sessionState = new RuntimeSessionStateStore();
     sessionState.setReservedInjectionTokens("supplemental::root", 20);
@@ -36,7 +37,7 @@ describe("context-supplemental-budget module", () => {
   test("returns budget_exhausted when no supplemental scope budget remains", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
-    config.infrastructure.contextBudget.maxInjectionTokens = 12;
+    setStaticContextInjectionBudget(config, 12);
 
     const sessionState = new RuntimeSessionStateStore();
     sessionState.setReservedInjectionTokens("supplemental::root", 12);
@@ -52,10 +53,10 @@ describe("context-supplemental-budget module", () => {
     expect(result.droppedReason).toBe("budget_exhausted");
   });
 
-  test("commit clamps reserved supplemental tokens to maxInjectionTokens", () => {
+  test("commit clamps reserved supplemental tokens to the effective injection budget", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
-    config.infrastructure.contextBudget.maxInjectionTokens = 10;
+    setStaticContextInjectionBudget(config, 10);
 
     const sessionState = new RuntimeSessionStateStore();
     sessionState.setReservedInjectionTokens("supplemental::root", 8);

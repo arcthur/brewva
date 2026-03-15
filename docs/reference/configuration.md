@@ -164,9 +164,15 @@ Telegram channel skill policy is now built-in and no longer configurable via
 - `infrastructure.events.dir`: `.orchestrator/events`
 - `infrastructure.events.level`: `ops`
 - `infrastructure.contextBudget.enabled`: `true`
-- `infrastructure.contextBudget.maxInjectionTokens`: `1200`
-- `infrastructure.contextBudget.compactionThresholdPercent`: `0.82`
-- `infrastructure.contextBudget.hardLimitPercent`: `0.94`
+- `infrastructure.contextBudget.injection.baseTokens`: `1200`
+- `infrastructure.contextBudget.injection.windowFraction`: `0.002`
+- `infrastructure.contextBudget.injection.maxTokens`: `4800`
+- `infrastructure.contextBudget.thresholds.compactionFloorPercent`: `0.82`
+- `infrastructure.contextBudget.thresholds.compactionCeilingPercent`: `0.9`
+- `infrastructure.contextBudget.thresholds.compactionHeadroomTokens`: `24000`
+- `infrastructure.contextBudget.thresholds.hardLimitFloorPercent`: `0.94`
+- `infrastructure.contextBudget.thresholds.hardLimitCeilingPercent`: `0.97`
+- `infrastructure.contextBudget.thresholds.hardLimitHeadroomTokens`: `8000`
 - `infrastructure.contextBudget.compactionInstructions`: default operational compaction guidance string
 - `infrastructure.contextBudget.compaction.minTurnsBetween`: `2`
 - `infrastructure.contextBudget.compaction.minSecondsBetween`: `45`
@@ -281,8 +287,8 @@ Notes:
 
 With `infrastructure.contextBudget.enabled=true`, runtime enforces:
 
-- primary injection cap (`maxInjectionTokens`)
-- pressure thresholds (`compactionThresholdPercent`, `hardLimitPercent`)
+- layered injection budget (`injection.baseTokens` + `contextWindow * injection.windowFraction`, capped by `injection.maxTokens`)
+- adaptive pressure thresholds (threshold floors/ceilings plus headroom-token targets)
 - session arena SLO policy (`arena.maxEntriesPerSession`)
 
 `enabled=false` disables runtime token-budget enforcement for context injection.
@@ -291,6 +297,8 @@ Runtime behavior:
 
 - Context injection uses a single deterministic path:
   global cap + hard-limit gate + arena SLO (`arena.maxEntriesPerSession`).
+- Effective compaction / hard-limit ratios are computed from the current session `contextWindow`:
+  `1 - headroomTokens / contextWindow`, then clamped into each threshold's configured floor/ceiling band.
 - When pressure is `critical` and no recent compaction has been performed, runtime arms a compaction gate:
   tool calls are blocked until `session_compact` is performed (only `session_compact` and `skill_complete` bypass the gate).
 - Projection injection is working-only (`brewva.projection-working`) and follows the same budget gate.
@@ -298,7 +306,8 @@ Runtime behavior:
 Normalization details from `normalizeBrewvaConfig(...)`:
 
 - Key numeric ranges are schema-enforced fail-fast (for example confidence ratios, schedule limits, context budget limits, and projection bounds).
-- `compactionThresholdPercent` is still clamped to `<= hardLimitPercent` after schema validation.
+- `injection.maxTokens` is clamped to `>= injection.baseTokens`.
+- threshold floors/ceilings are normalized so compaction thresholds never exceed hard-limit ceilings.
 - Integer-like counters are floor-normalized when already in-range.
 
 ## Cost Tracking Model

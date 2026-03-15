@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { setStaticContextPressureThresholds } from "../../fixtures/config.js";
 import {
   createMockExtensionAPI,
   createRuntimeConfig,
@@ -16,7 +17,7 @@ describe("context transform session hook contract", () => {
 
     const runtime = createRuntimeFixture({
       config: createRuntimeConfig((config) => {
-        config.infrastructure.contextBudget.hardLimitPercent = 0.8;
+        setStaticContextPressureThresholds(config, { hardLimitPercent: 0.8 });
       }),
       context: {
         buildInjection: async () => {
@@ -82,7 +83,7 @@ describe("context transform session hook contract", () => {
 
     const runtime = createRuntimeFixture({
       config: createRuntimeConfig((config) => {
-        config.infrastructure.contextBudget.hardLimitPercent = 0.8;
+        setStaticContextPressureThresholds(config, { hardLimitPercent: 0.8 });
       }),
       context: {
         onTurnStart: () => undefined,
@@ -129,8 +130,7 @@ describe("context transform session hook contract", () => {
     );
 
     expect(before.message?.content).toContain("[ContextCompactionGate]");
-    expect(before.message?.content).toContain("[OperationalDiagnostics]");
-    expect(before.message?.content).toContain("required_action: session_compact_now");
+    expect(before.message?.content?.includes("[OperationalDiagnostics]")).toBe(false);
     expect(before.message?.content).not.toContain("tape_pressure:");
     expect(eventTypes).toContain("context_compaction_gate_armed");
     expect(eventTypes).toContain("critical_without_compact");
@@ -175,7 +175,7 @@ describe("context transform session hook contract", () => {
 
     const runtime = createRuntimeFixture({
       config: createRuntimeConfig((config) => {
-        config.infrastructure.contextBudget.hardLimitPercent = 0.8;
+        setStaticContextPressureThresholds(config, { hardLimitPercent: 0.8 });
       }),
       context: {
         buildInjection: async () => ({
@@ -246,7 +246,7 @@ describe("context transform session hook contract", () => {
 
     const runtime = createRuntimeFixture({
       config: createRuntimeConfig((config) => {
-        config.infrastructure.contextBudget.hardLimitPercent = 0.8;
+        setStaticContextPressureThresholds(config, { hardLimitPercent: 0.8 });
       }),
       context: {
         buildInjection: async () => ({
@@ -326,7 +326,7 @@ describe("context transform session hook contract", () => {
       },
     );
     expect(afterWindow.message?.content).toContain("[ContextCompactionGate]");
-    expect(afterWindow.message?.content).toContain("[OperationalDiagnostics]");
+    expect(afterWindow.message?.content?.includes("[OperationalDiagnostics]")).toBe(false);
     expect(eventTypes).toContain("context_compaction_gate_armed");
     expect(eventTypes).toContain("critical_without_compact");
   });
@@ -337,7 +337,7 @@ describe("context transform session hook contract", () => {
 
     const runtime = createRuntimeFixture({
       config: createRuntimeConfig((config) => {
-        config.infrastructure.contextBudget.hardLimitPercent = 0.8;
+        setStaticContextPressureThresholds(config, { hardLimitPercent: 0.8 });
       }),
       context: {
         buildInjection: async () => ({

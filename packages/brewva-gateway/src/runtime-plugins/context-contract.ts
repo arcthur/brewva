@@ -1,11 +1,19 @@
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntime, ContextBudgetUsage } from "@brewva/brewva-runtime";
 import { formatPercent } from "./context-shared.js";
 
 const CONTEXT_CONTRACT_MARKER = "[Brewva Context Contract]";
 
-export function buildContextContractBlock(runtime: BrewvaRuntime): string {
-  const highThresholdPercent = formatPercent(runtime.context.getCompactionThresholdRatio());
-  const hardLimitPercent = formatPercent(runtime.context.getHardLimitRatio());
+export function buildContextContractBlock(input: {
+  runtime: BrewvaRuntime;
+  sessionId: string;
+  usage?: ContextBudgetUsage;
+}): string {
+  const highThresholdPercent = formatPercent(
+    input.runtime.context.getCompactionThresholdRatio(input.sessionId, input.usage),
+  );
+  const hardLimitPercent = formatPercent(
+    input.runtime.context.getHardLimitRatio(input.sessionId, input.usage),
+  );
 
   return [
     CONTEXT_CONTRACT_MARKER,
@@ -21,16 +29,20 @@ export function buildContextContractBlock(runtime: BrewvaRuntime): string {
   ].join("\n");
 }
 
-export function applyContextContract(systemPrompt: unknown, runtime: BrewvaRuntime): string {
+export function applyContextContract(
+  systemPrompt: unknown,
+  runtime: BrewvaRuntime,
+  sessionId: string,
+  usage?: ContextBudgetUsage,
+): string {
   const base = typeof systemPrompt === "string" ? systemPrompt : "";
-  if (base.includes(CONTEXT_CONTRACT_MARKER)) {
-    return base;
-  }
-  const contract = buildContextContractBlock(runtime);
-  if (base.trim().length === 0) {
+  const markerIndex = base.indexOf(CONTEXT_CONTRACT_MARKER);
+  const baseWithoutContract = markerIndex >= 0 ? base.slice(0, markerIndex).trimEnd() : base;
+  const contract = buildContextContractBlock({ runtime, sessionId, usage });
+  if (baseWithoutContract.trim().length === 0) {
     return contract;
   }
-  return `${base}\n\n${contract}`;
+  return `${baseWithoutContract}\n\n${contract}`;
 }
 
 export { CONTEXT_CONTRACT_MARKER };

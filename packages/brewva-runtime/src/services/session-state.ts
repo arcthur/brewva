@@ -31,12 +31,17 @@ export interface ScanConvergenceRuntimeState {
   toolStrategyByCallId: Map<string, ScanConvergenceToolStrategy>;
 }
 
+interface ReservedContextInjectionTokens {
+  primaryTokens: number;
+  supplementalTokens: number;
+}
+
 export class RuntimeSessionStateCell {
   activeSkill?: string;
   turn = 0;
   toolCalls = 0;
   lastInjectedContextFingerprintByScope = new Map<string, string>();
-  reservedContextInjectionTokensByScope = new Map<string, number>();
+  reservedContextInjectionTokensByScope = new Map<string, ReservedContextInjectionTokens>();
   lastLedgerCompactionTurn?: number;
   toolContractWarnings = new Set<string>();
   skillBudgetWarnings = new Set<string>();
@@ -97,16 +102,72 @@ export class RuntimeSessionStateStore {
     return `${sessionId}::${normalizedScope}`;
   }
 
-  getReservedInjectionTokens(scopeKey: string): number | undefined {
+  private normalizeReservedTokens(tokens: number): number {
+    if (!Number.isFinite(tokens)) {
+      return 0;
+    }
+    return Math.max(0, Math.floor(tokens));
+  }
+
+  private getReservedTokensRecord(scopeKey: string): ReservedContextInjectionTokens | undefined {
     return this.getExistingCell(
       RuntimeSessionStateStore.readSessionIdFromScopeKey(scopeKey),
     )?.reservedContextInjectionTokensByScope.get(scopeKey);
   }
 
+  private setReservedTokensRecord(scopeKey: string, record: ReservedContextInjectionTokens): void {
+    const normalizedRecord: ReservedContextInjectionTokens = {
+      primaryTokens: this.normalizeReservedTokens(record.primaryTokens),
+      supplementalTokens: this.normalizeReservedTokens(record.supplementalTokens),
+    };
+
+    const totalTokens = normalizedRecord.primaryTokens + normalizedRecord.supplementalTokens;
+    const sessionId = RuntimeSessionStateStore.readSessionIdFromScopeKey(scopeKey);
+    const store = this.getCell(sessionId).reservedContextInjectionTokensByScope;
+    if (totalTokens <= 0) {
+      store.delete(scopeKey);
+      return;
+    }
+    store.set(scopeKey, normalizedRecord);
+  }
+
+  getReservedInjectionTokens(scopeKey: string): number | undefined {
+    const record = this.getReservedTokensRecord(scopeKey);
+    if (!record) {
+      return undefined;
+    }
+    return record.primaryTokens + record.supplementalTokens;
+  }
+
   setReservedInjectionTokens(scopeKey: string, tokens: number): void {
-    this.getCell(
-      RuntimeSessionStateStore.readSessionIdFromScopeKey(scopeKey),
-    ).reservedContextInjectionTokensByScope.set(scopeKey, tokens);
+    this.setReservedTokensRecord(scopeKey, {
+      primaryTokens: tokens,
+      supplementalTokens: 0,
+    });
+  }
+
+  getReservedPrimaryInjectionTokens(scopeKey: string): number | undefined {
+    return this.getReservedTokensRecord(scopeKey)?.primaryTokens;
+  }
+
+  setReservedPrimaryInjectionTokens(scopeKey: string, tokens: number): void {
+    const current = this.getReservedTokensRecord(scopeKey);
+    this.setReservedTokensRecord(scopeKey, {
+      primaryTokens: tokens,
+      supplementalTokens: current?.supplementalTokens ?? 0,
+    });
+  }
+
+  getReservedSupplementalInjectionTokens(scopeKey: string): number | undefined {
+    return this.getReservedTokensRecord(scopeKey)?.supplementalTokens;
+  }
+
+  setReservedSupplementalInjectionTokens(scopeKey: string, tokens: number): void {
+    const current = this.getReservedTokensRecord(scopeKey);
+    this.setReservedTokensRecord(scopeKey, {
+      primaryTokens: current?.primaryTokens ?? 0,
+      supplementalTokens: tokens,
+    });
   }
 
   getLastInjectedFingerprint(scopeKey: string): string | undefined {

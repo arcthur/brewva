@@ -29,6 +29,9 @@ export function createSessionCompactTool(options: BrewvaToolOptions): ToolDefini
       const sessionId = getSessionId(ctx);
       const reason = normalizeReason(params.reason);
       const usage = ctx.getContextUsage();
+      const usagePercent =
+        options.runtime.context.getUsageRatio?.(usage) ??
+        options.runtime.context.getPressureStatus(sessionId, usage).usageRatio;
       const customInstructions = options.runtime.context.getCompactionInstructions?.();
 
       try {
@@ -51,7 +54,7 @@ export function createSessionCompactTool(options: BrewvaToolOptions): ToolDefini
           payload: {
             reason: reason ?? null,
             usageTokens: usage?.tokens ?? null,
-            usagePercent: usage?.percent ?? null,
+            usagePercent,
           },
         });
       } catch (error) {
@@ -76,7 +79,7 @@ export function createSessionCompactTool(options: BrewvaToolOptions): ToolDefini
           ok: true,
           reason: reason ?? null,
           usageTokens: usage?.tokens ?? null,
-          usagePercent: usage?.percent ?? null,
+          usagePercent,
         },
       );
     },

@@ -9,6 +9,7 @@ import type {
   BrewvaEventRecord,
   ContextBudgetUsage,
 } from "../../../packages/brewva-runtime/src/types.js";
+import { setStaticContextPressureThresholds } from "../../fixtures/config.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function createUsage(percent: number): ContextBudgetUsage {
@@ -30,8 +31,10 @@ describe("ContextPressureService", () => {
   test("blocks tools on critical pressure and emits expected payload", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
-    config.infrastructure.contextBudget.hardLimitPercent = 0.8;
-    config.infrastructure.contextBudget.compactionThresholdPercent = 0.7;
+    setStaticContextPressureThresholds(config, {
+      hardLimitPercent: 0.8,
+      compactionThresholdPercent: 0.7,
+    });
 
     const events: Array<{
       sessionId: string;
@@ -118,11 +121,91 @@ describe("ContextPressureService", () => {
     expect(gate.reason).toBe("hard_limit");
   });
 
+  test("normalizes usagePercent in compaction request telemetry", () => {
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.infrastructure.contextBudget.enabled = true;
+
+    const events: Array<{
+      sessionId: string;
+      type: string;
+      turn?: number;
+      payload?: Record<string, unknown>;
+    }> = [];
+
+    const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
+    budget.beginTurn("pressure-session", 8);
+
+    const service = new ContextPressureService({
+      config,
+      contextBudget: budget,
+      getCurrentTurn: () => 8,
+      recordEvent: (eventInput) => {
+        events.push(eventInput);
+        return undefined as BrewvaEventRecord | undefined;
+      },
+    });
+
+    service.requestCompaction("pressure-session", "hard_limit", {
+      tokens: 950,
+      contextWindow: 1_000,
+      percent: 95,
+    });
+
+    const requestedEvent = events.find((event) => event.type === "context_compaction_requested");
+    expect(requestedEvent?.payload).toEqual(
+      expect.objectContaining({
+        reason: "hard_limit",
+        usagePercent: 0.95,
+        tokens: 950,
+      }),
+    );
+  });
+
+  test("normalizes observed context usage telemetry into ratio form", () => {
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.infrastructure.contextBudget.enabled = true;
+
+    const events: Array<{
+      sessionId: string;
+      type: string;
+      turn?: number;
+      payload?: Record<string, unknown>;
+    }> = [];
+
+    const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
+    const service = new ContextPressureService({
+      config,
+      contextBudget: budget,
+      getCurrentTurn: () => 1,
+      recordEvent: (eventInput) => {
+        events.push(eventInput);
+        return undefined as BrewvaEventRecord | undefined;
+      },
+    });
+
+    service.observeContextUsage("pressure-session", {
+      tokens: 950,
+      contextWindow: 1_000,
+      percent: 95,
+    });
+
+    const observedEvent = events.find((event) => event.type === "context_usage");
+    expect(observedEvent?.payload).toEqual(
+      expect.objectContaining({
+        tokens: 950,
+        contextWindow: 1_000,
+        percent: 0.95,
+      }),
+    );
+  });
+
   test("does not arm compaction gate from pending reason alone when pressure is below critical", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
-    config.infrastructure.contextBudget.hardLimitPercent = 0.8;
-    config.infrastructure.contextBudget.compactionThresholdPercent = 0.7;
+    setStaticContextPressureThresholds(config, {
+      hardLimitPercent: 0.8,
+      compactionThresholdPercent: 0.7,
+    });
 
     const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
     budget.beginTurn("pressure-session", 9);
@@ -149,7 +232,7 @@ describe("ContextPressureService", () => {
   test("explaining the compaction gate does not emit blocked-tool telemetry", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
-    config.infrastructure.contextBudget.hardLimitPercent = 0.8;
+    setStaticContextPressureThresholds(config, { hardLimitPercent: 0.8 });
 
     const events: Array<{
       sessionId: string;
@@ -184,7 +267,7 @@ describe("ContextPressureService", () => {
   test("allows control-plane tools during critical pressure when configured as always allowed", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
-    config.infrastructure.contextBudget.hardLimitPercent = 0.8;
+    setStaticContextPressureThresholds(config, { hardLimitPercent: 0.8 });
 
     const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
     budget.beginTurn("pressure-session", 12);
@@ -213,8 +296,10 @@ describe("ContextPressureService", () => {
     const workspace = createWorkspaceWithSkills("pressure-runtime-wiring");
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
-    config.infrastructure.contextBudget.hardLimitPercent = 0.8;
-    config.infrastructure.contextBudget.compactionThresholdPercent = 0.7;
+    setStaticContextPressureThresholds(config, {
+      hardLimitPercent: 0.8,
+      compactionThresholdPercent: 0.7,
+    });
     config.infrastructure.events.enabled = true;
     config.infrastructure.events.dir = ".orchestrator/events";
     config.ledger.path = ".orchestrator/ledger/evidence.jsonl";

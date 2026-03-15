@@ -41,3 +41,34 @@ export function createTestConfig(
   }
   return config;
 }
+
+export function setStaticContextInjectionBudget(
+  config: BrewvaConfig,
+  maxTokens: number,
+): BrewvaConfig {
+  config.infrastructure.contextBudget.injection.baseTokens = maxTokens;
+  config.infrastructure.contextBudget.injection.windowFraction = 0;
+  config.infrastructure.contextBudget.injection.maxTokens = maxTokens;
+  return config;
+}
+
+export function setStaticContextPressureThresholds(
+  config: BrewvaConfig,
+  input: {
+    compactionThresholdPercent?: number;
+    hardLimitPercent: number;
+  },
+): BrewvaConfig {
+  const { thresholds } = config.infrastructure.contextBudget;
+  thresholds.hardLimitFloorPercent = input.hardLimitPercent;
+  thresholds.hardLimitCeilingPercent = input.hardLimitPercent;
+  const compactionThresholdPercent =
+    input.compactionThresholdPercent ??
+    Math.min(input.hardLimitPercent, thresholds.compactionFloorPercent);
+  thresholds.compactionFloorPercent = Math.min(compactionThresholdPercent, input.hardLimitPercent);
+  thresholds.compactionCeilingPercent = Math.min(
+    compactionThresholdPercent,
+    input.hardLimitPercent,
+  );
+  return config;
+}

@@ -8,6 +8,7 @@ import {
   type BrewvaConfig,
   type ContextSourceProvider,
 } from "@brewva/brewva-runtime";
+import { setStaticContextInjectionBudget } from "../../fixtures/config.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 type RuntimeWithInternals = {
@@ -21,7 +22,7 @@ function createConfig(): BrewvaConfig {
   const config = structuredClone(DEFAULT_BREWVA_CONFIG);
   config.projection.enabled = true;
   config.infrastructure.contextBudget.enabled = true;
-  config.infrastructure.contextBudget.maxInjectionTokens = 4_000;
+  setStaticContextInjectionBudget(config, 4_000);
   config.infrastructure.toolFailureInjection.enabled = true;
   return config;
 }

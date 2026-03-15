@@ -47,6 +47,24 @@ describe("Task status alignment", () => {
     expect(injection.text).not.toContain("status.health=budget_pressure");
   });
 
+  test("falls back to token telemetry when percent is missing for budget pressure", async () => {
+    const workspace = createTestWorkspace("task-status-null-percent");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "task-status-null-percent-1";
+
+    runtime.task.setSpec(sessionId, { schema: "brewva.task.v1", goal: "Do a thing" });
+    runtime.task.addItem(sessionId, { text: "Implement the fix" });
+
+    const injection = await runtime.context.buildInjection(sessionId, "next", {
+      tokens: 183000,
+      contextWindow: 200000,
+      percent: null,
+    });
+    expect(injection.text).toContain("status.phase=execute");
+    expect(injection.text).toContain("status.health=budget_pressure");
+    expect(injection.text).toContain("status.reason=context_usage_pressure");
+  });
+
   test("surfaces blockers even when task spec is missing", async () => {
     const workspace = createTestWorkspace("task-status-with-blocker-no-spec");
     const runtime = new BrewvaRuntime({ cwd: workspace });

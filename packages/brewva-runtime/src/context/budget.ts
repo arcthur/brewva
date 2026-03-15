@@ -5,7 +5,13 @@ import type {
   ContextInjectionDecision,
   BrewvaConfig,
 } from "../types.js";
-import { estimateTokenCount, normalizePercent, truncateTextToTokenBudget } from "../utils/token.js";
+import {
+  estimateTokenCount,
+  normalizePercent,
+  resolveContextUsageRatio,
+  resolveContextUsageTokens,
+  truncateTextToTokenBudget,
+} from "../utils/token.js";
 
 interface SessionBudgetState {
   turnIndex: number;
@@ -13,6 +19,12 @@ interface SessionBudgetState {
   lastCompactionAtMs?: number;
   lastContextUsage?: ContextBudgetUsage;
   pendingCompactionReason?: ContextCompactionReason;
+}
+
+export interface EffectiveContextBudgetPolicy {
+  injectionTokens: number;
+  compactionThresholdPercent: number;
+  hardLimitPercent: number;
 }
 
 export class ContextBudgetManager {
@@ -39,11 +51,62 @@ export class ContextBudgetManager {
     state.lastContextUsage = {
       tokens: usage.tokens,
       contextWindow: usage.contextWindow,
-      percent: normalizePercent(usage.percent, {
-        tokens: usage.tokens,
-        contextWindow: usage.contextWindow,
-      }),
+      percent: resolveContextUsageRatio(usage),
     };
+  }
+
+  getEffectivePolicy(sessionId: string, usage?: ContextBudgetUsage): EffectiveContextBudgetPolicy {
+    const current = this.resolveUsage(sessionId, usage);
+    const contextWindow =
+      typeof current?.contextWindow === "number" &&
+      Number.isFinite(current.contextWindow) &&
+      current.contextWindow > 0
+        ? current.contextWindow
+        : null;
+    const hardLimitPercent = this.resolveAdaptiveThreshold({
+      contextWindow,
+      floorPercent: this.config.thresholds.hardLimitFloorPercent,
+      ceilingPercent: this.config.thresholds.hardLimitCeilingPercent,
+      headroomTokens: this.config.thresholds.hardLimitHeadroomTokens,
+    });
+    const compactionThresholdPercent = Math.min(
+      hardLimitPercent,
+      this.resolveAdaptiveThreshold({
+        contextWindow,
+        floorPercent: this.config.thresholds.compactionFloorPercent,
+        ceilingPercent: this.config.thresholds.compactionCeilingPercent,
+        headroomTokens: this.config.thresholds.compactionHeadroomTokens,
+      }),
+    );
+
+    const baseInjectionTokens = Math.max(1, Math.floor(this.config.injection.baseTokens));
+    const adaptiveInjectionTokens =
+      contextWindow === null ? 0 : Math.floor(contextWindow * this.config.injection.windowFraction);
+    const injectionTokens = Math.max(
+      1,
+      Math.min(
+        Math.max(baseInjectionTokens, Math.floor(this.config.injection.maxTokens)),
+        baseInjectionTokens + adaptiveInjectionTokens,
+      ),
+    );
+
+    return {
+      injectionTokens,
+      compactionThresholdPercent,
+      hardLimitPercent,
+    };
+  }
+
+  getEffectiveInjectionTokenBudget(sessionId: string, usage?: ContextBudgetUsage): number {
+    return this.getEffectivePolicy(sessionId, usage).injectionTokens;
+  }
+
+  getEffectiveCompactionThresholdPercent(sessionId: string, usage?: ContextBudgetUsage): number {
+    return this.getEffectivePolicy(sessionId, usage).compactionThresholdPercent;
+  }
+
+  getEffectiveHardLimitPercent(sessionId: string, usage?: ContextBudgetUsage): number {
+    return this.getEffectivePolicy(sessionId, usage).hardLimitPercent;
   }
 
   planInjection(
@@ -64,15 +127,12 @@ export class ContextBudgetManager {
 
     this.observeUsage(sessionId, usage);
     const state = this.getOrCreate(sessionId);
-    const usagePercent = usage
-      ? normalizePercent(usage.percent, {
-          tokens: usage.tokens,
-          contextWindow: usage.contextWindow,
-        })
-      : normalizePercent(state.lastContextUsage?.percent);
+    const currentUsage = usage ?? state.lastContextUsage;
+    const usagePercent = resolveContextUsageRatio(currentUsage);
+    const effectivePolicy = this.getEffectivePolicy(sessionId, currentUsage);
     const originalTokens = estimateTokenCount(inputText);
 
-    if (usagePercent !== null && usagePercent >= this.config.hardLimitPercent) {
+    if (usagePercent !== null && usagePercent >= effectivePolicy.hardLimitPercent) {
       return {
         accepted: false,
         finalText: "",
@@ -83,7 +143,25 @@ export class ContextBudgetManager {
       };
     }
 
-    const tokenBudget = Math.max(32, this.config.maxInjectionTokens);
+    let tokenBudget = effectivePolicy.injectionTokens;
+    const projectedTokenBudget = this.resolveProjectedInjectionTokenBudget(
+      currentUsage,
+      effectivePolicy.hardLimitPercent,
+    );
+    if (projectedTokenBudget !== null) {
+      tokenBudget = Math.min(tokenBudget, projectedTokenBudget);
+      if (tokenBudget <= 0) {
+        return {
+          accepted: false,
+          finalText: "",
+          originalTokens,
+          finalTokens: 0,
+          truncated: false,
+          droppedReason: "hard_limit",
+        };
+      }
+    }
+
     const finalText = truncateTextToTokenBudget(inputText, tokenBudget);
     const finalTokens = estimateTokenCount(finalText);
     return {
@@ -106,12 +184,7 @@ export class ContextBudgetManager {
     this.observeUsage(sessionId, usage);
     const state = this.getOrCreate(sessionId);
     const current = usage ?? state.lastContextUsage;
-    const usagePercent = usage
-      ? normalizePercent(usage.percent, {
-          tokens: usage.tokens,
-          contextWindow: usage.contextWindow,
-        })
-      : normalizePercent(current?.percent);
+    const usagePercent = resolveContextUsageRatio(current);
     if (state.pendingCompactionReason) {
       return { shouldCompact: true, reason: state.pendingCompactionReason, usage: current };
     }
@@ -119,10 +192,12 @@ export class ContextBudgetManager {
       return { shouldCompact: false, usage: current };
     }
 
-    const hardLimitPercent = normalizePercent(this.config.hardLimitPercent) ?? 1;
-    const compactionThresholdPercent =
-      normalizePercent(this.config.compactionThresholdPercent) ?? hardLimitPercent;
+    const effectivePolicy = this.getEffectivePolicy(sessionId, usage);
+    const hardLimitPercent = effectivePolicy.hardLimitPercent;
+    const compactionThresholdPercent = effectivePolicy.compactionThresholdPercent;
     const pressureBypassPercent = normalizePercent(this.config.compaction.pressureBypassPercent);
+    // This stays static on purpose. A fixed bypass line lets large-window models skip cooldown
+    // earlier than the adaptive hard limit would, which is desirable once pressure is already high.
     const bypassCooldown =
       usagePercent >= hardLimitPercent ||
       (pressureBypassPercent !== null && usagePercent >= pressureBypassPercent);
@@ -192,6 +267,51 @@ export class ContextBudgetManager {
 
   getCompactionInstructions(): string {
     return this.config.compactionInstructions;
+  }
+
+  private resolveUsage(
+    sessionId: string,
+    usage?: ContextBudgetUsage,
+  ): ContextBudgetUsage | undefined {
+    return usage ?? this.getOrCreate(sessionId).lastContextUsage;
+  }
+
+  private resolveAdaptiveThreshold(input: {
+    contextWindow: number | null;
+    floorPercent: number;
+    ceilingPercent: number;
+    headroomTokens: number;
+  }): number {
+    const floorPercent = normalizePercent(input.floorPercent) ?? 0;
+    const ceilingPercent = Math.max(
+      floorPercent,
+      normalizePercent(input.ceilingPercent) ?? floorPercent,
+    );
+    if (input.contextWindow === null || input.contextWindow <= 0) {
+      return floorPercent;
+    }
+    const byHeadroom = Math.max(0, Math.min(1, 1 - input.headroomTokens / input.contextWindow));
+    return Math.max(floorPercent, Math.min(ceilingPercent, byHeadroom));
+  }
+
+  private resolveProjectedInjectionTokenBudget(
+    usage: ContextBudgetUsage | undefined,
+    hardLimitPercent: number,
+  ): number | null {
+    if (!usage) return null;
+    if (!Number.isFinite(usage.contextWindow) || usage.contextWindow <= 0) {
+      return null;
+    }
+
+    const currentTokens = resolveContextUsageTokens(usage);
+    if (currentTokens === null) {
+      return null;
+    }
+
+    const hardLimitBoundaryTokens =
+      // Keep projected usage strictly below the hard limit boundary after injection.
+      Math.ceil(Math.max(0, Math.min(1, hardLimitPercent)) * usage.contextWindow) - 1;
+    return Math.max(0, hardLimitBoundaryTokens - currentTokens);
   }
 
   private getOrCreate(sessionId: string): SessionBudgetState {
