@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { createBrewvaSession } from "@brewva/brewva-cli";
+import { createHostedSession as createBrewvaSession } from "@brewva/brewva-gateway/host";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function writeSkill(filePath: string, name: string): void {
@@ -330,6 +330,59 @@ describe("brewva session ui settings wiring", () => {
       expect((firstPacket?.proposal.payload as { packetKey?: string } | undefined)?.packetKey).toBe(
         "daily-summary",
       );
+    } finally {
+      result.session.dispose();
+    }
+  });
+
+  test("disables workspace addon loading when addons are turned off", async () => {
+    const workspace = createTestWorkspace("session-ui-addons-disabled");
+    const addonDir = join(workspace, ".brewva/addons/ops-status");
+    mkdirSync(addonDir, { recursive: true });
+    writeFileSync(
+      join(addonDir, "index.ts"),
+      ['export default { id: "ops-status" };'].join("\n"),
+      "utf8",
+    );
+    writeFileSync(
+      join(addonDir, "context-packets.jsonl"),
+      `${JSON.stringify({
+        addonId: "ops-status",
+        writtenAt: Date.now(),
+        scopeId: "scope-main",
+        packetKey: "daily-summary",
+        label: "Daily summary",
+        content: "Summary from addon host",
+        profile: "status_summary",
+      })}\n`,
+      "utf8",
+    );
+
+    const result = await createBrewvaSession({
+      cwd: workspace,
+      scopeId: "scope-main",
+      enableAddons: false,
+    });
+    try {
+      const sessionId = result.session.sessionManager.getSessionId();
+      const bootstrap = result.runtime.events.query(sessionId, {
+        type: "session_bootstrap",
+        last: 1,
+      })[0];
+      const payload =
+        (bootstrap?.payload as
+          | {
+              addonsEnabled?: boolean;
+              loadedAddonCount?: number;
+            }
+          | undefined) ?? {};
+      expect(payload.addonsEnabled).toBe(false);
+      expect(payload.loadedAddonCount).toBe(0);
+
+      const packets = result.runtime.proposals.list(sessionId, {
+        kind: "context_packet",
+      });
+      expect(packets).toHaveLength(0);
     } finally {
       result.session.dispose();
     }

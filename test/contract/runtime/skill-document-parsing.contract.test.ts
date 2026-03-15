@@ -234,6 +234,46 @@ describe("skill document parsing", () => {
     expect(merged.composableWith).toEqual(["debugging"]);
   });
 
+  test("overlay parsing leaves omitted dispatch undefined so base thresholds can inherit unchanged", () => {
+    const filePath = createTempSkillDocument(
+      "brewva-skill-overlay-dispatch-inherit-",
+      "skills/project/overlays/review/SKILL.md",
+      ["---", "effects:", "  denied_effects: [external_network]", "---", "# overlay"],
+    );
+
+    const parsed = parseSkillDocument(filePath, "overlay");
+    expect(parsed.contract.dispatch).toBeUndefined();
+
+    const merged = mergeOverlayContract(
+      createContract({
+        name: "review",
+        category: "core",
+        routing: { scope: "core" },
+        dispatch: {
+          suggestThreshold: 6,
+          autoThreshold: 11,
+        },
+        intent: {
+          outputs: ["review_report"],
+          outputContracts: {
+            review_report: {
+              kind: "text",
+              minWords: 3,
+              minLength: 18,
+            },
+          },
+        },
+      }),
+      parsed.contract,
+    );
+
+    expect(merged.dispatch).toEqual({
+      suggestThreshold: 6,
+      autoThreshold: 11,
+    });
+    expect(merged.effects?.deniedEffects).toEqual(["external_network"]);
+  });
+
   test("fails fast when non-overlay outputs omit output contracts", () => {
     const filePath = createTempSkillDocument(
       "brewva-skill-missing-output-contracts-",

@@ -124,6 +124,7 @@ export interface GatewayDaemonOptions {
   configPath?: string;
   model?: string;
   enableExtensions?: boolean;
+  enableAddons?: boolean;
   jsonStdout?: boolean;
   tickIntervalMs?: number;
   heartbeatTickIntervalMs?: number;
@@ -254,7 +255,7 @@ export class GatewayDaemon {
   private readonly supervisor: SessionBackend;
   private readonly turnWalStore?: TurnWALStore;
   private readonly heartbeatScheduler: HeartbeatScheduler;
-  private readonly addonHost: AddonHost;
+  private readonly addonHost: AddonHost | null;
   private readonly heartbeatSessionByRule = new Map<string, string>();
   private readonly broadcastObservers = new Set<(event: GatewayEvent, payload?: unknown) => void>();
   private readonly startedAt = Date.now();
@@ -344,9 +345,12 @@ export class GatewayDaemon {
       cwd: resolvedCwd,
       configPath: options.configPath,
     });
-    this.addonHost = new AddonHost({
-      cwd: workspaceRoot,
-    });
+    this.addonHost =
+      options.enableAddons === false
+        ? null
+        : new AddonHost({
+            cwd: workspaceRoot,
+          });
     this.turnWalStore = options.sessionBackend
       ? undefined
       : new TurnWALStore({
@@ -369,6 +373,7 @@ export class GatewayDaemon {
         defaultConfigPath: options.configPath,
         defaultModel: options.model,
         defaultEnableExtensions: options.enableExtensions,
+        defaultEnableAddons: options.enableAddons,
         sessionIdleTtlMs: options.sessionIdleTtlMs,
         sessionIdleSweepIntervalMs: options.sessionIdleSweepIntervalMs,
         maxWorkers: options.maxWorkers,
@@ -411,8 +416,10 @@ export class GatewayDaemon {
       this.ownsPidRecord = true;
 
       await this.supervisor.start();
-      await this.addonHost.loadAll();
-      this.addonHost.startJobs();
+      if (this.addonHost) {
+        await this.addonHost.loadAll();
+        this.addonHost.startJobs();
+      }
       this.heartbeatScheduler.start();
       this.startTickEmitter();
       this.installSignalHandlers();
@@ -573,7 +580,7 @@ export class GatewayDaemon {
     }
 
     this.heartbeatScheduler.stop();
-    this.addonHost.stopJobs();
+    this.addonHost?.stopJobs();
     try {
       await this.supervisor.stop();
     } catch {
@@ -645,7 +652,7 @@ export class GatewayDaemon {
     }
 
     this.heartbeatScheduler.stop();
-    this.addonHost.stopJobs();
+    this.addonHost?.stopJobs();
 
     if (this.wss) {
       const server = this.wss;
@@ -1003,6 +1010,7 @@ export class GatewayDaemon {
           model?: string;
           agentId?: string;
           enableExtensions?: boolean;
+          enableAddons?: boolean;
         };
         const requestedSessionId = input.sessionId?.trim() || randomUUID();
         if (input.cwd) {
@@ -1017,6 +1025,7 @@ export class GatewayDaemon {
             model: input.model,
             agentId: input.agentId,
             enableExtensions: input.enableExtensions,
+            ...(input.enableAddons === undefined ? {} : { enableAddons: input.enableAddons }),
           });
         } catch (error) {
           if (isSessionBackendCapacityError(error)) {

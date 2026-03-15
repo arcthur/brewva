@@ -2,7 +2,7 @@
   "name": "@brewva/brewva",
   "version": "0.1.0",
   "description": "Platform-aware binary launcher for the Brewva CLI",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "bin": {
     "brewva": "./bin/brewva.js"
   },

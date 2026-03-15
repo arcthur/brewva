@@ -3,12 +3,12 @@
 Orchestration is driven by runtime state management plus extension lifecycle handlers.
 
 - Runtime state machine: `packages/brewva-runtime/src/runtime.ts`
-- Extension registration: `packages/brewva-gateway/src/runtime-plugins/index.ts`
+- Extension registration: `@brewva/brewva-gateway/runtime-plugins` (`packages/brewva-gateway/src/runtime-plugins/index.ts`)
 
 ## Default Profile (Extensions Enabled)
 
-1. Gateway host creates a session (`packages/brewva-gateway/src/host/create-hosted-session.ts`)
-2. Extensions are registered (`packages/brewva-gateway/src/runtime-plugins/index.ts`)
+1. Gateway host creates a session (`@brewva/brewva-gateway/host`, implemented in `packages/brewva-gateway/src/host/create-hosted-session.ts`)
+2. Extensions are registered (`@brewva/brewva-gateway/runtime-plugins`)
 3. `before_agent_start` runs lifecycle plumbing (`context-transform`) and model-facing composition (`context-composer`)
 4. `tool_call` passes quality/security/budget gates (`quality-gate`)
 5. `ledger-writer` records durable tool outcomes (normally from SDK `tool_result`; can fallback to `tool_execution_end` when `tool_result` is missing). Persisted governance event is `tool_result_recorded`.

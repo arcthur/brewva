@@ -1,4 +1,7 @@
 import {
+  SKILL_ROUTING_DECIDED_EVENT_TYPE,
+  SKILL_ROUTING_IGNORED_EVENT_TYPE,
+  SKILL_ROUTING_OVERRIDDEN_EVENT_TYPE,
   SKILL_CASCADE_ABORTED_EVENT_TYPE,
   SKILL_CASCADE_FINISHED_EVENT_TYPE,
   SKILL_CASCADE_OVERRIDDEN_EVENT_TYPE,
@@ -12,6 +15,7 @@ import type { SkillRegistry } from "../skills/registry.js";
 import type {
   BrewvaConfig,
   BrewvaStructuredEvent,
+  SkillActivationResult,
   SkillCascadeChainSource,
   SkillCascadeSourceDecision,
   SkillCascadeSource,
@@ -69,10 +73,7 @@ export interface SkillCascadeServiceOptions {
   sessionState: RuntimeSessionStateStore;
   getCurrentTurn(sessionId: string): number;
   getActiveSkill(sessionId: string): SkillDocument | undefined;
-  activateSkill(
-    sessionId: string,
-    name: string,
-  ): { ok: boolean; reason?: string; skill?: SkillDocument };
+  activateSkill(sessionId: string, name: string): SkillActivationResult;
   getSkillOutputs(sessionId: string, skillName: string): Record<string, unknown> | undefined;
   listProducedOutputKeys(sessionId: string): string[];
   recordEvent(input: {
@@ -225,7 +226,7 @@ export class SkillCascadeService {
       return;
     }
 
-    if (event.type === "skill_routing_decided") {
+    if (event.type === SKILL_ROUTING_DECIDED_EVENT_TYPE) {
       if (this.config.mode === "off") return;
       this.onSkillRoutingDecided(event.sessionId, event.id);
       return;
@@ -254,12 +255,15 @@ export class SkillCascadeService {
       return;
     }
 
-    if (event.type === "skill_routing_overridden" || event.type === "skill_routing_ignored") {
+    if (
+      event.type === SKILL_ROUTING_OVERRIDDEN_EVENT_TYPE ||
+      event.type === SKILL_ROUTING_IGNORED_EVENT_TYPE
+    ) {
       const intent = this.sessionState.getExistingCell(event.sessionId)?.skillChainIntent;
       if (!intent || this.isTerminal(intent.status) || intent.source !== "dispatch") {
         return;
       }
-      if (event.type === "skill_routing_overridden") {
+      if (event.type === SKILL_ROUTING_OVERRIDDEN_EVENT_TYPE) {
         const payload = isRecord(event.payload) ? event.payload : undefined;
         const activatedSkill =
           payload && typeof payload.activatedSkill === "string"

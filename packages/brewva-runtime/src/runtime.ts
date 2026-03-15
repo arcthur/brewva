@@ -55,7 +55,7 @@ import { RuntimeSessionStateStore } from "./services/session-state.js";
 import { SkillCascadeService } from "./services/skill-cascade.js";
 import { SkillLifecycleService } from "./services/skill-lifecycle.js";
 import { TapeService } from "./services/tape.js";
-import { TaskWatchdogService } from "./services/task-watchdog-service.js";
+import { TaskWatchdogService } from "./services/task-watchdog.js";
 import { TaskService } from "./services/task.js";
 import { ToolGateService } from "./services/tool-gate.js";
 import { TrustMeterService } from "./services/trust-meter.js";
@@ -105,9 +105,11 @@ import type {
   ToolGovernanceDescriptor,
   SkillDocument,
   SkillDispatchDecision,
+  SkillActivationResult,
   SkillChainIntent,
   SkillCascadeChainSource,
   SkillCascadeControlResult,
+  SkillOutputValidationResult,
   ProposalEnvelope,
   ProposalKind,
   ProposalListQuery,
@@ -116,7 +118,12 @@ import type {
   SessionCostSummary,
   TapeSearchResult,
   TapeSearchScope,
+  TapeHandoffResult,
   TapeStatusState,
+  TaskBlockerRecordResult,
+  TaskBlockerResolveResult,
+  TaskItemAddResult,
+  TaskItemUpdateResult,
   TaskSpec,
   TaskState,
   TurnWALRecord,
@@ -126,9 +133,11 @@ import type {
   VerificationReport,
   WorkerMergeReport,
   WorkerResult,
+  TruthFactResolveResult,
+  TruthFactUpsertResult,
 } from "./types.js";
 import type { TaskItemStatus } from "./types.js";
-import type { TruthFact, TruthFactSeverity, TruthFactStatus, TruthState } from "./types.js";
+import type { TruthFactSeverity, TruthFactStatus, TruthState } from "./types.js";
 import { normalizeToolResultVerdict } from "./utils/tool-result.js";
 import { VerificationGate } from "./verification/gate.js";
 
@@ -262,28 +271,17 @@ export class BrewvaRuntime {
     getPendingDispatch(sessionId: string): SkillDispatchDecision | undefined;
     clearPendingDispatch(sessionId: string): SkillDispatchDecision | undefined;
     reconcilePendingDispatch(sessionId: string, turn: number): void;
-    activate(
-      sessionId: string,
-      name: string,
-    ): { ok: boolean; reason?: string; skill?: SkillDocument };
+    activate(sessionId: string, name: string): SkillActivationResult;
     getActive(sessionId: string): SkillDocument | undefined;
     validateOutputs(
       sessionId: string,
       outputs: Record<string, unknown>,
-    ): {
-      ok: boolean;
-      missing: string[];
-      invalid: Array<{ name: string; reason: string }>;
-    };
+    ): SkillOutputValidationResult;
     complete(
       sessionId: string,
       output: Record<string, unknown>,
       options?: { proof?: string; summary?: string; notes?: string },
-    ): {
-      ok: boolean;
-      missing: string[];
-      invalid: Array<{ name: string; reason: string }>;
-    };
+    ): SkillOutputValidationResult;
     getOutputs(sessionId: string, skillName: string): Record<string, unknown> | undefined;
     getConsumedOutputs(sessionId: string, targetSkillName: string): Record<string, unknown>;
     getCascadeIntent(sessionId: string): SkillChainIntent | undefined;
@@ -459,16 +457,16 @@ export class BrewvaRuntime {
     addItem(
       sessionId: string,
       input: { text: string; status?: TaskItemStatus; id?: string },
-    ): { ok: boolean; itemId?: string; error?: string };
+    ): TaskItemAddResult;
     updateItem(
       sessionId: string,
       input: { id: string; text?: string; status?: TaskItemStatus },
-    ): { ok: boolean; error?: string };
+    ): TaskItemUpdateResult;
     recordBlocker(
       sessionId: string,
       input: { id?: string; message: string; source?: string; truthFactId?: string },
-    ): { ok: boolean; blockerId?: string; error?: string };
-    resolveBlocker(sessionId: string, blockerId: string): { ok: boolean; error?: string };
+    ): TaskBlockerRecordResult;
+    resolveBlocker(sessionId: string, blockerId: string): TaskBlockerResolveResult;
     getState(sessionId: string): TaskState;
   };
   readonly truth: {
@@ -484,8 +482,8 @@ export class BrewvaRuntime {
         evidenceIds?: string[];
         status?: TruthFactStatus;
       },
-    ): { ok: boolean; fact?: TruthFact; error?: string };
-    resolveFact(sessionId: string, truthFactId: string): { ok: boolean; error?: string };
+    ): TruthFactUpsertResult;
+    resolveFact(sessionId: string, truthFactId: string): TruthFactResolveResult;
   };
   readonly ledger: {
     getDigest(sessionId: string): string;
@@ -539,13 +537,7 @@ export class BrewvaRuntime {
     recordTapeHandoff(
       sessionId: string,
       input: { name: string; summary?: string; nextSteps?: string },
-    ): {
-      ok: boolean;
-      eventId?: string;
-      createdAt?: number;
-      error?: string;
-      tapeStatus?: TapeStatusState;
-    };
+    ): TapeHandoffResult;
     searchTape(
       sessionId: string,
       input: { query: string; scope?: TapeSearchScope; limit?: number },

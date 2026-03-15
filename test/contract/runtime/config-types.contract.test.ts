@@ -23,4 +23,16 @@ describe("BrewvaConfigFile typing", () => {
     expect(config.projection?.workingFile).toBe("working.md");
     expect(config.infrastructure?.toolFailureInjection?.enabled).toBe(false);
   });
+
+  test("accepts null as the explicit unlimited session-cost sentinel", () => {
+    const config: BrewvaConfigFile = {
+      infrastructure: {
+        costTracking: {
+          maxCostUsdPerSession: null,
+        },
+      },
+    };
+
+    expect(config.infrastructure?.costTracking?.maxCostUsdPerSession).toBeNull();
+  });
 });

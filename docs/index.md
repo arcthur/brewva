@@ -80,6 +80,7 @@ This repository uses a layered documentation system:
 - Telegram channel package: `packages/brewva-channels-telegram/src/index.ts`
 - Telegram ingress package: `packages/brewva-ingress/src/index.ts`
 - Tool package: `packages/brewva-tools/src/index.ts`
-- Extension package: `packages/brewva-gateway/src/runtime-plugins/index.ts`
+- Extension package: `@brewva/brewva-gateway/runtime-plugins` (`packages/brewva-gateway/src/runtime-plugins/index.ts`)
 - CLI package: `packages/brewva-cli/src/index.ts`
 - Gateway package: `packages/brewva-gateway/src/index.ts`
+- Gateway host subpath: `@brewva/brewva-gateway/host` (`packages/brewva-gateway/src/host.ts`)

@@ -1,4 +1,5 @@
 import {
+  TOOL_SURFACE_RESOLVED_EVENT_TYPE,
   getToolGovernanceDescriptor,
   listSkillAllowedEffects,
   listSkillDeniedEffects,
@@ -19,7 +20,6 @@ import type { ExtensionAPI, ToolDefinition, ToolInfo } from "@mariozechner/pi-co
 
 const CAPABILITY_REQUEST_PATTERN = /\$([a-z][a-z0-9_]*)/g;
 const BUILTIN_ALWAYS_ON_TOOL_NAMES = ["read", "edit", "write"] as const;
-const TOOL_SURFACE_RESOLVED_EVENT_TYPE = "tool_surface_resolved";
 const MANAGED_TOOL_NAME_SET = new Set(MANAGED_BREWVA_TOOL_NAMES);
 
 type ToolSurfaceSkill = {

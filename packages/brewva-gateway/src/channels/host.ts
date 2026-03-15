@@ -47,6 +47,7 @@ export interface RunChannelModeOptions {
   model?: string;
   agentId?: string;
   enableExtensions: boolean;
+  enableAddons?: boolean;
   verbose: boolean;
   channel: string;
   channelConfig?: ChannelModeConfig;
@@ -914,11 +915,16 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
   const conversationBindings = ConversationBindingStore.create({
     workspaceRoot: runtime.workspaceRoot,
   });
-  const addonHost = new AddonHost({
-    cwd: runtime.workspaceRoot,
-  });
-  await addonHost.loadAll();
-  addonHost.startJobs();
+  const addonsEnabled = options.enableAddons ?? true;
+  const addonHost = addonsEnabled
+    ? new AddonHost({
+        cwd: runtime.workspaceRoot,
+      })
+    : null;
+  if (addonHost) {
+    await addonHost.loadAll();
+    addonHost.startJobs();
+  }
 
   const registry = await AgentRegistry.create({
     workspaceRoot: runtime.workspaceRoot,
@@ -1257,8 +1263,9 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
         configPath: options.configPath,
         model,
         enableExtensions: options.enableExtensions,
+        enableAddons: options.enableAddons,
         runtime: workerRuntime,
-        addonHost,
+        addonHost: addonHost ?? undefined,
         scopeId: scopeKey,
         extensionFactories: [extensionFactory],
       });
@@ -2008,7 +2015,7 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
       },
     });
   } catch (error) {
-    addonHost.stopJobs();
+    addonHost?.stopJobs();
     console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
     return;
@@ -2050,7 +2057,7 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
       turnWalCompactTimer = null;
     }
     await turnWalMaintenance.whenIdle();
-    addonHost.stopJobs();
+    addonHost?.stopJobs();
     await Promise.allSettled([bundle.onStop?.(), bundle.bridge.stop()]);
     console.error(`Error: ${toErrorMessage(error)}`);
     process.exitCode = 1;
@@ -2090,7 +2097,7 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
           }),
         );
         runtimeManager.disposeAll();
-        addonHost.stopJobs();
+        addonHost?.stopJobs();
 
         process.off("SIGINT", onSigInt);
         process.off("SIGTERM", onSigTerm);

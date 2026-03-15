@@ -12,7 +12,7 @@ import type { LedgerService } from "./ledger.js";
 import type { ReversibleMutationService } from "./reversible-mutation.js";
 import { RuntimeSessionStateStore } from "./session-state.js";
 import type { SkillLifecycleService } from "./skill-lifecycle.js";
-import type { TrustMeterService } from "./trust-meter.js";
+import type { ObserveRollbackResultInput, TrustMeterService } from "./trust-meter.js";
 
 export interface TrackToolCallInput {
   sessionId: string;
@@ -67,7 +67,7 @@ export class FileChangeService {
   }) => unknown;
   private readonly observeRollback: (
     sessionId: string,
-    input: { ok: boolean; failedPaths: number; strategy: "workspace_patchset" },
+    input: Omit<ObserveRollbackResultInput, "sessionId">,
   ) => void;
   private readonly markWorkspacePatchSetRolledBack: (
     sessionId: string,

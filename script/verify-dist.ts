@@ -97,6 +97,7 @@ function main(): void {
       "@brewva/brewva-channels-telegram",
       "@brewva/brewva-ingress",
       "@brewva/brewva-tools",
+      "@brewva/brewva-gateway/host",
       "@brewva/brewva-gateway/runtime-plugins",
       "@brewva/brewva-cli",
       "@brewva/brewva-gateway",
@@ -107,7 +108,33 @@ function main(): void {
         throw new Error("expected dist entrypoint, got " + entry.path);
       }
     }
-    await Promise.all(packages.map((name) => import(name)));
+    const [cliModule, hostModule, runtimePluginsModule, gatewayModule] = await Promise.all([
+      import("@brewva/brewva-cli"),
+      import("@brewva/brewva-gateway/host"),
+      import("@brewva/brewva-gateway/runtime-plugins"),
+      import("@brewva/brewva-gateway"),
+      ...packages
+        .filter(
+          (name) =>
+            name !== "@brewva/brewva-cli" &&
+            name !== "@brewva/brewva-gateway/host" &&
+            name !== "@brewva/brewva-gateway/runtime-plugins" &&
+            name !== "@brewva/brewva-gateway",
+        )
+        .map((name) => import(name)),
+    ]);
+    if (typeof hostModule.createHostedSession !== "function") {
+      throw new Error("gateway host subpath missing createHostedSession export");
+    }
+    if (typeof runtimePluginsModule.createBrewvaExtension !== "function") {
+      throw new Error("gateway runtime-plugins subpath missing createBrewvaExtension export");
+    }
+    if ("createBrewvaSession" in cliModule || "registerRuntimeCoreEventBridge" in cliModule) {
+      throw new Error("cli root entry unexpectedly re-exported gateway host helpers");
+    }
+    if ("createHostedSession" in gatewayModule || "createBrewvaExtension" in gatewayModule) {
+      throw new Error("gateway root entry unexpectedly re-exported subpath-only APIs");
+    }
     console.log(JSON.stringify(resolved));
   `;
 

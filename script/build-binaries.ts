@@ -89,6 +89,7 @@ const BREWVA_CONFIG_SCHEMA_PATH = join(
   "schema",
   "brewva.schema.json",
 );
+const BREWVA_LICENSE_PATH = join(process.cwd(), "LICENSE");
 
 function copyDirectory(source: string, target: string): void {
   if (!existsSync(source)) return;
@@ -99,6 +100,40 @@ function copyDirectory(source: string, target: string): void {
 function copyFile(source: string, target: string): void {
   if (!existsSync(source)) return;
   cpSync(source, target);
+}
+
+function buildRuntimeReadme(runtimePackage: RuntimePackageJson): string {
+  const packageName = runtimePackage.name || "@brewva/brewva";
+  const version = runtimePackage.version || "unknown";
+  const configDir = runtimePackage.piConfig?.configDir ?? ".config/brewva";
+  return `# Brewva Runtime Bundle
+
+This directory contains the packaged runtime assets that ship with \`${packageName}\` ${version}.
+
+## Included assets
+
+- \`brewva\` platform binary
+- \`brewva.schema.json\` runtime config schema
+- \`theme/\` interactive UI assets
+- \`export-html/\` HTML export assets
+- \`skills/\` bundled skills
+
+## Usage
+
+Run:
+
+\`\`\`bash
+brewva --help
+\`\`\`
+
+User configuration and runtime state default under:
+
+\`\`\`text
+${configDir}
+\`\`\`
+
+For repository documentation, use the workspace root \`README.md\` and \`docs/\` tree rather than this binary bundle.
+`;
 }
 
 function copyRuntimeAssets(outDir: string): void {
@@ -118,14 +153,10 @@ function copyRuntimeAssets(outDir: string): void {
   };
 
   writeFileSync(join(outDir, "package.json"), `${JSON.stringify(runtimePackage, null, 2)}\n`);
-
-  copyFile(join(PI_CODING_AGENT_PACKAGE_DIR, "README.md"), join(outDir, "README.md"));
-  copyFile(join(PI_CODING_AGENT_PACKAGE_DIR, "CHANGELOG.md"), join(outDir, "CHANGELOG.md"));
+  writeFileSync(join(outDir, "README.md"), buildRuntimeReadme(runtimePackage));
   copyFile(PHOTON_WASM_PATH, join(outDir, "photon_rs_bg.wasm"));
   copyFile(BREWVA_CONFIG_SCHEMA_PATH, join(outDir, "brewva.schema.json"));
-
-  copyDirectory(join(PI_CODING_AGENT_PACKAGE_DIR, "docs"), join(outDir, "docs"));
-  copyDirectory(join(PI_CODING_AGENT_PACKAGE_DIR, "examples"), join(outDir, "examples"));
+  copyFile(BREWVA_LICENSE_PATH, join(outDir, "LICENSE"));
   copyDirectory(
     join(PI_CODING_AGENT_PACKAGE_DIR, "dist", "modes", "interactive", "theme"),
     join(outDir, "theme"),
@@ -135,6 +166,7 @@ function copyRuntimeAssets(outDir: string): void {
     join(outDir, "export-html"),
   );
   copyDirectory(join(process.cwd(), "skills"), join(outDir, "skills"));
+  writeFileSync(join(outDir, ".gitkeep"), "");
 }
 
 async function buildPlatform(platform: PlatformTarget): Promise<boolean> {
@@ -146,6 +178,7 @@ async function buildPlatform(platform: PlatformTarget): Promise<boolean> {
   console.log(`  output: ${outfile}`);
 
   try {
+    rmSync(outDir, { recursive: true, force: true });
     await $`bun build --compile --minify --target=${platform.target} ${ENTRY_POINT} --outfile=${outfile}`;
 
     if (!existsSync(outfile)) {

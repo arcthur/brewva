@@ -137,7 +137,10 @@ requires: []
     runtime.context.onTurnStart(sessionId, 1);
     const activated = runtime.skills.activate(sessionId, "budgetcraft");
     expect(activated.ok).toBe(true);
-    const maxToolCalls = resolveSkillDefaultLease(activated.skill?.contract)?.maxToolCalls ?? 0;
+    if (!activated.ok) {
+      throw new Error(activated.reason);
+    }
+    const maxToolCalls = resolveSkillDefaultLease(activated.skill.contract)?.maxToolCalls ?? 0;
     const consumed = Math.max(1, maxToolCalls);
     for (let index = 0; index < consumed; index += 1) {
       runtime.tools.markCall(sessionId, "look_at");

@@ -64,7 +64,7 @@ export { createResourceLeaseTool } from "./resource-lease.js";
 export { createCognitionNoteTool } from "./cognition-note.js";
 export { defineBrewvaTool, getBrewvaToolMetadata } from "./utils/tool.js";
 // A2A tools require an orchestration adapter and are typically registered by channel extensions
-// (for example `createChannelA2AExtension` in `@brewva/brewva-cli`), not by the default bundle.
+// (for example `createChannelA2AExtension` in `@brewva/brewva-gateway`), not by the default bundle.
 export { createA2ATools } from "./a2a.js";
 export { createLookAtTool } from "./look-at.js";
 export { createGrepTool } from "./grep.js";

@@ -8,6 +8,7 @@ export interface OpenSessionInput {
   model?: string;
   agentId?: string;
   enableExtensions?: boolean;
+  enableAddons?: boolean;
 }
 
 export interface OpenSessionResult {

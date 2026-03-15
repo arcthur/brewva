@@ -1,4 +1,8 @@
 import type { SessionCostTracker } from "../cost/tracker.js";
+import {
+  GOVERNANCE_COST_ANOMALY_DETECTED_EVENT_TYPE,
+  GOVERNANCE_COST_ANOMALY_ERROR_EVENT_TYPE,
+} from "../events/event-types.js";
 import type { GovernancePort } from "../governance/port.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type { SessionCostSummary, SkillDocument } from "../types.js";
@@ -197,7 +201,7 @@ export class CostService {
         if (!result.anomaly) return;
         this.recordEvent({
           sessionId,
-          type: "governance_cost_anomaly_detected",
+          type: GOVERNANCE_COST_ANOMALY_DETECTED_EVENT_TYPE,
           turn,
           payload: {
             reason: result.reason ?? "unknown",
@@ -209,7 +213,7 @@ export class CostService {
       .catch((error) => {
         this.recordEvent({
           sessionId,
-          type: "governance_cost_anomaly_error",
+          type: GOVERNANCE_COST_ANOMALY_ERROR_EVENT_TYPE,
           turn,
           payload: {
             error: error instanceof Error ? error.message : String(error),

@@ -149,12 +149,14 @@ export async function createHostedSession(
 ): Promise<HostedSessionResult> {
   const cwd = resolve(options.cwd ?? process.cwd());
   const agentDir = resolveBrewvaAgentDir();
-  const resolvedAddonHost =
-    options.addonHost ??
-    (() => {
-      const host = new AddonHost({ cwd });
-      return host;
-    })();
+  const addonsEnabled = options.enableAddons !== false;
+  const resolvedAddonHost = addonsEnabled
+    ? (options.addonHost ??
+      (() => {
+        const host = new AddonHost({ cwd });
+        return host;
+      })())
+    : undefined;
 
   const authStorage = AuthStorage.create(join(agentDir, "auth.json"));
   const modelRegistry = new ModelRegistry(authStorage, join(agentDir, "models.json"));
@@ -228,10 +230,13 @@ export async function createHostedSession(
     registerRuntimeCoreEventBridge(runtime, sessionResult.session);
   }
 
-  await resolvedAddonHost.loadAll();
-  const loadedAddons = resolvedAddonHost.listAddons();
-  if (loadedAddons.length > 0) {
-    await resolvedAddonHost.applyContextPackets(runtime, sessionId, options.scopeId);
+  let loadedAddons: Array<{ id: string }> = [];
+  if (resolvedAddonHost) {
+    await resolvedAddonHost.loadAll();
+    loadedAddons = resolvedAddonHost.listAddons();
+    if (loadedAddons.length > 0) {
+      await resolvedAddonHost.applyContextPackets(runtime, sessionId, options.scopeId);
+    }
   }
 
   runtime.events.record({
@@ -241,7 +246,8 @@ export async function createHostedSession(
       cwd,
       agentId: runtime.agentId,
       extensionsEnabled,
-      addonsEnabled: loadedAddons.length > 0,
+      addonsEnabled,
+      loadedAddonCount: loadedAddons.length,
       skillBroker: {
         enabled: skillBrokerEnabled,
         proposalBoundary: skillBrokerEnabled ? "runtime.proposals.submit" : null,

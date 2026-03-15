@@ -13,7 +13,7 @@ import { formatISO } from "date-fns";
 import { resolveGlobalBrewvaRootDir, resolveProjectBrewvaRootDir } from "../config/paths.js";
 import type {
   BrewvaConfig,
-  SkillCategory,
+  LoadableSkillCategory,
   SkillDocument,
   SkillRoutingScope,
   SkillsIndexEntry,
@@ -33,7 +33,7 @@ import {
   listSkillPreferredTools,
   resolveSkillEffectLevel,
 } from "./facets.js";
-const LOADABLE_SKILL_CATEGORIES: SkillCategory[] = [
+const LOADABLE_SKILL_CATEGORIES: LoadableSkillCategory[] = [
   "core",
   "domain",
   "operator",
@@ -62,7 +62,7 @@ export interface SkillRegistryLoadReport {
   hiddenSkills: string[];
   overlaySkills: string[];
   sharedContextFiles: string[];
-  categories: Partial<Record<SkillCategory, string[]>>;
+  categories: Partial<Record<LoadableSkillCategory, string[]>>;
 }
 
 interface SharedContextEntry {
@@ -445,7 +445,7 @@ export class SkillRegistry {
       }
     }
 
-    for (const category of Object.keys(categories) as SkillCategory[]) {
+    for (const category of Object.keys(categories) as LoadableSkillCategory[]) {
       categories[category] = [...new Set(categories[category] ?? [])].toSorted((a, b) =>
         a.localeCompare(b),
       );
@@ -478,7 +478,7 @@ export class SkillRegistry {
     this.loadOverlays(join(skillDir, "project", "overlays"));
   }
 
-  private loadCategory(category: SkillCategory, dir: string): void {
+  private loadCategory(category: LoadableSkillCategory, dir: string): void {
     const files = listSkillFiles(dir);
     for (const filePath of files) {
       const parsed = parseSkillDocument(filePath, category);

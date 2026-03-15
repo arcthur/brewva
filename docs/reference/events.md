@@ -14,6 +14,114 @@ Every runtime event follows the same envelope shape:
 - `turn` (optional)
 - `payload` (optional)
 
+## Central Registry
+
+The authoritative registry for named runtime events lives in
+`packages/brewva-runtime/src/events/event-types.ts`.
+
+### Core Ledger And Projection Events
+
+- `anchor`
+- `checkpoint`
+- `task_event`
+- `truth_event`
+- `schedule_intent`
+- `projection_ingested`
+- `projection_refreshed`
+
+### Tool, Verification, And Mutation Events
+
+- `tool_result_recorded`
+- `tool_output_observed`
+- `tool_output_distilled`
+- `tool_output_artifact_persisted`
+- `observability_query_executed`
+- `observability_assertion_recorded`
+- `resource_lease_granted`
+- `resource_lease_cancelled`
+- `resource_lease_expired`
+- `exec_routed`
+- `exec_fallback_host`
+- `exec_blocked_isolation`
+- `exec_sandbox_error`
+- `verification_write_marked`
+- `verification_outcome_recorded`
+- `verification_state_reset`
+- `event_listener_error`
+- `tool_posture_selected`
+- `reversible_mutation_prepared`
+- `reversible_mutation_recorded`
+- `reversible_mutation_rolled_back`
+
+### Proposal And Governance Events
+
+- `proposal_received`
+- `proposal_decided`
+- `decision_receipt_recorded`
+- `effect_commitment_approval_requested`
+- `effect_commitment_approval_decided`
+- `effect_commitment_approval_consumed`
+- `governance_verify_spec_passed`
+- `governance_verify_spec_failed`
+- `governance_verify_spec_error`
+- `governance_cost_anomaly_detected`
+- `governance_cost_anomaly_error`
+- `governance_compaction_integrity_checked`
+- `governance_compaction_integrity_failed`
+- `governance_compaction_integrity_error`
+
+### Context, Cognition, And Watchdog Events
+
+- `context_composed`
+- `tool_surface_resolved`
+- `skill_routing_selection`
+- `skill_routing_decided`
+- `skill_routing_deferred`
+- `skill_routing_followed`
+- `skill_routing_overridden`
+- `skill_routing_ignored`
+- `scan_convergence_armed`
+- `scan_convergence_advisory`
+- `scan_convergence_blocked_tool`
+- `scan_convergence_reset`
+- `task_stuck_detected`
+- `task_stuck_cleared`
+- `memory_summary_written`
+- `memory_summary_write_failed`
+- `memory_reference_rehydrated`
+- `memory_reference_rehydration_failed`
+- `memory_summary_rehydrated`
+- `memory_summary_rehydration_failed`
+- `proactivity_wakeup_prepared`
+- `cognition_note_written`
+- `cognition_note_write_failed`
+- `cognitive_metric_first_productive_action`
+- `cognitive_metric_resumption_progress`
+- `cognitive_metric_rehydration_usefulness`
+
+### Debug Loop, Schedule, And Skill Cascade Events
+
+- `debug_loop_transition`
+- `debug_loop_failure_case_persisted`
+- `debug_loop_artifact_persist_failed`
+- `debug_loop_retry_scheduled`
+- `debug_loop_handoff_persisted`
+- `debug_loop_reference_persisted`
+- `schedule_recovery_deferred`
+- `schedule_recovery_summary`
+- `schedule_wakeup`
+- `schedule_child_session_started`
+- `schedule_child_session_finished`
+- `schedule_child_session_failed`
+- `skill_cascade_planned`
+- `skill_cascade_step_started`
+- `skill_cascade_step_completed`
+- `skill_cascade_paused`
+- `skill_cascade_replanned`
+- `skill_cascade_overridden`
+- `skill_cascade_finished`
+- `skill_cascade_aborted`
+
 ## Audit-Critical Families
 
 - `anchor`
@@ -56,21 +164,45 @@ degraded without aborting later listeners.
 - `cost_update`
 - `budget_alert`
 - `observability_query_executed`
-- `scan_convergence_*`
+- `scan_convergence_armed`
+- `scan_convergence_advisory`
+- `scan_convergence_blocked_tool`
+- `scan_convergence_reset`
 - `reversible_mutation_*`
 - `effect_commitment_approval_*`
-- `task_stuck_*`
+- `task_stuck_detected`
+- `task_stuck_cleared`
 - `tool_surface_resolved`
 - `context_composed`
 - `skill_*` lifecycle events outside cascade durability
 - `skill_routing_selection`
 - `skill_routing_decided`
-- `debug_loop_*`
-- `memory_*`
-- `cognition_note_*`
-- `cognitive_metric_*`
+- `skill_routing_deferred`
+- `skill_routing_followed`
+- `skill_routing_overridden`
+- `skill_routing_ignored`
+- `debug_loop_transition`
+- `debug_loop_failure_case_persisted`
+- `debug_loop_artifact_persist_failed`
+- `debug_loop_retry_scheduled`
+- `debug_loop_handoff_persisted`
+- `debug_loop_reference_persisted`
+- `memory_summary_written`
+- `memory_summary_write_failed`
+- `memory_reference_rehydrated`
+- `memory_reference_rehydration_failed`
+- `memory_summary_rehydrated`
+- `memory_summary_rehydration_failed`
+- `cognition_note_written`
+- `cognition_note_write_failed`
+- `cognitive_metric_first_productive_action`
+- `cognitive_metric_resumption_progress`
+- `cognitive_metric_rehydration_usefulness`
 - `proactivity_wakeup_prepared`
-- execution routing/isolation events
+- `exec_routed`
+- `exec_fallback_host`
+- `exec_blocked_isolation`
+- `exec_sandbox_error`
 - `tool_output_observed`
 - `tool_output_distilled`
 - `tool_output_artifact_persisted`
@@ -126,13 +258,17 @@ levels, but they no longer inflate audit-level tape retention.
 - `context_composed` records the model-facing composition summary:
   narrative/constraint/diagnostic block counts plus token totals and the
   resulting narrative ratio
-- `memory_summary_written` / `memory_summary_write_failed` record the write-side
-  cognition sediment loop at session boundaries
-- `memory_*_rehydrated` / `memory_*_rehydration_failed` record whether
-  cross-session cognition artifacts crossed the proposal boundary successfully
+- `memory_summary_written` records successful write-side cognition sediment at
+  session boundaries
+- `memory_summary_write_failed` records failed write-side cognition sediment at
+  session boundaries
+- `memory_reference_rehydrated` and `memory_reference_rehydration_failed`
+  record whether reference artifacts crossed the proposal boundary
+- `memory_summary_rehydrated` and `memory_summary_rehydration_failed`
+  record whether summary artifacts crossed the proposal boundary
 - `proactivity_wakeup_prepared` records control-plane wake-up metadata that may
   later influence memory selection before the model starts
-- `cognition_note_written` / `cognition_note_write_failed` record explicit
+- `cognition_note_written` and `cognition_note_write_failed` record explicit
   operator teaching writes into external cognition storage
 - `cognitive_metric_first_productive_action` records the first non-operator
   semantic `pass` tool result in a session
@@ -187,6 +323,8 @@ levels, but they no longer inflate audit-level tape retention.
   - `reason=scan_only_turns`
   - `reason=investigation_only_turns`
   - `reason=scan_failures`
+- `scan_convergence_advisory` records the structured non-blocking warning that
+  is emitted before the guard escalates into a hard block.
 - `scan_convergence_armed` also includes current counters, `blockedStrategy`, `blockedTools`, `recommendedStrategyTools`, and the active thresholds.
 - `scan_convergence_blocked_tool` records the blocked tool name, its `toolStrategy`, the active guard reason, and the counters at block time.
 - `scan_convergence_reset` records `reason=strategy_shift|input_reset`, the previous arm reason, and the strategy class that successfully cleared the guard.

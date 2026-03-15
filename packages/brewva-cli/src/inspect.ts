@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { parseArgs as parseNodeArgs } from "node:util";
 import {
   BrewvaRuntime,
+  SKILL_ROUTING_DECIDED_EVENT_TYPE,
   TASK_EVENT_TYPE,
   TAPE_ANCHOR_EVENT_TYPE,
   TAPE_CHECKPOINT_EVENT_TYPE,
@@ -26,6 +27,7 @@ const INSPECT_PARSE_OPTIONS = {
 interface InspectBootstrapPayload {
   extensionsEnabled?: boolean;
   addonsEnabled?: boolean;
+  loadedAddonCount?: number;
   skillBroker?: {
     enabled?: boolean;
     proposalBoundary?: string | null;
@@ -74,6 +76,7 @@ interface InspectReport {
   bootstrap: {
     extensionsEnabled: boolean | null;
     addonsEnabled: boolean | null;
+    loadedAddonCount: number | null;
     skillBrokerEnabled: boolean | null;
     routingEnabled: boolean | null;
     routingScopes: string[];
@@ -198,7 +201,7 @@ function buildSkillInspection(events: BrewvaEventRecord[]): InspectReport["skill
       }
       continue;
     }
-    if (event.type === "skill_routing_decided" && typeof payload?.mode === "string") {
+    if (event.type === SKILL_ROUTING_DECIDED_EVENT_TYPE && typeof payload?.mode === "string") {
       lastRoutingMode = payload.mode;
       continue;
     }
@@ -345,6 +348,12 @@ function buildInspectReport(runtime: BrewvaRuntime, sessionId: string): InspectR
       extensionsEnabled:
         typeof bootstrap?.extensionsEnabled === "boolean" ? bootstrap.extensionsEnabled : null,
       addonsEnabled: typeof bootstrap?.addonsEnabled === "boolean" ? bootstrap.addonsEnabled : null,
+      loadedAddonCount:
+        typeof bootstrap?.loadedAddonCount === "number" &&
+        Number.isInteger(bootstrap.loadedAddonCount) &&
+        bootstrap.loadedAddonCount >= 0
+          ? bootstrap.loadedAddonCount
+          : null,
       skillBrokerEnabled:
         typeof bootstrap?.skillBroker?.enabled === "boolean" ? bootstrap.skillBroker.enabled : null,
       routingEnabled:
@@ -430,7 +439,7 @@ function printInspectText(report: InspectReport): void {
     `Hydration: status=${report.hydration.status} issues=${report.hydration.issueCount} hydratedAt=${report.hydration.hydratedAt ?? "n/a"}`,
     `Replay: events=${report.replay.eventCount} first=${report.replay.firstEventAt ?? "n/a"} last=${report.replay.lastEventAt ?? "n/a"}`,
     `Replay: anchors=${report.replay.anchorCount} checkpoints=${report.replay.checkpointCount} tapePressure=${report.replay.tapePressure} entriesSinceAnchor=${report.replay.entriesSinceAnchor}`,
-    `Bootstrap: extensions=${renderNullableBoolean(report.bootstrap.extensionsEnabled)} addons=${renderNullableBoolean(report.bootstrap.addonsEnabled)} broker=${renderNullableBoolean(report.bootstrap.skillBrokerEnabled)}`,
+    `Bootstrap: extensions=${renderNullableBoolean(report.bootstrap.extensionsEnabled)} addons=${renderNullableBoolean(report.bootstrap.addonsEnabled)} loadedAddons=${report.bootstrap.loadedAddonCount ?? "n/a"} broker=${renderNullableBoolean(report.bootstrap.skillBrokerEnabled)}`,
     `Bootstrap: routingEnabled=${renderNullableBoolean(report.bootstrap.routingEnabled)} scopes=${renderList(report.bootstrap.routingScopes)}`,
     `Task: phase=${report.task.phase ?? "n/a"} health=${report.task.health ?? "n/a"} items=${report.task.items} blockers=${report.task.blockers} updatedAt=${report.task.updatedAt ?? "n/a"}`,
     `Task: goal=${report.task.goal ?? "n/a"}`,

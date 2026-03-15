@@ -24,7 +24,7 @@
 
 ### Workspace Boundaries
 
-- Use workspace package imports across package boundaries. Allowed public imports are `@brewva/brewva-runtime`, `@brewva/brewva-runtime/channels`, `@brewva/brewva-deliberation`, `@brewva/brewva-skill-broker`, `@brewva/brewva-channels-telegram`, `@brewva/brewva-ingress`, `@brewva/brewva-tools`, `@brewva/brewva-addons`, `@brewva/brewva-cli`, and `@brewva/brewva-gateway`.
+- Use workspace package imports across package boundaries. Allowed public imports are `@brewva/brewva-runtime`, `@brewva/brewva-runtime/channels`, `@brewva/brewva-deliberation`, `@brewva/brewva-skill-broker`, `@brewva/brewva-channels-telegram`, `@brewva/brewva-ingress`, `@brewva/brewva-tools`, `@brewva/brewva-addons`, `@brewva/brewva-cli`, `@brewva/brewva-gateway`, `@brewva/brewva-gateway/host`, and `@brewva/brewva-gateway/runtime-plugins`.
 - Do not reintroduce local alias schemes such as `@/...`.
 - Do not mix `src` and `dist` class types at public boundaries.
 - Do not import from `distribution/**` packages inside workspace package code; treat them as release artifacts.

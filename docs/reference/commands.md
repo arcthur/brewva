@@ -339,9 +339,10 @@ Short aliases:
 - `-v` for `--version`
 - `-h` for `--help`
 
-`--no-addons` disables presentation-oriented extension handlers. Runtime
-core bridge hooks remain active for tool policy, compaction gate, and
-ledger/patch tracking. A minimal autonomy context contract plus tape/context
+`--no-addons` is the historical flag name for disabling the addon host and the
+full gateway runtime-plugin stack. Runtime core bridge hooks remain active for
+tool policy, compaction gate, ledger/patch tracking, and optional skill-broker
+proposal routing. A minimal autonomy context contract plus tape/context
 pressure status injection remains active in this profile.
 
 `--backend` controls the primary session backend:

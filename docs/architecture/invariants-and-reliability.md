@@ -82,7 +82,6 @@ Relevant implementation:
 Relevant implementation:
 
 - `packages/brewva-gateway/src/host/create-hosted-session.ts`
-- `packages/brewva-cli/src/session-event-bridge.ts`
 - `packages/brewva-gateway/src/runtime-plugins/index.ts`
 
 ## 8) Working Projection Integrity Invariant

@@ -1,7 +1,7 @@
 import type { ToolInvocationPosture } from "../types.js";
 import type { ToolResultVerdict } from "../utils/tool-result.js";
 
-interface TrustState {
+interface TrustMeterState {
   score: number;
   samples: number;
   lastAdvisoryTurn?: number;
@@ -33,15 +33,15 @@ export interface ObserveRollbackResultInput {
 }
 
 export class TrustMeterService {
-  private readonly states = new Map<string, TrustState>();
+  private readonly states = new Map<string, TrustMeterState>();
 
-  private getState(sessionId: string): TrustState {
+  private getState(sessionId: string): TrustMeterState {
     const existing = this.states.get(sessionId);
     if (existing) {
       return existing;
     }
 
-    const created: TrustState = {
+    const created: TrustMeterState = {
       score: DEFAULT_SCORE,
       samples: 0,
     };

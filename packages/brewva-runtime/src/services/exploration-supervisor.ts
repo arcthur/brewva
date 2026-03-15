@@ -1,7 +1,7 @@
 import {
   SCAN_CONVERGENCE_ADVISORY_EVENT_TYPE,
   SCAN_CONVERGENCE_ARMED_EVENT_TYPE,
-  SCAN_CONVERGENCE_BLOCKED_EVENT_TYPE,
+  SCAN_CONVERGENCE_BLOCKED_TOOL_EVENT_TYPE,
   SCAN_CONVERGENCE_RESET_EVENT_TYPE,
 } from "../events/event-types.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
@@ -266,7 +266,7 @@ export class ExplorationSupervisorService {
       const reason = buildBlockReason(state.armedReason);
       this.recordEvent({
         sessionId: input.sessionId,
-        type: SCAN_CONVERGENCE_BLOCKED_EVENT_TYPE,
+        type: SCAN_CONVERGENCE_BLOCKED_TOOL_EVENT_TYPE,
         turn: this.getCurrentTurn(input.sessionId),
         payload: {
           toolCallId: input.toolCallId,

@@ -4,7 +4,11 @@ import type {
   ContextCompactionGateStatus,
   ContextInjectionEntry,
 } from "@brewva/brewva-runtime";
-import { coerceContextBudgetUsage } from "@brewva/brewva-runtime";
+import {
+  CONTEXT_COMPOSED_EVENT_TYPE,
+  SKILL_ROUTING_SELECTION_EVENT_TYPE,
+  coerceContextBudgetUsage,
+} from "@brewva/brewva-runtime";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { prepareContextComposerSupport } from "./context-composer-support.js";
 import {
@@ -22,7 +26,6 @@ import { appendSupplementalContextBlocks } from "./context-supplemental.js";
 import { clearRuntimeTurnClock, observeRuntimeTurnStart } from "./runtime-turn-clock.js";
 
 const CONTEXT_INJECTION_MESSAGE_TYPE = "brewva-context-injection";
-const CONTEXT_COMPOSED_EVENT_TYPE = "context_composed";
 
 export interface ContextTransformOptions {
   autoCompactionWatchdogMs?: number;
@@ -458,7 +461,7 @@ export function createContextTransformLifecycle(
         emitRuntimeEvent(runtime, {
           sessionId,
           turn: state.turnIndex,
-          type: "skill_routing_selection",
+          type: SKILL_ROUTING_SELECTION_EVENT_TYPE,
           payload: {
             status: "skipped",
             reason: skippedReason,
@@ -557,7 +560,7 @@ export function createContextTransformLifecycle(
       emitRuntimeEvent(runtime, {
         sessionId,
         turn: state.turnIndex,
-        type: "skill_routing_selection",
+        type: SKILL_ROUTING_SELECTION_EVENT_TYPE,
         payload: {
           status: routingProjection.selection.status,
           reason: routingProjection.selection.reason,

@@ -21,7 +21,13 @@ import {
   toTaskWatchdogEventPayload,
   type TaskWatchdogPhase,
 } from "../task/watchdog.js";
-import type { BrewvaEventQuery, BrewvaEventRecord, TaskState } from "../types.js";
+import type {
+  BrewvaEventQuery,
+  BrewvaEventRecord,
+  TaskBlockerRecordResult,
+  TaskBlockerResolveResult,
+  TaskState,
+} from "../types.js";
 import type { TaskService } from "./task.js";
 
 const DEFAULT_THRESHOLDS_MS: Record<TaskWatchdogPhase, number> = {
@@ -75,11 +81,11 @@ export class TaskWatchdogService {
   private readonly recordTaskBlocker: (
     sessionId: string,
     input: { id?: string; message: string; source?: string; truthFactId?: string },
-  ) => { ok: boolean; blockerId?: string; error?: string };
+  ) => TaskBlockerRecordResult;
   private readonly resolveTaskBlocker: (
     sessionId: string,
     blockerId: string,
-  ) => { ok: boolean; error?: string };
+  ) => TaskBlockerResolveResult;
   private readonly recordEvent: RuntimeKernelContext["recordEvent"];
   private readonly taskDetectionKeyBySession = new Map<string, string>();
 

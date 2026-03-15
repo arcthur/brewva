@@ -84,15 +84,7 @@ export interface SkillBrokerCandidateAssessment {
   preview?: SkillBrokerPreview;
 }
 
-export interface SkillBrokerJudgeTrace {
-  strategy: string;
-  status: SkillBrokerJudgeStatus;
-  reason: string;
-  selectedName?: string | null;
-  confidence?: SkillBrokerJudgeConfidence;
-  model?: string | null;
-  error?: string;
-}
+export type SkillBrokerJudgeTrace = SkillBrokerJudgeResult;
 
 export interface SkillBrokerTrace {
   brokerVersion: string;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { registerRuntimeCoreEventBridge } from "@brewva/brewva-cli";
+import { registerRuntimeCoreEventBridge } from "@brewva/brewva-gateway/host";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 

@@ -2,7 +2,9 @@ import type { TurnEnvelope } from "./channels/turn.js";
 import type { JsonValue } from "./utils/json.js";
 
 export type VerificationLevel = "quick" | "standard" | "strict";
-export type SkillCategory = "core" | "domain" | "operator" | "meta" | "internal" | "overlay";
+export type LoadableSkillCategory = "core" | "domain" | "operator" | "meta" | "internal";
+export type SkillOverlayCategory = "overlay";
+export type SkillCategory = LoadableSkillCategory | SkillOverlayCategory;
 export type SkillRoutingScope = "core" | "domain" | "operator" | "meta";
 export type SkillCostHint = "low" | "medium" | "high";
 export type SkillEffectLevel = "read_only" | "execute" | "mutation";
@@ -20,6 +22,12 @@ export type ToolInvocationPosture = "observe" | "reversible_mutate" | "commitmen
 export type SkillDispatchMode = "suggest" | "auto";
 export type SkillCascadeMode = "off" | "assist" | "auto";
 export type SkillCascadeSource = "dispatch" | "explicit";
+
+export type RuntimeSuccess<T extends Record<string, unknown> = {}> = { ok: true } & T;
+export type RuntimeFailure<E extends string = string> = { ok: false; error: E };
+export type RuntimeResult<T extends Record<string, unknown> = {}, E extends string = string> =
+  | RuntimeSuccess<T>
+  | RuntimeFailure<E>;
 
 export interface SkillDispatchPolicy {
   suggestThreshold: number;
@@ -86,20 +94,29 @@ export interface ToolMutationReceipt {
   timestamp: number;
 }
 
-export interface ToolMutationRollbackResult {
+export type PatchSetRollbackFailureReason =
+  | "no_patchset"
+  | "restore_failed"
+  | "patchset_not_latest";
+
+export type ToolMutationRollbackFailureReason =
+  | "no_mutation_receipt"
+  | "unsupported_rollback"
+  | PatchSetRollbackFailureReason;
+
+export interface RollbackOutcome<Reason extends string> {
   ok: boolean;
+  restoredPaths: string[];
+  failedPaths: string[];
+  reason?: Reason;
+}
+
+export interface ToolMutationRollbackResult extends RollbackOutcome<ToolMutationRollbackFailureReason> {
   receiptId?: string;
+  patchSetId?: string;
   toolName?: string;
   strategy?: ToolMutationStrategy;
   rollbackKind?: ToolMutationRollbackKind;
-  restoredPaths: string[];
-  failedPaths: string[];
-  reason?:
-    | "no_mutation_receipt"
-    | "unsupported_rollback"
-    | "no_patchset"
-    | "restore_failed"
-    | "patchset_not_latest";
 }
 
 export interface SkillCompletionDefinition {
@@ -113,21 +130,21 @@ export interface SkillIntentContract {
   completionDefinition?: SkillCompletionDefinition;
 }
 
-export interface SkillEffectsContract {
+export interface SkillEffectsPolicy {
   allowedEffects?: ToolEffectClass[];
   deniedEffects?: ToolEffectClass[];
 }
 
-export interface SkillEffectsOverride {
-  allowedEffects?: ToolEffectClass[];
-  deniedEffects?: ToolEffectClass[];
-}
+export type SkillEffectsContract = SkillEffectsPolicy;
+export type SkillEffectsOverride = SkillEffectsPolicy;
 
-export interface SkillResourceBudget {
+export interface ResourceBudgetLimits {
   maxToolCalls?: number;
   maxTokens?: number;
   maxParallel?: number;
 }
+
+export type SkillResourceBudget = ResourceBudgetLimits;
 
 export interface SkillResourcePolicy {
   defaultLease?: SkillResourceBudget;
@@ -147,7 +164,7 @@ export interface SkillExecutionHints {
 
 export interface SkillContract {
   name: string;
-  category: SkillCategory;
+  category: LoadableSkillCategory;
   dispatch?: SkillDispatchPolicy;
   routing?: SkillRoutingPolicy;
   intent?: SkillIntentContract;
@@ -163,7 +180,7 @@ export interface SkillContract {
 
 export interface SkillContractOverride extends Omit<
   Partial<SkillContract>,
-  "intent" | "effects" | "resources" | "executionHints" | "routing"
+  "name" | "category" | "intent" | "effects" | "resources" | "executionHints" | "routing"
 > {
   intent?: Partial<SkillIntentContract>;
   effects?: SkillEffectsOverride;
@@ -175,22 +192,40 @@ export interface SkillContractOverride extends Omit<
   routing?: Partial<SkillRoutingPolicy>;
 }
 
+export interface SkillOverlayContract extends SkillContractOverride {
+  name: string;
+  category: SkillOverlayCategory;
+  stability?: "experimental" | "stable" | "deprecated";
+  description?: string;
+}
+
+export type SkillContractLike = SkillContract | SkillOverlayContract;
+
 export type SecurityEnforcementMode = "off" | "warn" | "enforce";
 
 export type SecurityEnforcementPreference = SecurityEnforcementMode | "inherit";
 
-export interface SkillDocument {
+interface BaseSkillDocument<TCategory extends SkillCategory, TContract> {
   name: string;
   description: string;
-  category: SkillCategory;
+  category: TCategory;
   filePath: string;
   baseDir: string;
   markdown: string;
-  contract: SkillContract;
+  contract: TContract;
   resources: SkillResourceSet;
   sharedContextFiles: string[];
   overlayFiles: string[];
 }
+
+export interface SkillDocument extends BaseSkillDocument<LoadableSkillCategory, SkillContract> {}
+
+export interface OverlaySkillDocument extends BaseSkillDocument<
+  SkillOverlayCategory,
+  SkillOverlayContract
+> {}
+
+export type ParsedSkillDocument = SkillDocument | OverlaySkillDocument;
 
 export interface SkillsIndexEntry {
   name: string;
@@ -362,16 +397,13 @@ export interface DecideEffectCommitmentInput {
   reason?: string;
 }
 
-export type DecideEffectCommitmentResult =
-  | {
-      ok: true;
-      request: PendingEffectCommitmentRequest;
-      decision: "accept" | "reject";
-    }
-  | {
-      ok: false;
-      error: "request_not_found" | "decision_required";
-    };
+export type DecideEffectCommitmentResult = RuntimeResult<
+  {
+    request: PendingEffectCommitmentRequest;
+    decision: "accept" | "reject";
+  },
+  "request_not_found" | "decision_required"
+>;
 
 export interface SkillSelectionBreakdownEntry {
   signal: SkillSelectionSignal;
@@ -426,12 +458,42 @@ export interface SkillChainIntent {
   lastError?: string;
 }
 
-export interface SkillCascadeControlResult {
-  ok: boolean;
-  reason?: string;
-  intent?: SkillChainIntent;
-  activatedSkill?: string;
+export type SkillCascadeControlResult =
+  | RuntimeSuccess<{
+      intent?: SkillChainIntent;
+      activatedSkill?: string;
+    }>
+  | {
+      ok: false;
+      reason: string;
+      intent?: SkillChainIntent;
+      activatedSkill?: string;
+    };
+
+export type SkillActivationResult =
+  | RuntimeSuccess<{
+      skill: SkillDocument;
+    }>
+  | {
+      ok: false;
+      reason: string;
+    };
+
+export interface SkillOutputValidationIssue {
+  name: string;
+  reason: string;
 }
+
+export type SkillOutputValidationResult =
+  | RuntimeSuccess<{
+      missing: string[];
+      invalid: SkillOutputValidationIssue[];
+    }>
+  | {
+      ok: false;
+      missing: string[];
+      invalid: SkillOutputValidationIssue[];
+    };
 
 export interface SkillCascadeChainCandidate {
   source: SkillCascadeSource;
@@ -494,6 +556,7 @@ export interface CreateBrewvaSessionOptions {
   agentId?: string;
   routingScopes?: SkillRoutingScope[];
   enableExtensions?: boolean;
+  enableAddons?: boolean;
 }
 
 export type TaskSpecSchema = "brewva.task.v1";
@@ -677,19 +740,14 @@ export interface ScheduleIntentCreateInput {
   convergenceCondition?: ConvergencePredicate;
 }
 
-export type ScheduleIntentCreateResult =
-  | { ok: true; intent: ScheduleIntentProjectionRecord }
-  | { ok: false; error: string };
+export type ScheduleIntentCreateResult = RuntimeResult<{ intent: ScheduleIntentProjectionRecord }>;
 
 export interface ScheduleIntentCancelInput {
   intentId: string;
   reason?: string;
 }
 
-export interface ScheduleIntentCancelResult {
-  ok: boolean;
-  error?: string;
-}
+export type ScheduleIntentCancelResult = RuntimeResult;
 
 export interface ScheduleIntentUpdateInput {
   intentId: string;
@@ -703,9 +761,12 @@ export interface ScheduleIntentUpdateInput {
   convergenceCondition?: ConvergencePredicate;
 }
 
-export type ScheduleIntentUpdateResult =
-  | { ok: true; intent: ScheduleIntentProjectionRecord }
-  | { ok: false; error: string };
+export type ScheduleIntentUpdateResult = RuntimeResult<{ intent: ScheduleIntentProjectionRecord }>;
+
+export type TaskItemAddResult = RuntimeResult<{ itemId: string }>;
+export type TaskItemUpdateResult = RuntimeResult;
+export type TaskBlockerRecordResult = RuntimeResult<{ blockerId: string }>;
+export type TaskBlockerResolveResult = RuntimeResult;
 
 export interface ScheduleIntentListQuery {
   parentSessionId?: string;
@@ -974,7 +1035,11 @@ export interface BrewvaConfigFile {
       BrewvaConfig["infrastructure"]["toolOutputDistillationInjection"]
     >;
     interruptRecovery?: Partial<BrewvaConfig["infrastructure"]["interruptRecovery"]>;
-    costTracking?: Partial<BrewvaConfig["infrastructure"]["costTracking"]>;
+    costTracking?: Partial<
+      Omit<BrewvaConfig["infrastructure"]["costTracking"], "maxCostUsdPerSession">
+    > & {
+      maxCostUsdPerSession?: number | null;
+    };
     turnWal?: Partial<BrewvaConfig["infrastructure"]["turnWal"]>;
   };
 }
@@ -1027,6 +1092,9 @@ export interface TruthState {
   facts: TruthFact[];
   updatedAt: number | null;
 }
+
+export type TruthFactUpsertResult = RuntimeResult<{ fact: TruthFact }>;
+export type TruthFactResolveResult = RuntimeResult;
 
 export type TruthLedgerEventPayload =
   | {
@@ -1190,6 +1258,15 @@ export interface TapeStatusState {
   outputSearch?: OutputSearchTelemetryState;
 }
 
+export type TapeHandoffResult = RuntimeResult<
+  {
+    eventId: string;
+    createdAt: number;
+    tapeStatus: TapeStatusState;
+  },
+  "missing_name" | "event_store_disabled"
+>;
+
 export type TapeSearchScope = "current_phase" | "all_phases" | "anchors_only";
 
 export interface TapeSearchMatch {
@@ -1229,11 +1306,7 @@ export interface ToolAccessResult {
   warning?: string;
 }
 
-export interface ResourceLeaseBudget {
-  maxToolCalls?: number;
-  maxTokens?: number;
-  maxParallel?: number;
-}
+export type ResourceLeaseBudget = ResourceBudgetLimits;
 
 export interface ResourceLeaseRecord {
   id: string;
@@ -1261,13 +1334,9 @@ export interface ResourceLeaseQuery {
   skillName?: string;
 }
 
-export type ResourceLeaseResult =
-  | { ok: true; lease: ResourceLeaseRecord }
-  | { ok: false; error: string };
+export type ResourceLeaseResult = RuntimeResult<{ lease: ResourceLeaseRecord }>;
 
-export type ResourceLeaseCancelResult =
-  | { ok: true; lease: ResourceLeaseRecord }
-  | { ok: false; error: string };
+export type ResourceLeaseCancelResult = RuntimeResult<{ lease: ResourceLeaseRecord }>;
 
 export interface ParallelAcquireResult {
   accepted: boolean;
@@ -1321,12 +1390,8 @@ export interface WorkerMergeReport {
   mergedPatchSet?: PatchSet;
 }
 
-export interface RollbackResult {
-  ok: boolean;
+export interface RollbackResult extends RollbackOutcome<PatchSetRollbackFailureReason> {
   patchSetId?: string;
-  restoredPaths: string[];
-  failedPaths: string[];
-  reason?: "no_patchset" | "restore_failed" | "patchset_not_latest";
 }
 
 export interface BrewvaEventRecord {

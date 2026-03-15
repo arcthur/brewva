@@ -133,16 +133,18 @@ Short aliases:
 - `-v` for `--version`
 - `-h` for `--help`
 
-`--no-addons` disables the full extension orchestration layer.
-CLI still installs runtime core bridge hooks, so tool policy, compaction gate,
-and ledger/patch tracking remain enforced.
+`--no-addons` is the historical flag name for disabling the addon host and the
+full Brewva runtime-plugin orchestration layer.
+CLI still installs the runtime core bridge, so tool policy, compaction gate,
+ledger/patch tracking, and skill-broker proposal routing remain enforced when
+configured.
 
 Retained: `before_agent_start` core status/context block, `tool_call`,
 `tool_result`, `session_compact`, `session_shutdown`.
 
 Disabled: `registerContextTransform` (`turn_start`/`context` governance lifecycle),
 `registerEventStream`, memory handlers, `registerNotification`,
-`registerDebugLoop`, and cognitive metrics.
+`registerDebugLoop`, cognitive metrics, and addon-host packet/job loading.
 
 `--backend` selects the primary session backend:
 

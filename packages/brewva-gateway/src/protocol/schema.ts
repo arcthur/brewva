@@ -186,6 +186,7 @@ export const SessionsOpenParamsSchema = Type.Object(
     model: Type.Optional(NonEmptyString),
     agentId: Type.Optional(NonEmptyString),
     enableExtensions: Type.Optional(Type.Boolean()),
+    enableAddons: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false },
 );

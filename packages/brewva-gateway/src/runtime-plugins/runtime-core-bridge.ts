@@ -1,4 +1,8 @@
-import { coerceContextBudgetUsage, type BrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  CONTEXT_COMPOSED_EVENT_TYPE,
+  coerceContextBudgetUsage,
+  type BrewvaRuntime,
+} from "@brewva/brewva-runtime";
 import type { ExtensionAPI, ExtensionFactory } from "@mariozechner/pi-coding-agent";
 import { createCompletionGuardLifecycle } from "./completion-guard.js";
 import { prepareContextComposerSupport } from "./context-composer-support.js";
@@ -86,7 +90,7 @@ export function registerRuntimeCoreBridge(pi: ExtensionAPI, runtime: BrewvaRunti
         });
         runtime.events.record({
           sessionId,
-          type: "context_composed",
+          type: CONTEXT_COMPOSED_EVENT_TYPE,
           payload: buildContextComposedEventPayload(composed, injection.accepted),
         });
 

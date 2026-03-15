@@ -8,7 +8,7 @@
    - startup UI setting (`ui.quietStartup`) is applied from `runtime.config.ui` into session settings overrides
 3. Register lifecycle handlers (profile-dependent)
    - extensions-enabled: extension stack from `packages/brewva-gateway/src/runtime-plugins/index.ts`
-   - `--no-addons`: runtime core bridge + session event bridge (`packages/brewva-gateway/src/runtime-plugins/runtime-core-bridge.ts`, `packages/brewva-cli/src/session-event-bridge.ts`)
+   - `--no-addons`: runtime core bridge + session event bridge, with addon host disabled; skill-broker bootstrap may still be prepended when routing is enabled (`packages/brewva-gateway/src/runtime-plugins/runtime-core-bridge.ts`, `packages/brewva-gateway/src/host/create-hosted-session.ts`)
 4. Run turn loop with tool execution, ledger/event writes, and verification updates
 5. Emit replayable event timeline and dispose session resources
 
@@ -17,9 +17,9 @@
 - Replay (`--replay`): query structured events and print text/JSON timeline
 - Undo (`--undo`): resolve target session and rollback latest tracked patch set
 - JSON one-shot (`--mode json`/`--json`): emits normal stream plus final `brewva_event_bundle`
-- `--no-addons`: keeps runtime-core safety/evidence hooks plus reduced
-  narrative-first context composition, while extension-only presentation and
-  memory/debug orchestration hooks remain disabled
+- `--no-addons`: keeps runtime-core safety/evidence hooks only; addon-host
+  packet/job loading and extension-only presentation or memory/debug
+  orchestration hooks remain disabled
 - Channel gateway (`--channel`): run adapter bridge loop; bind conversations to scopes, then scopes to agent sessions, and dispatch inbound turns serially per scope
 
 ## Recovery Path

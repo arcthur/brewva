@@ -2,6 +2,10 @@ import type { ContextBudgetManager } from "../context/budget.js";
 import type { ContextInjectionCollector } from "../context/injection.js";
 import type { SessionCostTracker } from "../cost/tracker.js";
 import {
+  SKILL_ROUTING_DECIDED_EVENT_TYPE,
+  SKILL_ROUTING_FOLLOWED_EVENT_TYPE,
+  SKILL_ROUTING_IGNORED_EVENT_TYPE,
+  SKILL_ROUTING_OVERRIDDEN_EVENT_TYPE,
   RESOURCE_LEASE_CANCELLED_EVENT_TYPE,
   RESOURCE_LEASE_EXPIRED_EVENT_TYPE,
   RESOURCE_LEASE_GRANTED_EVENT_TYPE,
@@ -372,7 +376,7 @@ export class SessionLifecycleService {
           continue;
         }
 
-        if (event.type === "skill_routing_decided") {
+        if (event.type === SKILL_ROUTING_DECIDED_EVENT_TYPE) {
           const parsed = this.readPendingDispatch(payload, event.turn);
           if (parsed) {
             pendingDispatch = parsed;
@@ -389,9 +393,9 @@ export class SessionLifecycleService {
         }
 
         if (
-          event.type === "skill_routing_followed" ||
-          event.type === "skill_routing_overridden" ||
-          event.type === "skill_routing_ignored"
+          event.type === SKILL_ROUTING_FOLLOWED_EVENT_TYPE ||
+          event.type === SKILL_ROUTING_OVERRIDDEN_EVENT_TYPE ||
+          event.type === SKILL_ROUTING_IGNORED_EVENT_TYPE
         ) {
           pendingDispatch = undefined;
           continue;

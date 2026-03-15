@@ -6,7 +6,15 @@ import {
 } from "../evidence/artifacts.js";
 import { parseTscDiagnostics } from "../evidence/tsc.js";
 import { redactSecrets } from "../security/redact.js";
-import type { TaskState, TruthFact, TruthFactSeverity, TruthState } from "../types.js";
+import type {
+  TaskBlockerRecordResult,
+  TaskBlockerResolveResult,
+  TaskState,
+  TruthFactResolveResult,
+  TruthFactSeverity,
+  TruthFactUpsertResult,
+  TruthState,
+} from "../types.js";
 import { sha256 } from "../utils/hash.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import {
@@ -30,13 +38,13 @@ export interface TruthToolResultProjectorContext {
       details?: Record<string, unknown>;
       evidenceIds?: string[];
     },
-  ): { ok: boolean; fact?: TruthFact };
-  resolveTruthFact(sessionId: string, truthFactId: string): { ok: boolean };
+  ): TruthFactUpsertResult;
+  resolveTruthFact(sessionId: string, truthFactId: string): TruthFactResolveResult;
   recordTaskBlocker(
     sessionId: string,
     input: { id: string; message: string; source?: string; truthFactId?: string },
-  ): { ok: boolean };
-  resolveTaskBlocker(sessionId: string, blockerId: string): { ok: boolean };
+  ): TaskBlockerRecordResult;
+  resolveTaskBlocker(sessionId: string, blockerId: string): TaskBlockerResolveResult;
 }
 
 function extractShellCommandFromArgs(args: Record<string, unknown>): string | undefined {

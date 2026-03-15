@@ -2,15 +2,20 @@ import { readFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { parse as parseYaml } from "yaml";
 import type {
+  LoadableSkillCategory,
   SkillCategory,
   SkillCompletionDefinition,
   SkillContract,
+  SkillContractLike,
   SkillContractOverride,
   SkillDocument,
   SkillEffectsContract,
   SkillExecutionHints,
   SkillIntentContract,
+  OverlaySkillDocument,
+  ParsedSkillDocument,
   SkillOutputContract,
+  SkillOverlayContract,
   SkillResourceBudget,
   SkillResourcePolicy,
   SkillResourceSet,
@@ -745,9 +750,13 @@ function normalizePositiveInteger(value: unknown, fallback: number): number {
 
 function normalizeDispatchPolicy(
   data: Record<string, unknown>,
+  category: SkillCategory,
   filePath: string,
 ): SkillContract["dispatch"] | undefined {
   if (!Object.prototype.hasOwnProperty.call(data, "dispatch")) {
+    if (category === "overlay") {
+      return undefined;
+    }
     return {
       suggestThreshold: 10,
       autoThreshold: 16,
@@ -998,9 +1007,9 @@ function mergeExecutionHints(
 }
 
 function mergeDispatchPolicy(
-  base: SkillContract["dispatch"],
+  base: SkillContractLike["dispatch"],
   patch: SkillContractOverride["dispatch"] | undefined,
-): SkillContract["dispatch"] | undefined {
+): SkillContractLike["dispatch"] | undefined {
   if (!patch) return base;
   const baseDispatch = base ?? DEFAULT_DISPATCH_POLICY;
   const suggestThreshold =
@@ -1031,10 +1040,22 @@ function mergeRoutingPolicy(
 
 function normalizeContract(
   name: string,
+  category: "overlay",
+  data: Record<string, unknown>,
+  filePath: string,
+): SkillOverlayContract;
+function normalizeContract(
+  name: string,
+  category: LoadableSkillCategory,
+  data: Record<string, unknown>,
+  filePath: string,
+): SkillContract;
+function normalizeContract(
+  name: string,
   category: SkillCategory,
   data: Record<string, unknown>,
   filePath: string,
-): SkillContract {
+): SkillContractLike {
   if (Object.prototype.hasOwnProperty.call(data, "composableWith")) {
     failSkillContract(
       filePath,
@@ -1051,10 +1072,32 @@ function normalizeContract(
       ? readNullableStringArrayField(data, "consumes", filePath)
       : requireStringArrayField(data, "consumes", filePath);
   const requires = readOptionalStringArrayField(data, "requires", filePath);
-  const dispatch = normalizeDispatchPolicy(data, filePath);
+  const dispatch = normalizeDispatchPolicy(data, category, filePath);
   const routing = normalizeRoutingPolicy(category, data, filePath);
 
-  return {
+  if (category === "overlay") {
+    const contract = {
+      name,
+      category,
+      description: typeof data.description === "string" ? data.description : undefined,
+      dispatch,
+      routing,
+      intent: normalizeIntentContract(data, category, filePath),
+      effects: normalizeEffectsContract(data, category, filePath),
+      resources: normalizeResourcePolicy(data, category, filePath),
+      executionHints: normalizeExecutionHints(data, category, filePath),
+      composableWith,
+      consumes,
+      requires,
+      stability:
+        data.stability === "experimental" || data.stability === "deprecated"
+          ? data.stability
+          : "stable",
+    } satisfies SkillOverlayContract;
+    return contract;
+  }
+
+  const contract = {
     name,
     category,
     description: typeof data.description === "string" ? data.description : undefined,
@@ -1071,7 +1114,8 @@ function normalizeContract(
       data.stability === "experimental" || data.stability === "deprecated"
         ? data.stability
         : "stable",
-  };
+  } satisfies SkillContract;
+  return contract;
 }
 
 export function tightenContract(
@@ -1191,7 +1235,13 @@ export function createEmptySkillResources(): SkillResourceSet {
   };
 }
 
-export function parseSkillDocument(filePath: string, category: SkillCategory): SkillDocument {
+export function parseSkillDocument(filePath: string, category: "overlay"): OverlaySkillDocument;
+export function parseSkillDocument(
+  filePath: string,
+  category: LoadableSkillCategory,
+): SkillDocument;
+export function parseSkillDocument(filePath: string, category: SkillCategory): ParsedSkillDocument;
+export function parseSkillDocument(filePath: string, category: SkillCategory): ParsedSkillDocument {
   const raw = readFileSync(filePath, "utf8");
   const { body, data } = parseFrontmatter(raw);
   if (Object.prototype.hasOwnProperty.call(data, "tier")) {
@@ -1209,9 +1259,25 @@ export function parseSkillDocument(filePath: string, category: SkillCategory): S
 
   const inferredName = toString(data.name, basename(dirname(filePath)) ?? "skill");
   const description = toString(data.description, `${inferredName} skill`);
-  const contract = normalizeContract(inferredName, category, data, filePath);
   const resources = normalizeResourceSet(data, filePath);
 
+  if (category === "overlay") {
+    const contract = normalizeContract(inferredName, category, data, filePath);
+    return {
+      name: inferredName,
+      description,
+      category,
+      filePath,
+      baseDir: dirname(filePath),
+      markdown: body.trim(),
+      contract,
+      resources,
+      sharedContextFiles: [],
+      overlayFiles: [],
+    };
+  }
+
+  const contract = normalizeContract(inferredName, category, data, filePath);
   return {
     name: inferredName,
     description,

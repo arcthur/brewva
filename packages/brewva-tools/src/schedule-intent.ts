@@ -224,7 +224,7 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      if (options.runtime.config?.schedule?.enabled === false) {
+      if (!options.runtime.config.schedule.enabled) {
         return failTextResult("Schedule intent rejected (scheduler_disabled).", {
           ok: false,
           error: "scheduler_disabled",

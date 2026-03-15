@@ -733,6 +733,7 @@ async function handleStart(argv: string[]): Promise<number> {
       configPath: typeof parsed.values.config === "string" ? parsed.values.config : undefined,
       model: typeof parsed.values.model === "string" ? parsed.values.model : undefined,
       enableExtensions: parsed.values["no-addons"] !== true,
+      enableAddons: parsed.values["no-addons"] !== true,
       jsonStdout: jsonMode,
       tickIntervalMs: tickParsed.value,
       sessionIdleTtlMs: sessionIdleParsed.value,

@@ -196,7 +196,7 @@ Primary target files for the first refactor stage:
 
 - `packages/brewva-runtime/src/services/tool-gate.ts`
 - `packages/brewva-runtime/src/services/exploration-supervisor.ts`
-- `packages/brewva-runtime/src/services/task-watchdog-service.ts`
+- `packages/brewva-runtime/src/services/task-watchdog.ts`
 - `packages/brewva-runtime/src/services/trust-meter.ts`
 - `packages/brewva-runtime/src/governance/tool-governance.ts`
 - `packages/brewva-gateway/src/runtime-plugins/context-composer.ts`

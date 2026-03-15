@@ -632,10 +632,13 @@ function normalizeInfrastructureConfig(
     },
     costTracking: {
       enabled: normalizeBoolean(costTrackingInput.enabled, defaults.costTracking.enabled),
-      maxCostUsdPerSession: normalizeNonNegativeNumber(
-        costTrackingInput.maxCostUsdPerSession,
-        defaults.costTracking.maxCostUsdPerSession,
-      ),
+      maxCostUsdPerSession:
+        costTrackingInput.maxCostUsdPerSession === null
+          ? 0
+          : normalizeNonNegativeNumber(
+              costTrackingInput.maxCostUsdPerSession,
+              defaults.costTracking.maxCostUsdPerSession,
+            ),
       alertThresholdRatio: normalizeUnitInterval(
         costTrackingInput.alertThresholdRatio,
         defaults.costTracking.alertThresholdRatio,

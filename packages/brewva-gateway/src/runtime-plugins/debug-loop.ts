@@ -12,6 +12,7 @@ import {
   DEBUG_LOOP_ARTIFACT_PERSIST_FAILED_EVENT_TYPE,
   DEBUG_LOOP_FAILURE_CASE_PERSISTED_EVENT_TYPE,
   DEBUG_LOOP_HANDOFF_PERSISTED_EVENT_TYPE,
+  DEBUG_LOOP_REFERENCE_PERSISTED_EVENT_TYPE,
   DEBUG_LOOP_RETRY_SCHEDULED_EVENT_TYPE,
   DEBUG_LOOP_TRANSITION_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
@@ -1035,7 +1036,7 @@ class DebugLoopController {
       });
       this.runtime.events.record({
         sessionId: input.sessionId,
-        type: "debug_loop_reference_persisted",
+        type: DEBUG_LOOP_REFERENCE_PERSISTED_EVENT_TYPE,
         payload: {
           artifactRef: artifact.artifactRef,
           status: input.state.status,

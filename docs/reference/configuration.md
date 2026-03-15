@@ -66,7 +66,7 @@ may still be loaded while remaining hidden from standard proposal producers.
 Skill discovery accepts either:
 
 - a root containing `skills/<category>/...`
-- a direct category root containing `core/`, `domain/`, `operator/`, `meta/`, `internal/`, or `project/`
+- a direct skill root containing `core/`, `domain/`, `operator/`, `meta/`, or `internal/`, plus optional `project/` for shared context and overlays
 
 Project-specific shared context and overlays are discovered from:
 
@@ -141,6 +141,7 @@ Project-specific shared context and overlays are discovered from:
 
 - `parallel.enabled`: `true`
 - `parallel.maxConcurrent`: `3`
+- `parallel.maxTotalPerSession`: `10`
 
 ### `channels`
 
@@ -190,6 +191,8 @@ Telegram channel skill policy is now built-in and no longer configurable via
 - `infrastructure.costTracking.maxCostUsdPerSession`: `0`
 - `infrastructure.costTracking.alertThresholdRatio`: `0.8`
 - `infrastructure.costTracking.actionOnExceed`: `warn`
+  `0` is the legacy unlimited sentinel. Config files may also use `null` to
+  express the same no-cap behavior more explicitly.
 - `infrastructure.turnWal.enabled`: `true`
 - `infrastructure.turnWal.dir`: `.orchestrator/turn-wal`
 - `infrastructure.turnWal.defaultTtlMs`: `300000`
@@ -322,8 +325,10 @@ With `infrastructure.costTracking.enabled=false`:
 - session budget blocking is disabled (`budget.blocked=false`, `budget.sessionExceeded=false`)
 - budget alerts are suppressed (`alerts=[]`)
 
-`maxCostUsdPerSession=0` also results in no session-cap exceed condition, but
-`enabled` is the explicit policy switch for whether budget enforcement/alerts run.
+For config files, `maxCostUsdPerSession=null` is the explicit unlimited
+sentinel. `maxCostUsdPerSession=0` remains a backward-compatible alias and
+normalizes to the same no-cap behavior. `enabled` is still the explicit policy
+switch for whether budget enforcement/alerts run.
 
 ## Turn WAL Model
 
@@ -390,4 +395,3 @@ This means malformed or removed fields are never silently applied as active runt
 ## Current Limitations
 
 - Startup UI config currently exposes `ui.quietStartup` only; there is no `ui.collapseChangelog` field.
-- Parallel session total-start cap is internal (`PARALLEL_MAX_TOTAL_PER_SESSION=10`) and not configurable via `BrewvaConfig`.

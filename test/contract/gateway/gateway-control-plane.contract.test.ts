@@ -21,6 +21,7 @@ describe("gateway daemon control-plane methods", () => {
           model?: string;
           agentId?: string;
           enableExtensions?: boolean;
+          enableAddons?: boolean;
         }
       | undefined;
     const backend = createSessionBackendStub({
@@ -45,6 +46,7 @@ describe("gateway daemon control-plane methods", () => {
         model: "openai/gpt-5",
         agentId: "code-reviewer",
         enableExtensions: false,
+        enableAddons: false,
       })) as {
         sessionId: string;
         created: boolean;
@@ -60,6 +62,7 @@ describe("gateway daemon control-plane methods", () => {
         model: "openai/gpt-5",
         agentId: "code-reviewer",
         enableExtensions: false,
+        enableAddons: false,
       });
       expect(payload).toEqual({
         sessionId: "session-open",

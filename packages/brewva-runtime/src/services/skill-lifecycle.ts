@@ -1,26 +1,24 @@
+import {
+  SKILL_ROUTING_DECIDED_EVENT_TYPE,
+  SKILL_ROUTING_DEFERRED_EVENT_TYPE,
+  SKILL_ROUTING_FOLLOWED_EVENT_TYPE,
+  SKILL_ROUTING_IGNORED_EVENT_TYPE,
+  SKILL_ROUTING_OVERRIDDEN_EVENT_TYPE,
+} from "../events/event-types.js";
 import { getSkillOutputContracts, listSkillOutputs } from "../skills/facets.js";
 import type { SkillRegistry } from "../skills/registry.js";
 import { parseTaskSpec } from "../task/spec.js";
 import type {
+  SkillActivationResult,
   SkillDispatchDecision,
   SkillDocument,
   SkillOutputContract,
+  SkillOutputValidationResult,
   TaskSpec,
   TaskState,
 } from "../types.js";
 import type { RuntimeCallback } from "./callback.js";
 import { RuntimeSessionStateStore } from "./session-state.js";
-
-interface SkillOutputValidationIssue {
-  name: string;
-  reason: string;
-}
-
-interface SkillOutputValidationResult {
-  ok: boolean;
-  missing: string[];
-  invalid: SkillOutputValidationIssue[];
-}
 
 type InformativeTextOptions = {
   minWords?: number;
@@ -189,10 +187,7 @@ export class SkillLifecycleService {
     this.setTaskSpec = options.setTaskSpec;
   }
 
-  activateSkill(
-    sessionId: string,
-    name: string,
-  ): { ok: boolean; reason?: string; skill?: SkillDocument } {
+  activateSkill(sessionId: string, name: string): SkillActivationResult {
     const state = this.sessionState.getCell(sessionId);
     const skill = this.skills.get(name);
     if (!skill) {
@@ -229,7 +224,7 @@ export class SkillLifecycleService {
       if (primaryName && primaryName === name) {
         this.recordEvent({
           sessionId,
-          type: "skill_routing_followed",
+          type: SKILL_ROUTING_FOLLOWED_EVENT_TYPE,
           turn: this.getCurrentTurn(sessionId),
           payload: this.buildDispatchPayload(pendingDispatch, {
             activatedSkill: name,
@@ -239,7 +234,7 @@ export class SkillLifecycleService {
       } else {
         this.recordEvent({
           sessionId,
-          type: "skill_routing_overridden",
+          type: SKILL_ROUTING_OVERRIDDEN_EVENT_TYPE,
           turn: this.getCurrentTurn(sessionId),
           payload: this.buildDispatchPayload(pendingDispatch, {
             activatedSkill: name,
@@ -275,14 +270,14 @@ export class SkillLifecycleService {
     if (options.emitEvent === false) return;
     this.recordEvent({
       sessionId,
-      type: "skill_routing_decided",
+      type: SKILL_ROUTING_DECIDED_EVENT_TYPE,
       turn: this.getCurrentTurn(sessionId),
       payload: this.buildDispatchPayload(decision),
     });
     if (activeSkillName && shouldStorePending) {
       this.recordEvent({
         sessionId,
-        type: "skill_routing_deferred",
+        type: SKILL_ROUTING_DEFERRED_EVENT_TYPE,
         turn: this.getCurrentTurn(sessionId),
         payload: this.buildDispatchPayload(decision, {
           deferredBy: activeSkillName,
@@ -313,7 +308,7 @@ export class SkillLifecycleService {
 
     this.recordEvent({
       sessionId,
-      type: "skill_routing_ignored",
+      type: SKILL_ROUTING_IGNORED_EVENT_TYPE,
       turn: this.getCurrentTurn(sessionId),
       payload: this.buildDispatchPayload(pending, {
         resolvedBy: "turn_end",

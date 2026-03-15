@@ -27,6 +27,7 @@ function buildBaseResult(
   return {
     ok: false,
     receiptId: mutation.receipt.id,
+    patchSetId: mutation.patchSetId ?? undefined,
     toolName: mutation.receipt.toolName,
     strategy: mutation.receipt.strategy,
     rollbackKind: mutation.receipt.rollbackKind,
@@ -84,6 +85,7 @@ export class MutationRollbackService {
         const rollback = this.rollbackPatchSet(sessionId, mutation.patchSetId);
         result = buildBaseResult(mutation, {
           ok: rollback.ok,
+          patchSetId: mutation.patchSetId ?? undefined,
           restoredPaths: [...rollback.restoredPaths],
           failedPaths: [...rollback.failedPaths],
           reason: rollback.reason,

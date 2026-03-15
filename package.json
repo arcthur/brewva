@@ -2,6 +2,7 @@
   "name": "brewva",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "workspaces": [
     "packages/*",
     "distribution/*"
@@ -39,7 +40,7 @@
     "test:unit": "bun test test/unit --timeout 600000",
     "test:webhook-smoke": "bun run script/smoke-telegram-webhook-edge.ts",
     "test:webhook-smoke:live": "bun run script/smoke-telegram-webhook-live.ts",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc -b && bun run script/clean-package-dist.ts",
     "typecheck:test": "tsc -b test/tsconfig.json",
     "uninstall:local": "bash script/install-local.sh --uninstall"
   },

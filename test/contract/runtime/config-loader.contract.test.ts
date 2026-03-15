@@ -166,6 +166,28 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.skills.routing.scopes).toEqual(["domain", "operator"]);
   });
 
+  test("treats null session cost cap as the explicit unlimited sentinel", () => {
+    const workspace = createTestWorkspace("cost-cap-null-sentinel");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          infrastructure: {
+            costTracking: {
+              maxCostUsdPerSession: null,
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    expect(loaded.infrastructure.costTracking.maxCostUsdPerSession).toBe(0);
+  });
+
   test("fails fast on removed skills.selector config", () => {
     const workspace = createTestWorkspace("selector-config-removed");
     writeFileSync(

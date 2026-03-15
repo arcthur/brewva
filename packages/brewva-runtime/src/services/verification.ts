@@ -1,4 +1,9 @@
-import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "../events/event-types.js";
+import {
+  GOVERNANCE_VERIFY_SPEC_ERROR_EVENT_TYPE,
+  GOVERNANCE_VERIFY_SPEC_FAILED_EVENT_TYPE,
+  GOVERNANCE_VERIFY_SPEC_PASSED_EVENT_TYPE,
+  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+} from "../events/event-types.js";
 import type { GovernancePort } from "../governance/port.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type { BrewvaConfig, TaskState, VerificationLevel, VerificationReport } from "../types.js";
@@ -281,7 +286,7 @@ export class VerificationService {
       if (result.ok) {
         this.recordEvent({
           sessionId,
-          type: "governance_verify_spec_passed",
+          type: GOVERNANCE_VERIFY_SPEC_PASSED_EVENT_TYPE,
           payload: {
             level,
           },
@@ -292,7 +297,7 @@ export class VerificationService {
       const reason = (result.reason ?? "unknown").trim() || "unknown";
       this.recordEvent({
         sessionId,
-        type: "governance_verify_spec_failed",
+        type: GOVERNANCE_VERIFY_SPEC_FAILED_EVENT_TYPE,
         payload: {
           level,
           reason,
@@ -301,7 +306,7 @@ export class VerificationService {
     } catch (error) {
       this.recordEvent({
         sessionId,
-        type: "governance_verify_spec_error",
+        type: GOVERNANCE_VERIFY_SPEC_ERROR_EVENT_TYPE,
         payload: {
           level,
           error: error instanceof Error ? error.message : String(error),

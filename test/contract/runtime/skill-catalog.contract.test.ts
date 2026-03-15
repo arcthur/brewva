@@ -37,20 +37,17 @@ describe("repository catalog contracts", () => {
 
   test("built-in base skills declare explicit output contracts for every declared output", () => {
     const runtime = new BrewvaRuntime({ cwd: repoRoot() });
-    const missing = runtime.skills
-      .list()
-      .filter((skill) => skill.category !== "overlay")
-      .flatMap((skill) => {
-        const outputs = listSkillOutputs(skill.contract);
-        if (outputs.length === 0) {
-          return [];
-        }
-        const contracts = getSkillOutputContracts(skill.contract);
-        const uncovered = outputs.filter(
-          (name) => !Object.prototype.hasOwnProperty.call(contracts, name),
-        );
-        return uncovered.length === 0 ? [] : [`${skill.name}:${uncovered.join(",")}`];
-      });
+    const missing = runtime.skills.list().flatMap((skill) => {
+      const outputs = listSkillOutputs(skill.contract);
+      if (outputs.length === 0) {
+        return [];
+      }
+      const contracts = getSkillOutputContracts(skill.contract);
+      const uncovered = outputs.filter(
+        (name) => !Object.prototype.hasOwnProperty.call(contracts, name),
+      );
+      return uncovered.length === 0 ? [] : [`${skill.name}:${uncovered.join(",")}`];
+    });
 
     expect(missing).toEqual([]);
   });

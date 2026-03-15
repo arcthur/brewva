@@ -1,10 +1,21 @@
 # Reference: Extensions
 
-Extension factory entrypoint: `packages/brewva-gateway/src/runtime-plugins/index.ts`.
+Extension factory entrypoint: `@brewva/brewva-gateway/runtime-plugins`
+(`packages/brewva-gateway/src/runtime-plugins/index.ts`).
 
 Control-plane broker entrypoint: `packages/brewva-skill-broker/src/index.ts`.
 
 Shared deliberation helpers: `packages/brewva-deliberation/src/index.ts`.
+
+## Terminology
+
+- Extension: the gateway-side lifecycle integration layer registered into Brewva sessions
+- Runtime plugin: one concrete extension implementation file under `packages/brewva-gateway/src/runtime-plugins`
+- Addon: a separate operator-facing module from `@brewva/brewva-addons` that publishes durable control-plane state and context packets
+
+`--no-addons` is a historical CLI flag name. It disables both the addon host and
+the full Brewva runtime-plugin stack, leaving the reduced runtime-core bridge
+active; it does not rename the underlying addon package surface.
 
 ## Factory API
 
@@ -346,7 +357,7 @@ Disabled full-extension hooks in this profile:
 - `registerDebugLoop`
 - `registerNotification`
 
-This means no-addons keeps core safety/evidence guarantees, but omits presentation-oriented lifecycle orchestration from the full extension stack.
+This means no-addons keeps core safety/evidence guarantees, but omits presentation-oriented lifecycle orchestration from the full runtime-plugin stack.
 
 ## Channel Bridge Notes
 

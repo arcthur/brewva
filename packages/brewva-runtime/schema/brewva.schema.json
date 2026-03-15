@@ -164,7 +164,14 @@
                   "type": "boolean"
                 },
                 "maxCostUsdPerSession": {
-                  "type": "number"
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             },
@@ -665,9 +672,6 @@
         "description": {
           "type": "string"
         },
-        "category": {
-          "$ref": "#/definitions/SkillCategory"
-        },
         "composableWith": {
           "type": "array",
           "items": {
@@ -680,14 +684,8 @@
             "type": "string"
           }
         },
-        "costHint": {
-          "$ref": "#/definitions/SkillCostHint"
-        },
         "dispatch": {
           "$ref": "#/definitions/SkillDispatchPolicy"
-        },
-        "name": {
-          "type": "string"
         },
         "requires": {
           "type": "array",

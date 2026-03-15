@@ -1,5 +1,5 @@
 import type {
-  SkillContract,
+  SkillContractLike,
   SkillCostHint,
   SkillEffectLevel,
   SkillExecutionHints,
@@ -18,16 +18,16 @@ const MUTATION_EFFECTS = new Set<ToolEffectClass>([
   "memory_write",
 ]);
 
-export function resolveSkillIntent(contract: SkillContract | undefined): SkillIntentContract {
+export function resolveSkillIntent(contract: SkillContractLike | undefined): SkillIntentContract {
   return contract?.intent ?? {};
 }
 
-export function listSkillOutputs(contract: SkillContract | undefined): string[] {
+export function listSkillOutputs(contract: SkillContractLike | undefined): string[] {
   return [...(resolveSkillIntent(contract).outputs ?? [])];
 }
 
 export function getSkillOutputContracts(
-  contract: SkillContract | undefined,
+  contract: SkillContractLike | undefined,
 ): Record<string, SkillOutputContract> {
   return { ...resolveSkillIntent(contract).outputContracts };
 }
@@ -51,12 +51,14 @@ export function deriveSkillEffectLevel(
   return level;
 }
 
-export function resolveSkillEffectLevel(contract: SkillContract | undefined): SkillEffectLevel {
+export function resolveSkillEffectLevel(contract: SkillContractLike | undefined): SkillEffectLevel {
   const explicit = contract?.effects?.allowedEffects;
   return deriveSkillEffectLevel(explicit !== undefined ? explicit : READ_ONLY_EFFECTS);
 }
 
-export function listSkillAllowedEffects(contract: SkillContract | undefined): ToolEffectClass[] {
+export function listSkillAllowedEffects(
+  contract: SkillContractLike | undefined,
+): ToolEffectClass[] {
   const explicit = contract?.effects?.allowedEffects;
   if (explicit !== undefined) {
     return [...explicit];
@@ -64,36 +66,36 @@ export function listSkillAllowedEffects(contract: SkillContract | undefined): To
   return [...READ_ONLY_EFFECTS];
 }
 
-export function listSkillDeniedEffects(contract: SkillContract | undefined): ToolEffectClass[] {
+export function listSkillDeniedEffects(contract: SkillContractLike | undefined): ToolEffectClass[] {
   return [...(contract?.effects?.deniedEffects ?? [])];
 }
 
 export function resolveSkillExecutionHints(
-  contract: SkillContract | undefined,
+  contract: SkillContractLike | undefined,
 ): SkillExecutionHints {
   return contract?.executionHints ?? {};
 }
 
-export function listSkillPreferredTools(contract: SkillContract | undefined): string[] {
+export function listSkillPreferredTools(contract: SkillContractLike | undefined): string[] {
   return [...(resolveSkillExecutionHints(contract).preferredTools ?? [])];
 }
 
-export function listSkillFallbackTools(contract: SkillContract | undefined): string[] {
+export function listSkillFallbackTools(contract: SkillContractLike | undefined): string[] {
   return [...(resolveSkillExecutionHints(contract).fallbackTools ?? [])];
 }
 
-export function getSkillCostHint(contract: SkillContract | undefined): SkillCostHint {
+export function getSkillCostHint(contract: SkillContractLike | undefined): SkillCostHint {
   return resolveSkillExecutionHints(contract).costHint ?? "medium";
 }
 
 export function resolveSkillDefaultLease(
-  contract: SkillContract | undefined,
+  contract: SkillContractLike | undefined,
 ): SkillResourceBudget | undefined {
   return contract?.resources?.defaultLease;
 }
 
 export function resolveSkillHardCeiling(
-  contract: SkillContract | undefined,
+  contract: SkillContractLike | undefined,
 ): SkillResourceBudget | undefined {
   return contract?.resources?.hardCeiling;
 }

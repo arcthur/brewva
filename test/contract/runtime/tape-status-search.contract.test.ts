@@ -26,6 +26,9 @@ describe("tape status and search", () => {
       nextSteps: "implement changes",
     });
     expect(handoff.ok).toBe(true);
+    if (!handoff.ok) {
+      throw new Error(handoff.error);
+    }
     expect(handoff.eventId).toBeDefined();
 
     const after = runtime.events.getTapeStatus(sessionId);

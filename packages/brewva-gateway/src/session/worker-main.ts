@@ -230,6 +230,7 @@ async function handleInit(
       model: message.payload.model,
       agentId: message.payload.agentId,
       enableExtensions: message.payload.enableExtensions,
+      enableAddons: message.payload.enableAddons,
     });
     const agentSessionId = sessionResult.session.sessionManager.getSessionId();
     const watchdogOverrides = workerTestHarness.watchdog;

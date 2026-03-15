@@ -1,3 +1,8 @@
+import {
+  GOVERNANCE_COMPACTION_INTEGRITY_CHECKED_EVENT_TYPE,
+  GOVERNANCE_COMPACTION_INTEGRITY_ERROR_EVENT_TYPE,
+  GOVERNANCE_COMPACTION_INTEGRITY_FAILED_EVENT_TYPE,
+} from "../events/event-types.js";
 import type { GovernancePort } from "../governance/port.js";
 import {
   sanitizeCompactionSummary,
@@ -142,8 +147,8 @@ export function markContextCompacted(
       deps.recordEvent({
         sessionId,
         type: result.ok
-          ? "governance_compaction_integrity_checked"
-          : "governance_compaction_integrity_failed",
+          ? GOVERNANCE_COMPACTION_INTEGRITY_CHECKED_EVENT_TYPE
+          : GOVERNANCE_COMPACTION_INTEGRITY_FAILED_EVENT_TYPE,
         turn,
         payload: {
           ok: result.ok,
@@ -155,7 +160,7 @@ export function markContextCompacted(
     .catch((error) => {
       deps.recordEvent({
         sessionId,
-        type: "governance_compaction_integrity_error",
+        type: GOVERNANCE_COMPACTION_INTEGRITY_ERROR_EVENT_TYPE,
         turn,
         payload: {
           error: error instanceof Error ? error.message : String(error),

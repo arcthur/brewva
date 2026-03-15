@@ -6,6 +6,7 @@ import {
 } from "../events/event-types.js";
 import { resolveSkillDefaultLease, resolveSkillHardCeiling } from "../skills/facets.js";
 import type {
+  ResourceBudgetLimits,
   ResourceLeaseBudget,
   ResourceLeaseCancelResult,
   ResourceLeaseQuery,
@@ -33,9 +34,7 @@ export interface ResourceLeaseServiceOptions {
   skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
 }
 
-function cloneBudget(
-  budget: ResourceLeaseBudget | SkillResourceBudget | undefined,
-): ResourceLeaseBudget {
+function cloneBudget(budget: ResourceBudgetLimits | undefined): ResourceLeaseBudget {
   return {
     maxToolCalls: budget?.maxToolCalls,
     maxTokens: budget?.maxTokens,
@@ -59,8 +58,8 @@ function normalizePositiveInteger(value: unknown): number | undefined {
 }
 
 function sumBudget(
-  base: ResourceLeaseBudget | SkillResourceBudget | undefined,
-  delta: ResourceLeaseBudget | SkillResourceBudget | undefined,
+  base: ResourceBudgetLimits | undefined,
+  delta: ResourceBudgetLimits | undefined,
 ): ResourceLeaseBudget {
   const sumDimension = (
     left: number | undefined,

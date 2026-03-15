@@ -1,7 +1,11 @@
 import {
   SCAN_CONVERGENCE_ADVISORY_EVENT_TYPE,
   SCAN_CONVERGENCE_RESET_EVENT_TYPE,
+  type BrewvaEventRecord,
+  type BrewvaEventQuery,
+  type BrewvaRuntime,
   type ContextCompactionGateStatus,
+  type ContextInjectionCategory,
   type ContextInjectionEntry,
 } from "@brewva/brewva-runtime";
 import {
@@ -19,7 +23,28 @@ const CHARS_PER_TOKEN = 3.5;
 const CAPABILITY_VIEW_INVENTORY_RATIO_THRESHOLD = 0.35;
 const CAPABILITY_VIEW_COMPACT_RATIO_THRESHOLD = 0.2;
 
-export type ContextBlockCategory = "narrative" | "constraint" | "diagnostic";
+export type ContextBlockCategory = ContextInjectionCategory;
+
+type ContextComposerEventQuery = Pick<Exclude<BrewvaEventQuery, undefined>, "type" | "last">;
+
+type ContextComposerEventQueryResult = Array<
+  Pick<BrewvaEventRecord, "payload" | "turn" | "timestamp">
+>;
+
+type ContextComposerTapeStatus = Pick<
+  ReturnType<BrewvaRuntime["events"]["getTapeStatus"]>,
+  "tapePressure" | "entriesSinceAnchor"
+>;
+
+export type ContextComposerRuntime = {
+  events: {
+    getTapeStatus(sessionId: string): ContextComposerTapeStatus;
+    query?: (
+      sessionId: string,
+      query: ContextComposerEventQuery,
+    ) => ContextComposerEventQueryResult;
+  };
+};
 
 export interface ComposedContextBlock {
   id: string;
@@ -57,22 +82,7 @@ export interface ContextComposedEventPayload extends Record<string, unknown> {
 }
 
 export interface ContextComposerInput {
-  runtime: {
-    events: {
-      getTapeStatus(sessionId: string): {
-        tapePressure: string;
-        entriesSinceAnchor: number;
-      };
-      query?: (
-        sessionId: string,
-        query: { type?: string; last?: number },
-      ) => Array<{
-        payload?: Record<string, unknown>;
-        turn?: number;
-        timestamp: number;
-      }>;
-    };
-  };
+  runtime: ContextComposerRuntime;
   sessionId: string;
   gateStatus: ContextCompactionGateStatus;
   pendingCompactionReason?: string | null;

@@ -1,4 +1,6 @@
 import {
+  GOVERNANCE_VERIFY_SPEC_FAILED_EVENT_TYPE,
+  GOVERNANCE_VERIFY_SPEC_PASSED_EVENT_TYPE,
   TOOL_RESULT_RECORDED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   VERIFICATION_STATE_RESET_EVENT_TYPE,
@@ -7,9 +9,12 @@ import {
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type {
   BrewvaStructuredEvent,
-  TruthFact,
+  TaskBlockerRecordResult,
+  TaskBlockerResolveResult,
+  TruthFactResolveResult,
   TruthFactSeverity,
   TruthFactStatus,
+  TruthFactUpsertResult,
   VerificationCheckRun,
 } from "../types.js";
 import {
@@ -120,11 +125,11 @@ export class VerificationProjectorService {
   private readonly recordTaskBlocker: (
     sessionId: string,
     input: { id?: string; message: string; source?: string; truthFactId?: string },
-  ) => { ok: boolean; blockerId?: string; error?: string };
+  ) => TaskBlockerRecordResult;
   private readonly resolveTaskBlocker: (
     sessionId: string,
     blockerId: string,
-  ) => { ok: boolean; error?: string };
+  ) => TaskBlockerResolveResult;
   private readonly upsertTruthFact: (
     sessionId: string,
     input: {
@@ -136,11 +141,11 @@ export class VerificationProjectorService {
       evidenceIds?: string[];
       status?: TruthFactStatus;
     },
-  ) => { ok: boolean; fact?: TruthFact; error?: string };
+  ) => TruthFactUpsertResult;
   private readonly resolveTruthFact: (
     sessionId: string,
     truthFactId: string,
-  ) => { ok: boolean; error?: string };
+  ) => TruthFactResolveResult;
 
   constructor(options: VerificationProjectorServiceOptions) {
     this.getTaskState = (sessionId) => options.getTaskState(sessionId);
@@ -196,12 +201,12 @@ export class VerificationProjectorService {
       return;
     }
 
-    if (event.type === "governance_verify_spec_failed") {
+    if (event.type === GOVERNANCE_VERIFY_SPEC_FAILED_EVENT_TYPE) {
       this.applyGovernanceFailure(event.sessionId, event.payload);
       return;
     }
 
-    if (event.type === "governance_verify_spec_passed") {
+    if (event.type === GOVERNANCE_VERIFY_SPEC_PASSED_EVENT_TYPE) {
       this.applyGovernancePass(event.sessionId);
     }
   }

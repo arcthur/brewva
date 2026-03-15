@@ -2,6 +2,15 @@
 
 `@brewva/brewva-addons` is the public, operator-facing augmentation surface. Addons live outside the kernel and can only influence runtime behavior through persisted artifacts and proposal-bound context packets.
 
+## Terminology
+
+- Addon: an operator-installed control-plane module loaded from `.brewva/addons/**`
+- Extension: a session-lifecycle hook stack wired into the gateway/Brewva session runtime
+- Runtime plugin: one implementation file of an extension under `packages/brewva-gateway/src/runtime-plugins`
+
+These are related but not interchangeable surfaces. Addons publish durable state
+and packets; extensions consume runtime events and shape the live session.
+
 ## Scope
 
 Addons can declare:
@@ -16,7 +25,7 @@ Addons do not:
 
 - mutate kernel state directly
 - bypass `runtime.proposals.submit(...)`
-- register arbitrary lifecycle hooks into the Pi session runtime
+- register arbitrary lifecycle hooks into the Brewva session runtime
 
 ## Package Surface
 

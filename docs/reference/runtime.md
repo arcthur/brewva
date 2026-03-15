@@ -98,6 +98,7 @@ Reference: `docs/reference/proposal-boundary.md`.
 - `finish(input)`
   `finish(input)` and `recordResult(input)` use `channelSuccess` for tool/lifecycle transport success; semantic outcome is carried by `verdict`.
 - `acquireParallelSlot(sessionId, runId)`
+- `acquireParallelSlotAsync(sessionId, runId, options?)`
 - `releaseParallelSlot(sessionId, runId)`
 - `markCall(sessionId, toolName)`
 - `trackCallStart(input)`

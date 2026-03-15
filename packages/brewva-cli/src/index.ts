@@ -114,7 +114,7 @@ Options:
   --agent <id>          Agent identity id (.brewva/agents/<id>/identity.md)
   --task <json>         TaskSpec JSON (schema: brewva.task.v1)
   --task-file <path>    TaskSpec JSON file
-  --no-addons       Disable extension hooks (runtime core safety chain remains active)
+  --no-addons          Disable addon host and full runtime-plugin profile (historical flag name; core runtime remains active)
   --print, -p           Run one-shot mode
   --interactive, -i     Force interactive TUI mode
   --mode <text|json>    One-shot output mode
@@ -200,6 +200,7 @@ interface CliArgs {
   channel?: string;
   channelConfig?: CliChannelConfig;
   enableExtensions: boolean;
+  enableAddons: boolean;
   undo: boolean;
   replay: boolean;
   daemon: boolean;
@@ -424,6 +425,7 @@ function parseCliArgs(argv: string[]): CliParseResult {
       },
     },
     enableExtensions: parsed.values["no-addons"] !== true,
+    enableAddons: parsed.values["no-addons"] !== true,
     undo: parsed.values.undo === true,
     replay: parsed.values.replay === true,
     daemon: parsed.values.daemon === true,
@@ -784,6 +786,7 @@ async function run(): Promise<void> {
       model: parsed.model,
       agentId: parsed.agentId,
       enableExtensions: parsed.enableExtensions,
+      enableAddons: parsed.enableAddons,
       verbose: parsed.verbose,
       channel: parsed.channel,
       channelConfig: parsed.channelConfig,
@@ -824,6 +827,7 @@ async function run(): Promise<void> {
       model: parsed.model,
       agentId: parsed.agentId,
       enableExtensions: parsed.enableExtensions,
+      enableAddons: parsed.enableAddons,
       verbose: parsed.verbose,
     });
     return;
@@ -941,6 +945,7 @@ async function run(): Promise<void> {
       model: parsed.model,
       agentId: parsed.agentId,
       enableExtensions: parsed.enableExtensions,
+      enableAddons: parsed.enableAddons,
       prompt: initialMessage ?? "",
       verbose: parsed.verbose,
     });
@@ -980,6 +985,7 @@ async function run(): Promise<void> {
     model: parsed.model,
     agentId: parsed.agentId,
     enableExtensions: parsed.enableExtensions,
+    enableAddons: parsed.enableAddons,
   });
 
   const getSessionId = (): string => session.sessionManager.getSessionId();
@@ -1085,7 +1091,6 @@ if (isBunMain ?? isNodeMain) {
   });
 }
 
-export { createBrewvaSession } from "./session.js";
 export { parseArgs };
 export { JsonLineWriter, type JsonLineWritable, writeJsonLine } from "./json-lines.js";
 export {
@@ -1093,4 +1098,3 @@ export {
   resolveGatewayFailureStage,
   shouldFallbackAfterGatewayFailure,
 } from "./gateway-print.js";
-export { registerRuntimeCoreEventBridge } from "./session-event-bridge.js";

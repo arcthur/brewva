@@ -4,7 +4,14 @@ import {
   buildTruthFactResolvedEvent,
   buildTruthFactUpsertedEvent,
 } from "../truth/ledger.js";
-import type { TruthFact, TruthFactSeverity, TruthFactStatus, TruthState } from "../types.js";
+import type {
+  TruthFact,
+  TruthFactResolveResult,
+  TruthFactSeverity,
+  TruthFactStatus,
+  TruthFactUpsertResult,
+  TruthState,
+} from "../types.js";
 import { normalizeJsonRecord } from "../utils/json.js";
 
 export interface TruthServiceOptions {
@@ -39,7 +46,7 @@ export class TruthService {
       evidenceIds?: string[];
       status?: TruthFactStatus;
     },
-  ): { ok: boolean; fact?: TruthFact; error?: string } {
+  ): TruthFactUpsertResult {
     const id = input.id?.trim();
     if (!id) return { ok: false, error: "missing_id" };
 
@@ -78,7 +85,7 @@ export class TruthService {
     return { ok: true, fact };
   }
 
-  resolveTruthFact(sessionId: string, truthFactId: string): { ok: boolean; error?: string } {
+  resolveTruthFact(sessionId: string, truthFactId: string): TruthFactResolveResult {
     const id = truthFactId?.trim();
     if (!id) return { ok: false, error: "missing_id" };
 

@@ -123,6 +123,7 @@ export async function executeScheduleIntentRun(input: {
   configPath?: string;
   model?: string;
   enableExtensions?: boolean;
+  enableAddons?: boolean;
 }): Promise<{ evaluationSessionId: string; workerSessionId: string }> {
   const runIndex = input.intent.runCount + 1;
   const workerSessionId = buildScheduleWorkerSessionId({
@@ -139,6 +140,7 @@ export async function executeScheduleIntentRun(input: {
     configPath: input.configPath,
     model: input.model,
     enableExtensions: input.enableExtensions,
+    ...(input.enableAddons === undefined ? {} : { enableAddons: input.enableAddons }),
   });
   const agentSessionId = opened.agentSessionId?.trim() || workerSessionId;
   const wakeupMessage = buildScheduleWakeupMessage({

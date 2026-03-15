@@ -11,7 +11,11 @@ import type {
   BrewvaConfig,
   ContextBudgetUsage,
   TaskHealth,
+  TaskBlockerRecordResult,
+  TaskBlockerResolveResult,
+  TaskItemAddResult,
   TaskItemStatus,
+  TaskItemUpdateResult,
   TaskPhase,
   TaskSpec,
   TaskState,
@@ -234,7 +238,7 @@ export class TaskService {
   addTaskItem(
     sessionId: string,
     input: { id?: string; text: string; status?: TaskItemStatus },
-  ): { ok: boolean; itemId?: string; error?: string } {
+  ): TaskItemAddResult {
     const text = input.text?.trim();
     if (!text) {
       return { ok: false, error: "missing_text" };
@@ -257,7 +261,7 @@ export class TaskService {
   updateTaskItem(
     sessionId: string,
     input: { id: string; text?: string; status?: TaskItemStatus },
-  ): { ok: boolean; error?: string } {
+  ): TaskItemUpdateResult {
     const id = input.id?.trim();
     if (!id) return { ok: false, error: "missing_id" };
 
@@ -288,7 +292,7 @@ export class TaskService {
       source?: string;
       truthFactId?: string;
     },
-  ): { ok: boolean; blockerId?: string; error?: string } {
+  ): TaskBlockerRecordResult {
     const message = input.message?.trim();
     if (!message) {
       return { ok: false, error: "missing_message" };
@@ -309,7 +313,7 @@ export class TaskService {
     return { ok: true, blockerId: payload.blocker.id };
   }
 
-  resolveTaskBlocker(sessionId: string, blockerId: string): { ok: boolean; error?: string } {
+  resolveTaskBlocker(sessionId: string, blockerId: string): TaskBlockerResolveResult {
     const id = blockerId?.trim();
     if (!id) return { ok: false, error: "missing_id" };
 

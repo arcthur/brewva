@@ -13,6 +13,7 @@ import type {
   BrewvaEventRecord,
   OutputSearchTelemetryState,
   SessionCostSummary,
+  TapeHandoffResult,
   TapePressureLevel,
   TapeSearchMatch,
   TapeSearchResult,
@@ -275,13 +276,7 @@ export class TapeService {
   recordTapeHandoff(
     sessionId: string,
     input: { name: string; summary?: string; nextSteps?: string },
-  ): {
-    ok: boolean;
-    eventId?: string;
-    createdAt?: number;
-    error?: string;
-    tapeStatus?: TapeStatusState;
-  } {
+  ): TapeHandoffResult {
     const name = input.name?.trim();
     if (!name) {
       return { ok: false, error: "missing_name" };

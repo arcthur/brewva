@@ -4,6 +4,15 @@
 
 Runtime artifact paths are resolved from the workspace root (`nearest .brewva/brewva.json` or `.git` ancestor), not the leaf execution subdirectory.
 
+## Root Ownership
+
+- `.orchestrator/`: kernel durability, replay, rollback, and event/projection state
+- `.brewva/`: operator config, control-plane state, addons, channel metadata, and deliberation-side cognition artifacts
+
+The split is intentional: kernel replay/state stays isolated from operator and
+gateway control-plane material, even though both roots live under the same
+workspace.
+
 - Evidence ledger: `.orchestrator/ledger/evidence.jsonl`
 - Event stream (event tape): `.orchestrator/events/sess_<base64url(sessionId)>.jsonl`
   - file name uses a reversible base64url encoding of the UTF-8 `sessionId` to avoid filesystem collisions and preserve the original identifier
