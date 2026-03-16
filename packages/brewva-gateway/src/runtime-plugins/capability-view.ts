@@ -135,9 +135,16 @@ function compactText(value: string, maxChars = 200): string {
 function extractParameterKeys(parameters: unknown): string[] {
   if (!parameters || typeof parameters !== "object") return [];
   const schema = parameters as {
+    brewvaCanonicalParameterKeys?: unknown;
     type?: unknown;
     properties?: unknown;
   };
+  if (
+    Array.isArray(schema.brewvaCanonicalParameterKeys) &&
+    schema.brewvaCanonicalParameterKeys.every((value) => typeof value === "string")
+  ) {
+    return [...schema.brewvaCanonicalParameterKeys].toSorted();
+  }
   if (schema.type !== "object" || !schema.properties || typeof schema.properties !== "object") {
     return [];
   }

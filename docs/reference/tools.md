@@ -22,6 +22,10 @@ Defined in `packages/brewva-tools/src/lsp.ts`.
 `reason=diagnostics_scope_mismatch` when `tsc` fails but no diagnostics match
 the requested file/severity scope.
 
+`lsp_diagnostics.severity` canonical values are
+`error|warning|information|hint|all`; `warn` and `info` are accepted as aliases
+for `warning` and `information`.
+
 ## TOC Tools
 
 - `toc_document`
@@ -128,6 +132,12 @@ itself:
 
 - `brewva.surface`
 - `brewva.governance`
+
+Parameter-key compatibility:
+
+- managed Brewva tools accept top-level `camelCase` and `snake_case` spellings
+  for the same field; this reference shows canonical spellings only
+- if both spellings are present in one call, the documented canonical field wins
 
 For built-in managed tools this is a canonical view over the runtime's exact
 managed-tool policy, not a second authored copy. The default gateway/extension
@@ -290,7 +300,9 @@ Parameters:
 - `query` (string, required): search pattern (regex by default)
 - `paths` (string[], optional, max 20): paths to search (defaults to `["."]`)
 - `glob` (string[], optional, max 20): glob filters passed to `rg --glob`
-- `case` (`smart` | `ignore` | `sensitive`, default `smart`): case sensitivity mode
+- `case` (`smart` | `ignore` | `sensitive`, default `smart`): case sensitivity mode;
+  `smart_case`, `ignore_case`, `case_insensitive`, and `case_sensitive` are
+  accepted as aliases
 - `fixed` (boolean, default `false`): treat `query` as a literal string (`--fixed-strings`)
 - `max_lines` (number, 1–500, default `200`): output line cap; search is killed on truncation
 - `timeout_ms` (number, 100–120000, default `30000`): execution timeout
@@ -336,6 +348,14 @@ Parameters:
 `status` returns the current intent snapshot or reports no active cascade.
 `start` requires at least one step; other actions operate on the existing intent.
 
+`task_*` ledger tools keep canonical runtime values on write:
+
+- `task_set_spec.verification.level`: `quick|standard|strict`; `none` stores no
+  level for the new TaskSpec. Because `task_set_spec` rewrites the spec, include
+  `verification.commands` again in the same call if they should be preserved
+- `task_add_item` / `task_update_item` `status`: `todo|doing|done|blocked`;
+  `in_progress` and `in-progress` are accepted as aliases for `doing`
+
 `schedule_intent` supports `action=create|update|cancel|list`:
 
 - `create` requires `reason` and exactly one schedule target:
@@ -347,7 +367,8 @@ Parameters:
   empty patches are rejected with `empty_update`
 - `cancel` requires `intentId`
 - `list` supports `status` filtering (`all|active|cancelled|converged|error`) and
-  `includeAllSessions` (global scope), and returns projection `watermarkOffset`
+  `includeAllSessions` (global scope), and returns projection `watermarkOffset`;
+  `canceled` is accepted as an alias for `cancelled`
 
 Structured `convergenceCondition` predicates include:
 `truth_resolved`, `task_phase`, `max_runs`, `all_of`, `any_of`.
@@ -374,6 +395,7 @@ For cron intents, runtime defaults `maxRuns` to `10000` when omitted.
 
 - required fields: `metric`, `aggregation`, `operator`, `threshold`
 - optional fields: `types`, `where`, `windowMinutes`, `minSamples`, `severity`
+  (`info|warn|error`; `information` and `warning` are accepted as aliases)
 - verdicts: `pass`, `fail`, `inconclusive`
 - failure path: records observability assertion evidence and can sync to truth/task state through runtime truth extraction
 

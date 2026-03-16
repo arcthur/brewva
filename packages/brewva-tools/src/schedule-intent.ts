@@ -7,6 +7,7 @@ import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { addMilliseconds, formatISO } from "date-fns";
 import type { BrewvaToolOptions } from "./types.js";
+import { buildStringEnumSchema, normalizeStringEnumAlias } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
@@ -20,13 +21,14 @@ const ScheduleActionSchema = Type.Union([
 
 const ContinuityModeSchema = Type.Union([Type.Literal("inherit"), Type.Literal("fresh")]);
 
-const ListStatusSchema = Type.Union([
-  Type.Literal("all"),
-  Type.Literal("active"),
-  Type.Literal("cancelled"),
-  Type.Literal("converged"),
-  Type.Literal("error"),
-]);
+const SCHEDULE_LIST_STATUSES = ["all", "active", "cancelled", "converged", "error"] as const;
+const SCHEDULE_LIST_STATUS_ALIASES = {
+  canceled: "cancelled",
+} as const;
+const ListStatusSchema = buildStringEnumSchema(
+  SCHEDULE_LIST_STATUSES,
+  SCHEDULE_LIST_STATUS_ALIASES,
+);
 
 const ConvergencePredicateSchema = Type.Recursive((Self) =>
   Type.Union([
@@ -79,8 +81,18 @@ function formatIntentSummary(intent: ScheduleIntentProjectionRecord): string {
 }
 
 function toStatusFilter(value: unknown): ScheduleIntentStatus | undefined {
-  if (value === "active" || value === "cancelled" || value === "converged" || value === "error") {
-    return value;
+  const normalized = normalizeStringEnumAlias(
+    value,
+    SCHEDULE_LIST_STATUSES,
+    SCHEDULE_LIST_STATUS_ALIASES,
+  );
+  if (
+    normalized === "active" ||
+    normalized === "cancelled" ||
+    normalized === "converged" ||
+    normalized === "error"
+  ) {
+    return normalized;
   }
   return undefined;
 }
@@ -409,9 +421,16 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
         });
       }
 
+      const statusFilter = toStatusFilter(params.status);
+      const statusLabel =
+        normalizeStringEnumAlias(
+          params.status,
+          SCHEDULE_LIST_STATUSES,
+          SCHEDULE_LIST_STATUS_ALIASES,
+        ) ?? "all";
       const listQuery = {
         parentSessionId: params.includeAllSessions ? undefined : sessionId,
-        status: toStatusFilter(params.status),
+        status: statusFilter,
       };
       const intents = await options.runtime.schedule.listIntents(listQuery);
       const snapshot = await options.runtime.schedule.getProjectionSnapshot();
@@ -420,7 +439,7 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
         "[ScheduleIntents]",
         `count: ${intents.length}`,
         `scope: ${listQuery.parentSessionId ? "session" : "global"}`,
-        `status: ${params.status ?? "all"}`,
+        `status: ${statusLabel}`,
         `watermarkOffset: ${snapshot.watermarkOffset}`,
       ];
       const lines =

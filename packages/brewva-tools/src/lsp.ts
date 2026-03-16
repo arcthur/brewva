@@ -9,6 +9,7 @@ import { escapeRegexLiteral } from "./shared/query.js";
 import { walkWorkspaceFiles } from "./shared/workspace-walk.js";
 import type { BrewvaToolRuntime } from "./types.js";
 import { runCommand } from "./utils/exec.js";
+import { buildStringEnumSchema, normalizeStringEnumAlias } from "./utils/input-alias.js";
 import {
   type ParallelReadConfig,
   getToolSessionId,
@@ -34,6 +35,12 @@ const CODE_EXTENSIONS = new Set([
   ".rs",
   ".java",
 ]);
+
+const LSP_DIAGNOSTIC_SEVERITIES = ["error", "warning", "information", "hint", "all"] as const;
+const LSP_DIAGNOSTIC_SEVERITY_ALIASES = {
+  warn: "warning",
+  info: "information",
+} as const;
 
 const require = createRequire(import.meta.url);
 const TSC_BIN_PATH = require.resolve("typescript/bin/tsc");
@@ -553,18 +560,17 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
     parameters: Type.Object({
       filePath: Type.String(),
       severity: Type.Optional(
-        Type.Union([
-          Type.Literal("error"),
-          Type.Literal("warning"),
-          Type.Literal("information"),
-          Type.Literal("hint"),
-          Type.Literal("all"),
-        ]),
+        buildStringEnumSchema(LSP_DIAGNOSTIC_SEVERITIES, LSP_DIAGNOSTIC_SEVERITY_ALIASES),
       ),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       try {
-        const run = await diagnostics(ctx.cwd, params.filePath, params.severity);
+        const severity = normalizeStringEnumAlias(
+          params.severity,
+          LSP_DIAGNOSTIC_SEVERITIES,
+          LSP_DIAGNOSTIC_SEVERITY_ALIASES,
+        );
+        const run = await diagnostics(ctx.cwd, params.filePath, severity);
         return textResult(
           run.text,
           withVerdict(
@@ -572,7 +578,7 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
               status: run.status,
               reason: run.reason ?? null,
               filePath: params.filePath,
-              severity: params.severity ?? "all",
+              severity: severity ?? "all",
               exitCode: run.exitCode,
               filteredLineCount: run.filteredLineCount,
               diagnosticsCount: run.diagnostics.length,

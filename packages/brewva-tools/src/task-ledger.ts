@@ -1,23 +1,43 @@
-import { formatTaskStateBlock } from "@brewva/brewva-runtime";
+import {
+  formatTaskStateBlock,
+  type TaskItemStatus,
+  type VerificationLevel,
+} from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
+import { buildStringEnumSchema, normalizeStringEnumAlias } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
+
+const TASK_ITEM_STATUSES = ["todo", "doing", "done", "blocked"] as const;
+const TASK_ITEM_STATUS_ALIASES = {
+  in_progress: "doing",
+  "in-progress": "doing",
+} as const;
 
 const VerificationLevelSchema = Type.Union([
   Type.Literal("quick"),
   Type.Literal("standard"),
   Type.Literal("strict"),
+  Type.Literal("none"),
 ]);
 
-const TaskItemStatusSchema = Type.Union([
-  Type.Literal("todo"),
-  Type.Literal("doing"),
-  Type.Literal("done"),
-  Type.Literal("blocked"),
-]);
+const TaskItemStatusSchema = buildStringEnumSchema(TASK_ITEM_STATUSES, TASK_ITEM_STATUS_ALIASES);
+
+// `none` is not a normal string alias because it means "store no verification
+// level" rather than mapping to another persisted literal.
+function normalizeTaskVerificationLevel(value: unknown): VerificationLevel | undefined {
+  if (value === "quick" || value === "standard" || value === "strict") {
+    return value;
+  }
+  return undefined;
+}
+
+function normalizeTaskItemStatus(value: unknown): TaskItemStatus | undefined {
+  return normalizeStringEnumAlias(value, TASK_ITEM_STATUSES, TASK_ITEM_STATUS_ALIASES);
+}
 
 export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinition[] {
   const taskSetSpec = defineBrewvaTool({
@@ -47,13 +67,24 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
+      const normalizedVerificationLevel = normalizeTaskVerificationLevel(
+        params.verification?.level,
+      );
+      const normalizedVerification =
+        normalizedVerificationLevel || params.verification?.commands
+          ? {
+              level: normalizedVerificationLevel,
+              commands: params.verification?.commands,
+            }
+          : undefined;
+
       options.runtime.task.setSpec(sessionId, {
         schema: "brewva.task.v1",
         goal: params.goal,
         targets: params.targets,
         expectedBehavior: params.expectedBehavior,
         constraints: params.constraints,
-        verification: params.verification,
+        verification: normalizedVerification,
       });
       return textResult("TaskSpec recorded.", { ok: true });
     },
@@ -75,7 +106,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
       const result = options.runtime.task.addItem(sessionId, {
         id: params.id,
         text: params.text,
-        status: params.status,
+        status: normalizeTaskItemStatus(params.status),
       });
       if (!result.ok) {
         return failTextResult(`Task item rejected (${result.error ?? "unknown_error"}).`, result);
@@ -99,7 +130,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
       const result = options.runtime.task.updateItem(sessionId, {
         id: params.id,
         text: params.text,
-        status: params.status,
+        status: normalizeTaskItemStatus(params.status),
       });
       if (!result.ok) {
         return failTextResult(

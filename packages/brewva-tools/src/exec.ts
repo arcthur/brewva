@@ -19,20 +19,24 @@ import {
   type ManagedExecRunningSession,
 } from "./exec-process-registry.js";
 import type { BrewvaToolRuntime } from "./types.js";
+import { attachCanonicalParameterKeys } from "./utils/input-alias.js";
 import { textResult, withVerdict } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
-const ExecSchema = Type.Object({
-  command: Type.String({ minLength: 1 }),
-  workdir: Type.Optional(Type.String()),
-  env: Type.Optional(Type.Record(Type.String(), Type.String())),
-  yieldMs: Type.Optional(Type.Integer({ minimum: 0, maximum: 120_000 })),
-  yield_ms: Type.Optional(Type.Integer({ minimum: 0, maximum: 120_000 })),
-  background: Type.Optional(Type.Boolean()),
-  timeout: Type.Optional(Type.Number({ minimum: 1, maximum: 7_200_000 })),
-  timeout_ms: Type.Optional(Type.Integer({ minimum: 1, maximum: 7_200_000 })),
-});
+const ExecSchema = attachCanonicalParameterKeys(
+  Type.Object({
+    command: Type.String({ minLength: 1 }),
+    workdir: Type.Optional(Type.String()),
+    env: Type.Optional(Type.Record(Type.String(), Type.String())),
+    yieldMs: Type.Optional(Type.Integer({ minimum: 0, maximum: 120_000 })),
+    yield_ms: Type.Optional(Type.Integer({ minimum: 0, maximum: 120_000 })),
+    background: Type.Optional(Type.Boolean()),
+    timeout: Type.Optional(Type.Number({ minimum: 1, maximum: 7_200_000 })),
+    timeout_ms: Type.Optional(Type.Integer({ minimum: 1, maximum: 7_200_000 })),
+  }),
+  ["command", "workdir", "env", "yieldMs", "background", "timeout"],
+);
 
 const DEFAULT_YIELD_MS = 10_000;
 const MAX_TIMEOUT_SEC = 7_200;

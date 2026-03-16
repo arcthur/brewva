@@ -16,6 +16,7 @@ import {
   type ManagedExecFinishedSession,
   type ManagedExecRunningSession,
 } from "./exec-process-registry.js";
+import { attachCanonicalParameterKeys } from "./utils/input-alias.js";
 import { textResult, type ToolResultVerdict, withVerdict } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
@@ -30,17 +31,20 @@ const ProcessActionSchema = Type.Union([
   Type.Literal("remove"),
 ]);
 
-const ProcessSchema = Type.Object({
-  action: ProcessActionSchema,
-  sessionId: Type.Optional(Type.String()),
-  session_id: Type.Optional(Type.String()),
-  data: Type.Optional(Type.String()),
-  eof: Type.Optional(Type.Boolean()),
-  offset: Type.Optional(Type.Integer({ minimum: 0 })),
-  limit: Type.Optional(Type.Integer({ minimum: 0 })),
-  timeout: Type.Optional(Type.Number({ minimum: 0, maximum: MAX_POLL_WAIT_MS })),
-  timeout_ms: Type.Optional(Type.Integer({ minimum: 0, maximum: MAX_POLL_WAIT_MS })),
-});
+const ProcessSchema = attachCanonicalParameterKeys(
+  Type.Object({
+    action: ProcessActionSchema,
+    sessionId: Type.Optional(Type.String()),
+    session_id: Type.Optional(Type.String()),
+    data: Type.Optional(Type.String()),
+    eof: Type.Optional(Type.Boolean()),
+    offset: Type.Optional(Type.Integer({ minimum: 0 })),
+    limit: Type.Optional(Type.Integer({ minimum: 0 })),
+    timeout: Type.Optional(Type.Number({ minimum: 0, maximum: MAX_POLL_WAIT_MS })),
+    timeout_ms: Type.Optional(Type.Integer({ minimum: 0, maximum: MAX_POLL_WAIT_MS })),
+  }),
+  ["action", "sessionId", "data", "eof", "offset", "limit", "timeout"],
+);
 
 function pickSessionId(params: { sessionId?: unknown; session_id?: unknown }): string | undefined {
   const candidate = typeof params.sessionId === "string" ? params.sessionId : params.session_id;

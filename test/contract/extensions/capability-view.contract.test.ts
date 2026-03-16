@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildCapabilityView, renderCapabilityView } from "@brewva/brewva-gateway/runtime-plugins";
+import { createExecTool, createProcessTool } from "@brewva/brewva-tools";
 
 describe("capability view", () => {
   test("builds semantic inventory with governance-first ordering", () => {
@@ -279,5 +280,23 @@ describe("capability view", () => {
     expect(rendered[1]?.content).not.toContain("surface_policy:");
     expect(rendered[2]?.content).toContain("posture: reversible_mutate");
     expect(rendered[2]?.content).not.toContain("description:");
+  });
+
+  test("uses canonical parameter keys for managed tools that keep explicit alias fields", () => {
+    const result = buildCapabilityView({
+      prompt: "inspect $exec and $process",
+      allTools: [createExecTool(), createProcessTool()],
+      activeToolNames: [],
+    });
+
+    expect(result.details).toHaveLength(2);
+    expect(result.details[0]).toMatchObject({
+      name: "exec",
+      parameterKeys: ["background", "command", "env", "timeout", "workdir", "yieldMs"],
+    });
+    expect(result.details[1]).toMatchObject({
+      name: "process",
+      parameterKeys: ["action", "data", "eof", "limit", "offset", "sessionId", "timeout"],
+    });
   });
 });

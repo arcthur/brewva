@@ -3,10 +3,21 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
+import { buildStringEnumSchema, normalizeStringEnumAlias } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
 type GrepCase = "smart" | "ignore" | "sensitive";
+const GREP_CASE_VALUES = ["smart", "ignore", "sensitive"] as const;
+const GREP_CASE_ALIASES = {
+  smart_case: "smart",
+  ignore_case: "ignore",
+  case_insensitive: "ignore",
+  case_sensitive: "sensitive",
+} as const;
+const GREP_CASE_SCHEMA = buildStringEnumSchema(GREP_CASE_VALUES, GREP_CASE_ALIASES, {
+  defaultValue: "smart",
+});
 
 export type GrepRunResult = {
   exitCode: number;
@@ -180,11 +191,7 @@ export function createGrepTool(options: BrewvaToolOptions): ToolDefinition {
       query: Type.String({ minLength: 1 }),
       paths: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { maxItems: 20 })),
       glob: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { maxItems: 20 })),
-      case: Type.Optional(
-        Type.Union([Type.Literal("smart"), Type.Literal("ignore"), Type.Literal("sensitive")], {
-          default: "smart",
-        }),
-      ),
+      case: Type.Optional(GREP_CASE_SCHEMA),
       fixed: Type.Optional(Type.Boolean({ default: false })),
       max_lines: Type.Optional(Type.Number({ minimum: 1, maximum: 500, default: 200 })),
       timeout_ms: Type.Optional(Type.Number({ minimum: 100, maximum: 120000, default: 30000 })),
@@ -225,7 +232,8 @@ export function createGrepTool(options: BrewvaToolOptions): ToolDefinition {
         paths.push(normalized);
       }
       const globs = (params.glob ?? []).map((entry) => entry.trim()).filter(Boolean);
-      const caseMode: GrepCase = params.case ?? "smart";
+      const caseMode: GrepCase =
+        normalizeStringEnumAlias(params.case, GREP_CASE_VALUES, GREP_CASE_ALIASES) ?? "smart";
 
       const args: string[] = ["--line-number", "--no-heading", "--color", "never", "--hidden"];
 

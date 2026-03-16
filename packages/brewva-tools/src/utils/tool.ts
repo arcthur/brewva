@@ -7,6 +7,7 @@ import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import type { TSchema } from "@sinclair/typebox";
 import { getBrewvaToolSurface } from "../surface.js";
 import type { BrewvaManagedToolDefinition, BrewvaToolMetadata } from "../types.js";
+import { applyTopLevelCaseAliases } from "./input-alias.js";
 
 export function defineTool<TParams extends TSchema, TDetails = unknown>(
   tool: ToolDefinition<TParams, TDetails>,
@@ -57,8 +58,26 @@ export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
     throw new Error(`managed Brewva tool '${normalizedName}' is missing governance metadata`);
   }
 
+  const aliasedParameters = applyTopLevelCaseAliases(tool.parameters);
+  const execute: ToolDefinition<TParams, TDetails>["execute"] = async (
+    toolCallId,
+    params,
+    signal,
+    onUpdate,
+    ctx,
+  ) => {
+    return await tool.execute(
+      toolCallId,
+      aliasedParameters.normalize(params) as Parameters<typeof tool.execute>[1],
+      signal,
+      onUpdate,
+      ctx,
+    );
+  };
   const managed = {
     ...(tool as unknown as Record<string, unknown>),
+    parameters: aliasedParameters.schema,
+    execute,
   } as unknown as BrewvaManagedToolDefinition;
   Object.defineProperty(managed, "brewva", {
     enumerable: true,
