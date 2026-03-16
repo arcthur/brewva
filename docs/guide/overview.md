@@ -18,6 +18,7 @@
 - Context budget planning and compaction signaling
 - Event-first recovery via replayable runtime telemetry
 - Structured event persistence and replay support
+- Proposal admission with effect commitment authorization
 - Cost tracking with session budget alerts and skill contract budget enforcement
 
 ## Documentation Model

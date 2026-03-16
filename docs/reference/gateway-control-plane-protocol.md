@@ -18,7 +18,7 @@ The protocol uses three frame types:
 
 Error payload structure:
 
-- `code`: for example `invalid_request`, `unauthorized`, `bad_state`.
+- `code`: `invalid_request`, `unauthorized`, `bad_state`, `method_not_found`, `internal_error`, `timeout`.
 - `message`: human-readable error message.
 - `retryable`: optional retry hint.
 - `details`: optional machine-readable metadata.
@@ -56,7 +56,7 @@ Parameter summary (current semantics):
 - `connect`: `{ protocol, client, auth: { token }, challengeNonce }`
 - `health`: `{}`
 - `status.deep`: `{}`
-- `sessions.open`: `{ sessionId?, cwd?, configPath?, model?, agentId?, enableExtensions? }`
+- `sessions.open`: `{ sessionId?, cwd?, configPath?, model?, agentId?, enableExtensions?, enableAddons? }`
 - `sessions.subscribe`: `{ sessionId }`
 - `sessions.unsubscribe`: `{ sessionId }`
 - `sessions.send`: `{ sessionId, prompt, turnId? }`
@@ -78,6 +78,8 @@ Current JSON-block rule shape:
 - `sessionId?`
 - `objective?`
 - `contextHints?` (`string[]`)
+- `wakeMode?` (`always | if_signal`)
+- `staleAfterMinutes?`
 
 Rule semantics:
 
@@ -86,6 +88,10 @@ Rule semantics:
   explainability.
 - `contextHints` are retrieval hints for the cognitive layer. They do not
   bypass the proposal boundary.
+- `wakeMode=if_signal` allows the gateway to skip a heartbeat when no qualifying
+  signal is present.
+- `staleAfterMinutes` bounds how old a qualifying signal may be before the wake
+  is treated as stale.
 
 ## Response Semantics (Key Methods)
 
@@ -103,6 +109,7 @@ Rule semantics:
 - `session.turn.error`
 - `session.turn.end`
 - `heartbeat.fired`
+- `heartbeat.skipped`
 - `shutdown`
 
 Session-scoped events (`session.turn.*`) are routed by subscription scope, not broadcast to every authenticated connection.

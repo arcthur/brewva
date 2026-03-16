@@ -23,7 +23,7 @@ Guarantee bounded context behavior with explicit stop/compact semantics:
    - non-control-plane tools are blocked while gate is armed
    - `session_compact` (and lifecycle control tools) can pass
 4. Compaction completion
-   - `markContextCompacted(...)` clears scope fingerprints/reserved tokens
+   - `runtime.context.markCompacted(...)` clears arena reserved state and emits compaction completion events
    - emits integrity and governance events for audit
 
 ## Source Set
@@ -34,7 +34,10 @@ Default governance sources:
 - `brewva.context-packets`
 - `brewva.runtime-status`
 - `brewva.task-state`
-- `brewva.projection-working`
+- `brewva.projection-working` (conditional: when projection enabled)
+- `brewva.skill-candidates` (conditional: when routing enabled)
+- `brewva.skill-cascade-gate` (conditional: when cascade enabled)
+- `brewva.tool-outputs-distilled` (conditional: when distillation enabled)
 
 ## SLO And Degradation
 

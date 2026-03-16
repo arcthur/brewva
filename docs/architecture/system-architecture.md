@@ -37,6 +37,7 @@ Further reading:
 - `docs/architecture/cognitive-product-architecture.md`
 - `docs/architecture/exploration-and-effect-governance.md`
 - `docs/reference/proposal-boundary.md`
+- `docs/reference/runtime.md`
 
 ## Three Rings
 
@@ -89,6 +90,7 @@ Important distinctions:
 - `EvidenceLedger`: append-only evidence chain
 - `VerificationService`: verification outcome + blocker integration
 - `TruthService`: explicit runtime facts
+- `TrustMeterService`: rollback and verification trust signal aggregation
 
 ### Boundary Layer
 

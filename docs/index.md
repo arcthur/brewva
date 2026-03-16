@@ -20,6 +20,7 @@ This repository uses a layered documentation system:
 - Runtime architecture: `docs/guide/understanding-runtime-system.md`
 - Orchestration: `docs/guide/orchestration.md`
 - Skill categories: `docs/guide/category-and-skills.md`
+- Channel agent workspace: `docs/guide/channel-agent-workspace.md`
 
 ## Journeys
 
@@ -30,6 +31,7 @@ This repository uses a layered documentation system:
 - Intent-driven scheduling: `docs/journeys/intent-driven-scheduling.md`
 - Session handoff and replay: `docs/journeys/session-handoff-and-reference.md`
 - Operations and debugging: `docs/journeys/operations-and-debugging.md`
+- Working projection: `docs/journeys/working-projection.md`
 
 ## Architecture
 
@@ -72,6 +74,8 @@ This repository uses a layered documentation system:
 - Research playbook: `docs/research/README.md`
 - Roadmap notes: `docs/research/roadmap-notes.md`
 - Effect governance RFC: `docs/research/rfc-effect-governance-and-contract-vnext.md`
+- Capability compression RFC: `docs/research/rfc-capability-compression-and-output-distillation.md`
+- Invocation spine RFC: `docs/research/rfc-invocation-spine-and-posture-runtime-vnext.md`
 
 ## Source of Truth
 

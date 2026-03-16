@@ -52,7 +52,7 @@ brewva onboard --uninstall-daemon
 ## Validation Commands
 
 ```bash
-bun run typecheck
+bun run check
 bun test
 bun run test:docs
 ```

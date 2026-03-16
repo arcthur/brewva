@@ -141,6 +141,7 @@ The authoritative registry for named runtime events lives in
 - `effect_commitment_approval_decided`
 - `effect_commitment_approval_consumed`
 - `verification_outcome_recorded`
+- `verification_state_reset`
 - `event_listener_error`
 - `governance_verify_spec_passed`
 - `governance_verify_spec_failed`

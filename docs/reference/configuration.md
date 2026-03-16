@@ -351,7 +351,7 @@ Examples:
 - `skills.routing.continuityContinuePattern`
 - `ledger.digestWindow`
 - `tape.tapePressureThresholds.*`
-- `parallel.maxTotal`
+- `parallel.maxTotal` (superseded by `parallel.maxTotalPerSession`)
 - `infrastructure.costTracking.maxCostUsdPerSkill`
 
 If these keys are present in config files, schema validation fails startup and runtime does not apply them.

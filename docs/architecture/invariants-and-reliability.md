@@ -56,6 +56,8 @@ Relevant implementation:
 Relevant implementation:
 
 - `packages/brewva-runtime/src/state/file-change-tracker.ts`
+- `packages/brewva-runtime/src/services/mutation-rollback.ts`
+- `packages/brewva-runtime/src/services/reversible-mutation.ts`
 - `packages/brewva-runtime/src/runtime.ts`
 
 ## 6) Budget Boundedness Invariant
@@ -112,7 +114,5 @@ Relevant implementation:
 
 ## Reliability Validation
 
-- Runtime behavior tests: `test/runtime/runtime.test.ts`
-- End-to-end tool flow tests: `test/runtime/tools-flow.test.ts`
-- Gap remediation tests: `test/runtime/gap-remediation.test.ts`
-- Extension reliability tests: `test/extensions/extension-gaps.test.ts`
+Tests under `test/unit/runtime/`, `test/contract/runtime/`, and
+`test/contract/extensions/` validate these invariants.

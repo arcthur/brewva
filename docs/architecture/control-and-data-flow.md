@@ -69,6 +69,8 @@ flowchart TD
 
 ## Rollback Flow
 
+### Patchset-based rollback (`rollback_last_patch` / `--undo`)
+
 ```mermaid
 flowchart TD
   A["rollback_last_patch / --undo"] --> B["resolve session"]
@@ -76,4 +78,17 @@ flowchart TD
   C --> D{"restore ok?"}
   D -->|yes| E["emit rollback + verification_state_reset"]
   D -->|no| F["emit no_patchset or restore_failed"]
+```
+
+### Receipt-based mutation rollback (`runtime.tools.rollbackLastMutation(...)`)
+
+```mermaid
+flowchart TD
+  A["rollbackLastMutation(sessionId)"] --> B["resolve latest rollback candidate"]
+  B --> C{"strategy?"}
+  C -->|workspace_patchset| D["rollback tracked patch set"]
+  C -->|task_state_journal| E["restore prior task state + emit verification_state_reset"]
+  C -->|artifact_write / generic_journal| F["return unsupported_rollback"]
+  D --> G["emit rollback event trail"]
+  E --> G
 ```

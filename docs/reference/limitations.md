@@ -19,8 +19,8 @@ to miss when reading individual module docs.
 ## Configuration Boundary
 
 - Startup UI config currently exposes `ui.quietStartup` only.
-- Parallel per-session total-start cap is internal
-  (`PARALLEL_MAX_TOTAL_PER_SESSION=10`) and not configurable.
+- Parallel per-session total-start cap is configurable via
+  `parallel.maxTotalPerSession` (default `10`).
 - Context compaction recency window used by gate logic is internal and not
   configurable.
 

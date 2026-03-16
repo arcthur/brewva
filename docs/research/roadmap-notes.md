@@ -32,8 +32,8 @@ Related docs:
 
 Validation signals:
 
-- Replay correctness remains covered in `test/runtime/turn-replay-engine.test.ts`
-- Event query behavior remains covered in `test/runtime/tape-event-store.test.ts`
+- Replay correctness remains covered in `test/contract/runtime/turn-replay-engine-core.contract.test.ts`
+- Event query behavior remains covered in `test/contract/runtime/tape-event-store.contract.test.ts`
 
 Promotion criteria:
 
@@ -59,8 +59,8 @@ Related docs:
 
 Validation signals:
 
-- Context budget behavior remains covered in `test/runtime/context-budget.test.ts`
-- Context injection behavior remains covered in `test/runtime/context-injection.test.ts`
+- Context budget behavior remains covered in `test/contract/runtime/context-budget.contract.test.ts`
+- Context injection behavior remains covered in `test/contract/runtime/context-injection.contract.test.ts`
 
 Promotion criteria:
 
@@ -86,8 +86,8 @@ Related docs:
 
 Validation signals:
 
-- Replay/persistence scenarios pass in `test/e2e/replay-and-persistence.live.test.ts`
-- Signal handling scenarios pass in `test/e2e/signal-handling.live.test.ts`
+- Replay/persistence scenarios pass in `test/live/cli/replay-and-persistence.live.test.ts`
+- Signal handling scenarios pass in `test/live/cli/signal-handling.live.test.ts`
 
 Promotion criteria:
 
@@ -113,7 +113,7 @@ Related docs:
 
 Validation signals:
 
-- Cost tracking behavior remains covered in `test/e2e/cost-tracking.live.test.ts`
+- Cost tracking behavior remains covered in `test/live/provider/cost-tracking.live.test.ts`
 - Runtime cost API docs stay aligned with runtime surface tests.
 
 Promotion criteria:
@@ -140,8 +140,8 @@ Related docs:
 
 Validation signals:
 
-- Rollback behavior remains covered in `test/e2e/undo.live.test.ts`
-- Tool flow contract remains covered in `test/runtime/tools-flow.test.ts`
+- Rollback behavior remains covered in `test/live/cli/undo.live.test.ts`
+- Tool flow contract remains covered in `test/contract/tools/rollback.contract.test.ts`
 
 Promotion criteria:
 

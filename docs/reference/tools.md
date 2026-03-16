@@ -339,7 +339,7 @@ Parameters:
 `schedule_intent` supports `action=create|update|cancel|list`:
 
 - `create` requires `reason` and exactly one schedule target:
-  - one-shot: `runAt` or `delayMs`
+  - one-shot: `runAt` or `delayMs` (`delayMs` is a tool-level convenience parameter that gets resolved to `runAt` before the runtime API call)
   - recurring: `cron` (optional `timeZone`)
   - `runAt` / `delayMs` / `cron` are mutually exclusive, and `timeZone` is only valid with `cron`
 - `update` requires `intentId` and supports patching `reason`, `goalRef`,
@@ -407,6 +407,8 @@ Definitions:
 - `packages/brewva-tools/src/skill-load.ts`
 - `packages/brewva-tools/src/skill-complete.ts`
 - `packages/brewva-tools/src/skill-chain-control.ts`
+- `packages/brewva-tools/src/cognition-note.ts`
+- `packages/brewva-tools/src/resource-lease.ts`
 - `packages/brewva-tools/src/task-ledger.ts`
 
 `look_at` returns `status=unavailable` when it cannot find high-confidence

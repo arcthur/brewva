@@ -12,3 +12,14 @@
 - Cost Budget: threshold policy for session-level USD spend
 - Channel Gateway: external channel ingress/egress gateway used by `--channel` mode
 - Gateway (Control Plane): local daemon exposed via `brewva gateway ...`, providing a typed WebSocket API to control-plane clients
+- Proposal: an envelope submitted to the kernel for authorization; contains issuer, subject, payload, evidence references, and optional confidence/expiry metadata
+- DecisionReceipt: the kernel decision record for a Proposal; captures the decision, policy basis, reasons, committed effects, evidence references, turn, and timestamp
+- Arena: the context injection workspace that manages source reservations and token budgets per turn
+- Turn WAL: write-ahead log for turn durability; enables crash recovery and replay of in-flight turns
+- Posture: the security execution mode for a tool invocation: observe, reversible_mutate, or commitment
+- Projection: a working-memory snapshot maintained across turns; distilled from tool outputs and agent reasoning
+- Skill Cascade: ordered chain of skill candidates selected by routing; each skill is tried in priority order until one matches
+- Effect Commitment: a commitment-posture proposal that requires explicit operator approval before execution
+- Governance Port: the external authorization interface that the runtime calls for tool-gate and effect-commitment decisions
+- Addon: a user-authored extension package loaded from the `.brewva/addons/` directory; provides custom tools, skills, or lifecycle hooks
+- Extension: a runtime plugin registered via the gateway extension factory; provides lifecycle hooks and cognitive services

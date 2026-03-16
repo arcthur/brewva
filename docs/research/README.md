@@ -37,6 +37,7 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 ## Active notes
 
 - `docs/research/roadmap-notes.md`
+- `docs/research/rfc-invocation-spine-and-posture-runtime-vnext.md`
 
 ## Promoted notes (status pointers)
 

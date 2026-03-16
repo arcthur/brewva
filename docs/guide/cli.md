@@ -95,17 +95,27 @@ Useful flags:
 - `--replay`
 - `--daemon`
 - `--channel`
+- `--telegram-token`
+- `--telegram-callback-secret`
+- `--telegram-poll-timeout`
+- `--telegram-poll-limit`
+- `--telegram-poll-retry-ms`
+- `--session`
+- `--verbose`
+- `--version`
+- `--help`
+
+### Onboard Subcommand Flags
+
 - `--install-daemon`
 - `--uninstall-daemon`
 - `--launchd`
 - `--systemd`
 - `--no-start`
 - `--dry-run`
-- `--telegram-token`
-- `--telegram-callback-secret`
-- `--telegram-poll-timeout`
-- `--telegram-poll-limit`
-- `--telegram-poll-retry-ms`
+
+### Gateway Subcommand Flags
+
 - `--pid-file`
 - `--log-file`
 - `--token-file`
@@ -121,10 +131,6 @@ Useful flags:
 - `--service-name`
 - `--plist-file`
 - `--unit-file`
-- `--session`
-- `--verbose`
-- `--version`
-- `--help`
 
 Short aliases:
 

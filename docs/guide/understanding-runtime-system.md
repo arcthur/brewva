@@ -6,10 +6,12 @@
 It exposes domain APIs instead of a flat method bag:
 
 - `runtime.skills`
+- `runtime.proposals`
 - `runtime.context`
 - `runtime.tools`
 - `runtime.task`
 - `runtime.truth`
+- `runtime.ledger`
 - `runtime.schedule`
 - `runtime.turnWal`
 - `runtime.events`

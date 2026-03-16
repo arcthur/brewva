@@ -50,6 +50,14 @@
 - `task_record_blocker`
 - `task_resolve_blocker`
 - `task_view_state`
+- `cognition_note`
+- `resource_lease`
+
+Channel-conditional tools (available in a2a channels):
+
+- `agent_send`
+- `agent_broadcast`
+- `agent_list`
 
 Tool registry source: `packages/brewva-tools/src/index.ts`
 

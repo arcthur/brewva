@@ -103,8 +103,9 @@ must not blur the line.
 
 ## Contract Split
 
-Contracts are split into four layers instead of packing every concern into
-`SkillContract`.
+Contracts are split into four logical layers. These layers are sub-fields
+within a single `SkillContract` interface (`intent`, `effects`, `resources`,
+`executionHints`), not standalone types.
 
 ### `IntentContract`
 

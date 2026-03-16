@@ -41,4 +41,4 @@ inconsistent.
   - If `mode=sequential` with `reason=parallel_disabled`, enable runtime `parallel.enabled`.
   - If `failedFiles` is consistently high, verify file permissions and path stability.
   - If `durationMs` and `batches` are high for large scans, tune `parallel.maxConcurrent`.
-  - Note: per-session total parallel starts are currently capped by an internal runtime constant (`PARALLEL_MAX_TOTAL_PER_SESSION=10`), not by public config.
+  - Note: per-session total parallel starts are capped by `parallel.maxTotalPerSession` (default `10`).
