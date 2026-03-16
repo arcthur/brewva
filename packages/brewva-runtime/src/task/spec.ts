@@ -1,10 +1,30 @@
 import type { TaskSpec, VerificationLevel } from "../types.js";
 import { isRecord, normalizeNonEmptyString, normalizeStringArray } from "../utils/coerce.js";
 
-function normalizeVerificationLevel(value: unknown): VerificationLevel | undefined {
+export const TASK_SPEC_VERIFICATION_LEVEL_VALUES = ["quick", "standard", "strict", "none"] as const;
+
+export type TaskSpecVerificationLevelInput = (typeof TASK_SPEC_VERIFICATION_LEVEL_VALUES)[number];
+
+export const TASK_SPEC_VERIFICATION_LEVEL_ALIASES = {
+  smoke: "quick",
+  targeted: "standard",
+  full: "strict",
+  inspection: "none",
+  readonly: "none",
+  read_only: "none",
+  "read-only": "none",
+} as const satisfies Readonly<Record<string, TaskSpecVerificationLevelInput>>;
+
+export function normalizeTaskSpecVerificationLevel(value: unknown): VerificationLevel | undefined {
   if (typeof value !== "string") return undefined;
-  if (value === "quick" || value === "standard" || value === "strict") {
-    return value;
+  const normalized =
+    value in TASK_SPEC_VERIFICATION_LEVEL_ALIASES
+      ? TASK_SPEC_VERIFICATION_LEVEL_ALIASES[
+          value as keyof typeof TASK_SPEC_VERIFICATION_LEVEL_ALIASES
+        ]
+      : value;
+  if (normalized === "quick" || normalized === "standard" || normalized === "strict") {
+    return normalized;
   }
   return undefined;
 }
@@ -15,7 +35,7 @@ export function normalizeTaskSpec(input: TaskSpec): TaskSpec {
   const constraints = normalizeStringArray(input.constraints);
   const files = normalizeStringArray(input.targets?.files);
   const symbols = normalizeStringArray(input.targets?.symbols);
-  const verificationLevel = normalizeVerificationLevel(input.verification?.level);
+  const verificationLevel = normalizeTaskSpecVerificationLevel(input.verification?.level);
   const verificationCommands = normalizeStringArray(input.verification?.commands);
 
   return {
@@ -74,7 +94,7 @@ export function parseTaskSpec(
   const verificationRaw = input.verification;
   const verification = isRecord(verificationRaw)
     ? {
-        level: normalizeVerificationLevel(verificationRaw.level),
+        level: normalizeTaskSpecVerificationLevel(verificationRaw.level),
         commands: normalizeStringArray(verificationRaw.commands),
       }
     : undefined;

@@ -1,7 +1,9 @@
 import {
   formatTaskStateBlock,
+  normalizeTaskSpecVerificationLevel,
+  TASK_SPEC_VERIFICATION_LEVEL_ALIASES,
+  TASK_SPEC_VERIFICATION_LEVEL_VALUES,
   type TaskItemStatus,
-  type VerificationLevel,
 } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
@@ -17,23 +19,12 @@ const TASK_ITEM_STATUS_ALIASES = {
   "in-progress": "doing",
 } as const;
 
-const VerificationLevelSchema = Type.Union([
-  Type.Literal("quick"),
-  Type.Literal("standard"),
-  Type.Literal("strict"),
-  Type.Literal("none"),
-]);
+const VerificationLevelSchema = buildStringEnumSchema(
+  TASK_SPEC_VERIFICATION_LEVEL_VALUES,
+  TASK_SPEC_VERIFICATION_LEVEL_ALIASES,
+);
 
 const TaskItemStatusSchema = buildStringEnumSchema(TASK_ITEM_STATUSES, TASK_ITEM_STATUS_ALIASES);
-
-// `none` is not a normal string alias because it means "store no verification
-// level" rather than mapping to another persisted literal.
-function normalizeTaskVerificationLevel(value: unknown): VerificationLevel | undefined {
-  if (value === "quick" || value === "standard" || value === "strict") {
-    return value;
-  }
-  return undefined;
-}
 
 function normalizeTaskItemStatus(value: unknown): TaskItemStatus | undefined {
   return normalizeStringEnumAlias(value, TASK_ITEM_STATUSES, TASK_ITEM_STATUS_ALIASES);
@@ -47,6 +38,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
     promptSnippet: "Record or refine the task goal, constraints, targets, and verification plan.",
     promptGuidelines: [
       "Use this early when the objective, constraints, or verification plan need to be made explicit.",
+      "For read-only reviews, omit verification.level or use none; quick/standard/strict are the canonical stored levels.",
     ],
     parameters: Type.Object({
       goal: Type.String(),
@@ -67,7 +59,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const normalizedVerificationLevel = normalizeTaskVerificationLevel(
+      const normalizedVerificationLevel = normalizeTaskSpecVerificationLevel(
         params.verification?.level,
       );
       const normalizedVerification =

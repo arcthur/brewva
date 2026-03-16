@@ -7,7 +7,7 @@ import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import type { TSchema } from "@sinclair/typebox";
 import { getBrewvaToolSurface } from "../surface.js";
 import type { BrewvaManagedToolDefinition, BrewvaToolMetadata } from "../types.js";
-import { applyTopLevelCaseAliases } from "./input-alias.js";
+import { applyTopLevelCaseAliases, projectCanonicalTopLevelParameters } from "./input-alias.js";
 
 export function defineTool<TParams extends TSchema, TDetails = unknown>(
   tool: ToolDefinition<TParams, TDetails>,
@@ -59,6 +59,7 @@ export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
   }
 
   const aliasedParameters = applyTopLevelCaseAliases(tool.parameters);
+  const canonicalParameters = projectCanonicalTopLevelParameters(tool.parameters);
   const execute: ToolDefinition<TParams, TDetails>["execute"] = async (
     toolCallId,
     params,
@@ -76,7 +77,7 @@ export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
   };
   const managed = {
     ...(tool as unknown as Record<string, unknown>),
-    parameters: aliasedParameters.schema,
+    parameters: canonicalParameters,
     execute,
   } as unknown as BrewvaManagedToolDefinition;
   Object.defineProperty(managed, "brewva", {
@@ -85,6 +86,12 @@ export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
     get() {
       return resolveCanonicalBrewvaToolMetadata(normalizedName, metadata) ?? canonicalMetadata;
     },
+  });
+  Object.defineProperty(managed, "brewvaCanonicalParameters", {
+    enumerable: false,
+    configurable: false,
+    writable: false,
+    value: canonicalParameters,
   });
   return managed;
 }
@@ -100,4 +107,11 @@ export function getBrewvaToolMetadata(
     };
   }
   return resolveCanonicalBrewvaToolMetadata(tool?.name ?? "");
+}
+
+export function getBrewvaCanonicalParameters(
+  tool: ToolDefinition | BrewvaManagedToolDefinition | undefined,
+): TSchema | undefined {
+  const parameters = (tool as BrewvaManagedToolDefinition | undefined)?.brewvaCanonicalParameters;
+  return parameters ?? tool?.parameters;
 }

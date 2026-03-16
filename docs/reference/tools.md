@@ -350,9 +350,13 @@ Parameters:
 
 `task_*` ledger tools keep canonical runtime values on write:
 
-- `task_set_spec.verification.level`: `quick|standard|strict`; `none` stores no
-  level for the new TaskSpec. Because `task_set_spec` rewrites the spec, include
-  `verification.commands` again in the same call if they should be preserved
+- `task_set_spec.verification.level`: canonical stored values are
+  `quick|standard|strict`; `none` stores no level for the new TaskSpec.
+  Accepted aliases normalize to the canonical values on write:
+  `smoke->quick`, `targeted->standard`, `full->strict`,
+  `inspection|readonly|read_only|read-only->none`. Because `task_set_spec`
+  rewrites the spec, include `verification.commands` again in the same call if
+  they should be preserved
 - `task_add_item` / `task_update_item` `status`: `todo|doing|done|blocked`;
   `in_progress` and `in-progress` are accepted as aliases for `doing`
 

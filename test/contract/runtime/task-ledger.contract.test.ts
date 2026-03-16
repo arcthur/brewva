@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, parseTaskSpec } from "@brewva/brewva-runtime";
 import type { TaskSpec } from "@brewva/brewva-runtime";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -42,6 +42,45 @@ describe("Task ledger", () => {
     const runtime2 = new BrewvaRuntime({ cwd: workspace });
     const state = runtime2.task.getState(sessionId);
     expect(state.spec?.goal).toBe("Refactor context injection");
+  });
+
+  test("parseTaskSpec normalizes common verification aliases to canonical task values", () => {
+    const inspectionSpec = parseTaskSpec({
+      goal: "Review architecture",
+      verification: {
+        level: "inspection",
+        commands: ["review docs only"],
+      },
+    });
+    expect(inspectionSpec).toEqual({
+      ok: true,
+      spec: {
+        schema: "brewva.task.v1",
+        goal: "Review architecture",
+        verification: {
+          commands: ["review docs only"],
+        },
+      },
+    });
+
+    const fullSpec = parseTaskSpec({
+      goal: "Validate implementation",
+      verification: {
+        level: "full",
+        commands: ["bun test"],
+      },
+    });
+    expect(fullSpec).toEqual({
+      ok: true,
+      spec: {
+        schema: "brewva.task.v1",
+        goal: "Validate implementation",
+        verification: {
+          level: "strict",
+          commands: ["bun test"],
+        },
+      },
+    });
   });
 
   test("injects task ledger context without neighborhood probe details", async () => {

@@ -1,5 +1,6 @@
 import type { BrewvaRuntime, ToolGovernanceDescriptor } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import type { TSchema } from "@sinclair/typebox";
 
 export type BrewvaToolSurface = "base" | "skill" | "operator";
 
@@ -10,6 +11,7 @@ export interface BrewvaToolMetadata {
 
 export type BrewvaManagedToolDefinition = ToolDefinition & {
   brewva?: BrewvaToolMetadata;
+  brewvaCanonicalParameters?: TSchema;
 };
 
 export type BrewvaToolRuntime = Pick<
