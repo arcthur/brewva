@@ -18,7 +18,7 @@ import {
   type TapeCheckpointPayload,
 } from "../tape/events.js";
 import type { BrewvaConfig, BrewvaEventQuery, BrewvaEventRecord } from "../types.js";
-import { ensureDir } from "../utils/fs.js";
+import { ensureDir, ensureDirForFile } from "../utils/fs.js";
 import { normalizeJsonRecord } from "../utils/json.js";
 
 type EventAppendInput = {
@@ -132,6 +132,11 @@ export class BrewvaEventStore {
     const frozenRow = freezeEventRecord(row);
 
     const filePath = this.filePathForSession(frozenRow.sessionId);
+    if (!existsSync(filePath)) {
+      this.fileHasContent.set(filePath, false);
+      this.eventCacheByFilePath.delete(filePath);
+    }
+    ensureDirForFile(filePath);
     const prefix = this.hasContent(filePath) ? "\n" : "";
     const serialized = JSON.stringify(frozenRow);
     const appended = `${prefix}${serialized}`;

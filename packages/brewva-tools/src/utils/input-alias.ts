@@ -152,6 +152,43 @@ export function attachCanonicalParameterKeys<TParams extends TSchema>(
   return nextSchema;
 }
 
+export function projectCanonicalTopLevelParameters<TParams extends TSchema>(
+  schema: TParams,
+): TParams {
+  if (!isObjectSchemaLike(schema)) {
+    return schema;
+  }
+
+  const canonicalParameterKeys = readCanonicalParameterKeys(schema);
+  if (!canonicalParameterKeys || canonicalParameterKeys.length === 0) {
+    return schema;
+  }
+
+  const properties = schema.properties ?? {};
+  const nextPropertyEntries = canonicalParameterKeys
+    .filter((key) => Object.prototype.hasOwnProperty.call(properties, key))
+    .map((key) => [key, properties[key] as TSchema] as const);
+
+  if (
+    nextPropertyEntries.length === 0 ||
+    nextPropertyEntries.length === Object.keys(properties).length
+  ) {
+    return schema;
+  }
+
+  const canonicalKeySet = new Set(nextPropertyEntries.map(([key]) => key));
+  const nextSchema = cloneSchemaNode(schema);
+  nextSchema.properties = Object.fromEntries(nextPropertyEntries);
+  if (Array.isArray(schema.required)) {
+    nextSchema.required = schema.required.filter((key) => canonicalKeySet.has(key));
+  }
+  defineCanonicalParameterKeys(
+    nextSchema,
+    nextPropertyEntries.map(([key]) => key),
+  );
+  return nextSchema as TParams;
+}
+
 export function applyTopLevelCaseAliases<TParams extends TSchema>(
   schema: TParams,
 ): {

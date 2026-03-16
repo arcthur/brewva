@@ -190,7 +190,12 @@ export async function createHostedSession(
   const extensionFactories = [
     ...(skillBrokerEnabled ? [createSkillBrokerExtension({ runtime })] : []),
     ...(extensionsEnabled
-      ? [createBrewvaExtension({ runtime, registerTools: true })]
+      ? [
+          createBrewvaExtension({
+            runtime,
+            registerTools: true,
+          }),
+        ]
       : [createRuntimeCoreBridgeExtension({ runtime })]),
   ];
   if (options.extensionFactories && options.extensionFactories.length > 0) {

@@ -13,6 +13,30 @@ function handlerNames(handlers: Map<string, unknown[]>): string[] {
 }
 
 describe("no-addons contract", () => {
+  test("managed Brewva tools register canonical schemas by default", async () => {
+    const runtime = createRuntimeFixture();
+    const api = createMockExtensionAPI();
+    const extension = createBrewvaExtension({ runtime });
+    await extension(api.api);
+
+    const readSpans = api.api.getAllTools().find((tool) => tool.name === "read_spans");
+    const parameters = readSpans?.parameters as
+      | {
+          anyOf?: unknown;
+          allOf?: unknown;
+          properties?: Record<string, unknown>;
+          required?: string[];
+        }
+      | undefined;
+
+    expect(parameters).toBeDefined();
+    expect(parameters?.anyOf).toBeUndefined();
+    expect(parameters?.allOf).toBeUndefined();
+    expect(parameters?.properties?.file_path).toBeDefined();
+    expect(parameters?.properties?.filePath).toBeUndefined();
+    expect(parameters?.required).toEqual(["file_path", "spans"]);
+  });
+
   test("default extension and runtime-core bridge register different handler surfaces", async () => {
     const defaultRuntime = createRuntimeFixture();
     const defaultApi = createMockExtensionAPI();

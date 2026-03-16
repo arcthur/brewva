@@ -51,10 +51,31 @@ describe("task ledger tool aliases", () => {
 
     try {
       const sessionId = "task-ledger-tool-set-spec";
-      const input = {
+      const inspectionInput = {
         goal: "Review docs",
         verification: {
-          level: "none",
+          level: "inspection",
+          commands: ["bun test test/quality/docs"],
+        },
+      };
+      const smokeInput = {
+        goal: "Review docs",
+        verification: {
+          level: "smoke",
+          commands: ["bun test test/quality/docs"],
+        },
+      };
+      const targetedInput = {
+        goal: "Review docs",
+        verification: {
+          level: "targeted",
+          commands: ["bun test test/quality/docs"],
+        },
+      };
+      const fullInput = {
+        goal: "Review docs",
+        verification: {
+          level: "full",
           commands: ["bun test test/quality/docs"],
         },
       };
@@ -71,18 +92,58 @@ describe("task ledger tool aliases", () => {
         }
       ).properties?.verification?.properties?.level;
       expect(readLiteralUnionValues(verificationLevelSchema)).toContain("none");
+      expect(readLiteralUnionValues(verificationLevelSchema)).toContain("inspection");
+      expect(readLiteralUnionValues(verificationLevelSchema)).toContain("smoke");
+      expect(readLiteralUnionValues(verificationLevelSchema)).toContain("targeted");
+      expect(readLiteralUnionValues(verificationLevelSchema)).toContain("full");
       expect(readLiteralUnionValues(verificationLevelSchema)).not.toContain("off");
 
-      const result = await taskSetSpec.execute(
-        "tc-task-set-spec-alias",
-        input,
+      const inspectionResult = await taskSetSpec.execute(
+        "tc-task-set-spec-inspection-alias",
+        inspectionInput,
         undefined,
         undefined,
         fakeContext(sessionId),
       );
 
-      expect(extractTextContent(result)).toBe("TaskSpec recorded.");
+      expect(extractTextContent(inspectionResult)).toBe("TaskSpec recorded.");
       expect(runtime.task.getState(sessionId).spec?.verification).toEqual({
+        commands: ["bun test test/quality/docs"],
+      });
+
+      await taskSetSpec.execute(
+        "tc-task-set-spec-smoke-alias",
+        smokeInput,
+        undefined,
+        undefined,
+        fakeContext(sessionId),
+      );
+      expect(runtime.task.getState(sessionId).spec?.verification).toEqual({
+        level: "quick",
+        commands: ["bun test test/quality/docs"],
+      });
+
+      await taskSetSpec.execute(
+        "tc-task-set-spec-targeted-alias",
+        targetedInput,
+        undefined,
+        undefined,
+        fakeContext(sessionId),
+      );
+      expect(runtime.task.getState(sessionId).spec?.verification).toEqual({
+        level: "standard",
+        commands: ["bun test test/quality/docs"],
+      });
+
+      await taskSetSpec.execute(
+        "tc-task-set-spec-full-alias",
+        fullInput,
+        undefined,
+        undefined,
+        fakeContext(sessionId),
+      );
+      expect(runtime.task.getState(sessionId).spec?.verification).toEqual({
+        level: "strict",
         commands: ["bun test test/quality/docs"],
       });
     } finally {

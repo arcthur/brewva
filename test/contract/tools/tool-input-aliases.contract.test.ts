@@ -51,7 +51,7 @@ function requireTool<T extends { name: string }>(tools: T[], name: string): T {
 }
 
 describe("tool input alias contracts", () => {
-  test("look_at accepts camelCase filePath alias in schema and execution", async () => {
+  test("look_at keeps filePath alias as an execution-only compatibility path", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-look-at-alias-"));
     const filePath = join(workspace, "sample.ts");
     writeFileSync(filePath, "export const alpha = 1;\n", "utf8");
@@ -62,7 +62,7 @@ describe("tool input alias contracts", () => {
       goal: "trace transaction rollback boundary",
     };
 
-    expect(Value.Check(tool.parameters, params)).toBe(true);
+    expect(Value.Check(tool.parameters, params)).toBe(false);
     const result = await tool.execute(
       "tc-look-at-file-path-alias",
       params as never,
@@ -96,6 +96,51 @@ describe("tool input alias contracts", () => {
     expect(runtime.task.getState(sessionId).spec?.expectedBehavior).toBe(params.expected_behavior);
   });
 
+  test("task_set_spec accepts natural verification aliases and stores canonical values", async () => {
+    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const sessionId = "task-set-spec-verification-alias";
+    const tool = requireTool(createTaskLedgerTools({ runtime }), "task_set_spec");
+    const inspectionParams = {
+      goal: "Review the architecture without modifying code.",
+      verification: {
+        level: "inspection",
+        commands: ["review docs only"],
+      },
+    };
+    const targetedParams = {
+      goal: "Review the architecture without modifying code.",
+      verification: {
+        level: "targeted",
+        commands: ["bun test test/contract/tools"],
+      },
+    };
+
+    expect(Value.Check(tool.parameters, inspectionParams)).toBe(true);
+    await tool.execute(
+      "tc-task-set-spec-inspection-verification-alias",
+      inspectionParams as never,
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    expect(runtime.task.getState(sessionId).spec?.verification).toEqual({
+      commands: ["review docs only"],
+    });
+
+    expect(Value.Check(tool.parameters, targetedParams)).toBe(true);
+    await tool.execute(
+      "tc-task-set-spec-targeted-verification-alias",
+      targetedParams as never,
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    expect(runtime.task.getState(sessionId).spec?.verification).toEqual({
+      level: "standard",
+      commands: ["bun test test/contract/tools"],
+    });
+  });
+
   test("canonical top-level fields win when canonical and alias spellings are both present", async () => {
     const runtime = new BrewvaRuntime({ cwd: process.cwd() });
     const sessionId = "task-set-spec-canonical-wins";
@@ -118,7 +163,7 @@ describe("tool input alias contracts", () => {
     expect(runtime.task.getState(sessionId).spec?.expectedBehavior).toBe("canonical value");
   });
 
-  test("lsp_diagnostics accepts file_path and warn aliases and normalizes them to canonical values", async () => {
+  test("lsp_diagnostics keeps file_path alias as an execution-only compatibility path", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-lsp-alias-"));
     writeFileSync(
       join(workspace, "tsconfig.json"),
@@ -149,7 +194,7 @@ describe("tool input alias contracts", () => {
       severity: "warn",
     };
 
-    expect(Value.Check(tool.parameters, params)).toBe(true);
+    expect(Value.Check(tool.parameters, params)).toBe(false);
     const result = await tool.execute(
       "tc-lsp-diagnostics-alias",
       params as never,

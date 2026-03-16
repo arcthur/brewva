@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaEventStore, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { createTestWorkspace } from "../../helpers/workspace.js";
@@ -45,5 +45,23 @@ describe("BrewvaEventStore session id file mapping", () => {
 
     expect(store.listSessionIds()).toEqual([]);
     expect(store.list(sessionA)).toEqual([]);
+  });
+
+  test("recreates the events directory when it disappears after initialization", () => {
+    const workspace = createTestWorkspace("event-store-recreate-events-dir");
+    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    const sessionId = "heartbeat:rule-1";
+    const eventsRoot = join(workspace, DEFAULT_BREWVA_CONFIG.infrastructure.events.dir);
+
+    store.append({ sessionId, type: "startup", timestamp: 100 });
+    expect(existsSync(eventsRoot)).toBe(true);
+
+    rmSync(eventsRoot, { recursive: true, force: true });
+    expect(existsSync(eventsRoot)).toBe(false);
+
+    store.append({ sessionId, type: "resume", timestamp: 101 });
+
+    expect(existsSync(eventsRoot)).toBe(true);
+    expect(store.list(sessionId).map((row) => row.type)).toEqual(["resume"]);
   });
 });
