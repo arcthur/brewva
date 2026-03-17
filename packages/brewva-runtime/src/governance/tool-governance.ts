@@ -268,12 +268,10 @@ const TOOL_NAME_EFFECT_HINTS: Array<{
   },
 ];
 
-const CUSTOM_TOOL_GOVERNANCE_BY_NAME = new Map<string, ToolGovernanceDescriptor>();
-
-export function registerToolGovernanceDescriptor(
+function validateToolGovernanceDescriptor(
   toolName: string,
   input: ToolGovernanceDescriptor,
-): void {
+): ToolGovernanceDescriptor {
   const normalized = normalizeToolName(toolName);
   if (!normalized) {
     throw new Error("tool governance descriptor requires a non-empty tool name");
@@ -281,13 +279,50 @@ export function registerToolGovernanceDescriptor(
   if (!Array.isArray(input.effects) || input.effects.length === 0) {
     throw new Error(`tool governance descriptor '${normalized}' requires at least one effect`);
   }
-  CUSTOM_TOOL_GOVERNANCE_BY_NAME.set(normalized, normalizeDescriptor(input));
+  return normalizeDescriptor(input);
 }
 
-export function unregisterToolGovernanceDescriptor(toolName: string): void {
-  const normalized = normalizeToolName(toolName);
-  if (!normalized) return;
-  CUSTOM_TOOL_GOVERNANCE_BY_NAME.delete(normalized);
+export class ToolGovernanceRegistry {
+  private readonly customByName = new Map<string, ToolGovernanceDescriptor>();
+
+  register(toolName: string, input: ToolGovernanceDescriptor): void {
+    const normalized = normalizeToolName(toolName);
+    if (!normalized) {
+      throw new Error("tool governance descriptor requires a non-empty tool name");
+    }
+    this.customByName.set(normalized, validateToolGovernanceDescriptor(normalized, input));
+  }
+
+  unregister(toolName: string): void {
+    const normalized = normalizeToolName(toolName);
+    if (!normalized) return;
+    this.customByName.delete(normalized);
+  }
+
+  get(toolName: string): ToolGovernanceDescriptor | undefined {
+    return this.resolve(toolName).descriptor;
+  }
+
+  resolve(toolName: string): ToolGovernanceResolution {
+    const normalized = normalizeToolName(toolName);
+    if (!normalized) {
+      return {
+        source: "missing",
+      };
+    }
+    const custom = this.customByName.get(normalized);
+    if (custom) {
+      return {
+        descriptor: custom,
+        source: "registry",
+      };
+    }
+    return resolveDescriptorWithoutCustom(normalized);
+  }
+}
+
+export function createToolGovernanceRegistry(): ToolGovernanceRegistry {
+  return new ToolGovernanceRegistry();
 }
 
 export function getExactToolGovernanceDescriptor(
@@ -312,23 +347,56 @@ export function sameToolGovernanceDescriptor(
   );
 }
 
-export function getToolGovernanceDescriptor(
-  toolName: string,
-): ToolGovernanceDescriptor | undefined {
+export type ToolGovernanceDescriptorSource = "registry" | "exact" | "hint" | "missing";
+
+export interface ToolGovernanceResolution {
+  descriptor?: ToolGovernanceDescriptor;
+  source: ToolGovernanceDescriptorSource;
+}
+
+function resolveDescriptorWithoutCustom(toolName: string): ToolGovernanceResolution {
   const normalized = normalizeToolName(toolName);
-  if (!normalized) return undefined;
-  const custom = CUSTOM_TOOL_GOVERNANCE_BY_NAME.get(normalized);
-  if (custom) {
-    return custom;
+  if (!normalized) {
+    return {
+      source: "missing",
+    };
   }
   const exact = getExactToolGovernanceDescriptor(normalized);
   if (exact) {
-    return exact;
+    return {
+      descriptor: exact,
+      source: "exact",
+    };
   }
   const hinted = TOOL_NAME_EFFECT_HINTS.find((entry) => entry.match.test(normalized));
-  return hinted?.descriptor;
+  if (hinted) {
+    return {
+      descriptor: hinted.descriptor,
+      source: "hint",
+    };
+  }
+  return {
+    source: "missing",
+  };
 }
 
-export function resolveToolInvocationPosture(toolName: string): ToolInvocationPosture {
-  return getToolGovernanceDescriptor(toolName)?.posture ?? "observe";
+export function getToolGovernanceDescriptor(
+  toolName: string,
+  registry?: Pick<ToolGovernanceRegistry, "get">,
+): ToolGovernanceDescriptor | undefined {
+  return registry ? registry.get(toolName) : resolveDescriptorWithoutCustom(toolName).descriptor;
+}
+
+export function getToolGovernanceResolution(
+  toolName: string,
+  registry?: Pick<ToolGovernanceRegistry, "resolve">,
+): ToolGovernanceResolution {
+  return registry ? registry.resolve(toolName) : resolveDescriptorWithoutCustom(toolName);
+}
+
+export function resolveToolInvocationPosture(
+  toolName: string,
+  registry?: Pick<ToolGovernanceRegistry, "get">,
+): ToolInvocationPosture {
+  return getToolGovernanceDescriptor(toolName, registry)?.posture ?? "observe";
 }

@@ -182,11 +182,22 @@ This is enforced through active-tool selection, not by mutating kernel policy:
 - extensions narrow the visible tool list for the current turn
 - runtime gates remain the fail-closed backstop for actual execution
 
-Third-party or custom tools should register governance descriptors explicitly
-through `registerToolGovernanceDescriptor(...)` if they need effect
-authorization to participate in strict policy enforcement. Tools without
-governance metadata remain usable, but runtime emits a warning because it cannot
-enforce effect authorization for them yet.
+Third-party or custom tools should register exact governance descriptors on the
+owning runtime through `runtime.tools.registerGovernanceDescriptor(...)` if they
+need effect authorization to participate in strict policy enforcement.
+Registrations are runtime-scoped, not process-global. Regex hint fallback
+remains available as a migration path, but when an active skill exercises a
+hint-resolved tool runtime emits `governance_metadata_missing` until exact
+metadata is provided.
+
+Deprecation policy:
+
+- as of `2026-03-17`, no first-party Brewva tool may ship relying on regex hint
+  fallback; managed tool bundles are expected to carry exact governance
+  metadata and contract tests enforce that expectation
+- regex hint fallback remains only for third-party or custom tools as a
+  temporary migration path until exact descriptors are registered on the owning
+  runtime
 
 Explicit exception:
 

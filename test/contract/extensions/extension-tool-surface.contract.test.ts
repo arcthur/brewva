@@ -5,7 +5,10 @@ import {
 } from "@brewva/brewva-gateway/runtime-plugins";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import type { ToolInfo } from "@mariozechner/pi-coding-agent";
-import { createRuntimeFixture as createBaseRuntimeFixture } from "../../helpers/runtime.js";
+import {
+  createRuntimeConfig,
+  createRuntimeFixture as createBaseRuntimeFixture,
+} from "../../helpers/runtime.js";
 import { createMockExtensionAPI, invokeHandlerAsync } from "../helpers/extension.js";
 
 const EMPTY_PARAMETERS = {
@@ -73,8 +76,12 @@ interface ToolSurfaceRuntimeOptions {
 }
 
 function createToolSurfaceRuntime(options: ToolSurfaceRuntimeOptions = {}): ToolSurfaceRuntime {
-  const runtime = createBaseRuntimeFixture();
-  runtime.config.skills.routing.scopes = ["core", "domain"];
+  const runtime = createBaseRuntimeFixture({
+    config: createRuntimeConfig((config) => {
+      config.skills.routing.enabled = true;
+      config.skills.routing.scopes = ["core", "domain"];
+    }),
+  });
   Object.assign(runtime.skills, {
     getActive: options.getActive ?? (() => undefined),
     getPendingDispatch: options.getPendingDispatch ?? (() => undefined),

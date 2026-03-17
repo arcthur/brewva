@@ -64,8 +64,17 @@ turn-shaping path. The fixed phase order is:
 6. completion guard and summary persistence on `agent_end`
 7. lifecycle cleanup on `session_compact` / `session_shutdown`
 
+Deliberation-heavy memory, debug-loop, proactivity, and cognitive-metrics logic
+now live in `@brewva/brewva-deliberation`. Gateway runtime-plugin files are the
+thin lifecycle adapters that connect those modules to hosted sessions.
+
 Implementation files:
 
+- `packages/brewva-deliberation/src/memory-curator.ts`
+- `packages/brewva-deliberation/src/memory-formation.ts`
+- `packages/brewva-deliberation/src/cognitive-metrics.ts`
+- `packages/brewva-deliberation/src/debug-loop.ts`
+- `packages/brewva-deliberation/src/proactivity-engine.ts`
 - `packages/brewva-gateway/src/runtime-plugins/event-stream.ts`
 - `packages/brewva-gateway/src/runtime-plugins/tool-surface.ts`
 - `packages/brewva-gateway/src/runtime-plugins/memory-curator.ts`
@@ -158,8 +167,8 @@ tool output first.
 
 ## Automatic Debug Loop
 
-`registerDebugLoop` is an extension-side controller, not a runtime-kernel
-service.
+`registerDebugLoop` is the gateway adapter for the deliberation-side
+`DebugLoopController`, not a runtime-kernel service.
 
 Its current responsibilities are:
 
@@ -205,8 +214,8 @@ When debug-loop emits a cognition summary packet:
 
 ## Memory Curator
 
-`registerMemoryCurator` is the optional control-plane entry point for
-cross-session memory rehydration.
+`registerMemoryCurator` is the gateway adapter for the optional deliberation
+memory-curation entry point for cross-session memory rehydration.
 
 It does not turn cognition artifacts into kernel memory. Instead it:
 
@@ -230,7 +239,8 @@ match alone.
 
 ## Memory Formation
 
-`registerMemoryFormation` is the write-side counterpart to `registerMemoryCurator`.
+`registerMemoryFormation` is the gateway adapter for the write-side counterpart
+to `registerMemoryCurator`.
 
 It:
 
@@ -243,8 +253,8 @@ It:
 
 ## Cognitive Metrics
 
-`registerCognitiveMetrics` is `full`-profile-only telemetry about cognitive
-product outcomes.
+`registerCognitiveMetrics` is the gateway adapter for `full`-profile-only
+telemetry about cognitive product outcomes.
 
 Current derived metrics:
 

@@ -31,9 +31,12 @@ export interface ToolSurfaceRuntime {
   config: {
     skills: {
       routing: {
-        scopes: string[];
+        scopes: readonly string[];
       };
     };
+  };
+  tools?: {
+    getGovernanceDescriptor?(toolName: string): ReturnType<typeof getToolGovernanceDescriptor>;
   };
   skills: {
     getActive(sessionId: string): ToolSurfaceSkill | null | undefined;
@@ -119,14 +122,20 @@ function resolveSurfaceSkills(runtime: ToolSurfaceRuntime, sessionId: string): T
 }
 
 function resolveManagedToolGovernanceDescriptor(
+  runtime: ToolSurfaceRuntime,
   toolName: string,
   dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>,
 ) {
   const dynamicMetadata = getBrewvaToolMetadata(dynamicToolDefinitions?.get(toolName));
-  return dynamicMetadata?.governance ?? getToolGovernanceDescriptor(toolName);
+  return (
+    dynamicMetadata?.governance ??
+    runtime.tools?.getGovernanceDescriptor?.(toolName) ??
+    getToolGovernanceDescriptor(toolName)
+  );
 }
 
 function collectSkillToolNames(
+  runtime: ToolSurfaceRuntime,
   skills: ToolSurfaceSkill[],
   dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>,
 ): string[] {
@@ -141,7 +150,11 @@ function collectSkillToolNames(
     const allowedEffects = new Set(listSkillAllowedEffects(skill.contract));
     const deniedEffects = new Set(listSkillDeniedEffects(skill.contract));
     for (const toolName of SKILL_BREWVA_TOOL_NAMES) {
-      const descriptor = resolveManagedToolGovernanceDescriptor(toolName, dynamicToolDefinitions);
+      const descriptor = resolveManagedToolGovernanceDescriptor(
+        runtime,
+        toolName,
+        dynamicToolDefinitions,
+      );
       if (!descriptor) continue;
       if (descriptor.effects.some((effect) => deniedEffects.has(effect))) {
         continue;
@@ -215,6 +228,7 @@ function resolveManagedToolNamesForTurn(input: {
   );
   const surfaceSkills = resolveSurfaceSkills(input.runtime, input.sessionId);
   const skillManagedToolNames = collectSkillToolNames(
+    input.runtime,
     surfaceSkills,
     input.dynamicToolDefinitions,
   ).filter((toolName) => MANAGED_TOOL_NAME_SET.has(toolName));
@@ -304,7 +318,11 @@ function resolveActiveToolNames(input: {
   }
 
   const surfaceSkills = resolveSurfaceSkills(input.runtime, input.sessionId);
-  for (const toolName of collectSkillToolNames(surfaceSkills, input.dynamicToolDefinitions)) {
+  for (const toolName of collectSkillToolNames(
+    input.runtime,
+    surfaceSkills,
+    input.dynamicToolDefinitions,
+  )) {
     if (knownToolNames.has(toolName)) {
       active.add(toolName);
     }

@@ -8,8 +8,9 @@ Boundary contract sources:
 - Deliberation cognition bridge: `packages/brewva-deliberation/src/cognition.ts`
 - Deliberation helpers: `packages/brewva-deliberation/src/proposals.ts`
 - Deliberation runtime planning: `packages/brewva-deliberation/src/runtime-skills.ts`
+- Memory curator core: `packages/brewva-deliberation/src/memory-curator.ts`
 - Context composition bridge: `packages/brewva-gateway/src/runtime-plugins/context-transform.ts`
-- Memory curator producer: `packages/brewva-gateway/src/runtime-plugins/memory-curator.ts`
+- Memory curator adapter: `packages/brewva-gateway/src/runtime-plugins/memory-curator.ts`
 - Broker proposal producer: `packages/brewva-skill-broker/src/extension.ts`
 
 The proposal boundary is the public handoff between deliberation and kernel
@@ -150,12 +151,17 @@ Accepted effect:
 - kernel records a replayable pending request for the concrete commitment
   proposal
 - after operator acceptance, execution may proceed only when the caller resumes
-  that exact pending request
+  that exact pending request, including the original `toolCallId` and canonical
+  args identity
 - rejected or deferred receipts remain on tape and keep the attempted effect
   replayable without silently re-authorizing it
 - the operator desk reconstructs pending / accepted / consumed request state
   from tape events after restart instead of relying on opaque in-memory
   snapshots
+- consumption happens only after a durable linked tool outcome is recorded;
+  commitment execution is therefore explicitly at-least-once across crashes
+  after the external effect but before durable observation, so commitment tools
+  should use the request id as an idempotency key whenever the backend allows it
 
 ## Kernel Decision Rules
 

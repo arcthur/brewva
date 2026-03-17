@@ -37,7 +37,22 @@ Relevant implementation:
 - `packages/brewva-runtime/src/tape/replay-engine.ts`
 - `packages/brewva-runtime/src/runtime.ts`
 
-## 4) Contract Enforcement Invariant
+## 4) Commitment Replay And Exact-Binding Invariant
+
+- `effect_commitment` approval state must remain replay-derived from tape, not
+  from process-local approval memory.
+- accepted commitment requests are consumed only after a durable linked
+  `tool_result_recorded` outcome is observed.
+- explicit resume must match the approved `requestId`, original `toolCallId`,
+  and canonical argument identity (`argsDigest`).
+
+Relevant implementation:
+
+- `packages/brewva-runtime/src/services/tool-gate.ts`
+- `packages/brewva-runtime/src/services/effect-commitment-desk.ts`
+- `packages/brewva-runtime/src/services/ledger.ts`
+
+## 5) Contract Enforcement Invariant
 
 - Tool execution must respect active effect policy and effective resource ceilings before execution.
 - Skill completion must enforce required outputs and verification checks.
@@ -48,7 +63,7 @@ Relevant implementation:
 - `packages/brewva-runtime/src/runtime.ts`
 - `packages/brewva-tools/src/skill-complete.ts`
 
-## 5) Rollback Safety Invariant
+## 6) Rollback Safety Invariant
 
 - Rollback must restore only tracked mutations for the target session.
 - After successful rollback, verification state must be reset to avoid stale pass assumptions.
@@ -60,7 +75,7 @@ Relevant implementation:
 - `packages/brewva-runtime/src/services/reversible-mutation.ts`
 - `packages/brewva-runtime/src/runtime.ts`
 
-## 6) Budget Boundedness Invariant
+## 7) Budget Boundedness Invariant
 
 - Context injection must remain bounded by context budget policy.
 - Cost summary and budget alerts must reflect session-level usage.
@@ -71,7 +86,18 @@ Relevant implementation:
 - `packages/brewva-runtime/src/cost/tracker.ts`
 - `packages/brewva-runtime/src/runtime.ts`
 
-## 7) Profile Transparency Invariant
+## 8) Config Immutability Invariant
+
+- `runtime.config` must be deep-readonly after construction.
+- constructor-time overrides such as `routingScopes` must be applied before the
+  runtime is assembled instead of by post-construction mutation.
+
+Relevant implementation:
+
+- `packages/brewva-runtime/src/runtime.ts`
+- `packages/brewva-gateway/src/host/create-hosted-session.ts`
+
+## 9) Profile Transparency Invariant
 
 - Extension-enabled and `--no-addons` profiles must be behaviorally explicit:
   extension presentation hooks may differ, but core safety/evidence invariants
@@ -86,7 +112,7 @@ Relevant implementation:
 - `packages/brewva-gateway/src/host/create-hosted-session.ts`
 - `packages/brewva-gateway/src/runtime-plugins/index.ts`
 
-## 8) Working Projection Integrity Invariant
+## 10) Working Projection Integrity Invariant
 
 - Working projection must remain tape-derived and auditable:
   units and working snapshot are derived from event tape semantics, not an
@@ -111,6 +137,8 @@ Relevant implementation:
 - Missing rollback state: return explicit `no_patchset`.
 - Replay without events: return explicit no-session condition.
 - Context hard-limit breach: drop injection and emit context drop event.
+- Crash after external effect but before durable outcome persistence remains an
+  explicit at-least-once boundary for commitment-posture tools.
 
 ## Reliability Validation
 

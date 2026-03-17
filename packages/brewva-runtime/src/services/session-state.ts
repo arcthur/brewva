@@ -40,10 +40,13 @@ export class RuntimeSessionStateCell {
   activeSkill?: string;
   turn = 0;
   toolCalls = 0;
+  effectCommitmentRequestIdsByToolCallId = new Map<string, string>();
+  inflightEffectCommitmentRequestIds = new Set<string>();
   lastInjectedContextFingerprintByScope = new Map<string, string>();
   reservedContextInjectionTokensByScope = new Map<string, ReservedContextInjectionTokens>();
   lastLedgerCompactionTurn?: number;
   toolContractWarnings = new Set<string>();
+  governanceMetadataWarnings = new Set<string>();
   skillBudgetWarnings = new Set<string>();
   skillParallelWarnings = new Set<string>();
   resourceLeases = new Map<string, ResourceLeaseRecord>();

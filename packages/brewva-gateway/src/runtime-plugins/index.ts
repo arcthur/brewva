@@ -2,7 +2,6 @@ import {
   BrewvaRuntime,
   createTrustedLocalGovernancePort,
   getExactToolGovernanceDescriptor,
-  registerToolGovernanceDescriptor,
   sameToolGovernanceDescriptor,
   type BrewvaRuntimeOptions,
 } from "@brewva/brewva-runtime";
@@ -125,7 +124,8 @@ export function createBrewvaExtension(
       options.runtime ??
       new BrewvaRuntime({
         ...options,
-        governancePort: options.governancePort ?? createTrustedLocalGovernancePort(),
+        governancePort:
+          options.governancePort ?? createTrustedLocalGovernancePort({ profile: "team" }),
       });
     const shouldRegisterTools = options.registerTools !== false;
     const allTools = shouldRegisterTools ? buildBrewvaTools({ runtime }) : [];
@@ -141,7 +141,7 @@ export function createBrewvaExtension(
           if (sameToolGovernanceDescriptor(exactGovernance, metadata.governance)) {
             continue;
           }
-          registerToolGovernanceDescriptor(tool.name, metadata.governance);
+          runtime.tools.registerGovernanceDescriptor(tool.name, metadata.governance);
         }
       }
       for (const tool of allTools) {

@@ -37,6 +37,8 @@ export function prepareContextComposerSupport(input: {
         toolName,
         usage: input.usage,
       }),
+    resolveGovernanceDescriptor: (toolName) =>
+      input.runtime.tools.getGovernanceDescriptor(toolName),
   });
 
   return {

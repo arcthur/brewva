@@ -7,8 +7,6 @@ import {
   BrewvaRuntime,
   createTrustedLocalGovernancePort,
   type ProposalRecord,
-  registerToolGovernanceDescriptor,
-  unregisterToolGovernanceDescriptor,
 } from "@brewva/brewva-runtime";
 
 function repoRoot(): string {
@@ -192,6 +190,266 @@ describe("runtime proposals API", () => {
     expect(resumed.effectCommitmentRequestId).toBe(pendingAfterRestart[0]!.requestId);
   });
 
+  test("operator approval resume rejects long-argument collisions by exact digest, not summary prefix", () => {
+    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const sessionId = `runtime-proposals-commitment-args-${crypto.randomUUID()}`;
+    const sharedPrefix = "x".repeat(320);
+
+    const deferred = runtime.tools.start({
+      sessionId,
+      toolCallId: "tc-exec-long-args",
+      toolName: "exec",
+      args: { command: `${sharedPrefix}A` },
+    });
+
+    expect(deferred.allowed).toBe(false);
+    const pending = runtime.proposals.listPendingEffectCommitments(sessionId);
+    expect(pending).toHaveLength(1);
+
+    const accepted = runtime.proposals.decideEffectCommitment(sessionId, pending[0]!.requestId, {
+      decision: "accept",
+      actor: "operator:test",
+      reason: "exact payload reviewed",
+    });
+    expect(accepted.ok).toBe(true);
+
+    const mismatched = runtime.tools.start({
+      sessionId,
+      toolCallId: "tc-exec-long-args",
+      toolName: "exec",
+      args: { command: `${sharedPrefix}B` },
+      effectCommitmentRequestId: pending[0]!.requestId,
+    });
+
+    expect(mismatched.allowed).toBe(false);
+    expect(mismatched.reason).toContain("effect_commitment_request_args_mismatch:");
+  });
+
+  test("durable linked tool outcomes consume approved requests and persist replay linkage", () => {
+    const workspace = createWorkspace();
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = `runtime-proposals-commitment-consume-${crypto.randomUUID()}`;
+
+    const deferred = runtime.tools.start({
+      sessionId,
+      toolCallId: "tc-exec-consume",
+      toolName: "exec",
+      args: { command: "echo hi" },
+    });
+
+    expect(deferred.allowed).toBe(false);
+    const pending = runtime.proposals.listPendingEffectCommitments(sessionId);
+    expect(pending).toHaveLength(1);
+
+    const accepted = runtime.proposals.decideEffectCommitment(sessionId, pending[0]!.requestId, {
+      decision: "accept",
+      actor: "operator:test",
+      reason: "approved for execution",
+    });
+    expect(accepted.ok).toBe(true);
+
+    const resumed = runtime.tools.start({
+      sessionId,
+      toolCallId: "tc-exec-consume",
+      toolName: "exec",
+      args: { command: "echo hi" },
+      effectCommitmentRequestId: pending[0]!.requestId,
+    });
+    expect(resumed.allowed).toBe(true);
+
+    runtime.tools.finish({
+      sessionId,
+      toolCallId: "tc-exec-consume",
+      toolName: "exec",
+      args: { command: "echo hi" },
+      outputText: "hi",
+      channelSuccess: true,
+    });
+
+    const toolResult = runtime.events.query(sessionId, {
+      type: "tool_result_recorded",
+      last: 1,
+    })[0] as { payload?: { toolCallId?: string; effectCommitmentRequestId?: string } } | undefined;
+    expect(toolResult?.payload?.toolCallId).toBe("tc-exec-consume");
+    expect(toolResult?.payload?.effectCommitmentRequestId).toBe(pending[0]!.requestId);
+
+    const consumed = runtime.events.query(sessionId, {
+      type: "effect_commitment_approval_consumed",
+      last: 1,
+    })[0] as { payload?: { requestId?: string } } | undefined;
+    expect(consumed?.payload?.requestId).toBe(pending[0]!.requestId);
+
+    const restarted = new BrewvaRuntime({ cwd: workspace });
+    const replayed = restarted.tools.start({
+      sessionId,
+      toolCallId: "tc-exec-consume",
+      toolName: "exec",
+      args: { command: "echo hi" },
+      effectCommitmentRequestId: pending[0]!.requestId,
+    });
+
+    expect(replayed.allowed).toBe(false);
+    expect(replayed.reason).toContain("effect_commitment_operator_approval_consumed:");
+  });
+
+  test("linked runtime.tools.recordResult outcomes also consume approved requests", () => {
+    const workspace = createWorkspace();
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = `runtime-proposals-commitment-record-result-${crypto.randomUUID()}`;
+
+    const deferred = runtime.tools.start({
+      sessionId,
+      toolCallId: "tc-exec-record-result",
+      toolName: "exec",
+      args: { command: "echo hi" },
+    });
+
+    expect(deferred.allowed).toBe(false);
+    const pending = runtime.proposals.listPendingEffectCommitments(sessionId);
+    expect(pending).toHaveLength(1);
+
+    const accepted = runtime.proposals.decideEffectCommitment(sessionId, pending[0]!.requestId, {
+      decision: "accept",
+      actor: "operator:test",
+      reason: "recordResult path approved",
+    });
+    expect(accepted.ok).toBe(true);
+
+    runtime.tools.recordResult({
+      sessionId,
+      toolCallId: "tc-exec-record-result",
+      toolName: "exec",
+      args: { command: "echo hi" },
+      outputText: "hi",
+      channelSuccess: true,
+      effectCommitmentRequestId: pending[0]!.requestId,
+    });
+
+    const restarted = new BrewvaRuntime({ cwd: workspace });
+    const replayed = restarted.tools.start({
+      sessionId,
+      toolCallId: "tc-exec-record-result",
+      toolName: "exec",
+      args: { command: "echo hi" },
+      effectCommitmentRequestId: pending[0]!.requestId,
+    });
+
+    expect(replayed.allowed).toBe(false);
+    expect(replayed.reason).toContain("effect_commitment_operator_approval_consumed:");
+  });
+
+  test("pending requests are not consumed by linked tool results before operator approval", () => {
+    const workspace = createWorkspace();
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = `runtime-proposals-commitment-pending-linkage-${crypto.randomUUID()}`;
+
+    const deferred = runtime.tools.start({
+      sessionId,
+      toolCallId: "tc-exec-pending-linkage",
+      toolName: "exec",
+      args: { command: "echo hi" },
+    });
+
+    expect(deferred.allowed).toBe(false);
+    const pending = runtime.proposals.listPendingEffectCommitments(sessionId);
+    expect(pending).toHaveLength(1);
+
+    runtime.tools.recordResult({
+      sessionId,
+      toolCallId: "tc-exec-pending-linkage",
+      toolName: "exec",
+      args: { command: "echo hi" },
+      outputText: "hi",
+      channelSuccess: true,
+      effectCommitmentRequestId: pending[0]!.requestId,
+    });
+
+    const restarted = new BrewvaRuntime({ cwd: workspace });
+    expect(restarted.proposals.listPendingEffectCommitments(sessionId)).toHaveLength(1);
+
+    const resumed = restarted.tools.start({
+      sessionId,
+      toolCallId: "tc-exec-pending-linkage",
+      toolName: "exec",
+      args: { command: "echo hi" },
+      effectCommitmentRequestId: pending[0]!.requestId,
+    });
+
+    expect(resumed.allowed).toBe(false);
+    expect(resumed.reason).toContain("effect_commitment_pending_operator_approval:");
+  });
+
+  test("accepted requests are single-flight until a durable linked outcome releases them", () => {
+    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const sessionId = `runtime-proposals-commitment-in-flight-${crypto.randomUUID()}`;
+
+    const deferred = runtime.tools.start({
+      sessionId,
+      toolCallId: "tc-exec-in-flight",
+      toolName: "exec",
+      args: { command: "echo hi" },
+    });
+
+    expect(deferred.allowed).toBe(false);
+    const pending = runtime.proposals.listPendingEffectCommitments(sessionId);
+    expect(pending).toHaveLength(1);
+
+    const accepted = runtime.proposals.decideEffectCommitment(sessionId, pending[0]!.requestId, {
+      decision: "accept",
+      actor: "operator:test",
+      reason: "single-flight review complete",
+    });
+    expect(accepted.ok).toBe(true);
+
+    const first = runtime.tools.start({
+      sessionId,
+      toolCallId: "tc-exec-in-flight",
+      toolName: "exec",
+      args: { command: "echo hi" },
+      effectCommitmentRequestId: pending[0]!.requestId,
+    });
+    expect(first.allowed).toBe(true);
+    expect(
+      runtime.proposals
+        .list(sessionId, { kind: "effect_commitment" })
+        .filter((record) => record.receipt.decision === "accept"),
+    ).toHaveLength(1);
+
+    const duplicate = runtime.tools.start({
+      sessionId,
+      toolCallId: "tc-exec-in-flight",
+      toolName: "exec",
+      args: { command: "echo hi" },
+      effectCommitmentRequestId: pending[0]!.requestId,
+    });
+    expect(duplicate.allowed).toBe(false);
+    expect(duplicate.reason).toContain("effect_commitment_request_in_flight:");
+    expect(
+      runtime.proposals
+        .list(sessionId, { kind: "effect_commitment" })
+        .filter((record) => record.receipt.decision === "accept"),
+    ).toHaveLength(1);
+
+    runtime.tools.finish({
+      sessionId,
+      toolCallId: "tc-exec-in-flight",
+      toolName: "exec",
+      args: { command: "echo hi" },
+      outputText: "hi",
+      channelSuccess: true,
+    });
+
+    const replayed = runtime.tools.start({
+      sessionId,
+      toolCallId: "tc-exec-in-flight",
+      toolName: "exec",
+      args: { command: "echo hi" },
+      effectCommitmentRequestId: pending[0]!.requestId,
+    });
+    expect(replayed.allowed).toBe(false);
+    expect(replayed.reason).toContain("effect_commitment_operator_approval_consumed:");
+  });
+
   test("rejected effect commitment requests do not become sticky deny caches for future requests", () => {
     const runtime = new BrewvaRuntime({ cwd: repoRoot() });
     const sessionId = `runtime-proposals-commitment-reject-${crypto.randomUUID()}`;
@@ -243,13 +501,13 @@ describe("runtime proposals API", () => {
 
   test("custom commitment posture descriptors also fail closed without a governance port", () => {
     const toolName = "custom_commitment_probe";
-    registerToolGovernanceDescriptor(toolName, {
+    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    runtime.tools.registerGovernanceDescriptor(toolName, {
       effects: ["workspace_read"],
       defaultRisk: "high",
       posture: "commitment",
     });
     try {
-      const runtime = new BrewvaRuntime({ cwd: repoRoot() });
       const sessionId = `runtime-proposals-custom-commitment-${crypto.randomUUID()}`;
 
       const started = runtime.tools.start({
@@ -265,7 +523,7 @@ describe("runtime proposals API", () => {
       expect(started.reason).toContain("effect_commitment_pending_operator_approval:");
       expect(runtime.proposals.listPendingEffectCommitments(sessionId)).toHaveLength(1);
     } finally {
-      unregisterToolGovernanceDescriptor(toolName);
+      runtime.tools.unregisterGovernanceDescriptor(toolName);
     }
   });
 

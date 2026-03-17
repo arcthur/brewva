@@ -7,34 +7,34 @@ import { loadBrewvaConfig } from "./config/loader.js";
 import { normalizeBrewvaConfig } from "./config/normalize.js";
 import { resolveWorkspaceRootDir } from "./config/paths.js";
 import { ContextBudgetManager } from "./context/budget.js";
-import { registerBuiltInContextSourceProviders } from "./context/builtins.js";
 import { normalizeAgentId } from "./context/identity.js";
 import { ContextInjectionCollector, type ContextInjectionEntry } from "./context/injection.js";
 import {
-  ContextSourceProviderRegistry,
   type ContextSourceProvider,
   type ContextSourceProviderDescriptor,
 } from "./context/provider.js";
 import type { ToolOutputDistillationEntry } from "./context/tool-output-distilled.js";
 import { SessionCostTracker } from "./cost/tracker.js";
 import {
-  DECISION_RECEIPT_RECORDED_EVENT_TYPE,
   TOOL_OUTPUT_DISTILLED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
 } from "./events/event-types.js";
 import { BrewvaEventStore } from "./events/store.js";
 import type { GovernancePort } from "./governance/port.js";
+import {
+  createToolGovernanceRegistry,
+  getToolGovernanceResolution,
+} from "./governance/tool-governance.js";
 import { EvidenceLedger } from "./ledger/evidence-ledger.js";
 import { ParallelBudgetManager } from "./parallel/budget.js";
 import { ParallelResultStore } from "./parallel/results.js";
 import { ProjectionEngine } from "./projection/engine.js";
-import { inferEventCategory } from "./runtime-helpers.js";
-import type { RuntimeKernelContext } from "./runtime-kernel.js";
-import { SchedulerService } from "./schedule/service.js";
 import {
-  CONTEXT_CRITICAL_ALLOWED_TOOLS,
-  CONTROL_PLANE_TOOLS,
-} from "./security/control-plane-tools.js";
+  createRuntimeCoreDependencies as assembleRuntimeCoreDependencies,
+  createRuntimeKernelContext as assembleRuntimeKernelContext,
+  createRuntimeServiceDependencies as assembleRuntimeServiceDependencies,
+} from "./runtime-assembler.js";
+import type { RuntimeKernelContext } from "./runtime-kernel.js";
 import { sanitizeContextText } from "./security/sanitize.js";
 import { ContextService } from "./services/context.js";
 import { CostService } from "./services/cost.js";
@@ -45,10 +45,8 @@ import { FileChangeService } from "./services/file-change.js";
 import { LedgerService } from "./services/ledger.js";
 import { MutationRollbackService } from "./services/mutation-rollback.js";
 import { ParallelService } from "./services/parallel.js";
-import type { EffectCommitmentAuthorizationDecision } from "./services/proposal-admission-effect-commitment.js";
 import { ProposalAdmissionService } from "./services/proposal-admission.js";
 import { ResourceLeaseService } from "./services/resource-lease.js";
-import { ReversibleMutationService } from "./services/reversible-mutation.js";
 import { ScheduleIntentService } from "./services/schedule-intent.js";
 import { SessionLifecycleService } from "./services/session-lifecycle.js";
 import { RuntimeSessionStateStore } from "./services/session-state.js";
@@ -58,7 +56,6 @@ import { TapeService } from "./services/tape.js";
 import { TaskWatchdogService } from "./services/task-watchdog.js";
 import { TaskService } from "./services/task.js";
 import { ToolGateService } from "./services/tool-gate.js";
-import { TrustMeterService } from "./services/trust-meter.js";
 import { TruthProjectorService } from "./services/truth-projector.js";
 import { TruthService } from "./services/truth.js";
 import { VerificationProjectorService } from "./services/verification-projector.js";
@@ -95,14 +92,15 @@ import type {
   BrewvaReplaySession,
   BrewvaConfig,
   BrewvaStructuredEvent,
+  DeepReadonly,
   DecideEffectCommitmentInput,
   DecideEffectCommitmentResult,
   DecisionReceipt,
   PendingEffectCommitmentRequest,
   ToolInvocationPosture,
+  ToolGovernanceDescriptor,
   ToolMutationReceipt,
   ToolMutationRollbackResult,
-  ToolGovernanceDescriptor,
   SkillDocument,
   SkillDispatchDecision,
   SkillActivationResult,
@@ -110,6 +108,7 @@ import type {
   SkillCascadeChainSource,
   SkillCascadeControlResult,
   SkillOutputValidationResult,
+  SkillRoutingScope,
   ProposalEnvelope,
   ProposalKind,
   ProposalListQuery,
@@ -148,6 +147,7 @@ export interface BrewvaRuntimeOptions {
   governancePort?: GovernancePort;
   agentId?: string;
   skillCascadeChainSources?: SkillCascadeChainSource[];
+  routingScopes?: SkillRoutingScope[];
 }
 
 export interface VerifyCompletionOptions {
@@ -157,6 +157,7 @@ export interface VerifyCompletionOptions {
 
 type RuntimeConfigState = {
   config: BrewvaConfig;
+  readonlyConfig: DeepReadonly<BrewvaConfig>;
 };
 
 type RuntimeCoreDependencies = {
@@ -201,69 +202,32 @@ type RuntimeServiceDependencies = {
   effectCommitmentDeskService: EffectCommitmentDeskService;
 };
 
-function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "then" in value &&
-    typeof (value as { then?: unknown }).then === "function"
-  );
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function normalizeReasonList(
-  input: { reason?: string; reasons?: string[] } | undefined,
-  fallback: string,
-): string[] {
-  const values = [
-    ...(input?.reasons ?? []),
-    ...(typeof input?.reason === "string" ? [input.reason] : []),
-  ]
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
-  if (values.length === 0) {
-    return [fallback];
+function deepFreezeValue<T>(value: T): DeepReadonly<T> {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      deepFreezeValue(entry);
+    }
+    return Object.freeze(value) as DeepReadonly<T>;
   }
-  return [...new Set(values)];
-}
-
-function normalizePolicyBasis(values: readonly string[] | undefined, fallback: string): string[] {
-  const normalized = (values ?? [])
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
-  if (normalized.length === 0) {
-    return [fallback];
+  if (isPlainObject(value)) {
+    for (const entry of Object.values(value)) {
+      deepFreezeValue(entry);
+    }
+    return Object.freeze(value) as DeepReadonly<T>;
   }
-  return [...new Set(normalized)];
-}
-
-function buildKernelEffectCommitmentDecision(input: {
-  descriptor: ToolGovernanceDescriptor;
-  toolName: string;
-}): EffectCommitmentAuthorizationDecision {
-  const effectSet = new Set(input.descriptor.effects);
-  const toolName = input.toolName;
-  const policySuffix =
-    effectSet.has("external_network") || effectSet.has("external_side_effect")
-      ? "effect_commitment_external_requires_port"
-      : effectSet.has("schedule_mutation")
-        ? "effect_commitment_schedule_requires_port"
-        : effectSet.has("local_exec")
-          ? "effect_commitment_local_exec_requires_port"
-          : "effect_commitment_unknown_requires_port";
-
-  return {
-    decision: "defer",
-    policyBasis: ["effect_commitment_kernel_policy", policySuffix],
-    reasons: [`effect_commitment_requires_governance_port:${toolName}`],
-  };
+  return value as DeepReadonly<T>;
 }
 
 export class BrewvaRuntime {
-  readonly cwd: string;
-  readonly workspaceRoot: string;
-  readonly agentId: string;
-  readonly config: BrewvaConfig;
-  readonly skills: {
+  declare readonly cwd: string;
+  declare readonly workspaceRoot: string;
+  declare readonly agentId: string;
+  declare readonly config: DeepReadonly<BrewvaConfig>;
+  declare readonly skills: {
     refresh(): void;
     getLoadReport(): SkillRegistryLoadReport;
     list(): SkillDocument[];
@@ -300,7 +264,7 @@ export class BrewvaRuntime {
       },
     ): SkillCascadeControlResult;
   };
-  readonly proposals: {
+  declare readonly proposals: {
     submit<K extends ProposalKind>(
       sessionId: string,
       proposal: ProposalEnvelope<K>,
@@ -313,7 +277,7 @@ export class BrewvaRuntime {
       input: DecideEffectCommitmentInput,
     ): DecideEffectCommitmentResult;
   };
-  readonly context: {
+  declare readonly context: {
     onTurnStart(sessionId: string, turnIndex: number): void;
     onTurnEnd(sessionId: string): void;
     onUserInput(sessionId: string): void;
@@ -378,13 +342,16 @@ export class BrewvaRuntime {
       },
     ): void;
   };
-  readonly tools: {
+  declare readonly tools: {
     checkAccess(sessionId: string, toolName: string): { allowed: boolean; reason?: string };
     explainAccess(input: { sessionId: string; toolName: string; usage?: ContextBudgetUsage }): {
       allowed: boolean;
       reason?: string;
       warning?: string;
     };
+    getGovernanceDescriptor(toolName: string): ToolGovernanceDescriptor | undefined;
+    registerGovernanceDescriptor(toolName: string, input: ToolGovernanceDescriptor): void;
+    unregisterGovernanceDescriptor(toolName: string): void;
     start(input: {
       sessionId: string;
       toolCallId: string;
@@ -411,6 +378,7 @@ export class BrewvaRuntime {
       channelSuccess: boolean;
       verdict?: "pass" | "fail" | "inconclusive";
       metadata?: Record<string, unknown>;
+      effectCommitmentRequestId?: string;
     }): void;
     acquireParallelSlot(sessionId: string, runId: string): ParallelAcquireResult;
     acquireParallelSlotAsync(
@@ -444,15 +412,17 @@ export class BrewvaRuntime {
     resolveUndoSessionId(preferredSessionId?: string): string | undefined;
     recordResult(input: {
       sessionId: string;
+      toolCallId?: string;
       toolName: string;
       args: Record<string, unknown>;
       outputText: string;
       channelSuccess: boolean;
       verdict?: "pass" | "fail" | "inconclusive";
       metadata?: Record<string, unknown>;
+      effectCommitmentRequestId?: string;
     }): string;
   };
-  readonly task: {
+  declare readonly task: {
     setSpec(sessionId: string, spec: TaskSpec): void;
     addItem(
       sessionId: string,
@@ -469,7 +439,7 @@ export class BrewvaRuntime {
     resolveBlocker(sessionId: string, blockerId: string): TaskBlockerResolveResult;
     getState(sessionId: string): TaskState;
   };
-  readonly truth: {
+  declare readonly truth: {
     getState(sessionId: string): TruthState;
     upsertFact(
       sessionId: string,
@@ -485,14 +455,14 @@ export class BrewvaRuntime {
     ): TruthFactUpsertResult;
     resolveFact(sessionId: string, truthFactId: string): TruthFactResolveResult;
   };
-  readonly ledger: {
+  declare readonly ledger: {
     getDigest(sessionId: string): string;
     query(sessionId: string, query: EvidenceQuery): string;
     listRows(sessionId?: string): EvidenceLedgerRow[];
     verifyChain(sessionId: string): { valid: boolean; reason?: string };
     getPath(): string;
   };
-  readonly schedule: {
+  declare readonly schedule: {
     createIntent(
       sessionId: string,
       input: ScheduleIntentCreateInput,
@@ -508,7 +478,7 @@ export class BrewvaRuntime {
     listIntents(query?: ScheduleIntentListQuery): Promise<ScheduleIntentProjectionRecord[]>;
     getProjectionSnapshot(): Promise<ScheduleProjectionSnapshot>;
   };
-  readonly turnWal: {
+  declare readonly turnWal: {
     appendPending(
       envelope: TurnEnvelope,
       source: TurnWALSource,
@@ -528,7 +498,7 @@ export class BrewvaRuntime {
       dropped: number;
     };
   };
-  readonly events: {
+  declare readonly events: {
     record(input: RuntimeRecordEventInput): BrewvaEventRecord | undefined;
     query(sessionId: string, query?: BrewvaEventQuery): BrewvaEventRecord[];
     queryStructured(sessionId: string, query?: BrewvaEventQuery): BrewvaStructuredEvent[];
@@ -548,7 +518,7 @@ export class BrewvaRuntime {
     list(sessionId: string, query?: BrewvaEventQuery): BrewvaEventRecord[];
     listSessionIds(): string[];
   };
-  readonly verification: {
+  declare readonly verification: {
     evaluate(sessionId: string, level?: VerificationLevel): VerificationReport;
     verify(
       sessionId: string,
@@ -556,7 +526,7 @@ export class BrewvaRuntime {
       options?: VerifyCompletionOptions,
     ): Promise<VerificationReport>;
   };
-  readonly cost: {
+  declare readonly cost: {
     recordAssistantUsage(input: {
       sessionId: string;
       model: string;
@@ -570,7 +540,7 @@ export class BrewvaRuntime {
     }): void;
     getSummary(sessionId: string): SessionCostSummary;
   };
-  readonly session: {
+  declare readonly session: {
     recordWorkerResult(sessionId: string, result: WorkerResult): void;
     listWorkerResults(sessionId: string): WorkerResult[];
     mergeWorkerResults(sessionId: string): WorkerMergeReport;
@@ -587,210 +557,124 @@ export class BrewvaRuntime {
     getHydration(sessionId: string): SessionHydrationState;
   };
 
-  private readonly evidenceLedger: EvidenceLedger;
-  private readonly parallel: ParallelBudgetManager;
-  private readonly parallelResults: ParallelResultStore;
-  private readonly contextBudget: ContextBudgetManager;
-  private readonly contextInjection: ContextInjectionCollector;
-  private readonly fileChanges: FileChangeTracker;
-  private readonly costTracker: SessionCostTracker;
+  declare private readonly evidenceLedger: EvidenceLedger;
+  declare private readonly parallel: ParallelBudgetManager;
+  declare private readonly parallelResults: ParallelResultStore;
+  declare private readonly contextBudget: ContextBudgetManager;
+  declare private readonly contextInjection: ContextInjectionCollector;
+  declare private readonly fileChanges: FileChangeTracker;
+  declare private readonly costTracker: SessionCostTracker;
 
-  private readonly skillRegistry: SkillRegistry;
-  private readonly verificationGate: VerificationGate;
-  private readonly eventStore: BrewvaEventStore;
-  private readonly turnWalStore: TurnWALStore;
-  private readonly projectionEngine: ProjectionEngine;
+  declare private readonly skillRegistry: SkillRegistry;
+  declare private readonly verificationGate: VerificationGate;
+  declare private readonly eventStore: BrewvaEventStore;
+  declare private readonly turnWalStore: TurnWALStore;
+  declare private readonly projectionEngine: ProjectionEngine;
 
   private readonly sessionState = new RuntimeSessionStateStore();
   private readonly kernel: RuntimeKernelContext;
-  private readonly contextService: ContextService;
-  private readonly costService: CostService;
-  private readonly eventPipeline: EventPipelineService;
-  private readonly effectCommitmentDeskService: EffectCommitmentDeskService;
-  private readonly fileChangeService: FileChangeService;
-  private readonly resourceLeaseService: ResourceLeaseService;
-  private readonly ledgerService: LedgerService;
-  private readonly mutationRollbackService: MutationRollbackService;
-  private readonly parallelService: ParallelService;
-  private readonly proposalAdmissionService: ProposalAdmissionService;
-  private readonly explorationSupervisorService: ExplorationSupervisorService;
-  private readonly taskWatchdogService: TaskWatchdogService;
-  private readonly scheduleIntentService: ScheduleIntentService;
-  private readonly sessionLifecycleService: SessionLifecycleService;
-  private readonly skillLifecycleService: SkillLifecycleService;
-  private readonly skillCascadeService: SkillCascadeService;
-  private readonly taskService: TaskService;
-  private readonly tapeService: TapeService;
-  private readonly truthService: TruthService;
-  private readonly truthProjectorService: TruthProjectorService;
-  private readonly toolGateService: ToolGateService;
-  private readonly verificationProjectorService: VerificationProjectorService;
-  private readonly verificationService: VerificationService;
-  private turnReplay: TurnReplayEngine;
+  declare private readonly contextService: ContextService;
+  declare private readonly costService: CostService;
+  declare private readonly eventPipeline: EventPipelineService;
+  declare private readonly effectCommitmentDeskService: EffectCommitmentDeskService;
+  declare private readonly fileChangeService: FileChangeService;
+  declare private readonly resourceLeaseService: ResourceLeaseService;
+  declare private readonly ledgerService: LedgerService;
+  declare private readonly mutationRollbackService: MutationRollbackService;
+  declare private readonly parallelService: ParallelService;
+  declare private readonly proposalAdmissionService: ProposalAdmissionService;
+  declare private readonly explorationSupervisorService: ExplorationSupervisorService;
+  declare private readonly taskWatchdogService: TaskWatchdogService;
+  declare private readonly scheduleIntentService: ScheduleIntentService;
+  declare private readonly sessionLifecycleService: SessionLifecycleService;
+  declare private readonly skillLifecycleService: SkillLifecycleService;
+  declare private readonly skillCascadeService: SkillCascadeService;
+  declare private readonly taskService: TaskService;
+  declare private readonly tapeService: TapeService;
+  declare private readonly truthService: TruthService;
+  declare private readonly truthProjectorService: TruthProjectorService;
+  declare private readonly toolGateService: ToolGateService;
+  declare private readonly verificationProjectorService: VerificationProjectorService;
+  declare private readonly verificationService: VerificationService;
+  declare private readonly runtimeConfig: BrewvaConfig;
+  private readonly toolGovernanceRegistry = createToolGovernanceRegistry();
+  declare private turnReplay: TurnReplayEngine;
 
   constructor(options: BrewvaRuntimeOptions = {}) {
-    this.cwd = resolve(options.cwd ?? process.cwd());
-    this.workspaceRoot = resolveWorkspaceRootDir(this.cwd);
-    this.agentId = normalizeAgentId(options.agentId ?? process.env["BREWVA_AGENT_ID"]);
+    const cwd = resolve(options.cwd ?? process.cwd());
+    const workspaceRoot = resolveWorkspaceRootDir(cwd);
+    const agentId = normalizeAgentId(options.agentId ?? process.env["BREWVA_AGENT_ID"]);
+    Object.assign(this, {
+      cwd,
+      workspaceRoot,
+      agentId,
+    });
     const configState = this.resolveRuntimeConfig(options);
-    this.config = configState.config;
-    const coreDependencies = this.createCoreDependencies(options);
-    this.skillRegistry = coreDependencies.skillRegistry;
-    this.evidenceLedger = coreDependencies.evidenceLedger;
-    this.verificationGate = coreDependencies.verificationGate;
-    this.parallel = coreDependencies.parallel;
-    this.parallelResults = coreDependencies.parallelResults;
-    this.eventStore = coreDependencies.eventStore;
-    this.turnWalStore = coreDependencies.turnWalStore;
-    this.contextBudget = coreDependencies.contextBudget;
-    this.contextInjection = coreDependencies.contextInjection;
-    this.turnReplay = coreDependencies.turnReplay;
-    this.fileChanges = coreDependencies.fileChanges;
-    this.costTracker = coreDependencies.costTracker;
-    this.projectionEngine = coreDependencies.projectionEngine;
+    Object.assign(this, {
+      runtimeConfig: configState.config,
+      config: configState.readonlyConfig,
+    });
+    Object.assign(this, this.createCoreDependencies(options));
     this.kernel = this.createKernelContext(options);
-
-    const serviceDependencies = this.createServiceDependencies(options);
-    this.proposalAdmissionService = serviceDependencies.proposalAdmissionService;
-    this.skillLifecycleService = serviceDependencies.skillLifecycleService;
-    this.skillCascadeService = serviceDependencies.skillCascadeService;
-    this.taskService = serviceDependencies.taskService;
-    this.truthService = serviceDependencies.truthService;
-    this.ledgerService = serviceDependencies.ledgerService;
-    this.resourceLeaseService = serviceDependencies.resourceLeaseService;
-    this.parallelService = serviceDependencies.parallelService;
-    this.costService = serviceDependencies.costService;
-    this.verificationService = serviceDependencies.verificationService;
-    this.contextService = serviceDependencies.contextService;
-    this.explorationSupervisorService = serviceDependencies.explorationSupervisorService;
-    this.taskWatchdogService = serviceDependencies.taskWatchdogService;
-    this.tapeService = serviceDependencies.tapeService;
-    this.eventPipeline = serviceDependencies.eventPipeline;
-    this.effectCommitmentDeskService = serviceDependencies.effectCommitmentDeskService;
-    this.truthProjectorService = serviceDependencies.truthProjectorService;
-    this.verificationProjectorService = serviceDependencies.verificationProjectorService;
-    this.scheduleIntentService = serviceDependencies.scheduleIntentService;
-    this.fileChangeService = serviceDependencies.fileChangeService;
-    this.mutationRollbackService = serviceDependencies.mutationRollbackService;
-    this.sessionLifecycleService = serviceDependencies.sessionLifecycleService;
-    this.toolGateService = serviceDependencies.toolGateService;
+    Object.assign(this, this.createServiceDependencies(options));
     this.eventPipeline.subscribeEvents((event) =>
       this.skillCascadeService.handleRuntimeEvent(event),
     );
-
-    const domainApis = this.createDomainApis();
-    this.skills = domainApis.skills;
-    this.proposals = domainApis.proposals;
-    this.context = domainApis.context;
-    this.tools = domainApis.tools;
-    this.task = domainApis.task;
-    this.truth = domainApis.truth;
-    this.ledger = domainApis.ledger;
-    this.schedule = domainApis.schedule;
-    this.turnWal = domainApis.turnWal;
-    this.events = domainApis.events;
-    this.verification = domainApis.verification;
-    this.cost = domainApis.cost;
-    this.session = domainApis.session;
+    Object.assign(this, this.createDomainApis());
   }
 
   private resolveRuntimeConfig(options: BrewvaRuntimeOptions): RuntimeConfigState {
-    if (options.config) {
-      return {
-        config: normalizeBrewvaConfig(options.config, DEFAULT_BREWVA_CONFIG),
-      };
+    const config = options.config
+      ? normalizeBrewvaConfig(options.config, DEFAULT_BREWVA_CONFIG)
+      : loadBrewvaConfig({
+          cwd: this.cwd,
+          configPath: options.configPath,
+        });
+
+    if (options.routingScopes && options.routingScopes.length > 0) {
+      config.skills.routing.enabled = true;
+      config.skills.routing.scopes = [...new Set(options.routingScopes)];
     }
+
     return {
-      config: loadBrewvaConfig({
-        cwd: this.cwd,
-        configPath: options.configPath,
-      }),
+      config,
+      readonlyConfig: deepFreezeValue(config),
     };
   }
 
   private createCoreDependencies(_options: BrewvaRuntimeOptions): RuntimeCoreDependencies {
-    const skillRegistry = new SkillRegistry({
-      rootDir: this.cwd,
-      config: this.config,
-    });
-    skillRegistry.load();
-    skillRegistry.writeIndex();
-
-    const evidenceLedger = new EvidenceLedger(resolve(this.workspaceRoot, this.config.ledger.path));
-    const verificationGate = new VerificationGate(this.config);
-    const parallel = new ParallelBudgetManager(this.config.parallel);
-    const parallelResults = new ParallelResultStore();
-    const eventStore = new BrewvaEventStore(this.config.infrastructure.events, this.workspaceRoot);
-    const turnWalStore = new TurnWALStore({
+    return assembleRuntimeCoreDependencies({
+      cwd: this.cwd,
       workspaceRoot: this.workspaceRoot,
-      config: this.config.infrastructure.turnWal,
-      scope: "runtime",
-      recordEvent: (input) => {
-        this.recordEvent({
-          sessionId: input.sessionId,
-          type: input.type,
-          payload: input.payload,
-          skipTapeCheckpoint: true,
-        });
-      },
+      config: this.runtimeConfig,
+      recordEvent: (input) => this.recordEvent(input),
+      getCurrentTurn: (sessionId) => this.getCurrentTurn(sessionId),
     });
-    const contextBudget = new ContextBudgetManager(this.config.infrastructure.contextBudget);
-    const contextInjection = new ContextInjectionCollector({
-      sourceTokenLimits: {},
-      maxEntriesPerSession: this.config.infrastructure.contextBudget.arena.maxEntriesPerSession,
-    });
-    const turnReplay = new TurnReplayEngine({
-      listEvents: (sessionId) => eventStore.list(sessionId),
-      getTurn: (sessionId) => this.getCurrentTurn(sessionId),
-    });
-    const fileChanges = new FileChangeTracker(this.cwd, {
-      artifactsBaseDir: this.workspaceRoot,
-    });
-    const costTracker = new SessionCostTracker(this.config.infrastructure.costTracking);
-    const projectionEngine = new ProjectionEngine({
-      enabled: this.config.projection.enabled,
-      rootDir: resolve(this.workspaceRoot, this.config.projection.dir),
-      workingFile: this.config.projection.workingFile,
-      maxWorkingChars: this.config.projection.maxWorkingChars,
-      recordEvent: (eventInput) => this.recordEvent(eventInput),
-    });
-
-    return {
-      skillRegistry,
-      evidenceLedger,
-      verificationGate,
-      parallel,
-      parallelResults,
-      eventStore,
-      turnWalStore,
-      contextBudget,
-      contextInjection,
-      turnReplay,
-      fileChanges,
-      costTracker,
-      projectionEngine,
-    };
   }
 
   private createKernelContext(options: BrewvaRuntimeOptions): RuntimeKernelContext {
-    return {
+    return assembleRuntimeKernelContext({
       cwd: this.cwd,
       workspaceRoot: this.workspaceRoot,
       agentId: this.agentId,
-      config: this.config,
+      config: this.runtimeConfig,
       governancePort: options.governancePort,
+      coreDependencies: {
+        skillRegistry: this.skillRegistry,
+        evidenceLedger: this.evidenceLedger,
+        verificationGate: this.verificationGate,
+        parallel: this.parallel,
+        parallelResults: this.parallelResults,
+        eventStore: this.eventStore,
+        turnWalStore: this.turnWalStore,
+        contextBudget: this.contextBudget,
+        contextInjection: this.contextInjection,
+        turnReplay: this.turnReplay,
+        fileChanges: this.fileChanges,
+        costTracker: this.costTracker,
+        projectionEngine: this.projectionEngine,
+      },
       sessionState: this.sessionState,
-      contextBudget: this.contextBudget,
-      contextInjection: this.contextInjection,
-      projectionEngine: this.projectionEngine,
-      turnReplay: this.turnReplay,
-      eventStore: this.eventStore,
-      evidenceLedger: this.evidenceLedger,
-      verificationGate: this.verificationGate,
-      parallel: this.parallel,
-      parallelResults: this.parallelResults,
-      fileChanges: this.fileChanges,
-      costTracker: this.costTracker,
       getCurrentTurn: (sessionId) => this.getCurrentTurn(sessionId),
       getTaskState: (sessionId) => this.getTaskState(sessionId),
       getTruthState: (sessionId) => this.getTruthState(sessionId),
@@ -800,350 +684,44 @@ export class BrewvaRuntime {
         this.getRecentToolOutputDistillations(sessionId, maxEntries),
       getLatestVerificationOutcome: (sessionId) => this.getLatestVerificationOutcome(sessionId),
       isContextBudgetEnabled: () => this.isContextBudgetEnabled(),
-    };
+    });
   }
 
   private createServiceDependencies(options: BrewvaRuntimeOptions): RuntimeServiceDependencies {
-    const taskService = new TaskService({
-      config: this.config,
-      isContextBudgetEnabled: () => this.kernel.isContextBudgetEnabled(),
-      resolveContextBudgetThresholds: (sessionId, usage) => ({
-        compactionThresholdPercent: this.contextBudget.getEffectiveCompactionThresholdPercent(
-          sessionId,
-          usage,
-        ),
-        hardLimitPercent: this.contextBudget.getEffectiveHardLimitPercent(sessionId, usage),
-      }),
-      getTaskState: (sessionId) => this.kernel.getTaskState(sessionId),
-      getTruthState: (sessionId) => this.kernel.getTruthState(sessionId),
-      evaluateCompletion: (sessionId, level) => this.evaluateCompletion(sessionId, level),
-      recordEvent: (input) => this.kernel.recordEvent(input),
-    });
-    const skillLifecycleService = new SkillLifecycleService({
-      skills: this.skillRegistry,
-      sessionState: this.sessionState,
-      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
-      getTaskState: (sessionId) => this.kernel.getTaskState(sessionId),
-      recordEvent: (input) => this.kernel.recordEvent(input),
-      setTaskSpec: (sessionId, spec) => taskService.setTaskSpec(sessionId, spec),
-    });
-    const skillCascadeService = new SkillCascadeService({
-      config: this.config.skills.cascade,
-      skills: this.skillRegistry,
-      sessionState: this.sessionState,
-      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
-      getActiveSkill: (sessionId) => skillLifecycleService.getActiveSkill(sessionId),
-      activateSkill: (sessionId, name) => skillLifecycleService.activateSkill(sessionId, name),
-      getSkillOutputs: (sessionId, skillName) =>
-        skillLifecycleService.getSkillOutputs(sessionId, skillName),
-      listProducedOutputKeys: (sessionId) =>
-        skillLifecycleService.listProducedOutputKeys(sessionId),
-      recordEvent: (input) => this.kernel.recordEvent(input),
-      chainSources: options.skillCascadeChainSources,
-    });
-    const truthService = new TruthService({
-      getTruthState: (sessionId) => this.kernel.getTruthState(sessionId),
-      recordEvent: (input) => this.kernel.recordEvent(input),
-    });
-    const ledgerService = new LedgerService({
-      config: this.config,
-      evidenceLedger: this.evidenceLedger,
-      sessionState: this.sessionState,
-      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
-      recordEvent: (input) => this.kernel.recordEvent(input),
-      skillLifecycleService,
-    });
-    const resourceLeaseService = new ResourceLeaseService({
-      sessionState: this.sessionState,
-      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
-      recordEvent: (input) => this.kernel.recordEvent(input),
-      skillLifecycleService,
-    });
-    const parallelService = new ParallelService({
-      securityConfig: this.config.security,
-      parallel: this.parallel,
-      parallelResults: this.parallelResults,
-      sessionState: this.sessionState,
-      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
-      recordEvent: (input) => this.kernel.recordEvent(input),
-      resourceLeaseService,
-      skillLifecycleService,
-    });
-    const costService = new CostService({
-      costTracker: this.costTracker,
-      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
-      recordEvent: (input) => this.kernel.recordEvent(input),
-      ledgerService,
-      skillLifecycleService,
-      governancePort: options.governancePort,
-    });
-    const trustMeterService = new TrustMeterService();
-    const verificationService = new VerificationService({
+    return assembleRuntimeServiceDependencies({
       cwd: this.cwd,
-      config: this.config,
-      verificationGate: this.verificationGate,
-      getTaskState: (sessionId) => this.kernel.getTaskState(sessionId),
-      recordEvent: (input) => this.kernel.recordEvent(input),
-      governancePort: options.governancePort,
-      skillLifecycleService,
-      ledgerService,
-      trustMeterService,
-    });
-    const effectCommitmentDeskService = new EffectCommitmentDeskService({
-      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
-      listEvents: (sessionId) => this.eventStore.list(sessionId),
-      recordEvent: (input) => this.kernel.recordEvent(input),
-    });
-    const proposalAdmissionService = new ProposalAdmissionService({
-      listDecisionReceiptEvents: (sessionId) =>
-        this.eventStore.list(sessionId, { type: DECISION_RECEIPT_RECORDED_EVENT_TYPE }),
-      recordEvent: (input) => this.kernel.recordEvent(input),
-      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
-      skillRegistry: this.skillRegistry,
-      skillLifecycleService,
-      effectCommitmentAuthorizer: ({ sessionId, proposal, descriptor, turn }) => {
-        const toolName = proposal.payload.toolName.trim() || proposal.subject.trim();
-        const governanceDecision = options.governancePort?.authorizeEffectCommitment?.({
-          sessionId,
-          proposal,
-          turn,
-        });
-        if (governanceDecision !== undefined) {
-          if (isPromiseLike(governanceDecision)) {
-            return {
-              decision: "defer",
-              policyBasis: [
-                "effect_commitment_governance_port",
-                "effect_commitment_async_unsupported",
-              ],
-              reasons: [`effect_commitment_async_authorization_not_supported:${toolName}`],
-            };
-          }
-          const decision =
-            governanceDecision.decision === "accept" ||
-            governanceDecision.decision === "reject" ||
-            governanceDecision.decision === "defer"
-              ? governanceDecision.decision
-              : "reject";
-          return {
-            decision,
-            policyBasis: normalizePolicyBasis(
-              governanceDecision.policyBasis,
-              "effect_commitment_governance_port",
-            ),
-            reasons: normalizeReasonList(
-              governanceDecision,
-              `effect_commitment_${decision}:${toolName}`,
-            ),
-          };
-        }
-        if (options.governancePort) {
-          return buildKernelEffectCommitmentDecision({
-            descriptor,
-            toolName,
-          });
-        }
-        return effectCommitmentDeskService.authorize({
-          sessionId,
-          proposal,
-          descriptor,
-          turn,
-        });
-      },
-    });
-    const contextSourceProviders = new ContextSourceProviderRegistry();
-    registerBuiltInContextSourceProviders(contextSourceProviders, {
       workspaceRoot: this.workspaceRoot,
       agentId: this.agentId,
-      kernel: this.kernel,
-      proposalAdmissionService,
-      skillLifecycleService,
-      skillCascadeService,
-    });
-    const contextService = new ContextService({
-      config: this.config,
-      contextBudget: this.contextBudget,
-      contextInjection: this.contextInjection,
-      sessionState: this.sessionState,
-      getTruthState: (sessionId) => this.kernel.getTruthState(sessionId),
-      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
-      sanitizeInput: (text) => this.kernel.sanitizeInput(text),
-      recordEvent: (input) => this.kernel.recordEvent(input),
-      alwaysAllowedTools: CONTEXT_CRITICAL_ALLOWED_TOOLS,
-      contextSourceProviders,
-      ledgerService,
-      skillLifecycleService,
-      taskService,
+      config: this.runtimeConfig,
       governancePort: options.governancePort,
-    });
-    const explorationSupervisorService = new ExplorationSupervisorService({
+      skillCascadeChainSources: options.skillCascadeChainSources,
+      kernel: this.kernel,
+      coreDependencies: {
+        skillRegistry: this.skillRegistry,
+        evidenceLedger: this.evidenceLedger,
+        verificationGate: this.verificationGate,
+        parallel: this.parallel,
+        parallelResults: this.parallelResults,
+        eventStore: this.eventStore,
+        turnWalStore: this.turnWalStore,
+        contextBudget: this.contextBudget,
+        contextInjection: this.contextInjection,
+        turnReplay: this.turnReplay,
+        fileChanges: this.fileChanges,
+        costTracker: this.costTracker,
+        projectionEngine: this.projectionEngine,
+      },
       sessionState: this.sessionState,
-      listEvents: (sessionId, query) => this.eventStore.list(sessionId, query),
-      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
-      recordEvent: (input) => this.kernel.recordEvent(input),
-      skillLifecycleService,
-      trustMeterService,
-    });
-    const taskWatchdogService = new TaskWatchdogService({
-      listEvents: (sessionId, query) => this.eventStore.list(sessionId, query),
-      getTaskState: (sessionId) => this.kernel.getTaskState(sessionId),
-      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
-      recordEvent: (input) => this.kernel.recordEvent(input),
-      taskService,
-    });
-    const reversibleMutationService = new ReversibleMutationService({
-      getTaskState: (sessionId) => this.kernel.getTaskState(sessionId),
-      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
-      recordEvent: (input) => this.kernel.recordEvent(input),
-    });
-    const tapeService = new TapeService({
-      tapeConfig: this.config.tape,
-      sessionState: this.sessionState,
-      queryEvents: (sessionId, query) => this.eventStore.list(sessionId, query),
-      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
-      getTaskState: (sessionId) => this.kernel.getTaskState(sessionId),
-      getTruthState: (sessionId) => this.kernel.getTruthState(sessionId),
-      getCostSummary: (sessionId) => this.resolveCheckpointCostSummary(sessionId),
-      getCostSkillLastTurnByName: (sessionId) =>
+      resolveToolGovernanceDescriptor: (toolName) => this.toolGovernanceRegistry.get(toolName),
+      resolveToolGovernanceSource: (toolName) =>
+        getToolGovernanceResolution(toolName, this.toolGovernanceRegistry).source,
+      resolveToolInvocationPosture: (toolName) =>
+        this.toolGovernanceRegistry.get(toolName)?.posture ?? "observe",
+      resolveCheckpointCostSummary: (sessionId) => this.resolveCheckpointCostSummary(sessionId),
+      resolveCheckpointCostSkillLastTurnByName: (sessionId) =>
         this.resolveCheckpointCostSkillLastTurnByName(sessionId),
-      getCheckpointEvidenceState: (sessionId) =>
-        this.turnReplay.getCheckpointEvidenceState(sessionId),
-      getCheckpointProjectionState: (sessionId) =>
-        this.turnReplay.getCheckpointProjectionState(sessionId),
-      recordEvent: (input) => this.kernel.recordEvent(input),
+      evaluateCompletion: (sessionId, level) => this.evaluateCompletion(sessionId, level),
     });
-    const eventPipeline = new EventPipelineService({
-      events: this.eventStore,
-      level: this.config.infrastructure.events.level,
-      inferEventCategory,
-      observeReplayEvent: (event) => this.turnReplay.observeEvent(event),
-      ingestProjectionEvent: (event) => this.projectionEngine.ingestEvent(event),
-      maybeRecordTapeCheckpoint: (event) => tapeService.maybeRecordTapeCheckpoint(event),
-    });
-    const truthProjectorService = new TruthProjectorService({
-      cwd: this.cwd,
-      getTaskState: (sessionId) => this.kernel.getTaskState(sessionId),
-      getTruthState: (sessionId) => this.kernel.getTruthState(sessionId),
-      eventPipeline,
-      taskService,
-      truthService,
-    });
-    const verificationProjectorService = new VerificationProjectorService({
-      getTaskState: (sessionId) => this.kernel.getTaskState(sessionId),
-      getTruthState: (sessionId) => this.kernel.getTruthState(sessionId),
-      verificationStateStore: this.verificationGate.stateStore,
-      eventPipeline,
-      taskService,
-      truthService,
-    });
-    const scheduleIntentService = new ScheduleIntentService({
-      createManager: () =>
-        new SchedulerService({
-          runtime: {
-            workspaceRoot: this.workspaceRoot,
-            scheduleConfig: this.config.schedule,
-            listSessionIds: () => this.eventStore.listSessionIds(),
-            listEvents: (sessionId, query) => this.eventStore.list(sessionId, query),
-            recordEvent: (input) => eventPipeline.recordEvent(input),
-            subscribeEvents: (listener) => eventPipeline.subscribeEvents(listener),
-            getTruthState: (sessionId) => this.kernel.getTruthState(sessionId),
-            getTaskState: (sessionId) => this.kernel.getTaskState(sessionId),
-            turnWal: {
-              appendPending: (envelope, source, walOptions) =>
-                this.turnWalStore.appendPending(envelope, source, walOptions),
-              markInflight: (walId) => this.turnWalStore.markInflight(walId),
-              markDone: (walId) => this.turnWalStore.markDone(walId),
-              markFailed: (walId, error) => this.turnWalStore.markFailed(walId, error),
-              markExpired: (walId) => this.turnWalStore.markExpired(walId),
-              listPending: () => this.turnWalStore.listPending(),
-            },
-          },
-          enableExecution: false,
-        }),
-    });
-    const fileChangeService = new FileChangeService({
-      sessionState: this.sessionState,
-      fileChanges: this.fileChanges,
-      costTracker: this.costTracker,
-      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
-      recordEvent: (input) => this.kernel.recordEvent(input),
-      ledgerService,
-      skillLifecycleService,
-      trustMeterService,
-      reversibleMutationService,
-    });
-    const mutationRollbackService = new MutationRollbackService({
-      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
-      recordEvent: (input) => this.kernel.recordEvent(input),
-      reversibleMutationService,
-      fileChangeService,
-      trustMeterService,
-    });
-    const sessionLifecycleService = new SessionLifecycleService({
-      sessionState: this.sessionState,
-      contextBudget: this.contextBudget,
-      contextInjection: this.contextInjection,
-      fileChanges: this.fileChanges,
-      verificationGate: this.verificationGate,
-      parallel: this.parallel,
-      parallelResults: this.parallelResults,
-      costTracker: this.costTracker,
-      projectionEngine: this.projectionEngine,
-      turnReplay: this.turnReplay,
-      eventStore: this.eventStore,
-      evidenceLedger: this.evidenceLedger,
-      recordEvent: (input) => this.kernel.recordEvent(input),
-      contextService,
-    });
-    const toolGateService = new ToolGateService({
-      securityConfig: this.config.security,
-      costTracker: this.costTracker,
-      sessionState: this.sessionState,
-      getCurrentTurn: (sessionId) => this.kernel.getCurrentTurn(sessionId),
-      recordEvent: (input) => this.kernel.recordEvent(input),
-      alwaysAllowedTools: CONTROL_PLANE_TOOLS,
-      resourceLeaseService,
-      skillLifecycleService,
-      contextService,
-      fileChangeService,
-      ledgerService,
-      proposalAdmissionService,
-      effectCommitmentDeskService,
-      reversibleMutationService,
-      explorationSupervisorService,
-    });
-    sessionLifecycleService.onClearState((sessionId) => {
-      trustMeterService.clear(sessionId);
-      taskWatchdogService.clear(sessionId);
-      reversibleMutationService.clear(sessionId);
-      effectCommitmentDeskService.clear(sessionId);
-    });
-
-    return {
-      proposalAdmissionService,
-      skillLifecycleService,
-      skillCascadeService,
-      taskService,
-      truthService,
-      ledgerService,
-      resourceLeaseService,
-      parallelService,
-      costService,
-      verificationService,
-      contextService,
-      explorationSupervisorService,
-      taskWatchdogService,
-      tapeService,
-      eventPipeline,
-      effectCommitmentDeskService,
-      truthProjectorService,
-      verificationProjectorService,
-      scheduleIntentService,
-      fileChangeService,
-      mutationRollbackService,
-      sessionLifecycleService,
-      toolGateService,
-    };
   }
 
   private createDomainApis(): {
@@ -1282,6 +860,11 @@ export class BrewvaRuntime {
             ? { allowed: true, warning: warnings.join("; ") }
             : { allowed: true };
         },
+        getGovernanceDescriptor: (toolName) => this.toolGovernanceRegistry.get(toolName),
+        registerGovernanceDescriptor: (toolName, input) =>
+          this.toolGovernanceRegistry.register(toolName, input),
+        unregisterGovernanceDescriptor: (toolName) =>
+          this.toolGovernanceRegistry.unregister(toolName),
         start: (input) => this.toolGateService.startToolCall(input),
         finish: (input) => {
           this.toolGateService.finishToolCall(input);
@@ -1305,7 +888,25 @@ export class BrewvaRuntime {
         rollbackLastMutation: (sessionId) => this.mutationRollbackService.rollbackLast(sessionId),
         resolveUndoSessionId: (preferredSessionId) =>
           this.fileChangeService.resolveUndoSessionId(preferredSessionId),
-        recordResult: (input) => this.ledgerService.recordToolResult(input),
+        recordResult: (input) => {
+          const state = this.sessionState.getCell(input.sessionId);
+          const effectCommitmentRequestId =
+            input.effectCommitmentRequestId?.trim() ||
+            (input.toolCallId
+              ? state.effectCommitmentRequestIdsByToolCallId.get(input.toolCallId)
+              : undefined);
+          const ledgerId = this.ledgerService.recordToolResult({
+            ...input,
+            effectCommitmentRequestId,
+          });
+          if (input.toolCallId) {
+            state.effectCommitmentRequestIdsByToolCallId.delete(input.toolCallId);
+          }
+          if (effectCommitmentRequestId) {
+            state.inflightEffectCommitmentRequestIds.delete(effectCommitmentRequestId);
+          }
+          return ledgerId;
+        },
       },
       task: {
         setSpec: (sessionId, spec) => this.taskService.setTaskSpec(sessionId, spec),
@@ -1350,7 +951,7 @@ export class BrewvaRuntime {
         recover: async () => {
           const recovery = new TurnWALRecovery({
             workspaceRoot: this.workspaceRoot,
-            config: this.config.infrastructure.turnWal,
+            config: this.runtimeConfig.infrastructure.turnWal,
             recordEvent: (input: {
               sessionId: string;
               type: string;
@@ -1435,7 +1036,7 @@ export class BrewvaRuntime {
   }
 
   private sanitizeInput(text: string): string {
-    if (!this.config.security.sanitizeContext) {
+    if (!this.runtimeConfig.security.sanitizeContext) {
       return text;
     }
     return sanitizeContextText(text);
@@ -1576,6 +1177,6 @@ export class BrewvaRuntime {
   }
 
   private isContextBudgetEnabled(): boolean {
-    return this.config.infrastructure.contextBudget.enabled;
+    return this.runtimeConfig.infrastructure.contextBudget.enabled;
   }
 }

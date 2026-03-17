@@ -4,6 +4,7 @@ import {
   EFFECT_COMMITMENT_APPROVAL_CONSUMED_EVENT_TYPE,
   EFFECT_COMMITMENT_APPROVAL_DECIDED_EVENT_TYPE,
   EFFECT_COMMITMENT_APPROVAL_REQUESTED_EVENT_TYPE,
+  TOOL_RESULT_RECORDED_EVENT_TYPE,
 } from "../events/event-types.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type {
@@ -35,7 +36,7 @@ interface SessionDeskState {
   requestIdByProposalId: Map<string, string>;
 }
 
-function normalizeArgsSummary(value: string | undefined): string {
+function normalizeArgsDigest(value: string | undefined): string {
   return value?.trim() ?? "";
 }
 
@@ -67,7 +68,7 @@ export interface ResumeEffectCommitmentInput {
   requestId: string;
   toolName: string;
   toolCallId: string;
-  argsSummary?: string;
+  argsDigest: string;
 }
 
 export type ResumeEffectCommitmentResult =
@@ -105,21 +106,6 @@ export class EffectCommitmentDeskService {
     const record = this.getRecordByProposalId(state, input.proposal.id);
     if (record) {
       if (record.state === "accepted") {
-        record.state = "consumed";
-        this.recordEvent({
-          sessionId: input.sessionId,
-          type: EFFECT_COMMITMENT_APPROVAL_CONSUMED_EVENT_TYPE,
-          turn: input.turn,
-          payload: {
-            requestId: record.request.requestId,
-            proposalId: record.request.proposalId,
-            toolName: record.request.toolName,
-            toolCallId: record.request.toolCallId,
-            decision: "accept",
-            actor: record.actor ?? null,
-            reason: record.reason ?? null,
-          },
-        });
         return {
           decision: "accept",
           requestId: record.request.requestId,
@@ -273,9 +259,7 @@ export class EffectCommitmentDeskService {
         reason: `effect_commitment_request_tool_call_id_mismatch:${normalizedRequestId}`,
       };
     }
-    if (
-      normalizeArgsSummary(input.argsSummary) !== normalizeArgsSummary(record.request.argsSummary)
-    ) {
+    if (normalizeArgsDigest(input.argsDigest) !== normalizeArgsDigest(record.request.argsDigest)) {
       return {
         ok: false,
         requestId: normalizedRequestId,
@@ -310,6 +294,53 @@ export class EffectCommitmentDeskService {
       requestId: normalizedRequestId,
       proposal: cloneProposal(record.proposal),
     };
+  }
+
+  observeToolOutcome(input: {
+    sessionId: string;
+    requestId?: string;
+    toolName: string;
+    toolCallId?: string;
+    ledgerId?: string;
+    verdict?: "pass" | "fail" | "inconclusive";
+    channelSuccess?: boolean;
+  }): void {
+    const normalizedRequestId = input.requestId?.trim() ?? "";
+    const normalizedToolCallId = input.toolCallId?.trim() ?? "";
+    const normalizedToolName = normalizeToolName(input.toolName);
+    if (!normalizedRequestId || !normalizedToolCallId || !normalizedToolName) {
+      return;
+    }
+
+    const record = this.getState(input.sessionId).recordsByRequestId.get(normalizedRequestId);
+    if (!record || record.state !== "accepted") {
+      return;
+    }
+    if (
+      normalizedToolName !== record.request.toolName ||
+      normalizedToolCallId !== record.request.toolCallId
+    ) {
+      return;
+    }
+
+    record.state = "consumed";
+    this.recordEvent({
+      sessionId: input.sessionId,
+      type: EFFECT_COMMITMENT_APPROVAL_CONSUMED_EVENT_TYPE,
+      turn: this.getCurrentTurn(input.sessionId),
+      payload: {
+        requestId: record.request.requestId,
+        proposalId: record.request.proposalId,
+        toolName: record.request.toolName,
+        toolCallId: record.request.toolCallId,
+        decision: "accept",
+        actor: record.actor ?? null,
+        reason: record.reason ?? null,
+        ledgerId: input.ledgerId ?? null,
+        verdict: input.verdict ?? null,
+        channelSuccess: typeof input.channelSuccess === "boolean" ? input.channelSuccess : null,
+      },
+    });
   }
 
   getRequestIdForProposal(sessionId: string, proposalId: string): string | undefined {
@@ -393,6 +424,22 @@ export class EffectCommitmentDeskService {
         record.state = payload.decision === "accept" ? "accepted" : "rejected";
         record.actor = payload.actor;
         record.reason = payload.reason;
+        continue;
+      }
+      if (event.type === TOOL_RESULT_RECORDED_EVENT_TYPE) {
+        const payload = this.readToolOutcomePayload(event);
+        if (!payload) {
+          continue;
+        }
+        const record = state.recordsByRequestId.get(payload.requestId);
+        if (
+          record &&
+          record.state === "accepted" &&
+          record.request.toolName === payload.toolName &&
+          record.request.toolCallId === payload.toolCallId
+        ) {
+          record.state = "consumed";
+        }
         continue;
       }
       if (event.type === EFFECT_COMMITMENT_APPROVAL_CONSUMED_EVENT_TYPE) {
@@ -489,6 +536,7 @@ export class EffectCommitmentDeskService {
       typeof proposalPayload.toolName !== "string" ||
       typeof proposalPayload.toolCallId !== "string" ||
       proposalPayload.posture !== "commitment" ||
+      typeof proposalPayload.argsDigest !== "string" ||
       !Array.isArray(proposalPayload.effects)
     ) {
       return undefined;
@@ -508,6 +556,7 @@ export class EffectCommitmentDeskService {
         posture: "commitment",
         effects: [...proposalPayload.effects],
         defaultRisk: proposalPayload.defaultRisk,
+        argsDigest: proposalPayload.argsDigest,
         argsSummary: proposalPayload.argsSummary,
       },
       evidenceRefs,
@@ -620,6 +669,34 @@ export class EffectCommitmentDeskService {
     };
   }
 
+  private readToolOutcomePayload(event: BrewvaEventRecord): {
+    requestId: string;
+    toolName: string;
+    toolCallId: string;
+  } | null {
+    const payload =
+      event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
+        ? (event.payload as Record<string, unknown>)
+        : null;
+    if (!payload) {
+      return null;
+    }
+    const requestId =
+      typeof payload.effectCommitmentRequestId === "string"
+        ? payload.effectCommitmentRequestId.trim()
+        : "";
+    const toolName = typeof payload.toolName === "string" ? payload.toolName.trim() : "";
+    const toolCallId = typeof payload.toolCallId === "string" ? payload.toolCallId.trim() : "";
+    if (!requestId || !toolName || !toolCallId) {
+      return null;
+    }
+    return {
+      requestId,
+      toolName: normalizeToolName(toolName),
+      toolCallId,
+    };
+  }
+
   private createHydratedRecord(input: {
     requestId: string;
     proposal: ProposalEnvelope<"effect_commitment">;
@@ -635,6 +712,7 @@ export class EffectCommitmentDeskService {
       posture: "commitment",
       effects: [...input.proposal.payload.effects],
       defaultRisk: input.proposal.payload.defaultRisk,
+      argsDigest: input.proposal.payload.argsDigest,
       argsSummary: input.proposal.payload.argsSummary,
       evidenceRefs: input.proposal.evidenceRefs.map((ref) => ({ ...ref })),
       turn:

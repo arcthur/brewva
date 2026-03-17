@@ -16,6 +16,7 @@ import type {
   ProposalListQuery,
   ProposalPayloadByKind,
   ProposalRecord,
+  ToolGovernanceDescriptor,
 } from "../types.js";
 import { commitContextPacketProposal } from "./proposal-admission-context-packet.js";
 import {
@@ -59,6 +60,7 @@ export interface ProposalAdmissionServiceOptions {
     SkillLifecycleService,
     "setPendingDispatch" | "listProducedOutputKeys"
   >;
+  resolveToolGovernanceDescriptor: (toolName: string) => ToolGovernanceDescriptor | undefined;
   effectCommitmentAuthorizer: (
     input: AuthorizeEffectCommitmentInput,
   ) => EffectCommitmentAuthorizationDecision;
@@ -74,6 +76,9 @@ export class ProposalAdmissionService {
     decision: Parameters<SkillLifecycleService["setPendingDispatch"]>[1],
   ) => void;
   private readonly listProducedOutputKeys: (sessionId: string) => string[];
+  private readonly resolveToolGovernanceDescriptor: (
+    toolName: string,
+  ) => ToolGovernanceDescriptor | undefined;
   private readonly authorizeEffectCommitment: (
     input: AuthorizeEffectCommitmentInput,
   ) => EffectCommitmentAuthorizationDecision;
@@ -87,6 +92,8 @@ export class ProposalAdmissionService {
       options.skillLifecycleService.setPendingDispatch(sessionId, decision, { emitEvent: true });
     this.listProducedOutputKeys = (sessionId) =>
       options.skillLifecycleService.listProducedOutputKeys(sessionId);
+    this.resolveToolGovernanceDescriptor = (toolName) =>
+      options.resolveToolGovernanceDescriptor(toolName);
     this.authorizeEffectCommitment = (input) => options.effectCommitmentAuthorizer(input);
   }
 
@@ -360,6 +367,8 @@ export class ProposalAdmissionService {
         sessionId,
         proposal: proposal as ProposalEnvelope<"effect_commitment">,
         turn,
+        resolveToolGovernanceDescriptor: (toolName) =>
+          this.resolveToolGovernanceDescriptor(toolName),
         buildDecisionReceipt: (
           nextProposal,
           decision,

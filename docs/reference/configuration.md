@@ -26,6 +26,29 @@ Configuration contract sources:
 
 Configuration files are patch overlays: omitted fields inherit defaults/lower-precedence layers.
 
+## Construction-Time Overrides
+
+Some runtime choices are intentionally constructor inputs rather than persisted
+config-file keys:
+
+- `new BrewvaRuntime({ routingScopes })` overrides `skills.routing.scopes`
+  before normalization and deep-freeze. This is the supported host/session path
+  for routing-scope narrowing.
+- `runtime.config` is deep-readonly after construction. Hosted paths must pass
+  routing scope changes during construction instead of mutating
+  `runtime.config` afterward.
+- trusted-local governance posture is chosen when constructing a governance
+  port, for example
+  `createTrustedLocalGovernancePort({ profile: "personal" | "team" | "restricted" })`
+  rather than through `brewva.json`.
+
+Current front-door defaults:
+
+- CLI-owned runtimes use `personal`
+- gateway/hosted/channel runtimes use `team`
+- raw runtimes without a governance port fail closed by opening the replayable
+  operator desk for commitment-posture effects
+
 ## Key Defaults
 
 ### `skills`

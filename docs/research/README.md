@@ -38,6 +38,7 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 
 - `docs/research/roadmap-notes.md`
 - `docs/research/rfc-invocation-spine-and-posture-runtime-vnext.md`
+- `docs/research/rfc-runtime-decomposition-and-deliberation-thickening.md`
 
 ## Promoted notes (status pointers)
 

@@ -72,18 +72,39 @@ describe("Verification blockers", () => {
         ?.status,
     ).toBe("active");
 
-    runtime.config.verification.commands.tests = "true";
-    runtime.tools.markCall(sessionId, "edit");
-    const report2 = await runtime.verification.verify(sessionId, "standard", {
+    writeConfig(
+      workspace,
+      createTestConfig(
+        {
+          verification: {
+            defaultLevel: "standard",
+            checks: {
+              quick: ["type-check"],
+              standard: ["type-check", "tests"],
+              strict: ["type-check", "tests"],
+            },
+            commands: {
+              "type-check": "true",
+              tests: "true",
+            },
+          },
+        },
+        { eventsLevel: "debug" },
+      ),
+    );
+
+    const reloaded = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    reloaded.tools.markCall(sessionId, "edit");
+    const report2 = await reloaded.verification.verify(sessionId, "standard", {
       executeCommands: true,
       timeoutMs: 5_000,
     });
     expect(report2.passed).toBe(true);
     expect(
-      runtime.task.getState(sessionId).blockers.some((item) => item.id === "verifier:tests"),
+      reloaded.task.getState(sessionId).blockers.some((item) => item.id === "verifier:tests"),
     ).toBe(false);
     expect(
-      runtime.truth.getState(sessionId).facts.find((fact) => fact.id === "truth:verifier:tests")
+      reloaded.truth.getState(sessionId).facts.find((fact) => fact.id === "truth:verifier:tests")
         ?.status,
     ).toBe("resolved");
   });

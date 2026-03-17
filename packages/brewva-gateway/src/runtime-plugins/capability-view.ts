@@ -43,6 +43,9 @@ export interface BuildCapabilityViewInput {
   allTools: ToolLike[];
   activeToolNames: string[];
   resolveAccess?: (toolName: string) => CapabilityAccessDecision;
+  resolveGovernanceDescriptor?: (
+    toolName: string,
+  ) => ReturnType<typeof getToolGovernanceDescriptor>;
   maxRequestedDetails?: number;
 }
 
@@ -155,11 +158,14 @@ function resolveCapabilitySurface(name: string): CapabilitySurface {
   return getBrewvaToolSurface(name) ?? "external";
 }
 
-function resolveCapabilityPosture(name: string): {
+function resolveCapabilityPosture(
+  input: Pick<BuildCapabilityViewInput, "resolveGovernanceDescriptor">,
+  name: string,
+): {
   posture: ToolInvocationPosture;
   effects: ToolEffectClass[];
 } {
-  const descriptor = getToolGovernanceDescriptor(name);
+  const descriptor = input.resolveGovernanceDescriptor?.(name) ?? getToolGovernanceDescriptor(name);
   return {
     posture: descriptor?.posture ?? "observe",
     effects: [...(descriptor?.effects ?? [])],
@@ -200,7 +206,7 @@ function toCapabilityEntries(input: BuildCapabilityViewInput): CapabilityEntry[]
       visible: activeToolNames.has(name),
       governance: GOVERNANCE_TOOL_NAMES.has(name),
       surface: resolveCapabilitySurface(name),
-      ...resolveCapabilityPosture(name),
+      ...resolveCapabilityPosture(input, name),
     });
   }
   entries.sort((left, right) => {

@@ -48,6 +48,8 @@ interface EventFileCache {
   readonly rows: BrewvaEventRecord[];
   byteOffset: number;
   trailingFragment: string;
+  timestampsMonotonic: boolean;
+  lastTimestamp: number | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -177,32 +179,26 @@ export class BrewvaEventStore {
   }
 
   list(sessionId: string, query: BrewvaEventQuery = {}): BrewvaEventRecord[] {
-    const rows = this.listFromCache(sessionId);
-    const requestedLast =
-      typeof query.last === "number" && Number.isFinite(query.last)
-        ? Math.max(0, Math.floor(query.last))
-        : 0;
+    const cache = this.getCache(sessionId);
+    const rows = this.selectTimeWindow(cache, query);
+    const type = typeof query.type === "string" && query.type.trim().length > 0 ? query.type : null;
+    const last = this.normalizeTailCount(query.last);
+    const offset = this.normalizeWindowCount(query.offset);
+    const limit = this.normalizeWindowCount(query.limit);
 
-    if (requestedLast > 0 && query.type) {
-      const matches: BrewvaEventRecord[] = [];
-      for (let index = rows.length - 1; index >= 0; index -= 1) {
-        const row = rows[index];
-        if (!row || row.type !== query.type) continue;
-        matches.push(row);
-        if (matches.length >= requestedLast) break;
-      }
-      return matches.toReversed();
+    let matches = type ? rows.filter((row) => row.type === type) : rows.slice();
+
+    if (last !== null) {
+      matches = matches.slice(-last);
+    }
+    if (offset !== null && offset > 0) {
+      matches = matches.slice(offset);
+    }
+    if (limit !== null) {
+      matches = matches.slice(0, limit);
     }
 
-    if (requestedLast > 0) {
-      return rows.slice(-requestedLast);
-    }
-
-    if (query.type) {
-      return rows.filter((row) => row.type === query.type);
-    }
-
-    return rows.slice();
+    return matches;
   }
 
   listAnchors(sessionId: string, query: Omit<BrewvaEventQuery, "type"> = {}): BrewvaEventRecord[] {
@@ -261,10 +257,18 @@ export class BrewvaEventStore {
       .map(([sessionId]) => sessionId);
   }
 
-  private listFromCache(sessionId: string): BrewvaEventRecord[] {
-    if (!this.enabled) return [];
+  private getCache(sessionId: string): EventFileCache {
+    if (!this.enabled) {
+      return {
+        rows: [],
+        byteOffset: 0,
+        trailingFragment: "",
+        timestampsMonotonic: true,
+        lastTimestamp: null,
+      };
+    }
     const filePath = this.filePathForSession(sessionId);
-    return this.syncCacheForFile(filePath).rows;
+    return this.syncCacheForFile(filePath);
   }
 
   private filePathForSession(sessionId: string): string {
@@ -278,6 +282,8 @@ export class BrewvaEventStore {
         rows: [],
         byteOffset: 0,
         trailingFragment: "",
+        timestampsMonotonic: true,
+        lastTimestamp: null,
       };
       this.eventCacheByFilePath.set(filePath, empty);
       return empty;
@@ -291,6 +297,8 @@ export class BrewvaEventStore {
         rows: [],
         byteOffset: 0,
         trailingFragment: "",
+        timestampsMonotonic: true,
+        lastTimestamp: null,
       };
       this.eventCacheByFilePath.set(filePath, empty);
       return empty;
@@ -316,6 +324,8 @@ export class BrewvaEventStore {
       rows: [],
       byteOffset: size,
       trailingFragment: "",
+      timestampsMonotonic: true,
+      lastTimestamp: null,
     };
 
     if (size > 0) {
@@ -365,7 +375,7 @@ export class BrewvaEventStore {
 
       const parsed = parseEventRecord(trimmed);
       if (parsed) {
-        cache.rows.push(parsed);
+        this.pushRow(cache, parsed);
         continue;
       }
 
@@ -383,8 +393,75 @@ export class BrewvaEventStore {
       this.eventCacheByFilePath.delete(filePath);
       return;
     }
-    cached.rows.push(row);
+    this.pushRow(cached, row);
     cached.byteOffset += Buffer.byteLength(appended, "utf8");
+  }
+
+  private pushRow(cache: EventFileCache, row: BrewvaEventRecord): void {
+    if (cache.lastTimestamp !== null && row.timestamp < cache.lastTimestamp) {
+      cache.timestampsMonotonic = false;
+    }
+    cache.lastTimestamp = row.timestamp;
+    cache.rows.push(row);
+  }
+
+  private selectTimeWindow(cache: EventFileCache, query: BrewvaEventQuery): BrewvaEventRecord[] {
+    const after = this.normalizeTimestamp(query.after);
+    const before = this.normalizeTimestamp(query.before);
+    if (after !== null && before !== null && after >= before) {
+      return [];
+    }
+    if (after === null && before === null) {
+      return cache.rows;
+    }
+    if (cache.timestampsMonotonic) {
+      const startIndex = after === null ? 0 : this.findFirstTimestampAtLeast(cache.rows, after);
+      const endIndex =
+        before === null ? cache.rows.length : this.findFirstTimestampAtLeast(cache.rows, before);
+      return cache.rows.slice(startIndex, endIndex);
+    }
+    return cache.rows.filter((row) => {
+      if (after !== null && row.timestamp < after) return false;
+      if (before !== null && row.timestamp >= before) return false;
+      return true;
+    });
+  }
+
+  private findFirstTimestampAtLeast(rows: readonly BrewvaEventRecord[], target: number): number {
+    let low = 0;
+    let high = rows.length;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      const row = rows[middle];
+      if (!row || row.timestamp >= target) {
+        high = middle;
+      } else {
+        low = middle + 1;
+      }
+    }
+    return low;
+  }
+
+  private normalizeTimestamp(value: number | undefined): number | null {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return null;
+    }
+    return value;
+  }
+
+  private normalizeTailCount(value: number | undefined): number | null {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return null;
+    }
+    const normalized = Math.max(0, Math.floor(value));
+    return normalized > 0 ? normalized : null;
+  }
+
+  private normalizeWindowCount(value: number | undefined): number | null {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return null;
+    }
+    return Math.max(0, Math.floor(value));
   }
 
   private hasContent(filePath: string): boolean {

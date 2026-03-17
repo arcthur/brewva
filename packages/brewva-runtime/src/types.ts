@@ -29,6 +29,14 @@ export type RuntimeResult<T extends Record<string, unknown> = {}, E extends stri
   | RuntimeSuccess<T>
   | RuntimeFailure<E>;
 
+export type DeepReadonly<T> = T extends (...args: never[]) => unknown
+  ? T
+  : T extends readonly (infer TValue)[]
+    ? readonly DeepReadonly<TValue>[]
+    : T extends object
+      ? { readonly [TKey in keyof T]: DeepReadonly<T[TKey]> }
+      : T;
+
 export interface SkillDispatchPolicy {
   suggestThreshold: number;
   autoThreshold: number;
@@ -326,6 +334,7 @@ export interface EffectCommitmentProposalPayload {
   posture: ToolInvocationPosture;
   effects: ToolEffectClass[];
   defaultRisk?: ToolGovernanceRisk;
+  argsDigest: string;
   argsSummary?: string;
 }
 
@@ -385,6 +394,7 @@ export interface PendingEffectCommitmentRequest {
   posture: "commitment";
   effects: ToolEffectClass[];
   defaultRisk?: ToolGovernanceRisk;
+  argsDigest: string;
   argsSummary?: string;
   evidenceRefs: EvidenceRef[];
   turn: number;
@@ -1429,6 +1439,10 @@ export interface BrewvaStructuredEvent {
 export interface BrewvaEventQuery {
   type?: string;
   last?: number;
+  after?: number;
+  before?: number;
+  offset?: number;
+  limit?: number;
 }
 
 export interface BrewvaReplaySession {

@@ -7,7 +7,11 @@ import {
   buildScheduleIntentCreatedEvent,
   parseScheduleIntentEvent,
 } from "@brewva/brewva-runtime";
-import { createWorkspace, schedulerRuntimePort } from "./scheduler-service.helpers.js";
+import {
+  createSchedulerConfig,
+  createWorkspace,
+  schedulerRuntimePort,
+} from "./scheduler-service.helpers.js";
 
 describe("scheduler service recovery contract", () => {
   test("recovers a missed runAt intent and converges a one-shot intent", async () => {
@@ -63,9 +67,13 @@ describe("scheduler service recovery contract", () => {
 
   test("defers overflow missed intents beyond the catch-up limit", async () => {
     const workspace = createWorkspace("recover-overflow");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
-    runtime.config.schedule.maxRecoveryCatchUps = 1;
-    runtime.config.schedule.minIntervalMs = 60_000;
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: createSchedulerConfig((config) => {
+        config.schedule.maxRecoveryCatchUps = 1;
+        config.schedule.minIntervalMs = 60_000;
+      }),
+    });
 
     const nowMs = Date.UTC(2026, 0, 1, 0, 30, 0, 0);
     const sessionId = "scheduler-recover-overflow-session";
@@ -131,9 +139,13 @@ describe("scheduler service recovery contract", () => {
 
   test("round-robins catch-up across sessions and emits recovery summaries", async () => {
     const workspace = createWorkspace("recover-fairness");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
-    runtime.config.schedule.maxRecoveryCatchUps = 2;
-    runtime.config.schedule.minIntervalMs = 60_000;
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: createSchedulerConfig((config) => {
+        config.schedule.maxRecoveryCatchUps = 2;
+        config.schedule.minIntervalMs = 60_000;
+      }),
+    });
 
     const nowMs = Date.UTC(2026, 0, 1, 1, 0, 0, 0);
     const dueRunAt = nowMs - 10_000;
@@ -232,9 +244,13 @@ describe("scheduler service recovery contract", () => {
 
   test("opens the circuit and cancels the intent after repeated executeIntent failures", async () => {
     const workspace = createWorkspace("circuit");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
-    runtime.config.schedule.maxConsecutiveErrors = 2;
-    runtime.config.schedule.minIntervalMs = 10;
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: createSchedulerConfig((config) => {
+        config.schedule.maxConsecutiveErrors = 2;
+        config.schedule.minIntervalMs = 10;
+      }),
+    });
 
     let nowMs = Date.now();
     const sessionId = "scheduler-circuit-session";
@@ -279,9 +295,13 @@ describe("scheduler service recovery contract", () => {
 
   test("records the error and schedules a retry when executeIntent fails below the threshold", async () => {
     const workspace = createWorkspace("execution-error-retry");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
-    runtime.config.schedule.maxConsecutiveErrors = 3;
-    runtime.config.schedule.minIntervalMs = 10;
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: createSchedulerConfig((config) => {
+        config.schedule.maxConsecutiveErrors = 3;
+        config.schedule.minIntervalMs = 10;
+      }),
+    });
 
     const nowMs = Date.now();
     const sessionId = "scheduler-error-retry-session";
@@ -329,8 +349,12 @@ describe("scheduler service recovery contract", () => {
 
   test("catches up a missed cron run and schedules the next slot", async () => {
     const workspace = createWorkspace("cron-recover");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
-    runtime.config.schedule.minIntervalMs = 60_000;
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: createSchedulerConfig((config) => {
+        config.schedule.minIntervalMs = 60_000;
+      }),
+    });
 
     let nowMs = Date.UTC(2026, 0, 1, 0, 1, 30, 0);
     const executed: number[] = [];
@@ -386,8 +410,12 @@ describe("scheduler service recovery contract", () => {
 
   test("subscribes to runtime events from external intent creation", async () => {
     const workspace = createWorkspace("subscribe-events");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
-    runtime.config.schedule.minIntervalMs = 60_000;
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: createSchedulerConfig((config) => {
+        config.schedule.minIntervalMs = 60_000;
+      }),
+    });
 
     const nowMs = Date.UTC(2026, 0, 1, 0, 30, 0, 0);
     const daemonScheduler = new SchedulerService({

@@ -152,6 +152,8 @@ capabilities, such as:
 Current module anchors:
 
 - `packages/brewva-gateway/src/runtime-plugins/context-composer.ts`
+- `packages/brewva-deliberation/src/memory-curator.ts`
+- `packages/brewva-deliberation/src/memory-formation.ts`
 - `packages/brewva-gateway/src/runtime-plugins/memory-curator.ts`
 - `packages/brewva-gateway/src/runtime-plugins/memory-formation.ts`
 - `packages/brewva-runtime/src/context/identity.ts`
@@ -289,6 +291,9 @@ Current module anchors:
   - `packages/brewva-gateway/src/daemon/heartbeat-policy.ts`
   - `packages/brewva-gateway/src/daemon/gateway-daemon.ts`
   - `packages/brewva-gateway/src/daemon/session-supervisor.ts`
+- deliberation wake policy and metrics core:
+  - `packages/brewva-deliberation/src/proactivity-engine.ts`
+  - `packages/brewva-deliberation/src/cognitive-metrics.ts`
 - proactivity trigger bridge:
   - `packages/brewva-gateway/src/runtime-plugins/proactivity-context.ts`
 - wake policy and wake planning:
@@ -327,6 +332,9 @@ Memory quality governance also belongs to the `Control Plane`.
 
 Current module anchors:
 
+- `packages/brewva-deliberation/src/memory-curator.ts`
+- `packages/brewva-deliberation/src/memory-formation.ts`
+- `packages/brewva-deliberation/src/cognitive-metrics.ts`
 - `packages/brewva-gateway/src/runtime-plugins/memory-curator.ts`
 - `packages/brewva-gateway/src/runtime-plugins/memory-formation.ts`
 - `packages/brewva-gateway/src/runtime-plugins/cognitive-metrics.ts`

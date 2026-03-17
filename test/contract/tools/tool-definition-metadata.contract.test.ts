@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { TOOL_GOVERNANCE_BY_NAME } from "@brewva/brewva-runtime";
+import { TOOL_GOVERNANCE_BY_NAME, getExactToolGovernanceDescriptor } from "@brewva/brewva-runtime";
 import {
   buildBrewvaTools,
   createA2ATools,
@@ -17,6 +17,7 @@ describe("managed Brewva tool definition metadata", () => {
       expect(metadata, `missing metadata for ${tool.name}`).toBeDefined();
       expect(metadata?.surface).toBe(getBrewvaToolSurface(tool.name));
       expect(metadata?.governance).toEqual(TOOL_GOVERNANCE_BY_NAME[tool.name]);
+      expect(getExactToolGovernanceDescriptor(tool.name)).toEqual(metadata?.governance);
     }
   });
 
@@ -38,6 +39,7 @@ describe("managed Brewva tool definition metadata", () => {
       expect(metadata, `missing metadata for ${tool.name}`).toBeDefined();
       expect(metadata?.surface).toBe(getBrewvaToolSurface(tool.name));
       expect(metadata?.governance).toEqual(TOOL_GOVERNANCE_BY_NAME[tool.name]);
+      expect(getExactToolGovernanceDescriptor(tool.name)).toEqual(metadata?.governance);
     }
   });
 });

@@ -170,6 +170,7 @@ function readCliVersion(): string {
 }
 
 const CLI_VERSION = readCliVersion();
+const CLI_TRUSTED_LOCAL_GOVERNANCE = { profile: "personal" } as const;
 
 function printVersion(): void {
   console.log(CLI_VERSION);
@@ -714,7 +715,7 @@ function printGatewayCostSummary(input: {
   const runtime = new BrewvaRuntime({
     cwd: resolveBackendWorkingCwd(input.cwd),
     configPath: input.configPath,
-    governancePort: createTrustedLocalGovernancePort(),
+    governancePort: createTrustedLocalGovernancePort(CLI_TRUSTED_LOCAL_GOVERNANCE),
   });
   runtime.context.onTurnStart(replaySessionId, 0);
   printCostSummary(replaySessionId, runtime);
@@ -861,7 +862,7 @@ async function run(): Promise<void> {
     const runtime = new BrewvaRuntime({
       cwd: parsed.cwd,
       configPath: parsed.configPath,
-      governancePort: createTrustedLocalGovernancePort(),
+      governancePort: createTrustedLocalGovernancePort(CLI_TRUSTED_LOCAL_GOVERNANCE),
     });
     const targetSessionId = parsed.sessionId ?? runtime.events.listReplaySessions(1)[0]?.sessionId;
     if (!targetSessionId) {
@@ -884,7 +885,7 @@ async function run(): Promise<void> {
     const runtime = new BrewvaRuntime({
       cwd: parsed.cwd,
       configPath: parsed.configPath,
-      governancePort: createTrustedLocalGovernancePort(),
+      governancePort: createTrustedLocalGovernancePort(CLI_TRUSTED_LOCAL_GOVERNANCE),
     });
     const targetSessionId = runtime.tools.resolveUndoSessionId(parsed.sessionId);
     if (!targetSessionId) {

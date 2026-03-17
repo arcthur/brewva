@@ -8,6 +8,11 @@ Primary class: `packages/brewva-runtime/src/runtime.ts`.
 
 The runtime no longer exposes a large flat method list. Public access is organized into domain APIs.
 
+Alongside the domain APIs, runtime exposes read-only identity and environment
+state (`cwd`, `workspaceRoot`, `agentId`, `config`). `runtime.config` is a
+deep-readonly snapshot after construction; constructor inputs such as
+`routingScopes` must be applied before the runtime is assembled.
+
 ## Public Surface (Domain APIs)
 
 ### `runtime.skills.*`
@@ -52,7 +57,8 @@ Proposal boundary semantics:
   - `decideEffectCommitment(...)` records explicit `accept | reject` operator decisions
   - accepted approvals do not auto-apply to later matching calls; the caller must
     resume the exact pending request through `runtime.tools.start(...)` with
-    `effectCommitmentRequestId`, the original `toolCallId`, and matching args
+    `effectCommitmentRequestId`, the original `toolCallId`, and the exact
+    canonical args identity
   - pending and accepted request state is replay-hydrated from tape after
     restart; operator approval is not kept only in process memory
 
@@ -89,6 +95,9 @@ Reference: `docs/reference/proposal-boundary.md`.
 
 - `checkAccess(sessionId, toolName)`
 - `explainAccess(input)`
+- `getGovernanceDescriptor(toolName)`
+- `registerGovernanceDescriptor(toolName, input)`
+- `unregisterGovernanceDescriptor(toolName)`
 - `start(input)`
   `start(input)` accepts optional `effectCommitmentRequestId` for explicitly
   resuming an operator-approved commitment request. Deferred commitment starts
@@ -96,7 +105,12 @@ Reference: `docs/reference/proposal-boundary.md`.
   can route the approval flow. Restarted runtimes may reuse that request id
   after desk state has been rebuilt from events.
 - `finish(input)`
-  `finish(input)` and `recordResult(input)` use `channelSuccess` for tool/lifecycle transport success; semantic outcome is carried by `verdict`.
+  `finish(input)` and `recordResult(input)` use `channelSuccess` for
+  tool/lifecycle transport success; semantic outcome is carried by `verdict`.
+  Commitment-posture outcomes may also carry `effectCommitmentRequestId` plus
+  `toolCallId` so the durable tool result can be joined back to the approved
+  request that authorized it. Durable linked tool outcomes are also the point
+  that consumes an accepted operator approval.
 - `acquireParallelSlot(sessionId, runId)`
 - `acquireParallelSlotAsync(sessionId, runId, options?)`
 - `releaseParallelSlot(sessionId, runId)`
@@ -119,9 +133,14 @@ Resource lease semantics:
 
 Tool-governance note:
 
-- tools with governance descriptors participate in effect authorization
-- tools without governance metadata emit warnings and remain usable until they
-  are classified, so custom tool integrations do not hard-break in strict mode
+- managed Brewva tools resolve exact governance descriptors first
+- custom or third-party tools may register runtime-scoped exact descriptors
+  through `runtime.tools.registerGovernanceDescriptor(...)`
+- regex hint fallback remains available so unknown tools do not hard-break
+  immediately, but when an active skill exercises a hinted tool runtime emits
+  `governance_metadata_missing` to make the ambiguity explicit
+- tools with no exact descriptor still cannot participate in exact effect
+  authorization until they are classified
 - `rollbackLastMutation(...)` is the posture-aware rollback surface:
   - workspace patchset mutations delegate to the file rollback path
   - task-state journals restore the last pre-mutation checkpoint
@@ -186,6 +205,21 @@ Tool-governance note:
 - `toStructured(event)`
 - `list(sessionId, query?)`
 - `listSessionIds()`
+
+Event query semantics:
+
+- `query(...)`, `queryStructured(...)`, and `list(...)` accept the same
+  `BrewvaEventQuery` filters:
+  - `type` for exact event-type match
+  - `after` for inclusive timestamp lower bound
+  - `before` for exclusive timestamp upper bound
+  - `last` to keep only the latest `N` matches after type/time filtering
+  - `offset` to skip the first `N` rows from the current result window
+  - `limit` to cap the final row count
+- result order remains tape order (oldest to newest)
+- when timestamps are monotonic in tape order, the store uses indexed
+  time-window slicing; otherwise it falls back to a full scan while preserving
+  the same result contract
 
 ### `runtime.verification.*`
 
@@ -423,7 +457,6 @@ source tape events rather than restoring units from checkpoint payload alone.
 
 ## Current Limitations
 
-- `runtime.events.query(...)` / `queryStructured(...)` only support lightweight filtering (`type`, `last`), not time-range/offset cursors.
 - `runtime.events.subscribe(listener)` is process-local and ephemeral; subscribers do not survive process restart.
 
 ## Type Contracts

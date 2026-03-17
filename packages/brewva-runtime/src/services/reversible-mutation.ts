@@ -3,11 +3,11 @@ import {
   REVERSIBLE_MUTATION_PREPARED_EVENT_TYPE,
   REVERSIBLE_MUTATION_RECORDED_EVENT_TYPE,
 } from "../events/event-types.js";
-import { getToolGovernanceDescriptor } from "../governance/tool-governance.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type {
   PatchSet,
   TaskState,
+  ToolGovernanceDescriptor,
   ToolMutationReceipt,
   ToolMutationRollbackKind,
   ToolMutationStrategy,
@@ -50,6 +50,7 @@ export interface ReversibleMutationServiceOptions {
   getTaskState: RuntimeKernelContext["getTaskState"];
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
   recordEvent: RuntimeKernelContext["recordEvent"];
+  resolveToolGovernanceDescriptor: (toolName: string) => ToolGovernanceDescriptor | undefined;
 }
 
 function cloneTaskState(state: TaskState): TaskState {
@@ -73,11 +74,13 @@ function sameTaskState(left: TaskState | undefined, right: TaskState | undefined
   return stableJsonStringify(left ?? null) === stableJsonStringify(right ?? null);
 }
 
-function resolveMutationStrategy(toolName: string): {
+function resolveMutationStrategy(
+  toolName: string,
+  descriptor: ToolGovernanceDescriptor | undefined,
+): {
   strategy: ToolMutationStrategy;
   rollbackKind: ToolMutationRollbackKind;
 } | null {
-  const descriptor = getToolGovernanceDescriptor(toolName);
   if (!descriptor || descriptor.posture !== "reversible_mutate") {
     return null;
   }
@@ -109,12 +112,12 @@ function resolveMutationStrategy(toolName: string): {
 function buildReceipt(input: {
   toolCallId: string;
   toolName: string;
+  descriptor: ToolGovernanceDescriptor | undefined;
   strategy: ToolMutationStrategy;
   rollbackKind: ToolMutationRollbackKind;
   turn: number;
   timestamp: number;
 }): ToolMutationReceipt {
-  const descriptor = getToolGovernanceDescriptor(input.toolName);
   return {
     id: [
       "mutation",
@@ -127,7 +130,7 @@ function buildReceipt(input: {
     posture: "reversible_mutate",
     strategy: input.strategy,
     rollbackKind: input.rollbackKind,
-    effects: [...(descriptor?.effects ?? [])],
+    effects: [...(input.descriptor?.effects ?? [])],
     turn: input.turn,
     timestamp: input.timestamp,
   };
@@ -175,6 +178,9 @@ export class ReversibleMutationService {
   private readonly getTaskState: (sessionId: string) => TaskState;
   private readonly getCurrentTurn: (sessionId: string) => number;
   private readonly recordEvent: RuntimeKernelContext["recordEvent"];
+  private readonly resolveToolGovernanceDescriptor: (
+    toolName: string,
+  ) => ToolGovernanceDescriptor | undefined;
   private readonly pendingBySession = new Map<string, Map<string, PendingReversibleMutation>>();
   private readonly recordedBySession = new Map<string, RecordedReversibleMutation[]>();
   private readonly rolledBackReceiptIdsBySession = new Map<string, Set<string>>();
@@ -183,10 +189,13 @@ export class ReversibleMutationService {
     this.getTaskState = (sessionId) => options.getTaskState(sessionId);
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
     this.recordEvent = (input) => options.recordEvent(input);
+    this.resolveToolGovernanceDescriptor = (toolName) =>
+      options.resolveToolGovernanceDescriptor(toolName);
   }
 
   prepare(input: PrepareReversibleMutationInput): ToolMutationReceipt | undefined {
-    const resolved = resolveMutationStrategy(input.toolName);
+    const descriptor = this.resolveToolGovernanceDescriptor(input.toolName);
+    const resolved = resolveMutationStrategy(input.toolName, descriptor);
     if (!resolved) {
       return undefined;
     }
@@ -195,6 +204,7 @@ export class ReversibleMutationService {
     const receipt = buildReceipt({
       toolCallId: input.toolCallId,
       toolName: input.toolName,
+      descriptor,
       strategy: resolved.strategy,
       rollbackKind: resolved.rollbackKind,
       turn,

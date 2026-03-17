@@ -209,7 +209,7 @@ export class AgentRuntimeManager {
       cwd: this.controllerRuntime.cwd,
       agentId,
       config,
-      governancePort: createTrustedLocalGovernancePort(),
+      governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
     });
     const now = Date.now();
     return {

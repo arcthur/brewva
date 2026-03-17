@@ -28,6 +28,7 @@
   "dependencies": {
     "@brewva/brewva-addons": "workspace:*",
     "@brewva/brewva-channels-telegram": "workspace:*",
+    "@brewva/brewva-deliberation": "workspace:*",
     "@brewva/brewva-ingress": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
     "@brewva/brewva-skill-broker": "workspace:*",

@@ -878,7 +878,7 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
     cwd: options.cwd,
     configPath: options.configPath,
     agentId: options.agentId,
-    governancePort: createTrustedLocalGovernancePort(),
+    governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
   });
   options.onRuntimeReady?.(runtime);
 

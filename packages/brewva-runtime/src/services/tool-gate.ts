@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { SessionCostTracker } from "../cost/tracker.js";
-import { TOOL_POSTURE_SELECTED_EVENT_TYPE } from "../events/event-types.js";
 import {
-  getToolGovernanceDescriptor,
-  resolveToolInvocationPosture,
-} from "../governance/tool-governance.js";
+  GOVERNANCE_METADATA_MISSING_EVENT_TYPE,
+  TOOL_POSTURE_SELECTED_EVENT_TYPE,
+} from "../events/event-types.js";
+import type { ToolGovernanceDescriptorSource } from "../governance/tool-governance.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import { resolveSecurityPolicy } from "../security/mode.js";
 import { checkToolAccess as evaluateSkillToolAccess } from "../security/tool-policy.js";
@@ -15,9 +15,11 @@ import type {
   PatchSet,
   ProposalEnvelope,
   SkillDocument,
+  ToolGovernanceDescriptor,
   ToolInvocationPosture,
   ToolMutationReceipt,
 } from "../types.js";
+import { sha256 } from "../utils/hash.js";
 import { stableJsonStringify } from "../utils/json.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import { resolveToolResultVerdict } from "../utils/tool-result.js";
@@ -65,6 +67,7 @@ export interface FinishToolCallInput {
   channelSuccess: boolean;
   verdict?: "pass" | "fail" | "inconclusive";
   metadata?: Record<string, unknown>;
+  effectCommitmentRequestId?: string;
 }
 
 export interface ToolGateServiceOptions {
@@ -74,6 +77,9 @@ export interface ToolGateServiceOptions {
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
   recordEvent: RuntimeKernelContext["recordEvent"];
   alwaysAllowedTools: string[];
+  resolveToolGovernanceDescriptor: (toolName: string) => ToolGovernanceDescriptor | undefined;
+  resolveToolGovernanceSource: (toolName: string) => ToolGovernanceDescriptorSource;
+  resolveToolInvocationPosture: (toolName: string) => ToolInvocationPosture;
   resourceLeaseService: Pick<ResourceLeaseService, "getEffectiveBudget">;
   skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
   contextService: Pick<ContextService, "checkContextCompactionGate" | "observeContextUsage">;
@@ -100,6 +106,13 @@ export class ToolGateService {
   private readonly sessionState: RuntimeSessionStateStore;
   private readonly alwaysAllowedTools: string[];
   private readonly alwaysAllowedToolSet: Set<string>;
+  private readonly resolveToolGovernanceDescriptor: (
+    toolName: string,
+  ) => ToolGovernanceDescriptor | undefined;
+  private readonly resolveToolGovernanceSource: (
+    toolName: string,
+  ) => ToolGovernanceDescriptorSource;
+  private readonly resolveToolInvocationPosture: (toolName: string) => ToolInvocationPosture;
   private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
   private readonly getCurrentTurn: (sessionId: string) => number;
   private readonly getEffectiveBudget: ResourceLeaseService["getEffectiveBudget"];
@@ -129,12 +142,14 @@ export class ToolGateService {
   }) => void;
   private readonly recordToolResult: (input: {
     sessionId: string;
+    toolCallId?: string;
     toolName: string;
     args: Record<string, unknown>;
     outputText: string;
     channelSuccess: boolean;
     verdict?: "pass" | "fail" | "inconclusive";
     metadata?: Record<string, unknown>;
+    effectCommitmentRequestId?: string;
   }) => string;
   private readonly trackToolCallEnd: (input: {
     sessionId: string;
@@ -192,6 +207,11 @@ export class ToolGateService {
         .map((toolName) => normalizeToolName(toolName))
         .filter((toolName) => toolName.length > 0),
     );
+    this.resolveToolGovernanceDescriptor = (toolName) =>
+      options.resolveToolGovernanceDescriptor(toolName);
+    this.resolveToolGovernanceSource = (toolName) => options.resolveToolGovernanceSource(toolName);
+    this.resolveToolInvocationPosture = (toolName) =>
+      options.resolveToolInvocationPosture(toolName);
     this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
     this.getEffectiveBudget = (sessionId, contract, skillName) =>
@@ -242,6 +262,8 @@ export class ToolGateService {
       enforceDeniedEffects: this.securityPolicy.enforceDeniedEffects,
       effectAuthorizationMode: this.securityPolicy.effectAuthorizationMode,
       alwaysAllowedTools: this.alwaysAllowedTools,
+      resolveToolGovernanceDescriptor: (nextToolName) =>
+        this.resolveToolGovernanceDescriptor(nextToolName),
     });
 
     if (access.warning && skill) {
@@ -258,6 +280,25 @@ export class ToolGateService {
             toolName: normalizedToolName,
             mode: this.securityPolicy.effectAuthorizationMode,
             reason: access.warning,
+          },
+        });
+      }
+    }
+
+    if (skill && this.resolveToolGovernanceSource(normalizedToolName) === "hint") {
+      const key = `${skill.name}:${normalizedToolName}`;
+      if (!state.governanceMetadataWarnings.has(key)) {
+        state.governanceMetadataWarnings.add(key);
+        this.recordEvent({
+          sessionId,
+          type: GOVERNANCE_METADATA_MISSING_EVENT_TYPE,
+          turn: this.getCurrentTurn(sessionId),
+          payload: {
+            skill: skill.name,
+            toolName: normalizedToolName,
+            resolution: "hint",
+            message:
+              "Tool governance fell back to regex hint matching; add an exact descriptor to remove ambiguity.",
           },
         });
       }
@@ -407,6 +448,8 @@ export class ToolGateService {
       enforceDeniedEffects: this.securityPolicy.enforceDeniedEffects,
       effectAuthorizationMode: this.securityPolicy.effectAuthorizationMode,
       alwaysAllowedTools: this.alwaysAllowedTools,
+      resolveToolGovernanceDescriptor: (nextToolName) =>
+        this.resolveToolGovernanceDescriptor(nextToolName),
     });
 
     if (!access.allowed) {
@@ -474,19 +517,22 @@ export class ToolGateService {
     };
   }
 
-  private summarizeArgs(args: Record<string, unknown> | undefined): string | undefined {
-    if (!args || Object.keys(args).length === 0) {
-      return undefined;
-    }
+  private resolveArgsIdentity(
+    args: Record<string, unknown> | undefined,
+  ): { digest: string; summary?: string } | undefined {
     try {
-      const serialized = stableJsonStringify(args);
-      if (!serialized) {
-        return undefined;
-      }
-      if (serialized.length <= 240) {
-        return serialized;
-      }
-      return `${serialized.slice(0, 237)}...`;
+      const normalizedArgs = args ?? {};
+      const serialized = stableJsonStringify(normalizedArgs);
+      const summary =
+        Object.keys(normalizedArgs).length === 0
+          ? undefined
+          : serialized.length <= 240
+            ? serialized
+            : `${serialized.slice(0, 237)}...`;
+      return {
+        digest: sha256(serialized),
+        summary,
+      };
     } catch {
       return undefined;
     }
@@ -496,9 +542,10 @@ export class ToolGateService {
     input: StartToolCallInput,
     posture: "commitment",
     evidenceEvent: BrewvaEventRecord,
+    argsIdentity: { digest: string; summary?: string },
   ): ProposalEnvelope<"effect_commitment"> | undefined {
     const normalizedToolName = normalizeToolName(input.toolName);
-    const descriptor = getToolGovernanceDescriptor(normalizedToolName);
+    const descriptor = this.resolveToolGovernanceDescriptor(normalizedToolName);
     if (!descriptor) {
       return undefined;
     }
@@ -520,7 +567,8 @@ export class ToolGateService {
         posture,
         effects: [...descriptor.effects],
         defaultRisk: descriptor.defaultRisk,
-        argsSummary: this.summarizeArgs(input.args),
+        argsDigest: argsIdentity.digest,
+        argsSummary: argsIdentity.summary,
       },
       evidenceRefs: [
         {
@@ -538,13 +586,32 @@ export class ToolGateService {
     input: StartToolCallInput,
     evidenceEvent: BrewvaEventRecord | undefined,
   ): ToolAccessDecision {
+    const argsIdentity = this.resolveArgsIdentity(input.args);
+    if (!argsIdentity) {
+      const reason = `Commitment tool '${normalizeToolName(input.toolName)}' requires serializable args for exact authorization binding.`;
+      this.recordEvent({
+        sessionId: input.sessionId,
+        type: "tool_call_blocked",
+        turn: this.getCurrentTurn(input.sessionId),
+        payload: {
+          toolName: normalizeToolName(input.toolName),
+          reason,
+        },
+      });
+      return {
+        allowed: false,
+        posture: "commitment",
+        reason,
+      };
+    }
+
     if (input.effectCommitmentRequestId) {
       const resumed = this.prepareEffectCommitmentResume({
         sessionId: input.sessionId,
         requestId: input.effectCommitmentRequestId,
         toolName: input.toolName,
         toolCallId: input.toolCallId,
-        argsSummary: this.summarizeArgs(input.args),
+        argsDigest: argsIdentity.digest,
       });
       if (!resumed.ok) {
         this.recordEvent({
@@ -617,7 +684,7 @@ export class ToolGateService {
       };
     }
 
-    const proposal = this.buildCommitmentProposal(input, "commitment", evidenceEvent);
+    const proposal = this.buildCommitmentProposal(input, "commitment", evidenceEvent, argsIdentity);
     if (!proposal) {
       const reason = `Commitment tool '${normalizeToolName(input.toolName)}' is missing governance metadata.`;
       this.recordEvent({
@@ -675,9 +742,11 @@ export class ToolGateService {
   }
 
   startToolCall(input: StartToolCallInput): ToolAccessDecision {
-    const posture = resolveToolInvocationPosture(input.toolName);
+    const posture = this.resolveToolInvocationPosture(input.toolName);
     const normalizedToolName = normalizeToolName(input.toolName);
-    const descriptor = getToolGovernanceDescriptor(input.toolName);
+    const descriptor = this.resolveToolGovernanceDescriptor(input.toolName);
+    const state = this.sessionState.getCell(input.sessionId);
+    const requestedEffectCommitmentRequestId = input.effectCommitmentRequestId?.trim();
 
     if (input.usage) {
       this.observeContextUsage(input.sessionId, input.usage);
@@ -709,32 +778,92 @@ export class ToolGateService {
       });
     }
 
+    if (
+      requestedEffectCommitmentRequestId &&
+      state.inflightEffectCommitmentRequestIds.has(requestedEffectCommitmentRequestId)
+    ) {
+      const reason = `effect_commitment_request_in_flight:${requestedEffectCommitmentRequestId}`;
+      this.recordEvent({
+        sessionId: input.sessionId,
+        type: "tool_call_blocked",
+        turn: this.getCurrentTurn(input.sessionId),
+        payload: {
+          toolName: normalizedToolName,
+          reason,
+          requestId: requestedEffectCommitmentRequestId,
+        },
+      });
+      return {
+        allowed: false,
+        posture,
+        reason,
+        effectCommitmentRequestId: requestedEffectCommitmentRequestId,
+      };
+    }
+
     const gateDecision = this.evaluatePolicyPosture(input, posture, postureEvent);
     if (!gateDecision.allowed) return gateDecision;
 
-    this.markToolCall(input.sessionId, input.toolName);
-    this.trackToolCallStart({
-      sessionId: input.sessionId,
-      toolCallId: input.toolCallId,
-      toolName: input.toolName,
-      args: input.args,
-    });
-    const mutationReceipt =
-      posture === "reversible_mutate"
-        ? this.prepareMutation({
-            sessionId: input.sessionId,
-            toolCallId: input.toolCallId,
-            toolName: input.toolName,
-          })
-        : undefined;
-    return {
-      allowed: true,
-      advisory: gateDecision.advisory,
-      posture,
-      commitmentReceipt: gateDecision.commitmentReceipt,
-      effectCommitmentRequestId: gateDecision.effectCommitmentRequestId,
-      mutationReceipt,
-    };
+    const effectCommitmentRequestId = gateDecision.effectCommitmentRequestId?.trim();
+    if (
+      effectCommitmentRequestId &&
+      state.inflightEffectCommitmentRequestIds.has(effectCommitmentRequestId)
+    ) {
+      const reason = `effect_commitment_request_in_flight:${effectCommitmentRequestId}`;
+      this.recordEvent({
+        sessionId: input.sessionId,
+        type: "tool_call_blocked",
+        turn: this.getCurrentTurn(input.sessionId),
+        payload: {
+          toolName: normalizedToolName,
+          reason,
+          requestId: effectCommitmentRequestId,
+        },
+      });
+      return {
+        allowed: false,
+        posture,
+        reason,
+        effectCommitmentRequestId,
+      };
+    }
+
+    if (effectCommitmentRequestId) {
+      state.inflightEffectCommitmentRequestIds.add(effectCommitmentRequestId);
+      state.effectCommitmentRequestIdsByToolCallId.set(input.toolCallId, effectCommitmentRequestId);
+    }
+
+    try {
+      this.markToolCall(input.sessionId, input.toolName);
+      this.trackToolCallStart({
+        sessionId: input.sessionId,
+        toolCallId: input.toolCallId,
+        toolName: input.toolName,
+        args: input.args,
+      });
+      const mutationReceipt =
+        posture === "reversible_mutate"
+          ? this.prepareMutation({
+              sessionId: input.sessionId,
+              toolCallId: input.toolCallId,
+              toolName: input.toolName,
+            })
+          : undefined;
+      return {
+        allowed: true,
+        advisory: gateDecision.advisory,
+        posture,
+        commitmentReceipt: gateDecision.commitmentReceipt,
+        effectCommitmentRequestId: gateDecision.effectCommitmentRequestId,
+        mutationReceipt,
+      };
+    } catch (error) {
+      if (effectCommitmentRequestId) {
+        state.inflightEffectCommitmentRequestIds.delete(effectCommitmentRequestId);
+        state.effectCommitmentRequestIdsByToolCallId.delete(input.toolCallId);
+      }
+      throw error;
+    }
   }
 
   private evaluatePolicyPosture(
@@ -798,20 +927,30 @@ export class ToolGateService {
   }
 
   finishToolCall(input: FinishToolCallInput): string {
-    const posture = resolveToolInvocationPosture(input.toolName);
+    const posture = this.resolveToolInvocationPosture(input.toolName);
+    const state = this.sessionState.getCell(input.sessionId);
     const verdict = resolveToolResultVerdict({
       verdict: input.verdict,
       channelSuccess: input.channelSuccess,
     });
+    const effectCommitmentRequestId =
+      input.effectCommitmentRequestId?.trim() ||
+      state.effectCommitmentRequestIdsByToolCallId.get(input.toolCallId);
     const ledgerId = this.recordToolResult({
       sessionId: input.sessionId,
+      toolCallId: input.toolCallId,
       toolName: input.toolName,
       args: input.args,
       outputText: input.outputText,
       channelSuccess: input.channelSuccess,
       verdict,
       metadata: input.metadata,
+      effectCommitmentRequestId,
     });
+    state.effectCommitmentRequestIdsByToolCallId.delete(input.toolCallId);
+    if (effectCommitmentRequestId) {
+      state.inflightEffectCommitmentRequestIds.delete(effectCommitmentRequestId);
+    }
     this.observeExplorationToolResult({
       sessionId: input.sessionId,
       toolCallId: input.toolCallId,

@@ -14,6 +14,23 @@ Every runtime event follows the same envelope shape:
 - `turn` (optional)
 - `payload` (optional)
 
+## Event Query Contract
+
+Runtime event queries use `BrewvaEventQuery` across
+`runtime.events.query(...)`, `queryStructured(...)`, and `list(...)`.
+
+- `type`: exact event-type match
+- `after`: inclusive timestamp lower bound
+- `before`: exclusive timestamp upper bound
+- `last`: keep only the latest `N` matches after type/time filtering
+- `offset`: skip the first `N` rows from the current result window
+- `limit`: cap the final row count
+
+Result order is always tape order from oldest to newest. Time-range filtering
+uses an indexed slice when timestamps remain monotonic in tape order; if a
+session contains out-of-order timestamps, the store falls back to a full scan
+without changing query semantics.
+
 ## Central Registry
 
 The authoritative registry for named runtime events lives in
@@ -66,6 +83,7 @@ The authoritative registry for named runtime events lives in
 - `governance_verify_spec_error`
 - `governance_cost_anomaly_detected`
 - `governance_cost_anomaly_error`
+- `governance_metadata_missing`
 - `governance_compaction_integrity_checked`
 - `governance_compaction_integrity_failed`
 - `governance_compaction_integrity_error`
@@ -131,6 +149,9 @@ The authoritative registry for named runtime events lives in
 - `verification_write_marked`
 - `tool_result_recorded`
   Tool-result payloads now use `channelSuccess` for execution-channel success and `verdict` for semantic outcome.
+  When present, `effectCommitmentRequestId` and `toolCallId` are durable linkage
+  fields that let replay join the tool outcome back to the approved commitment
+  request that authorized it.
   When present, `truthProjection` and `verificationProjection` are replayable
   derivation inputs, not second authority channels.
 - `observability_assertion_recorded`
@@ -171,6 +192,7 @@ degraded without aborting later listeners.
 - `scan_convergence_reset`
 - `reversible_mutation_*`
 - `effect_commitment_approval_*`
+- `governance_metadata_missing`
 - `task_stuck_detected`
 - `task_stuck_cleared`
 - `tool_surface_resolved`
@@ -218,6 +240,7 @@ These are retained under `ops` and `debug`.
 - `governance_verify_spec_error`
 - `governance_cost_anomaly_detected`
 - `governance_cost_anomaly_error`
+- `governance_metadata_missing`
 - `governance_compaction_integrity_checked`
 - `governance_compaction_integrity_failed`
 - `governance_compaction_integrity_error`
@@ -225,6 +248,10 @@ These are retained under `ops` and `debug`.
 `governance_verify_spec_*` is audit-retained because verifier/governance blockers
 are now projected from that event family.
 Other governance telemetry remains available at `ops` and `debug`.
+
+`governance_metadata_missing` records that tool governance had to fall back to
+regex hint matching for an active skill/tool pair. It is a migration aid for
+exact metadata adoption, not a second authorization decision.
 
 ## Projection Families
 
@@ -314,7 +341,8 @@ levels, but they no longer inflate audit-level tape retention.
 - `effect_commitment_approval_decided` records the explicit operator decision
   (`accept` or `reject`) for that pending request.
 - `effect_commitment_approval_consumed` records the point where an accepted
-  approval is consumed by an explicit resume of that exact pending request.
+  approval is consumed by a durable linked tool outcome record for that exact
+  pending request, not merely by start-time resume authorization.
 - together with `decision_receipt_recorded`, this event family is the replay
   source for the operator desk queue after restart.
 

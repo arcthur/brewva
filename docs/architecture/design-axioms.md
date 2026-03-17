@@ -73,7 +73,7 @@ Implementation note:
   - CLI, gateway, channels
   - operator UX
   - handoff artifacts
-  - debug-loop controllers
+  - lifecycle adapters
 
 The rings are about authority, not package names. Code may move across packages
 over time; authority boundaries should not.
@@ -106,15 +106,19 @@ Current module anchors:
   - `packages/brewva-gateway/src/runtime-plugins/tool-surface.ts`
 - `Cognitive Product Plane`
   - `packages/brewva-gateway/src/runtime-plugins/context-composer.ts`
+  - `packages/brewva-deliberation/src/memory-formation.ts`
+  - `packages/brewva-deliberation/src/memory-curator.ts`
   - `packages/brewva-gateway/src/runtime-plugins/memory-formation.ts`
   - `packages/brewva-gateway/src/runtime-plugins/memory-curator.ts`
   - `packages/brewva-runtime/src/context/identity.ts`
 - `Control Plane`
   - `packages/brewva-skill-broker/src/*`
+  - `packages/brewva-deliberation/src/debug-loop.ts`
+  - `packages/brewva-deliberation/src/proactivity-engine.ts`
+  - `packages/brewva-deliberation/src/cognitive-metrics.ts`
   - `packages/brewva-gateway/src/runtime-plugins/debug-loop.ts`
   - `packages/brewva-gateway/src/runtime-plugins/proactivity-context.ts`
   - `packages/brewva-gateway/src/runtime-plugins/cognitive-metrics.ts`
-  - `packages/brewva-gateway/src/runtime-plugins/memory-curator.ts`
   - `packages/brewva-gateway/src/daemon/heartbeat-policy.ts`
   - `packages/brewva-gateway/src/daemon/schedule-runner.ts`
 
@@ -159,6 +163,9 @@ met:
 - control-plane planning helpers now have a separate release and review axis
 - external cognition artifacts and proposal-query projection now live outside
   the kernel instead of being improvised inside producer modules
+- deliberation-heavy memory, debug-loop, proactivity, and cognitive-metrics
+  logic now live in `@brewva/brewva-deliberation`, while gateway keeps the
+  lifecycle adapters that bind those modules into hosted sessions
 
 The ring model still matters more than package count. A package split is only
 useful when it protects authority boundaries instead of hiding them.

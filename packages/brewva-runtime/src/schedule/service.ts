@@ -11,6 +11,7 @@ import type {
   BrewvaEventRecord,
   BrewvaStructuredEvent,
   ConvergencePredicate,
+  DeepReadonly,
   ScheduleIntentCancelInput,
   ScheduleIntentCancelResult,
   ScheduleIntentCreateInput,
@@ -158,7 +159,7 @@ export interface SchedulerCatchUpSummary {
 
 export interface SchedulerRuntimePort {
   workspaceRoot: string;
-  scheduleConfig: BrewvaConfig["schedule"];
+  scheduleConfig: DeepReadonly<BrewvaConfig["schedule"]>;
   listSessionIds(): string[];
   listEvents(sessionId: string, query?: BrewvaEventQuery): BrewvaEventRecord[];
   recordEvent(input: {

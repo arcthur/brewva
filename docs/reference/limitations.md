@@ -7,8 +7,6 @@ to miss when reading individual module docs.
 
 - `runtime.skills.complete(sessionId, output, options?)` accepts `options` for
   compatibility, but current runtime flow only persists/uses `output`.
-- `runtime.events.query(...)` and `queryStructured(...)` support only
-  `type` + `last` filters (`BrewvaEventQuery`); no time-range/cursor filters.
 - `runtime.events.subscribe(...)` is in-process and ephemeral.
 
 ## Event Pipeline

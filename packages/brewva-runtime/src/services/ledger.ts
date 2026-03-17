@@ -17,6 +17,7 @@ import {
   type ToolResultVerdict,
 } from "../utils/tool-result.js";
 import { buildVerificationToolResultProjectionPayload } from "../verification/projector-payloads.js";
+import type { EffectCommitmentDeskService } from "./effect-commitment-desk.js";
 import { RuntimeSessionStateStore } from "./session-state.js";
 import type { SkillLifecycleService } from "./skill-lifecycle.js";
 
@@ -63,6 +64,7 @@ export interface LedgerServiceOptions {
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
   recordEvent: RuntimeKernelContext["recordEvent"];
   skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
+  effectCommitmentDeskService?: Pick<EffectCommitmentDeskService, "observeToolOutcome">;
 }
 
 function buildTruthProjectionPayload(input: {
@@ -123,6 +125,9 @@ export class LedgerService {
     timestamp?: number;
     skipTapeCheckpoint?: boolean;
   }) => unknown;
+  private readonly observeEffectCommitmentToolOutcome?: (
+    input: Parameters<EffectCommitmentDeskService["observeToolOutcome"]>[0],
+  ) => void;
 
   constructor(options: LedgerServiceOptions) {
     this.config = options.config;
@@ -131,6 +136,9 @@ export class LedgerService {
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
     this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
     this.recordEvent = (input) => options.recordEvent(input);
+    this.observeEffectCommitmentToolOutcome = options.effectCommitmentDeskService
+      ? (input) => options.effectCommitmentDeskService?.observeToolOutcome(input)
+      : undefined;
   }
 
   recordInfrastructureRow(input: {
@@ -166,12 +174,14 @@ export class LedgerService {
 
   recordToolResult(input: {
     sessionId: string;
+    toolCallId?: string;
     toolName: string;
     args: Record<string, unknown>;
     outputText: string;
     channelSuccess: boolean;
     verdict?: "pass" | "fail" | "inconclusive";
     metadata?: Record<string, unknown>;
+    effectCommitmentRequestId?: string;
   }): string {
     const turn = this.getCurrentTurn(input.sessionId);
     const activeSkill = this.getActiveSkill(input.sessionId);
@@ -239,9 +249,11 @@ export class LedgerService {
       turn,
       payload: {
         toolName: input.toolName,
+        toolCallId: input.toolCallId ?? null,
         verdict,
         channelSuccess: input.channelSuccess,
         ledgerId: ledgerRow.id,
+        effectCommitmentRequestId: input.effectCommitmentRequestId ?? null,
         outputObservation,
         outputArtifact,
         outputDistillation,
@@ -278,6 +290,15 @@ export class LedgerService {
             }
           : null,
       },
+    });
+    this.observeEffectCommitmentToolOutcome?.({
+      sessionId: input.sessionId,
+      requestId: input.effectCommitmentRequestId,
+      toolName: input.toolName,
+      toolCallId: input.toolCallId,
+      ledgerId: ledgerRow.id,
+      verdict,
+      channelSuccess: input.channelSuccess,
     });
     this.maybeCompactLedger(input.sessionId, turn);
     return ledgerRow.id;

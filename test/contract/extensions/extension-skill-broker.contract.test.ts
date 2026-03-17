@@ -220,8 +220,7 @@ describe("external skill broker extension", () => {
         },
       ],
     });
-    const runtime = new BrewvaRuntime({ cwd: workspace });
-    runtime.config.skills.routing.enabled = true;
+    const runtime = new BrewvaRuntime({ cwd: workspace, routingScopes: ["domain"] });
     const sessionId = "heuristic-session";
 
     await createSkillBrokerExtension({ runtime, brokerOptions: { judge: null } })(api);
@@ -267,8 +266,7 @@ describe("external skill broker extension", () => {
         },
       ],
     });
-    const runtime = new BrewvaRuntime({ cwd: workspace });
-    runtime.config.skills.routing.enabled = true;
+    const runtime = new BrewvaRuntime({ cwd: workspace, routingScopes: ["domain"] });
     const sessionId = "llm-session";
 
     await createSkillBrokerExtension({ runtime })(api);
@@ -291,6 +289,6 @@ describe("external skill broker extension", () => {
 
     const trace = readLatestBrokerTrace(workspace, sessionId);
     expect(trace.judge?.status).toBe("skipped");
-    expect(trace.judge?.reason).toBe("empty_shortlist");
+    expect(trace.judge?.reason).toBe("no_model");
   });
 });

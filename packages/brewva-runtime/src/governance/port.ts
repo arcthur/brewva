@@ -63,5 +63,5 @@ export interface GovernancePort {
   ): GovernanceCompactionIntegrityOutput | Promise<GovernanceCompactionIntegrityOutput>;
   authorizeEffectCommitment?(
     input: GovernanceAuthorizeEffectCommitmentInput,
-  ): GovernanceAuthorizeEffectCommitmentOutput | Promise<GovernanceAuthorizeEffectCommitmentOutput>;
+  ): GovernanceAuthorizeEffectCommitmentOutput;
 }

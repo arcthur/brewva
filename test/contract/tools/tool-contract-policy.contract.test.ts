@@ -5,9 +5,8 @@ import {
   DEFAULT_BREWVA_CONFIG,
   BrewvaRuntime,
   getToolGovernanceDescriptor,
-  registerToolGovernanceDescriptor,
+  type BrewvaConfig,
   type SkillContractOverride,
-  unregisterToolGovernanceDescriptor,
 } from "@brewva/brewva-runtime";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -21,7 +20,7 @@ function createPolicyWorkspace(name: string): string {
 function createRuntime(
   workspace: string,
   options: {
-    security?: Partial<BrewvaRuntime["config"]["security"]>;
+    security?: Partial<BrewvaConfig["security"]>;
     skillOverrides?: Record<string, SkillContractOverride>;
   } = {},
 ): BrewvaRuntime {
@@ -157,7 +156,7 @@ describe("effect governance policy modes", () => {
     const runtime = createRuntime(workspace, { security: { mode: "strict" } });
     const sessionId = "effect-governance-custom-descriptor-1";
 
-    registerToolGovernanceDescriptor("custom_exec_tool", {
+    runtime.tools.registerGovernanceDescriptor("custom_exec_tool", {
       effects: ["local_exec"],
       defaultRisk: "high",
     });
@@ -167,7 +166,100 @@ describe("effect governance policy modes", () => {
       expect(blocked.allowed).toBe(false);
       expect(blocked.reason).toContain("local_exec");
     } finally {
-      unregisterToolGovernanceDescriptor("custom_exec_tool");
+      runtime.tools.unregisterGovernanceDescriptor("custom_exec_tool");
+    }
+  });
+
+  test("explainAccess uses runtime-scoped governance descriptors", () => {
+    const workspace = createPolicyWorkspace("effect-governance-explain-custom");
+    const runtime = createRuntime(workspace, { security: { mode: "strict" } });
+    const sessionId = "effect-governance-explain-custom-1";
+
+    runtime.tools.registerGovernanceDescriptor("custom_exec_tool", {
+      effects: ["local_exec"],
+      defaultRisk: "high",
+    });
+    try {
+      expect(runtime.skills.activate(sessionId, "design").ok).toBe(true);
+      const explained = runtime.tools.explainAccess({
+        sessionId,
+        toolName: "custom_exec_tool",
+      });
+      expect(explained.allowed).toBe(false);
+      expect(explained.reason).toContain("local_exec");
+    } finally {
+      runtime.tools.unregisterGovernanceDescriptor("custom_exec_tool");
+    }
+  });
+
+  test("hint-based governance emits governance_metadata_missing once until exact metadata is added", () => {
+    const workspace = createPolicyWorkspace("effect-governance-hint-metadata");
+    const runtime = createRuntime(workspace, { security: { mode: "strict" } });
+    const sessionId = "effect-governance-hint-metadata-1";
+
+    expect(runtime.skills.activate(sessionId, "design").ok).toBe(true);
+
+    const first = runtime.tools.checkAccess(sessionId, "custom_query_tool");
+    const second = runtime.tools.checkAccess(sessionId, "custom_query_tool");
+
+    expect(first.allowed).toBe(true);
+    expect(second.allowed).toBe(true);
+    const events = runtime.events.query(sessionId, { type: "governance_metadata_missing" });
+    expect(events).toHaveLength(1);
+    expect(events[0]?.payload).toMatchObject({
+      skill: "design",
+      toolName: "custom_query_tool",
+      resolution: "hint",
+    });
+  });
+
+  test("governance_metadata_missing deduplication survives restart", () => {
+    const workspace = createPolicyWorkspace("effect-governance-hint-restart");
+    const options = { security: { mode: "strict" as const } };
+    const sessionId = "effect-governance-hint-restart-1";
+
+    const runtime = createRuntime(workspace, options);
+    runtime.context.onTurnStart(sessionId, 1);
+    expect(runtime.skills.activate(sessionId, "design").ok).toBe(true);
+    expect(runtime.tools.checkAccess(sessionId, "custom_query_tool").allowed).toBe(true);
+    expect(runtime.events.query(sessionId, { type: "governance_metadata_missing" })).toHaveLength(
+      1,
+    );
+
+    const reloaded = createRuntime(workspace, options);
+    reloaded.context.onTurnStart(sessionId, 1);
+    expect(reloaded.tools.checkAccess(sessionId, "custom_query_tool").allowed).toBe(true);
+    expect(reloaded.events.query(sessionId, { type: "governance_metadata_missing" })).toHaveLength(
+      1,
+    );
+  });
+
+  test("runtime-scoped governance descriptors do not leak across runtime instances", () => {
+    const runtimeA = createRuntime(createPolicyWorkspace("effect-governance-runtime-a"), {
+      security: { mode: "strict" },
+    });
+    const runtimeB = createRuntime(createPolicyWorkspace("effect-governance-runtime-b"), {
+      security: { mode: "strict" },
+    });
+
+    runtimeA.tools.registerGovernanceDescriptor("custom_remote_tool", {
+      effects: ["local_exec"],
+      defaultRisk: "high",
+    });
+    try {
+      expect(runtimeA.skills.activate("runtime-a", "design").ok).toBe(true);
+      expect(runtimeB.skills.activate("runtime-b", "design").ok).toBe(true);
+
+      const blocked = runtimeA.tools.checkAccess("runtime-a", "custom_remote_tool");
+      const warned = runtimeB.tools.checkAccess("runtime-b", "custom_remote_tool");
+
+      expect(blocked.allowed).toBe(false);
+      expect(blocked.reason).toContain("local_exec");
+      expect(warned.allowed).toBe(true);
+      expect(runtimeA.events.query("runtime-a", { type: "tool_contract_warning" })).toHaveLength(0);
+      expect(runtimeB.events.query("runtime-b", { type: "tool_contract_warning" })).toHaveLength(1);
+    } finally {
+      runtimeA.tools.unregisterGovernanceDescriptor("custom_remote_tool");
     }
   });
 

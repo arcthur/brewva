@@ -67,7 +67,7 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
     cwd: parsed.cwd,
     configPath: parsed.configPath,
     agentId: parsed.agentId,
-    governancePort: createTrustedLocalGovernancePort(),
+    governancePort: createTrustedLocalGovernancePort({ profile: "personal" }),
   });
   parsed.onRuntimeReady?.(runtime);
 

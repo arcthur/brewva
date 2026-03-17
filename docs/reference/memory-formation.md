@@ -1,6 +1,10 @@
 # Reference: Memory Formation
 
-Implementation entrypoint:
+Implementation core:
+
+- `packages/brewva-deliberation/src/memory-formation.ts`
+
+Gateway lifecycle adapter:
 
 - `packages/brewva-gateway/src/runtime-plugins/memory-formation.ts`
 

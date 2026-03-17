@@ -1,10 +1,10 @@
 import type { ToolEffectClass } from "../types.js";
 import type { GovernancePort } from "./port.js";
 
+export type TrustedLocalGovernanceProfile = "personal" | "team" | "restricted";
+
 export interface TrustedLocalGovernancePortOptions {
-  allowLocalExec?: boolean;
-  allowScheduleMutation?: boolean;
-  allowExternalEffects?: boolean;
+  profile?: TrustedLocalGovernanceProfile;
 }
 
 function hasAnyEffect(
@@ -14,12 +14,40 @@ function hasAnyEffect(
   return expected.some((effect) => effects.includes(effect));
 }
 
+function resolveProfilePolicy(profile: TrustedLocalGovernanceProfile): {
+  allowLocalExec: boolean;
+  allowScheduleMutation: boolean;
+  allowExternalEffects: boolean;
+} {
+  switch (profile) {
+    case "team":
+      return {
+        allowLocalExec: true,
+        allowScheduleMutation: true,
+        allowExternalEffects: false,
+      };
+    case "restricted":
+      return {
+        allowLocalExec: false,
+        allowScheduleMutation: false,
+        allowExternalEffects: false,
+      };
+    case "personal":
+    default:
+      return {
+        allowLocalExec: true,
+        allowScheduleMutation: true,
+        allowExternalEffects: true,
+      };
+  }
+}
+
 export function createTrustedLocalGovernancePort(
   options: TrustedLocalGovernancePortOptions = {},
 ): GovernancePort {
-  const allowLocalExec = options.allowLocalExec ?? true;
-  const allowScheduleMutation = options.allowScheduleMutation ?? true;
-  const allowExternalEffects = options.allowExternalEffects ?? true;
+  const profile = options.profile ?? "personal";
+  const { allowLocalExec, allowScheduleMutation, allowExternalEffects } =
+    resolveProfilePolicy(profile);
 
   return {
     authorizeEffectCommitment(input) {

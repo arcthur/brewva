@@ -510,7 +510,7 @@ export async function runInspectCli(argv: string[]): Promise<number> {
   const runtime = new BrewvaRuntime({
     cwd: typeof parsed.values.cwd === "string" ? parsed.values.cwd : undefined,
     configPath: typeof parsed.values.config === "string" ? parsed.values.config : undefined,
-    governancePort: createTrustedLocalGovernancePort(),
+    governancePort: createTrustedLocalGovernancePort({ profile: "personal" }),
   });
   const targetSessionId = resolveTargetSession(
     runtime,

@@ -43,7 +43,7 @@ Further reading:
 
 - `Kernel Ring`: commitment, gates, verification, replay, recovery, fail-closed behavior
 - `Deliberation Ring`: ranking, planning, proposal generation, multi-model orchestration
-- `Experience Ring`: CLI, gateway, channels, debug-loop controller, operator UX
+- `Experience Ring`: CLI, gateway, channels, lifecycle adapters, operator UX
 
 Boundary rule:
 
@@ -190,9 +190,12 @@ introduce adaptive inference paths.
 
 Current host default:
 
-- CLI and gateway-owned runtimes install an explicit trusted local governance
-  port
-- that host port authorizes commitment effects for local trusted surfaces
+- CLI-owned runtimes install
+  `createTrustedLocalGovernancePort({ profile: "personal" })`
+- gateway/hosted/channel runtimes install
+  `createTrustedLocalGovernancePort({ profile: "team" })`
+- profile selection is explicit at the front door instead of being hidden in
+  runtime-internal defaults
 - raw `BrewvaRuntime` instances without a governance port now fail closed at the
   commitment boundary by opening a replayable operator-approval desk rather than
   implicitly authorizing the effect

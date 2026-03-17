@@ -1,7 +1,12 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, type SchedulerRuntimePort } from "@brewva/brewva-runtime";
+import {
+  DEFAULT_BREWVA_CONFIG,
+  BrewvaRuntime,
+  type BrewvaConfig,
+  type SchedulerRuntimePort,
+} from "@brewva/brewva-runtime";
 
 export function createWorkspace(name: string): string {
   const workspace = mkdtempSync(join(tmpdir(), `brewva-scheduler-${name}-`));
@@ -20,6 +25,13 @@ export function createWorkspace(name: string): string {
     "utf8",
   );
   return workspace;
+}
+
+export function createSchedulerConfig(mutate?: (config: BrewvaConfig) => void): BrewvaConfig {
+  const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+  config.schedule.enabled = true;
+  mutate?.(config);
+  return config;
 }
 
 export function schedulerRuntimePort(runtime: BrewvaRuntime): SchedulerRuntimePort {

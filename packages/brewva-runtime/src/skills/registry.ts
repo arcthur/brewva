@@ -157,7 +157,7 @@ function appendDiscoveredRoot(
 
 export function discoverSkillRegistryRoots(input: {
   cwd: string;
-  configuredRoots?: string[];
+  configuredRoots?: readonly string[];
   moduleUrl?: string;
   execPath?: string;
   globalRootDir?: string;

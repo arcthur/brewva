@@ -203,4 +203,123 @@ describe("BrewvaEventStore tape helpers", () => {
     expect(Object.isFrozen(row.payload)).toBe(true);
     expect(Object.isFrozen(row.payload?.nested)).toBe(true);
   });
+
+  test("supports time-range, tail, offset, and limit filters together", () => {
+    const workspace = createTestWorkspace("tape-store-query-window");
+    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    const sessionId = "tape-store-query-window-1";
+
+    store.append({
+      sessionId,
+      type: "task_event",
+      timestamp: 100,
+      payload: { index: 1 },
+    });
+    store.append({
+      sessionId,
+      type: "tool_result_recorded",
+      timestamp: 200,
+      payload: { index: 2 },
+    });
+    store.append({
+      sessionId,
+      type: "tool_result_recorded",
+      timestamp: 300,
+      payload: { index: 3 },
+    });
+    store.append({
+      sessionId,
+      type: "tool_result_recorded",
+      timestamp: 400,
+      payload: { index: 4 },
+    });
+    store.append({
+      sessionId,
+      type: "task_event",
+      timestamp: 500,
+      payload: { index: 5 },
+    });
+
+    const rows = store.list(sessionId, {
+      type: "tool_result_recorded",
+      after: 150,
+      before: 450,
+      last: 2,
+      offset: 1,
+      limit: 1,
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.timestamp).toBe(400);
+    expect(rows[0]?.payload).toEqual({ index: 4 });
+  });
+
+  test("falls back to scan semantics when timestamps are not monotonic", () => {
+    const workspace = createTestWorkspace("tape-store-query-non-monotonic");
+    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    const sessionId = "tape-store-query-non-monotonic-1";
+
+    store.append({
+      sessionId,
+      type: "tool_result_recorded",
+      timestamp: 300,
+      payload: { index: 1 },
+    });
+    store.append({
+      sessionId,
+      type: "tool_result_recorded",
+      timestamp: 100,
+      payload: { index: 2 },
+    });
+    store.append({
+      sessionId,
+      type: "tool_result_recorded",
+      timestamp: 200,
+      payload: { index: 3 },
+    });
+
+    const rows = store.list(sessionId, {
+      type: "tool_result_recorded",
+      after: 150,
+      before: 250,
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.timestamp).toBe(200);
+    expect(rows[0]?.payload).toEqual({ index: 3 });
+  });
+
+  test("treats zero limit and empty time windows as empty results", () => {
+    const workspace = createTestWorkspace("tape-store-query-empty");
+    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    const sessionId = "tape-store-query-empty-1";
+
+    store.append({
+      sessionId,
+      type: "tool_result_recorded",
+      timestamp: 100,
+      payload: { index: 1 },
+    });
+    store.append({
+      sessionId,
+      type: "tool_result_recorded",
+      timestamp: 200,
+      payload: { index: 2 },
+    });
+
+    expect(
+      store.list(sessionId, {
+        type: "tool_result_recorded",
+        limit: 0,
+      }),
+    ).toEqual([]);
+
+    expect(
+      store.list(sessionId, {
+        type: "tool_result_recorded",
+        after: 200,
+        before: 200,
+      }),
+    ).toEqual([]);
+  });
 });

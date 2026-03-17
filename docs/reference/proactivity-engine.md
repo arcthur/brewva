@@ -2,6 +2,7 @@
 
 Current implementation surfaces:
 
+- `packages/brewva-deliberation/src/proactivity-engine.ts`
 - `packages/brewva-gateway/src/runtime-plugins/proactivity-engine.ts`
 - `packages/brewva-gateway/src/daemon/heartbeat-policy.ts`
 - `packages/brewva-gateway/src/daemon/gateway-daemon.ts`

@@ -76,6 +76,7 @@ This repository uses a layered documentation system:
 - Effect governance RFC: `docs/research/rfc-effect-governance-and-contract-vnext.md`
 - Capability compression RFC: `docs/research/rfc-capability-compression-and-output-distillation.md`
 - Invocation spine RFC: `docs/research/rfc-invocation-spine-and-posture-runtime-vnext.md`
+- Runtime decomposition RFC: `docs/research/rfc-runtime-decomposition-and-deliberation-thickening.md`
 
 ## Source of Truth
 

@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { registerRuntimeCoreBridge } from "@brewva/brewva-gateway/runtime-plugins";
-import { createRuntimeFixture as createBaseRuntimeFixture } from "../../helpers/runtime.js";
+import {
+  createRuntimeConfig,
+  createRuntimeFixture as createBaseRuntimeFixture,
+} from "../../helpers/runtime.js";
 import {
   createMockExtensionAPI,
   invokeHandler,
@@ -35,8 +38,12 @@ function createRuntimeFixture(
     observedContext: [],
   };
 
-  const runtime = createBaseRuntimeFixture();
-  runtime.config.skills.routing.scopes = ["core", "domain"];
+  const runtime = createBaseRuntimeFixture({
+    config: createRuntimeConfig((config) => {
+      config.skills.routing.enabled = true;
+      config.skills.routing.scopes = ["core", "domain"];
+    }),
+  });
 
   Object.assign(runtime.tools, {
     start(payload: Record<string, unknown>) {

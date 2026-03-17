@@ -1,4 +1,3 @@
-import { getToolGovernanceDescriptor } from "../governance/tool-governance.js";
 import type {
   DecisionReceipt,
   ProposalDecision,
@@ -29,6 +28,7 @@ interface EffectCommitmentProposalCommitInput {
   proposal: ProposalEnvelope<"effect_commitment">;
   turn: number;
   buildDecisionReceipt: BuildDecisionReceipt;
+  resolveToolGovernanceDescriptor: (toolName: string) => ToolGovernanceDescriptor | undefined;
   authorize: (input: AuthorizeEffectCommitmentInput) => EffectCommitmentAuthorizationDecision;
 }
 
@@ -46,6 +46,7 @@ export function commitEffectCommitmentProposal({
   proposal,
   turn,
   buildDecisionReceipt,
+  resolveToolGovernanceDescriptor,
   authorize,
 }: EffectCommitmentProposalCommitInput): DecisionReceipt {
   const payload = proposal.payload;
@@ -70,6 +71,16 @@ export function commitEffectCommitmentProposal({
     );
   }
 
+  if (!payload.argsDigest.trim()) {
+    return buildDecisionReceipt(
+      proposal,
+      "reject",
+      ["effect_commitment_shape"],
+      [`effect_commitment_missing_args_digest:${toolName}`],
+      turn,
+    );
+  }
+
   if (payload.posture !== "commitment") {
     return buildDecisionReceipt(
       proposal,
@@ -80,7 +91,7 @@ export function commitEffectCommitmentProposal({
     );
   }
 
-  const descriptor = getToolGovernanceDescriptor(toolName);
+  const descriptor = resolveToolGovernanceDescriptor(toolName);
   if (!descriptor) {
     return buildDecisionReceipt(
       proposal,
@@ -145,6 +156,7 @@ export function commitEffectCommitmentProposal({
         posture: payload.posture,
         effects: [...descriptor.effects],
         defaultRisk: descriptor.defaultRisk ?? null,
+        argsDigest: payload.argsDigest,
         argsSummary: payload.argsSummary ?? null,
       },
     },

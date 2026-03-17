@@ -1,6 +1,10 @@
 # Reference: Memory Curator
 
-Implementation entrypoint:
+Implementation core:
+
+- `packages/brewva-deliberation/src/memory-curator.ts`
+
+Gateway lifecycle adapter:
 
 - `packages/brewva-gateway/src/runtime-plugins/memory-curator.ts`
 

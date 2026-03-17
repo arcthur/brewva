@@ -39,6 +39,13 @@ export interface CreateHostedSessionOptions extends RuntimeCreateBrewvaSessionOp
   scopeId?: string;
 }
 
+function sameRoutingScopes(actual: readonly string[], expected: readonly string[]): boolean {
+  if (actual.length !== expected.length) {
+    return false;
+  }
+  return actual.every((scope, index) => scope === expected[index]);
+}
+
 function applyRuntimeUiSettings(
   settingsManager: SettingsManager,
   uiConfig: BrewvaRuntime["config"]["ui"],
@@ -169,16 +176,23 @@ export async function createHostedSession(
       configPath: options.configPath,
       config: undefined,
       agentId: options.agentId,
-      governancePort: createTrustedLocalGovernancePort(),
+      governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
+      routingScopes: options.routingScopes,
     });
 
   const hasRoutingOverride = Boolean(options.routingScopes && options.routingScopes.length > 0);
-  if (options.routingScopes && options.routingScopes.length > 0) {
-    runtime.config.skills.routing.enabled = true;
-    runtime.config.skills.routing.scopes = [...new Set(options.routingScopes)];
-  }
-  if (hasRoutingOverride) {
-    runtime.skills.refresh();
+  const requestedRoutingScopes = options.routingScopes ? [...new Set(options.routingScopes)] : [];
+  if (options.runtime && hasRoutingOverride) {
+    const runtimeRoutingEnabled = runtime.config.skills.routing.enabled;
+    const runtimeRoutingScopes = [...runtime.config.skills.routing.scopes];
+    if (
+      !runtimeRoutingEnabled ||
+      !sameRoutingScopes(runtimeRoutingScopes, requestedRoutingScopes)
+    ) {
+      throw new Error(
+        "routingScopes must be applied when constructing BrewvaRuntime; createHostedSession no longer mutates runtime.config",
+      );
+    }
   }
   const skillLoadReport = runtime.skills.getLoadReport();
 
@@ -186,7 +200,7 @@ export async function createHostedSession(
   applyRuntimeUiSettings(settingsManager, runtime.config.ui);
 
   const extensionsEnabled = options.enableExtensions !== false;
-  const skillBrokerEnabled = runtime.config.skills.routing.enabled || hasRoutingOverride;
+  const skillBrokerEnabled = runtime.config.skills.routing.enabled;
   const extensionFactories = [
     ...(skillBrokerEnabled ? [createSkillBrokerExtension({ runtime })] : []),
     ...(extensionsEnabled

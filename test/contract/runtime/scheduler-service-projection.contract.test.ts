@@ -9,7 +9,11 @@ import {
   buildScheduleIntentCreatedEvent,
   parseScheduleIntentEvent,
 } from "@brewva/brewva-runtime";
-import { createWorkspace, schedulerRuntimePort } from "./scheduler-service.helpers.js";
+import {
+  createSchedulerConfig,
+  createWorkspace,
+  schedulerRuntimePort,
+} from "./scheduler-service.helpers.js";
 
 describe("scheduler service projection contract", () => {
   test("keeps append order for same-timestamp events during replay", async () => {
@@ -71,8 +75,12 @@ describe("scheduler service projection contract", () => {
 
   test("updates active intent schedule targets and emits intent_updated", async () => {
     const workspace = createWorkspace("update-intent");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
-    runtime.config.schedule.minIntervalMs = 60_000;
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: createSchedulerConfig((config) => {
+        config.schedule.minIntervalMs = 60_000;
+      }),
+    });
     const scheduler = new SchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
@@ -120,8 +128,12 @@ describe("scheduler service projection contract", () => {
 
   test("updates cron intent timeZone without changing the cron expression", async () => {
     const workspace = createWorkspace("update-timezone-only");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
-    runtime.config.schedule.minIntervalMs = 60_000;
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: createSchedulerConfig((config) => {
+        config.schedule.minIntervalMs = 60_000;
+      }),
+    });
 
     const nowMs = Date.UTC(2026, 0, 1, 0, 30, 0, 0);
     const scheduler = new SchedulerService({
