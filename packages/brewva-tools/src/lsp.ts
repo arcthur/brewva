@@ -41,6 +41,12 @@ const LSP_DIAGNOSTIC_SEVERITY_ALIASES = {
   warn: "warning",
   info: "information",
 } as const;
+const LSP_SYMBOL_SCOPE_VALUES = ["document", "workspace"] as const;
+const LSP_SYMBOL_SCOPE_ALIASES = {
+  file: "document",
+  repo: "workspace",
+  project: "workspace",
+} as const;
 
 const require = createRequire(import.meta.url);
 const TSC_BIN_PATH = require.resolve("typescript/bin/tsc");
@@ -504,12 +510,20 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
       "Heuristic-based (regex/file scan), not real LSP. List symbols or search workspace.",
     parameters: Type.Object({
       filePath: Type.String(),
-      scope: Type.Optional(Type.Union([Type.Literal("document"), Type.Literal("workspace")])),
+      scope: Type.Optional(
+        buildStringEnumSchema(LSP_SYMBOL_SCOPE_VALUES, LSP_SYMBOL_SCOPE_ALIASES, {
+          recommendedValue: "document",
+          guidance:
+            "Use document by default. Use workspace only when you need a cross-repo symbol search, and provide query for workspace scope.",
+        }),
+      ),
       query: Type.Optional(Type.String()),
       limit: Type.Optional(Type.Number({ minimum: 1, maximum: 1000 })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      const scope = params.scope ?? "document";
+      const scope =
+        normalizeStringEnumAlias(params.scope, LSP_SYMBOL_SCOPE_VALUES, LSP_SYMBOL_SCOPE_ALIASES) ??
+        "document";
       const limit = params.limit ?? 50;
 
       if (scope === "document") {
@@ -560,7 +574,11 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
     parameters: Type.Object({
       filePath: Type.String(),
       severity: Type.Optional(
-        buildStringEnumSchema(LSP_DIAGNOSTIC_SEVERITIES, LSP_DIAGNOSTIC_SEVERITY_ALIASES),
+        buildStringEnumSchema(LSP_DIAGNOSTIC_SEVERITIES, LSP_DIAGNOSTIC_SEVERITY_ALIASES, {
+          recommendedValue: "all",
+          guidance:
+            "Use all by default. Narrow to error, warning, information, or hint only when you need a filtered diagnostic slice.",
+        }),
       ),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {

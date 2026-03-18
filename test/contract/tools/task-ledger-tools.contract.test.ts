@@ -44,7 +44,7 @@ function readLiteralUnionValues(schema: unknown): string[] {
 }
 
 describe("task ledger tool aliases", () => {
-  test("task_set_spec accepts verification level aliases and stores canonical values", async () => {
+  test("task_set_spec exposes agent-facing verification levels and lowers them to runtime values", async () => {
     const { workspace, runtime, taskSetSpec } = createTaskLedgerToolHarness(
       "task-ledger-tool-set-spec",
     );
@@ -96,7 +96,7 @@ describe("task ledger tool aliases", () => {
       expect(readLiteralUnionValues(verificationLevelSchema)).toContain("smoke");
       expect(readLiteralUnionValues(verificationLevelSchema)).toContain("targeted");
       expect(readLiteralUnionValues(verificationLevelSchema)).toContain("full");
-      expect(readLiteralUnionValues(verificationLevelSchema)).not.toContain("off");
+      expect(readLiteralUnionValues(verificationLevelSchema)).not.toContain("standard");
 
       const inspectionResult = await taskSetSpec.execute(
         "tc-task-set-spec-inspection-alias",
@@ -151,7 +151,7 @@ describe("task ledger tool aliases", () => {
     }
   });
 
-  test("task_add_item accepts in-progress aliases and records canonical status", async () => {
+  test("task_add_item exposes agent-facing statuses and lowers them to runtime values", async () => {
     const { workspace, runtime, taskAddItem } = createTaskLedgerToolHarness(
       "task-ledger-tool-add-item",
     );
@@ -170,10 +170,10 @@ describe("task ledger tool aliases", () => {
           };
         }
       ).properties?.status;
+      expect(readLiteralUnionValues(statusSchema)).toContain("pending");
       expect(readLiteralUnionValues(statusSchema)).toContain("in_progress");
       expect(readLiteralUnionValues(statusSchema)).toContain("in-progress");
-      expect(readLiteralUnionValues(statusSchema)).not.toContain("pending");
-      expect(readLiteralUnionValues(statusSchema)).not.toContain("completed");
+      expect(readLiteralUnionValues(statusSchema)).not.toContain("doing");
 
       const result = await taskAddItem.execute(
         "tc-task-add-item-alias",
@@ -190,7 +190,7 @@ describe("task ledger tool aliases", () => {
     }
   });
 
-  test("task_update_item shares the same status alias normalization", async () => {
+  test("task_update_item shares the same agent-facing status lowering", async () => {
     const { workspace, runtime, taskUpdateItem } = createTaskLedgerToolHarness(
       "task-ledger-tool-update-item",
     );

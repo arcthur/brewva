@@ -12,6 +12,7 @@ import {
   type CostFoldState,
 } from "../cost/fold.js";
 import { PROJECTION_REFRESHED_EVENT_TYPE } from "../events/event-types.js";
+import { classifyToolFailure } from "../evidence/artifacts.js";
 import {
   TASK_EVENT_TYPE,
   coerceTaskLedgerPayload,
@@ -226,6 +227,32 @@ function normalizeNonNegativeInteger(value: unknown, fallback = 0): number {
   return Math.max(0, Math.floor(value));
 }
 
+function resolveFailureClassFromPayload(payload: JsonRecord): FailureClassKey {
+  const rawFailureContext = isRecord(payload.failureContext) ? payload.failureContext : null;
+  const explicitFailureClass =
+    normalizeToolFailureClass(payload.failureClass) ??
+    normalizeToolFailureClass(rawFailureContext?.failureClass);
+  if (explicitFailureClass) {
+    return explicitFailureClass;
+  }
+
+  const toolName = typeof payload.toolName === "string" ? payload.toolName : "";
+  const args = isRecord(rawFailureContext?.args)
+    ? (rawFailureContext.args as Record<string, unknown>)
+    : {};
+  const outputText =
+    typeof rawFailureContext?.outputText === "string" ? rawFailureContext.outputText : "";
+
+  return (
+    classifyToolFailure({
+      toolName,
+      args,
+      outputText,
+      isError: true,
+    }) ?? "execution"
+  );
+}
+
 function parseFailureContext(
   payload: JsonRecord,
   fallbackTurn: number,
@@ -242,7 +269,7 @@ function parseFailureContext(
   const outputText = typeof raw.outputText === "string" ? raw.outputText : "";
   if (!outputText) return null;
   const turn = normalizeToolFailureTurn(raw.turn, fallbackTurn);
-  const failureClass = normalizeToolFailureClass(raw.failureClass);
+  const failureClass = resolveFailureClassFromPayload(payload);
 
   return {
     toolName,
@@ -287,12 +314,7 @@ function reduceEvidenceState(
   };
 
   if (verdict === "fail") {
-    const eventFailureClass: FailureClassKey =
-      normalizeToolFailureClass(payload.failureClass) ??
-      normalizeToolFailureClass(
-        (isRecord(payload.failureContext) ? payload.failureContext : null)?.failureClass,
-      ) ??
-      "execution";
+    const eventFailureClass = resolveFailureClassFromPayload(payload);
     next.failureClassCounts = incrementFailureClassCount(
       next.failureClassCounts,
       eventFailureClass,

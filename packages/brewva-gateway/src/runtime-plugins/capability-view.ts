@@ -3,7 +3,12 @@ import {
   type ToolEffectClass,
   type ToolInvocationPosture,
 } from "@brewva/brewva-runtime";
-import { getBrewvaToolSurface, type BrewvaToolSurface } from "@brewva/brewva-tools";
+import {
+  collectStringEnumContracts,
+  getBrewvaToolSurface,
+  type BrewvaToolSurface,
+  type StringEnumContractEntry,
+} from "@brewva/brewva-tools";
 
 interface ToolLike {
   name: string;
@@ -25,11 +30,22 @@ interface CapabilityEntry {
   name: string;
   description: string;
   parameterKeys: string[];
+  parameterDetails: CapabilityParameterDetail[];
   visible: boolean;
   governance: boolean;
   surface: CapabilitySurface;
   posture: ToolInvocationPosture;
   effects: ToolEffectClass[];
+}
+
+export interface CapabilityParameterDetail {
+  pathText: string;
+  acceptedValues: string[];
+  aliasMappings: string[];
+  defaultValue?: string;
+  recommendedValue?: string;
+  guidance?: string;
+  omitGuidance?: string;
 }
 
 export interface CapabilityAccessDecision {
@@ -65,6 +81,7 @@ export interface CapabilityDetail {
   name: string;
   description: string;
   parameterKeys: string[];
+  parameterDetails: CapabilityParameterDetail[];
   surface: CapabilitySurface;
   posture: ToolInvocationPosture;
   effects: ToolEffectClass[];
@@ -154,6 +171,33 @@ function extractParameterKeys(parameters: unknown): string[] {
   return Object.keys(schema.properties as Record<string, unknown>).toSorted();
 }
 
+function mapCapabilityParameterDetail(
+  entry: StringEnumContractEntry,
+): CapabilityParameterDetail | null {
+  const aliasMappings = Object.entries(entry.contract.aliases)
+    .map(([alias, canonical]) => `${alias}->${canonical}`)
+    .toSorted();
+  if (entry.pathText.length === 0) {
+    return null;
+  }
+  return {
+    pathText: entry.pathText,
+    acceptedValues: [...entry.contract.canonicalValues],
+    aliasMappings,
+    defaultValue: entry.contract.defaultValue,
+    recommendedValue: entry.contract.recommendedValue,
+    guidance: entry.contract.guidance,
+    omitGuidance: entry.contract.omitGuidance,
+  };
+}
+
+function extractParameterDetails(parameters: unknown): CapabilityParameterDetail[] {
+  return collectStringEnumContracts(parameters)
+    .map((entry) => mapCapabilityParameterDetail(entry))
+    .filter((entry): entry is CapabilityParameterDetail => entry !== null)
+    .toSorted((left, right) => left.pathText.localeCompare(right.pathText));
+}
+
 function resolveCapabilitySurface(name: string): CapabilitySurface {
   return getBrewvaToolSurface(name) ?? "external";
 }
@@ -203,6 +247,7 @@ function toCapabilityEntries(input: BuildCapabilityViewInput): CapabilityEntry[]
       name,
       description: tool.description.trim(),
       parameterKeys: extractParameterKeys(tool.parameters),
+      parameterDetails: extractParameterDetails(tool.parameters),
       visible: activeToolNames.has(name),
       governance: GOVERNANCE_TOOL_NAMES.has(name),
       surface: resolveCapabilitySurface(name),
@@ -260,6 +305,26 @@ function formatFullDetailBlock(detail: CapabilityDetail): string {
     `governance: ${detail.governance ? "true" : "false"}`,
   ];
 
+  for (const parameterDetail of detail.parameterDetails) {
+    const detailParts = [
+      `values=${parameterDetail.acceptedValues.join("|")}`,
+      parameterDetail.aliasMappings.length > 0
+        ? `aliases=${parameterDetail.aliasMappings.join(", ")}`
+        : undefined,
+      parameterDetail.defaultValue ? `default=${parameterDetail.defaultValue}` : undefined,
+      parameterDetail.recommendedValue
+        ? `recommended=${parameterDetail.recommendedValue}`
+        : undefined,
+      parameterDetail.guidance
+        ? `guidance=${compactText(parameterDetail.guidance, 220)}`
+        : undefined,
+      parameterDetail.omitGuidance
+        ? `omit=${compactText(parameterDetail.omitGuidance, 180)}`
+        : undefined,
+    ].filter((part): part is string => Boolean(part));
+    lines.push(`param.${parameterDetail.pathText}: ${detailParts.join(" ; ")}`);
+  }
+
   if (detail.access) {
     lines.push(`allowed_now: ${detail.access.allowed ? "true" : "false"}`);
     if (detail.access.warning) {
@@ -281,6 +346,17 @@ function formatCompactDetailBlock(detail: CapabilityDetail): string {
     `posture: ${detail.posture}`,
     `effects: ${detail.effects.length > 0 ? detail.effects.join(", ") : "(none)"}`,
   ];
+
+  for (const parameterDetail of detail.parameterDetails.slice(0, 3)) {
+    const detailParts = [
+      `values=${parameterDetail.acceptedValues.join("|")}`,
+      parameterDetail.aliasMappings.length > 0
+        ? `aliases=${parameterDetail.aliasMappings.slice(0, 4).join(", ")}`
+        : undefined,
+      parameterDetail.defaultValue ? `default=${parameterDetail.defaultValue}` : undefined,
+    ].filter((part): part is string => Boolean(part));
+    lines.push(`param.${parameterDetail.pathText}: ${detailParts.join(" ; ")}`);
+  }
 
   if (detail.access) {
     lines.push(`allowed_now: ${detail.access.allowed ? "true" : "false"}`);
@@ -417,6 +493,7 @@ export function buildCapabilityView(input: BuildCapabilityViewInput): BuildCapab
       name: entry.name,
       description: entry.description,
       parameterKeys: entry.parameterKeys,
+      parameterDetails: entry.parameterDetails,
       surface: entry.surface,
       posture: entry.posture,
       effects: entry.effects,

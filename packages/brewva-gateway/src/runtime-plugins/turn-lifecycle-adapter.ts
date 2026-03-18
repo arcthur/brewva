@@ -1,24 +1,43 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, InputEventResult } from "@mariozechner/pi-coding-agent";
 
 type LifecycleEvent = unknown;
 type LifecycleContext = unknown;
 type MaybePromise<T> = T | Promise<T>;
-type ExtensionHookRegistrar = {
-  on(event: string, handler: (event: unknown, ctx: unknown) => unknown): void;
-};
 
-type LifecycleHook<T = unknown> = (
+interface BeforeAgentStartLifecycleResult {
+  message?: {
+    customType: string;
+    content: string;
+    display?: boolean;
+    details?: unknown;
+  };
+  systemPrompt?: string;
+}
+
+interface ToolCallLifecycleResult {
+  block?: boolean;
+  reason?: string;
+}
+
+type BeforeAgentStartRegistrar = (
+  event: "before_agent_start",
+  handler: (
+    event: LifecycleEvent,
+    ctx: LifecycleContext,
+  ) => MaybePromise<BeforeAgentStartLifecycleResult | undefined>,
+) => void;
+type LifecycleHook<TResult = void> = (
   event: LifecycleEvent,
   ctx: LifecycleContext,
-) => MaybePromise<T | undefined>;
+) => MaybePromise<TResult | undefined>;
 
 export interface TurnLifecycleHandlers {
   sessionStart?: LifecycleHook;
   turnStart?: LifecycleHook;
-  input?: LifecycleHook;
+  input?: LifecycleHook<InputEventResult>;
   context?: LifecycleHook;
-  beforeAgentStart?: LifecycleHook<object>;
-  toolCall?: LifecycleHook;
+  beforeAgentStart?: LifecycleHook<BeforeAgentStartLifecycleResult>;
+  toolCall?: LifecycleHook<ToolCallLifecycleResult>;
   toolResult?: LifecycleHook;
   toolExecutionEnd?: LifecycleHook;
   agentEnd?: LifecycleHook;
@@ -29,10 +48,10 @@ export interface TurnLifecycleHandlers {
 export interface TurnLifecycleAdapterOptions {
   sessionStart?: LifecycleHook[];
   turnStart?: LifecycleHook[];
-  input?: LifecycleHook[];
+  input?: LifecycleHook<InputEventResult>[];
   context?: LifecycleHook[];
-  beforeAgentStart?: LifecycleHook<object>[];
-  toolCall?: LifecycleHook[];
+  beforeAgentStart?: LifecycleHook<BeforeAgentStartLifecycleResult>[];
+  toolCall?: LifecycleHook<ToolCallLifecycleResult>[];
   toolResult?: LifecycleHook[];
   toolExecutionEnd?: LifecycleHook[];
   agentEnd?: LifecycleHook[];
@@ -41,9 +60,9 @@ export interface TurnLifecycleAdapterOptions {
 }
 
 function mergeBeforeAgentStartResult(
-  current: object | undefined,
+  current: BeforeAgentStartLifecycleResult | undefined,
   next: unknown,
-): object | undefined {
+): BeforeAgentStartLifecycleResult | undefined {
   if (!next || typeof next !== "object") {
     return current;
   }
@@ -92,13 +111,13 @@ function runPipeline(
   return undefined;
 }
 
-async function continueUntilResult(
-  handlers: LifecycleHook[],
+async function continueUntilResult<TResult>(
+  handlers: LifecycleHook<TResult>[],
   startIndex: number,
   event: LifecycleEvent,
   ctx: LifecycleContext,
-  pending: Promise<unknown>,
-): Promise<unknown> {
+  pending: Promise<TResult | undefined>,
+): Promise<TResult | undefined> {
   const pendingResult = await pending;
   if (pendingResult !== undefined) {
     return pendingResult;
@@ -113,11 +132,11 @@ async function continueUntilResult(
   return undefined;
 }
 
-function runUntilResult(
-  handlers: LifecycleHook[] | undefined,
+function runUntilResult<TResult>(
+  handlers: LifecycleHook<TResult>[] | undefined,
   event: LifecycleEvent,
   ctx: LifecycleContext,
-): MaybePromise<unknown> {
+): MaybePromise<TResult | undefined> {
   if (!handlers || handlers.length === 0) {
     return undefined;
   }
@@ -134,13 +153,13 @@ function runUntilResult(
 }
 
 async function continueBeforeAgentStart(
-  handlers: LifecycleHook<object>[],
+  handlers: LifecycleHook<BeforeAgentStartLifecycleResult>[],
   startIndex: number,
   event: LifecycleEvent,
   ctx: LifecycleContext,
-  merged: object | undefined,
-  pending: Promise<object | undefined>,
-): Promise<object | undefined> {
+  merged: BeforeAgentStartLifecycleResult | undefined,
+  pending: Promise<BeforeAgentStartLifecycleResult | undefined>,
+): Promise<BeforeAgentStartLifecycleResult | undefined> {
   let nextMerged = mergeBeforeAgentStartResult(merged, await pending);
   for (let index = startIndex; index < handlers.length; index += 1) {
     const result = handlers[index]?.(event, ctx);
@@ -153,14 +172,14 @@ async function continueBeforeAgentStart(
 }
 
 function runBeforeAgentStart(
-  handlers: LifecycleHook<object>[] | undefined,
+  handlers: LifecycleHook<BeforeAgentStartLifecycleResult>[] | undefined,
   event: LifecycleEvent,
   ctx: LifecycleContext,
-): MaybePromise<object | undefined> {
+): MaybePromise<BeforeAgentStartLifecycleResult | undefined> {
   if (!handlers || handlers.length === 0) {
     return undefined;
   }
-  let merged: object | undefined;
+  let merged: BeforeAgentStartLifecycleResult | undefined;
   for (let index = 0; index < handlers.length; index += 1) {
     const result = handlers[index]?.(event, ctx);
     if (result && isPromiseLike(result)) {
@@ -175,55 +194,50 @@ export function registerTurnLifecycleAdapter(
   pi: ExtensionAPI,
   options: TurnLifecycleAdapterOptions,
 ): void {
-  const hooks = pi as unknown as ExtensionHookRegistrar;
   if (options.sessionStart?.length) {
-    hooks.on("session_start", (event, ctx) => runPipeline(options.sessionStart, event, ctx));
+    pi.on("session_start", (event, ctx) => runPipeline(options.sessionStart, event, ctx));
   }
 
   if (options.turnStart?.length) {
-    hooks.on("turn_start", (event, ctx) => runPipeline(options.turnStart, event, ctx));
+    pi.on("turn_start", (event, ctx) => runPipeline(options.turnStart, event, ctx));
   }
 
   if (options.input?.length) {
-    hooks.on("input", (event, ctx) => runUntilResult(options.input, event, ctx) ?? undefined);
+    pi.on("input", (event, ctx) => runUntilResult(options.input, event, ctx) ?? undefined);
   }
 
   if (options.context?.length) {
-    hooks.on("context", (event, ctx) => runPipeline(options.context, event, ctx));
+    pi.on("context", (event, ctx) => runPipeline(options.context, event, ctx));
   }
 
   if (options.beforeAgentStart?.length) {
-    hooks.on("before_agent_start", (event, ctx) => {
+    const registerBeforeAgentStart = pi.on.bind(pi) as BeforeAgentStartRegistrar;
+    registerBeforeAgentStart("before_agent_start", (event, ctx) => {
       return runBeforeAgentStart(options.beforeAgentStart, event, ctx) ?? undefined;
     });
   }
 
   if (options.toolCall?.length) {
-    hooks.on(
-      "tool_call",
-      (event, ctx) => runUntilResult(options.toolCall, event, ctx) ?? undefined,
-    );
+    pi.on("tool_call", (event, ctx) => runUntilResult(options.toolCall, event, ctx) ?? undefined);
   }
 
   if (options.toolResult?.length) {
-    hooks.on("tool_result", (event, ctx) => runPipeline(options.toolResult, event, ctx));
+    pi.on("tool_result", (event, ctx) => runPipeline(options.toolResult, event, ctx));
   }
 
   if (options.toolExecutionEnd?.length) {
-    hooks.on("tool_execution_end", (event, ctx) =>
-      runPipeline(options.toolExecutionEnd, event, ctx),
-    );
+    pi.on("tool_execution_end", (event, ctx) => runPipeline(options.toolExecutionEnd, event, ctx));
   }
 
   if (options.agentEnd?.length) {
-    hooks.on("agent_end", (event, ctx) => runPipeline(options.agentEnd, event, ctx));
+    pi.on("agent_end", (event, ctx) => runPipeline(options.agentEnd, event, ctx));
   }
 
   if (options.sessionCompact?.length) {
-    hooks.on("session_compact", (event, ctx) => runPipeline(options.sessionCompact, event, ctx));
+    pi.on("session_compact", (event, ctx) => runPipeline(options.sessionCompact, event, ctx));
   }
 
   if (options.sessionShutdown?.length) {
-    hooks.on("session_shutdown", (event, ctx) => runPipeline(options.sessionShutdown, event, ctx));
+    pi.on("session_shutdown", (event, ctx) => runPipeline(options.sessionShutdown, event, ctx));
   }
 }

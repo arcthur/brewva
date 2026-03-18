@@ -1,3 +1,4 @@
+import { formatTaskVerificationLevelForSurface } from "../task/surface.js";
 import type { ToolFailureEntry } from "./tool-failures.js";
 
 export interface VerificationOutcomeSnapshot {
@@ -46,9 +47,12 @@ export function buildRuntimeStatusBlock(input: {
   const lines: string[] = ["[RuntimeStatus]"];
 
   if (verification) {
+    const verificationLevel =
+      formatTaskVerificationLevelForSurface(verification.level) ??
+      normalizeToken(verification.level, "unknown");
     const summary = [
       `verification=${normalizeToken(verification.outcome, "unknown")}`,
-      `level=${normalizeToken(verification.level, "unknown")}`,
+      `level=${verificationLevel}`,
     ];
     if (verification.failedChecks && verification.failedChecks.length > 0) {
       summary.push(`failed=${joinList(verification.failedChecks, 4)}`);

@@ -7,15 +7,21 @@ import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { formatISO } from "date-fns";
 import type { BrewvaToolOptions } from "./types.js";
+import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
-const TapeSearchScopeSchema = Type.Union([
-  Type.Literal("current_phase"),
-  Type.Literal("all_phases"),
-  Type.Literal("anchors_only"),
-]);
+const TAPE_SEARCH_SCOPE_VALUES = ["current_phase", "all_phases", "anchors_only"] as const;
+const TapeSearchScopeSchema = buildStringEnumSchema(
+  TAPE_SEARCH_SCOPE_VALUES,
+  {},
+  {
+    recommendedValue: "current_phase",
+    guidance:
+      "Use current_phase by default. Use all_phases for a full-history scan and anchors_only when you only need phase handoff or checkpoint anchors.",
+  },
+);
 
 function normalizeQuery(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;

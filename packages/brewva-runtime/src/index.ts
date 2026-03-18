@@ -41,6 +41,7 @@ export * from "./cost/tracker.js";
 export * from "./cost/assistant-usage.js";
 export * from "./task/spec.js";
 export * from "./task/ledger.js";
+export * from "./task/surface.js";
 export * from "./task/watchdog.js";
 export * from "./truth/ledger.js";
 export * from "./tape/events.js";

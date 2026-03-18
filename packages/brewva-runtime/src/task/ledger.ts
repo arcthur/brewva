@@ -11,6 +11,10 @@ import type {
   TaskStatus,
 } from "../types.js";
 import { isRecord, normalizeNonEmptyString, normalizeStringArray } from "../utils/coerce.js";
+import {
+  formatTaskItemStatusForSurface,
+  formatTaskVerificationLevelForSurface,
+} from "./surface.js";
 
 export const TASK_EVENT_TYPE = "task_event";
 export const TASK_LEDGER_SCHEMA = "brewva.task.ledger.v1" as const;
@@ -497,13 +501,15 @@ export function formatTaskStateBlock(state: TaskState): string {
   if (open.length > 0) {
     lines.push("openItems:");
     for (const item of open) {
-      lines.push(`- [${item.status}] ${item.text}`);
+      lines.push(`- [${formatTaskItemStatusForSurface(item.status) ?? item.status}] ${item.text}`);
     }
   }
 
   const verification = spec?.verification;
   if (verification?.level) {
-    lines.push(`verification.level=${verification.level}`);
+    lines.push(
+      `verification.level=${formatTaskVerificationLevelForSurface(verification.level) ?? verification.level}`,
+    );
   }
   if (verification?.commands && verification.commands.length > 0) {
     lines.push("verification.commands:");

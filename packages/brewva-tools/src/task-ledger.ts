@@ -1,34 +1,63 @@
 import {
   formatTaskStateBlock,
-  normalizeTaskSpecVerificationLevel,
-  TASK_SPEC_VERIFICATION_LEVEL_ALIASES,
-  TASK_SPEC_VERIFICATION_LEVEL_VALUES,
+  TASK_AGENT_ITEM_STATUS_ALIASES,
+  TASK_AGENT_ITEM_STATUS_RUNTIME_MAP,
+  TASK_AGENT_ITEM_STATUS_VALUES,
+  TASK_AGENT_VERIFICATION_LEVEL_ALIASES,
+  TASK_AGENT_VERIFICATION_LEVEL_RUNTIME_MAP,
+  TASK_AGENT_VERIFICATION_LEVEL_VALUES,
   type TaskItemStatus,
+  type VerificationLevel,
 } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
-import { buildStringEnumSchema, normalizeStringEnumAlias } from "./utils/input-alias.js";
+import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
-const TASK_ITEM_STATUSES = ["todo", "doing", "done", "blocked"] as const;
-const TASK_ITEM_STATUS_ALIASES = {
-  in_progress: "doing",
-  "in-progress": "doing",
-} as const;
-
 const VerificationLevelSchema = buildStringEnumSchema(
-  TASK_SPEC_VERIFICATION_LEVEL_VALUES,
-  TASK_SPEC_VERIFICATION_LEVEL_ALIASES,
+  TASK_AGENT_VERIFICATION_LEVEL_VALUES,
+  TASK_AGENT_VERIFICATION_LEVEL_ALIASES,
+  {
+    recommendedValue: "none",
+    guidance:
+      "Use smoke for a quick executable check, targeted for focused verification, and full for broad validation. For read-only review, omit this field or use none.",
+    omitGuidance: "Omit this field or use none for read-only review and investigation.",
+    runtimeValueMap: TASK_AGENT_VERIFICATION_LEVEL_RUNTIME_MAP,
+  },
 );
 
-const TaskItemStatusSchema = buildStringEnumSchema(TASK_ITEM_STATUSES, TASK_ITEM_STATUS_ALIASES);
+const TaskItemStatusSchema = buildStringEnumSchema(
+  TASK_AGENT_ITEM_STATUS_VALUES,
+  TASK_AGENT_ITEM_STATUS_ALIASES,
+  {
+    recommendedValue: "pending",
+    guidance:
+      "Use pending for not-started work, in_progress for active work, blocked for waiting, and done for finished work.",
+    runtimeValueMap: TASK_AGENT_ITEM_STATUS_RUNTIME_MAP,
+  },
+);
 
-function normalizeTaskItemStatus(value: unknown): TaskItemStatus | undefined {
-  return normalizeStringEnumAlias(value, TASK_ITEM_STATUSES, TASK_ITEM_STATUS_ALIASES);
+function toRuntimeVerificationLevel(value: unknown): VerificationLevel | undefined {
+  return value === "quick" || value === "standard" || value === "strict" ? value : undefined;
 }
+
+function toRuntimeTaskItemStatus(value: unknown): TaskItemStatus | undefined {
+  return value === "todo" || value === "doing" || value === "done" || value === "blocked"
+    ? value
+    : undefined;
+}
+
+const taskSetSpecVerificationGuideline =
+  "For read-only reviews, omit verification.level or use none; smoke, targeted, and full are the agent-facing verification levels when you need an execution plan.";
+
+const taskItemStatusGuideline =
+  "Status values are pending, in_progress, blocked, or done; use pending for not-started work and in_progress for active work.";
+
+const taskItemCanonicalGuideline =
+  "Prefer canonical statuses pending, in_progress, blocked, and done so task state stays consistent.";
 
 export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinition[] {
   const taskSetSpec = defineBrewvaTool({
@@ -38,7 +67,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
     promptSnippet: "Record or refine the task goal, constraints, targets, and verification plan.",
     promptGuidelines: [
       "Use this early when the objective, constraints, or verification plan need to be made explicit.",
-      "For read-only reviews, omit verification.level or use none; quick/standard/strict are the canonical stored levels.",
+      taskSetSpecVerificationGuideline,
     ],
     parameters: Type.Object({
       goal: Type.String(),
@@ -59,9 +88,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const normalizedVerificationLevel = normalizeTaskSpecVerificationLevel(
-        params.verification?.level,
-      );
+      const normalizedVerificationLevel = toRuntimeVerificationLevel(params.verification?.level);
       const normalizedVerification =
         normalizedVerificationLevel || params.verification?.commands
           ? {
@@ -88,6 +115,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
     description: "Add a task item to the Task Ledger.",
     promptSnippet:
       "Add a concrete task item to the Task Ledger instead of tracking it only in prose.",
+    promptGuidelines: [taskItemStatusGuideline],
     parameters: Type.Object({
       id: Type.Optional(Type.String()),
       text: Type.String(),
@@ -98,7 +126,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
       const result = options.runtime.task.addItem(sessionId, {
         id: params.id,
         text: params.text,
-        status: normalizeTaskItemStatus(params.status),
+        status: toRuntimeTaskItemStatus(params.status),
       });
       if (!result.ok) {
         return failTextResult(`Task item rejected (${result.error ?? "unknown_error"}).`, result);
@@ -112,6 +140,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
     label: "Task Update Item",
     description: "Update a task item in the Task Ledger.",
     promptSnippet: "Update task item text or status as work progresses.",
+    promptGuidelines: [taskItemCanonicalGuideline],
     parameters: Type.Object({
       id: Type.String(),
       text: Type.Optional(Type.String()),
@@ -122,7 +151,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
       const result = options.runtime.task.updateItem(sessionId, {
         id: params.id,
         text: params.text,
-        status: normalizeTaskItemStatus(params.status),
+        status: toRuntimeTaskItemStatus(params.status),
       });
       if (!result.ok) {
         return failTextResult(

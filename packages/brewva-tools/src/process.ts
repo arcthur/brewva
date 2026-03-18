@@ -16,20 +16,20 @@ import {
   type ManagedExecFinishedSession,
   type ManagedExecRunningSession,
 } from "./exec-process-registry.js";
-import { attachCanonicalParameterKeys } from "./utils/input-alias.js";
+import { attachCanonicalParameterKeys, buildStringEnumSchema } from "./utils/input-alias.js";
 import { textResult, type ToolResultVerdict, withVerdict } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
-const ProcessActionSchema = Type.Union([
-  Type.Literal("list"),
-  Type.Literal("poll"),
-  Type.Literal("log"),
-  Type.Literal("write"),
-  Type.Literal("kill"),
-  Type.Literal("clear"),
-  Type.Literal("remove"),
-]);
+const PROCESS_ACTION_VALUES = ["list", "poll", "log", "write", "kill", "clear", "remove"] as const;
+const ProcessActionSchema = buildStringEnumSchema(
+  PROCESS_ACTION_VALUES,
+  {},
+  {
+    guidance:
+      "Use list to inspect sessions, poll for incremental output, log for stored logs, write for stdin, kill to stop a running session, clear to prune completed sessions, and remove to delete a stored session record.",
+  },
+);
 
 const ProcessSchema = attachCanonicalParameterKeys(
   Type.Object({
@@ -145,6 +145,10 @@ export function createProcessTool(): ToolDefinition {
     label: "Process",
     description:
       "Manage background exec sessions: list, poll output, inspect logs, write stdin, kill.",
+    promptGuidelines: [
+      "Action values are list, poll, log, write, kill, clear, and remove.",
+      "Use poll for incremental output while a background session is running; use log for retained output snapshots.",
+    ],
     parameters: ProcessSchema,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const ownerSessionId = getSessionId(ctx);

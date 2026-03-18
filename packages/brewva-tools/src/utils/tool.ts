@@ -7,7 +7,11 @@ import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import type { TSchema } from "@sinclair/typebox";
 import { getBrewvaToolSurface } from "../surface.js";
 import type { BrewvaManagedToolDefinition, BrewvaToolMetadata } from "../types.js";
-import { applyTopLevelCaseAliases, projectCanonicalTopLevelParameters } from "./input-alias.js";
+import {
+  applyTopLevelCaseAliases,
+  lowerStringEnumContractParameters,
+  projectCanonicalTopLevelParameters,
+} from "./input-alias.js";
 
 export function defineTool<TParams extends TSchema, TDetails = unknown>(
   tool: ToolDefinition<TParams, TDetails>,
@@ -59,7 +63,7 @@ export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
   }
 
   const aliasedParameters = applyTopLevelCaseAliases(tool.parameters);
-  const canonicalParameters = projectCanonicalTopLevelParameters(tool.parameters);
+  const agentParameters = projectCanonicalTopLevelParameters(tool.parameters);
   const execute: ToolDefinition<TParams, TDetails>["execute"] = async (
     toolCallId,
     params,
@@ -67,9 +71,11 @@ export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
     onUpdate,
     ctx,
   ) => {
+    const normalizedParams = aliasedParameters.normalize(params);
+    const loweredParams = lowerStringEnumContractParameters(agentParameters, normalizedParams);
     return await tool.execute(
       toolCallId,
-      aliasedParameters.normalize(params) as Parameters<typeof tool.execute>[1],
+      loweredParams as Parameters<typeof tool.execute>[1],
       signal,
       onUpdate,
       ctx,
@@ -77,7 +83,7 @@ export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
   };
   const managed = {
     ...(tool as unknown as Record<string, unknown>),
-    parameters: canonicalParameters,
+    parameters: agentParameters,
     execute,
   } as unknown as BrewvaManagedToolDefinition;
   Object.defineProperty(managed, "brewva", {
@@ -87,11 +93,11 @@ export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
       return resolveCanonicalBrewvaToolMetadata(normalizedName, metadata) ?? canonicalMetadata;
     },
   });
-  Object.defineProperty(managed, "brewvaCanonicalParameters", {
+  Object.defineProperty(managed, "brewvaAgentParameters", {
     enumerable: false,
     configurable: false,
     writable: false,
-    value: canonicalParameters,
+    value: agentParameters,
   });
   return managed;
 }
@@ -109,9 +115,9 @@ export function getBrewvaToolMetadata(
   return resolveCanonicalBrewvaToolMetadata(tool?.name ?? "");
 }
 
-export function getBrewvaCanonicalParameters(
+export function getBrewvaAgentParameters(
   tool: ToolDefinition | BrewvaManagedToolDefinition | undefined,
 ): TSchema | undefined {
-  const parameters = (tool as BrewvaManagedToolDefinition | undefined)?.brewvaCanonicalParameters;
+  const parameters = (tool as BrewvaManagedToolDefinition | undefined)?.brewvaAgentParameters;
   return parameters ?? tool?.parameters;
 }

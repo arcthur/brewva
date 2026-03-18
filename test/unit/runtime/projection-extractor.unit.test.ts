@@ -72,7 +72,7 @@ describe("projection extractor", () => {
     const statements = result.upserts.map((unit) => unit.statement);
     expect(statements).toContain("Ship governance kernel runtime");
     expect(statements).toContain("No backward compatibility.");
-    expect(statements).toContain("standard");
+    expect(statements).toContain("targeted");
     expect(statements).toContain("bun test");
     expect(result.resolves).toEqual([
       {

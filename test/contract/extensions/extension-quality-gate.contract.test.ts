@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { registerQualityGate } from "@brewva/brewva-gateway/runtime-plugins";
+import { createGrepTool, createScheduleIntentTool } from "@brewva/brewva-tools";
 import { createMockExtensionAPI, invokeHandler } from "../helpers/extension.js";
 import { createRuntimeFixture } from "./fixtures/runtime.js";
 
@@ -229,5 +230,134 @@ describe("Extension gaps: quality gate", () => {
 
     expect(result.content?.[0]?.text).toContain("[ExplorationAdvisory]");
     expect(result.content?.[1]?.text).toBe("original result");
+  });
+
+  test("given invocation validation failure, when tool_result hook runs, then repair hint includes canonical enum contract", () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const runtime = createRuntimeFixture({
+      tools: {
+        start: () => ({ allowed: true }),
+      },
+      context: {
+        sanitizeInput: (text: string) => text,
+      },
+    });
+    const grepTool = createGrepTool({ runtime });
+
+    registerQualityGate(api, runtime, {
+      toolDefinitionsByName: new Map([[grepTool.name, grepTool]]),
+    });
+
+    invokeHandler(
+      handlers,
+      "tool_call",
+      {
+        toolCallId: "tc-repair",
+        toolName: "grep",
+        input: { query: "needle", case: "loud" },
+      },
+      {
+        sessionManager: { getSessionId: () => "qg-4" },
+        getContextUsage: () => ({ tokens: 64, contextWindow: 4096, percent: 0.02 }),
+      },
+    );
+
+    const result = invokeHandler<{ content?: Array<{ text?: string }> }>(
+      handlers,
+      "tool_result",
+      {
+        toolCallId: "tc-repair",
+        toolName: "grep",
+        input: { query: "needle", case: "loud" },
+        isError: true,
+        content: [
+          { type: "text", text: "Schema validation failed: case must be equal to constant" },
+        ],
+        details: { message: "Schema validation failed" },
+      },
+      {
+        sessionManager: { getSessionId: () => "qg-4" },
+      },
+    );
+
+    expect(result.content?.[0]?.text).toContain("[InvocationRepair]");
+    expect(result.content?.[0]?.text).toContain('case: got="loud"');
+    expect(result.content?.[0]?.text).toContain("accepted=smart|insensitive|sensitive");
+    expect(result.content?.[0]?.text).toContain("recommended=smart");
+  });
+
+  test("given nested invocation validation failure, when tool_result hook runs, then repair hint includes nested parameter path", () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const runtime = createRuntimeFixture({
+      tools: {
+        start: () => ({ allowed: true }),
+      },
+      context: {
+        sanitizeInput: (text: string) => text,
+      },
+    });
+    const scheduleIntentTool = createScheduleIntentTool({ runtime });
+
+    registerQualityGate(api, runtime, {
+      toolDefinitionsByName: new Map([[scheduleIntentTool.name, scheduleIntentTool]]),
+    });
+
+    invokeHandler(
+      handlers,
+      "tool_call",
+      {
+        toolCallId: "tc-schedule-repair",
+        toolName: "schedule_intent",
+        input: {
+          action: "create",
+          reason: "wait for state",
+          delayMs: 120_000,
+          convergenceCondition: {
+            kind: "phase_gate",
+            phase: "complete",
+          },
+        },
+      },
+      {
+        sessionManager: { getSessionId: () => "qg-5" },
+        getContextUsage: () => ({ tokens: 96, contextWindow: 4096, percent: 0.02 }),
+      },
+    );
+
+    const result = invokeHandler<{ content?: Array<{ text?: string }> }>(
+      handlers,
+      "tool_result",
+      {
+        toolCallId: "tc-schedule-repair",
+        toolName: "schedule_intent",
+        input: {
+          action: "create",
+          reason: "wait for state",
+          delayMs: 120_000,
+          convergenceCondition: {
+            kind: "phase_gate",
+            phase: "complete",
+          },
+        },
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "Schema validation failed: convergenceCondition.kind must be equal to constant",
+          },
+        ],
+        details: { message: "Schema validation failed" },
+      },
+      {
+        sessionManager: { getSessionId: () => "qg-5" },
+      },
+    );
+
+    expect(result.content?.[0]?.text).toContain("[InvocationRepair]");
+    expect(result.content?.[0]?.text).toContain('convergenceCondition.kind: got="phase_gate"');
+    expect(result.content?.[0]?.text).toContain(
+      "accepted=truth_resolved|task_phase|max_runs|all_of|any_of",
+    );
+    expect(result.content?.[0]?.text).toContain('convergenceCondition.phase: got="complete"');
   });
 });

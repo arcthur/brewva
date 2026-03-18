@@ -62,7 +62,9 @@ function registerLifecycleHandlers(
   };
   const features = resolveProfile(profile);
   const contextTransform = createContextTransformLifecycle(pi, runtime);
-  const qualityGate = createQualityGateLifecycle(runtime);
+  const qualityGate = createQualityGateLifecycle(runtime, {
+    toolDefinitionsByName,
+  });
   const toolSurface = createToolSurfaceLifecycle(pi, runtime, {
     dynamicToolDefinitions: toolDefinitionsByName,
   });

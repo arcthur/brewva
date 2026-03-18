@@ -2,17 +2,21 @@ import type { SkillChainIntent } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
+import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
-const SkillChainControlActionSchema = Type.Union([
-  Type.Literal("status"),
-  Type.Literal("pause"),
-  Type.Literal("resume"),
-  Type.Literal("cancel"),
-  Type.Literal("start"),
-]);
+const SKILL_CHAIN_CONTROL_ACTION_VALUES = ["status", "pause", "resume", "cancel", "start"] as const;
+const SkillChainControlActionSchema = buildStringEnumSchema(
+  SKILL_CHAIN_CONTROL_ACTION_VALUES,
+  {},
+  {
+    recommendedValue: "status",
+    guidance:
+      "Use status to inspect the current cascade, pause or resume to control execution, cancel to stop it, and start only for an explicit multi-step cascade.",
+  },
+);
 
 function formatIntent(intent: SkillChainIntent): string {
   const lines = [
