@@ -139,6 +139,17 @@ Parameter-key compatibility:
   for the same field; this reference shows canonical spellings only
 - if both spellings are present in one call, the documented canonical field wins
 
+Parameter/value contract:
+
+- documented parameter names and enum values are the `agent-facing` canonical
+  surface
+- managed-tool execution lowers that surface into runtime canonical values
+  before tool logic runs when runtime storage or external adapters need a
+  different value space
+- capability detail, invocation repair hints, and injected task/runtime text
+  are expected to speak the same agent-facing vocabulary as this reference;
+  runtime storage words are not the model-facing contract
+
 For built-in managed tools this is a canonical view over the runtime's exact
 managed-tool policy, not a second authored copy. The default gateway/extension
 path imports that metadata only when runtime does not already have an exact
@@ -311,9 +322,10 @@ Parameters:
 - `query` (string, required): search pattern (regex by default)
 - `paths` (string[], optional, max 20): paths to search (defaults to `["."]`)
 - `glob` (string[], optional, max 20): glob filters passed to `rg --glob`
-- `case` (`smart` | `ignore` | `sensitive`, default `smart`): case sensitivity mode;
-  `smart_case`, `ignore_case`, `case_insensitive`, and `case_sensitive` are
-  accepted as aliases
+- `case` (`smart` | `insensitive` | `sensitive`, default `smart`): case
+  sensitivity mode; `smart_case`, `case_insensitive`,
+  `case-insensitive`, `case_sensitive`, and `case-sensitive` are accepted as
+  aliases
 - `fixed` (boolean, default `false`): treat `query` as a literal string (`--fixed-strings`)
 - `max_lines` (number, 1–500, default `200`): output line cap; search is killed on truncation
 - `timeout_ms` (number, 100–120000, default `30000`): execution timeout
@@ -359,17 +371,21 @@ Parameters:
 `status` returns the current intent snapshot or reports no active cascade.
 `start` requires at least one step; other actions operate on the existing intent.
 
-`task_*` ledger tools keep canonical runtime values on write:
+`task_*` ledger tools use an agent-facing surface and lower to runtime storage
+values on write:
 
-- `task_set_spec.verification.level`: canonical stored values are
-  `quick|standard|strict`; `none` stores no level for the new TaskSpec.
-  Accepted aliases normalize to the canonical values on write:
-  `smoke->quick`, `targeted->standard`, `full->strict`,
-  `inspection|readonly|read_only|read-only->none`. Because `task_set_spec`
-  rewrites the spec, include `verification.commands` again in the same call if
-  they should be preserved
-- `task_add_item` / `task_update_item` `status`: `todo|doing|done|blocked`;
-  `in_progress` and `in-progress` are accepted as aliases for `doing`
+- `task_set_spec.verification.level`
+  - agent-facing values: `smoke|targeted|full|none`
+  - accepted read-only aliases: `inspection|investigate|readonly|read_only|read-only->none`
+  - runtime storage lowering: `smoke->quick`, `targeted->standard`,
+    `full->strict`, `none->(omit stored level)`
+  - because `task_set_spec` rewrites the spec, include
+    `verification.commands` again in the same call if they should be preserved
+- `task_add_item` / `task_update_item` `status`
+  - agent-facing values: `pending|in_progress|done|blocked`
+  - accepted alias: `in-progress->in_progress`
+  - runtime storage lowering: `pending->todo`, `in_progress->doing`,
+    `done->done`, `blocked->blocked`
 
 `schedule_intent` supports `action=create|update|cancel|list`:
 

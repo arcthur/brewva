@@ -101,6 +101,44 @@ describe("TurnReplayEngine cost and evidence folding", () => {
     expect(view.evidenceState.failureClassCounts.execution).toBe(0);
   });
 
+  test("derives invocation validation counts from failure context when failureClass is missing", () => {
+    const sessionId = "replay-engine-derived-invocation-validation";
+    const events: BrewvaEventRecord[] = [
+      {
+        id: "evt-tool-failure-derived-1",
+        sessionId,
+        type: "tool_result_recorded",
+        timestamp: 1,
+        turn: 4,
+        payload: {
+          toolName: "grep",
+          verdict: "fail",
+          channelSuccess: false,
+          failureContext: {
+            args: {
+              query: "needle",
+              case: "loud",
+            },
+            outputText: "Schema validation failed: case must be equal to constant",
+            turn: 4,
+            failureClass: null,
+          },
+        } as BrewvaEventRecord["payload"],
+      },
+    ];
+    const engine = new TurnReplayEngine({
+      listEvents: () => events,
+      getTurn: () => 4,
+    });
+
+    const failures = engine.getRecentToolFailures(sessionId);
+    expect(failures[0]?.failureClass).toBe("invocation_validation");
+
+    const view = engine.replay(sessionId);
+    expect(view.evidenceState.failureClassCounts.invocation_validation).toBe(1);
+    expect(view.evidenceState.failureClassCounts.execution).toBe(0);
+  });
+
   test("folded cost turns count is deduplicated by turn", () => {
     const sessionId = "replay-engine-cost-turns";
     const events: BrewvaEventRecord[] = [

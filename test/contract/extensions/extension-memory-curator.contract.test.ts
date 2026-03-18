@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { symlink, unlink } from "node:fs/promises";
+import { join } from "node:path";
 import { writeCognitionArtifact } from "@brewva/brewva-deliberation";
 import { registerMemoryCurator } from "@brewva/brewva-gateway/runtime-plugins";
 import type { ProposalRecord } from "@brewva/brewva-runtime";
@@ -127,5 +129,54 @@ describe("memory curator extension", () => {
     expect(runtime.events.query(sessionId).map((event) => event.type)).toContain(
       "memory_summary_rehydrated",
     );
+  });
+
+  test("before_agent_start degrades to failure events when cognition artifacts disappear mid-scan", async () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const runtime = createRuntimeFixture();
+    const sessionId = "memory-curator-reference-failure";
+
+    const artifact = await writeCognitionArtifact({
+      workspaceRoot: runtime.workspaceRoot,
+      lane: "reference",
+      name: "runtime-routing-regression",
+      content: [
+        "[ReferenceSediment]",
+        "kind: guide",
+        "focus: proposal admission runtime dispatch regression guidance",
+      ].join("\n"),
+      createdAt: 1731000000400,
+    });
+
+    await unlink(artifact.absolutePath);
+    await symlink(
+      join(runtime.workspaceRoot, "missing-reference-artifact.md"),
+      artifact.absolutePath,
+    );
+
+    registerMemoryCurator(api, runtime);
+
+    await invokeHandlerAsync(
+      handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "Investigate the proposal admission runtime dispatch regression guidance.",
+      },
+      createSessionContext(sessionId),
+    );
+
+    expect(
+      runtime.events
+        .query(sessionId)
+        .findLast((event) => event.type === "memory_reference_rehydration_failed")?.payload,
+    ).toMatchObject({
+      packetKey: "reference:selection",
+    });
+    expect(
+      runtime.proposals.list(sessionId, {
+        kind: "context_packet",
+      }),
+    ).toHaveLength(0);
   });
 });

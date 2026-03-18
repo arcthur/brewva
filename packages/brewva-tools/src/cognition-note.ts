@@ -20,6 +20,7 @@ import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { formatISO } from "date-fns";
 import type { BrewvaToolOptions } from "./types.js";
+import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
@@ -37,16 +38,24 @@ interface ListedArtifact {
   semanticKey: string;
 }
 
-const ActionSchema = Type.Union([
-  Type.Literal("record"),
-  Type.Literal("supersede"),
-  Type.Literal("list"),
-]);
-const KindSchema = Type.Union([
-  Type.Literal("reference"),
-  Type.Literal("procedure"),
-  Type.Literal("episode"),
-]);
+const COGNITION_NOTE_ACTION_VALUES = ["record", "supersede", "list"] as const;
+const COGNITION_NOTE_KIND_VALUES = ["reference", "procedure", "episode"] as const;
+const ActionSchema = buildStringEnumSchema(
+  COGNITION_NOTE_ACTION_VALUES,
+  {},
+  {
+    guidance:
+      "Use record to create a new operator note, supersede to replace an earlier note with the same semantic key, and list to inspect existing notes.",
+  },
+);
+const KindSchema = buildStringEnumSchema(
+  COGNITION_NOTE_KIND_VALUES,
+  {},
+  {
+    guidance:
+      "Use reference for stable facts, procedure for reusable workflows, and episode for session-scoped observations or learnings.",
+  },
+);
 
 function normalizeOperatorNoteString(value: unknown): string | undefined {
   if (typeof value !== "string") {
@@ -235,6 +244,10 @@ export function createCognitionNoteTool(options: BrewvaToolOptions): ToolDefinit
     label: "Cognition Note",
     description:
       "Record, supersede, or list operator-authored cognition artifacts without mutating kernel state.",
+    promptGuidelines: [
+      "Action values are record, supersede, and list.",
+      "Kind values are reference, procedure, and episode when you need to classify the note explicitly.",
+    ],
     parameters: Type.Object({
       action: ActionSchema,
       kind: Type.Optional(KindSchema),

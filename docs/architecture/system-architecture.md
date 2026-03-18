@@ -176,6 +176,49 @@ Current rule:
 - tool surface may influence deliberation, but it does not define kernel
   authority by itself
 
+### Agent-Facing Contract Lowering
+
+Managed Brewva tools now treat invocation contract as three explicit layers:
+
+- `agent-facing invocation surface`
+  - this is the only canonical model-facing value space
+  - capability disclosure, repair hints, prompt guidance, and tool docs must be
+    authored from this layer
+- `lowering layer`
+  - shared managed-tool execution spine lowers accepted agent-facing values into
+    runtime canonical values before tool logic runs
+  - lowering is where surface ergonomics and runtime stability meet; it is not
+    a second ad-hoc prompt layer
+- `runtime canonical state`
+  - runtime services, tape, replay, and persisted task/truth state keep stable
+    internal values that are optimized for execution and recovery, not for model
+    wording
+
+Non-negotiable rule:
+
+- do not expose runtime canonical literals directly to the model when they
+  differ from the agent-facing surface
+- if runtime stores a different canonical value, model-visible state injection
+  must be lifted back into the agent-facing wording
+- adding aliases alone is not considered a complete fix; the fix is complete
+  only when input surface, lowering, repair hints, capability disclosure, and
+  injected runtime text agree on the same agent-facing contract
+
+Current examples:
+
+- `task_*` tools expose `smoke|targeted|full|none` and
+  `pending|in_progress|done|blocked` to the model, then lower to
+  `quick|standard|strict|none` and `todo|doing|done|blocked` for runtime state
+- `grep.case` exposes `insensitive` to the model and lowers to ripgrep's
+  internal `ignore` mode before execution
+
+Anti-pattern to avoid:
+
+- do not author schema around runtime storage words and then paper over the gap
+  with prompt prose or validator retries
+- do not let capability detail, repair hints, or task/runtime injection reveal
+  a different vocabulary than the tool surface itself
+
 ## Governance Port
 
 `BrewvaRuntimeOptions.governancePort` is optional and governance-only:

@@ -1,9 +1,24 @@
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
+import { buildStringEnumSchema, normalizeStringEnumAlias } from "./utils/input-alias.js";
 import { textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
+
+const LEDGER_VERDICT_VALUES = ["pass", "fail", "inconclusive"] as const;
+const LedgerVerdictSchema = buildStringEnumSchema(
+  LEDGER_VERDICT_VALUES,
+  {},
+  {
+    guidance:
+      "Filter by verdict only when narrowing prior evidence. Use inconclusive for partial or non-terminal results.",
+  },
+);
+
+function normalizeLedgerVerdict(value: unknown): "pass" | "fail" | "inconclusive" | undefined {
+  return normalizeStringEnumAlias(value, LEDGER_VERDICT_VALUES);
+}
 
 export function createLedgerQueryTool(options: BrewvaToolOptions): ToolDefinition {
   return defineBrewvaTool({
@@ -18,16 +33,21 @@ export function createLedgerQueryTool(options: BrewvaToolOptions): ToolDefinitio
     parameters: Type.Object({
       file: Type.Optional(Type.String()),
       skill: Type.Optional(Type.String()),
-      verdict: Type.Optional(
-        Type.Union([Type.Literal("pass"), Type.Literal("fail"), Type.Literal("inconclusive")]),
-      ),
+      verdict: Type.Optional(LedgerVerdictSchema),
       tool: Type.Optional(Type.String()),
       last: Type.Optional(Type.Number({ minimum: 1, maximum: 200 })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const text = options.runtime.ledger.query(sessionId, params);
-      return textResult(text, { sessionId, query: params });
+      const query = {
+        file: params.file,
+        skill: params.skill,
+        verdict: normalizeLedgerVerdict(params.verdict),
+        tool: params.tool,
+        last: params.last,
+      };
+      const text = options.runtime.ledger.query(sessionId, query);
+      return textResult(text, { sessionId, query });
     },
   });
 }

@@ -35,6 +35,25 @@ function buildPacketKey(lane: "reference" | "summary", fileName: string): string
   return `${lane}:${stripArtifactExtension(fileName)}`;
 }
 
+function recordRehydrationFailure(input: {
+  runtime: BrewvaRuntime;
+  sessionId: string;
+  eventType: string;
+  packetKey: string;
+  artifactRef?: string;
+  error: unknown;
+}): void {
+  input.runtime.events.record({
+    sessionId: input.sessionId,
+    type: input.eventType,
+    payload: {
+      packetKey: input.packetKey,
+      artifactRef: input.artifactRef,
+      error: input.error instanceof Error ? input.error.message : String(input.error),
+    },
+  });
+}
+
 async function submitPacket(input: {
   runtime: BrewvaRuntime;
   sessionId: string;
@@ -118,46 +137,66 @@ export function createMemoryCuratorLifecycle(runtime: BrewvaRuntime): MemoryCura
       const hydratedPackets = getOrCreateHydratedPackets(hydratedPacketsBySession, sessionId);
       const prompt = typeof rawEvent.prompt === "string" ? rawEvent.prompt : "";
 
-      const referenceMatches = await selectCognitionArtifactsForPrompt({
-        workspaceRoot: runtime.workspaceRoot,
-        lane: "reference",
-        prompt,
-        maxArtifacts: 2,
-        scanLimit: 16,
-      });
-      for (const match of referenceMatches) {
-        const packetKey = buildPacketKey("reference", match.artifact.fileName);
-        if (hydratedPackets.has(packetKey)) {
-          continue;
-        }
-        await submitPacket({
-          runtime,
-          sessionId,
-          packetKey,
-          successEventType: MEMORY_REFERENCE_REHYDRATED_EVENT_TYPE,
-          failureEventType: MEMORY_REFERENCE_REHYDRATION_FAILED_EVENT_TYPE,
-          artifact: match.artifact,
-          content: match.content,
+      try {
+        const referenceMatches = await selectCognitionArtifactsForPrompt({
+          workspaceRoot: runtime.workspaceRoot,
+          lane: "reference",
+          prompt,
+          maxArtifacts: 2,
+          scanLimit: 16,
         });
-        hydratedPackets.add(packetKey);
-      }
-
-      const summary = await findLatestSessionSummary(runtime, sessionId);
-      if (summary) {
-        const packetKey = buildPacketKey("summary", summary.artifact.fileName);
-        if (!hydratedPackets.has(packetKey)) {
+        for (const match of referenceMatches) {
+          const packetKey = buildPacketKey("reference", match.artifact.fileName);
+          if (hydratedPackets.has(packetKey)) {
+            continue;
+          }
           await submitPacket({
             runtime,
             sessionId,
             packetKey,
-            successEventType: MEMORY_SUMMARY_REHYDRATED_EVENT_TYPE,
-            failureEventType: MEMORY_SUMMARY_REHYDRATION_FAILED_EVENT_TYPE,
-            artifact: summary.artifact,
-            content: summary.content,
-            profile: "status_summary",
+            successEventType: MEMORY_REFERENCE_REHYDRATED_EVENT_TYPE,
+            failureEventType: MEMORY_REFERENCE_REHYDRATION_FAILED_EVENT_TYPE,
+            artifact: match.artifact,
+            content: match.content,
           });
           hydratedPackets.add(packetKey);
         }
+      } catch (error) {
+        recordRehydrationFailure({
+          runtime,
+          sessionId,
+          eventType: MEMORY_REFERENCE_REHYDRATION_FAILED_EVENT_TYPE,
+          packetKey: "reference:selection",
+          error,
+        });
+      }
+
+      try {
+        const summary = await findLatestSessionSummary(runtime, sessionId);
+        if (summary) {
+          const packetKey = buildPacketKey("summary", summary.artifact.fileName);
+          if (!hydratedPackets.has(packetKey)) {
+            await submitPacket({
+              runtime,
+              sessionId,
+              packetKey,
+              successEventType: MEMORY_SUMMARY_REHYDRATED_EVENT_TYPE,
+              failureEventType: MEMORY_SUMMARY_REHYDRATION_FAILED_EVENT_TYPE,
+              artifact: summary.artifact,
+              content: summary.content,
+              profile: "status_summary",
+            });
+            hydratedPackets.add(packetKey);
+          }
+        }
+      } catch (error) {
+        recordRehydrationFailure({
+          runtime,
+          sessionId,
+          eventType: MEMORY_SUMMARY_REHYDRATION_FAILED_EVENT_TYPE,
+          packetKey: "summary:scan",
+          error,
+        });
       }
 
       return undefined;

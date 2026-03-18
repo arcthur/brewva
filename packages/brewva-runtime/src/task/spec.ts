@@ -10,6 +10,7 @@ export const TASK_SPEC_VERIFICATION_LEVEL_ALIASES = {
   targeted: "standard",
   full: "strict",
   inspection: "none",
+  investigate: "none",
   readonly: "none",
   read_only: "none",
   "read-only": "none",

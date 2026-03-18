@@ -3,20 +3,27 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
-import { buildStringEnumSchema, normalizeStringEnumAlias } from "./utils/input-alias.js";
+import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
 type GrepCase = "smart" | "ignore" | "sensitive";
-const GREP_CASE_VALUES = ["smart", "ignore", "sensitive"] as const;
+const GREP_CASE_VALUES = ["smart", "insensitive", "sensitive"] as const;
 const GREP_CASE_ALIASES = {
   smart_case: "smart",
-  ignore_case: "ignore",
-  case_insensitive: "ignore",
+  "case-insensitive": "insensitive",
+  case_insensitive: "insensitive",
+  "case-sensitive": "sensitive",
   case_sensitive: "sensitive",
 } as const;
 const GREP_CASE_SCHEMA = buildStringEnumSchema(GREP_CASE_VALUES, GREP_CASE_ALIASES, {
   defaultValue: "smart",
+  recommendedValue: "smart",
+  guidance:
+    "Use smart by default. Use insensitive for case-insensitive search and sensitive for exact-case search.",
+  runtimeValueMap: {
+    insensitive: "ignore",
+  },
 });
 
 export type GrepRunResult = {
@@ -187,6 +194,9 @@ export function createGrepTool(options: BrewvaToolOptions): ToolDefinition {
     name: "grep",
     label: "Grep",
     description: "Search code using ripgrep (rg) with bounded output.",
+    promptGuidelines: [
+      "Prefer case=smart by default; use insensitive for case-insensitive search and sensitive for exact-case search.",
+    ],
     parameters: Type.Object({
       query: Type.String({ minLength: 1 }),
       paths: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { maxItems: 20 })),
@@ -233,7 +243,7 @@ export function createGrepTool(options: BrewvaToolOptions): ToolDefinition {
       }
       const globs = (params.glob ?? []).map((entry) => entry.trim()).filter(Boolean);
       const caseMode: GrepCase =
-        normalizeStringEnumAlias(params.case, GREP_CASE_VALUES, GREP_CASE_ALIASES) ?? "smart";
+        params.case === "ignore" || params.case === "sensitive" ? params.case : "smart";
 
       const args: string[] = ["--line-number", "--no-heading", "--color", "never", "--hidden"];
 

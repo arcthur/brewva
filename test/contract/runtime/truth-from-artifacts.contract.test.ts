@@ -142,6 +142,40 @@ describe("Truth extraction from evidence artifacts", () => {
     ).toBe(false);
   });
 
+  test("records invocation validation failureClass for non-exec tool failures", () => {
+    const workspace = createTestWorkspace("truth-from-artifacts-non-exec-validation");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "truth-from-artifacts-non-exec-validation-1";
+
+    runtime.tools.recordResult({
+      sessionId,
+      toolName: "grep",
+      args: { query: "needle", case: "loud" },
+      outputText: "Schema validation failed: case must be equal to constant",
+      channelSuccess: false,
+      metadata: {
+        details: {
+          message: "Schema validation failed",
+        },
+      },
+    });
+
+    const recorded = runtime.events.query(sessionId, {
+      type: "tool_result_recorded",
+      last: 1,
+    })[0];
+    const recordedPayload = recorded?.payload as
+      | {
+          failureClass?: string | null;
+          failureContext?: {
+            failureClass?: string | null;
+          } | null;
+        }
+      | undefined;
+    expect(recordedPayload?.failureClass).toBe("invocation_validation");
+    expect(recordedPayload?.failureContext?.failureClass).toBe("invocation_validation");
+  });
+
   test("does not create blockers for search no-match exit code", () => {
     const workspace = createTestWorkspace("truth-from-artifacts-nomatch");
     const runtime = new BrewvaRuntime({ cwd: workspace });

@@ -2,15 +2,20 @@ import type { ResourceLeaseRecord } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
+import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
-const LeaseActionSchema = Type.Union([
-  Type.Literal("request"),
-  Type.Literal("list"),
-  Type.Literal("cancel"),
-]);
+const RESOURCE_LEASE_ACTION_VALUES = ["request", "list", "cancel"] as const;
+const LeaseActionSchema = buildStringEnumSchema(
+  RESOURCE_LEASE_ACTION_VALUES,
+  {},
+  {
+    guidance:
+      "Use request to ask for a temporary budget increase, list to inspect active leases, and cancel to release an existing lease.",
+  },
+);
 
 function formatLease(lease: ResourceLeaseRecord): string {
   const budget = [
@@ -39,6 +44,7 @@ export function createResourceLeaseTool(options: BrewvaToolOptions): ToolDefinit
     promptGuidelines: [
       "Use this when the active skill needs more budget than its default lease provides.",
       "Prefer bounded TTLs and the smallest budget increase that unblocks the task.",
+      "Action values are request, list, and cancel.",
     ],
     parameters: Type.Object({
       action: LeaseActionSchema,

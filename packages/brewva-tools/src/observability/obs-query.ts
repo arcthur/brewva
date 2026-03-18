@@ -13,6 +13,7 @@ import {
   computeObservabilityThrottle,
   formatMetricValue,
   getObservabilityThrottleEvents,
+  normalizeObservabilityAggregation,
   normalizePositiveInteger,
   normalizeTypeList,
   normalizeWhere,
@@ -60,7 +61,7 @@ export function createObsQueryTool(options: BrewvaToolOptions): ToolDefinition {
         typeof params.metric === "string" && params.metric.trim().length > 0
           ? params.metric.trim()
           : null;
-      const aggregation = params.aggregation ?? null;
+      const aggregation = normalizeObservabilityAggregation(params.aggregation) ?? null;
       if ((metric === null) !== (aggregation === null)) {
         return failTextResult("obs_query rejected (metric_and_aggregation_must_be_paired).", {
           ok: false,

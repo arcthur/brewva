@@ -62,11 +62,23 @@ export { createLspTools } from "./lsp.js";
 export { createAstGrepTools } from "./ast-grep.js";
 export { createResourceLeaseTool } from "./resource-lease.js";
 export { createCognitionNoteTool } from "./cognition-note.js";
+export { defineBrewvaTool, getBrewvaAgentParameters, getBrewvaToolMetadata } from "./utils/tool.js";
 export {
-  defineBrewvaTool,
-  getBrewvaCanonicalParameters,
-  getBrewvaToolMetadata,
-} from "./utils/tool.js";
+  BREWVA_STRING_ENUM_CONTRACT,
+  BREWVA_STRING_ENUM_CONTRACT_PATHS,
+  attachStringEnumContractPaths,
+  collectStringEnumContractMismatches,
+  collectStringEnumContracts,
+  lowerStringEnumContractParameters,
+  lowerStringEnumContractValue,
+  normalizeStringEnumContractValue,
+  readStringEnumContractPathMetadata,
+  readStringEnumContractMetadata,
+  type StringEnumContractEntry,
+  type StringEnumContractPathMetadataEntry,
+  type StringEnumContractMetadata,
+  type StringEnumContractMismatch,
+} from "./utils/input-alias.js";
 // A2A tools require an orchestration adapter and are typically registered by channel extensions
 // (for example `createChannelA2AExtension` in `@brewva/brewva-gateway`), not by the default bundle.
 export { createA2ATools } from "./a2a.js";

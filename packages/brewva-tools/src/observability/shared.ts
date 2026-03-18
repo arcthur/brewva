@@ -5,6 +5,7 @@ import type { BrewvaEventRecord } from "@brewva/brewva-runtime";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolRuntime } from "../types.js";
+import { buildStringEnumSchema, normalizeStringEnumAlias } from "../utils/input-alias.js";
 
 const DEFAULT_ARTIFACT_DIR = ".orchestrator/tool-output-artifacts";
 const SEARCH_THROTTLE_WINDOW_MS = 90_000;
@@ -29,30 +30,41 @@ export const OBS_TYPES_SCHEMA = Type.Optional(
   }),
 );
 
-export const OBS_AGGREGATION_SCHEMA = Type.Union([
-  Type.Literal("count"),
-  Type.Literal("min"),
-  Type.Literal("max"),
-  Type.Literal("avg"),
-  Type.Literal("p50"),
-  Type.Literal("p95"),
-  Type.Literal("latest"),
-]);
+const OBS_AGGREGATION_VALUES = ["count", "min", "max", "avg", "p50", "p95", "latest"] as const;
+export const OBS_AGGREGATION_SCHEMA = buildStringEnumSchema(
+  OBS_AGGREGATION_VALUES,
+  {},
+  {
+    guidance:
+      "Use count when you only need event volume. Use latest for the newest metric sample, avg for central tendency, and p95 for tail latency or outlier-sensitive checks.",
+  },
+);
 
-export const OBS_OPERATOR_SCHEMA = Type.Union([
-  Type.Literal("<"),
-  Type.Literal("<="),
-  Type.Literal(">"),
-  Type.Literal(">="),
-  Type.Literal("=="),
-  Type.Literal("!="),
-]);
+const OBS_OPERATOR_VALUES = ["<", "<=", ">", ">=", "==", "!="] as const;
+export const OBS_OPERATOR_SCHEMA = buildStringEnumSchema(
+  OBS_OPERATOR_VALUES,
+  {},
+  {
+    guidance:
+      "Use < or <= for upper bounds, > or >= for lower bounds, and == or != only for exact-match assertions.",
+  },
+);
 
 export type ObservabilityFilterValue = string | number | boolean | null;
 
 export type ObservabilityAggregation = "count" | "min" | "max" | "avg" | "p50" | "p95" | "latest";
 
 export type ObservabilityOperator = "<" | "<=" | ">" | ">=" | "==" | "!=";
+
+export function normalizeObservabilityAggregation(
+  value: unknown,
+): ObservabilityAggregation | undefined {
+  return normalizeStringEnumAlias(value, OBS_AGGREGATION_VALUES);
+}
+
+export function normalizeObservabilityOperator(value: unknown): ObservabilityOperator | undefined {
+  return normalizeStringEnumAlias(value, OBS_OPERATOR_VALUES);
+}
 
 export interface ObservabilityQuerySpec {
   types: string[];

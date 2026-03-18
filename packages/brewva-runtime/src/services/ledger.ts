@@ -1,5 +1,9 @@
 import { TOOL_RESULT_RECORDED_EVENT_TYPE } from "../events/event-types.js";
-import { extractEvidenceArtifacts, type CommandFailureClass } from "../evidence/artifacts.js";
+import {
+  classifyToolFailure,
+  extractEvidenceArtifacts,
+  type CommandFailureClass,
+} from "../evidence/artifacts.js";
 import { buildLedgerDigest } from "../ledger/digest.js";
 import type { EvidenceLedger } from "../ledger/evidence-ledger.js";
 import { formatLedgerRows } from "../ledger/query.js";
@@ -45,6 +49,17 @@ function resolveToolFailureClass(input: {
   metadata: Record<string, unknown> | undefined;
 }): CommandFailureClass | undefined {
   if (!isToolResultFail(input.verdict)) return undefined;
+
+  const classifiedFailure = classifyToolFailure({
+    toolName: input.toolName,
+    args: input.args,
+    outputText: input.outputText,
+    details: input.metadata?.details,
+    isError: true,
+  });
+  if (classifiedFailure) {
+    return classifiedFailure;
+  }
 
   const artifacts = extractEvidenceArtifacts({
     toolName: input.toolName,

@@ -19,6 +19,8 @@ import {
   computeObservabilityThrottle,
   formatMetricValue,
   getObservabilityThrottleEvents,
+  normalizeObservabilityAggregation,
+  normalizeObservabilityOperator,
   normalizePositiveInteger,
   normalizeTypeList,
   normalizeWhere,
@@ -72,7 +74,11 @@ export function createObsSloAssertTool(options: BrewvaToolOptions): ToolDefiniti
       windowMinutes: Type.Optional(Type.Integer({ minimum: 1, maximum: 10_080 })),
       minSamples: Type.Optional(Type.Integer({ minimum: 1, maximum: MAX_MIN_SAMPLES })),
       severity: Type.Optional(
-        buildStringEnumSchema(OBS_ASSERT_SEVERITIES, OBS_ASSERT_SEVERITY_ALIASES),
+        buildStringEnumSchema(OBS_ASSERT_SEVERITIES, OBS_ASSERT_SEVERITY_ALIASES, {
+          recommendedValue: "warn",
+          guidance:
+            "Use warn for notable degradation, error for hard failure, and info for lightweight supporting evidence.",
+        }),
       ),
     }),
     async execute(toolCallId, params, _signal, _onUpdate, ctx) {
@@ -129,18 +135,17 @@ export function createObsSloAssertTool(options: BrewvaToolOptions): ToolDefiniti
         windowMinutes: normalizeWindowMinutes(params.windowMinutes),
         last: null,
         metric: params.metric.trim(),
-        aggregation: params.aggregation,
+        aggregation: normalizeObservabilityAggregation(params.aggregation) ?? "count",
       } as const;
       const query = runObservabilityQuery(options.runtime, sessionId, spec);
       const workspaceRoot = resolveWorkspaceRoot(options.runtime, ctx);
       const generatedAt = Date.now();
+      const operator = normalizeObservabilityOperator(params.operator) ?? "==";
 
       let verdict: "pass" | "fail" | "inconclusive";
       if (query.sampleSize < minSamples || query.observedValue === null) {
         verdict = "inconclusive";
-      } else if (
-        compareObservabilityValue(query.observedValue, params.operator, params.threshold)
-      ) {
+      } else if (compareObservabilityValue(query.observedValue, operator, params.threshold)) {
         verdict = "pass";
       } else {
         verdict = "fail";
@@ -153,7 +158,7 @@ export function createObsSloAssertTool(options: BrewvaToolOptions): ToolDefiniti
           where: spec.where,
           metric: spec.metric,
           aggregation: spec.aggregation,
-          operator: params.operator,
+          operator,
           threshold: params.threshold,
           windowMinutes: spec.windowMinutes,
           minSamples,
@@ -214,7 +219,7 @@ export function createObsSloAssertTool(options: BrewvaToolOptions): ToolDefiniti
           verdict,
           metric: spec.metric,
           aggregation: spec.aggregation,
-          operator: params.operator,
+          operator,
           threshold: params.threshold,
           observedValue: query.observedValue,
           sampleSize: query.sampleSize,

@@ -111,6 +111,13 @@ describe("Task ledger", () => {
       targets: {
         files: ["src/foo.ts"],
       },
+      verification: {
+        level: "standard",
+      },
+    });
+    runtime.task.addItem(sessionId, {
+      text: "Confirm the projected task state uses agent-facing labels",
+      status: "todo",
     });
 
     const injection = await runtime.context.buildInjection(
@@ -120,6 +127,10 @@ describe("Task ledger", () => {
     expect(injection.text).toContain("[TaskLedger]");
     expect(injection.text).toContain("targets.files:");
     expect(injection.text).toContain("src/foo.ts");
+    expect(injection.text).toContain("verification.level=targeted");
+    expect(injection.text).toContain(
+      "- [pending] Confirm the projected task state uses agent-facing labels",
+    );
     expect(injection.text).not.toContain("[Viewport]");
   });
 });

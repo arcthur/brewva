@@ -1,25 +1,44 @@
 import type {
+  ConvergencePredicate,
+  ScheduleContinuityMode,
   ScheduleIntentProjectionRecord,
   ScheduleIntentStatus,
   ScheduleIntentUpdateInput,
+  TaskPhase,
 } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { addMilliseconds, formatISO } from "date-fns";
 import type { BrewvaToolOptions } from "./types.js";
-import { buildStringEnumSchema, normalizeStringEnumAlias } from "./utils/input-alias.js";
+import {
+  attachStringEnumContractPaths,
+  buildStringEnumSchema,
+  normalizeStringEnumAlias,
+} from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
-const ScheduleActionSchema = Type.Union([
-  Type.Literal("create"),
-  Type.Literal("update"),
-  Type.Literal("cancel"),
-  Type.Literal("list"),
-]);
+const SCHEDULE_ACTION_VALUES = ["create", "update", "cancel", "list"] as const;
+const ScheduleActionSchema = buildStringEnumSchema(
+  SCHEDULE_ACTION_VALUES,
+  {},
+  {
+    guidance:
+      "Use create to schedule new work, update to patch an existing intent, cancel to stop an intent, and list to inspect recorded intents.",
+  },
+);
 
-const ContinuityModeSchema = Type.Union([Type.Literal("inherit"), Type.Literal("fresh")]);
+const CONTINUITY_MODE_VALUES = ["inherit", "fresh"] as const;
+const ContinuityModeSchema = buildStringEnumSchema(
+  CONTINUITY_MODE_VALUES,
+  {},
+  {
+    recommendedValue: "inherit",
+    guidance:
+      "Use inherit to keep the scheduled work attached to the current session and goal lineage. Use fresh for a detached follow-up branch.",
+  },
+);
 
 const SCHEDULE_LIST_STATUSES = ["all", "active", "cancelled", "converged", "error"] as const;
 const SCHEDULE_LIST_STATUS_ALIASES = {
@@ -28,38 +47,66 @@ const SCHEDULE_LIST_STATUS_ALIASES = {
 const ListStatusSchema = buildStringEnumSchema(
   SCHEDULE_LIST_STATUSES,
   SCHEDULE_LIST_STATUS_ALIASES,
+  {
+    recommendedValue: "all",
+    guidance:
+      "Use all by default. Filter to active, cancelled, converged, or error only when narrowing the listing.",
+  },
 );
 
-const ConvergencePredicateSchema = Type.Recursive((Self) =>
-  Type.Union([
-    Type.Object({
-      kind: Type.Literal("truth_resolved"),
-      factId: Type.String({ minLength: 1, maxLength: 300 }),
-    }),
-    Type.Object({
-      kind: Type.Literal("task_phase"),
-      phase: Type.Union([
-        Type.Literal("align"),
-        Type.Literal("investigate"),
-        Type.Literal("execute"),
-        Type.Literal("verify"),
-        Type.Literal("blocked"),
-        Type.Literal("done"),
-      ]),
-    }),
-    Type.Object({
-      kind: Type.Literal("max_runs"),
-      limit: Type.Integer({ minimum: 1 }),
-    }),
-    Type.Object({
-      kind: Type.Literal("all_of"),
-      predicates: Type.Array(Self, { minItems: 1, maxItems: 16 }),
-    }),
-    Type.Object({
-      kind: Type.Literal("any_of"),
-      predicates: Type.Array(Self, { minItems: 1, maxItems: 16 }),
-    }),
-  ]),
+const CONVERGENCE_KIND_VALUES = [
+  "truth_resolved",
+  "task_phase",
+  "max_runs",
+  "all_of",
+  "any_of",
+] as const;
+const TASK_PHASE_VALUES = ["align", "investigate", "execute", "verify", "blocked", "done"] as const;
+const TaskPhaseSchema = buildStringEnumSchema(
+  TASK_PHASE_VALUES,
+  {},
+  {
+    guidance:
+      "Use task_phase when the schedule should stop after the task reaches a specific phase such as investigate, execute, verify, blocked, or done.",
+  },
+);
+
+const ConvergencePredicateSchema = attachStringEnumContractPaths(
+  Type.Recursive((Self) =>
+    Type.Union([
+      Type.Object({
+        kind: Type.Literal("truth_resolved"),
+        factId: Type.String({ minLength: 1, maxLength: 300 }),
+      }),
+      Type.Object({
+        kind: Type.Literal("task_phase"),
+        phase: TaskPhaseSchema,
+      }),
+      Type.Object({
+        kind: Type.Literal("max_runs"),
+        limit: Type.Integer({ minimum: 1 }),
+      }),
+      Type.Object({
+        kind: Type.Literal("all_of"),
+        predicates: Type.Array(Self, { minItems: 1, maxItems: 16 }),
+      }),
+      Type.Object({
+        kind: Type.Literal("any_of"),
+        predicates: Type.Array(Self, { minItems: 1, maxItems: 16 }),
+      }),
+    ]),
+  ),
+  [
+    {
+      path: ["kind"],
+      contract: {
+        canonicalValues: CONVERGENCE_KIND_VALUES,
+        aliases: {},
+        guidance:
+          "Use truth_resolved for fact-based convergence, task_phase for task-state convergence, max_runs for bounded retries, and all_of or any_of to compose multiple predicates.",
+      },
+    },
+  ],
 );
 
 function normalizeOptionalString(value: unknown): string | undefined {
@@ -94,6 +141,55 @@ function toStatusFilter(value: unknown): ScheduleIntentStatus | undefined {
   ) {
     return normalized;
   }
+  return undefined;
+}
+
+function normalizeContinuityMode(value: unknown): ScheduleContinuityMode | undefined {
+  return normalizeStringEnumAlias(value, CONTINUITY_MODE_VALUES);
+}
+
+function normalizeTaskPhase(value: unknown): TaskPhase | undefined {
+  return normalizeStringEnumAlias(value, TASK_PHASE_VALUES);
+}
+
+function normalizeConvergencePredicate(value: unknown): ConvergencePredicate | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const candidate = value as Record<string, unknown>;
+  const kind = candidate.kind;
+
+  if (kind === "truth_resolved") {
+    const factId = normalizeOptionalString(candidate.factId);
+    return factId ? { kind, factId } : undefined;
+  }
+
+  if (kind === "task_phase") {
+    const phase = normalizeTaskPhase(candidate.phase);
+    return phase ? { kind, phase } : undefined;
+  }
+
+  if (kind === "max_runs") {
+    if (
+      typeof candidate.limit !== "number" ||
+      !Number.isInteger(candidate.limit) ||
+      candidate.limit < 1
+    ) {
+      return undefined;
+    }
+    return { kind, limit: candidate.limit };
+  }
+
+  if (kind === "all_of" || kind === "any_of") {
+    if (!Array.isArray(candidate.predicates) || candidate.predicates.length === 0) {
+      return undefined;
+    }
+    const predicates = candidate.predicates
+      .map((entry) => normalizeConvergencePredicate(entry))
+      .filter((entry): entry is ConvergencePredicate => entry !== undefined);
+    return predicates.length === candidate.predicates.length ? { kind, predicates } : undefined;
+  }
+
   return undefined;
 }
 
@@ -218,6 +314,7 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
     promptSnippet: "Create, update, cancel, or list deferred and recurring execution intents.",
     promptGuidelines: [
       "Use this only when the user explicitly wants future or recurring execution.",
+      "Action values are create, update, cancel, and list. Prefer continuityMode=inherit unless the scheduled work should detach into a fresh branch.",
     ],
     parameters: Type.Object({
       action: ScheduleActionSchema,
@@ -236,6 +333,8 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
+      const continuityMode = normalizeContinuityMode(params.continuityMode);
+      const convergenceCondition = normalizeConvergencePredicate(params.convergenceCondition);
       if (!options.runtime.config.schedule.enabled) {
         return failTextResult("Schedule intent rejected (scheduler_disabled).", {
           ok: false,
@@ -272,12 +371,12 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
           reason,
           intentId: normalizeOptionalString(params.intentId),
           goalRef: normalizeOptionalString(params.goalRef),
-          continuityMode: params.continuityMode,
+          continuityMode,
           runAt: scheduleTarget.runAt,
           cron: scheduleTarget.cron,
           timeZone: scheduleTarget.timeZone,
           maxRuns: params.maxRuns,
-          convergenceCondition: params.convergenceCondition,
+          convergenceCondition,
         });
 
         if (!created.ok) {
@@ -344,9 +443,9 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
         const hasNonSchedulePatch =
           reason !== undefined ||
           goalRef !== undefined ||
-          params.continuityMode !== undefined ||
+          continuityMode !== undefined ||
           params.maxRuns !== undefined ||
-          params.convergenceCondition !== undefined;
+          convergenceCondition !== undefined;
         if (!schedulePatch.hasScheduleUpdate && !hasNonSchedulePatch) {
           return failTextResult("Schedule intent update rejected (empty_update).", {
             ok: false,
@@ -356,9 +455,9 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
 
         const updateInput: ScheduleIntentUpdateInput = {
           intentId,
-          continuityMode: params.continuityMode,
+          continuityMode,
           maxRuns: params.maxRuns,
-          convergenceCondition: params.convergenceCondition,
+          convergenceCondition,
         };
         if (reason !== undefined) updateInput.reason = reason;
         if (params.goalRef !== undefined) updateInput.goalRef = goalRef;

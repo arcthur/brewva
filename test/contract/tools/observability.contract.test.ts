@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime";
 import {
   createCostViewTool,
   createObsQueryTool,
@@ -104,6 +104,14 @@ describe("observability tool contracts", () => {
         startupMs: 920,
       },
     });
+    runtime.events.record({
+      sessionId,
+      type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+      payload: {
+        level: "standard",
+        outcome: "passed",
+      },
+    });
 
     const assertTool = createObsSloAssertTool({ runtime });
     const assertResult = await assertTool.execute(
@@ -135,5 +143,6 @@ describe("observability tool contracts", () => {
     expect(snapshotText).toContain("[ObsSnapshot]");
     expect(snapshotText).toContain("tape_pressure:");
     expect(snapshotText).toContain("context_pressure:");
+    expect(snapshotText).toContain("verification_level: targeted");
   });
 });

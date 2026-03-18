@@ -96,7 +96,7 @@ describe("tool input alias contracts", () => {
     expect(runtime.task.getState(sessionId).spec?.expectedBehavior).toBe(params.expected_behavior);
   });
 
-  test("task_set_spec accepts natural verification aliases and stores canonical values", async () => {
+  test("task_set_spec accepts agent-facing verification values and lowers them to runtime values", async () => {
     const runtime = new BrewvaRuntime({ cwd: process.cwd() });
     const sessionId = "task-set-spec-verification-alias";
     const tool = requireTool(createTaskLedgerTools({ runtime }), "task_set_spec");
@@ -139,6 +139,81 @@ describe("tool input alias contracts", () => {
       level: "standard",
       commands: ["bun test test/contract/tools"],
     });
+    expect(
+      Value.Check(tool.parameters, {
+        goal: "Review the architecture without modifying code.",
+        verification: {
+          level: "standard",
+        },
+      }),
+    ).toBe(false);
+  });
+
+  test("task_set_spec accepts investigate as a read-only verification alias", async () => {
+    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const sessionId = "task-set-spec-investigate-verification-alias";
+    const tool = requireTool(createTaskLedgerTools({ runtime }), "task_set_spec");
+    const params = {
+      goal: "Review the runtime behavior without changing code.",
+      verification: {
+        level: "investigate",
+      },
+    };
+
+    expect(Value.Check(tool.parameters, params)).toBe(true);
+    await tool.execute(
+      "tc-task-set-spec-investigate-verification-alias",
+      params as never,
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    expect(runtime.task.getState(sessionId).spec?.verification).toBeUndefined();
+  });
+
+  test("task item tools accept agent-facing statuses and lower them to runtime values", async () => {
+    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const sessionId = "task-item-pending-status-alias";
+    const tools = createTaskLedgerTools({ runtime });
+    const addTool = requireTool(tools, "task_add_item");
+    const updateTool = requireTool(tools, "task_update_item");
+
+    const addParams = {
+      text: "Investigate contract mismatch handling.",
+      status: "pending",
+    };
+    expect(Value.Check(addTool.parameters, addParams)).toBe(true);
+    const addResult = await addTool.execute(
+      "tc-task-add-item-pending-status-alias",
+      addParams as never,
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const itemId = extractTextContent(addResult).match(/\(([^)]+)\)/)?.[1];
+    expect(itemId).toBeTruthy();
+    expect(runtime.task.getState(sessionId).items[0]?.status).toBe("todo");
+    expect(
+      Value.Check(addTool.parameters, {
+        text: "Investigate contract mismatch handling.",
+        status: "doing",
+      }),
+    ).toBe(false);
+
+    const updateParams = {
+      id: itemId!,
+      status: "pending",
+    };
+    expect(Value.Check(updateTool.parameters, updateParams)).toBe(true);
+    await updateTool.execute(
+      "tc-task-update-item-pending-status-alias",
+      updateParams as never,
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    expect(runtime.task.getState(sessionId).items[0]?.status).toBe("todo");
   });
 
   test("canonical top-level fields win when canonical and alias spellings are both present", async () => {
@@ -161,6 +236,40 @@ describe("tool input alias contracts", () => {
     );
 
     expect(runtime.task.getState(sessionId).spec?.expectedBehavior).toBe("canonical value");
+  });
+
+  test("grep exposes agent-facing case values and lowers insensitive to the runtime mode", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-grep-surface-"));
+    writeFileSync(join(workspace, "sample.txt"), "Needle\nneedle\n", "utf8");
+
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const tool = createGrepTool({ runtime });
+
+    expect(
+      Value.Check(tool.parameters, {
+        query: "needle",
+        case: "insensitive",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(tool.parameters, {
+        query: "needle",
+        case: "ignore",
+      }),
+    ).toBe(false);
+
+    const result = await tool.execute(
+      "tc-grep-agent-surface",
+      {
+        query: "needle",
+        case: "insensitive",
+      } as never,
+      undefined,
+      undefined,
+      fakeContext("grep-agent-surface", workspace),
+    );
+
+    expect(extractTextContent(result)).toContain("matches_shown: 2");
   });
 
   test("lsp_diagnostics keeps file_path alias as an execution-only compatibility path", async () => {
@@ -207,6 +316,25 @@ describe("tool input alias contracts", () => {
     expect(details?.filePath).toBe(filePath);
     expect(details?.severity).toBe("warning");
     expect(details?.reason).toBe("diagnostics_scope_mismatch");
+  });
+
+  test("lsp_symbols accepts natural scope aliases for document and workspace scans", () => {
+    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const tool = requireTool(createLspTools({ runtime }), "lsp_symbols");
+
+    expect(
+      Value.Check(tool.parameters, {
+        filePath: "/tmp/example.ts",
+        scope: "file",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(tool.parameters, {
+        filePath: "/tmp/example.ts",
+        scope: "project",
+        query: "needle",
+      }),
+    ).toBe(true);
   });
 
   test("obs_slo_assert accepts snake_case keys and severity aliases, then records canonical severity", async () => {
@@ -312,6 +440,12 @@ describe("tool input alias contracts", () => {
         case: "case_sensitive",
         maxLines: 25,
         timeoutMs: 500,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(tool.parameters, {
+        query: "needle",
+        case: "insensitive",
       }),
     ).toBe(true);
   });

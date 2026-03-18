@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { buildCapabilityView, renderCapabilityView } from "@brewva/brewva-gateway/runtime-plugins";
-import { createExecTool, createProcessTool } from "@brewva/brewva-tools";
+import {
+  createExecTool,
+  createGrepTool,
+  createProcessTool,
+  createScheduleIntentTool,
+} from "@brewva/brewva-tools";
+import { createRuntimeFixture } from "./fixtures/runtime.js";
 
 describe("capability view", () => {
   test("builds semantic inventory with governance-first ordering", () => {
@@ -172,6 +178,72 @@ describe("capability view", () => {
     });
     expect(rendered[2]?.content).toContain("allowed_now: false");
     expect(rendered[2]?.content).toContain("deny_reason: blocked-for-test");
+  });
+
+  test("renders enum contract details for requested capabilities", () => {
+    const runtime = createRuntimeFixture();
+    const grepTool = createGrepTool({ runtime });
+    const result = buildCapabilityView({
+      prompt: "inspect $grep",
+      allTools: [grepTool],
+      activeToolNames: [],
+    });
+
+    expect(result.details[0]?.parameterDetails).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          pathText: "case",
+          acceptedValues: ["smart", "insensitive", "sensitive"],
+        }),
+      ]),
+    );
+
+    const rendered = renderCapabilityView({
+      capabilityView: result,
+      mode: "full",
+      includeInventory: false,
+    });
+    expect(rendered[2]?.content).toContain("param.case:");
+    expect(rendered[2]?.content).toContain("values=smart|insensitive|sensitive");
+    expect(rendered[2]?.content).toContain("aliases=case-insensitive->insensitive");
+  });
+
+  test("renders nested enum contract details for schedule intent predicates", () => {
+    const runtime = createRuntimeFixture();
+    const scheduleIntentTool = createScheduleIntentTool({ runtime });
+    const result = buildCapabilityView({
+      prompt: "inspect $schedule_intent",
+      allTools: [scheduleIntentTool],
+      activeToolNames: [],
+    });
+
+    expect(result.details[0]?.parameterDetails).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          pathText: "action",
+          acceptedValues: ["create", "update", "cancel", "list"],
+        }),
+        expect.objectContaining({
+          pathText: "convergenceCondition.kind",
+          acceptedValues: ["truth_resolved", "task_phase", "max_runs", "all_of", "any_of"],
+        }),
+        expect.objectContaining({
+          pathText: "convergenceCondition.phase",
+          acceptedValues: ["align", "investigate", "execute", "verify", "blocked", "done"],
+        }),
+      ]),
+    );
+
+    const rendered = renderCapabilityView({
+      capabilityView: result,
+      mode: "full",
+      includeInventory: false,
+    });
+    expect(rendered[2]?.content).toContain("param.action:");
+    expect(rendered[2]?.content).toContain("param.convergenceCondition.kind:");
+    expect(rendered[2]?.content).toContain(
+      "values=truth_resolved|task_phase|max_runs|all_of|any_of",
+    );
   });
 
   test("records operator visibility hints in inventory semantics", () => {

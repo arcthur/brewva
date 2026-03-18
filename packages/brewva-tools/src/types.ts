@@ -11,7 +11,7 @@ export interface BrewvaToolMetadata {
 
 export type BrewvaManagedToolDefinition = ToolDefinition & {
   brewva?: BrewvaToolMetadata;
-  brewvaCanonicalParameters?: TSchema;
+  brewvaAgentParameters?: TSchema;
 };
 
 export type BrewvaToolRuntime = Pick<

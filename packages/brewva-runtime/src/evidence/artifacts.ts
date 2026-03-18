@@ -116,7 +116,10 @@ function looksLikeScriptCompositionToken(token: string): boolean {
   return !/^[A-Za-z0-9_./-]+$/u.test(token);
 }
 
-function classifyExecFailure(input: { details: unknown; outputText: string }): CommandFailureClass {
+function classifyInvocationValidationFailure(input: {
+  details: unknown;
+  outputText: string;
+}): CommandFailureClass | undefined {
   const detailsText = collectFailureDetailText(input.details);
   const outputText = input.outputText;
   const detailsLooksLikeValidation = INVOCATION_VALIDATION_PATTERN.test(detailsText);
@@ -126,7 +129,16 @@ function classifyExecFailure(input: { details: unknown; outputText: string }): C
   if ((detailsLooksLikeValidation || outputLooksLikeValidation) && !hasExecutionEvidence) {
     return "invocation_validation";
   }
+  return undefined;
+}
 
+function classifyExecFailure(input: { details: unknown; outputText: string }): CommandFailureClass {
+  const invocationValidation = classifyInvocationValidationFailure(input);
+  if (invocationValidation) {
+    return invocationValidation;
+  }
+
+  const outputText = input.outputText;
   const shellSyntaxInOutput = SHELL_SYNTAX_PATTERN.test(outputText);
   const shellSyntaxStrongSignal =
     /syntax error near unexpected token|while looking for matching|unexpected EOF while looking for matching/iu.test(
@@ -144,6 +156,36 @@ function classifyExecFailure(input: { details: unknown; outputText: string }): C
     return "script_composition";
   }
   return "execution";
+}
+
+export function classifyToolFailure(input: {
+  toolName: string;
+  args?: Record<string, unknown>;
+  outputText: string;
+  details?: unknown;
+  isError: boolean;
+}): CommandFailureClass | undefined {
+  if (!input.isError) {
+    return undefined;
+  }
+
+  const toolName = input.toolName.trim().toLowerCase();
+  if (!toolName) {
+    return undefined;
+  }
+  if (toolName === "exec") {
+    return classifyExecFailure({
+      details: input.details,
+      outputText: input.outputText,
+    });
+  }
+
+  return (
+    classifyInvocationValidationFailure({
+      details: input.details,
+      outputText: input.outputText,
+    }) ?? "execution"
+  );
 }
 
 type TscDiagnosticEntry = {
@@ -223,10 +265,14 @@ export function extractEvidenceArtifacts(input: {
   if (toolName === "exec" && input.isError) {
     const command = getCommand(input.args) ?? "";
     const exitCode = extractExitCode(input.details);
-    const failureClass = classifyExecFailure({
-      details: input.details,
-      outputText: input.outputText,
-    });
+    const failureClass =
+      classifyToolFailure({
+        toolName,
+        args: input.args,
+        outputText: input.outputText,
+        details: input.details,
+        isError: input.isError,
+      }) ?? "execution";
 
     const failingTests = uniqueLines(
       extractLines(input.outputText, /^\s*(?:FAIL|ERROR|✕|×)\b/i, 12),

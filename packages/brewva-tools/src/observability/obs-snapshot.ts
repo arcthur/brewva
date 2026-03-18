@@ -1,4 +1,7 @@
-import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime";
+import {
+  formatTaskVerificationLevelForSurface,
+  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+} from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../types.js";
@@ -49,7 +52,9 @@ export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinitio
           typeof verificationPayload?.outcome === "string" ? verificationPayload.outcome : "none"
         }`,
         `verification_level: ${
-          typeof verificationPayload?.level === "string" ? verificationPayload.level : "none"
+          formatTaskVerificationLevelForSurface(
+            typeof verificationPayload?.level === "string" ? verificationPayload.level : undefined,
+          ) ?? "none"
         }`,
       ];
       if (

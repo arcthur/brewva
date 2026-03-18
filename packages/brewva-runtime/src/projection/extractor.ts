@@ -1,4 +1,5 @@
 import { TASK_EVENT_TYPE, coerceTaskLedgerPayload } from "../task/ledger.js";
+import { formatTaskVerificationLevelForSurface } from "../task/surface.js";
 import { TRUTH_EVENT_TYPE, coerceTruthLedgerPayload } from "../truth/ledger.js";
 import type { BrewvaEventRecord } from "../types.js";
 import type {
@@ -161,13 +162,16 @@ function extractTask(event: BrewvaEventRecord): ProjectionExtractionResult {
         });
       }
       if (payload.spec.verification?.level) {
+        const verificationLevel =
+          formatTaskVerificationLevelForSurface(payload.spec.verification.level) ??
+          payload.spec.verification.level;
         keepProjectionKeys.push("task_spec.verification.level");
         upserts.push({
           sessionId: event.sessionId,
           status: "active",
           projectionKey: "task_spec.verification.level",
           label: "task.verification.level",
-          statement: payload.spec.verification.level,
+          statement: verificationLevel,
           sourceRefs: [sourceRef],
           metadata: {
             source: "task_event",
