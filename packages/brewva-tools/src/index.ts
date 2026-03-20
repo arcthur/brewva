@@ -20,42 +20,66 @@ import { createSessionCompactTool } from "./session-compact.js";
 import { createSkillChainControlTool } from "./skill-chain-control.js";
 import { createSkillCompleteTool } from "./skill-complete.js";
 import { createSkillLoadTool } from "./skill-load.js";
+import { createSubagentCancelTool, createSubagentStatusTool } from "./subagent-control.js";
+import { createSubagentFanoutTool, createSubagentRunTool } from "./subagent-run.js";
 import { createTapeTools } from "./tape.js";
 import { createTaskLedgerTools } from "./task-ledger.js";
 import { createTocTools } from "./toc.js";
-import type { BrewvaToolRuntime } from "./types.js";
+import type { BrewvaToolOrchestration, BrewvaToolRuntime } from "./types.js";
+import { createWorkerResultsApplyTool, createWorkerResultsMergeTool } from "./worker-results.js";
 
 export interface BuildBrewvaToolsOptions {
   runtime: BrewvaToolRuntime;
+  orchestration?: BrewvaToolOrchestration;
+  toolNames?: readonly string[];
 }
 
 export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefinition[] {
-  return [
-    ...createLspTools({ runtime: options.runtime }),
-    ...createTocTools({ runtime: options.runtime }),
+  const runtime = Object.assign(
+    {},
+    options.runtime,
+    options.orchestration ? { orchestration: options.orchestration } : {},
+  ) as BrewvaToolRuntime;
+
+  const tools = [
+    ...createLspTools({ runtime }),
+    ...createTocTools({ runtime }),
     ...createAstGrepTools(),
-    createReadSpansTool({ runtime: options.runtime }),
+    createReadSpansTool({ runtime }),
     createLookAtTool(),
-    createGrepTool({ runtime: options.runtime }),
-    createExecTool({ runtime: options.runtime }),
+    createGrepTool({ runtime }),
+    createExecTool({ runtime }),
     createProcessTool(),
-    createCostViewTool({ runtime: options.runtime }),
-    createCognitionNoteTool({ runtime: options.runtime }),
-    createObsQueryTool({ runtime: options.runtime }),
-    createObsSloAssertTool({ runtime: options.runtime }),
-    createObsSnapshotTool({ runtime: options.runtime }),
-    createLedgerQueryTool({ runtime: options.runtime }),
-    createOutputSearchTool({ runtime: options.runtime }),
-    createScheduleIntentTool({ runtime: options.runtime }),
-    ...createTapeTools({ runtime: options.runtime }),
-    createSessionCompactTool({ runtime: options.runtime }),
-    createResourceLeaseTool({ runtime: options.runtime }),
-    createRollbackLastPatchTool({ runtime: options.runtime }),
-    createSkillLoadTool({ runtime: options.runtime }),
-    createSkillCompleteTool({ runtime: options.runtime }),
-    createSkillChainControlTool({ runtime: options.runtime }),
-    ...createTaskLedgerTools({ runtime: options.runtime }),
+    createCostViewTool({ runtime }),
+    createCognitionNoteTool({ runtime }),
+    createObsQueryTool({ runtime }),
+    createObsSloAssertTool({ runtime }),
+    createObsSnapshotTool({ runtime }),
+    createLedgerQueryTool({ runtime }),
+    createOutputSearchTool({ runtime }),
+    createScheduleIntentTool({ runtime }),
+    ...createTapeTools({ runtime }),
+    createSessionCompactTool({ runtime }),
+    createResourceLeaseTool({ runtime }),
+    createRollbackLastPatchTool({ runtime }),
+    createWorkerResultsMergeTool({ runtime }),
+    createWorkerResultsApplyTool({ runtime }),
+    createSkillLoadTool({ runtime }),
+    createSkillCompleteTool({ runtime }),
+    createSkillChainControlTool({ runtime }),
+    createSubagentRunTool({ runtime }),
+    createSubagentFanoutTool({ runtime }),
+    createSubagentStatusTool({ runtime }),
+    createSubagentCancelTool({ runtime }),
+    ...createTaskLedgerTools({ runtime }),
   ];
+
+  if (!options.toolNames || options.toolNames.length === 0) {
+    return tools;
+  }
+
+  const allowed = new Set(options.toolNames);
+  return tools.filter((tool) => allowed.has(tool.name));
 }
 
 export { createLspTools } from "./lsp.js";
@@ -97,10 +121,13 @@ export { createTocTools } from "./toc.js";
 export { createTapeTools } from "./tape.js";
 export { createSessionCompactTool } from "./session-compact.js";
 export { createRollbackLastPatchTool } from "./rollback-last-patch.js";
+export { createWorkerResultsMergeTool, createWorkerResultsApplyTool } from "./worker-results.js";
 export { createScheduleIntentTool } from "./schedule-intent.js";
 export { createSkillLoadTool } from "./skill-load.js";
 export { createSkillCompleteTool } from "./skill-complete.js";
 export { createSkillChainControlTool } from "./skill-chain-control.js";
+export { createSubagentStatusTool, createSubagentCancelTool } from "./subagent-control.js";
+export { createSubagentRunTool, createSubagentFanoutTool } from "./subagent-run.js";
 export { createTaskLedgerTools } from "./task-ledger.js";
 export {
   resolveBrewvaModelSelection,
@@ -118,7 +145,30 @@ export {
   type BrewvaToolSurface,
 } from "./surface.js";
 export type {
+  BrewvaToolOrchestration,
   BrewvaManagedToolDefinition,
+  DelegationPacket,
+  DelegationTaskPacket,
+  SubagentContextBudget,
+  SubagentContextRef,
+  SubagentContextRefKind,
+  SubagentDelegationMode,
+  SubagentExecutionPosture,
+  SubagentExecutionHints,
+  SubagentOutcomeArtifactRef,
+  SubagentOutcome,
+  SubagentOutcomeBase,
+  SubagentOutcomeEvidenceRef,
+  SubagentOutcomeFailure,
+  SubagentOutcomeMetricSummary,
+  SubagentOutcomeSuccess,
+  SubagentReturnMode,
+  SubagentResultMode,
+  SubagentRunRequest,
+  SubagentRunResult,
+  SubagentStartResult,
+  SubagentStatusResult,
+  SubagentCancelResult,
   BrewvaToolMetadata,
   BrewvaToolRuntime,
 } from "./types.js";

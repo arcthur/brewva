@@ -58,21 +58,29 @@ Boundary rule:
 
 - `Working State Plane`: projection, context arena, pending dispatch, active tool surface
 - `Cognitive Product Plane`: context composition, memory formation, memory curation, persona/profile rendering
-- `Control Plane`: broker, debug-loop, heartbeat policy, proactive wake context, scheduling triggers, future planners
+- `Control Plane`: broker, debug-loop, heartbeat policy, proactive wake context, scheduling triggers, delegation planners, subagent orchestration, future planners
 
 Rings define authority. Planes define product behavior.
+
+Subagent delegation belongs to the control plane:
+
+- subagent profiles, delegation packets, and child-run orchestration are
+  control-plane execution objects
+- child runs may explore, summarize, verify, or prepare patch candidates
+- kernel authority remains at effect authorization, proposal admission, merge
+  adoption, and replayable receipts
 
 ## State Taxonomy
 
 Brewva keeps five different kinds of system objects separate:
 
-| Category                 | Role                                                            | Authority                    | Typical carriers                                     |
-| ------------------------ | --------------------------------------------------------------- | ---------------------------- | ---------------------------------------------------- |
-| `Kernel Commitments`     | authoritative system commitments                                | authoritative                | tape, receipts, task, truth, ledger                  |
-| `Working State`          | session-local working view and injection planning               | non-authoritative            | projection, context arena, pending dispatch          |
-| `Deliberation Artifacts` | non-kernel cognition and cross-session sediment                 | non-authoritative            | `.brewva/cognition/*`, broker traces, operator notes |
-| `Tool Surface`           | turn-visible action surface                                     | policy-governed              | base tools, skill-scoped tools, operator tools       |
-| `Control Plane`          | scheduling, ranking, retry loops, operator-facing orchestration | non-authoritative by default | broker, debug-loop, gateway heartbeat/policy         |
+| Category                 | Role                                                                        | Authority                    | Typical carriers                                             |
+| ------------------------ | --------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------ |
+| `Kernel Commitments`     | authoritative system commitments                                            | authoritative                | tape, receipts, task, truth, ledger                          |
+| `Working State`          | session-local working view and injection planning                           | non-authoritative            | projection, context arena, pending dispatch                  |
+| `Deliberation Artifacts` | non-kernel cognition and cross-session sediment                             | non-authoritative            | `.brewva/cognition/*`, broker traces, operator notes         |
+| `Tool Surface`           | turn-visible action surface                                                 | policy-governed              | base tools, skill-scoped tools, operator tools               |
+| `Control Plane`          | scheduling, ranking, retry loops, delegation, operator-facing orchestration | non-authoritative by default | broker, debug-loop, delegation planner, child-run controller |
 
 Important distinctions:
 

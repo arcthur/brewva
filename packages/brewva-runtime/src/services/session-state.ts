@@ -1,4 +1,5 @@
 import type {
+  DelegationRunRecord,
   ResourceLeaseRecord,
   SessionHydrationState,
   SkillChainIntent,
@@ -50,6 +51,7 @@ export class RuntimeSessionStateCell {
   skillBudgetWarnings = new Set<string>();
   skillParallelWarnings = new Set<string>();
   resourceLeases = new Map<string, ResourceLeaseRecord>();
+  delegationRuns = new Map<string, DelegationRunRecord>();
   skillOutputs = new Map<string, SkillOutputRecord>();
   pendingDispatch?: SkillDispatchDecision;
   skillChainIntent?: SkillChainIntent;

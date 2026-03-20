@@ -100,6 +100,52 @@ export interface ToolGateServiceOptions {
   >;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readPatchSetOverride(metadata: Record<string, unknown> | undefined): PatchSet | undefined {
+  const details = isRecord(metadata?.details) ? metadata.details : undefined;
+  const patchSet = isRecord(details?.patchSet) ? details.patchSet : undefined;
+  if (!patchSet) {
+    return undefined;
+  }
+  if (typeof patchSet.id !== "string" || typeof patchSet.createdAt !== "number") {
+    return undefined;
+  }
+  if (!Array.isArray(patchSet.changes)) {
+    return undefined;
+  }
+
+  const changes: PatchSet["changes"] = [];
+  for (const change of patchSet.changes) {
+    if (!isRecord(change)) {
+      continue;
+    }
+    if (typeof change.path !== "string") {
+      continue;
+    }
+    if (change.action !== "add" && change.action !== "modify" && change.action !== "delete") {
+      continue;
+    }
+    changes.push({
+      path: change.path,
+      action: change.action,
+      beforeHash: typeof change.beforeHash === "string" ? change.beforeHash : undefined,
+      afterHash: typeof change.afterHash === "string" ? change.afterHash : undefined,
+      diffText: typeof change.diffText === "string" ? change.diffText : undefined,
+      artifactRef: typeof change.artifactRef === "string" ? change.artifactRef : undefined,
+    });
+  }
+
+  return {
+    id: patchSet.id,
+    createdAt: patchSet.createdAt,
+    summary: typeof patchSet.summary === "string" ? patchSet.summary : undefined,
+    changes,
+  };
+}
+
 export class ToolGateService {
   private readonly securityPolicy: ReturnType<typeof resolveSecurityPolicy>;
   private readonly costTracker: SessionCostTracker;
@@ -960,12 +1006,14 @@ export class ToolGateService {
       outputText: input.outputText,
       posture,
     });
-    const patchSet = this.trackToolCallEnd({
-      sessionId: input.sessionId,
-      toolCallId: input.toolCallId,
-      toolName: input.toolName,
-      channelSuccess: input.channelSuccess,
-    });
+    const patchSet =
+      readPatchSetOverride(input.metadata) ??
+      this.trackToolCallEnd({
+        sessionId: input.sessionId,
+        toolCallId: input.toolCallId,
+        toolName: input.toolName,
+        channelSuccess: input.channelSuccess,
+      });
     if (posture === "reversible_mutate") {
       this.recordMutation({
         sessionId: input.sessionId,

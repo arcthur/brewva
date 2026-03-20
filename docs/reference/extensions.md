@@ -124,6 +124,36 @@ Telemetry:
 
 - `tool_surface_resolved`
 
+## Delegation Recommendation
+
+`ContextComposer` may emit one extra diagnostic block before agent start:
+
+- `[DelegationRecommendation]`
+
+This block is deliberately non-authoritative.
+
+It exists to point the model toward explicit control-plane delegation when:
+
+- an active skill exists
+- the current prompt looks exploration-heavy or verification-heavy
+- delegation tools are already visible on the current turn
+- no live child run is already pending for the same parent session
+
+Current contract:
+
+- authority remains `explicit_only`
+- the block never auto-spawns a child run
+- patch-producing recommendations point back to the parent-controlled merge path
+  (`worker_results_merge -> worker_results_apply`)
+- the context composer preserves this block under diagnostic compaction pressure
+  ahead of lower-value noise blocks
+
+Implementation anchors:
+
+- `packages/brewva-gateway/src/runtime-plugins/delegation-recommendation.ts`
+- `packages/brewva-gateway/src/runtime-plugins/context-composer-support.ts`
+- `packages/brewva-gateway/src/runtime-plugins/context-composer.ts`
+
 ## Scan Convergence Guard
 
 Scan convergence is a runtime governance service. There is no dedicated

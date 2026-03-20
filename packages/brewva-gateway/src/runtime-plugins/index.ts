@@ -9,6 +9,7 @@ import {
   buildBrewvaTools,
   getBrewvaToolMetadata,
   getBrewvaToolSurface,
+  type BrewvaToolOrchestration,
 } from "@brewva/brewva-tools";
 import type { ExtensionAPI, ExtensionFactory } from "@mariozechner/pi-coding-agent";
 import { createCognitiveMetricsLifecycle, registerCognitiveMetrics } from "./cognitive-metrics.js";
@@ -29,6 +30,8 @@ export interface CreateBrewvaExtensionOptions extends BrewvaRuntimeOptions {
   runtime?: BrewvaRuntime;
   registerTools?: boolean;
   profile?: BrewvaExtensionProfile;
+  orchestration?: BrewvaToolOrchestration;
+  managedToolNames?: readonly string[];
 }
 
 export type BrewvaExtensionProfile = "core" | "memory" | "debug" | "full";
@@ -130,7 +133,13 @@ export function createBrewvaExtension(
           options.governancePort ?? createTrustedLocalGovernancePort({ profile: "team" }),
       });
     const shouldRegisterTools = options.registerTools !== false;
-    const allTools = shouldRegisterTools ? buildBrewvaTools({ runtime }) : [];
+    const allTools = shouldRegisterTools
+      ? buildBrewvaTools({
+          runtime,
+          orchestration: options.orchestration,
+          toolNames: options.managedToolNames,
+        })
+      : [];
     const toolDefinitionsByName = shouldRegisterTools
       ? new Map(allTools.map((tool) => [tool.name, tool] as const))
       : undefined;

@@ -131,6 +131,7 @@ import type {
   VerificationLevel,
   VerificationReport,
   WorkerMergeReport,
+  WorkerApplyReport,
   WorkerResult,
   TruthFactResolveResult,
   TruthFactUpsertResult,
@@ -544,6 +545,10 @@ export class BrewvaRuntime {
     recordWorkerResult(sessionId: string, result: WorkerResult): void;
     listWorkerResults(sessionId: string): WorkerResult[];
     mergeWorkerResults(sessionId: string): WorkerMergeReport;
+    applyMergedWorkerResults(
+      sessionId: string,
+      input: { toolName: string; toolCallId?: string },
+    ): WorkerApplyReport;
     clearWorkerResults(sessionId: string): void;
     pollStall(
       sessionId: string,
@@ -552,6 +557,15 @@ export class BrewvaRuntime {
         thresholdsMs?: Partial<Record<"investigate" | "execute" | "verify", number>>;
       },
     ): void;
+    recordDelegationRun(sessionId: string, record: import("./types.js").DelegationRunRecord): void;
+    getDelegationRun(
+      sessionId: string,
+      runId: string,
+    ): import("./types.js").DelegationRunRecord | undefined;
+    listDelegationRuns(
+      sessionId: string,
+      query?: import("./types.js").DelegationRunQuery,
+    ): import("./types.js").DelegationRunRecord[];
     clearState(sessionId: string): void;
     onClearState(listener: (sessionId: string) => void): () => void;
     getHydration(sessionId: string): SessionHydrationState;
@@ -1001,6 +1015,8 @@ export class BrewvaRuntime {
           this.parallelService.recordWorkerResult(sessionId, result),
         listWorkerResults: (sessionId) => this.parallelService.listWorkerResults(sessionId),
         mergeWorkerResults: (sessionId) => this.parallelService.mergeWorkerResults(sessionId),
+        applyMergedWorkerResults: (sessionId, input) =>
+          this.parallelService.applyMergedWorkerResults(sessionId, input),
         clearWorkerResults: (sessionId) => this.parallelService.clearWorkerResults(sessionId),
         pollStall: (sessionId, input) =>
           this.taskWatchdogService.pollTaskProgress({
@@ -1008,6 +1024,12 @@ export class BrewvaRuntime {
             now: input?.now,
             thresholdsMs: input?.thresholdsMs,
           }),
+        recordDelegationRun: (sessionId, record) =>
+          this.sessionLifecycleService.recordDelegationRun(sessionId, record),
+        getDelegationRun: (sessionId, runId) =>
+          this.sessionLifecycleService.getDelegationRun(sessionId, runId),
+        listDelegationRuns: (sessionId, query) =>
+          this.sessionLifecycleService.listDelegationRuns(sessionId, query),
         clearState: (sessionId) => this.sessionLifecycleService.clearSessionState(sessionId),
         onClearState: (listener) => this.sessionLifecycleService.onClearState(listener),
         getHydration: (sessionId) => {

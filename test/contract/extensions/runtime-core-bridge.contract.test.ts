@@ -239,7 +239,7 @@ describe("runtime core bridge extension", () => {
     }
     expect(beforeStart.systemPrompt).toContain("[Brewva Context Contract]");
     expect(beforeStart.message?.content).toContain("[ContextCompactionGate]");
-    expect(beforeStart.message?.content).toContain("[OperationalDiagnostics]");
+    expect(beforeStart.message?.content?.includes("[OperationalDiagnostics]")).toBe(false);
     expect(beforeStart.message?.content).not.toContain("tape_pressure:");
     expect(beforeStart.message?.details?.profile).toBe("runtime-core");
     expect(calls.events.some((event) => event.type === "context_composed")).toBe(true);

@@ -72,7 +72,9 @@ describe("session state cleanup", () => {
       patches: {
         id: "ps-1",
         createdAt: Date.now(),
-        changes: [{ path: "src/a.ts", action: "modify", diffText: "diff" }],
+        changes: [
+          { path: "src/a.ts", action: "modify", diffText: "diff", artifactRef: "artifacts/a.ts" },
+        ],
       },
     });
     runtime.tools.recordResult({

@@ -366,16 +366,6 @@ export function createRuntimeServiceDependencies(
     recordEvent: (input) => options.kernel.recordEvent(input),
     skillLifecycleService,
   });
-  const parallelService = new ParallelService({
-    securityConfig: options.config.security,
-    parallel: options.coreDependencies.parallel,
-    parallelResults: options.coreDependencies.parallelResults,
-    sessionState: options.sessionState,
-    getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
-    recordEvent: (input) => options.kernel.recordEvent(input),
-    resourceLeaseService,
-    skillLifecycleService,
-  });
   const costService = new CostService({
     costTracker: options.coreDependencies.costTracker,
     getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
@@ -571,6 +561,18 @@ export function createRuntimeServiceDependencies(
     skillLifecycleService,
     trustMeterService,
     reversibleMutationService,
+  });
+  const parallelService = new ParallelService({
+    workspaceRoot: options.workspaceRoot,
+    securityConfig: options.config.security,
+    parallel: options.coreDependencies.parallel,
+    parallelResults: options.coreDependencies.parallelResults,
+    sessionState: options.sessionState,
+    getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
+    recordEvent: (input) => options.kernel.recordEvent(input),
+    fileChangeService,
+    resourceLeaseService,
+    skillLifecycleService,
   });
   const mutationRollbackService = new MutationRollbackService({
     getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),

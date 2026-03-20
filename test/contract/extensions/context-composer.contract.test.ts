@@ -32,6 +32,7 @@ function createComposerRuntime(
     advisoryPayload?: Record<string, unknown>;
     advisoryTimestamp?: number;
     resetTimestamp?: number;
+    pendingDelegations?: Array<{ runId: string; profile: string; status: "pending" | "running" }>;
   } = {},
 ): ContextComposerInput["runtime"] {
   return {
@@ -59,6 +60,17 @@ function createComposerRuntime(
                 },
               ]
             : [],
+    },
+    session: {
+      listDelegationRuns: () =>
+        (options.pendingDelegations ?? []).map((run, index) => ({
+          runId: run.runId,
+          profile: run.profile,
+          parentSessionId: "compose-session",
+          status: run.status,
+          createdAt: index + 1,
+          updatedAt: index + 1,
+        })),
     },
   } as ContextComposerInput["runtime"];
 }
@@ -165,6 +177,72 @@ describe("context composer", () => {
     expect(result.metrics.diagnosticTokens).toBe(0);
   });
 
+  test("preserves delegation recommendations when governance cap trims lower-priority diagnostics", () => {
+    const result = composeContextBlocks({
+      runtime: createComposerRuntime("low", 1),
+      sessionId: "compose-delegation-recommendation",
+      gateStatus: {
+        required: false,
+        reason: null,
+        pressure: {
+          level: "low",
+          usageRatio: 0.2,
+          hardLimitRatio: 0.95,
+          compactionThresholdRatio: 0.8,
+        },
+        recentCompaction: false,
+        lastCompactionTurn: null,
+        turnsSinceCompaction: null,
+        windowTurns: 4,
+      },
+      pendingCompactionReason: null,
+      capabilityView: buildCapabilityView({
+        prompt: "continue",
+        allTools: [
+          {
+            name: "subagent_run",
+            description: "Delegate work to an isolated subagent.",
+            parameters: { type: "object", properties: {} },
+          },
+        ],
+        activeToolNames: ["subagent_run"],
+      }),
+      injectionAccepted: false,
+      admittedEntries: [],
+      supplementalBlocks: [
+        {
+          id: "generic-diagnostic",
+          category: "diagnostic",
+          content: [
+            "[GenericDiagnostic]",
+            "signal: keep shrinking governance-heavy context before capability expansion.",
+            "signal: keep shrinking governance-heavy context before capability expansion.",
+            "signal: keep shrinking governance-heavy context before capability expansion.",
+          ].join("\n"),
+          estimatedTokens: 48,
+        },
+        {
+          id: "delegation-recommendation",
+          category: "diagnostic",
+          content: [
+            "[DelegationRecommendation]",
+            "tool: subagent_run",
+            "profile: verifier",
+            "mode: single",
+            "posture: observe",
+            "confidence: medium",
+            "reason: The active skill is review-oriented and benefits from a verifier lane.",
+            "authority: explicit_only",
+          ].join("\n"),
+          estimatedTokens: 62,
+        },
+      ],
+    });
+
+    expect(result.content).toContain("[DelegationRecommendation]");
+    expect(result.content).not.toContain("[GenericDiagnostic]");
+  });
+
   test("includes tape telemetry only when diagnostics are explicitly requested", () => {
     const result = composeContextBlocks({
       runtime: createComposerRuntime("high", 18),
@@ -204,6 +282,95 @@ describe("context composer", () => {
     expect(result.content).toContain("tape_pressure: high");
     expect(result.content).toContain("tape_entries_since_anchor: 18");
     expect(result.content).not.toContain("[CapabilityDetail:$obs_query]");
+  });
+
+  test("surfaces pending delegations in operational diagnostics", () => {
+    const result = composeContextBlocks({
+      runtime: createComposerRuntime("medium", 4, {
+        pendingDelegations: [
+          { runId: "run-a", profile: "researcher", status: "running" },
+          { runId: "run-b", profile: "verifier", status: "pending" },
+        ],
+      }),
+      sessionId: "compose-pending-delegations",
+      gateStatus: {
+        required: false,
+        reason: null,
+        pressure: {
+          level: "medium",
+          usageRatio: 0.55,
+          hardLimitRatio: 0.98,
+          compactionThresholdRatio: 0.8,
+        },
+        recentCompaction: false,
+        lastCompactionTurn: null,
+        turnsSinceCompaction: 1,
+        windowTurns: 4,
+      },
+      pendingCompactionReason: "usage_threshold",
+      capabilityView: buildCapabilityView({
+        prompt: "inspect $obs_query",
+        allTools: [
+          {
+            name: "obs_query",
+            description: "Query runtime events.",
+            parameters: { type: "object", properties: {} },
+          },
+        ],
+        activeToolNames: ["obs_query"],
+      }),
+      injectionAccepted: false,
+      admittedEntries: [],
+    });
+
+    expect(result.content).toContain("pending_delegations: 2");
+    expect(result.content).toContain("researcher/run-a:running");
+    expect(result.content).toContain("verifier/run-b:pending");
+  });
+
+  test("adds an explicit pending delegations section to compaction guidance", () => {
+    const result = composeContextBlocks({
+      runtime: createComposerRuntime("high", 9, {
+        pendingDelegations: [
+          { runId: "run-c", profile: "researcher", status: "running" },
+          { runId: "run-d", profile: "patch-worker", status: "pending" },
+        ],
+      }),
+      sessionId: "compose-compaction-pending-delegations",
+      gateStatus: {
+        required: true,
+        reason: "hard_limit",
+        pressure: {
+          level: "critical",
+          usageRatio: 0.97,
+          hardLimitRatio: 0.98,
+          compactionThresholdRatio: 0.8,
+        },
+        recentCompaction: false,
+        lastCompactionTurn: null,
+        turnsSinceCompaction: 7,
+        windowTurns: 4,
+      },
+      pendingCompactionReason: "usage_threshold",
+      capabilityView: buildCapabilityView({
+        prompt: "continue",
+        allTools: [
+          {
+            name: "session_compact",
+            description: "Compact session context.",
+            parameters: { type: "object", properties: {} },
+          },
+        ],
+        activeToolNames: ["session_compact"],
+      }),
+      injectionAccepted: false,
+      admittedEntries: [],
+    });
+
+    expect(result.content).toContain("[PendingDelegations]");
+    expect(result.content).toContain("count: 2");
+    expect(result.content).toContain("researcher/run-c:running");
+    expect(result.content).toContain("patch-worker/run-d:pending");
   });
 
   test("caps governance-heavy injections before they crowd out narrative blocks", () => {

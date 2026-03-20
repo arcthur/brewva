@@ -5,6 +5,7 @@ export * from "./cli.js";
 export * from "./conversations/index.js";
 export * from "./network.js";
 export * from "./state-store.js";
+export * from "./subagents/index.js";
 export * from "./utils/runtime.js";
 export * from "./protocol/index.js";
 export * from "./daemon/gateway-daemon.js";

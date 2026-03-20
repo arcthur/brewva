@@ -41,9 +41,15 @@
 - `tape_search`
 - `session_compact`
 - `rollback_last_patch`
+- `worker_results_merge`
+- `worker_results_apply`
 - `skill_load`
 - `skill_complete`
 - `skill_chain_control`
+- `subagent_run`
+- `subagent_fanout`
+- `subagent_status`
+- `subagent_cancel`
 - `task_set_spec`
 - `task_add_item`
 - `task_update_item`

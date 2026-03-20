@@ -5,7 +5,7 @@ import {
 } from "../events/event-types.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import { FileChangeTracker } from "../state/file-change-tracker.js";
-import type { PatchSet, RollbackResult, SkillDocument } from "../types.js";
+import type { PatchApplyResult, PatchSet, RollbackResult, SkillDocument } from "../types.js";
 import { isMutationTool } from "../verification/classifier.js";
 import { buildVerificationWriteMarkedPayload } from "../verification/projector-payloads.js";
 import type { LedgerService } from "./ledger.js";
@@ -26,6 +26,13 @@ export interface TrackToolCallEndInput {
   toolCallId: string;
   toolName: string;
   channelSuccess: boolean;
+}
+
+export interface ApplyPatchSetInput {
+  sessionId: string;
+  toolName: string;
+  patchSet: PatchSet;
+  toolCallId?: string;
 }
 
 export interface FileChangeServiceOptions {
@@ -167,6 +174,66 @@ export class FileChangeService {
       },
     });
     return patchSet;
+  }
+
+  applyPatchSet(input: ApplyPatchSetInput): PatchApplyResult {
+    const applied = this.fileChanges.applyPatchSet(input.sessionId, {
+      patchSet: input.patchSet,
+      toolName: input.toolName,
+    });
+    this.recordEvent({
+      sessionId: input.sessionId,
+      type: "patch_recorded",
+      turn: this.getCurrentTurn(input.sessionId),
+      payload: {
+        toolCallId: input.toolCallId ?? null,
+        toolName: input.toolName,
+        patchSetId: applied.patchSetId ?? null,
+        changes: input.patchSet.changes.map((change) => ({
+          path: change.path,
+          action: change.action,
+        })),
+        applyStatus: applied.ok ? "applied" : "failed",
+        failedPaths: applied.failedPaths,
+        reason: applied.reason ?? null,
+      },
+    });
+    if (applied.ok) {
+      this.recordInfrastructureRow({
+        sessionId: input.sessionId,
+        turn: this.getCurrentTurn(input.sessionId),
+        skill: this.getActiveSkill(input.sessionId)?.name ?? null,
+        tool: input.toolName,
+        argsSummary: `patchSet=${input.patchSet.id}`,
+        outputSummary: `applied=${applied.appliedPaths.length} failed=0`,
+        fullOutput: JSON.stringify(applied),
+        verdict: "pass",
+        metadata: {
+          source: "worker_merge_apply",
+          patchSetId: applied.patchSetId ?? null,
+          appliedPaths: applied.appliedPaths,
+        },
+      });
+      return applied;
+    }
+
+    this.recordInfrastructureRow({
+      sessionId: input.sessionId,
+      turn: this.getCurrentTurn(input.sessionId),
+      skill: this.getActiveSkill(input.sessionId)?.name ?? null,
+      tool: input.toolName,
+      argsSummary: `patchSet=${input.patchSet.id}`,
+      outputSummary: `apply_failed=${applied.failedPaths.length}`,
+      fullOutput: JSON.stringify(applied),
+      verdict: "fail",
+      metadata: {
+        source: "worker_merge_apply",
+        patchSetId: applied.patchSetId ?? null,
+        failedPaths: applied.failedPaths,
+        reason: applied.reason ?? null,
+      },
+    });
+    return applied;
   }
 
   rollbackLastPatchSet(sessionId: string): RollbackResult {

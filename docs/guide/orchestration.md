@@ -10,6 +10,11 @@ Orchestration is driven by runtime state management plus extension lifecycle han
 1. Gateway host creates a session (`@brewva/brewva-gateway/host`, implemented in `packages/brewva-gateway/src/host/create-hosted-session.ts`)
 2. Extensions are registered (`@brewva/brewva-gateway/runtime-plugins`)
 3. `before_agent_start` runs lifecycle plumbing (`context-transform`) and model-facing composition (`context-composer`)
+   - when the active skill, prompt shape, and visible tool surface suggest that
+     explicit delegation is a better exploration path, context composition may
+     inject a non-authoritative `[DelegationRecommendation]` diagnostic block
+   - recommendation authority stays `explicit_only`; actual child execution
+     still requires `subagent_run` or `subagent_fanout`
 4. `tool_call` passes quality/security/budget gates (`quality-gate`)
 5. `ledger-writer` records durable tool outcomes (normally from SDK `tool_result`; can fallback to `tool_execution_end` when `tool_result` is missing). Persisted governance event is `tool_result_recorded`.
 6. `tool-result-distiller` may replace large pure-text `tool_result` payloads with bounded same-turn summaries after raw evidence is recorded.

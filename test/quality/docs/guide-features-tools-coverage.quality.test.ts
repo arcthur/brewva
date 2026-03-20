@@ -23,9 +23,12 @@ function collectToolNames(sourceRoot: string): string[] {
     "skill-chain-control.ts",
     "skill-load.ts",
     "skill-complete.ts",
+    "subagent-control.ts",
+    "subagent-run.ts",
     "tape.ts",
     "task-ledger.ts",
     "toc.ts",
+    "worker-results.ts",
   ];
 
   const names = new Set<string>();

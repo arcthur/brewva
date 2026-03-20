@@ -1193,6 +1193,62 @@ export interface SessionHydrationState {
   issues: SessionHydrationIssue[];
 }
 
+export type DelegationRunStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "timeout"
+  | "cancelled"
+  | "merged";
+
+export type DelegationOutcomeKind = "exploration" | "review" | "verification" | "patch";
+export type DelegationDeliveryMode = "text_only" | "supplemental" | "context_packet" | "both";
+
+export interface DelegationArtifactRef {
+  kind: string;
+  path: string;
+  summary?: string;
+}
+
+export interface DelegationDeliveryRecord {
+  mode: DelegationDeliveryMode;
+  scopeId?: string;
+  label?: string;
+  ttlMs?: number;
+  supplementalAppended?: boolean;
+  contextPacketProposalId?: string;
+  contextPacketDecision?: ProposalDecision;
+  updatedAt?: number;
+}
+
+export interface DelegationRunRecord {
+  runId: string;
+  profile: string;
+  parentSessionId: string;
+  status: DelegationRunStatus;
+  createdAt: number;
+  updatedAt: number;
+  label?: string;
+  workerSessionId?: string;
+  parentSkill?: string;
+  kind?: DelegationOutcomeKind;
+  posture?: Extract<ToolInvocationPosture, "observe" | "reversible_mutate">;
+  summary?: string;
+  error?: string;
+  artifactRefs?: DelegationArtifactRef[];
+  delivery?: DelegationDeliveryRecord;
+  totalTokens?: number;
+  costUsd?: number;
+}
+
+export interface DelegationRunQuery {
+  runIds?: string[];
+  statuses?: DelegationRunStatus[];
+  includeTerminal?: boolean;
+  limit?: number;
+}
+
 export interface ContextBudgetUsage {
   tokens: number | null;
   contextWindow: number;
@@ -1367,6 +1423,7 @@ export interface PatchFileChange {
   beforeHash?: string;
   afterHash?: string;
   diffText?: string;
+  artifactRef?: string;
 }
 
 export interface PatchSet {
@@ -1398,6 +1455,33 @@ export interface WorkerMergeReport {
   workerIds: string[];
   conflicts: PatchConflict[];
   mergedPatchSet?: PatchSet;
+}
+
+export type PatchApplyFailureReason =
+  | "empty_patchset"
+  | "invalid_path"
+  | "missing_artifact"
+  | "before_hash_mismatch"
+  | "after_hash_mismatch"
+  | "write_failed";
+
+export interface PatchApplyResult {
+  ok: boolean;
+  patchSetId?: string;
+  appliedPaths: string[];
+  failedPaths: string[];
+  reason?: PatchApplyFailureReason;
+}
+
+export interface WorkerApplyReport {
+  status: "empty" | "conflicts" | "applied" | "apply_failed";
+  workerIds: string[];
+  conflicts: PatchConflict[];
+  mergedPatchSet?: PatchSet;
+  appliedPatchSetId?: string;
+  appliedPaths: string[];
+  failedPaths: string[];
+  reason?: PatchApplyFailureReason;
 }
 
 export interface RollbackResult extends RollbackOutcome<PatchSetRollbackFailureReason> {

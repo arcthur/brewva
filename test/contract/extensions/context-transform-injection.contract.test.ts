@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import type { SkillDocument } from "@brewva/brewva-runtime";
 import {
   CONTEXT_SOURCES,
   createMockExtensionAPI,
+  createRuntimeConfig,
   createRuntimeFixture,
   invokeHandlerAsync,
   invokeHandlersAsync,
@@ -119,5 +121,100 @@ describe("context transform injection contract", () => {
 
     expect(calls).toEqual(["async"]);
     expect(result.message.content).toContain("[TaskState]\nstatus: async");
+  });
+
+  test("injects a non-authoritative delegation recommendation when planner heuristics align", async () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const extensionApi = api as unknown as {
+      registerTool: (tool: { name: string; description: string; parameters?: unknown }) => void;
+    };
+    extensionApi.registerTool({
+      name: "subagent_run",
+      description: "Delegate work to an isolated subagent.",
+      parameters: { type: "object", properties: {} },
+    });
+
+    const sessionId = "s-delegation-recommendation";
+    const activeSkill: SkillDocument = {
+      name: "review",
+      description: "Review skill fixture",
+      category: "core",
+      filePath: "/tmp/review/SKILL.md",
+      baseDir: "/tmp/review",
+      markdown: "# review",
+      contract: {
+        name: "review",
+        category: "core",
+        intent: {
+          outputs: ["findings"],
+        },
+        effects: {
+          allowedEffects: ["workspace_read", "runtime_observe"],
+        },
+        executionHints: {
+          preferredTools: ["read"],
+          fallbackTools: ["grep"],
+        },
+      },
+      resources: {
+        references: [],
+        scripts: [],
+        heuristics: [],
+        invariants: [],
+      },
+      sharedContextFiles: [],
+      overlayFiles: [],
+    };
+    const runtime = createRuntimeFixture({
+      config: createRuntimeConfig(),
+      context: {
+        checkAndRequestCompaction: () => false,
+        buildInjection: async () => ({
+          text: "",
+          entries: [],
+          accepted: false,
+          originalTokens: 0,
+          finalTokens: 0,
+          truncated: false,
+        }),
+      },
+    });
+    Object.assign(runtime.skills, {
+      getActive(activeSessionId: string) {
+        return activeSessionId === sessionId ? activeSkill : undefined;
+      },
+    });
+
+    registerContextTransform(api, runtime);
+
+    const results = await invokeHandlersAsync<{
+      message?: {
+        content?: string;
+      };
+    }>(
+      handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "review this change for regression risk and correctness issues",
+        systemPrompt: "base prompt",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => sessionId,
+        },
+        getContextUsage: () => undefined,
+      },
+    );
+    const result = results.find((candidate) =>
+      candidate?.message?.content?.includes("[DelegationRecommendation]"),
+    );
+    if (!result?.message?.content) {
+      throw new Error("expected a delegation recommendation block in hidden context");
+    }
+
+    expect(result.message.content).toContain("tool: subagent_run");
+    expect(result.message.content).toContain("profile: verifier");
+    expect(result.message.content).toContain("authority: explicit_only");
   });
 });

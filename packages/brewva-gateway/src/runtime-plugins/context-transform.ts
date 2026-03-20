@@ -425,13 +425,14 @@ export function createContextTransformLifecycle(
       };
 
       const prompt = typeof rawEvent.prompt === "string" ? rawEvent.prompt : "";
-      let { gateStatus, pendingCompactionReason, capabilityView } = prepareContextComposerSupport({
-        runtime,
-        pi,
-        sessionId,
-        prompt,
-        usage,
-      });
+      let { gateStatus, pendingCompactionReason, capabilityView, delegationRecommendation } =
+        prepareContextComposerSupport({
+          runtime,
+          pi,
+          sessionId,
+          prompt,
+          usage,
+        });
       if (gateStatus.required) {
         emitGateEvents(gateStatus, "hard_limit");
       }
@@ -439,13 +440,16 @@ export function createContextTransformLifecycle(
         sessionId,
         usage,
         injectionScopeId,
-        blocks: resolveSupplementalContextBlocks({
-          runtime,
-          sessionId,
-          gateStatus,
-          pendingCompactionReason,
-          capabilityView,
-        }),
+        blocks: [
+          ...resolveSupplementalContextBlocks({
+            runtime,
+            sessionId,
+            gateStatus,
+            pendingCompactionReason,
+            capabilityView,
+          }),
+          ...(delegationRecommendation ? [delegationRecommendation] : []),
+        ],
       });
       const systemPromptWithContract = applyContextContract(
         rawEvent.systemPrompt,
@@ -543,18 +547,22 @@ export function createContextTransformLifecycle(
       gateStatus = gateStatusAfterInjection;
       pendingCompactionReason = supportAfterInjection.pendingCompactionReason;
       capabilityView = supportAfterInjection.capabilityView;
+      delegationRecommendation = supportAfterInjection.delegationRecommendation;
       state.lastRuntimeGateRequired = gateStatus.required;
       const supplementalBlocks = appendSupplementalContextBlocks(runtime, {
         sessionId,
         usage,
         injectionScopeId,
-        blocks: resolveSupplementalContextBlocks({
-          runtime,
-          sessionId,
-          gateStatus,
-          pendingCompactionReason,
-          capabilityView,
-        }),
+        blocks: [
+          ...resolveSupplementalContextBlocks({
+            runtime,
+            sessionId,
+            gateStatus,
+            pendingCompactionReason,
+            capabilityView,
+          }),
+          ...(delegationRecommendation ? [delegationRecommendation] : []),
+        ],
       });
 
       emitRuntimeEvent(runtime, {

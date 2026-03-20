@@ -22,6 +22,26 @@ Automatic debug retry is now implemented as an extension-side controller that
 reuses explicit cascade intents plus runtime verification outcomes; it is not a
 public skill and not a runtime-kernel planner.
 
+## Skills vs Subagents
+
+Skills and subagents solve different problems and stay intentionally separate.
+
+- `skill`
+  - semantic contract for the work
+  - expected outputs, effect ceilings, completion rules, and budget ceilings
+- `subagent profile`
+  - isolated execution strategy for a delegated slice of work
+  - model/tool surface narrowing, result mode, and posture defaults
+
+Current rules:
+
+- a child run may preload or prefer one or more skills, but it does not create
+  a second authoritative skill lifecycle by default
+- the parent session remains the authority that owns active skill state,
+  completion, and patch adoption
+- patch-producing child runs return `WorkerResult` / patch artifacts for the
+  parent-controlled `worker_results_merge` -> `worker_results_apply` flow
+
 ## Contract Metadata
 
 Skill frontmatter supports intent, effect, resource, and execution metadata:

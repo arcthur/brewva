@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { setStaticContextPressureThresholds } from "../../fixtures/config.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
@@ -8,6 +11,10 @@ const originalDateNow = Date.now;
 afterEach(() => {
   Date.now = originalDateNow;
 });
+
+function sha256(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
+}
 
 describe("runtime facade coverage", () => {
   test("session.pollStall records and deduplicates watchdog detection through the public session API", () => {
@@ -92,6 +99,164 @@ describe("runtime facade coverage", () => {
 
     expect(observed).toEqual([sessionId]);
     expect(runtime.session.listWorkerResults(sessionId)).toHaveLength(0);
+  });
+
+  test("session facade records and lists delegation runs", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createTestWorkspace("runtime-facade-delegation-runs"),
+    });
+    const sessionId = "runtime-facade-delegation-runs-1";
+
+    runtime.session.recordDelegationRun(sessionId, {
+      runId: "delegation-1",
+      profile: "reviewer",
+      parentSessionId: sessionId,
+      status: "running",
+      createdAt: 10,
+      updatedAt: 12,
+      kind: "review",
+      summary: "Reviewing patch boundaries.",
+    });
+
+    expect(runtime.session.getDelegationRun(sessionId, "delegation-1")).toMatchObject({
+      runId: "delegation-1",
+      status: "running",
+      profile: "reviewer",
+    });
+    expect(runtime.session.listDelegationRuns(sessionId)).toHaveLength(1);
+  });
+
+  test("delegation run state rehydrates from lifecycle events and merge receipts", () => {
+    const workspace = createTestWorkspace("runtime-facade-delegation-hydration");
+    const sessionId = "runtime-facade-delegation-hydration-1";
+    const writer = new BrewvaRuntime({ cwd: workspace });
+
+    writer.events.record({
+      sessionId,
+      type: "subagent_spawned",
+      timestamp: 100,
+      payload: {
+        runId: "delegation-hydrated-1",
+        profile: "patch-worker",
+        kind: "patch",
+        posture: "reversible_mutate",
+        status: "running",
+        deliveryMode: "context_packet",
+        deliveryScopeId: "delegation-hydrated",
+        deliveryTtlMs: 60_000,
+      },
+    });
+    writer.events.record({
+      sessionId,
+      type: "subagent_completed",
+      timestamp: 120,
+      payload: {
+        runId: "delegation-hydrated-1",
+        profile: "patch-worker",
+        kind: "patch",
+        childSessionId: "child-hydrated-1",
+        posture: "reversible_mutate",
+        status: "completed",
+        summary: "Produced a patch candidate.",
+        artifactRefs: [
+          {
+            kind: "patch_file",
+            path: ".orchestrator/subagent-patch-artifacts/hydrated/a.ts",
+          },
+        ],
+        deliveryMode: "context_packet",
+        deliveryScopeId: "delegation-hydrated",
+        deliveryTtlMs: 60_000,
+        contextPacketProposalId: `${sessionId}:context_packet:120`,
+        contextPacketDecision: "accept",
+        deliveryUpdatedAt: 121,
+      },
+    });
+    writer.events.record({
+      sessionId,
+      type: "worker_results_applied",
+      timestamp: 150,
+      payload: {
+        workerIds: ["delegation-hydrated-1"],
+        appliedPaths: ["src/a.ts"],
+      },
+    });
+
+    const reader = new BrewvaRuntime({ cwd: workspace });
+    const runs = reader.session.listDelegationRuns(sessionId, {
+      statuses: ["merged"],
+    });
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({
+      runId: "delegation-hydrated-1",
+      status: "merged",
+      workerSessionId: "child-hydrated-1",
+      delivery: {
+        mode: "context_packet",
+        scopeId: "delegation-hydrated",
+        contextPacketProposalId: `${sessionId}:context_packet:120`,
+        contextPacketDecision: "accept",
+      },
+    });
+  });
+
+  test("delegation timeout and delivery handoff metadata survive runtime restart", () => {
+    const workspace = createTestWorkspace("runtime-facade-delegation-timeout");
+    const sessionId = "runtime-facade-delegation-timeout-1";
+    const writer = new BrewvaRuntime({ cwd: workspace });
+
+    writer.events.record({
+      sessionId,
+      type: "subagent_spawned",
+      timestamp: 200,
+      payload: {
+        runId: "delegation-timeout-1",
+        profile: "reviewer",
+        kind: "review",
+        posture: "observe",
+        status: "running",
+        deliveryMode: "context_packet",
+        deliveryScopeId: "delegation-timeout",
+        deliveryTtlMs: 60_000,
+      },
+    });
+    writer.events.record({
+      sessionId,
+      type: "subagent_failed",
+      timestamp: 260,
+      payload: {
+        runId: "delegation-timeout-1",
+        profile: "reviewer",
+        kind: "review",
+        posture: "observe",
+        status: "timeout",
+        summary: "Child run timed out after 5s.",
+        error: "timeout:5000",
+        deliveryMode: "context_packet",
+        deliveryScopeId: "delegation-timeout",
+        deliveryTtlMs: 60_000,
+        contextPacketProposalId: `${sessionId}:context_packet:260`,
+        contextPacketDecision: "accept",
+        deliveryUpdatedAt: 261,
+      },
+    });
+
+    const reader = new BrewvaRuntime({ cwd: workspace });
+    const run = reader.session.getDelegationRun(sessionId, "delegation-timeout-1");
+
+    expect(run).toMatchObject({
+      runId: "delegation-timeout-1",
+      status: "timeout",
+      summary: "Child run timed out after 5s.",
+      delivery: {
+        mode: "context_packet",
+        scopeId: "delegation-timeout",
+        ttlMs: 60_000,
+        contextPacketProposalId: `${sessionId}:context_packet:260`,
+        contextPacketDecision: "accept",
+        updatedAt: 261,
+      },
+    });
   });
 
   test("events.toStructured mirrors structured queries through the public events facade", () => {
@@ -231,5 +396,59 @@ describe("runtime facade coverage", () => {
         blocked: false,
       },
     });
+  });
+
+  test("session.applyMergedWorkerResults publishes a merged worker patch and clears transient worker state", () => {
+    const workspace = createTestWorkspace("runtime-facade-worker-apply");
+    mkdirSync(join(workspace, "src"), { recursive: true });
+
+    const beforeText = "export const facade = 'before';\n";
+    const afterText = "export const facade = 'after';\n";
+    const filePath = join(workspace, "src", "facade.ts");
+    const artifactPath = join(
+      workspace,
+      ".orchestrator",
+      "subagent-patch-artifacts",
+      "facade-ps",
+      "facade.ts",
+    );
+
+    writeFileSync(filePath, beforeText, "utf8");
+    mkdirSync(join(workspace, ".orchestrator", "subagent-patch-artifacts", "facade-ps"), {
+      recursive: true,
+    });
+    writeFileSync(artifactPath, afterText, "utf8");
+
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "runtime-facade-worker-apply-1";
+    runtime.context.onTurnStart(sessionId, 1);
+    runtime.session.recordWorkerResult(sessionId, {
+      workerId: "worker-a",
+      status: "ok",
+      summary: "worker apply candidate",
+      patches: {
+        id: "facade-ps",
+        createdAt: Date.now(),
+        changes: [
+          {
+            path: "src/facade.ts",
+            action: "modify",
+            beforeHash: sha256(beforeText),
+            afterHash: sha256(afterText),
+            artifactRef: ".orchestrator/subagent-patch-artifacts/facade-ps/facade.ts",
+          },
+        ],
+      },
+    });
+
+    const report = runtime.session.applyMergedWorkerResults(sessionId, {
+      toolName: "worker_results_apply",
+      toolCallId: "tc-runtime-facade-worker-apply",
+    });
+
+    expect(report.status).toBe("applied");
+    expect(report.appliedPaths).toEqual(["src/facade.ts"]);
+    expect(readFileSync(filePath, "utf8")).toBe(afterText);
+    expect(runtime.session.listWorkerResults(sessionId)).toHaveLength(0);
   });
 });

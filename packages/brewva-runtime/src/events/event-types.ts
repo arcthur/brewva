@@ -96,6 +96,12 @@ export const SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE = "schedule_child_session
 export const SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE =
   "schedule_child_session_finished" as const;
 export const SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE = "schedule_child_session_failed" as const;
+export const SUBAGENT_SPAWNED_EVENT_TYPE = "subagent_spawned" as const;
+export const SUBAGENT_COMPLETED_EVENT_TYPE = "subagent_completed" as const;
+export const SUBAGENT_FAILED_EVENT_TYPE = "subagent_failed" as const;
+export const SUBAGENT_CANCELLED_EVENT_TYPE = "subagent_cancelled" as const;
+export const WORKER_RESULTS_APPLIED_EVENT_TYPE = "worker_results_applied" as const;
+export const WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE = "worker_results_apply_failed" as const;
 
 export const GOVERNANCE_VERIFY_SPEC_PASSED_EVENT_TYPE = "governance_verify_spec_passed" as const;
 export const GOVERNANCE_VERIFY_SPEC_FAILED_EVENT_TYPE = "governance_verify_spec_failed" as const;
@@ -192,6 +198,12 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
+  SUBAGENT_SPAWNED_EVENT_TYPE,
+  SUBAGENT_COMPLETED_EVENT_TYPE,
+  SUBAGENT_FAILED_EVENT_TYPE,
+  SUBAGENT_CANCELLED_EVENT_TYPE,
+  WORKER_RESULTS_APPLIED_EVENT_TYPE,
+  WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
   GOVERNANCE_VERIFY_SPEC_PASSED_EVENT_TYPE,
   GOVERNANCE_VERIFY_SPEC_FAILED_EVENT_TYPE,
   GOVERNANCE_VERIFY_SPEC_ERROR_EVENT_TYPE,

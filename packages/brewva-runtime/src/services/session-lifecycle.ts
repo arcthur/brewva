@@ -10,10 +10,17 @@ import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type { FileChangeTracker } from "../state/file-change-tracker.js";
 import { TAPE_CHECKPOINT_EVENT_TYPE, coerceTapeCheckpointPayload } from "../tape/events.js";
 import type { TurnReplayEngine } from "../tape/replay-engine.js";
-import type { BrewvaEventRecord, SessionHydrationIssue, SessionHydrationState } from "../types.js";
+import type {
+  BrewvaEventRecord,
+  DelegationRunQuery,
+  DelegationRunRecord,
+  SessionHydrationIssue,
+  SessionHydrationState,
+} from "../types.js";
 import type { VerificationGate } from "../verification/gate.js";
 import type { ContextService } from "./context.js";
 import { createCostHydrationFold } from "./session-hydration-fold-cost.js";
+import { createDelegationHydrationFold } from "./session-hydration-fold-delegation.js";
 import { createLedgerHydrationFold } from "./session-hydration-fold-ledger.js";
 import { createResourceLeaseHydrationFold } from "./session-hydration-fold-resource-lease.js";
 import { createSkillHydrationFold } from "./session-hydration-fold-skill.js";
@@ -109,7 +116,31 @@ export class SessionLifecycleService {
     createResourceLeaseHydrationFold(),
     createCostHydrationFold(),
     createLedgerHydrationFold(),
+    createDelegationHydrationFold(),
   ];
+
+  private static cloneDelegationRunRecord(record: DelegationRunRecord): DelegationRunRecord {
+    return {
+      ...record,
+      artifactRefs: record.artifactRefs?.map((ref) => ({
+        kind: ref.kind,
+        path: ref.path,
+        summary: ref.summary,
+      })),
+      delivery: record.delivery
+        ? {
+            mode: record.delivery.mode,
+            scopeId: record.delivery.scopeId,
+            label: record.delivery.label,
+            ttlMs: record.delivery.ttlMs,
+            supplementalAppended: record.delivery.supplementalAppended,
+            contextPacketProposalId: record.delivery.contextPacketProposalId,
+            contextPacketDecision: record.delivery.contextPacketDecision,
+            updatedAt: record.delivery.updatedAt,
+          }
+        : undefined,
+    };
+  }
 
   onTurnStart(sessionId: string, turnIndex: number): void {
     this.hydrateSessionStateFromEvents(sessionId);
@@ -145,6 +176,68 @@ export class SessionLifecycleService {
         reason: issue.reason,
       })),
     };
+  }
+
+  recordDelegationRun(sessionId: string, record: DelegationRunRecord): void {
+    this.hydrateSessionStateFromEvents(sessionId);
+    this.sessionState
+      .getCell(sessionId)
+      .delegationRuns.set(record.runId, SessionLifecycleService.cloneDelegationRunRecord(record));
+  }
+
+  getDelegationRun(sessionId: string, runId: string): DelegationRunRecord | undefined {
+    this.hydrateSessionStateFromEvents(sessionId);
+    const record = this.sessionState.getExistingCell(sessionId)?.delegationRuns.get(runId);
+    if (!record) {
+      return undefined;
+    }
+    return SessionLifecycleService.cloneDelegationRunRecord(record);
+  }
+
+  listDelegationRuns(sessionId: string, query: DelegationRunQuery = {}): DelegationRunRecord[] {
+    this.hydrateSessionStateFromEvents(sessionId);
+    const cell = this.sessionState.getExistingCell(sessionId);
+    if (!cell) {
+      return [];
+    }
+    const runIdFilter =
+      Array.isArray(query.runIds) && query.runIds.length > 0 ? new Set(query.runIds) : undefined;
+    const statusFilter =
+      Array.isArray(query.statuses) && query.statuses.length > 0
+        ? new Set(query.statuses)
+        : undefined;
+    const includeTerminal = query.includeTerminal !== false;
+    const runs = [...cell.delegationRuns.values()]
+      .filter((record) => {
+        if (runIdFilter && !runIdFilter.has(record.runId)) {
+          return false;
+        }
+        if (
+          !includeTerminal &&
+          (record.status === "completed" ||
+            record.status === "failed" ||
+            record.status === "timeout" ||
+            record.status === "cancelled" ||
+            record.status === "merged")
+        ) {
+          return false;
+        }
+        if (statusFilter && !statusFilter.has(record.status)) {
+          return false;
+        }
+        return true;
+      })
+      .toSorted((left, right) => {
+        if (right.updatedAt !== left.updatedAt) {
+          return right.updatedAt - left.updatedAt;
+        }
+        return left.runId.localeCompare(right.runId);
+      })
+      .map((record) => SessionLifecycleService.cloneDelegationRunRecord(record));
+    if (typeof query.limit === "number" && Number.isFinite(query.limit) && query.limit > 0) {
+      return runs.slice(0, Math.trunc(query.limit));
+    }
+    return runs;
   }
 
   onClearState(listener: (sessionId: string) => void): () => void {

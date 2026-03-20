@@ -81,6 +81,8 @@ Responsibilities:
 - discover paths
 - probe different tool combinations
 - generate or revise plans
+- choose when bounded child delegation is a better exploration shape than
+  keeping more work in the parent context window
 - request additional context, a different commitment surface, or more budget
   without self-authorizing new effects
 
@@ -88,12 +90,22 @@ Allowed artifacts:
 
 - draft plans
 - broker traces
+- delegation packets and child-run outcomes
 - cognition artifacts
 - temporary `context_packet` material
 - lease requests
 
 These artifacts may make the model more effective, but they are not kernel
 authority by default.
+
+Subagent execution lives in this lane:
+
+- child runs may use isolated context windows, separate model/tool profiles,
+  and background execution
+- patch-producing child runs still return candidates to the parent session
+  rather than self-authorizing parent workspace mutation
+- late child outcomes may cross back through the existing `context_packet`
+  boundary when same-turn inline injection is no longer valid
 
 ### `commitment lane`
 

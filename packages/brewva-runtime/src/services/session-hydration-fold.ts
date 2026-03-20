@@ -1,5 +1,6 @@
 import type {
   BrewvaEventRecord,
+  DelegationRunRecord,
   ResourceLeaseRecord,
   SessionHydrationIssue,
   SkillChainIntent,
@@ -87,6 +88,10 @@ export interface VerificationHydrationState {
 
 export interface LedgerHydrationState {
   lastLedgerCompactionTurn?: number;
+}
+
+export interface DelegationHydrationState {
+  delegationRuns: Map<string, DelegationRunRecord>;
 }
 
 export function readObjectRecord(value: unknown): Record<string, unknown> | null {

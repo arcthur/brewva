@@ -110,10 +110,16 @@ Default tool bundle (registered by `buildBrewvaTools()`):
 - `resource_lease`
 - `session_compact`
 - `rollback_last_patch`
+- `worker_results_merge`
+- `worker_results_apply`
 - `cognition_note`
 - `skill_load`
 - `skill_complete`
 - `skill_chain_control`
+- `subagent_run`
+- `subagent_fanout`
+- `subagent_status`
+- `subagent_cancel`
 - `task_set_spec`
 - `task_add_item`
 - `task_update_item`
@@ -257,6 +263,173 @@ Behavior:
 - granted, cancelled, and expired leases are replayable session events
 - `resource_lease` is a narrow governance-owned direct-commit flow; it records
   budget receipts without widening effect authority
+
+### `worker_results_merge`
+
+Inspects the current session's recorded worker results and reports whether the
+current patch set is empty, conflicting, or cleanly mergeable.
+
+Parameters: none.
+
+Behavior:
+
+- read-only inspection tool; it never changes worker state or parent workspace
+- returns `status=empty` when no worker results are recorded
+- returns `status=conflicts` plus conflicting paths/worker ids when patch merge
+  would be ambiguous
+- returns `status=merged` plus a merged patch summary when the current worker
+  set can be adopted by the parent
+- this is the canonical merge inspection surface for patch-producing subagents;
+  a separate `subagent_merge` tool is unnecessary while delegated patch
+  adoption remains worker-result based
+
+### `worker_results_apply`
+
+Merges the current session's worker results and applies the merged patch set to
+the parent workspace.
+
+Parameters: none.
+
+Behavior:
+
+- parent-controlled adoption path for patch-producing workers and subagents
+- requires a clean merge; conflicts are reported and nothing is written
+- successful application records a reversible patch set, clears the transient
+  worker-result buffer, and can be undone with `rollback_last_patch`
+- apply failures preserve worker results so the parent can inspect or rerun
+  delegation
+- together with `worker_results_merge`, this is the canonical parent-side
+  replacement for a dedicated `subagent_merge` verb
+
+### `subagent_run`
+
+Delegates a bounded task to an isolated subagent profile and returns structured
+outcomes.
+
+Parameters:
+
+- `profile` (string, required)
+- `mode` (`single` | `parallel`, optional)
+- `objective` (string, required for `single`)
+- `deliverable` (string, optional)
+- `constraints` (string[], optional)
+- `sharedNotes` (string[], optional)
+- `activeSkillName` (string, optional)
+- `entrySkill` (string, optional)
+- `requiredOutputs` (string[], optional)
+- `executionHints.preferredTools` (string[], optional)
+- `executionHints.fallbackTools` (string[], optional)
+- `executionHints.preferredSkills` (string[], optional)
+- `contextRefs` (array, optional)
+- `contextBudget` (object, optional)
+- `effectCeiling.posture` (`observe` | `reversible_mutate`, optional)
+- `waitMode` (`completion` | `start`, optional)
+- `timeoutMs` (number, optional)
+- `returnMode` (`text_only` | `supplemental` | `context_packet` | `both`, optional)
+- `returnLabel` (string, optional)
+- `returnScopeId` (string, optional)
+- `returnPacketKey` (string, optional)
+- `returnTtlMs` (number, required when `returnMode` includes `context_packet`)
+- `tasks` (array, required for `parallel`)
+
+Behavior:
+
+- `single` runs delegate one bounded packet; `parallel` fans out independent
+  task packets
+- `waitMode=completion` waits for outcomes in the current turn; `waitMode=start`
+  launches background delegation and returns run ids for later inspection or
+  cancellation
+- the parent keeps authoritative skill lifecycle and only receives structured
+  delegated outcomes
+- context should be passed by compact references and bounded budgets, not by
+  copying the entire parent conversation
+- `activeSkillName`, `requiredOutputs`, and `executionHints.*` align the child
+  with the parent skill contract without changing authority ownership
+- `reversible_mutate` posture is reserved for isolated write-capable runners;
+  read-only profiles should stay on `observe`
+- `returnMode=supplemental` appends a compact same-turn outcome summary through
+  runtime supplemental context injection
+- `returnMode=context_packet` persists a replayable outcome handoff through the
+  existing `context_packet` proposal boundary
+- `returnMode=both` performs both deliveries; `text_only` leaves the result on
+  the visible tool channel only
+
+### `subagent_fanout`
+
+Delegates multiple independent slices of work to the same isolated subagent
+profile and returns structured parallel outcomes.
+
+Parameters:
+
+- `profile` (string, required)
+- `objective` (string, optional shared objective)
+- `deliverable` (string, optional shared deliverable)
+- `constraints` (string[], optional shared constraints)
+- `sharedNotes` (string[], optional shared notes)
+- `activeSkillName` (string, optional)
+- `entrySkill` (string, optional)
+- `requiredOutputs` (string[], optional)
+- `executionHints.preferredTools` (string[], optional)
+- `executionHints.fallbackTools` (string[], optional)
+- `executionHints.preferredSkills` (string[], optional)
+- `contextRefs` (array, optional shared references)
+- `contextBudget` (object, optional)
+- `effectCeiling.posture` (`observe` | `reversible_mutate`, optional)
+- `waitMode` (`completion` | `start`, optional)
+- `timeoutMs` (number, optional)
+- `returnMode` (`text_only` | `supplemental` | `context_packet` | `both`, optional)
+- `returnLabel` (string, optional)
+- `returnScopeId` (string, optional)
+- `returnPacketKey` (string, optional)
+- `returnTtlMs` (number, required when `returnMode` includes `context_packet`)
+- `tasks` (array, required)
+
+Behavior:
+
+- always runs in explicit parallel mode
+- shared packet fields are merged into each task-specific packet before launch
+- use this when the parent wants a clear fan-out boundary instead of one large
+  delegated run with mixed concerns
+- background starts and replayable return delivery follow the same rules as
+  `subagent_run`
+
+### `subagent_status`
+
+Inspects active and recent delegated runs for the current session.
+
+Parameters:
+
+- `runId` (string, optional)
+- `statuses` (`pending` | `running` | `completed` | `failed` | `timeout` |
+  `cancelled` | `merged`, optional)
+- `includeTerminal` (boolean, optional)
+- `limit` (number, optional)
+
+Behavior:
+
+- returns replayable delegation state from `runtime.session.*`
+- when a live orchestration adapter is present, also reports `live` and
+  `cancelable`
+- supports narrow inspection of one run id or filtered lifecycle slices
+- includes compact delivery/handoff metadata when the run was configured to
+  return through `supplemental`, `context_packet`, or `both`
+
+### `subagent_cancel`
+
+Cancels a live delegated run by `runId`.
+
+Parameters:
+
+- `runId` (string, required)
+- `reason` (string, optional)
+
+Behavior:
+
+- only cancels runs that are still live in the current process
+- terminal runs are reported as terminal; they are not rewritten into a fake
+  cancelled state
+- cancellation updates the delegation lifecycle state and emits
+  `subagent_cancelled`
 
 ### `cognition_note`
 

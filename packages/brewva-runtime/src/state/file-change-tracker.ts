@@ -1,6 +1,11 @@
 import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { basename, relative, resolve } from "node:path";
-import type { PatchFileAction, PatchSet, RollbackResult } from "../types.js";
+import type {
+  PatchApplyFailureReason,
+  PatchFileAction,
+  PatchSet,
+  RollbackResult,
+} from "../types.js";
 import { ensureDir, writeFileAtomic } from "../utils/fs.js";
 import { sha256 } from "../utils/hash.js";
 import { isMutationTool } from "../verification/classifier.js";
@@ -45,6 +50,7 @@ interface PersistedChange {
   beforeHash?: string;
   afterHash?: string;
   beforeSnapshotFile?: string;
+  artifactRef?: string;
 }
 
 interface PersistedPatchSet {
@@ -122,6 +128,24 @@ function resolveFilePath(
   return {
     absolutePath,
     relativePath: normalizeRelativePath(rel),
+  };
+}
+
+function resolveWorkspaceRelativePath(
+  cwd: string,
+  candidate: string,
+): { absolutePath: string; relativePath: string } | undefined {
+  const trimmed = candidate.trim();
+  if (!trimmed || trimmed.includes("\0")) return undefined;
+
+  const absolutePath = resolve(cwd, trimmed);
+  const rel = normalizeRelativePath(relative(cwd, absolutePath));
+  if (!rel || rel === "." || rel.startsWith("..")) {
+    return undefined;
+  }
+  return {
+    absolutePath,
+    relativePath: rel,
   };
 }
 
@@ -253,6 +277,191 @@ export class FileChangeTracker {
     }
     this.persistHistory(input.sessionId);
     return patchSet;
+  }
+
+  applyPatchSet(
+    sessionId: string,
+    input: {
+      patchSet: PatchSet;
+      toolName: string;
+    },
+  ): {
+    ok: boolean;
+    patchSetId?: string;
+    appliedPaths: string[];
+    failedPaths: string[];
+    reason?: PatchApplyFailureReason;
+  } {
+    this.ensureHistoryLoaded(sessionId);
+    if (input.patchSet.changes.length === 0) {
+      return {
+        ok: false,
+        patchSetId: input.patchSet.id,
+        appliedPaths: [],
+        failedPaths: [],
+        reason: "empty_patchset",
+      };
+    }
+
+    const validated: AppliedMutation["changes"] = [];
+    const artifactBuffers = new Map<string, Buffer>();
+
+    for (const change of input.patchSet.changes) {
+      const resolvedPath = resolveWorkspaceRelativePath(this.cwd, change.path);
+      if (!resolvedPath) {
+        return {
+          ok: false,
+          patchSetId: input.patchSet.id,
+          appliedPaths: [],
+          failedPaths: [change.path],
+          reason: "invalid_path",
+        };
+      }
+
+      const beforeExists = existsSync(resolvedPath.absolutePath);
+      const beforeHash = beforeExists ? sha256(readFileSync(resolvedPath.absolutePath)) : undefined;
+      const expectedBeforeHash = change.beforeHash?.trim();
+      if (change.action === "add" && beforeExists) {
+        return {
+          ok: false,
+          patchSetId: input.patchSet.id,
+          appliedPaths: [],
+          failedPaths: [change.path],
+          reason: "before_hash_mismatch",
+        };
+      }
+      if (change.action !== "add") {
+        if (!beforeExists) {
+          return {
+            ok: false,
+            patchSetId: input.patchSet.id,
+            appliedPaths: [],
+            failedPaths: [change.path],
+            reason: "before_hash_mismatch",
+          };
+        }
+        if (expectedBeforeHash && beforeHash !== expectedBeforeHash) {
+          return {
+            ok: false,
+            patchSetId: input.patchSet.id,
+            appliedPaths: [],
+            failedPaths: [change.path],
+            reason: "before_hash_mismatch",
+          };
+        }
+      }
+
+      let afterHash = change.afterHash;
+      if (change.action !== "delete") {
+        const artifactRef = change.artifactRef?.trim();
+        const artifactPath = artifactRef
+          ? resolveWorkspaceRelativePath(this.cwd, artifactRef)
+          : undefined;
+        if (!artifactRef || !artifactPath || !existsSync(artifactPath.absolutePath)) {
+          return {
+            ok: false,
+            patchSetId: input.patchSet.id,
+            appliedPaths: [],
+            failedPaths: [change.path],
+            reason: "missing_artifact",
+          };
+        }
+        const artifactContent = readFileSync(artifactPath.absolutePath);
+        const artifactHash = sha256(artifactContent);
+        if (change.afterHash && artifactHash !== change.afterHash) {
+          return {
+            ok: false,
+            patchSetId: input.patchSet.id,
+            appliedPaths: [],
+            failedPaths: [change.path],
+            reason: "after_hash_mismatch",
+          };
+        }
+        artifactBuffers.set(change.path, artifactContent);
+        afterHash = artifactHash;
+      }
+
+      const snapshot = this.captureFileSnapshot(
+        sessionId,
+        resolvedPath.absolutePath,
+        resolvedPath.relativePath,
+      );
+      validated.push({
+        ...snapshot,
+        action: change.action,
+        afterHash,
+      });
+    }
+
+    const appliedPaths: string[] = [];
+    try {
+      for (const change of validated) {
+        if (change.action === "delete") {
+          if (existsSync(change.absolutePath)) {
+            rmSync(change.absolutePath, { force: true });
+          }
+        } else {
+          const artifactContent = artifactBuffers.get(change.relativePath);
+          if (!artifactContent) {
+            throw new Error(`Missing artifact buffer for ${change.relativePath}`);
+          }
+          writeFileAtomic(change.absolutePath, artifactContent);
+        }
+        appliedPaths.push(change.relativePath);
+      }
+    } catch {
+      const rollbackFailedPaths: string[] = [];
+      for (const change of validated.toReversed()) {
+        if (!appliedPaths.includes(change.relativePath)) {
+          continue;
+        }
+        try {
+          if (change.beforeExists) {
+            if (!change.beforeSnapshotPath || !existsSync(change.beforeSnapshotPath)) {
+              throw new Error(`Missing snapshot for ${change.relativePath}`);
+            }
+            writeFileAtomic(change.absolutePath, readFileSync(change.beforeSnapshotPath));
+          } else if (existsSync(change.absolutePath)) {
+            rmSync(change.absolutePath, { force: true });
+          }
+        } catch {
+          rollbackFailedPaths.push(change.relativePath);
+        }
+      }
+
+      return {
+        ok: false,
+        patchSetId: input.patchSet.id,
+        appliedPaths: [],
+        failedPaths: rollbackFailedPaths.length > 0 ? rollbackFailedPaths : [...appliedPaths],
+        reason: "write_failed",
+      };
+    }
+
+    const history = this.getOrCreateHistory(sessionId);
+    history.push({
+      patchSet: {
+        ...input.patchSet,
+        changes: input.patchSet.changes.map((change) => ({
+          ...change,
+          artifactRef: change.artifactRef,
+        })),
+      },
+      toolName: input.toolName,
+      appliedAt: Date.now(),
+      changes: validated,
+    });
+    if (history.length > MAX_HISTORY) {
+      history.splice(0, history.length - MAX_HISTORY);
+    }
+    this.persistHistory(sessionId);
+
+    return {
+      ok: true,
+      patchSetId: input.patchSet.id,
+      appliedPaths,
+      failedPaths: [],
+    };
   }
 
   rollbackLast(sessionId: string): RollbackResult {
@@ -438,6 +647,9 @@ export class FileChangeTracker {
             action: change.action,
             beforeHash: change.beforeHash,
             afterHash: change.afterHash,
+            artifactRef: entry.patchSet.changes.find(
+              (patchChange) => patchChange.path === change.relativePath,
+            )?.artifactRef,
           })),
         },
         toolName: entry.toolName,
@@ -581,6 +793,7 @@ export class FileChangeTracker {
               action: change.action,
               beforeHash: change.beforeHash,
               afterHash: change.afterHash,
+              artifactRef: change.artifactRef,
             })),
           },
           toolName: entry.toolName,
@@ -615,6 +828,9 @@ export class FileChangeTracker {
           beforeSnapshotFile: change.beforeSnapshotPath
             ? snapshotFileName(change.beforeSnapshotPath)
             : undefined,
+          artifactRef: item.patchSet.changes.find(
+            (patchChange) => patchChange.path === change.relativePath,
+          )?.artifactRef,
         })),
       })),
     };

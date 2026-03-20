@@ -44,3 +44,4 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 
 - `docs/research/rfc-effect-governance-and-contract-vnext.md`
 - `docs/research/rfc-capability-compression-and-output-distillation.md`
+- `docs/research/rfc-subagent-delegation-and-isolated-execution.md`

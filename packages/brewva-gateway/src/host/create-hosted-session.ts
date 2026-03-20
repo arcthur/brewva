@@ -7,7 +7,11 @@ import {
   type CreateBrewvaSessionOptions as RuntimeCreateBrewvaSessionOptions,
 } from "@brewva/brewva-runtime";
 import { createSkillBrokerExtension } from "@brewva/brewva-skill-broker";
-import { buildBrewvaTools, resolveBrewvaModelSelection } from "@brewva/brewva-tools";
+import {
+  buildBrewvaTools,
+  resolveBrewvaModelSelection,
+  type BrewvaToolOrchestration,
+} from "@brewva/brewva-tools";
 import {
   AuthStorage,
   createAgentSession,
@@ -26,6 +30,11 @@ import {
   createBrewvaExtension,
   createRuntimeCoreBridgeExtension,
 } from "../runtime-plugins/index.js";
+import {
+  createDetachedSubagentBackgroundController,
+  createHostedSubagentAdapter,
+  type HostedSubagentBuiltinToolName,
+} from "../subagents/index.js";
 
 export interface HostedSessionResult extends CreateAgentSessionResult {
   runtime: BrewvaRuntime;
@@ -36,7 +45,28 @@ export interface CreateHostedSessionOptions extends RuntimeCreateBrewvaSessionOp
   runtime?: BrewvaRuntime;
   addonHost?: AddonHost;
   extensionFactories?: ExtensionFactory[];
+  orchestration?: BrewvaToolOrchestration;
+  managedToolNames?: readonly string[];
+  builtinToolNames?: readonly HostedSubagentBuiltinToolName[];
+  enableSubagents?: boolean;
   scopeId?: string;
+}
+
+function resolveBuiltinTools(
+  builtinToolNames: readonly HostedSubagentBuiltinToolName[] | undefined,
+): Array<typeof readTool | typeof editTool | typeof writeTool> {
+  const requested = new Set(builtinToolNames ?? ["read", "edit", "write"]);
+  const tools: Array<typeof readTool | typeof editTool | typeof writeTool> = [];
+  if (requested.has("read")) {
+    tools.push(readTool);
+  }
+  if (requested.has("edit")) {
+    tools.push(editTool);
+  }
+  if (requested.has("write")) {
+    tools.push(writeTool);
+  }
+  return tools;
 }
 
 function sameRoutingScopes(actual: readonly string[], expected: readonly string[]): boolean {
@@ -195,6 +225,39 @@ export async function createHostedSession(
     }
   }
   const skillLoadReport = runtime.skills.getLoadReport();
+  const autoSubagentsEnabled = options.enableSubagents !== false;
+  const orchestration: BrewvaToolOrchestration | undefined = (() => {
+    if (!autoSubagentsEnabled || options.orchestration?.subagents) {
+      return options.orchestration;
+    }
+    const subagents = createHostedSubagentAdapter({
+      runtime,
+      backgroundController: createDetachedSubagentBackgroundController({
+        runtime,
+        configPath: options.configPath,
+        routingScopes: options.routingScopes,
+      }),
+      createChildSession: (childOptions) =>
+        createHostedSession({
+          cwd: childOptions.cwd ?? cwd,
+          configPath: childOptions.configPath ?? options.configPath,
+          model: childOptions.model,
+          agentId: childOptions.agentId,
+          enableExtensions: childOptions.enableExtensions,
+          enableAddons: childOptions.enableAddons,
+          enableSubagents: childOptions.enableSubagents,
+          orchestration: childOptions.orchestration,
+          managedToolNames: childOptions.managedToolNames,
+          builtinToolNames: childOptions.builtinToolNames,
+          routingScopes: options.routingScopes,
+          scopeId: options.scopeId,
+        }),
+    });
+    return {
+      ...options.orchestration,
+      subagents,
+    };
+  })();
 
   const settingsManager = SettingsManager.create(cwd, agentDir);
   applyRuntimeUiSettings(settingsManager, runtime.config.ui);
@@ -208,6 +271,8 @@ export async function createHostedSession(
           createBrewvaExtension({
             runtime,
             registerTools: true,
+            orchestration,
+            managedToolNames: options.managedToolNames,
           }),
         ]
       : [createRuntimeCoreBridgeExtension({ runtime })]),
@@ -224,7 +289,14 @@ export async function createHostedSession(
   });
   await resourceLoader.reload();
 
-  const customTools = extensionsEnabled ? undefined : buildBrewvaTools({ runtime });
+  const customTools = extensionsEnabled
+    ? undefined
+    : buildBrewvaTools({
+        runtime,
+        orchestration,
+        toolNames: options.managedToolNames,
+      });
+  const builtinTools = resolveBuiltinTools(options.builtinToolNames);
 
   const sessionResult = await createAgentSession({
     cwd,
@@ -235,7 +307,7 @@ export async function createHostedSession(
     resourceLoader,
     model: selectedModel.model,
     thinkingLevel: selectedModel.thinkingLevel,
-    tools: [readTool, editTool, writeTool],
+    tools: builtinTools,
     customTools,
   });
 

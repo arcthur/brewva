@@ -8,3 +8,4 @@ export * from "./proactivity-engine.js";
 export * from "./records.js";
 export * from "./runtime-skills.js";
 export * from "./runtime-turn-clock.js";
+export * from "./subagents.js";

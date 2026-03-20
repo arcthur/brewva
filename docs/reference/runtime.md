@@ -249,11 +249,46 @@ Read-only verification semantics:
 - `recordWorkerResult(sessionId, result)`
 - `listWorkerResults(sessionId)`
 - `mergeWorkerResults(sessionId)`
+- `applyMergedWorkerResults(sessionId, input)`
 - `clearWorkerResults(sessionId)`
 - `pollStall(sessionId, input?)`
+- `recordDelegationRun(sessionId, record)`
+- `getDelegationRun(sessionId, runId)`
+- `listDelegationRuns(sessionId, query?)`
 - `clearState(sessionId)`
 - `onClearState(listener)`
 - `getHydration(sessionId)`
+
+Worker-result adoption semantics:
+
+- `mergeWorkerResults(...)` is read-only; it reports `empty | conflicts | merged`
+  without changing parent workspace state
+- `applyMergedWorkerResults(...)` is the parent-controlled adoption path for a
+  clean merged worker patch set
+- merged worker patch application is still reversible-mutation governed: the
+  merged patch is applied through the normal workspace patch tracker, recorded
+  as a reversible patch set, and can be undone through
+  `runtime.tools.rollbackLastPatchSet(...)`
+- apply failures leave the underlying worker results intact so the parent can
+  inspect, repair, or rerun delegation instead of losing pending work
+
+Delegation-run state semantics:
+
+- `recordDelegationRun(...)` stores compact child-run lifecycle state in the
+  session-local runtime cache
+- `getDelegationRun(...)` and `listDelegationRuns(...)` expose replayable
+  delegation lifecycle snapshots for status inspection, compaction diagnostics,
+  and late outcome handoff handling
+- when compaction guidance is rendered through the gateway context composer,
+  active delegated runs are surfaced both as operational counters and as a
+  dedicated `[PendingDelegations]` section so active child work survives
+  context-pressure compression
+- delegation snapshots retain requested return-delivery metadata plus durable
+  handoff linkage such as accepted `context_packet` proposal ids when a child
+  outcome is routed back into the parent context
+- delegation state is restored from compact lifecycle events and worker-merge
+  receipts during hydrate; timeout vs failure state and delivery/handoff status
+  survive replay without requiring raw child transcripts
 
 `runtime.session.getHydration(sessionId)` returns replay/hydration state for the
 session-local runtime caches:

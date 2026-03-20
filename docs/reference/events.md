@@ -131,6 +131,12 @@ The authoritative registry for named runtime events lives in
 - `schedule_child_session_started`
 - `schedule_child_session_finished`
 - `schedule_child_session_failed`
+- `subagent_spawned`
+- `subagent_completed`
+- `subagent_failed`
+- `subagent_cancelled`
+- `worker_results_applied`
+- `worker_results_apply_failed`
 - `skill_cascade_planned`
 - `skill_cascade_step_started`
 - `skill_cascade_step_completed`
@@ -167,6 +173,12 @@ The authoritative registry for named runtime events lives in
 - `governance_verify_spec_passed`
 - `governance_verify_spec_failed`
 - `governance_verify_spec_error`
+- `subagent_spawned`
+- `subagent_completed`
+- `subagent_failed`
+- `subagent_cancelled`
+- `worker_results_applied`
+- `worker_results_apply_failed`
 - schedule lifecycle events
 - skill cascade lifecycle events
 
@@ -222,6 +234,12 @@ degraded without aborting later listeners.
 - `cognitive_metric_resumption_progress`
 - `cognitive_metric_rehydration_usefulness`
 - `proactivity_wakeup_prepared`
+- `subagent_spawned`
+- `subagent_completed`
+- `subagent_failed`
+- `subagent_cancelled`
+- `worker_results_applied`
+- `worker_results_apply_failed`
 - `exec_routed`
 - `exec_fallback_host`
 - `exec_blocked_isolation`
@@ -232,6 +250,21 @@ degraded without aborting later listeners.
 - `turn_wal_*`
 
 These are retained under `ops` and `debug`.
+
+`subagent_spawned`, `subagent_completed`, `subagent_failed`, and
+`subagent_cancelled` carry the delegation `runId`, `profile`, delegated `kind`,
+and resolved `posture`. Completion, failure, and cancellation payloads may also
+include `childSessionId`, `summary`, `artifactRefs`, `workerStatus`, and
+`patchChangeCount` when the delegated run used an isolated patch worker and
+produced a parent-visible `WorkerResult`. When delegated outcomes are routed
+back into the parent context, these lifecycle events also retain compact return
+delivery metadata such as `deliveryMode`, `deliveryScopeId`,
+`contextPacketProposalId`, and `contextPacketDecision`.
+
+`worker_results_applied` and `worker_results_apply_failed` record the
+parent-controlled adoption outcome for merged worker patches. Successful payloads
+include `patchSetId`, `workerIds`, and `appliedPaths`; failure payloads include
+the failure `reason` plus either merge-conflict detail or `failedPaths`.
 
 ## Governance Families
 

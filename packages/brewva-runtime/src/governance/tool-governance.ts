@@ -191,6 +191,30 @@ export const TOOL_GOVERNANCE_BY_NAME: Record<string, ToolGovernanceDescriptor> =
     effects: ["runtime_observe"],
     defaultRisk: "low",
   }),
+  worker_results_merge: descriptor({
+    effects: ["runtime_observe"],
+    defaultRisk: "low",
+  }),
+  worker_results_apply: descriptor({
+    effects: ["workspace_write"],
+    defaultRisk: "high",
+  }),
+  subagent_run: descriptor({
+    effects: ["runtime_observe"],
+    defaultRisk: "medium",
+  }),
+  subagent_fanout: descriptor({
+    effects: ["runtime_observe"],
+    defaultRisk: "medium",
+  }),
+  subagent_status: descriptor({
+    effects: ["runtime_observe"],
+    defaultRisk: "low",
+  }),
+  subagent_cancel: descriptor({
+    effects: ["runtime_observe"],
+    defaultRisk: "medium",
+  }),
   skill_chain_control: descriptor({
     effects: ["runtime_observe"],
     defaultRisk: "low",
