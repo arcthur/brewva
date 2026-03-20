@@ -40,7 +40,7 @@ export interface GovernanceCompactionIntegrityOutput {
 
 export interface GovernanceAuthorizeEffectCommitmentInput {
   sessionId: string;
-  proposal: ProposalEnvelope<"effect_commitment">;
+  proposal: ProposalEnvelope;
   turn: number;
 }
 

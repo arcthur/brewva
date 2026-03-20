@@ -40,7 +40,6 @@ import { ContextService } from "./services/context.js";
 import { CostService } from "./services/cost.js";
 import { EffectCommitmentDeskService } from "./services/effect-commitment-desk.js";
 import { EventPipelineService, type RuntimeRecordEventInput } from "./services/event-pipeline.js";
-import { ExplorationSupervisorService } from "./services/exploration-supervisor.js";
 import { FileChangeService } from "./services/file-change.js";
 import { LedgerService } from "./services/ledger.js";
 import { MutationRollbackService } from "./services/mutation-rollback.js";
@@ -50,7 +49,6 @@ import { ResourceLeaseService } from "./services/resource-lease.js";
 import { ScheduleIntentService } from "./services/schedule-intent.js";
 import { SessionLifecycleService } from "./services/session-lifecycle.js";
 import { RuntimeSessionStateStore } from "./services/session-state.js";
-import { SkillCascadeService } from "./services/skill-cascade.js";
 import { SkillLifecycleService } from "./services/skill-lifecycle.js";
 import { TapeService } from "./services/tape.js";
 import { TaskWatchdogService } from "./services/task-watchdog.js";
@@ -97,16 +95,12 @@ import type {
   DecideEffectCommitmentResult,
   DecisionReceipt,
   PendingEffectCommitmentRequest,
-  ToolInvocationPosture,
+  ToolExecutionBoundary,
   ToolGovernanceDescriptor,
   ToolMutationReceipt,
   ToolMutationRollbackResult,
   SkillDocument,
-  SkillDispatchDecision,
   SkillActivationResult,
-  SkillChainIntent,
-  SkillCascadeChainSource,
-  SkillCascadeControlResult,
   SkillOutputValidationResult,
   SkillRoutingScope,
   ProposalEnvelope,
@@ -147,7 +141,6 @@ export interface BrewvaRuntimeOptions {
   config?: BrewvaConfig;
   governancePort?: GovernancePort;
   agentId?: string;
-  skillCascadeChainSources?: SkillCascadeChainSource[];
   routingScopes?: SkillRoutingScope[];
 }
 
@@ -180,7 +173,6 @@ type RuntimeCoreDependencies = {
 type RuntimeServiceDependencies = {
   proposalAdmissionService: ProposalAdmissionService;
   skillLifecycleService: SkillLifecycleService;
-  skillCascadeService: SkillCascadeService;
   taskService: TaskService;
   truthService: TruthService;
   ledgerService: LedgerService;
@@ -189,7 +181,6 @@ type RuntimeServiceDependencies = {
   costService: CostService;
   verificationService: VerificationService;
   contextService: ContextService;
-  explorationSupervisorService: ExplorationSupervisorService;
   taskWatchdogService: TaskWatchdogService;
   tapeService: TapeService;
   eventPipeline: EventPipelineService;
@@ -233,9 +224,6 @@ export class BrewvaRuntime {
     getLoadReport(): SkillRegistryLoadReport;
     list(): SkillDocument[];
     get(name: string): SkillDocument | undefined;
-    getPendingDispatch(sessionId: string): SkillDispatchDecision | undefined;
-    clearPendingDispatch(sessionId: string): SkillDispatchDecision | undefined;
-    reconcilePendingDispatch(sessionId: string, turn: number): void;
     activate(sessionId: string, name: string): SkillActivationResult;
     getActive(sessionId: string): SkillDocument | undefined;
     validateOutputs(
@@ -249,21 +237,6 @@ export class BrewvaRuntime {
     ): SkillOutputValidationResult;
     getOutputs(sessionId: string, skillName: string): Record<string, unknown> | undefined;
     getConsumedOutputs(sessionId: string, targetSkillName: string): Record<string, unknown>;
-    getCascadeIntent(sessionId: string): SkillChainIntent | undefined;
-    pauseCascade(sessionId: string, reason?: string): SkillCascadeControlResult;
-    resumeCascade(sessionId: string, reason?: string): SkillCascadeControlResult;
-    cancelCascade(sessionId: string, reason?: string): SkillCascadeControlResult;
-    startCascade(
-      sessionId: string,
-      input: {
-        steps: Array<{
-          skill: string;
-          consumes?: string[];
-          produces?: string[];
-          lane?: string;
-        }>;
-      },
-    ): SkillCascadeControlResult;
   };
   declare readonly proposals: {
     submit<K extends ProposalKind>(
@@ -365,7 +338,7 @@ export class BrewvaRuntime {
       allowed: boolean;
       reason?: string;
       advisory?: string;
-      posture?: ToolInvocationPosture;
+      boundary?: ToolExecutionBoundary;
       commitmentReceipt?: DecisionReceipt;
       effectCommitmentRequestId?: string;
       mutationReceipt?: ToolMutationReceipt;
@@ -597,12 +570,10 @@ export class BrewvaRuntime {
   declare private readonly mutationRollbackService: MutationRollbackService;
   declare private readonly parallelService: ParallelService;
   declare private readonly proposalAdmissionService: ProposalAdmissionService;
-  declare private readonly explorationSupervisorService: ExplorationSupervisorService;
   declare private readonly taskWatchdogService: TaskWatchdogService;
   declare private readonly scheduleIntentService: ScheduleIntentService;
   declare private readonly sessionLifecycleService: SessionLifecycleService;
   declare private readonly skillLifecycleService: SkillLifecycleService;
-  declare private readonly skillCascadeService: SkillCascadeService;
   declare private readonly taskService: TaskService;
   declare private readonly tapeService: TapeService;
   declare private readonly truthService: TruthService;
@@ -631,9 +602,6 @@ export class BrewvaRuntime {
     Object.assign(this, this.createCoreDependencies(options));
     this.kernel = this.createKernelContext(options);
     Object.assign(this, this.createServiceDependencies(options));
-    this.eventPipeline.subscribeEvents((event) =>
-      this.skillCascadeService.handleRuntimeEvent(event),
-    );
     Object.assign(this, this.createDomainApis());
   }
 
@@ -708,7 +676,6 @@ export class BrewvaRuntime {
       agentId: this.agentId,
       config: this.runtimeConfig,
       governancePort: options.governancePort,
-      skillCascadeChainSources: options.skillCascadeChainSources,
       kernel: this.kernel,
       coreDependencies: {
         skillRegistry: this.skillRegistry,
@@ -729,8 +696,8 @@ export class BrewvaRuntime {
       resolveToolGovernanceDescriptor: (toolName) => this.toolGovernanceRegistry.get(toolName),
       resolveToolGovernanceSource: (toolName) =>
         getToolGovernanceResolution(toolName, this.toolGovernanceRegistry).source,
-      resolveToolInvocationPosture: (toolName) =>
-        this.toolGovernanceRegistry.get(toolName)?.posture ?? "observe",
+      resolveToolExecutionBoundary: (toolName) =>
+        this.toolGovernanceRegistry.get(toolName)?.boundary ?? "safe",
       resolveCheckpointCostSummary: (sessionId) => this.resolveCheckpointCostSummary(sessionId),
       resolveCheckpointCostSkillLastTurnByName: (sessionId) =>
         this.resolveCheckpointCostSkillLastTurnByName(sessionId),
@@ -762,11 +729,6 @@ export class BrewvaRuntime {
         getLoadReport: () => this.skillRegistry.getLoadReport(),
         list: () => this.skillRegistry.list(),
         get: (name) => this.skillRegistry.get(name),
-        getPendingDispatch: (sessionId) => this.skillLifecycleService.getPendingDispatch(sessionId),
-        clearPendingDispatch: (sessionId) =>
-          this.skillLifecycleService.clearPendingDispatch(sessionId),
-        reconcilePendingDispatch: (sessionId, turn) =>
-          this.skillLifecycleService.reconcilePendingDispatchOnTurnEnd(sessionId, turn),
         activate: (sessionId, name) => this.skillLifecycleService.activateSkill(sessionId, name),
         getActive: (sessionId) => this.skillLifecycleService.getActiveSkill(sessionId),
         validateOutputs: (sessionId, outputs) =>
@@ -777,15 +739,6 @@ export class BrewvaRuntime {
           this.skillLifecycleService.getSkillOutputs(sessionId, skillName),
         getConsumedOutputs: (sessionId, targetSkillName) =>
           this.skillLifecycleService.getAvailableConsumedOutputs(sessionId, targetSkillName),
-        getCascadeIntent: (sessionId) => this.skillCascadeService.getIntent(sessionId),
-        pauseCascade: (sessionId, reason) =>
-          this.skillCascadeService.pauseIntent(sessionId, reason),
-        resumeCascade: (sessionId, reason) =>
-          this.skillCascadeService.resumeIntent(sessionId, reason),
-        cancelCascade: (sessionId, reason) =>
-          this.skillCascadeService.cancelIntent(sessionId, reason),
-        startCascade: (sessionId, input) =>
-          this.skillCascadeService.createExplicitIntent(sessionId, input),
       },
       proposals: {
         submit: (sessionId, proposal) =>
@@ -802,8 +755,8 @@ export class BrewvaRuntime {
           this.sessionLifecycleService.onTurnStart(sessionId, turnIndex);
           this.taskWatchdogService.onTurnStart(sessionId);
         },
-        onTurnEnd: (sessionId) => this.explorationSupervisorService.onTurnEnd(sessionId),
-        onUserInput: (sessionId) => this.explorationSupervisorService.onUserInput(sessionId),
+        onTurnEnd: () => {},
+        onUserInput: () => {},
         sanitizeInput: (text) => this.sanitizeInput(text),
         observeUsage: (sessionId, usage) =>
           this.contextService.observeContextUsage(sessionId, usage),

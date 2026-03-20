@@ -1,20 +1,20 @@
 import type {
   ToolEffectClass,
+  ToolExecutionBoundary,
   ToolGovernanceDescriptor,
   ToolGovernanceRisk,
-  ToolInvocationPosture,
 } from "../types.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 
 function descriptor(input: {
   effects: ToolEffectClass[];
   defaultRisk?: ToolGovernanceRisk;
-  posture?: ToolInvocationPosture;
+  boundary?: ToolExecutionBoundary;
 }): ToolGovernanceDescriptor {
   return {
     effects: input.effects,
     defaultRisk: input.defaultRisk,
-    posture: input.posture ?? resolveToolInvocationPostureFromEffects(input.effects),
+    boundary: input.boundary ?? resolveToolExecutionBoundaryFromEffects(input.effects),
   };
 }
 
@@ -22,28 +22,33 @@ function normalizeDescriptor(input: ToolGovernanceDescriptor): ToolGovernanceDes
   return {
     effects: [...new Set(input.effects)],
     defaultRisk: input.defaultRisk,
-    posture: input.posture ?? resolveToolInvocationPostureFromEffects(input.effects),
+    boundary: input.boundary ?? resolveToolExecutionBoundaryFromEffects(input.effects),
   };
 }
 
-function resolveToolInvocationPostureFromEffects(
+export function resolveToolExecutionBoundaryFromEffects(
   effects: readonly ToolEffectClass[],
-): ToolInvocationPosture {
-  if (
-    effects.some(
-      (effect) =>
-        effect === "local_exec" ||
-        effect === "external_network" ||
-        effect === "external_side_effect" ||
-        effect === "schedule_mutation",
-    )
-  ) {
-    return "commitment";
-  }
-  if (effects.some((effect) => effect === "workspace_write" || effect === "memory_write")) {
-    return "reversible_mutate";
-  }
-  return "observe";
+): ToolExecutionBoundary {
+  return effects.some((effect) => effect !== "workspace_read" && effect !== "runtime_observe")
+    ? "effectful"
+    : "safe";
+}
+
+export function toolEffectsRequireEffectCommitment(effects: readonly ToolEffectClass[]): boolean {
+  return effects.some(
+    (effect) =>
+      effect === "local_exec" ||
+      effect === "external_network" ||
+      effect === "external_side_effect" ||
+      effect === "schedule_mutation",
+  );
+}
+
+export function toolEffectsCreateRollbackAnchor(effects: readonly ToolEffectClass[]): boolean {
+  return (
+    !toolEffectsRequireEffectCommitment(effects) &&
+    effects.some((effect) => effect === "workspace_write" || effect === "memory_write")
+  );
 }
 
 function sameEffects(
@@ -215,10 +220,6 @@ export const TOOL_GOVERNANCE_BY_NAME: Record<string, ToolGovernanceDescriptor> =
     effects: ["runtime_observe"],
     defaultRisk: "medium",
   }),
-  skill_chain_control: descriptor({
-    effects: ["runtime_observe"],
-    defaultRisk: "low",
-  }),
   task_view_state: descriptor({
     effects: ["runtime_observe"],
     defaultRisk: "low",
@@ -240,10 +241,6 @@ export const TOOL_GOVERNANCE_BY_NAME: Record<string, ToolGovernanceDescriptor> =
     defaultRisk: "medium",
   }),
   task_resolve_blocker: descriptor({
-    effects: ["memory_write"],
-    defaultRisk: "medium",
-  }),
-  cognition_note: descriptor({
     effects: ["memory_write"],
     defaultRisk: "medium",
   }),
@@ -366,7 +363,7 @@ export function sameToolGovernanceDescriptor(
   }
   return (
     left.defaultRisk === right.defaultRisk &&
-    left.posture === right.posture &&
+    left.boundary === right.boundary &&
     sameEffects(left.effects, right.effects)
   );
 }
@@ -418,9 +415,21 @@ export function getToolGovernanceResolution(
   return registry ? registry.resolve(toolName) : resolveDescriptorWithoutCustom(toolName);
 }
 
-export function resolveToolInvocationPosture(
+export function resolveToolExecutionBoundary(
   toolName: string,
   registry?: Pick<ToolGovernanceRegistry, "get">,
-): ToolInvocationPosture {
-  return getToolGovernanceDescriptor(toolName, registry)?.posture ?? "observe";
+): ToolExecutionBoundary {
+  return getToolGovernanceDescriptor(toolName, registry)?.boundary ?? "safe";
+}
+
+export function toolGovernanceRequiresEffectCommitment(
+  toolDescriptor: ToolGovernanceDescriptor | undefined,
+): boolean {
+  return toolEffectsRequireEffectCommitment(toolDescriptor?.effects ?? []);
+}
+
+export function toolGovernanceCreatesRollbackAnchor(
+  toolDescriptor: ToolGovernanceDescriptor | undefined,
+): boolean {
+  return toolEffectsCreateRollbackAnchor(toolDescriptor?.effects ?? []);
 }

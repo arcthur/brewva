@@ -1,4 +1,3 @@
-import { resolveSkillSelectionProjection } from "@brewva/brewva-deliberation";
 import type {
   BrewvaRuntime,
   ContextCompactionGateStatus,
@@ -140,10 +139,7 @@ async function resolveContextInjection(
   );
 }
 
-function resolveRoutingProjection(
-  runtime: BrewvaRuntime,
-  sessionId: string,
-): {
+function resolveRoutingProjection(): {
   selection: {
     status: string;
     reason: string;
@@ -152,7 +148,15 @@ function resolveRoutingProjection(
   };
   error: string | null;
 } {
-  return resolveSkillSelectionProjection(runtime, sessionId);
+  return {
+    selection: {
+      status: "skipped",
+      reason: "selection_unavailable",
+      selectedCount: 0,
+      selectedSkills: [],
+    },
+    error: null,
+  };
 }
 
 export function createContextTransformLifecycle(
@@ -425,14 +429,13 @@ export function createContextTransformLifecycle(
       };
 
       const prompt = typeof rawEvent.prompt === "string" ? rawEvent.prompt : "";
-      let { gateStatus, pendingCompactionReason, capabilityView, delegationRecommendation } =
-        prepareContextComposerSupport({
-          runtime,
-          pi,
-          sessionId,
-          prompt,
-          usage,
-        });
+      let { gateStatus, pendingCompactionReason, capabilityView } = prepareContextComposerSupport({
+        runtime,
+        pi,
+        sessionId,
+        prompt,
+        usage,
+      });
       if (gateStatus.required) {
         emitGateEvents(gateStatus, "hard_limit");
       }
@@ -448,7 +451,6 @@ export function createContextTransformLifecycle(
             pendingCompactionReason,
             capabilityView,
           }),
-          ...(delegationRecommendation ? [delegationRecommendation] : []),
         ],
       });
       const systemPromptWithContract = applyContextContract(
@@ -532,7 +534,7 @@ export function createContextTransformLifecycle(
         usage,
         injectionScopeId,
       });
-      const routingProjection = resolveRoutingProjection(runtime, sessionId);
+      const routingProjection = resolveRoutingProjection();
       const supportAfterInjection = prepareContextComposerSupport({
         runtime,
         pi,
@@ -547,7 +549,6 @@ export function createContextTransformLifecycle(
       gateStatus = gateStatusAfterInjection;
       pendingCompactionReason = supportAfterInjection.pendingCompactionReason;
       capabilityView = supportAfterInjection.capabilityView;
-      delegationRecommendation = supportAfterInjection.delegationRecommendation;
       state.lastRuntimeGateRequired = gateStatus.required;
       const supplementalBlocks = appendSupplementalContextBlocks(runtime, {
         sessionId,
@@ -561,7 +562,6 @@ export function createContextTransformLifecycle(
             pendingCompactionReason,
             capabilityView,
           }),
-          ...(delegationRecommendation ? [delegationRecommendation] : []),
         ],
       });
 

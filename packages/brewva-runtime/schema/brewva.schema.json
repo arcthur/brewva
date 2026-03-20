@@ -115,10 +115,10 @@
                     "baseTokens": {
                       "type": "number"
                     },
-                    "windowFraction": {
+                    "maxTokens": {
                       "type": "number"
                     },
-                    "maxTokens": {
+                    "windowFraction": {
                       "type": "number"
                     }
                   }
@@ -164,14 +164,7 @@
                   "type": "boolean"
                 },
                 "maxCostUsdPerSession": {
-                  "anyOf": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
+                  "type": ["number", "null"]
                 }
               }
             },
@@ -421,30 +414,6 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "cascade": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "enabledSources": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/definitions/SkillCascadeSource"
-                  }
-                },
-                "maxStepsPerRun": {
-                  "type": "number"
-                },
-                "mode": {
-                  "$ref": "#/definitions/SkillCascadeMode"
-                },
-                "sourcePriority": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/definitions/SkillCascadeSource"
-                  }
-                }
-              }
-            },
             "disabled": {
               "type": "array",
               "items": {
@@ -554,121 +523,25 @@
         }
       ]
     },
-    "SkillCascadeMode": {
-      "type": "string",
-      "enum": ["off", "assist", "auto"]
-    },
-    "SkillCascadeSource": {
-      "type": "string",
-      "enum": ["dispatch", "explicit"]
-    },
-    "SkillCategory": {
-      "type": "string",
-      "enum": ["core", "domain", "operator", "meta", "internal", "overlay"]
+    "SkillCompletionDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requiredEvidenceKinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "verificationLevel": {
+          "$ref": "#/definitions/VerificationLevel"
+        }
+      }
     },
     "SkillContractOverride": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "intent": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "outputs": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "outputContracts": {
-              "type": "object",
-              "additionalProperties": {
-                "$ref": "#/definitions/SkillOutputContract"
-              }
-            },
-            "completionDefinition": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "verificationLevel": {
-                  "$ref": "#/definitions/VerificationLevel"
-                },
-                "requiredEvidenceKinds": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "effects": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "allowedEffects": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/ToolEffectClass"
-              }
-            },
-            "deniedEffects": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/ToolEffectClass"
-              }
-            }
-          }
-        },
-        "resources": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "defaultLease": {
-              "$ref": "#/definitions/SkillResourceBudget"
-            },
-            "hardCeiling": {
-              "$ref": "#/definitions/SkillResourceBudget"
-            }
-          }
-        },
-        "executionHints": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "preferredTools": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "fallbackTools": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "suggestedChains": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "steps": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            },
-            "costHint": {
-              "$ref": "#/definitions/SkillCostHint"
-            }
-          }
-        },
         "description": {
           "type": "string"
         },
@@ -684,13 +557,97 @@
             "type": "string"
           }
         },
-        "dispatch": {
-          "$ref": "#/definitions/SkillDispatchPolicy"
+        "effects": {
+          "$ref": "#/definitions/SkillEffectsOverride"
+        },
+        "executionHints": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "costHint": {
+              "$ref": "#/definitions/SkillCostHint"
+            },
+            "fallbackTools": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "preferredTools": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "suggestedChains": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/SkillSuggestedChain"
+              }
+            }
+          }
+        },
+        "intent": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "completionDefinition": {
+              "$ref": "#/definitions/SkillCompletionDefinition"
+            },
+            "outputContracts": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/definitions/SkillOutputContract"
+              }
+            },
+            "outputs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
         },
         "requires": {
           "type": "array",
           "items": {
             "type": "string"
+          }
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "defaultLease": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "maxParallel": {
+                  "type": "number"
+                },
+                "maxTokens": {
+                  "type": "number"
+                },
+                "maxToolCalls": {
+                  "type": "number"
+                }
+              }
+            },
+            "hardCeiling": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "maxParallel": {
+                  "type": "number"
+                },
+                "maxTokens": {
+                  "type": "number"
+                },
+                "maxToolCalls": {
+                  "type": "number"
+                }
+              }
+            }
           }
         },
         "routing": {
@@ -712,39 +669,24 @@
       "type": "string",
       "enum": ["low", "medium", "high"]
     },
-    "SkillDispatchMode": {
-      "type": "string",
-      "enum": ["suggest", "auto"]
+    "SkillEffectsOverride": {
+      "$ref": "#/definitions/SkillEffectsPolicy"
     },
-    "SkillDispatchPolicy": {
+    "SkillEffectsPolicy": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "autoThreshold": {
-          "type": "number"
+        "allowedEffects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ToolEffectClass"
+          }
         },
-        "suggestThreshold": {
-          "type": "number"
-        }
-      },
-      "required": ["suggestThreshold", "autoThreshold"]
-    },
-    "SkillEffectLevel": {
-      "type": "string",
-      "enum": ["read_only", "execute", "mutation"]
-    },
-    "SkillResourceBudget": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "maxTokens": {
-          "type": "number"
-        },
-        "maxToolCalls": {
-          "type": "number"
-        },
-        "maxParallel": {
-          "type": "number"
+        "deniedEffects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ToolEffectClass"
+          }
         }
       }
     },
@@ -818,6 +760,19 @@
     "SkillRoutingScope": {
       "type": "string",
       "enum": ["core", "domain", "operator", "meta"]
+    },
+    "SkillSuggestedChain": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["steps"]
     },
     "ToolEffectClass": {
       "type": "string",

@@ -3,11 +3,9 @@ import { existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { resolve } from "node:path";
 import process from "node:process";
-import { planHeartbeatWake } from "@brewva/brewva-gateway/runtime-plugins";
 import { loadBrewvaConfig, resolveWorkspaceRootDir } from "@brewva/brewva-runtime";
 import { TurnWALStore } from "@brewva/brewva-runtime/channels";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
-import { AddonHost } from "../addons/host.js";
 import { loadOrCreateGatewayToken, rotateGatewayToken } from "../auth.js";
 import { assertLoopbackHost, normalizeGatewayHost } from "../network.js";
 import type { GatewayErrorShape } from "../protocol/index.js";
@@ -124,7 +122,6 @@ export interface GatewayDaemonOptions {
   configPath?: string;
   model?: string;
   enableExtensions?: boolean;
-  enableAddons?: boolean;
   jsonStdout?: boolean;
   tickIntervalMs?: number;
   heartbeatTickIntervalMs?: number;
@@ -255,7 +252,6 @@ export class GatewayDaemon {
   private readonly supervisor: SessionBackend;
   private readonly turnWalStore?: TurnWALStore;
   private readonly heartbeatScheduler: HeartbeatScheduler;
-  private readonly addonHost: AddonHost | null;
   private readonly heartbeatSessionByRule = new Map<string, string>();
   private readonly broadcastObservers = new Set<(event: GatewayEvent, payload?: unknown) => void>();
   private readonly startedAt = Date.now();
@@ -345,12 +341,6 @@ export class GatewayDaemon {
       cwd: resolvedCwd,
       configPath: options.configPath,
     });
-    this.addonHost =
-      options.enableAddons === false
-        ? null
-        : new AddonHost({
-            cwd: workspaceRoot,
-          });
     this.turnWalStore = options.sessionBackend
       ? undefined
       : new TurnWALStore({
@@ -373,7 +363,6 @@ export class GatewayDaemon {
         defaultConfigPath: options.configPath,
         defaultModel: options.model,
         defaultEnableExtensions: options.enableExtensions,
-        defaultEnableAddons: options.enableAddons,
         sessionIdleTtlMs: options.sessionIdleTtlMs,
         sessionIdleSweepIntervalMs: options.sessionIdleSweepIntervalMs,
         maxWorkers: options.maxWorkers,
@@ -416,10 +405,6 @@ export class GatewayDaemon {
       this.ownsPidRecord = true;
 
       await this.supervisor.start();
-      if (this.addonHost) {
-        await this.addonHost.loadAll();
-        this.addonHost.startJobs();
-      }
       this.heartbeatScheduler.start();
       this.startTickEmitter();
       this.installSignalHandlers();
@@ -580,7 +565,6 @@ export class GatewayDaemon {
     }
 
     this.heartbeatScheduler.stop();
-    this.addonHost?.stopJobs();
     try {
       await this.supervisor.stop();
     } catch {
@@ -652,7 +636,6 @@ export class GatewayDaemon {
     }
 
     this.heartbeatScheduler.stop();
-    this.addonHost?.stopJobs();
 
     if (this.wss) {
       const server = this.wss;
@@ -1010,7 +993,6 @@ export class GatewayDaemon {
           model?: string;
           agentId?: string;
           enableExtensions?: boolean;
-          enableAddons?: boolean;
         };
         const requestedSessionId = input.sessionId?.trim() || randomUUID();
         if (input.cwd) {
@@ -1025,7 +1007,6 @@ export class GatewayDaemon {
             model: input.model,
             agentId: input.agentId,
             enableExtensions: input.enableExtensions,
-            ...(input.enableAddons === undefined ? {} : { enableAddons: input.enableAddons }),
           });
         } catch (error) {
           if (isSessionBackendCapacityError(error)) {
@@ -1219,41 +1200,11 @@ export class GatewayDaemon {
     const sessionId =
       this.heartbeatSessionByRule.get(rule.id) ?? this.resolveHeartbeatSessionId(rule);
     this.heartbeatSessionByRule.set(rule.id, sessionId);
-    const wakePlan = await planHeartbeatWake({
-      workspaceRoot: this.options.cwd,
-      sessionId,
-      rule,
-    });
-    if (wakePlan.decision === "skip") {
-      this.logger.info("heartbeat skipped", {
-        ruleId: rule.id,
-        sessionId,
-        wakeMode: wakePlan.wakeMode,
-        reason: wakePlan.reason,
-      });
-      this.broadcastEvent("heartbeat.skipped", {
-        ruleId: rule.id,
-        sessionId,
-        ts: Date.now(),
-        wakeMode: wakePlan.wakeMode,
-        reason: wakePlan.reason,
-      });
-      return;
-    }
+    const heartbeatPrompt = rule.prompt.trim();
     await this.supervisor.openSession({ sessionId });
-    const result = await this.supervisor.sendPrompt(sessionId, wakePlan.prompt, {
+    const result = await this.supervisor.sendPrompt(sessionId, heartbeatPrompt, {
       waitForCompletion: true,
       source: "heartbeat",
-      trigger: {
-        kind: "heartbeat",
-        ruleId: rule.id,
-        objective: wakePlan.objective,
-        contextHints: wakePlan.contextHints,
-        wakeMode: wakePlan.wakeMode,
-        planReason: wakePlan.reason,
-        selectionText: wakePlan.selectionText,
-        signalArtifactRefs: wakePlan.signalArtifactRefs,
-      },
     });
 
     this.broadcastEvent("heartbeat.fired", {
@@ -1261,8 +1212,6 @@ export class GatewayDaemon {
       sessionId,
       ts: Date.now(),
       hasResult: result.output !== undefined,
-      wakeMode: wakePlan.wakeMode,
-      reason: wakePlan.reason,
     });
   }
 

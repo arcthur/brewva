@@ -114,7 +114,7 @@ Options:
   --agent <id>          Agent identity id (.brewva/agents/<id>/identity.md)
   --task <json>         TaskSpec JSON (schema: brewva.task.v1)
   --task-file <path>    TaskSpec JSON file
-  --no-addons          Disable addon host and full runtime-plugin profile (historical flag name; core runtime remains active)
+  --no-extensions      Disable the hosted extension stack and keep the reduced runtime-core bridge
   --print, -p           Run one-shot mode
   --interactive, -i     Force interactive TUI mode
   --mode <text|json>    One-shot output mode
@@ -201,7 +201,6 @@ interface CliArgs {
   channel?: string;
   channelConfig?: CliChannelConfig;
   enableExtensions: boolean;
-  enableAddons: boolean;
   undo: boolean;
   replay: boolean;
   daemon: boolean;
@@ -228,7 +227,7 @@ const CLI_PARSE_OPTIONS = {
   agent: { type: "string" },
   task: { type: "string" },
   "task-file": { type: "string" },
-  "no-addons": { type: "boolean" },
+  "no-extensions": { type: "boolean" },
   print: { type: "boolean", short: "p" },
   interactive: { type: "boolean", short: "i" },
   mode: { type: "string" },
@@ -266,7 +265,7 @@ const ONBOARD_PARSE_OPTIONS = {
   "log-file": { type: "string" },
   "token-file": { type: "string" },
   heartbeat: { type: "string" },
-  "no-addons": { type: "boolean" },
+  "no-extensions": { type: "boolean" },
   "tick-interval-ms": { type: "string" },
   "session-idle-ms": { type: "string" },
   "max-workers": { type: "string" },
@@ -425,8 +424,7 @@ function parseCliArgs(argv: string[]): CliParseResult {
         pollRetryMs: pollRetryMs.value,
       },
     },
-    enableExtensions: parsed.values["no-addons"] !== true,
-    enableAddons: parsed.values["no-addons"] !== true,
+    enableExtensions: parsed.values["no-extensions"] !== true,
     undo: parsed.values.undo === true,
     replay: parsed.values.replay === true,
     daemon: parsed.values.daemon === true,
@@ -549,7 +547,7 @@ async function runOnboardCli(argv: string[]): Promise<number> {
 
   if (installDaemon) {
     pushOnboardBooleanFlag(gatewayArgs, "no-start", parsed.values["no-start"]);
-    pushOnboardBooleanFlag(gatewayArgs, "no-addons", parsed.values["no-addons"]);
+    pushOnboardBooleanFlag(gatewayArgs, "no-extensions", parsed.values["no-extensions"]);
 
     pushOnboardStringFlag(gatewayArgs, "cwd", parsed.values.cwd);
     pushOnboardStringFlag(gatewayArgs, "config", parsed.values.config);
@@ -787,7 +785,6 @@ async function run(): Promise<void> {
       model: parsed.model,
       agentId: parsed.agentId,
       enableExtensions: parsed.enableExtensions,
-      enableAddons: parsed.enableAddons,
       verbose: parsed.verbose,
       channel: parsed.channel,
       channelConfig: parsed.channelConfig,
@@ -828,7 +825,6 @@ async function run(): Promise<void> {
       model: parsed.model,
       agentId: parsed.agentId,
       enableExtensions: parsed.enableExtensions,
-      enableAddons: parsed.enableAddons,
       verbose: parsed.verbose,
     });
     return;
@@ -946,7 +942,6 @@ async function run(): Promise<void> {
       model: parsed.model,
       agentId: parsed.agentId,
       enableExtensions: parsed.enableExtensions,
-      enableAddons: parsed.enableAddons,
       prompt: initialMessage ?? "",
       verbose: parsed.verbose,
     });
@@ -986,7 +981,6 @@ async function run(): Promise<void> {
     model: parsed.model,
     agentId: parsed.agentId,
     enableExtensions: parsed.enableExtensions,
-    enableAddons: parsed.enableAddons,
   });
 
   const getSessionId = (): string => session.sessionManager.getSessionId();

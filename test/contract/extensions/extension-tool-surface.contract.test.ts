@@ -68,8 +68,6 @@ function createSkillDocument(
 
 interface ToolSurfaceRuntimeOptions {
   getActive?: ToolSurfaceRuntime["skills"]["getActive"];
-  getPendingDispatch?: ToolSurfaceRuntime["skills"]["getPendingDispatch"];
-  getCascadeIntent?: ToolSurfaceRuntime["skills"]["getCascadeIntent"];
   getSkill?: ToolSurfaceRuntime["skills"]["get"];
   taskState?: ReturnType<ToolSurfaceRuntime["task"]["getState"]>;
   recordEvent?: ToolSurfaceRuntime["events"]["record"];
@@ -84,8 +82,6 @@ function createToolSurfaceRuntime(options: ToolSurfaceRuntimeOptions = {}): Tool
   });
   Object.assign(runtime.skills, {
     getActive: options.getActive ?? (() => undefined),
-    getPendingDispatch: options.getPendingDispatch ?? (() => undefined),
-    getCascadeIntent: options.getCascadeIntent ?? (() => undefined),
     get: options.getSkill ?? (() => undefined),
   });
   if (options.taskState) {
@@ -100,7 +96,7 @@ function createToolSurfaceRuntime(options: ToolSurfaceRuntimeOptions = {}): Tool
 }
 
 describe("tool surface extension", () => {
-  test("activates base and skill-scoped tools from current dispatch state", async () => {
+  test("activates base and skill-scoped tools from the current active skill", async () => {
     const extensionApi = createMockExtensionAPI();
     registerTools(extensionApi.api, [
       "read",
@@ -117,10 +113,12 @@ describe("tool surface extension", () => {
 
     const events: Array<Record<string, unknown>> = [];
     const runtime = createToolSurfaceRuntime({
-      getPendingDispatch: () => ({
-        primary: { name: "debugging" },
-        chain: ["debugging"],
-      }),
+      getActive: () =>
+        createSkillDocument(
+          "debugging",
+          ["workspace_read", "runtime_observe", "local_exec"],
+          ["exec"],
+        ),
       getSkill: (name: string) =>
         name === "debugging"
           ? createSkillDocument(
@@ -301,10 +299,12 @@ describe("tool surface extension", () => {
     registerTools(extensionApi.api, ["read", "edit", "write", "session_compact", "grep", "exec"]);
 
     const runtime = createToolSurfaceRuntime({
-      getPendingDispatch: () => ({
-        primary: { name: "debugging" },
-        chain: ["debugging"],
-      }),
+      getActive: () =>
+        createSkillDocument(
+          "debugging",
+          ["workspace_read", "runtime_observe", "local_exec"],
+          ["exec"],
+        ),
       getSkill: (name: string) =>
         name === "debugging"
           ? createSkillDocument(

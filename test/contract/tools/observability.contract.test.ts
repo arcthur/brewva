@@ -9,11 +9,19 @@ import {
   createObsSloAssertTool,
   createObsSnapshotTool,
 } from "@brewva/brewva-tools";
+import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
+
+function createCleanRuntime(cwd = process.cwd()): BrewvaRuntime {
+  return new BrewvaRuntime({
+    cwd,
+    config: createRuntimeConfig(),
+  });
+}
 
 describe("observability tool contracts", () => {
   test("cost_view returns session, skill, and tool breakdowns", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createCleanRuntime();
     const sessionId = "s10";
     runtime.context.onTurnStart(sessionId, 1);
     runtime.tools.markCall(sessionId, "read");

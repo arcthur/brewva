@@ -123,8 +123,8 @@ Important anchors:
   - effect posture and runtime authorization
 - `packages/brewva-runtime/src/services/skill-lifecycle.ts`
   - authoritative skill activation/completion
-- `packages/brewva-runtime/src/services/skill-cascade.ts`
-  - sequence progression between skills
+- `packages/brewva-runtime/src/runtime.ts`
+  - domain-level runtime surface exposed to delegated execution
 - `packages/brewva-gateway/src/session/worker-main.ts`
   - worker-backed isolated session execution
 - `packages/brewva-gateway/src/session/worker-protocol.ts`
@@ -133,10 +133,8 @@ Important anchors:
   - fan-out, discussion, and A2A coordination primitives
 - `packages/brewva-gateway/src/channels/agent-runtime-manager.ts`
   - runtime namespacing for multiple agent identities
-- `packages/brewva-skill-broker/src/extension.ts`
-  - control-plane selection before kernel commitment
-- `packages/brewva-deliberation/src/runtime-skills.ts`
-  - deliberation-side views over skills and chain planning
+- `packages/brewva-runtime/src/services/skill-lifecycle.ts`
+  - skill activation and completion primitives delegated runs must respect
 
 Today these parts exist, but there is no single delegation contract tying them
 together. Without that contract, any subagent feature risks collapsing into one
@@ -771,11 +769,11 @@ the contracts and lifecycle semantics are stable.
 
 Recommended direction:
 
-- `packages/brewva-deliberation`
+- `packages/brewva-gateway/src/subagents`
   - profile selection and packet construction helpers
-  - future delegation planner
-- `packages/brewva-gateway`
   - child-run orchestrator and worker/session integration
+- `packages/brewva-gateway`
+  - gateway-facing hosting and session lifecycle wiring
 - `packages/brewva-tools`
   - explicit managed tools such as `subagent_run`
 - `packages/brewva-runtime`
@@ -912,10 +910,9 @@ This note is ready for promotion when all of the following are true:
 - `packages/brewva-runtime/src/parallel/results.ts`
 - `packages/brewva-runtime/src/services/tool-gate.ts`
 - `packages/brewva-runtime/src/services/skill-lifecycle.ts`
-- `packages/brewva-runtime/src/services/skill-cascade.ts`
+- `packages/brewva-runtime/src/runtime.ts`
 - `packages/brewva-gateway/src/session/worker-main.ts`
 - `packages/brewva-gateway/src/session/worker-protocol.ts`
 - `packages/brewva-gateway/src/channels/coordinator.ts`
 - `packages/brewva-gateway/src/channels/agent-runtime-manager.ts`
-- `packages/brewva-skill-broker/src/extension.ts`
-- `packages/brewva-deliberation/src/runtime-skills.ts`
+- `packages/brewva-gateway/src/runtime-plugins/tool-surface.ts`

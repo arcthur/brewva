@@ -10,8 +10,7 @@ import type {
   DelegationDeliveryRecord,
   DelegationRunRecord,
   DelegationRunStatus,
-  ProposalDecision,
-  ToolInvocationPosture,
+  ToolExecutionBoundary,
 } from "../types.js";
 import type { DelegationHydrationState, SessionHydrationFold } from "./session-hydration-fold.js";
 import { readEventPayload, readNonNegativeNumber } from "./session-hydration-fold.js";
@@ -33,10 +32,7 @@ function cloneRunRecord(record: DelegationRunRecord): DelegationRunRecord {
           mode: record.delivery.mode,
           scopeId: record.delivery.scopeId,
           label: record.delivery.label,
-          ttlMs: record.delivery.ttlMs,
           supplementalAppended: record.delivery.supplementalAppended,
-          contextPacketProposalId: record.delivery.contextPacketProposalId,
-          contextPacketDecision: record.delivery.contextPacketDecision,
           updatedAt: record.delivery.updatedAt,
         }
       : undefined,
@@ -60,22 +56,11 @@ function readRunStatus(value: unknown): DelegationRunStatus | undefined {
 }
 
 function readDeliveryMode(value: unknown): DelegationDeliveryRecord["mode"] | undefined {
-  return value === "text_only" ||
-    value === "supplemental" ||
-    value === "context_packet" ||
-    value === "both"
-    ? value
-    : undefined;
+  return value === "text_only" || value === "supplemental" ? value : undefined;
 }
 
-function readProposalDecision(value: unknown): ProposalDecision | undefined {
-  return value === "accept" || value === "reject" || value === "defer" ? value : undefined;
-}
-
-function readPosture(
-  value: unknown,
-): Extract<ToolInvocationPosture, "observe" | "reversible_mutate"> | undefined {
-  return value === "observe" || value === "reversible_mutate" ? value : undefined;
+function readBoundary(value: unknown): ToolExecutionBoundary | undefined {
+  return value === "safe" || value === "effectful" ? value : undefined;
 }
 
 function readArtifactRefs(
@@ -118,18 +103,12 @@ function mergeDeliveryRecord(
     typeof payload?.supplementalAppended === "boolean"
       ? payload.supplementalAppended
       : existing?.supplementalAppended;
-  const ttlMsValue = readNonNegativeNumber(payload?.deliveryTtlMs);
   const updatedAt = readNonNegativeNumber(payload?.deliveryUpdatedAt) ?? fallbackTimestamp;
   return {
     mode,
     scopeId: readString(payload?.deliveryScopeId) ?? existing?.scopeId,
     label: readString(payload?.deliveryLabel) ?? existing?.label,
-    ttlMs: ttlMsValue ?? existing?.ttlMs,
     supplementalAppended,
-    contextPacketProposalId:
-      readString(payload?.contextPacketProposalId) ?? existing?.contextPacketProposalId,
-    contextPacketDecision:
-      readProposalDecision(payload?.contextPacketDecision) ?? existing?.contextPacketDecision,
     updatedAt: updatedAt ?? existing?.updatedAt,
   };
 }
@@ -182,7 +161,7 @@ export function createDelegationHydrationFold(): SessionHydrationFold<Delegation
             readString(payload?.kind) === "patch"
               ? (readString(payload?.kind) as DelegationRunRecord["kind"])
               : existing?.kind,
-          posture: readPosture(payload?.posture) ?? existing?.posture,
+          boundary: readBoundary(payload?.boundary) ?? existing?.boundary,
           summary: existing?.summary,
           error: existing?.error,
           artifactRefs: existing?.artifactRefs,
@@ -216,7 +195,7 @@ export function createDelegationHydrationFold(): SessionHydrationFold<Delegation
             readString(payload?.kind) === "patch"
               ? (readString(payload?.kind) as DelegationRunRecord["kind"])
               : existing?.kind,
-          posture: readPosture(payload?.posture) ?? existing?.posture,
+          boundary: readBoundary(payload?.boundary) ?? existing?.boundary,
           summary: readString(payload?.summary) ?? existing?.summary,
           error: undefined,
           artifactRefs: readArtifactRefs(payload) ?? existing?.artifactRefs,
@@ -265,7 +244,7 @@ export function createDelegationHydrationFold(): SessionHydrationFold<Delegation
             readString(payload?.kind) === "patch"
               ? (readString(payload?.kind) as DelegationRunRecord["kind"])
               : existing?.kind,
-          posture: readPosture(payload?.posture) ?? existing?.posture,
+          boundary: readBoundary(payload?.boundary) ?? existing?.boundary,
           summary: readString(payload?.summary) ?? existing?.summary,
           error:
             readString(payload?.error) ??

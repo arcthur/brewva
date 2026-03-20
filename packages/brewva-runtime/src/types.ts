@@ -18,10 +18,7 @@ export type ToolEffectClass =
   | "schedule_mutation"
   | "memory_write";
 export type ToolGovernanceRisk = "low" | "medium" | "high";
-export type ToolInvocationPosture = "observe" | "reversible_mutate" | "commitment";
-export type SkillDispatchMode = "suggest" | "auto";
-export type SkillCascadeMode = "off" | "assist" | "auto";
-export type SkillCascadeSource = "dispatch" | "explicit";
+export type ToolExecutionBoundary = "safe" | "effectful";
 
 export type RuntimeSuccess<T extends Record<string, unknown> = {}> = { ok: true } & T;
 export type RuntimeFailure<E extends string = string> = { ok: false; error: E };
@@ -36,11 +33,6 @@ export type DeepReadonly<T> = T extends (...args: never[]) => unknown
     : T extends object
       ? { readonly [TKey in keyof T]: DeepReadonly<T[TKey]> }
       : T;
-
-export interface SkillDispatchPolicy {
-  suggestThreshold: number;
-  autoThreshold: number;
-}
 
 export interface SkillRoutingPolicy {
   scope: SkillRoutingScope;
@@ -79,7 +71,7 @@ export type SkillOutputContract =
 export interface ToolGovernanceDescriptor {
   effects: ToolEffectClass[];
   defaultRisk?: ToolGovernanceRisk;
-  posture?: ToolInvocationPosture;
+  boundary?: ToolExecutionBoundary;
 }
 
 export type ToolMutationStrategy =
@@ -94,7 +86,7 @@ export interface ToolMutationReceipt {
   id: string;
   toolCallId: string;
   toolName: string;
-  posture: "reversible_mutate";
+  boundary: "effectful";
   strategy: ToolMutationStrategy;
   rollbackKind: ToolMutationRollbackKind;
   effects: ToolEffectClass[];
@@ -173,7 +165,6 @@ export interface SkillExecutionHints {
 export interface SkillContract {
   name: string;
   category: LoadableSkillCategory;
-  dispatch?: SkillDispatchPolicy;
   routing?: SkillRoutingPolicy;
   intent?: SkillIntentContract;
   effects?: SkillEffectsContract;
@@ -249,50 +240,14 @@ export interface SkillsIndexEntry {
   consumes: string[];
   requires: string[];
   effectLevel: SkillEffectLevel;
-  dispatch?: SkillDispatchPolicy;
   routingScope?: SkillRoutingScope;
 }
 
-export interface SkillSelection {
-  name: string;
-  score: number;
-  reason: string;
-  breakdown: SkillSelectionBreakdownEntry[];
-}
-
-export type SkillSelectionSignal =
-  | "semantic_match"
-  | "name_exact"
-  | "name_token"
-  | "description_token"
-  | "preview_token"
-  | "preview_boundary"
-  | "output_token"
-  | "consume_token"
-  | "tool_token"
-  | "available_output";
-
-export const SKILL_SELECTION_SIGNALS: SkillSelectionSignal[] = [
-  "semantic_match",
-  "name_exact",
-  "name_token",
-  "description_token",
-  "preview_token",
-  "preview_boundary",
-  "output_token",
-  "consume_token",
-  "tool_token",
-  "available_output",
-];
-
-export type ProposalKind = "skill_selection" | "context_packet" | "effect_commitment";
+export type ProposalKind = "effect_commitment";
 
 export type ProposalDecision = "accept" | "reject" | "defer";
-export type ContextPacketAction = "upsert" | "revoke";
-export type ContextPacketProfile = "status_summary";
 
 export type EvidenceSourceType =
-  | "broker_trace"
   | "event"
   | "ledger"
   | "task"
@@ -310,28 +265,10 @@ export interface EvidenceRef {
   createdAt: number;
 }
 
-export interface SkillSelectionProposalPayload {
-  selected: SkillSelection[];
-  routingOutcome?: SkillRoutingOutcome;
-  reason?: string;
-  confidence?: number;
-  source?: string;
-  prompt?: string;
-}
-
-export interface ContextPacketProposalPayload {
-  label: string;
-  content: string;
-  scopeId?: string;
-  packetKey?: string;
-  action?: ContextPacketAction;
-  profile?: ContextPacketProfile;
-}
-
 export interface EffectCommitmentProposalPayload {
   toolName: string;
   toolCallId: string;
-  posture: ToolInvocationPosture;
+  boundary: "effectful";
   effects: ToolEffectClass[];
   defaultRisk?: ToolGovernanceRisk;
   argsDigest: string;
@@ -339,8 +276,6 @@ export interface EffectCommitmentProposalPayload {
 }
 
 export type ProposalPayloadByKind = {
-  skill_selection: SkillSelectionProposalPayload;
-  context_packet: ContextPacketProposalPayload;
   effect_commitment: EffectCommitmentProposalPayload;
 };
 
@@ -391,7 +326,7 @@ export interface PendingEffectCommitmentRequest {
   toolName: string;
   toolCallId: string;
   subject: string;
-  posture: "commitment";
+  boundary: "effectful";
   effects: ToolEffectClass[];
   defaultRisk?: ToolGovernanceRisk;
   argsDigest: string;
@@ -414,71 +349,6 @@ export type DecideEffectCommitmentResult = RuntimeResult<
   },
   "request_not_found" | "decision_required"
 >;
-
-export interface SkillSelectionBreakdownEntry {
-  signal: SkillSelectionSignal;
-  term: string;
-  delta: number;
-}
-
-export type SkillDispatchDecisionMode = "none" | SkillDispatchMode;
-
-export type SkillRoutingOutcome = "selected" | "empty" | "failed";
-
-export interface SkillDispatchDecision {
-  mode: SkillDispatchDecisionMode;
-  primary: SkillSelection | null;
-  selected: SkillSelection[];
-  chain: string[];
-  unresolvedConsumes: string[];
-  confidence: number;
-  reason: string;
-  turn: number;
-  routingOutcome?: SkillRoutingOutcome;
-}
-
-export type SkillChainIntentStatus =
-  | "pending"
-  | "running"
-  | "paused"
-  | "completed"
-  | "failed"
-  | "cancelled";
-
-export interface SkillChainIntentStep {
-  id: string;
-  skill: string;
-  consumes: string[];
-  produces: string[];
-  lane?: string;
-}
-
-export interface SkillChainIntent {
-  id: string;
-  source: SkillCascadeSource;
-  sourceEventId?: string;
-  sourceTurn: number;
-  steps: SkillChainIntentStep[];
-  cursor: number;
-  status: SkillChainIntentStatus;
-  unresolvedConsumes: string[];
-  createdAt: number;
-  updatedAt: number;
-  retries: number;
-  lastError?: string;
-}
-
-export type SkillCascadeControlResult =
-  | RuntimeSuccess<{
-      intent?: SkillChainIntent;
-      activatedSkill?: string;
-    }>
-  | {
-      ok: false;
-      reason: string;
-      intent?: SkillChainIntent;
-      activatedSkill?: string;
-    };
 
 export type SkillActivationResult =
   | RuntimeSuccess<{
@@ -505,54 +375,6 @@ export type SkillOutputValidationResult =
       invalid: SkillOutputValidationIssue[];
     };
 
-export interface SkillCascadeChainCandidate {
-  source: SkillCascadeSource;
-  steps: SkillChainIntentStep[];
-  unresolvedConsumes: string[];
-}
-
-export interface SkillCascadeDispatchSourceInput {
-  decision: SkillDispatchDecision;
-  maxStepsPerRun: number;
-}
-
-export interface SkillCascadeExplicitSourceInput {
-  steps: Array<{
-    skill: string;
-    consumes?: string[];
-    produces?: string[];
-    lane?: string;
-  }>;
-}
-
-export interface SkillCascadeChainSource {
-  readonly source: SkillCascadeSource;
-  fromDispatch?(input: SkillCascadeDispatchSourceInput): SkillCascadeChainCandidate | null;
-  fromExplicit?(input: SkillCascadeExplicitSourceInput): SkillCascadeChainCandidate | null;
-}
-
-export type SkillCascadeSourceDecisionReason =
-  | "incoming_source_disabled"
-  | "existing_source_disabled"
-  | "no_existing_intent"
-  | "existing_terminal"
-  | "existing_running_active_skill"
-  | "explicit_source_locked"
-  | "incoming_source_not_configured"
-  | "existing_source_not_configured"
-  | "incoming_same_unconfigured_source"
-  | "incoming_higher_or_equal_priority"
-  | "incoming_lower_priority";
-
-export interface SkillCascadeSourceDecision {
-  replace: boolean;
-  reason: SkillCascadeSourceDecisionReason;
-  incomingSource: SkillCascadeSource;
-  existingSource?: SkillCascadeSource;
-  incomingRank: number | null;
-  existingRank: number | null;
-}
-
 export interface SkillOutputRecord {
   skillName: string;
   completedAt: number;
@@ -566,7 +388,6 @@ export interface CreateBrewvaSessionOptions {
   agentId?: string;
   routingScopes?: SkillRoutingScope[];
   enableExtensions?: boolean;
-  enableAddons?: boolean;
 }
 
 export type TaskSpecSchema = "brewva.task.v1";
@@ -845,12 +666,6 @@ export interface BrewvaConfig {
       enabled: boolean;
       scopes: SkillRoutingScope[];
     };
-    cascade: {
-      mode: SkillCascadeMode;
-      enabledSources: SkillCascadeSource[];
-      sourcePriority: SkillCascadeSource[];
-      maxStepsPerRun: number;
-    };
   };
   verification: {
     defaultLevel: VerificationLevel;
@@ -999,10 +814,9 @@ type DeepPartial<T> = T extends readonly (infer U)[]
 export interface BrewvaConfigFile {
   $schema?: string;
   ui?: Partial<BrewvaConfig["ui"]>;
-  skills?: Partial<Omit<BrewvaConfig["skills"], "overrides" | "cascade" | "routing">> & {
+  skills?: Partial<Omit<BrewvaConfig["skills"], "overrides" | "routing">> & {
     overrides?: BrewvaConfig["skills"]["overrides"];
     routing?: Partial<BrewvaConfig["skills"]["routing"]>;
-    cascade?: Partial<BrewvaConfig["skills"]["cascade"]>;
   };
   verification?: Partial<Omit<BrewvaConfig["verification"], "checks" | "commands">> & {
     checks?: Partial<BrewvaConfig["verification"]["checks"]>;
@@ -1203,7 +1017,7 @@ export type DelegationRunStatus =
   | "merged";
 
 export type DelegationOutcomeKind = "exploration" | "review" | "verification" | "patch";
-export type DelegationDeliveryMode = "text_only" | "supplemental" | "context_packet" | "both";
+export type DelegationDeliveryMode = "text_only" | "supplemental";
 
 export interface DelegationArtifactRef {
   kind: string;
@@ -1215,10 +1029,7 @@ export interface DelegationDeliveryRecord {
   mode: DelegationDeliveryMode;
   scopeId?: string;
   label?: string;
-  ttlMs?: number;
   supplementalAppended?: boolean;
-  contextPacketProposalId?: string;
-  contextPacketDecision?: ProposalDecision;
   updatedAt?: number;
 }
 
@@ -1233,7 +1044,7 @@ export interface DelegationRunRecord {
   workerSessionId?: string;
   parentSkill?: string;
   kind?: DelegationOutcomeKind;
-  posture?: Extract<ToolInvocationPosture, "observe" | "reversible_mutate">;
+  boundary?: ToolExecutionBoundary;
   summary?: string;
   error?: string;
   artifactRefs?: DelegationArtifactRef[];

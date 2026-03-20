@@ -6,7 +6,6 @@ import {
   resolveBrewvaAgentDir,
   type CreateBrewvaSessionOptions as RuntimeCreateBrewvaSessionOptions,
 } from "@brewva/brewva-runtime";
-import { createSkillBrokerExtension } from "@brewva/brewva-skill-broker";
 import {
   buildBrewvaTools,
   resolveBrewvaModelSelection,
@@ -25,7 +24,6 @@ import {
   type CreateAgentSessionResult,
   type ExtensionFactory,
 } from "@mariozechner/pi-coding-agent";
-import { AddonHost } from "../addons/host.js";
 import {
   createBrewvaExtension,
   createRuntimeCoreBridgeExtension,
@@ -38,12 +36,10 @@ import {
 
 export interface HostedSessionResult extends CreateAgentSessionResult {
   runtime: BrewvaRuntime;
-  addonHost?: AddonHost;
 }
 
 export interface CreateHostedSessionOptions extends RuntimeCreateBrewvaSessionOptions {
   runtime?: BrewvaRuntime;
-  addonHost?: AddonHost;
   extensionFactories?: ExtensionFactory[];
   orchestration?: BrewvaToolOrchestration;
   managedToolNames?: readonly string[];
@@ -115,7 +111,6 @@ export function registerRuntimeCoreEventBridge(
           ? (event as { toolResults: unknown[] }).toolResults.length
           : 0;
         runtime.context.onTurnEnd(sessionId);
-        runtime.skills.reconcilePendingDispatch(sessionId, turnIndex);
         runtime.events.record({
           sessionId,
           type: "turn_end",
@@ -186,14 +181,6 @@ export async function createHostedSession(
 ): Promise<HostedSessionResult> {
   const cwd = resolve(options.cwd ?? process.cwd());
   const agentDir = resolveBrewvaAgentDir();
-  const addonsEnabled = options.enableAddons !== false;
-  const resolvedAddonHost = addonsEnabled
-    ? (options.addonHost ??
-      (() => {
-        const host = new AddonHost({ cwd });
-        return host;
-      })())
-    : undefined;
 
   const authStorage = AuthStorage.create(join(agentDir, "auth.json"));
   const modelRegistry = new ModelRegistry(authStorage, join(agentDir, "models.json"));
@@ -244,7 +231,6 @@ export async function createHostedSession(
           model: childOptions.model,
           agentId: childOptions.agentId,
           enableExtensions: childOptions.enableExtensions,
-          enableAddons: childOptions.enableAddons,
           enableSubagents: childOptions.enableSubagents,
           orchestration: childOptions.orchestration,
           managedToolNames: childOptions.managedToolNames,
@@ -263,20 +249,16 @@ export async function createHostedSession(
   applyRuntimeUiSettings(settingsManager, runtime.config.ui);
 
   const extensionsEnabled = options.enableExtensions !== false;
-  const skillBrokerEnabled = runtime.config.skills.routing.enabled;
-  const extensionFactories = [
-    ...(skillBrokerEnabled ? [createSkillBrokerExtension({ runtime })] : []),
-    ...(extensionsEnabled
-      ? [
-          createBrewvaExtension({
-            runtime,
-            registerTools: true,
-            orchestration,
-            managedToolNames: options.managedToolNames,
-          }),
-        ]
-      : [createRuntimeCoreBridgeExtension({ runtime })]),
-  ];
+  const extensionFactories = extensionsEnabled
+    ? [
+        createBrewvaExtension({
+          runtime,
+          registerTools: true,
+          orchestration,
+          managedToolNames: options.managedToolNames,
+        }),
+      ]
+    : [createRuntimeCoreBridgeExtension({ runtime })];
   if (options.extensionFactories && options.extensionFactories.length > 0) {
     extensionFactories.push(...options.extensionFactories);
   }
@@ -321,15 +303,6 @@ export async function createHostedSession(
     registerRuntimeCoreEventBridge(runtime, sessionResult.session);
   }
 
-  let loadedAddons: Array<{ id: string }> = [];
-  if (resolvedAddonHost) {
-    await resolvedAddonHost.loadAll();
-    loadedAddons = resolvedAddonHost.listAddons();
-    if (loadedAddons.length > 0) {
-      await resolvedAddonHost.applyContextPackets(runtime, sessionId, options.scopeId);
-    }
-  }
-
   runtime.events.record({
     sessionId,
     type: "session_bootstrap",
@@ -337,12 +310,6 @@ export async function createHostedSession(
       cwd,
       agentId: runtime.agentId,
       extensionsEnabled,
-      addonsEnabled,
-      loadedAddonCount: loadedAddons.length,
-      skillBroker: {
-        enabled: skillBrokerEnabled,
-        proposalBoundary: skillBrokerEnabled ? "runtime.proposals.submit" : null,
-      },
       skillLoad: {
         routingEnabled: skillLoadReport.routingEnabled,
         routingScopes: skillLoadReport.routingScopes,
@@ -356,6 +323,5 @@ export async function createHostedSession(
   return {
     ...sessionResult,
     runtime,
-    addonHost: loadedAddons.length > 0 ? resolvedAddonHost : undefined,
   };
 }

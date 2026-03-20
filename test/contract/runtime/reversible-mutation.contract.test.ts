@@ -8,7 +8,7 @@ function createWorkspace(): string {
   return mkdtempSync(join(tmpdir(), "brewva-reversible-mutation-"));
 }
 
-describe("reversible mutation posture", () => {
+describe("reversible mutation receipts", () => {
   test("task mutations emit a task-state journal receipt", () => {
     const workspace = createWorkspace();
     const runtime = new BrewvaRuntime({ cwd: workspace });
@@ -20,18 +20,18 @@ describe("reversible mutation posture", () => {
       toolCallId: "tc-task-set-spec",
       toolName: "task_set_spec",
       args: {
-        goal: "Implement the new runtime posture model",
+        goal: "Implement the new runtime effect gate model",
       },
     });
 
     expect(started.allowed).toBe(true);
-    expect(started.posture).toBe("reversible_mutate");
+    expect(started.boundary).toBe("effectful");
     expect(started.mutationReceipt?.strategy).toBe("task_state_journal");
     expect(started.mutationReceipt?.rollbackKind).toBe("task_state_replay");
 
     const nextSpec: TaskSpec = {
       schema: "brewva.task.v1",
-      goal: "Implement the new runtime posture model",
+      goal: "Implement the new runtime effect gate model",
     };
     runtime.task.setSpec(sessionId, nextSpec);
     runtime.tools.finish({
@@ -86,7 +86,7 @@ describe("reversible mutation posture", () => {
     });
 
     expect(started.allowed).toBe(true);
-    expect(started.posture).toBe("reversible_mutate");
+    expect(started.boundary).toBe("effectful");
     expect(started.mutationReceipt?.strategy).toBe("workspace_patchset");
     expect(started.mutationReceipt?.rollbackKind).toBe("patchset");
 

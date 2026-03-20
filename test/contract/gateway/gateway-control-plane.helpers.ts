@@ -18,10 +18,6 @@ export interface PolicyRule {
   intervalMinutes: number;
   prompt: string;
   sessionId?: string;
-  objective?: string;
-  contextHints?: string[];
-  wakeMode?: "always" | "if_signal";
-  staleAfterMinutes?: number;
 }
 
 export interface ReloadPayload {

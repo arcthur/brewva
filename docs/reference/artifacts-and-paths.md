@@ -7,7 +7,7 @@ Runtime artifact paths are resolved from the workspace root (`nearest .brewva/br
 ## Root Ownership
 
 - `.orchestrator/`: kernel durability, replay, rollback, and event/projection state
-- `.brewva/`: operator config, control-plane state, addons, channel metadata, and deliberation-side cognition artifacts
+- `.brewva/`: operator config, control-plane state, addons, channel metadata, and optional non-kernel helper material
 
 The split is intentional: kernel replay/state stays isolated from operator and
 gateway control-plane material, even though both roots live under the same
@@ -22,53 +22,27 @@ workspace.
 - Working projection markdown: `.orchestrator/projection/sessions/sess_<base64url(sessionId)>/working.md`
 - Projection state: `.orchestrator/projection/state.json`
 - Projection refresh advisory lock (ephemeral): `.orchestrator/projection/.refresh.lock`
-- Debug-loop state: `.orchestrator/artifacts/sessions/sess_<base64url(sessionId)>/debug-loop.json`
-  - `retryCount` records scheduled retries after the first failed implementation verification
-- Debug-loop failure snapshot: `.orchestrator/artifacts/sessions/sess_<base64url(sessionId)>/failure-case.json`
-- Deterministic handoff packet: `.orchestrator/artifacts/sessions/sess_<base64url(sessionId)>/handoff.json`
-  - latest-wins snapshot; later `agent_end`, `session_shutdown`, or terminal debug-loop persistence overwrites the same file
+- Optional control-plane session artifacts: `.orchestrator/artifacts/sessions/sess_<base64url(sessionId)>/*`
+  - reserved for non-kernel helper outputs when an optional control-plane path
+    is installed
+  - not part of the kernel replay contract
 - Tape checkpoints: `checkpoint` events embedded in the per-session event tape (`.orchestrator/events/sess_<base64url(sessionId)>.jsonl`)
 - Runtime recovery source: event tape replay (`checkpoint + delta`); no standalone runtime session-state snapshot file
 - Rollback snapshots: `.orchestrator/snapshots/<session>/*.snap`
   - per-file pre-mutation snapshots used only by rollback
 - Rollback patch history: `.orchestrator/snapshots/<session>/patchsets.json`
 - Generated skill index: `.brewva/skills_index.json`
-  - External broker traces: `.brewva/skill-broker/<sessionId>/*.json`
   - includes selected skill roots (`roots`) and the merged skill index (`skills`)
-- Deliberation-side cognitive artifacts (non-kernel, not auto-injected): `.brewva/cognition/reference/` and `.brewva/cognition/summaries/`
-  - these directories are operator/control-plane owned
-  - runtime kernel does not read them implicitly; they must cross the boundary as `context_packet` proposals
-  - helper surface: `packages/brewva-deliberation/src/cognition.ts`
-  - debug-loop may publish scoped retry/handoff summaries here with a stable
-    `packetKey=debug-loop:status`
-  - terminal debug-loop handoff persistence may also publish
-    `debug-loop-reference.md` under `reference/` for later cross-session
-    rehydration
-  - repeated packets can share a stable `packetKey` so the latest accepted
-    cognition packet replaces earlier ones for injection without erasing tape history
-  - `MemoryFormation` writes resumable `status_summary` artifacts here at
-    lifecycle boundaries such as `agent_end`, `session_compact`, and
-    `session_shutdown`
-  - resumable `status_summary` artifacts carry a `session_scope` field so
-    resumability stays tied to the target live session
-  - operator teaching may append or supersede `ReferenceNote`,
-    `ProcedureNote`, and `EpisodeNote` artifacts through the `cognition_note`
-    operator tool; these are deliberation-side artifacts, not part of the
-    default memory path
-  - operator-teaching supersede remains append-only on disk, but retrieval and
-    listing collapse older versions by semantic key
-  - `registerMemoryCurator` may rehydrate selected `reference/` artifacts and
-    the latest same-session `status_summary` into accepted `context_packet`
-    proposals for future sessions
-  - storage lanes and retrieval strategies are intentionally not one-to-one:
-    `reference` lane yields default cross-session reference hydration, while
-    `summaries` yields the latest same-session summary hydration
 - Agent identity profile (per-agent): `.brewva/agents/<agent-id>/identity.md`
   - `<agent-id>` comes from runtime option `agentId` (or `BREWVA_AGENT_ID`, fallback `default`)
   - id normalization: lowercase slug (`[a-z0-9._-]`, invalid separators mapped to `-`)
   - required section headings: `Who I Am`, `How I Work`, `What I Care About`
   - runtime renders those headings into the structured `[PersonaProfile]`
     context block; files without those headings are ignored
+
+Legacy operator-owned cognition directories such as `.brewva/cognition/**` may
+still exist in older workspaces, but they are not part of the current default
+runtime path.
 
 ## Global Roots
 
@@ -89,7 +63,7 @@ workspace.
 ## Source Paths
 
 - Runtime: `packages/brewva-runtime/src`
-- Deliberation: `packages/brewva-deliberation/src`
 - Tools: `packages/brewva-tools/src`
 - Extensions: `packages/brewva-gateway/src/runtime-plugins`
+- Gateway subagents: `packages/brewva-gateway/src/subagents`
 - CLI: `packages/brewva-cli/src`

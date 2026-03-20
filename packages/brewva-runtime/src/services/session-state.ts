@@ -2,8 +2,6 @@ import type {
   DelegationRunRecord,
   ResourceLeaseRecord,
   SessionHydrationState,
-  SkillChainIntent,
-  SkillDispatchDecision,
   SkillOutputRecord,
 } from "../types.js";
 
@@ -53,8 +51,6 @@ export class RuntimeSessionStateCell {
   resourceLeases = new Map<string, ResourceLeaseRecord>();
   delegationRuns = new Map<string, DelegationRunRecord>();
   skillOutputs = new Map<string, SkillOutputRecord>();
-  pendingDispatch?: SkillDispatchDecision;
-  skillChainIntent?: SkillChainIntent;
   tapeCheckpointWriteInProgress = false;
   tapeCheckpointCounterInitialized = false;
   tapeEntriesSinceCheckpoint = 0;

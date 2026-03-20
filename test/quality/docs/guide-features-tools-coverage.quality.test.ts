@@ -20,7 +20,6 @@ function collectToolNames(sourceRoot: string): string[] {
     "rollback-last-patch.ts",
     "schedule-intent.ts",
     "session-compact.ts",
-    "skill-chain-control.ts",
     "skill-load.ts",
     "skill-complete.ts",
     "subagent-control.ts",

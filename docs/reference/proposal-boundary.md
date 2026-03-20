@@ -4,27 +4,30 @@ Boundary contract sources:
 
 - Runtime types: `packages/brewva-runtime/src/types.ts`
 - Runtime facade: `packages/brewva-runtime/src/runtime.ts`
-- Deliberation records: `packages/brewva-deliberation/src/records.ts`
-- Deliberation cognition bridge: `packages/brewva-deliberation/src/cognition.ts`
-- Deliberation helpers: `packages/brewva-deliberation/src/proposals.ts`
-- Deliberation runtime planning: `packages/brewva-deliberation/src/runtime-skills.ts`
-- Memory curator core: `packages/brewva-deliberation/src/memory-curator.ts`
-- Context composition bridge: `packages/brewva-gateway/src/runtime-plugins/context-transform.ts`
-- Memory curator adapter: `packages/brewva-gateway/src/runtime-plugins/memory-curator.ts`
-- Broker proposal producer: `packages/brewva-skill-broker/src/extension.ts`
+- Proposal admission: `packages/brewva-runtime/src/services/proposal-admission.ts`
+- Effect-commitment admission: `packages/brewva-runtime/src/services/proposal-admission-effect-commitment.ts`
+- Operator desk: `packages/brewva-runtime/src/services/effect-commitment-desk.ts`
 
-The proposal boundary is the public handoff between deliberation and kernel
-commitment.
+The public proposal boundary is now intentionally small.
+
+Current rule:
+
+- the only proposal kind is `effect_commitment`
+- skill routing is not a proposal boundary
+- context shaping is not a proposal boundary
+
+This keeps the kernel boundary focused on one question:
+
+`May this effectful action proceed?`
 
 ## Authority Model
 
-- deliberation may propose
+- producers may submit a proposal
 - kernel may `accept`, `reject`, or `defer`
-- only accepted proposals may create new kernel commitments
-- every proposal decision must remain replayable from tape
+- only accepted proposals may create approval-bearing commitments
+- every decision is durable and replayable from tape
 
-There is no kernel-owned fallback path that silently recreates missing adaptive
-selection behavior.
+There is no fallback path that silently recreates approval state in memory.
 
 ## Core Objects
 
@@ -41,20 +44,7 @@ Optional field:
 
 - `hash`
 
-Current source types include:
-
-- `broker_trace`
-- `event`
-- `ledger`
-- `task`
-- `truth`
-- `workspace_artifact`
-- `operator_note`
-- `verification`
-- `tool_result`
-
-`EvidenceRef` is provenance, not business meaning. It points to why the
-proposal exists; it does not itself decide acceptance.
+`EvidenceRef` captures provenance. It does not itself authorize anything.
 
 ### `ProposalEnvelope`
 
@@ -70,10 +60,8 @@ Fields:
 - `expiresAt?`
 - `createdAt`
 
-Current proposal kinds:
+Current proposal kind:
 
-- `skill_selection`
-- `context_packet`
 - `effect_commitment`
 
 ### `DecisionReceipt`
@@ -89,165 +77,91 @@ Fields:
 - `turn`
 - `timestamp`
 
-`DecisionReceipt` is the commitment-side answer to a proposal. It is the unit
-operators and replay logic should inspect when asking what the kernel actually
-decided.
+`DecisionReceipt` is the durable kernel answer. Replay, operators, and recovery
+logic should inspect receipts rather than process-local state.
 
-## Proposal Kinds
-
-### `skill_selection`
+## `effect_commitment`
 
 Producer intent:
 
-- broker shortlist
-- ranking/judging result
-- manual or operator-assisted selection
+- record an approval-bearing request for an `effectful` tool call
+- keep the request auditable before the effect executes
+
+Typical cases:
+
+- `local_exec`
+- `schedule_mutation`
+- external network or side-effecting tools that require operator approval
 
 Accepted effect:
 
-- kernel creates a pending dispatch commitment
-- actual skill entry still happens via
-  `skill_load`
+- kernel creates a replayable pending approval request
+- operator approval is recorded through the effect-commitment desk
+- the caller must resume the exact request with
+  `runtime.tools.start({ ..., effectCommitmentRequestId })`
+- approval is consumed only after a durable linked tool result is recorded
 
-### `context_packet`
+This means the commitment path is explicitly at-least-once across crashes after
+the external effect but before durable observation. Backends should therefore
+use the request id as an idempotency key whenever possible.
 
-Producer intent:
+## Admission Rules
 
-- curated non-authoritative context prepared outside the kernel
-- operator/control-plane cognition artifacts under `.brewva/cognition/*`
+Current admission is conservative:
 
-Optional payload controls:
-
-- `scopeId`: inject only for the matching context leaf scope
-- `packetKey`: let later packets from the same `issuer + scopeId + packetKey`
-  replace earlier ones during injection
-- `action`: `upsert` (default) or `revoke`; accepted revoke packets act as
-  latest-wins tombstones during injection
-- `profile`: optional packet profile tag; current built-in profile is
-  `status_summary`
-- `expiresAt`: keep the packet auditable on tape, but stop injecting it after
-  the TTL passes
-
-Accepted effect:
-
-- packet becomes available to deterministic context injection as
-  `brewva.context-packets`
-- the kernel injects only active packets for the current scope, and collapses
-  replacement packets by latest accepted receipt
-- accepted `revoke` packets stop the matching packet from injecting without
-  deleting tape history
-- packet does not become truth/task/ledger state on its own
-
-### `effect_commitment`
-
-Producer intent:
-
-- commitment-posture tool calls that cross the effect authorization boundary
-- auditable submission of `local_exec`, `schedule_mutation`, and external side
-  effects before runtime execution
-
-Accepted effect:
-
-- kernel records a replayable pending request for the concrete commitment
-  proposal
-- after operator acceptance, execution may proceed only when the caller resumes
-  that exact pending request, including the original `toolCallId` and canonical
-  args identity
-- rejected or deferred receipts remain on tape and keep the attempted effect
-  replayable without silently re-authorizing it
-- the operator desk reconstructs pending / accepted / consumed request state
-  from tape events after restart instead of relying on opaque in-memory
-  snapshots
-- consumption happens only after a durable linked tool outcome is recorded;
-  commitment execution is therefore explicitly at-least-once across crashes
-  after the external effect but before durable observation, so commitment tools
-  should use the request id as an idempotency key whenever the backend allows it
-
-## Kernel Decision Rules
-
-Current admission rules are intentionally conservative:
-
-- required identity fields must exist (`id`, `issuer`, `subject`)
+- `id`, `issuer`, and `subject` are required
 - at least one `EvidenceRef` is required
 - expired proposals are rejected
-- unknown skills are rejected
-- empty `skill_selection` proposals are rejected or deferred, not fabricated
-- malformed `context_packet` proposals are rejected
-- reserved built-in issuers must obey their declared boundary policy
-
-Current reserved issuer policy:
-
-- `brewva.skill-broker`
-  - allowed kinds: `skill_selection`
-  - requires `broker_trace` evidence
-- `brewva.extensions.debug-loop`
-  - allowed kinds: `context_packet`
-  - `context_packet` requires scoped `status_summary` packets with `packetKey`,
-    `expiresAt`, and `event` / `workspace_artifact` / `operator_note` evidence
-- `brewva.extensions.memory-curator`
-  - allowed kinds: `context_packet`
-  - requires `workspace_artifact` evidence
-  - requires `packetKey` and `expiresAt`
+- `payload.toolName` is required
+- `payload.toolCallId` is required
+- `payload.argsDigest` is required
+- `payload.boundary` must be `effectful`
+- the tool must have an exact governance descriptor
+- the tool must actually require approval under that descriptor
+- the declared `effects` must match the governance descriptor
 
 Decision meanings:
 
-- `accept`: commitment created
-- `reject`: proposal invalid or disallowed
-- `defer`: proposal is well-formed enough to record, but commitment is not made
-  yet
+- `accept`: pending approval-bearing commitment created
+- `reject`: invalid or disallowed
+- `defer`: recorded, but not yet committed
 
 ## Direct Commit Boundary
 
-Not every cross-module decision is a proposal.
+Not every effectful action becomes a proposal.
 
-Current direct-commit paths include:
+Direct kernel execution still applies to:
 
-- explicit cascade starts (`runtime.skills.startCascade(...)`)
-- debug-loop retry scheduling
-- broker-owned cascade planning after accepted `skill_selection`
+- `safe` tools
+- `effectful` tools that are rollbackable but not approval-bound
+- internal runtime bookkeeping that does not cross an external authority boundary
 
-Use the proposal boundary only when the action crosses a real admission/audit
-boundary: broker skill selection, external/non-authoritative context
-injection, or commitment-posture effect execution.
+The proposal boundary exists only for approval-bearing effect commitment.
 
-## Tape And Event Mapping
+## Tape Mapping
 
-Every proposal round should leave this replayable shape:
+Every proposal round leaves this replayable shape:
 
 - `proposal_received`
 - `proposal_decided`
 - `decision_receipt_recorded`
 
-The receipt event stores both the normalized proposal and the kernel decision so
-the boundary remains auditable after restart or replay.
+Approval state is layered on top through:
 
-`runtime.proposals.list(sessionId, query?)` returns proposal records newest
-first by receipt timestamp. Deliberation helpers may still sort defensively when
-they collapse latest-wins packet keys, but the runtime surface itself treats the
-latest receipt as index `0`.
+- `effect_commitment_approval_requested`
+- `effect_commitment_approval_decided`
+- `effect_commitment_approval_consumed`
 
-For commitment-posture effects, the same domain now exposes the operator desk
-surface:
+`runtime.proposals.list(sessionId, query?)` returns newest-first proposal
+records by receipt timestamp.
+
+The operator desk surface lives in the same domain:
 
 - `runtime.proposals.listPendingEffectCommitments(sessionId)`
 - `runtime.proposals.decideEffectCommitment(sessionId, requestId, input)`
 - `runtime.tools.start({ ..., effectCommitmentRequestId })`
 
-This keeps the approval queue and the receipt-bearing proposal history in one
-governance namespace instead of creating a second parallel authority path.
-The queue is replay-first: pending and approved request state is rebuilt from
-`effect_commitment_approval_*` events plus the recorded proposal/receipt pair.
-
-## Producer Guidelines
-
-Deliberation/experience producers should:
-
-- keep `issuer` stable and specific
-- submit concrete evidence references
-- treat `defer` as a real outcome, not an error path
-- avoid encoding hidden authority into `payload`
-
-Kernel code should:
+This keeps approval state and proposal history in one replay-first namespace.
 
 - never mutate authoritative state without a receipt-worthy reason
 - keep `policyBasis` and `reasons` readable by operators

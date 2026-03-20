@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createRuntimeConfig } from "../../helpers/runtime.js";
 import {
   GAP_REMEDIATION_CONFIG_PATH,
   createGapRemediationConfig as createConfig,
@@ -14,9 +15,16 @@ function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
+function createCleanRuntime(cwd = process.cwd()): BrewvaRuntime {
+  return new BrewvaRuntime({
+    cwd,
+    config: createRuntimeConfig(),
+  });
+}
+
 describe("Gap remediation: parallel result lifecycle", () => {
   test("detects patch conflicts and supports merged patchset", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createCleanRuntime();
     const sessionId = "parallel-1";
 
     runtime.session.recordWorkerResult(sessionId, {

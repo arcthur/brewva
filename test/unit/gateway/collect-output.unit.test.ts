@@ -7,10 +7,7 @@ import {
 
 type SessionLike = {
   subscribe: (listener: (event: AgentSessionEvent) => void) => () => void;
-  sendUserMessage: (
-    content: string,
-    options?: { deliverAs?: "steer" | "followUp" },
-  ) => Promise<void>;
+  sendUserMessage: (content: string, options?: { deliverAs?: "followUp" }) => Promise<void>;
   agent: {
     waitForIdle: () => Promise<void>;
   };

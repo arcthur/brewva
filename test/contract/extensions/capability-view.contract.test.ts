@@ -51,10 +51,9 @@ describe("capability view", () => {
 
     expect(result.inventory.availableTotal).toBe(3);
     expect(result.inventory.visibleNames).toEqual(["exec"]);
-    expect(result.inventory.visibleByPosture).toEqual({
-      observe: 0,
-      reversible_mutate: 0,
-      commitment: 1,
+    expect(result.inventory.visibleByBoundary).toEqual({
+      safe: 0,
+      effectful: 1,
     });
     expect(result.inventory.hiddenBySurface.skill).toBe(1);
     expect(result.inventory.hiddenBySurface.operator).toBe(0);
@@ -95,7 +94,7 @@ describe("capability view", () => {
     expect(result.missing).toEqual(["not_exists"]);
     expect(result.details[0]).toMatchObject({
       surface: "skill",
-      posture: "observe",
+      boundary: "safe",
       visibleNow: false,
     });
     expect(result.details[0]?.effects).toEqual(["runtime_observe"]);
@@ -297,7 +296,7 @@ describe("capability view", () => {
     expect(result.inventory.hints).toContain("load_or_accept_skill");
   });
 
-  test("captures posture and effect boundaries for reversible tools", () => {
+  test("captures effect boundaries and rollback hints for mutable tools", () => {
     const result = buildCapabilityView({
       prompt: "inspect $task_set_spec",
       allTools: [
@@ -310,7 +309,8 @@ describe("capability view", () => {
       activeToolNames: [],
     });
 
-    expect(result.details[0]?.posture).toBe("reversible_mutate");
+    expect(result.details[0]?.boundary).toBe("effectful");
+    expect(result.details[0]?.rollbackable).toBe(true);
     expect(result.details[0]?.effects).toEqual(["memory_write"]);
   });
 
@@ -348,9 +348,9 @@ describe("capability view", () => {
       "capability-view-policy",
       "capability-detail:task_set_spec",
     ]);
-    expect(rendered[1]?.content).toContain("posture_policy:");
+    expect(rendered[1]?.content).toContain("boundary_policy:");
     expect(rendered[1]?.content).not.toContain("surface_policy:");
-    expect(rendered[2]?.content).toContain("posture: reversible_mutate");
+    expect(rendered[2]?.content).toContain("boundary: effectful");
     expect(rendered[2]?.content).not.toContain("description:");
   });
 

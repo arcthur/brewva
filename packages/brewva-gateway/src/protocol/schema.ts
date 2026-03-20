@@ -40,7 +40,6 @@ export const GatewayEvents = [
   "session.turn.error",
   "session.turn.end",
   "heartbeat.fired",
-  "heartbeat.skipped",
   "shutdown",
 ] as const;
 
@@ -186,7 +185,6 @@ export const SessionsOpenParamsSchema = Type.Object(
     model: Type.Optional(NonEmptyString),
     agentId: Type.Optional(NonEmptyString),
     enableExtensions: Type.Optional(Type.Boolean()),
-    enableAddons: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false },
 );

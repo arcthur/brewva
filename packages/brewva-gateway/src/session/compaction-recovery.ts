@@ -4,7 +4,7 @@ const COMPACTION_RESUME_PROMPT =
   "Context compaction completed. Resume the interrupted turn from the current task and evidence state. Do not repeat completed tool side effects unless required for correctness. Finish the pending response.";
 
 type SendUserMessageOptions = {
-  deliverAs?: "steer" | "followUp";
+  deliverAs?: "followUp";
 };
 
 export interface CompactionRecoverySessionLike {

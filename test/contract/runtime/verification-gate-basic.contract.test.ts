@@ -1,13 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createRuntimeConfig } from "../../helpers/runtime.js";
 
 function repoRoot(): string {
   return process.cwd();
 }
 
+function createCleanRuntime(): BrewvaRuntime {
+  return new BrewvaRuntime({
+    cwd: repoRoot(),
+    config: createRuntimeConfig(),
+  });
+}
+
 describe("S-004/S-005 verification gate", () => {
   test("blocks without evidence after write and passes with evidence", async () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createCleanRuntime();
     const sessionId = "s4";
 
     runtime.tools.markCall(sessionId, "edit");
@@ -36,7 +44,7 @@ describe("S-004/S-005 verification gate", () => {
   });
 
   test("read-only session skips verification checks", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createCleanRuntime();
     const sessionId = "s4-readonly";
 
     const report = runtime.verification.evaluate(sessionId);
@@ -50,7 +58,7 @@ describe("S-004/S-005 verification gate", () => {
   });
 
   test("treats multi_edit as a mutation tool for verification gating", async () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createCleanRuntime();
     const sessionId = "s4-multi-edit";
 
     runtime.tools.markCall(sessionId, "multi_edit");
@@ -61,7 +69,7 @@ describe("S-004/S-005 verification gate", () => {
   });
 
   test("requires pass verdict before tool results count as verification evidence", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createCleanRuntime();
     const sessionId = "s4-explicit-verdicts";
 
     runtime.tools.markCall(sessionId, "edit");

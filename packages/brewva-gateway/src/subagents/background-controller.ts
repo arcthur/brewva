@@ -26,7 +26,7 @@ import {
   writeDetachedSubagentSpec,
 } from "./background-protocol.js";
 import type { HostedSubagentProfile } from "./profiles.js";
-import { resolveRequestedPosture } from "./shared.js";
+import { resolveRequestedBoundary } from "./shared.js";
 
 export interface HostedSubagentBackgroundController {
   startRun(input: {
@@ -85,7 +85,6 @@ function buildDeliveryRecord(
     mode: delivery.returnMode,
     scopeId: delivery.returnScopeId,
     label: delivery.returnLabel,
-    ttlMs: delivery.returnTtlMs,
     updatedAt,
   };
 }
@@ -96,7 +95,7 @@ function buildLifecyclePayload(record: DelegationRunRecord): Record<string, unkn
     profile: record.profile,
     label: record.label ?? null,
     kind: record.kind ?? null,
-    posture: record.posture ?? null,
+    boundary: record.boundary ?? null,
     parentSkill: record.parentSkill ?? null,
     childSessionId: record.workerSessionId ?? null,
     status: record.status,
@@ -108,10 +107,7 @@ function buildLifecyclePayload(record: DelegationRunRecord): Record<string, unkn
     deliveryMode: record.delivery?.mode ?? null,
     deliveryScopeId: record.delivery?.scopeId ?? null,
     deliveryLabel: record.delivery?.label ?? null,
-    deliveryTtlMs: record.delivery?.ttlMs ?? null,
     supplementalAppended: record.delivery?.supplementalAppended ?? null,
-    contextPacketProposalId: record.delivery?.contextPacketProposalId ?? null,
-    contextPacketDecision: record.delivery?.contextPacketDecision ?? null,
     deliveryUpdatedAt: record.delivery?.updatedAt ?? null,
   };
 }
@@ -247,7 +243,7 @@ export function createDetachedSubagentBackgroundController(
       const runId = randomUUID();
       const createdAt = Date.now();
       const parentSkill = options.runtime.skills.getActive(input.parentSessionId)?.name;
-      const posture = resolveRequestedPosture(input.profile, input.packet);
+      const boundary = resolveRequestedBoundary(input.profile, input.packet);
       const initialRecord: DelegationRunRecord = {
         runId,
         profile: input.profile.name,
@@ -258,7 +254,7 @@ export function createDetachedSubagentBackgroundController(
         label: input.label,
         parentSkill,
         kind: input.profile.resultMode,
-        posture,
+        boundary,
         delivery: buildDeliveryRecord(input.delivery, createdAt),
       };
       options.runtime.session.recordDelegationRun(input.parentSessionId, initialRecord);

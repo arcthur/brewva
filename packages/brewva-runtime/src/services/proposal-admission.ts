@@ -4,62 +4,27 @@ import {
   PROPOSAL_RECEIVED_EVENT_TYPE,
 } from "../events/event-types.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
-import type { SkillRegistry } from "../skills/registry.js";
 import type {
   BrewvaEventRecord,
-  ContextPacketProposalPayload,
   DecisionReceipt,
   EvidenceRef,
   ProposalDecision,
   ProposalEnvelope,
   ProposalKind,
   ProposalListQuery,
-  ProposalPayloadByKind,
   ProposalRecord,
   ToolGovernanceDescriptor,
 } from "../types.js";
-import { commitContextPacketProposal } from "./proposal-admission-context-packet.js";
 import {
   commitEffectCommitmentProposal,
   type AuthorizeEffectCommitmentInput,
   type EffectCommitmentAuthorizationDecision,
 } from "./proposal-admission-effect-commitment.js";
-import { commitSkillSelectionProposal } from "./proposal-admission-skill-selection.js";
-import type { SkillLifecycleService } from "./skill-lifecycle.js";
-
-const RESERVED_PROPOSAL_ISSUER_POLICIES = {
-  "brewva.skill-broker": {
-    skill_selection: {
-      requiredEvidenceSourceTypes: ["broker_trace"],
-    },
-  },
-  "brewva.extensions.debug-loop": {
-    context_packet: {
-      requiredEvidenceSourceTypes: ["event", "workspace_artifact", "operator_note"],
-      requirePacketKey: true,
-      requireScopeId: true,
-      requireExpiresAt: true,
-      requireProfile: "status_summary",
-    },
-  },
-  "brewva.extensions.memory-curator": {
-    context_packet: {
-      requiredEvidenceSourceTypes: ["workspace_artifact"],
-      requirePacketKey: true,
-      requireExpiresAt: true,
-    },
-  },
-} as const;
 
 export interface ProposalAdmissionServiceOptions {
   listDecisionReceiptEvents: (sessionId: string) => BrewvaEventRecord[];
   recordEvent: RuntimeKernelContext["recordEvent"];
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
-  skillRegistry: Pick<SkillRegistry, "get">;
-  skillLifecycleService: Pick<
-    SkillLifecycleService,
-    "setPendingDispatch" | "listProducedOutputKeys"
-  >;
   resolveToolGovernanceDescriptor: (toolName: string) => ToolGovernanceDescriptor | undefined;
   effectCommitmentAuthorizer: (
     input: AuthorizeEffectCommitmentInput,
@@ -70,12 +35,6 @@ export class ProposalAdmissionService {
   private readonly listDecisionReceiptEvents: (sessionId: string) => BrewvaEventRecord[];
   private readonly recordEvent: RuntimeKernelContext["recordEvent"];
   private readonly getCurrentTurn: (sessionId: string) => number;
-  private readonly getSkill: (name: string) => ReturnType<SkillRegistry["get"]>;
-  private readonly setPendingDispatch: (
-    sessionId: string,
-    decision: Parameters<SkillLifecycleService["setPendingDispatch"]>[1],
-  ) => void;
-  private readonly listProducedOutputKeys: (sessionId: string) => string[];
   private readonly resolveToolGovernanceDescriptor: (
     toolName: string,
   ) => ToolGovernanceDescriptor | undefined;
@@ -87,11 +46,6 @@ export class ProposalAdmissionService {
     this.listDecisionReceiptEvents = (sessionId) => options.listDecisionReceiptEvents(sessionId);
     this.recordEvent = (input) => options.recordEvent(input);
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
-    this.getSkill = (name) => options.skillRegistry.get(name);
-    this.setPendingDispatch = (sessionId, decision) =>
-      options.skillLifecycleService.setPendingDispatch(sessionId, decision, { emitEvent: true });
-    this.listProducedOutputKeys = (sessionId) =>
-      options.skillLifecycleService.listProducedOutputKeys(sessionId);
     this.resolveToolGovernanceDescriptor = (toolName) =>
       options.resolveToolGovernanceDescriptor(toolName);
     this.authorizeEffectCommitment = (input) => options.effectCommitmentAuthorizer(input);
@@ -175,47 +129,6 @@ export class ProposalAdmissionService {
     return this.listProposalRecords(sessionId, { kind, decision, limit: 1 })[0];
   }
 
-  listInjectableContextPackets(
-    sessionId: string,
-    injectionScopeId?: string,
-    now = Date.now(),
-  ): ProposalRecord<"context_packet">[] {
-    const seenKeys = new Set<string>();
-    const records = this.listProposalRecords(sessionId, {
-      kind: "context_packet",
-      decision: "accept",
-    }) as ProposalRecord<"context_packet">[];
-    const effective: ProposalRecord<"context_packet">[] = [];
-
-    for (const record of records) {
-      const scopeId = record.proposal.payload.scopeId;
-      if (scopeId && scopeId !== injectionScopeId) {
-        continue;
-      }
-      if (typeof record.proposal.expiresAt === "number" && record.proposal.expiresAt < now) {
-        continue;
-      }
-      const packetKey = record.proposal.payload.packetKey;
-      const action = record.proposal.payload.action ?? "upsert";
-      if (packetKey) {
-        const dedupeKey = `${record.proposal.issuer}:${scopeId ?? "global"}:${packetKey}`;
-        if (seenKeys.has(dedupeKey)) {
-          continue;
-        }
-        seenKeys.add(dedupeKey);
-        if (action === "revoke") {
-          continue;
-        }
-      }
-      if (action === "revoke") {
-        continue;
-      }
-      effective.push(record);
-    }
-
-    return effective.map((record) => structuredClone(record));
-  }
-
   private readProposalRecord(payload: unknown): ProposalRecord | null {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
       return null;
@@ -233,35 +146,12 @@ export class ProposalAdmissionService {
   private normalizeProposalEnvelope<K extends ProposalKind>(
     proposal: ProposalEnvelope<K>,
   ): ProposalEnvelope<K> {
-    const contextPacketPayload =
-      proposal.kind === "context_packet"
-        ? (proposal.payload as ProposalEnvelope<"context_packet">["payload"])
-        : null;
-    const normalizedPayload = contextPacketPayload
-      ? ({
-          ...contextPacketPayload,
-          label: contextPacketPayload.label.trim(),
-          content: contextPacketPayload.content.trim(),
-          scopeId:
-            typeof contextPacketPayload.scopeId === "string" &&
-            contextPacketPayload.scopeId.trim().length > 0
-              ? contextPacketPayload.scopeId.trim()
-              : undefined,
-          packetKey:
-            typeof contextPacketPayload.packetKey === "string" &&
-            contextPacketPayload.packetKey.trim().length > 0
-              ? contextPacketPayload.packetKey.trim()
-              : undefined,
-          action: contextPacketPayload.action === "revoke" ? "revoke" : "upsert",
-          profile: contextPacketPayload.profile === "status_summary" ? "status_summary" : undefined,
-        } satisfies ProposalEnvelope<"context_packet">["payload"])
-      : proposal.payload;
     return {
       ...proposal,
       id: proposal.id.trim(),
       issuer: proposal.issuer.trim(),
       subject: proposal.subject.trim(),
-      payload: normalizedPayload as ProposalPayloadByKind[K],
+      payload: proposal.payload,
       evidenceRefs: this.normalizeEvidenceRefs(proposal.evidenceRefs),
       confidence:
         typeof proposal.confidence === "number" && Number.isFinite(proposal.confidence)
@@ -330,67 +220,11 @@ export class ProposalAdmissionService {
         turn,
       );
     }
-    const issuerPolicyDecision = this.validateReservedProposalIssuerPolicy(proposal, turn);
-    if (issuerPolicyDecision) {
-      return issuerPolicyDecision;
-    }
-
-    if (proposal.kind === "skill_selection") {
-      return commitSkillSelectionProposal({
-        sessionId,
-        proposal: proposal as ProposalEnvelope<"skill_selection">,
-        turn,
-        getSkill: (name) => this.getSkill(name),
-        setPendingDispatch: (nextSessionId, decision) =>
-          this.setPendingDispatch(nextSessionId, decision),
-        listProducedOutputKeys: (nextSessionId) => this.listProducedOutputKeys(nextSessionId),
-        buildDecisionReceipt: (
-          nextProposal,
-          decision,
-          policyBasis,
-          reasons,
-          nextTurn,
-          committedEffects = [],
-        ) =>
-          this.buildDecisionReceipt(
-            nextProposal,
-            decision,
-            policyBasis,
-            reasons,
-            nextTurn,
-            committedEffects,
-          ),
-      });
-    }
-    if (proposal.kind === "effect_commitment") {
-      return commitEffectCommitmentProposal({
-        sessionId,
-        proposal: proposal as ProposalEnvelope<"effect_commitment">,
-        turn,
-        resolveToolGovernanceDescriptor: (toolName) =>
-          this.resolveToolGovernanceDescriptor(toolName),
-        buildDecisionReceipt: (
-          nextProposal,
-          decision,
-          policyBasis,
-          reasons,
-          nextTurn,
-          committedEffects = [],
-        ) =>
-          this.buildDecisionReceipt(
-            nextProposal,
-            decision,
-            policyBasis,
-            reasons,
-            nextTurn,
-            committedEffects,
-          ),
-        authorize: (input) => this.authorizeEffectCommitment(input),
-      });
-    }
-    return commitContextPacketProposal({
-      proposal: proposal as ProposalEnvelope<"context_packet">,
+    return commitEffectCommitmentProposal({
+      sessionId,
+      proposal,
       turn,
+      resolveToolGovernanceDescriptor: (toolName) => this.resolveToolGovernanceDescriptor(toolName),
       buildDecisionReceipt: (
         nextProposal,
         decision,
@@ -407,6 +241,7 @@ export class ProposalAdmissionService {
           nextTurn,
           committedEffects,
         ),
+      authorize: (input) => this.authorizeEffectCommitment(input),
     });
   }
 
@@ -428,94 +263,5 @@ export class ProposalAdmissionService {
       turn,
       timestamp: Date.now(),
     };
-  }
-
-  private validateReservedProposalIssuerPolicy(
-    proposal: ProposalEnvelope,
-    turn: number,
-  ): DecisionReceipt | null {
-    const issuerPolicy =
-      RESERVED_PROPOSAL_ISSUER_POLICIES[
-        proposal.issuer as keyof typeof RESERVED_PROPOSAL_ISSUER_POLICIES
-      ];
-    if (!issuerPolicy) {
-      return null;
-    }
-    const kindPolicy = issuerPolicy[proposal.kind as keyof typeof issuerPolicy] as
-      | {
-          requiredEvidenceSourceTypes?: readonly string[];
-          requirePacketKey?: boolean;
-          requireScopeId?: boolean;
-          requireExpiresAt?: boolean;
-          requireProfile?: string;
-        }
-      | undefined;
-    if (!kindPolicy) {
-      return this.buildDecisionReceipt(
-        proposal,
-        "reject",
-        ["issuer_policy"],
-        [`reserved_issuer_kind_disallowed:${proposal.issuer}:${proposal.kind}`],
-        turn,
-      );
-    }
-    const requiredEvidenceSourceTypes = kindPolicy.requiredEvidenceSourceTypes;
-    if (
-      requiredEvidenceSourceTypes &&
-      !proposal.evidenceRefs.some((entry) => requiredEvidenceSourceTypes.includes(entry.sourceType))
-    ) {
-      return this.buildDecisionReceipt(
-        proposal,
-        "reject",
-        ["issuer_policy"],
-        [
-          `reserved_issuer_missing_evidence_type:${proposal.issuer}:${requiredEvidenceSourceTypes.join("|")}`,
-        ],
-        turn,
-      );
-    }
-    if (proposal.kind !== "context_packet") {
-      return null;
-    }
-    const payload = proposal.payload as ContextPacketProposalPayload;
-    if (kindPolicy.requirePacketKey && !payload.packetKey) {
-      return this.buildDecisionReceipt(
-        proposal,
-        "reject",
-        ["issuer_policy"],
-        [`reserved_context_packet_missing_packet_key:${proposal.issuer}`],
-        turn,
-      );
-    }
-    if (kindPolicy.requireScopeId && !payload.scopeId) {
-      return this.buildDecisionReceipt(
-        proposal,
-        "reject",
-        ["issuer_policy"],
-        [`reserved_context_packet_missing_scope:${proposal.issuer}`],
-        turn,
-      );
-    }
-    if (kindPolicy.requireExpiresAt && typeof proposal.expiresAt !== "number") {
-      return this.buildDecisionReceipt(
-        proposal,
-        "reject",
-        ["issuer_policy"],
-        [`reserved_context_packet_missing_expires_at:${proposal.issuer}`],
-        turn,
-      );
-    }
-    if (kindPolicy.requireProfile && payload.profile !== kindPolicy.requireProfile) {
-      return this.buildDecisionReceipt(
-        proposal,
-        "reject",
-        ["issuer_policy"],
-        [
-          `reserved_context_packet_profile_required:${proposal.issuer}:${kindPolicy.requireProfile}`,
-        ],
-        turn,
-      );
-    }
-    return null;
   }
 }

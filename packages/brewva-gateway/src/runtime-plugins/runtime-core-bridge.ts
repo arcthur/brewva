@@ -57,7 +57,7 @@ export function registerRuntimeCoreBridge(pi: ExtensionAPI, runtime: BrewvaRunti
           usage,
           injectionScopeId,
         );
-        const { gateStatus, pendingCompactionReason, capabilityView, delegationRecommendation } =
+        const { gateStatus, pendingCompactionReason, capabilityView } =
           prepareContextComposerSupport({
             runtime,
             pi,
@@ -77,7 +77,6 @@ export function registerRuntimeCoreBridge(pi: ExtensionAPI, runtime: BrewvaRunti
               pendingCompactionReason,
               capabilityView,
             }),
-            ...(delegationRecommendation ? [delegationRecommendation] : []),
           ],
         });
         const composed = composeContextBlocks({

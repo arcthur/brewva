@@ -25,7 +25,6 @@ export interface RunDaemonOptions {
   model?: string;
   agentId?: string;
   enableExtensions: boolean;
-  enableAddons?: boolean;
   verbose: boolean;
   onRuntimeReady?: (runtime: BrewvaRuntime) => void;
 }
@@ -113,7 +112,6 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
     defaultConfigPath: parsed.configPath,
     defaultModel: parsed.model,
     defaultEnableExtensions: parsed.enableExtensions,
-    defaultEnableAddons: parsed.enableAddons,
     turnWalStore,
     turnWalCompactIntervalMs: Math.max(
       30_000,
@@ -223,7 +221,6 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
           configPath: parsed.configPath,
           model: parsed.model,
           enableExtensions: parsed.enableExtensions,
-          enableAddons: parsed.enableAddons,
         });
       },
     });

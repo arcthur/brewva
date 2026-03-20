@@ -3,8 +3,6 @@ import type {
   DelegationRunRecord,
   ResourceLeaseRecord,
   SessionHydrationIssue,
-  SkillChainIntent,
-  SkillDispatchDecision,
   SkillOutputRecord,
   VerificationCheckRun,
   VerificationEvidence,
@@ -72,8 +70,6 @@ export interface SkillHydrationState {
   skillBudgetWarnings: Set<string>;
   skillParallelWarnings: Set<string>;
   skillOutputs: Map<string, SkillOutputRecord>;
-  pendingDispatch?: SkillDispatchDecision;
-  skillChainIntent?: SkillChainIntent;
 }
 
 export interface ResourceLeaseHydrationState {

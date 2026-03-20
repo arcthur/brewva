@@ -104,12 +104,14 @@ describe("hosted subagent orchestrator", () => {
     expect(outcome.kind).toBe("patch");
     expect(outcome.status).toBe("ok");
     expect(outcome.workerSessionId).toBe("child-session");
-    expect(outcome.patches?.changes).toEqual([
-      expect.objectContaining({
-        path: "src/message.ts",
-        action: "modify",
-      }),
-    ]);
+    expect(outcome.patches?.changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "src/message.ts",
+          action: "modify",
+        }),
+      ]),
+    );
     expect(outcome.artifactRefs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -146,13 +148,13 @@ describe("hosted subagent orchestrator", () => {
     expect(completedEvents[0]?.payload).toMatchObject({
       workerStatus: "ok",
       patchChangeCount: 1,
-      posture: "reversible_mutate",
+      boundary: "effectful",
     });
 
     await rm(workspaceRoot, { recursive: true, force: true });
   });
 
-  test("allows packet posture to narrow a patch-worker profile back to observe", async () => {
+  test("allows packet boundary to narrow a patch-worker profile back to safe", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-narrow-");
     const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
     const parentSessionId = "parent-session-narrow";
@@ -208,7 +210,7 @@ describe("hosted subagent orchestrator", () => {
         packet: {
           objective: "Inspect the module without changing files.",
           effectCeiling: {
-            posture: "observe",
+            boundary: "safe",
           },
         },
       },
@@ -439,9 +441,8 @@ describe("hosted subagent orchestrator", () => {
           objective: "Review the runtime boundary changes.",
         },
         delivery: {
-          returnMode: "context_packet",
+          returnMode: "text_only",
           returnScopeId: "delegation-review",
-          returnTtlMs: 60_000,
         },
       },
     });
@@ -459,9 +460,6 @@ describe("hosted subagent orchestrator", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
 
-    const records = runtime.proposals.list(parentSessionId, { kind: "context_packet" });
-    expect(records).toHaveLength(1);
-
     const status = await adapter.status({
       fromSessionId: parentSessionId,
       query: {
@@ -473,10 +471,8 @@ describe("hosted subagent orchestrator", () => {
       runId,
       status: "completed",
       delivery: {
-        mode: "context_packet",
+        mode: "text_only",
         scopeId: "delegation-review",
-        contextPacketProposalId: records[0]?.proposal.id,
-        contextPacketDecision: records[0]?.receipt.decision,
       },
     });
 

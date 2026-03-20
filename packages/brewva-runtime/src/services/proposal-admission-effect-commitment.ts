@@ -1,3 +1,4 @@
+import { toolGovernanceRequiresEffectCommitment } from "../governance/tool-governance.js";
 import type {
   DecisionReceipt,
   ProposalDecision,
@@ -10,7 +11,7 @@ import type { BuildDecisionReceipt } from "./proposal-admission-shared.js";
 
 export interface AuthorizeEffectCommitmentInput {
   sessionId: string;
-  proposal: ProposalEnvelope<"effect_commitment">;
+  proposal: ProposalEnvelope;
   descriptor: ToolGovernanceDescriptor;
   turn: number;
 }
@@ -25,7 +26,7 @@ export interface EffectCommitmentAuthorizationDecision {
 
 interface EffectCommitmentProposalCommitInput {
   sessionId: string;
-  proposal: ProposalEnvelope<"effect_commitment">;
+  proposal: ProposalEnvelope;
   turn: number;
   buildDecisionReceipt: BuildDecisionReceipt;
   resolveToolGovernanceDescriptor: (toolName: string) => ToolGovernanceDescriptor | undefined;
@@ -81,12 +82,12 @@ export function commitEffectCommitmentProposal({
     );
   }
 
-  if (payload.posture !== "commitment") {
+  if (payload.boundary !== "effectful") {
     return buildDecisionReceipt(
       proposal,
       "reject",
-      ["effect_commitment_posture"],
-      [`effect_commitment_requires_commitment_posture:${toolName}`],
+      ["effect_commitment_boundary"],
+      [`effect_commitment_requires_effectful_boundary:${toolName}`],
       turn,
     );
   }
@@ -102,12 +103,12 @@ export function commitEffectCommitmentProposal({
     );
   }
 
-  if (descriptor.posture !== "commitment") {
+  if (descriptor.boundary !== "effectful" || !toolGovernanceRequiresEffectCommitment(descriptor)) {
     return buildDecisionReceipt(
       proposal,
       "reject",
-      ["effect_commitment_posture"],
-      [`effect_commitment_tool_not_commitment_posture:${toolName}`],
+      ["effect_commitment_boundary"],
+      [`effect_commitment_tool_not_approval_bound:${toolName}`],
       turn,
     );
   }
@@ -133,7 +134,7 @@ export function commitEffectCommitmentProposal({
     [
       "effect_commitment",
       "tool_governance_descriptor",
-      "commitment_posture",
+      "effectful_boundary",
       ...(authorization.policyBasis ?? []),
     ],
     "effect_commitment_policy",
@@ -153,7 +154,7 @@ export function commitEffectCommitmentProposal({
       details: {
         toolName,
         toolCallId: payload.toolCallId,
-        posture: payload.posture,
+        boundary: payload.boundary,
         effects: [...descriptor.effects],
         defaultRisk: descriptor.defaultRisk ?? null,
         argsDigest: payload.argsDigest,

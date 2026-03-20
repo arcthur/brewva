@@ -3,7 +3,6 @@ import { SessionBackendCapacityError, SessionBackendStateError } from "@brewva/b
 import {
   ReloadPayload,
   SessionsClosePayload,
-  createBroadcastSpy,
   createConnectionState,
   createDaemonHarness,
   createSessionBackendStub,
@@ -21,7 +20,6 @@ describe("gateway daemon control-plane methods", () => {
           model?: string;
           agentId?: string;
           enableExtensions?: boolean;
-          enableAddons?: boolean;
         }
       | undefined;
     const backend = createSessionBackendStub({
@@ -46,7 +44,6 @@ describe("gateway daemon control-plane methods", () => {
         model: "openai/gpt-5",
         agentId: "code-reviewer",
         enableExtensions: false,
-        enableAddons: false,
       })) as {
         sessionId: string;
         created: boolean;
@@ -62,7 +59,6 @@ describe("gateway daemon control-plane methods", () => {
         model: "openai/gpt-5",
         agentId: "code-reviewer",
         enableExtensions: false,
-        enableAddons: false,
       });
       expect(payload).toEqual({
         sessionId: "session-open",
@@ -76,7 +72,7 @@ describe("gateway daemon control-plane methods", () => {
     }
   });
 
-  test("heartbeat fire forwards proactive trigger metadata to the session backend", async () => {
+  test("heartbeat fire sends the explicit heartbeat prompt without extra trigger metadata", async () => {
     let captured:
       | {
           sessionId: string;
@@ -84,16 +80,7 @@ describe("gateway daemon control-plane methods", () => {
           options?: {
             waitForCompletion?: boolean;
             source?: "gateway" | "heartbeat";
-            trigger?: {
-              kind: "heartbeat";
-              ruleId: string;
-              objective?: string;
-              contextHints?: string[];
-              wakeMode?: "always" | "if_signal";
-              planReason?: string;
-              selectionText?: string;
-              signalArtifactRefs?: string[];
-            };
+            trigger?: unknown;
           };
         }
       | undefined;
@@ -110,16 +97,7 @@ describe("gateway daemon control-plane methods", () => {
           options: options as {
             waitForCompletion?: boolean;
             source?: "gateway" | "heartbeat";
-            trigger?: {
-              kind: "heartbeat";
-              ruleId: string;
-              objective?: string;
-              contextHints?: string[];
-              wakeMode?: "always" | "if_signal";
-              planReason?: string;
-              selectionText?: string;
-              signalArtifactRefs?: string[];
-            };
+            trigger?: unknown;
           },
         };
         return {
@@ -138,9 +116,12 @@ describe("gateway daemon control-plane methods", () => {
         {
           id: "nightly-release",
           intervalMinutes: 15,
-          prompt: "Check project status.",
-          objective: "Review release readiness.",
-          contextHints: ["release readiness", "backlog risk"],
+          prompt: [
+            "Check project status.",
+            "Review release readiness.",
+            "release readiness",
+            "backlog risk",
+          ].join("\n"),
         },
       ],
       { sessionBackend: backend },
@@ -150,83 +131,25 @@ describe("gateway daemon control-plane methods", () => {
       await harness.daemon.testHooks.fireHeartbeat({
         id: "nightly-release",
         intervalMinutes: 15,
-        prompt: "Check project status.",
-        objective: "Review release readiness.",
-        contextHints: ["release readiness", "backlog risk"],
-      });
-
-      expect(captured?.options?.source).toBe("heartbeat");
-      expect(captured?.options?.trigger).toEqual({
-        kind: "heartbeat",
-        ruleId: "nightly-release",
-        objective: "Review release readiness.",
-        contextHints: ["release readiness", "backlog risk"],
-        wakeMode: "always",
-        planReason: "always",
-        selectionText: [
+        prompt: [
           "Check project status.",
           "Review release readiness.",
           "release readiness",
           "backlog risk",
         ].join("\n"),
-        signalArtifactRefs: [],
-      });
-    } finally {
-      harness.dispose();
-    }
-  });
-
-  test("heartbeat fire can skip wake-up when wake policy requires a signal and none exists", async () => {
-    let opened = false;
-    let sent = false;
-    const backend = createSessionBackendStub({
-      openSession: async () => {
-        opened = true;
-        return {
-          sessionId: "heartbeat:nightly-release",
-          created: true,
-          workerPid: 4321,
-        };
-      },
-      sendPrompt: async () => {
-        sent = true;
-        return {
-          sessionId: "heartbeat:nightly-release",
-          turnId: "turn-heartbeat",
-          accepted: true,
-        };
-      },
-    });
-    const harness = createDaemonHarness(
-      [
-        {
-          id: "nightly-release",
-          intervalMinutes: 15,
-          prompt: "Check project status.",
-          objective: "Review release readiness.",
-          contextHints: ["release readiness", "backlog risk"],
-          wakeMode: "if_signal",
-        },
-      ],
-      { sessionBackend: backend },
-    );
-    const broadcastSpy = createBroadcastSpy(harness.daemon);
-
-    try {
-      await harness.daemon.testHooks.fireHeartbeat({
-        id: "nightly-release",
-        intervalMinutes: 15,
-        prompt: "Check project status.",
-        objective: "Review release readiness.",
-        contextHints: ["release readiness", "backlog risk"],
-        wakeMode: "if_signal",
       });
 
-      expect(opened).toBe(false);
-      expect(sent).toBe(false);
-      expect(broadcastSpy.events.some((entry) => entry.event === "heartbeat.skipped")).toBe(true);
+      expect(captured?.options?.source).toBe("heartbeat");
+      expect(captured?.options?.trigger).toBeUndefined();
+      expect(captured?.prompt).toBe(
+        [
+          "Check project status.",
+          "Review release readiness.",
+          "release readiness",
+          "backlog risk",
+        ].join("\n"),
+      );
     } finally {
-      broadcastSpy.restore();
       harness.dispose();
     }
   });

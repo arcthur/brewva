@@ -27,11 +27,9 @@ to miss when reading individual module docs.
 - `--backend gateway` is currently limited to one-shot text mode.
 - `--backend gateway` does not support interactive mode, JSON mode,
   `--undo`/`--replay`, `--daemon`, `--channel`, or TaskSpec (`--task`, `--task-file`).
-- `--no-addons` keeps runtime safety hooks (`before_agent_start` core block,
+- `--no-extensions` keeps runtime safety hooks (`before_agent_start` core block,
   `tool_call`, `tool_result`, `session_compact`, `session_shutdown`), but disables
-  full-extension presentation/lifecycle hooks (`registerContextTransform`,
-  `registerEventStream`, memory handlers, `registerNotification`,
-  `registerDebugLoop`, cognitive metrics).
+  the richer hosted-session presentation stack.
 
 ## Schedule Runtime
 

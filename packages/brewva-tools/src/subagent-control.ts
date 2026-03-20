@@ -73,11 +73,6 @@ function summarizeRun(
       `mode=${run.delivery.mode}`,
       run.delivery.scopeId ? `scope=${run.delivery.scopeId}` : null,
       run.delivery.supplementalAppended ? "supplemental=yes" : null,
-      run.delivery.contextPacketProposalId
-        ? `context_packet=${run.delivery.contextPacketDecision ?? "submitted"}:${run.delivery.contextPacketProposalId}`
-        : run.delivery.mode === "context_packet" || run.delivery.mode === "both"
-          ? "context_packet=pending"
-          : null,
     ].filter(Boolean);
     if (delivery.length > 0) {
       lines.push(`  delivery: ${delivery.join(" ")}`);
@@ -131,7 +126,7 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
               workerSessionId: run.workerSessionId,
               parentSkill: run.parentSkill,
               kind: run.kind,
-              posture: run.posture,
+              boundary: run.boundary,
               summary: run.summary,
               error: run.error,
               artifactRefs: run.artifactRefs?.map((ref) => ({
@@ -144,10 +139,7 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
                     mode: run.delivery.mode,
                     scopeId: run.delivery.scopeId,
                     label: run.delivery.label,
-                    ttlMs: run.delivery.ttlMs,
                     supplementalAppended: run.delivery.supplementalAppended,
-                    contextPacketProposalId: run.delivery.contextPacketProposalId,
-                    contextPacketDecision: run.delivery.contextPacketDecision,
                     updatedAt: run.delivery.updatedAt,
                   }
                 : undefined,

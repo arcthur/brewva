@@ -2,12 +2,12 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { submitContextPacketProposal } from "@brewva/brewva-deliberation";
 import {
   BrewvaRuntime,
   createTrustedLocalGovernancePort,
   type ProposalRecord,
 } from "@brewva/brewva-runtime";
+import { createRuntimeConfig } from "../../helpers/runtime.js";
 
 function repoRoot(): string {
   return process.cwd();
@@ -17,15 +17,14 @@ function createWorkspace(): string {
   return mkdtempSync(join(tmpdir(), "brewva-proposals-"));
 }
 
-function buildEvidence(sessionId: string, createdAt: number) {
-  return [
-    {
-      id: `${sessionId}:operator-note:${createdAt}`,
-      sourceType: "operator_note" as const,
-      locator: `session://${sessionId}/operator-note/${createdAt}`,
-      createdAt,
-    },
-  ];
+function createCleanRuntime(
+  options: ConstructorParameters<typeof BrewvaRuntime>[0] = {},
+): BrewvaRuntime {
+  return new BrewvaRuntime({
+    cwd: repoRoot(),
+    config: createRuntimeConfig(),
+    ...options,
+  });
 }
 
 const originalDateNow = Date.now;
@@ -35,9 +34,8 @@ afterEach(() => {
 });
 
 describe("runtime proposals API", () => {
-  test("commitment posture tool starts emit accepted effect_commitment receipts", () => {
-    const runtime = new BrewvaRuntime({
-      cwd: repoRoot(),
+  test("approval-bound tool starts emit accepted effect_commitment receipts", () => {
+    const runtime = createCleanRuntime({
       governancePort: createTrustedLocalGovernancePort(),
     });
     const sessionId = `runtime-proposals-commitment-${crypto.randomUUID()}`;
@@ -50,26 +48,26 @@ describe("runtime proposals API", () => {
     });
 
     expect(started.allowed).toBe(true);
-    expect(started.posture).toBe("commitment");
+    expect(started.boundary).toBe("effectful");
     expect(started.commitmentReceipt?.decision).toBe("accept");
 
-    const postureEvent = runtime.events.query(sessionId, {
-      type: "tool_posture_selected",
+    const effectGateEvent = runtime.events.query(sessionId, {
+      type: "tool_effect_gate_selected",
       last: 1,
     })[0];
     const listed = runtime.proposals.list(sessionId, {
       kind: "effect_commitment",
       limit: 1,
-    })[0] as ProposalRecord<"effect_commitment"> | undefined;
+    })[0] as ProposalRecord | undefined;
     expect(listed?.proposal.payload.toolName).toBe("exec");
     expect(listed?.proposal.payload.toolCallId).toBe("tc-exec-commitment");
     expect(listed?.receipt.decision).toBe("accept");
     expect(listed?.receipt.committedEffects[0]?.kind).toBe("tool_commitment");
-    expect(listed?.proposal.evidenceRefs[0]?.locator).toBe(`event://${postureEvent?.id}`);
+    expect(listed?.proposal.evidenceRefs[0]?.locator).toBe(`event://${effectGateEvent?.id}`);
   });
 
-  test("default runtime opens an operator approval request for commitment posture tools", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+  test("default runtime opens an operator approval request for approval-bound tools", () => {
+    const runtime = createCleanRuntime();
     const sessionId = `runtime-proposals-commitment-default-${crypto.randomUUID()}`;
 
     const started = runtime.tools.start({
@@ -80,7 +78,7 @@ describe("runtime proposals API", () => {
     });
 
     expect(started.allowed).toBe(false);
-    expect(started.posture).toBe("commitment");
+    expect(started.boundary).toBe("effectful");
     expect(started.commitmentReceipt?.decision).toBe("defer");
     expect(started.reason).toContain("effect_commitment_pending_operator_approval:");
     expect(typeof started.effectCommitmentRequestId).toBe("string");
@@ -92,7 +90,7 @@ describe("runtime proposals API", () => {
   });
 
   test("operator approval desk approves an exact pending request that must be explicitly resumed", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createCleanRuntime();
     const sessionId = `runtime-proposals-commitment-approve-${crypto.randomUUID()}`;
 
     const deferred = runtime.tools.start({
@@ -191,7 +189,7 @@ describe("runtime proposals API", () => {
   });
 
   test("operator approval resume rejects long-argument collisions by exact digest, not summary prefix", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createCleanRuntime();
     const sessionId = `runtime-proposals-commitment-args-${crypto.randomUUID()}`;
     const sharedPrefix = "x".repeat(320);
 
@@ -380,7 +378,7 @@ describe("runtime proposals API", () => {
   });
 
   test("accepted requests are single-flight until a durable linked outcome releases them", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createCleanRuntime();
     const sessionId = `runtime-proposals-commitment-in-flight-${crypto.randomUUID()}`;
 
     const deferred = runtime.tools.start({
@@ -451,7 +449,7 @@ describe("runtime proposals API", () => {
   });
 
   test("rejected effect commitment requests do not become sticky deny caches for future requests", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createCleanRuntime();
     const sessionId = `runtime-proposals-commitment-reject-${crypto.randomUUID()}`;
 
     const firstDeferred = runtime.tools.start({
@@ -499,13 +497,13 @@ describe("runtime proposals API", () => {
     expect(remainingPending[0]?.toolCallId).toBe("tc-exec-reject-twice");
   });
 
-  test("custom commitment posture descriptors also fail closed without a governance port", () => {
+  test("custom approval-bound descriptors also fail closed without a governance port", () => {
     const toolName = "custom_commitment_probe";
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createCleanRuntime();
     runtime.tools.registerGovernanceDescriptor(toolName, {
-      effects: ["workspace_read"],
+      effects: ["local_exec"],
       defaultRisk: "high",
-      posture: "commitment",
+      boundary: "effectful",
     });
     try {
       const sessionId = `runtime-proposals-custom-commitment-${crypto.randomUUID()}`;
@@ -518,7 +516,7 @@ describe("runtime proposals API", () => {
       });
 
       expect(started.allowed).toBe(false);
-      expect(started.posture).toBe("commitment");
+      expect(started.boundary).toBe("effectful");
       expect(started.commitmentReceipt?.decision).toBe("defer");
       expect(started.reason).toContain("effect_commitment_pending_operator_approval:");
       expect(runtime.proposals.listPendingEffectCommitments(sessionId)).toHaveLength(1);
@@ -527,9 +525,8 @@ describe("runtime proposals API", () => {
     }
   });
 
-  test("governancePort authorization can defer commitment tool execution", () => {
-    const runtime = new BrewvaRuntime({
-      cwd: repoRoot(),
+  test("governancePort authorization can defer approval-bound tool execution", () => {
+    const runtime = createCleanRuntime({
       governancePort: {
         authorizeEffectCommitment: () => ({
           decision: "defer",
@@ -548,20 +545,20 @@ describe("runtime proposals API", () => {
     });
 
     expect(started.allowed).toBe(false);
-    expect(started.posture).toBe("commitment");
+    expect(started.boundary).toBe("effectful");
     expect(started.commitmentReceipt?.decision).toBe("defer");
     expect(started.reason).toContain("operator review required");
 
     const listed = runtime.proposals.list(sessionId, {
       kind: "effect_commitment",
       limit: 1,
-    })[0] as ProposalRecord<"effect_commitment"> | undefined;
+    })[0] as ProposalRecord | undefined;
     expect(listed?.receipt.decision).toBe("defer");
     expect(listed?.receipt.policyBasis).toContain("test_governance_port");
   });
 
-  test("observe posture tool starts do not emit effect_commitment proposals", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+  test("safe-boundary tool starts do not emit effect_commitment proposals", () => {
+    const runtime = createCleanRuntime();
     const sessionId = `runtime-proposals-observe-${crypto.randomUUID()}`;
 
     const started = runtime.tools.start({
@@ -572,104 +569,8 @@ describe("runtime proposals API", () => {
     });
 
     expect(started.allowed).toBe(true);
-    expect(started.posture).toBe("observe");
+    expect(started.boundary).toBe("safe");
     expect(started.commitmentReceipt).toBeUndefined();
     expect(runtime.proposals.list(sessionId, { kind: "effect_commitment" })).toHaveLength(0);
-  });
-
-  test("lists proposal records newest first by receipt timestamp", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
-    const sessionId = `runtime-proposals-${crypto.randomUUID()}`;
-
-    Date.now = () => 100;
-    submitContextPacketProposal({
-      runtime,
-      sessionId,
-      issuer: "test.operator",
-      subject: "first packet",
-      label: "OperatorMemo",
-      content: "first",
-      evidenceRefs: buildEvidence(sessionId, 100),
-    });
-
-    Date.now = () => 300;
-    submitContextPacketProposal({
-      runtime,
-      sessionId,
-      issuer: "test.operator",
-      subject: "third packet",
-      label: "OperatorMemo",
-      content: "third",
-      evidenceRefs: buildEvidence(sessionId, 300),
-    });
-
-    Date.now = () => 200;
-    submitContextPacketProposal({
-      runtime,
-      sessionId,
-      issuer: "test.operator",
-      subject: "second packet",
-      label: "OperatorMemo",
-      content: "second",
-      evidenceRefs: buildEvidence(sessionId, 200),
-    });
-
-    const listed = runtime.proposals.list(sessionId, {
-      kind: "context_packet",
-    }) as ProposalRecord<"context_packet">[];
-    expect(listed.map((record) => record.receipt.timestamp)).toEqual([300, 200, 100]);
-    expect(listed.map((record) => record.proposal.payload.content)).toEqual([
-      "third",
-      "second",
-      "first",
-    ]);
-    const latest = runtime.proposals.list(sessionId, {
-      kind: "context_packet",
-      limit: 1,
-    })[0] as ProposalRecord<"context_packet"> | undefined;
-    expect(latest?.proposal.payload.content).toBe("third");
-  });
-
-  test("isolates proposal listings across sessions even when packet keys and timestamps match", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
-    const sessionA = `runtime-proposals-a-${crypto.randomUUID()}`;
-    const sessionB = `runtime-proposals-b-${crypto.randomUUID()}`;
-
-    Date.now = () => 500;
-    submitContextPacketProposal({
-      runtime,
-      sessionId: sessionA,
-      issuer: "test.operator",
-      subject: "session a packet",
-      label: "OperatorMemo",
-      content: "summary from session a",
-      packetKey: "summary",
-      createdAt: 500,
-      evidenceRefs: buildEvidence(sessionA, 500),
-    });
-    submitContextPacketProposal({
-      runtime,
-      sessionId: sessionB,
-      issuer: "test.operator",
-      subject: "session b packet",
-      label: "OperatorMemo",
-      content: "summary from session b",
-      packetKey: "summary",
-      createdAt: 500,
-      evidenceRefs: buildEvidence(sessionB, 500),
-    });
-
-    const listedA = runtime.proposals.list(sessionA, {
-      kind: "context_packet",
-    }) as ProposalRecord<"context_packet">[];
-    const listedB = runtime.proposals.list(sessionB, {
-      kind: "context_packet",
-    }) as ProposalRecord<"context_packet">[];
-
-    expect(listedA).toHaveLength(1);
-    expect(listedB).toHaveLength(1);
-    expect(listedA[0]?.proposal.payload.content).toBe("summary from session a");
-    expect(listedB[0]?.proposal.payload.content).toBe("summary from session b");
-    expect(runtime.proposals.list(`missing-${crypto.randomUUID()}`)).toHaveLength(0);
   });
 });

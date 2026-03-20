@@ -1,13 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createRuntimeConfig } from "../../helpers/runtime.js";
 
 function repoRoot(): string {
   return process.cwd();
 }
 
+function createCleanRuntime(): BrewvaRuntime {
+  return new BrewvaRuntime({
+    cwd: repoRoot(),
+    config: createRuntimeConfig(),
+  });
+}
+
 describe("cost evidence separation in digest", () => {
   test("given ledger and infrastructure cost records, when building digest, then infrastructure entries are excluded", async () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createCleanRuntime();
     const sessionId = `cost-sep-${Date.now()}`;
 
     runtime.tools.recordResult({

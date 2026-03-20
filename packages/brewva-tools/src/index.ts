@@ -1,6 +1,5 @@
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { createAstGrepTools } from "./ast-grep.js";
-import { createCognitionNoteTool } from "./cognition-note.js";
 import { createCostViewTool } from "./cost-view.js";
 import { createExecTool } from "./exec.js";
 import { createGrepTool } from "./grep.js";
@@ -17,7 +16,6 @@ import { createResourceLeaseTool } from "./resource-lease.js";
 import { createRollbackLastPatchTool } from "./rollback-last-patch.js";
 import { createScheduleIntentTool } from "./schedule-intent.js";
 import { createSessionCompactTool } from "./session-compact.js";
-import { createSkillChainControlTool } from "./skill-chain-control.js";
 import { createSkillCompleteTool } from "./skill-complete.js";
 import { createSkillLoadTool } from "./skill-load.js";
 import { createSubagentCancelTool, createSubagentStatusTool } from "./subagent-control.js";
@@ -51,7 +49,6 @@ export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefiniti
     createExecTool({ runtime }),
     createProcessTool(),
     createCostViewTool({ runtime }),
-    createCognitionNoteTool({ runtime }),
     createObsQueryTool({ runtime }),
     createObsSloAssertTool({ runtime }),
     createObsSnapshotTool({ runtime }),
@@ -66,7 +63,6 @@ export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefiniti
     createWorkerResultsApplyTool({ runtime }),
     createSkillLoadTool({ runtime }),
     createSkillCompleteTool({ runtime }),
-    createSkillChainControlTool({ runtime }),
     createSubagentRunTool({ runtime }),
     createSubagentFanoutTool({ runtime }),
     createSubagentStatusTool({ runtime }),
@@ -85,7 +81,6 @@ export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefiniti
 export { createLspTools } from "./lsp.js";
 export { createAstGrepTools } from "./ast-grep.js";
 export { createResourceLeaseTool } from "./resource-lease.js";
-export { createCognitionNoteTool } from "./cognition-note.js";
 export { defineBrewvaTool, getBrewvaAgentParameters, getBrewvaToolMetadata } from "./utils/tool.js";
 export {
   BREWVA_STRING_ENUM_CONTRACT,
@@ -125,7 +120,6 @@ export { createWorkerResultsMergeTool, createWorkerResultsApplyTool } from "./wo
 export { createScheduleIntentTool } from "./schedule-intent.js";
 export { createSkillLoadTool } from "./skill-load.js";
 export { createSkillCompleteTool } from "./skill-complete.js";
-export { createSkillChainControlTool } from "./skill-chain-control.js";
 export { createSubagentStatusTool, createSubagentCancelTool } from "./subagent-control.js";
 export { createSubagentRunTool, createSubagentFanoutTool } from "./subagent-run.js";
 export { createTaskLedgerTools } from "./task-ledger.js";
@@ -153,7 +147,7 @@ export type {
   SubagentContextRef,
   SubagentContextRefKind,
   SubagentDelegationMode,
-  SubagentExecutionPosture,
+  SubagentExecutionBoundary,
   SubagentExecutionHints,
   SubagentOutcomeArtifactRef,
   SubagentOutcome,

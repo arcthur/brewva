@@ -12,12 +12,6 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
       enabled: false,
       scopes: ["core", "domain"],
     },
-    cascade: {
-      mode: "off",
-      enabledSources: ["explicit", "dispatch"],
-      sourcePriority: ["explicit", "dispatch"],
-      maxStepsPerRun: 8,
-    },
   },
   verification: {
     defaultLevel: "standard",

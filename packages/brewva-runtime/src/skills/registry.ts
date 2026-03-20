@@ -390,10 +390,6 @@ export class SkillRegistry {
         consumes: skill.contract.consumes ?? [],
         requires: skill.contract.requires ?? [],
         effectLevel: resolveSkillEffectLevel(skill.contract),
-        dispatch: {
-          suggestThreshold: skill.contract.dispatch?.suggestThreshold ?? 10,
-          autoThreshold: skill.contract.dispatch?.autoThreshold ?? 16,
-        },
         routingScope: skill.contract.routing?.scope,
       }));
   }

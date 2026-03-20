@@ -17,7 +17,7 @@ const RESEARCHER_PROFILE: HostedSubagentProfile = {
   description: "Repository exploration worker.",
   resultMode: "exploration",
   prompt: "Inspect the repository and summarize findings.",
-  posture: "observe",
+  boundary: "safe",
   builtinToolNames: ["read"],
 };
 

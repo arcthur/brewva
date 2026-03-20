@@ -13,7 +13,7 @@ Brewva is an AI-native coding-agent runtime built with Bun and TypeScript. It ke
 ## What Brewva Optimizes For
 
 - Deterministic runtime boundaries for context, tools, verification, cost, and state mutation
-- A shared invocation spine with explicit tool postures: `observe`, `reversible_mutate`, and `commitment`
+- A shared invocation spine with an explicit `safe | effectful` execution boundary
 - Tape-first durability and replay, with working state rebuilt from event history
 - Explicit proposal and governance boundaries instead of implicit agent-side mutation
 - Replay-first approval and rollback flows instead of hidden in-memory authority
@@ -30,28 +30,27 @@ The runtime is optimized around one question:
 flowchart TD
   AGENT["Agent (LLM)"]
   SPINE["Invocation Spine<br/>usage + WAL/events + ledger + tracking"]
-  POSTURE["Posture Policy<br/>observe / reversible_mutate / commitment"]
-  BOUNDARY["Proposal Boundary<br/>receipts + operator/governance decisions"]
+  EFFECT["Effect Gate<br/>safe / effectful"]
+  BOUNDARY["Commitment Boundary<br/>receipts + operator/governance decisions"]
   DURABILITY["Durability Layer<br/>Event Tape + Replay + Turn WAL"]
   PROJECTION["Working Projection<br/>units.jsonl + working.md"]
   OPERATORS["Operator Surfaces<br/>CLI + Gateway + Extensions + Channels"]
 
   AGENT --> SPINE
-  SPINE --> POSTURE
-  POSTURE --> BOUNDARY
+  SPINE --> EFFECT
+  EFFECT --> BOUNDARY
   BOUNDARY --> DURABILITY
   DURABILITY --> PROJECTION
-  OPERATORS --> POSTURE
+  OPERATORS --> EFFECT
   OPERATORS --> BOUNDARY
   OPERATORS --> DURABILITY
 ```
 
 Current runtime shape:
 
-- `observe` posture keeps exploration on an advisory path instead of hard-blocking the model's thought process.
-- `reversible_mutate` issues mutation receipts and rollback anchors, then exposes rollback through `runtime.tools.rollbackLastMutation(...)`.
-- `commitment` routes effectful execution through `effect_commitment` proposals, receipts, and explicit approval decisions.
-- when no host `governancePort` authorizes a commitment effect, Brewva opens a replayable operator desk instead of silently permitting the action.
+- `safe` execution keeps read-only and observational work on the direct path.
+- `effectful` execution records receipts, preserves rollbackability for reversible mutations, and routes approval-bound effects through `effect_commitment`.
+- when no host `governancePort` authorizes an approval-bound effect, Brewva opens a replayable operator desk instead of silently permitting the action.
 - pending and approved commitment requests are rebuilt from tape after restart, so approval flow is replay-first rather than process-local.
 
 Implementation detail and system boundaries:
@@ -67,13 +66,10 @@ Implementation detail and system boundaries:
 ## Package Surfaces
 
 - `@brewva/brewva-runtime`: runtime contracts, replay, projection, verification, governance, cost, and WAL durability
-- `@brewva/brewva-deliberation`: proposal producers, evidence helpers, and control-plane planning helpers
-- `@brewva/brewva-skill-broker`: broker-backed skill selection and control-plane integration
-- `@brewva/brewva-tools`: runtime-aware tools for code, tape, task, schedule, observability, and skill control flows
-- `@brewva/brewva-addons`: public addon SDK for jobs, panels, artifact stores, and scope-scoped context publication
-- `@brewva/brewva-gateway/runtime-plugins`: runtime hook wiring, integration guards, and debug-loop orchestration
+- `@brewva/brewva-tools`: runtime-aware tools for code, tape, task, schedule, observability, and explicit subagent flows
+- `@brewva/brewva-gateway/runtime-plugins`: runtime hook wiring, integration guards, and hidden-context composition
 - `@brewva/brewva-cli`: interactive CLI, print/json modes, replay/undo, daemon, and the user-facing front door into gateway-hosted channels
-- `@brewva/brewva-gateway`: local control-plane daemon and worker supervision
+- `@brewva/brewva-gateway`: local control-plane daemon, worker supervision, and subagent/session orchestration
 - `@brewva/brewva-channels-telegram`: Telegram adapter and transport
 - `@brewva/brewva-ingress`: webhook worker/server ingress for Telegram edge delivery
 - `distribution/brewva` and `distribution/brewva-*`: launcher and per-platform binary packages

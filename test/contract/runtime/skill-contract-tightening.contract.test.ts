@@ -167,15 +167,11 @@ describe("skill contract tightening", () => {
     expect(resolveSkillEffectLevel(contract)).toBe("read_only");
   });
 
-  test("shared merge policies keep dispatch, routing, effect tightening, and maxParallel aligned", () => {
+  test("shared merge policies keep routing, effect tightening, and maxParallel aligned", () => {
     const base = createContract({
       name: "implementation",
       category: "core",
       routing: { scope: "core" },
-      dispatch: {
-        suggestThreshold: 10,
-        autoThreshold: 20,
-      },
       effects: {
         allowedEffects: ["workspace_read"],
       },
@@ -188,10 +184,6 @@ describe("skill contract tightening", () => {
     const override: SkillContractOverride = {
       resources: {
         defaultLease: { maxToolCalls: 12, maxTokens: 20000, maxParallel: 3 },
-      },
-      dispatch: {
-        suggestThreshold: 14,
-        autoThreshold: 18,
       },
       effects: {
         allowedEffects: ["workspace_read", "local_exec"],
@@ -215,10 +207,6 @@ describe("skill contract tightening", () => {
         maxToolCalls: 12,
         maxTokens: 20000,
         maxParallel: 3,
-      });
-      expect(result.dispatch).toEqual({
-        suggestThreshold: 14,
-        autoThreshold: 20,
       });
       expect(result.routing).toEqual({ scope: "core" });
       expect(result.resources?.defaultLease?.maxParallel).toBe(3);

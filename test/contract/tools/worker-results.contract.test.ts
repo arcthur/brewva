@@ -5,15 +5,23 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { createWorkerResultsApplyTool, createWorkerResultsMergeTool } from "@brewva/brewva-tools";
+import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
 
 function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
+function createCleanRuntime(cwd = process.cwd()): BrewvaRuntime {
+  return new BrewvaRuntime({
+    cwd,
+    config: createRuntimeConfig(),
+  });
+}
+
 describe("worker results tools contract", () => {
   test("worker_results_merge reports conflicts without clearing worker state", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createCleanRuntime();
     const sessionId = "worker-results-merge-conflict";
 
     runtime.session.recordWorkerResult(sessionId, {

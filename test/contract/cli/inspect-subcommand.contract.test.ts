@@ -40,11 +40,6 @@ describe("inspect subcommand", () => {
           type: "session_bootstrap",
           payload: {
             extensionsEnabled: false,
-            addonsEnabled: false,
-            skillBroker: {
-              enabled: false,
-              proposalBoundary: null,
-            },
             skillLoad: {
               routingEnabled: false,
               routingScopes: ["core", "domain"],
@@ -104,7 +99,7 @@ describe("inspect subcommand", () => {
           verification: { outcome: string | null; failedChecks: string[] };
           ledger: { chainValid: boolean; rows: number };
           consistency: { ledgerChain: string };
-          bootstrap: { skillBrokerEnabled: boolean | null; routingEnabled: boolean | null };
+          bootstrap: { routingEnabled: boolean | null };
         };
 
         expect(payload.sessionId).toBe(sessionId);
@@ -116,7 +111,6 @@ describe("inspect subcommand", () => {
         expect(payload.ledger.rows).toBeGreaterThan(0);
         expect(payload.ledger.chainValid).toBe(true);
         expect(payload.consistency.ledgerChain).toBe("ok");
-        expect(payload.bootstrap.skillBrokerEnabled).toBe(false);
         expect(payload.bootstrap.routingEnabled).toBe(false);
       } finally {
         if (previousXdgConfigHome === undefined) {

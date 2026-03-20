@@ -87,7 +87,6 @@ export interface SessionSupervisorOptions {
   defaultConfigPath?: string;
   defaultModel?: string;
   defaultEnableExtensions?: boolean;
-  defaultEnableAddons?: boolean;
   workerEnv?: Record<string, string | undefined>;
   sessionIdleTtlMs?: number;
   sessionIdleSweepIntervalMs?: number;
@@ -344,7 +343,6 @@ export class SessionSupervisor implements SessionBackend {
         model: input.model,
         agentId: input.agentId,
         enableExtensions: input.enableExtensions,
-        enableAddons: input.enableAddons,
         pending: new Map<string, PendingRequest>(),
         pendingTurns: new Map<string, PendingTurn>(),
         turnQueue: [],
@@ -382,7 +380,6 @@ export class SessionSupervisor implements SessionBackend {
           model: input.model ?? this.options.defaultModel,
           agentId: input.agentId,
           enableExtensions: input.enableExtensions ?? this.options.defaultEnableExtensions,
-          enableAddons: input.enableAddons ?? this.options.defaultEnableAddons,
           parentPid: process.pid,
         },
       });

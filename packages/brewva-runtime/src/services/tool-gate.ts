@@ -2,9 +2,13 @@ import { randomUUID } from "node:crypto";
 import type { SessionCostTracker } from "../cost/tracker.js";
 import {
   GOVERNANCE_METADATA_MISSING_EVENT_TYPE,
-  TOOL_POSTURE_SELECTED_EVENT_TYPE,
+  TOOL_EFFECT_GATE_SELECTED_EVENT_TYPE,
 } from "../events/event-types.js";
-import type { ToolGovernanceDescriptorSource } from "../governance/tool-governance.js";
+import {
+  toolGovernanceCreatesRollbackAnchor,
+  toolGovernanceRequiresEffectCommitment,
+  type ToolGovernanceDescriptorSource,
+} from "../governance/tool-governance.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import { resolveSecurityPolicy } from "../security/mode.js";
 import { checkToolAccess as evaluateSkillToolAccess } from "../security/tool-policy.js";
@@ -15,8 +19,8 @@ import type {
   PatchSet,
   ProposalEnvelope,
   SkillDocument,
+  ToolExecutionBoundary,
   ToolGovernanceDescriptor,
-  ToolInvocationPosture,
   ToolMutationReceipt,
 } from "../types.js";
 import { sha256 } from "../utils/hash.js";
@@ -25,7 +29,6 @@ import { normalizeToolName } from "../utils/tool-name.js";
 import { resolveToolResultVerdict } from "../utils/tool-result.js";
 import type { ContextService } from "./context.js";
 import type { EffectCommitmentDeskService } from "./effect-commitment-desk.js";
-import type { ExplorationSupervisorService } from "./exploration-supervisor.js";
 import type { FileChangeService } from "./file-change.js";
 import type { LedgerService } from "./ledger.js";
 import type { ProposalAdmissionService } from "./proposal-admission.js";
@@ -38,7 +41,7 @@ export interface ToolAccessDecision {
   allowed: boolean;
   reason?: string;
   advisory?: string;
-  posture?: ToolInvocationPosture;
+  boundary?: ToolExecutionBoundary;
   commitmentReceipt?: DecisionReceipt;
   effectCommitmentRequestId?: string;
   mutationReceipt?: ToolMutationReceipt;
@@ -79,7 +82,7 @@ export interface ToolGateServiceOptions {
   alwaysAllowedTools: string[];
   resolveToolGovernanceDescriptor: (toolName: string) => ToolGovernanceDescriptor | undefined;
   resolveToolGovernanceSource: (toolName: string) => ToolGovernanceDescriptorSource;
-  resolveToolInvocationPosture: (toolName: string) => ToolInvocationPosture;
+  resolveToolExecutionBoundary: (toolName: string) => ToolExecutionBoundary;
   resourceLeaseService: Pick<ResourceLeaseService, "getEffectiveBudget">;
   skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
   contextService: Pick<ContextService, "checkContextCompactionGate" | "observeContextUsage">;
@@ -94,10 +97,6 @@ export interface ToolGateServiceOptions {
     "prepareResume" | "getRequestIdForProposal"
   >;
   reversibleMutationService: Pick<ReversibleMutationService, "prepare" | "record">;
-  explorationSupervisorService: Pick<
-    ExplorationSupervisorService,
-    "checkToolCall" | "observeToolResult"
-  >;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -158,7 +157,7 @@ export class ToolGateService {
   private readonly resolveToolGovernanceSource: (
     toolName: string,
   ) => ToolGovernanceDescriptorSource;
-  private readonly resolveToolInvocationPosture: (toolName: string) => ToolInvocationPosture;
+  private readonly resolveToolExecutionBoundary: (toolName: string) => ToolExecutionBoundary;
   private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
   private readonly getCurrentTurn: (sessionId: string) => number;
   private readonly getEffectiveBudget: ResourceLeaseService["getEffectiveBudget"];
@@ -217,25 +216,9 @@ export class ToolGateService {
     patchSet?: PatchSet;
     metadata?: Record<string, unknown>;
   }) => void;
-  private readonly checkExploration: (input: {
-    sessionId: string;
-    toolCallId: string;
-    toolName: string;
-    args?: Record<string, unknown>;
-    posture: ToolInvocationPosture;
-  }) => ToolAccessDecision;
-  private readonly observeExplorationToolResult: (input: {
-    sessionId: string;
-    toolCallId: string;
-    toolName: string;
-    args?: Record<string, unknown>;
-    verdict: "pass" | "fail" | "inconclusive";
-    outputText: string;
-    posture: ToolInvocationPosture;
-  }) => void;
   private readonly submitProposal: (
     sessionId: string,
-    proposal: ProposalEnvelope<"effect_commitment">,
+    proposal: ProposalEnvelope,
   ) => DecisionReceipt;
   private readonly prepareEffectCommitmentResume: EffectCommitmentDeskService["prepareResume"];
   private readonly getEffectCommitmentRequestIdForProposal: (
@@ -256,8 +239,8 @@ export class ToolGateService {
     this.resolveToolGovernanceDescriptor = (toolName) =>
       options.resolveToolGovernanceDescriptor(toolName);
     this.resolveToolGovernanceSource = (toolName) => options.resolveToolGovernanceSource(toolName);
-    this.resolveToolInvocationPosture = (toolName) =>
-      options.resolveToolInvocationPosture(toolName);
+    this.resolveToolExecutionBoundary = (toolName) =>
+      options.resolveToolExecutionBoundary(toolName);
     this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
     this.getEffectiveBudget = (sessionId, contract, skillName) =>
@@ -280,9 +263,6 @@ export class ToolGateService {
       options.effectCommitmentDeskService.getRequestIdForProposal(sessionId, proposalId);
     this.prepareMutation = (input) => options.reversibleMutationService.prepare(input);
     this.recordMutation = (input) => options.reversibleMutationService.record(input);
-    this.checkExploration = (input) => options.explorationSupervisorService.checkToolCall(input);
-    this.observeExplorationToolResult = (input) =>
-      options.explorationSupervisorService.observeToolResult(input);
   }
 
   checkToolAccess(sessionId: string, toolName: string): ToolAccessDecision {
@@ -586,10 +566,9 @@ export class ToolGateService {
 
   private buildCommitmentProposal(
     input: StartToolCallInput,
-    posture: "commitment",
     evidenceEvent: BrewvaEventRecord,
     argsIdentity: { digest: string; summary?: string },
-  ): ProposalEnvelope<"effect_commitment"> | undefined {
+  ): ProposalEnvelope | undefined {
     const normalizedToolName = normalizeToolName(input.toolName);
     const descriptor = this.resolveToolGovernanceDescriptor(normalizedToolName);
     if (!descriptor) {
@@ -610,7 +589,7 @@ export class ToolGateService {
       payload: {
         toolName: normalizedToolName,
         toolCallId: input.toolCallId.trim(),
-        posture,
+        boundary: "effectful",
         effects: [...descriptor.effects],
         defaultRisk: descriptor.defaultRisk,
         argsDigest: argsIdentity.digest,
@@ -628,7 +607,7 @@ export class ToolGateService {
     };
   }
 
-  private authorizeCommitment(
+  private authorizeEffectCommitment(
     input: StartToolCallInput,
     evidenceEvent: BrewvaEventRecord | undefined,
   ): ToolAccessDecision {
@@ -646,7 +625,7 @@ export class ToolGateService {
       });
       return {
         allowed: false,
-        posture: "commitment",
+        boundary: "effectful",
         reason,
       };
     }
@@ -672,7 +651,7 @@ export class ToolGateService {
         });
         return {
           allowed: false,
-          posture: "commitment",
+          boundary: "effectful",
           reason: resumed.reason,
           effectCommitmentRequestId: resumed.requestId,
         };
@@ -697,7 +676,7 @@ export class ToolGateService {
         });
         return {
           allowed: false,
-          posture: "commitment",
+          boundary: "effectful",
           reason,
           commitmentReceipt: resumedReceipt,
           effectCommitmentRequestId: resumed.requestId,
@@ -706,7 +685,7 @@ export class ToolGateService {
 
       return {
         allowed: true,
-        posture: "commitment",
+        boundary: "effectful",
         commitmentReceipt: resumedReceipt,
         effectCommitmentRequestId: resumed.requestId,
       };
@@ -725,12 +704,12 @@ export class ToolGateService {
       });
       return {
         allowed: false,
-        posture: "commitment",
+        boundary: "effectful",
         reason,
       };
     }
 
-    const proposal = this.buildCommitmentProposal(input, "commitment", evidenceEvent, argsIdentity);
+    const proposal = this.buildCommitmentProposal(input, evidenceEvent, argsIdentity);
     if (!proposal) {
       const reason = `Commitment tool '${normalizeToolName(input.toolName)}' is missing governance metadata.`;
       this.recordEvent({
@@ -744,7 +723,7 @@ export class ToolGateService {
       });
       return {
         allowed: false,
-        posture: "commitment",
+        boundary: "effectful",
         reason,
       };
     }
@@ -772,7 +751,7 @@ export class ToolGateService {
       });
       return {
         allowed: false,
-        posture: "commitment",
+        boundary: "effectful",
         reason,
         commitmentReceipt: receipt,
         effectCommitmentRequestId,
@@ -781,14 +760,14 @@ export class ToolGateService {
 
     return {
       allowed: true,
-      posture: "commitment",
+      boundary: "effectful",
       commitmentReceipt: receipt,
       effectCommitmentRequestId,
     };
   }
 
   startToolCall(input: StartToolCallInput): ToolAccessDecision {
-    const posture = this.resolveToolInvocationPosture(input.toolName);
+    const boundary = this.resolveToolExecutionBoundary(input.toolName);
     const normalizedToolName = normalizeToolName(input.toolName);
     const descriptor = this.resolveToolGovernanceDescriptor(input.toolName);
     const state = this.sessionState.getCell(input.sessionId);
@@ -798,16 +777,18 @@ export class ToolGateService {
       this.observeContextUsage(input.sessionId, input.usage);
     }
 
-    const postureEvent = this.recordEvent({
+    const effectGateEvent = this.recordEvent({
       sessionId: input.sessionId,
-      type: TOOL_POSTURE_SELECTED_EVENT_TYPE,
+      type: TOOL_EFFECT_GATE_SELECTED_EVENT_TYPE,
       turn: this.getCurrentTurn(input.sessionId),
       payload: {
         toolCallId: input.toolCallId,
         toolName: normalizedToolName,
-        posture,
+        boundary,
         effects: descriptor?.effects ?? [],
         defaultRisk: descriptor?.defaultRisk ?? null,
+        requiresApproval: toolGovernanceRequiresEffectCommitment(descriptor),
+        rollbackable: toolGovernanceCreatesRollbackAnchor(descriptor),
       },
     });
 
@@ -819,7 +800,7 @@ export class ToolGateService {
         payload: {
           toolCallId: input.toolCallId,
           toolName: input.toolName,
-          posture,
+          boundary,
         },
       });
     }
@@ -841,13 +822,13 @@ export class ToolGateService {
       });
       return {
         allowed: false,
-        posture,
+        boundary,
         reason,
         effectCommitmentRequestId: requestedEffectCommitmentRequestId,
       };
     }
 
-    const gateDecision = this.evaluatePolicyPosture(input, posture, postureEvent);
+    const gateDecision = this.evaluateEffectGate(input, boundary, descriptor, effectGateEvent);
     if (!gateDecision.allowed) return gateDecision;
 
     const effectCommitmentRequestId = gateDecision.effectCommitmentRequestId?.trim();
@@ -868,7 +849,7 @@ export class ToolGateService {
       });
       return {
         allowed: false,
-        posture,
+        boundary,
         reason,
         effectCommitmentRequestId,
       };
@@ -887,18 +868,17 @@ export class ToolGateService {
         toolName: input.toolName,
         args: input.args,
       });
-      const mutationReceipt =
-        posture === "reversible_mutate"
-          ? this.prepareMutation({
-              sessionId: input.sessionId,
-              toolCallId: input.toolCallId,
-              toolName: input.toolName,
-            })
-          : undefined;
+      const mutationReceipt = toolGovernanceCreatesRollbackAnchor(descriptor)
+        ? this.prepareMutation({
+            sessionId: input.sessionId,
+            toolCallId: input.toolCallId,
+            toolName: input.toolName,
+          })
+        : undefined;
       return {
         allowed: true,
         advisory: gateDecision.advisory,
-        posture,
+        boundary,
         commitmentReceipt: gateDecision.commitmentReceipt,
         effectCommitmentRequestId: gateDecision.effectCommitmentRequestId,
         mutationReceipt,
@@ -912,16 +892,17 @@ export class ToolGateService {
     }
   }
 
-  private evaluatePolicyPosture(
+  private evaluateEffectGate(
     input: StartToolCallInput,
-    posture: ToolInvocationPosture,
-    postureEvent: BrewvaEventRecord | undefined,
+    boundary: ToolExecutionBoundary,
+    descriptor: ToolGovernanceDescriptor | undefined,
+    effectGateEvent: BrewvaEventRecord | undefined,
   ): ToolAccessDecision {
     const access = this.checkToolAccess(input.sessionId, input.toolName);
     if (!access.allowed) {
       return {
         ...access,
-        posture,
+        boundary,
       };
     }
 
@@ -933,33 +914,18 @@ export class ToolGateService {
     if (!compaction.allowed) {
       return {
         ...compaction,
-        posture,
+        boundary,
       };
     }
 
-    const exploration = this.checkExploration({
-      sessionId: input.sessionId,
-      toolCallId: input.toolCallId,
-      toolName: input.toolName,
-      args: input.args,
-      posture,
-    });
-    if (!exploration.allowed) {
-      return {
-        ...exploration,
-        posture,
-      };
-    }
-
-    if (posture === "commitment") {
-      const commitment = this.authorizeCommitment(input, postureEvent);
+    if (boundary === "effectful" && toolGovernanceRequiresEffectCommitment(descriptor)) {
+      const commitment = this.authorizeEffectCommitment(input, effectGateEvent);
       if (!commitment.allowed) {
         return commitment;
       }
       return {
         allowed: true,
-        advisory: exploration.advisory,
-        posture,
+        boundary,
         commitmentReceipt: commitment.commitmentReceipt,
         effectCommitmentRequestId: commitment.effectCommitmentRequestId,
       };
@@ -967,13 +933,12 @@ export class ToolGateService {
 
     return {
       allowed: true,
-      advisory: exploration.advisory,
-      posture,
+      boundary,
     };
   }
 
   finishToolCall(input: FinishToolCallInput): string {
-    const posture = this.resolveToolInvocationPosture(input.toolName);
+    const descriptor = this.resolveToolGovernanceDescriptor(input.toolName);
     const state = this.sessionState.getCell(input.sessionId);
     const verdict = resolveToolResultVerdict({
       verdict: input.verdict,
@@ -997,15 +962,6 @@ export class ToolGateService {
     if (effectCommitmentRequestId) {
       state.inflightEffectCommitmentRequestIds.delete(effectCommitmentRequestId);
     }
-    this.observeExplorationToolResult({
-      sessionId: input.sessionId,
-      toolCallId: input.toolCallId,
-      toolName: input.toolName,
-      args: input.args,
-      verdict,
-      outputText: input.outputText,
-      posture,
-    });
     const patchSet =
       readPatchSetOverride(input.metadata) ??
       this.trackToolCallEnd({
@@ -1014,7 +970,7 @@ export class ToolGateService {
         toolName: input.toolName,
         channelSuccess: input.channelSuccess,
       });
-    if (posture === "reversible_mutate") {
+    if (toolGovernanceCreatesRollbackAnchor(descriptor)) {
       this.recordMutation({
         sessionId: input.sessionId,
         toolCallId: input.toolCallId,

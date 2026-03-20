@@ -1,16 +1,8 @@
-import {
-  SKILL_ROUTING_DECIDED_EVENT_TYPE,
-  SKILL_ROUTING_DEFERRED_EVENT_TYPE,
-  SKILL_ROUTING_FOLLOWED_EVENT_TYPE,
-  SKILL_ROUTING_IGNORED_EVENT_TYPE,
-  SKILL_ROUTING_OVERRIDDEN_EVENT_TYPE,
-} from "../events/event-types.js";
 import { getSkillOutputContracts, listSkillOutputs } from "../skills/facets.js";
 import type { SkillRegistry } from "../skills/registry.js";
 import { parseTaskSpec } from "../task/spec.js";
 import type {
   SkillActivationResult,
-  SkillDispatchDecision,
   SkillDocument,
   SkillOutputContract,
   SkillOutputValidationResult,
@@ -218,33 +210,6 @@ export class SkillLifecycleService {
       },
     });
 
-    const pendingDispatch = this.getPendingDispatch(sessionId);
-    if (pendingDispatch && pendingDispatch.mode !== "none") {
-      const primaryName = pendingDispatch.primary?.name;
-      if (primaryName && primaryName === name) {
-        this.recordEvent({
-          sessionId,
-          type: SKILL_ROUTING_FOLLOWED_EVENT_TYPE,
-          turn: this.getCurrentTurn(sessionId),
-          payload: this.buildDispatchPayload(pendingDispatch, {
-            activatedSkill: name,
-            resolvedBy: "skill_load",
-          }),
-        });
-      } else {
-        this.recordEvent({
-          sessionId,
-          type: SKILL_ROUTING_OVERRIDDEN_EVENT_TYPE,
-          turn: this.getCurrentTurn(sessionId),
-          payload: this.buildDispatchPayload(pendingDispatch, {
-            activatedSkill: name,
-            resolvedBy: "skill_load_non_primary",
-          }),
-        });
-      }
-      state.pendingDispatch = undefined;
-    }
-
     return { ok: true, skill };
   }
 
@@ -252,69 +217,6 @@ export class SkillLifecycleService {
     const active = this.sessionState.getExistingCell(sessionId)?.activeSkill;
     if (!active) return undefined;
     return this.skills.get(active);
-  }
-
-  setPendingDispatch(
-    sessionId: string,
-    decision: SkillDispatchDecision,
-    options: { emitEvent?: boolean } = {},
-  ): void {
-    const state = this.sessionState.getCell(sessionId);
-    const activeSkillName = state.activeSkill ?? null;
-    const shouldStorePending = decision.mode !== "none";
-    if (!shouldStorePending) {
-      state.pendingDispatch = undefined;
-    } else {
-      state.pendingDispatch = decision;
-    }
-    if (options.emitEvent === false) return;
-    this.recordEvent({
-      sessionId,
-      type: SKILL_ROUTING_DECIDED_EVENT_TYPE,
-      turn: this.getCurrentTurn(sessionId),
-      payload: this.buildDispatchPayload(decision),
-    });
-    if (activeSkillName && shouldStorePending) {
-      this.recordEvent({
-        sessionId,
-        type: SKILL_ROUTING_DEFERRED_EVENT_TYPE,
-        turn: this.getCurrentTurn(sessionId),
-        payload: this.buildDispatchPayload(decision, {
-          deferredBy: activeSkillName,
-          deferredAtTurn: this.getCurrentTurn(sessionId),
-        }),
-      });
-    }
-  }
-
-  getPendingDispatch(sessionId: string): SkillDispatchDecision | undefined {
-    return this.sessionState.getExistingCell(sessionId)?.pendingDispatch;
-  }
-
-  clearPendingDispatch(sessionId: string): SkillDispatchDecision | undefined {
-    const state = this.sessionState.getExistingCell(sessionId);
-    const pending = state?.pendingDispatch;
-    if (state) {
-      state.pendingDispatch = undefined;
-    }
-    return pending;
-  }
-
-  reconcilePendingDispatchOnTurnEnd(sessionId: string, turn: number): void {
-    const pending = this.getPendingDispatch(sessionId);
-    if (!pending || pending.mode === "none") return;
-    const effectiveTurn = Math.max(turn, this.getCurrentTurn(sessionId));
-    if (pending.turn > effectiveTurn) return;
-
-    this.recordEvent({
-      sessionId,
-      type: SKILL_ROUTING_IGNORED_EVENT_TYPE,
-      turn: this.getCurrentTurn(sessionId),
-      payload: this.buildDispatchPayload(pending, {
-        resolvedBy: "turn_end",
-      }),
-    });
-    this.clearPendingDispatch(sessionId);
   }
 
   validateSkillOutputs(
@@ -426,37 +328,6 @@ export class SkillLifecycleService {
       }
     }
     return [...outputKeys];
-  }
-
-  private buildDispatchPayload(
-    decision: SkillDispatchDecision,
-    extra?: Record<string, unknown>,
-  ): Record<string, unknown> {
-    return {
-      mode: decision.mode,
-      reason: decision.reason,
-      confidence: decision.confidence,
-      routingOutcome: decision.routingOutcome ?? null,
-      decisionTurn: decision.turn,
-      primary: decision.primary
-        ? {
-            name: decision.primary.name,
-            score: decision.primary.score,
-            reason: decision.primary.reason,
-            breakdown: decision.primary.breakdown,
-          }
-        : null,
-      selectedCount: decision.selected.length,
-      selected: decision.selected.map((entry) => ({
-        name: entry.name,
-        score: entry.score,
-        reason: entry.reason,
-        breakdown: entry.breakdown,
-      })),
-      chain: decision.chain,
-      unresolvedConsumes: decision.unresolvedConsumes,
-      ...extra,
-    };
   }
 
   private maybePromoteTaskSpec(sessionId: string, outputs: Record<string, unknown>): void {

@@ -40,22 +40,6 @@ export interface ToolSurfaceRuntime {
   };
   skills: {
     getActive(sessionId: string): ToolSurfaceSkill | null | undefined;
-    getPendingDispatch(sessionId: string):
-      | {
-          primary?: {
-            name?: string | null;
-          } | null;
-          chain?: string[];
-        }
-      | undefined;
-    getCascadeIntent(sessionId: string):
-      | {
-          steps: Array<{
-            skill: string;
-          }>;
-          cursor: number;
-        }
-      | undefined;
     get(name: string): ToolSurfaceSkill | undefined;
   };
   task: {
@@ -108,13 +92,8 @@ function appendSkillName(names: string[], skillName: string | null | undefined):
 function resolveSurfaceSkills(runtime: ToolSurfaceRuntime, sessionId: string): ToolSurfaceSkill[] {
   const names: string[] = [];
   const active = runtime.skills.getActive(sessionId);
-  const pendingDispatch = runtime.skills.getPendingDispatch(sessionId);
-  const cascadeIntent = runtime.skills.getCascadeIntent(sessionId);
 
   appendSkillName(names, active?.name);
-  appendSkillName(names, pendingDispatch?.primary?.name);
-  appendSkillName(names, pendingDispatch?.chain?.[0]);
-  appendSkillName(names, cascadeIntent?.steps[cascadeIntent.cursor]?.skill);
 
   return names
     .map((name) => runtime.skills.get(name))
@@ -232,16 +211,10 @@ function resolveManagedToolNamesForTurn(input: {
     surfaceSkills,
     input.dynamicToolDefinitions,
   ).filter((toolName) => MANAGED_TOOL_NAME_SET.has(toolName));
-  const lifecycleManagedToolNames: string[] = [];
+  const lifecycleManagedToolNames: string[] = ["skill_load"];
 
   if (surfaceSkills.length > 0) {
     lifecycleManagedToolNames.push("skill_complete");
-  }
-  if (input.runtime.skills.getPendingDispatch(input.sessionId)) {
-    lifecycleManagedToolNames.push("skill_load");
-  }
-  if (input.runtime.skills.getCascadeIntent(input.sessionId)) {
-    lifecycleManagedToolNames.push("skill_chain_control");
   }
   const investigationManagedToolNames = resolveInvestigationLifecycleToolNames(
     input.runtime,
@@ -336,17 +309,8 @@ function resolveActiveToolNames(input: {
   if (surfaceSkills.length > 0 && knownToolNames.has("skill_complete")) {
     active.add("skill_complete");
   }
-  if (
-    input.runtime.skills.getPendingDispatch(input.sessionId) &&
-    knownToolNames.has("skill_load")
-  ) {
+  if (knownToolNames.has("skill_load")) {
     active.add("skill_load");
-  }
-  if (
-    input.runtime.skills.getCascadeIntent(input.sessionId) &&
-    knownToolNames.has("skill_chain_control")
-  ) {
-    active.add("skill_chain_control");
   }
 
   const operatorProfile = isOperatorProfile(input.runtime);

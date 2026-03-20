@@ -4,7 +4,7 @@ import type {
   DelegationRunRecord,
   PatchSet,
   ToolGovernanceDescriptor,
-  ToolInvocationPosture,
+  ToolExecutionBoundary,
 } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import type { TSchema } from "@sinclair/typebox";
@@ -23,7 +23,7 @@ export type BrewvaManagedToolDefinition = ToolDefinition & {
 
 export type SubagentResultMode = "exploration" | "review" | "verification" | "patch";
 export type SubagentDelegationMode = "single" | "parallel";
-export type SubagentReturnMode = "text_only" | "supplemental" | "context_packet" | "both";
+export type SubagentReturnMode = "text_only" | "supplemental";
 export type SubagentContextRefKind =
   | "event"
   | "ledger"
@@ -32,10 +32,7 @@ export type SubagentContextRefKind =
   | "workspace_span"
   | "task"
   | "truth";
-export type SubagentExecutionPosture = Extract<
-  ToolInvocationPosture,
-  "observe" | "reversible_mutate"
->;
+export type SubagentExecutionBoundary = ToolExecutionBoundary;
 
 export interface SubagentContextBudget {
   maxInjectionTokens?: number;
@@ -66,7 +63,7 @@ export interface DelegationPacket {
   contextRefs?: SubagentContextRef[];
   contextBudget?: SubagentContextBudget;
   effectCeiling?: {
-    posture?: SubagentExecutionPosture;
+    boundary?: SubagentExecutionBoundary;
   };
 }
 
@@ -84,8 +81,6 @@ export interface SubagentRunRequest {
     returnMode: SubagentReturnMode;
     returnLabel?: string;
     returnScopeId?: string;
-    returnPacketKey?: string;
-    returnTtlMs?: number;
   };
 }
 

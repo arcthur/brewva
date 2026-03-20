@@ -1,11 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   createSubagentFanoutTool,
   createSubagentRunTool,
   type SubagentRunRequest,
 } from "@brewva/brewva-tools";
-import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function fakeContext(sessionId: string): any {
   return {
@@ -228,74 +226,6 @@ describe("subagent_run tool", () => {
     });
     expect(appendCalls[0]?.text).toContain("Delegation outcome for profile=researcher");
     expect(extractText(result)).toContain("supplemental delivery accepted");
-  });
-
-  test("can persist replayable outcome handoff as a context_packet proposal", async () => {
-    const runtime = new BrewvaRuntime({
-      cwd: createTestWorkspace("subagent-run-context-packet"),
-    });
-    const tool = createSubagentRunTool({
-      runtime: Object.assign(runtime, {
-        orchestration: {
-          subagents: {
-            run: async (_input: { fromSessionId: string; request: SubagentRunRequest }) => ({
-              ok: true as const,
-              mode: "single" as const,
-              profile: "reviewer",
-              outcomes: [
-                {
-                  ok: true as const,
-                  runId: "run-context-packet",
-                  profile: "reviewer",
-                  kind: "review" as const,
-                  status: "ok" as const,
-                  workerSessionId: "child-reviewer",
-                  summary: "No blocking regressions detected.",
-                  metrics: {
-                    durationMs: 11,
-                    totalTokens: 44,
-                  },
-                  evidenceRefs: [
-                    {
-                      sourceType: "event" as const,
-                      locator: "session:child-reviewer:agent_end",
-                    },
-                  ],
-                },
-              ],
-            }),
-          },
-        },
-      }),
-    });
-
-    const result = await tool.execute(
-      "tc-subagent-context-packet",
-      {
-        profile: "reviewer",
-        objective: "review the gateway patch",
-        returnMode: "context_packet",
-        returnTtlMs: 60_000,
-        returnScopeId: "delegation-review",
-      },
-      undefined,
-      undefined,
-      fakeContext("session-context-packet"),
-    );
-
-    const records = runtime.proposals.list("session-context-packet", {
-      kind: "context_packet",
-    });
-    expect(records).toHaveLength(1);
-    const payload = records[0]?.proposal.payload;
-    expect(payload).toMatchObject({
-      label: "Subagent outcome (reviewer)",
-      scopeId: "delegation-review",
-    });
-    expect((payload as { content?: string } | undefined)?.content).toContain(
-      "No blocking regressions detected.",
-    );
-    expect(extractText(result)).toContain("context_packet accepted");
   });
 
   test("forwards enriched delegation packet fields to the subagent adapter", async () => {

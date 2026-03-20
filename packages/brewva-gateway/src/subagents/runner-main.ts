@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import { buildEvidenceRef, submitContextPacketProposal } from "@brewva/brewva-deliberation";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { DelegationRunRecord, SkillRoutingScope } from "@brewva/brewva-runtime";
 import type {
@@ -29,7 +28,7 @@ import {
   buildWorkerResult,
   resolveBuiltinToolNamesForRun,
   resolveManagedToolNamesForRun,
-  resolveRequestedPosture,
+  resolveRequestedBoundary,
   resolveRunSummary,
   sanitizeFragment,
 } from "./shared.js";
@@ -45,7 +44,7 @@ function buildLifecyclePayload(record: DelegationRunRecord): Record<string, unkn
     profile: record.profile,
     label: record.label ?? null,
     kind: record.kind ?? null,
-    posture: record.posture ?? null,
+    boundary: record.boundary ?? null,
     parentSkill: record.parentSkill ?? null,
     childSessionId: record.workerSessionId ?? null,
     status: record.status,
@@ -57,10 +56,7 @@ function buildLifecyclePayload(record: DelegationRunRecord): Record<string, unkn
     deliveryMode: record.delivery?.mode ?? null,
     deliveryScopeId: record.delivery?.scopeId ?? null,
     deliveryLabel: record.delivery?.label ?? null,
-    deliveryTtlMs: record.delivery?.ttlMs ?? null,
     supplementalAppended: record.delivery?.supplementalAppended ?? null,
-    contextPacketProposalId: record.delivery?.contextPacketProposalId ?? null,
-    contextPacketDecision: record.delivery?.contextPacketDecision ?? null,
     deliveryUpdatedAt: record.delivery?.updatedAt ?? null,
   };
 }
@@ -90,49 +86,6 @@ function buildFailureOutcome(input: {
   };
 }
 
-function buildOutcomeEvidenceRefs(input: {
-  sessionId: string;
-  outcome: SubagentOutcome;
-  createdAt: number;
-}) {
-  if (!input.outcome.ok) {
-    return [];
-  }
-  return input.outcome.evidenceRefs.map((evidenceRef, index) =>
-    buildEvidenceRef({
-      id: `${input.sessionId}:subagent_outcome:${input.outcome.runId}:${index}`,
-      sourceType: evidenceRef.sourceType,
-      locator: evidenceRef.locator,
-      createdAt: input.createdAt,
-    }),
-  );
-}
-
-function summarizeOutcomeForDelivery(outcome: SubagentOutcome): string {
-  if (!outcome.ok) {
-    return `- ${outcome.label ?? outcome.runId}: ${outcome.status} (${outcome.error})`;
-  }
-  const parts = [
-    outcome.kind,
-    outcome.workerSessionId ? `worker=${outcome.workerSessionId}` : null,
-    typeof outcome.metrics.totalTokens === "number"
-      ? `tokens=${outcome.metrics.totalTokens}`
-      : null,
-    typeof outcome.metrics.costUsd === "number"
-      ? `cost=$${outcome.metrics.costUsd.toFixed(4)}`
-      : null,
-  ].filter(Boolean);
-  return `- ${outcome.label ?? outcome.runId}: ${parts.join(" ")}\n  ${outcome.summary}`;
-}
-
-function buildDeliveryContent(input: { profile: string; outcome: SubagentOutcome }): string {
-  return [
-    `Delegation outcome for profile=${input.profile}`,
-    "Mode: single",
-    summarizeOutcomeForDelivery(input.outcome),
-  ].join("\n");
-}
-
 function applyDurableDelivery(input: {
   runtime: BrewvaRuntime;
   sessionId: string;
@@ -148,40 +101,9 @@ function applyDurableDelivery(input: {
     mode: input.delivery.returnMode,
     scopeId: input.delivery.returnScopeId,
     label: input.delivery.returnLabel,
-    ttlMs: input.delivery.returnTtlMs,
     supplementalAppended: false,
     updatedAt: createdAt,
   };
-  if (input.delivery.returnMode === "context_packet" || input.delivery.returnMode === "both") {
-    const submitted = submitContextPacketProposal({
-      runtime: {
-        proposals: input.runtime.proposals,
-      },
-      sessionId: input.sessionId,
-      issuer: "brewva.subagent",
-      subject: `delegation outcome ${input.profile}`,
-      label: input.delivery.returnLabel ?? `Subagent outcome (${input.profile})`,
-      content: buildDeliveryContent({
-        profile: input.profile,
-        outcome: input.outcome,
-      }),
-      scopeId: input.delivery.returnScopeId ?? `subagent:${input.profile}`,
-      packetKey:
-        input.delivery.returnPacketKey ??
-        `subagent_outcome:${input.profile}:${input.outcome.runId}:${createdAt.toString(36)}`,
-      evidenceRefs: buildOutcomeEvidenceRefs({
-        sessionId: input.sessionId,
-        outcome: input.outcome,
-        createdAt,
-      }),
-      expiresAt:
-        typeof input.delivery.returnTtlMs === "number"
-          ? createdAt + input.delivery.returnTtlMs
-          : undefined,
-    });
-    deliveryRecord.contextPacketProposalId = submitted.proposal.id;
-    deliveryRecord.contextPacketDecision = submitted.receipt.decision;
-  }
   return deliveryRecord;
 }
 
@@ -275,7 +197,7 @@ async function main(): Promise<void> {
   let timeoutTriggered = false;
   let childSessionId: string | undefined;
   let profileRecord: HostedSubagentProfile = profile;
-  const requestedPosture = resolveRequestedPosture(profileRecord, packet);
+  const requestedBoundary = resolveRequestedBoundary(profileRecord, packet);
 
   const readCancelReason = (): string | undefined =>
     readDetachedSubagentCancelRequest(spec.workspaceRoot, spec.runId)?.reason;
@@ -290,7 +212,7 @@ async function main(): Promise<void> {
   });
 
   try {
-    if (requestedPosture === "reversible_mutate") {
+    if (requestedBoundary === "effectful") {
       isolatedWorkspace = await createIsolatedWorkspace(spec.workspaceRoot);
     }
     childSession = await createHostedSession({
@@ -299,17 +221,16 @@ async function main(): Promise<void> {
       model: profileRecord.model,
       agentId: `subagent-${sanitizeFragment(profileRecord.name) || "worker"}`,
       enableExtensions: profileRecord.enableExtensions ?? false,
-      enableAddons: profileRecord.enableAddons ?? false,
       enableSubagents: false,
       managedToolNames: resolveManagedToolNamesForRun(
         parentRuntime,
         profileRecord,
-        requestedPosture,
+        requestedBoundary,
       ),
       builtinToolNames: resolveBuiltinToolNamesForRun(
         parentRuntime,
         profileRecord,
-        requestedPosture,
+        requestedBoundary,
       ),
       routingScopes: normalizeRoutingScopes(spec.routingScopes),
     });
@@ -324,14 +245,14 @@ async function main(): Promise<void> {
         label: spec.label,
         parentSkill: parentRuntime.skills.getActive(spec.parentSessionId)?.name,
         kind: profileRecord.resultMode,
-        posture: requestedPosture,
+        boundary: requestedBoundary,
         delivery: existing?.delivery,
       }),
       status: "running",
       updatedAt: Date.now(),
       workerSessionId: childSessionId,
       kind: profileRecord.resultMode,
-      posture: requestedPosture,
+      boundary: requestedBoundary,
     };
     parentRuntime.session.recordDelegationRun(spec.parentSessionId, runningRecord);
     parentRuntime.events.record({
@@ -386,7 +307,7 @@ async function main(): Promise<void> {
       summary,
     });
 
-    if (requestedPosture === "reversible_mutate") {
+    if (requestedBoundary === "effectful") {
       parentRuntime.session.recordWorkerResult(
         spec.parentSessionId,
         buildWorkerResult({
@@ -449,7 +370,7 @@ async function main(): Promise<void> {
       label: spec.label,
       parentSkill: parentRuntime.skills.getActive(spec.parentSessionId)?.name,
       kind: profileRecord.resultMode,
-      posture: requestedPosture,
+      boundary: requestedBoundary,
       summary,
       artifactRefs: outcome.artifactRefs?.map((ref) => ({ ...ref })),
       totalTokens: childCostSummary.totalTokens,
@@ -476,7 +397,7 @@ async function main(): Promise<void> {
       : cancellationReason
         ? "cancelled"
         : "failed";
-    if (requestedPosture === "reversible_mutate") {
+    if (requestedBoundary === "effectful") {
       parentRuntime.session.recordWorkerResult(
         spec.parentSessionId,
         buildWorkerResult({
@@ -518,7 +439,7 @@ async function main(): Promise<void> {
       label: spec.label,
       parentSkill: parentRuntime.skills.getActive(spec.parentSessionId)?.name,
       kind: profileRecord.resultMode,
-      posture: requestedPosture,
+      boundary: requestedBoundary,
       summary: message,
       error: message,
       artifactRefs,

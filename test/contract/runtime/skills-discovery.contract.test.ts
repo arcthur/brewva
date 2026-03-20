@@ -309,8 +309,6 @@ describe("skill discovery and loading", () => {
       projectOverlayPath,
       [
         "---",
-        "dispatch:",
-        "  suggest_threshold: 12",
         "resources:",
         "  default_lease:",
         "    max_tool_calls: 7",
@@ -329,8 +327,6 @@ describe("skill discovery and loading", () => {
       externalOverlayPath,
       [
         "---",
-        "dispatch:",
-        "  suggest_threshold: 14",
         "effects:",
         "  denied_effects: [local_exec]",
         "resources:",
@@ -356,7 +352,6 @@ describe("skill discovery and loading", () => {
       resolve(projectOverlayPath),
       resolve(externalOverlayPath),
     ]);
-    expect(skill?.contract.dispatch?.suggestThreshold).toBe(14);
     expect(skill?.contract.resources?.defaultLease?.maxToolCalls).toBe(5);
     expect(skill?.contract.executionHints?.preferredTools).toContain("tape_search");
     expect(skill?.contract.effects?.deniedEffects).toContain("local_exec");

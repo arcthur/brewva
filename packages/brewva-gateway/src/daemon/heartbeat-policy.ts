@@ -7,10 +7,6 @@ export interface HeartbeatRule {
   intervalMinutes: number;
   prompt: string;
   sessionId?: string;
-  objective?: string;
-  contextHints?: string[];
-  wakeMode?: "always" | "if_signal";
-  staleAfterMinutes?: number;
 }
 
 export interface HeartbeatPolicy {
@@ -35,35 +31,11 @@ function normalizeRule(
     typeof input.sessionId === "string" && input.sessionId.trim()
       ? input.sessionId.trim()
       : undefined;
-  const objective =
-    typeof input.objective === "string" && input.objective.trim()
-      ? input.objective.trim()
-      : undefined;
-  const contextHints = Array.isArray(input.contextHints)
-    ? [
-        ...new Set(
-          input.contextHints
-            .filter((value): value is string => typeof value === "string")
-            .map((value) => value.trim())
-            .filter((value) => value.length > 0),
-        ),
-      ]
-    : undefined;
-  const wakeMode =
-    input.wakeMode === "always" || input.wakeMode === "if_signal" ? input.wakeMode : undefined;
-  const staleAfterMinutes =
-    typeof input.staleAfterMinutes === "number" && Number.isFinite(input.staleAfterMinutes)
-      ? Math.max(1, Math.floor(input.staleAfterMinutes))
-      : undefined;
   return {
     id,
     prompt,
     intervalMinutes: Math.floor(intervalMinutes),
     sessionId,
-    objective,
-    contextHints: contextHints && contextHints.length > 0 ? contextHints : undefined,
-    wakeMode,
-    staleAfterMinutes,
   };
 }
 

@@ -132,10 +132,7 @@ export class SessionLifecycleService {
             mode: record.delivery.mode,
             scopeId: record.delivery.scopeId,
             label: record.delivery.label,
-            ttlMs: record.delivery.ttlMs,
             supplementalAppended: record.delivery.supplementalAppended,
-            contextPacketProposalId: record.delivery.contextPacketProposalId,
-            contextPacketDecision: record.delivery.contextPacketDecision,
             updatedAt: record.delivery.updatedAt,
           }
         : undefined,

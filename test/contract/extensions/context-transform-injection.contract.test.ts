@@ -123,7 +123,7 @@ describe("context transform injection contract", () => {
     expect(result.message.content).toContain("[TaskState]\nstatus: async");
   });
 
-  test("injects a non-authoritative delegation recommendation when planner heuristics align", async () => {
+  test("does not inject delegation recommendations into hidden context", async () => {
     const { api, handlers } = createMockExtensionAPI();
     const extensionApi = api as unknown as {
       registerTool: (tool: { name: string; description: string; parameters?: unknown }) => void;
@@ -134,7 +134,7 @@ describe("context transform injection contract", () => {
       parameters: { type: "object", properties: {} },
     });
 
-    const sessionId = "s-delegation-recommendation";
+    const sessionId = "s-no-delegation-recommendation";
     const activeSkill: SkillDocument = {
       name: "review",
       description: "Review skill fixture",
@@ -206,15 +206,7 @@ describe("context transform injection contract", () => {
         getContextUsage: () => undefined,
       },
     );
-    const result = results.find((candidate) =>
-      candidate?.message?.content?.includes("[DelegationRecommendation]"),
-    );
-    if (!result?.message?.content) {
-      throw new Error("expected a delegation recommendation block in hidden context");
-    }
-
-    expect(result.message.content).toContain("tool: subagent_run");
-    expect(result.message.content).toContain("profile: verifier");
-    expect(result.message.content).toContain("authority: explicit_only");
+    const result = results.find((candidate) => typeof candidate?.message?.content === "string");
+    expect(result?.message?.content).not.toContain("[DelegationRecommendation]");
   });
 });

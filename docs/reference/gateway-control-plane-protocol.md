@@ -56,7 +56,7 @@ Parameter summary (current semantics):
 - `connect`: `{ protocol, client, auth: { token }, challengeNonce }`
 - `health`: `{}`
 - `status.deep`: `{}`
-- `sessions.open`: `{ sessionId?, cwd?, configPath?, model?, agentId?, enableExtensions?, enableAddons? }`
+- `sessions.open`: `{ sessionId?, cwd?, configPath?, model?, agentId?, enableExtensions? }`
 - `sessions.subscribe`: `{ sessionId }`
 - `sessions.unsubscribe`: `{ sessionId }`
 - `sessions.send`: `{ sessionId, prompt, turnId? }`
@@ -76,22 +76,12 @@ Current JSON-block rule shape:
 - `intervalMinutes`
 - `prompt`
 - `sessionId?`
-- `objective?`
-- `contextHints?` (`string[]`)
-- `wakeMode?` (`always | if_signal`)
-- `staleAfterMinutes?`
 
 Rule semantics:
 
 - `prompt` is the model-facing wake-up instruction.
-- `objective` is durable control-plane intent used for retrieval and wake-up
-  explainability.
-- `contextHints` are retrieval hints for the cognitive layer. They do not
-  bypass the proposal boundary.
-- `wakeMode=if_signal` allows the gateway to skip a heartbeat when no qualifying
-  signal is present.
-- `staleAfterMinutes` bounds how old a qualifying signal may be before the wake
-  is treated as stale.
+- heartbeat rules are always explicit fires now; there is no cognition-driven
+  wake suppression layer.
 
 ## Response Semantics (Key Methods)
 
@@ -109,7 +99,6 @@ Rule semantics:
 - `session.turn.error`
 - `session.turn.end`
 - `heartbeat.fired`
-- `heartbeat.skipped`
 - `shutdown`
 
 Session-scoped events (`session.turn.*`) are routed by subscription scope, not broadcast to every authenticated connection.

@@ -42,7 +42,7 @@ When `enabled=true`, session budget behavior is controlled by:
 Governance checks are optional adapters, but once configured they participate in the
 runtime decision loop:
 
-- `authorizeEffectCommitment` decides whether commitment-posture tool effects
+- `authorizeEffectCommitment` decides whether approval-bound effectful tool actions
   may execute or must stay deferred.
 - `verifySpec` can convert a verification pass into a governance failure with blocker evidence.
 - `detectCostAnomaly` emits anomaly diagnostics without changing session accounting totals.

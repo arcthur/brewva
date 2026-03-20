@@ -114,7 +114,6 @@ describe("effect governance policy modes", () => {
     expect(runtime.tools.checkAccess(sessionId, "tape_search").allowed).toBe(true);
     expect(runtime.tools.checkAccess(sessionId, "session_compact").allowed).toBe(true);
     expect(runtime.tools.checkAccess(sessionId, "rollback_last_patch").allowed).toBe(true);
-    expect(runtime.tools.checkAccess(sessionId, "cognition_note").allowed).toBe(true);
   });
 
   test("standard mode with effect enforcement override blocks unauthorized effects", () => {
@@ -267,7 +266,7 @@ describe("effect governance policy modes", () => {
     expect(getToolGovernanceDescriptor("process")).toEqual({
       effects: ["local_exec"],
       defaultRisk: "medium",
-      posture: "commitment",
+      boundary: "effectful",
     });
     expect(getToolGovernanceDescriptor("process_image")).toBeUndefined();
     expect(getToolGovernanceDescriptor("data_process")).toBeUndefined();

@@ -3,7 +3,6 @@ import { join, resolve } from "node:path";
 import { parseArgs as parseNodeArgs } from "node:util";
 import {
   BrewvaRuntime,
-  SKILL_ROUTING_DECIDED_EVENT_TYPE,
   TASK_EVENT_TYPE,
   TAPE_ANCHOR_EVENT_TYPE,
   TAPE_CHECKPOINT_EVENT_TYPE,
@@ -26,12 +25,6 @@ const INSPECT_PARSE_OPTIONS = {
 
 interface InspectBootstrapPayload {
   extensionsEnabled?: boolean;
-  addonsEnabled?: boolean;
-  loadedAddonCount?: number;
-  skillBroker?: {
-    enabled?: boolean;
-    proposalBoundary?: string | null;
-  };
   skillLoad?: {
     routingEnabled?: boolean;
     routingScopes?: string[];
@@ -75,9 +68,6 @@ interface InspectReport {
   };
   bootstrap: {
     extensionsEnabled: boolean | null;
-    addonsEnabled: boolean | null;
-    loadedAddonCount: number | null;
-    skillBrokerEnabled: boolean | null;
     routingEnabled: boolean | null;
     routingScopes: string[];
     routableSkills: string[];
@@ -99,8 +89,6 @@ interface InspectReport {
   skills: {
     activeSkill: string | null;
     completedSkills: string[];
-    lastRoutingMode: string | null;
-    lastCascadeEvent: string | null;
   };
   verification: InspectVerification;
   ledger: {
@@ -185,8 +173,6 @@ function readLatestEventPayload<T extends object>(
 function buildSkillInspection(events: BrewvaEventRecord[]): InspectReport["skills"] {
   let activeSkill: string | null = null;
   const completedSkills = new Set<string>();
-  let lastRoutingMode: string | null = null;
-  let lastCascadeEvent: string | null = null;
 
   for (const event of events) {
     const payload = event.payload;
@@ -199,22 +185,12 @@ function buildSkillInspection(events: BrewvaEventRecord[]): InspectReport["skill
       if (activeSkill === payload.skillName) {
         activeSkill = null;
       }
-      continue;
-    }
-    if (event.type === SKILL_ROUTING_DECIDED_EVENT_TYPE && typeof payload?.mode === "string") {
-      lastRoutingMode = payload.mode;
-      continue;
-    }
-    if (event.type.startsWith("skill_cascade_")) {
-      lastCascadeEvent = event.type;
     }
   }
 
   return {
     activeSkill,
     completedSkills: [...completedSkills].toSorted((left, right) => left.localeCompare(right)),
-    lastRoutingMode,
-    lastCascadeEvent,
   };
 }
 
@@ -347,15 +323,6 @@ function buildInspectReport(runtime: BrewvaRuntime, sessionId: string): InspectR
     bootstrap: {
       extensionsEnabled:
         typeof bootstrap?.extensionsEnabled === "boolean" ? bootstrap.extensionsEnabled : null,
-      addonsEnabled: typeof bootstrap?.addonsEnabled === "boolean" ? bootstrap.addonsEnabled : null,
-      loadedAddonCount:
-        typeof bootstrap?.loadedAddonCount === "number" &&
-        Number.isInteger(bootstrap.loadedAddonCount) &&
-        bootstrap.loadedAddonCount >= 0
-          ? bootstrap.loadedAddonCount
-          : null,
-      skillBrokerEnabled:
-        typeof bootstrap?.skillBroker?.enabled === "boolean" ? bootstrap.skillBroker.enabled : null,
       routingEnabled:
         typeof bootstrap?.skillLoad?.routingEnabled === "boolean"
           ? bootstrap.skillLoad.routingEnabled
@@ -439,12 +406,11 @@ function printInspectText(report: InspectReport): void {
     `Hydration: status=${report.hydration.status} issues=${report.hydration.issueCount} hydratedAt=${report.hydration.hydratedAt ?? "n/a"}`,
     `Replay: events=${report.replay.eventCount} first=${report.replay.firstEventAt ?? "n/a"} last=${report.replay.lastEventAt ?? "n/a"}`,
     `Replay: anchors=${report.replay.anchorCount} checkpoints=${report.replay.checkpointCount} tapePressure=${report.replay.tapePressure} entriesSinceAnchor=${report.replay.entriesSinceAnchor}`,
-    `Bootstrap: extensions=${renderNullableBoolean(report.bootstrap.extensionsEnabled)} addons=${renderNullableBoolean(report.bootstrap.addonsEnabled)} loadedAddons=${report.bootstrap.loadedAddonCount ?? "n/a"} broker=${renderNullableBoolean(report.bootstrap.skillBrokerEnabled)}`,
     `Bootstrap: routingEnabled=${renderNullableBoolean(report.bootstrap.routingEnabled)} scopes=${renderList(report.bootstrap.routingScopes)}`,
     `Task: phase=${report.task.phase ?? "n/a"} health=${report.task.health ?? "n/a"} items=${report.task.items} blockers=${report.task.blockers} updatedAt=${report.task.updatedAt ?? "n/a"}`,
     `Task: goal=${report.task.goal ?? "n/a"}`,
     `Truth: active=${report.truth.activeFacts}/${report.truth.totalFacts} updatedAt=${report.truth.updatedAt ?? "n/a"}`,
-    `Skills: active=${report.skills.activeSkill ?? "none"} completed=${renderList(report.skills.completedSkills)} routingMode=${report.skills.lastRoutingMode ?? "n/a"} cascade=${report.skills.lastCascadeEvent ?? "n/a"}`,
+    `Skills: active=${report.skills.activeSkill ?? "none"} completed=${renderList(report.skills.completedSkills)}`,
     `Verification: outcome=${report.verification.outcome ?? "n/a"} level=${report.verification.level ?? "n/a"} failed=${renderList(report.verification.failedChecks)} missing=${renderList(report.verification.missingEvidence)}`,
     `Ledger: rows=${report.ledger.rows} chain=${report.ledger.chainValid ? "valid" : "invalid"} path=${report.ledger.path}`,
     `Projection: enabled=${report.projection.enabled ? "yes" : "no"} working=${report.consistency.projectionWorking} path=${report.projection.workingPath}`,

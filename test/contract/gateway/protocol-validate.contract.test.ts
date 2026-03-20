@@ -88,7 +88,7 @@ describe("gateway protocol validator", () => {
     expect(result.params.turnId).toBe("turn-3");
   });
 
-  test("given sessions.open with optional agent and addon flags, when validating params, then validation succeeds", () => {
+  test("given sessions.open with optional agent and extension flags, when validating params, then validation succeeds", () => {
     const result = validateParamsForMethod("sessions.open", {
       sessionId: "session-5",
       cwd: "/tmp/workspace",
@@ -96,14 +96,13 @@ describe("gateway protocol validator", () => {
       model: "openai/gpt-5",
       agentId: "code-reviewer",
       enableExtensions: true,
-      enableAddons: false,
     });
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
     }
     expect(result.params.agentId).toBe("code-reviewer");
-    expect(result.params.enableAddons).toBe(false);
+    expect(result.params.enableExtensions).toBe(true);
   });
 
   test("given sessions.unsubscribe with extra property, when validating params, then validation fails", () => {

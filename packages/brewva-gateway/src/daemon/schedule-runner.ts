@@ -40,15 +40,15 @@ export function collectScheduleContinuationSnapshot(
   runtime: BrewvaRuntime,
   input: { parentSessionId: string; continuityMode: ScheduleContinuityMode },
 ): ScheduleContinuationSnapshot {
-  const parentAnchor = runtime.events.getTapeStatus(input.parentSessionId).lastAnchor;
   if (input.continuityMode !== "inherit") {
     return {
       taskSpec: null,
       truthFacts: [],
-      parentAnchor: parentAnchor ?? null,
+      parentAnchor: null,
     };
   }
 
+  const parentAnchor = runtime.events.getTapeStatus(input.parentSessionId).lastAnchor;
   const parentTask = runtime.task.getState(input.parentSessionId);
   const parentTruth = runtime.truth.getState(input.parentSessionId);
   return {
@@ -59,19 +59,19 @@ export function collectScheduleContinuationSnapshot(
 }
 
 export function buildSchedulePromptTrigger(input: {
-  intent: ScheduleIntentProjectionRecord;
-  runIndex: number;
+  continuityMode: ScheduleContinuityMode;
   snapshot: ScheduleContinuationSnapshot;
 }): SchedulePromptTrigger {
+  if (input.continuityMode !== "inherit") {
+    return {
+      kind: "schedule",
+      continuityMode: input.continuityMode,
+    };
+  }
+
   return {
     kind: "schedule",
-    intentId: input.intent.intentId,
-    parentSessionId: input.intent.parentSessionId,
-    runIndex: input.runIndex,
-    reason: input.intent.reason,
-    continuityMode: input.intent.continuityMode,
-    timeZone: input.intent.timeZone,
-    goalRef: input.intent.goalRef,
+    continuityMode: input.continuityMode,
     taskSpec: input.snapshot.taskSpec,
     truthFacts: input.snapshot.truthFacts,
     parentAnchor: input.snapshot.parentAnchor,
@@ -80,33 +80,21 @@ export function buildSchedulePromptTrigger(input: {
 
 export function buildScheduleWakeupMessage(input: {
   intent: ScheduleIntentProjectionRecord;
-  runIndex: number;
   snapshot: ScheduleContinuationSnapshot;
 }): string {
-  const anchor = input.snapshot.parentAnchor;
-  const lines = [
-    "[Schedule Wakeup]",
-    `intent_id: ${input.intent.intentId}`,
-    `parent_session_id: ${input.intent.parentSessionId}`,
-    `run_index: ${input.runIndex}`,
-    `reason: ${input.intent.reason}`,
-    `continuity_mode: ${input.intent.continuityMode}`,
-    `time_zone: ${input.intent.timeZone ?? "none"}`,
-    `goal_ref: ${input.intent.goalRef ?? "none"}`,
-    `inherited_task_spec: ${input.snapshot.taskSpec ? "yes" : "no"}`,
-    `inherited_truth_facts: ${input.snapshot.truthFacts.length}`,
-    `parent_anchor_id: ${anchor?.id ?? "none"}`,
-    `parent_anchor_name: ${anchor?.name ?? "none"}`,
-  ];
+  const lines = ["[Schedule Wakeup]", `reason: ${input.intent.reason}`];
 
+  if (input.intent.continuityMode === "fresh") {
+    lines.push("Run this pass fresh. Prior task and truth state are not preloaded.");
+  }
   if (input.snapshot.taskSpec) {
     lines.push(`task_goal: ${clampText(input.snapshot.taskSpec.goal, 320) ?? "none"}`);
   }
-  const anchorSummary = clampText(anchor?.summary, 320);
+  const anchorSummary = clampText(input.snapshot.parentAnchor?.summary, 320);
   if (anchorSummary) {
     lines.push(`parent_anchor_summary: ${anchorSummary}`);
   }
-  const nextSteps = clampText(anchor?.nextSteps, 320);
+  const nextSteps = clampText(input.snapshot.parentAnchor?.nextSteps, 320);
   if (nextSteps) {
     lines.push(`parent_anchor_next_steps: ${nextSteps}`);
   }
@@ -123,7 +111,6 @@ export async function executeScheduleIntentRun(input: {
   configPath?: string;
   model?: string;
   enableExtensions?: boolean;
-  enableAddons?: boolean;
 }): Promise<{ evaluationSessionId: string; workerSessionId: string }> {
   const runIndex = input.intent.runCount + 1;
   const workerSessionId = buildScheduleWorkerSessionId({
@@ -140,17 +127,14 @@ export async function executeScheduleIntentRun(input: {
     configPath: input.configPath,
     model: input.model,
     enableExtensions: input.enableExtensions,
-    ...(input.enableAddons === undefined ? {} : { enableAddons: input.enableAddons }),
   });
   const agentSessionId = opened.agentSessionId?.trim() || workerSessionId;
   const wakeupMessage = buildScheduleWakeupMessage({
     intent: input.intent,
-    runIndex,
     snapshot,
   });
   const trigger = buildSchedulePromptTrigger({
-    intent: input.intent,
-    runIndex,
+    continuityMode: input.intent.continuityMode,
     snapshot,
   });
 

@@ -1,10 +1,10 @@
 # Reference: Skills
 
-Skill parsing, merge, and selection logic:
+Skill parsing, merge, and runtime-facing lifecycle logic:
 
 - `packages/brewva-runtime/src/skills/contract.ts`
 - `packages/brewva-runtime/src/skills/registry.ts`
-- `packages/brewva-runtime/src/skills/dispatch.ts`
+- `packages/brewva-runtime/src/services/skill-lifecycle.ts`
 - `packages/brewva-gateway/src/runtime-plugins/context-transform.ts`
 
 ## Current Model
@@ -18,10 +18,6 @@ Skill taxonomy is now split by role:
 
 This keeps lifecycle choreography out of the public catalog.
 
-Automatic debug retry is now implemented as an extension-side controller that
-reuses explicit cascade intents plus runtime verification outcomes; it is not a
-public skill and not a runtime-kernel planner.
-
 ## Skills vs Subagents
 
 Skills and subagents solve different problems and stay intentionally separate.
@@ -31,7 +27,7 @@ Skills and subagents solve different problems and stay intentionally separate.
   - expected outputs, effect ceilings, completion rules, and budget ceilings
 - `subagent profile`
   - isolated execution strategy for a delegated slice of work
-  - model/tool surface narrowing, result mode, and posture defaults
+  - model/tool surface narrowing, result mode, and boundary defaults
 
 Current rules:
 
@@ -93,10 +89,10 @@ Current output contract kinds are intentionally limited to `text`, `enum`, and
 
 Skill discovery and deliberation are now separated from kernel commitment:
 
-1. Deliberation layers may rank skills, judge candidates, and build chains.
-2. The kernel accepts only proposals that cross an admission boundary (`skill_selection`, `context_packet`, `effect_commitment`).
-3. Proposal telemetry still emits `skill_routing_selection` as a projection of the latest accepted/deferred selection outcome (`selected | empty | failed | skipped`).
-4. Activation remains explicit: accepted proposals may arm `suggest/auto` dispatch decisions, but actual skill entry still happens through `skill_load`.
+1. Deliberation layers may rank skills, judge candidates, and suggest the next step.
+2. Runtime emits `skill_routing_*` telemetry for that reasoning path.
+3. Activation remains explicit through `skill_load`.
+4. The proposal boundary is reserved for `effect_commitment`, not for skill selection.
 5. Runtime does not run adaptive inference loops or online model reranking in the kernel path.
 
 Routing is disabled by default (`skills.routing.enabled=false`). When enabled,
@@ -106,58 +102,30 @@ Routing is disabled by default (`skills.routing.enabled=false`). When enabled,
 
 The runtime kernel and the optional control plane have different jobs:
 
-- kernel/runtime: dispatch commitments, evidence, replay, policy enforcement, and proposal commitment
-- control plane: optional candidate generation, selection assistance, chain planning, and model-assisted judging
-
-When the broker path is enabled, it submits explicit proposals into the kernel
-boundary. The model-assisted judge therefore does not make the kernel
-"smarter"; it is a separate deliberation/control-plane path.
+- kernel/runtime: activation state, output validation, evidence, replay, policy enforcement, and effect commitment
+- control plane: optional candidate generation, selection assistance, chain planning, delegation, and model-assisted judging
 
 `skills_index.json` carries normalized contract metadata for each routable skill
 entry, including `category`, `routingScope`, `outputs`, `requires`, `consumes`,
 derived `effectLevel`, `allowedEffects`, and `dispatch`.
 
-## Cascade Orchestration
+## Model-Native Sequencing
 
-Skill cascading is policy-driven via `skills.cascade.*`:
+Runtime no longer owns public skill chaining or cascade policy. Skill
+sequencing is model-native: the active model may load, activate, complete, and
+re-enter skills as needed, but the runtime does not expose a public chain-intent
+state machine or automatic next-step progression surface.
 
-- `mode=off`: no automatic cascade behavior
-- `mode=assist`: runtime records/plans chains but waits for manual continuation
-- `mode=auto`: runtime auto-advances to next steps after `skill_completed` events
+This keeps the kernel boundary narrow:
 
-Chain intent can come from:
+- runtime owns durable skill activation/completion state
+- runtime validates declared outputs and records replayable receipts
+- model-side planning decides whether to continue with another skill, verify,
+  repair, or stop
 
-- explicit `startCascade(...)` / `skill_chain_control`
-- broker-owned or extension-owned direct cascade starts
-
-Source arbitration uses:
-
-- `skills.cascade.enabledSources` as allowlist
-- `skills.cascade.sourcePriority` as ordering for enabled sources
-
-Current built-in sources are only `dispatch` and `explicit`.
-
-Runtime records cascade lifecycle as replayable events:
-
-- `skill_cascade_planned`
-- `skill_cascade_step_started`
-- `skill_cascade_step_completed`
-- `skill_cascade_paused`
-- `skill_cascade_replanned`
-- `skill_cascade_overridden`
-- `skill_cascade_finished`
-- `skill_cascade_aborted`
-
-When step consumes are missing, cascade deterministically pauses
-(`reason=missing_consumes`). Runtime no longer supports compose-originated chain
-plans as a public source.
-
-The debug loop reuses explicit cascade rather than introducing a second step
-engine. Its failure snapshot and handoff packet are extension-owned artifacts,
-not public skill outputs. The latest retry/handoff summary may also be mirrored
-into Deliberation-side cognition artifacts and cross back as a scoped
-`context_packet`, but it still remains non-authoritative context rather than
-skill output or kernel state.
+Deliberation-side recovery flows such as debug or review may still publish
+non-authoritative artifacts, but they do not create a second public
+skill-sequencing API in the runtime.
 
 ## Public Routable Skills
 

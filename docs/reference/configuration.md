@@ -47,7 +47,7 @@ Current front-door defaults:
 - CLI-owned runtimes use `personal`
 - gateway/hosted/channel runtimes use `team`
 - raw runtimes without a governance port fail closed by opening the replayable
-  operator desk for commitment-posture effects
+  operator desk for approval-bound effectful actions
 
 ## Key Defaults
 
@@ -58,13 +58,6 @@ Current front-door defaults:
 - `skills.overrides`: `{}`
 - `skills.routing.enabled`: `false`
 - `skills.routing.scopes`: `["core", "domain"]`
-- `skills.cascade.mode`: `off` (`off | assist | auto`)
-- `skills.cascade.enabledSources`: `["explicit", "dispatch"]`
-- `skills.cascade.sourcePriority`: `["explicit", "dispatch"]`
-- `skills.cascade.maxStepsPerRun`: `8`
-
-`skills.cascade.enabledSources` controls which sources are allowed to produce chain intents.
-`skills.cascade.sourcePriority` only controls arbitration order among enabled sources.
 
 `skills.overrides` are runtime config tightenings only. They can reduce
 budgets, tighten dispatch thresholds, and narrow effect authorization, but they
@@ -72,14 +65,20 @@ do not add new authority. Use project overlays for project-specific execution
 hints and shared-context extension.
 
 There is no longer a public `skills.selector.*` config surface. Candidate
-generation, broker judging, and chain planning belong to the deliberation ring,
-not the kernel. Kernel admission now happens through proposal submission:
+ranking and chain planning, when present, belong to higher-level helper layers,
+not the kernel.
+
+There is no longer a public `skills.cascade.*` config surface. If present in a
+config file, runtime normalization fails fast because model path sequencing is
+no longer runtime-managed.
+
+Kernel admission now happens through proposal submission:
 
 - `runtime.proposals.submit(sessionId, proposal)`
 - `DecisionReceipt.decision = accept | reject | defer`
 
-`skills.routing.enabled=false` keeps skills loadable but disables default broker
-registration and auto-routing surfaces. Explicit `routingScopes` overrides or
+`skills.routing.enabled=false` keeps skills loadable but disables default
+routing-proposal surfaces. Explicit `routingScopes` overrides or
 direct `skill_load` usage can still activate skills.
 
 When routing is enabled, `skills.routing.scopes` is the explicit scope allowlist

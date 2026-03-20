@@ -8,7 +8,6 @@ export interface OpenSessionInput {
   model?: string;
   agentId?: string;
   enableExtensions?: boolean;
-  enableAddons?: boolean;
 }
 
 export interface OpenSessionResult {
@@ -16,17 +15,6 @@ export interface OpenSessionResult {
   created: boolean;
   workerPid: number;
   agentSessionId?: string;
-}
-
-export interface HeartbeatPromptTrigger {
-  kind: "heartbeat";
-  ruleId: string;
-  objective?: string;
-  contextHints?: string[];
-  wakeMode?: "always" | "if_signal";
-  planReason?: string;
-  selectionText?: string;
-  signalArtifactRefs?: string[];
 }
 
 export interface SchedulePromptAnchor {
@@ -38,19 +26,13 @@ export interface SchedulePromptAnchor {
 
 export interface SchedulePromptTrigger {
   kind: "schedule";
-  intentId: string;
-  parentSessionId: string;
-  runIndex: number;
-  reason: string;
   continuityMode: ScheduleContinuityMode;
-  timeZone?: string;
-  goalRef?: string;
   taskSpec?: TaskSpec | null;
   truthFacts?: TruthFact[];
   parentAnchor?: SchedulePromptAnchor | null;
 }
 
-export type SendPromptTrigger = HeartbeatPromptTrigger | SchedulePromptTrigger;
+export type SendPromptTrigger = SchedulePromptTrigger;
 
 export interface SessionWorkerInfo {
   sessionId: string;

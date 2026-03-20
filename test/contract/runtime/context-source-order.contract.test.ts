@@ -105,10 +105,9 @@ describe("context source order integration", () => {
     });
     expect(runtime.context.listProviders()).toEqual([
       { source: CONTEXT_SOURCES.identity, category: "narrative", order: 10 },
-      { source: CONTEXT_SOURCES.contextPackets, category: "narrative", order: 30 },
-      { source: CONTEXT_SOURCES.runtimeStatus, category: "narrative", order: 40 },
-      { source: CONTEXT_SOURCES.taskState, category: "narrative", order: 60 },
-      { source: CONTEXT_SOURCES.projectionWorking, category: "narrative", order: 70 },
+      { source: CONTEXT_SOURCES.runtimeStatus, category: "narrative", order: 20 },
+      { source: CONTEXT_SOURCES.taskState, category: "narrative", order: 40 },
+      { source: CONTEXT_SOURCES.projectionWorking, category: "narrative", order: 50 },
     ]);
 
     const injected = await runtime.context.buildInjection(
@@ -175,9 +174,11 @@ describe("context source order integration", () => {
     const runtimeStatusPosition = blockIndex(injected.text, "RuntimeStatus");
     const customProviderPosition = blockIndex(injected.text, "CustomOperatorNote");
     const taskLedgerPosition = blockIndex(injected.text, "TaskLedger");
+    const workingProjectionPosition = blockIndex(injected.text, "WorkingProjection");
     expect(runtimeStatusPosition).toBeGreaterThanOrEqual(0);
-    expect(customProviderPosition).toBeGreaterThan(runtimeStatusPosition);
-    expect(taskLedgerPosition).toBeGreaterThan(customProviderPosition);
+    expect(taskLedgerPosition).toBeGreaterThan(runtimeStatusPosition);
+    expect(workingProjectionPosition).toBeGreaterThan(taskLedgerPosition);
+    expect(customProviderPosition).toBeGreaterThan(workingProjectionPosition);
 
     expect(runtime.context.unregisterProvider("brewva.custom-operator-note")).toBe(true);
     expect(runtime.context.unregisterProvider("brewva.custom-operator-note")).toBe(false);
@@ -226,7 +227,6 @@ describe("context source order integration", () => {
   test("registers optional built-in providers only when config enables them", () => {
     const config = createConfig();
     config.skills.routing.enabled = true;
-    config.skills.cascade.mode = "assist";
     config.infrastructure.toolOutputDistillationInjection.enabled = true;
 
     const runtime = new BrewvaRuntime({
@@ -237,13 +237,10 @@ describe("context source order integration", () => {
 
     expect(runtime.context.listProviders()).toEqual([
       { source: CONTEXT_SOURCES.identity, category: "narrative", order: 10 },
-      { source: CONTEXT_SOURCES.skillCandidates, category: "narrative", order: 20 },
-      { source: CONTEXT_SOURCES.skillCascadeGate, category: "constraint", order: 25 },
-      { source: CONTEXT_SOURCES.contextPackets, category: "narrative", order: 30 },
-      { source: CONTEXT_SOURCES.runtimeStatus, category: "narrative", order: 40 },
-      { source: CONTEXT_SOURCES.toolOutputsDistilled, category: "narrative", order: 50 },
-      { source: CONTEXT_SOURCES.taskState, category: "narrative", order: 60 },
-      { source: CONTEXT_SOURCES.projectionWorking, category: "narrative", order: 70 },
+      { source: CONTEXT_SOURCES.runtimeStatus, category: "narrative", order: 20 },
+      { source: CONTEXT_SOURCES.toolOutputsDistilled, category: "narrative", order: 30 },
+      { source: CONTEXT_SOURCES.taskState, category: "narrative", order: 40 },
+      { source: CONTEXT_SOURCES.projectionWorking, category: "narrative", order: 50 },
     ]);
   });
 });

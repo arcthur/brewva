@@ -58,8 +58,8 @@ export function buildDelegationPrompt(
   if (packet.entrySkill) {
     lines.push(`Entry skill: ${packet.entrySkill}`);
   }
-  if (packet.effectCeiling?.posture) {
-    lines.push(`Effect ceiling: ${packet.effectCeiling.posture}`);
+  if (packet.effectCeiling?.boundary) {
+    lines.push(`Effect ceiling: ${packet.effectCeiling.boundary}`);
   }
   if (packet.contextBudget?.maxTurnTokens) {
     lines.push(`Turn token ceiling: ${packet.contextBudget.maxTurnTokens}`);

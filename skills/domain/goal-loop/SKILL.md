@@ -3,9 +3,6 @@ name: goal-loop
 description: Use bounded multi-run continuity when progress must span repeated executions
   and convergence can be judged from explicit evidence.
 stability: experimental
-dispatch:
-  suggest_threshold: 12
-  auto_threshold: 24
 intent:
   outputs:
     - loop_contract

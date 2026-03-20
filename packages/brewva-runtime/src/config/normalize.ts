@@ -8,8 +8,6 @@ const VALID_EVENT_LEVELS = new Set(["audit", "ops", "debug"]);
 const VALID_VERIFICATION_LEVELS = new Set<VerificationLevel>(["quick", "standard", "strict"]);
 const VALID_CHANNEL_SCOPE_STRATEGIES = new Set(["chat", "thread"]);
 const VALID_CHANNEL_ACL_MODES = new Set(["open", "closed"]);
-const VALID_SKILL_CASCADE_MODES = new Set(["off", "assist", "auto"]);
-const VALID_SKILL_CASCADE_SOURCES = new Set(["dispatch", "explicit"]);
 const VALID_SKILL_ROUTING_SCOPES = new Set(["core", "domain", "operator", "meta"]);
 
 type AnyRecord = Record<string, unknown>;
@@ -133,21 +131,6 @@ function normalizeSkillOverrides(
   return out;
 }
 
-function normalizeSkillCascadeSourceList(
-  value: unknown,
-  fallback: BrewvaConfig["skills"]["cascade"]["enabledSources"],
-): BrewvaConfig["skills"]["cascade"]["enabledSources"] {
-  if (!Array.isArray(value)) return [...fallback];
-  const out: BrewvaConfig["skills"]["cascade"]["enabledSources"] = [];
-  for (const entry of value) {
-    if (typeof entry !== "string" || !VALID_SKILL_CASCADE_SOURCES.has(entry)) continue;
-    const normalizedEntry = entry as BrewvaConfig["skills"]["cascade"]["enabledSources"][number];
-    if (out.includes(normalizedEntry)) continue;
-    out.push(normalizedEntry);
-  }
-  return out.length > 0 ? out : [...fallback];
-}
-
 function normalizeSkillRoutingScopeList(
   value: unknown,
   fallback: SkillRoutingScope[],
@@ -173,28 +156,16 @@ function normalizeSkillsConfig(
   skillsInput: AnyRecord,
   defaults: BrewvaConfig["skills"],
 ): BrewvaConfig["skills"] {
+  if (Object.hasOwn(skillsInput, "cascade")) {
+    throw new Error(
+      "skills.cascade has been removed; model path sequencing is no longer runtime-managed.",
+    );
+  }
   const skillsRoutingInput = isRecord(skillsInput.routing) ? skillsInput.routing : {};
-  const skillsCascadeInput = isRecord(skillsInput.cascade) ? skillsInput.cascade : {};
-  const normalizedCascadeSourcePriority = normalizeSkillCascadeSourceList(
-    skillsCascadeInput.sourcePriority,
-    defaults.cascade.sourcePriority,
-  );
-  const normalizedCascadeEnabledSources = normalizeSkillCascadeSourceList(
-    skillsCascadeInput.enabledSources,
-    defaults.cascade.enabledSources,
-  );
   const normalizedRoutingScopes = normalizeSkillRoutingScopeList(
     skillsRoutingInput.scopes,
     defaults.routing.scopes,
   );
-  const effectiveCascadeSourcePriority = [
-    ...normalizedCascadeSourcePriority.filter((source) =>
-      normalizedCascadeEnabledSources.includes(source),
-    ),
-    ...normalizedCascadeEnabledSources.filter(
-      (source) => !normalizedCascadeSourcePriority.includes(source),
-    ),
-  ] as BrewvaConfig["skills"]["cascade"]["sourcePriority"];
 
   return {
     roots: normalizeStringArray(skillsInput.roots, defaults.roots ?? []),
@@ -203,20 +174,6 @@ function normalizeSkillsConfig(
     routing: {
       enabled: normalizeBoolean(skillsRoutingInput.enabled, defaults.routing.enabled),
       scopes: normalizedRoutingScopes,
-    },
-    cascade: {
-      mode: normalizeStrictStringEnum(
-        skillsCascadeInput.mode,
-        defaults.cascade.mode,
-        VALID_SKILL_CASCADE_MODES,
-        "skills.cascade.mode",
-      ),
-      enabledSources: normalizedCascadeEnabledSources,
-      sourcePriority: effectiveCascadeSourcePriority,
-      maxStepsPerRun: normalizePositiveInteger(
-        skillsCascadeInput.maxStepsPerRun,
-        defaults.cascade.maxStepsPerRun,
-      ),
     },
   };
 }

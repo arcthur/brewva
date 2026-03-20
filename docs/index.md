@@ -49,13 +49,9 @@ This repository uses a layered documentation system:
 - Skills: `docs/reference/skills.md`
 - Runtime API: `docs/reference/runtime.md`
 - Context composer: `docs/reference/context-composer.md`
-- Memory formation: `docs/reference/memory-formation.md`
-- Memory curator: `docs/reference/memory-curator.md`
-- Proactivity engine: `docs/reference/proactivity-engine.md`
-- Operator teaching: `docs/reference/operator-teaching.md`
+- Proactivity (removed, explicit heartbeat remains): `docs/reference/proactivity-engine.md`
 - Proposal boundary: `docs/reference/proposal-boundary.md`
 - Events: `docs/reference/events.md`
-- Addons: `docs/reference/addons.md`
 - Extensions: `docs/reference/extensions.md`
 - Commands (CLI surface): `docs/reference/commands.md`
 - Gateway control-plane protocol: `docs/reference/gateway-control-plane-protocol.md`
@@ -72,6 +68,7 @@ This repository uses a layered documentation system:
 ## Research (Incubation Layer)
 
 - Research playbook: `docs/research/README.md`
+- Boundary-first subtraction and model-native recovery RFC: `docs/research/rfc-boundary-first-subtraction-and-model-native-recovery.md`
 - Roadmap notes: `docs/research/roadmap-notes.md`
 - Effect governance RFC: `docs/research/rfc-effect-governance-and-contract-vnext.md`
 - Capability compression RFC: `docs/research/rfc-capability-compression-and-output-distillation.md`
@@ -81,7 +78,6 @@ This repository uses a layered documentation system:
 ## Source of Truth
 
 - Runtime package: `packages/brewva-runtime/src/index.ts`
-- Deliberation package: `packages/brewva-deliberation/src/index.ts`
 - Telegram channel package: `packages/brewva-channels-telegram/src/index.ts`
 - Telegram ingress package: `packages/brewva-ingress/src/index.ts`
 - Tool package: `packages/brewva-tools/src/index.ts`
@@ -89,3 +85,4 @@ This repository uses a layered documentation system:
 - CLI package: `packages/brewva-cli/src/index.ts`
 - Gateway package: `packages/brewva-gateway/src/index.ts`
 - Gateway host subpath: `@brewva/brewva-gateway/host` (`packages/brewva-gateway/src/host.ts`)
+- Gateway subagent helpers: `packages/brewva-gateway/src/subagents`

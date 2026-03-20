@@ -12,7 +12,7 @@ function handlerNames(handlers: Map<string, unknown[]>): string[] {
   return [...handlers.keys()].toSorted((left, right) => left.localeCompare(right));
 }
 
-describe("no-addons contract", () => {
+describe("no-extensions contract", () => {
   test("managed Brewva tools register canonical schemas by default", async () => {
     const runtime = createRuntimeFixture();
     const api = createMockExtensionAPI();

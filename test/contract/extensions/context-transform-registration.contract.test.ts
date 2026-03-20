@@ -191,10 +191,10 @@ describe("context transform registration contract", () => {
     })[0]?.payload as { status?: string; reason?: string; selectedCount?: number } | undefined;
 
     expect(selectionPayload?.status).toBe("skipped");
-    expect(selectionPayload?.reason).toBe("selection_proposal_unavailable");
+    expect(selectionPayload?.reason).toBe("selection_unavailable");
     expect(selectionPayload?.selectedCount).toBe(0);
     expect(result.message.details?.routingSelection?.status).toBe("skipped");
-    expect(result.message.details?.routingSelection?.reason).toBe("selection_proposal_unavailable");
+    expect(result.message.details?.routingSelection?.reason).toBe("selection_unavailable");
     expect(result.message.details?.routingSelection?.selectedCount).toBe(0);
 
     const summary = runtime.cost.getSummary(sessionId);

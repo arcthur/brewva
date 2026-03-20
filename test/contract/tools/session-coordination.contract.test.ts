@@ -3,16 +3,20 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import {
-  createSessionCompactTool,
-  createSkillChainControlTool,
-  createTapeTools,
-} from "@brewva/brewva-tools";
+import { createSessionCompactTool, createTapeTools } from "@brewva/brewva-tools";
+import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { extractTextContent, fakeContext, mergeContext } from "./tools-flow.helpers.js";
+
+function createCleanRuntime(cwd = process.cwd()): BrewvaRuntime {
+  return new BrewvaRuntime({
+    cwd,
+    config: createRuntimeConfig(),
+  });
+}
 
 describe("session coordination tool contracts", () => {
   test("session_compact requests SDK compaction with runtime instructions without sending a hidden follow-up", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createCleanRuntime();
     const sessionId = "s11";
     let compactCalls = 0;
     let capturedInstructions: string | undefined;
@@ -233,63 +237,5 @@ describe("session coordination tool contracts", () => {
     expect(text).toContain("[TapeSearch]");
     expect(text).toContain("matches:");
     expect(text.toLowerCase()).toContain("flaky");
-  });
-
-  test("skill_chain_control supports status, start, pause, resume, and cancel", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
-    const sessionId = "s15";
-    const tool = createSkillChainControlTool({ runtime });
-
-    const before = await tool.execute(
-      "tc-s15-status-before",
-      { action: "status" },
-      undefined,
-      undefined,
-      fakeContext(sessionId),
-    );
-    expect(extractTextContent(before)).toContain("No active or historical skill cascade intent");
-
-    const started = await tool.execute(
-      "tc-s15-start",
-      {
-        action: "start",
-        steps: [{ skill: "repository-analysis", consumes: [], produces: ["repository_snapshot"] }],
-      },
-      undefined,
-      undefined,
-      fakeContext(sessionId),
-    );
-    expect(extractTextContent(started)).toContain("# Skill Cascade");
-    expect(runtime.skills.getCascadeIntent(sessionId)?.source).toBe("explicit");
-
-    const paused = await tool.execute(
-      "tc-s15-pause",
-      { action: "pause", reason: "manual pause for review" },
-      undefined,
-      undefined,
-      fakeContext(sessionId),
-    );
-    expect(extractTextContent(paused)).toContain("status: paused");
-    expect(runtime.skills.getCascadeIntent(sessionId)?.status).toBe("paused");
-
-    const resumed = await tool.execute(
-      "tc-s15-resume",
-      { action: "resume", reason: "continue execution" },
-      undefined,
-      undefined,
-      fakeContext(sessionId),
-    );
-    expect(extractTextContent(resumed)).toContain("# Skill Cascade");
-    expect(runtime.skills.getCascadeIntent(sessionId)?.status).toBe("running");
-
-    const cancelled = await tool.execute(
-      "tc-s15-cancel",
-      { action: "cancel", reason: "manual stop" },
-      undefined,
-      undefined,
-      fakeContext(sessionId),
-    );
-    expect(extractTextContent(cancelled)).toContain("status: cancelled");
-    expect(runtime.skills.getCascadeIntent(sessionId)?.status).toBe("cancelled");
   });
 });

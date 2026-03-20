@@ -21,7 +21,7 @@ export function buildContextContractBlock(input: {
     "- `tape_handoff` records durable handoff state; it does not reduce message tokens.",
     "- `session_compact` reduces message-history pressure; it does not rewrite tape semantics.",
     "- If a compaction gate or advisory block appears, follow it before broad tool work.",
-    "- Prefer current task state, accepted context packets, and working projection before replaying tape.",
+    "- Prefer current task state, supplemental context, and working projection before replaying tape.",
     "Hard rules:",
     "- call `session_compact` directly, never through `exec` or shell wrappers.",
     `- compact soon when context pressure reaches high (${highThresholdPercent}).`,

@@ -1,6 +1,4 @@
 import {
-  SCAN_CONVERGENCE_ADVISORY_EVENT_TYPE,
-  SCAN_CONVERGENCE_RESET_EVENT_TYPE,
   type DelegationRunQuery,
   type DelegationRunRecord,
   type BrewvaEventRecord,
@@ -24,7 +22,6 @@ const MIN_CAPABILITY_VIEW_TOKENS = 48;
 const CHARS_PER_TOKEN = 3.5;
 const CAPABILITY_VIEW_INVENTORY_RATIO_THRESHOLD = 0.35;
 const CAPABILITY_VIEW_COMPACT_RATIO_THRESHOLD = 0.2;
-const PRESERVED_DIAGNOSTIC_BLOCK_IDS = new Set(["delegation-recommendation"]);
 
 export type ContextBlockCategory = ContextInjectionCategory;
 
@@ -235,19 +232,6 @@ function buildOperationalDiagnosticsBlock(input: {
     lines.push(`tape_entries_since_anchor: ${tapeStatus.entriesSinceAnchor}`);
   }
   return lines.join("\n");
-}
-
-function buildExplorationAdvisoryBlock(payload: Record<string, unknown>): string | null {
-  const message =
-    typeof payload.message === "string"
-      ? payload.message.trim()
-      : typeof payload.summary === "string"
-        ? payload.summary.trim()
-        : "";
-  if (!message) {
-    return null;
-  }
-  return message;
 }
 
 function shouldIncludeOperationalDiagnostics(requested: string[]): string[] {
@@ -487,10 +471,7 @@ function applyGovernanceBudgetCap(blocks: InternalContextBlock[]): InternalConte
   current = removeBlocksWhileOverCap(
     current,
     governanceCap,
-    (block) =>
-      block.category === "diagnostic" &&
-      block.id !== "operational-diagnostics" &&
-      !PRESERVED_DIAGNOSTIC_BLOCK_IDS.has(block.id),
+    (block) => block.category === "diagnostic" && block.id !== "operational-diagnostics",
   );
 
   governanceTokens = measureGovernanceTokens(current);
@@ -621,36 +602,6 @@ function applyGovernanceBudgetCap(blocks: InternalContextBlock[]): InternalConte
   );
 }
 
-function resolveExplorationAdvisoryBlock(
-  input: Pick<ContextComposerInput, "runtime" | "sessionId">,
-): ComposedContextBlock | null {
-  const advisoryEvent = input.runtime.events.query?.(input.sessionId, {
-    type: SCAN_CONVERGENCE_ADVISORY_EVENT_TYPE,
-    last: 1,
-  })?.[0];
-  const resetEvent = input.runtime.events.query?.(input.sessionId, {
-    type: SCAN_CONVERGENCE_RESET_EVENT_TYPE,
-    last: 1,
-  })?.[0];
-  if (
-    advisoryEvent &&
-    resetEvent &&
-    typeof advisoryEvent.timestamp === "number" &&
-    typeof resetEvent.timestamp === "number" &&
-    resetEvent.timestamp >= advisoryEvent.timestamp
-  ) {
-    return null;
-  }
-  if (!advisoryEvent?.payload || typeof advisoryEvent.payload !== "object") {
-    return null;
-  }
-  const content = buildExplorationAdvisoryBlock(advisoryEvent.payload);
-  if (!content) {
-    return null;
-  }
-  return makeBlock("exploration-advisory", "diagnostic", content);
-}
-
 function toPublicBlock(block: InternalContextBlock): ComposedContextBlock {
   const { compactContent: _compactContent, ...publicBlock } = block;
   return publicBlock;
@@ -738,17 +689,6 @@ export function resolveSupplementalContextBlocks(
     if (diagnosticBlock) {
       blocks.push(diagnosticBlock);
     }
-  }
-
-  const explorationAdvisoryBlock = resolveExplorationAdvisoryBlock(input);
-  if (explorationAdvisoryBlock) {
-    blocks.push(
-      makeBlock(
-        explorationAdvisoryBlock.id,
-        explorationAdvisoryBlock.category,
-        explorationAdvisoryBlock.content,
-      )!,
-    );
   }
 
   return blocks.map(toPublicBlock);

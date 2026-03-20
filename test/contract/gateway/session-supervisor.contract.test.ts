@@ -12,47 +12,30 @@ interface SentPromptMessage {
   kind: "send";
   requestId: string;
   payload: {
-    trigger?:
-      | {
-          kind: "heartbeat";
-          ruleId: string;
-          objective?: string;
-          contextHints?: string[];
-          wakeMode?: "always" | "if_signal";
-          planReason?: string;
-          selectionText?: string;
-          signalArtifactRefs?: string[];
-        }
-      | {
-          kind: "schedule";
-          intentId: string;
-          parentSessionId: string;
-          runIndex: number;
-          reason: string;
-          continuityMode: "inherit" | "fresh";
-          timeZone?: string;
-          goalRef?: string;
-          taskSpec?: {
-            schema: "brewva.task.v1";
-            goal: string;
-          } | null;
-          truthFacts?: Array<{
-            id: string;
-            kind: string;
-            severity: "info" | "warn" | "error";
-            status: "active" | "resolved";
-            summary: string;
-            evidenceIds: string[];
-            firstSeenAt: number;
-            lastSeenAt: number;
-          }>;
-          parentAnchor?: {
-            id: string;
-            name?: string;
-            summary?: string;
-            nextSteps?: string;
-          } | null;
-        };
+    trigger?: {
+      kind: "schedule";
+      continuityMode: "inherit" | "fresh";
+      taskSpec?: {
+        schema: "brewva.task.v1";
+        goal: string;
+      } | null;
+      truthFacts?: Array<{
+        id: string;
+        kind: string;
+        severity: "info" | "warn" | "error";
+        status: "active" | "resolved";
+        summary: string;
+        evidenceIds: string[];
+        firstSeenAt: number;
+        lastSeenAt: number;
+      }>;
+      parentAnchor?: {
+        id: string;
+        name?: string;
+        summary?: string;
+        nextSteps?: string;
+      } | null;
+    };
   };
 }
 
@@ -377,7 +360,7 @@ describe("session supervisor safeguards", () => {
     }
   });
 
-  test("given sendPrompt trigger metadata, when supervisor forwards to worker, then trigger payload is preserved", async () => {
+  test("given a heartbeat-sourced prompt, when supervisor forwards to worker, then no extra trigger payload is attached", async () => {
     const root = mkdtempSync(join(tmpdir(), "brewva-session-supervisor-"));
     const stateDir = join(root, "state");
     const supervisor = new SessionSupervisor({
@@ -420,22 +403,11 @@ describe("session supervisor safeguards", () => {
 
       await supervisor.sendPrompt("trigger-session", "Check project status.", {
         source: "heartbeat",
-        trigger: {
-          kind: "heartbeat",
-          ruleId: "nightly-release",
-          objective: "Review release readiness.",
-          contextHints: ["release readiness", "backlog risk"],
-        },
       });
 
       expect(sentMessage).toBeDefined();
       expect(sentMessage?.kind).toBe("send");
-      expect(sentMessage?.payload.trigger).toEqual({
-        kind: "heartbeat",
-        ruleId: "nightly-release",
-        objective: "Review release readiness.",
-        contextHints: ["release readiness", "backlog risk"],
-      });
+      expect(sentMessage?.payload.trigger).toBeUndefined();
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -486,13 +458,7 @@ describe("session supervisor safeguards", () => {
         source: "schedule",
         trigger: {
           kind: "schedule",
-          intentId: "intent-1",
-          parentSessionId: "parent-1",
-          runIndex: 2,
-          reason: "nightly follow-up",
           continuityMode: "inherit",
-          timeZone: "Asia/Singapore",
-          goalRef: "goal-1",
           taskSpec: {
             schema: "brewva.task.v1",
             goal: "Finish the release checklist",
@@ -519,13 +485,7 @@ describe("session supervisor safeguards", () => {
 
       expect(sentMessage?.payload.trigger).toEqual({
         kind: "schedule",
-        intentId: "intent-1",
-        parentSessionId: "parent-1",
-        runIndex: 2,
-        reason: "nightly follow-up",
         continuityMode: "inherit",
-        timeZone: "Asia/Singapore",
-        goalRef: "goal-1",
         taskSpec: {
           schema: "brewva.task.v1",
           goal: "Finish the release checklist",

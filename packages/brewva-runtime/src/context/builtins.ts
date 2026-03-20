@@ -1,13 +1,7 @@
-import {
-  buildSkillCandidateBlock,
-  buildSkillCascadeGateBlock,
-  buildTaskStateBlock,
-} from "../runtime-helpers.js";
+import { buildTaskStateBlock } from "../runtime-helpers.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type { ProposalAdmissionService } from "../services/proposal-admission.js";
-import type { SkillCascadeService } from "../services/skill-cascade.js";
 import type { SkillLifecycleService } from "../services/skill-lifecycle.js";
-import type { ProposalRecord } from "../types.js";
 import { readIdentityProfile } from "./identity.js";
 import type { ContextSourceProvider, ContextSourceProviderRegistry } from "./provider.js";
 import { buildRuntimeStatusBlock } from "./runtime-status.js";
@@ -18,18 +12,12 @@ import {
   type ToolOutputDistillationEntry,
 } from "./tool-output-distilled.js";
 
-const MIN_SKILL_CANDIDATE_INJECTION_CONFIDENCE = 0.55;
-
 export interface BuiltInContextSourceProviderDeps {
   workspaceRoot: string;
   agentId: string;
   kernel: RuntimeKernelContext;
-  proposalAdmissionService: Pick<
-    ProposalAdmissionService,
-    "getLatestProposalRecord" | "listInjectableContextPackets"
-  >;
+  proposalAdmissionService: Pick<ProposalAdmissionService, "getLatestProposalRecord">;
   skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
-  skillCascadeService: Pick<SkillCascadeService, "getIntent">;
 }
 
 export function registerBuiltInContextSourceProviders(
@@ -46,17 +34,10 @@ export function createBuiltInContextSourceProviders(
 ): ContextSourceProvider[] {
   const providers: ContextSourceProvider[] = [
     createIdentityProvider(deps),
-    createContextPacketsProvider(deps),
     createRuntimeStatusProvider(deps),
     createTaskStateProvider(deps),
   ];
 
-  if (deps.kernel.config.skills.routing.enabled) {
-    providers.push(createSkillCandidatesProvider(deps));
-  }
-  if (deps.kernel.config.skills.cascade.mode !== "off") {
-    providers.push(createSkillCascadeGateProvider(deps));
-  }
   if (deps.kernel.config.infrastructure.toolOutputDistillationInjection.enabled) {
     providers.push(createToolOutputDistilledProvider(deps));
   }
@@ -102,93 +83,13 @@ function createIdentityProvider(deps: BuiltInContextSourceProviderDeps): Context
   };
 }
 
-function createSkillCandidatesProvider(
-  deps: BuiltInContextSourceProviderDeps,
-): ContextSourceProvider {
-  return {
-    source: CONTEXT_SOURCES.skillCandidates,
-    category: "narrative",
-    order: 20,
-    collect: (input) => {
-      const latestSkillSelection = deps.proposalAdmissionService.getLatestProposalRecord(
-        input.sessionId,
-        "skill_selection",
-        "accept",
-      ) as ProposalRecord<"skill_selection"> | undefined;
-      const selectedSkills = latestSkillSelection?.proposal.payload.selected ?? [];
-      const selectionConfidence =
-        latestSkillSelection?.proposal.confidence ??
-        latestSkillSelection?.proposal.payload.confidence ??
-        0;
-      if (
-        selectedSkills.length === 0 ||
-        selectionConfidence < MIN_SKILL_CANDIDATE_INJECTION_CONFIDENCE
-      ) {
-        return;
-      }
-      input.register({
-        id: "top-k-skills",
-        content: buildSkillCandidateBlock(selectedSkills),
-      });
-    },
-  };
-}
-
-function createSkillCascadeGateProvider(
-  deps: BuiltInContextSourceProviderDeps,
-): ContextSourceProvider {
-  return {
-    source: CONTEXT_SOURCES.skillCascadeGate,
-    category: "constraint",
-    order: 25,
-    collect: (input) => {
-      const activeSkillName =
-        deps.skillLifecycleService.getActiveSkill(input.sessionId)?.name ?? null;
-      if (activeSkillName) return;
-      const intent = deps.skillCascadeService.getIntent(input.sessionId);
-      if (!intent || (intent.status !== "paused" && intent.status !== "pending")) {
-        return;
-      }
-      input.register({
-        id: "skill-cascade-gate",
-        content: buildSkillCascadeGateBlock(intent),
-      });
-    },
-  };
-}
-
-function createContextPacketsProvider(
-  deps: BuiltInContextSourceProviderDeps,
-): ContextSourceProvider {
-  return {
-    source: CONTEXT_SOURCES.contextPackets,
-    category: "narrative",
-    order: 30,
-    collect: (input) => {
-      for (const packet of deps.proposalAdmissionService.listInjectableContextPackets(
-        input.sessionId,
-        input.injectionScopeId,
-      )) {
-        input.register({
-          id:
-            typeof packet.proposal.payload.packetKey === "string" &&
-            packet.proposal.payload.packetKey.trim().length > 0
-              ? `context-packet:${packet.proposal.issuer}:${packet.proposal.payload.scopeId ?? "global"}:${packet.proposal.payload.packetKey.trim()}`
-              : `context-packet:${packet.proposal.id}`,
-          content: `[ContextPacket:${packet.proposal.payload.label}]\n${packet.proposal.payload.content}`,
-        });
-      }
-    },
-  };
-}
-
 function createRuntimeStatusProvider(
   deps: BuiltInContextSourceProviderDeps,
 ): ContextSourceProvider {
   return {
     source: CONTEXT_SOURCES.runtimeStatus,
     category: "narrative",
-    order: 40,
+    order: 20,
     collect: (input) => {
       const toolFailureConfig = deps.kernel.config.infrastructure.toolFailureInjection;
       const recentFailures = toolFailureConfig.enabled
@@ -217,7 +118,7 @@ function createToolOutputDistilledProvider(
   return {
     source: CONTEXT_SOURCES.toolOutputsDistilled,
     category: "narrative",
-    order: 50,
+    order: 30,
     collect: (input) => {
       const distillationConfig = deps.kernel.config.infrastructure.toolOutputDistillationInjection;
       const distilledBlock = buildRecentToolOutputDistillationBlock(
@@ -240,7 +141,7 @@ function createTaskStateProvider(deps: BuiltInContextSourceProviderDeps): Contex
   return {
     source: CONTEXT_SOURCES.taskState,
     category: "narrative",
-    order: 60,
+    order: 40,
     collect: (input) => {
       const taskState = deps.kernel.getTaskState(input.sessionId);
       if (
@@ -267,7 +168,7 @@ function createProjectionWorkingProvider(
   return {
     source: CONTEXT_SOURCES.projectionWorking,
     category: "narrative",
-    order: 70,
+    order: 50,
     collect: (input) => {
       deps.kernel.projectionEngine.refreshIfNeeded({ sessionId: input.sessionId });
       const working = deps.kernel.projectionEngine.getWorkingProjection(input.sessionId);

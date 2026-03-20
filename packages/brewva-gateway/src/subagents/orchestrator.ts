@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { buildEvidenceRef, submitContextPacketProposal } from "@brewva/brewva-deliberation";
 import type {
   BrewvaRuntime,
   DelegationRunQuery,
@@ -13,7 +12,7 @@ import type {
   DelegationTaskPacket,
   SubagentCancelResult,
   SubagentOutcomeArtifactRef,
-  SubagentExecutionPosture,
+  SubagentExecutionBoundary,
   SubagentOutcome,
   SubagentOutcomeSuccess,
   SubagentRunRequest,
@@ -36,7 +35,7 @@ import {
   buildWorkerResult,
   resolveBuiltinToolNamesForRun,
   resolveManagedToolNamesForRun,
-  resolveRequestedPosture,
+  resolveRequestedBoundary,
   resolveRunSummary,
   sanitizeFragment,
 } from "./shared.js";
@@ -54,7 +53,6 @@ export interface HostedSubagentSessionOptions {
   builtinToolNames?: readonly HostedSubagentBuiltinToolName[];
   managedToolNames?: readonly string[];
   enableExtensions?: boolean;
-  enableAddons?: boolean;
   enableSubagents?: boolean;
   orchestration?: BrewvaToolOrchestration;
 }
@@ -64,7 +62,7 @@ export interface HostedSubagentSessionResult {
   session: {
     dispose(): void;
     abort?(): Promise<void>;
-    sendUserMessage(content: string, options?: { deliverAs?: "steer" | "followUp" }): Promise<void>;
+    sendUserMessage(content: string, options?: { deliverAs?: "followUp" }): Promise<void>;
     agent: {
       waitForIdle(): Promise<void>;
     };
@@ -116,7 +114,7 @@ function mergeTaskPacket(
       ...taskPacket.contextBudget,
     },
     effectCeiling: {
-      posture: taskPacket.effectCeiling?.posture ?? sharedPacket?.effectCeiling?.posture,
+      boundary: taskPacket.effectCeiling?.boundary ?? sharedPacket?.effectCeiling?.boundary,
     },
   };
 }
@@ -187,10 +185,7 @@ function cloneDelegationRunRecord(record: DelegationRunRecord): DelegationRunRec
           mode: record.delivery.mode,
           scopeId: record.delivery.scopeId,
           label: record.delivery.label,
-          ttlMs: record.delivery.ttlMs,
           supplementalAppended: record.delivery.supplementalAppended,
-          contextPacketProposalId: record.delivery.contextPacketProposalId,
-          contextPacketDecision: record.delivery.contextPacketDecision,
           updatedAt: record.delivery.updatedAt,
         }
       : undefined,
@@ -226,24 +221,6 @@ function buildDelegationDeliveryContent(input: {
   ].join("\n");
 }
 
-function buildOutcomeEvidenceRefs(input: {
-  sessionId: string;
-  outcome: SubagentOutcome;
-  createdAt: number;
-}) {
-  if (!input.outcome.ok) {
-    return [];
-  }
-  return input.outcome.evidenceRefs.map((evidenceRef, index) =>
-    buildEvidenceRef({
-      id: `${input.sessionId}:subagent_outcome:${input.outcome.runId}:${index}`,
-      sourceType: evidenceRef.sourceType,
-      locator: evidenceRef.locator,
-      createdAt: input.createdAt,
-    }),
-  );
-}
-
 function buildDeliveryRecordFromRequest(
   delivery: SubagentRunRequest["delivery"] | undefined,
   updatedAt: number,
@@ -255,15 +232,12 @@ function buildDeliveryRecordFromRequest(
     mode: delivery.returnMode,
     scopeId: delivery.returnScopeId,
     label: delivery.returnLabel,
-    ttlMs: delivery.returnTtlMs,
     updatedAt,
   };
 }
 
 interface DelegationDeliveryResult {
   supplementalAppended?: boolean;
-  contextPacketProposalId?: string;
-  contextPacketDecision?: "accept" | "reject" | "defer";
   updatedAt: number;
 }
 
@@ -283,8 +257,6 @@ function mergeDeliveryRecord(
       typeof result.supplementalAppended === "boolean"
         ? result.supplementalAppended
         : delivery.supplementalAppended,
-    contextPacketProposalId: result.contextPacketProposalId ?? delivery.contextPacketProposalId,
-    contextPacketDecision: result.contextPacketDecision ?? delivery.contextPacketDecision,
     updatedAt: result.updatedAt,
   };
 }
@@ -303,9 +275,7 @@ function deliverDelegationOutcome(input: {
     outcome: input.outcome,
   });
   let supplementalAppended = false;
-  let contextPacketProposalId: string | undefined;
-  let contextPacketDecision: DelegationDeliveryResult["contextPacketDecision"];
-  if (input.delivery.returnMode === "supplemental" || input.delivery.returnMode === "both") {
+  if (input.delivery.returnMode === "supplemental") {
     input.runtime.context.appendSupplementalInjection(
       input.sessionId,
       content,
@@ -314,34 +284,8 @@ function deliverDelegationOutcome(input: {
     );
     supplementalAppended = true;
   }
-  if (input.delivery.returnMode === "context_packet" || input.delivery.returnMode === "both") {
-    const submitted = submitContextPacketProposal({
-      runtime: {
-        proposals: input.runtime.proposals,
-      },
-      sessionId: input.sessionId,
-      issuer: "brewva.subagent",
-      subject: `delegation outcome ${input.profile}`,
-      label: input.delivery.returnLabel ?? `Subagent outcome (${input.profile})`,
-      content,
-      scopeId: input.delivery.returnScopeId ?? `subagent:${input.profile}`,
-      packetKey:
-        input.delivery.returnPacketKey ??
-        `subagent_outcome:${input.profile}:${input.outcome.runId}:${createdAt.toString(36)}`,
-      evidenceRefs: buildOutcomeEvidenceRefs({
-        sessionId: input.sessionId,
-        outcome: input.outcome,
-        createdAt,
-      }),
-      expiresAt: createdAt + (input.delivery.returnTtlMs ?? 0),
-    });
-    contextPacketProposalId = submitted.proposal.id;
-    contextPacketDecision = submitted.receipt.decision;
-  }
   return {
     supplementalAppended,
-    contextPacketProposalId,
-    contextPacketDecision,
     updatedAt: createdAt,
   };
 }
@@ -445,7 +389,7 @@ export function createHostedSubagentAdapter(
 
     const sharedPacket = mergeDelegationPacketWithProfileDefaults(profile, input.request.packet);
     try {
-      resolveRequestedPosture(profile, sharedPacket);
+      resolveRequestedBoundary(profile, sharedPacket);
     } catch (error) {
       return {
         ok: false,
@@ -500,7 +444,7 @@ export function createHostedSubagentAdapter(
     let child: HostedSubagentSessionResult | undefined;
     let isolatedWorkspace: IsolatedWorkspaceHandle | undefined;
     let childSessionId: string | undefined;
-    let resolvedPosture: SubagentExecutionPosture | undefined;
+    let resolvedBoundary: SubagentExecutionBoundary | undefined;
     let childCostAggregated = false;
     let parallelSlotReleased = false;
     let cancellationReason: string | undefined;
@@ -537,7 +481,6 @@ export function createHostedSubagentAdapter(
           deliveryMode: input.delivery?.returnMode ?? null,
           deliveryScopeId: input.delivery?.returnScopeId ?? null,
           deliveryLabel: input.delivery?.returnLabel ?? null,
-          deliveryTtlMs: input.delivery?.returnTtlMs ?? null,
         },
       });
       return {
@@ -565,7 +508,7 @@ export function createHostedSubagentAdapter(
     };
 
     try {
-      resolvedPosture = resolveRequestedPosture(input.profile, input.packet);
+      resolvedBoundary = resolveRequestedBoundary(input.profile, input.packet);
     } catch (error) {
       return immediateFailure(error instanceof Error ? error.message : String(error));
     }
@@ -585,7 +528,7 @@ export function createHostedSubagentAdapter(
       label: input.label,
       parentSkill,
       kind: input.profile.resultMode,
-      posture: resolvedPosture,
+      boundary: resolvedBoundary,
       delivery: buildDeliveryRecordFromRequest(input.delivery, startedAt),
     });
 
@@ -597,13 +540,12 @@ export function createHostedSubagentAdapter(
         profile: input.profile.name,
         label: input.label ?? null,
         kind: input.profile.resultMode,
-        posture: resolvedPosture,
+        boundary: resolvedBoundary,
         parentSkill: parentSkill ?? null,
         status: "pending",
         deliveryMode: input.delivery?.returnMode ?? null,
         deliveryScopeId: input.delivery?.returnScopeId ?? null,
         deliveryLabel: input.delivery?.returnLabel ?? null,
-        deliveryTtlMs: input.delivery?.returnTtlMs ?? null,
       },
     });
 
@@ -655,12 +597,12 @@ export function createHostedSubagentAdapter(
         const builtinToolNames = resolveBuiltinToolNamesForRun(
           options.runtime,
           input.profile,
-          resolvedPosture,
+          resolvedBoundary,
         );
         const managedToolNames = resolveManagedToolNamesForRun(
           options.runtime,
           input.profile,
-          resolvedPosture,
+          resolvedBoundary,
         );
 
         if (typeof input.timeoutMs === "number" && input.timeoutMs > 0) {
@@ -671,7 +613,7 @@ export function createHostedSubagentAdapter(
           }, input.timeoutMs);
         }
 
-        if (resolvedPosture === "reversible_mutate") {
+        if (resolvedBoundary === "effectful") {
           isolatedWorkspace = await createIsolatedWorkspace(options.runtime.workspaceRoot);
         }
 
@@ -682,7 +624,6 @@ export function createHostedSubagentAdapter(
           builtinToolNames,
           managedToolNames,
           enableExtensions: input.profile.enableExtensions ?? false,
-          enableAddons: input.profile.enableAddons ?? false,
           enableSubagents: false,
         });
 
@@ -705,14 +646,13 @@ export function createHostedSubagentAdapter(
             profile: input.profile.name,
             label: input.label ?? null,
             kind: input.profile.resultMode,
-            posture: resolvedPosture,
+            boundary: resolvedBoundary,
             childSessionId,
             parentSkill: parentSkill ?? null,
             status: "running",
             deliveryMode: input.delivery?.returnMode ?? null,
             deliveryScopeId: input.delivery?.returnScopeId ?? null,
             deliveryLabel: input.delivery?.returnLabel ?? null,
-            deliveryTtlMs: input.delivery?.returnTtlMs ?? null,
           },
         });
 
@@ -742,7 +682,7 @@ export function createHostedSubagentAdapter(
           summary,
         );
         const workerResult =
-          resolvedPosture === "reversible_mutate"
+          resolvedBoundary === "effectful"
             ? buildWorkerResult({
                 workerId: runId,
                 summary,
@@ -824,7 +764,7 @@ export function createHostedSubagentAdapter(
             label: input.label ?? null,
             kind: input.profile.resultMode,
             childSessionId,
-            posture: resolvedPosture,
+            boundary: resolvedBoundary,
             parentSkill: parentSkill ?? null,
             status: "completed",
             summary,
@@ -836,10 +776,7 @@ export function createHostedSubagentAdapter(
             deliveryMode: completedRecord.delivery?.mode ?? null,
             deliveryScopeId: completedRecord.delivery?.scopeId ?? null,
             deliveryLabel: completedRecord.delivery?.label ?? null,
-            deliveryTtlMs: completedRecord.delivery?.ttlMs ?? null,
             supplementalAppended: completedRecord.delivery?.supplementalAppended ?? null,
-            contextPacketProposalId: completedRecord.delivery?.contextPacketProposalId ?? null,
-            contextPacketDecision: completedRecord.delivery?.contextPacketDecision ?? null,
             deliveryUpdatedAt: completedRecord.delivery?.updatedAt ?? null,
           },
         });
@@ -855,7 +792,7 @@ export function createHostedSubagentAdapter(
           childCostAggregated = true;
         }
         let workerResult: WorkerResult | undefined;
-        if (resolvedPosture === "reversible_mutate") {
+        if (resolvedBoundary === "effectful") {
           const patches = await captureIsolatedPatchSet(
             options.runtime.workspaceRoot,
             isolatedWorkspace,
@@ -939,7 +876,7 @@ export function createHostedSubagentAdapter(
             label: input.label ?? null,
             kind: input.profile.resultMode,
             childSessionId: childSessionId ?? null,
-            posture: resolvedPosture ?? null,
+            boundary: resolvedBoundary ?? null,
             parentSkill: parentSkill ?? null,
             error: message,
             reason: cancellationReason ?? null,
@@ -951,10 +888,7 @@ export function createHostedSubagentAdapter(
             deliveryMode: updatedRecord.delivery?.mode ?? null,
             deliveryScopeId: updatedRecord.delivery?.scopeId ?? null,
             deliveryLabel: updatedRecord.delivery?.label ?? null,
-            deliveryTtlMs: updatedRecord.delivery?.ttlMs ?? null,
             supplementalAppended: updatedRecord.delivery?.supplementalAppended ?? null,
-            contextPacketProposalId: updatedRecord.delivery?.contextPacketProposalId ?? null,
-            contextPacketDecision: updatedRecord.delivery?.contextPacketDecision ?? null,
             deliveryUpdatedAt: updatedRecord.delivery?.updatedAt ?? null,
           },
         });
@@ -1105,7 +1039,7 @@ export function createHostedSubagentAdapter(
           workerSessionId: record.workerSessionId,
           parentSkill: record.parentSkill,
           kind: record.kind,
-          posture: record.posture,
+          boundary: record.boundary,
           summary: record.summary,
           error: record.error,
           artifactRefs: record.artifactRefs?.map((ref) => ({
@@ -1118,10 +1052,7 @@ export function createHostedSubagentAdapter(
                 mode: record.delivery.mode,
                 scopeId: record.delivery.scopeId,
                 label: record.delivery.label,
-                ttlMs: record.delivery.ttlMs,
                 supplementalAppended: record.delivery.supplementalAppended,
-                contextPacketProposalId: record.delivery.contextPacketProposalId,
-                contextPacketDecision: record.delivery.contextPacketDecision,
                 updatedAt: record.delivery.updatedAt,
               }
             : undefined,

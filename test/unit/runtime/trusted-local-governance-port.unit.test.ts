@@ -21,7 +21,7 @@ function createAuthorizationInput(
       payload: {
         toolName: "exec",
         toolCallId: "call-1",
-        posture: "commitment",
+        boundary: "effectful",
         argsSummary: "exec --help",
         argsDigest: "digest",
         effects,

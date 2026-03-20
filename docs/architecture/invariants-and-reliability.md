@@ -99,7 +99,7 @@ Relevant implementation:
 
 ## 9) Profile Transparency Invariant
 
-- Extension-enabled and `--no-addons` profiles must be behaviorally explicit:
+- Extension-enabled and `--no-extensions` profiles must be behaviorally explicit:
   extension presentation hooks may differ, but core safety/evidence invariants
   must remain equivalent.
 - When extensions are disabled, runtime core chain still enforces effect policy,
@@ -138,7 +138,7 @@ Relevant implementation:
 - Replay without events: return explicit no-session condition.
 - Context hard-limit breach: drop injection and emit context drop event.
 - Crash after external effect but before durable outcome persistence remains an
-  explicit at-least-once boundary for commitment-posture tools.
+  explicit at-least-once boundary for approval-bound effectful tools.
 
 ## Reliability Validation
 

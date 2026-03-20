@@ -25,7 +25,7 @@ type EffectCommitmentRequestState = "pending" | "accepted" | "rejected" | "consu
 
 interface EffectCommitmentRequestRecord {
   request: PendingEffectCommitmentRequest;
-  proposal: ProposalEnvelope<"effect_commitment">;
+  proposal: ProposalEnvelope;
   state: EffectCommitmentRequestState;
   actor?: string;
   reason?: string;
@@ -50,9 +50,7 @@ function clonePendingRequest(
   };
 }
 
-function cloneProposal(
-  proposal: ProposalEnvelope<"effect_commitment">,
-): ProposalEnvelope<"effect_commitment"> {
+function cloneProposal(proposal: ProposalEnvelope): ProposalEnvelope {
   return {
     ...proposal,
     payload: {
@@ -75,7 +73,7 @@ export type ResumeEffectCommitmentResult =
   | {
       ok: true;
       requestId: string;
-      proposal: ProposalEnvelope<"effect_commitment">;
+      proposal: ProposalEnvelope;
     }
   | {
       ok: false;
@@ -161,7 +159,7 @@ export class EffectCommitmentDeskService {
         toolName: created.request.toolName,
         toolCallId: created.request.toolCallId,
         subject: created.request.subject,
-        posture: created.request.posture,
+        boundary: created.request.boundary,
         effects: [...created.request.effects],
         argsSummary: created.request.argsSummary ?? null,
         defaultRisk: created.request.defaultRisk ?? null,
@@ -352,7 +350,7 @@ export class EffectCommitmentDeskService {
   }
 
   private createRequestRecord(
-    proposal: ProposalEnvelope<"effect_commitment">,
+    proposal: ProposalEnvelope,
     turn: number,
   ): EffectCommitmentRequestRecord {
     return this.createHydratedRecord({
@@ -394,7 +392,7 @@ export class EffectCommitmentDeskService {
       return;
     }
 
-    const proposalsById = new Map<string, ProposalEnvelope<"effect_commitment">>();
+    const proposalsById = new Map<string, ProposalEnvelope>();
     for (const event of events) {
       const proposal = this.readProposalEnvelopeFromEvent(event);
       if (proposal) {
@@ -470,7 +468,7 @@ export class EffectCommitmentDeskService {
       decision?: "accept" | "reject";
     },
     event: BrewvaEventRecord,
-    proposalsById: ReadonlyMap<string, ProposalEnvelope<"effect_commitment">>,
+    proposalsById: ReadonlyMap<string, ProposalEnvelope>,
   ): EffectCommitmentRequestRecord | undefined {
     const existing = state.recordsByRequestId.get(payload.requestId);
     if (existing) {
@@ -491,9 +489,7 @@ export class EffectCommitmentDeskService {
     return created;
   }
 
-  private readProposalEnvelopeFromEvent(
-    event: BrewvaEventRecord,
-  ): ProposalEnvelope<"effect_commitment"> | undefined {
+  private readProposalEnvelopeFromEvent(event: BrewvaEventRecord): ProposalEnvelope | undefined {
     if (event.type === DECISION_RECEIPT_RECORDED_EVENT_TYPE) {
       const payload =
         event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
@@ -511,13 +507,11 @@ export class EffectCommitmentDeskService {
     return this.readProposalEnvelope(payload?.proposal);
   }
 
-  private readProposalEnvelope(
-    payload: unknown,
-  ): ProposalEnvelope<"effect_commitment"> | undefined {
+  private readProposalEnvelope(payload: unknown): ProposalEnvelope | undefined {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
       return undefined;
     }
-    const candidate = payload as Partial<ProposalEnvelope<"effect_commitment">>;
+    const candidate = payload as Partial<ProposalEnvelope>;
     if (
       candidate.kind !== "effect_commitment" ||
       typeof candidate.id !== "string" ||
@@ -535,7 +529,7 @@ export class EffectCommitmentDeskService {
     if (
       typeof proposalPayload.toolName !== "string" ||
       typeof proposalPayload.toolCallId !== "string" ||
-      proposalPayload.posture !== "commitment" ||
+      proposalPayload.boundary !== "effectful" ||
       typeof proposalPayload.argsDigest !== "string" ||
       !Array.isArray(proposalPayload.effects)
     ) {
@@ -553,7 +547,7 @@ export class EffectCommitmentDeskService {
       payload: {
         toolName: proposalPayload.toolName,
         toolCallId: proposalPayload.toolCallId,
-        posture: "commitment",
+        boundary: "effectful",
         effects: [...proposalPayload.effects],
         defaultRisk: proposalPayload.defaultRisk,
         argsDigest: proposalPayload.argsDigest,
@@ -596,7 +590,7 @@ export class EffectCommitmentDeskService {
 
   private readApprovalRequestedEvent(
     event: BrewvaEventRecord,
-    proposalsById: ReadonlyMap<string, ProposalEnvelope<"effect_commitment">>,
+    proposalsById: ReadonlyMap<string, ProposalEnvelope>,
   ): EffectCommitmentRequestRecord | undefined {
     const payload =
       event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
@@ -699,7 +693,7 @@ export class EffectCommitmentDeskService {
 
   private createHydratedRecord(input: {
     requestId: string;
-    proposal: ProposalEnvelope<"effect_commitment">;
+    proposal: ProposalEnvelope;
     turn?: number;
     createdAt: number;
   }): EffectCommitmentRequestRecord {
@@ -709,7 +703,7 @@ export class EffectCommitmentDeskService {
       toolName: input.proposal.payload.toolName,
       toolCallId: input.proposal.payload.toolCallId,
       subject: input.proposal.subject,
-      posture: "commitment",
+      boundary: "effectful",
       effects: [...input.proposal.payload.effects],
       defaultRisk: input.proposal.payload.defaultRisk,
       argsDigest: input.proposal.payload.argsDigest,

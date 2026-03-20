@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import type {
   DelegationPacket,
   SubagentContextBudget,
-  SubagentExecutionPosture,
+  SubagentExecutionBoundary,
   SubagentResultMode,
 } from "@brewva/brewva-tools";
 
@@ -15,13 +15,12 @@ export interface HostedSubagentProfile {
   description: string;
   resultMode: SubagentResultMode;
   prompt: string;
-  posture?: SubagentExecutionPosture;
+  boundary?: SubagentExecutionBoundary;
   model?: string;
   entrySkill?: string;
   builtinToolNames?: HostedSubagentBuiltinToolName[];
   managedToolNames?: string[];
   defaultContextBudget?: SubagentContextBudget;
-  enableAddons?: boolean;
   enableExtensions?: boolean;
 }
 
@@ -55,8 +54,8 @@ function asBuiltinToolArray(value: unknown): HostedSubagentBuiltinToolName[] | u
   return normalized.length > 0 ? normalized : undefined;
 }
 
-function asPosture(value: unknown): SubagentExecutionPosture | undefined {
-  return value === "observe" || value === "reversible_mutate" ? value : undefined;
+function asBoundary(value: unknown): SubagentExecutionBoundary | undefined {
+  return value === "safe" || value === "effectful" ? value : undefined;
 }
 
 function asResultMode(value: unknown): SubagentResultMode | undefined {
@@ -89,9 +88,9 @@ function asContextBudget(value: unknown): SubagentContextBudget | undefined {
   };
 }
 
-const POSTURE_RANK: Record<SubagentExecutionPosture, number> = {
-  observe: 0,
-  reversible_mutate: 1,
+const BOUNDARY_RANK: Record<SubagentExecutionBoundary, number> = {
+  safe: 0,
+  effectful: 1,
 };
 
 function assertSubset(
@@ -137,11 +136,11 @@ function assertOverlayTightening(
       `invalid_subagent_profile:${candidate.name}:resultMode cannot replace the base profile mode`,
     );
   }
-  const basePosture = base.posture ?? "observe";
-  const candidatePosture = candidate.posture ?? basePosture;
-  if (POSTURE_RANK[candidatePosture] > POSTURE_RANK[basePosture]) {
+  const baseBoundary = base.boundary ?? "safe";
+  const candidateBoundary = candidate.boundary ?? baseBoundary;
+  if (BOUNDARY_RANK[candidateBoundary] > BOUNDARY_RANK[baseBoundary]) {
     throw new Error(
-      `invalid_subagent_profile:${candidate.name}:posture cannot widen beyond the base profile`,
+      `invalid_subagent_profile:${candidate.name}:boundary cannot widen beyond the base profile`,
     );
   }
   assertSubset(
@@ -168,11 +167,6 @@ function assertOverlayTightening(
     base.defaultContextBudget?.maxTurnTokens,
     candidate.defaultContextBudget?.maxTurnTokens,
   );
-  if (base.enableAddons === false && candidate.enableAddons === true) {
-    throw new Error(
-      `invalid_subagent_profile:${candidate.name}:enableAddons cannot widen a disabled base profile`,
-    );
-  }
   if (base.enableExtensions === false && candidate.enableExtensions === true) {
     throw new Error(
       `invalid_subagent_profile:${candidate.name}:enableExtensions cannot widen a disabled base profile`,
@@ -184,6 +178,9 @@ function toProfile(
   source: Record<string, unknown>,
   defaults?: HostedSubagentProfile,
 ): HostedSubagentProfile | undefined {
+  if (Object.hasOwn(source, "posture")) {
+    throw new Error("posture has been removed; use boundary with safe or effectful");
+  }
   const name = asString(source.name) ?? defaults?.name;
   const description = asString(source.description) ?? defaults?.description;
   const resultMode = asResultMode(source.resultMode) ?? defaults?.resultMode;
@@ -197,15 +194,13 @@ function toProfile(
     description,
     resultMode,
     prompt,
-    posture: asPosture(source.posture) ?? defaults?.posture ?? "observe",
+    boundary: asBoundary(source.boundary) ?? defaults?.boundary ?? "safe",
     model: asString(source.model) ?? defaults?.model,
     entrySkill: asString(source.entrySkill) ?? defaults?.entrySkill,
     builtinToolNames: asBuiltinToolArray(source.builtinToolNames) ?? defaults?.builtinToolNames,
     managedToolNames: asStringArray(source.managedToolNames) ?? defaults?.managedToolNames,
     defaultContextBudget:
       asContextBudget(source.defaultContextBudget) ?? defaults?.defaultContextBudget,
-    enableAddons:
-      typeof source.enableAddons === "boolean" ? source.enableAddons : defaults?.enableAddons,
     enableExtensions:
       typeof source.enableExtensions === "boolean"
         ? source.enableExtensions
@@ -220,7 +215,7 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
     resultMode: "exploration",
     prompt:
       "Investigate the delegated objective with a repository-scout mindset. Focus on relevant files, summarize concrete findings, and keep conclusions tightly tied to evidence.",
-    posture: "observe",
+    boundary: "safe",
     builtinToolNames: ["read"],
     managedToolNames: [
       "grep",
@@ -242,7 +237,6 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
       maxInjectionTokens: 1800,
       maxTurnTokens: 6000,
     },
-    enableAddons: false,
     enableExtensions: false,
   },
   reviewer: {
@@ -251,7 +245,7 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
     resultMode: "review",
     prompt:
       "Review the delegated scope as a strict senior engineer. Prioritize correctness, regressions, missing tests, and contract drift. Keep the answer concrete and evidence-backed.",
-    posture: "observe",
+    boundary: "safe",
     builtinToolNames: ["read"],
     managedToolNames: [
       "grep",
@@ -273,7 +267,6 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
       maxInjectionTokens: 2000,
       maxTurnTokens: 7000,
     },
-    enableAddons: false,
     enableExtensions: false,
   },
   verifier: {
@@ -283,7 +276,7 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
     resultMode: "verification",
     prompt:
       "Verify the delegated objective using only read-only evidence. Prefer diagnostics, previously recorded outputs, and explicit blockers over speculation.",
-    posture: "observe",
+    boundary: "safe",
     builtinToolNames: ["read"],
     managedToolNames: [
       "grep",
@@ -302,7 +295,6 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
       maxInjectionTokens: 1800,
       maxTurnTokens: 7000,
     },
-    enableAddons: false,
     enableExtensions: false,
   },
   "patch-worker": {
@@ -312,7 +304,7 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
     resultMode: "patch",
     prompt:
       "Implement the delegated change inside the isolated workspace. Keep edits minimal, preserve surrounding behavior, and explain the patch and verification evidence concisely.",
-    posture: "reversible_mutate",
+    boundary: "effectful",
     builtinToolNames: ["read", "edit", "write"],
     managedToolNames: [
       "grep",
@@ -334,7 +326,6 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
       maxInjectionTokens: 2000,
       maxTurnTokens: 8000,
     },
-    enableAddons: false,
     enableExtensions: false,
   },
 } as const;
@@ -403,7 +394,7 @@ export function mergeDelegationPacketWithProfileDefaults(
       ...packet.contextBudget,
     },
     effectCeiling: {
-      posture: packet.effectCeiling?.posture ?? profile.posture ?? "observe",
+      boundary: packet.effectCeiling?.boundary ?? profile.boundary ?? "safe",
     },
   };
 }

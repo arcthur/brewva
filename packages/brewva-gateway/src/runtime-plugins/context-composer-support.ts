@@ -1,14 +1,11 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { ExtensionAPI, ToolInfo } from "@mariozechner/pi-coding-agent";
 import { buildCapabilityView, type BuildCapabilityViewResult } from "./capability-view.js";
-import type { ComposedContextBlock } from "./context-composer.js";
-import { resolveDelegationRecommendationBlock } from "./delegation-recommendation.js";
 
 export interface PreparedContextComposerSupport {
   gateStatus: ReturnType<BrewvaRuntime["context"]["getCompactionGateStatus"]>;
   pendingCompactionReason: string | null;
   capabilityView: BuildCapabilityViewResult;
-  delegationRecommendation: ComposedContextBlock | null;
 }
 
 export function prepareContextComposerSupport(input: {
@@ -43,19 +40,9 @@ export function prepareContextComposerSupport(input: {
     resolveGovernanceDescriptor: (toolName) =>
       input.runtime.tools.getGovernanceDescriptor(toolName),
   });
-  const delegationRecommendation = resolveDelegationRecommendationBlock({
-    runtime: input.runtime,
-    sessionId: input.sessionId,
-    prompt: input.prompt,
-    capabilityView,
-    gateRequired: gateStatus.required,
-    pendingCompactionReason,
-  });
-
   return {
     gateStatus,
     pendingCompactionReason,
     capabilityView,
-    delegationRecommendation,
   };
 }

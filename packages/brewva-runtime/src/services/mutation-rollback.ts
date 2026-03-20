@@ -10,14 +10,12 @@ import type {
   RecordedReversibleMutation,
   ReversibleMutationService,
 } from "./reversible-mutation.js";
-import type { TrustMeterService } from "./trust-meter.js";
 
 export interface MutationRollbackServiceOptions {
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
   recordEvent: RuntimeKernelContext["recordEvent"];
   reversibleMutationService: ReversibleMutationService;
   fileChangeService: Pick<FileChangeService, "rollbackPatchSet">;
-  trustMeterService: TrustMeterService;
 }
 
 function buildBaseResult(
@@ -50,7 +48,6 @@ export class MutationRollbackService {
     sessionId: string,
     patchSetId?: string,
   ) => ReturnType<FileChangeService["rollbackPatchSet"]>;
-  private readonly trustMeterService: TrustMeterService;
 
   constructor(options: MutationRollbackServiceOptions) {
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
@@ -58,7 +55,6 @@ export class MutationRollbackService {
     this.reversibleMutationService = options.reversibleMutationService;
     this.rollbackPatchSet = (sessionId, patchSetId) =>
       options.fileChangeService.rollbackPatchSet(sessionId, patchSetId);
-    this.trustMeterService = options.trustMeterService;
   }
 
   rollbackLast(sessionId: string): ToolMutationRollbackResult {
@@ -126,15 +122,6 @@ export class MutationRollbackService {
 
     if (result.ok) {
       this.reversibleMutationService.markRolledBack(sessionId, mutation.receipt.id);
-    }
-
-    if (mutation.receipt.strategy !== "workspace_patchset") {
-      this.trustMeterService.observeRollbackResult({
-        sessionId,
-        ok: result.ok,
-        failedPaths: result.failedPaths.length,
-        strategy: mutation.receipt.strategy,
-      });
     }
 
     this.recordEvent({

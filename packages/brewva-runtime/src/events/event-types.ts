@@ -27,7 +27,7 @@ export const VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE = "verification_outcome_re
 export const VERIFICATION_STATE_RESET_EVENT_TYPE = "verification_state_reset" as const;
 export const TASK_STUCK_DETECTED_EVENT_TYPE = "task_stuck_detected" as const;
 export const TASK_STUCK_CLEARED_EVENT_TYPE = "task_stuck_cleared" as const;
-export const TOOL_POSTURE_SELECTED_EVENT_TYPE = "tool_posture_selected" as const;
+export const TOOL_EFFECT_GATE_SELECTED_EVENT_TYPE = "tool_effect_gate_selected" as const;
 export const REVERSIBLE_MUTATION_PREPARED_EVENT_TYPE = "reversible_mutation_prepared" as const;
 export const REVERSIBLE_MUTATION_RECORDED_EVENT_TYPE = "reversible_mutation_recorded" as const;
 export const REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE =
@@ -38,56 +38,12 @@ export const EFFECT_COMMITMENT_APPROVAL_DECIDED_EVENT_TYPE =
   "effect_commitment_approval_decided" as const;
 export const EFFECT_COMMITMENT_APPROVAL_CONSUMED_EVENT_TYPE =
   "effect_commitment_approval_consumed" as const;
-export const SCAN_CONVERGENCE_ARMED_EVENT_TYPE = "scan_convergence_armed" as const;
-export const SCAN_CONVERGENCE_ADVISORY_EVENT_TYPE = "scan_convergence_advisory" as const;
-export const SCAN_CONVERGENCE_BLOCKED_TOOL_EVENT_TYPE = "scan_convergence_blocked_tool" as const;
-export const SCAN_CONVERGENCE_BLOCKED_EVENT_TYPE = SCAN_CONVERGENCE_BLOCKED_TOOL_EVENT_TYPE;
-export const SCAN_CONVERGENCE_RESET_EVENT_TYPE = "scan_convergence_reset" as const;
-export const DEBUG_LOOP_TRANSITION_EVENT_TYPE = "debug_loop_transition" as const;
-export const DEBUG_LOOP_FAILURE_CASE_PERSISTED_EVENT_TYPE =
-  "debug_loop_failure_case_persisted" as const;
-export const DEBUG_LOOP_ARTIFACT_PERSIST_FAILED_EVENT_TYPE =
-  "debug_loop_artifact_persist_failed" as const;
-export const DEBUG_LOOP_RETRY_SCHEDULED_EVENT_TYPE = "debug_loop_retry_scheduled" as const;
-export const DEBUG_LOOP_HANDOFF_PERSISTED_EVENT_TYPE = "debug_loop_handoff_persisted" as const;
-export const DEBUG_LOOP_REFERENCE_PERSISTED_EVENT_TYPE = "debug_loop_reference_persisted" as const;
-export const MEMORY_SUMMARY_WRITTEN_EVENT_TYPE = "memory_summary_written" as const;
-export const MEMORY_SUMMARY_WRITE_FAILED_EVENT_TYPE = "memory_summary_write_failed" as const;
-export const MEMORY_REFERENCE_REHYDRATED_EVENT_TYPE = "memory_reference_rehydrated" as const;
-export const MEMORY_REFERENCE_REHYDRATION_FAILED_EVENT_TYPE =
-  "memory_reference_rehydration_failed" as const;
-export const MEMORY_SUMMARY_REHYDRATED_EVENT_TYPE = "memory_summary_rehydrated" as const;
-export const MEMORY_SUMMARY_REHYDRATION_FAILED_EVENT_TYPE =
-  "memory_summary_rehydration_failed" as const;
-export const PROACTIVITY_WAKEUP_PREPARED_EVENT_TYPE = "proactivity_wakeup_prepared" as const;
-export const COGNITION_NOTE_WRITTEN_EVENT_TYPE = "cognition_note_written" as const;
-export const COGNITION_NOTE_WRITE_FAILED_EVENT_TYPE = "cognition_note_write_failed" as const;
-export const COGNITIVE_METRIC_FIRST_PRODUCTIVE_ACTION_EVENT_TYPE =
-  "cognitive_metric_first_productive_action" as const;
-export const COGNITIVE_METRIC_RESUMPTION_PROGRESS_EVENT_TYPE =
-  "cognitive_metric_resumption_progress" as const;
-export const COGNITIVE_METRIC_REHYDRATION_USEFULNESS_EVENT_TYPE =
-  "cognitive_metric_rehydration_usefulness" as const;
 
 export const PROJECTION_INGESTED_EVENT_TYPE = "projection_ingested" as const;
 export const PROJECTION_REFRESHED_EVENT_TYPE = "projection_refreshed" as const;
 export const CONTEXT_COMPOSED_EVENT_TYPE = "context_composed" as const;
 export const TOOL_SURFACE_RESOLVED_EVENT_TYPE = "tool_surface_resolved" as const;
 export const SKILL_ROUTING_SELECTION_EVENT_TYPE = "skill_routing_selection" as const;
-export const SKILL_ROUTING_DECIDED_EVENT_TYPE = "skill_routing_decided" as const;
-export const SKILL_ROUTING_DEFERRED_EVENT_TYPE = "skill_routing_deferred" as const;
-export const SKILL_ROUTING_FOLLOWED_EVENT_TYPE = "skill_routing_followed" as const;
-export const SKILL_ROUTING_OVERRIDDEN_EVENT_TYPE = "skill_routing_overridden" as const;
-export const SKILL_ROUTING_IGNORED_EVENT_TYPE = "skill_routing_ignored" as const;
-
-export const SKILL_CASCADE_PLANNED_EVENT_TYPE = "skill_cascade_planned" as const;
-export const SKILL_CASCADE_STEP_STARTED_EVENT_TYPE = "skill_cascade_step_started" as const;
-export const SKILL_CASCADE_STEP_COMPLETED_EVENT_TYPE = "skill_cascade_step_completed" as const;
-export const SKILL_CASCADE_PAUSED_EVENT_TYPE = "skill_cascade_paused" as const;
-export const SKILL_CASCADE_REPLANNED_EVENT_TYPE = "skill_cascade_replanned" as const;
-export const SKILL_CASCADE_OVERRIDDEN_EVENT_TYPE = "skill_cascade_overridden" as const;
-export const SKILL_CASCADE_FINISHED_EVENT_TYPE = "skill_cascade_finished" as const;
-export const SKILL_CASCADE_ABORTED_EVENT_TYPE = "skill_cascade_aborted" as const;
 
 export const SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE = "schedule_recovery_deferred" as const;
 export const SCHEDULE_RECOVERY_SUMMARY_EVENT_TYPE = "schedule_recovery_summary" as const;
@@ -144,53 +100,18 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   VERIFICATION_STATE_RESET_EVENT_TYPE,
   TASK_STUCK_DETECTED_EVENT_TYPE,
   TASK_STUCK_CLEARED_EVENT_TYPE,
-  TOOL_POSTURE_SELECTED_EVENT_TYPE,
+  TOOL_EFFECT_GATE_SELECTED_EVENT_TYPE,
   REVERSIBLE_MUTATION_PREPARED_EVENT_TYPE,
   REVERSIBLE_MUTATION_RECORDED_EVENT_TYPE,
   REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE,
   EFFECT_COMMITMENT_APPROVAL_REQUESTED_EVENT_TYPE,
   EFFECT_COMMITMENT_APPROVAL_DECIDED_EVENT_TYPE,
   EFFECT_COMMITMENT_APPROVAL_CONSUMED_EVENT_TYPE,
-  SCAN_CONVERGENCE_ARMED_EVENT_TYPE,
-  SCAN_CONVERGENCE_ADVISORY_EVENT_TYPE,
-  SCAN_CONVERGENCE_BLOCKED_TOOL_EVENT_TYPE,
-  SCAN_CONVERGENCE_RESET_EVENT_TYPE,
-  DEBUG_LOOP_TRANSITION_EVENT_TYPE,
-  DEBUG_LOOP_FAILURE_CASE_PERSISTED_EVENT_TYPE,
-  DEBUG_LOOP_ARTIFACT_PERSIST_FAILED_EVENT_TYPE,
-  DEBUG_LOOP_RETRY_SCHEDULED_EVENT_TYPE,
-  DEBUG_LOOP_HANDOFF_PERSISTED_EVENT_TYPE,
-  DEBUG_LOOP_REFERENCE_PERSISTED_EVENT_TYPE,
-  MEMORY_SUMMARY_WRITTEN_EVENT_TYPE,
-  MEMORY_SUMMARY_WRITE_FAILED_EVENT_TYPE,
-  MEMORY_REFERENCE_REHYDRATED_EVENT_TYPE,
-  MEMORY_REFERENCE_REHYDRATION_FAILED_EVENT_TYPE,
-  MEMORY_SUMMARY_REHYDRATED_EVENT_TYPE,
-  MEMORY_SUMMARY_REHYDRATION_FAILED_EVENT_TYPE,
-  PROACTIVITY_WAKEUP_PREPARED_EVENT_TYPE,
-  COGNITION_NOTE_WRITTEN_EVENT_TYPE,
-  COGNITION_NOTE_WRITE_FAILED_EVENT_TYPE,
-  COGNITIVE_METRIC_FIRST_PRODUCTIVE_ACTION_EVENT_TYPE,
-  COGNITIVE_METRIC_RESUMPTION_PROGRESS_EVENT_TYPE,
-  COGNITIVE_METRIC_REHYDRATION_USEFULNESS_EVENT_TYPE,
   PROJECTION_INGESTED_EVENT_TYPE,
   PROJECTION_REFRESHED_EVENT_TYPE,
   CONTEXT_COMPOSED_EVENT_TYPE,
   TOOL_SURFACE_RESOLVED_EVENT_TYPE,
   SKILL_ROUTING_SELECTION_EVENT_TYPE,
-  SKILL_ROUTING_DECIDED_EVENT_TYPE,
-  SKILL_ROUTING_DEFERRED_EVENT_TYPE,
-  SKILL_ROUTING_FOLLOWED_EVENT_TYPE,
-  SKILL_ROUTING_OVERRIDDEN_EVENT_TYPE,
-  SKILL_ROUTING_IGNORED_EVENT_TYPE,
-  SKILL_CASCADE_PLANNED_EVENT_TYPE,
-  SKILL_CASCADE_STEP_STARTED_EVENT_TYPE,
-  SKILL_CASCADE_STEP_COMPLETED_EVENT_TYPE,
-  SKILL_CASCADE_PAUSED_EVENT_TYPE,
-  SKILL_CASCADE_REPLANNED_EVENT_TYPE,
-  SKILL_CASCADE_OVERRIDDEN_EVENT_TYPE,
-  SKILL_CASCADE_FINISHED_EVENT_TYPE,
-  SKILL_CASCADE_ABORTED_EVENT_TYPE,
   SCHEDULE_EVENT_TYPE,
   SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE,
   SCHEDULE_RECOVERY_SUMMARY_EVENT_TYPE,

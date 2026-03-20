@@ -6,11 +6,19 @@ import {
   parseSkillDocument,
   resolveSkillEffectLevel,
 } from "@brewva/brewva-runtime";
+import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { repoRoot } from "./skill-contract.helpers.js";
+
+function createCleanRuntime(): BrewvaRuntime {
+  return new BrewvaRuntime({
+    cwd: repoRoot(),
+    config: createRuntimeConfig(),
+  });
+}
 
 describe("repository catalog contracts", () => {
   test("runtime loads the new v2 catalog names", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createCleanRuntime();
 
     expect(runtime.skills.get("repository-analysis")).toBeDefined();
     expect(runtime.skills.get("design")).toBeDefined();
@@ -36,7 +44,7 @@ describe("repository catalog contracts", () => {
   });
 
   test("built-in base skills declare explicit output contracts for every declared output", () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createCleanRuntime();
     const missing = runtime.skills.list().flatMap((skill) => {
       const outputs = listSkillOutputs(skill.contract);
       if (outputs.length === 0) {

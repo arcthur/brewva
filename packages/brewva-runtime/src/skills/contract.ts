@@ -741,83 +741,13 @@ function mergeOutputContracts(
   return merged;
 }
 
-function normalizePositiveInteger(value: unknown, fallback: number): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return fallback;
-  }
-  return Math.max(1, Math.floor(value));
-}
-
-function normalizeDispatchPolicy(
-  data: Record<string, unknown>,
-  category: SkillCategory,
-  filePath: string,
-): SkillContract["dispatch"] | undefined {
-  if (!Object.prototype.hasOwnProperty.call(data, "dispatch")) {
-    if (category === "overlay") {
-      return undefined;
-    }
-    return {
-      suggestThreshold: 10,
-      autoThreshold: 16,
-    };
-  }
-
-  const rawDispatch = requireRecordField(data, "dispatch", filePath);
-  if (Object.prototype.hasOwnProperty.call(rawDispatch, "gateThreshold")) {
+function rejectLegacyDispatchPolicy(data: Record<string, unknown>, filePath: string): void {
+  if (Object.prototype.hasOwnProperty.call(data, "dispatch")) {
     failSkillContract(
       filePath,
-      "dispatch.gateThreshold is not supported. Use dispatch.suggest_threshold.",
+      "dispatch has been removed; model path sequencing is no longer runtime-managed.",
     );
   }
-  if (Object.prototype.hasOwnProperty.call(rawDispatch, "autoThreshold")) {
-    failSkillContract(
-      filePath,
-      "dispatch.autoThreshold is not supported. Use dispatch.auto_threshold.",
-    );
-  }
-  if (Object.prototype.hasOwnProperty.call(rawDispatch, "suggestThreshold")) {
-    failSkillContract(
-      filePath,
-      "dispatch.suggestThreshold is not supported. Use dispatch.suggest_threshold.",
-    );
-  }
-  if (
-    Object.prototype.hasOwnProperty.call(rawDispatch, "suggest_threshold") &&
-    (typeof rawDispatch.suggest_threshold !== "number" ||
-      !Number.isFinite(rawDispatch.suggest_threshold))
-  ) {
-    failSkillContract(filePath, "dispatch.suggest_threshold must be a finite number.");
-  }
-  if (
-    Object.prototype.hasOwnProperty.call(rawDispatch, "auto_threshold") &&
-    (typeof rawDispatch.auto_threshold !== "number" || !Number.isFinite(rawDispatch.auto_threshold))
-  ) {
-    failSkillContract(filePath, "dispatch.auto_threshold must be a finite number.");
-  }
-  if (Object.prototype.hasOwnProperty.call(rawDispatch, "gate_threshold")) {
-    failSkillContract(
-      filePath,
-      "dispatch.gate_threshold has been removed. Use dispatch.suggest_threshold.",
-    );
-  }
-  if (Object.prototype.hasOwnProperty.call(rawDispatch, "defaultMode")) {
-    failSkillContract(filePath, "dispatch.defaultMode has been removed.");
-  }
-  if (Object.prototype.hasOwnProperty.call(rawDispatch, "default_mode")) {
-    failSkillContract(filePath, "dispatch.default_mode has been removed.");
-  }
-
-  const suggestThreshold = normalizePositiveInteger(rawDispatch.suggest_threshold, 10);
-  const autoThreshold = Math.max(
-    suggestThreshold,
-    normalizePositiveInteger(rawDispatch.auto_threshold, 16),
-  );
-
-  return {
-    suggestThreshold,
-    autoThreshold,
-  };
 }
 
 function resolveRoutingScope(category: SkillCategory): SkillRoutingPolicy["scope"] | undefined {
@@ -889,11 +819,6 @@ function normalizeResourceSet(data: Record<string, unknown>, filePath: string): 
     invariants: readOptionalStringArrayField(data, "invariants", filePath),
   };
 }
-
-const DEFAULT_DISPATCH_POLICY: NonNullable<SkillContract["dispatch"]> = {
-  suggestThreshold: 10,
-  autoThreshold: 16,
-};
 
 function mergeResourceBudgetCaps(
   base: SkillResourceBudget | undefined,
@@ -1006,26 +931,6 @@ function mergeExecutionHints(
   };
 }
 
-function mergeDispatchPolicy(
-  base: SkillContractLike["dispatch"],
-  patch: SkillContractOverride["dispatch"] | undefined,
-): SkillContractLike["dispatch"] | undefined {
-  if (!patch) return base;
-  const baseDispatch = base ?? DEFAULT_DISPATCH_POLICY;
-  const suggestThreshold =
-    typeof patch.suggestThreshold === "number"
-      ? Math.max(baseDispatch.suggestThreshold, Math.floor(patch.suggestThreshold))
-      : baseDispatch.suggestThreshold;
-  const autoThreshold =
-    typeof patch.autoThreshold === "number"
-      ? Math.max(baseDispatch.autoThreshold, Math.floor(patch.autoThreshold))
-      : baseDispatch.autoThreshold;
-  return {
-    suggestThreshold,
-    autoThreshold: Math.max(suggestThreshold, autoThreshold),
-  };
-}
-
 function mergeRoutingPolicy(
   base: SkillRoutingPolicy | undefined,
   patch: SkillContractOverride["routing"] | undefined,
@@ -1072,7 +977,7 @@ function normalizeContract(
       ? readNullableStringArrayField(data, "consumes", filePath)
       : requireStringArrayField(data, "consumes", filePath);
   const requires = readOptionalStringArrayField(data, "requires", filePath);
-  const dispatch = normalizeDispatchPolicy(data, category, filePath);
+  rejectLegacyDispatchPolicy(data, filePath);
   const routing = normalizeRoutingPolicy(category, data, filePath);
 
   if (category === "overlay") {
@@ -1080,7 +985,6 @@ function normalizeContract(
       name,
       category,
       description: typeof data.description === "string" ? data.description : undefined,
-      dispatch,
       routing,
       intent: normalizeIntentContract(data, category, filePath),
       effects: normalizeEffectsContract(data, category, filePath),
@@ -1101,7 +1005,6 @@ function normalizeContract(
     name,
     category,
     description: typeof data.description === "string" ? data.description : undefined,
-    dispatch,
     routing,
     intent: normalizeIntentContract(data, category, filePath),
     effects: normalizeEffectsContract(data, category, filePath),
@@ -1122,7 +1025,6 @@ export function tightenContract(
   base: SkillContract,
   override: SkillContractOverride,
 ): SkillContract {
-  const dispatch = mergeDispatchPolicy(base.dispatch, override.dispatch);
   const routing = mergeRoutingPolicy(base.routing, override.routing);
   const resources = ensureMergedResourcePolicyBounds(base.name, {
     defaultLease: mergeResourceBudgetCaps(
@@ -1137,7 +1039,6 @@ export function tightenContract(
 
   return {
     ...base,
-    dispatch,
     routing,
     intent: mergeIntentContract(base.intent, override.intent, base.name),
     effects: mergeEffectsContract(base.effects, override.effects),
@@ -1153,7 +1054,6 @@ export function mergeOverlayContract(
   base: SkillContract,
   overlay: SkillContractOverride,
 ): SkillContract {
-  const dispatch = mergeDispatchPolicy(base.dispatch, overlay.dispatch);
   const routing = mergeRoutingPolicy(base.routing, overlay.routing);
   const mergedOutputs = [
     ...new Set([...(base.intent?.outputs ?? []), ...(overlay.intent?.outputs ?? [])]),
@@ -1177,7 +1077,6 @@ export function mergeOverlayContract(
 
   return {
     ...base,
-    dispatch,
     routing,
     intent: {
       outputs: mergedOutputs,

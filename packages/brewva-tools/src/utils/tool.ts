@@ -23,7 +23,7 @@ function cloneGovernanceDescriptor(input: ToolGovernanceDescriptor): ToolGoverna
   return {
     effects: [...new Set(input.effects)],
     defaultRisk: input.defaultRisk,
-    posture: input.posture,
+    boundary: input.boundary,
   };
 }
 

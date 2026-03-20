@@ -234,25 +234,20 @@ describe("skill document parsing", () => {
     expect(merged.composableWith).toEqual(["debugging"]);
   });
 
-  test("overlay parsing leaves omitted dispatch undefined so base thresholds can inherit unchanged", () => {
+  test("overlay parsing leaves legacy dispatch absent and still merges denied effects", () => {
     const filePath = createTempSkillDocument(
-      "brewva-skill-overlay-dispatch-inherit-",
+      "brewva-skill-overlay-no-dispatch-",
       "skills/project/overlays/review/SKILL.md",
       ["---", "effects:", "  denied_effects: [external_network]", "---", "# overlay"],
     );
 
     const parsed = parseSkillDocument(filePath, "overlay");
-    expect(parsed.contract.dispatch).toBeUndefined();
 
     const merged = mergeOverlayContract(
       createContract({
         name: "review",
         category: "core",
         routing: { scope: "core" },
-        dispatch: {
-          suggestThreshold: 6,
-          autoThreshold: 11,
-        },
         intent: {
           outputs: ["review_report"],
           outputContracts: {
@@ -267,11 +262,25 @@ describe("skill document parsing", () => {
       parsed.contract,
     );
 
-    expect(merged.dispatch).toEqual({
-      suggestThreshold: 6,
-      autoThreshold: 11,
-    });
     expect(merged.effects?.deniedEffects).toEqual(["external_network"]);
+  });
+
+  test("rejects legacy dispatch metadata in overlays", () => {
+    const filePath = createTempSkillDocument(
+      "brewva-skill-overlay-legacy-dispatch-",
+      "skills/project/overlays/review/SKILL.md",
+      [
+        "---",
+        "dispatch:",
+        "  suggest_threshold: 6",
+        "effects:",
+        "  denied_effects: [external_network]",
+        "---",
+        "# overlay",
+      ],
+    );
+
+    expect(() => parseSkillDocument(filePath, "overlay")).toThrow("dispatch has been removed");
   });
 
   test("fails fast when non-overlay outputs omit output contracts", () => {

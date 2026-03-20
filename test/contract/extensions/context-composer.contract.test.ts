@@ -29,9 +29,6 @@ function createComposerRuntime(
   tapePressure: "low" | "medium" | "high",
   entriesSinceAnchor: number,
   options: {
-    advisoryPayload?: Record<string, unknown>;
-    advisoryTimestamp?: number;
-    resetTimestamp?: number;
     pendingDelegations?: Array<{ runId: string; profile: string; status: "pending" | "running" }>;
   } = {},
 ): ContextComposerInput["runtime"] {
@@ -44,22 +41,7 @@ function createComposerRuntime(
         entriesSinceCheckpoint: 7,
         lastAnchor: tapePressure === "low" ? null : { id: "a-1", name: "handoff" },
       }),
-      query: (_sessionId, query) =>
-        query.type === "scan_convergence_advisory" && options.advisoryPayload
-          ? [
-              {
-                timestamp: options.advisoryTimestamp ?? 1,
-                payload: options.advisoryPayload,
-              },
-            ]
-          : query.type === "scan_convergence_reset" && typeof options.resetTimestamp === "number"
-            ? [
-                {
-                  timestamp: options.resetTimestamp,
-                  payload: { reason: "input_reset" },
-                },
-              ]
-            : [],
+      query: () => [],
     },
     session: {
       listDelegationRuns: () =>
@@ -109,9 +91,9 @@ describe("context composer", () => {
       injectionAccepted: true,
       admittedEntries: [
         makeEntry(
-          CONTEXT_SOURCES.skillCascadeGate,
-          "skill-cascade-gate",
-          "[SkillCascadeGate]\nstatus: pending",
+          "brewva.custom-constraint",
+          "custom-constraint",
+          "[CustomConstraint]\nstatus: pending",
           8,
           "constraint",
         ),
@@ -131,7 +113,7 @@ describe("context composer", () => {
       "constraint",
     ]);
     expect(result.content.indexOf("[TaskState]")).toBeLessThan(
-      result.content.indexOf("[SkillCascadeGate]"),
+      result.content.indexOf("[CustomConstraint]"),
     );
     expect(result.metrics.narrativeRatio).toBeGreaterThan(0.25);
   });
@@ -175,72 +157,6 @@ describe("context composer", () => {
     expect(result.content).not.toContain("tape_pressure:");
     expect(result.content).not.toContain("tape_entries_since_anchor:");
     expect(result.metrics.diagnosticTokens).toBe(0);
-  });
-
-  test("preserves delegation recommendations when governance cap trims lower-priority diagnostics", () => {
-    const result = composeContextBlocks({
-      runtime: createComposerRuntime("low", 1),
-      sessionId: "compose-delegation-recommendation",
-      gateStatus: {
-        required: false,
-        reason: null,
-        pressure: {
-          level: "low",
-          usageRatio: 0.2,
-          hardLimitRatio: 0.95,
-          compactionThresholdRatio: 0.8,
-        },
-        recentCompaction: false,
-        lastCompactionTurn: null,
-        turnsSinceCompaction: null,
-        windowTurns: 4,
-      },
-      pendingCompactionReason: null,
-      capabilityView: buildCapabilityView({
-        prompt: "continue",
-        allTools: [
-          {
-            name: "subagent_run",
-            description: "Delegate work to an isolated subagent.",
-            parameters: { type: "object", properties: {} },
-          },
-        ],
-        activeToolNames: ["subagent_run"],
-      }),
-      injectionAccepted: false,
-      admittedEntries: [],
-      supplementalBlocks: [
-        {
-          id: "generic-diagnostic",
-          category: "diagnostic",
-          content: [
-            "[GenericDiagnostic]",
-            "signal: keep shrinking governance-heavy context before capability expansion.",
-            "signal: keep shrinking governance-heavy context before capability expansion.",
-            "signal: keep shrinking governance-heavy context before capability expansion.",
-          ].join("\n"),
-          estimatedTokens: 48,
-        },
-        {
-          id: "delegation-recommendation",
-          category: "diagnostic",
-          content: [
-            "[DelegationRecommendation]",
-            "tool: subagent_run",
-            "profile: verifier",
-            "mode: single",
-            "posture: observe",
-            "confidence: medium",
-            "reason: The active skill is review-oriented and benefits from a verifier lane.",
-            "authority: explicit_only",
-          ].join("\n"),
-          estimatedTokens: 62,
-        },
-      ],
-    });
-
-    expect(result.content).toContain("[DelegationRecommendation]");
-    expect(result.content).not.toContain("[GenericDiagnostic]");
   });
 
   test("includes tape telemetry only when diagnostics are explicitly requested", () => {
@@ -375,12 +291,7 @@ describe("context composer", () => {
 
   test("caps governance-heavy injections before they crowd out narrative blocks", () => {
     const result = composeContextBlocks({
-      runtime: createComposerRuntime("medium", 6, {
-        advisoryPayload: {
-          message:
-            "[ExplorationAdvisory]\nRepeated low-signal scanning is piling up. Switch strategy before broadening the scan.",
-        },
-      }),
+      runtime: createComposerRuntime("medium", 6),
       sessionId: "compose-4",
       gateStatus: {
         required: false,
@@ -465,53 +376,8 @@ describe("context composer", () => {
     });
 
     expect(result.content).toContain("[OperationalDiagnostics]");
-    expect(result.content).not.toContain("[ExplorationAdvisory]");
     expect(result.content).toContain("[TaskState]");
     expect(result.metrics.narrativeRatio).toBeGreaterThan(0.15);
-  });
-
-  test("suppresses stale exploration advisories after a newer reset event", () => {
-    const result = composeContextBlocks({
-      runtime: createComposerRuntime("medium", 6, {
-        advisoryPayload: {
-          message:
-            "[ExplorationAdvisory]\nRepeated low-signal scanning is piling up. Switch strategy before broadening the scan.",
-        },
-        advisoryTimestamp: 10,
-        resetTimestamp: 11,
-      }),
-      sessionId: "compose-5",
-      gateStatus: {
-        required: false,
-        reason: null,
-        pressure: {
-          level: "low",
-          usageRatio: 0.4,
-          hardLimitRatio: 0.98,
-          compactionThresholdRatio: 0.8,
-        },
-        recentCompaction: false,
-        lastCompactionTurn: null,
-        turnsSinceCompaction: 1,
-        windowTurns: 4,
-      },
-      pendingCompactionReason: null,
-      capabilityView: buildCapabilityView({
-        prompt: "continue",
-        allTools: [
-          {
-            name: "obs_query",
-            description: "Query runtime events.",
-            parameters: { type: "object", properties: {} },
-          },
-        ],
-        activeToolNames: ["obs_query"],
-      }),
-      injectionAccepted: false,
-      admittedEntries: [],
-    });
-
-    expect(result.content).not.toContain("[ExplorationAdvisory]");
   });
 
   test("uses narrative ratio to compact capability sections before dropping explicit tool details", () => {
@@ -567,11 +433,11 @@ describe("context composer", () => {
 
     expect(result.content).toContain("[CapabilityView]");
     expect(result.content).toContain("[CapabilityDetail:$task_set_spec]");
-    expect(result.content).toContain("posture: reversible_mutate");
+    expect(result.content).toContain("boundary: effectful");
     expect(result.content).toContain("effects: memory_write");
     expect(result.content).not.toContain("description:");
     expect(result.content).not.toContain("surface_policy:");
-    expect(result.content).not.toContain("posture_policy:");
+    expect(result.content).not.toContain("boundary_policy:");
     expect(result.content).not.toContain("hidden_skill_count:");
     expect(result.content).not.toContain("operator_hint:");
   });

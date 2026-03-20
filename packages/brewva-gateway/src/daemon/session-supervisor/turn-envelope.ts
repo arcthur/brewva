@@ -1,7 +1,6 @@
 import type { TruthFact } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import type {
-  HeartbeatPromptTrigger,
   SchedulePromptAnchor,
   SchedulePromptTrigger,
   SendPromptTrigger,
@@ -22,22 +21,6 @@ function readStringField(record: Record<string, unknown>, key: string): string |
   return typeof value === "string" ? normalizeOptionalString(value) : undefined;
 }
 
-function readStringArrayField(record: Record<string, unknown>, key: string): string[] | undefined {
-  const value = record[key];
-  if (!Array.isArray(value)) {
-    return undefined;
-  }
-  const normalized = [
-    ...new Set(
-      value
-        .filter((entry): entry is string => typeof entry === "string")
-        .map((entry) => entry.trim())
-        .filter((entry) => entry.length > 0),
-    ),
-  ];
-  return normalized.length > 0 ? normalized : undefined;
-}
-
 function readEnumField<T extends string>(
   record: Record<string, unknown>,
   key: string,
@@ -45,16 +28,6 @@ function readEnumField<T extends string>(
 ): T | undefined {
   const value = record[key];
   return typeof value === "string" && allowed.includes(value as T) ? (value as T) : undefined;
-}
-
-function readPositiveIntegerField(
-  record: Record<string, unknown>,
-  key: string,
-): number | undefined {
-  const value = record[key];
-  return typeof value === "number" && Number.isFinite(value) && value > 0
-    ? Math.floor(value)
-    : undefined;
 }
 
 function readTaskSpecField(
@@ -156,46 +129,19 @@ export function extractTriggerFromEnvelope(envelope: TurnEnvelope): SendPromptTr
   if (!isRecord(raw)) {
     return undefined;
   }
-  const kind = readEnumField(raw, "kind", ["heartbeat", "schedule"] as const);
-  if (kind === "heartbeat") {
-    const ruleId = readStringField(raw, "ruleId");
-    if (!ruleId) {
-      return undefined;
-    }
-    const trigger: HeartbeatPromptTrigger = {
-      kind: "heartbeat",
-      ruleId,
-      objective: readStringField(raw, "objective"),
-      contextHints: readStringArrayField(raw, "contextHints"),
-      wakeMode: readEnumField(raw, "wakeMode", ["always", "if_signal"] as const),
-      planReason: readStringField(raw, "planReason"),
-      selectionText: readStringField(raw, "selectionText"),
-      signalArtifactRefs: readStringArrayField(raw, "signalArtifactRefs"),
-    };
-    return trigger;
-  }
+  const kind = readEnumField(raw, "kind", ["schedule"] as const);
   if (kind !== "schedule") {
     return undefined;
   }
 
-  const intentId = readStringField(raw, "intentId");
-  const parentSessionId = readStringField(raw, "parentSessionId");
-  const runIndex = readPositiveIntegerField(raw, "runIndex");
-  const reason = readStringField(raw, "reason");
   const continuityMode = readEnumField(raw, "continuityMode", ["inherit", "fresh"] as const);
-  if (!intentId || !parentSessionId || !runIndex || !reason || !continuityMode) {
+  if (!continuityMode) {
     return undefined;
   }
 
   const trigger: SchedulePromptTrigger = {
     kind: "schedule",
-    intentId,
-    parentSessionId,
-    runIndex,
-    reason,
     continuityMode,
-    timeZone: readStringField(raw, "timeZone"),
-    goalRef: readStringField(raw, "goalRef"),
     taskSpec: readTaskSpecField(raw, "taskSpec"),
     truthFacts: readTruthFactsField(raw, "truthFacts"),
     parentAnchor: readSchedulePromptAnchor(raw.parentAnchor),

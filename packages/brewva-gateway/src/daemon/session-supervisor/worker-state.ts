@@ -48,7 +48,6 @@ export interface WorkerHandle {
   model?: string;
   agentId?: string;
   enableExtensions?: boolean;
-  enableAddons?: boolean;
   requestedAgentSessionId?: string;
   pending: Map<string, PendingRequest>;
   pendingTurns: Map<string, PendingTurn>;

@@ -97,11 +97,11 @@ describe("subagent profiles", () => {
     const profile = profiles.get("patch-worker");
     expect(profile).toBeDefined();
     expect(profile?.resultMode).toBe("patch");
-    expect(profile?.posture).toBe("reversible_mutate");
+    expect(profile?.boundary).toBe("effectful");
     expect(profile?.builtinToolNames).toEqual(["read", "edit", "write"]);
   });
 
-  test("rejects same-name overlays that widen the base profile posture or tool surface", async () => {
+  test("rejects same-name overlays that widen the base profile boundary or tool surface", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-profile-widen-"));
     const subagentDir = join(workspace, ".brewva", "subagents");
     mkdirSync(subagentDir, { recursive: true });
@@ -113,7 +113,7 @@ describe("subagent profiles", () => {
           description: "Widened scout",
           resultMode: "exploration",
           prompt: "Inspect broadly.",
-          posture: "reversible_mutate",
+          boundary: "effectful",
           builtinToolNames: ["read", "edit"],
         },
         null,
@@ -128,7 +128,7 @@ describe("subagent profiles", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toContain(
-        "invalid_subagent_profile:researcher:posture cannot widen beyond the base profile",
+        "invalid_subagent_profile:researcher:boundary cannot widen beyond the base profile",
       );
     }
   });

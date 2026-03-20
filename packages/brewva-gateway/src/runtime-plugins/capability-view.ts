@@ -1,7 +1,9 @@
 import {
   getToolGovernanceDescriptor,
+  toolGovernanceCreatesRollbackAnchor,
+  toolGovernanceRequiresEffectCommitment,
   type ToolEffectClass,
-  type ToolInvocationPosture,
+  type ToolExecutionBoundary,
 } from "@brewva/brewva-runtime";
 import {
   collectStringEnumContracts,
@@ -20,7 +22,7 @@ export type CapabilitySurface = BrewvaToolSurface | "external";
 export type CapabilityHintId = "load_or_accept_skill" | "operator_profile_available";
 export type CapabilityPolicyId =
   | "surface_visibility"
-  | "posture_boundaries"
+  | "effect_boundaries"
   | "explicit_request_expansion";
 export type CapabilityRenderMode = "full" | "compact";
 export type CapabilityRenderedBlockKind = "summary" | "inventory" | "policy" | "detail" | "missing";
@@ -34,8 +36,10 @@ interface CapabilityEntry {
   visible: boolean;
   governance: boolean;
   surface: CapabilitySurface;
-  posture: ToolInvocationPosture;
+  boundary: ToolExecutionBoundary;
   effects: ToolEffectClass[];
+  requiresApproval: boolean;
+  rollbackable: boolean;
 }
 
 export interface CapabilityParameterDetail {
@@ -68,7 +72,7 @@ export interface BuildCapabilityViewInput {
 export interface CapabilityVisibilityInventory {
   availableTotal: number;
   visibleNames: string[];
-  visibleByPosture: Record<ToolInvocationPosture, number>;
+  visibleByBoundary: Record<ToolExecutionBoundary, number>;
   hiddenBySurface: Record<CapabilitySurface, number>;
   hints: CapabilityHintId[];
 }
@@ -83,8 +87,10 @@ export interface CapabilityDetail {
   parameterKeys: string[];
   parameterDetails: CapabilityParameterDetail[];
   surface: CapabilitySurface;
-  posture: ToolInvocationPosture;
+  boundary: ToolExecutionBoundary;
   effects: ToolEffectClass[];
+  requiresApproval: boolean;
+  rollbackable: boolean;
   visibleNow: boolean;
   governance: boolean;
   access?: CapabilityAccessDecision;
@@ -120,7 +126,6 @@ const GOVERNANCE_TOOL_NAMES = new Set<string>([
   "tape_info",
   "tape_search",
   "skill_complete",
-  "skill_chain_control",
   "task_set_spec",
   "task_view_state",
 ]);
@@ -136,10 +141,9 @@ const SURFACE_ORDER: Record<CapabilitySurface, number> = {
   operator: 2,
   external: 3,
 };
-const POSTURE_ORDER: Record<ToolInvocationPosture, number> = {
-  observe: 0,
-  reversible_mutate: 1,
-  commitment: 2,
+const BOUNDARY_ORDER: Record<ToolExecutionBoundary, number> = {
+  safe: 0,
+  effectful: 1,
 };
 
 function normalizeToolName(name: string): string {
@@ -202,17 +206,21 @@ function resolveCapabilitySurface(name: string): CapabilitySurface {
   return getBrewvaToolSurface(name) ?? "external";
 }
 
-function resolveCapabilityPosture(
+function resolveCapabilityBoundary(
   input: Pick<BuildCapabilityViewInput, "resolveGovernanceDescriptor">,
   name: string,
 ): {
-  posture: ToolInvocationPosture;
+  boundary: ToolExecutionBoundary;
   effects: ToolEffectClass[];
+  requiresApproval: boolean;
+  rollbackable: boolean;
 } {
   const descriptor = input.resolveGovernanceDescriptor?.(name) ?? getToolGovernanceDescriptor(name);
   return {
-    posture: descriptor?.posture ?? "observe",
+    boundary: descriptor?.boundary ?? "safe",
     effects: [...(descriptor?.effects ?? [])],
+    requiresApproval: toolGovernanceRequiresEffectCommitment(descriptor),
+    rollbackable: toolGovernanceCreatesRollbackAnchor(descriptor),
   };
 }
 
@@ -220,10 +228,9 @@ function createEmptyInventory(): CapabilityVisibilityInventory {
   return {
     availableTotal: 0,
     visibleNames: [],
-    visibleByPosture: {
-      observe: 0,
-      reversible_mutate: 0,
-      commitment: 0,
+    visibleByBoundary: {
+      safe: 0,
+      effectful: 0,
     },
     hiddenBySurface: {
       base: 0,
@@ -251,7 +258,7 @@ function toCapabilityEntries(input: BuildCapabilityViewInput): CapabilityEntry[]
       visible: activeToolNames.has(name),
       governance: GOVERNANCE_TOOL_NAMES.has(name),
       surface: resolveCapabilitySurface(name),
-      ...resolveCapabilityPosture(input, name),
+      ...resolveCapabilityBoundary(input, name),
     });
   }
   entries.sort((left, right) => {
@@ -264,8 +271,8 @@ function toCapabilityEntries(input: BuildCapabilityViewInput): CapabilityEntry[]
     if (left.governance !== right.governance) {
       return left.governance ? -1 : 1;
     }
-    if (left.posture !== right.posture) {
-      return POSTURE_ORDER[left.posture] - POSTURE_ORDER[right.posture];
+    if (left.boundary !== right.boundary) {
+      return BOUNDARY_ORDER[left.boundary] - BOUNDARY_ORDER[right.boundary];
     }
     return left.name.localeCompare(right.name);
   });
@@ -299,8 +306,10 @@ function formatFullDetailBlock(detail: CapabilityDetail): string {
     `description: ${description}`,
     `parameters: ${parameters}`,
     `surface: ${detail.surface}`,
-    `posture: ${detail.posture}`,
+    `boundary: ${detail.boundary}`,
     `effects: ${detail.effects.length > 0 ? detail.effects.join(", ") : "(none)"}`,
+    `approval_required: ${detail.requiresApproval ? "true" : "false"}`,
+    `rollbackable: ${detail.rollbackable ? "true" : "false"}`,
     `visible_now: ${detail.visibleNow ? "true" : "false"}`,
     `governance: ${detail.governance ? "true" : "false"}`,
   ];
@@ -343,8 +352,10 @@ function formatCompactDetailBlock(detail: CapabilityDetail): string {
   const lines = [
     `[CapabilityDetail:$${detail.name}]`,
     `parameters: ${parameters}`,
-    `posture: ${detail.posture}`,
+    `boundary: ${detail.boundary}`,
     `effects: ${detail.effects.length > 0 ? detail.effects.join(", ") : "(none)"}`,
+    `approval_required: ${detail.requiresApproval ? "true" : "false"}`,
+    `rollbackable: ${detail.rollbackable ? "true" : "false"}`,
   ];
 
   for (const parameterDetail of detail.parameterDetails.slice(0, 3)) {
@@ -382,12 +393,12 @@ function renderSummaryBlock(
       `available_total: ${inventory.availableTotal}`,
       `visible_now_count: ${inventory.visibleNames.length}`,
       `visible_now: ${visibleNow}`,
-      `visible_postures: observe=${inventory.visibleByPosture.observe} reversible_mutate=${inventory.visibleByPosture.reversible_mutate} commitment=${inventory.visibleByPosture.commitment}`,
+      `visible_boundaries: safe=${inventory.visibleByBoundary.safe} effectful=${inventory.visibleByBoundary.effectful}`,
     ].join("\n"),
     compactContent: [
       "[CapabilityView]",
       `visible_now: ${visibleNow}`,
-      `visible_postures: observe=${inventory.visibleByPosture.observe} reversible_mutate=${inventory.visibleByPosture.reversible_mutate} commitment=${inventory.visibleByPosture.commitment}`,
+      `visible_boundaries: safe=${inventory.visibleByBoundary.safe} effectful=${inventory.visibleByBoundary.effectful}`,
     ].join("\n"),
   };
 }
@@ -422,9 +433,9 @@ function renderPolicyBlock(
       );
       continue;
     }
-    if (policy.id === "posture_boundaries") {
+    if (policy.id === "effect_boundaries") {
       const text =
-        "posture_policy: observe tools favor exploration, reversible_mutate tools create local rollback or journal anchors, commitment tools require explicit effect authorization.";
+        "boundary_policy: safe tools support direct inspection; effectful tools either create rollback anchors or require explicit approval before execution.";
       lines.push(text);
       compactLines.push(text);
       continue;
@@ -495,8 +506,10 @@ export function buildCapabilityView(input: BuildCapabilityViewInput): BuildCapab
       parameterKeys: entry.parameterKeys,
       parameterDetails: entry.parameterDetails,
       surface: entry.surface,
-      posture: entry.posture,
+      boundary: entry.boundary,
       effects: entry.effects,
+      requiresApproval: entry.requiresApproval,
+      rollbackable: entry.rollbackable,
       visibleNow: entry.visible,
       governance: entry.governance,
       access: input.resolveAccess?.(entry.name),
@@ -506,11 +519,9 @@ export function buildCapabilityView(input: BuildCapabilityViewInput): BuildCapab
   const inventory: CapabilityVisibilityInventory = {
     availableTotal: entries.length,
     visibleNames: visibleEntries.map((entry) => entry.name),
-    visibleByPosture: {
-      observe: visibleEntries.filter((entry) => entry.posture === "observe").length,
-      reversible_mutate: visibleEntries.filter((entry) => entry.posture === "reversible_mutate")
-        .length,
-      commitment: visibleEntries.filter((entry) => entry.posture === "commitment").length,
+    visibleByBoundary: {
+      safe: visibleEntries.filter((entry) => entry.boundary === "safe").length,
+      effectful: visibleEntries.filter((entry) => entry.boundary === "effectful").length,
     },
     hiddenBySurface: {
       base: entries.filter((entry) => !entry.visible && entry.surface === "base").length,
@@ -533,7 +544,7 @@ export function buildCapabilityView(input: BuildCapabilityViewInput): BuildCapab
     inventory,
     policies: [
       { id: "surface_visibility" },
-      { id: "posture_boundaries" },
+      { id: "effect_boundaries" },
       { id: "explicit_request_expansion" },
     ],
     requested,

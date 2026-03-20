@@ -2,7 +2,7 @@
 
 ## Philosophy
 
-Brewva is a Commitment Runtime.
+Brewva is a commitment runtime.
 
 The system optimizes for one question:
 
@@ -12,17 +12,9 @@ Constitution:
 
 `Intelligence proposes. Kernel commits. Tape remembers.`
 
-Implementation-grade constitutional reading:
+Implementation-grade reading:
 
 `Intelligence explores. Kernel authorizes effects. Tape remembers commitments.`
-
-This does not replace the constitution. It clarifies the same boundary at the
-granularity now used by the runtime:
-
-- `proposes / explores` belongs to deliberation and control-plane layers
-- `commits / authorizes effects` belongs to kernel authority
-- `Tape remembers commitments` means the tape records committed outcomes rather
-  than every intermediate reasoning path
 
 Design priority:
 
@@ -34,198 +26,128 @@ Design priority:
 Further reading:
 
 - `docs/architecture/design-axioms.md`
-- `docs/architecture/cognitive-product-architecture.md`
-- `docs/architecture/exploration-and-effect-governance.md`
 - `docs/reference/proposal-boundary.md`
 - `docs/reference/runtime.md`
 
 ## Three Rings
 
-- `Kernel Ring`: commitment, gates, verification, replay, recovery, fail-closed behavior
-- `Deliberation Ring`: ranking, planning, proposal generation, multi-model orchestration
-- `Experience Ring`: CLI, gateway, channels, lifecycle adapters, operator UX
+- `Kernel Ring`
+  - commitment
+  - effect gates
+  - verification
+  - replay and recovery
+- `Deliberation Ring`
+  - planning
+  - ranking
+  - sequencing
+  - delegation decisions
+- `Experience Ring`
+  - CLI
+  - gateway
+  - channels
+  - operator UX
 
 Boundary rule:
 
 - outer intelligence may propose
 - kernel may accept, reject, or defer
-- explicit governance-owned direct-commit flows may exist, but they must stay
-  narrow and receipt-bearing
 - every committed decision produces a receipt
-- tape is commitment memory, not a best-effort log
+- tape is commitment memory, not a best-effort debug log
 
 ## Operational Planes
 
-- `Working State Plane`: projection, context arena, pending dispatch, active tool surface
-- `Cognitive Product Plane`: context composition, memory formation, memory curation, persona/profile rendering
-- `Control Plane`: broker, debug-loop, heartbeat policy, proactive wake context, scheduling triggers, delegation planners, subagent orchestration, future planners
+- `Working State Plane`
+  - projection
+  - context arena
+  - active tool surface
+- `Cognitive Product Plane`
+  - context composition
+  - identity rendering
+  - capability disclosure
+  - model-facing recovery hints
+- `Control Plane`
+  - heartbeat triggers
+  - scheduling triggers
+  - subagent orchestration
+  - future planners
 
 Rings define authority. Planes define product behavior.
 
-Subagent delegation belongs to the control plane:
-
-- subagent profiles, delegation packets, and child-run orchestration are
-  control-plane execution objects
-- child runs may explore, summarize, verify, or prepare patch candidates
-- kernel authority remains at effect authorization, proposal admission, merge
-  adoption, and replayable receipts
-
 ## State Taxonomy
 
-Brewva keeps five different kinds of system objects separate:
-
-| Category                 | Role                                                                        | Authority                    | Typical carriers                                             |
-| ------------------------ | --------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------ |
-| `Kernel Commitments`     | authoritative system commitments                                            | authoritative                | tape, receipts, task, truth, ledger                          |
-| `Working State`          | session-local working view and injection planning                           | non-authoritative            | projection, context arena, pending dispatch                  |
-| `Deliberation Artifacts` | non-kernel cognition and cross-session sediment                             | non-authoritative            | `.brewva/cognition/*`, broker traces, operator notes         |
-| `Tool Surface`           | turn-visible action surface                                                 | policy-governed              | base tools, skill-scoped tools, operator tools               |
-| `Control Plane`          | scheduling, ranking, retry loops, delegation, operator-facing orchestration | non-authoritative by default | broker, debug-loop, delegation planner, child-run controller |
+| Category                 | Role                                                           | Authority                    | Typical carriers                                     |
+| ------------------------ | -------------------------------------------------------------- | ---------------------------- | ---------------------------------------------------- |
+| `Kernel Commitments`     | authoritative system commitments                               | authoritative                | tape, receipts, task, truth, ledger                  |
+| `Working State`          | session-local working view and injection planning              | non-authoritative            | projection, context arena, active tool surface       |
+| `Deliberation Artifacts` | non-kernel planning and operator sediment                      | non-authoritative            | operator notes, schedule prompts, delegation packets |
+| `Tool Surface`           | turn-visible action surface                                    | policy-governed              | base tools, skill-scoped tools, operator tools       |
+| `Control Plane`          | scheduling, ranking, delegation, operator-facing orchestration | non-authoritative by default | schedulers, wake prompts, child-run controllers      |
 
 Important distinctions:
 
-- projection is working state, not a long-term memory tier
+- projection is working state, not long-term memory
 - context arena is an injection planner, not a memory system
-- deliberation artifacts may survive across sessions, but they only enter kernel
-  context through accepted `context_packet` proposals
-- tool surface should reflect the current commitment boundary, not the full
+- tool surface should reflect the current commitment boundary, not the whole
   static capability catalog
 
 ## Core Kernel
 
 ### Trust Layer
 
-- `EvidenceLedger`: append-only evidence chain
-- `VerificationService`: verification outcome + blocker integration
-- `TruthService`: explicit runtime facts
-- `TrustMeterService`: rollback and verification trust signal aggregation
+- `EvidenceLedger`
+- `VerificationService`
+- `TruthService`
 
 ### Boundary Layer
 
-- `ToolGateService`: execution authorization + policy checks
-  - Current authority is effect authorization plus effective resource ceilings
-  - A small set of runtime-owned control-plane tools remains explicitly exempted
-    for recovery and negotiation; those exceptions are narrow and auditable
-- `SessionCostTracker` + `CostService`: cost boundary and budget actions
-- `ContextBudgetManager` + compaction gate: context boundary
+- `ToolGateService`
+  - effect authorization
+  - approval requirements
+  - rollback receipt creation
+- `SessionCostTracker` + `CostService`
+- `ContextBudgetManager` + compaction gate
 
 ### Contract Layer
 
-- `SkillLifecycleService`: skill activation/completion contracts
-- `SkillCascadeService`: contract-driven chain progression
-- `TaskService`: task spec/item/blocker state machine
+- `SkillLifecycleService`
+- `TaskService`
 
 ### Durability Layer
 
-- event tape (`BrewvaEventStore`)
-- checkpoint + delta replay (`TurnReplayEngine`)
-- turn WAL (`TurnWALStore`, `TurnWALRecovery`)
-
-## Projection Model
-
-Projection state is working-only:
-
-- source-of-truth: event tape
-- projection: `.orchestrator/projection/units.jsonl`
-- working snapshot: `.orchestrator/projection/sessions/sess_<base64url(sessionId)>/working.md`
-- injected source: `brewva.projection-working` only
-
-No recall lane and no external recall runtime branch are part of the kernel.
-
-Projection is one context source, not a parallel memory system. Cross-session
-knowledge sediment belongs in deliberation artifacts, then re-enters through
-proposal-backed `context_packet` injection.
+- event tape
+- checkpoint + delta replay
+- turn WAL
 
 ## Context Model
 
 Context injection is single-path and deterministic:
 
-- governance source registration
+- governed source registration
 - arena planning
 - global budget clamp
 - hard-limit compaction gate
 
-Arena SLO is an execution boundary, not an inference selector.
-
 Projection and arena are not parallel memories:
 
-- projection provides one deterministic source snapshot
-- arena plans which sources fit the current injection budget
+- projection provides one deterministic working snapshot
+- arena plans which sources fit the current turn
 
-Model-facing composition is a separate concern:
+Model-facing composition is separate:
 
-- runtime admission decides which sources are allowed and budget-safe
+- runtime admission decides which sources are allowed
 - `ContextComposer` decides how admitted blocks are shown to the model
-- default full-extension behavior is narrative-first
-- concise diagnostics appear only on anomaly or explicit diagnostic request
+- default hosted-session behavior is narrative-first
 
 ## Tool Surface
 
-Tool visibility is part of governance, not just packaging.
+The runtime/extension stack treats tool surface as three layers:
 
-The runtime/extension stack now treats tool surface as three layers:
+- `base tools`
+- `skill-informed tools`
+- `operator tools`
 
-- `base tools`: always-on core tools and low-level session controls
-- `skill-informed tools`: preferred/fallback hints plus effect-authorized
-  managed skill tools derived from the current active/pending/cascade contracts
-- `operator tools`: observability and operator-facing controls exposed only for
-  operator profiles by default, or per-turn explicit `$tool_name` disclosure
-  requests
-
-This keeps the visible action surface aligned with the current commitment
-context instead of exposing the entire static tool bundle on every turn.
-
-Current rule:
-
-- the visible tool surface helps the model understand available paths
-- governance authority sits on effect classes and resource ceilings, not on
-  tool-path
-  prescription
-- tool surface may influence deliberation, but it does not define kernel
-  authority by itself
-
-### Agent-Facing Contract Lowering
-
-Managed Brewva tools now treat invocation contract as three explicit layers:
-
-- `agent-facing invocation surface`
-  - this is the only canonical model-facing value space
-  - capability disclosure, repair hints, prompt guidance, and tool docs must be
-    authored from this layer
-- `lowering layer`
-  - shared managed-tool execution spine lowers accepted agent-facing values into
-    runtime canonical values before tool logic runs
-  - lowering is where surface ergonomics and runtime stability meet; it is not
-    a second ad-hoc prompt layer
-- `runtime canonical state`
-  - runtime services, tape, replay, and persisted task/truth state keep stable
-    internal values that are optimized for execution and recovery, not for model
-    wording
-
-Non-negotiable rule:
-
-- do not expose runtime canonical literals directly to the model when they
-  differ from the agent-facing surface
-- if runtime stores a different canonical value, model-visible state injection
-  must be lifted back into the agent-facing wording
-- adding aliases alone is not considered a complete fix; the fix is complete
-  only when input surface, lowering, repair hints, capability disclosure, and
-  injected runtime text agree on the same agent-facing contract
-
-Current examples:
-
-- `task_*` tools expose `smoke|targeted|full|none` and
-  `pending|in_progress|done|blocked` to the model, then lower to
-  `quick|standard|strict|none` and `todo|doing|done|blocked` for runtime state
-- `grep.case` exposes `insensitive` to the model and lowers to ripgrep's
-  internal `ignore` mode before execution
-
-Anti-pattern to avoid:
-
-- do not author schema around runtime storage words and then paper over the gap
-  with prompt prose or validator retries
-- do not let capability detail, repair hints, or task/runtime injection reveal
-  a different vocabulary than the tool surface itself
+Visible surface helps the model understand available paths, but authority sits
+on effect classes, approval requirements, rollbackability, and resource ceilings.
 
 ## Governance Port
 
@@ -236,68 +158,13 @@ Anti-pattern to avoid:
 - `detectCostAnomaly`
 - `checkCompactionIntegrity`
 
-These checks enrich auditability and effect authorization; they do not
-introduce adaptive inference paths.
-
-Current host default:
+Current host defaults:
 
 - CLI-owned runtimes install
   `createTrustedLocalGovernancePort({ profile: "personal" })`
 - gateway/hosted/channel runtimes install
   `createTrustedLocalGovernancePort({ profile: "team" })`
-- profile selection is explicit at the front door instead of being hidden in
-  runtime-internal defaults
-- raw `BrewvaRuntime` instances without a governance port now fail closed at the
-  commitment boundary by opening a replayable operator-approval desk rather than
-  implicitly authorizing the effect
-
-## Control Plane Boundary
-
-Optional control-plane components may provide operator-facing assistance outside
-the kernel path. For example, a skill broker or planner may produce
-`skill_selection` proposals or direct cascade intents. Shared proposal/evidence
-helpers for the remaining boundary live in `@brewva/brewva-deliberation`.
-
-Cross-session cognition sediment follows the same rule:
-
-- control-plane or extension code writes non-authoritative artifacts under
-  `.brewva/cognition/*`
-- `MemoryCurator` may rehydrate selected artifacts into `context_packet` proposals
-- cognitive artifacts still cross through the proposal boundary
-- budget expansion uses a separate receipt-bearing governance path via
-  `resource_lease`
-
-When that path is enabled:
-
-- selection and planning happen before kernel commitment
-- proposals cross the boundary through `runtime.proposals.submit(...)`
-- `resource_lease` may record direct budget commitments without granting new
-  effect authorization
-- managed Brewva tool definitions now expose first-class `brewva.governance`
-  metadata as a canonical view over the exact managed-tool policy, and the
-  default gateway path imports it only for tools the runtime does not already
-  classify exactly
-- the kernel remains governance-only for dispatch commitments, cascade activation,
-  evidence, and replay
+- raw runtimes without a governance port fail closed at the approval boundary
 
 This preserves the kernel promise: the kernel governs execution, but adaptive
 selection logic stays outside the core path.
-
-Current evolution rule:
-
-- make deliberation thicker so it owns path search, retries, reordering, and
-  lease negotiation
-- make contracts lighter so they express more `intent` and `effect`
-- make governance look more like effect authorization than a prewritten
-  execution script
-
-## Extensions
-
-Extensions can shape operator UX (for example tool-surface disclosure), but kernel
-governance decisions remain in runtime services.
-
-## Non-goals
-
-- runtime-managed model routing inference
-- multi-tier adaptive projection structures
-- multi-branch context retrieval heuristics

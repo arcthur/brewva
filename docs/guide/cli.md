@@ -85,7 +85,7 @@ Useful flags:
 - `--agent`
 - `--task`
 - `--task-file`
-- `--no-addons`
+- `--no-extensions`
 - `--print`
 - `--interactive`
 - `--mode`
@@ -139,18 +139,15 @@ Short aliases:
 - `-v` for `--version`
 - `-h` for `--help`
 
-`--no-addons` is the historical flag name for disabling the addon host and the
-full Brewva runtime-plugin orchestration layer.
+`--no-extensions` disables the full Brewva runtime-plugin orchestration layer.
 CLI still installs the runtime core bridge, so tool policy, compaction gate,
-ledger/patch tracking, and skill-broker proposal routing remain enforced when
-configured.
+and ledger/patch tracking remain enforced.
 
 Retained: `before_agent_start` core status/context block, `tool_call`,
 `tool_result`, `session_compact`, `session_shutdown`.
 
 Disabled: `registerContextTransform` (`turn_start`/`context` governance lifecycle),
-`registerEventStream`, memory handlers, `registerNotification`,
-`registerDebugLoop`, cognitive metrics, and addon-host packet/job loading.
+`registerEventStream`, and richer hosted-session presentation hooks.
 
 `--backend` selects the primary session backend:
 

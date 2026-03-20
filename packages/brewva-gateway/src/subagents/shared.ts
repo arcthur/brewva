@@ -2,12 +2,12 @@ import type {
   BrewvaRuntime,
   PatchSet,
   SessionCostSummary,
-  ToolInvocationPosture,
+  ToolExecutionBoundary,
   WorkerResult,
 } from "@brewva/brewva-runtime";
 import type {
   DelegationPacket,
-  SubagentExecutionPosture,
+  SubagentExecutionBoundary,
   SubagentOutcomeArtifactRef,
 } from "@brewva/brewva-tools";
 import type { HostedSubagentBuiltinToolName, HostedSubagentProfile } from "./profiles.js";
@@ -15,10 +15,9 @@ import type { HostedSubagentBuiltinToolName, HostedSubagentProfile } from "./pro
 const ALL_BUILTIN_SUBAGENT_TOOLS = ["read", "edit", "write"] as const;
 const PATCH_MANIFEST_FILE_NAME = "patchset.json";
 
-const POSTURE_RANK: Record<ToolInvocationPosture, number> = {
-  observe: 0,
-  reversible_mutate: 1,
-  commitment: 2,
+const BOUNDARY_RANK: Record<ToolExecutionBoundary, number> = {
+  safe: 0,
+  effectful: 1,
 };
 
 export function sanitizeFragment(value: string): string {
@@ -42,43 +41,43 @@ export function resolveRunSummary(text: string, fallback: string): string {
   return summary || fallback;
 }
 
-function postureWithinCeiling(
-  posture: ToolInvocationPosture | undefined,
-  ceiling: SubagentExecutionPosture,
+function boundaryWithinCeiling(
+  boundary: ToolExecutionBoundary | undefined,
+  ceiling: SubagentExecutionBoundary,
 ): boolean {
-  return POSTURE_RANK[posture ?? "observe"] <= POSTURE_RANK[ceiling];
+  return BOUNDARY_RANK[boundary ?? "safe"] <= BOUNDARY_RANK[ceiling];
 }
 
-export function resolveRequestedPosture(
+export function resolveRequestedBoundary(
   profile: HostedSubagentProfile,
   packet: DelegationPacket | undefined,
-): SubagentExecutionPosture {
-  const profilePosture = profile.posture ?? "observe";
-  const requestedPosture = packet?.effectCeiling?.posture ?? profilePosture;
-  if (profilePosture === "observe" && requestedPosture === "reversible_mutate") {
+): SubagentExecutionBoundary {
+  const profileBoundary = profile.boundary ?? "safe";
+  const requestedBoundary = packet?.effectCeiling?.boundary ?? profileBoundary;
+  if (profileBoundary === "safe" && requestedBoundary === "effectful") {
     throw new Error("subagent_effect_ceiling_widening_not_allowed");
   }
-  return requestedPosture;
+  return requestedBoundary;
 }
 
 export function resolveBuiltinToolNamesForRun(
   runtime: BrewvaRuntime,
   profile: HostedSubagentProfile,
-  posture: SubagentExecutionPosture,
+  boundary: SubagentExecutionBoundary,
 ): HostedSubagentBuiltinToolName[] {
   const requested =
     profile.builtinToolNames ??
-    (posture === "reversible_mutate" ? [...ALL_BUILTIN_SUBAGENT_TOOLS] : ["read"]);
+    (boundary === "effectful" ? [...ALL_BUILTIN_SUBAGENT_TOOLS] : ["read"]);
 
   return [...new Set(requested)].filter((toolName) =>
-    postureWithinCeiling(runtime.tools.getGovernanceDescriptor(toolName)?.posture, posture),
+    boundaryWithinCeiling(runtime.tools.getGovernanceDescriptor(toolName)?.boundary, boundary),
   );
 }
 
 export function resolveManagedToolNamesForRun(
   runtime: BrewvaRuntime,
   profile: HostedSubagentProfile,
-  posture: SubagentExecutionPosture,
+  boundary: SubagentExecutionBoundary,
 ): string[] {
   const requested = profile.managedToolNames ?? [];
   return [...new Set(requested)].filter((toolName) => {
@@ -90,7 +89,10 @@ export function resolveManagedToolNamesForRun(
     ) {
       return false;
     }
-    return postureWithinCeiling(runtime.tools.getGovernanceDescriptor(toolName)?.posture, posture);
+    return boundaryWithinCeiling(
+      runtime.tools.getGovernanceDescriptor(toolName)?.boundary,
+      boundary,
+    );
   });
 }
 

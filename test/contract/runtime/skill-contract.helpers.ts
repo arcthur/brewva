@@ -19,7 +19,6 @@ export function createContract(
     name: input.name,
     category: input.category,
     routing: input.routing,
-    dispatch: input.dispatch,
     intent: input.intent,
     effects: input.effects ?? {
       allowedEffects: ["workspace_read"],

@@ -3,6 +3,7 @@ import {
   REVERSIBLE_MUTATION_PREPARED_EVENT_TYPE,
   REVERSIBLE_MUTATION_RECORDED_EVENT_TYPE,
 } from "../events/event-types.js";
+import { toolGovernanceCreatesRollbackAnchor } from "../governance/tool-governance.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type {
   PatchSet,
@@ -81,20 +82,13 @@ function resolveMutationStrategy(
   strategy: ToolMutationStrategy;
   rollbackKind: ToolMutationRollbackKind;
 } | null {
-  if (!descriptor || descriptor.posture !== "reversible_mutate") {
+  if (!descriptor || !toolGovernanceCreatesRollbackAnchor(descriptor)) {
     return null;
   }
-  const normalizedToolName = normalizeToolName(toolName);
   if (descriptor.effects.includes("workspace_write")) {
     return {
       strategy: "workspace_patchset",
       rollbackKind: "patchset",
-    };
-  }
-  if (normalizedToolName === "cognition_note") {
-    return {
-      strategy: "artifact_write",
-      rollbackKind: "artifact_ref",
     };
   }
   if (descriptor.effects.includes("memory_write")) {
@@ -127,7 +121,7 @@ function buildReceipt(input: {
     ].join(":"),
     toolCallId: input.toolCallId.trim(),
     toolName: normalizeToolName(input.toolName),
-    posture: "reversible_mutate",
+    boundary: "effectful",
     strategy: input.strategy,
     rollbackKind: input.rollbackKind,
     effects: [...(input.descriptor?.effects ?? [])],

@@ -178,15 +178,9 @@ v1 does not:
 New events:
 
 - `tool_posture_selected`
-- `scan_convergence_armed`
-- `scan_convergence_advisory`
-- `scan_convergence_blocked_tool`
-- `scan_convergence_reset`
 
 Of these:
 
-- `scan_convergence_advisory` is a lightweight diagnostic event consumable from
-  the prompt side
 - `tool_posture_selected` is the foundational telemetry that makes the runtime's
   effect-posture decision explicit
 
@@ -195,9 +189,7 @@ Of these:
 Primary target files for the first refactor stage:
 
 - `packages/brewva-runtime/src/services/tool-gate.ts`
-- `packages/brewva-runtime/src/services/exploration-supervisor.ts`
 - `packages/brewva-runtime/src/services/task-watchdog.ts`
-- `packages/brewva-runtime/src/services/trust-meter.ts`
 - `packages/brewva-runtime/src/governance/tool-governance.ts`
 - `packages/brewva-gateway/src/runtime-plugins/context-composer.ts`
 

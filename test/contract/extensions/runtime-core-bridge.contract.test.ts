@@ -168,12 +168,6 @@ function createRuntimeFixture(
     getActive() {
       return null;
     },
-    getPendingDispatch() {
-      return undefined;
-    },
-    getCascadeIntent() {
-      return undefined;
-    },
     get() {
       return undefined;
     },

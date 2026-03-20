@@ -197,7 +197,7 @@ describe("brewva session ui settings wiring", () => {
     }
   });
 
-  test("session bootstrap records proposal boundary for the skill broker", async () => {
+  test("session bootstrap no longer exposes removed skill-broker metadata", async () => {
     const workspace = createTestWorkspace("session-ui-skill-broker-bootstrap");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
@@ -227,21 +227,23 @@ describe("brewva session ui settings wiring", () => {
       })[0];
       const payload = (bootstrap?.payload as
         | {
-            skillBroker?: {
-              enabled?: boolean;
-              proposalBoundary?: string;
+            skillBroker?: unknown;
+            skillLoad?: {
+              routingEnabled?: boolean;
+              routingScopes?: string[];
             };
           }
-        | undefined) ?? { skillBroker: { enabled: false } };
-      expect(payload.skillBroker?.enabled).toBe(true);
-      expect(payload.skillBroker?.proposalBoundary).toBe("runtime.proposals.submit");
+        | undefined) ?? { skillLoad: {} };
+      expect(payload.skillBroker).toBeUndefined();
+      expect(payload.skillLoad?.routingEnabled).toBe(true);
+      expect(payload.skillLoad?.routingScopes).toEqual(["core", "domain"]);
     } finally {
       result.session.dispose();
     }
   });
 
-  test("no-addons session bootstrap still exposes the proposal boundary", async () => {
-    const workspace = createTestWorkspace("session-ui-skill-broker-no-addons");
+  test("no-extensions session bootstrap does not reintroduce removed skill-broker metadata", async () => {
+    const workspace = createTestWorkspace("session-ui-skill-broker-no-extensions");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
       JSON.stringify(
@@ -271,184 +273,17 @@ describe("brewva session ui settings wiring", () => {
       const payload = (bootstrap?.payload as
         | {
             extensionsEnabled?: boolean;
-            skillBroker?: {
-              enabled?: boolean;
-              proposalBoundary?: string;
+            skillBroker?: unknown;
+            skillLoad?: {
+              routingEnabled?: boolean;
             };
           }
-        | undefined) ?? { extensionsEnabled: true, skillBroker: { enabled: false } };
+        | undefined) ?? { extensionsEnabled: true, skillLoad: {} };
       expect(payload.extensionsEnabled).toBe(false);
-      expect(payload.skillBroker?.enabled).toBe(true);
-      expect(payload.skillBroker?.proposalBoundary).toBe("runtime.proposals.submit");
+      expect(payload.skillBroker).toBeUndefined();
+      expect(payload.skillLoad?.routingEnabled).toBe(true);
     } finally {
       result.session.dispose();
-    }
-  });
-
-  test("autoloads workspace addons and applies persisted scope context packets", async () => {
-    const workspace = createTestWorkspace("session-ui-addons-autoload");
-    const addonDir = join(workspace, ".brewva/addons/ops-status");
-    mkdirSync(addonDir, { recursive: true });
-    writeFileSync(
-      join(addonDir, "index.ts"),
-      ['export default { id: "ops-status" };'].join("\n"),
-      "utf8",
-    );
-    writeFileSync(
-      join(addonDir, "context-packets.jsonl"),
-      `${JSON.stringify({
-        addonId: "ops-status",
-        writtenAt: Date.now(),
-        scopeId: "scope-main",
-        packetKey: "daily-summary",
-        label: "Daily summary",
-        content: "Summary from addon host",
-        profile: "status_summary",
-      })}\n`,
-      "utf8",
-    );
-
-    const result = await createBrewvaSession({
-      cwd: workspace,
-      scopeId: "scope-main",
-    });
-    try {
-      const sessionId = result.session.sessionManager.getSessionId();
-      const bootstrap = result.runtime.events.query(sessionId, {
-        type: "session_bootstrap",
-        last: 1,
-      })[0];
-      const payload = (bootstrap?.payload as { addonsEnabled?: boolean } | undefined) ?? {};
-      expect(payload.addonsEnabled).toBe(true);
-
-      const packets = result.runtime.proposals.list(sessionId, {
-        kind: "context_packet",
-      });
-      expect(packets).toHaveLength(1);
-      const firstPacket = packets[0];
-      expect(firstPacket?.proposal.issuer).toBe("addon:ops-status");
-      expect((firstPacket?.proposal.payload as { packetKey?: string } | undefined)?.packetKey).toBe(
-        "daily-summary",
-      );
-    } finally {
-      result.session.dispose();
-    }
-  });
-
-  test("disables workspace addon loading when addons are turned off", async () => {
-    const workspace = createTestWorkspace("session-ui-addons-disabled");
-    const addonDir = join(workspace, ".brewva/addons/ops-status");
-    mkdirSync(addonDir, { recursive: true });
-    writeFileSync(
-      join(addonDir, "index.ts"),
-      ['export default { id: "ops-status" };'].join("\n"),
-      "utf8",
-    );
-    writeFileSync(
-      join(addonDir, "context-packets.jsonl"),
-      `${JSON.stringify({
-        addonId: "ops-status",
-        writtenAt: Date.now(),
-        scopeId: "scope-main",
-        packetKey: "daily-summary",
-        label: "Daily summary",
-        content: "Summary from addon host",
-        profile: "status_summary",
-      })}\n`,
-      "utf8",
-    );
-
-    const result = await createBrewvaSession({
-      cwd: workspace,
-      scopeId: "scope-main",
-      enableAddons: false,
-    });
-    try {
-      const sessionId = result.session.sessionManager.getSessionId();
-      const bootstrap = result.runtime.events.query(sessionId, {
-        type: "session_bootstrap",
-        last: 1,
-      })[0];
-      const payload =
-        (bootstrap?.payload as
-          | {
-              addonsEnabled?: boolean;
-              loadedAddonCount?: number;
-            }
-          | undefined) ?? {};
-      expect(payload.addonsEnabled).toBe(false);
-      expect(payload.loadedAddonCount).toBe(0);
-
-      const packets = result.runtime.proposals.list(sessionId, {
-        kind: "context_packet",
-      });
-      expect(packets).toHaveLength(0);
-    } finally {
-      result.session.dispose();
-    }
-  });
-
-  test("fails fast when workspace addon omits required config", async () => {
-    const workspace = createTestWorkspace("session-ui-addons-required-config");
-    const addonDir = join(workspace, ".brewva/addons/ops-status");
-    mkdirSync(addonDir, { recursive: true });
-    writeFileSync(
-      join(addonDir, "index.ts"),
-      [
-        "export default {",
-        '  id: "ops-status",',
-        "  config: {",
-        "    apiKey: {",
-        '      type: "string",',
-        '      description: "API key",',
-        "      required: true,",
-        "    },",
-        "  },",
-        "};",
-      ].join("\n"),
-      "utf8",
-    );
-
-    try {
-      await createBrewvaSession({
-        cwd: workspace,
-      });
-      throw new Error("expected addon config validation to fail");
-    } catch (error) {
-      expect((error as Error).message).toContain(
-        "missing required config for addon ops-status: apiKey",
-      );
-    }
-  });
-
-  test("fails fast when workspace addon exports invalid jobs", async () => {
-    const workspace = createTestWorkspace("session-ui-addons-invalid-job");
-    const addonDir = join(workspace, ".brewva/addons/ops-status");
-    mkdirSync(addonDir, { recursive: true });
-    writeFileSync(
-      join(addonDir, "index.ts"),
-      [
-        "export default {",
-        '  id: "ops-status",',
-        "  jobs: [",
-        "    {",
-        '      id: "",',
-        "      schedule: {},",
-        '      run: "not-a-function",',
-        "    },",
-        "  ],",
-        "};",
-      ].join("\n"),
-      "utf8",
-    );
-
-    try {
-      await createBrewvaSession({
-        cwd: workspace,
-      });
-      throw new Error("expected addon job validation to fail");
-    } catch (error) {
-      expect((error as Error).message).toContain("addon jobs[0].id is required");
     }
   });
 });

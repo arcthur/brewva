@@ -3,9 +3,6 @@ name: review
 description: Assess change risk, plan conformance, and merge safety with findings-first
   output and explicit residual risk.
 stability: stable
-dispatch:
-  suggest_threshold: 10
-  auto_threshold: 18
 intent:
   outputs:
     - review_report

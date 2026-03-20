@@ -14,7 +14,6 @@
     }
   },
   "dependencies": {
-    "@brewva/brewva-deliberation": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
     "@mariozechner/pi-coding-agent": "^0.57.1",
     "@sinclair/typebox": "^0.34.48",

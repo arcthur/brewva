@@ -12,6 +12,7 @@ import {
   createScheduleIntentTool,
   createTaskLedgerTools,
 } from "@brewva/brewva-tools";
+import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { createScheduleToolRuntime } from "./tools-flow.helpers.js";
 
 const requireFromBrewvaTools = createRequire(
@@ -50,6 +51,13 @@ function requireTool<T extends { name: string }>(tools: T[], name: string): T {
   return tool;
 }
 
+function createCleanRuntime(cwd = process.cwd()): BrewvaRuntime {
+  return new BrewvaRuntime({
+    cwd,
+    config: createRuntimeConfig(),
+  });
+}
+
 describe("tool input alias contracts", () => {
   test("look_at keeps filePath alias as an execution-only compatibility path", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-look-at-alias-"));
@@ -76,7 +84,7 @@ describe("tool input alias contracts", () => {
   });
 
   test("task_set_spec accepts snake_case expected_behavior alias and stores canonical field", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createCleanRuntime();
     const sessionId = "task-set-spec-case-alias";
     const tool = requireTool(createTaskLedgerTools({ runtime }), "task_set_spec");
     const params = {
@@ -97,7 +105,7 @@ describe("tool input alias contracts", () => {
   });
 
   test("task_set_spec accepts agent-facing verification values and lowers them to runtime values", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createCleanRuntime();
     const sessionId = "task-set-spec-verification-alias";
     const tool = requireTool(createTaskLedgerTools({ runtime }), "task_set_spec");
     const inspectionParams = {
@@ -150,7 +158,7 @@ describe("tool input alias contracts", () => {
   });
 
   test("task_set_spec accepts investigate as a read-only verification alias", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createCleanRuntime();
     const sessionId = "task-set-spec-investigate-verification-alias";
     const tool = requireTool(createTaskLedgerTools({ runtime }), "task_set_spec");
     const params = {
@@ -172,7 +180,7 @@ describe("tool input alias contracts", () => {
   });
 
   test("task item tools accept agent-facing statuses and lower them to runtime values", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createCleanRuntime();
     const sessionId = "task-item-pending-status-alias";
     const tools = createTaskLedgerTools({ runtime });
     const addTool = requireTool(tools, "task_add_item");
@@ -217,7 +225,7 @@ describe("tool input alias contracts", () => {
   });
 
   test("canonical top-level fields win when canonical and alias spellings are both present", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createCleanRuntime();
     const sessionId = "task-set-spec-canonical-wins";
     const tool = requireTool(createTaskLedgerTools({ runtime }), "task_set_spec");
     const params = {
@@ -319,7 +327,7 @@ describe("tool input alias contracts", () => {
   });
 
   test("lsp_symbols accepts natural scope aliases for document and workspace scans", () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createCleanRuntime();
     const tool = requireTool(createLspTools({ runtime }), "lsp_symbols");
 
     expect(
@@ -432,7 +440,7 @@ describe("tool input alias contracts", () => {
   });
 
   test("grep schema accepts camelCase numeric keys and explicit case-mode aliases", () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createCleanRuntime();
     const tool = createGrepTool({ runtime });
     expect(
       Value.Check(tool.parameters, {

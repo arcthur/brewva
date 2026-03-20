@@ -1,4 +1,3 @@
-import { buildEvidenceRef, submitContextPacketProposal } from "@brewva/brewva-deliberation";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import type {
@@ -9,7 +8,7 @@ import type {
   SubagentReturnMode,
   SubagentOutcome,
   SubagentRunRequest,
-  SubagentExecutionPosture,
+  SubagentExecutionBoundary,
 } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, textResult, withVerdict } from "./utils/result.js";
@@ -17,13 +16,8 @@ import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
 const SUBAGENT_MODE_VALUES = ["single", "parallel"] as const;
-const SUBAGENT_POSTURE_VALUES = ["observe", "reversible_mutate"] as const;
-const SUBAGENT_RETURN_MODE_VALUES = [
-  "text_only",
-  "supplemental",
-  "context_packet",
-  "both",
-] as const;
+const SUBAGENT_BOUNDARY_VALUES = ["safe", "effectful"] as const;
+const SUBAGENT_RETURN_MODE_VALUES = ["text_only", "supplemental"] as const;
 const SUBAGENT_WAIT_MODE_VALUES = ["completion", "start"] as const;
 
 const ModeSchema = buildStringEnumSchema(
@@ -34,12 +28,11 @@ const ModeSchema = buildStringEnumSchema(
   },
 );
 
-const PostureSchema = buildStringEnumSchema(
-  SUBAGENT_POSTURE_VALUES,
+const BoundarySchema = buildStringEnumSchema(
+  SUBAGENT_BOUNDARY_VALUES,
   {},
   {
-    guidance:
-      "Observe is the default. Reversible mutate is reserved for isolated write-capable runners.",
+    guidance: "Safe is the default. Effectful is reserved for isolated write-capable runners.",
   },
 );
 
@@ -47,8 +40,7 @@ const ReturnModeSchema = buildStringEnumSchema(
   SUBAGENT_RETURN_MODE_VALUES,
   {},
   {
-    guidance:
-      "Use supplemental for same-turn hidden reinjection, context_packet for replayable handoff, or both for both channels.",
+    guidance: "Use supplemental for same-turn hidden reinjection only.",
   },
 );
 
@@ -120,7 +112,7 @@ const PacketFields = {
   ),
   effectCeiling: Type.Optional(
     Type.Object({
-      posture: Type.Optional(PostureSchema),
+      boundary: Type.Optional(BoundarySchema),
     }),
   ),
 } as const;
@@ -173,9 +165,9 @@ function toPacket(packet: {
   if (!objective) {
     return undefined;
   }
-  const posture = normalizePosture(
+  const boundary = normalizeBoundary(
     typeof packet.effectCeiling === "object" && packet.effectCeiling !== null
-      ? (packet.effectCeiling as { posture?: unknown }).posture
+      ? (packet.effectCeiling as { boundary?: unknown }).boundary
       : undefined,
   );
   return {
@@ -223,12 +215,12 @@ function toPacket(packet: {
                 : undefined,
           }
         : undefined,
-    effectCeiling: posture ? { posture } : undefined,
+    effectCeiling: boundary ? { boundary } : undefined,
   };
 }
 
-function normalizePosture(value: unknown): SubagentExecutionPosture | undefined {
-  return value === "observe" || value === "reversible_mutate" ? value : undefined;
+function normalizeBoundary(value: unknown): SubagentExecutionBoundary | undefined {
+  return value === "safe" || value === "effectful" ? value : undefined;
 }
 
 function resolveMode(value: unknown, tasks: unknown): SubagentDelegationMode {
@@ -242,12 +234,7 @@ function resolveMode(value: unknown, tasks: unknown): SubagentDelegationMode {
 }
 
 function resolveReturnMode(value: unknown): SubagentReturnMode {
-  return value === "supplemental" ||
-    value === "context_packet" ||
-    value === "both" ||
-    value === "text_only"
-    ? value
-    : "text_only";
+  return value === "supplemental" || value === "text_only" ? value : "text_only";
 }
 
 function resolveWaitMode(value: unknown): "completion" | "start" {
@@ -255,11 +242,7 @@ function resolveWaitMode(value: unknown): "completion" | "start" {
 }
 
 function includesSupplementalReturn(mode: SubagentReturnMode): boolean {
-  return mode === "supplemental" || mode === "both";
-}
-
-function includesContextPacketReturn(mode: SubagentReturnMode): boolean {
-  return mode === "context_packet" || mode === "both";
+  return mode === "supplemental";
 }
 
 function toTask(task: Record<string, unknown>): DelegationTaskPacket {
@@ -342,32 +325,6 @@ function summarizeStartedRun(run: {
   return `- ${prefix}: ${parts.join(" ")}`;
 }
 
-function buildOutcomeEvidenceRefs(input: {
-  sessionId: string;
-  outcomes: SubagentOutcome[];
-  createdAt: number;
-}) {
-  const refs = [];
-  let index = 0;
-  for (const outcome of input.outcomes) {
-    if (!outcome.ok) {
-      continue;
-    }
-    for (const evidenceRef of outcome.evidenceRefs) {
-      refs.push(
-        buildEvidenceRef({
-          id: `${input.sessionId}:subagent_outcome:${outcome.runId}:${index}`,
-          sourceType: evidenceRef.sourceType,
-          locator: evidenceRef.locator,
-          createdAt: input.createdAt,
-        }),
-      );
-      index += 1;
-    }
-  }
-  return refs;
-}
-
 function deliverSubagentOutcome(input: {
   runtime: BrewvaToolOptions["runtime"];
   sessionId: string;
@@ -377,8 +334,6 @@ function deliverSubagentOutcome(input: {
   returnMode: SubagentReturnMode;
   returnLabel?: string;
   returnScopeId?: string;
-  returnPacketKey?: string;
-  returnTtlMs?: number;
 }): {
   supplemental?: {
     attempted: boolean;
@@ -387,14 +342,7 @@ function deliverSubagentOutcome(input: {
     finalTokens?: number;
     droppedReason?: "hard_limit" | "budget_exhausted";
   };
-  contextPacket?: {
-    attempted: boolean;
-    submitted: boolean;
-    proposalId?: string;
-    decision?: "accept" | "reject" | "defer";
-  };
 } {
-  const createdAt = Date.now();
   const content = buildDeliveryContent({
     profile: input.profile,
     mode: input.mode,
@@ -410,12 +358,6 @@ function deliverSubagentOutcome(input: {
       truncated?: boolean;
       finalTokens?: number;
       droppedReason?: "hard_limit" | "budget_exhausted";
-    };
-    contextPacket?: {
-      attempted: boolean;
-      submitted: boolean;
-      proposalId?: string;
-      decision?: "accept" | "reject" | "defer";
     };
   } = {};
 
@@ -435,54 +377,13 @@ function deliverSubagentOutcome(input: {
     };
   }
 
-  if (includesContextPacketReturn(input.returnMode)) {
-    const submitted = submitContextPacketProposal({
-      runtime: {
-        proposals: input.runtime.proposals,
-      },
-      sessionId: input.sessionId,
-      issuer: "brewva.subagent",
-      subject: `delegation outcome ${input.profile}`,
-      label: input.returnLabel ?? `Subagent outcome (${input.profile})`,
-      content,
-      scopeId: input.returnScopeId ?? `subagent:${input.profile}`,
-      packetKey:
-        input.returnPacketKey ?? `subagent_outcome:${input.profile}:${createdAt.toString(36)}`,
-      evidenceRefs: buildOutcomeEvidenceRefs({
-        sessionId: input.sessionId,
-        outcomes: input.outcomes,
-        createdAt,
-      }),
-      expiresAt: createdAt + (input.returnTtlMs ?? 0),
-    });
-    delivery.contextPacket = {
-      attempted: true,
-      submitted: submitted.receipt.decision === "accept",
-      proposalId: submitted.proposal.id,
-      decision: submitted.receipt.decision,
-    };
-  }
-
   return delivery;
 }
 
 function validateDeliveryConfiguration(
   runtime: BrewvaToolOptions["runtime"],
   returnMode: SubagentReturnMode,
-  returnTtlMs: unknown,
 ): { ok: true } | { ok: false; message: string } {
-  if (includesContextPacketReturn(returnMode) && typeof returnTtlMs !== "number") {
-    return {
-      ok: false,
-      message: "Error: returnTtlMs is required when returnMode includes context_packet.",
-    };
-  }
-  if (includesContextPacketReturn(returnMode) && !runtime.proposals) {
-    return {
-      ok: false,
-      message: "Error: runtime proposals are unavailable for context_packet delivery.",
-    };
-  }
   if (includesSupplementalReturn(returnMode) && !runtime.context?.appendSupplementalInjection) {
     return {
       ok: false,
@@ -504,9 +405,6 @@ function buildDeliveryRequest(
     returnMode,
     returnLabel: typeof params.returnLabel === "string" ? params.returnLabel : undefined,
     returnScopeId: typeof params.returnScopeId === "string" ? params.returnScopeId : undefined,
-    returnPacketKey:
-      typeof params.returnPacketKey === "string" ? params.returnPacketKey : undefined,
-    returnTtlMs: typeof params.returnTtlMs === "number" ? params.returnTtlMs : undefined,
   };
 }
 
@@ -584,9 +482,9 @@ async function executeSubagentToolWithRequest(input: {
         ok: false,
       });
     }
-    if (input.returnMode === "supplemental" || input.returnMode === "both") {
+    if (input.returnMode === "supplemental") {
       return failTextResult(
-        "Background subagent delivery must be text_only or context_packet; supplemental return paths are not durable across turns.",
+        "Background subagent delivery must be text_only; inspect durable results later with subagent_status or worker_results_*.",
         {
           ok: false,
         },
@@ -616,9 +514,6 @@ async function executeSubagentToolWithRequest(input: {
         }),
       ),
     ];
-    if (input.returnMode !== "text_only") {
-      lines.push(`delivery=${input.returnMode}`);
-    }
     return textResult(
       lines.join("\n"),
       started.ok
@@ -654,8 +549,6 @@ async function executeSubagentToolWithRequest(input: {
           returnMode: input.returnMode,
           returnLabel: input.delivery?.returnLabel,
           returnScopeId: input.delivery?.returnScopeId,
-          returnPacketKey: input.delivery?.returnPacketKey,
-          returnTtlMs: input.delivery?.returnTtlMs,
         })
       : undefined;
   const lines = [header, ...result.outcomes.map((outcome) => summarizeOutcome(outcome))];
@@ -666,23 +559,11 @@ async function executeSubagentToolWithRequest(input: {
         : `supplemental delivery skipped (${delivery.supplemental.droppedReason ?? "unavailable"})`,
     );
   }
-  if (delivery?.contextPacket?.attempted) {
-    lines.push(
-      delivery.contextPacket.submitted
-        ? `context_packet accepted (${delivery.contextPacket.proposalId})`
-        : `context_packet not accepted (${delivery.contextPacket.decision ?? "unknown"})`,
-    );
-  }
   const details = {
     ...(result as unknown as Record<string, unknown>),
     delivery,
   };
-  const contextPacketRejected =
-    delivery?.contextPacket?.attempted === true ? !delivery.contextPacket.submitted : false;
-  return textResult(
-    lines.join("\n"),
-    failures.length > 0 || contextPacketRejected ? withVerdict(details, "fail") : details,
-  );
+  return textResult(lines.join("\n"), failures.length > 0 ? withVerdict(details, "fail") : details);
 }
 
 export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinition {
@@ -717,8 +598,6 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
       returnMode: Type.Optional(ReturnModeSchema),
       returnLabel: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
       returnScopeId: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
-      returnPacketKey: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
-      returnTtlMs: Type.Optional(Type.Integer({ minimum: 1 })),
       tasks: Type.Optional(Type.Array(TaskPacketSchema, { minItems: 1, maxItems: 12 })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
@@ -732,11 +611,7 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
       const mode = resolveMode(params.mode, params.tasks);
       const waitMode = resolveWaitMode(params.waitMode);
       const returnMode = resolveReturnMode(params.returnMode);
-      const deliveryValidation = validateDeliveryConfiguration(
-        options.runtime,
-        returnMode,
-        params.returnTtlMs,
-      );
+      const deliveryValidation = validateDeliveryConfiguration(options.runtime, returnMode);
       if (!deliveryValidation.ok) {
         return failTextResult(deliveryValidation.message, { ok: false });
       }
@@ -796,8 +671,6 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
       returnMode: Type.Optional(ReturnModeSchema),
       returnLabel: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
       returnScopeId: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
-      returnPacketKey: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
-      returnTtlMs: Type.Optional(Type.Integer({ minimum: 1 })),
       tasks: Type.Array(TaskPacketSchema, { minItems: 1, maxItems: 12 }),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
@@ -810,11 +683,7 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
 
       const waitMode = resolveWaitMode(params.waitMode);
       const returnMode = resolveReturnMode(params.returnMode);
-      const deliveryValidation = validateDeliveryConfiguration(
-        options.runtime,
-        returnMode,
-        params.returnTtlMs,
-      );
+      const deliveryValidation = validateDeliveryConfiguration(options.runtime, returnMode);
       if (!deliveryValidation.ok) {
         return failTextResult(deliveryValidation.message, { ok: false });
       }

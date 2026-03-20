@@ -36,6 +36,12 @@ The durable target remains:
 5. Governance remains runtime-scoped, exact-first for managed tools, and
    explicit about trusted-local profiles.
 
+Historical note:
+
+The later boundary-first subtraction RFC removed the standalone
+`@brewva/brewva-deliberation` package. Surviving delegation and turn-clock
+helpers now live directly under gateway/runtime ownership.
+
 ## Target Architecture
 
 The long-term architecture this RFC defends is:
@@ -144,12 +150,12 @@ helpers.
 
 Source evidence:
 
-- `packages/brewva-deliberation/src/index.ts`
-- `packages/brewva-gateway/src/runtime-plugins/debug-loop.ts`
-- `packages/brewva-gateway/src/runtime-plugins/memory-curator.ts`
-- `packages/brewva-gateway/src/runtime-plugins/memory-formation.ts`
-- `packages/brewva-gateway/src/runtime-plugins/proactivity-engine.ts`
-- `packages/brewva-gateway/src/runtime-plugins/cognitive-metrics.ts`
+- `packages/brewva-gateway/src/subagents`
+- `packages/brewva-gateway/src/runtime-plugins/index.ts`
+- the historical gateway memory-curation adapter
+- the historical gateway memory-formation adapter
+- the historical gateway proactivity adapter (removed later)
+- the historical gateway cognitive-metrics adapter
 
 ### Problem 3: Monolithic Session Hydration
 
@@ -645,8 +651,8 @@ Concrete steps:
    - implemented: `DebugLoopController`, failure-case persistence, retry
      scheduling, and `CognitiveMetrics` core live in
      `@brewva/brewva-deliberation`
-   - implemented: gateway retains `registerDebugLoop()` and lifecycle-hook
-     adapters
+   - implemented: gateway retained lifecycle-hook adapters around that
+     deliberation-owned recovery path
 
 3. Phase 4c: update `@brewva/brewva-deliberation` exports
    - implemented: deliberation exports cover cognition, proposals, records,
@@ -662,15 +668,13 @@ Workspace package boundaries after migration:
 
 Target files:
 
-- `packages/brewva-deliberation/src/` (new modules)
-- `packages/brewva-gateway/src/runtime-plugins/memory-curator.ts` (thin adapter)
-- `packages/brewva-gateway/src/runtime-plugins/memory-formation.ts` (thin
-  adapter)
-- `packages/brewva-gateway/src/runtime-plugins/proactivity-engine.ts` (thin
-  adapter)
-- `packages/brewva-gateway/src/runtime-plugins/debug-loop.ts` (thin adapter)
-- `packages/brewva-gateway/src/runtime-plugins/cognitive-metrics.ts` (thin
-  adapter)
+- `packages/brewva-gateway/src/subagents` (current home for the surviving delegation helpers)
+- historical gateway memory-curation adapter (thin adapter at the time)
+- historical gateway memory-formation adapter (thin adapter at the time)
+- historical gateway proactivity adapter (thin adapter at the time, removed
+  later)
+- `packages/brewva-gateway/src/runtime-plugins/index.ts` (integration anchor)
+- historical gateway cognitive-metrics adapter (thin adapter at the time)
 
 Verification:
 
@@ -974,13 +978,12 @@ recommended default is stated explicitly.
 - `packages/brewva-runtime/src/config/normalize.ts`
 - `packages/brewva-runtime/src/types.ts`
 - `packages/brewva-runtime/src/`
-- `packages/brewva-deliberation/src/index.ts`
+- `packages/brewva-gateway/src/subagents`
 - `packages/brewva-gateway/src/runtime-plugins/index.ts`
-- `packages/brewva-gateway/src/runtime-plugins/debug-loop.ts`
-- `packages/brewva-gateway/src/runtime-plugins/memory-curator.ts`
-- `packages/brewva-gateway/src/runtime-plugins/memory-formation.ts`
-- `packages/brewva-gateway/src/runtime-plugins/proactivity-engine.ts`
-- `packages/brewva-gateway/src/runtime-plugins/cognitive-metrics.ts`
+- historical gateway memory-curation adapter
+- historical gateway memory-formation adapter
+- the historical gateway proactivity adapter
+- historical gateway cognitive-metrics adapter
 - `packages/brewva-gateway/src/host/create-hosted-session.ts`
 - `docs/architecture/system-architecture.md`
 - `docs/architecture/design-axioms.md`

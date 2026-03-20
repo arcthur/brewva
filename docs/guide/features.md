@@ -3,11 +3,11 @@
 ## Runtime Capabilities
 
 - Skill contract selection and activation
-- Tool access policy checks and budget checks
+- Tool access policy checks, effect boundaries, and budget checks
 - Evidence ledger and digest injection
 - Task/truth state management with event-sourced replay
 - Verification gates (`quick`, `standard`, `strict`)
-- Extension-side automatic debug loop with deterministic failure snapshots and handoff packets
+- Model-native review and repair with receipt-bearing rollback / approval surfaces
 - Context budget tracking and compaction events
 - Event-first runtime persistence and replay
 - Cost observability and threshold-based budget alerts
@@ -45,7 +45,6 @@
 - `worker_results_apply`
 - `skill_load`
 - `skill_complete`
-- `skill_chain_control`
 - `subagent_run`
 - `subagent_fanout`
 - `subagent_status`
@@ -56,7 +55,6 @@
 - `task_record_blocker`
 - `task_resolve_blocker`
 - `task_view_state`
-- `cognition_note`
 - `resource_lease`
 
 Channel-conditional tools (available in a2a channels):

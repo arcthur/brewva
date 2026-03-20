@@ -12,7 +12,6 @@ import type { LedgerService } from "./ledger.js";
 import type { ReversibleMutationService } from "./reversible-mutation.js";
 import { RuntimeSessionStateStore } from "./session-state.js";
 import type { SkillLifecycleService } from "./skill-lifecycle.js";
-import type { ObserveRollbackResultInput, TrustMeterService } from "./trust-meter.js";
 
 export interface TrackToolCallInput {
   sessionId: string;
@@ -43,7 +42,6 @@ export interface FileChangeServiceOptions {
   recordEvent: RuntimeKernelContext["recordEvent"];
   ledgerService: Pick<LedgerService, "recordInfrastructureRow">;
   skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
-  trustMeterService: TrustMeterService;
   reversibleMutationService: Pick<ReversibleMutationService, "markWorkspacePatchSetRolledBack">;
 }
 
@@ -72,10 +70,6 @@ export class FileChangeService {
     timestamp?: number;
     skipTapeCheckpoint?: boolean;
   }) => unknown;
-  private readonly observeRollback: (
-    sessionId: string,
-    input: Omit<ObserveRollbackResultInput, "sessionId">,
-  ) => void;
   private readonly markWorkspacePatchSetRolledBack: (
     sessionId: string,
     patchSetId: string,
@@ -89,13 +83,6 @@ export class FileChangeService {
     this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
     this.recordEvent = (input) => options.recordEvent(input);
-    this.observeRollback = (sessionId, input) =>
-      options.trustMeterService.observeRollbackResult({
-        sessionId,
-        ok: input.ok,
-        failedPaths: input.failedPaths,
-        strategy: input.strategy,
-      });
     this.markWorkspacePatchSetRolledBack = (sessionId, patchSetId) =>
       options.reversibleMutationService.markWorkspacePatchSetRolledBack(sessionId, patchSetId);
   }
@@ -250,11 +237,6 @@ export class FileChangeService {
       rollback.ok && rollback.patchSetId
         ? this.markWorkspacePatchSetRolledBack(sessionId, rollback.patchSetId)
         : undefined;
-    this.observeRollback(sessionId, {
-      ok: rollback.ok,
-      failedPaths: rollback.failedPaths.length,
-      strategy: "workspace_patchset",
-    });
     this.recordEvent({
       sessionId,
       type: "rollback",

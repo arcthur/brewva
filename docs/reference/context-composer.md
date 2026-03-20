@@ -8,16 +8,16 @@ Implementation entrypoints:
 
 ## Role
 
-`ContextComposer` is the model-facing composition step for extension profiles
-that expose Brewva context to the model.
+`ContextComposer` is the model-facing presentation layer for already-admitted
+runtime context.
 
-Current callers:
+It does not decide:
 
-- `registerContextTransform` (full extension profile)
-- `registerRuntimeCoreBridge` (`--no-addons` reduced profile)
+- which sources exist
+- which sources fit the budget
+- which tool calls are allowed
 
-It does not decide which sources exist or which sources fit the budget. It only
-decides how already-admitted context should be shown to the model.
+It only decides how admitted context is shown to the model.
 
 ## Input Contract
 
@@ -26,45 +26,35 @@ decides how already-admitted context should be shown to the model.
 - `sessionId`
 - current compaction-gate state
 - pending compaction reason, if any
-- capability-view semantic disclosure state for the current turn
-  - `inventory` for visible-now summary, posture counts, hidden-surface counts,
-    and disclosure hints
-  - `policies` for disclosure and posture-boundary rules
-  - `requested` for explicit `$name` requests parsed from the turn prompt
-  - `details` for requested capability semantics selected for rendering
-  - `missing` for requested names that do not map to a known tool
+- capability-view state for the current turn
 - admitted context entries from `runtime.context.buildInjection(...)`
-- acceptance status for that injected context
+- optional supplemental blocks from the hosted-session path
+- acceptance status for the injection pass
 
-Admitted entries come from the kernel admission path, not from ad-hoc extension
-reads. There is no raw-text fallback path in the composer contract.
+Admitted entries come from the kernel path. There is no raw-text extension
+fallback.
 
 ## Output Contract
 
-The composer returns an ordered list of blocks:
+The composer returns ordered blocks in three categories:
 
 - `narrative`
-  - kernel-admitted narrative entries from `runtime.context.buildInjection(...)`
-  - on the default path this typically means `brewva.identity`,
-    `brewva.context-packets`, `brewva.runtime-status`, `brewva.task-state`, and
-    `brewva.projection-working`
-  - optional narrative providers may add `brewva.skill-candidates` or
-    `brewva.tool-outputs-distilled`
+  - identity
+  - runtime status
+  - task state
+  - working projection
+  - optional distilled tool output
+  - same-turn supplemental return blocks
 - `constraint`
-  - rendered capability disclosure blocks derived from the semantic capability
-    view
-  - this may include `capability-view-summary`, `capability-view-policy`,
-    optional `capability-view-inventory`, requested `capability-detail:*`, and
-    `capability-detail-missing`
-  - compaction gate/advisory blocks
-  - any admitted constraint-category provider blocks such as
-    `brewva.skill-cascade-gate`
+  - capability summary
+  - capability policy
+  - optional capability inventory
+  - requested capability detail
+  - compaction gate or compaction advisory
 - `diagnostic`
-  - concise operational diagnostics only when explicitly requested or when
-    compaction pressure requires additional explanation
-  - tape telemetry appears only for explicit diagnostic tool requests surfaced
-    through the capability view, such as `$tape_info`, `$tape_search`,
-    `$obs_query`, `$obs_slo_assert`, or `$obs_snapshot`
+  - operational diagnostics
+  - pending delegation status
+  - explicit tape or observability hints when requested
 
 Each block carries:
 
@@ -73,55 +63,51 @@ Each block carries:
 - `content`
 - `estimatedTokens`
 
-## Capability Disclosure Resolution
+## Capability Rendering
 
-`ContextComposer` first measures admitted narrative tokens, then chooses a
-render profile for capability disclosure:
+Capability disclosure is derived from the semantic capability view.
 
-- healthy narrative headroom keeps full disclosure plus inventory
-- moderate pressure keeps full policy and requested details but drops inventory
-- tighter pressure switches to compact summary/policy/detail rendering
+Current effect vocabulary is:
 
-After rendering, governance trimming still happens in semantic order instead of
-raw string truncation:
+- `safe`
+- `effectful`
 
-- non-operational diagnostics first
-- optional inventory
-- compaction advisory
-- compact capability detail/policy, then compact summary
-- generic capability policy before requested diagnostic capability detail
-- operational diagnostics last
+Rendered capability detail may include:
 
-This keeps explicit `$name` detail requests more stable than inventory or
-decorative hints when context pressure increases.
+- visible-now summary
+- boundary counts
+- approval-required flags
+- rollbackable flags
+- explicit `$tool_name` detail
+
+Compaction pressure degrades disclosure semantically rather than truncating raw
+strings:
+
+- optional inventory drops first
+- compact policy/detail render before dropping requested semantics
+- operational diagnostics stay last and only when useful
 
 ## Non-Goals
 
 `ContextComposer` does not own:
 
-- context-source registration
-- budget clamp
-- arena planning
-- compaction lifecycle hooks
-- tape replay
+- provider registration
+- budget planning
+- admission decisions
+- replay
+- hidden planning hints
 
-Those remain split across runtime services and extension lifecycle plumbing.
+Those stay in runtime services and lifecycle plumbing.
 
 ## Metrics
 
-The composer emits `context_composed` telemetry from the lifecycle adapter with:
+The lifecycle adapter records `context_composed` with:
 
-- narrative block count
-- constraint block count
-- diagnostic block count
+- block counts by category
 - total composed tokens
 - narrative tokens
 - narrative ratio
 
-This provides a direct measurement for the product rule:
+This preserves the product rule:
 
 `Model sees narrative.`
-
-The same `narrativeRatio` also drives capability disclosure resolution, so
-posture-aware tool detail can degrade by tier before requested semantics are
-dropped outright.

@@ -7,9 +7,6 @@ export type ScanConvergenceToolRule =
     }
   | {
       kind: "exec";
-    }
-  | {
-      kind: "skill_chain_control";
     };
 
 function staticRule(strategy: ScanConvergenceToolStrategy): ScanConvergenceToolRule {
@@ -62,17 +59,13 @@ export const SCAN_CONVERGENCE_TOOL_RULES_BY_NAME = {
   task_set_spec: staticRule("progress"),
   task_update_item: staticRule("progress"),
   rollback_last_patch: staticRule("progress"),
-  cognition_note: staticRule("progress"),
   exec: { kind: "exec" },
-  skill_chain_control: { kind: "skill_chain_control" },
 } as const satisfies Record<string, ScanConvergenceToolRule>;
 
 export const SCAN_CONVERGENCE_TOOL_RULE_NAMES = Object.keys(
   SCAN_CONVERGENCE_TOOL_RULES_BY_NAME,
 ).toSorted();
 
-const SKILL_CHAIN_CONTROL_PROGRESS_ACTIONS = new Set(["start"]);
-const SKILL_CHAIN_CONTROL_NEUTRAL_ACTIONS = new Set(["status", "pause", "resume", "cancel"]);
 const LOW_SIGNAL_EXEC_PRIMARY_TOKENS = new Set([
   "ls",
   "find",
@@ -355,15 +348,7 @@ export function classifyScanConvergenceToolStrategy(
   if (rule.kind === "exec") {
     return isLowSignalExecCommand(args) ? "low_signal" : "progress";
   }
-
-  const action = typeof args?.action === "string" ? args.action.trim().toLowerCase() : "";
-  if (SKILL_CHAIN_CONTROL_PROGRESS_ACTIONS.has(action)) {
-    return "progress";
-  }
-  if (SKILL_CHAIN_CONTROL_NEUTRAL_ACTIONS.has(action)) {
-    return "neutral";
-  }
-  return "neutral";
+  return "progress";
 }
 
 export function listBlockedScanConvergenceTools(): string[] {

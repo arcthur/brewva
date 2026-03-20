@@ -4,55 +4,49 @@ Brewva's kernel is defined by one constitutional line:
 
 `Intelligence proposes. Kernel commits. Tape remembers.`
 
-Implementation-grade constitutional reading:
+Implementation-grade reading:
 
 `Intelligence explores. Kernel authorizes effects. Tape remembers commitments.`
 
-This document fixes the long-lived architectural taste behind that line so new
-features can be judged against a stable standard instead of local convenience.
+This document fixes the architectural taste behind that line so new features
+can be judged against a stable standard instead of local convenience.
 
 ## Axioms
 
 1. `Adaptive logic stays out of the kernel.`
-   Ranking, planning, summarization, model routing, and heuristic inference may
-   exist, but they belong to deliberation/control-plane layers.
-2. `Proposal, not power.`
-   Outer layers may submit proposals; they do not gain authority to mutate
-   kernel state directly.
-   Reserved built-in issuers must also obey their explicit boundary policy;
-   they do not get hidden internal exemptions.
-3. `Every commitment has a receipt.`
+   Ranking, planning, summarization, and heuristic inference belong to
+   deliberation/control-plane layers.
+2. `Subtraction beats switches.`
+   When a control-plane layer stops earning its keep, delete it from the
+   default product path instead of hiding it behind a compatibility toggle.
+3. `Govern effects, not thought paths.`
+   Kernel authority should constrain what may happen to the world, not prescribe
+   the exact reasoning path intelligence must take.
+4. `Every commitment has a receipt.`
    Accept/reject/defer decisions must remain inspectable after the turn that
    produced them.
-4. `Tape is commitment memory.`
-   The event tape is not just a debug log. It is the replayable memory for what
-   the system actually committed.
-5. `Inconclusive is honest governance.`
+5. `Tape is commitment memory.`
+   The event tape is replayable memory for what the system actually committed.
+6. `Inconclusive is honest governance.`
    The system must be able to say "not enough evidence yet" without collapsing
    into a fake pass/fail binary.
-6. `Graceful degradation beats hidden cleverness.`
-   If a deliberation path fails, the kernel must stay safe and explainable
-   rather than silently improvising new behavior.
-7. `Govern effects, not thought paths.`
-   Kernel authority should constrain what may happen to the world, not prescribe
-   the exact reasoning path that intelligence must take.
-8. `Process defaults are hints before they are gates.`
-   Recommended tools, likely chains, and estimated budgets are useful planner
-   priors, but they should not become constitutional truth by accident.
-9. `Resource expansion is negotiated, not assumed.`
+7. `Graceful degradation beats hidden cleverness.`
+   If a deliberation path fails, the kernel must stay safe and explainable.
+8. `Resource expansion is negotiated, not assumed.`
    When a run needs more budget, the preferred answer is an explicit
-   `resource_lease`, not hidden privilege escalation. When a run needs a
-   different effect boundary, the answer is a different commitment boundary,
-   not silent self-escalation.
+   `resource_lease`, not hidden privilege escalation.
+9. `Recovery is model-native, not kernel choreography.`
+   Review, verify, repair, and retry remain first-class product behavior, but
+   runtime should provide primitives rather than a planner-shaped state machine.
 
 Implementation note:
 
-- the runtime now centers authority on effect classes, effective resource
-  ceilings, and `resource_lease` negotiation
-- the visible tool surface and execution hints still shape exploration, but
-  they do not define authority on their own
-- explicit control-plane exemptions and direct governance flows may exist, but
-  they must stay narrow, receipt-bearing, and auditable
+- runtime authority centers on effect classes, approval requirements, and
+  receipt-bearing rollback
+- visible tool surface and execution hints still shape exploration, but they do
+  not define authority on their own
+- explicit control-plane exemptions may exist, but they must stay narrow and
+  auditable
 
 ## Ring Model
 
@@ -61,69 +55,34 @@ Implementation note:
   - policy enforcement
   - tool/context/cost gates
   - verification
-  - replay, WAL, checkpoint recovery
-  - fail-closed behavior
+  - replay, WAL, recovery
 - `Deliberation Ring`
-  - candidate generation
-  - ranking and planning
-  - broker/judge/model orchestration
-  - context curation
+  - planning
+  - ranking
+  - sequencing
   - future multi-model reasoning flows
 - `Experience Ring`
   - CLI, gateway, channels
   - operator UX
-  - handoff artifacts
   - lifecycle adapters
 
-The rings are about authority, not package names. Code may move across packages
-over time; authority boundaries should not.
+Rings are about authority, not package names.
 
 ## Plane Model
-
-Planes describe cross-cutting concerns that may read across rings without
-gaining their authority:
 
 - `Working State Plane`
   - projection
   - context arena
-  - pending dispatch
   - active tool surface
 - `Cognitive Product Plane`
   - context composition
-  - memory formation
-  - memory curation
   - persona/profile rendering
+  - capability disclosure
 - `Control Plane`
-  - broker, debug-loop, heartbeat, proactive wake context, scheduling triggers,
-    future planners
-
-Current module anchors:
-
-- `Working State Plane`
-  - `packages/brewva-runtime/src/context/*`
-  - `packages/brewva-runtime/src/services/context*.ts`
-  - `packages/brewva-runtime/src/projection/*`
-  - `packages/brewva-gateway/src/runtime-plugins/tool-surface.ts`
-- `Cognitive Product Plane`
-  - `packages/brewva-gateway/src/runtime-plugins/context-composer.ts`
-  - `packages/brewva-deliberation/src/memory-formation.ts`
-  - `packages/brewva-deliberation/src/memory-curator.ts`
-  - `packages/brewva-gateway/src/runtime-plugins/memory-formation.ts`
-  - `packages/brewva-gateway/src/runtime-plugins/memory-curator.ts`
-  - `packages/brewva-runtime/src/context/identity.ts`
-- `Control Plane`
-  - `packages/brewva-skill-broker/src/*`
-  - `packages/brewva-deliberation/src/debug-loop.ts`
-  - `packages/brewva-deliberation/src/proactivity-engine.ts`
-  - `packages/brewva-deliberation/src/cognitive-metrics.ts`
-  - `packages/brewva-gateway/src/runtime-plugins/debug-loop.ts`
-  - `packages/brewva-gateway/src/runtime-plugins/proactivity-context.ts`
-  - `packages/brewva-gateway/src/runtime-plugins/cognitive-metrics.ts`
-  - `packages/brewva-gateway/src/daemon/heartbeat-policy.ts`
-  - `packages/brewva-gateway/src/daemon/schedule-runner.ts`
-
-Rings answer "who may commit". Planes answer "what concern is this code
-serving".
+  - recovery
+  - heartbeat
+  - scheduling
+  - delegation orchestration
 
 Product rule:
 
@@ -145,27 +104,12 @@ The kernel may:
 
 The kernel may not:
 
-- silently invent a proposal on behalf of a missing deliberation layer
-- perform adaptive model-side ranking inside the commitment path
+- silently invent proposals on behalf of missing deliberation layers
+- perform adaptive ranking inside the commitment path
 - treat lossy summaries as authoritative state
 - hide commitment reasons behind opaque heuristics
-- prescribe an internal thought path when the real governance need is effect authorization
 
 ## Package Realization
 
-`@brewva/brewva-deliberation` now exists because those trigger conditions were
-met:
-
-- multiple proposal producers (`skill-broker`, `debug-loop`) already shared the
-  same proposal/evidence mechanics
-- proposal generation needs its own test surface without pulling kernel
-  governance logic into every producer
-- control-plane planning helpers now have a separate release and review axis
-- external cognition artifacts and proposal-query projection now live outside
-  the kernel instead of being improvised inside producer modules
-- deliberation-heavy memory, debug-loop, proactivity, and cognitive-metrics
-  logic now live in `@brewva/brewva-deliberation`, while gateway keeps the
-  lifecycle adapters that bind those modules into hosted sessions
-
-The ring model still matters more than package count. A package split is only
-useful when it protects authority boundaries instead of hiding them.
+The ring model matters more than package count. A package split is useful only
+when it protects authority boundaries instead of hiding them.

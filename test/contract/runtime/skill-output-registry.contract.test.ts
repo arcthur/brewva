@@ -1,13 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createRuntimeConfig } from "../../helpers/runtime.js";
 
 function repoRoot(): string {
   return process.cwd();
 }
 
+function createCleanRuntime(): BrewvaRuntime {
+  return new BrewvaRuntime({
+    cwd: repoRoot(),
+    config: createRuntimeConfig(),
+  });
+}
+
 describe("skill output registry", () => {
   test("completed skill outputs are queryable by subsequent skills", async () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createCleanRuntime();
     const sessionId = "output-reg-1";
 
     runtime.skills.activate(sessionId, "repository-analysis");
@@ -24,7 +32,7 @@ describe("skill output registry", () => {
   });
 
   test("getConsumedOutputs returns matching outputs for downstream skills", async () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createCleanRuntime();
     const sessionId = "output-reg-2";
 
     runtime.skills.activate(sessionId, "repository-analysis");
@@ -52,14 +60,14 @@ describe("skill output registry", () => {
   });
 
   test("getConsumedOutputs returns empty for unknown skill", async () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createCleanRuntime();
     const result = runtime.skills.getConsumedOutputs("any-session", "nonexistent");
     expect(result).toEqual({});
   });
 
   test("replays skill outputs from skill_completed events after runtime restart", async () => {
     const sessionId = `skill-output-replay-${Date.now()}`;
-    const runtimeA = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtimeA = createCleanRuntime();
     runtimeA.skills.activate(sessionId, "repository-analysis");
     runtimeA.skills.complete(sessionId, {
       repository_snapshot: "replayed module map",
@@ -67,14 +75,14 @@ describe("skill output registry", () => {
       unknowns: ["No unresolved repository gaps remained at replay capture time."],
     });
 
-    const runtimeB = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtimeB = createCleanRuntime();
     runtimeB.context.onTurnStart(sessionId, 1);
     const replayed = runtimeB.skills.getConsumedOutputs(sessionId, "debugging");
     expect(replayed.repository_snapshot).toBe("replayed module map");
   });
 
   test("emits skill_completed event with outputs and output keys", async () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createCleanRuntime();
     const sessionId = `skill-complete-event-${Date.now()}`;
     runtime.skills.activate(sessionId, "repository-analysis");
     const outputs = {
@@ -97,7 +105,7 @@ describe("skill output registry", () => {
   });
 
   test("emits skill_activated event when a skill is loaded", async () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createCleanRuntime();
     const sessionId = `skill-activated-event-${Date.now()}`;
     runtime.skills.activate(sessionId, "repository-analysis");
 
@@ -110,7 +118,7 @@ describe("skill output registry", () => {
   });
 
   test("promotes task spec from task_spec output", async () => {
-    const runtime = new BrewvaRuntime({ cwd: repoRoot() });
+    const runtime = createCleanRuntime();
     const sessionId = `task-spec-output-${Date.now()}`;
 
     runtime.skills.activate(sessionId, "repository-analysis");

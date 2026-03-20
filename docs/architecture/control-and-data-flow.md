@@ -25,7 +25,7 @@ sequenceDiagram
   RT->>STORE: event tape + evidence ledger + snapshots
 ```
 
-## Core Bridge Flow (`--no-addons`)
+## Core Bridge Flow (`--no-extensions`)
 
 ```mermaid
 flowchart TD

@@ -145,7 +145,7 @@ Describes empirical guidance rather than authority:
 - cost estimates
 - convergence guidance
 
-This information should serve brokers, planners, debug loops, and future
+This information should serve planners, recovery controllers, and future
 orchestrators rather than directly becoming kernel commit conditions.
 
 ## Governance Style

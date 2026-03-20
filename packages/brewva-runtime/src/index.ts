@@ -6,8 +6,6 @@ export * from "./config/paths.js";
 export * from "./skills/contract.js";
 export * from "./skills/facets.js";
 export * from "./skills/registry.js";
-export * from "./skills/dispatch.js";
-export * from "./skills/chain-planner.js";
 export * from "./ledger/evidence-ledger.js";
 export * from "./ledger/digest.js";
 export * from "./ledger/query.js";

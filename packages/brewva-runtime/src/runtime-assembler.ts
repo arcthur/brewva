@@ -26,7 +26,6 @@ import { ContextService } from "./services/context.js";
 import { CostService } from "./services/cost.js";
 import { EffectCommitmentDeskService } from "./services/effect-commitment-desk.js";
 import { EventPipelineService, type RuntimeRecordEventInput } from "./services/event-pipeline.js";
-import { ExplorationSupervisorService } from "./services/exploration-supervisor.js";
 import { FileChangeService } from "./services/file-change.js";
 import { LedgerService } from "./services/ledger.js";
 import { MutationRollbackService } from "./services/mutation-rollback.js";
@@ -38,13 +37,11 @@ import { ReversibleMutationService } from "./services/reversible-mutation.js";
 import { ScheduleIntentService } from "./services/schedule-intent.js";
 import { SessionLifecycleService } from "./services/session-lifecycle.js";
 import type { RuntimeSessionStateStore } from "./services/session-state.js";
-import { SkillCascadeService } from "./services/skill-cascade.js";
 import { SkillLifecycleService } from "./services/skill-lifecycle.js";
 import { TapeService } from "./services/tape.js";
 import { TaskWatchdogService } from "./services/task-watchdog.js";
 import { TaskService } from "./services/task.js";
 import { ToolGateService } from "./services/tool-gate.js";
-import { TrustMeterService } from "./services/trust-meter.js";
 import { TruthProjectorService } from "./services/truth-projector.js";
 import { TruthService } from "./services/truth.js";
 import { VerificationProjectorService } from "./services/verification-projector.js";
@@ -56,9 +53,8 @@ import type {
   BrewvaConfig,
   BrewvaEventRecord,
   SessionCostSummary,
-  SkillCascadeChainSource,
+  ToolExecutionBoundary,
   ToolGovernanceDescriptor,
-  ToolInvocationPosture,
   VerificationLevel,
   VerificationReport,
 } from "./types.js";
@@ -83,7 +79,6 @@ export interface RuntimeCoreDependencies {
 export interface RuntimeServiceDependencies {
   proposalAdmissionService: ProposalAdmissionService;
   skillLifecycleService: SkillLifecycleService;
-  skillCascadeService: SkillCascadeService;
   taskService: TaskService;
   truthService: TruthService;
   ledgerService: LedgerService;
@@ -92,7 +87,6 @@ export interface RuntimeServiceDependencies {
   costService: CostService;
   verificationService: VerificationService;
   contextService: ContextService;
-  explorationSupervisorService: ExplorationSupervisorService;
   taskWatchdogService: TaskWatchdogService;
   tapeService: TapeService;
   eventPipeline: EventPipelineService;
@@ -141,13 +135,12 @@ interface RuntimeServiceAssemblyOptions {
   agentId: string;
   config: BrewvaConfig;
   governancePort?: GovernancePort;
-  skillCascadeChainSources?: SkillCascadeChainSource[];
   kernel: RuntimeKernelContext;
   coreDependencies: RuntimeCoreDependencies;
   sessionState: RuntimeSessionStateStore;
   resolveToolGovernanceDescriptor: (toolName: string) => ToolGovernanceDescriptor | undefined;
   resolveToolGovernanceSource: (toolName: string) => ToolGovernanceDescriptorSource;
-  resolveToolInvocationPosture: (toolName: string) => ToolInvocationPosture;
+  resolveToolExecutionBoundary: (toolName: string) => ToolExecutionBoundary;
   resolveCheckpointCostSummary(sessionId: string): SessionCostSummary;
   resolveCheckpointCostSkillLastTurnByName(sessionId: string): Record<string, number>;
   evaluateCompletion(sessionId: string, level?: VerificationLevel): VerificationReport;
@@ -329,19 +322,6 @@ export function createRuntimeServiceDependencies(
     recordEvent: (input) => options.kernel.recordEvent(input),
     setTaskSpec: (sessionId, spec) => taskService.setTaskSpec(sessionId, spec),
   });
-  const skillCascadeService = new SkillCascadeService({
-    config: options.config.skills.cascade,
-    skills: options.coreDependencies.skillRegistry,
-    sessionState: options.sessionState,
-    getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
-    getActiveSkill: (sessionId) => skillLifecycleService.getActiveSkill(sessionId),
-    activateSkill: (sessionId, name) => skillLifecycleService.activateSkill(sessionId, name),
-    getSkillOutputs: (sessionId, skillName) =>
-      skillLifecycleService.getSkillOutputs(sessionId, skillName),
-    listProducedOutputKeys: (sessionId) => skillLifecycleService.listProducedOutputKeys(sessionId),
-    recordEvent: (input) => options.kernel.recordEvent(input),
-    chainSources: options.skillCascadeChainSources,
-  });
   const truthService = new TruthService({
     getTruthState: (sessionId) => options.kernel.getTruthState(sessionId),
     recordEvent: (input) => options.kernel.recordEvent(input),
@@ -374,7 +354,6 @@ export function createRuntimeServiceDependencies(
     skillLifecycleService,
     governancePort: options.governancePort,
   });
-  const trustMeterService = new TrustMeterService();
   const verificationService = new VerificationService({
     cwd: options.cwd,
     config: options.config,
@@ -384,7 +363,6 @@ export function createRuntimeServiceDependencies(
     governancePort: options.governancePort,
     skillLifecycleService,
     ledgerService,
-    trustMeterService,
   });
   const proposalAdmissionService = new ProposalAdmissionService({
     listDecisionReceiptEvents: (sessionId) =>
@@ -393,8 +371,6 @@ export function createRuntimeServiceDependencies(
       }),
     recordEvent: (input) => options.kernel.recordEvent(input),
     getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
-    skillRegistry: options.coreDependencies.skillRegistry,
-    skillLifecycleService,
     resolveToolGovernanceDescriptor: (toolName) =>
       options.resolveToolGovernanceDescriptor(toolName),
     effectCommitmentAuthorizer: ({ sessionId, proposal, descriptor, turn }) => {
@@ -444,7 +420,6 @@ export function createRuntimeServiceDependencies(
     kernel: options.kernel,
     proposalAdmissionService,
     skillLifecycleService,
-    skillCascadeService,
   });
   const contextService = new ContextService({
     config: options.config,
@@ -461,14 +436,6 @@ export function createRuntimeServiceDependencies(
     skillLifecycleService,
     taskService,
     governancePort: options.governancePort,
-  });
-  const explorationSupervisorService = new ExplorationSupervisorService({
-    sessionState: options.sessionState,
-    listEvents: (sessionId, query) => options.coreDependencies.eventStore.list(sessionId, query),
-    getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
-    recordEvent: (input) => options.kernel.recordEvent(input),
-    skillLifecycleService,
-    trustMeterService,
   });
   const taskWatchdogService = new TaskWatchdogService({
     listEvents: (sessionId, query) => options.coreDependencies.eventStore.list(sessionId, query),
@@ -559,7 +526,6 @@ export function createRuntimeServiceDependencies(
     recordEvent: (input) => options.kernel.recordEvent(input),
     ledgerService,
     skillLifecycleService,
-    trustMeterService,
     reversibleMutationService,
   });
   const parallelService = new ParallelService({
@@ -579,7 +545,6 @@ export function createRuntimeServiceDependencies(
     recordEvent: (input) => options.kernel.recordEvent(input),
     reversibleMutationService,
     fileChangeService,
-    trustMeterService,
   });
   const sessionLifecycleService = new SessionLifecycleService({
     sessionState: options.sessionState,
@@ -607,7 +572,7 @@ export function createRuntimeServiceDependencies(
     resolveToolGovernanceDescriptor: (toolName) =>
       options.resolveToolGovernanceDescriptor(toolName),
     resolveToolGovernanceSource: (toolName) => options.resolveToolGovernanceSource(toolName),
-    resolveToolInvocationPosture: (toolName) => options.resolveToolInvocationPosture(toolName),
+    resolveToolExecutionBoundary: (toolName) => options.resolveToolExecutionBoundary(toolName),
     resourceLeaseService,
     skillLifecycleService,
     contextService,
@@ -616,10 +581,8 @@ export function createRuntimeServiceDependencies(
     proposalAdmissionService,
     effectCommitmentDeskService,
     reversibleMutationService,
-    explorationSupervisorService,
   });
   sessionLifecycleService.onClearState((sessionId) => {
-    trustMeterService.clear(sessionId);
     taskWatchdogService.clear(sessionId);
     reversibleMutationService.clear(sessionId);
     effectCommitmentDeskService.clear(sessionId);
@@ -628,7 +591,6 @@ export function createRuntimeServiceDependencies(
   return {
     proposalAdmissionService,
     skillLifecycleService,
-    skillCascadeService,
     taskService,
     truthService,
     ledgerService,
@@ -637,7 +599,6 @@ export function createRuntimeServiceDependencies(
     costService,
     verificationService,
     contextService,
-    explorationSupervisorService,
     taskWatchdogService,
     tapeService,
     eventPipeline,

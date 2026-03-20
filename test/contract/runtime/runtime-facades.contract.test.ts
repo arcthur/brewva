@@ -139,11 +139,10 @@ describe("runtime facade coverage", () => {
         runId: "delegation-hydrated-1",
         profile: "patch-worker",
         kind: "patch",
-        posture: "reversible_mutate",
+        boundary: "effectful",
         status: "running",
-        deliveryMode: "context_packet",
+        deliveryMode: "supplemental",
         deliveryScopeId: "delegation-hydrated",
-        deliveryTtlMs: 60_000,
       },
     });
     writer.events.record({
@@ -155,7 +154,7 @@ describe("runtime facade coverage", () => {
         profile: "patch-worker",
         kind: "patch",
         childSessionId: "child-hydrated-1",
-        posture: "reversible_mutate",
+        boundary: "effectful",
         status: "completed",
         summary: "Produced a patch candidate.",
         artifactRefs: [
@@ -164,11 +163,9 @@ describe("runtime facade coverage", () => {
             path: ".orchestrator/subagent-patch-artifacts/hydrated/a.ts",
           },
         ],
-        deliveryMode: "context_packet",
+        deliveryMode: "supplemental",
         deliveryScopeId: "delegation-hydrated",
-        deliveryTtlMs: 60_000,
-        contextPacketProposalId: `${sessionId}:context_packet:120`,
-        contextPacketDecision: "accept",
+        supplementalAppended: true,
         deliveryUpdatedAt: 121,
       },
     });
@@ -192,10 +189,9 @@ describe("runtime facade coverage", () => {
       status: "merged",
       workerSessionId: "child-hydrated-1",
       delivery: {
-        mode: "context_packet",
+        mode: "supplemental",
         scopeId: "delegation-hydrated",
-        contextPacketProposalId: `${sessionId}:context_packet:120`,
-        contextPacketDecision: "accept",
+        supplementalAppended: true,
       },
     });
   });
@@ -213,11 +209,10 @@ describe("runtime facade coverage", () => {
         runId: "delegation-timeout-1",
         profile: "reviewer",
         kind: "review",
-        posture: "observe",
+        boundary: "safe",
         status: "running",
-        deliveryMode: "context_packet",
+        deliveryMode: "supplemental",
         deliveryScopeId: "delegation-timeout",
-        deliveryTtlMs: 60_000,
       },
     });
     writer.events.record({
@@ -228,15 +223,13 @@ describe("runtime facade coverage", () => {
         runId: "delegation-timeout-1",
         profile: "reviewer",
         kind: "review",
-        posture: "observe",
+        boundary: "safe",
         status: "timeout",
         summary: "Child run timed out after 5s.",
         error: "timeout:5000",
-        deliveryMode: "context_packet",
+        deliveryMode: "supplemental",
         deliveryScopeId: "delegation-timeout",
-        deliveryTtlMs: 60_000,
-        contextPacketProposalId: `${sessionId}:context_packet:260`,
-        contextPacketDecision: "accept",
+        supplementalAppended: true,
         deliveryUpdatedAt: 261,
       },
     });
@@ -249,11 +242,9 @@ describe("runtime facade coverage", () => {
       status: "timeout",
       summary: "Child run timed out after 5s.",
       delivery: {
-        mode: "context_packet",
+        mode: "supplemental",
         scopeId: "delegation-timeout",
-        ttlMs: 60_000,
-        contextPacketProposalId: `${sessionId}:context_packet:260`,
-        contextPacketDecision: "accept",
+        supplementalAppended: true,
         updatedAt: 261,
       },
     });

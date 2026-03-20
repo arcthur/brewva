@@ -1,4 +1,3 @@
-import { recordProactivityWakeup } from "@brewva/brewva-gateway/runtime-plugins";
 import { observeRuntimeTurnStart } from "../runtime-plugins/runtime-turn-clock.js";
 import { collectSessionPromptOutput } from "./collect-output.js";
 import { createGatewaySession, type GatewaySessionResult } from "./create-session.js";
@@ -112,7 +111,6 @@ function recordFakeTurnLifecycle(
     payload: message,
   });
   runtime.context.onTurnEnd(agentSessionId);
-  runtime.skills.reconcilePendingDispatch(agentSessionId, runtimeTurn);
   runtime.events.record({
     sessionId: agentSessionId,
     type: "turn_end",
@@ -230,7 +228,6 @@ async function handleInit(
       model: message.payload.model,
       agentId: message.payload.agentId,
       enableExtensions: message.payload.enableExtensions,
-      enableAddons: message.payload.enableAddons,
     });
     const agentSessionId = sessionResult.session.sessionManager.getSessionId();
     const watchdogOverrides = workerTestHarness.watchdog;
@@ -348,19 +345,6 @@ async function runTurn(input: {
   });
 
   try {
-    if (input.trigger?.kind === "heartbeat") {
-      recordProactivityWakeup(sessionResult.runtime, input.agentSessionId, {
-        source: "heartbeat",
-        ruleId: input.trigger.ruleId,
-        prompt: input.prompt,
-        objective: input.trigger.objective,
-        contextHints: input.trigger.contextHints,
-        wakeMode: input.trigger.wakeMode,
-        planReason: input.trigger.planReason,
-        selectionText: input.trigger.selectionText,
-        signalArtifactRefs: input.trigger.signalArtifactRefs,
-      });
-    }
     if (input.trigger?.kind === "schedule") {
       applySchedulePromptTrigger(sessionResult.runtime, input.agentSessionId, input.trigger);
     }
