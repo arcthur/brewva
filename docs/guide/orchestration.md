@@ -5,29 +5,21 @@ Orchestration is driven by runtime state management plus extension lifecycle han
 - Runtime state machine: `packages/brewva-runtime/src/runtime.ts`
 - Extension registration: `@brewva/brewva-gateway/runtime-plugins` (`packages/brewva-gateway/src/runtime-plugins/index.ts`)
 
-## Default Profile (Extensions Enabled)
+## Hosted Pipeline
 
 1. Gateway host creates a session (`@brewva/brewva-gateway/host`, implemented in `packages/brewva-gateway/src/host/create-hosted-session.ts`)
-2. Extensions are registered (`@brewva/brewva-gateway/runtime-plugins`)
+2. Gateway host installs `createHostedTurnPipeline` (`@brewva/brewva-gateway/runtime-plugins`)
 3. `before_agent_start` runs lifecycle plumbing (`context-transform`) and model-facing composition (`context-composer`)
 4. `tool_call` passes quality/security/budget gates (`quality-gate`)
 5. `ledger-writer` records durable tool outcomes (normally from SDK `tool_result`; can fallback to `tool_execution_end` when `tool_result` is missing). Persisted governance event is `tool_result_recorded`.
 6. `tool-result-distiller` may replace large pure-text `tool_result` payloads with bounded same-turn summaries after raw evidence is recorded.
 7. `agent_end` runs completion guard and leaves recovery sequencing to the model
 
-## Direct-Tool Profile (`--no-extensions`)
+## Tool Registration Modes
 
-1. Gateway host registers tools directly (`buildBrewvaTools`)
-2. Gateway host installs `createRuntimeCoreBridgeExtension` (tool surface + quality gate + ledger writer + tool-result distiller + completion guard + reduced lifecycle bridge)
-3. `tool_call` passes quality/security/budget gates (`quality-gate`)
-4. `ledger-writer` records durable tool outcomes and closes the runtime tool lifecycle (`tool_result_recorded` + `runtime.tools.finish(...)`)
-5. `tool-result-distiller` may replace large pure-text `tool_result` payloads with bounded same-turn summaries after raw evidence is recorded.
-6. Gateway host installs `registerRuntimeCoreEventBridge` for lifecycle and assistant-usage telemetry
-7. Extension-only presentation hooks remain disabled (`context` hook auto-compaction lifecycle,
-   event streaming, and the richer hosted-session presentation path)
-8. Runtime core bridge still runs `before_agent_start`, but now uses the same
-   narrative-first `ContextComposer` and standard Brewva context contract as
-   the extensions-enabled path
+1. `registerTools: true` registers managed Brewva tools through the hosted pipeline
+2. `registerTools: false` keeps the same hosted lifecycle pipeline, but tool registration is delegated to the host session setup
+3. Runtime lifecycle, event streaming, context shaping, ledger finalization, and completion guard stay identical across both modes
 
 ## Runtime Subsystems
 

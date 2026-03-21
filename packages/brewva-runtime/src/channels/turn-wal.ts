@@ -12,7 +12,7 @@ import {
 import { resolve } from "node:path";
 import type { BrewvaConfig, TurnWALRecord, TurnWALSource, TurnWALStatus } from "../types.js";
 import { ensureDir, writeFileAtomic } from "../utils/fs.js";
-import type { TurnEnvelope } from "./turn.js";
+import { assertTurnEnvelope, type TurnEnvelope } from "./turn.js";
 
 export interface TurnWALStoreOptions {
   workspaceRoot: string;
@@ -52,19 +52,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function isTurnEnvelope(value: unknown): value is TurnEnvelope {
-  if (!isRecord(value)) return false;
-  if (value.schema !== "brewva.turn.v1") return false;
-  if (typeof value.kind !== "string") return false;
-  if (typeof value.sessionId !== "string" || !value.sessionId.trim()) return false;
-  if (typeof value.turnId !== "string" || !value.turnId.trim()) return false;
-  if (typeof value.channel !== "string" || !value.channel.trim()) return false;
-  if (typeof value.conversationId !== "string" || !value.conversationId.trim()) return false;
-  if (typeof value.timestamp !== "number" || !Number.isFinite(value.timestamp)) return false;
-  if (!Array.isArray(value.parts)) return false;
-  return true;
-}
-
 function isTurnWALStatus(value: unknown): value is TurnWALStatus {
   return (
     value === "pending" ||
@@ -83,12 +70,14 @@ function isTurnWALSource(value: unknown): value is TurnWALSource {
 
 function parseTurnWALRecord(line: string): TurnWALRecord | null {
   let value: unknown;
+  let envelope: TurnEnvelope;
   try {
     value = JSON.parse(line);
+    if (!isRecord(value)) return null;
+    envelope = assertTurnEnvelope(value.envelope);
   } catch {
     return null;
   }
-  if (!isRecord(value)) return null;
   if (value.schema !== "brewva.turn-wal.v1") return null;
   if (typeof value.walId !== "string" || !value.walId.trim()) return null;
   if (typeof value.turnId !== "string" || !value.turnId.trim()) return null;
@@ -96,7 +85,6 @@ function parseTurnWALRecord(line: string): TurnWALRecord | null {
   if (typeof value.channel !== "string" || !value.channel.trim()) return null;
   if (typeof value.conversationId !== "string" || !value.conversationId.trim()) return null;
   if (!isTurnWALStatus(value.status)) return null;
-  if (!isTurnEnvelope(value.envelope)) return null;
   if (
     typeof value.createdAt !== "number" ||
     !Number.isFinite(value.createdAt) ||
@@ -129,7 +117,7 @@ function parseTurnWALRecord(line: string): TurnWALRecord | null {
     channel: value.channel,
     conversationId: value.conversationId,
     status: value.status,
-    envelope: value.envelope,
+    envelope,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
     attempts: value.attempts,

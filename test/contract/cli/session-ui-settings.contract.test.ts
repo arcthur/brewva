@@ -242,8 +242,8 @@ describe("brewva session ui settings wiring", () => {
     }
   });
 
-  test("no-extensions session bootstrap does not reintroduce removed skill-broker metadata", async () => {
-    const workspace = createTestWorkspace("session-ui-skill-broker-no-extensions");
+  test("direct managed tools session bootstrap does not reintroduce removed skill-broker metadata", async () => {
+    const workspace = createTestWorkspace("session-ui-skill-broker-direct-tools");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
       JSON.stringify(
@@ -262,7 +262,7 @@ describe("brewva session ui settings wiring", () => {
     const result = await createBrewvaSession({
       cwd: workspace,
       configPath: ".brewva/brewva.json",
-      enableExtensions: false,
+      managedToolMode: "direct",
     });
     try {
       const sessionId = result.session.sessionManager.getSessionId();
@@ -272,14 +272,14 @@ describe("brewva session ui settings wiring", () => {
       })[0];
       const payload = (bootstrap?.payload as
         | {
-            extensionsEnabled?: boolean;
+            managedToolMode?: "extension" | "direct";
             skillBroker?: unknown;
             skillLoad?: {
               routingEnabled?: boolean;
             };
           }
-        | undefined) ?? { extensionsEnabled: true, skillLoad: {} };
-      expect(payload.extensionsEnabled).toBe(false);
+        | undefined) ?? { managedToolMode: "extension", skillLoad: {} };
+      expect(payload.managedToolMode).toBe("direct");
       expect(payload.skillBroker).toBeUndefined();
       expect(payload.skillLoad?.routingEnabled).toBe(true);
     } finally {

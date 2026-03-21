@@ -1,4 +1,5 @@
 import type { ChildProcess } from "node:child_process";
+import type { ManagedToolMode } from "@brewva/brewva-runtime";
 import type { TurnWALStore } from "@brewva/brewva-runtime/channels";
 import type {
   ParentToWorkerMessage,
@@ -47,7 +48,7 @@ export interface WorkerHandle {
   configPath?: string;
   model?: string;
   agentId?: string;
-  enableExtensions?: boolean;
+  managedToolMode?: ManagedToolMode;
   requestedAgentSessionId?: string;
   pending: Map<string, PendingRequest>;
   pendingTurns: Map<string, PendingTurn>;

@@ -99,12 +99,12 @@ Relevant implementation:
 
 ## 9) Profile Transparency Invariant
 
-- Extension-enabled and `--no-extensions` profiles must be behaviorally explicit:
-  extension presentation hooks may differ, but core safety/evidence invariants
-  must remain equivalent.
-- When extensions are disabled, runtime core chain still enforces effect policy,
-  critical compaction gate, tool-call accounting, patch tracking, and
-  tool-result ledger persistence.
+- `managedToolMode=extension` and `managedToolMode=direct` must be behaviorally
+  explicit: the registration surface may differ, but core safety/evidence
+  invariants must remain equivalent.
+- When managed tools are provided directly, the hosted lifecycle chain still
+  enforces effect policy, critical compaction gate, tool-call accounting, patch
+  tracking, and tool-result ledger persistence.
 - Core lifecycle and assistant-usage telemetry must still be persisted.
 
 Relevant implementation:

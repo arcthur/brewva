@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  createBrewvaExtension,
-  createRuntimeCoreBridgeExtension,
-} from "@brewva/brewva-gateway/runtime-plugins";
+import { createHostedTurnPipeline } from "@brewva/brewva-gateway/runtime-plugins";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import type { ToolInfo } from "@mariozechner/pi-coding-agent";
 import { createMockExtensionAPI, invokeHandlerAsync } from "../helpers/extension.js";
@@ -12,11 +9,11 @@ function handlerNames(handlers: Map<string, unknown[]>): string[] {
   return [...handlers.keys()].toSorted((left, right) => left.localeCompare(right));
 }
 
-describe("no-extensions contract", () => {
+describe("managed tool registration modes", () => {
   test("managed Brewva tools register canonical schemas by default", async () => {
     const runtime = createRuntimeFixture();
     const api = createMockExtensionAPI();
-    const extension = createBrewvaExtension({ runtime });
+    const extension = createHostedTurnPipeline({ runtime });
     await extension(api.api);
 
     const readSpans = api.api.getAllTools().find((tool) => tool.name === "read_spans");
@@ -37,49 +34,37 @@ describe("no-extensions contract", () => {
     expect(parameters?.required).toEqual(["file_path", "spans"]);
   });
 
-  test("default extension and runtime-core bridge register different handler surfaces", async () => {
-    const defaultRuntime = createRuntimeFixture();
-    const defaultApi = createMockExtensionAPI();
-    const defaultExtension = createBrewvaExtension({
-      runtime: defaultRuntime,
+  test("registerTools only affects tool registration, not hosted pipeline handler surfaces", async () => {
+    const managedRuntime = createRuntimeFixture();
+    const managedApi = createMockExtensionAPI();
+    await createHostedTurnPipeline({
+      runtime: managedRuntime,
+      registerTools: true,
+    })(managedApi.api);
+
+    const bridgeOnlyRuntime = createRuntimeFixture();
+    const bridgeOnlyApi = createMockExtensionAPI();
+    await createHostedTurnPipeline({
+      runtime: bridgeOnlyRuntime,
       registerTools: false,
-    });
-    await defaultExtension(defaultApi.api);
+    })(bridgeOnlyApi.api);
 
-    const coreRuntime = createRuntimeFixture();
-    const core = createMockExtensionAPI();
-    const coreExtension = createRuntimeCoreBridgeExtension({
-      runtime: coreRuntime,
-    });
-    await coreExtension(core.api);
+    const managedHandlers = handlerNames(managedApi.handlers);
+    const bridgeOnlyHandlers = handlerNames(bridgeOnlyApi.handlers);
 
-    const defaultHandlers = handlerNames(defaultApi.handlers);
-    const coreHandlers = handlerNames(core.handlers);
-
-    expect(defaultHandlers).toContain("before_agent_start");
-    expect(defaultHandlers).toContain("context");
-    expect(defaultHandlers).toContain("session_start");
-    expect(defaultHandlers).toContain("turn_start");
-    expect(defaultHandlers).toContain("session_compact");
-    expect(defaultHandlers).toContain("session_shutdown");
-    expect(defaultHandlers).toContain("tool_call");
-    expect(defaultHandlers).toContain("tool_result");
-    expect(defaultHandlers).toContain("tool_execution_end");
-    expect(defaultHandlers).toContain("agent_end");
-
-    expect(coreHandlers).toContain("before_agent_start");
-    expect(coreHandlers).toContain("session_compact");
-    expect(coreHandlers).toContain("session_shutdown");
-    expect(coreHandlers).toContain("input");
-    expect(coreHandlers).toContain("tool_call");
-    expect(coreHandlers).toContain("tool_result");
-    expect(coreHandlers).toContain("tool_execution_start");
-    expect(coreHandlers).toContain("tool_execution_end");
-    expect(coreHandlers).toContain("agent_end");
-
-    expect(coreHandlers).not.toContain("context");
-    expect(coreHandlers).not.toContain("session_start");
-    expect(coreHandlers).not.toContain("turn_start");
+    expect(managedHandlers).toEqual(bridgeOnlyHandlers);
+    expect(managedHandlers).toContain("before_agent_start");
+    expect(managedHandlers).toContain("context");
+    expect(managedHandlers).toContain("input");
+    expect(managedHandlers).toContain("session_start");
+    expect(managedHandlers).toContain("turn_start");
+    expect(managedHandlers).toContain("session_compact");
+    expect(managedHandlers).toContain("session_shutdown");
+    expect(managedHandlers).toContain("tool_call");
+    expect(managedHandlers).toContain("tool_result");
+    expect(managedHandlers).toContain("tool_execution_start");
+    expect(managedHandlers).toContain("tool_execution_end");
+    expect(managedHandlers).toContain("agent_end");
   });
 
   test("registerTools=false does not late-register managed Brewva tools", async () => {
@@ -100,7 +85,7 @@ describe("no-extensions contract", () => {
     };
     api.api.registerTool(foreignTool);
 
-    const extension = createBrewvaExtension({
+    const extension = createHostedTurnPipeline({
       runtime,
       registerTools: false,
     });

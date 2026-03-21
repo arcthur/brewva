@@ -2,9 +2,9 @@ import { join, resolve } from "node:path";
 import {
   BrewvaRuntime,
   createTrustedLocalGovernancePort,
-  recordAssistantUsageFromMessage,
   resolveBrewvaAgentDir,
   type CreateBrewvaSessionOptions as RuntimeCreateBrewvaSessionOptions,
+  type ManagedToolMode,
 } from "@brewva/brewva-runtime";
 import {
   buildBrewvaTools,
@@ -20,14 +20,10 @@ import {
   readTool,
   SettingsManager,
   writeTool,
-  type AgentSessionEvent,
   type CreateAgentSessionResult,
   type ExtensionFactory,
 } from "@mariozechner/pi-coding-agent";
-import {
-  createBrewvaExtension,
-  createRuntimeCoreBridgeExtension,
-} from "../runtime-plugins/index.js";
+import { createHostedTurnPipeline } from "../runtime-plugins/index.js";
 import {
   createDetachedSubagentBackgroundController,
   createHostedSubagentAdapter,
@@ -81,99 +77,8 @@ function applyRuntimeUiSettings(
   });
 }
 
-export function registerRuntimeCoreEventBridge(
-  runtime: BrewvaRuntime,
-  session: HostedSessionResult["session"],
-): () => void {
-  let turnIndex = 0;
-
-  return session.subscribe((event: AgentSessionEvent) => {
-    const sessionId = session.sessionManager.getSessionId();
-
-    switch (event.type) {
-      case "agent_start":
-        turnIndex = 0;
-        runtime.events.record({
-          sessionId,
-          type: "agent_start",
-        });
-        break;
-      case "turn_start":
-        runtime.context.onTurnStart(sessionId, turnIndex);
-        runtime.events.record({
-          sessionId,
-          type: "turn_start",
-          turn: turnIndex,
-        });
-        break;
-      case "turn_end": {
-        const toolResults = Array.isArray((event as { toolResults?: unknown }).toolResults)
-          ? (event as { toolResults: unknown[] }).toolResults.length
-          : 0;
-        runtime.context.onTurnEnd(sessionId);
-        runtime.events.record({
-          sessionId,
-          type: "turn_end",
-          turn: turnIndex,
-          payload: { toolResults },
-        });
-        turnIndex += 1;
-        break;
-      }
-      case "message_end":
-        recordAssistantUsageFromMessage(
-          runtime,
-          sessionId,
-          (event as { message?: unknown }).message,
-        );
-        break;
-      case "tool_execution_start":
-        runtime.events.record({
-          sessionId,
-          type: "tool_execution_start",
-          payload: {
-            toolCallId: (event as { toolCallId?: unknown }).toolCallId,
-            toolName: (event as { toolName?: unknown }).toolName,
-          },
-        });
-        break;
-      case "tool_execution_update":
-        runtime.events.record({
-          sessionId,
-          type: "tool_execution_update",
-          payload: {
-            toolCallId: (event as { toolCallId?: unknown }).toolCallId,
-            toolName: (event as { toolName?: unknown }).toolName,
-          },
-        });
-        break;
-      case "tool_execution_end":
-        runtime.events.record({
-          sessionId,
-          type: "tool_execution_end",
-          payload: {
-            toolCallId: (event as { toolCallId?: unknown }).toolCallId,
-            toolName: (event as { toolName?: unknown }).toolName,
-            isError: (event as { isError?: unknown }).isError === true,
-          },
-        });
-        break;
-      case "agent_end":
-        runtime.events.record({
-          sessionId,
-          type: "agent_end",
-          payload: {
-            messageCount: Array.isArray((event as { messages?: unknown }).messages)
-              ? (event as { messages: unknown[] }).messages.length
-              : 0,
-            costSummary: runtime.cost.getSummary(sessionId),
-          },
-        });
-        break;
-      default:
-        break;
-    }
-  });
+function resolveManagedToolMode(mode: ManagedToolMode | undefined): ManagedToolMode {
+  return mode === "direct" ? "direct" : "extension";
 }
 
 export async function createHostedSession(
@@ -230,7 +135,7 @@ export async function createHostedSession(
           configPath: childOptions.configPath ?? options.configPath,
           model: childOptions.model,
           agentId: childOptions.agentId,
-          enableExtensions: childOptions.enableExtensions,
+          managedToolMode: childOptions.managedToolMode,
           enableSubagents: childOptions.enableSubagents,
           orchestration: childOptions.orchestration,
           managedToolNames: childOptions.managedToolNames,
@@ -248,17 +153,16 @@ export async function createHostedSession(
   const settingsManager = SettingsManager.create(cwd, agentDir);
   applyRuntimeUiSettings(settingsManager, runtime.config.ui);
 
-  const extensionsEnabled = options.enableExtensions !== false;
-  const extensionFactories = extensionsEnabled
-    ? [
-        createBrewvaExtension({
-          runtime,
-          registerTools: true,
-          orchestration,
-          managedToolNames: options.managedToolNames,
-        }),
-      ]
-    : [createRuntimeCoreBridgeExtension({ runtime })];
+  const managedToolMode = resolveManagedToolMode(options.managedToolMode);
+  const registerManagedTools = managedToolMode === "extension";
+  const extensionFactories = [
+    createHostedTurnPipeline({
+      runtime,
+      registerTools: registerManagedTools,
+      orchestration,
+      managedToolNames: options.managedToolNames,
+    }),
+  ];
   if (options.extensionFactories && options.extensionFactories.length > 0) {
     extensionFactories.push(...options.extensionFactories);
   }
@@ -271,13 +175,14 @@ export async function createHostedSession(
   });
   await resourceLoader.reload();
 
-  const customTools = extensionsEnabled
-    ? undefined
-    : buildBrewvaTools({
-        runtime,
-        orchestration,
-        toolNames: options.managedToolNames,
-      });
+  const customTools =
+    managedToolMode === "direct"
+      ? buildBrewvaTools({
+          runtime,
+          orchestration,
+          toolNames: options.managedToolNames,
+        })
+      : undefined;
   const builtinTools = resolveBuiltinTools(options.builtinToolNames);
 
   const sessionResult = await createAgentSession({
@@ -294,22 +199,13 @@ export async function createHostedSession(
   });
 
   const sessionId = sessionResult.session.sessionManager.getSessionId();
-  if (!extensionsEnabled) {
-    runtime.events.record({
-      sessionId,
-      type: "session_start",
-      payload: { cwd },
-    });
-    registerRuntimeCoreEventBridge(runtime, sessionResult.session);
-  }
-
   runtime.events.record({
     sessionId,
     type: "session_bootstrap",
     payload: {
       cwd,
       agentId: runtime.agentId,
-      extensionsEnabled,
+      managedToolMode,
       skillLoad: {
         routingEnabled: skillLoadReport.routingEnabled,
         routingScopes: skillLoadReport.routingScopes,

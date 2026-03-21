@@ -54,6 +54,7 @@ import { TapeService } from "./services/tape.js";
 import { TaskWatchdogService } from "./services/task-watchdog.js";
 import { TaskService } from "./services/task.js";
 import { ToolGateService } from "./services/tool-gate.js";
+import { ToolInvocationSpine } from "./services/tool-invocation-spine.js";
 import { TruthProjectorService } from "./services/truth-projector.js";
 import { TruthService } from "./services/truth.js";
 import { VerificationProjectorService } from "./services/verification-projector.js";
@@ -191,6 +192,7 @@ type RuntimeServiceDependencies = {
   mutationRollbackService: MutationRollbackService;
   sessionLifecycleService: SessionLifecycleService;
   toolGateService: ToolGateService;
+  toolInvocationSpine: ToolInvocationSpine;
   effectCommitmentDeskService: EffectCommitmentDeskService;
 };
 
@@ -579,6 +581,7 @@ export class BrewvaRuntime {
   declare private readonly truthService: TruthService;
   declare private readonly truthProjectorService: TruthProjectorService;
   declare private readonly toolGateService: ToolGateService;
+  declare private readonly toolInvocationSpine: ToolInvocationSpine;
   declare private readonly verificationProjectorService: VerificationProjectorService;
   declare private readonly verificationService: VerificationService;
   declare private readonly runtimeConfig: BrewvaConfig;
@@ -832,9 +835,9 @@ export class BrewvaRuntime {
           this.toolGovernanceRegistry.register(toolName, input),
         unregisterGovernanceDescriptor: (toolName) =>
           this.toolGovernanceRegistry.unregister(toolName),
-        start: (input) => this.toolGateService.startToolCall(input),
+        start: (input) => this.toolInvocationSpine.begin(input),
         finish: (input) => {
-          this.toolGateService.finishToolCall(input);
+          this.toolInvocationSpine.complete(input);
         },
         acquireParallelSlot: (sessionId, runId) =>
           this.parallelService.acquireParallelSlot(sessionId, runId),
@@ -855,25 +858,7 @@ export class BrewvaRuntime {
         rollbackLastMutation: (sessionId) => this.mutationRollbackService.rollbackLast(sessionId),
         resolveUndoSessionId: (preferredSessionId) =>
           this.fileChangeService.resolveUndoSessionId(preferredSessionId),
-        recordResult: (input) => {
-          const state = this.sessionState.getCell(input.sessionId);
-          const effectCommitmentRequestId =
-            input.effectCommitmentRequestId?.trim() ||
-            (input.toolCallId
-              ? state.effectCommitmentRequestIdsByToolCallId.get(input.toolCallId)
-              : undefined);
-          const ledgerId = this.ledgerService.recordToolResult({
-            ...input,
-            effectCommitmentRequestId,
-          });
-          if (input.toolCallId) {
-            state.effectCommitmentRequestIdsByToolCallId.delete(input.toolCallId);
-          }
-          if (effectCommitmentRequestId) {
-            state.inflightEffectCommitmentRequestIds.delete(effectCommitmentRequestId);
-          }
-          return ledgerId;
-        },
+        recordResult: (input) => this.toolInvocationSpine.recordResult(input),
       },
       task: {
         setSpec: (sessionId, spec) => this.taskService.setTaskSpec(sessionId, spec),

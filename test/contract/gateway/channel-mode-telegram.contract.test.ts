@@ -98,7 +98,7 @@ describe("gateway contract: telegram channel dispatch", () => {
       await runChannelMode({
         cwd: workspace,
         configPath,
-        enableExtensions: false,
+        managedToolMode: "direct",
         verbose: false,
         channel: "telegram",
         channelConfig,

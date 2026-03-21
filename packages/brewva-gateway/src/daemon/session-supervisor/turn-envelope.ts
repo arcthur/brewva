@@ -1,5 +1,5 @@
 import type { TruthFact } from "@brewva/brewva-runtime";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
+import { buildTurnEnvelope, type TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import type {
   SchedulePromptAnchor,
   SchedulePromptTrigger,
@@ -97,8 +97,7 @@ export function buildSessionTurnEnvelope(input: {
   source: "gateway" | "heartbeat" | "schedule";
   trigger?: SendPromptTrigger;
 }): TurnEnvelope {
-  return {
-    schema: "brewva.turn.v1",
+  return buildTurnEnvelope({
     kind: "user",
     sessionId: input.sessionId,
     turnId: input.turnId,
@@ -110,7 +109,7 @@ export function buildSessionTurnEnvelope(input: {
       source: input.source,
       trigger: input.trigger ?? null,
     },
-  };
+  });
 }
 
 export function extractPromptFromEnvelope(envelope: TurnEnvelope): string {

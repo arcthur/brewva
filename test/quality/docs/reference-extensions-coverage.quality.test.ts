@@ -3,15 +3,15 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const EXPECTED_SYMBOLS = [
-  "createBrewvaExtension",
-  "brewvaExtension",
+  "createHostedTurnPipeline",
+  "TurnLifecyclePort",
+  "registerTurnLifecyclePorts",
   "registerContextTransform",
   "registerEventStream",
   "registerQualityGate",
   "registerLedgerWriter",
   "registerToolResultDistiller",
   "registerCompletionGuard",
-  "registerNotification",
 ];
 
 describe("docs/reference extensions coverage", () => {

@@ -15,6 +15,7 @@ import {
   SchedulerService,
   createTrustedLocalGovernancePort,
   parseScheduleIntentEvent,
+  type ManagedToolMode,
 } from "@brewva/brewva-runtime";
 import { TurnWALStore } from "@brewva/brewva-runtime/channels";
 import { differenceInSeconds, formatISO } from "date-fns";
@@ -24,7 +25,7 @@ export interface RunDaemonOptions {
   configPath?: string;
   model?: string;
   agentId?: string;
-  enableExtensions: boolean;
+  managedToolMode: ManagedToolMode;
   verbose: boolean;
   onRuntimeReady?: (runtime: BrewvaRuntime) => void;
 }
@@ -111,7 +112,7 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
     defaultCwd: runtime.cwd,
     defaultConfigPath: parsed.configPath,
     defaultModel: parsed.model,
-    defaultEnableExtensions: parsed.enableExtensions,
+    defaultManagedToolMode: parsed.managedToolMode,
     turnWalStore,
     turnWalCompactIntervalMs: Math.max(
       30_000,
@@ -220,7 +221,7 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
           cwd: parsed.cwd,
           configPath: parsed.configPath,
           model: parsed.model,
-          enableExtensions: parsed.enableExtensions,
+          managedToolMode: parsed.managedToolMode,
         });
       },
     });

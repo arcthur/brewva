@@ -116,7 +116,7 @@ describe("context transform injection contract", () => {
       candidate?.message?.content?.includes("[TaskState]\nstatus: async"),
     );
     if (!result) {
-      throw new Error("Expected context-transform result from createBrewvaExtension.");
+      throw new Error("Expected context-transform result from createHostedTurnPipeline.");
     }
 
     expect(calls).toEqual(["async"]);

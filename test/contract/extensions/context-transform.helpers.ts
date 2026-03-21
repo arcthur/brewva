@@ -1,5 +1,5 @@
 import {
-  createBrewvaExtension,
+  createHostedTurnPipeline,
   registerContextTransform,
 } from "@brewva/brewva-gateway/runtime-plugins";
 import { CONTEXT_SOURCES, type ContextInjectionEntry } from "@brewva/brewva-runtime";
@@ -13,7 +13,7 @@ import { createRuntimeConfig, createRuntimeFixture } from "./fixtures/runtime.js
 
 export {
   CONTEXT_SOURCES,
-  createBrewvaExtension,
+  createHostedTurnPipeline,
   createMockExtensionAPI,
   createRuntimeConfig,
   createRuntimeFixture,

@@ -8,18 +8,22 @@ import {
   getBrewvaAgentParameters,
 } from "@brewva/brewva-tools";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import type { InputEventResult } from "@mariozechner/pi-coding-agent";
+import type { InputEventResult, ToolResultEvent } from "@mariozechner/pi-coding-agent";
 
 interface QualityGateToolCallResult {
   block?: boolean;
   reason?: string;
 }
 
+interface QualityGateToolResultResult {
+  content?: ToolResultEvent["content"];
+}
+
 type QualityGateTransformResult = Extract<InputEventResult, { action: "transform" }>;
 
 export interface QualityGateLifecycle {
   toolCall: (event: unknown, ctx: unknown) => QualityGateToolCallResult | undefined;
-  toolResult: (event: unknown, ctx: unknown) => unknown;
+  toolResult: (event: unknown, ctx: unknown) => QualityGateToolResultResult | undefined;
   input: (event: unknown, ctx: unknown) => InputEventResult | undefined;
 }
 
@@ -93,12 +97,17 @@ export function createQualityGateLifecycle(
     }
   };
 
-  const normalizeToolResultContent = (value: unknown): Array<Record<string, unknown>> => {
+  const normalizeToolResultContent = (value: unknown): ToolResultEvent["content"] => {
     if (!Array.isArray(value)) {
       return [];
     }
     return value.filter(
-      (entry): entry is Record<string, unknown> => !!entry && typeof entry === "object",
+      (entry): entry is ToolResultEvent["content"][number] =>
+        Boolean(entry) &&
+        typeof entry === "object" &&
+        "type" in entry &&
+        ((entry as { type?: unknown }).type === "text" ||
+          (entry as { type?: unknown }).type === "image"),
     );
   };
 
@@ -238,7 +247,7 @@ export function createQualityGateLifecycle(
         return undefined;
       }
 
-      const injectedContent: Array<Record<string, unknown>> = [];
+      const injectedContent: ToolResultEvent["content"] = [];
       if (advisory) {
         injectedContent.push({ type: "text", text: advisory });
       }

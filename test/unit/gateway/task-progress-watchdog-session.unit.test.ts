@@ -14,7 +14,7 @@ describe("gateway session watchdog integration", () => {
     Date.now = () => now;
     const result = await createGatewaySession({
       cwd: createTestWorkspace("gateway-watchdog-session"),
-      enableExtensions: false,
+      managedToolMode: "direct",
     });
 
     try {

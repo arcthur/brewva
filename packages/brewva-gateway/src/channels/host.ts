@@ -1,8 +1,13 @@
 import type { Server } from "node:http";
 import { TelegramWebhookTransport } from "@brewva/brewva-channels-telegram";
 import { createTelegramIngressServer, type TelegramIngressAuth } from "@brewva/brewva-ingress";
-import { BrewvaRuntime, createTrustedLocalGovernancePort } from "@brewva/brewva-runtime";
 import {
+  BrewvaRuntime,
+  createTrustedLocalGovernancePort,
+  type ManagedToolMode,
+} from "@brewva/brewva-runtime";
+import {
+  buildTurnEnvelope,
   type ChannelTurnBridge,
   TurnWALRecovery,
   TurnWALStore,
@@ -45,7 +50,7 @@ export interface RunChannelModeOptions {
   configPath?: string;
   model?: string;
   agentId?: string;
-  enableExtensions: boolean;
+  managedToolMode: ManagedToolMode;
   verbose: boolean;
   channel: string;
   channelConfig?: ChannelModeConfig;
@@ -671,14 +676,12 @@ function buildOutboundTurn(input: {
   meta?: Record<string, unknown>;
 }): TurnEnvelope {
   const now = Date.now();
-  return {
-    schema: "brewva.turn.v1",
+  return buildTurnEnvelope({
     kind: input.kind,
     sessionId: input.inbound.sessionId,
     turnId: `${input.inbound.turnId}:${input.kind}:${input.sequence}`,
     channel: input.inbound.channel,
     conversationId: input.inbound.conversationId,
-    messageId: undefined,
     threadId: input.inbound.threadId,
     timestamp: now,
     parts: [{ type: "text", text: input.text }],
@@ -688,7 +691,7 @@ function buildOutboundTurn(input: {
       generatedAt: now,
       ...input.meta,
     },
-  };
+  });
 }
 
 function rewriteTurnText(turn: TurnEnvelope, text: string): TurnEnvelope {
@@ -1250,7 +1253,7 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
         cwd: options.cwd,
         configPath: options.configPath,
         model,
-        enableExtensions: options.enableExtensions,
+        managedToolMode: options.managedToolMode,
         runtime: workerRuntime,
         scopeId: scopeKey,
         extensionFactories: [extensionFactory],

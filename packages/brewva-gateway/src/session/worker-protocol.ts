@@ -1,3 +1,4 @@
+import type { ManagedToolMode } from "@brewva/brewva-runtime";
 import type { SendPromptTrigger } from "../daemon/session-backend.js";
 import type { GatewayToolOutput, SessionStreamChunk } from "./collect-output.js";
 
@@ -13,7 +14,7 @@ export type ParentToWorkerMessage =
         configPath?: string;
         model?: string;
         agentId?: string;
-        enableExtensions?: boolean;
+        managedToolMode?: ManagedToolMode;
         parentPid: number;
       };
     }

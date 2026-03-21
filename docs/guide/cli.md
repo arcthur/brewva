@@ -85,7 +85,7 @@ Useful flags:
 - `--agent`
 - `--task`
 - `--task-file`
-- `--no-extensions`
+- `--managed-tools`
 - `--print`
 - `--interactive`
 - `--mode`
@@ -139,15 +139,17 @@ Short aliases:
 - `-v` for `--version`
 - `-h` for `--help`
 
-`--no-extensions` disables the full Brewva runtime-plugin orchestration layer.
-CLI still installs the runtime core bridge, so tool policy, compaction gate,
-and ledger/patch tracking remain enforced.
+`--managed-tools <extension|direct>` controls how Brewva-managed tools reach the
+session:
 
-Retained: `before_agent_start` core status/context block, `tool_call`,
-`tool_result`, `session_compact`, `session_shutdown`.
+- `extension` (default): the hosted pipeline registers managed tools through the
+  extension API before each turn.
+- `direct`: the same hosted pipeline remains active, but the host provides
+  managed tools directly when creating the session.
 
-Disabled: `registerContextTransform` (`turn_start`/`context` governance lifecycle),
-`registerEventStream`, and richer hosted-session presentation hooks.
+Both modes keep the same tool policy, compaction gate, ledger write, event
+stream, and lifecycle-port behavior. There is no reduced runtime-core bridge
+profile anymore.
 
 `--backend` selects the primary session backend:
 

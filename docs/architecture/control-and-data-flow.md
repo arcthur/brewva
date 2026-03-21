@@ -25,15 +25,15 @@ sequenceDiagram
   RT->>STORE: event tape + evidence ledger + snapshots
 ```
 
-## Core Bridge Flow (`--no-extensions`)
+## Direct Managed Tools Flow (`--managed-tools direct`)
 
 ```mermaid
 flowchart TD
-  A["create runtime"] --> B["register runtime-core bridge"]
-  B --> C["before_agent_start: core status + deterministic injection"]
-  C --> D["tool_call: tool gate + cost/context boundary"]
-  D --> E["tool_result: evidence + event write"]
-  E --> F["session lifecycle: compaction / shutdown bookkeeping"]
+  A["create runtime"] --> B["create hosted turn pipeline"]
+  B --> C["host provides managed tools directly"]
+  C --> D["before_agent_start: hosted context + tool surface"]
+  D --> E["tool_call: tool gate + invocation spine"]
+  E --> F["tool_result: ledger + event stream + distillation"]
 ```
 
 ## Persistence Flow
