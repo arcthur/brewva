@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-import { buildChannelDedupeKey, buildChannelSessionId } from "@brewva/brewva-runtime/channels";
+import {
+  buildChannelDedupeKey,
+  buildChannelSessionId,
+  coerceTurnEnvelope,
+} from "@brewva/brewva-runtime/channels";
 import type { ApprovalPayload, TurnEnvelope, TurnPart } from "@brewva/brewva-runtime/channels";
 import {
   decodeTelegramApprovalCallback,
@@ -662,8 +666,7 @@ function projectCallbackQueryToApprovalTurn(
     partText.push(`state_path: .brewva/channel/approval-state/${restoredState.stateKey}.json`);
   }
 
-  return {
-    schema: "brewva.turn.v1",
+  const projected = coerceTurnEnvelope({
     kind: "approval",
     sessionId,
     turnId: `tg:callback:${callback.id}`,
@@ -693,7 +696,8 @@ function projectCallbackQueryToApprovalTurn(
       ...(restoredState?.stateKey ? { approvalStateKey: restoredState.stateKey } : {}),
       ...(restoredState?.state !== undefined ? { approvalState: restoredState.state } : {}),
     },
-  };
+  });
+  return projected.ok ? (projected.envelope ?? null) : null;
 }
 
 function projectMessageToUserTurn(
@@ -712,8 +716,7 @@ function projectMessageToUserTurn(
   if (parts.length === 0) return null;
 
   const edited = Boolean(update.edited_message);
-  return {
-    schema: "brewva.turn.v1",
+  const projected = coerceTurnEnvelope({
     kind: "user",
     sessionId: buildChannelSessionId("telegram", conversationId),
     turnId: `tg:${edited ? "edited" : "message"}:${conversationId}:${message.message_id}`,
@@ -732,7 +735,8 @@ function projectMessageToUserTurn(
       senderUsername: message.from?.username ?? null,
       edited,
     },
-  };
+  });
+  return projected.ok ? (projected.envelope ?? null) : null;
 }
 
 export function projectTelegramUpdateToTurn(

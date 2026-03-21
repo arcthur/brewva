@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   CONTEXT_SOURCES,
-  createBrewvaExtension,
+  createHostedTurnPipeline,
   createMockExtensionAPI,
   createRuntimeConfig,
   createRuntimeFixture,
@@ -202,7 +202,7 @@ describe("context transform registration contract", () => {
     expect(summary.totalCostUsd).toBe(0);
   });
 
-  test("preserves async context injection through createBrewvaExtension", async () => {
+  test("preserves async context injection through createHostedTurnPipeline", async () => {
     const { api, handlers } = createMockExtensionAPI();
     const calls: string[] = [];
     const runtime = createRuntimeFixture({
@@ -231,7 +231,7 @@ describe("context transform registration contract", () => {
       },
     });
 
-    const extension = createBrewvaExtension({
+    const extension = createHostedTurnPipeline({
       runtime,
       registerTools: false,
     });

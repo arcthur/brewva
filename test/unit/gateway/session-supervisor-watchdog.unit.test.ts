@@ -85,7 +85,7 @@ describe("session supervisor watchdog bridge", () => {
     const supervisor = new SessionSupervisor({
       stateDir: join(workspace, "state"),
       defaultCwd: workspace,
-      defaultEnableExtensions: false,
+      defaultManagedToolMode: "direct",
       workerEnv: createWorkerTestEnv({
         taskGoal: "Detect stalled runtime work from the worker process",
         pollIntervalMs: 1_000,
@@ -151,7 +151,7 @@ describe("session supervisor watchdog bridge", () => {
     const supervisor = new SessionSupervisor({
       stateDir: join(workspace, "state"),
       defaultCwd: workspace,
-      defaultEnableExtensions: false,
+      defaultManagedToolMode: "direct",
       workerEnv: createWorkerTestEnv({
         taskGoal: "Ensure shutdown stops watchdog polling before detection",
         pollIntervalMs: 2_000,
@@ -214,7 +214,7 @@ describe("session supervisor watchdog bridge", () => {
     const supervisor = new SessionSupervisor({
       stateDir: join(workspace, "state"),
       defaultCwd: workspace,
-      defaultEnableExtensions: false,
+      defaultManagedToolMode: "direct",
       logger: {
         debug: () => {},
         info: () => {},

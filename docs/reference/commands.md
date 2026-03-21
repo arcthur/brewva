@@ -52,7 +52,7 @@ Loopback-only host policy applies to gateway start/probe/control (`--host` must 
 - `--log-file`
 - `--token-file`
 - `--heartbeat`
-- `--no-extensions`
+- `--managed-tools`
 - `--json`
 - `--tick-interval-ms`
 - `--session-idle-ms`
@@ -79,7 +79,7 @@ Loopback-only host policy applies to gateway start/probe/control (`--host` must 
 - `--log-file`
 - `--token-file`
 - `--heartbeat`
-- `--no-extensions`
+- `--managed-tools`
 - `--tick-interval-ms`
 - `--session-idle-ms`
 - `--max-workers`
@@ -291,7 +291,7 @@ With `--verbose`, daemon prints a rolling 60-second scheduler window summary
 - `--agent`
 - `--task`
 - `--task-file`
-- `--no-extensions`
+- `--managed-tools`
 - `--print`
 - `--interactive`
 - `--mode`
@@ -339,10 +339,13 @@ Short aliases:
 - `-v` for `--version`
 - `-h` for `--help`
 
-`--no-extensions` disables the full gateway runtime-plugin stack. Runtime core bridge hooks remain active for
-tool policy, compaction gate, and ledger/patch tracking. A minimal autonomy
-context contract plus tape/context pressure status injection remains active in
-this profile.
+`--managed-tools <extension|direct>` switches only the managed-tool registration
+surface:
+
+- `extension` (default): register managed Brewva tools through the hosted
+  extension pipeline.
+- `direct`: provide managed Brewva tools directly from the host/session while
+  keeping the same hosted lifecycle pipeline active.
 
 `--backend` controls the primary session backend:
 

@@ -42,13 +42,13 @@ describe("Extension integration: observability injection", () => {
     const extensionPath = join(workspace, "brewva-inline-extension.ts");
     const brewvaExtensionEntry = join(
       process.cwd(),
-      "node_modules/@brewva/brewva-gateway/dist/runtime-plugins/index.js",
+      "packages/brewva-gateway/src/runtime-plugins.ts",
     ).replaceAll("\\", "/");
     writeFileSync(
       extensionPath,
       [
-        `import { createBrewvaExtension } from '${brewvaExtensionEntry}';`,
-        `export default createBrewvaExtension({ registerTools: false, cwd: ${JSON.stringify(workspace)} });`,
+        `import { createHostedTurnPipeline } from '${brewvaExtensionEntry}';`,
+        `export default createHostedTurnPipeline({ registerTools: false, cwd: ${JSON.stringify(workspace)} });`,
       ].join("\n"),
       "utf8",
     );

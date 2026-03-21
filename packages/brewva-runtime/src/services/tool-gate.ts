@@ -16,7 +16,6 @@ import type {
   BrewvaEventRecord,
   ContextBudgetUsage,
   DecisionReceipt,
-  PatchSet,
   ProposalEnvelope,
   SkillDocument,
   ToolExecutionBoundary,
@@ -29,11 +28,8 @@ import { normalizeToolName } from "../utils/tool-name.js";
 import { resolveToolResultVerdict } from "../utils/tool-result.js";
 import type { ContextService } from "./context.js";
 import type { EffectCommitmentDeskService } from "./effect-commitment-desk.js";
-import type { FileChangeService } from "./file-change.js";
-import type { LedgerService } from "./ledger.js";
 import type { ProposalAdmissionService } from "./proposal-admission.js";
 import type { ResourceLeaseService } from "./resource-lease.js";
-import type { ReversibleMutationService } from "./reversible-mutation.js";
 import { RuntimeSessionStateStore } from "./session-state.js";
 import type { SkillLifecycleService } from "./skill-lifecycle.js";
 
@@ -73,6 +69,16 @@ export interface FinishToolCallInput {
   effectCommitmentRequestId?: string;
 }
 
+export interface ToolStartAuthorization extends ToolAccessDecision {
+  descriptor?: ToolGovernanceDescriptor;
+}
+
+export interface ToolCompletionContext {
+  descriptor?: ToolGovernanceDescriptor;
+  verdict: "pass" | "fail" | "inconclusive";
+  effectCommitmentRequestId?: string;
+}
+
 export interface ToolGateServiceOptions {
   securityConfig: RuntimeKernelContext["config"]["security"];
   costTracker: RuntimeKernelContext["costTracker"];
@@ -86,63 +92,11 @@ export interface ToolGateServiceOptions {
   resourceLeaseService: Pick<ResourceLeaseService, "getEffectiveBudget">;
   skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
   contextService: Pick<ContextService, "checkContextCompactionGate" | "observeContextUsage">;
-  fileChangeService: Pick<
-    FileChangeService,
-    "markToolCall" | "trackToolCallStart" | "trackToolCallEnd"
-  >;
-  ledgerService: Pick<LedgerService, "recordToolResult">;
   proposalAdmissionService: Pick<ProposalAdmissionService, "submitProposal">;
   effectCommitmentDeskService: Pick<
     EffectCommitmentDeskService,
     "prepareResume" | "getRequestIdForProposal"
   >;
-  reversibleMutationService: Pick<ReversibleMutationService, "prepare" | "record">;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readPatchSetOverride(metadata: Record<string, unknown> | undefined): PatchSet | undefined {
-  const details = isRecord(metadata?.details) ? metadata.details : undefined;
-  const patchSet = isRecord(details?.patchSet) ? details.patchSet : undefined;
-  if (!patchSet) {
-    return undefined;
-  }
-  if (typeof patchSet.id !== "string" || typeof patchSet.createdAt !== "number") {
-    return undefined;
-  }
-  if (!Array.isArray(patchSet.changes)) {
-    return undefined;
-  }
-
-  const changes: PatchSet["changes"] = [];
-  for (const change of patchSet.changes) {
-    if (!isRecord(change)) {
-      continue;
-    }
-    if (typeof change.path !== "string") {
-      continue;
-    }
-    if (change.action !== "add" && change.action !== "modify" && change.action !== "delete") {
-      continue;
-    }
-    changes.push({
-      path: change.path,
-      action: change.action,
-      beforeHash: typeof change.beforeHash === "string" ? change.beforeHash : undefined,
-      afterHash: typeof change.afterHash === "string" ? change.afterHash : undefined,
-      diffText: typeof change.diffText === "string" ? change.diffText : undefined,
-      artifactRef: typeof change.artifactRef === "string" ? change.artifactRef : undefined,
-    });
-  }
-
-  return {
-    id: patchSet.id,
-    createdAt: patchSet.createdAt,
-    summary: typeof patchSet.summary === "string" ? patchSet.summary : undefined,
-    changes,
-  };
 }
 
 export class ToolGateService {
@@ -178,44 +132,6 @@ export class ToolGateService {
     sessionId: string,
     usage: ContextBudgetUsage | undefined,
   ) => void;
-  private readonly markToolCall: (sessionId: string, toolName: string) => void;
-  private readonly trackToolCallStart: (input: {
-    sessionId: string;
-    toolCallId: string;
-    toolName: string;
-    args?: Record<string, unknown>;
-  }) => void;
-  private readonly recordToolResult: (input: {
-    sessionId: string;
-    toolCallId?: string;
-    toolName: string;
-    args: Record<string, unknown>;
-    outputText: string;
-    channelSuccess: boolean;
-    verdict?: "pass" | "fail" | "inconclusive";
-    metadata?: Record<string, unknown>;
-    effectCommitmentRequestId?: string;
-  }) => string;
-  private readonly trackToolCallEnd: (input: {
-    sessionId: string;
-    toolCallId: string;
-    toolName: string;
-    channelSuccess: boolean;
-  }) => PatchSet | undefined;
-  private readonly prepareMutation: (input: {
-    sessionId: string;
-    toolCallId: string;
-    toolName: string;
-  }) => ToolMutationReceipt | undefined;
-  private readonly recordMutation: (input: {
-    sessionId: string;
-    toolCallId: string;
-    toolName: string;
-    channelSuccess: boolean;
-    verdict?: "pass" | "fail" | "inconclusive";
-    patchSet?: PatchSet;
-    metadata?: Record<string, unknown>;
-  }) => void;
   private readonly submitProposal: (
     sessionId: string,
     proposal: ProposalEnvelope,
@@ -250,19 +166,12 @@ export class ToolGateService {
       options.contextService.checkContextCompactionGate(sessionId, toolName, usage);
     this.observeContextUsage = (sessionId, usage) =>
       options.contextService.observeContextUsage(sessionId, usage);
-    this.markToolCall = (sessionId, toolName) =>
-      options.fileChangeService.markToolCall(sessionId, toolName);
-    this.trackToolCallStart = (input) => options.fileChangeService.trackToolCallStart(input);
-    this.recordToolResult = (input) => options.ledgerService.recordToolResult(input);
-    this.trackToolCallEnd = (input) => options.fileChangeService.trackToolCallEnd(input);
     this.submitProposal = (sessionId, proposal) =>
       options.proposalAdmissionService.submitProposal(sessionId, proposal);
     this.prepareEffectCommitmentResume = (input) =>
       options.effectCommitmentDeskService.prepareResume(input);
     this.getEffectCommitmentRequestIdForProposal = (sessionId, proposalId) =>
       options.effectCommitmentDeskService.getRequestIdForProposal(sessionId, proposalId);
-    this.prepareMutation = (input) => options.reversibleMutationService.prepare(input);
-    this.recordMutation = (input) => options.reversibleMutationService.record(input);
   }
 
   checkToolAccess(sessionId: string, toolName: string): ToolAccessDecision {
@@ -766,7 +675,7 @@ export class ToolGateService {
     };
   }
 
-  startToolCall(input: StartToolCallInput): ToolAccessDecision {
+  authorizeToolCall(input: StartToolCallInput): ToolStartAuthorization {
     const boundary = this.resolveToolExecutionBoundary(input.toolName);
     const normalizedToolName = normalizeToolName(input.toolName);
     const descriptor = this.resolveToolGovernanceDescriptor(input.toolName);
@@ -825,11 +734,17 @@ export class ToolGateService {
         boundary,
         reason,
         effectCommitmentRequestId: requestedEffectCommitmentRequestId,
+        descriptor,
       };
     }
 
     const gateDecision = this.evaluateEffectGate(input, boundary, descriptor, effectGateEvent);
-    if (!gateDecision.allowed) return gateDecision;
+    if (!gateDecision.allowed) {
+      return {
+        ...gateDecision,
+        descriptor,
+      };
+    }
 
     const effectCommitmentRequestId = gateDecision.effectCommitmentRequestId?.trim();
     if (
@@ -852,6 +767,7 @@ export class ToolGateService {
         boundary,
         reason,
         effectCommitmentRequestId,
+        descriptor,
       };
     }
 
@@ -860,36 +776,14 @@ export class ToolGateService {
       state.effectCommitmentRequestIdsByToolCallId.set(input.toolCallId, effectCommitmentRequestId);
     }
 
-    try {
-      this.markToolCall(input.sessionId, input.toolName);
-      this.trackToolCallStart({
-        sessionId: input.sessionId,
-        toolCallId: input.toolCallId,
-        toolName: input.toolName,
-        args: input.args,
-      });
-      const mutationReceipt = toolGovernanceCreatesRollbackAnchor(descriptor)
-        ? this.prepareMutation({
-            sessionId: input.sessionId,
-            toolCallId: input.toolCallId,
-            toolName: input.toolName,
-          })
-        : undefined;
-      return {
-        allowed: true,
-        advisory: gateDecision.advisory,
-        boundary,
-        commitmentReceipt: gateDecision.commitmentReceipt,
-        effectCommitmentRequestId: gateDecision.effectCommitmentRequestId,
-        mutationReceipt,
-      };
-    } catch (error) {
-      if (effectCommitmentRequestId) {
-        state.inflightEffectCommitmentRequestIds.delete(effectCommitmentRequestId);
-        state.effectCommitmentRequestIdsByToolCallId.delete(input.toolCallId);
-      }
-      throw error;
-    }
+    return {
+      allowed: true,
+      advisory: gateDecision.advisory,
+      boundary,
+      commitmentReceipt: gateDecision.commitmentReceipt,
+      effectCommitmentRequestId: gateDecision.effectCommitmentRequestId,
+      descriptor,
+    };
   }
 
   private evaluateEffectGate(
@@ -937,7 +831,14 @@ export class ToolGateService {
     };
   }
 
-  finishToolCall(input: FinishToolCallInput): string {
+  resolveToolCompletion(input: {
+    sessionId: string;
+    toolCallId?: string;
+    toolName: string;
+    channelSuccess: boolean;
+    verdict?: "pass" | "fail" | "inconclusive";
+    effectCommitmentRequestId?: string;
+  }): ToolCompletionContext {
     const descriptor = this.resolveToolGovernanceDescriptor(input.toolName);
     const state = this.sessionState.getCell(input.sessionId);
     const verdict = resolveToolResultVerdict({
@@ -946,41 +847,28 @@ export class ToolGateService {
     });
     const effectCommitmentRequestId =
       input.effectCommitmentRequestId?.trim() ||
-      state.effectCommitmentRequestIdsByToolCallId.get(input.toolCallId);
-    const ledgerId = this.recordToolResult({
-      sessionId: input.sessionId,
-      toolCallId: input.toolCallId,
-      toolName: input.toolName,
-      args: input.args,
-      outputText: input.outputText,
-      channelSuccess: input.channelSuccess,
+      (input.toolCallId
+        ? state.effectCommitmentRequestIdsByToolCallId.get(input.toolCallId)
+        : undefined);
+    return {
+      descriptor,
       verdict,
-      metadata: input.metadata,
       effectCommitmentRequestId,
-    });
-    state.effectCommitmentRequestIdsByToolCallId.delete(input.toolCallId);
-    if (effectCommitmentRequestId) {
-      state.inflightEffectCommitmentRequestIds.delete(effectCommitmentRequestId);
+    };
+  }
+
+  clearEffectCommitmentState(input: {
+    sessionId: string;
+    toolCallId?: string;
+    effectCommitmentRequestId?: string;
+  }): void {
+    const state = this.sessionState.getCell(input.sessionId);
+    if (input.toolCallId) {
+      state.effectCommitmentRequestIdsByToolCallId.delete(input.toolCallId);
     }
-    const patchSet =
-      readPatchSetOverride(input.metadata) ??
-      this.trackToolCallEnd({
-        sessionId: input.sessionId,
-        toolCallId: input.toolCallId,
-        toolName: input.toolName,
-        channelSuccess: input.channelSuccess,
-      });
-    if (toolGovernanceCreatesRollbackAnchor(descriptor)) {
-      this.recordMutation({
-        sessionId: input.sessionId,
-        toolCallId: input.toolCallId,
-        toolName: input.toolName,
-        channelSuccess: input.channelSuccess,
-        verdict,
-        patchSet,
-        metadata: input.metadata,
-      });
+    const requestId = input.effectCommitmentRequestId?.trim();
+    if (requestId) {
+      state.inflightEffectCommitmentRequestIds.delete(requestId);
     }
-    return ledgerId;
   }
 }

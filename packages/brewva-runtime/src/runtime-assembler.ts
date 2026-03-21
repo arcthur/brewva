@@ -42,6 +42,7 @@ import { TapeService } from "./services/tape.js";
 import { TaskWatchdogService } from "./services/task-watchdog.js";
 import { TaskService } from "./services/task.js";
 import { ToolGateService } from "./services/tool-gate.js";
+import { ToolInvocationSpine } from "./services/tool-invocation-spine.js";
 import { TruthProjectorService } from "./services/truth-projector.js";
 import { TruthService } from "./services/truth.js";
 import { VerificationProjectorService } from "./services/verification-projector.js";
@@ -97,6 +98,7 @@ export interface RuntimeServiceDependencies {
   mutationRollbackService: MutationRollbackService;
   sessionLifecycleService: SessionLifecycleService;
   toolGateService: ToolGateService;
+  toolInvocationSpine: ToolInvocationSpine;
   effectCommitmentDeskService: EffectCommitmentDeskService;
 }
 
@@ -576,10 +578,13 @@ export function createRuntimeServiceDependencies(
     resourceLeaseService,
     skillLifecycleService,
     contextService,
-    fileChangeService,
-    ledgerService,
     proposalAdmissionService,
     effectCommitmentDeskService,
+  });
+  const toolInvocationSpine = new ToolInvocationSpine({
+    toolGateService,
+    fileChangeService,
+    ledgerService,
     reversibleMutationService,
   });
   sessionLifecycleService.onClearState((sessionId) => {
@@ -610,5 +615,6 @@ export function createRuntimeServiceDependencies(
     mutationRollbackService,
     sessionLifecycleService,
     toolGateService,
+    toolInvocationSpine,
   };
 }

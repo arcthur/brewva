@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { addMilliseconds, subMilliseconds } from "date-fns";
-import type { TurnEnvelope } from "../channels/turn.js";
+import { buildTurnEnvelope, type TurnEnvelope } from "../channels/turn.js";
 import {
   SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE,
   SCHEDULE_RECOVERY_SUMMARY_EVENT_TYPE,
@@ -69,8 +69,7 @@ function buildScheduleTurnEnvelope(input: {
   runIndex: number;
   now: number;
 }): TurnEnvelope {
-  return {
-    schema: "brewva.turn.v1",
+  return buildTurnEnvelope({
     kind: "user",
     sessionId: input.intent.parentSessionId,
     turnId: buildScheduleWalDedupeKey(input.intent.intentId, input.runIndex),
@@ -90,7 +89,7 @@ function buildScheduleTurnEnvelope(input: {
       continuityMode: input.intent.continuityMode,
       goalRef: input.intent.goalRef ?? null,
     },
-  };
+  });
 }
 
 function readIntentIdFromWal(record: TurnWALRecord): string | undefined {

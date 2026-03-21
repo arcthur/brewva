@@ -9,9 +9,9 @@ describe("extensions entrypoint surface", () => {
     ]);
 
     expect(typeof host.createHostedSession).toBe("function");
-    expect(typeof runtimePlugins.createBrewvaExtension).toBe("function");
+    expect(typeof runtimePlugins.createHostedTurnPipeline).toBe("function");
     expect("createHostedSession" in gateway).toBe(false);
-    expect("createBrewvaExtension" in gateway).toBe(false);
+    expect("createHostedTurnPipeline" in gateway).toBe(false);
   });
 
   test("does not expose removed memory bridge hook", async () => {

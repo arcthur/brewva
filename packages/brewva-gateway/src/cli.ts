@@ -3,7 +3,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import process from "node:process";
 import { parseArgs as parseNodeArgs } from "node:util";
-import { BrewvaConfigLoadError, resolveBrewvaAgentDir } from "@brewva/brewva-runtime";
+import {
+  BrewvaConfigLoadError,
+  resolveBrewvaAgentDir,
+  type ManagedToolMode,
+} from "@brewva/brewva-runtime";
 import { readGatewayToken } from "./auth.js";
 import { connectGatewayClient } from "./client.js";
 import { GatewayDaemon } from "./daemon/gateway-daemon.js";
@@ -75,7 +79,7 @@ const START_PARSE_OPTIONS = {
   "log-file": { type: "string" },
   "token-file": { type: "string" },
   heartbeat: { type: "string" },
-  "no-extensions": { type: "boolean" },
+  "managed-tools": { type: "string" },
   json: { type: "boolean" },
   "tick-interval-ms": { type: "string" },
   "session-idle-ms": { type: "string" },
@@ -158,7 +162,7 @@ const INSTALL_PARSE_OPTIONS = {
   "log-file": { type: "string" },
   "token-file": { type: "string" },
   heartbeat: { type: "string" },
-  "no-extensions": { type: "boolean" },
+  "managed-tools": { type: "string" },
   "tick-interval-ms": { type: "string" },
   "session-idle-ms": { type: "string" },
   "max-workers": { type: "string" },
@@ -224,6 +228,30 @@ function pushStringFlag(args: string[], name: string, value: unknown): void {
   args.push(`--${name}`, normalized);
 }
 
+function describeFlagValue(raw: unknown): string {
+  if (typeof raw === "string") {
+    return raw;
+  }
+  try {
+    return JSON.stringify(raw) ?? typeof raw;
+  } catch {
+    return typeof raw;
+  }
+}
+
+function resolveManagedToolModeFlag(raw: unknown): { value: ManagedToolMode; error?: string } {
+  if (raw === undefined) {
+    return { value: "extension" };
+  }
+  if (raw === "extension" || raw === "direct") {
+    return { value: raw };
+  }
+  return {
+    value: "extension",
+    error: `Error: --managed-tools must be "extension" or "direct" (received "${describeFlagValue(raw)}").`,
+  };
+}
+
 function resolveDetachedBootstrapPrefix(): string[] {
   const entryArg = process.argv[1];
   if (typeof entryArg !== "string" || !entryArg.trim()) {
@@ -283,9 +311,7 @@ function buildDetachedStartArgs(values: Readonly<Record<string, unknown>>): stri
   pushStringFlag(args, "max-payload-bytes", values["max-payload-bytes"]);
   pushStringFlag(args, "health-http-port", values["health-http-port"]);
   pushStringFlag(args, "health-http-path", values["health-http-path"]);
-  if (values["no-extensions"] === true) {
-    args.push("--no-extensions");
-  }
+  pushStringFlag(args, "managed-tools", values["managed-tools"]);
   return args;
 }
 
@@ -534,6 +560,11 @@ async function handleStart(argv: string[]): Promise<number> {
     console.error("Error: --detach and --foreground cannot be used together.");
     return 1;
   }
+  const managedToolMode = resolveManagedToolModeFlag(parsed.values["managed-tools"]);
+  if (managedToolMode.error) {
+    console.error(managedToolMode.error);
+    return 1;
+  }
 
   const portParsed = parseOptionalIntegerFlag("port", parsed.values.port, {
     minimum: 1,
@@ -732,7 +763,7 @@ async function handleStart(argv: string[]): Promise<number> {
       cwd: typeof parsed.values.cwd === "string" ? parsed.values.cwd : process.cwd(),
       configPath: typeof parsed.values.config === "string" ? parsed.values.config : undefined,
       model: typeof parsed.values.model === "string" ? parsed.values.model : undefined,
-      enableExtensions: parsed.values["no-extensions"] !== true,
+      managedToolMode: managedToolMode.value,
       jsonStdout: jsonMode,
       tickIntervalMs: tickParsed.value,
       sessionIdleTtlMs: sessionIdleParsed.value,
@@ -1344,6 +1375,11 @@ async function handleInstall(argv: string[]): Promise<number> {
     );
     return 1;
   }
+  const managedToolMode = resolveManagedToolModeFlag(parsed.values["managed-tools"]);
+  if (managedToolMode.error) {
+    console.error(managedToolMode.error);
+    return 1;
+  }
 
   const supervisor = resolveSupervisorKind({
     launchd: parsed.values.launchd === true,
@@ -1465,6 +1501,7 @@ async function handleInstall(argv: string[]): Promise<number> {
     "log-file": paths.logFilePath,
     "token-file": paths.tokenFilePath,
     heartbeat: paths.heartbeatPolicyPath,
+    "managed-tools": managedToolMode.value,
   };
 
   const startArgs = buildDetachedStartArgs(startValues);

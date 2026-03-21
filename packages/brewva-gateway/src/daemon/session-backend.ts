@@ -1,4 +1,9 @@
-import type { ScheduleContinuityMode, TaskSpec, TruthFact } from "@brewva/brewva-runtime";
+import type {
+  ManagedToolMode,
+  ScheduleContinuityMode,
+  TaskSpec,
+  TruthFact,
+} from "@brewva/brewva-runtime";
 import type { GatewayToolOutput } from "../session/collect-output.js";
 
 export interface OpenSessionInput {
@@ -7,7 +12,7 @@ export interface OpenSessionInput {
   configPath?: string;
   model?: string;
   agentId?: string;
-  enableExtensions?: boolean;
+  managedToolMode?: ManagedToolMode;
 }
 
 export interface OpenSessionResult {

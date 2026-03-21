@@ -3,6 +3,7 @@ import type {
   BrewvaRuntime,
   DelegationRunQuery,
   DelegationRunRecord,
+  ManagedToolMode,
   PatchSet,
   WorkerResult,
 } from "@brewva/brewva-runtime";
@@ -52,7 +53,7 @@ export interface HostedSubagentSessionOptions {
   configPath?: string;
   builtinToolNames?: readonly HostedSubagentBuiltinToolName[];
   managedToolNames?: readonly string[];
-  enableExtensions?: boolean;
+  managedToolMode?: ManagedToolMode;
   enableSubagents?: boolean;
   orchestration?: BrewvaToolOrchestration;
 }
@@ -623,7 +624,7 @@ export function createHostedSubagentAdapter(
           cwd: isolatedWorkspace?.root,
           builtinToolNames,
           managedToolNames,
-          enableExtensions: input.profile.enableExtensions ?? false,
+          managedToolMode: input.profile.managedToolMode ?? "direct",
           enableSubagents: false,
         });
 

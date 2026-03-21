@@ -39,22 +39,23 @@ describe("e2e: tool call proof", () => {
     }
   });
 
-  runLive("--no-extensions mode still emits valid final bundle", () => {
-    const workspace = createWorkspace("no-extensions");
+  runLive("--managed-tools direct mode still emits valid final bundle", () => {
+    const workspace = createWorkspace("managed-tools-direct");
     writeMinimalConfig(workspace);
 
     try {
       const run = runCliSync(workspace, [
-        "--no-extensions",
+        "--managed-tools",
+        "direct",
         "--mode",
         "json",
-        "Do not call any tool. Reply exactly: NO-EXT-OK",
+        "Do not call any tool. Reply exactly: DIRECT-TOOLS-OK",
       ]);
 
-      if (skipLiveForProviderRateLimitResult("no-extensions", run)) {
+      if (skipLiveForProviderRateLimitResult("managed-tools-direct", run)) {
         return;
       }
-      assertCliSuccess(run, "no-extensions");
+      assertCliSuccess(run, "managed-tools-direct");
 
       const lines = parseJsonLines(run.stdout, { strict: true });
       const bundle = findFinalBundle(lines);

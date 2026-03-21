@@ -381,13 +381,15 @@ export interface SkillOutputRecord {
   outputs: Record<string, unknown>;
 }
 
+export type ManagedToolMode = "extension" | "direct";
+
 export interface CreateBrewvaSessionOptions {
   cwd?: string;
   configPath?: string;
   model?: string;
   agentId?: string;
   routingScopes?: SkillRoutingScope[];
-  enableExtensions?: boolean;
+  managedToolMode?: ManagedToolMode;
 }
 
 export type TaskSpecSchema = "brewva.task.v1";

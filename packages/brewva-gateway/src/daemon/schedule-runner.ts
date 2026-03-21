@@ -4,6 +4,7 @@ import {
   SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
   SCHEDULE_WAKEUP_EVENT_TYPE,
+  type ManagedToolMode,
   type ScheduleContinuityMode,
   type ScheduleIntentProjectionRecord,
   type TaskSpec,
@@ -110,7 +111,7 @@ export async function executeScheduleIntentRun(input: {
   cwd?: string;
   configPath?: string;
   model?: string;
-  enableExtensions?: boolean;
+  managedToolMode?: ManagedToolMode;
 }): Promise<{ evaluationSessionId: string; workerSessionId: string }> {
   const runIndex = input.intent.runCount + 1;
   const workerSessionId = buildScheduleWorkerSessionId({
@@ -126,7 +127,7 @@ export async function executeScheduleIntentRun(input: {
     cwd: input.cwd,
     configPath: input.configPath,
     model: input.model,
-    enableExtensions: input.enableExtensions,
+    managedToolMode: input.managedToolMode,
   });
   const agentSessionId = opened.agentSessionId?.trim() || workerSessionId;
   const wakeupMessage = buildScheduleWakeupMessage({

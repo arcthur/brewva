@@ -11,59 +11,100 @@ import {
   getBrewvaToolSurface,
   type BrewvaToolOrchestration,
 } from "@brewva/brewva-tools";
-import type { ExtensionAPI, ExtensionFactory } from "@mariozechner/pi-coding-agent";
+import type { ExtensionFactory } from "@mariozechner/pi-coding-agent";
 import { createCompletionGuardLifecycle, registerCompletionGuard } from "./completion-guard.js";
 import { createContextTransformLifecycle, registerContextTransform } from "./context-transform.js";
 import { registerEventStream } from "./event-stream.js";
 import { registerLedgerWriter } from "./ledger-writer.js";
-import { createQualityGateLifecycle } from "./quality-gate.js";
+import { createQualityGateLifecycle, registerQualityGate } from "./quality-gate.js";
 import { registerToolResultDistiller } from "./tool-result-distiller.js";
-import { createToolSurfaceLifecycle, registerToolSurface } from "./tool-surface.js";
-import { registerTurnLifecycleAdapter } from "./turn-lifecycle-adapter.js";
+import {
+  createToolSurfaceLifecycle,
+  registerToolSurface,
+  type ToolSurfaceRuntime,
+} from "./tool-surface.js";
+import { registerTurnLifecyclePorts, type TurnLifecyclePort } from "./turn-lifecycle-port.js";
 
-export interface CreateBrewvaExtensionOptions extends BrewvaRuntimeOptions {
+export interface CreateHostedTurnPipelineOptions extends BrewvaRuntimeOptions {
   runtime?: BrewvaRuntime;
   registerTools?: boolean;
   orchestration?: BrewvaToolOrchestration;
   managedToolNames?: readonly string[];
+  ports?: readonly TurnLifecyclePort[];
 }
 
-function registerLifecycleHandlers(
-  pi: ExtensionAPI,
+function buildManagedTools(
   runtime: BrewvaRuntime,
-  toolDefinitionsByName?: ReadonlyMap<string, ReturnType<typeof buildBrewvaTools>[number]>,
+  options: Pick<CreateHostedTurnPipelineOptions, "managedToolNames" | "orchestration">,
+): ReturnType<typeof buildBrewvaTools> {
+  return buildBrewvaTools({
+    runtime,
+    orchestration: options.orchestration,
+    toolNames: options.managedToolNames,
+  });
+}
+
+function registerGovernanceDescriptors(
+  runtime: BrewvaRuntime,
+  tools: ReturnType<typeof buildBrewvaTools>,
 ): void {
-  const hooks = pi as unknown as {
-    on(event: string, handler: (event: unknown, ctx: unknown) => unknown): void;
-  };
+  for (const tool of tools) {
+    const metadata = getBrewvaToolMetadata(tool);
+    if (!metadata?.governance) {
+      continue;
+    }
+    const exactGovernance = getExactToolGovernanceDescriptor(tool.name);
+    if (sameToolGovernanceDescriptor(exactGovernance, metadata.governance)) {
+      continue;
+    }
+    runtime.tools.registerGovernanceDescriptor(tool.name, metadata.governance);
+  }
+}
+
+function registerHostedPipeline(
+  runtime: BrewvaRuntime,
+  pi: Parameters<ExtensionFactory>[0],
+  tools: ReturnType<typeof buildBrewvaTools>,
+  registerTools: boolean,
+  userPorts: readonly TurnLifecyclePort[],
+): void {
+  const toolDefinitionsByName = new Map(tools.map((tool) => [tool.name, tool] as const));
   const contextTransform = createContextTransformLifecycle(pi, runtime);
   const qualityGate = createQualityGateLifecycle(runtime, {
     toolDefinitionsByName,
   });
   const toolSurface = createToolSurfaceLifecycle(pi, runtime, {
-    dynamicToolDefinitions: toolDefinitionsByName,
+    dynamicToolDefinitions: registerTools ? toolDefinitionsByName : undefined,
   });
   const completionGuard = createCompletionGuardLifecycle(pi, runtime);
 
-  hooks.on("input", qualityGate.input);
-  hooks.on("tool_call", qualityGate.toolCall);
+  pi.on("tool_call", qualityGate.toolCall);
+  pi.on("context", contextTransform.context);
   registerEventStream(pi, runtime);
-  registerTurnLifecycleAdapter(pi, {
-    turnStart: [contextTransform.turnStart],
-    input: [qualityGate.input],
-    context: [contextTransform.context],
-    beforeAgentStart: [toolSurface.beforeAgentStart, contextTransform.beforeAgentStart],
-    agentEnd: [completionGuard.agentEnd],
-    sessionCompact: [contextTransform.sessionCompact],
-    sessionShutdown: [contextTransform.sessionShutdown, completionGuard.sessionShutdown],
-  });
   registerLedgerWriter(pi, runtime);
   registerToolResultDistiller(pi, runtime);
-  hooks.on("tool_result", qualityGate.toolResult);
+  registerTurnLifecyclePorts(pi, [
+    {
+      turnStart: contextTransform.turnStart,
+      beforeAgentStart: toolSurface.beforeAgentStart,
+      sessionCompact: contextTransform.sessionCompact,
+      sessionShutdown: contextTransform.sessionShutdown,
+    },
+    {
+      input: qualityGate.input,
+      beforeAgentStart: contextTransform.beforeAgentStart,
+      toolResult: qualityGate.toolResult,
+    },
+    {
+      agentEnd: completionGuard.agentEnd,
+      sessionShutdown: completionGuard.sessionShutdown,
+    },
+    ...userPorts,
+  ]);
 }
 
-export function createBrewvaExtension(
-  options: CreateBrewvaExtensionOptions = {},
+export function createHostedTurnPipeline(
+  options: CreateHostedTurnPipelineOptions = {},
 ): ExtensionFactory {
   return (pi) => {
     const runtime =
@@ -73,49 +114,24 @@ export function createBrewvaExtension(
         governancePort:
           options.governancePort ?? createTrustedLocalGovernancePort({ profile: "team" }),
       });
-    const shouldRegisterTools = options.registerTools !== false;
-    const allTools = shouldRegisterTools
-      ? buildBrewvaTools({
-          runtime,
-          orchestration: options.orchestration,
-          toolNames: options.managedToolNames,
-        })
-      : [];
-    const toolDefinitionsByName = shouldRegisterTools
-      ? new Map(allTools.map((tool) => [tool.name, tool] as const))
-      : undefined;
+    const allTools = buildManagedTools(runtime, options);
+    const registerTools = options.registerTools !== false;
 
-    if (shouldRegisterTools) {
+    registerGovernanceDescriptors(runtime, allTools);
+    if (registerTools) {
       for (const tool of allTools) {
-        const metadata = getBrewvaToolMetadata(tool);
-        if (metadata?.governance) {
-          const exactGovernance = getExactToolGovernanceDescriptor(tool.name);
-          if (sameToolGovernanceDescriptor(exactGovernance, metadata.governance)) {
-            continue;
-          }
-          runtime.tools.registerGovernanceDescriptor(tool.name, metadata.governance);
+        if (getBrewvaToolSurface(tool.name) !== "base") {
+          continue;
         }
-      }
-      for (const tool of allTools) {
-        if (getBrewvaToolSurface(tool.name) !== "base") continue;
         pi.registerTool(tool);
       }
     }
 
-    registerLifecycleHandlers(pi, runtime, toolDefinitionsByName);
+    registerHostedPipeline(runtime, pi, allTools, registerTools, options.ports ?? []);
   };
 }
 
-export function brewvaExtension(options: CreateBrewvaExtensionOptions = {}): ExtensionFactory {
-  return createBrewvaExtension(options);
-}
-
-export {
-  createRuntimeCoreBridgeExtension,
-  registerRuntimeCoreBridge,
-} from "./runtime-core-bridge.js";
 export { registerContextTransform } from "./context-transform.js";
-export { registerTurnLifecycleAdapter } from "./turn-lifecycle-adapter.js";
 export {
   composeContextBlocks,
   type ComposedContextBlock,
@@ -165,3 +181,4 @@ export {
   type ResolveToolDisplayTextInput,
   type ToolDisplayVerdict,
 } from "./tool-output-display.js";
+export { registerTurnLifecyclePorts, type TurnLifecyclePort } from "./turn-lifecycle-port.js";

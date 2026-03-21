@@ -15,6 +15,7 @@ import {
   createTrustedLocalGovernancePort,
   normalizeAgentId,
   parseTaskSpec,
+  type ManagedToolMode,
   type TaskSpec,
 } from "@brewva/brewva-runtime";
 import { InteractiveMode, runPrintMode } from "@mariozechner/pi-coding-agent";
@@ -114,7 +115,8 @@ Options:
   --agent <id>          Agent identity id (.brewva/agents/<id>/identity.md)
   --task <json>         TaskSpec JSON (schema: brewva.task.v1)
   --task-file <path>    TaskSpec JSON file
-  --no-extensions      Disable the hosted extension stack and keep the reduced runtime-core bridge
+  --managed-tools <extension|direct>
+                       Register managed Brewva tools through the hosted pipeline or provide them directly (default: extension)
   --print, -p           Run one-shot mode
   --interactive, -i     Force interactive TUI mode
   --mode <text|json>    One-shot output mode
@@ -200,7 +202,7 @@ interface CliArgs {
   taskFile?: string;
   channel?: string;
   channelConfig?: CliChannelConfig;
-  enableExtensions: boolean;
+  managedToolMode: ManagedToolMode;
   undo: boolean;
   replay: boolean;
   daemon: boolean;
@@ -227,7 +229,7 @@ const CLI_PARSE_OPTIONS = {
   agent: { type: "string" },
   task: { type: "string" },
   "task-file": { type: "string" },
-  "no-extensions": { type: "boolean" },
+  "managed-tools": { type: "string" },
   print: { type: "boolean", short: "p" },
   interactive: { type: "boolean", short: "i" },
   mode: { type: "string" },
@@ -265,7 +267,7 @@ const ONBOARD_PARSE_OPTIONS = {
   "log-file": { type: "string" },
   "token-file": { type: "string" },
   heartbeat: { type: "string" },
-  "no-extensions": { type: "boolean" },
+  "managed-tools": { type: "string" },
   "tick-interval-ms": { type: "string" },
   "session-idle-ms": { type: "string" },
   "max-workers": { type: "string" },
@@ -293,6 +295,30 @@ function resolveBackendFromFlag(value: string | undefined): CliBackendKind | nul
   }
   console.error(`Error: --backend must be "auto", "embedded", or "gateway" (received "${value}").`);
   return null;
+}
+
+function describeFlagValue(raw: unknown): string {
+  if (typeof raw === "string") {
+    return raw;
+  }
+  try {
+    return JSON.stringify(raw) ?? typeof raw;
+  } catch {
+    return typeof raw;
+  }
+}
+
+function resolveManagedToolModeFlag(raw: unknown): { value: ManagedToolMode; error?: string } {
+  if (raw === undefined) {
+    return { value: "extension" };
+  }
+  if (raw === "extension" || raw === "direct") {
+    return { value: raw };
+  }
+  return {
+    value: "extension",
+    error: `Error: --managed-tools must be "extension" or "direct" (received "${describeFlagValue(raw)}").`,
+  };
 }
 
 function parseOptionalIntegerFlag(
@@ -371,6 +397,11 @@ function parseCliArgs(argv: string[]): CliParseResult {
   if (!backend) {
     return { kind: "error" };
   }
+  const managedToolMode = resolveManagedToolModeFlag(parsed.values["managed-tools"]);
+  if (managedToolMode.error) {
+    console.error(managedToolMode.error);
+    return { kind: "error" };
+  }
 
   const prompt = parsed.positionals.join(" ").trim() || undefined;
   const pollTimeout = parseOptionalIntegerFlag(
@@ -424,7 +455,7 @@ function parseCliArgs(argv: string[]): CliParseResult {
         pollRetryMs: pollRetryMs.value,
       },
     },
-    enableExtensions: parsed.values["no-extensions"] !== true,
+    managedToolMode: managedToolMode.value,
     undo: parsed.values.undo === true,
     replay: parsed.values.replay === true,
     daemon: parsed.values.daemon === true,
@@ -547,7 +578,12 @@ async function runOnboardCli(argv: string[]): Promise<number> {
 
   if (installDaemon) {
     pushOnboardBooleanFlag(gatewayArgs, "no-start", parsed.values["no-start"]);
-    pushOnboardBooleanFlag(gatewayArgs, "no-extensions", parsed.values["no-extensions"]);
+    const managedToolMode = resolveManagedToolModeFlag(parsed.values["managed-tools"]);
+    if (managedToolMode.error) {
+      console.error(managedToolMode.error);
+      return 1;
+    }
+    pushOnboardStringFlag(gatewayArgs, "managed-tools", managedToolMode.value);
 
     pushOnboardStringFlag(gatewayArgs, "cwd", parsed.values.cwd);
     pushOnboardStringFlag(gatewayArgs, "config", parsed.values.config);
@@ -784,7 +820,7 @@ async function run(): Promise<void> {
       configPath: parsed.configPath,
       model: parsed.model,
       agentId: parsed.agentId,
-      enableExtensions: parsed.enableExtensions,
+      managedToolMode: parsed.managedToolMode,
       verbose: parsed.verbose,
       channel: parsed.channel,
       channelConfig: parsed.channelConfig,
@@ -824,7 +860,7 @@ async function run(): Promise<void> {
       configPath: parsed.configPath,
       model: parsed.model,
       agentId: parsed.agentId,
-      enableExtensions: parsed.enableExtensions,
+      managedToolMode: parsed.managedToolMode,
       verbose: parsed.verbose,
     });
     return;
@@ -941,7 +977,7 @@ async function run(): Promise<void> {
       configPath: parsed.configPath,
       model: parsed.model,
       agentId: parsed.agentId,
-      enableExtensions: parsed.enableExtensions,
+      managedToolMode: parsed.managedToolMode,
       prompt: initialMessage ?? "",
       verbose: parsed.verbose,
     });
@@ -980,7 +1016,7 @@ async function run(): Promise<void> {
     configPath: parsed.configPath,
     model: parsed.model,
     agentId: parsed.agentId,
-    enableExtensions: parsed.enableExtensions,
+    managedToolMode: parsed.managedToolMode,
   });
 
   const getSessionId = (): string => session.sessionManager.getSessionId();

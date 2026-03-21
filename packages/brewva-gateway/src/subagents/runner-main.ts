@@ -220,7 +220,7 @@ async function main(): Promise<void> {
       configPath: spec.configPath,
       model: profileRecord.model,
       agentId: `subagent-${sanitizeFragment(profileRecord.name) || "worker"}`,
-      enableExtensions: profileRecord.enableExtensions ?? false,
+      managedToolMode: profileRecord.managedToolMode ?? "direct",
       enableSubagents: false,
       managedToolNames: resolveManagedToolNamesForRun(
         parentRuntime,

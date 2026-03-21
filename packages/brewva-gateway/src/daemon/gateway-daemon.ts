@@ -3,7 +3,11 @@ import { existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { resolve } from "node:path";
 import process from "node:process";
-import { loadBrewvaConfig, resolveWorkspaceRootDir } from "@brewva/brewva-runtime";
+import {
+  loadBrewvaConfig,
+  resolveWorkspaceRootDir,
+  type ManagedToolMode,
+} from "@brewva/brewva-runtime";
 import { TurnWALStore } from "@brewva/brewva-runtime/channels";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 import { loadOrCreateGatewayToken, rotateGatewayToken } from "../auth.js";
@@ -121,7 +125,7 @@ export interface GatewayDaemonOptions {
   cwd: string;
   configPath?: string;
   model?: string;
-  enableExtensions?: boolean;
+  managedToolMode?: ManagedToolMode;
   jsonStdout?: boolean;
   tickIntervalMs?: number;
   heartbeatTickIntervalMs?: number;
@@ -362,7 +366,7 @@ export class GatewayDaemon {
         defaultCwd: resolve(options.cwd),
         defaultConfigPath: options.configPath,
         defaultModel: options.model,
-        defaultEnableExtensions: options.enableExtensions,
+        defaultManagedToolMode: options.managedToolMode,
         sessionIdleTtlMs: options.sessionIdleTtlMs,
         sessionIdleSweepIntervalMs: options.sessionIdleSweepIntervalMs,
         maxWorkers: options.maxWorkers,
@@ -992,7 +996,7 @@ export class GatewayDaemon {
           configPath?: string;
           model?: string;
           agentId?: string;
-          enableExtensions?: boolean;
+          managedToolMode?: ManagedToolMode;
         };
         const requestedSessionId = input.sessionId?.trim() || randomUUID();
         if (input.cwd) {
@@ -1006,7 +1010,7 @@ export class GatewayDaemon {
             configPath: input.configPath,
             model: input.model,
             agentId: input.agentId,
-            enableExtensions: input.enableExtensions,
+            managedToolMode: input.managedToolMode,
           });
         } catch (error) {
           if (isSessionBackendCapacityError(error)) {

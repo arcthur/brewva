@@ -39,7 +39,7 @@ describe("inspect subcommand", () => {
           sessionId,
           type: "session_bootstrap",
           payload: {
-            extensionsEnabled: false,
+            managedToolMode: "direct",
             skillLoad: {
               routingEnabled: false,
               routingScopes: ["core", "domain"],

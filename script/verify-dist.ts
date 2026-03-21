@@ -125,13 +125,16 @@ function main(): void {
     if (typeof hostModule.createHostedSession !== "function") {
       throw new Error("gateway host subpath missing createHostedSession export");
     }
-    if (typeof runtimePluginsModule.createBrewvaExtension !== "function") {
-      throw new Error("gateway runtime-plugins subpath missing createBrewvaExtension export");
+    if (typeof runtimePluginsModule.createHostedTurnPipeline !== "function") {
+      throw new Error("gateway runtime-plugins subpath missing createHostedTurnPipeline export");
     }
     if ("createBrewvaSession" in cliModule || "registerRuntimeCoreEventBridge" in cliModule) {
       throw new Error("cli root entry unexpectedly re-exported gateway host helpers");
     }
-    if ("createHostedSession" in gatewayModule || "createBrewvaExtension" in gatewayModule) {
+    if ("registerRuntimeCoreEventBridge" in hostModule) {
+      throw new Error("gateway host subpath still exports removed session event bridge helper");
+    }
+    if ("createHostedSession" in gatewayModule || "createHostedTurnPipeline" in gatewayModule) {
       throw new Error("gateway root entry unexpectedly re-exported subpath-only APIs");
     }
     console.log(JSON.stringify(resolved));

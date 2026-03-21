@@ -19,7 +19,7 @@ describe("gateway daemon control-plane methods", () => {
           configPath?: string;
           model?: string;
           agentId?: string;
-          enableExtensions?: boolean;
+          managedToolMode?: "extension" | "direct";
         }
       | undefined;
     const backend = createSessionBackendStub({
@@ -43,7 +43,7 @@ describe("gateway daemon control-plane methods", () => {
         configPath: ".brewva/brewva.json",
         model: "openai/gpt-5",
         agentId: "code-reviewer",
-        enableExtensions: false,
+        managedToolMode: "direct",
       })) as {
         sessionId: string;
         created: boolean;
@@ -58,7 +58,7 @@ describe("gateway daemon control-plane methods", () => {
         configPath: ".brewva/brewva.json",
         model: "openai/gpt-5",
         agentId: "code-reviewer",
-        enableExtensions: false,
+        managedToolMode: "direct",
       });
       expect(payload).toEqual({
         sessionId: "session-open",

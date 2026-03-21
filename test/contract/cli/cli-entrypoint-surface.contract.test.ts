@@ -13,6 +13,6 @@ describe("cli entrypoint surface", () => {
     expect("registerRuntimeCoreEventBridge" in cli).toBe(false);
 
     expect(typeof gatewayHost.createHostedSession).toBe("function");
-    expect(typeof gatewayHost.registerRuntimeCoreEventBridge).toBe("function");
+    expect("registerRuntimeCoreEventBridge" in gatewayHost).toBe(false);
   });
 });

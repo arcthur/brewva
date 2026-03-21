@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { TurnWALRecord } from "@brewva/brewva-runtime";
+import type { ManagedToolMode, TurnWALRecord } from "@brewva/brewva-runtime";
 import { TurnWALRecovery, TurnWALStore } from "@brewva/brewva-runtime/channels";
 import type { WorkerToParentMessage } from "../session/worker-protocol.js";
 import {
@@ -86,7 +86,7 @@ export interface SessionSupervisorOptions {
   defaultCwd: string;
   defaultConfigPath?: string;
   defaultModel?: string;
-  defaultEnableExtensions?: boolean;
+  defaultManagedToolMode?: ManagedToolMode;
   workerEnv?: Record<string, string | undefined>;
   sessionIdleTtlMs?: number;
   sessionIdleSweepIntervalMs?: number;
@@ -342,7 +342,7 @@ export class SessionSupervisor implements SessionBackend {
         configPath: input.configPath,
         model: input.model,
         agentId: input.agentId,
-        enableExtensions: input.enableExtensions,
+        managedToolMode: input.managedToolMode,
         pending: new Map<string, PendingRequest>(),
         pendingTurns: new Map<string, PendingTurn>(),
         turnQueue: [],
@@ -379,7 +379,7 @@ export class SessionSupervisor implements SessionBackend {
           configPath: input.configPath ?? this.options.defaultConfigPath,
           model: input.model ?? this.options.defaultModel,
           agentId: input.agentId,
-          enableExtensions: input.enableExtensions ?? this.options.defaultEnableExtensions,
+          managedToolMode: input.managedToolMode ?? this.options.defaultManagedToolMode,
           parentPid: process.pid,
         },
       });

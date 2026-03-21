@@ -82,7 +82,8 @@ function startSchedulerDaemon(workspace: string): DaemonProcess {
       "--config",
       ".brewva/brewva.json",
       "--daemon",
-      "--no-extensions",
+      "--managed-tools",
+      "direct",
     ],
     {
       cwd: repoRoot,

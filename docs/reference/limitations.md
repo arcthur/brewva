@@ -27,9 +27,9 @@ to miss when reading individual module docs.
 - `--backend gateway` is currently limited to one-shot text mode.
 - `--backend gateway` does not support interactive mode, JSON mode,
   `--undo`/`--replay`, `--daemon`, `--channel`, or TaskSpec (`--task`, `--task-file`).
-- `--no-extensions` keeps runtime safety hooks (`before_agent_start` core block,
-  `tool_call`, `tool_result`, `session_compact`, `session_shutdown`), but disables
-  the richer hosted-session presentation stack.
+- `--managed-tools direct` does not disable hosted lifecycle ports; it only
+  switches managed Brewva tools from extension registration to direct host
+  provisioning.
 
 ## Schedule Runtime
 

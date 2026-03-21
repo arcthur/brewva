@@ -8,6 +8,7 @@ import {
   readGatewayToken,
   resolveGatewayPaths,
 } from "@brewva/brewva-gateway";
+import type { ManagedToolMode } from "@brewva/brewva-runtime";
 
 export type CliBackendKind = "auto" | "embedded" | "gateway";
 
@@ -31,7 +32,7 @@ export interface TryGatewayPrintInput {
   configPath?: string;
   model?: string;
   agentId?: string;
-  enableExtensions: boolean;
+  managedToolMode: ManagedToolMode;
   prompt: string;
   verbose: boolean;
 }
@@ -208,7 +209,7 @@ export async function tryGatewayPrint(input: TryGatewayPrintInput): Promise<Gate
       configPath: input.configPath,
       model: input.model,
       agentId: input.agentId,
-      enableExtensions: input.enableExtensions,
+      managedToolMode: input.managedToolMode,
     });
     sessionOpened = true;
 

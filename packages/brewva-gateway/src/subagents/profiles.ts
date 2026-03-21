@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import type { ManagedToolMode } from "@brewva/brewva-runtime";
 import type {
   DelegationPacket,
   SubagentContextBudget,
@@ -21,7 +22,7 @@ export interface HostedSubagentProfile {
   builtinToolNames?: HostedSubagentBuiltinToolName[];
   managedToolNames?: string[];
   defaultContextBudget?: SubagentContextBudget;
-  enableExtensions?: boolean;
+  managedToolMode?: ManagedToolMode;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -56,6 +57,10 @@ function asBuiltinToolArray(value: unknown): HostedSubagentBuiltinToolName[] | u
 
 function asBoundary(value: unknown): SubagentExecutionBoundary | undefined {
   return value === "safe" || value === "effectful" ? value : undefined;
+}
+
+function asManagedToolMode(value: unknown): ManagedToolMode | undefined {
+  return value === "extension" || value === "direct" ? value : undefined;
 }
 
 function asResultMode(value: unknown): SubagentResultMode | undefined {
@@ -167,9 +172,9 @@ function assertOverlayTightening(
     base.defaultContextBudget?.maxTurnTokens,
     candidate.defaultContextBudget?.maxTurnTokens,
   );
-  if (base.enableExtensions === false && candidate.enableExtensions === true) {
+  if (base.managedToolMode === "direct" && candidate.managedToolMode === "extension") {
     throw new Error(
-      `invalid_subagent_profile:${candidate.name}:enableExtensions cannot widen a disabled base profile`,
+      `invalid_subagent_profile:${candidate.name}:managedToolMode cannot widen beyond direct`,
     );
   }
 }
@@ -201,10 +206,7 @@ function toProfile(
     managedToolNames: asStringArray(source.managedToolNames) ?? defaults?.managedToolNames,
     defaultContextBudget:
       asContextBudget(source.defaultContextBudget) ?? defaults?.defaultContextBudget,
-    enableExtensions:
-      typeof source.enableExtensions === "boolean"
-        ? source.enableExtensions
-        : defaults?.enableExtensions,
+    managedToolMode: asManagedToolMode(source.managedToolMode) ?? defaults?.managedToolMode,
   };
 }
 
@@ -237,7 +239,7 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
       maxInjectionTokens: 1800,
       maxTurnTokens: 6000,
     },
-    enableExtensions: false,
+    managedToolMode: "direct",
   },
   reviewer: {
     name: "reviewer",
@@ -267,7 +269,7 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
       maxInjectionTokens: 2000,
       maxTurnTokens: 7000,
     },
-    enableExtensions: false,
+    managedToolMode: "direct",
   },
   verifier: {
     name: "verifier",
@@ -295,7 +297,7 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
       maxInjectionTokens: 1800,
       maxTurnTokens: 7000,
     },
-    enableExtensions: false,
+    managedToolMode: "direct",
   },
   "patch-worker": {
     name: "patch-worker",
@@ -326,7 +328,7 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
       maxInjectionTokens: 2000,
       maxTurnTokens: 8000,
     },
-    enableExtensions: false,
+    managedToolMode: "direct",
   },
 } as const;
 

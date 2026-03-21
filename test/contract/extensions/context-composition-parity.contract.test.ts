@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  createHostedTurnPipeline,
   registerContextTransform,
-  registerRuntimeCoreBridge,
 } from "@brewva/brewva-gateway/runtime-plugins";
 import { setStaticContextPressureThresholds } from "../../fixtures/config.js";
 import {
@@ -13,7 +13,7 @@ import {
 import { createRuntimeConfig, createRuntimeFixture } from "./fixtures/runtime.js";
 
 describe("context composition parity", () => {
-  test("keeps gate-clearing semantics aligned between full extensions and runtime-core profile", async () => {
+  test("keeps gate-clearing semantics aligned between direct context registration and hosted pipeline", async () => {
     const config = createRuntimeConfig((draft) => {
       setStaticContextPressureThresholds(draft, { hardLimitPercent: 0.8 });
     });
@@ -68,11 +68,14 @@ describe("context composition parity", () => {
       },
     );
 
-    const coreRuntime = makeRuntime();
-    const core = createMockExtensionAPI();
-    registerRuntimeCoreBridge(core.api, coreRuntime);
+    const hostedRuntime = makeRuntime();
+    const hosted = createMockExtensionAPI();
+    await createHostedTurnPipeline({
+      runtime: hostedRuntime,
+      registerTools: false,
+    })(hosted.api);
     await invokeHandlerAsync(
-      core.handlers,
+      hosted.handlers,
       "before_agent_start",
       { type: "before_agent_start", prompt: "arm", systemPrompt: "base" },
       {
@@ -81,18 +84,18 @@ describe("context composition parity", () => {
       },
     );
     invokeHandler(
-      core.handlers,
+      hosted.handlers,
       "session_compact",
       {
-        compactionEntry: { id: "cmp-core", summary: "clear gate" },
+        compactionEntry: { id: "cmp-hosted", summary: "clear gate" },
       },
       {
         sessionManager,
         getContextUsage: () => ({ tokens: 150, contextWindow: 1000, percent: 0.15 }),
       },
     );
-    const coreResults = await invokeHandlersAsync<{ message?: { content?: string } }>(
-      core.handlers,
+    const hostedResults = await invokeHandlersAsync<{ message?: { content?: string } }>(
+      hosted.handlers,
       "before_agent_start",
       { type: "before_agent_start", prompt: "after compact", systemPrompt: "base" },
       {
@@ -100,7 +103,7 @@ describe("context composition parity", () => {
         getContextUsage: () => ({ tokens: 150, contextWindow: 1000, percent: 0.15 }),
       },
     );
-    const coreAfter = coreResults.find(
+    const hostedAfter = hostedResults.find(
       (value): value is { message: { content: string } } =>
         typeof value === "object" &&
         value !== null &&
@@ -108,9 +111,9 @@ describe("context composition parity", () => {
     );
 
     expect(fullRuntime.context.getCompactionGateStatus("parity-clear").required).toBe(false);
-    expect(coreRuntime.context.getCompactionGateStatus("parity-clear").required).toBe(false);
+    expect(hostedRuntime.context.getCompactionGateStatus("parity-clear").required).toBe(false);
     expect(fullAfter.message?.content?.includes("[ContextCompactionGate]")).toBe(false);
-    expect(coreAfter?.message.content.includes("[ContextCompactionGate]")).toBe(false);
-    expect(coreAfter?.message.content.includes("[OperationalDiagnostics]")).toBe(false);
+    expect(hostedAfter?.message.content.includes("[ContextCompactionGate]")).toBe(false);
+    expect(hostedAfter?.message.content.includes("[OperationalDiagnostics]")).toBe(false);
   });
 });
