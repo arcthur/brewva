@@ -143,4 +143,47 @@ describe("tool result inline distiller", () => {
     expect(results).toEqual([undefined]);
     expect(currentEvent.content).toEqual([{ type: "text", text: "edited src/a.ts" }]);
   });
+
+  test("applies inline browser snapshot distillation for long DOM snapshots", () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const runtime = createRuntimeFixture();
+
+    registerToolResultDistiller(api, runtime);
+
+    const snapshotText = [
+      "[Browser Snapshot]",
+      "session: browser-session-3",
+      "artifact: .orchestrator/browser-artifacts/browser-session-3/snapshot.txt",
+      "interactive: true",
+      "snapshot:",
+      ...Array.from(
+        { length: 160 },
+        (_value, index) => `[@e${index}]<input>Field ${index}</input>`,
+      ),
+    ].join("\n");
+
+    const { results } = invokeToolResultMiddleware(
+      handlers,
+      {
+        toolCallId: "tc-browser-inline",
+        toolName: "browser_snapshot",
+        input: {},
+        isError: false,
+        content: [{ type: "text", text: snapshotText }],
+        details: {
+          artifactRef: ".orchestrator/browser-artifacts/browser-session-3/snapshot.txt",
+        },
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "distill-browser-1",
+        },
+      },
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      content: [{ type: "text", text: expect.stringContaining("[BrowserSnapshotDistilled]") }],
+    });
+  });
 });

@@ -6,6 +6,7 @@ function collectToolNames(sourceRoot: string): string[] {
   const files = [
     "a2a.ts",
     "ast-grep.ts",
+    "browser.ts",
     "cost-view.ts",
     "exec.ts",
     "grep.ts",

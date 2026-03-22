@@ -10,10 +10,8 @@ describe("Output health guard disabled by default", () => {
 
     runtime.events.record({
       sessionId,
-      type: "message_update",
+      type: "message_end",
       payload: {
-        deltaType: "text_delta",
-        deltaChars: 10,
         health: {
           score: 0.2,
           drunk: true,
@@ -34,10 +32,8 @@ describe("Output health guard disabled by default", () => {
 
     runtime.events.record({
       sessionId,
-      type: "message_update",
+      type: "message_end",
       payload: {
-        deltaType: "text_delta",
-        deltaChars: 10,
         health: {
           score: 0.95,
           drunk: false,

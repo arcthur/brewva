@@ -234,6 +234,95 @@ describe("event pipeline level classification", () => {
     ).toHaveLength(0);
   });
 
+  test("keeps normalization evidence at audit level but drops model compatibility telemetry", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-normalizer-")),
+      config: createAuditConfig(),
+    });
+    const sessionId = "audit-level-normalizer-session";
+
+    runtime.events.record({
+      sessionId,
+      type: "tool_call_normalized",
+      payload: {
+        toolCallId: "tc-1",
+        toolName: "exec",
+        repairKinds: ["double_stringified_arguments"],
+      },
+    });
+    runtime.events.record({
+      sessionId,
+      type: "tool_call_normalization_failed",
+      payload: {
+        reason: "invalid_arguments",
+        candidateToolName: "exec",
+      },
+    });
+    runtime.events.record({
+      sessionId,
+      type: "model_capability_profile_selected",
+      payload: {
+        provider: "openai",
+        api: "openai-responses",
+        model: "gpt-5.4",
+        profileId: "openai-responses-default",
+      },
+    });
+    runtime.events.record({
+      sessionId,
+      type: "model_request_patched",
+      payload: {
+        provider: "anthropic",
+        api: "anthropic-messages",
+        model: "claude-sonnet-4",
+        profileId: "anthropic-default",
+        patchKinds: ["anthropic_named_tool_choice_wrapper_fixed"],
+      },
+    });
+
+    expect(runtime.events.query(sessionId, { type: "tool_call_normalized" })).toHaveLength(1);
+    expect(
+      runtime.events.query(sessionId, { type: "tool_call_normalization_failed" }),
+    ).toHaveLength(1);
+    expect(
+      runtime.events.query(sessionId, { type: "model_capability_profile_selected" }),
+    ).toHaveLength(0);
+    expect(runtime.events.query(sessionId, { type: "model_request_patched" })).toHaveLength(0);
+  });
+
+  test("keeps approval and delegation lifecycle events at audit level because replay depends on them", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-replay-critical-")),
+      config: createAuditConfig(),
+    });
+    const sessionId = "audit-level-replay-critical-session";
+    const replayCriticalTypes = [
+      "effect_commitment_approval_requested",
+      "effect_commitment_approval_decided",
+      "effect_commitment_approval_consumed",
+      "subagent_spawned",
+      "subagent_completed",
+      "subagent_failed",
+      "subagent_cancelled",
+      "worker_results_applied",
+      "worker_results_apply_failed",
+    ] as const;
+
+    for (const type of replayCriticalTypes) {
+      runtime.events.record({
+        sessionId,
+        type,
+        payload: {
+          marker: type,
+        },
+      });
+    }
+
+    for (const type of replayCriticalTypes) {
+      expect(runtime.events.query(sessionId, { type })).toHaveLength(1);
+    }
+  });
+
   test("keeps task watchdog events at ops level and drops them at audit level", () => {
     const auditRuntime = new BrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-watchdog-")),
@@ -280,5 +369,47 @@ describe("event pipeline level classification", () => {
 
     expect(auditRuntime.events.query(sessionId, { type: "task_stuck_detected" })).toHaveLength(0);
     expect(opsRuntime.events.query(sessionId, { type: "task_stuck_detected" })).toHaveLength(1);
+  });
+
+  test("classifies model compatibility telemetry as session events at ops level", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-events-ops-model-compat-")),
+      config: createOpsConfig(),
+    });
+    const sessionId = "ops-level-model-compat-session";
+
+    runtime.events.record({
+      sessionId,
+      type: "model_capability_profile_selected",
+      payload: {
+        provider: "openai",
+        api: "openai-responses",
+        model: "gpt-5.4",
+        profileId: "openai-responses-default",
+      },
+    });
+    runtime.events.record({
+      sessionId,
+      type: "model_request_patched",
+      payload: {
+        provider: "openai-codex",
+        api: "openai-codex-responses",
+        model: "codex-mini-latest",
+        profileId: "openai-codex-default",
+        patchKinds: ["codex_parallel_tool_calls_defaulted"],
+      },
+    });
+
+    expect(
+      runtime.events.query(sessionId, { type: "model_capability_profile_selected" }),
+    ).toHaveLength(1);
+    expect(runtime.events.query(sessionId, { type: "model_request_patched" })).toHaveLength(1);
+    expect(
+      runtime.events.queryStructured(sessionId, { type: "model_capability_profile_selected" })[0]
+        ?.category,
+    ).toBe("session");
+    expect(
+      runtime.events.queryStructured(sessionId, { type: "model_request_patched" })[0]?.category,
+    ).toBe("session");
   });
 });

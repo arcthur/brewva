@@ -20,6 +20,18 @@ Default tools registered by `buildBrewvaTools()`:
 - `read_spans`
 - `grep`
 - `exec`
+- `browser_open`
+- `browser_wait`
+- `browser_snapshot`
+- `browser_click`
+- `browser_fill`
+- `browser_get`
+- `browser_screenshot`
+- `browser_pdf`
+- `browser_diff_snapshot`
+- `browser_state_load`
+- `browser_state_save`
+- `browser_close`
 - `process`
 - `cost_view`
 - `obs_query`
@@ -85,6 +97,18 @@ Notes:
 ### Execution And Observability
 
 - `exec`
+- `browser_open`
+- `browser_wait`
+- `browser_snapshot`
+- `browser_click`
+- `browser_fill`
+- `browser_get`
+- `browser_screenshot`
+- `browser_pdf`
+- `browser_diff_snapshot`
+- `browser_state_load`
+- `browser_state_save`
+- `browser_close`
 - `process`
 - `cost_view`
 - `obs_query`
@@ -97,6 +121,34 @@ Notes:
 - `tape_search`
 
 These tools are the preferred path for evidence reuse and replay inspection.
+
+### Browser Automation
+
+Browser tools wrap the local `agent-browser` CLI behind managed Brewva tool
+metadata and governance.
+
+- `browser_open`
+- `browser_wait`
+- `browser_snapshot`
+- `browser_click`
+- `browser_fill`
+- `browser_get`
+- `browser_screenshot`
+- `browser_pdf`
+- `browser_diff_snapshot`
+- `browser_state_load`
+- `browser_state_save`
+- `browser_close`
+
+Current posture:
+
+- browser sessions are scoped per Brewva session
+- default artifacts are written under `.orchestrator/browser-artifacts/<session>`
+- explicit browser artifact paths must stay inside the workspace root
+- `browser_snapshot`, `browser_diff_snapshot`, and `browser_get` with
+  `field=text` retain workspace artifacts; when outputs are too large, hosted
+  sessions expose distilled summaries to the model instead of feeding the full
+  page content back verbatim
 
 ### Recovery, Scheduling, And Task State
 

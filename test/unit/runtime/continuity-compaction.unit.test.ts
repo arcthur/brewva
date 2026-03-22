@@ -9,7 +9,7 @@ describe("compaction continuity assertion helper", () => {
   test("accepts bounded continuation after auto compaction completion", () => {
     const events: CompactionContinuityEvent[] = [
       { type: "context_compaction_auto_completed", timestamp: 1_000 },
-      { type: "message_update", timestamp: 1_800 },
+      { type: "message_end", timestamp: 1_800 },
       { type: "agent_end", timestamp: 2_200 },
     ];
 
@@ -28,7 +28,7 @@ describe("compaction continuity assertion helper", () => {
   test("rejects excessive silence after auto compaction completion", () => {
     const events: CompactionContinuityEvent[] = [
       { type: "context_compaction_auto_completed", timestamp: 1_000 },
-      { type: "message_update", timestamp: 1_000 + MAX_POST_AUTO_COMPACTION_GAP_MS + 1 },
+      { type: "message_end", timestamp: 1_000 + MAX_POST_AUTO_COMPACTION_GAP_MS + 1 },
     ];
 
     expect(() => assertAutoCompactionCompletionContinuity(events)).toThrow();

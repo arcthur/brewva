@@ -189,6 +189,17 @@ Tool-governance note:
 - `list(sessionId, query?)`
 - `listSessionIds()`
 
+Hosted-session event boundary notes:
+
+- `runtime.events.query(...)` and `runtime.events.queryStructured(...)` expose
+  the durable tape, not the ephemeral hosted live stream
+- live-only hosted events such as `message_update` and `tool_execution_update`
+  are intentionally not replay-visible through the runtime event API
+- pre-parse compatibility evidence surfaces through durable events such as
+  `tool_call_normalized` and `tool_call_normalization_failed`
+- model capability selection and request patch telemetry are emitted by the
+  hosted gateway adapter, not by the runtime kernel itself
+
 ### `runtime.verification.*`
 
 - `evaluate(sessionId, level?)`

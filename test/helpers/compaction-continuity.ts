@@ -7,11 +7,9 @@ export type CompactionContinuityEvent = {
 
 const POST_AUTO_COMPACTION_CONTINUATION_TYPES = new Set([
   "message_start",
-  "message_update",
   "message_end",
   "tool_call",
   "tool_execution_start",
-  "tool_execution_update",
   "tool_execution_end",
   "tool_result",
 ]);

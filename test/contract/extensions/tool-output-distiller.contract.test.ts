@@ -81,6 +81,62 @@ describe("tool output distiller", () => {
     expect(distillation.summaryText).toContain("src/file-0.ts:1: TODO item 0");
   });
 
+  test("applies browser snapshot heuristic for large DOM snapshots and keeps the artifact reference", () => {
+    const output = [
+      "[Browser Snapshot]",
+      "session: browser-session-1",
+      "artifact: .orchestrator/browser-artifacts/browser-session-1/snapshot.txt",
+      "interactive: true",
+      "snapshot:",
+      ...Array.from(
+        { length: 140 },
+        (_value, index) => `[@e${index}]<button>Action ${index}</button>`,
+      ),
+    ].join("\n");
+    const distillation = distillToolOutput({
+      toolName: "browser_snapshot",
+      isError: false,
+      outputText: output,
+    });
+
+    expect(distillation.distillationApplied).toBe(true);
+    expect(distillation.strategy).toBe("browser_snapshot_heuristic");
+    expect(distillation.summaryText).toContain("[BrowserSnapshotDistilled]");
+    expect(distillation.summaryText).toContain(
+      "artifact: .orchestrator/browser-artifacts/browser-session-1/snapshot.txt",
+    );
+    expect(distillation.summaryText).toContain("interactive_refs: 140");
+    expect(distillation.summaryText).toContain("[@e0]<button>Action 0</button>");
+  });
+
+  test("applies browser get heuristic for large rendered text captures", () => {
+    const output = [
+      "[Browser Get]",
+      "session: browser-session-2",
+      "artifact: .orchestrator/browser-artifacts/browser-session-2/text.txt",
+      "selector: main",
+      "text:",
+      ...Array.from(
+        { length: 100 },
+        (_value, index) => `Paragraph ${index} ${"content ".repeat(8).trim()}`,
+      ),
+    ].join("\n");
+    const distillation = distillToolOutput({
+      toolName: "browser_get",
+      isError: false,
+      outputText: output,
+    });
+
+    expect(distillation.distillationApplied).toBe(true);
+    expect(distillation.strategy).toBe("browser_get_heuristic");
+    expect(distillation.summaryText).toContain("[BrowserGetDistilled]");
+    expect(distillation.summaryText).toContain(
+      "artifact: .orchestrator/browser-artifacts/browser-session-2/text.txt",
+    );
+    expect(distillation.summaryText).toContain("selector: main");
+    expect(distillation.summaryText).toContain("Paragraph 0");
+  });
+
   test("skips low-value distillation when output is too small", () => {
     const distillation = distillToolOutput({
       toolName: "exec",
