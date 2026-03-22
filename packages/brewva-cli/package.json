@@ -19,7 +19,7 @@
   "dependencies": {
     "@brewva/brewva-gateway": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
-    "@mariozechner/pi-coding-agent": "^0.57.1",
+    "@mariozechner/pi-coding-agent": "^0.61.1",
     "date-fns": "^4.1.0"
   },
   "engines": {

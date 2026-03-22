@@ -104,14 +104,15 @@ describe("hosted subagent orchestrator", () => {
     expect(outcome.kind).toBe("patch");
     expect(outcome.status).toBe("ok");
     expect(outcome.workerSessionId).toBe("child-session");
-    expect(outcome.patches?.changes).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          path: "src/message.ts",
-          action: "modify",
-        }),
-      ]),
-    );
+    expect(outcome.patches?.changes).toEqual([
+      expect.objectContaining({
+        path: "src/message.ts",
+        action: "modify",
+      }),
+    ]);
+    expect(
+      outcome.patches?.changes.some((change) => change.path === ".brewva/skills_index.json"),
+    ).toBe(false);
     expect(outcome.artifactRefs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -147,7 +148,7 @@ describe("hosted subagent orchestrator", () => {
     expect(completedEvents).toHaveLength(1);
     expect(completedEvents[0]?.payload).toMatchObject({
       workerStatus: "ok",
-      patchChangeCount: 1,
+      patchChangeCount: outcome.patches?.changes.length,
       boundary: "effectful",
     });
 

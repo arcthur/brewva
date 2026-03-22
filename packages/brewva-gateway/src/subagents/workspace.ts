@@ -5,6 +5,7 @@ import { basename, join, relative, resolve } from "node:path";
 import type { PatchFileAction, PatchSet } from "@brewva/brewva-runtime";
 
 const IGNORED_ROOT_SEGMENTS = new Set([".git", "node_modules", ".orchestrator"]);
+const IGNORED_RELATIVE_PATHS = new Set([".brewva/skills_index.json"]);
 const PATCH_ARTIFACT_ROOT = ".orchestrator/subagent-patch-artifacts";
 const PATCH_MANIFEST_FILE_NAME = "patchset.json";
 
@@ -16,6 +17,9 @@ function shouldIgnorePath(relativePath: string): boolean {
   const normalized = normalizeRelativePath(relativePath).replace(/^\.\/+/u, "");
   if (!normalized) {
     return false;
+  }
+  if (IGNORED_RELATIVE_PATHS.has(normalized)) {
+    return true;
   }
   const [firstSegment] = normalized.split("/");
   return firstSegment ? IGNORED_ROOT_SEGMENTS.has(firstSegment) : false;
