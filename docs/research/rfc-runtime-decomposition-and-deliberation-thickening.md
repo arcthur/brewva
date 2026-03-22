@@ -2,9 +2,9 @@
 
 ## Document Metadata
 
-- Status: `implemented on mainline`
+- Status: `archived`
 - Owner: runtime maintainers
-- Last reviewed: `2026-03-17`
+- Last reviewed: `2026-03-22`
 - Promotion target:
   - `docs/architecture/system-architecture.md`
   - `docs/architecture/design-axioms.md`
@@ -12,6 +12,23 @@
   - `docs/reference/runtime.md`
   - `docs/reference/events.md`
   - `docs/reference/configuration.md`
+
+## Archive Summary
+
+This note is archived as a historical design record.
+
+The runtime-facade, hydration, config-sealing, and commitment-hardening work it
+tracked has largely been absorbed into stable architecture/reference docs and
+mainline implementation.
+
+However, this RFC is no longer the current architecture source of truth:
+
+- later stable docs define the adopted contracts for runtime facade, replay,
+  config immutability, and governance
+- the newer boundary-first subtraction RFC superseded this file's standalone
+  deliberation-package direction
+- current package ownership should be read from stable docs and current code,
+  not from this RFC's original target-package plan
 
 ## Direct Conclusion
 

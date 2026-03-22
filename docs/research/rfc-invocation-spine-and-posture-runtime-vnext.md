@@ -2,15 +2,32 @@
 
 ## Document Metadata
 
-- Status: `active`
+- Status: `archived`
 - Owner: runtime maintainers
-- Last reviewed: `2026-03-14`
+- Last reviewed: `2026-03-22`
 - Promotion target:
   - `docs/architecture/exploration-and-effect-governance.md`
   - `docs/architecture/control-and-data-flow.md`
   - `docs/reference/runtime.md`
   - `docs/reference/context-composer.md`
   - `docs/reference/events.md`
+
+## Archive Summary
+
+This note is archived because its runtime-core implementation work largely
+landed, but its top-level vocabulary is no longer the current public contract.
+
+Adopted pieces such as shared invocation recording, effect-boundary governance,
+receipt-aware rollback, and injection shaping are now reflected in stable docs
+and code. The original framing in this RFC is no longer the source of truth for
+current architecture:
+
+- stable docs now expose `safe` / `effectful` boundaries, `effect_commitment`,
+  and receipt-aware rollback instead of the RFC's three-posture public model
+- newer boundary-first subtraction direction removed exploration-supervision and
+  trust-scoring as active architectural goals
+- current subagent/runtime surfaces reject `posture` in favor of explicit
+  `boundary`
 
 ## Direct Conclusion
 
