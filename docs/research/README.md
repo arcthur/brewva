@@ -38,8 +38,6 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 
 - `docs/research/rfc-boundary-first-subtraction-and-model-native-recovery.md`
 - `docs/research/roadmap-notes.md`
-- `docs/research/rfc-invocation-spine-and-posture-runtime-vnext.md`
-- `docs/research/rfc-runtime-decomposition-and-deliberation-thickening.md`
 
 ## Promoted notes (status pointers)
 
@@ -49,3 +47,8 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 - `docs/research/rfc-preparse-normalization-model-capability-and-live-audit-split.md`
 - `docs/research/rfc-workflow-artifacts-and-readiness-control-plane.md`
 - `docs/research/rfc-iteration-facts-and-model-native-optimization-protocols.md`
+
+## Archived / superseded notes
+
+- `docs/research/rfc-invocation-spine-and-posture-runtime-vnext.md`
+- `docs/research/rfc-runtime-decomposition-and-deliberation-thickening.md`
