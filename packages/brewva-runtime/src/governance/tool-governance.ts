@@ -136,6 +136,10 @@ export const TOOL_GOVERNANCE_BY_NAME: Record<string, ToolGovernanceDescriptor> =
     effects: ["workspace_read", "runtime_observe"],
     defaultRisk: "low",
   }),
+  workflow_status: descriptor({
+    effects: ["runtime_observe"],
+    defaultRisk: "low",
+  }),
   ledger_query: descriptor({
     effects: ["runtime_observe"],
     defaultRisk: "low",

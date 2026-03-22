@@ -39,6 +39,7 @@ Default tools registered by `buildBrewvaTools()`:
 - `obs_snapshot`
 - `ledger_query`
 - `output_search`
+- `workflow_status`
 - `schedule_intent`
 - `tape_handoff`
 - `tape_info`
@@ -116,11 +117,15 @@ Notes:
 - `obs_snapshot`
 - `ledger_query`
 - `output_search`
+- `workflow_status`
 - `tape_handoff`
 - `tape_info`
 - `tape_search`
 
 These tools are the preferred path for evidence reuse and replay inspection.
+
+`workflow_status` is advisory only. It derives readiness from runtime events and
+session state, but it does not prescribe or enforce a workflow path.
 
 ### Browser Automation
 
@@ -311,3 +316,18 @@ Skill sequencing is model-native.
 - `skill_complete` records output and runs completion/verification policy
 
 There is no public skill-cascade or chain-control tool.
+
+## `workflow_status`
+
+Derived workflow inspection surface.
+
+- summarizes planning, implementation, review, verification, and release
+  readiness
+- implementation may be `pending` when delegated patch results still await
+  parent merge/apply
+- reports blockers such as stale review/verification, task blockers, and
+  pending worker results
+- optionally includes recent derived workflow artifacts
+
+This tool is advisory. It does not create a runtime-owned chain planner and it
+does not force the model to follow a suggested path.

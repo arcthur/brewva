@@ -141,4 +141,81 @@ describe("projection engine", () => {
     expect(rebuilt?.content).toContain("Rebuild working snapshot from persisted units");
     expect(existsSync(workingSnapshotPath(workspace, sessionId))).toBe(true);
   });
+
+  test("rebuilds workflow projection units from tape and preserves workflow state markers", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-projection-engine-workflow-"));
+    const engine = new ProjectionEngine({
+      enabled: true,
+      rootDir: workspace,
+      workingFile: "working.md",
+      maxWorkingChars: 2_000,
+    });
+
+    const sessionId = "projection-engine-workflow";
+    const events: BrewvaEventRecord[] = [
+      {
+        id: "evt-workflow-design",
+        sessionId,
+        type: "skill_completed",
+        timestamp: 100,
+        payload: {
+          skillName: "design",
+          outputKeys: ["design_spec", "execution_plan"],
+          outputs: {
+            design_spec: "Lock the workflow artifact contract.",
+            execution_plan: ["Derive readiness", "Expose advisory context"],
+          },
+        },
+      },
+      {
+        id: "evt-workflow-write",
+        sessionId,
+        type: "verification_write_marked",
+        timestamp: 110,
+        payload: {
+          toolName: "edit",
+        },
+      },
+      {
+        id: "evt-workflow-review",
+        sessionId,
+        type: "skill_completed",
+        timestamp: 120,
+        payload: {
+          skillName: "review",
+          outputKeys: ["review_report", "review_findings", "merge_decision"],
+          outputs: {
+            review_report: "Workflow chain is ready.",
+            review_findings: [],
+            merge_decision: "ready",
+          },
+        },
+      },
+    ];
+
+    const rebuilt = engine.rebuildSessionFromTape({
+      sessionId,
+      events,
+      mode: "always",
+    });
+
+    expect(rebuilt.reason).toBe("replayed");
+    expect(rebuilt.replayedEvents).toBe(3);
+
+    const snapshot = engine.getWorkingProjection(sessionId);
+    expect(snapshot).toBeDefined();
+    expect(snapshot?.content).toContain("[WorkingProjection]");
+    expect(snapshot?.content).toContain(
+      "workflow.design: state=ready; freshness=unknown; Lock the workflow artifact contract.",
+    );
+    expect(snapshot?.content).toContain(
+      "workflow.execution_plan: state=ready; freshness=unknown; Execution plan with 2 step(s): Derive readiness, Expose advisory context.",
+    );
+    expect(snapshot?.content).toContain(
+      "workflow.implementation: state=ready; freshness=fresh; Workspace mutation observed via edit; downstream review and verification may need refresh.",
+    );
+    expect(snapshot?.content).toContain(
+      "workflow.review: state=ready; freshness=fresh; decision=ready; Workflow chain is ready.",
+    );
+  });
 });

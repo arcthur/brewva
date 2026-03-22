@@ -60,6 +60,7 @@ Boundary rule:
   - projection
   - context arena
   - active tool surface
+  - derived workflow artifacts and readiness snapshots
 - `Cognitive Product Plane`
   - context composition
   - identity rendering
@@ -86,6 +87,8 @@ Rings define authority. Planes define product behavior.
 Important distinctions:
 
 - projection is working state, not long-term memory
+- workflow artifacts/readiness are derived working-state views, not new
+  commitment-memory event families
 - context arena is an injection planner, not a memory system
 - tool surface should reflect the current commitment boundary, not the whole
   static capability catalog
@@ -131,12 +134,16 @@ Projection and arena are not parallel memories:
 
 - projection provides one deterministic working snapshot
 - arena plans which sources fit the current turn
+- workflow advisories and `workflow_status` read from durable events and working
+  state, but they remain advisory rather than prescribing a path
 
 Model-facing composition is separate:
 
 - runtime admission decides which sources are allowed
 - `ContextComposer` decides how admitted blocks are shown to the model
 - default hosted-session behavior is narrative-first
+- the model may ignore workflow suggestions and choose another valid path unless
+  an independent governance boundary blocks it
 
 ## Tool Surface
 

@@ -87,6 +87,7 @@ Default injected sources:
 - `brewva.identity`
 - `brewva.runtime-status`
 - `brewva.task-state`
+- `brewva.workflow-advisory`
 - `brewva.projection-working`
 - `brewva.tool-outputs-distilled` (optional)
 

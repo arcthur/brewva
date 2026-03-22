@@ -257,6 +257,159 @@ requires: []
     expect(afterRestart.passed).toBe(true);
   });
 
+  test("rehydrates workflow readiness and advisory context from tape after restart", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-workflow-rehydrate-"));
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    const sessionId = "workflow-rehydrate-1";
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    runtime.context.onTurnStart(sessionId, 1);
+    runtime.task.setSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Promote workflow artifacts and readiness",
+    });
+    runtime.events.record({
+      sessionId,
+      type: "skill_completed",
+      timestamp: 100,
+      payload: {
+        skillName: "design",
+        outputKeys: ["design_spec", "execution_plan"],
+        outputs: {
+          design_spec: "Define the workflow artifact contract.",
+          execution_plan: ["Derive readiness", "Publish advisory context"],
+        },
+      },
+    });
+    runtime.events.record({
+      sessionId,
+      type: "verification_write_marked",
+      timestamp: 110,
+      payload: {
+        toolName: "edit",
+      },
+    });
+    runtime.events.record({
+      sessionId,
+      type: "skill_completed",
+      timestamp: 120,
+      payload: {
+        skillName: "review",
+        outputKeys: ["review_report", "review_findings", "merge_decision"],
+        outputs: {
+          review_report: "Workflow chain looks ready.",
+          review_findings: [],
+          merge_decision: "ready",
+        },
+      },
+    });
+    runtime.events.record({
+      sessionId,
+      type: "verification_outcome_recorded",
+      timestamp: 130,
+      payload: {
+        outcome: "pass",
+        level: "standard",
+        failedChecks: [],
+        evidenceFreshness: "fresh",
+      },
+    });
+
+    const beforeRestart = await runtime.context.buildInjection(
+      sessionId,
+      "continue",
+      { tokens: 320, contextWindow: 16_000, percent: 0.02 },
+      "workflow-rehydrate-before",
+    );
+    expect(beforeRestart.text).toContain("[WorkflowAdvisory]");
+    expect(beforeRestart.text).toContain("planning: ready");
+    expect(beforeRestart.text).toContain("implementation: ready");
+    expect(beforeRestart.text).toContain("review: ready");
+    expect(beforeRestart.text).toContain("verification: ready");
+    expect(beforeRestart.text).toContain("release: ready");
+
+    const reloaded = new BrewvaRuntime({ cwd: workspace, config });
+    reloaded.context.onTurnStart(sessionId, 1);
+    const afterRestart = await reloaded.context.buildInjection(
+      sessionId,
+      "continue",
+      { tokens: 320, contextWindow: 16_000, percent: 0.02 },
+      "workflow-rehydrate-after",
+    );
+
+    expect(afterRestart.accepted).toBe(true);
+    expect(afterRestart.text).toContain("[WorkflowAdvisory]");
+    expect(afterRestart.text).toContain("planning: ready");
+    expect(afterRestart.text).toContain("implementation: ready");
+    expect(afterRestart.text).toContain("review: ready");
+    expect(afterRestart.text).toContain("verification: ready");
+    expect(afterRestart.text).toContain("release: ready");
+    expect(afterRestart.text).toContain("[WorkingProjection]");
+    expect(afterRestart.text).toContain("workflow.design: state=ready; freshness=unknown;");
+    expect(afterRestart.text).toContain("workflow.review: state=ready; freshness=fresh;");
+    expect(afterRestart.text).toContain("workflow.verification: state=ready; freshness=fresh;");
+  });
+
+  test("rehydrates pending patch worker results into workflow advisory after restart", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-workflow-pending-worker-rehydrate-"));
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    const sessionId = "workflow-pending-worker-rehydrate-1";
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    runtime.context.onTurnStart(sessionId, 1);
+    runtime.events.record({
+      sessionId,
+      type: "skill_completed",
+      timestamp: 100,
+      payload: {
+        skillName: "review",
+        outputKeys: ["review_report", "review_findings", "merge_decision"],
+        outputs: {
+          review_report: "Workflow chain looks ready.",
+          review_findings: [],
+          merge_decision: "ready",
+        },
+      },
+    });
+    runtime.events.record({
+      sessionId,
+      type: "verification_outcome_recorded",
+      timestamp: 110,
+      payload: {
+        outcome: "pass",
+        level: "standard",
+        failedChecks: [],
+        evidenceFreshness: "fresh",
+      },
+    });
+    runtime.events.record({
+      sessionId,
+      type: "subagent_completed",
+      timestamp: 120,
+      payload: {
+        runId: "patch-worker-1",
+        profile: "patch-worker",
+        kind: "patch",
+        summary: "Patch worker completed and awaits parent merge/apply.",
+      },
+    });
+
+    const reloaded = new BrewvaRuntime({ cwd: workspace, config });
+    reloaded.context.onTurnStart(sessionId, 1);
+    const injected = await reloaded.context.buildInjection(
+      sessionId,
+      "continue",
+      { tokens: 320, contextWindow: 16_000, percent: 0.02 },
+      "workflow-pending-worker-after",
+    );
+
+    expect(injected.accepted).toBe(true);
+    expect(injected.text).toContain("[WorkflowAdvisory]");
+    expect(injected.text).toContain("implementation: pending");
+    expect(injected.text).toContain("release: blocked");
+    expect(injected.text).toContain("pending_worker_results: 1");
+  });
+
   test("resets checkpoint counter state when a checkpoint is manually recorded", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-manual-checkpoint-counter-"));
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);

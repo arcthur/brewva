@@ -173,6 +173,7 @@ function resolveInvestigationLifecycleToolNames(
     "task_update_item",
     "task_record_blocker",
     "task_resolve_blocker",
+    "workflow_status",
     "output_search",
     "ledger_query",
     "tape_search",
@@ -211,7 +212,7 @@ function resolveManagedToolNamesForTurn(input: {
     surfaceSkills,
     input.dynamicToolDefinitions,
   ).filter((toolName) => MANAGED_TOOL_NAME_SET.has(toolName));
-  const lifecycleManagedToolNames: string[] = ["skill_load"];
+  const lifecycleManagedToolNames: string[] = ["skill_load", "workflow_status"];
 
   if (surfaceSkills.length > 0) {
     lifecycleManagedToolNames.push("skill_complete");

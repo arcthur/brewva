@@ -40,7 +40,9 @@ flowchart TD
    workspace directly.
 5. Let the parent session inspect and adopt child patch results explicitly via
    `worker_results_merge` and `worker_results_apply`.
-6. Release slots, persist lifecycle state, and keep pending child runs visible
+6. Feed pending or applied worker outcomes back into workflow readiness so
+   release remains blocked until parent-controlled merge/apply completes.
+7. Release slots, persist lifecycle state, and keep pending child runs visible
    to compaction through a dedicated `PendingDelegations` section.
 
 ## Background Runs And Recovery
@@ -55,6 +57,8 @@ effort helpers.
   metadata
 - late outcomes may return through `context_packet` when inline same-turn
   injection is no longer valid
+- workflow readiness treats pending worker results as release blockers until the
+  parent explicitly merges or applies them
 
 Note: use `runtime.tools.acquireParallelSlot(...)` to apply per-skill
 `maxParallel` policy (warn/enforce), not internal parallel managers directly.
@@ -69,6 +73,8 @@ Note: use `runtime.tools.acquireParallelSlot(...)` to apply per-skill
   `packages/brewva-gateway/src/subagents/workspace.ts`
 - Runtime parallel and merge state:
   `packages/brewva-runtime/src/services/parallel.ts`
+- Workflow readiness derivation:
+  `packages/brewva-runtime/src/workflow/derivation.ts`
 - Session hydration fold:
   `packages/brewva-runtime/src/services/session-hydration-fold-delegation.ts`
 - Parent-side tool surface:

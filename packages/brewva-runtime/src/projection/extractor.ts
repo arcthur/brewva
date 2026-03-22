@@ -2,6 +2,7 @@ import { TASK_EVENT_TYPE, coerceTaskLedgerPayload } from "../task/ledger.js";
 import { formatTaskVerificationLevelForSurface } from "../task/surface.js";
 import { TRUTH_EVENT_TYPE, coerceTruthLedgerPayload } from "../truth/ledger.js";
 import type { BrewvaEventRecord } from "../types.js";
+import { deriveWorkflowArtifactsFromEvent } from "../workflow/derivation.js";
 import type {
   ProjectionExtractionResult,
   ProjectionSourceRef,
@@ -57,6 +58,14 @@ function dedupeCandidates(candidates: ProjectionUnitCandidate[]): ProjectionUnit
     });
   }
   return [...merged.values()];
+}
+
+function formatWorkflowProjectionStatement(input: {
+  state: string;
+  freshness: string;
+  summary: string;
+}): string {
+  return `state=${input.state}; freshness=${input.freshness}; ${input.summary}`;
 }
 
 function extractTruth(event: BrewvaEventRecord): ProjectionExtractionResult {
@@ -239,8 +248,44 @@ function extractTask(event: BrewvaEventRecord): ProjectionExtractionResult {
   };
 }
 
+function extractWorkflow(event: BrewvaEventRecord): ProjectionExtractionResult {
+  const sourceRef = createSourceRef(event);
+  const upserts = deriveWorkflowArtifactsFromEvent(event).map(
+    (artifact): ProjectionUnitCandidate => ({
+      sessionId: event.sessionId,
+      status: "active",
+      projectionKey: `workflow_artifact:${artifact.kind}`,
+      label: `workflow.${artifact.kind}`,
+      statement: formatWorkflowProjectionStatement({
+        state: artifact.state,
+        freshness: artifact.freshness,
+        summary: artifact.summary,
+      }),
+      sourceRefs: [sourceRef],
+      metadata: {
+        source: "workflow_event",
+        projectionGroup: "workflow_artifact",
+        workflowKind: artifact.kind,
+        workflowState: artifact.state,
+        workflowFreshness: artifact.freshness,
+        sourceSkillNames: artifact.sourceSkillNames,
+        outputKeys: artifact.outputKeys,
+      },
+    }),
+  );
+
+  return {
+    upserts: dedupeCandidates(upserts),
+    resolves: [],
+  };
+}
+
 export function extractProjectionFromEvent(event: BrewvaEventRecord): ProjectionExtractionResult {
   if (event.type === TRUTH_EVENT_TYPE) return extractTruth(event);
   if (event.type === TASK_EVENT_TYPE) return extractTask(event);
+  const workflow = extractWorkflow(event);
+  if (workflow.upserts.length > 0 || workflow.resolves.length > 0) {
+    return workflow;
+  }
   return emptyResult();
 }

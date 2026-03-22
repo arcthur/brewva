@@ -110,8 +110,34 @@ Current responsibilities:
 - recovery presentation
   - exposes verification, rollbackability, approval requirements, and worker
     outcomes without prescribing the next step
+- workflow advisory presentation
+  - summarizes derived planning/review/verification/release readiness
+  - exposes latest workflow artifact signals and blockers
+  - stays advisory-only instead of turning product UX into a hidden planner
 
 This plane may read kernel state, but it does not mutate kernel state directly.
+
+## Workflow Advisory Surfaces
+
+Workflow chaining is productized as a derived cognitive/control-plane surface,
+not as a new kernel authority object.
+
+Current product surfaces:
+
+- `[WorkflowAdvisory]` in default context injection
+- `workflow_status` as an explicit inspection tool
+- working projection entries such as `workflow.design`, `workflow.review`, and
+  `workflow.verification`
+
+These surfaces are derived from durable events and session state such as:
+
+- `skill_completed` outputs
+- verification outcome and write-mark events
+- worker patch adoption or failure events
+- pending delegated worker results
+
+The product goal is visibility and recovery guidance. The product must not
+convert those signals into a mandatory stage machine.
 
 ## ContextComposer Boundary
 

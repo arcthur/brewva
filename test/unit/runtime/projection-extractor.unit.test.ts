@@ -160,6 +160,54 @@ describe("projection extractor", () => {
     expect(result.resolves).toHaveLength(0);
   });
 
+  test("extracts workflow artifact candidates from skill completion outputs", () => {
+    const result = extractProjectionFromEvent(
+      event({
+        id: "evt-skill-complete-workflow",
+        type: "skill_completed",
+        payload: {
+          skillName: "design",
+          outputKeys: ["design_spec", "execution_plan"],
+          outputs: {
+            design_spec: "Document the runtime contract.",
+            execution_plan: ["Update runtime helper", "Add contract tests"],
+          },
+        },
+      }),
+    );
+
+    expect(result.upserts).toHaveLength(2);
+    expect(result.upserts.map((unit) => unit.projectionKey).toSorted()).toEqual([
+      "workflow_artifact:design",
+      "workflow_artifact:execution_plan",
+    ]);
+    expect(result.upserts[0]?.metadata?.projectionGroup).toBe("workflow_artifact");
+    expect(result.upserts[0]?.statement).toContain("state=ready; freshness=unknown;");
+    expect(result.resolves).toHaveLength(0);
+  });
+
+  test("extracts workflow verification candidate from verification outcome events", () => {
+    const result = extractProjectionFromEvent(
+      event({
+        id: "evt-verify-workflow",
+        type: "verification_outcome_recorded",
+        payload: {
+          outcome: "fail",
+          level: "standard",
+          failedChecks: ["tests"],
+          evidenceFreshness: "fresh",
+        },
+      }),
+    );
+
+    expect(result.upserts).toHaveLength(1);
+    expect(result.upserts[0]?.projectionKey).toBe("workflow_artifact:verification");
+    expect(result.upserts[0]?.label).toBe("workflow.verification");
+    expect(result.upserts[0]?.statement).toContain("state=blocked; freshness=fresh;");
+    expect(result.upserts[0]?.metadata?.workflowState).toBe("blocked");
+    expect(result.resolves).toHaveLength(0);
+  });
+
   test("ignores non-projectable event types", () => {
     const result = extractProjectionFromEvent(
       event({

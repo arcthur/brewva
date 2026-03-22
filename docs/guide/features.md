@@ -11,6 +11,7 @@
 - Context budget tracking and compaction events
 - Event-first runtime persistence and replay
 - Cost observability and threshold-based budget alerts
+- Derived workflow artifacts and advisory readiness inspection
 
 ## Tool Surface
 
@@ -47,6 +48,7 @@
 - `obs_snapshot`
 - `ledger_query`
 - `output_search`
+- `workflow_status`
 - `schedule_intent`
 - `tape_handoff`
 - `tape_info`

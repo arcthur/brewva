@@ -127,6 +127,33 @@ Deliberation-side recovery flows such as debug or review may still publish
 non-authoritative artifacts, but they do not create a second public
 skill-sequencing API in the runtime.
 
+## Workflow Artifacts And Readiness
+
+Skill lifecycle remains the authoritative semantic contract boundary, but the
+runtime now derives workflow-facing artifacts from completed skill outputs and
+adjacent evidence signals.
+
+Current derived workflow artifact sources include:
+
+- `design_spec` -> `workflow.design`
+- `execution_plan` -> `workflow.execution_plan`
+- `change_set` / `files_changed` and write markers -> `workflow.implementation`
+- `review_report` / `review_findings` / `merge_decision` -> `workflow.review`
+- verification outcomes -> `workflow.verification`
+- delegated patch adoption or failure -> `workflow.worker_patch`
+
+Important boundary rules:
+
+- workflow artifacts are derived working-state projections, not a second
+  commitment-memory authority
+- workflow readiness is advisory-only and does not create a kernel-owned stage
+  DAG
+- models may ignore a suggested next step and choose another valid path unless
+  governance or safety boundaries independently block it
+
+Control-plane and operator surfaces may inspect this state through
+`workflow_status` and the default `[WorkflowAdvisory]` context source.
+
 ## Public Routable Skills
 
 ### Core

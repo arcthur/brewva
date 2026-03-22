@@ -29,6 +29,66 @@ export interface ParallelServiceOptions {
   skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
 }
 
+function readPatchSetManifest(
+  workspaceRoot: string,
+  pathRef: string,
+): WorkerResult["patches"] | undefined {
+  const filePath = resolve(workspaceRoot, pathRef);
+  if (!existsSync(filePath)) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(readFileSync(filePath, "utf8")) as WorkerResult["patches"];
+    if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.changes)) {
+      return undefined;
+    }
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+export function hydrateAndListWorkerResults(input: {
+  sessionId: string;
+  workspaceRoot: string;
+  sessionState: RuntimeSessionStateStore;
+  parallelResults: ParallelResultStore;
+}): WorkerResult[] {
+  const state = input.sessionState.getCell(input.sessionId);
+  const existingWorkerIds = new Set(
+    input.parallelResults.list(input.sessionId).map((result) => result.workerId),
+  );
+  for (const run of state.delegationRuns.values()) {
+    if (existingWorkerIds.has(run.runId)) {
+      continue;
+    }
+    if (run.kind !== "patch") {
+      continue;
+    }
+    if (run.status === "pending" || run.status === "running" || run.status === "merged") {
+      continue;
+    }
+    const manifestRef = run.artifactRefs?.find((ref) => ref.kind === "patch_manifest")?.path;
+    const patches = manifestRef
+      ? readPatchSetManifest(input.workspaceRoot, manifestRef)
+      : undefined;
+    const result: WorkerResult = {
+      workerId: run.runId,
+      status: run.status === "completed" ? (patches ? "ok" : "skipped") : "error",
+      summary:
+        run.summary ??
+        (run.status === "completed"
+          ? "Recovered delegated patch outcome."
+          : (run.error ?? "Recovered delegated patch failure.")),
+      patches,
+      errorMessage: run.status === "completed" ? undefined : run.error,
+    };
+    input.parallelResults.record(input.sessionId, result);
+    existingWorkerIds.add(run.runId);
+  }
+  return input.parallelResults.list(input.sessionId);
+}
+
 export class ParallelService {
   private readonly securityPolicy: ReturnType<typeof resolveSecurityPolicy>;
   private readonly workspaceRoot: string;
@@ -96,12 +156,21 @@ export class ParallelService {
   }
 
   listWorkerResults(sessionId: string): WorkerResult[] {
-    this.rehydrateDelegatedWorkerResults(sessionId);
-    return this.parallelResults.list(sessionId);
+    return hydrateAndListWorkerResults({
+      sessionId,
+      workspaceRoot: this.workspaceRoot,
+      sessionState: this.sessionState,
+      parallelResults: this.parallelResults,
+    });
   }
 
   mergeWorkerResults(sessionId: string): WorkerMergeReport {
-    this.rehydrateDelegatedWorkerResults(sessionId);
+    hydrateAndListWorkerResults({
+      sessionId,
+      workspaceRoot: this.workspaceRoot,
+      sessionState: this.sessionState,
+      parallelResults: this.parallelResults,
+    });
     return this.parallelResults.merge(sessionId);
   }
 
@@ -112,7 +181,12 @@ export class ParallelService {
       toolCallId?: string;
     },
   ): WorkerApplyReport {
-    this.rehydrateDelegatedWorkerResults(sessionId);
+    hydrateAndListWorkerResults({
+      sessionId,
+      workspaceRoot: this.workspaceRoot,
+      sessionState: this.sessionState,
+      parallelResults: this.parallelResults,
+    });
     const merged = this.parallelResults.merge(sessionId);
     if (merged.status === "empty") {
       this.recordEvent({
@@ -232,55 +306,6 @@ export class ParallelService {
 
   clearWorkerResults(sessionId: string): void {
     this.parallelResults.clear(sessionId);
-  }
-
-  private rehydrateDelegatedWorkerResults(sessionId: string): void {
-    const state = this.sessionState.getCell(sessionId);
-    const existingWorkerIds = new Set(
-      this.parallelResults.list(sessionId).map((result) => result.workerId),
-    );
-    for (const run of state.delegationRuns.values()) {
-      if (existingWorkerIds.has(run.runId)) {
-        continue;
-      }
-      if (run.kind !== "patch") {
-        continue;
-      }
-      if (run.status === "pending" || run.status === "running" || run.status === "merged") {
-        continue;
-      }
-      const manifestRef = run.artifactRefs?.find((ref) => ref.kind === "patch_manifest")?.path;
-      const patches = manifestRef ? this.readPatchSetManifest(manifestRef) : undefined;
-      const result: WorkerResult = {
-        workerId: run.runId,
-        status: run.status === "completed" ? (patches ? "ok" : "skipped") : "error",
-        summary:
-          run.summary ??
-          (run.status === "completed"
-            ? "Recovered delegated patch outcome."
-            : (run.error ?? "Recovered delegated patch failure.")),
-        patches,
-        errorMessage: run.status === "completed" ? undefined : run.error,
-      };
-      this.parallelResults.record(sessionId, result);
-      existingWorkerIds.add(run.runId);
-    }
-  }
-
-  private readPatchSetManifest(pathRef: string): WorkerResult["patches"] | undefined {
-    const filePath = resolve(this.workspaceRoot, pathRef);
-    if (!existsSync(filePath)) {
-      return undefined;
-    }
-    try {
-      const parsed = JSON.parse(readFileSync(filePath, "utf8")) as WorkerResult["patches"];
-      if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.changes)) {
-        return undefined;
-      }
-      return parsed;
-    } catch {
-      return undefined;
-    }
   }
 
   private tryAcquireParallelSlot(

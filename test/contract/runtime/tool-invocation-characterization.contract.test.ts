@@ -612,6 +612,9 @@ describe("Tool invocation characterization", () => {
         },
       },
       {
+        type: "projection_ingested",
+      },
+      {
         type: "tool_call_marked",
         payload: {
           toolName: "edit",

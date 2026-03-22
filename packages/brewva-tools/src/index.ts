@@ -26,6 +26,7 @@ import { createTaskLedgerTools } from "./task-ledger.js";
 import { createTocTools } from "./toc.js";
 import type { BrewvaToolOrchestration, BrewvaToolRuntime } from "./types.js";
 import { createWorkerResultsApplyTool, createWorkerResultsMergeTool } from "./worker-results.js";
+import { createWorkflowStatusTool } from "./workflow-status.js";
 
 export interface BuildBrewvaToolsOptions {
   runtime: BrewvaToolRuntime;
@@ -56,6 +57,7 @@ export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefiniti
     createObsSnapshotTool({ runtime }),
     createLedgerQueryTool({ runtime }),
     createOutputSearchTool({ runtime }),
+    createWorkflowStatusTool({ runtime }),
     createScheduleIntentTool({ runtime }),
     ...createTapeTools({ runtime }),
     createSessionCompactTool({ runtime }),
@@ -115,6 +117,7 @@ export { createObsSloAssertTool } from "./observability/obs-slo-assert.js";
 export { createObsSnapshotTool } from "./observability/obs-snapshot.js";
 export { createLedgerQueryTool } from "./ledger-query.js";
 export { createOutputSearchTool } from "./output-search.js";
+export { createWorkflowStatusTool } from "./workflow-status.js";
 export { createTocTools } from "./toc.js";
 export { createTapeTools } from "./tape.js";
 export { createSessionCompactTool } from "./session-compact.js";

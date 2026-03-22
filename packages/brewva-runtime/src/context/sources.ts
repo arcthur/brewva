@@ -4,6 +4,7 @@ export const CONTEXT_SOURCES = {
   identity: "brewva.identity",
   runtimeStatus: "brewva.runtime-status",
   taskState: "brewva.task-state",
+  workflowAdvisory: "brewva.workflow-advisory",
   toolOutputsDistilled: "brewva.tool-outputs-distilled",
   projectionWorking: "brewva.projection-working",
 } as const;
@@ -14,6 +15,7 @@ export const CONTEXT_SOURCE_CATEGORIES: Record<ContextSourceId, ContextInjection
   [CONTEXT_SOURCES.identity]: "narrative",
   [CONTEXT_SOURCES.runtimeStatus]: "narrative",
   [CONTEXT_SOURCES.taskState]: "narrative",
+  [CONTEXT_SOURCES.workflowAdvisory]: "narrative",
   [CONTEXT_SOURCES.toolOutputsDistilled]: "narrative",
   [CONTEXT_SOURCES.projectionWorking]: "narrative",
 };

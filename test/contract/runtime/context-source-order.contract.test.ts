@@ -90,6 +90,18 @@ describe("context source order integration", () => {
       message: "tool failure blocks completion",
       source: "test",
     });
+    runtime.events.record({
+      sessionId,
+      type: "skill_completed",
+      timestamp: 100,
+      payload: {
+        skillName: "design",
+        outputKeys: ["design_spec"],
+        outputs: {
+          design_spec: "Deterministic workflow advisory for the active task.",
+        },
+      } as Record<string, unknown>,
+    });
     runtime.tools.recordResult({
       sessionId,
       toolName: "exec",
@@ -107,6 +119,7 @@ describe("context source order integration", () => {
       { source: CONTEXT_SOURCES.identity, category: "narrative", order: 10 },
       { source: CONTEXT_SOURCES.runtimeStatus, category: "narrative", order: 20 },
       { source: CONTEXT_SOURCES.taskState, category: "narrative", order: 40 },
+      { source: CONTEXT_SOURCES.workflowAdvisory, category: "narrative", order: 45 },
       { source: CONTEXT_SOURCES.projectionWorking, category: "narrative", order: 50 },
     ]);
 
@@ -120,12 +133,16 @@ describe("context source order integration", () => {
     expect(injected.text.length).toBeGreaterThan(0);
     const runtimeStatusPosition = blockIndex(injected.text, "RuntimeStatus");
     const taskLedgerPosition = blockIndex(injected.text, "TaskLedger");
+    const workflowAdvisoryPosition = blockIndex(injected.text, "WorkflowAdvisory");
     const workingProjectionPosition = blockIndex(injected.text, "WorkingProjection");
     expect(injected.text.includes("[TruthLedger]")).toBe(false);
     expect(injected.text.includes("[TruthFacts]")).toBe(false);
     expect(runtimeStatusPosition).toBeGreaterThanOrEqual(0);
     expect(taskLedgerPosition).toBeGreaterThan(runtimeStatusPosition);
+    expect(workflowAdvisoryPosition).toBeGreaterThan(taskLedgerPosition);
     expect(workingProjectionPosition).toBeGreaterThan(taskLedgerPosition);
+    expect(workingProjectionPosition).toBeGreaterThan(workflowAdvisoryPosition);
+    expect(injected.text).toContain("advisory_only: true");
     expect(injected.text.includes("[MemoryRecall]")).toBe(false);
   });
 
@@ -143,6 +160,20 @@ describe("context source order integration", () => {
     runtime.task.setSpec(sessionId, {
       schema: "brewva.task.v1",
       goal: "Validate externally registered provider order",
+    });
+    runtime.events.record({
+      sessionId,
+      type: "skill_completed",
+      timestamp: 100,
+      payload: {
+        skillName: "review",
+        outputKeys: ["review_report", "review_findings", "merge_decision"],
+        outputs: {
+          review_report: "Review is green.",
+          review_findings: [],
+          merge_decision: "ready",
+        },
+      } as Record<string, unknown>,
     });
     runtime.tools.recordResult({
       sessionId,
@@ -174,10 +205,13 @@ describe("context source order integration", () => {
     const runtimeStatusPosition = blockIndex(injected.text, "RuntimeStatus");
     const customProviderPosition = blockIndex(injected.text, "CustomOperatorNote");
     const taskLedgerPosition = blockIndex(injected.text, "TaskLedger");
+    const workflowAdvisoryPosition = blockIndex(injected.text, "WorkflowAdvisory");
     const workingProjectionPosition = blockIndex(injected.text, "WorkingProjection");
     expect(runtimeStatusPosition).toBeGreaterThanOrEqual(0);
     expect(taskLedgerPosition).toBeGreaterThan(runtimeStatusPosition);
+    expect(workflowAdvisoryPosition).toBeGreaterThan(taskLedgerPosition);
     expect(workingProjectionPosition).toBeGreaterThan(taskLedgerPosition);
+    expect(workingProjectionPosition).toBeGreaterThan(workflowAdvisoryPosition);
     expect(customProviderPosition).toBeGreaterThan(workingProjectionPosition);
 
     expect(runtime.context.unregisterProvider("brewva.custom-operator-note")).toBe(true);
@@ -240,6 +274,7 @@ describe("context source order integration", () => {
       { source: CONTEXT_SOURCES.runtimeStatus, category: "narrative", order: 20 },
       { source: CONTEXT_SOURCES.toolOutputsDistilled, category: "narrative", order: 30 },
       { source: CONTEXT_SOURCES.taskState, category: "narrative", order: 40 },
+      { source: CONTEXT_SOURCES.workflowAdvisory, category: "narrative", order: 45 },
       { source: CONTEXT_SOURCES.projectionWorking, category: "narrative", order: 50 },
     ]);
   });

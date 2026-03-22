@@ -104,6 +104,7 @@ describe("tool surface extension", () => {
       "write",
       "session_compact",
       "skill_load",
+      "workflow_status",
       "grep",
       "toc_document",
       "exec",
@@ -150,6 +151,7 @@ describe("tool surface extension", () => {
 
     expect(extensionApi.activeTools).toContain("session_compact");
     expect(extensionApi.activeTools).toContain("skill_load");
+    expect(extensionApi.activeTools).toContain("workflow_status");
     expect(extensionApi.activeTools).toContain("grep");
     expect(extensionApi.activeTools).toContain("exec");
     expect(extensionApi.activeTools).toContain("skill_complete");
@@ -243,6 +245,7 @@ describe("tool surface extension", () => {
       "session_compact",
       "task_set_spec",
       "task_view_state",
+      "workflow_status",
       "task_add_item",
       "task_record_blocker",
       "ledger_query",
@@ -286,6 +289,7 @@ describe("tool surface extension", () => {
 
     expect(extensionApi.activeTools).toContain("task_set_spec");
     expect(extensionApi.activeTools).toContain("task_view_state");
+    expect(extensionApi.activeTools).toContain("workflow_status");
     expect(extensionApi.activeTools).toContain("task_add_item");
     expect(extensionApi.activeTools).toContain("task_record_blocker");
     expect(extensionApi.activeTools).toContain("ledger_query");
