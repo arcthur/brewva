@@ -8,6 +8,7 @@ This document models governance-first runtime flow and persistence boundaries.
 sequenceDiagram
   participant U as User
   participant CLI as brewva-cli
+  participant COMP as "Provider Compatibility"
   participant RT as BrewvaRuntime
   participant EXT as brewva-gateway/runtime-plugins
   participant TOOLS as brewva-tools
@@ -17,6 +18,12 @@ sequenceDiagram
   CLI->>EXT: before_agent_start
   EXT->>RT: context.observeUsage + context.buildInjection
   RT->>STORE: read/update working projection state (units + working)
+  CLI->>COMP: provider request payload
+  COMP->>COMP: resolve capability profile + patch request
+  COMP-->>CLI: normalized provider request
+  CLI->>COMP: assistant completion
+  COMP->>COMP: normalize structured tool call or fail fast
+  COMP-->>CLI: admitted completion event
   CLI->>EXT: tool_call
   EXT->>RT: tools.start (policy + budget + compaction gate)
   CLI->>TOOLS: execute
@@ -30,10 +37,12 @@ sequenceDiagram
 ```mermaid
 flowchart TD
   A["create runtime"] --> B["create hosted turn pipeline"]
-  B --> C["host provides managed tools directly"]
-  C --> D["before_agent_start: hosted context + tool surface"]
-  D --> E["tool_call: tool gate + invocation spine"]
-  E --> F["tool_result: ledger + event stream + distillation"]
+  B --> C["install hosted provider compatibility"]
+  C --> D["host provides managed tools directly"]
+  D --> E["before_agent_start: hosted context + tool surface"]
+  E --> F["provider request patch + pre-parse normalization"]
+  F --> G["tool_call: tool gate + invocation spine"]
+  G --> H["tool_result: ledger + event stream + distillation"]
 ```
 
 ## Persistence Flow
@@ -46,6 +55,41 @@ flowchart LR
   RT --> MEM["working projection (.orchestrator/projection/units.jsonl + sessions/sess_<id>/working.md)"]
   RT --> SNAP["rollback snapshots (.orchestrator/snapshots/<session>/*)"]
 ```
+
+## Hosted Event Surfaces
+
+```mermaid
+flowchart LR
+  LIVE["Hosted live stream"] --> L1["message_update"]
+  LIVE --> L2["tool_execution_update"]
+  LIVE --> L3["assistant text/thinking deltas"]
+
+  AUDIT["Durable audit tape"] --> A1["message_end summary"]
+  AUDIT --> A2["tool_execution_end summary"]
+  AUDIT --> A3["tool_call_normalized / tool_call_normalization_failed"]
+  AUDIT --> A4["approval + delegation lifecycle"]
+```
+
+Live activity stays channel-oriented and ephemeral. Durable tape keeps replay,
+evidence, and recovery semantics.
+
+## Hosted Provider Compatibility Flow
+
+```mermaid
+flowchart TD
+  A["hosted session bootstrap"] --> B["install provider compatibility layer"]
+  B --> C["register session-scoped runtime + registry"]
+  C --> D["provider request patching"]
+  D --> E["model/provider response"]
+  E --> F{"structured tool call admissible?"}
+  F -->|yes| G["emit normalized completion into Pi session"]
+  F -->|no| H["emit normalization failure error"]
+  G --> I["quality-gate tool_call admission"]
+```
+
+The compatibility seam sits before runtime authority. It can repair structural
+shape, but it cannot grant permission, invent semantic intent, or bypass the
+tool gate.
 
 ## Working Projection Flow
 

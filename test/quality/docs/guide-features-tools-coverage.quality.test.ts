@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 function collectToolNames(sourceRoot: string): string[] {
   const files = [
     "ast-grep.ts",
+    "browser.ts",
     "cost-view.ts",
     "exec.ts",
     "grep.ts",

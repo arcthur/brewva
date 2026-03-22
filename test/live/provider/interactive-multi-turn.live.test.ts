@@ -408,7 +408,7 @@ describe("e2e: interactive multi-turn live regression", () => {
       eventFile: "/tmp/events.jsonl",
       events: [
         { type: "context_compaction_auto_completed", timestamp: 1_000 },
-        { type: "message_update", timestamp: 1_800 },
+        { type: "message_end", timestamp: 1_800 },
         { type: "agent_end", timestamp: 2_200 },
       ],
     };
@@ -441,7 +441,7 @@ describe("e2e: interactive multi-turn live regression", () => {
       eventFile: "/tmp/events.jsonl",
       events: [
         { type: "context_compaction_auto_completed", timestamp: 1_000 },
-        { type: "message_update", timestamp: 1_000 + MAX_POST_AUTO_COMPACTION_GAP_MS + 1 },
+        { type: "message_end", timestamp: 1_000 + MAX_POST_AUTO_COMPACTION_GAP_MS + 1 },
       ],
     };
 

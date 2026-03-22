@@ -14,7 +14,14 @@ export interface ToolOutputDistillationInput {
 
 export interface ToolOutputDistillation {
   distillationApplied: boolean;
-  strategy: "none" | "exec_heuristic" | "grep_heuristic" | "lsp_heuristic";
+  strategy:
+    | "none"
+    | "exec_heuristic"
+    | "grep_heuristic"
+    | "lsp_heuristic"
+    | "browser_snapshot_heuristic"
+    | "browser_diff_heuristic"
+    | "browser_get_heuristic";
   summaryText: string;
   rawChars: number;
   rawBytes: number;
@@ -204,6 +211,169 @@ function buildGrepSummary(lines: string[]): string {
   return ["[GrepDistilled]", ...headerLines, body].join("\n");
 }
 
+interface ParsedBrowserTextPayload {
+  header: string;
+  session?: string;
+  artifactRef?: string;
+  metadata: string[];
+  bodyLabel?: string;
+  bodyLines: string[];
+}
+
+const BROWSER_BODY_LABELS = new Set(["snapshot", "diff", "text", "title", "url"]);
+const BROWSER_INTERACTIVE_REF_TEST_PATTERN = /\[@[^\]]+\]/u;
+const BROWSER_INTERACTIVE_REF_COUNT_PATTERN = /\[@[^\]]+\]/gu;
+const BROWSER_INTERACTIVE_TAG_PATTERN =
+  /<(?:button|input|a|select|textarea|option|label|form|summary|menuitem|tab|checkbox|radio)\b/iu;
+
+function parseBrowserTextPayload(rawText: string): ParsedBrowserTextPayload {
+  const lines = rawText
+    .split(/\r?\n/u)
+    .map((line) => clampLine(line))
+    .filter((line) => line.length > 0);
+  if (lines.length === 0) {
+    return {
+      header: "",
+      metadata: [],
+      bodyLines: [],
+    };
+  }
+
+  const header = lines[0] ?? "";
+  const rest = lines.slice(1);
+  let session: string | undefined;
+  let artifactRef: string | undefined;
+  let bodyLabel: string | undefined;
+  let bodyStartIndex = rest.length;
+  const metadata: string[] = [];
+
+  for (const [index, line] of rest.entries()) {
+    if (line.startsWith("session: ")) {
+      session = line.slice("session: ".length).trim() || undefined;
+      continue;
+    }
+    if (line.startsWith("artifact: ")) {
+      artifactRef = line.slice("artifact: ".length).trim() || undefined;
+      continue;
+    }
+    if (line.endsWith(":")) {
+      const candidate = line.slice(0, -1).trim().toLowerCase();
+      if (BROWSER_BODY_LABELS.has(candidate)) {
+        bodyLabel = candidate;
+        bodyStartIndex = index + 1;
+        break;
+      }
+    }
+    metadata.push(line);
+  }
+
+  return {
+    header,
+    session,
+    artifactRef,
+    metadata,
+    bodyLabel,
+    bodyLines: rest.slice(bodyStartIndex).filter((line) => line.length > 0),
+  };
+}
+
+function countBrowserInteractiveRefs(lines: string[]): number {
+  return lines.reduce(
+    (count, line) => count + (line.match(BROWSER_INTERACTIVE_REF_COUNT_PATTERN)?.length ?? 0),
+    0,
+  );
+}
+
+function selectBrowserSnapshotHighlights(lines: string[]): string[] {
+  const selected: string[] = [];
+  for (const line of lines) {
+    if (
+      BROWSER_INTERACTIVE_TAG_PATTERN.test(line) ||
+      BROWSER_INTERACTIVE_REF_TEST_PATTERN.test(line)
+    ) {
+      pushUniqueLimited(selected, line, 12);
+    }
+  }
+  if (selected.length === 0) {
+    for (const line of lines.slice(0, 12)) {
+      pushUniqueLimited(selected, line, 12);
+    }
+  }
+  for (const line of lines.slice(Math.max(0, lines.length - 4))) {
+    pushUniqueLimited(selected, line, 16);
+  }
+  return selected;
+}
+
+function selectBrowserDiffHighlights(lines: string[]): string[] {
+  const added = lines.filter((line) => line.startsWith("+"));
+  const removed = lines.filter((line) => line.startsWith("-"));
+  const context = lines.filter((line) => !line.startsWith("+") && !line.startsWith("-"));
+  const selected: string[] = [];
+
+  for (const line of added) pushUniqueLimited(selected, line, 8);
+  for (const line of removed) pushUniqueLimited(selected, line, 16);
+  for (const line of context.slice(0, 4)) pushUniqueLimited(selected, line, 20);
+  return selected;
+}
+
+function selectBrowserTextHighlights(lines: string[]): string[] {
+  const selected: string[] = [];
+  for (const line of lines.slice(0, 12)) {
+    pushUniqueLimited(selected, line, 12);
+  }
+  for (const line of lines.slice(Math.max(0, lines.length - 4))) {
+    pushUniqueLimited(selected, line, 16);
+  }
+  return selected;
+}
+
+function buildBrowserSnapshotSummary(rawText: string): string {
+  const parsed = parseBrowserTextPayload(rawText);
+  const highlights = selectBrowserSnapshotHighlights(parsed.bodyLines);
+  return [
+    "[BrowserSnapshotDistilled]",
+    ...(parsed.session ? [`session: ${parsed.session}`] : []),
+    ...(parsed.artifactRef ? [`artifact: ${parsed.artifactRef}`] : []),
+    ...parsed.metadata.slice(0, 4),
+    `interactive_refs: ${countBrowserInteractiveRefs(parsed.bodyLines)}`,
+    `body_lines: ${parsed.bodyLines.length}`,
+    "highlights:",
+    ...(highlights.length > 0 ? highlights.map((line) => `- ${line}`) : ["- (no snapshot lines)"]),
+  ].join("\n");
+}
+
+function buildBrowserDiffSummary(rawText: string): string {
+  const parsed = parseBrowserTextPayload(rawText);
+  const highlights = selectBrowserDiffHighlights(parsed.bodyLines);
+  const addedLines = parsed.bodyLines.filter((line) => line.startsWith("+")).length;
+  const removedLines = parsed.bodyLines.filter((line) => line.startsWith("-")).length;
+  return [
+    "[BrowserDiffDistilled]",
+    ...(parsed.session ? [`session: ${parsed.session}`] : []),
+    ...(parsed.artifactRef ? [`artifact: ${parsed.artifactRef}`] : []),
+    `added_lines: ${addedLines}`,
+    `removed_lines: ${removedLines}`,
+    "changes:",
+    ...(highlights.length > 0 ? highlights.map((line) => `- ${line}`) : ["- (no diff lines)"]),
+  ].join("\n");
+}
+
+function buildBrowserGetSummary(rawText: string): string {
+  const parsed = parseBrowserTextPayload(rawText);
+  const highlights = selectBrowserTextHighlights(parsed.bodyLines);
+  return [
+    "[BrowserGetDistilled]",
+    ...(parsed.session ? [`session: ${parsed.session}`] : []),
+    ...(parsed.artifactRef ? [`artifact: ${parsed.artifactRef}`] : []),
+    ...parsed.metadata.slice(0, 4),
+    `body_label: ${parsed.bodyLabel ?? "text"}`,
+    `body_lines: ${parsed.bodyLines.length}`,
+    "highlights:",
+    ...(highlights.length > 0 ? highlights.map((line) => `- ${line}`) : ["- (no text lines)"]),
+  ].join("\n");
+}
+
 function shouldKeepDistillation(input: {
   strategy: ToolOutputDistillation["strategy"];
   rawTokens: number;
@@ -252,6 +422,15 @@ export function distillToolOutput(input: ToolOutputDistillationInput): ToolOutpu
   } else if (normalizedToolName.startsWith("lsp_")) {
     strategy = "lsp_heuristic";
     rawSummaryText = buildLspSummary(lines, rawText);
+  } else if (normalizedToolName === "browser_snapshot") {
+    strategy = "browser_snapshot_heuristic";
+    rawSummaryText = buildBrowserSnapshotSummary(rawText);
+  } else if (normalizedToolName === "browser_diff_snapshot") {
+    strategy = "browser_diff_heuristic";
+    rawSummaryText = buildBrowserDiffSummary(rawText);
+  } else if (normalizedToolName === "browser_get") {
+    strategy = "browser_get_heuristic";
+    rawSummaryText = buildBrowserGetSummary(rawText);
   }
 
   const distillationApplied = strategy !== "none";

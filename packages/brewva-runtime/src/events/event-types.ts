@@ -44,6 +44,11 @@ export const PROJECTION_REFRESHED_EVENT_TYPE = "projection_refreshed" as const;
 export const CONTEXT_COMPOSED_EVENT_TYPE = "context_composed" as const;
 export const TOOL_SURFACE_RESOLVED_EVENT_TYPE = "tool_surface_resolved" as const;
 export const SKILL_ROUTING_SELECTION_EVENT_TYPE = "skill_routing_selection" as const;
+export const TOOL_CALL_NORMALIZED_EVENT_TYPE = "tool_call_normalized" as const;
+export const TOOL_CALL_NORMALIZATION_FAILED_EVENT_TYPE = "tool_call_normalization_failed" as const;
+export const MODEL_CAPABILITY_PROFILE_SELECTED_EVENT_TYPE =
+  "model_capability_profile_selected" as const;
+export const MODEL_REQUEST_PATCHED_EVENT_TYPE = "model_request_patched" as const;
 
 export const SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE = "schedule_recovery_deferred" as const;
 export const SCHEDULE_RECOVERY_SUMMARY_EVENT_TYPE = "schedule_recovery_summary" as const;
@@ -112,6 +117,10 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   CONTEXT_COMPOSED_EVENT_TYPE,
   TOOL_SURFACE_RESOLVED_EVENT_TYPE,
   SKILL_ROUTING_SELECTION_EVENT_TYPE,
+  TOOL_CALL_NORMALIZED_EVENT_TYPE,
+  TOOL_CALL_NORMALIZATION_FAILED_EVENT_TYPE,
+  MODEL_CAPABILITY_PROFILE_SELECTED_EVENT_TYPE,
+  MODEL_REQUEST_PATCHED_EVENT_TYPE,
   SCHEDULE_EVENT_TYPE,
   SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE,
   SCHEDULE_RECOVERY_SUMMARY_EVENT_TYPE,

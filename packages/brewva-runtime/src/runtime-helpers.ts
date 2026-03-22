@@ -10,6 +10,7 @@ export function inferEventCategory(type: string): BrewvaEventCategory {
   if (
     type.startsWith("session_") ||
     type.startsWith("channel_session_") ||
+    type.startsWith("model_") ||
     type === "session_start" ||
     type === "session_shutdown"
   )

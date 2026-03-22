@@ -1,5 +1,6 @@
 import { recordAssistantUsageFromMessage, type BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { releaseHostedSessionProviderCompatibility } from "./provider-compatibility.js";
 import {
   clearRuntimeTurnClock,
   getCurrentRuntimeTurn,
@@ -201,11 +202,9 @@ function computeMessageHealth(windowText: string, windowChars: number): MessageH
   };
 }
 
-const MESSAGE_UPDATE_MIN_INTERVAL_MS = 250;
 const MESSAGE_HEALTH_WINDOW_MAX_CHARS = 2400;
 
 export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): void {
-  const lastMessageUpdateAtBySession = new Map<string, number>();
   const lastAssistantTextBySession = new Map<string, string>();
   const assistantWindowBySession = new Map<string, string>();
   const observedToolCallsBySession = new Map<string, Set<string>>();
@@ -236,11 +235,11 @@ export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): v
       sessionId,
       type: "session_shutdown",
     });
-    lastMessageUpdateAtBySession.delete(sessionId);
     lastAssistantTextBySession.delete(sessionId);
     assistantWindowBySession.delete(sessionId);
     observedToolCallsBySession.delete(sessionId);
     clearRuntimeTurnClock(sessionId);
+    releaseHostedSessionProviderCompatibility(sessionId);
     runtime.session.clearState(sessionId);
     return undefined;
   });
@@ -300,7 +299,6 @@ export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): v
 
   pi.on("message_start", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
-    lastMessageUpdateAtBySession.delete(sessionId);
     lastAssistantTextBySession.delete(sessionId);
     assistantWindowBySession.delete(sessionId);
     runtime.events.record({
@@ -333,38 +331,24 @@ export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): v
       );
       assistantWindowBySession.set(sessionId, nextWindow);
     }
-
-    const now = Date.now();
-    const last = lastMessageUpdateAtBySession.get(sessionId) ?? 0;
-    if (now - last < MESSAGE_UPDATE_MIN_INTERVAL_MS) {
-      return undefined;
-    }
-    lastMessageUpdateAtBySession.set(sessionId, now);
-    runtime.events.record({
-      sessionId,
-      type: "message_update",
-      payload: {
-        message: summarizeMessage(event.message),
-        deltaType: event.assistantMessageEvent.type,
-        deltaChars: delta.length,
-        health: computeMessageHealth(
-          assistantWindowBySession.get(sessionId) ?? "",
-          (assistantWindowBySession.get(sessionId) ?? "").length,
-        ),
-      },
-    });
     return undefined;
   });
 
   pi.on("message_end", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
-    lastMessageUpdateAtBySession.delete(sessionId);
+    const healthWindow = clampTail(
+      assistantWindowBySession.get(sessionId) ?? extractMessageText(event.message),
+      MESSAGE_HEALTH_WINDOW_MAX_CHARS,
+    );
     lastAssistantTextBySession.delete(sessionId);
     assistantWindowBySession.delete(sessionId);
     runtime.events.record({
       sessionId,
       type: "message_end",
-      payload: summarizeMessage(event.message),
+      payload: {
+        ...summarizeMessage(event.message),
+        health: computeMessageHealth(healthWindow, healthWindow.length),
+      },
     });
     recordAssistantUsageFromMessage(runtime, sessionId, event.message);
     return undefined;
@@ -383,14 +367,8 @@ export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): v
   });
 
   pi.on("tool_execution_update", (event, ctx) => {
-    runtime.events.record({
-      sessionId: ctx.sessionManager.getSessionId(),
-      type: "tool_execution_update",
-      payload: {
-        toolCallId: event.toolCallId,
-        toolName: event.toolName,
-      },
-    });
+    void event;
+    void ctx;
     return undefined;
   });
 

@@ -25,6 +25,10 @@ import {
 } from "@mariozechner/pi-coding-agent";
 import { createHostedTurnPipeline } from "../runtime-plugins/index.js";
 import {
+  installHostedProviderCompatibilityLayer,
+  registerHostedSessionProviderCompatibility,
+} from "../runtime-plugins/provider-compatibility.js";
+import {
   createDetachedSubagentBackgroundController,
   createHostedSubagentAdapter,
   type HostedSubagentBuiltinToolName,
@@ -86,6 +90,7 @@ export async function createHostedSession(
 ): Promise<HostedSessionResult> {
   const cwd = resolve(options.cwd ?? process.cwd());
   const agentDir = resolveBrewvaAgentDir();
+  installHostedProviderCompatibilityLayer();
 
   const authStorage = AuthStorage.create(join(agentDir, "auth.json"));
   const modelRegistry = new ModelRegistry(authStorage, join(agentDir, "models.json"));
@@ -199,6 +204,10 @@ export async function createHostedSession(
   });
 
   const sessionId = sessionResult.session.sessionManager.getSessionId();
+  registerHostedSessionProviderCompatibility({
+    sessionId,
+    runtime,
+  });
   runtime.events.record({
     sessionId,
     type: "session_bootstrap",

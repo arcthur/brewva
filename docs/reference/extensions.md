@@ -41,6 +41,16 @@ There are no longer public extension profiles such as `core`, `memory`, or
 - typed lifecycle ports for `input`, `turnStart`, `beforeAgentStart`, `toolResult`,
   `agentEnd`, `sessionCompact`, and `sessionShutdown`
 
+Hosted sessions also install a provider compatibility seam outside the
+extension-factory lifecycle itself:
+
+- `installHostedProviderCompatibilityLayer`
+- `registerHostedSessionProviderCompatibility`
+
+This seam is registered during hosted-session bootstrap in
+`packages/brewva-gateway/src/host/create-hosted-session.ts`, not through a
+public lifecycle port.
+
 Implementation anchors:
 
 - `packages/brewva-gateway/src/runtime-plugins/index.ts`
@@ -54,10 +64,42 @@ Implementation anchors:
 - `packages/brewva-gateway/src/runtime-plugins/context-contract.ts`
 - `packages/brewva-gateway/src/runtime-plugins/quality-gate.ts`
 - `packages/brewva-gateway/src/runtime-plugins/completion-guard.ts`
+- `packages/brewva-gateway/src/runtime-plugins/provider-compatibility.ts`
+- `packages/brewva-gateway/src/host/create-hosted-session.ts`
 
 There is no longer a reduced runtime-core bridge profile. Hosted sessions use
 one lifecycle shape whether tools are registered by the extension factory or
 provided directly by the host.
+
+## Hosted Provider Compatibility
+
+Hosted sessions wrap Pi API providers with a compatibility adapter before
+messages are admitted into the runtime authority path.
+
+Responsibilities:
+
+- resolve an explicit model capability profile for the active provider/model
+- patch request payload shape in a declarative, auditable way
+- normalize admissible tool-call structure before Pi emits the final hosted
+  completion
+- fail fast when a malformed tool call cannot be repaired without guessing
+
+Intentional boundaries:
+
+- request patching happens before provider submission
+- tool-call normalization happens before `tool_call` reaches `quality-gate`
+- neither layer is allowed to grant authority or bypass runtime governance
+- semantic guessing is intentionally out of scope
+
+Primary telemetry:
+
+- `tool_call_normalized`
+- `tool_call_normalization_failed`
+- `model_capability_profile_selected`
+- `model_request_patched`
+
+These events are documented in `docs/reference/events.md`. Normalization events
+are audit-retained; model capability telemetry remains session/ops level.
 
 ## Turn Lifecycle Port
 
@@ -95,6 +137,10 @@ Two hosted hooks therefore stay as direct Pi registrations instead of
 The public `toolResult` lifecycle stage is therefore intentionally narrower: it
 is for post-authority, model-facing shaping after the raw outcome is already
 durable.
+
+The provider compatibility seam is also intentionally not a public
+`TurnLifecyclePort` stage. It operates before the runtime can treat model
+output as a valid tool call at all.
 
 ## Tool Surface Resolution
 
@@ -136,6 +182,28 @@ Telemetry:
 
 `registerCompletionGuard` keeps completion model-native but not lax. It blocks
 premature completion when required verification has not passed.
+
+## Event Surface Split
+
+Hosted sessions intentionally separate live activity from durable audit
+records.
+
+Live-only stream behavior:
+
+- `message_update` stays in the hosted session stream only
+- `tool_execution_update` stays in the hosted session stream only
+- assistant text/thinking deltas are not appended to the durable tape
+
+Durable summary behavior:
+
+- `message_end` carries the durable assistant-message summary plus health
+  metrics
+- `tool_execution_end` carries the durable execution outcome summary
+- audit-retained normalization events keep repair/rejection evidence without
+  persisting raw delta traffic
+
+This keeps replay and evidence surfaces stable while allowing high-frequency UI
+feedback in hosted channels.
 
 ## Removed Layers
 

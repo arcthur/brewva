@@ -180,6 +180,54 @@ export const TOOL_GOVERNANCE_BY_NAME: Record<string, ToolGovernanceDescriptor> =
     effects: ["local_exec"],
     defaultRisk: "high",
   }),
+  browser_open: descriptor({
+    effects: ["local_exec"],
+    defaultRisk: "medium",
+  }),
+  browser_wait: descriptor({
+    effects: ["local_exec"],
+    defaultRisk: "low",
+  }),
+  browser_snapshot: descriptor({
+    effects: ["local_exec", "workspace_write"],
+    defaultRisk: "medium",
+  }),
+  browser_click: descriptor({
+    effects: ["local_exec"],
+    defaultRisk: "high",
+  }),
+  browser_fill: descriptor({
+    effects: ["local_exec"],
+    defaultRisk: "high",
+  }),
+  browser_get: descriptor({
+    effects: ["local_exec", "workspace_write"],
+    defaultRisk: "medium",
+  }),
+  browser_screenshot: descriptor({
+    effects: ["local_exec", "workspace_write"],
+    defaultRisk: "medium",
+  }),
+  browser_pdf: descriptor({
+    effects: ["local_exec", "workspace_write"],
+    defaultRisk: "medium",
+  }),
+  browser_diff_snapshot: descriptor({
+    effects: ["local_exec", "workspace_write"],
+    defaultRisk: "medium",
+  }),
+  browser_state_load: descriptor({
+    effects: ["workspace_read", "local_exec"],
+    defaultRisk: "high",
+  }),
+  browser_state_save: descriptor({
+    effects: ["local_exec", "workspace_write"],
+    defaultRisk: "high",
+  }),
+  browser_close: descriptor({
+    effects: ["local_exec"],
+    defaultRisk: "low",
+  }),
   process: descriptor({
     effects: ["local_exec"],
     defaultRisk: "medium",

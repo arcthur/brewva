@@ -165,7 +165,7 @@ maxcalls`,
     ).toBe(true);
   });
 
-  test("given rapid message updates, when event stream throttling applies, then sampled message_update events are persisted", () => {
+  test("given assistant delta events, when the message completes, then only the durable message_end summary is persisted", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-throttle-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "ext-throttle-1";
@@ -180,56 +180,49 @@ maxcalls`,
       },
     };
 
-    const originalNow = Date.now;
-    let now = 10_000;
-    Date.now = () => now;
+    invokeHandlers(handlers, "message_start", { message: { role: "assistant", content: [] } }, ctx);
+    invokeHandlers(
+      handlers,
+      "message_update",
+      {
+        message: { role: "assistant", content: [{ type: "text", text: "a" }] },
+        assistantMessageEvent: { type: "text_delta", delta: "a" },
+      },
+      ctx,
+    );
+    invokeHandlers(
+      handlers,
+      "message_update",
+      {
+        message: { role: "assistant", content: [{ type: "text", text: "ab" }] },
+        assistantMessageEvent: { type: "text_delta", delta: "b" },
+      },
+      ctx,
+    );
+    invokeHandlers(
+      handlers,
+      "message_update",
+      {
+        message: { role: "assistant", content: [{ type: "text", text: "abc" }] },
+        assistantMessageEvent: { type: "text_delta", delta: "c" },
+      },
+      ctx,
+    );
+    invokeHandlers(
+      handlers,
+      "message_end",
+      {
+        message: { role: "assistant", content: [{ type: "text", text: "abc" }] },
+      },
+      ctx,
+    );
 
-    try {
-      invokeHandlers(
-        handlers,
-        "message_start",
-        { message: { role: "assistant", content: [] } },
-        ctx,
-      );
-
-      invokeHandlers(
-        handlers,
-        "message_update",
-        {
-          message: { role: "assistant", content: [{ type: "text", text: "a" }] },
-          assistantMessageEvent: { type: "text_delta", delta: "a" },
-        },
-        ctx,
-      );
-      now += 100;
-      invokeHandlers(
-        handlers,
-        "message_update",
-        {
-          message: { role: "assistant", content: [{ type: "text", text: "ab" }] },
-          assistantMessageEvent: { type: "text_delta", delta: "b" },
-        },
-        ctx,
-      );
-      now += 300;
-      invokeHandlers(
-        handlers,
-        "message_update",
-        {
-          message: { role: "assistant", content: [{ type: "text", text: "abc" }] },
-          assistantMessageEvent: { type: "text_delta", delta: "c" },
-        },
-        ctx,
-      );
-    } finally {
-      Date.now = originalNow;
-    }
-
-    const updates = runtime.events.query(sessionId, { type: "message_update" });
-    expect(updates.length).toBe(2);
-    const payload = updates[0]?.payload as { deltaChars?: number; health?: { score?: number } };
-    expect(payload.deltaChars).toBe(1);
+    expect(runtime.events.query(sessionId, { type: "message_update" })).toHaveLength(0);
+    const ends = runtime.events.query(sessionId, { type: "message_end" });
+    expect(ends).toHaveLength(1);
+    const payload = ends[0]?.payload as { health?: { score?: number; windowChars?: number } };
     expect(payload.health).toBeTruthy();
     expect(typeof payload.health?.score).toBe("number");
+    expect(payload.health?.windowChars).toBe(3);
   });
 });

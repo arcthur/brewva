@@ -48,6 +48,8 @@ The authoritative registry lives in
 - `tool_output_observed`
 - `tool_output_distilled`
 - `tool_output_artifact_persisted`
+- `tool_call_normalized`
+- `tool_call_normalization_failed`
 - `observability_query_executed`
 - `observability_assertion_recorded`
 - `resource_lease_granted`
@@ -89,6 +91,8 @@ The authoritative registry lives in
 - `context_composed`
 - `tool_surface_resolved`
 - `skill_routing_selection`
+- `model_capability_profile_selected`
+- `model_request_patched`
 - `task_stuck_detected`
 - `task_stuck_cleared`
 
@@ -116,6 +120,8 @@ The audit-retained core includes:
 - `task_event`
 - `truth_event`
 - `tool_result_recorded`
+- `tool_call_normalized`
+- `tool_call_normalization_failed`
 - `verification_write_marked`
 - `verification_outcome_recorded`
 - `proposal_received`
@@ -139,6 +145,10 @@ approval-bearing request that authorized it.
 `event_listener_error` is also audit-retained because it records fan-out
 degradation without dropping the source event.
 
+`message_update` and `tool_execution_update` now remain only in the hosted
+session live stream and are no longer written to the durable tape. The durable
+side keeps only the `message_end` summary and the `tool_execution_end` result.
+
 ## Operational Semantics
 
 `tool_effect_gate_selected` records the chosen public boundary plus execution
@@ -159,3 +169,9 @@ properties such as:
 
 `worker_results_applied` and `worker_results_apply_failed` record the
 parent-controlled adoption outcome for child-produced patches.
+
+`tool_call_normalized` and `tool_call_normalization_failed` record whether the
+pre-parse compatibility layer repaired or rejected a tool call.
+`model_capability_profile_selected` and `model_request_patched` record which
+capability profile the provider/model adapter selected and which request
+patches it applied.

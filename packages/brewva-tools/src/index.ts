@@ -1,5 +1,6 @@
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { createAstGrepTools } from "./ast-grep.js";
+import { createBrowserTools } from "./browser.js";
 import { createCostViewTool } from "./cost-view.js";
 import { createExecTool } from "./exec.js";
 import { createGrepTool } from "./grep.js";
@@ -47,6 +48,7 @@ export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefiniti
     createLookAtTool(),
     createGrepTool({ runtime }),
     createExecTool({ runtime }),
+    ...createBrowserTools({ runtime }),
     createProcessTool(),
     createCostViewTool({ runtime }),
     createObsQueryTool({ runtime }),
@@ -80,6 +82,7 @@ export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefiniti
 
 export { createLspTools } from "./lsp.js";
 export { createAstGrepTools } from "./ast-grep.js";
+export { createBrowserTools } from "./browser.js";
 export { createResourceLeaseTool } from "./resource-lease.js";
 export { defineBrewvaTool, getBrewvaAgentParameters, getBrewvaToolMetadata } from "./utils/tool.js";
 export {
