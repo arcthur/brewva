@@ -47,7 +47,6 @@ execution_hints:
     - read
     - look_at
     - grep
-    - exec
     - skill_complete
 references:
   - skills/meta/skill-authoring/references/authored-behavior.md
@@ -55,10 +54,6 @@ references:
   - references/eval-safe-mode.md
   - references/security-baseline.md
   - references/semantic-locators.md
-scripts:
-  - templates/authenticated-session.sh
-  - templates/capture-workflow.sh
-  - templates/form-automation.sh
 consumes:
   - structured_payload
   - design_spec
@@ -87,8 +82,8 @@ State the URL, the objective, and the evidence needed.
 
 ### Step 2: Run the browser workflow
 
-Prefer managed `browser_*` tools first. Use the bundled shell templates only
-when you need a pre-packaged multi-step workflow.
+Use managed `browser_*` tools only. Do not invoke `agent-browser` directly
+through shell workflows for this skill.
 
 Before every browser action, make the loop explicit:
 
