@@ -43,12 +43,7 @@ describe("context transform session hook contract", () => {
     registerContextTransform(api, runtime);
 
     const result = await invokeHandlerAsync<{
-      message?: {
-        content?: string;
-        details?: {
-          routingSelection?: { status?: string; reason?: string; selectedCount?: number };
-        };
-      };
+      message?: { content?: string };
     }>(
       handlers,
       "before_agent_start",
@@ -67,13 +62,7 @@ describe("context transform session hook contract", () => {
 
     expect(injectionCalls).toBe(0);
     expect(result.message?.content).toContain("[ContextCompactionGate]");
-    expect(result.message?.details?.routingSelection?.status).toBe("skipped");
-    expect(result.message?.details?.routingSelection?.reason).toBe("critical_compaction_gate");
-    expect(result.message?.details?.routingSelection?.selectedCount).toBe(0);
-
-    const selectionEvent = eventPayloads.find((event) => event.type === "skill_routing_selection");
-    expect(selectionEvent?.payload?.status).toBe("skipped");
-    expect(selectionEvent?.payload?.reason).toBe("critical_compaction_gate");
+    expect(eventPayloads.some((event) => event.type === "skill_routing_selection")).toBe(false);
   });
 
   test("arms the critical gate for non-session_compact flows and clears it after compaction", async () => {

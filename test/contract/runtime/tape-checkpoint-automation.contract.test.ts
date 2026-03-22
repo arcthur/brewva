@@ -321,14 +321,7 @@ requires: []
       { tokens: 320, contextWindow: 16_000, percent: 0.02 },
       "workflow-rehydrate-before",
     );
-    expect(beforeRestart.text).toContain("[WorkflowAdvisory]");
-    expect(beforeRestart.text).toContain("planning: ready");
-    expect(beforeRestart.text).toContain("implementation: ready");
-    expect(beforeRestart.text).toContain("review: ready");
-    expect(beforeRestart.text).toContain("qa: missing");
-    expect(beforeRestart.text).toContain("verification: ready");
-    expect(beforeRestart.text).toContain("ship: ready");
-    expect(beforeRestart.text).toContain("retro: missing");
+    expect(beforeRestart.text).toContain("[WorkingProjection]");
 
     const reloaded = new BrewvaRuntime({ cwd: workspace, config });
     reloaded.context.onTurnStart(sessionId, 1);
@@ -340,21 +333,13 @@ requires: []
     );
 
     expect(afterRestart.accepted).toBe(true);
-    expect(afterRestart.text).toContain("[WorkflowAdvisory]");
-    expect(afterRestart.text).toContain("planning: ready");
-    expect(afterRestart.text).toContain("implementation: ready");
-    expect(afterRestart.text).toContain("review: ready");
-    expect(afterRestart.text).toContain("qa: missing");
-    expect(afterRestart.text).toContain("verification: ready");
-    expect(afterRestart.text).toContain("ship: ready");
-    expect(afterRestart.text).toContain("retro: missing");
     expect(afterRestart.text).toContain("[WorkingProjection]");
     expect(afterRestart.text).toContain("workflow.design: state=ready; freshness=unknown;");
     expect(afterRestart.text).toContain("workflow.review: state=ready; freshness=fresh;");
     expect(afterRestart.text).toContain("workflow.verification: state=ready; freshness=fresh;");
   });
 
-  test("rehydrates pending patch worker results into workflow advisory after restart", async () => {
+  test("rehydrates pending patch worker results into workflow projection after restart", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-workflow-pending-worker-rehydrate-"));
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     const sessionId = "workflow-pending-worker-rehydrate-1";
@@ -408,10 +393,10 @@ requires: []
     );
 
     expect(injected.accepted).toBe(true);
-    expect(injected.text).toContain("[WorkflowAdvisory]");
-    expect(injected.text).toContain("implementation: pending");
-    expect(injected.text).toContain("ship: blocked");
-    expect(injected.text).toContain("pending_worker_results: 1");
+    expect(injected.text).toContain("[WorkingProjection]");
+    expect(injected.text).toContain(
+      "workflow.worker_patch: state=pending; freshness=fresh; Patch worker completed and awaits parent merge/apply.",
+    );
   });
 
   test("resets checkpoint counter state when a checkpoint is manually recorded", async () => {

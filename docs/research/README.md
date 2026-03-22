@@ -47,6 +47,7 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 - `docs/research/rfc-preparse-normalization-model-capability-and-live-audit-split.md`
 - `docs/research/rfc-workflow-artifacts-and-readiness-control-plane.md`
 - `docs/research/rfc-iteration-facts-and-model-native-optimization-protocols.md`
+- `docs/research/rfc-default-path-re-hardening-and-advisory-surface-narrowing.md`
 
 ## Archived / superseded notes
 

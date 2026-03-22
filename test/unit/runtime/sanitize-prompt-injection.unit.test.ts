@@ -63,7 +63,6 @@ describe("getSourceTrustTier", () => {
 
   test("classifies internal sources", () => {
     expect(getSourceTrustTier("brewva.runtime-status")).toBe("internal");
-    expect(getSourceTrustTier("brewva.workflow-advisory")).toBe("internal");
     expect(getSourceTrustTier("brewva.tool-outputs-distilled")).toBe("internal");
     expect(getSourceTrustTier("brewva.projection-working")).toBe("internal");
   });

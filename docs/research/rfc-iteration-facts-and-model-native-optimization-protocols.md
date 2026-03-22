@@ -28,14 +28,11 @@ Stable implementation now includes:
 - durable iteration-fact event families for:
   - `iteration_metric_observed`
   - `iteration_guard_recorded`
-  - `iteration_decision_recorded`
-  - `iteration_convergence_recorded`
 - typed `runtime.events.*` helpers for recording and listing those fact
   families
 - the managed `iteration_fact` tool for model-native protocols
 - derived workflow/projection advisory surfaces such as
-  `workflow.iteration_metric`, `workflow.iteration_guard`,
-  `workflow.iteration_decision`, and `workflow.iteration_convergence`
+  `workflow.iteration_metric` and `workflow.iteration_guard`
 - audit/replay integration so fact history survives restart and remains
   queryable through the durable event tape
 
@@ -56,8 +53,7 @@ The promoted contract is:
 
 1. Brewva is substrate, not optimizer.
 2. Runtime may persist only objective iteration evidence:
-   metric observations, guard results, explicit iteration decisions, and
-   convergence reasons.
+   metric observations and guard results on the default model-writable surface.
 3. Loop strategy remains model-native and may not be hardened into a
    runtime-owned planner.
 4. Workflow/projection surfaces may summarize iteration facts, but those
@@ -83,6 +79,8 @@ The following ideas are intentionally not part of the promoted contract:
 - a runtime-owned optimizer domain
 - planner state or next-step prescription in the kernel
 - automatic keep/discard policy in runtime
+- model-writable decision/convergence protocol facts without stronger evidence
+  boundaries
 - richer protocol products built on top of iteration facts
 
 If those areas become priorities, they should start from a new focused RFC

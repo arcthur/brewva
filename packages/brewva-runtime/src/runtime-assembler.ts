@@ -444,7 +444,6 @@ export function createRuntimeServiceDependencies(
     getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
     getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
     recordEvent: (input) => options.kernel.recordEvent(input),
-    taskService,
   });
   const reversibleMutationService = new ReversibleMutationService({
     getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
@@ -588,7 +587,6 @@ export function createRuntimeServiceDependencies(
     reversibleMutationService,
   });
   sessionLifecycleService.onClearState((sessionId) => {
-    taskWatchdogService.clear(sessionId);
     reversibleMutationService.clear(sessionId);
     effectCommitmentDeskService.clear(sessionId);
   });

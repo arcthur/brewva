@@ -3,11 +3,7 @@ import type {
   ContextCompactionGateStatus,
   ContextInjectionEntry,
 } from "@brewva/brewva-runtime";
-import {
-  CONTEXT_COMPOSED_EVENT_TYPE,
-  SKILL_ROUTING_SELECTION_EVENT_TYPE,
-  coerceContextBudgetUsage,
-} from "@brewva/brewva-runtime";
+import { CONTEXT_COMPOSED_EVENT_TYPE, coerceContextBudgetUsage } from "@brewva/brewva-runtime";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { prepareContextComposerSupport } from "./context-composer-support.js";
 import {
@@ -137,26 +133,6 @@ async function resolveContextInjection(
     input.usage,
     input.injectionScopeId,
   );
-}
-
-function resolveRoutingProjection(): {
-  selection: {
-    status: string;
-    reason: string;
-    selectedCount: number;
-    selectedSkills: string[];
-  };
-  error: string | null;
-} {
-  return {
-    selection: {
-      status: "skipped",
-      reason: "selection_unavailable",
-      selectedCount: 0,
-      selectedSkills: [],
-    },
-    error: null,
-  };
 }
 
 export function createContextTransformLifecycle(
@@ -463,21 +439,6 @@ export function createContextTransformLifecycle(
 
       if (gateStatus.required) {
         state.lastRuntimeGateRequired = true;
-        const skippedReason = "critical_compaction_gate";
-        emitRuntimeEvent(runtime, {
-          sessionId,
-          turn: state.turnIndex,
-          type: SKILL_ROUTING_SELECTION_EVENT_TYPE,
-          payload: {
-            status: "skipped",
-            reason: skippedReason,
-            selectedCount: 0,
-            selectedSkills: [],
-            inputChars: originalPrompt.length,
-            error: null,
-          },
-        });
-
         const composed = composeContextBlocks({
           runtime,
           sessionId,
@@ -513,11 +474,6 @@ export function createContextTransformLifecycle(
                 constraintTokens: composed.metrics.constraintTokens,
                 diagnosticTokens: composed.metrics.diagnosticTokens,
               },
-              routingSelection: {
-                status: "skipped",
-                reason: skippedReason,
-                selectedCount: 0,
-              },
               capabilityView: {
                 requested: capabilityView.requested,
                 detailNames: capabilityView.details.map((detail) => detail.name),
@@ -534,7 +490,6 @@ export function createContextTransformLifecycle(
         usage,
         injectionScopeId,
       });
-      const routingProjection = resolveRoutingProjection();
       const supportAfterInjection = prepareContextComposerSupport({
         runtime,
         pi,
@@ -563,20 +518,6 @@ export function createContextTransformLifecycle(
             capabilityView,
           }),
         ],
-      });
-
-      emitRuntimeEvent(runtime, {
-        sessionId,
-        turn: state.turnIndex,
-        type: SKILL_ROUTING_SELECTION_EVENT_TYPE,
-        payload: {
-          status: routingProjection.selection.status,
-          reason: routingProjection.selection.reason,
-          selectedCount: routingProjection.selection.selectedCount,
-          selectedSkills: routingProjection.selection.selectedSkills,
-          inputChars: originalPrompt.length,
-          error: routingProjection.error,
-        },
       });
 
       if (pendingCompactionReason && !gateStatus.required) {
@@ -628,11 +569,6 @@ export function createContextTransformLifecycle(
               narrativeTokens: composed.metrics.narrativeTokens,
               constraintTokens: composed.metrics.constraintTokens,
               diagnosticTokens: composed.metrics.diagnosticTokens,
-            },
-            routingSelection: {
-              status: routingProjection.selection.status,
-              reason: routingProjection.selection.reason,
-              selectedCount: routingProjection.selection.selectedCount,
             },
             capabilityView: {
               requested: capabilityView.requested,

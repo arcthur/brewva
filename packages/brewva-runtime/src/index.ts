@@ -51,5 +51,4 @@ export * from "./schedule/cron.js";
 export * from "./schedule/projection.js";
 export * from "./schedule/service.js";
 export * from "./iteration/facts.js";
-export * from "./services/scan-convergence-strategy.js";
 export * from "./workflow/derivation.js";

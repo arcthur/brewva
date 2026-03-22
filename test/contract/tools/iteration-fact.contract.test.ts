@@ -7,7 +7,7 @@ import { createIterationFactTool } from "@brewva/brewva-tools";
 import { extractTextContent, mergeContext } from "./tools-flow.helpers.js";
 
 describe("iteration_fact contract", () => {
-  test("records metric, guard, decision, and convergence facts through the managed tool surface", async () => {
+  test("records evidence-backed metric and guard facts through the managed tool surface", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-iteration-fact-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "iteration-fact-contract-1";
@@ -50,46 +50,10 @@ describe("iteration_fact contract", () => {
     const metricEventId = (metricResult.details as { eventId?: string } | undefined)?.eventId;
     const guardEventId = (guardResult.details as { eventId?: string } | undefined)?.eventId;
 
-    const decisionResult = await tool.execute(
-      "tc-iteration-decision",
-      {
-        action: "record_decision",
-        iteration_key: "iter-2",
-        decision: "keep",
-        reason_code: "metric_improved_guard_green",
-        source: "goal-loop",
-        metric_observation_refs: metricEventId ? [metricEventId] : [],
-        guard_result_refs: guardEventId ? [guardEventId] : [],
-        summary: "Keep the change because latency improved and guards stayed green.",
-      },
-      undefined,
-      undefined,
-      mergeContext(sessionId, { cwd: workspace }),
-    );
-
-    const decisionEventId = (decisionResult.details as { eventId?: string } | undefined)?.eventId;
-
-    const convergenceResult = await tool.execute(
-      "tc-iteration-convergence",
-      {
-        action: "record_convergence",
-        run_key: "goal-loop/run-2",
-        status: "continue",
-        reason_code: "budget_available",
-        source: "goal-loop",
-        predicate_ref: "maxRuns<5",
-        evidence_refs: decisionEventId ? [decisionEventId] : [],
-        summary: "Budget remains, so continue to the next iteration.",
-      },
-      undefined,
-      undefined,
-      mergeContext(sessionId, { cwd: workspace }),
-    );
-
     expect(extractTextContent(metricResult)).toContain("Metric observation recorded");
     expect(extractTextContent(guardResult)).toContain("Guard result recorded");
-    expect(extractTextContent(decisionResult)).toContain("Iteration decision recorded");
-    expect(extractTextContent(convergenceResult)).toContain("Convergence reason recorded");
+    expect(metricEventId).toBeDefined();
+    expect(guardEventId).toBeDefined();
 
     const listResult = await tool.execute(
       "tc-iteration-list",
@@ -98,7 +62,6 @@ describe("iteration_fact contract", () => {
         history_limit: 5,
         fact_kind: "all",
         iteration_key: "iter-2",
-        run_key: "goal-loop/run-2",
       },
       undefined,
       undefined,
@@ -109,23 +72,48 @@ describe("iteration_fact contract", () => {
     expect(text).toContain("[IterationFacts]");
     expect(text).toContain("metrics: 1");
     expect(text).toContain("guards: 1");
-    expect(text).toContain("decisions: 1");
-    expect(text).toContain("convergence: 1");
     expect(text).toContain("key=latency_ms");
     expect(text).toContain("key=error_budget");
-    expect(text).toContain("decision=keep");
-    expect(text).toContain("run=goal-loop/run-2");
 
     expect(
       runtime.events.listMetricObservations(sessionId, { iterationKey: "iter-2" }),
     ).toHaveLength(1);
     expect(runtime.events.listGuardResults(sessionId, { iterationKey: "iter-2" })).toHaveLength(1);
-    expect(
-      runtime.events.listIterationDecisions(sessionId, { iterationKey: "iter-2" }),
-    ).toHaveLength(1);
-    expect(
-      runtime.events.listConvergenceReasons(sessionId, { runKey: "goal-loop/run-2" }),
-    ).toHaveLength(1);
+  });
+
+  test("rejects metric and guard writes without evidence refs", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-iteration-fact-evidence-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "iteration-fact-contract-evidence";
+    const tool = createIterationFactTool({ runtime });
+
+    const metricResult = await tool.execute(
+      "tc-iteration-metric-missing-evidence",
+      {
+        action: "record_metric",
+        metric_key: "latency_ms",
+        value: 92,
+      },
+      undefined,
+      undefined,
+      mergeContext(sessionId, { cwd: workspace }),
+    );
+    const guardResult = await tool.execute(
+      "tc-iteration-guard-missing-evidence",
+      {
+        action: "record_guard",
+        guard_key: "error_budget",
+        status: "pass",
+      },
+      undefined,
+      undefined,
+      mergeContext(sessionId, { cwd: workspace }),
+    );
+
+    expect(extractTextContent(metricResult)).toContain("evidence_refs");
+    expect(extractTextContent(guardResult)).toContain("evidence_refs");
+    expect(runtime.events.listMetricObservations(sessionId)).toEqual([]);
+    expect(runtime.events.listGuardResults(sessionId)).toEqual([]);
   });
 
   test("lists lineage-scoped facts through the managed tool surface", async () => {

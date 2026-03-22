@@ -244,7 +244,7 @@ async function handleInit(
       runtime: sessionResult.runtime,
       sessionId: agentSessionId,
       pollIntervalMs: watchdogOverrides.pollIntervalMs,
-      thresholdsMs: watchdogOverrides.thresholdsMs,
+      thresholdMs: watchdogOverrides.thresholdMs,
     });
     taskProgressWatchdog.start();
 

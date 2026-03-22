@@ -2,12 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { SessionSupervisor } from "@brewva/brewva-gateway";
-import { BrewvaRuntime, WATCHDOG_BLOCKER_ID } from "@brewva/brewva-runtime";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   buildWorkerTestHarnessEnv,
   WORKER_TEST_HARNESS_ENV_KEYS,
 } from "../../../packages/brewva-gateway/src/session/worker-test-harness.js";
-import { createTestWorkspace } from "../../helpers/workspace.js";
+import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
+import { createTestWorkspace, writeTestConfig } from "../../helpers/workspace.js";
+
+const TEST_CONFIG_PATH = ".brewva/brewva.json";
 
 async function waitForCondition<T>(
   check: () => T | null | undefined,
@@ -45,13 +48,13 @@ async function sleepMs(durationMs: number): Promise<void> {
 function createWorkerTestEnv(overrides: {
   taskGoal: string;
   pollIntervalMs: number;
-  investigateMs: number;
+  thresholdMs: number;
 }): Record<string, string | undefined> {
   return buildWorkerTestHarnessEnv({
     watchdog: {
       taskGoal: overrides.taskGoal,
       pollIntervalMs: overrides.pollIntervalMs,
-      investigateMs: overrides.investigateMs,
+      thresholdMs: overrides.thresholdMs,
     },
   });
 }
@@ -82,14 +85,16 @@ function applyProcessEnv(overrides: Record<string, string | undefined>): () => v
 describe("session supervisor watchdog bridge", () => {
   test("worker process persists watchdog detection and blocker state after init", async () => {
     const workspace = createTestWorkspace("supervisor-watchdog-worker-bridge");
+    writeTestConfig(workspace, createOpsRuntimeConfig(), TEST_CONFIG_PATH);
     const supervisor = new SessionSupervisor({
       stateDir: join(workspace, "state"),
       defaultCwd: workspace,
+      defaultConfigPath: TEST_CONFIG_PATH,
       defaultManagedToolMode: "direct",
       workerEnv: createWorkerTestEnv({
         taskGoal: "Detect stalled runtime work from the worker process",
         pollIntervalMs: 1_000,
-        investigateMs: 1_000,
+        thresholdMs: 1_000,
       }),
       logger: {
         debug: () => {},
@@ -115,7 +120,7 @@ describe("session supervisor watchdog bridge", () => {
       const detected = await waitForCondition(
         () => {
           if (!agentSessionId) return null;
-          const observer = new BrewvaRuntime({ cwd: workspace });
+          const observer = new BrewvaRuntime({ cwd: workspace, configPath: TEST_CONFIG_PATH });
           return observer.events.query(resolvedAgentSessionId, {
             type: "task_stuck_detected",
             last: 1,
@@ -130,16 +135,13 @@ describe("session supervisor watchdog bridge", () => {
 
       expect(detected.payload).toMatchObject({
         schema: "brewva.task-watchdog.v1",
-        phase: "investigate",
         thresholdMs: 1_000,
-        blockerWritten: true,
-        blockerId: WATCHDOG_BLOCKER_ID,
+        idleMs: expect.any(Number),
       });
 
-      const observer = new BrewvaRuntime({ cwd: workspace });
+      const observer = new BrewvaRuntime({ cwd: workspace, configPath: TEST_CONFIG_PATH });
       const taskState = observer.task.getState(resolvedAgentSessionId);
-      expect(taskState.blockers.some((blocker) => blocker.id === WATCHDOG_BLOCKER_ID)).toBe(true);
-      expect(taskState.status?.phase).toBe("blocked");
+      expect(taskState.blockers).toEqual([]);
     } finally {
       await supervisor.stop();
       rmSync(workspace, { recursive: true, force: true });
@@ -148,14 +150,16 @@ describe("session supervisor watchdog bridge", () => {
 
   test("stopSession shuts down worker before watchdog can emit stuck state", async () => {
     const workspace = createTestWorkspace("supervisor-watchdog-worker-stop");
+    writeTestConfig(workspace, createOpsRuntimeConfig(), TEST_CONFIG_PATH);
     const supervisor = new SessionSupervisor({
       stateDir: join(workspace, "state"),
       defaultCwd: workspace,
+      defaultConfigPath: TEST_CONFIG_PATH,
       defaultManagedToolMode: "direct",
       workerEnv: createWorkerTestEnv({
         taskGoal: "Ensure shutdown stops watchdog polling before detection",
         pollIntervalMs: 2_000,
-        investigateMs: 2_000,
+        thresholdMs: 2_000,
       }),
       logger: {
         debug: () => {},
@@ -183,7 +187,7 @@ describe("session supervisor watchdog bridge", () => {
 
       await sleepMs(3_000);
 
-      const observer = new BrewvaRuntime({ cwd: workspace });
+      const observer = new BrewvaRuntime({ cwd: workspace, configPath: TEST_CONFIG_PATH });
       expect(
         observer.events.query(resolvedAgentSessionId, {
           type: "task_stuck_detected",
@@ -191,7 +195,7 @@ describe("session supervisor watchdog bridge", () => {
       ).toHaveLength(0);
 
       const taskState = observer.task.getState(resolvedAgentSessionId);
-      expect(taskState.blockers.some((blocker) => blocker.id === WATCHDOG_BLOCKER_ID)).toBe(false);
+      expect(taskState.blockers).toEqual([]);
     } finally {
       await supervisor.stop();
       rmSync(workspace, { recursive: true, force: true });
@@ -200,13 +204,14 @@ describe("session supervisor watchdog bridge", () => {
 
   test("ambient watchdog env is ignored without explicit worker test overrides", async () => {
     const workspace = createTestWorkspace("supervisor-watchdog-worker-ambient-env");
+    writeTestConfig(workspace, createOpsRuntimeConfig(), TEST_CONFIG_PATH);
     const restoreEnv = applyProcessEnv(
       buildWorkerTestHarnessEnv({
         enabled: false,
         watchdog: {
           taskGoal: "This ambient env should not bootstrap worker task state",
           pollIntervalMs: 1_000,
-          investigateMs: 1_000,
+          thresholdMs: 1_000,
         },
       }),
     );
@@ -214,6 +219,7 @@ describe("session supervisor watchdog bridge", () => {
     const supervisor = new SessionSupervisor({
       stateDir: join(workspace, "state"),
       defaultCwd: workspace,
+      defaultConfigPath: TEST_CONFIG_PATH,
       defaultManagedToolMode: "direct",
       logger: {
         debug: () => {},
@@ -234,7 +240,7 @@ describe("session supervisor watchdog bridge", () => {
 
       await sleepMs(1_500);
 
-      const observer = new BrewvaRuntime({ cwd: workspace });
+      const observer = new BrewvaRuntime({ cwd: workspace, configPath: TEST_CONFIG_PATH });
       expect(observer.events.query(agentSessionId!, { type: "task_stuck_detected" })).toHaveLength(
         0,
       );

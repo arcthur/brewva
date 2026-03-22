@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { createGatewaySession } from "../../../packages/brewva-gateway/src/session/create-session.js";
 import { TaskProgressWatchdog } from "../../../packages/brewva-gateway/src/session/task-progress-watchdog.js";
+import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("gateway session watchdog integration", () => {
-  test("records watchdog detection for a real gateway session id", async () => {
+  test("records idle detection for a real gateway session id", async () => {
     const originalNow = Date.now;
     let now = 1_740_000_000_000;
     let scheduledCallback: (() => void) | null = null;
@@ -14,6 +15,7 @@ describe("gateway session watchdog integration", () => {
     Date.now = () => now;
     const result = await createGatewaySession({
       cwd: createTestWorkspace("gateway-watchdog-session"),
+      config: createOpsRuntimeConfig(),
       managedToolMode: "direct",
     });
 
@@ -37,9 +39,7 @@ describe("gateway session watchdog integration", () => {
         sessionId,
         now: () => now,
         pollIntervalMs: 2_000,
-        thresholdsMs: {
-          investigate: 2_000,
-        },
+        thresholdMs: 2_000,
         setIntervalFn: (callback) => {
           scheduledCallback = callback;
           return intervalHandle;
@@ -67,9 +67,8 @@ describe("gateway session watchdog integration", () => {
       expect(detected?.sessionId).toBe(sessionId);
       expect(detected?.payload).toMatchObject({
         schema: "brewva.task-watchdog.v1",
-        phase: "investigate",
         thresholdMs: 2_000,
-        blockerWritten: true,
+        idleMs: 2_001,
       });
 
       watchdog.stop();

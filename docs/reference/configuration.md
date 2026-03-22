@@ -185,7 +185,7 @@ Telegram channel skill policy is now built-in and no longer configurable via
 
 - `infrastructure.events.enabled`: `true`
 - `infrastructure.events.dir`: `.orchestrator/events`
-- `infrastructure.events.level`: `ops`
+- `infrastructure.events.level`: `audit`
 - `infrastructure.contextBudget.enabled`: `true`
 - `infrastructure.contextBudget.injection.baseTokens`: `1200`
 - `infrastructure.contextBudget.injection.windowFraction`: `0.002`
@@ -304,7 +304,7 @@ Notes:
 
 `infrastructure.events.level` controls default signal density:
 
-- `audit`: only replay/audit-critical events
+- `audit`: default; only replay/audit-critical events
 - `ops`: audit + operational state transitions/warnings (including `governance_*`)
 - `debug`: full stream (including high-noise diagnostics such as `tool_parallel_read`)
 

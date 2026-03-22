@@ -110,42 +110,43 @@ Current responsibilities:
 - recovery presentation
   - exposes verification, rollbackability, approval requirements, and worker
     outcomes without prescribing the next step
-- workflow advisory presentation
-  - summarizes derived discovery/strategy/planning/implementation/review/QA/verification/ship/retro state
-  - exposes latest workflow artifact signals and blockers
-  - stays advisory-only instead of turning product UX into a hidden planner
+- workflow inspection presentation
+  - exposes explicit pull-based workflow surfaces such as `workflow_status`
+    and working projection entries
+  - summarizes derived workflow artifact signals and blockers without default
+    turn-time injection
+  - stays explicit and advisory-only instead of turning product UX into a hidden planner
 - optimization protocol presentation
   - exposes objective iteration facts such as metric observations, guard
-    results, explicit keep/discard decisions, and convergence reasons
+    results
   - keeps loop strategy and sequencing in the model-native layer rather than
     moving them into kernel authority
 
 This plane may read kernel state, but it does not mutate kernel state directly.
 
-## Workflow Advisory Surfaces
+## Workflow Inspection Surfaces
 
-Workflow chaining is productized as a derived cognitive/control-plane surface,
-not as a new kernel authority object.
+Workflow chaining is productized as an explicit inspection surface, not as a
+new kernel authority object.
 
 Current product surfaces:
 
-- `[WorkflowAdvisory]` in default context injection
 - `workflow_status` as an explicit inspection tool
 - working projection entries such as `workflow.discovery`, `workflow.strategy_review`,
   `workflow.design`, `workflow.review`, `workflow.qa`, `workflow.ship`,
-  `workflow.iteration_metric`, and `workflow.iteration_decision`
+  `workflow.iteration_metric`, and `workflow.iteration_guard`
 
 These surfaces are derived from durable events and session state such as:
 
 - `skill_completed` outputs
 - verification outcome and write-mark events
-- iteration fact events such as metric observations, guard results, decisions,
-  and convergence reasons
+- iteration fact events such as metric observations and guard results
 - worker patch adoption or failure events
 - pending delegated worker results
 
 The product goal is visibility and recovery guidance. The product must not
-convert those signals into a mandatory stage machine.
+convert those signals into a mandatory stage machine or a default injected lane
+brief.
 
 ## ContextComposer Boundary
 

@@ -1,9 +1,7 @@
 import { buildTaskStateBlock } from "../runtime-helpers.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
-import { hydrateAndListWorkerResults } from "../services/parallel.js";
 import type { ProposalAdmissionService } from "../services/proposal-admission.js";
 import type { SkillLifecycleService } from "../services/skill-lifecycle.js";
-import { deriveWorkflowStatus } from "../workflow/derivation.js";
 import { readIdentityProfile } from "./identity.js";
 import type { ContextSourceProvider, ContextSourceProviderRegistry } from "./provider.js";
 import { buildRuntimeStatusBlock } from "./runtime-status.js";
@@ -13,7 +11,6 @@ import {
   buildRecentToolOutputDistillationBlock,
   type ToolOutputDistillationEntry,
 } from "./tool-output-distilled.js";
-import { buildWorkflowAdvisoryBlock } from "./workflow-advisory.js";
 
 export interface BuiltInContextSourceProviderDeps {
   workspaceRoot: string;
@@ -39,7 +36,6 @@ export function createBuiltInContextSourceProviders(
     createIdentityProvider(deps),
     createRuntimeStatusProvider(deps),
     createTaskStateProvider(deps),
-    createWorkflowAdvisoryProvider(deps),
   ];
 
   if (deps.kernel.config.infrastructure.toolOutputDistillationInjection.enabled) {
@@ -161,46 +157,6 @@ function createTaskStateProvider(deps: BuiltInContextSourceProviderDeps): Contex
       input.register({
         id: "task-state",
         content: taskBlock,
-      });
-    },
-  };
-}
-
-function createWorkflowAdvisoryProvider(
-  deps: BuiltInContextSourceProviderDeps,
-): ContextSourceProvider {
-  return {
-    source: CONTEXT_SOURCES.workflowAdvisory,
-    category: "narrative",
-    order: 45,
-    collect: (input) => {
-      const taskState = deps.kernel.getTaskState(input.sessionId);
-      const pendingWorkerResults = hydrateAndListWorkerResults({
-        sessionId: input.sessionId,
-        workspaceRoot: deps.workspaceRoot,
-        sessionState: deps.kernel.sessionState,
-        parallelResults: deps.kernel.parallelResults,
-      });
-      const events = deps.kernel.eventStore.list(input.sessionId);
-      if (events.length === 0 && pendingWorkerResults.length === 0) {
-        return;
-      }
-
-      const snapshot = deriveWorkflowStatus({
-        sessionId: input.sessionId,
-        events,
-        blockers: taskState.blockers.map((blocker) => ({
-          id: blocker.id,
-          message: blocker.message,
-        })),
-        pendingWorkerResults: pendingWorkerResults.length,
-        workspaceRoot: deps.workspaceRoot,
-      });
-      const advisoryContent = buildWorkflowAdvisoryBlock(snapshot);
-      if (!advisoryContent) return;
-      input.register({
-        id: "workflow-advisory",
-        content: advisoryContent,
       });
     },
   };

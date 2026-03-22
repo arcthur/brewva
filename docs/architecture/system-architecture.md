@@ -129,8 +129,6 @@ Runtime may persist a small set of objective optimization facts:
 
 - metric observations
 - guard results
-- iteration decisions
-- convergence reasons
 
 These facts are durable evidence that can be replayed, queried, and surfaced
 through advisory projections. They do not give the runtime authority to choose
@@ -149,16 +147,16 @@ Projection and arena are not parallel memories:
 
 - projection provides one deterministic working snapshot
 - arena plans which sources fit the current turn
-- workflow advisories and `workflow_status` read from durable events and working
-  state, but they remain advisory rather than prescribing a path
+- working projection and `workflow_status` read from durable events and working
+  state, but they remain explicit/advisory rather than prescribing a path
 
 Model-facing composition is separate:
 
 - runtime admission decides which sources are allowed
 - `ContextComposer` decides how admitted blocks are shown to the model
 - default hosted-session behavior is narrative-first
-- the model may ignore workflow suggestions and choose another valid path unless
-  an independent governance boundary blocks it
+- the model may choose any valid path unless an independent governance boundary
+  blocks it
 
 ## Tool Surface
 

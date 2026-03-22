@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -61,6 +61,23 @@ describe("detached subagent background controller", () => {
     expect(
       existsSync(join(workspaceRoot, ".orchestrator", "subagent-runs", run.runId, "spec.json")),
     ).toBe(true);
+    const spec = JSON.parse(
+      readFileSync(
+        join(workspaceRoot, ".orchestrator", "subagent-runs", run.runId, "spec.json"),
+        "utf8",
+      ),
+    ) as {
+      schema: string;
+      config: {
+        infrastructure?: {
+          events?: {
+            level?: string;
+          };
+        };
+      };
+    };
+    expect(spec.schema).toBe("brewva.subagent-run-spec.v2");
+    expect(spec.config.infrastructure?.events?.level).toBe("audit");
 
     pidAlive = false;
   });

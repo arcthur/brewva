@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type {
+  BrewvaConfig,
   BrewvaRuntime,
   DelegationRunQuery,
   DelegationRunRecord,
@@ -120,6 +121,10 @@ function isTerminalStatus(status: DelegationRunRecord["status"]): boolean {
     status === "cancelled" ||
     status === "merged"
   );
+}
+
+function cloneRuntimeConfig(runtime: BrewvaRuntime): BrewvaConfig {
+  return structuredClone(runtime.config) as BrewvaConfig;
 }
 
 function defaultSpawnProcess(input: {
@@ -265,10 +270,11 @@ export function createDetachedSubagentBackgroundController(
       });
 
       const spec: DetachedSubagentRunSpec = {
-        schema: "brewva.subagent-run-spec.v1",
+        schema: "brewva.subagent-run-spec.v2",
         runId,
         parentSessionId: input.parentSessionId,
         workspaceRoot: options.runtime.workspaceRoot,
+        config: cloneRuntimeConfig(options.runtime),
         configPath: options.configPath,
         routingScopes: options.routingScopes,
         profileName: input.profile.name,

@@ -66,8 +66,9 @@ flowchart LR
 
   AUDIT["Durable audit tape"] --> A1["message_end summary"]
   AUDIT --> A2["tool_execution_end summary"]
-  AUDIT --> A3["tool_call_normalized / tool_call_normalization_failed"]
   AUDIT --> A4["approval + delegation lifecycle"]
+
+  OPS["Durable ops tape (level >= ops)"] --> O1["tool_call_normalized / tool_call_normalization_failed"]
 ```
 
 Live activity stays channel-oriented and ephemeral. Durable tape keeps replay,

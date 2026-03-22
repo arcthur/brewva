@@ -29,12 +29,11 @@ Stable implementation now includes:
   verification events, subagent lifecycle events, and worker adoption outcomes
 - advisory workflow summaries for discovery, strategy, planning,
   implementation, review, QA, verification, ship, and retro visibility
-- default `[WorkflowAdvisory]` context injection for model-facing advisory
-  visibility
 - `workflow_status` as an explicit operator/model inspection tool
 - working projection entries such as `workflow.discovery`,
   `workflow.strategy_review`, `workflow.design`, `workflow.review`,
   `workflow.qa`, and `workflow.ship`
+- no default workflow-lane context injection in the hosted path
 - replay and restart rebuild coverage for workflow artifacts and readiness
 
 Stable references:
@@ -55,9 +54,11 @@ The promoted contract is:
 1. Workflow artifacts are derived working-state projections, not new
    commitment-memory event families.
 2. Readiness is advisory, not prescriptive.
-3. The model may ignore a suggested next step and choose another valid path
-   unless an independent governance or safety boundary blocks it.
-4. Brewva does not introduce a kernel-owned workflow DAG or expand the public
+3. Workflow inspection is explicit pull rather than default push in the hosted
+   path.
+4. The model may choose another valid path unless an independent governance or
+   safety boundary blocks it.
+5. Brewva does not introduce a kernel-owned workflow DAG or expand the public
    proposal boundary for workflow policy.
 
 ## Validation Status

@@ -108,8 +108,13 @@ function applyDurableDelivery(input: {
 }
 
 async function loadSpec(path: string): Promise<DetachedSubagentRunSpec> {
-  const raw = JSON.parse(await readFile(path, "utf8")) as DetachedSubagentRunSpec;
-  return raw;
+  const raw = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+  const schema =
+    typeof raw.schema === "string" ? raw.schema : "missing_detached_subagent_spec_schema";
+  if (schema !== "brewva.subagent-run-spec.v2") {
+    throw new Error(`unsupported_detached_subagent_spec_schema:${schema}`);
+  }
+  return raw as unknown as DetachedSubagentRunSpec;
 }
 
 function normalizeRoutingScopes(
@@ -131,6 +136,7 @@ async function main(): Promise<void> {
   const spec = await loadSpec(specPath);
   const parentRuntime = new BrewvaRuntime({
     cwd: spec.workspaceRoot,
+    config: spec.config,
     configPath: spec.configPath,
     routingScopes: normalizeRoutingScopes(spec.routingScopes),
   });
@@ -217,6 +223,7 @@ async function main(): Promise<void> {
     }
     childSession = await createHostedSession({
       cwd: isolatedWorkspace?.root ?? spec.workspaceRoot,
+      config: spec.config,
       configPath: spec.configPath,
       model: profileRecord.model,
       agentId: `subagent-${sanitizeFragment(profileRecord.name) || "worker"}`,

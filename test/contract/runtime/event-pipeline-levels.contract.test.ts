@@ -17,7 +17,7 @@ function createOpsConfig(): BrewvaConfig {
 }
 
 describe("event pipeline level classification", () => {
-  test("keeps recovery-grade evidence visible at audit level but drops telemetry", () => {
+  test("keeps explicit inspection and recovery receipts visible at audit level while dropping adaptive telemetry", () => {
     const runtime = new BrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-")),
       config: createAuditConfig(),
@@ -82,19 +82,19 @@ describe("event pipeline level classification", () => {
       },
     });
 
-    expect(runtime.events.query(sessionId, { type: "tool_output_observed" })).toHaveLength(0);
-    expect(runtime.events.query(sessionId, { type: "tool_output_distilled" })).toHaveLength(0);
+    expect(runtime.events.query(sessionId, { type: "tool_output_observed" })).toHaveLength(1);
+    expect(runtime.events.query(sessionId, { type: "tool_output_distilled" })).toHaveLength(1);
     expect(
       runtime.events.query(sessionId, { type: "tool_output_artifact_persisted" }),
-    ).toHaveLength(0);
+    ).toHaveLength(1);
     expect(runtime.events.query(sessionId, { type: "observability_query_executed" })).toHaveLength(
-      0,
+      1,
     );
     expect(
       runtime.events.query(sessionId, { type: "observability_assertion_recorded" }),
     ).toHaveLength(1);
-    expect(runtime.events.query(sessionId, { type: "tool_output_search" })).toHaveLength(0);
-    expect(runtime.events.query(sessionId, { type: "tool_execution_end" })).toHaveLength(0);
+    expect(runtime.events.query(sessionId, { type: "tool_output_search" })).toHaveLength(1);
+    expect(runtime.events.query(sessionId, { type: "tool_execution_end" })).toHaveLength(1);
   });
 
   test("keeps governance events visible at ops level with governance category", () => {
@@ -234,14 +234,18 @@ describe("event pipeline level classification", () => {
     ).toHaveLength(0);
   });
 
-  test("keeps normalization evidence at audit level but drops model compatibility telemetry", () => {
-    const runtime = new BrewvaRuntime({
+  test("keeps normalization telemetry at ops level but drops it at audit level", () => {
+    const auditRuntime = new BrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-normalizer-")),
       config: createAuditConfig(),
     });
-    const sessionId = "audit-level-normalizer-session";
+    const opsRuntime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-events-ops-normalizer-")),
+      config: createOpsConfig(),
+    });
+    const sessionId = "normalizer-level-session";
 
-    runtime.events.record({
+    auditRuntime.events.record({
       sessionId,
       type: "tool_call_normalized",
       payload: {
@@ -250,7 +254,7 @@ describe("event pipeline level classification", () => {
         repairKinds: ["double_stringified_arguments"],
       },
     });
-    runtime.events.record({
+    auditRuntime.events.record({
       sessionId,
       type: "tool_call_normalization_failed",
       payload: {
@@ -258,7 +262,24 @@ describe("event pipeline level classification", () => {
         candidateToolName: "exec",
       },
     });
-    runtime.events.record({
+    opsRuntime.events.record({
+      sessionId,
+      type: "tool_call_normalized",
+      payload: {
+        toolCallId: "tc-1",
+        toolName: "exec",
+        repairKinds: ["double_stringified_arguments"],
+      },
+    });
+    opsRuntime.events.record({
+      sessionId,
+      type: "tool_call_normalization_failed",
+      payload: {
+        reason: "invalid_arguments",
+        candidateToolName: "exec",
+      },
+    });
+    auditRuntime.events.record({
       sessionId,
       type: "model_capability_profile_selected",
       payload: {
@@ -268,7 +289,7 @@ describe("event pipeline level classification", () => {
         profileId: "openai-responses-default",
       },
     });
-    runtime.events.record({
+    opsRuntime.events.record({
       sessionId,
       type: "model_request_patched",
       payload: {
@@ -280,14 +301,18 @@ describe("event pipeline level classification", () => {
       },
     });
 
-    expect(runtime.events.query(sessionId, { type: "tool_call_normalized" })).toHaveLength(1);
+    expect(auditRuntime.events.query(sessionId, { type: "tool_call_normalized" })).toHaveLength(0);
     expect(
-      runtime.events.query(sessionId, { type: "tool_call_normalization_failed" }),
+      auditRuntime.events.query(sessionId, { type: "tool_call_normalization_failed" }),
+    ).toHaveLength(0);
+    expect(opsRuntime.events.query(sessionId, { type: "tool_call_normalized" })).toHaveLength(1);
+    expect(
+      opsRuntime.events.query(sessionId, { type: "tool_call_normalization_failed" }),
     ).toHaveLength(1);
     expect(
-      runtime.events.query(sessionId, { type: "model_capability_profile_selected" }),
+      auditRuntime.events.query(sessionId, { type: "model_capability_profile_selected" }),
     ).toHaveLength(0);
-    expect(runtime.events.query(sessionId, { type: "model_request_patched" })).toHaveLength(0);
+    expect(auditRuntime.events.query(sessionId, { type: "model_request_patched" })).toHaveLength(0);
   });
 
   test("keeps approval and delegation lifecycle events at audit level because replay depends on them", () => {
@@ -323,6 +348,52 @@ describe("event pipeline level classification", () => {
     }
   });
 
+  test("keeps custom domain events at audit level while reserved runtime prefixes stay fail-closed", () => {
+    const auditRuntime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-unknown-")),
+      config: createAuditConfig(),
+    });
+    const opsRuntime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-events-ops-unknown-")),
+      config: createOpsConfig(),
+    });
+    const sessionId = "unknown-level-session";
+
+    auditRuntime.events.record({
+      sessionId,
+      type: "custom_probe_event",
+      payload: {
+        source: "contract-test",
+      },
+    });
+    auditRuntime.events.record({
+      sessionId,
+      type: "context_future_probe",
+      payload: {
+        source: "contract-test",
+      },
+    });
+    opsRuntime.events.record({
+      sessionId,
+      type: "custom_probe_event",
+      payload: {
+        source: "contract-test",
+      },
+    });
+    opsRuntime.events.record({
+      sessionId,
+      type: "context_future_probe",
+      payload: {
+        source: "contract-test",
+      },
+    });
+
+    expect(auditRuntime.events.query(sessionId, { type: "custom_probe_event" })).toHaveLength(1);
+    expect(auditRuntime.events.query(sessionId, { type: "context_future_probe" })).toHaveLength(0);
+    expect(opsRuntime.events.query(sessionId, { type: "custom_probe_event" })).toHaveLength(1);
+    expect(opsRuntime.events.query(sessionId, { type: "context_future_probe" })).toHaveLength(1);
+  });
+
   test("keeps task watchdog events at ops level and drops them at audit level", () => {
     const auditRuntime = new BrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-watchdog-")),
@@ -339,15 +410,11 @@ describe("event pipeline level classification", () => {
       type: "task_stuck_detected",
       payload: {
         schema: "brewva.task-watchdog.v1",
-        phase: "investigate",
         thresholdMs: 300000,
         baselineProgressAt: 1000,
         detectedAt: 301000,
         idleMs: 300000,
         openItemCount: 0,
-        blockerId: "watchdog:task-stuck:no-progress",
-        blockerWritten: true,
-        suppressedBy: null,
       },
     });
     opsRuntime.events.record({
@@ -355,15 +422,11 @@ describe("event pipeline level classification", () => {
       type: "task_stuck_detected",
       payload: {
         schema: "brewva.task-watchdog.v1",
-        phase: "investigate",
         thresholdMs: 300000,
         baselineProgressAt: 1000,
         detectedAt: 301000,
         idleMs: 300000,
         openItemCount: 0,
-        blockerId: "watchdog:task-stuck:no-progress",
-        blockerWritten: true,
-        suppressedBy: null,
       },
     });
 

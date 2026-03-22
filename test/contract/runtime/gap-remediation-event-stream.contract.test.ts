@@ -12,7 +12,16 @@ import {
 describe("Gap remediation: event stream safety", () => {
   test("normalizes event payload to JSON-safe values", async () => {
     const workspace = createWorkspace("events-payload");
-    writeConfig(workspace, createConfig({}));
+    writeConfig(
+      workspace,
+      createConfig({
+        infrastructure: {
+          events: {
+            level: "ops",
+          },
+        },
+      }),
+    );
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
     const sessionId = "events-payload-1";
@@ -64,7 +73,16 @@ describe("Gap remediation: event stream safety", () => {
 
   test("tolerates invalid JSON lines in persisted event stream", async () => {
     const workspace = createWorkspace("events-bad-lines");
-    writeConfig(workspace, createConfig({}));
+    writeConfig(
+      workspace,
+      createConfig({
+        infrastructure: {
+          events: {
+            level: "ops",
+          },
+        },
+      }),
+    );
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
     const sessionId = "events-bad-lines-1";
@@ -84,7 +102,16 @@ describe("Gap remediation: event stream safety", () => {
 
   test("secret values are redacted before event persistence", async () => {
     const workspace = createWorkspace("events-redact");
-    writeConfig(workspace, createConfig({}));
+    writeConfig(
+      workspace,
+      createConfig({
+        infrastructure: {
+          events: {
+            level: "ops",
+          },
+        },
+      }),
+    );
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
     const sessionId = "events-redact-1";

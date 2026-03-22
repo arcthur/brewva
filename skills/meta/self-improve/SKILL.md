@@ -24,7 +24,7 @@ effects:
   allowed_effects:
     - workspace_read
     - local_exec
-    - runtime_observe
+    - memory_write
   denied_effects:
     - workspace_write
 resources:
@@ -85,7 +85,8 @@ Use this skill when:
 - the same failure pattern keeps recurring
 - review findings reveal a systemic weakness
 - runtime forensics show repeated operational waste
-- a bounded loop keeps discarding, escalating, or stalling for the same reason
+- a bounded loop keeps failing to improve, regressing guard checks,
+  escalating, or stalling for the same reason
 
 ## Workflow
 
@@ -98,8 +99,9 @@ When the learning target is one bounded optimization lineage:
 
 - query `iteration_fact` with `session_scope = parent_lineage`
 - narrow with `source = "goal-loop:<loop_key>"`
-- collect the concrete metric, guard, decision, and convergence records before
-  naming a system lesson
+- collect the concrete metric and guard records before naming a system lesson
+- use explicit reports, handoff artifacts, or verification outcomes for
+  disposition context instead of inventing planner-state facts
 
 Treat the evidence as clustered signals, not as one undifferentiated pile:
 
@@ -148,8 +150,8 @@ Decide whether the improvement should land in:
 - Distinguish evidence, hypothesis, and intervention. The fact that something
   hurt twice does not yet prove the root process flaw.
 - When loop history is involved, prefer objective stuck signals over narrative
-  memory: discard streaks, guard flakiness, convergence stalls, and repeated
-  escalations are stronger than "it felt stuck".
+  memory: flat metric streaks, guard flakiness, repeated escalations, and
+  repeated verification failures are stronger than "it felt stuck".
 - Prefer the smallest next improvement that can validate the hypothesis instead
   of proposing broad architecture rewrites.
 - Every systemic claim should point back to concrete fact references, report

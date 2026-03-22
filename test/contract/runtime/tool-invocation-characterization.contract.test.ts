@@ -7,7 +7,7 @@ import {
   createTrustedLocalGovernancePort,
   type BrewvaEventRecord,
 } from "@brewva/brewva-runtime";
-import { createRuntimeConfig } from "../../helpers/runtime.js";
+import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 
 function createWorkspace(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -18,7 +18,7 @@ function createRuntime(
 ): BrewvaRuntime {
   return new BrewvaRuntime({
     cwd: createWorkspace("brewva-tool-char-"),
-    config: createRuntimeConfig(),
+    config: createOpsRuntimeConfig(),
     ...options,
   });
 }
@@ -467,7 +467,7 @@ describe("Tool invocation characterization", () => {
     const workspace = createWorkspace("brewva-tool-char-compact-");
     const runtime = new BrewvaRuntime({
       cwd: workspace,
-      config: createRuntimeConfig((config) => {
+      config: createOpsRuntimeConfig((config) => {
         config.infrastructure.contextBudget.enabled = true;
         config.infrastructure.contextBudget.thresholds.compactionFloorPercent = 0.8;
         config.infrastructure.contextBudget.thresholds.compactionCeilingPercent = 0.8;
@@ -548,7 +548,7 @@ describe("Tool invocation characterization", () => {
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
     const runtime = new BrewvaRuntime({
       cwd: workspace,
-      config: createRuntimeConfig(),
+      config: createOpsRuntimeConfig(),
     });
     const sessionId = "tool-char-finish";
     runtime.context.onTurnStart(sessionId, 1);

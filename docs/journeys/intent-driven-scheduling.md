@@ -46,8 +46,6 @@ child-session execution:
 
 - `iteration_metric_observed`
 - `iteration_guard_recorded`
-- `iteration_decision_recorded`
-- `iteration_convergence_recorded`
 
 Those facts remain advisory evidence for the protocol running inside the child
 session. Scheduler semantics stay limited to explicit convergence predicates,

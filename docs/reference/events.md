@@ -42,12 +42,39 @@ The authoritative registry lives in
 - `projection_ingested`
 - `projection_refreshed`
 
-### Tool, Verification, And Mutation
+### Session, Turn, And Hosted Lifecycle
 
+- `channel_session_bound`
+- `session_bootstrap`
+- `session_start`
+- `session_shutdown`
+- `session_interrupted`
+- `session_before_compact`
+- `session_compact`
+- `session_compact_requested`
+- `session_compact_failed`
+- `session_compact_request_failed`
+- `session_turn_compaction_resume_requested`
+- `session_turn_compaction_resume_dispatched`
+- `session_turn_compaction_resume_failed`
+- `turn_start`
+- `turn_end`
+- `message_end`
+- `agent_end`
+
+### Tool, Verification, Mutation, And Recovery
+
+- `tool_call`
+- `tool_call_blocked`
+- `tool_call_marked`
+- `tool_contract_warning`
+- `tool_execution_start`
+- `tool_execution_end`
 - `tool_result_recorded`
 - `tool_output_observed`
 - `tool_output_distilled`
 - `tool_output_artifact_persisted`
+- `tool_output_search`
 - `tool_call_normalized`
 - `tool_call_normalization_failed`
 - `observability_query_executed`
@@ -67,13 +94,24 @@ The authoritative registry lives in
 - `reversible_mutation_prepared`
 - `reversible_mutation_recorded`
 - `reversible_mutation_rolled_back`
+- `rollback`
+- `file_snapshot_captured`
+- `ledger_compacted`
+- `context_compaction_gate_blocked_tool`
+- `cost_update`
+- `budget_alert`
+
+### Skill Lifecycle And Budget
+
+- `skill_activated`
+- `skill_completed`
+- `skill_budget_warning`
+- `skill_parallel_warning`
 
 ### Iteration Facts
 
 - `iteration_metric_observed`
 - `iteration_guard_recorded`
-- `iteration_decision_recorded`
-- `iteration_convergence_recorded`
 
 ### Proposal And Governance
 
@@ -97,7 +135,6 @@ The authoritative registry lives in
 
 - `context_composed`
 - `tool_surface_resolved`
-- `skill_routing_selection`
 - `model_capability_profile_selected`
 - `model_request_patched`
 - `task_stuck_detected`
@@ -138,18 +175,14 @@ events and session state:
   - `workflow.iteration_metric`
 - `iteration_guard_recorded`
   - `workflow.iteration_guard`
-- `iteration_decision_recorded`
-  - `workflow.iteration_decision`
-- `iteration_convergence_recorded`
-  - `workflow.iteration_convergence`
 - `subagent_*`
   - delegated patch-worker lifecycle signals
 - `worker_results_applied` / `worker_results_apply_failed`
   - parent-controlled worker adoption outcomes
 
-Those derived workflow surfaces are exposed through working projection,
-`[WorkflowAdvisory]`, and `workflow_status`. They are advisory working-state
-views, not new audit-critical authority events.
+Those derived workflow surfaces are exposed through working projection and
+`workflow_status`. They are advisory working-state views, not new audit-critical
+authority events.
 
 ## Audit-Critical Families
 
@@ -159,13 +192,16 @@ The audit-retained core includes:
 - `checkpoint`
 - `task_event`
 - `truth_event`
+- session/turn lifecycle receipts such as `session_bootstrap`, `session_start`,
+  `session_shutdown`, `turn_start`, `turn_end`, `message_end`, and `agent_end`
+- hosted compaction receipts such as `session_compact_requested`,
+  `session_compact`, and `session_turn_compaction_resume_requested`
+- tool execution receipts such as `tool_call`, `tool_execution_start`,
+  `tool_execution_end`, and `tool_result_recorded`
 - `tool_result_recorded`
-- `tool_call_normalized`
-- `tool_call_normalization_failed`
+- `tool_output_search`
 - `iteration_metric_observed`
 - `iteration_guard_recorded`
-- `iteration_decision_recorded`
-- `iteration_convergence_recorded`
 - `verification_write_marked`
 - `verification_outcome_recorded`
 - `proposal_received`
@@ -180,6 +216,11 @@ The audit-retained core includes:
 - `subagent_cancelled`
 - `worker_results_applied`
 - `worker_results_apply_failed`
+- `skill_activated`
+- `skill_completed`
+- `cost_update`
+- `budget_alert`
+- `rollback`
 - schedule lifecycle events
 
 `tool_result_recorded` is the durable outcome event. When present,
@@ -220,19 +261,14 @@ Iteration fact events record objective optimization evidence only:
   - measured value, optional aggregation, optional sample count, evidence refs
 - `iteration_guard_recorded`
   - guard key, pass/fail-like status, and evidence refs
-- `iteration_decision_recorded`
-  - explicit keep/discard/block/crash/inconclusive outcome for one iteration
-- `iteration_convergence_recorded`
-  - explicit continue/converged/escalated/stopped reason for a bounded run
 
 Workflow readiness is computed from those durable families plus current task
-blockers and pending worker-result state. The resulting advisory summary covers
-discovery, strategy, planning, implementation, review, QA, verification, ship,
-retro, and iteration-fact visibility. It remains advisory-only and may not
-prescribe a single legal workflow path.
+blockers and pending worker-result state. The resulting advisory surfaces remain
+inspection-only and may not prescribe a single legal workflow path.
 
 `tool_call_normalized` and `tool_call_normalization_failed` record whether the
-pre-parse compatibility layer repaired or rejected a tool call.
+pre-parse compatibility layer repaired or rejected a tool call. They are ops
+telemetry rather than audit-default commitment memory.
 `model_capability_profile_selected` and `model_request_patched` record which
 capability profile the provider/model adapter selected and which request
 patches it applied.

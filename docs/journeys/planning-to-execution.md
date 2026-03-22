@@ -21,7 +21,7 @@ flowchart TD
   F -->|No| D
   F -->|Yes| G["Finalize via skill_complete"]
   G --> H["Derive Workflow Artifacts and Readiness"]
-  H --> I["Surface Advisory State via workflow_status / WorkflowAdvisory"]
+  H --> I["Inspect State via workflow_status / WorkingProjection"]
 ```
 
 ## Key Steps
@@ -31,8 +31,8 @@ flowchart TD
 3. Collect evidence and satisfy verification requirements
 4. Complete the active skill with required outputs
 5. Let derived workflow artifacts update discovery/strategy/planning/review/QA/verification/ship state
-6. Use `workflow_status` or the default advisory context to inspect the current
-   chain without forcing the next step
+6. Use `workflow_status` or working projection to inspect the current chain
+   without forcing the next step
 
 ## Code Pointers
 

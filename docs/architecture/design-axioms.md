@@ -44,8 +44,8 @@ Implementation note:
 - runtime authority centers on effect classes, approval requirements, and
   receipt-bearing rollback
 - runtime may persist objective iteration facts such as metric observations,
-  guard results, explicit iteration decisions, and convergence reasons, but
-  those facts remain durable evidence rather than a runtime-owned optimizer
+  guard results, and any future evidence-bound protocol facts, but those facts
+  remain durable evidence rather than a runtime-owned optimizer
 - visible tool surface and execution hints still shape exploration, but they do
   not define authority on their own
 - explicit control-plane exemptions may exist, but they must stay narrow and

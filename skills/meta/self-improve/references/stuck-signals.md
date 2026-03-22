@@ -9,18 +9,18 @@ One stuck event is not yet a system lesson.
 
 You need a bounded evidence set that shows repetition, for example:
 
-- multiple `discard` decisions with the same reason family
+- multiple flat or regressing metric outcomes with the same reason family
 - repeated guard failures around otherwise similar metric movement
-- repeated convergence results that end in `continue` or `escalated` without
-  meaningful trajectory change
+- repeated handoff or convergence reports that keep saying `continue` or
+  `escalated` without meaningful trajectory change
 - repeated user or operator intervention on the same protocol weakness
 
 ## Signal Families
 
-### Discard Streak
+### Flat Or Regressing Streak
 
-Treat this as meaningful when several consecutive iterations end in `discard`
-for closely related reasons such as:
+Treat this as meaningful when several consecutive iterations show no meaningful
+progress for closely related reasons such as:
 
 - `no_improvement`
 - `below_noise_floor`

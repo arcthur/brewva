@@ -105,7 +105,8 @@ behavior improves specialist quality without creating a second control loop.
 Skill discovery and deliberation are now separated from kernel commitment:
 
 1. Deliberation layers may rank skills, judge candidates, and suggest the next step.
-2. Runtime emits `skill_routing_*` telemetry for that reasoning path.
+2. Runtime does not emit a dedicated durable `skill_routing_*` family in the
+   default path.
 3. Activation remains explicit through `skill_load`.
 4. The proposal boundary is reserved for `effect_commitment`, not for skill selection.
 5. Runtime does not run adaptive inference loops or online model reranking in the kernel path.
@@ -170,8 +171,6 @@ Current derived workflow artifact sources include:
 - delegated patch adoption or failure -> `workflow.worker_patch`
 - metric observations -> `workflow.iteration_metric`
 - guard results -> `workflow.iteration_guard`
-- iteration decisions -> `workflow.iteration_decision`
-- convergence reasons -> `workflow.iteration_convergence`
 
 Important boundary rules:
 
@@ -179,11 +178,13 @@ Important boundary rules:
   commitment-memory authority
 - workflow readiness is advisory-only and does not create a kernel-owned stage
   DAG
-- models may ignore a suggested next step and choose another valid path unless
-  governance or safety boundaries independently block it
+- inspection remains explicit: use `workflow_status` or working projection
+  surfaces when needed instead of default turn-time workflow injection
+- models may choose any valid path unless governance or safety boundaries
+  independently block it
 
 Control-plane and operator surfaces may inspect this state through
-`workflow_status` and the default `[WorkflowAdvisory]` context source.
+`workflow_status` and working projection surfaces.
 
 Protocol skills may sit beside the common delivery chain without becoming
 runtime-owned planners:
@@ -219,7 +220,8 @@ runtime-owned planners:
 
 `goal-loop` should be treated as a bounded multi-run continuity skill with
 explicit cadence, lineage-aware iteration-fact history, and objective
-keep/discard discipline. It is not a general-purpose implementation skill.
+metric/guard evidence discipline. It is not a general-purpose implementation
+skill.
 
 `predict-review` is an advisory multi-perspective skill. It uses public
 delegation tools and existing built-in subagent profiles to generate competing

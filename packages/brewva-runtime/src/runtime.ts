@@ -16,8 +16,6 @@ import {
 import type { ToolOutputDistillationEntry } from "./context/tool-output-distilled.js";
 import { SessionCostTracker } from "./cost/tracker.js";
 import {
-  ITERATION_CONVERGENCE_RECORDED_EVENT_TYPE,
-  ITERATION_DECISION_RECORDED_EVENT_TYPE,
   ITERATION_GUARD_RECORDED_EVENT_TYPE,
   ITERATION_METRIC_OBSERVED_EVENT_TYPE,
   TOOL_OUTPUT_DISTILLED_EVENT_TYPE,
@@ -31,36 +29,20 @@ import {
 } from "./governance/tool-governance.js";
 import {
   applyFactWindow,
-  buildConvergenceReasonPayload,
   buildGuardResultPayload,
-  buildIterationDecisionPayload,
   buildMetricObservationPayload,
-  coerceConvergenceReasonPayload,
   coerceGuardResultPayload,
-  coerceIterationDecisionPayload,
   coerceMetricObservationPayload,
-  filterConvergenceReasonRecords,
   filterGuardResultRecords,
-  filterIterationDecisionRecords,
   filterMetricObservationRecords,
-  getConvergenceReasonEventQuery,
   getGuardResultEventQuery,
-  getIterationDecisionEventQuery,
   getMetricObservationEventQuery,
-  toConvergenceReasonRecord,
   toGuardResultRecord,
-  toIterationDecisionRecord,
   toMetricObservationRecord,
-  type ConvergenceReasonInput,
-  type ConvergenceReasonQuery,
-  type ConvergenceReasonRecord,
   type GuardResultInput,
   type GuardResultQuery,
   type GuardResultRecord,
   type IterationFactSessionScope,
-  type IterationDecisionInput,
-  type IterationDecisionQuery,
-  type IterationDecisionRecord,
   type MetricObservationInput,
   type MetricObservationQuery,
   type MetricObservationRecord,
@@ -530,22 +512,6 @@ export class BrewvaRuntime {
     ): MetricObservationRecord[];
     recordGuardResult(sessionId: string, input: GuardResultInput): BrewvaEventRecord | undefined;
     listGuardResults(sessionId: string, query?: GuardResultQuery): GuardResultRecord[];
-    recordIterationDecision(
-      sessionId: string,
-      input: IterationDecisionInput,
-    ): BrewvaEventRecord | undefined;
-    listIterationDecisions(
-      sessionId: string,
-      query?: IterationDecisionQuery,
-    ): IterationDecisionRecord[];
-    recordConvergenceReason(
-      sessionId: string,
-      input: ConvergenceReasonInput,
-    ): BrewvaEventRecord | undefined;
-    listConvergenceReasons(
-      sessionId: string,
-      query?: ConvergenceReasonQuery,
-    ): ConvergenceReasonRecord[];
     getTapeStatus(sessionId: string): TapeStatusState;
     getTapePressureThresholds(): TapeStatusState["thresholds"];
     recordTapeHandoff(
@@ -597,7 +563,7 @@ export class BrewvaRuntime {
       sessionId: string,
       input?: {
         now?: number;
-        thresholdsMs?: Partial<Record<"investigate" | "execute" | "verify", number>>;
+        thresholdMs?: number;
       },
     ): void;
     recordDelegationRun(sessionId: string, record: import("./types.js").DelegationRunRecord): void;
@@ -999,12 +965,6 @@ export class BrewvaRuntime {
         listMetricObservations: (sessionId, query) => this.listMetricObservations(sessionId, query),
         recordGuardResult: (sessionId, input) => this.recordGuardResult(sessionId, input),
         listGuardResults: (sessionId, query) => this.listGuardResults(sessionId, query),
-        recordIterationDecision: (sessionId, input) =>
-          this.recordIterationDecision(sessionId, input),
-        listIterationDecisions: (sessionId, query) => this.listIterationDecisions(sessionId, query),
-        recordConvergenceReason: (sessionId, input) =>
-          this.recordConvergenceReason(sessionId, input),
-        listConvergenceReasons: (sessionId, query) => this.listConvergenceReasons(sessionId, query),
         getTapeStatus: (sessionId) => this.tapeService.getTapeStatus(sessionId),
         getTapePressureThresholds: () => this.tapeService.getPressureThresholds(),
         recordTapeHandoff: (sessionId, input) =>
@@ -1039,7 +999,7 @@ export class BrewvaRuntime {
           this.taskWatchdogService.pollTaskProgress({
             sessionId,
             now: input?.now,
-            thresholdsMs: input?.thresholdsMs,
+            thresholdMs: input?.thresholdMs,
           }),
         recordDelegationRun: (sessionId, record) =>
           this.sessionLifecycleService.recordDelegationRun(sessionId, record),
@@ -1266,62 +1226,6 @@ export class BrewvaRuntime {
       toGuardResultRecord,
     );
     return applyFactWindow(filterGuardResultRecords(records, query), query);
-  }
-
-  private recordIterationDecision(
-    sessionId: string,
-    input: IterationDecisionInput,
-  ): BrewvaEventRecord | undefined {
-    const payload = coerceIterationDecisionPayload(buildIterationDecisionPayload(input));
-    if (!payload) return undefined;
-    return this.recordEvent({
-      sessionId,
-      type: ITERATION_DECISION_RECORDED_EVENT_TYPE,
-      turn: input.turn,
-      timestamp: input.timestamp,
-      payload: payload as unknown as Record<string, unknown>,
-    });
-  }
-
-  private listIterationDecisions(
-    sessionId: string,
-    query: IterationDecisionQuery = {},
-  ): IterationDecisionRecord[] {
-    const records = this.listIterationFactRecords(
-      sessionId,
-      query,
-      getIterationDecisionEventQuery,
-      toIterationDecisionRecord,
-    );
-    return applyFactWindow(filterIterationDecisionRecords(records, query), query);
-  }
-
-  private recordConvergenceReason(
-    sessionId: string,
-    input: ConvergenceReasonInput,
-  ): BrewvaEventRecord | undefined {
-    const payload = coerceConvergenceReasonPayload(buildConvergenceReasonPayload(input));
-    if (!payload) return undefined;
-    return this.recordEvent({
-      sessionId,
-      type: ITERATION_CONVERGENCE_RECORDED_EVENT_TYPE,
-      turn: input.turn,
-      timestamp: input.timestamp,
-      payload: payload as unknown as Record<string, unknown>,
-    });
-  }
-
-  private listConvergenceReasons(
-    sessionId: string,
-    query: ConvergenceReasonQuery = {},
-  ): ConvergenceReasonRecord[] {
-    const records = this.listIterationFactRecords(
-      sessionId,
-      query,
-      getConvergenceReasonEventQuery,
-      toConvergenceReasonRecord,
-    );
-    return applyFactWindow(filterConvergenceReasonRecords(records, query), query);
   }
 
   private listIterationFactRecords<

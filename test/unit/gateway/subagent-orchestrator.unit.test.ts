@@ -7,7 +7,7 @@ import {
   createHostedSubagentAdapter,
   type HostedSubagentSessionOptions,
 } from "@brewva/brewva-gateway";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 
 function createTempWorkspace(prefix: string): string {
@@ -157,14 +157,21 @@ describe("hosted subagent orchestrator", () => {
 
   test("allows packet boundary to narrow a patch-worker profile back to safe", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-narrow-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtimeConfig = structuredClone(DEFAULT_BREWVA_CONFIG);
+    runtimeConfig.infrastructure.events.level = "ops";
+    const runtime = new BrewvaRuntime({
+      cwd: workspaceRoot,
+      config: runtimeConfig,
+    });
     const parentSessionId = "parent-session-narrow";
     let capturedBuiltinTools: readonly string[] = [];
+    let capturedEventsLevel = "";
 
     const adapter = createHostedSubagentAdapter({
       runtime,
       async createChildSession(input: HostedSubagentSessionOptions) {
         capturedBuiltinTools = input.builtinToolNames ?? [];
+        capturedEventsLevel = input.config?.infrastructure.events.level ?? "";
         const childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
         const childSessionId = "child-observe";
         const listeners = new Set<(event: AgentSessionEvent) => void>();
@@ -219,6 +226,7 @@ describe("hosted subagent orchestrator", () => {
 
     expect(result.ok).toBe(true);
     expect(capturedBuiltinTools).toEqual(["read"]);
+    expect(capturedEventsLevel).toBe("ops");
     expect(runtime.session.listWorkerResults(parentSessionId)).toEqual([
       expect.objectContaining({
         workerId: expect.any(String),

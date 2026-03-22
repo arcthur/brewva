@@ -2,10 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, type BrewvaConfig } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, type BrewvaConfig } from "@brewva/brewva-runtime";
+import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 
 function createConfig(): BrewvaConfig {
-  return structuredClone(DEFAULT_BREWVA_CONFIG);
+  return createOpsRuntimeConfig();
 }
 
 describe("context compaction request dedupe", () => {

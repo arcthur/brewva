@@ -8,6 +8,7 @@ import {
   buildScheduleIntentFiredEvent,
 } from "@brewva/brewva-runtime";
 import { setStaticContextPressureThresholds } from "../../fixtures/config.js";
+import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 const originalDateNow = Date.now;
@@ -25,7 +26,10 @@ describe("runtime facade coverage", () => {
     let now = 1_740_000_000_000;
     Date.now = () => now;
 
-    const runtime = new BrewvaRuntime({ cwd: createTestWorkspace("runtime-facade-poll-stall") });
+    const runtime = new BrewvaRuntime({
+      cwd: createTestWorkspace("runtime-facade-poll-stall"),
+      config: createOpsRuntimeConfig(),
+    });
     const sessionId = "runtime-facade-poll-stall-1";
 
     now = 1_740_000_000_100;
@@ -36,15 +40,11 @@ describe("runtime facade coverage", () => {
 
     runtime.session.pollStall(sessionId, {
       now: now + 1_001,
-      thresholdsMs: {
-        investigate: 1_000,
-      },
+      thresholdMs: 1_000,
     });
 
     const state = runtime.task.getState(sessionId);
-    expect(state.blockers.some((entry) => entry.id === "watchdog:task-stuck:no-progress")).toBe(
-      true,
-    );
+    expect(state.blockers).toEqual([]);
 
     const detected = runtime.events.query(sessionId, {
       type: "task_stuck_detected",
@@ -52,16 +52,13 @@ describe("runtime facade coverage", () => {
     expect(detected).toHaveLength(1);
     expect(detected[0]?.payload).toMatchObject({
       schema: "brewva.task-watchdog.v1",
-      phase: "investigate",
-      blockerWritten: true,
-      blockerId: "watchdog:task-stuck:no-progress",
+      thresholdMs: 1_000,
+      idleMs: 1_001,
     });
 
     runtime.session.pollStall(sessionId, {
       now: now + 1_500,
-      thresholdsMs: {
-        investigate: 1_000,
-      },
+      thresholdMs: 1_000,
     });
 
     expect(runtime.events.query(sessionId, { type: "task_stuck_detected" })).toHaveLength(1);
@@ -300,7 +297,7 @@ describe("runtime facade coverage", () => {
     });
   });
 
-  test("events facade records typed iteration facts and exposes them as state events", () => {
+  test("events facade records typed metric and guard facts and exposes them as state events", () => {
     const runtime = new BrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-iteration-facts"),
     });
@@ -324,28 +321,9 @@ describe("runtime facade coverage", () => {
       evidenceRefs: ["slo:error-budget"],
       summary: "Error budget stayed green.",
     });
-    const decisionEvent = runtime.events.recordIterationDecision(sessionId, {
-      iterationKey: "iter-1",
-      decision: "keep",
-      reasonCode: "metric_improved_guard_green",
-      source: "goal-loop",
-      metricObservationRefs: metricEvent ? [metricEvent.id] : [],
-      guardResultRefs: guardEvent ? [guardEvent.id] : [],
-      summary: "Latency improved without guard regressions.",
-    });
-    runtime.events.recordConvergenceReason(sessionId, {
-      runKey: "goal-loop/run-1",
-      status: "continue",
-      reasonCode: "budget_available",
-      source: "goal-loop",
-      predicateRef: "maxRuns<5",
-      evidenceRefs: decisionEvent ? [decisionEvent.id] : [],
-      summary: "Continue with the next bounded iteration.",
-    });
 
     expect(metricEvent?.type).toBe("iteration_metric_observed");
     expect(guardEvent?.type).toBe("iteration_guard_recorded");
-    expect(decisionEvent?.type).toBe("iteration_decision_recorded");
 
     expect(runtime.events.listMetricObservations(sessionId, { metricKey: "latency_ms" })).toEqual([
       expect.objectContaining({
@@ -365,27 +343,6 @@ describe("runtime facade coverage", () => {
         source: "goal-loop",
       }),
     ]);
-    expect(
-      runtime.events.listIterationDecisions(sessionId, {
-        decision: "keep",
-        iterationKey: "iter-1",
-      }),
-    ).toEqual([
-      expect.objectContaining({
-        iterationKey: "iter-1",
-        decision: "keep",
-        reasonCode: "metric_improved_guard_green",
-      }),
-    ]);
-    expect(runtime.events.listConvergenceReasons(sessionId, { runKey: "goal-loop/run-1" })).toEqual(
-      [
-        expect.objectContaining({
-          runKey: "goal-loop/run-1",
-          status: "continue",
-          reasonCode: "budget_available",
-        }),
-      ],
-    );
 
     const structuredMetric = runtime.events.queryStructured(sessionId, {
       type: "iteration_metric_observed",
@@ -513,20 +470,6 @@ describe("runtime facade coverage", () => {
         source: loopSource,
         timestamp: entry.timestamp + 1,
       });
-      runtime.events.recordIterationDecision(entry.sessionId, {
-        iterationKey: entry.iterationKey,
-        decision: "keep",
-        reasonCode: "metric_improved_guard_green",
-        source: loopSource,
-        timestamp: entry.timestamp + 2,
-      });
-      runtime.events.recordConvergenceReason(entry.sessionId, {
-        runKey: entry.iterationKey.replace(/\/iter-\d+$/, ""),
-        status: "continue",
-        reasonCode: "budget_available",
-        source: loopSource,
-        timestamp: entry.timestamp + 3,
-      });
     }
 
     runtime.events.recordMetricObservation(childSessionId, {
@@ -579,19 +522,6 @@ describe("runtime facade coverage", () => {
     expect(
       runtime.events.listGuardResults(childSessionId, {
         guardKey: "typecheck",
-        source: loopSource,
-        sessionScope: "parent_lineage",
-      }),
-    ).toHaveLength(3);
-    expect(
-      runtime.events.listIterationDecisions(childSessionId, {
-        decision: "keep",
-        source: loopSource,
-        sessionScope: "parent_lineage",
-      }),
-    ).toHaveLength(3);
-    expect(
-      runtime.events.listConvergenceReasons(childSessionId, {
         source: loopSource,
         sessionScope: "parent_lineage",
       }),

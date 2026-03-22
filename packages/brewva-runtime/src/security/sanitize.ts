@@ -65,7 +65,6 @@ const SOURCE_TRUST_MAP: Record<string, SourceTrustTier> = {
   [CONTEXT_SOURCES.identity]: "system",
   [CONTEXT_SOURCES.taskState]: "system",
   [CONTEXT_SOURCES.runtimeStatus]: "internal",
-  [CONTEXT_SOURCES.workflowAdvisory]: "internal",
   [CONTEXT_SOURCES.toolOutputsDistilled]: "internal",
   [CONTEXT_SOURCES.projectionWorking]: "internal",
 };

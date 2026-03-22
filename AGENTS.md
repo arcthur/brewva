@@ -36,7 +36,7 @@
 - Integration direction is async-first; do not add parallel sync facade APIs.
 - Preserve the current security, event-level, and fail-fast config semantics described in `packages/brewva-runtime/src/types.ts`, `packages/brewva-runtime/src/security/mode.ts`, and `docs/reference/configuration.md`.
 - Preserve the current runtime execution shape: shared invocation spine first, then execution boundary policy (`safe`, `effectful`), then receipt-bearing effect authorization or rollback.
-- Preserve the current context model: deterministic single-path injection, explicit context source labels, working-only projection, deterministic `skill_routing_selection` telemetry, and WAL-based turn durability/recovery.
+- Preserve the current context model: deterministic single-path injection, explicit context source labels, working-only projection, explicit workflow inspection surfaces, and WAL-based turn durability/recovery.
 - Keep `governancePort` governance-only and do not re-expose removed internal tuning knobs unless they represent a clear user-facing decision boundary.
 - Keep commitment flows replay-first: `effect_commitment` proposals, operator-desk approval events, and explicit resume via `effectCommitmentRequestId` are the source of truth, not process-local approval state.
 - Keep reversible mutation flows receipt-based: `reversible_mutate` must continue producing rollback/journal artifacts and remain recoverable through `runtime.tools.rollbackLastMutation(...)`.

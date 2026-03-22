@@ -21,6 +21,18 @@ import type { ExtensionAPI, ToolDefinition, ToolInfo } from "@mariozechner/pi-co
 const CAPABILITY_REQUEST_PATTERN = /\$([a-z][a-z0-9_]*)/g;
 const BUILTIN_ALWAYS_ON_TOOL_NAMES = ["read", "edit", "write"] as const;
 const MANAGED_TOOL_NAME_SET = new Set(MANAGED_BREWVA_TOOL_NAMES);
+const ALWAYS_ON_INSPECTION_TOOL_NAMES = [
+  "task_set_spec",
+  "task_view_state",
+  "task_add_item",
+  "task_update_item",
+  "task_record_blocker",
+  "task_resolve_blocker",
+  "output_search",
+  "ledger_query",
+  "tape_search",
+  "tape_handoff",
+] as const;
 
 type ToolSurfaceSkill = {
   name: string;
@@ -146,41 +158,6 @@ function collectSkillToolNames(
   return [...names];
 }
 
-function getTaskStateSafe(runtime: ToolSurfaceRuntime, sessionId: string) {
-  try {
-    return runtime.task.getState(sessionId);
-  } catch {
-    return undefined;
-  }
-}
-
-function resolveInvestigationLifecycleToolNames(
-  runtime: ToolSurfaceRuntime,
-  sessionId: string,
-): string[] {
-  const state = getTaskStateSafe(runtime, sessionId);
-  const phase = state?.status?.phase;
-  const shouldExpose =
-    !state?.spec || phase === "investigate" || phase === "blocked" || phase === undefined;
-  if (!shouldExpose) {
-    return [];
-  }
-
-  return [
-    "task_set_spec",
-    "task_view_state",
-    "task_add_item",
-    "task_update_item",
-    "task_record_blocker",
-    "task_resolve_blocker",
-    "workflow_status",
-    "output_search",
-    "ledger_query",
-    "tape_search",
-    "tape_handoff",
-  ];
-}
-
 function resolveRequestedManagedToolNames(
   requestedToolNames: string[],
   knownToolNames: Set<string>,
@@ -200,7 +177,6 @@ function resolveManagedToolNamesForTurn(input: {
   requestedManagedToolNames: string[];
   skillManagedToolNames: string[];
   lifecycleManagedToolNames: string[];
-  investigationManagedToolNames: string[];
   operatorManagedToolNames: string[];
 } {
   const requestedManagedToolNames = extractRequestedToolNames(input.prompt).filter((toolName) =>
@@ -212,15 +188,15 @@ function resolveManagedToolNamesForTurn(input: {
     surfaceSkills,
     input.dynamicToolDefinitions,
   ).filter((toolName) => MANAGED_TOOL_NAME_SET.has(toolName));
-  const lifecycleManagedToolNames: string[] = ["skill_load", "workflow_status"];
+  const lifecycleManagedToolNames: string[] = [
+    "skill_load",
+    "workflow_status",
+    ...ALWAYS_ON_INSPECTION_TOOL_NAMES,
+  ];
 
   if (surfaceSkills.length > 0) {
     lifecycleManagedToolNames.push("skill_complete");
   }
-  const investigationManagedToolNames = resolveInvestigationLifecycleToolNames(
-    input.runtime,
-    input.sessionId,
-  );
 
   const operatorManagedToolNames = isOperatorProfile(input.runtime)
     ? OPERATOR_BREWVA_TOOL_NAMES
@@ -230,7 +206,6 @@ function resolveManagedToolNamesForTurn(input: {
     requestedManagedToolNames,
     skillManagedToolNames,
     lifecycleManagedToolNames: [...new Set(lifecycleManagedToolNames)],
-    investigationManagedToolNames: [...new Set(investigationManagedToolNames)],
     operatorManagedToolNames,
   };
 }
@@ -301,7 +276,7 @@ function resolveActiveToolNames(input: {
       active.add(toolName);
     }
   }
-  for (const toolName of resolveInvestigationLifecycleToolNames(input.runtime, input.sessionId)) {
+  for (const toolName of ALWAYS_ON_INSPECTION_TOOL_NAMES) {
     if (knownToolNames.has(toolName)) {
       active.add(toolName);
     }
@@ -312,6 +287,9 @@ function resolveActiveToolNames(input: {
   }
   if (knownToolNames.has("skill_load")) {
     active.add("skill_load");
+  }
+  if (knownToolNames.has("workflow_status")) {
+    active.add("workflow_status");
   }
 
   const operatorProfile = isOperatorProfile(input.runtime);
@@ -390,7 +368,6 @@ function registerMissingManagedTools(input: {
     ...dynamic.requestedManagedToolNames,
     ...dynamic.skillManagedToolNames,
     ...dynamic.lifecycleManagedToolNames,
-    ...dynamic.investigationManagedToolNames,
     ...dynamic.operatorManagedToolNames,
   ];
 

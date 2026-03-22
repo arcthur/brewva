@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
+  BrewvaConfig,
   BrewvaRuntime,
   DelegationRunQuery,
   DelegationRunRecord,
@@ -51,6 +52,7 @@ export interface HostedSubagentSessionOptions {
   model?: string;
   cwd?: string;
   configPath?: string;
+  config?: BrewvaConfig;
   builtinToolNames?: readonly HostedSubagentBuiltinToolName[];
   managedToolNames?: readonly string[];
   managedToolMode?: ManagedToolMode;
@@ -622,6 +624,7 @@ export function createHostedSubagentAdapter(
           agentId: `subagent-${sanitizeFragment(input.profile.name) || "worker"}`,
           model: input.profile.model,
           cwd: isolatedWorkspace?.root,
+          config: structuredClone(options.runtime.config) as BrewvaConfig,
           builtinToolNames,
           managedToolNames,
           managedToolMode: input.profile.managedToolMode ?? "direct",

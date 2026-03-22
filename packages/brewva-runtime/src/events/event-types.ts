@@ -12,14 +12,50 @@ export const OBSERVABILITY_ASSERTION_RECORDED_EVENT_TYPE =
   "observability_assertion_recorded" as const;
 export const ITERATION_METRIC_OBSERVED_EVENT_TYPE = "iteration_metric_observed" as const;
 export const ITERATION_GUARD_RECORDED_EVENT_TYPE = "iteration_guard_recorded" as const;
-export const ITERATION_DECISION_RECORDED_EVENT_TYPE = "iteration_decision_recorded" as const;
-export const ITERATION_CONVERGENCE_RECORDED_EVENT_TYPE = "iteration_convergence_recorded" as const;
 export const PROPOSAL_RECEIVED_EVENT_TYPE = "proposal_received" as const;
 export const PROPOSAL_DECIDED_EVENT_TYPE = "proposal_decided" as const;
 export const DECISION_RECEIPT_RECORDED_EVENT_TYPE = "decision_receipt_recorded" as const;
 export const RESOURCE_LEASE_GRANTED_EVENT_TYPE = "resource_lease_granted" as const;
 export const RESOURCE_LEASE_CANCELLED_EVENT_TYPE = "resource_lease_cancelled" as const;
 export const RESOURCE_LEASE_EXPIRED_EVENT_TYPE = "resource_lease_expired" as const;
+export const AGENT_END_EVENT_TYPE = "agent_end" as const;
+export const BUDGET_ALERT_EVENT_TYPE = "budget_alert" as const;
+export const CHANNEL_SESSION_BOUND_EVENT_TYPE = "channel_session_bound" as const;
+export const CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE =
+  "context_compaction_gate_blocked_tool" as const;
+export const COST_UPDATE_EVENT_TYPE = "cost_update" as const;
+export const FILE_SNAPSHOT_CAPTURED_EVENT_TYPE = "file_snapshot_captured" as const;
+export const LEDGER_COMPACTED_EVENT_TYPE = "ledger_compacted" as const;
+export const MESSAGE_END_EVENT_TYPE = "message_end" as const;
+export const ROLLBACK_EVENT_TYPE = "rollback" as const;
+export const SESSION_BEFORE_COMPACT_EVENT_TYPE = "session_before_compact" as const;
+export const SESSION_BOOTSTRAP_EVENT_TYPE = "session_bootstrap" as const;
+export const SESSION_COMPACT_EVENT_TYPE = "session_compact" as const;
+export const SESSION_COMPACT_FAILED_EVENT_TYPE = "session_compact_failed" as const;
+export const SESSION_COMPACT_REQUESTED_EVENT_TYPE = "session_compact_requested" as const;
+export const SESSION_COMPACT_REQUEST_FAILED_EVENT_TYPE = "session_compact_request_failed" as const;
+export const SESSION_INTERRUPTED_EVENT_TYPE = "session_interrupted" as const;
+export const SESSION_SHUTDOWN_EVENT_TYPE = "session_shutdown" as const;
+export const SESSION_START_EVENT_TYPE = "session_start" as const;
+export const SESSION_TURN_COMPACTION_RESUME_DISPATCHED_EVENT_TYPE =
+  "session_turn_compaction_resume_dispatched" as const;
+export const SESSION_TURN_COMPACTION_RESUME_FAILED_EVENT_TYPE =
+  "session_turn_compaction_resume_failed" as const;
+export const SESSION_TURN_COMPACTION_RESUME_REQUESTED_EVENT_TYPE =
+  "session_turn_compaction_resume_requested" as const;
+export const SKILL_ACTIVATED_EVENT_TYPE = "skill_activated" as const;
+export const SKILL_BUDGET_WARNING_EVENT_TYPE = "skill_budget_warning" as const;
+export const SKILL_COMPLETED_EVENT_TYPE = "skill_completed" as const;
+export const SKILL_PARALLEL_WARNING_EVENT_TYPE = "skill_parallel_warning" as const;
+export const TOOL_CALL_EVENT_TYPE = "tool_call" as const;
+export const TOOL_CALL_BLOCKED_EVENT_TYPE = "tool_call_blocked" as const;
+export const TOOL_CALL_MARKED_EVENT_TYPE = "tool_call_marked" as const;
+export const TOOL_CONTRACT_WARNING_EVENT_TYPE = "tool_contract_warning" as const;
+export const TOOL_EXECUTION_END_EVENT_TYPE = "tool_execution_end" as const;
+export const TOOL_EXECUTION_START_EVENT_TYPE = "tool_execution_start" as const;
+export const TOOL_OUTPUT_SEARCH_EVENT_TYPE = "tool_output_search" as const;
+export const TURN_END_EVENT_TYPE = "turn_end" as const;
+export const TURN_START_EVENT_TYPE = "turn_start" as const;
 
 export const EXEC_ROUTED_EVENT_TYPE = "exec_routed" as const;
 export const EXEC_FALLBACK_HOST_EVENT_TYPE = "exec_fallback_host" as const;
@@ -47,7 +83,6 @@ export const PROJECTION_INGESTED_EVENT_TYPE = "projection_ingested" as const;
 export const PROJECTION_REFRESHED_EVENT_TYPE = "projection_refreshed" as const;
 export const CONTEXT_COMPOSED_EVENT_TYPE = "context_composed" as const;
 export const TOOL_SURFACE_RESOLVED_EVENT_TYPE = "tool_surface_resolved" as const;
-export const SKILL_ROUTING_SELECTION_EVENT_TYPE = "skill_routing_selection" as const;
 export const TOOL_CALL_NORMALIZED_EVENT_TYPE = "tool_call_normalized" as const;
 export const TOOL_CALL_NORMALIZATION_FAILED_EVENT_TYPE = "tool_call_normalization_failed" as const;
 export const MODEL_CAPABILITY_PROFILE_SELECTED_EVENT_TYPE =
@@ -96,14 +131,46 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   OBSERVABILITY_ASSERTION_RECORDED_EVENT_TYPE,
   ITERATION_METRIC_OBSERVED_EVENT_TYPE,
   ITERATION_GUARD_RECORDED_EVENT_TYPE,
-  ITERATION_DECISION_RECORDED_EVENT_TYPE,
-  ITERATION_CONVERGENCE_RECORDED_EVENT_TYPE,
   PROPOSAL_RECEIVED_EVENT_TYPE,
   PROPOSAL_DECIDED_EVENT_TYPE,
   DECISION_RECEIPT_RECORDED_EVENT_TYPE,
   RESOURCE_LEASE_GRANTED_EVENT_TYPE,
   RESOURCE_LEASE_CANCELLED_EVENT_TYPE,
   RESOURCE_LEASE_EXPIRED_EVENT_TYPE,
+  AGENT_END_EVENT_TYPE,
+  BUDGET_ALERT_EVENT_TYPE,
+  CHANNEL_SESSION_BOUND_EVENT_TYPE,
+  CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE,
+  COST_UPDATE_EVENT_TYPE,
+  FILE_SNAPSHOT_CAPTURED_EVENT_TYPE,
+  LEDGER_COMPACTED_EVENT_TYPE,
+  MESSAGE_END_EVENT_TYPE,
+  ROLLBACK_EVENT_TYPE,
+  SESSION_BEFORE_COMPACT_EVENT_TYPE,
+  SESSION_BOOTSTRAP_EVENT_TYPE,
+  SESSION_COMPACT_EVENT_TYPE,
+  SESSION_COMPACT_FAILED_EVENT_TYPE,
+  SESSION_COMPACT_REQUESTED_EVENT_TYPE,
+  SESSION_COMPACT_REQUEST_FAILED_EVENT_TYPE,
+  SESSION_INTERRUPTED_EVENT_TYPE,
+  SESSION_SHUTDOWN_EVENT_TYPE,
+  SESSION_START_EVENT_TYPE,
+  SESSION_TURN_COMPACTION_RESUME_DISPATCHED_EVENT_TYPE,
+  SESSION_TURN_COMPACTION_RESUME_FAILED_EVENT_TYPE,
+  SESSION_TURN_COMPACTION_RESUME_REQUESTED_EVENT_TYPE,
+  SKILL_ACTIVATED_EVENT_TYPE,
+  SKILL_BUDGET_WARNING_EVENT_TYPE,
+  SKILL_COMPLETED_EVENT_TYPE,
+  SKILL_PARALLEL_WARNING_EVENT_TYPE,
+  TOOL_CALL_EVENT_TYPE,
+  TOOL_CALL_BLOCKED_EVENT_TYPE,
+  TOOL_CALL_MARKED_EVENT_TYPE,
+  TOOL_CONTRACT_WARNING_EVENT_TYPE,
+  TOOL_EXECUTION_END_EVENT_TYPE,
+  TOOL_EXECUTION_START_EVENT_TYPE,
+  TOOL_OUTPUT_SEARCH_EVENT_TYPE,
+  TURN_END_EVENT_TYPE,
+  TURN_START_EVENT_TYPE,
   EXEC_ROUTED_EVENT_TYPE,
   EXEC_FALLBACK_HOST_EVENT_TYPE,
   EXEC_BLOCKED_ISOLATION_EVENT_TYPE,
@@ -124,7 +191,6 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   PROJECTION_REFRESHED_EVENT_TYPE,
   CONTEXT_COMPOSED_EVENT_TYPE,
   TOOL_SURFACE_RESOLVED_EVENT_TYPE,
-  SKILL_ROUTING_SELECTION_EVENT_TYPE,
   TOOL_CALL_NORMALIZED_EVENT_TYPE,
   TOOL_CALL_NORMALIZATION_FAILED_EVENT_TYPE,
   MODEL_CAPABILITY_PROFILE_SELECTED_EVENT_TYPE,

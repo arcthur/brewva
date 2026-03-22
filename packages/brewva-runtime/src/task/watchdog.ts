@@ -2,33 +2,22 @@ import {
   TASK_STUCK_CLEARED_EVENT_TYPE,
   TASK_STUCK_DETECTED_EVENT_TYPE,
 } from "../events/event-types.js";
-import type { BrewvaEventRecord, TaskBlocker, TaskPhase, TaskState } from "../types.js";
+import type { BrewvaEventRecord, TaskState } from "../types.js";
 import { coerceTaskLedgerPayload } from "./ledger.js";
 
 export const TASK_WATCHDOG_SCHEMA = "brewva.task-watchdog.v1" as const;
-export const WATCHDOG_BLOCKER_ID = "watchdog:task-stuck:no-progress" as const;
-export const WATCHDOG_BLOCKER_SOURCE = "runtime.watchdog" as const;
-export const SCAN_CONVERGENCE_BLOCKER_ID = "guard:scan-convergence" as const;
-
-export type TaskWatchdogPhase = Extract<TaskPhase, "investigate" | "execute" | "verify">;
 
 export interface TaskStuckDetectedPayload {
   schema: typeof TASK_WATCHDOG_SCHEMA;
-  phase: TaskWatchdogPhase;
   thresholdMs: number;
   baselineProgressAt: number;
   detectedAt: number;
   idleMs: number;
   openItemCount: number;
-  blockerId: string | null;
-  blockerWritten: boolean;
-  suppressedBy: string | null;
 }
 
 export interface TaskStuckClearedPayload {
   schema: typeof TASK_WATCHDOG_SCHEMA;
-  phase: TaskWatchdogPhase;
-  blockerId: string;
   detectedAt: number;
   clearedAt: number;
   resumedProgressAt: number;
@@ -37,10 +26,7 @@ export interface TaskStuckClearedPayload {
 
 export interface TaskWatchdogEligibility {
   eligible: boolean;
-  phase: TaskWatchdogPhase | null;
-  hasWatchdogBlocker: boolean;
-  suppressedByBlockerId?: string;
-  reason?: "inactive_phase" | "non_watchdog_blockers_present";
+  reason?: "inactive_task";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -58,75 +44,27 @@ function countOpenItems(state: TaskState): number {
   return state.items.filter((item) => item.status !== "done").length;
 }
 
-export function inferUnderlyingTaskPhase(state: TaskState): TaskWatchdogPhase | null {
-  const openItemCount = countOpenItems(state);
-  if (openItemCount > 0) {
-    return "execute";
-  }
-  if (!state.spec || state.items.length === 0) {
-    return "investigate";
-  }
-  return "verify";
-}
-
-export function resolveTaskWatchdogPhase(state: TaskState): TaskWatchdogPhase | null {
-  const statusPhase = state.status?.phase;
-  if (statusPhase === "investigate" || statusPhase === "execute" || statusPhase === "verify") {
-    return statusPhase;
-  }
-  return inferUnderlyingTaskPhase(state);
-}
-
-export function getTaskWatchdogBlocker(state: TaskState): TaskBlocker | undefined {
-  return state.blockers.find((blocker) => blocker.id === WATCHDOG_BLOCKER_ID);
-}
-
 export function getTaskWatchdogOpenItemCount(state: TaskState): number {
   return countOpenItems(state);
 }
 
 export function evaluateTaskWatchdogEligibility(state: TaskState): TaskWatchdogEligibility {
-  const hasWatchdogBlocker = Boolean(getTaskWatchdogBlocker(state));
-  const hasScanConvergenceBlocker = state.blockers.some(
-    (blocker) => blocker.id === SCAN_CONVERGENCE_BLOCKER_ID,
-  );
-  const otherBlockers = state.blockers.filter(
-    (blocker) => blocker.id !== WATCHDOG_BLOCKER_ID && blocker.id !== SCAN_CONVERGENCE_BLOCKER_ID,
-  );
-  if (otherBlockers.length > 0) {
+  if (state.status?.phase === "done") {
     return {
       eligible: false,
-      phase: null,
-      hasWatchdogBlocker,
-      reason: "non_watchdog_blockers_present",
+      reason: "inactive_task",
     };
   }
 
-  const statusPhase = state.status?.phase;
-  if (statusPhase === "done") {
+  if (!state.spec && state.items.length === 0 && state.blockers.length === 0) {
     return {
       eligible: false,
-      phase: null,
-      hasWatchdogBlocker,
-      reason: "inactive_phase",
-    };
-  }
-
-  const phase = resolveTaskWatchdogPhase(state);
-  if (!phase) {
-    return {
-      eligible: false,
-      phase: null,
-      hasWatchdogBlocker,
-      reason: "inactive_phase",
+      reason: "inactive_task",
     };
   }
 
   return {
     eligible: true,
-    phase,
-    hasWatchdogBlocker,
-    suppressedByBlockerId: hasScanConvergenceBlocker ? SCAN_CONVERGENCE_BLOCKER_ID : undefined,
   };
 }
 
@@ -142,9 +80,6 @@ export function computeTaskSemanticProgressAt(input: {
   }
 
   for (const blocker of input.state.blockers) {
-    if (blocker.id === WATCHDOG_BLOCKER_ID) {
-      continue;
-    }
     latest = maxTimestamp(latest, blocker.createdAt);
   }
 
@@ -161,7 +96,7 @@ export function computeTaskSemanticProgressAt(input: {
       latest = maxTimestamp(latest, event.timestamp);
       break;
     }
-    if (payload.kind === "blocker_resolved" && payload.blockerId !== WATCHDOG_BLOCKER_ID) {
+    if (payload.kind === "blocker_resolved") {
       latest = maxTimestamp(latest, event.timestamp);
       break;
     }
@@ -174,25 +109,6 @@ export function computeTaskSemanticProgressAt(input: {
   return typeof input.state.updatedAt === "number" && Number.isFinite(input.state.updatedAt)
     ? input.state.updatedAt
     : null;
-}
-
-export function buildTaskStuckBlockerMessage(input: {
-  phase: TaskWatchdogPhase;
-  idleMs: number;
-  thresholdMs: number;
-  baselineProgressAt: number;
-  openItemCount: number;
-}): string {
-  return [
-    "[TaskProgressWatchdog]",
-    "No semantic task progress detected within the watchdog threshold.",
-    `phase=${input.phase}`,
-    `idle_ms=${input.idleMs}`,
-    `threshold_ms=${input.thresholdMs}`,
-    `open_items=${input.openItemCount}`,
-    `last_progress_at=${input.baselineProgressAt}`,
-    "required_next_step=Summarize current evidence, record blocker/root cause, or change strategy before continuing.",
-  ].join("\n");
 }
 
 export function buildTaskStuckDetectedPayload(
@@ -223,9 +139,6 @@ export function coerceTaskStuckDetectedPayload(value: unknown): TaskStuckDetecte
   if (!isRecord(value) || value.schema !== TASK_WATCHDOG_SCHEMA) {
     return null;
   }
-  if (value.phase !== "investigate" && value.phase !== "execute" && value.phase !== "verify") {
-    return null;
-  }
   const thresholdMs = Number(value.thresholdMs);
   const baselineProgressAt = Number(value.baselineProgressAt);
   const detectedAt = Number(value.detectedAt);
@@ -240,19 +153,13 @@ export function coerceTaskStuckDetectedPayload(value: unknown): TaskStuckDetecte
   ) {
     return null;
   }
-  const blockerId = typeof value.blockerId === "string" ? value.blockerId : null;
-  const suppressedBy = typeof value.suppressedBy === "string" ? value.suppressedBy : null;
   return {
     schema: TASK_WATCHDOG_SCHEMA,
-    phase: value.phase,
     thresholdMs,
     baselineProgressAt,
     detectedAt,
     idleMs,
     openItemCount,
-    blockerId,
-    blockerWritten: value.blockerWritten === true,
-    suppressedBy,
   };
 }
 

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function writeIdentity(workspace: string, agentId: string, content: string): void {
@@ -33,7 +34,7 @@ describe("Context injection orchestrator characterization", () => {
       ["## Who I Am", "orchestrator characterization"].join("\n"),
     );
     writeAgentsRules(workspace);
-    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    const config = createOpsRuntimeConfig();
 
     const runtime = new BrewvaRuntime({ cwd: workspace, agentId: "default", config });
     const sessionId = "ctx-orchestrator-sources-1";
@@ -97,7 +98,7 @@ describe("Context injection orchestrator characterization", () => {
 
   test("drops duplicate fingerprint in same scope and emits context_injection_dropped", async () => {
     const workspace = createTestWorkspace("ctx-orchestrator-duplicate");
-    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    const config = createOpsRuntimeConfig();
     config.projection.enabled = false;
     config.infrastructure.toolFailureInjection.enabled = false;
     const runtime = new BrewvaRuntime({ cwd: workspace, config });

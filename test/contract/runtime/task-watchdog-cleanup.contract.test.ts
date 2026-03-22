@@ -1,19 +1,19 @@
 import { describe, expect, test } from "bun:test";
-import {
-  BrewvaRuntime,
-  WATCHDOG_BLOCKER_ID,
-  WATCHDOG_BLOCKER_SOURCE,
-} from "@brewva/brewva-runtime";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("task watchdog cleanup", () => {
-  test("clears persisted watchdog blocker on turn start after semantic progress resumes", () => {
+  test("records a cleared event on turn start after semantic progress resumes", () => {
     const originalNow = Date.now;
     let now = 1_730_000_000_000;
 
     Date.now = () => now;
     try {
-      const runtime = new BrewvaRuntime({ cwd: createTestWorkspace("watchdog-cleanup") });
+      const runtime = new BrewvaRuntime({
+        cwd: createTestWorkspace("watchdog-cleanup"),
+        config: createOpsRuntimeConfig(),
+      });
       const sessionId = "watchdog-cleanup-1";
 
       now = 1_730_000_000_100;
@@ -23,27 +23,26 @@ describe("task watchdog cleanup", () => {
       });
 
       now = 1_730_000_000_200;
-      runtime.task.recordBlocker(sessionId, {
-        id: WATCHDOG_BLOCKER_ID,
-        message: "watchdog stall detected",
-        source: WATCHDOG_BLOCKER_SOURCE,
+      runtime.session.pollStall(sessionId, {
+        now,
+        thresholdMs: 1_000,
       });
+      expect(runtime.events.query(sessionId, { type: "task_stuck_detected" })).toHaveLength(0);
 
-      now = 1_730_000_000_300;
+      now = 1_730_000_001_300;
+      runtime.session.pollStall(sessionId, {
+        now,
+        thresholdMs: 1_000,
+      });
+      expect(runtime.events.query(sessionId, { type: "task_stuck_detected" })).toHaveLength(1);
+
+      now = 1_730_000_001_400;
       runtime.task.addItem(sessionId, {
         text: "Semantic progress resumes with a new task item",
       });
 
-      const blocked = runtime.task.getState(sessionId);
-      expect(blocked.blockers.some((entry) => entry.id === WATCHDOG_BLOCKER_ID)).toBe(true);
-      expect(blocked.status?.phase).toBe("blocked");
-
-      now = 1_730_000_000_400;
+      now = 1_730_000_001_500;
       runtime.context.onTurnStart(sessionId, 1);
-
-      const cleared = runtime.task.getState(sessionId);
-      expect(cleared.blockers.some((entry) => entry.id === WATCHDOG_BLOCKER_ID)).toBe(false);
-      expect(cleared.status?.phase).toBe("execute");
 
       const clearEvent = runtime.events.query(sessionId, {
         type: "task_stuck_cleared",
@@ -51,10 +50,9 @@ describe("task watchdog cleanup", () => {
       })[0];
       expect(clearEvent?.payload).toMatchObject({
         schema: "brewva.task-watchdog.v1",
-        blockerId: WATCHDOG_BLOCKER_ID,
-        detectedAt: 1_730_000_000_200,
-        clearedAt: 1_730_000_000_400,
-        resumedProgressAt: 1_730_000_000_300,
+        detectedAt: 1_730_000_001_300,
+        clearedAt: 1_730_000_001_500,
+        resumedProgressAt: 1_730_000_001_400,
       });
     } finally {
       Date.now = originalNow;

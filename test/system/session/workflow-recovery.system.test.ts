@@ -12,7 +12,7 @@ function createConfig(): BrewvaConfig {
 }
 
 describe("system: workflow recovery", () => {
-  test("rebuilds workflow advisory and projection artifacts from tape when projection state is missing", async () => {
+  test("rebuilds workflow projection artifacts from tape when projection state is missing", async () => {
     const workspace = createTestWorkspace("workflow-recovery-system");
     const config = createConfig();
     const sessionId = "workflow-system-recovery-1";
@@ -84,14 +84,6 @@ describe("system: workflow recovery", () => {
       );
 
       expect(injected.accepted).toBe(true);
-      expect(injected.text).toContain("[WorkflowAdvisory]");
-      expect(injected.text).toContain("planning: ready");
-      expect(injected.text).toContain("implementation: ready");
-      expect(injected.text).toContain("review: ready");
-      expect(injected.text).toContain("qa: missing");
-      expect(injected.text).toContain("verification: ready");
-      expect(injected.text).toContain("ship: ready");
-      expect(injected.text).toContain("retro: missing");
       expect(injected.text).toContain("[WorkingProjection]");
       expect(injected.text).toContain(
         "workflow.design: state=ready; freshness=unknown; Recover workflow artifacts from tape.",

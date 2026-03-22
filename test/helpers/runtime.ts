@@ -17,6 +17,13 @@ export function createRuntimeConfig(mutate?: (config: BrewvaConfig) => void): Br
   return config;
 }
 
+export function createOpsRuntimeConfig(mutate?: (config: BrewvaConfig) => void): BrewvaConfig {
+  return createRuntimeConfig((config) => {
+    config.infrastructure.events.level = "ops";
+    mutate?.(config);
+  });
+}
+
 export function createRuntimeFixture(options: RuntimeFixtureOptions = {}): BrewvaRuntime {
   const runtime = new BrewvaRuntime({
     cwd: mkdtempSync(join(tmpdir(), "brewva-ext-runtime-fixture-")),

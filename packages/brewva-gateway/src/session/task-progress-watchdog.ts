@@ -1,25 +1,16 @@
-import {
-  SCAN_CONVERGENCE_BLOCKER_ID,
-  type BrewvaRuntime,
-  type TaskWatchdogPhase,
-} from "@brewva/brewva-runtime";
+import { type BrewvaRuntime } from "@brewva/brewva-runtime";
 
 type IntervalHandle = ReturnType<typeof setInterval>;
-type TaskProgressWatchdogThresholdPolicy = Readonly<Record<TaskWatchdogPhase, number>>;
 
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
-const DEFAULT_THRESHOLDS_MS: Record<TaskWatchdogPhase, number> = {
-  investigate: 5 * 60_000,
-  execute: 10 * 60_000,
-  verify: 5 * 60_000,
-};
+const DEFAULT_THRESHOLD_MS = 5 * 60_000;
 
 export interface TaskProgressWatchdogOptions {
   runtime: BrewvaRuntime;
   sessionId: string;
   now?: () => number;
   pollIntervalMs?: number;
-  thresholdsMs?: Partial<Record<TaskWatchdogPhase, number>>;
+  thresholdMs?: number;
   setIntervalFn?: (callback: () => void, delayMs: number) => IntervalHandle;
   clearIntervalFn?: (handle: IntervalHandle) => void;
 }
@@ -30,30 +21,12 @@ function sanitizeDelayMs(value: number | undefined, fallbackMs: number): number 
   return Math.max(1_000, candidate);
 }
 
-function createThresholdPolicy(
-  overrides?: Partial<Record<TaskWatchdogPhase, number>>,
-): TaskProgressWatchdogThresholdPolicy {
-  return {
-    investigate: sanitizeDelayMs(overrides?.investigate, DEFAULT_THRESHOLDS_MS.investigate),
-    execute: sanitizeDelayMs(overrides?.execute, DEFAULT_THRESHOLDS_MS.execute),
-    verify: sanitizeDelayMs(overrides?.verify, DEFAULT_THRESHOLDS_MS.verify),
-  };
-}
-
-function buildDetectionKey(input: {
-  phase: TaskWatchdogPhase;
-  baselineProgressAt: number;
-  suppressedBy: string | null;
-}): string {
-  return `${input.phase}:${input.baselineProgressAt}:${input.suppressedBy ?? ""}`;
-}
-
 export class TaskProgressWatchdog {
   private readonly runtime: BrewvaRuntime;
   private readonly sessionId: string;
   private readonly now: () => number;
   private readonly pollIntervalMs: number;
-  private readonly thresholdPolicy: TaskProgressWatchdogThresholdPolicy;
+  private readonly thresholdMs: number;
   private readonly setIntervalFn: TaskProgressWatchdogOptions["setIntervalFn"];
   private readonly clearIntervalFn: TaskProgressWatchdogOptions["clearIntervalFn"];
   private timer: IntervalHandle | null = null;
@@ -63,7 +36,7 @@ export class TaskProgressWatchdog {
     this.sessionId = options.sessionId;
     this.now = options.now ?? (() => Date.now());
     this.pollIntervalMs = sanitizeDelayMs(options.pollIntervalMs, DEFAULT_POLL_INTERVAL_MS);
-    this.thresholdPolicy = createThresholdPolicy(options.thresholdsMs);
+    this.thresholdMs = sanitizeDelayMs(options.thresholdMs, DEFAULT_THRESHOLD_MS);
     this.setIntervalFn =
       options.setIntervalFn ?? ((callback, delayMs) => setInterval(callback, delayMs));
     this.clearIntervalFn = options.clearIntervalFn ?? ((handle) => clearInterval(handle));
@@ -87,16 +60,13 @@ export class TaskProgressWatchdog {
   poll(): void {
     this.runtime.session.pollStall(this.sessionId, {
       now: this.now(),
-      thresholdsMs: this.thresholdPolicy,
+      thresholdMs: this.thresholdMs,
     });
   }
 }
 
 export const TASK_PROGRESS_WATCHDOG_TEST_ONLY = {
   DEFAULT_POLL_INTERVAL_MS,
-  DEFAULT_THRESHOLDS_MS,
-  createThresholdPolicy,
+  DEFAULT_THRESHOLD_MS,
   sanitizeDelayMs,
-  buildDetectionKey,
-  SCAN_CONVERGENCE_BLOCKER_ID,
 };

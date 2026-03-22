@@ -145,7 +145,7 @@ describe("context transform registration contract", () => {
     });
   });
 
-  test("emits deterministic routing telemetry from the real runtime path", async () => {
+  test("does not emit deprecated routing telemetry from the real runtime path", async () => {
     const { api, handlers } = createMockExtensionAPI();
     const runtime = createRuntimeFixture({
       config: createRuntimeConfig((config) => {
@@ -159,17 +159,7 @@ describe("context transform registration contract", () => {
     registerContextTransform(api, runtime);
 
     const prompt = "Review architecture risks, merge safety, and quality audit gaps";
-    const result = await invokeHandlerAsync<{
-      message: {
-        details?: {
-          routingSelection?: {
-            status?: string;
-            reason?: string;
-            selectedCount?: number;
-          };
-        };
-      };
-    }>(
+    const result = await invokeHandlerAsync<{ message: { details?: Record<string, unknown> } }>(
       handlers,
       "before_agent_start",
       {
@@ -185,17 +175,10 @@ describe("context transform registration contract", () => {
       },
     );
 
-    const selectionPayload = runtime.events.query(sessionId, {
-      type: "skill_routing_selection",
-      last: 1,
-    })[0]?.payload as { status?: string; reason?: string; selectedCount?: number } | undefined;
-
-    expect(selectionPayload?.status).toBe("skipped");
-    expect(selectionPayload?.reason).toBe("selection_unavailable");
-    expect(selectionPayload?.selectedCount).toBe(0);
-    expect(result.message.details?.routingSelection?.status).toBe("skipped");
-    expect(result.message.details?.routingSelection?.reason).toBe("selection_unavailable");
-    expect(result.message.details?.routingSelection?.selectedCount).toBe(0);
+    expect(runtime.events.query(sessionId, { type: "skill_routing_selection", last: 1 })).toEqual(
+      [],
+    );
+    expect(result.message.details?.routingSelection).toBeUndefined();
 
     const summary = runtime.cost.getSummary(sessionId);
     expect(summary.totalTokens).toBe(0);

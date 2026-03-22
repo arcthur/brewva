@@ -141,8 +141,8 @@ export const TOOL_GOVERNANCE_BY_NAME: Record<string, ToolGovernanceDescriptor> =
     defaultRisk: "low",
   }),
   iteration_fact: descriptor({
-    effects: ["runtime_observe"],
-    defaultRisk: "low",
+    effects: ["memory_write"],
+    defaultRisk: "medium",
   }),
   ledger_query: descriptor({
     effects: ["runtime_observe"],

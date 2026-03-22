@@ -87,16 +87,10 @@ Default injected sources:
 - `brewva.identity`
 - `brewva.runtime-status`
 - `brewva.task-state`
-- `brewva.workflow-advisory`
 - `brewva.projection-working`
 - `brewva.tool-outputs-distilled` (optional)
 
 There is no default proposal-backed context source anymore.
-
-`brewva.workflow-advisory` is advisory-only. It summarizes derived discovery,
-strategy, planning, implementation, review, QA, verification, ship, retro, and
-iteration-fact state from durable events plus session state. It does not
-prescribe a required next skill.
 
 ### `runtime.tools.*`
 
@@ -189,10 +183,6 @@ Tool-governance note:
 - `listMetricObservations(sessionId, query?)`
 - `recordGuardResult(sessionId, input)`
 - `listGuardResults(sessionId, query?)`
-- `recordIterationDecision(sessionId, input)`
-- `listIterationDecisions(sessionId, query?)`
-- `recordConvergenceReason(sessionId, input)`
-- `listConvergenceReasons(sessionId, query?)`
 - `getTapeStatus(sessionId)`
 - `getTapePressureThresholds()`
 - `recordTapeHandoff(sessionId, input)`
@@ -208,16 +198,16 @@ Hosted-session event boundary notes:
 - `runtime.events.query(...)` and `runtime.events.queryStructured(...)` expose
   the durable tape, not the ephemeral hosted live stream
 - iteration fact helpers persist and query receipt-grade objective facts:
-  metric observations, guard results, iteration decisions, and convergence
-  reasons
+  metric observations and guard results
 - iteration fact list helpers accept optional `source` and `sessionScope`
   filters; `sessionScope=parent_lineage` resolves the owning parent session
   plus scheduler-created `continuityMode=inherit` child sessions while keeping
   each record's true `sessionId`
 - live-only hosted events such as `message_update` and `tool_execution_update`
   are intentionally not replay-visible through the runtime event API
-- pre-parse compatibility evidence surfaces through durable events such as
-  `tool_call_normalized` and `tool_call_normalization_failed`
+- pre-parse compatibility evidence surfaces through durable ops telemetry such
+  as `tool_call_normalized` and `tool_call_normalization_failed` when
+  `infrastructure.events.level >= ops`
 - model capability selection and request patch telemetry are emitted by the
   hosted gateway adapter, not by the runtime kernel itself
 

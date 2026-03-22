@@ -99,7 +99,8 @@ Primary telemetry:
 - `model_request_patched`
 
 These events are documented in `docs/reference/events.md`. Normalization events
-are audit-retained; model capability telemetry remains session/ops level.
+are retained only at `ops`/`debug` event levels; model capability telemetry
+also remains session/ops level.
 
 ## Turn Lifecycle Port
 

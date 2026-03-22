@@ -25,7 +25,7 @@ intent:
 effects:
   allowed_effects:
     - workspace_read
-    - runtime_observe
+    - memory_write
     - schedule_mutation
 resources:
   default_lease:
@@ -162,30 +162,32 @@ source-grade identifier.
 
 ### Step 3: Record objective iteration evidence
 
-Each iteration must produce objective facts in this order:
+Each iteration must persist only objective facts:
 
 1. `metric_observation`
 2. `guard_result` when a guard exists
-3. `iteration_decision`
-4. `convergence_reason` when the run stops, converges, escalates, or hands off
 
-Decision discipline:
+Interpretation stays in skill outputs, not in `iteration_fact` writes. After
+recording facts:
+
+- compute the observed delta versus the prior comparable baseline
+- classify the run in `iteration_report`
+- when the run stops, converges, escalates, or hands off, explain that outcome
+  in `convergence_report`
+
+Evidence discipline:
 
 ```text
 IF metric improved AND delta > min_delta AND (no guard OR guard passed):
-    decision = "keep"
+    outcome = "progress"
 ELIF metric improved AND guard failed:
-    decision = "discard"
-    reasonCode = "guard_regression"
+    outcome = "guard_regression"
 ELIF metric improved AND delta <= min_delta:
-    decision = "discard"
-    reasonCode = "below_noise_floor"
+    outcome = "below_noise_floor"
 ELIF metric unchanged or worse:
-    decision = "discard"
-    reasonCode = "no_improvement"
+    outcome = "no_improvement"
 ELIF execution crashed:
-    decision = "crash"
-    reasonCode = "<error classification>"
+    outcome = "crash"
 ```
 
 When reading prior history, query `iteration_fact` with:
@@ -230,9 +232,10 @@ it happens. If the next run is scheduler-backed, create or update
   do not count as progress.
 - A run is useful only if it improves the metric, protects the guard, reduces
   uncertainty, or produces a stronger handoff packet.
-- If the last several iterations are all `discard`, re-read the full in-scope
-  context, inspect lineage-scoped fact history, and either change strategy or
-  escalate explicitly.
+- If the last several iterations show flat metrics, repeated guard regression,
+  or no stronger handoff packet, re-read the full in-scope context, inspect
+  lineage-scoped fact history, and either change strategy or escalate
+  explicitly.
 
 ## Handoff Expectations
 
@@ -240,7 +243,8 @@ it happens. If the next run is scheduler-backed, create or update
   must include cadence, continuity mode, loop identity, metric, convergence
   predicate, and escalation path.
 - `iteration_report` should include the objective slice, `iteration_key`,
-  fact references, decision, numeric delta, and one-sentence summary.
+  fact references, numeric delta, guard status, observed outcome, and
+  one-sentence summary.
 - `convergence_report` should include the `run_key`, status, reason code,
   metric trajectory summary, and the observable evidence for continue or stop.
 - `continuation_plan` should define the next run objective, next owner, next run
@@ -276,7 +280,7 @@ it happens. If the next run is scheduler-backed, create or update
 
 Input: "Keep improving the migration verification loop over the next few days.
 Stop when the P0 checklist is fully green or the loop escalates after repeated
-discards."
+flat or regressing runs."
 
 Output: `loop_contract`, `iteration_report`, `convergence_report`,
 `continuation_plan`.

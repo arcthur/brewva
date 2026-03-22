@@ -686,20 +686,23 @@ export class ToolGateService {
       this.observeContextUsage(input.sessionId, input.usage);
     }
 
-    const effectGateEvent = this.recordEvent({
-      sessionId: input.sessionId,
-      type: TOOL_EFFECT_GATE_SELECTED_EVENT_TYPE,
-      turn: this.getCurrentTurn(input.sessionId),
-      payload: {
-        toolCallId: input.toolCallId,
-        toolName: normalizedToolName,
-        boundary,
-        effects: descriptor?.effects ?? [],
-        defaultRisk: descriptor?.defaultRisk ?? null,
-        requiresApproval: toolGovernanceRequiresEffectCommitment(descriptor),
-        rollbackable: toolGovernanceCreatesRollbackAnchor(descriptor),
-      },
-    });
+    const effectGateEvent =
+      boundary === "effectful"
+        ? this.recordEvent({
+            sessionId: input.sessionId,
+            type: TOOL_EFFECT_GATE_SELECTED_EVENT_TYPE,
+            turn: this.getCurrentTurn(input.sessionId),
+            payload: {
+              toolCallId: input.toolCallId,
+              toolName: normalizedToolName,
+              boundary,
+              effects: descriptor?.effects ?? [],
+              defaultRisk: descriptor?.defaultRisk ?? null,
+              requiresApproval: toolGovernanceRequiresEffectCommitment(descriptor),
+              rollbackable: toolGovernanceCreatesRollbackAnchor(descriptor),
+            },
+          })
+        : undefined;
 
     if (input.recordLifecycleEvent) {
       this.recordEvent({

@@ -258,32 +258,24 @@ Supported actions:
 
 - `record_metric`
 - `record_guard`
-- `record_decision`
-- `record_convergence`
 - `list`
 
 Canonical parameters vary by action:
 
 - `record_metric`
   - `metric_key`, `value`, optional `unit`, `aggregation`, `sample_count`,
-    `iteration_key`, `evidence_refs`, `source`, `summary`
+    `iteration_key`, required `evidence_refs`, optional `source`, `summary`
 - `record_guard`
-  - `guard_key`, `status`, optional `iteration_key`, `evidence_refs`, `source`,
-    `summary`
-- `record_decision`
-  - `iteration_key`, `decision`, `reason_code`, optional
-    `metric_observation_refs`, `guard_result_refs`, `rollback_receipt_ref`,
-    `mutation_receipt_ref`, `source`, `summary`
-- `record_convergence`
-  - `run_key`, `status`, `reason_code`, optional `predicate_ref`,
-    `evidence_refs`, `source`, `summary`
+  - `guard_key`, `status`, optional `iteration_key`, required `evidence_refs`,
+    optional `source`, `summary`
 - `list`
   - optional `fact_kind`, `history_limit`, `metric_key`, `guard_key`,
-    `iteration_key`, `run_key`, `reason_code`, `source`, `session_scope`
+    `iteration_key`, `source`, `session_scope`
 
 Behavior:
 
 - only objective facts should be recorded
+- durable writes require concrete `evidence_refs`
 - this tool does not prescribe the next step in a loop
 - fact history is durable and replay-visible through `runtime.events.*`
 - `session_scope` defaults to `current_session`
@@ -293,7 +285,7 @@ Behavior:
   keeps its true `sessionId`
 - `source` is the stable protocol filter for one loop or experiment lineage;
   bounded `goal-loop` runs should reuse `goal-loop:<loop_key>`
-- derived workflow artifacts may surface the latest fact family as advisory
+- derived workflow artifacts may surface metric and guard evidence as advisory
   working state
 
 ## `subagent_run` And `subagent_fanout`

@@ -17,6 +17,7 @@ import {
   ModelRegistry,
   SessionManager,
 } from "@mariozechner/pi-coding-agent";
+import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createMockExtensionAPI, invokeHandlers } from "../helpers/extension.js";
 
 describe("Extension integration: observability injection", () => {
@@ -126,7 +127,7 @@ describe("Extension integration: observability injection", () => {
     mkdirSync(join(workspace, "src"), { recursive: true });
     writeFileSync(join(workspace, "src/a.ts"), "export const value = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "ext-obs-1";
 
     const { api, handlers } = createMockExtensionAPI();
@@ -255,14 +256,14 @@ describe("Extension integration: observability injection", () => {
         ?.changes,
     ).toEqual([{ path: "src/a.ts", action: "modify" }]);
 
-    const reloaded = new BrewvaRuntime({ cwd: workspace });
+    const reloaded = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     expect(reloaded.events.query(sessionId).length).toBeGreaterThan(0);
     expect(reloaded.ledger.listRows(sessionId)).toHaveLength(1);
   });
 
   test("given session_shutdown event, when observability handler runs, then runtime cleanup is dispatched through the public session API", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-shutdown-clean-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "ext-shutdown-clean-1";
 
     runtime.context.onTurnStart(sessionId, 1);

@@ -6,35 +6,17 @@ import {
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import { TASK_EVENT_TYPE } from "../task/ledger.js";
 import {
-  SCAN_CONVERGENCE_BLOCKER_ID,
-  WATCHDOG_BLOCKER_ID,
-  WATCHDOG_BLOCKER_SOURCE,
-  buildTaskStuckBlockerMessage,
   buildTaskStuckClearedPayload,
   buildTaskStuckDetectedPayload,
   coerceTaskStuckDetectedPayload,
   computeTaskSemanticProgressAt,
   evaluateTaskWatchdogEligibility,
-  getTaskWatchdogBlocker,
   getTaskWatchdogOpenItemCount,
-  resolveTaskWatchdogPhase,
   toTaskWatchdogEventPayload,
-  type TaskWatchdogPhase,
 } from "../task/watchdog.js";
-import type {
-  BrewvaEventQuery,
-  BrewvaEventRecord,
-  TaskBlockerRecordResult,
-  TaskBlockerResolveResult,
-  TaskState,
-} from "../types.js";
-import type { TaskService } from "./task.js";
+import type { BrewvaEventQuery, BrewvaEventRecord, TaskState } from "../types.js";
 
-const DEFAULT_THRESHOLDS_MS: Record<TaskWatchdogPhase, number> = {
-  investigate: 5 * 60_000,
-  execute: 10 * 60_000,
-  verify: 5 * 60_000,
-};
+const DEFAULT_THRESHOLD_MS = 5 * 60_000;
 
 function sanitizeDelayMs(value: number | undefined, fallbackMs: number): number {
   const candidate =
@@ -42,28 +24,10 @@ function sanitizeDelayMs(value: number | undefined, fallbackMs: number): number 
   return Math.max(1_000, candidate);
 }
 
-function createThresholdPolicy(
-  overrides?: Partial<Record<TaskWatchdogPhase, number>>,
-): Readonly<Record<TaskWatchdogPhase, number>> {
-  return {
-    investigate: sanitizeDelayMs(overrides?.investigate, DEFAULT_THRESHOLDS_MS.investigate),
-    execute: sanitizeDelayMs(overrides?.execute, DEFAULT_THRESHOLDS_MS.execute),
-    verify: sanitizeDelayMs(overrides?.verify, DEFAULT_THRESHOLDS_MS.verify),
-  };
-}
-
-function buildDetectionKey(input: {
-  phase: TaskWatchdogPhase;
-  baselineProgressAt: number;
-  suppressedBy: string | null;
-}): string {
-  return `${input.phase}:${input.baselineProgressAt}:${input.suppressedBy ?? ""}`;
-}
-
 export interface PollTaskProgressInput {
   sessionId: string;
   now?: number;
-  thresholdsMs?: Partial<Record<TaskWatchdogPhase, number>>;
+  thresholdMs?: number;
 }
 
 export interface TaskWatchdogServiceOptions {
@@ -71,32 +35,18 @@ export interface TaskWatchdogServiceOptions {
   getTaskState: RuntimeKernelContext["getTaskState"];
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
   recordEvent: RuntimeKernelContext["recordEvent"];
-  taskService: Pick<TaskService, "recordTaskBlocker" | "resolveTaskBlocker">;
 }
 
 export class TaskWatchdogService {
   private readonly listEvents: TaskWatchdogServiceOptions["listEvents"];
   private readonly getTaskState: (sessionId: string) => TaskState;
   private readonly getCurrentTurn: (sessionId: string) => number;
-  private readonly recordTaskBlocker: (
-    sessionId: string,
-    input: { id?: string; message: string; source?: string; truthFactId?: string },
-  ) => TaskBlockerRecordResult;
-  private readonly resolveTaskBlocker: (
-    sessionId: string,
-    blockerId: string,
-  ) => TaskBlockerResolveResult;
   private readonly recordEvent: RuntimeKernelContext["recordEvent"];
-  private readonly taskDetectionKeyBySession = new Map<string, string>();
 
   constructor(options: TaskWatchdogServiceOptions) {
     this.listEvents = (sessionId, query) => options.listEvents(sessionId, query);
     this.getTaskState = (sessionId) => options.getTaskState(sessionId);
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
-    this.recordTaskBlocker = (sessionId, input) =>
-      options.taskService.recordTaskBlocker(sessionId, input);
-    this.resolveTaskBlocker = (sessionId, blockerId) =>
-      options.taskService.resolveTaskBlocker(sessionId, blockerId);
     this.recordEvent = (input) => options.recordEvent(input);
   }
 
@@ -107,7 +57,7 @@ export class TaskWatchdogService {
   pollTaskProgress(input: PollTaskProgressInput): void {
     const taskState = this.getTaskState(input.sessionId);
     const eligibility = evaluateTaskWatchdogEligibility(taskState);
-    if (!eligibility.eligible || !eligibility.phase) {
+    if (!eligibility.eligible) {
       return;
     }
 
@@ -126,24 +76,10 @@ export class TaskWatchdogService {
       return;
     }
 
-    const thresholdPolicy = createThresholdPolicy(input.thresholdsMs);
-    const thresholdMs = thresholdPolicy[eligibility.phase];
+    const thresholdMs = sanitizeDelayMs(input.thresholdMs, DEFAULT_THRESHOLD_MS);
     const detectedAt = input.now ?? Date.now();
     const idleMs = Math.max(0, detectedAt - baselineProgressAt);
     if (idleMs < thresholdMs) {
-      return;
-    }
-
-    const suppressedBy = eligibility.suppressedByBlockerId ?? null;
-    if (suppressedBy === SCAN_CONVERGENCE_BLOCKER_ID && eligibility.hasWatchdogBlocker) {
-      this.resolveTaskBlocker(input.sessionId, WATCHDOG_BLOCKER_ID);
-    }
-    const detectionKey = buildDetectionKey({
-      phase: eligibility.phase,
-      baselineProgressAt,
-      suppressedBy,
-    });
-    if (this.taskDetectionKeyBySession.get(input.sessionId) === detectionKey) {
       return;
     }
 
@@ -151,64 +87,56 @@ export class TaskWatchdogService {
       type: TASK_STUCK_DETECTED_EVENT_TYPE,
       last: 1,
     })[0];
+    const latestClearedAt =
+      this.listEvents(input.sessionId, {
+        type: TASK_STUCK_CLEARED_EVENT_TYPE,
+        last: 1,
+      })[0]?.timestamp ?? 0;
     const latestPayload = coerceTaskStuckDetectedPayload(latestDetected?.payload);
     if (
       latestPayload &&
-      buildDetectionKey({
-        phase: latestPayload.phase,
-        baselineProgressAt: latestPayload.baselineProgressAt,
-        suppressedBy: latestPayload.suppressedBy,
-      }) === detectionKey
+      latestDetected &&
+      latestDetected.timestamp > latestClearedAt &&
+      latestPayload.baselineProgressAt === baselineProgressAt &&
+      latestPayload.thresholdMs === thresholdMs
     ) {
-      this.taskDetectionKeyBySession.set(input.sessionId, detectionKey);
       return;
     }
 
-    let blockerWritten = false;
-    if (!suppressedBy && !eligibility.hasWatchdogBlocker) {
-      const result = this.recordTaskBlocker(input.sessionId, {
-        id: WATCHDOG_BLOCKER_ID,
-        message: buildTaskStuckBlockerMessage({
-          phase: eligibility.phase,
-          idleMs,
-          thresholdMs,
-          baselineProgressAt,
-          openItemCount: getTaskWatchdogOpenItemCount(taskState),
-        }),
-        source: WATCHDOG_BLOCKER_SOURCE,
-      });
-      blockerWritten = result.ok;
-    }
-
     const detectedPayload = buildTaskStuckDetectedPayload({
-      phase: eligibility.phase,
       thresholdMs,
       baselineProgressAt,
       detectedAt,
       idleMs,
       openItemCount: getTaskWatchdogOpenItemCount(taskState),
-      blockerId: blockerWritten ? WATCHDOG_BLOCKER_ID : null,
-      blockerWritten,
-      suppressedBy,
     });
 
     this.recordEvent({
       sessionId: input.sessionId,
       type: TASK_STUCK_DETECTED_EVENT_TYPE,
+      timestamp: detectedAt,
       turn: this.getCurrentTurn(input.sessionId),
       payload: toTaskWatchdogEventPayload(detectedPayload),
     });
-    this.taskDetectionKeyBySession.set(input.sessionId, detectionKey);
-  }
-
-  clear(sessionId: string): void {
-    this.taskDetectionKeyBySession.delete(sessionId);
   }
 
   private maybeClearTaskProgressStall(sessionId: string): void {
     const taskState = this.getTaskState(sessionId);
-    const watchdogBlocker = getTaskWatchdogBlocker(taskState);
-    if (!watchdogBlocker) {
+    const latestDetected = this.listEvents(sessionId, {
+      type: TASK_STUCK_DETECTED_EVENT_TYPE,
+      last: 1,
+    })[0];
+    const detectedPayload = coerceTaskStuckDetectedPayload(latestDetected?.payload);
+    if (!latestDetected || !detectedPayload) {
+      return;
+    }
+
+    const latestClearedAt =
+      this.listEvents(sessionId, {
+        type: TASK_STUCK_CLEARED_EVENT_TYPE,
+        last: 1,
+      })[0]?.timestamp ?? 0;
+    if (latestDetected.timestamp <= latestClearedAt) {
       return;
     }
 
@@ -223,19 +151,12 @@ export class TaskWatchdogService {
       taskEvents,
       lastVerificationAt,
     });
-    if (semanticProgressAt === null || semanticProgressAt <= watchdogBlocker.createdAt) {
-      return;
-    }
-
-    const resolved = this.resolveTaskBlocker(sessionId, WATCHDOG_BLOCKER_ID);
-    if (!resolved.ok) {
+    if (semanticProgressAt === null || semanticProgressAt <= detectedPayload.baselineProgressAt) {
       return;
     }
     const clearedAt = Date.now();
     const clearedPayload = buildTaskStuckClearedPayload({
-      phase: resolveTaskWatchdogPhase(taskState) ?? "investigate",
-      blockerId: WATCHDOG_BLOCKER_ID,
-      detectedAt: watchdogBlocker.createdAt,
+      detectedAt: detectedPayload.detectedAt,
       clearedAt,
       resumedProgressAt: semanticProgressAt,
       openItemCount: getTaskWatchdogOpenItemCount(taskState),
@@ -248,6 +169,5 @@ export class TaskWatchdogService {
       timestamp: clearedAt,
       payload: toTaskWatchdogEventPayload(clearedPayload),
     });
-    this.taskDetectionKeyBySession.delete(sessionId);
   }
 }

@@ -101,7 +101,7 @@ export async function createHostedSession(
     new BrewvaRuntime({
       cwd,
       configPath: options.configPath,
-      config: undefined,
+      config: options.config,
       agentId: options.agentId,
       governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
       routingScopes: options.routingScopes,
@@ -138,6 +138,7 @@ export async function createHostedSession(
         createHostedSession({
           cwd: childOptions.cwd ?? cwd,
           configPath: childOptions.configPath ?? options.configPath,
+          config: childOptions.config,
           model: childOptions.model,
           agentId: childOptions.agentId,
           managedToolMode: childOptions.managedToolMode,

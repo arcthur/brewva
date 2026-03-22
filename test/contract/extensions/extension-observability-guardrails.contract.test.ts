@@ -3,7 +3,8 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerEventStream, registerQualityGate } from "@brewva/brewva-gateway/runtime-plugins";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createMockExtensionAPI, invokeHandlers } from "../helpers/extension.js";
 
 describe("Extension integration: observability guardrails", () => {
@@ -38,7 +39,7 @@ blocktool`,
       "utf8",
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "ext-blocked-1";
     expect(runtime.skills.activate(sessionId, "blocktool").ok).toBe(true);
 
@@ -101,7 +102,7 @@ maxcalls`,
       "utf8",
     );
 
-    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    const config = createOpsRuntimeConfig();
     config.security.mode = "strict";
 
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
@@ -167,7 +168,7 @@ maxcalls`,
 
   test("given assistant delta events, when the message completes, then only the durable message_end summary is persisted", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-throttle-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "ext-throttle-1";
 
     const { api, handlers } = createMockExtensionAPI();

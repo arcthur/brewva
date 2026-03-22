@@ -100,7 +100,7 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     events: {
       enabled: true,
       dir: ".orchestrator/events",
-      level: "ops",
+      level: "audit",
     },
     contextBudget: {
       enabled: true,

@@ -386,6 +386,7 @@ export type ManagedToolMode = "extension" | "direct";
 export interface CreateBrewvaSessionOptions {
   cwd?: string;
   configPath?: string;
+  config?: BrewvaConfig;
   model?: string;
   agentId?: string;
   routingScopes?: SkillRoutingScope[];

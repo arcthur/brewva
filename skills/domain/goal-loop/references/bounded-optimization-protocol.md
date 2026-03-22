@@ -9,7 +9,7 @@ facts.
 Each iteration follows one path:
 
 ```text
-review lineage state -> pick one causal unit -> apply -> measure -> guard -> decide -> record -> next
+review lineage state -> pick one causal unit -> apply -> measure -> guard -> summarize -> next
 ```
 
 The important constraint is "one causal unit", not "one edited line". The
@@ -55,28 +55,28 @@ Do not start the loop until all of these are true:
 
 If any item fails, route back to `design` or stop and ask the user.
 
-## Decision Discipline
+## Evidence Discipline
 
 Use objective evidence only:
 
 ```text
 IF metric improved AND delta > min_delta AND (no guard OR guard passed):
-    decision = "keep"
+    outcome = "progress"
 ELIF metric improved AND guard failed:
-    decision = "discard"
-    reasonCode = "guard_regression"
+    outcome = "guard_regression"
 ELIF metric improved AND delta <= min_delta:
-    decision = "discard"
-    reasonCode = "below_noise_floor"
+    outcome = "below_noise_floor"
 ELIF metric unchanged or worse:
-    decision = "discard"
-    reasonCode = "no_improvement"
+    outcome = "no_improvement"
 ELIF execution crashed:
-    decision = "crash"
-    reasonCode = "<error classification>"
+    outcome = "crash"
 ```
 
-Do not decide based on taste, optimism, or "this probably helped".
+Persist only the metric/guard facts. Put the interpreted `outcome`,
+reasoning summary, and next handoff into `iteration_report` or
+`convergence_report`, not into `iteration_fact`.
+
+Do not summarize based on taste, optimism, or "this probably helped".
 
 ## Noise Handling
 
@@ -94,8 +94,8 @@ still preserves the real signal.
 
 When the metric improves but the guard fails:
 
-1. discard the change
-2. record `reasonCode = "guard_regression"`
+1. treat the run as guard regression
+2. record the metric/guard evidence
 3. inspect the guard output
 4. try a different approach to the same objective slice
 
@@ -118,20 +118,22 @@ This is how the protocol avoids mixing:
 
 ## Stuck Escalation
 
-A discard streak is a protocol signal, not a runtime-owned planner state.
+A flat-or-regressing evidence streak is a protocol signal, not a runtime-owned
+planner state.
 
 Suggested default:
 
-- if the last 5 iterations are all `discard`, treat the loop as stuck
+- if the last 5 iterations show no meaningful metric improvement, repeated
+  guard regression, or both, treat the loop as stuck
 
 When stuck:
 
 1. re-read all in-scope files
-2. inspect lineage-scoped metric and decision history
+2. inspect lineage-scoped metric and guard history
 3. identify what keeps failing
 4. change strategy once
-5. if the next iteration still fails, emit `convergence_reason` with
-   `status = "escalated"`
+5. if the next iteration still fails, escalate explicitly in the handoff or
+   `convergence_report`
 
 The escalation owner must already exist in the loop contract.
 

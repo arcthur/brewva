@@ -9,9 +9,7 @@ export type GatewayWorkerHarnessConfig = {
   watchdog?: {
     taskGoal?: string;
     pollIntervalMs?: number;
-    investigateMs?: number;
-    executeMs?: number;
-    verifyMs?: number;
+    thresholdMs?: number;
   };
   fakeAssistantText?: string;
 };
@@ -37,11 +35,8 @@ export function buildGatewayWorkerHarnessEnv(
   const fakeAssistantText = normalizeOptionalString(config.fakeAssistantText);
   const taskGoal = normalizeOptionalString(config.watchdog?.taskGoal);
   const pollIntervalMs = normalizePositiveInteger(config.watchdog?.pollIntervalMs);
-  const investigateMs = normalizePositiveInteger(config.watchdog?.investigateMs);
-  const executeMs = normalizePositiveInteger(config.watchdog?.executeMs);
-  const verifyMs = normalizePositiveInteger(config.watchdog?.verifyMs);
-  const hasOverrides =
-    fakeAssistantText || taskGoal || pollIntervalMs || investigateMs || executeMs || verifyMs;
+  const thresholdMs = normalizePositiveInteger(config.watchdog?.thresholdMs);
+  const hasOverrides = fakeAssistantText || taskGoal || pollIntervalMs || thresholdMs;
   const enabled = config.enabled ?? Boolean(hasOverrides);
 
   return {
@@ -49,9 +44,7 @@ export function buildGatewayWorkerHarnessEnv(
     BREWVA_INTERNAL_GATEWAY_FAKE_ASSISTANT_TEXT: fakeAssistantText,
     BREWVA_INTERNAL_GATEWAY_WATCHDOG_TASK_GOAL: taskGoal,
     BREWVA_INTERNAL_GATEWAY_WATCHDOG_POLL_MS: pollIntervalMs,
-    BREWVA_INTERNAL_GATEWAY_WATCHDOG_INVESTIGATE_MS: investigateMs,
-    BREWVA_INTERNAL_GATEWAY_WATCHDOG_EXECUTE_MS: executeMs,
-    BREWVA_INTERNAL_GATEWAY_WATCHDOG_VERIFY_MS: verifyMs,
+    BREWVA_INTERNAL_GATEWAY_WATCHDOG_THRESHOLD_MS: thresholdMs,
   };
 }
 

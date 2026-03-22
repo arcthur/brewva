@@ -5,31 +5,6 @@ import type {
   SkillOutputRecord,
 } from "../types.js";
 
-export type ScanConvergenceReason =
-  | "scan_only_turns"
-  | "investigation_only_turns"
-  | "scan_failures";
-
-export type ScanConvergenceResetReason = "strategy_shift" | "input_reset";
-
-export type ScanConvergenceToolStrategy =
-  | "raw_scan"
-  | "low_signal"
-  | "evidence_reuse"
-  | "progress"
-  | "neutral";
-
-export interface ScanConvergenceRuntimeState {
-  currentTurnRawScanToolCalls: number;
-  currentTurnLowSignalToolCalls: number;
-  currentTurnConvergenceToolCalls: number;
-  consecutiveScanOnlyTurns: number;
-  consecutiveInvestigationOnlyTurns: number;
-  consecutiveScanFailures: number;
-  armedReason: ScanConvergenceReason | null;
-  toolStrategyByCallId: Map<string, ScanConvergenceToolStrategy>;
-}
-
 interface ReservedContextInjectionTokens {
   primaryTokens: number;
   supplementalTokens: number;
@@ -57,8 +32,6 @@ export class RuntimeSessionStateCell {
   tapeLatestAnchorEventId?: string;
   tapeLastCheckpointEventId?: string;
   tapeProcessedEventIdsSinceCheckpoint = new Set<string>();
-  scanConvergence?: ScanConvergenceRuntimeState;
-  scanConvergenceHydrated = false;
   hydration: SessionHydrationState = {
     status: "cold",
     issues: [],

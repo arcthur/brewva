@@ -8,14 +8,15 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
-import type { DelegationRunRecord, SkillRoutingScope } from "@brewva/brewva-runtime";
+import type { BrewvaConfig, DelegationRunRecord, SkillRoutingScope } from "@brewva/brewva-runtime";
 import type { DelegationPacket, SubagentRunRequest } from "@brewva/brewva-tools";
 
 export interface DetachedSubagentRunSpec {
-  schema: "brewva.subagent-run-spec.v1";
+  schema: "brewva.subagent-run-spec.v2";
   runId: string;
   parentSessionId: string;
   workspaceRoot: string;
+  config: BrewvaConfig;
   configPath?: string;
   routingScopes?: SkillRoutingScope[];
   profileName: string;
