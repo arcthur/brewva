@@ -60,7 +60,7 @@ Boundary rule:
   - projection
   - context arena
   - active tool surface
-  - derived workflow artifacts and readiness snapshots
+  - derived workflow artifacts and posture snapshots
 - `Cognitive Product Plane`
   - context composition
   - identity rendering
@@ -73,6 +73,36 @@ Boundary rule:
   - future planners
 
 Rings define authority. Planes define product behavior.
+
+## Adjacent Repository Fitness Plane
+
+Brewva's architecture is centered on the `runtime commitment plane`.
+
+That plane answers:
+
+`Why can we trust this agent action or runtime commitment?`
+
+An adjacent but different problem is `repository fitness`:
+
+- whether a repository change is safe enough to review, merge, release, or
+  escalate
+- which deterministic gates should block early
+- which risky diffs should route to deeper validation or human review
+
+Brewva may later integrate repository-fitness evidence, but Brewva does not
+own repository merge or release authority by default. Session-local
+verification, workflow posture, and ship-posture summaries must not be
+misread as a full repository fitness engine.
+
+Allowed interaction pattern:
+
+- repository-fitness systems may expose explicit external surfaces such as CI
+  verdicts, review-routing summaries, or change-fitness reports
+- hosts may import that evidence through policy adapters, explicit tools, or
+  other non-kernel control-plane wiring
+- external repository judgment should remain legible as imported evidence
+  rather than silently turning session-local runtime surfaces into merge
+  authority
 
 ## State Taxonomy
 
@@ -87,8 +117,10 @@ Rings define authority. Planes define product behavior.
 Important distinctions:
 
 - projection is working state, not long-term memory
-- workflow artifacts/readiness are derived working-state views, not new
+- workflow artifacts/posture are derived working-state views, not new
   commitment-memory event families
+- session-scoped workflow posture is not repository merge or release
+  authority
 - iteration facts are durable event evidence for model-native optimization
   loops, not a runtime-owned optimizer state machine
 - context arena is an injection planner, not a memory system
@@ -188,3 +220,8 @@ Current host defaults:
 
 This preserves the kernel promise: the kernel governs execution, but adaptive
 selection logic stays outside the core path.
+
+External repository-fitness systems may still interact with Brewva through host
+policy, explicit tools, or imported evidence. That integration should feed the
+runtime as external judgment input rather than expanding the kernel into a
+repository merge controller.

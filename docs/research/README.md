@@ -45,7 +45,8 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 - `docs/research/rfc-capability-compression-and-output-distillation.md`
 - `docs/research/rfc-subagent-delegation-and-isolated-execution.md`
 - `docs/research/rfc-preparse-normalization-model-capability-and-live-audit-split.md`
-- `docs/research/rfc-workflow-artifacts-and-readiness-control-plane.md`
+- `docs/research/rfc-repository-fitness-plane-and-runtime-boundary.md`
+- `docs/research/rfc-workflow-artifacts-and-posture-control-plane.md`
 - `docs/research/rfc-iteration-facts-and-model-native-optimization-protocols.md`
 - `docs/research/rfc-default-path-re-hardening-and-advisory-surface-narrowing.md`
 

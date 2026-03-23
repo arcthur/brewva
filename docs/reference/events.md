@@ -160,7 +160,7 @@ The authoritative registry lives in
 Brewva does not define a dedicated `workflow_*` durable event family for
 workflow chaining.
 
-Instead, workflow artifacts and readiness are derived from existing durable
+Instead, workflow artifacts and posture are derived from existing durable
 events and session state:
 
 - `skill_completed`
@@ -262,7 +262,7 @@ Iteration fact events record objective optimization evidence only:
 - `iteration_guard_recorded`
   - guard key, pass/fail-like status, and evidence refs
 
-Workflow readiness is computed from those durable families plus current task
+Workflow posture is computed from those durable families plus current task
 blockers and pending worker-result state. The resulting advisory surfaces remain
 inspection-only and may not prescribe a single legal workflow path.
 

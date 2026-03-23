@@ -58,6 +58,8 @@ Consequences:
 - operator telemetry does not become default model context
 - model-facing context is composed from admitted sources, not raw dashboards
 - review and repair remain product behavior without becoming kernel planning
+- repository merge or release authority remains outside the default cognitive
+  plane unless a host explicitly imports external fitness evidence
 
 ## Exploration Lane And Commitment Lane
 
@@ -147,6 +149,15 @@ These surfaces are derived from durable events and session state such as:
 The product goal is visibility and recovery guidance. The product must not
 convert those signals into a mandatory stage machine or a default injected lane
 brief.
+
+Those surfaces are also narrower than repository change fitness:
+
+- `workflow_status`
+- projection-level posture summaries
+- session-derived `ship_posture`
+
+They describe session-local advisory state. They do not declare that a
+repository diff is approved to merge or ready to release.
 
 ## ContextComposer Boundary
 

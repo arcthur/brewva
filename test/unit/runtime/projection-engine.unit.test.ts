@@ -163,7 +163,7 @@ describe("projection engine", () => {
           outputKeys: ["design_spec", "execution_plan"],
           outputs: {
             design_spec: "Lock the workflow artifact contract.",
-            execution_plan: ["Derive readiness", "Expose advisory context"],
+            execution_plan: ["Derive posture", "Expose advisory context"],
           },
         },
       },
@@ -209,7 +209,7 @@ describe("projection engine", () => {
       "workflow.design: state=ready; freshness=unknown; Lock the workflow artifact contract.",
     );
     expect(snapshot?.content).toContain(
-      "workflow.execution_plan: state=ready; freshness=unknown; Execution plan with 2 step(s): Derive readiness, Expose advisory context.",
+      "workflow.execution_plan: state=ready; freshness=unknown; Execution plan with 2 step(s): Derive posture, Expose advisory context.",
     );
     expect(snapshot?.content).toContain(
       "workflow.implementation: state=ready; freshness=fresh; Workspace mutation observed via edit; downstream review and verification may need refresh.",

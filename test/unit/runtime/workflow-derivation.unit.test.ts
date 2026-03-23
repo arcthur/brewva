@@ -41,7 +41,7 @@ describe("workflow derivation", () => {
               "open_questions",
             ],
             outputs: {
-              problem_frame: "Operators need a fast view of workflow readiness drift.",
+              problem_frame: "Operators need a fast view of workflow posture drift.",
               user_pains: ["Hard to see missing stages", "Runtime state is easy to misread"],
               scope_recommendation: "Start with advisory-only state.",
               design_seed: "Project workflow state from durable events.",
@@ -140,13 +140,13 @@ describe("workflow derivation", () => {
       ],
     });
 
-    expect(status.readiness.discovery).toBe("ready");
-    expect(status.readiness.strategy).toBe("ready");
-    expect(status.readiness.review).toBe("ready");
-    expect(status.readiness.qa).toBe("ready");
-    expect(status.readiness.verification).toBe("ready");
-    expect(status.readiness.ship).toBe("ready");
-    expect(status.readiness.retro).toBe("ready");
+    expect(status.posture.discovery).toBe("ready");
+    expect(status.posture.strategy).toBe("ready");
+    expect(status.posture.review).toBe("ready");
+    expect(status.posture.qa).toBe("ready");
+    expect(status.posture.verification).toBe("ready");
+    expect(status.posture.ship).toBe("ready");
+    expect(status.posture.retro).toBe("ready");
     expect(status.artifacts.map((artifact) => artifact.kind)).toEqual(
       expect.arrayContaining([
         "discovery",
@@ -154,7 +154,7 @@ describe("workflow derivation", () => {
         "qa",
         "ship",
         "retro",
-        "release_readiness",
+        "ship_posture",
       ]),
     );
   });
@@ -239,21 +239,21 @@ describe("workflow derivation", () => {
       ],
     });
 
-    expect(status.readiness.implementation).toBe("ready");
-    expect(status.readiness.review).toBe("stale");
-    expect(status.readiness.qa).toBe("missing");
-    expect(status.readiness.verification).toBe("stale");
-    expect(status.readiness.ship).toBe("blocked");
-    expect(status.readiness.blockers).toContain(
+    expect(status.posture.implementation).toBe("ready");
+    expect(status.posture.review).toBe("stale");
+    expect(status.posture.qa).toBe("missing");
+    expect(status.posture.verification).toBe("stale");
+    expect(status.posture.ship).toBe("blocked");
+    expect(status.posture.blockers).toContain(
       "Review artifact is stale after later workspace mutations.",
     );
-    expect(status.readiness.blockers).toContain(
+    expect(status.posture.blockers).toContain(
       "Verification artifact is stale after later workspace mutations.",
     );
-    expect(status.artifacts[0]?.kind).toBe("release_readiness");
+    expect(status.artifacts[0]?.kind).toBe("ship_posture");
   });
 
-  test("blocks release when worker results are still pending", () => {
+  test("blocks ship posture when worker results are still pending", () => {
     const status = deriveWorkflowStatus({
       sessionId: "workflow-pending-workers",
       pendingWorkerResults: 2,
@@ -288,12 +288,12 @@ describe("workflow derivation", () => {
       ],
     });
 
-    expect(status.readiness.implementation).toBe("pending");
-    expect(status.readiness.review).toBe("ready");
-    expect(status.readiness.qa).toBe("missing");
-    expect(status.readiness.verification).toBe("ready");
-    expect(status.readiness.ship).toBe("blocked");
-    expect(status.readiness.blockers).toContain(
+    expect(status.posture.implementation).toBe("pending");
+    expect(status.posture.review).toBe("ready");
+    expect(status.posture.qa).toBe("missing");
+    expect(status.posture.verification).toBe("ready");
+    expect(status.posture.ship).toBe("blocked");
+    expect(status.posture.blockers).toContain(
       "Pending worker results require merge/apply (2 results).",
     );
   });
@@ -344,16 +344,14 @@ describe("workflow derivation", () => {
       ],
     });
 
-    expect(status.readiness.implementation).toBe("pending");
-    expect(status.readiness.ship).toBe("blocked");
-    expect(status.readiness.blockers).toContain(
-      "Worker patch result is pending parent merge/apply.",
-    );
+    expect(status.posture.implementation).toBe("pending");
+    expect(status.posture.ship).toBe("blocked");
+    expect(status.posture.blockers).toContain("Worker patch result is pending parent merge/apply.");
   });
 
-  test("does not mark release readiness freshness stale from unrelated blocker wording", () => {
+  test("does not mark ship posture freshness stale from unrelated blocker wording", () => {
     const status = deriveWorkflowStatus({
-      sessionId: "workflow-release-freshness",
+      sessionId: "workflow-ship-posture-freshness",
       blockers: [
         {
           id: "blocker-1",
@@ -364,7 +362,7 @@ describe("workflow derivation", () => {
         event({
           id: "evt-review-ready",
           type: "skill_completed",
-          sessionId: "workflow-release-freshness",
+          sessionId: "workflow-ship-posture-freshness",
           timestamp: 100,
           payload: {
             skillName: "review",
@@ -379,7 +377,7 @@ describe("workflow derivation", () => {
         event({
           id: "evt-verify-ready",
           type: "verification_outcome_recorded",
-          sessionId: "workflow-release-freshness",
+          sessionId: "workflow-ship-posture-freshness",
           timestamp: 110,
           payload: {
             outcome: "pass",
@@ -391,15 +389,15 @@ describe("workflow derivation", () => {
       ],
     });
 
-    expect(status.readiness.review).toBe("ready");
-    expect(status.readiness.qa).toBe("missing");
-    expect(status.readiness.verification).toBe("ready");
-    expect(status.readiness.ship).toBe("blocked");
-    expect(status.artifacts[0]?.kind).toBe("release_readiness");
+    expect(status.posture.review).toBe("ready");
+    expect(status.posture.qa).toBe("missing");
+    expect(status.posture.verification).toBe("ready");
+    expect(status.posture.ship).toBe("blocked");
+    expect(status.artifacts[0]?.kind).toBe("ship_posture");
     expect(status.artifacts[0]?.freshness).toBe("unknown");
   });
 
-  test("marks ship artifacts stale when later QA or verification evidence changes release posture", () => {
+  test("marks ship artifacts stale when later QA or verification evidence changes ship posture", () => {
     const status = deriveWorkflowStatus({
       sessionId: "workflow-ship-stale",
       events: [
@@ -448,8 +446,8 @@ describe("workflow derivation", () => {
       ],
     });
 
-    expect(status.readiness.ship).toBe("stale");
-    expect(status.readiness.blockers).toContain(
+    expect(status.posture.ship).toBe("stale");
+    expect(status.posture.blockers).toContain(
       "Ship artifact is stale after later workflow evidence changed.",
     );
     const shipArtifact = status.artifacts.find((artifact) => artifact.kind === "ship");

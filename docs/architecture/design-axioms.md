@@ -38,11 +38,18 @@ can be judged against a stable standard instead of local convenience.
 9. `Recovery is model-native, not kernel choreography.`
    Review, verify, repair, and retry remain first-class product behavior, but
    runtime should provide primitives rather than a planner-shaped state machine.
+10. `Repository governance stays adjacent to the kernel.`
+    Merge or release trust for repository changes belongs to an adjacent
+    repository-governance plane. The runtime may consume or emit evidence for
+    that plane, but it should not silently absorb repository policy into kernel
+    authority.
 
 Implementation note:
 
 - runtime authority centers on effect classes, approval requirements, and
   receipt-bearing rollback
+- repository-level change fitness may consume runtime evidence, but it remains
+  a separate judgment structure from runtime commitment authority
 - runtime may persist objective iteration facts such as metric observations,
   guard results, and any future evidence-bound protocol facts, but those facts
   remain durable evidence rather than a runtime-owned optimizer

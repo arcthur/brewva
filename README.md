@@ -53,6 +53,10 @@ Current runtime shape:
 - when no host `governancePort` authorizes an approval-bound effect, Brewva opens a replayable operator desk instead of silently permitting the action.
 - pending and approved commitment requests are rebuilt from tape after restart, so approval flow is replay-first rather than process-local.
 
+Repository-level change fitness may still integrate with Brewva through host
+policy or imported evidence, but that remains adjacent to the default runtime
+architecture rather than a kernel-owned merge or release gate.
+
 Implementation detail and system boundaries:
 
 - `docs/architecture/system-architecture.md`
@@ -98,7 +102,7 @@ One common delivery chain is:
 `discovery -> strategy-review -> design -> implementation -> review -> qa -> ship -> retro`
 
 This remains advisory and model-native. Runtime still owns verification,
-readiness, replay, and effect governance rather than a kernel-managed stage
+posture, replay, and effect governance rather than a kernel-managed stage
 planner.
 
 ## Quick Start

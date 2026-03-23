@@ -257,7 +257,7 @@ requires: []
     expect(afterRestart.passed).toBe(true);
   });
 
-  test("rehydrates workflow readiness and advisory context from tape after restart", async () => {
+  test("rehydrates workflow posture and advisory context from tape after restart", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-workflow-rehydrate-"));
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     const sessionId = "workflow-rehydrate-1";
@@ -266,7 +266,7 @@ requires: []
     runtime.context.onTurnStart(sessionId, 1);
     runtime.task.setSpec(sessionId, {
       schema: "brewva.task.v1",
-      goal: "Promote workflow artifacts and readiness",
+      goal: "Promote workflow artifacts and posture",
     });
     runtime.events.record({
       sessionId,
@@ -277,7 +277,7 @@ requires: []
         outputKeys: ["design_spec", "execution_plan"],
         outputs: {
           design_spec: "Define the workflow artifact contract.",
-          execution_plan: ["Derive readiness", "Publish advisory context"],
+          execution_plan: ["Derive posture", "Publish advisory context"],
         },
       },
     });

@@ -55,9 +55,12 @@ function selectArtifactsForDisplay(
   artifacts: readonly WorkflowArtifact[],
   historyLimit: number,
 ): WorkflowArtifact[] {
-  const coreArtifacts = artifacts.filter((artifact) => artifact.kind !== "release_readiness");
-  const releaseArtifact = artifacts.find((artifact) => artifact.kind === "release_readiness");
-  return [...coreArtifacts, ...(releaseArtifact ? [releaseArtifact] : [])].slice(0, historyLimit);
+  const coreArtifacts = artifacts.filter((artifact) => artifact.kind !== "ship_posture");
+  const shipPostureArtifact = artifacts.find((artifact) => artifact.kind === "ship_posture");
+  return [...coreArtifacts, ...(shipPostureArtifact ? [shipPostureArtifact] : [])].slice(
+    0,
+    historyLimit,
+  );
 }
 
 export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefinition {
@@ -65,9 +68,9 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
     name: "workflow_status",
     label: "Workflow Status",
     description:
-      "Inspect derived workflow artifacts and readiness without prescribing the next step.",
+      "Inspect derived workflow artifacts and posture without prescribing the next step.",
     promptSnippet:
-      "Inspect workflow readiness, blockers, and the latest derived artifacts before deciding the next move.",
+      "Inspect workflow posture, blockers, and the latest derived artifacts before deciding the next move.",
     promptGuidelines: [
       "Use this to understand whether discovery and strategy are present, whether implementation is blocked or pending, and whether review, QA, verification, ship, or retro state needs attention.",
       "Treat the result as advisory state; it does not force a workflow path.",
@@ -92,12 +95,12 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         workspaceRoot: options.runtime.workspaceRoot,
       });
 
-      const readiness = snapshot.readiness;
+      const posture = snapshot.posture;
       const verdict = overallVerdict({
-        review: readiness.review,
-        qa: readiness.qa,
-        verification: readiness.verification,
-        ship: readiness.ship,
+        review: posture.review,
+        qa: posture.qa,
+        verification: posture.verification,
+        ship: posture.ship,
       });
       const includeArtifacts = params.include_artifacts === true;
       const historyLimit = Math.max(1, Math.min(20, params.history_limit ?? 5));
@@ -106,21 +109,21 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         "[WorkflowStatus]",
         `updated_at: ${formatTimestamp(snapshot.updatedAt)}`,
         `current_workspace_revision: ${snapshot.currentWorkspaceRevision ?? "unavailable"}`,
-        `discovery: ${readiness.discovery}`,
-        `strategy: ${readiness.strategy}`,
-        `planning: ${readiness.planning}`,
-        `implementation: ${readiness.implementation}`,
-        `review: ${readiness.review}`,
-        `qa: ${readiness.qa}`,
-        `verification: ${readiness.verification}`,
-        `ship: ${readiness.ship}`,
-        `retro: ${readiness.retro}`,
+        `discovery: ${posture.discovery}`,
+        `strategy: ${posture.strategy}`,
+        `planning: ${posture.planning}`,
+        `implementation: ${posture.implementation}`,
+        `review: ${posture.review}`,
+        `qa: ${posture.qa}`,
+        `verification: ${posture.verification}`,
+        `ship: ${posture.ship}`,
+        `retro: ${posture.retro}`,
         `pending_worker_results: ${snapshot.pendingWorkerResults}`,
       ];
 
-      if (readiness.blockers.length > 0) {
+      if (posture.blockers.length > 0) {
         lines.push("blockers:");
-        for (const blocker of readiness.blockers) {
+        for (const blocker of posture.blockers) {
           lines.push(`- ${blocker}`);
         }
       } else {
@@ -145,7 +148,7 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
           {
             sessionId,
             currentWorkspaceRevision: snapshot.currentWorkspaceRevision ?? null,
-            readiness,
+            posture,
             artifacts: includeArtifacts ? displayArtifacts : [],
             pendingWorkerResults: pendingWorkerResults.map((result) => ({
               workerId: result.workerId,

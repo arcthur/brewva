@@ -129,7 +129,7 @@ Produce:
 - `review_findings` should be ordered from highest to lowest value and should be
   actionable by implementation without reinterpreting the review.
 - `review_report` should record assumptions, blind spots, and residual risk so
-  ship-readiness consumers know what was and was not covered.
+  downstream ship decisions know what was and was not covered.
 - `merge_decision` should match the findings and evidence; it should never be a
   detached summary label.
 

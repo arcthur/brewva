@@ -1,10 +1,10 @@
-# Research: Workflow Artifacts And Readiness Control Plane
+# Research: Workflow Artifacts And Posture Control Plane
 
 ## Document Metadata
 
 - Status: `promoted`
 - Owner: runtime maintainers
-- Last reviewed: `2026-03-22`
+- Last reviewed: `2026-03-23`
 - Promotion target:
   - `docs/architecture/system-architecture.md`
   - `docs/architecture/cognitive-product-architecture.md`
@@ -34,7 +34,7 @@ Stable implementation now includes:
   `workflow.strategy_review`, `workflow.design`, `workflow.review`,
   `workflow.qa`, and `workflow.ship`
 - no default workflow-lane context injection in the hosted path
-- replay and restart rebuild coverage for workflow artifacts and readiness
+- replay and restart rebuild coverage for workflow artifacts and posture
 
 Stable references:
 
@@ -53,7 +53,7 @@ The promoted contract is:
 
 1. Workflow artifacts are derived working-state projections, not new
    commitment-memory event families.
-2. Readiness is advisory, not prescriptive.
+2. Posture is advisory, not prescriptive.
 3. Workflow inspection is explicit pull rather than default push in the hosted
    path.
 4. The model may choose another valid path unless an independent governance or
