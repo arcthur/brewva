@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Bun `1.3.9+`
+- Bun `1.3.11+`
 - Node `^20.19.0 || >=22.12.0` for CLI execution and tooling
 - Model/provider setup supported by `@mariozechner/pi-coding-agent`
 
