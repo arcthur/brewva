@@ -43,7 +43,7 @@
 
 ### Build Baseline
 
-- Build and test with Bun, not npm or yarn. Baseline is Bun `1.3.9`, Node `^20.19.0 || >=22.12.0`, ESM, strict TypeScript, and a root `tsconfig.json` that continues covering `packages/*` and `script/`.
+- Build and test with Bun, not npm or yarn. Baseline is Bun `1.3.11`, Node `^20.19.0 || >=22.12.0`, ESM, strict TypeScript, and a root `tsconfig.json` that continues covering `packages/*` and `script/`.
 
 ## Workflow Gates
 

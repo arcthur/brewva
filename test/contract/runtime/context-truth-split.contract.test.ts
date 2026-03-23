@@ -12,7 +12,7 @@ function createTruthSplitWorkspace(name: string): string {
       "## CRITICAL RULES",
       "- User-facing command name is `brewva`.",
       "- Use workspace package imports `@brewva/brewva-runtime`.",
-      "- Use Bun `1.3.9`.",
+      "- Use Bun `1.3.11`.",
       "- Run bun run test:dist.",
     ].join("\n"),
     "utf8",
