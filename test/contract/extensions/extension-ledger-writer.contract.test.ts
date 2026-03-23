@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { registerLedgerWriter } from "@brewva/brewva-gateway/runtime-plugins";
-import { createMockExtensionAPI, invokeHandler } from "../helpers/extension.js";
+import { createMockExtensionAPI, invokeHandler } from "../../helpers/extension.js";
 import { createRuntimeFixture } from "./fixtures/runtime.js";
 
 describe("Extension gaps: ledger writer", () => {

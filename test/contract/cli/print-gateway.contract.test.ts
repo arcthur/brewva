@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { assertCliSuccess, runCli } from "../helpers/cli.js";
-import { writeMinimalConfig } from "../helpers/config.js";
-import { countEventType, latestEventFile, parseEventFile } from "../helpers/events.js";
-import { startGatewayDaemonHarness } from "../helpers/gateway.js";
-import { cleanupTestWorkspace, createTestWorkspace } from "../helpers/workspace.js";
+import { assertCliSuccess, runCli } from "../../helpers/cli.js";
+import { writeMinimalConfig } from "../../helpers/config.js";
+import { countEventType, latestEventFile, parseEventFile } from "../../helpers/events.js";
+import { startGatewayDaemonHarness } from "../../helpers/gateway.js";
+import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("cli contract: gateway-backed print mode", () => {
   test("gateway-backed print emits assistant text and persists core events", async () => {

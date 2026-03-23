@@ -5,9 +5,12 @@ import { mkdirSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { createExecTool } from "@brewva/brewva-tools";
-import { cleanupWorkspace, createWorkspace, runLive } from "../helpers.js";
+import { runLive } from "../../helpers/live.js";
+import { cleanupWorkspace, createWorkspace } from "../../helpers/workspace.js";
 
-const runMicrosandboxLive: typeof test = process.env.BREWVA_E2E_MSB === "1" ? runLive : test.skip;
+const microsandboxLiveEnabled =
+  process.env.BREWVA_TEST_MSB === "1" || process.env.BREWVA_E2E_MSB === "1";
+const runMicrosandboxLive: typeof test = microsandboxLiveEnabled ? runLive : test.skip;
 
 function extractTextContent(result: { content: Array<{ type: string; text?: string }> }): string {
   const textPart = result.content.find(
@@ -38,7 +41,7 @@ function assertMicrosandboxCliAvailable(): void {
   const probe = spawnSync("msb", ["--version"], { encoding: "utf8" });
   if (probe.status === 0 && !probe.error) return;
   const lines = [
-    "BREWVA_E2E_MSB=1 requires microsandbox CLI (`msb`) in PATH.",
+    "BREWVA_TEST_MSB=1 requires microsandbox CLI (`msb`) in PATH.",
     `status: ${probe.status ?? "null"}`,
     `error: ${probe.error ? String(probe.error) : "none"}`,
     `stdout: ${(probe.stdout ?? "").trim()}`,
@@ -178,7 +181,7 @@ async function startMicrosandboxServer(
   });
 }
 
-describe("e2e: microsandbox isolation live", () => {
+describe("live: microsandbox isolation", () => {
   runMicrosandboxLive(
     "enforceIsolation routes to live microsandbox and remains fail-closed when server is down",
     async () => {
@@ -225,7 +228,7 @@ describe("e2e: microsandbox isolation live", () => {
           cwd: workspace,
           sessionManager: {
             getSessionId() {
-              return "e2e-microsandbox-isolation";
+              return "live-microsandbox-isolation";
             },
           },
         };
@@ -234,10 +237,10 @@ describe("e2e: microsandbox isolation live", () => {
           "tc-msb-live-success",
           {
             command:
-              'pwd && echo "$BREWVA_E2E_ENV" && echo "Authorization: Bearer super-secret-token"',
+              'pwd && echo "$BREWVA_TEST_ENV" && echo "Authorization: Bearer super-secret-token"',
             workdir: "/",
             env: {
-              BREWVA_E2E_ENV: "msb-live-ok",
+              BREWVA_TEST_ENV: "msb-live-ok",
             },
             timeout: 30,
           },
@@ -254,7 +257,7 @@ describe("e2e: microsandbox isolation live", () => {
         };
         expect(successDetails.backend).toBe("sandbox");
         expect(successDetails.cwd).toBe("/");
-        expect(successDetails.appliedEnvKeys?.includes("BREWVA_E2E_ENV")).toBe(true);
+        expect(successDetails.appliedEnvKeys?.includes("BREWVA_TEST_ENV")).toBe(true);
         expect(successDetails.timeoutSec).toBe(30);
         const successText = extractTextContent(successResult);
         expect(successText.includes("msb-live-ok")).toBe(true);

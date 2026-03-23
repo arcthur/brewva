@@ -12,11 +12,13 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { hasProviderRateLimitText } from "../../helpers/cli.js";
 import {
   assertAutoCompactionCompletionContinuity,
   MAX_POST_AUTO_COMPACTION_GAP_MS,
 } from "../../helpers/compaction-continuity.js";
-import { hasProviderRateLimitText, keepWorkspace, repoRoot, runLive } from "../helpers.js";
+import { runLive } from "../../helpers/live.js";
+import { keepTestWorkspace, repoRoot } from "../../helpers/workspace.js";
 
 type RuntimeEvent = {
   type?: unknown;
@@ -398,7 +400,7 @@ function hasCompactionAutoFailure(result: RegressionRunResult): boolean {
   return countEvents(result.events, "context_compaction_auto_failed") > 0;
 }
 
-describe("e2e: interactive multi-turn live regression", () => {
+describe("live: interactive multi-turn regression", () => {
   test("assertion helper accepts bounded continuation after auto compaction completion", () => {
     const result: RegressionRunResult = {
       workspace: "/tmp/brewva-live-assert-pass",
@@ -477,7 +479,7 @@ describe("e2e: interactive multi-turn live regression", () => {
           { cause: error },
         );
       } finally {
-        if (!keepWorkspace) {
+        if (!keepTestWorkspace) {
           rmSync(result.workspace, { recursive: true, force: true });
         }
       }

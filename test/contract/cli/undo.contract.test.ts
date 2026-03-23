@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { assertCliSuccess, runCliSync } from "../helpers/cli.js";
-import { cleanupTestWorkspace, createTestWorkspace } from "../helpers/workspace.js";
+import { assertCliSuccess, runCliSync } from "../../helpers/cli.js";
+import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("cli contract: undo", () => {
   test("undo restores the latest tracked patch set through the CLI surface", () => {

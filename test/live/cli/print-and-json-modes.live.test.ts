@@ -1,21 +1,22 @@
 import { describe, expect } from "bun:test";
 import {
   assertCliSuccess,
-  cleanupWorkspace,
+  runCliSync,
+  skipLiveForProviderRateLimitResult,
+} from "../../helpers/cli.js";
+import { writeMinimalConfig } from "../../helpers/config.js";
+import {
   countEventType,
-  createWorkspace,
   findFinalBundle,
   firstIndexOf,
   latestEventFile,
   parseEventFile,
   parseJsonLines,
-  runCliSync,
-  runLive,
-  skipLiveForProviderRateLimitResult,
-  writeMinimalConfig,
-} from "../helpers.js";
+} from "../../helpers/events.js";
+import { runLive } from "../../helpers/live.js";
+import { cleanupWorkspace, createWorkspace } from "../../helpers/workspace.js";
 
-describe("e2e: print and json modes", () => {
+describe("live: print and json modes", () => {
   runLive("print mode produces output and persists core events", () => {
     const workspace = createWorkspace("print-mode");
     writeMinimalConfig(workspace);

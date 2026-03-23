@@ -4,19 +4,16 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   assertCliSuccess,
-  cleanupWorkspace,
-  createWorkspace,
-  findFinalBundle,
-  type BrewvaEventBundle,
-  parseJsonLines,
   runCliSync,
-  runLive,
   sanitizeSessionId,
   skipLiveForProviderRateLimitResult,
-  writeMinimalConfig,
-} from "../helpers.js";
+} from "../../helpers/cli.js";
+import { writeMinimalConfig } from "../../helpers/config.js";
+import { type BrewvaEventBundle, findFinalBundle, parseJsonLines } from "../../helpers/events.js";
+import { runLive } from "../../helpers/live.js";
+import { cleanupWorkspace, createWorkspace } from "../../helpers/workspace.js";
 
-describe("e2e: undo", () => {
+describe("live: undo", () => {
   runLive("undo restores file after llm-driven edit", () => {
     const workspace = createWorkspace("undo");
     writeMinimalConfig(workspace);

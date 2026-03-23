@@ -1,18 +1,15 @@
 import { describe, expect } from "bun:test";
 import {
   assertCliSuccess,
-  cleanupWorkspace,
-  createWorkspace,
-  findFinalBundle,
-  isRecord,
-  parseJsonLines,
   runCliSync,
-  runLive,
   skipLiveForProviderRateLimitResult,
-  writeMinimalConfig,
-} from "../helpers.js";
+} from "../../helpers/cli.js";
+import { writeMinimalConfig } from "../../helpers/config.js";
+import { findFinalBundle, isRecord, parseJsonLines } from "../../helpers/events.js";
+import { runLive } from "../../helpers/live.js";
+import { cleanupWorkspace, createWorkspace } from "../../helpers/workspace.js";
 
-describe("e2e: cost tracking visibility", () => {
+describe("live: cost tracking visibility", () => {
   runLive("json bundle exposes numeric costSummary fields", () => {
     const workspace = createWorkspace("cost-json");
     writeMinimalConfig(workspace);

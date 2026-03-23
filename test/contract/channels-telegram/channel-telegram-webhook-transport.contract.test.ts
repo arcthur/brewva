@@ -5,7 +5,7 @@ import {
   type TelegramOutboundRequest,
   type TelegramUpdate,
 } from "@brewva/brewva-channels-telegram";
-import { assertRejectsWithMessage, resolveRequestUrl } from "../helpers.js";
+import { assertRejectsWithMessage, resolveRequestUrl } from "../../helpers.js";
 
 interface FetchCall {
   url: string;

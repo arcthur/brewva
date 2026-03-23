@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { registerQualityGate } from "@brewva/brewva-gateway/runtime-plugins";
 import { createGrepTool, createScheduleIntentTool } from "@brewva/brewva-tools";
-import { createMockExtensionAPI, invokeHandler } from "../helpers/extension.js";
+import { createMockExtensionAPI, invokeHandler } from "../../helpers/extension.js";
 import { createRuntimeFixture } from "./fixtures/runtime.js";
 
 describe("Extension gaps: quality gate", () => {

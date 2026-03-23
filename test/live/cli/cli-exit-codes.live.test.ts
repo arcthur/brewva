@@ -1,13 +1,10 @@
 import { describe, expect } from "bun:test";
-import {
-  cleanupWorkspace,
-  createWorkspace,
-  runCliSync,
-  runLive,
-  writeMinimalConfig,
-} from "../helpers.js";
+import { runCliSync } from "../../helpers/cli.js";
+import { writeMinimalConfig } from "../../helpers/config.js";
+import { runLive } from "../../helpers/live.js";
+import { cleanupWorkspace, createWorkspace } from "../../helpers/workspace.js";
 
-describe("e2e: cli exit codes", () => {
+describe("live: cli exit codes", () => {
   runLive("returns non-zero exit code for unknown flags", () => {
     const workspace = createWorkspace("cli-unknown-flag");
     writeMinimalConfig(workspace);

@@ -9,7 +9,7 @@ import {
   createObsSloAssertTool,
   createOutputSearchTool,
 } from "@brewva/brewva-tools";
-import { createMockExtensionAPI, invokeHandlers } from "../helpers/extension.js";
+import { createMockExtensionAPI, invokeHandlers } from "../../helpers/extension.js";
 
 describe("Extension integration: observability ledger", () => {
   test("given high-volume exec tool output with explicit fail verdict, when ledger writer handles tool_result, then verdict propagates into observed and distilled telemetry", () => {

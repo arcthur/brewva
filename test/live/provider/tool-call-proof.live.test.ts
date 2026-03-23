@@ -4,18 +4,15 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   assertCliSuccess,
-  cleanupWorkspace,
-  createWorkspace,
-  findFinalBundle,
-  isRecord,
-  parseJsonLines,
   runCliSync,
-  runLive,
   skipLiveForProviderRateLimitResult,
-  writeMinimalConfig,
-} from "../helpers.js";
+} from "../../helpers/cli.js";
+import { writeMinimalConfig } from "../../helpers/config.js";
+import { findFinalBundle, isRecord, parseJsonLines } from "../../helpers/events.js";
+import { runLive } from "../../helpers/live.js";
+import { cleanupWorkspace, createWorkspace } from "../../helpers/workspace.js";
 
-describe("e2e: tool call proof", () => {
+describe("live: tool call proof", () => {
   runLive("agent can read secret token from workspace file", () => {
     const workspace = createWorkspace("tool-proof");
     writeMinimalConfig(workspace);

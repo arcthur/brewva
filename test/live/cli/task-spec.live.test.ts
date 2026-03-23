@@ -1,17 +1,11 @@
 import { describe, expect } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  assertCliSuccess,
-  cleanupWorkspace,
-  createWorkspace,
-  findFinalBundle,
-  isRecord,
-  parseJsonLines,
-  runCliSync,
-  runLive,
-  writeMinimalConfig,
-} from "../helpers.js";
+import { assertCliSuccess, runCliSync } from "../../helpers/cli.js";
+import { writeMinimalConfig } from "../../helpers/config.js";
+import { findFinalBundle, isRecord, parseJsonLines } from "../../helpers/events.js";
+import { runLive } from "../../helpers/live.js";
+import { cleanupWorkspace, createWorkspace } from "../../helpers/workspace.js";
 
 type TaskSpecSetPayload = {
   kind: "spec_set";
@@ -39,7 +33,7 @@ function findTaskSpecSetPayload(
   return undefined;
 }
 
-describe("e2e: task spec plumbing", () => {
+describe("live: task spec plumbing", () => {
   runLive("--task is persisted as task_event spec_set", () => {
     const workspace = createWorkspace("task-spec");
     writeMinimalConfig(workspace);

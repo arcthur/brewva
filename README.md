@@ -147,8 +147,8 @@ Useful additional commands:
 
 ```bash
 bun run analyze:projection
-bun run test:e2e
-bun run test:e2e:live
+bun run test:system
+bun run test:live
 ```
 
 ## Documentation Map

@@ -5,11 +5,11 @@ import {
 } from "@brewva/brewva-gateway/runtime-plugins";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import type { ToolInfo } from "@mariozechner/pi-coding-agent";
+import { createMockExtensionAPI, invokeHandlerAsync } from "../../helpers/extension.js";
 import {
   createRuntimeConfig,
   createRuntimeFixture as createBaseRuntimeFixture,
 } from "../../helpers/runtime.js";
-import { createMockExtensionAPI, invokeHandlerAsync } from "../helpers/extension.js";
 
 const EMPTY_PARAMETERS = {
   type: "object",

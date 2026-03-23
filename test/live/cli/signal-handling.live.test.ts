@@ -1,16 +1,10 @@
 import { describe, expect } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
-import {
-  cleanupWorkspace,
-  createWorkspace,
-  hasProviderRateLimitText,
-  latestEventFile,
-  parseEventFile,
-  repoRoot,
-  runLive,
-  skipLiveForProviderRateLimit,
-  writeMinimalConfig,
-} from "../helpers.js";
+import { hasProviderRateLimitText, skipLiveForProviderRateLimit } from "../../helpers/cli.js";
+import { writeMinimalConfig } from "../../helpers/config.js";
+import { latestEventFile, parseEventFile } from "../../helpers/events.js";
+import { runLive } from "../../helpers/live.js";
+import { cleanupWorkspace, createWorkspace, repoRoot } from "../../helpers/workspace.js";
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -57,7 +51,7 @@ async function waitForExit(
   });
 }
 
-describe("e2e: signal handling", () => {
+describe("live: signal handling", () => {
   runLive("SIGINT emits session_interrupted and exits with code 130", async () => {
     const workspace = createWorkspace("signal");
     writeMinimalConfig(workspace);

@@ -10,8 +10,9 @@ import {
   SCHEDULE_WAKEUP_EVENT_TYPE,
   parseScheduleIntentEvent,
 } from "@brewva/brewva-runtime";
-import { cleanupWorkspace, createWorkspace, repoRoot, writeMinimalConfig } from "../helpers.js";
-import { buildGatewayWorkerHarnessEnv } from "../helpers/gateway.js";
+import { writeMinimalConfig } from "../../helpers/config.js";
+import { buildGatewayWorkerHarnessEnv } from "../../helpers/gateway.js";
+import { cleanupWorkspace, createWorkspace, repoRoot } from "../../helpers/workspace.js";
 
 interface DaemonProcess {
   child: ChildProcess;

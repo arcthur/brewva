@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createHostedTurnPipeline } from "@brewva/brewva-gateway/runtime-plugins";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import type { ToolInfo } from "@mariozechner/pi-coding-agent";
-import { createMockExtensionAPI, invokeHandlerAsync } from "../helpers/extension.js";
+import { createMockExtensionAPI, invokeHandlerAsync } from "../../helpers/extension.js";
 import { createRuntimeFixture } from "./fixtures/runtime.js";
 
 function handlerNames(handlers: Map<string, unknown[]>): string[] {

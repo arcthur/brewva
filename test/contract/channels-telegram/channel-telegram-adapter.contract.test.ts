@@ -10,7 +10,7 @@ import {
 } from "@brewva/brewva-channels-telegram";
 import type { TelegramOutboundRequest, TelegramUpdate } from "@brewva/brewva-channels-telegram";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import { assertRejectsWithMessage } from "../helpers.js";
+import { assertRejectsWithMessage } from "../../helpers.js";
 
 function createMessageUpdate(): TelegramUpdate {
   return {

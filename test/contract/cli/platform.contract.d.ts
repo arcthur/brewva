@@ -1,4 +1,4 @@
-declare module "../../distribution/brewva/bin/platform.js" {
+declare module "../../../distribution/brewva/bin/platform.js" {
   export function getPlatformPackage(options: {
     platform: string;
     arch: string;

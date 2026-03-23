@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerEventStream, registerQualityGate } from "@brewva/brewva-gateway/runtime-plugins";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createMockExtensionAPI, invokeHandlers } from "../../helpers/extension.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
-import { createMockExtensionAPI, invokeHandlers } from "../helpers/extension.js";
 
 describe("Extension integration: observability guardrails", () => {
   test("given blocked tool_call, when handlers run with stopOnBlock, then tool_call is recorded and tool_call_marked is omitted", () => {
