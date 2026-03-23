@@ -1,15 +1,9 @@
 import { describe, expect } from "bun:test";
-import {
-  assertCliSuccess,
-  cleanupWorkspace,
-  createWorkspace,
-  findFinalBundle,
-  isRecord,
-  parseJsonLines,
-  runCliSync,
-  runLive,
-  writeMinimalConfig,
-} from "../helpers.js";
+import { assertCliSuccess, runCliSync } from "../../helpers/cli.js";
+import { writeMinimalConfig } from "../../helpers/config.js";
+import { findFinalBundle, isRecord, parseJsonLines } from "../../helpers/events.js";
+import { runLive } from "../../helpers/live.js";
+import { cleanupWorkspace, createWorkspace } from "../../helpers/workspace.js";
 
 type ReplayStructuredEvent = {
   schema: "brewva.event.v1";
@@ -32,7 +26,7 @@ function toReplayStructuredEvents(lines: unknown[]): ReplayStructuredEvent[] {
   return events;
 }
 
-describe("e2e: replay and persistence", () => {
+describe("live: replay and persistence", () => {
   runLive("replay returns structured persisted events for json-mode session", () => {
     const workspace = createWorkspace("replay");
     writeMinimalConfig(workspace);

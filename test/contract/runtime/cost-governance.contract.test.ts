@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import { cleanupTestWorkspace, createTestWorkspace } from "../helpers/workspace.js";
+import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 async function flushAsyncEvents(): Promise<void> {
   await Promise.resolve();

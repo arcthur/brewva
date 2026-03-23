@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type SpawnSyncReturns } from "node:child_process";
-import { repoRoot } from "./live.js";
+import { repoRoot } from "./workspace.js";
 
 export type CliRunResult = {
   status: number | null;

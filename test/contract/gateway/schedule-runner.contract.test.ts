@@ -13,7 +13,7 @@ import {
   SCHEDULE_WAKEUP_EVENT_TYPE,
   type ScheduleIntentProjectionRecord,
 } from "@brewva/brewva-runtime";
-import { cleanupTestWorkspace, createTestWorkspace } from "../helpers/workspace.js";
+import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 function createScheduleIntent(
   overrides: Partial<ScheduleIntentProjectionRecord> = {},

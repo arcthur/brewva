@@ -8,7 +8,7 @@ import {
   invokeHandler,
   invokeHandlerAsync,
   invokeHandlersAsync,
-} from "../helpers/extension.js";
+} from "../../helpers/extension.js";
 import { createRuntimeConfig, createRuntimeFixture } from "./fixtures/runtime.js";
 
 export {

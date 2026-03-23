@@ -208,7 +208,7 @@ Webhook ingress can be enabled via environment variables (no additional CLI flag
 - `BREWVA_TELEGRAM_INGRESS_HMAC_MAX_SKEW_MS`
 - `BREWVA_TELEGRAM_INGRESS_NONCE_TTL_MS`
 
-Optional Telegram API endpoint override (useful for local e2e/fake API tests):
+Optional Telegram API endpoint override (useful for local integration/fake API tests):
 
 - `BREWVA_TELEGRAM_API_BASE_URL`
 

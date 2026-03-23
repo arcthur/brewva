@@ -8,8 +8,8 @@ import {
   type RunChannelModeDependencies,
 } from "@brewva/brewva-gateway";
 import type { ChannelTurnBridge, TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import { waitUntil } from "../helpers/process.js";
-import { cleanupTestWorkspace, createTestWorkspace } from "../helpers/workspace.js";
+import { waitUntil } from "../../helpers/process.js";
+import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 function writeChannelConfig(workspace: string): string {
   const configPath = join(workspace, ".brewva", "brewva.json");

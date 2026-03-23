@@ -6,7 +6,7 @@ import {
   type ChannelAdapter,
   type TurnEnvelope,
 } from "@brewva/brewva-runtime/channels";
-import { assertRejectsWithMessage } from "../helpers.js";
+import { assertRejectsWithMessage } from "../../helpers.js";
 
 type RuntimeLike = {
   events: {

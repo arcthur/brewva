@@ -17,8 +17,8 @@ import {
   ModelRegistry,
   SessionManager,
 } from "@mariozechner/pi-coding-agent";
+import { createMockExtensionAPI, invokeHandlers } from "../../helpers/extension.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
-import { createMockExtensionAPI, invokeHandlers } from "../helpers/extension.js";
 
 describe("Extension integration: observability injection", () => {
   test("given extension runner contract, when emitBeforeAgentStart executes, then brewva context message is included", async () => {

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { runCliSync } from "../helpers/cli.js";
-import { cleanupTestWorkspace, createTestWorkspace } from "../helpers/workspace.js";
+import { runCliSync } from "../../helpers/cli.js";
+import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 function writeRemovedTelegramConfig(workspace: string): void {
   const configDir = join(workspace, ".brewva");

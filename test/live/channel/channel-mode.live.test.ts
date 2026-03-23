@@ -3,13 +3,9 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import {
-  cleanupWorkspace,
-  createWorkspace,
-  repoRoot,
-  runLive,
-  writeMinimalConfig,
-} from "../helpers.js";
+import { writeMinimalConfig } from "../../helpers/config.js";
+import { runLive } from "../../helpers/live.js";
+import { cleanupWorkspace, createWorkspace, repoRoot } from "../../helpers/workspace.js";
 
 interface TelegramRequestRecord {
   method: string;
@@ -240,7 +236,7 @@ async function stopChildProcess(
   return await Promise.race([exitPromise, timeoutPromise]);
 }
 
-describe("e2e: channel mode live", () => {
+describe("live: channel mode", () => {
   runLive(
     "polling channel mode processes /agents command through fake telegram api and emits outbound reply",
     async () => {

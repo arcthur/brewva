@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseArgs } from "@brewva/brewva-cli";
-import { captureConsole } from "../helpers.js";
+import { captureConsole } from "../../helpers.js";
 
 describe("brewva cli args", () => {
   test("given --help, when parsing args, then help banner is printed", () => {

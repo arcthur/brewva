@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { createTestConfig } from "../../fixtures/config.js";
-import { createTestWorkspace, writeTestConfig } from "../helpers/workspace.js";
+import { createTestWorkspace, writeTestConfig } from "../../helpers/workspace.js";
 
 function writeConfig(
   workspace: string,

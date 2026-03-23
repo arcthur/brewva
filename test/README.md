@@ -41,10 +41,11 @@ Do not use ambiguous file labels such as `e2e-ish` or `characterization`.
 
 ## Helper Usage
 
-- Shared helpers live under `test/helpers/**`.
+- Shared helpers live under `test/helpers.ts` and `test/helpers/**`.
+- Import shared helpers directly from those root paths. Do not add layer-local re-export trees under `test/<layer>/helpers/**`.
 - Do not create local `createWorkspace`, `waitUntil`, or `withTimeout` clones when an equivalent helper exists.
-- Fixture builders that also seed required assets such as skills, `AGENTS.md`, or other domain-specific files are allowed when the shared workspace helper does not cover that setup.
-- Layer-local shims may re-export from `test/helpers/**` to keep relative imports stable during migration.
+- Shared fixtures live under `test/fixtures/**`; keep them semantic, not mirror-only.
+- Local `*.helpers.ts` files are allowed when they encode subtree-specific setup or assertions that do not belong in the global helper surface.
 
 ## Placement Rules
 
