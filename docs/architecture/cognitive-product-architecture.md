@@ -5,6 +5,21 @@ changing the constitutional line:
 
 `Intelligence proposes. Kernel commits. Tape remembers.`
 
+Interpretation rule:
+
+- this document explains model-facing product behavior
+- it does not redefine kernel authority or replay contracts
+- if wording here conflicts with `design-axioms`, `invariants-and-reliability`,
+  or `system-architecture`, those narrower authority documents win
+
+Normative status:
+
+- this file describes product-facing shape and presentation, not authority
+- it must not be used as the sole justification for default-path injections,
+  hidden phase logic, or durable control-state growth
+- if the product shape changes, this file should be updated instead of being
+  treated as an implicit contract expander
+
 ## Taxonomy
 
 Brewva keeps two taxonomies separate:
@@ -64,6 +79,17 @@ Consequences:
 ## Exploration Lane And Commitment Lane
 
 The product still distinguishes two lanes.
+
+These lanes are explanatory product language, not first-class runtime
+authority objects. They must not be implemented as hidden stage machines or
+default path prescriptions.
+
+Concrete non-goals:
+
+- default injected workflow lane briefs
+- hidden phase resolution or required-next-step controllers
+- runtime-owned convergence blockers that decide when exploration should stop
+- model-writable durable hints that feed back into later control logic
 
 ### `exploration lane`
 
@@ -149,6 +175,12 @@ These surfaces are derived from durable events and session state such as:
 The product goal is visibility and recovery guidance. The product must not
 convert those signals into a mandatory stage machine or a default injected lane
 brief.
+
+Interpretation reminder:
+
+- these workflow surfaces may summarize session-local state
+- they do not grant new authority to projection, context composition, or
+  product-facing adapters
 
 Those surfaces are also narrower than repository change fitness:
 

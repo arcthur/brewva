@@ -6,6 +6,13 @@ contract, tool-governance, deliberation, and control-plane design.
 It does not replace the constitution. It refines that constitution at the
 implementation granularity now used across the runtime.
 
+Interpretation rule:
+
+- this document explains governance style and boundary intent
+- it does not authorize planner-shaped logic inside the default hosted path
+- if a passage here reads broader than the constitutional or invariant docs,
+  the narrower authority contract wins
+
 ## Constitutional Reading
 
 The current constitution still stands:
@@ -60,6 +67,22 @@ contract:
 
 The former is governance. The latter is planner work.
 
+Documentation consequence:
+
+- text about negotiation, hints, lanes, or planner work should not be read as a
+  license to reintroduce hidden default-path orchestration
+
+## Non-Goals
+
+This document must not be used to justify the following in the default hosted
+path:
+
+- default injected workflow prescriptions or lane briefs
+- hidden phase/state-machine recovery controllers
+- model-writable durable control hints
+- telemetry or advisory facts silently becoming kernel-owned optimizer state
+- planner behavior being smuggled back in as "presentation" or "guidance"
+
 There is also a separate repository-level question:
 
 `Should this change be reviewed, merged, released, or escalated?`
@@ -107,6 +130,12 @@ Properties:
 The lanes must connect only through explicit boundary crossings such as
 proposals, leases, receipts, and effect authorization. Hidden runtime fallback
 must not blur the line.
+
+Interpretation reminder:
+
+- lanes are explanatory boundary language
+- they do not require a lane controller, phase tracker, or turn-time lane
+  injection mechanism
 
 ## Contract Split
 
@@ -157,8 +186,8 @@ orchestrators rather than directly becoming kernel commit conditions.
 
 ## Governance Style
 
-The governance style moves from “predefined path” to
-“authorize effects plus negotiate resources.”
+The governance style moves from "predefined path" to
+"authorize effects plus negotiate resources."
 
 That implies:
 

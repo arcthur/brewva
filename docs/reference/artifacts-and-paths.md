@@ -17,7 +17,9 @@ workspace.
 - Event stream (event tape): `.orchestrator/events/sess_<base64url(sessionId)>.jsonl`
   - file name uses a reversible base64url encoding of the UTF-8 `sessionId` to avoid filesystem collisions and preserve the original identifier
   - only `sess_*.jsonl` files are treated as event tape shards; non-prefixed JSONL files in the directory are ignored by the runtime
-- includes runtime and tool telemetry events such as `tool_parallel_read`
+  - includes audit-retained receipts by default, plus optional ops/debug
+    telemetry when `infrastructure.events.level` is raised
+  - for example, `tool_parallel_read` appears only at `debug` level
 - Projection units log: `.orchestrator/projection/units.jsonl`
 - Working projection markdown: `.orchestrator/projection/sessions/sess_<base64url(sessionId)>/working.md`
 - Projection state: `.orchestrator/projection/state.json`

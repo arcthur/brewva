@@ -1,7 +1,7 @@
 # Working Projection Journey
 
-This journey describes the current working-projection runtime behavior after governance
-kernel convergence.
+This journey describes the current working-projection runtime behavior in the
+re-hardened default path.
 
 ## Goal
 
@@ -41,3 +41,5 @@ There is no recall lane and no external recall branch in the default runtime.
   it is observational and not a restorable semantic unit snapshot.
 - Projection entries are keyed by source identity, not by heuristic importance classes.
 - Any projection update path must stay deterministic and explainable.
+- Working projection is a bounded working snapshot, not a planner memory or a
+  default injected workflow brief.

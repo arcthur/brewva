@@ -6,6 +6,9 @@ Allow agents to declare future execution intent via `schedule_intent`, then
 continue execution in daemon-managed child sessions until convergence, while
 remaining fully replayable from persisted events.
 
+Here, "convergence" is an explicit schedule-intent stop condition, not a hidden
+runtime planner or default-path recovery controller.
+
 ```mermaid
 flowchart TD
   A["Agent Session"] --> B["schedule_intent (create/update/cancel/list)"]
@@ -40,6 +43,8 @@ flowchart TD
   - `fresh`: runs without inheriting parent state
 - `convergenceCondition` supports structured predicates:
   `truth_resolved`, `task_phase`, `max_runs`, `all_of`, `any_of`
+- `task_phase` reads explicit task-state phase and remains a user-authored
+  schedule predicate, not a runtime-owned workflow prescription
 
 Bounded optimization loops may also persist objective iteration facts during
 child-session execution:

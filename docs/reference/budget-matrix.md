@@ -10,7 +10,7 @@ and replay/observability sources.
 | **Session Cost**            | USD                   | `ToolGateService.checkToolAccess` via `SessionCostTracker.getBudgetStatus` | `tool_call_marked`, `cost_update`, `budget_alert`                                                                                       | `infrastructure.costTracking.*`                                                          | checkpoint `state.cost` + shared cost fold |
 | **Context Injection**       | tokens                | `ContextBudgetManager.planInjection`                                       | `context_injected`, `context_injection_dropped`                                                                                         | `infrastructure.contextBudget.*`                                                         | runtime-local state only                   |
 | **Context Compaction Gate** | context window ratio  | `ContextPressureService.checkContextCompactionGate`                        | `context_compaction_requested`, `context_compaction_gate_blocked_tool`, `context_compacted`                                             | `infrastructure.contextBudget.compaction.*`, `infrastructure.contextBudget.thresholds.*` | runtime-local state only                   |
-| **Context Arena SLO**       | entry count           | `ContextArena.ensureAppendCapacity`                                        | `context_arena_slo_enforced`                                                                                                            | `infrastructure.contextBudget.arena.maxEntriesPerSession`                                | rebuilt from tape events                   |
+| **Context Arena SLO**       | entry count           | `ContextArena.ensureAppendCapacity`                                        | `context_arena_slo_enforced`                                                                                                            | `infrastructure.contextBudget.arena.maxEntriesPerSession`                                | runtime-local arena state only             |
 | **Governance Checks**       | checks / turn         | effect authorization plus verification/cost/compaction governance hooks    | `proposal_*`, `decision_receipt_recorded`, `governance_verify_spec_*`, `governance_cost_anomaly_*`, `governance_compaction_integrity_*` | `BrewvaRuntimeOptions.governancePort`                                                    | tape events + checkpoint replay            |
 | **Parallel**                | concurrent/total runs | `ParallelBudgetManager.acquire`                                            | operational acquire/release telemetry                                                                                                   | `parallel.*` (`parallel.maxTotalPerSession`)                                             | runtime-local slot state only              |
 
@@ -47,3 +47,10 @@ runtime decision loop:
 - `verifySpec` can convert a verification pass into a governance failure with blocker evidence.
 - `detectCostAnomaly` emits anomaly diagnostics without changing session accounting totals.
 - `checkCompactionIntegrity` validates compaction summaries and emits governance integrity events.
+
+## Notes On Replay Precision
+
+- Context-injection and compaction observability events improve diagnostics, but
+  they do not currently rebuild the arena or compaction planner from tape.
+- `context_arena_slo_enforced` records that the ceiling was hit; it is not a
+  replay contract for reconstructing exact prior arena contents.

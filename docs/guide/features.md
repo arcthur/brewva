@@ -2,7 +2,7 @@
 
 ## Runtime Capabilities
 
-- Skill contract selection and activation
+- Skill contract activation and enforcement
 - Tool access policy checks, effect boundaries, and budget checks
 - Evidence ledger and digest injection
 - Task/truth state management with event-sourced replay
@@ -11,7 +11,7 @@
 - Context budget tracking and compaction events
 - Event-first runtime persistence and replay
 - Cost observability and threshold-based budget alerts
-- Derived workflow artifacts and advisory posture inspection
+- Derived workflow artifacts and explicit advisory inspection surfaces
 - Objective iteration fact persistence and lineage-aware query for
   model-native optimization loops
 
@@ -97,19 +97,20 @@ Tool registry source: `packages/brewva-tools/src/index.ts`
 - Project overlays: `repository-analysis`, `design`, `implementation`, `debugging`, `review`, `runtime-forensics`
 - Shared project context: `critical-rules`, `migration-priority-matrix`, `package-boundaries`, `runtime-artifacts`
 
-Runtime-owned phases, not public skills:
+Runtime-owned workflow semantics, not public skills:
 
 - verification
 - finishing
 - recovery
-- compose-style chain planning
+- compose-style workflow semantics
 
 One common public delivery chain is:
 
 `discovery -> strategy-review -> design -> implementation -> review -> qa -> ship -> retro`
 
 The chain is a skill-layer convention, not a runtime-owned DAG. Verification,
-workflow posture, and ship advisories remain kernel-derived surfaces.
+derived workflow status, and ship advisories remain explicit runtime inspection
+surfaces rather than default injected planning hints.
 
 Skill roots:
 

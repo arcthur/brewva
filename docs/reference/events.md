@@ -184,6 +184,9 @@ Those derived workflow surfaces are exposed through working projection and
 `workflow_status`. They are advisory working-state views, not new audit-critical
 authority events.
 
+Those surfaces are explicit inspection views. They do not become a default
+turn-time workflow brief or a hidden next-step controller.
+
 ## Audit-Critical Families
 
 The audit-retained core includes:

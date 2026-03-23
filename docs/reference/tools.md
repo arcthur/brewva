@@ -126,9 +126,11 @@ Notes:
 
 These tools are the preferred path for evidence reuse and replay inspection.
 
-`workflow_status` is advisory only. It derives stage posture and ship posture
+`workflow_status` is advisory only. It derives workflow status and ship posture
 from runtime events and session state, but it does not prescribe or
-enforce a workflow path.
+enforce a workflow path. The default hosted path does not maintain a hidden
+workflow brief; inspection happens when the model or operator explicitly reads
+this surface.
 
 ### Browser Automation
 
@@ -200,7 +202,7 @@ Current public boundary vocabulary:
 - `safe`
 - `effectful`
 
-`effectful` does not mean “always requires approval”. Some `effectful` tools
+`effectful` does not mean "always requires approval". Some `effectful` tools
 are rollbackable and execute directly; approval is required only when the tool's
 exact governance descriptor says so.
 
@@ -276,6 +278,8 @@ Behavior:
 
 - only objective facts should be recorded
 - durable writes require concrete `evidence_refs`
+- decision-like or convergence-control facts are not part of this tool's
+  stable contract
 - this tool does not prescribe the next step in a loop
 - fact history is durable and replay-visible through `runtime.events.*`
 - `session_scope` defaults to `current_session`
@@ -372,4 +376,6 @@ Derived workflow inspection surface.
 - optionally includes recent derived workflow artifacts
 
 This tool is advisory. It does not create a runtime-owned chain planner and it
-does not force the model to follow a suggested path.
+does not force the model to follow a suggested path. Calling the tool is the
+explicit inspection step; the runtime does not run a hidden next-step
+controller behind it.

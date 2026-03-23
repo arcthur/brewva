@@ -12,7 +12,7 @@
 
 ## Runtime Responsibilities
 
-- Skill discovery, ranking, activation, and contract enforcement
+- Skill registry, activation, and contract enforcement
 - Evidence ledger recording, digest generation, and query
 - Verification gate evaluation and command-based verification checks
 - Context budget planning and compaction signaling

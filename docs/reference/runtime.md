@@ -91,6 +91,8 @@ Default injected sources:
 - `brewva.tool-outputs-distilled` (optional)
 
 There is no default proposal-backed context source anymore.
+There is no default injected workflow advisory or `workflow_status` context
+source.
 
 ### `runtime.tools.*`
 

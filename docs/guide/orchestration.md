@@ -2,7 +2,7 @@
 
 Orchestration is driven by runtime state management plus extension lifecycle handlers.
 
-- Runtime state machine: `packages/brewva-runtime/src/runtime.ts`
+- Runtime governance facade and service wiring: `packages/brewva-runtime/src/runtime.ts`
 - Extension registration: `@brewva/brewva-gateway/runtime-plugins` (`packages/brewva-gateway/src/runtime-plugins/index.ts`)
 
 ## Hosted Pipeline

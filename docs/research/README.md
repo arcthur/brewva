@@ -36,6 +36,7 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 
 ## Active notes
 
+- `docs/research/rfc-architecture-doc-precision-review.md`
 - `docs/research/rfc-boundary-first-subtraction-and-model-native-recovery.md`
 - `docs/research/roadmap-notes.md`
 

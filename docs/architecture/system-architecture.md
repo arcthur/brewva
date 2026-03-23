@@ -29,6 +29,31 @@ Further reading:
 - `docs/reference/proposal-boundary.md`
 - `docs/reference/runtime.md`
 
+## Interpretation Order
+
+When architecture documents disagree in tone or granularity, interpret them in
+this order:
+
+1. `docs/architecture/design-axioms.md`
+2. `docs/architecture/invariants-and-reliability.md`
+3. `docs/architecture/system-architecture.md`
+4. explanatory product-shape or flow descriptions such as
+   `docs/architecture/cognitive-product-architecture.md`,
+   `docs/architecture/exploration-and-effect-governance.md`, and
+   `docs/architecture/control-and-data-flow.md`
+
+This file defines authority maps and state taxonomy. It should stay more stable
+than product-shape narratives or flow snapshots.
+
+Use this file to answer:
+
+- who owns authority
+- which state is authoritative versus derived
+- which classes of product behavior are allowed to stay advisory-only
+
+Do not use broad plane language from lower-precedence documents to widen kernel
+authority, durable control state, or default-path prescriptions.
+
 ## Three Rings
 
 - `Kernel Ring`
@@ -73,6 +98,14 @@ Boundary rule:
   - future planners
 
 Rings define authority. Planes define product behavior.
+
+Boundary note:
+
+- rings outrank planes when authority is in question
+- naming a plane does not create new authority by itself
+- planes may explain presentation or orchestration, but they must not be used
+  to justify hidden stage machines, default injected lane briefs, or
+  model-writable control state
 
 ## Adjacent Repository Fitness Plane
 

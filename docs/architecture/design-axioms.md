@@ -43,6 +43,10 @@ can be judged against a stable standard instead of local convenience.
     repository-governance plane. The runtime may consume or emit evidence for
     that plane, but it should not silently absorb repository policy into kernel
     authority.
+11. `Documentation hierarchy follows authority hierarchy.`
+    Documents that describe product shape, orchestration flow, or operator UX
+    must not silently widen kernel authority. When wording conflicts, the
+    narrowest authority-defining document wins.
 
 Implementation note:
 
@@ -57,6 +61,8 @@ Implementation note:
   not define authority on their own
 - explicit control-plane exemptions may exist, but they must stay narrow and
   auditable
+- architecture prose about planes, lanes, prompts, or flow should be read as
+  descriptive only unless it names a concrete invariant or public contract
 
 ## Ring Model
 

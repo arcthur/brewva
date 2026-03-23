@@ -68,13 +68,18 @@ This repository uses a layered documentation system:
 ## Research (Incubation Layer)
 
 - Research playbook: `docs/research/README.md`
+- Architecture doc precision review RFC: `docs/research/rfc-architecture-doc-precision-review.md`
 - Boundary-first subtraction and model-native recovery RFC: `docs/research/rfc-boundary-first-subtraction-and-model-native-recovery.md`
+- Default-path re-hardening RFC: `docs/research/rfc-default-path-re-hardening-and-advisory-surface-narrowing.md`
 - Repository fitness plane and runtime boundary RFC: `docs/research/rfc-repository-fitness-plane-and-runtime-boundary.md`
 - Roadmap notes: `docs/research/roadmap-notes.md`
 - Effect governance RFC: `docs/research/rfc-effect-governance-and-contract-vnext.md`
 - Capability compression RFC: `docs/research/rfc-capability-compression-and-output-distillation.md`
-- Invocation spine RFC: `docs/research/rfc-invocation-spine-and-posture-runtime-vnext.md`
-- Runtime decomposition RFC: `docs/research/rfc-runtime-decomposition-and-deliberation-thickening.md`
+- Subagent delegation RFC: `docs/research/rfc-subagent-delegation-and-isolated-execution.md`
+- Pre-parse normalization RFC: `docs/research/rfc-preparse-normalization-model-capability-and-live-audit-split.md`
+- Workflow artifacts RFC: `docs/research/rfc-workflow-artifacts-and-posture-control-plane.md`
+- Iteration facts RFC: `docs/research/rfc-iteration-facts-and-model-native-optimization-protocols.md`
+- Archived / superseded examples: `docs/research/rfc-invocation-spine-and-posture-runtime-vnext.md`, `docs/research/rfc-runtime-decomposition-and-deliberation-thickening.md`
 
 ## Source of Truth
 

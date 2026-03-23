@@ -12,7 +12,7 @@ Skill parsing, merge, and runtime-facing lifecycle logic:
 Skill taxonomy is now split by role:
 
 - public routable skills: routable semantic territory
-- runtime/control-plane phases: workflow semantics, not public skills
+- runtime/control-plane workflow semantics: not public skills
 - project overlays: project-specific tightening, execution guidance, and shared-context extension
 - operator/meta skills: loaded, but usually hidden from standard routing
 
@@ -73,8 +73,9 @@ categories. Same-name specialization belongs in `skills/project/overlays/*`,
 not in a second base skill definition that relies on load order.
 
 `skills/internal/` is currently a reserved documentation slot for runtime-owned
-phases. Verification, finishing, recovery, and compose-style planning live in
-runtime/control-plane code today rather than structured `SKILL.md` documents.
+workflow or recovery semantics. Verification, finishing, recovery, and
+compose-style planning live in runtime/control-plane code today rather than
+structured `SKILL.md` documents.
 
 `intent.output_contracts` makes artifact quality explicit in the skill contract
 instead of hiding it inside runtime heuristics. Non-overlay skills with
@@ -148,7 +149,7 @@ One common delivery chain now present in the catalog is:
 `discovery -> strategy-review -> design -> implementation -> review -> qa -> ship -> retro`
 
 This remains a prompt-side and control-plane convention. Runtime still owns
-verification, replay, posture derivation, and effect governance.
+verification, replay, derived workflow status, and effect governance.
 
 ## Workflow Artifacts And Posture
 
@@ -182,6 +183,8 @@ Important boundary rules:
   surfaces when needed instead of default turn-time workflow injection
 - models may choose any valid path unless governance or safety boundaries
   independently block it
+- derived workflow state is visible by inspection, not by a hidden planner or
+  next-step controller
 
 Control-plane and operator surfaces may inspect this state through
 `workflow_status` and working projection surfaces.

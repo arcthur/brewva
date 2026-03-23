@@ -54,7 +54,7 @@ This avoids hidden coupling from scheduling internals back into facade methods.
 
 Core contracts are defined in `packages/brewva-runtime/src/types.ts`, including:
 
-- skill contracts and dispatch/cascade types
+- skill contracts and routing/scheduling types
 - ledger and truth/task payload contracts
 - event/replay/wal contracts
 - verification and cost summary contracts

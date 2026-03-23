@@ -15,7 +15,7 @@ Skills are loaded by category, not by lifecycle tier.
 The important distinction is semantic:
 
 - public skill = routable capability boundary
-- runtime phase = workflow owned by runtime/control plane
+- runtime/control-plane workflow semantics = not public skills
 - project overlay = project-specific tightening plus shared context
 - operator/meta = loaded, but hidden from standard routing by default
 
@@ -72,17 +72,18 @@ Project overlays do not create new semantic territory. They:
 This keeps project knowledge centralized without turning every project into a new
 catalog of public super-skills.
 
-## Runtime-Owned Phases
+## Runtime-Owned Workflow Semantics
 
 These are no longer public skills:
 
 - verification
 - finishing
 - recovery
-- compose-style chain planning
+- compose-style workflow semantics
 
-`skills/internal/` is intentionally reserved for future structured phase docs.
-Today those runtime-owned phases are implemented in code, not as routable skills.
+`skills/internal/` is intentionally reserved for future structured runtime
+workflow or recovery docs. Today those runtime-owned semantics are implemented
+in code, not as routable skills.
 
 Skill configuration contract is defined in `packages/brewva-runtime/src/types.ts`
 (`BrewvaConfig.skills`).

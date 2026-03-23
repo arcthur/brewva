@@ -31,4 +31,6 @@
   (skill/budget/cost counters, warning dedupe, ledger compaction cooldown).
 - Note: upstream `turnIndex` can reset to `0` on `agent_start` boundaries. Brewva normalizes turns to be monotonic per session (for example `effectiveTurn = max(current, turnIndex)`) and uses the normalized value for gating/reconciliation.
 - If projection artifacts are missing, runtime can rebuild projection files from
-  tape-backed `projection_*` snapshots.
+  source tape events using deterministic projection extraction rules.
+  `projection_ingested` and `projection_refreshed` remain projection telemetry,
+  not semantic rebuild inputs.

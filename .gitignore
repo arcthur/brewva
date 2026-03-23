@@ -19,3 +19,4 @@ distribution/brewva-*/bin/examples
 distribution/brewva-*/bin/theme
 distribution/brewva-*/bin/export-html
 distribution/brewva-*/bin/skills
+.DS_Store

@@ -2,6 +2,19 @@
 
 This document models governance-first runtime flow and persistence boundaries.
 
+Interpretation rule:
+
+- these diagrams are descriptive snapshots of the current runtime shape
+- they do not override architectural invariants or public contracts
+- if the implementation changes, this file should be updated rather than used
+  to infer new authority
+- host-specific branches, deleted paths, or optional integrations may be omitted
+  here without changing the authority model
+
+Use this file to understand current wiring. Use `docs/architecture/*.md`,
+`docs/reference/*.md`, and runtime code to decide what authority or persistence
+semantics are actually allowed.
+
 ## Default Session Flow (Extensions Enabled)
 
 ```mermaid

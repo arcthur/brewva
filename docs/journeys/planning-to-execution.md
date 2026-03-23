@@ -8,8 +8,10 @@ One common public-skill chain is:
 
 `discovery -> strategy-review -> design -> implementation -> review -> qa -> ship -> retro`
 
-The runtime does not force this sequence. It derives posture and verification
-state while the model chooses when to move between these skills.
+The runtime does not force this sequence. It derives advisory workflow state
+and verification state while the model chooses when to move between these
+skills. Workflow inspection remains explicit and pull-based; the default path
+does not inject a required lane brief.
 
 ```mermaid
 flowchart TD
@@ -32,7 +34,8 @@ flowchart TD
 4. Complete the active skill with required outputs
 5. Let derived workflow artifacts update discovery/strategy/planning/review/QA/verification/ship state
 6. Use `workflow_status` or working projection to inspect the current chain
-   without forcing the next step
+   explicitly, without forcing the next step or injecting a planner-shaped
+   default
 
 ## Code Pointers
 
@@ -40,4 +43,4 @@ flowchart TD
 - Load tool: `packages/brewva-tools/src/skill-load.ts`
 - Completion + verification: `packages/brewva-tools/src/skill-complete.ts`
 - Workflow derivation: `packages/brewva-runtime/src/workflow/derivation.ts`
-- Advisory query surface: `packages/brewva-tools/src/workflow-status.ts`
+- Explicit advisory query surface: `packages/brewva-tools/src/workflow-status.ts`

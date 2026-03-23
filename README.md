@@ -102,8 +102,8 @@ One common delivery chain is:
 `discovery -> strategy-review -> design -> implementation -> review -> qa -> ship -> retro`
 
 This remains advisory and model-native. Runtime still owns verification,
-posture, replay, and effect governance rather than a kernel-managed stage
-planner.
+derived workflow inspection surfaces, replay, and effect governance rather
+than a kernel-managed stage planner.
 
 ## Quick Start
 

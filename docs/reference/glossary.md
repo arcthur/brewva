@@ -17,7 +17,7 @@
 - Arena: the context injection workspace that manages source reservations and token budgets per turn
 - Turn WAL: write-ahead log for turn durability; enables crash recovery and replay of in-flight turns
 - Effect Boundary: the runtime execution class for a tool invocation: `safe` or `effectful`
-- Projection: a working-memory snapshot maintained across turns; distilled from tool outputs and agent reasoning
+- Projection: a tape-derived working snapshot maintained across turns; rebuilt from source events rather than agent reasoning memory
 - Supplemental Context: same-turn non-authoritative context appended through the hosted-session path rather than persisted as a kernel proposal
 - Effect Commitment: an approval-bearing proposal for an `effectful` tool invocation
 - Governance Port: the external authorization interface that the runtime calls for tool-gate and effect-commitment decisions
