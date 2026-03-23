@@ -69,6 +69,7 @@ This repository uses a layered documentation system:
 
 - Research playbook: `docs/research/README.md`
 - Boundary-first subtraction and model-native recovery RFC: `docs/research/rfc-boundary-first-subtraction-and-model-native-recovery.md`
+- Repository fitness plane and runtime boundary RFC: `docs/research/rfc-repository-fitness-plane-and-runtime-boundary.md`
 - Roadmap notes: `docs/research/roadmap-notes.md`
 - Effect governance RFC: `docs/research/rfc-effect-governance-and-contract-vnext.md`
 - Capability compression RFC: `docs/research/rfc-capability-compression-and-output-distillation.md`

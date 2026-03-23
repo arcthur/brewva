@@ -11,7 +11,7 @@
 - Context budget tracking and compaction events
 - Event-first runtime persistence and replay
 - Cost observability and threshold-based budget alerts
-- Derived workflow artifacts and advisory readiness inspection
+- Derived workflow artifacts and advisory posture inspection
 - Objective iteration fact persistence and lineage-aware query for
   model-native optimization loops
 
@@ -109,7 +109,7 @@ One common public delivery chain is:
 `discovery -> strategy-review -> design -> implementation -> review -> qa -> ship -> retro`
 
 The chain is a skill-layer convention, not a runtime-owned DAG. Verification,
-workflow readiness, and ship advisories remain kernel-derived surfaces.
+workflow posture, and ship advisories remain kernel-derived surfaces.
 
 Skill roots:
 

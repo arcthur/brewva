@@ -40,7 +40,7 @@ flowchart TD
    workspace directly.
 5. Let the parent session inspect and adopt child patch results explicitly via
    `worker_results_merge` and `worker_results_apply`.
-6. Feed pending or applied worker outcomes back into workflow readiness so
+6. Feed pending or applied worker outcomes back into workflow posture so
    ship state remains blocked until parent-controlled merge/apply completes.
 7. Release slots, persist lifecycle state, and keep pending child runs visible
    to compaction through a dedicated `PendingDelegations` section.
@@ -57,7 +57,7 @@ effort helpers.
   metadata
 - late outcomes may return through `context_packet` when inline same-turn
   injection is no longer valid
-- workflow readiness treats pending worker results as ship blockers until the
+- workflow posture treats pending worker results as ship blockers until the
   parent explicitly merges or applies them
 
 Note: use `runtime.tools.acquireParallelSlot(...)` to apply per-skill
@@ -73,7 +73,7 @@ Note: use `runtime.tools.acquireParallelSlot(...)` to apply per-skill
   `packages/brewva-gateway/src/subagents/workspace.ts`
 - Runtime parallel and merge state:
   `packages/brewva-runtime/src/services/parallel.ts`
-- Workflow readiness derivation:
+- Workflow posture derivation:
   `packages/brewva-runtime/src/workflow/derivation.ts`
 - Session hydration fold:
   `packages/brewva-runtime/src/services/session-hydration-fold-delegation.ts`

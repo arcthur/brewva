@@ -87,7 +87,7 @@ Use this skill when:
 
 ### Step 1: Rebuild release context
 
-Collect the current branch state, release target, workflow readiness, review
+Collect the current branch state, release target, workflow posture, review
 state, QA result, and outstanding blockers.
 
 ### Step 2: Choose the release path you are evaluating

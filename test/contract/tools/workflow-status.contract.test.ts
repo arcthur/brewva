@@ -71,10 +71,35 @@ describe("workflow_status contract", () => {
     expect(text).toContain("artifacts (latest 4):");
     expect(text).toContain("- review | state=ready | freshness=stale");
     expect(text).toContain("- verification | state=ready | freshness=stale");
-    expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("fail");
+    expect(
+      (
+        result.details as
+          | {
+              verdict?: string;
+              posture?: { review?: string; ship?: string };
+              readiness?: unknown;
+            }
+          | undefined
+      )?.verdict,
+    ).toBe("fail");
+    expect(
+      (
+        result.details as
+          | {
+              posture?: { review?: string; ship?: string };
+            }
+          | undefined
+      )?.posture,
+    ).toEqual(
+      expect.objectContaining({
+        review: "stale",
+        ship: "blocked",
+      }),
+    );
+    expect((result.details as { readiness?: unknown } | undefined)?.readiness).toBeUndefined();
   });
 
-  test("blocks release while worker results are still pending", async () => {
+  test("blocks ship posture while worker results are still pending", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-pending-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "workflow-status-pending";
@@ -256,7 +281,7 @@ describe("workflow_status contract", () => {
     expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("pass");
   });
 
-  test("prefers core workflow artifacts over synthetic release readiness when artifacts are limited", async () => {
+  test("prefers core workflow artifacts over synthetic ship posture when artifacts are limited", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-limit-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "workflow-status-limit";
@@ -302,7 +327,7 @@ describe("workflow_status contract", () => {
     const text = extractTextContent(result);
     expect(text).toContain("artifacts (latest 1):");
     expect(text).toContain("- verification | state=ready | freshness=fresh");
-    expect(text).not.toContain("- release_readiness");
+    expect(text).not.toContain("- ship_posture");
     expect(
       (result.details as { artifacts?: Array<{ kind: string }> } | undefined)?.artifacts?.[0]?.kind,
     ).toBe("verification");

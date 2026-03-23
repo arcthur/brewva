@@ -8,7 +8,7 @@ One common public-skill chain is:
 
 `discovery -> strategy-review -> design -> implementation -> review -> qa -> ship -> retro`
 
-The runtime does not force this sequence. It derives readiness and verification
+The runtime does not force this sequence. It derives posture and verification
 state while the model chooses when to move between these skills.
 
 ```mermaid
@@ -20,7 +20,7 @@ flowchart TD
   E --> F{"Verification Gate Passed?"}
   F -->|No| D
   F -->|Yes| G["Finalize via skill_complete"]
-  G --> H["Derive Workflow Artifacts and Readiness"]
+  G --> H["Derive Workflow Artifacts and Posture"]
   H --> I["Inspect State via workflow_status / WorkingProjection"]
 ```
 

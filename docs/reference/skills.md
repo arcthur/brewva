@@ -148,9 +148,9 @@ One common delivery chain now present in the catalog is:
 `discovery -> strategy-review -> design -> implementation -> review -> qa -> ship -> retro`
 
 This remains a prompt-side and control-plane convention. Runtime still owns
-verification, replay, readiness derivation, and effect governance.
+verification, replay, posture derivation, and effect governance.
 
-## Workflow Artifacts And Readiness
+## Workflow Artifacts And Posture
 
 Skill lifecycle remains the authoritative semantic contract boundary, but the
 runtime now derives workflow-facing artifacts from completed skill outputs and
@@ -176,7 +176,7 @@ Important boundary rules:
 
 - workflow artifacts are derived working-state projections, not a second
   commitment-memory authority
-- workflow readiness is advisory-only and does not create a kernel-owned stage
+- workflow posture is advisory-only and does not create a kernel-owned stage
   DAG
 - inspection remains explicit: use `workflow_status` or working projection
   surfaces when needed instead of default turn-time workflow injection

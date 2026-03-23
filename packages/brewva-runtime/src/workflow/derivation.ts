@@ -28,7 +28,7 @@ export const WORKFLOW_ARTIFACT_KINDS = [
   "worker_patch",
   "iteration_metric",
   "iteration_guard",
-  "release_readiness",
+  "ship_posture",
 ] as const;
 
 export type WorkflowArtifactKind = (typeof WORKFLOW_ARTIFACT_KINDS)[number];
@@ -55,7 +55,7 @@ export interface WorkflowArtifact {
   metadata?: Record<string, JsonValue>;
 }
 
-export interface WorkflowReadiness {
+export interface WorkflowPosture {
   sessionId: string;
   discovery: WorkflowPresenceStatus;
   strategy: WorkflowPresenceStatus;
@@ -74,7 +74,7 @@ export interface WorkflowReadiness {
 export interface WorkflowStatusSnapshot {
   sessionId: string;
   currentWorkspaceRevision?: string;
-  readiness: WorkflowReadiness;
+  posture: WorkflowPosture;
   artifacts: WorkflowArtifact[];
   pendingWorkerResults: number;
   updatedAt: number;
@@ -83,7 +83,7 @@ export interface WorkflowStatusSnapshot {
 interface WorkflowDraftArtifact {
   artifactId: string;
   sessionId: string;
-  kind: Exclude<WorkflowArtifactKind, "release_readiness">;
+  kind: Exclude<WorkflowArtifactKind, "ship_posture">;
   summary: string;
   sourceEventIds: string[];
   sourceSkillNames: string[];
@@ -834,7 +834,7 @@ export function deriveWorkflowArtifacts(events: readonly BrewvaEventRecord[]): W
         artifact.kind === "design" ||
         artifact.kind === "execution_plan" ||
         artifact.kind === "retro" ||
-        artifact.kind === "release_readiness"
+        artifact.kind === "ship_posture"
       ) {
         artifact.freshness = artifact.freshness === "stale" ? "stale" : "unknown";
         continue;
@@ -955,11 +955,11 @@ function dedupeBlockers(blockers: readonly string[]): string[] {
   return [...new Set(blockers.map((entry) => entry.trim()).filter((entry) => entry.length > 0))];
 }
 
-function createReleaseArtifact(input: {
+function createShipPostureArtifact(input: {
   sessionId: string;
   updatedAt: number;
   currentWorkspaceRevision?: string;
-  readiness: WorkflowReadiness;
+  posture: WorkflowPosture;
   latestArtifacts: Partial<Record<WorkflowArtifactKind, WorkflowArtifact>>;
 }): WorkflowArtifact {
   const latestCoreArtifacts = [
@@ -984,40 +984,40 @@ function createReleaseArtifact(input: {
   );
 
   const blockerPreview =
-    input.readiness.blockers.length > 0
-      ? ` Blockers: ${formatPreviewList(input.readiness.blockers, 2)}.`
+    input.posture.blockers.length > 0
+      ? ` Blockers: ${formatPreviewList(input.posture.blockers, 2)}.`
       : "";
-  const summary = `Ship readiness is ${input.readiness.ship}.${blockerPreview}`;
+  const summary = `Ship posture is ${input.posture.ship}.${blockerPreview}`;
 
   return {
-    artifactId: `wfart:release_readiness:${input.sessionId}:${input.updatedAt}`,
+    artifactId: `wfart:ship_posture:${input.sessionId}:${input.updatedAt}`,
     sessionId: input.sessionId,
-    kind: "release_readiness",
+    kind: "ship_posture",
     summary,
     sourceEventIds,
     sourceSkillNames,
     outputKeys: [],
     producedAt: input.updatedAt,
     freshness:
-      input.readiness.ship === "ready"
+      input.posture.ship === "ready"
         ? "fresh"
-        : input.readiness.ship === "stale" ||
-            input.readiness.review === "stale" ||
-            input.readiness.qa === "stale" ||
-            input.readiness.verification === "stale"
+        : input.posture.ship === "stale" ||
+            input.posture.review === "stale" ||
+            input.posture.qa === "stale" ||
+            input.posture.verification === "stale"
           ? "stale"
           : "unknown",
     state:
-      input.readiness.ship === "ready"
+      input.posture.ship === "ready"
         ? "ready"
-        : input.readiness.ship === "blocked"
+        : input.posture.ship === "blocked"
           ? "blocked"
           : "pending",
     workspaceRevision: input.currentWorkspaceRevision,
     metadata: {
       source: "workflow_status",
-      ship: input.readiness.ship,
-      blockers: input.readiness.blockers,
+      ship: input.posture.ship,
+      blockers: input.posture.blockers,
     },
   };
 }
@@ -1176,7 +1176,7 @@ export function deriveWorkflowStatus(input: DeriveWorkflowStatusInput): Workflow
   );
   const updatedAt = latestObservedAt > 0 ? latestObservedAt : Date.now();
 
-  const readiness: WorkflowReadiness = {
+  const posture: WorkflowPosture = {
     sessionId: input.sessionId,
     discovery,
     strategy,
@@ -1206,32 +1206,32 @@ export function deriveWorkflowStatus(input: DeriveWorkflowStatusInput): Workflow
     updatedAt,
   };
 
-  const releaseArtifact = createReleaseArtifact({
+  const shipPostureArtifact = createShipPostureArtifact({
     sessionId: input.sessionId,
     updatedAt,
     currentWorkspaceRevision,
-    readiness,
+    posture,
     latestArtifacts,
   });
-  const artifactsWithRelease = [releaseArtifact, ...artifacts].toSorted(
+  const artifactsWithShipPosture = [shipPostureArtifact, ...artifacts].toSorted(
     (left, right) =>
       right.producedAt - left.producedAt ||
-      (left.kind === "release_readiness"
+      (left.kind === "ship_posture"
         ? -1
-        : right.kind === "release_readiness"
+        : right.kind === "ship_posture"
           ? 1
           : left.artifactId.localeCompare(right.artifactId)),
   );
-  readiness.latestArtifactIds = uniqueStrings([
-    ...readiness.latestArtifactIds,
-    releaseArtifact.artifactId,
+  posture.latestArtifactIds = uniqueStrings([
+    ...posture.latestArtifactIds,
+    shipPostureArtifact.artifactId,
   ]);
 
   return {
     sessionId: input.sessionId,
     currentWorkspaceRevision,
-    readiness,
-    artifacts: artifactsWithRelease,
+    posture,
+    artifacts: artifactsWithShipPosture,
     pendingWorkerResults,
     updatedAt,
   };

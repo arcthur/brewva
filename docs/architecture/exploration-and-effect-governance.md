@@ -60,6 +60,13 @@ contract:
 
 The former is governance. The latter is planner work.
 
+There is also a separate repository-level question:
+
+`Should this change be reviewed, merged, released, or escalated?`
+
+That question belongs to an adjacent repository-fitness plane rather than to
+the runtime commitment lane itself.
+
 ## Two Lanes
 
 The system recognizes two distinct lanes.
@@ -217,6 +224,16 @@ Verification should align with the same principle:
 This does not weaken verification. It makes verification target the thing that
 actually needs to be trusted.
 
+Current boundary clarification:
+
+- runtime verification asks whether the current session or task has the
+  evidence needed for trustworthy completion and post-write confidence
+- repository fitness asks whether a repository change has passed the right
+  change-level gates, routing rules, and release checks
+
+The two may exchange evidence, but they should not be collapsed into one
+undifferentiated `verification` layer.
+
 ## Non-goals
 
 This architecture does not mean:
@@ -226,6 +243,9 @@ This architecture does not mean:
 - replacing pre-authorization with post-hoc audit
 - deleting current tool gating in one step
 - allowing the model to expand authority without receipts
+- turning the runtime kernel into a repository-local merge or release gate
+- treating workflow posture or runtime verification freshness as sufficient
+  repository fitness on their own
 
 ## Related Documents
 

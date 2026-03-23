@@ -118,8 +118,8 @@ describe("gateway daemon control-plane methods", () => {
           intervalMinutes: 15,
           prompt: [
             "Check project status.",
-            "Review release readiness.",
-            "release readiness",
+            "Review ship posture.",
+            "ship posture",
             "backlog risk",
           ].join("\n"),
         },
@@ -133,8 +133,8 @@ describe("gateway daemon control-plane methods", () => {
         intervalMinutes: 15,
         prompt: [
           "Check project status.",
-          "Review release readiness.",
-          "release readiness",
+          "Review ship posture.",
+          "ship posture",
           "backlog risk",
         ].join("\n"),
       });
@@ -142,12 +142,9 @@ describe("gateway daemon control-plane methods", () => {
       expect(captured?.options?.source).toBe("heartbeat");
       expect(captured?.options?.trigger).toBeUndefined();
       expect(captured?.prompt).toBe(
-        [
-          "Check project status.",
-          "Review release readiness.",
-          "release readiness",
-          "backlog risk",
-        ].join("\n"),
+        ["Check project status.", "Review ship posture.", "ship posture", "backlog risk"].join(
+          "\n",
+        ),
       );
     } finally {
       harness.dispose();
