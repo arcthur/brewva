@@ -3,7 +3,7 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
-import { buildStringEnumSchema } from "./utils/input-alias.js";
+import { buildStringEnumSchema, normalizeStringEnumAlias } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
@@ -25,6 +25,20 @@ const GREP_CASE_SCHEMA = buildStringEnumSchema(GREP_CASE_VALUES, GREP_CASE_ALIAS
     insensitive: "ignore",
   },
 });
+
+function normalizeGrepCase(value: unknown): GrepCase {
+  if (value === "ignore" || value === "sensitive" || value === "smart") {
+    return value;
+  }
+  const normalized = normalizeStringEnumAlias(value, GREP_CASE_VALUES, GREP_CASE_ALIASES);
+  if (normalized === "insensitive") {
+    return "ignore";
+  }
+  if (normalized === "sensitive") {
+    return "sensitive";
+  }
+  return "smart";
+}
 
 export type GrepRunResult = {
   exitCode: number;
@@ -242,8 +256,7 @@ export function createGrepTool(options: BrewvaToolOptions): ToolDefinition {
         paths.push(normalized);
       }
       const globs = (params.glob ?? []).map((entry) => entry.trim()).filter(Boolean);
-      const caseMode: GrepCase =
-        params.case === "ignore" || params.case === "sensitive" ? params.case : "smart";
+      const caseMode = normalizeGrepCase(params.case);
 
       const args: string[] = ["--line-number", "--no-heading", "--color", "never", "--hidden"];
 
@@ -257,6 +270,8 @@ export function createGrepTool(options: BrewvaToolOptions): ToolDefinition {
 
       if (caseMode === "ignore") {
         args.push("--ignore-case");
+      } else if (caseMode === "smart") {
+        args.push("--smart-case");
       } else if (caseMode === "sensitive") {
         args.push("--case-sensitive");
       }

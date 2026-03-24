@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,9 +10,20 @@ import {
   createObsSnapshotTool,
 } from "@brewva/brewva-tools";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
+import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
 
-function createCleanRuntime(cwd = process.cwd()): BrewvaRuntime {
+let workspace = "";
+
+beforeEach(() => {
+  workspace = createTestWorkspace("observability-tools-contract");
+});
+
+afterEach(() => {
+  if (workspace) cleanupWorkspace(workspace);
+});
+
+function createCleanRuntime(cwd = workspace): BrewvaRuntime {
   return new BrewvaRuntime({
     cwd,
     config: createRuntimeConfig(),
@@ -51,8 +62,8 @@ describe("observability tool contracts", () => {
   });
 
   test("obs_query persists a raw artifact and returns a compact summary", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-obs-query-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const obsQueryWorkspace = mkdtempSync(join(tmpdir(), "brewva-tools-obs-query-"));
+    const runtime = new BrewvaRuntime({ cwd: obsQueryWorkspace });
     const sessionId = "s10-obs-query";
 
     runtime.events.record({
@@ -94,14 +105,14 @@ describe("observability tool contracts", () => {
     const artifactOverride = (result.details as { artifactOverride?: { artifactRef?: string } })
       ?.artifactOverride;
     expect(typeof artifactOverride?.artifactRef).toBe("string");
-    expect(readFileSync(join(workspace, artifactOverride?.artifactRef ?? ""), "utf8")).toContain(
-      '"schema": "brewva.observability.query.v1"',
-    );
+    expect(
+      readFileSync(join(obsQueryWorkspace, artifactOverride?.artifactRef ?? ""), "utf8"),
+    ).toContain('"schema": "brewva.observability.query.v1"');
   });
 
   test("obs_slo_assert returns a fail verdict and obs_snapshot exposes runtime health", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-obs-snapshot-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const obsSnapshotWorkspace = mkdtempSync(join(tmpdir(), "brewva-tools-obs-snapshot-"));
+    const runtime = new BrewvaRuntime({ cwd: obsSnapshotWorkspace });
     const sessionId = "s10-obs-snapshot";
 
     runtime.events.record({

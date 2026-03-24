@@ -204,10 +204,16 @@ function computeMessageHealth(windowText: string, windowChars: number): MessageH
 
 const MESSAGE_HEALTH_WINDOW_MAX_CHARS = 2400;
 
+type PendingToolResult = {
+  toolName: string;
+  isError: boolean;
+};
+
 export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): void {
   const lastAssistantTextBySession = new Map<string, string>();
   const assistantWindowBySession = new Map<string, string>();
   const observedToolCallsBySession = new Map<string, Set<string>>();
+  const pendingToolResultsBySession = new Map<string, Map<string, PendingToolResult>>();
 
   const getObservedToolCalls = (sessionId: string): Set<string> => {
     const existing = observedToolCallsBySession.get(sessionId);
@@ -215,6 +221,58 @@ export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): v
     const created = new Set<string>();
     observedToolCallsBySession.set(sessionId, created);
     return created;
+  };
+
+  const getPendingToolResults = (sessionId: string): Map<string, PendingToolResult> => {
+    const existing = pendingToolResultsBySession.get(sessionId);
+    if (existing) return existing;
+    const created = new Map<string, PendingToolResult>();
+    pendingToolResultsBySession.set(sessionId, created);
+    return created;
+  };
+
+  const clearTrackedToolCall = (sessionId: string, toolCallId: string): void => {
+    observedToolCallsBySession.get(sessionId)?.delete(toolCallId);
+    pendingToolResultsBySession.get(sessionId)?.delete(toolCallId);
+  };
+
+  const ensureObservedToolCall = (
+    sessionId: string,
+    toolCallId: string,
+    toolName: string,
+  ): void => {
+    const observedToolCalls = getObservedToolCalls(sessionId);
+    if (observedToolCalls.has(toolCallId)) return;
+    runtime.events.record({
+      sessionId,
+      type: "tool_call",
+      payload: {
+        toolCallId,
+        toolName,
+        lifecycleFallbackReason: "tool_result_without_tool_call",
+      },
+    });
+    observedToolCalls.add(toolCallId);
+  };
+
+  const flushPendingToolResults = (sessionId: string): void => {
+    const pendingToolResults = pendingToolResultsBySession.get(sessionId);
+    if (!pendingToolResults || pendingToolResults.size === 0) return;
+
+    for (const [toolCallId, pending] of pendingToolResults) {
+      runtime.events.record({
+        sessionId,
+        type: "tool_execution_end",
+        payload: {
+          toolCallId,
+          toolName: pending.toolName,
+          isError: pending.isError,
+        },
+      });
+      observedToolCallsBySession.get(sessionId)?.delete(toolCallId);
+    }
+
+    pendingToolResults.clear();
   };
 
   pi.on("session_start", (_event, ctx) => {
@@ -231,6 +289,7 @@ export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): v
 
   pi.on("session_shutdown", (_event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
+    flushPendingToolResults(sessionId);
     runtime.events.record({
       sessionId,
       type: "session_shutdown",
@@ -238,6 +297,7 @@ export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): v
     lastAssistantTextBySession.delete(sessionId);
     assistantWindowBySession.delete(sessionId);
     observedToolCallsBySession.delete(sessionId);
+    pendingToolResultsBySession.delete(sessionId);
     clearRuntimeTurnClock(sessionId);
     releaseHostedSessionProviderCompatibility(sessionId);
     runtime.session.clearState(sessionId);
@@ -254,6 +314,7 @@ export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): v
 
   pi.on("agent_end", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
+    flushPendingToolResults(sessionId);
     runtime.events.record({
       sessionId,
       type: "agent_end",
@@ -283,6 +344,7 @@ export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): v
   pi.on("turn_end", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
     const runtimeTurn = getCurrentRuntimeTurn(sessionId);
+    flushPendingToolResults(sessionId);
     runtime.context.onTurnEnd(sessionId);
     runtime.events.record({
       sessionId,
@@ -372,6 +434,20 @@ export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): v
     return undefined;
   });
 
+  pi.on("tool_result", (event, ctx) => {
+    const sessionId = ctx.sessionManager.getSessionId();
+    if (typeof event.toolCallId !== "string" || typeof event.toolName !== "string") {
+      return undefined;
+    }
+
+    ensureObservedToolCall(sessionId, event.toolCallId, event.toolName);
+    getPendingToolResults(sessionId).set(event.toolCallId, {
+      toolName: event.toolName,
+      isError: event.isError,
+    });
+    return undefined;
+  });
+
   pi.on("tool_execution_end", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
     const observedToolCalls = getObservedToolCalls(sessionId);
@@ -397,7 +473,7 @@ export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): v
         isError: event.isError,
       },
     });
-    observedToolCalls.delete(event.toolCallId);
+    clearTrackedToolCall(sessionId, event.toolCallId);
     return undefined;
   });
 
@@ -416,8 +492,10 @@ export function registerEventStream(pi: ExtensionAPI, runtime: BrewvaRuntime): v
   });
 
   pi.on("session_before_compact", (event, ctx) => {
+    const sessionId = ctx.sessionManager.getSessionId();
+    flushPendingToolResults(sessionId);
     runtime.events.record({
-      sessionId: ctx.sessionManager.getSessionId(),
+      sessionId,
       type: "session_before_compact",
       payload: {
         branchEntries: event.branchEntries.length,

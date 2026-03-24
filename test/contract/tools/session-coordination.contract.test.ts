@@ -1,13 +1,24 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { createSessionCompactTool, createTapeTools } from "@brewva/brewva-tools";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
+import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 import { extractTextContent, fakeContext, mergeContext } from "./tools-flow.helpers.js";
 
-function createCleanRuntime(cwd = process.cwd()): BrewvaRuntime {
+let workspace = "";
+
+beforeEach(() => {
+  workspace = createTestWorkspace("session-coordination-contract");
+});
+
+afterEach(() => {
+  if (workspace) cleanupWorkspace(workspace);
+});
+
+function createCleanRuntime(cwd = workspace): BrewvaRuntime {
   return new BrewvaRuntime({
     cwd,
     config: createRuntimeConfig(),
@@ -122,8 +133,8 @@ describe("session coordination tool contracts", () => {
   });
 
   test("tape_handoff writes an anchor and tape_info reports tape and context pressure", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-tape-info-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const tapeInfoWorkspace = mkdtempSync(join(tmpdir(), "brewva-tools-tape-info-"));
+    const runtime = new BrewvaRuntime({ cwd: tapeInfoWorkspace });
     const sessionId = "s12";
     runtime.context.onTurnStart(sessionId, 1);
 
@@ -201,8 +212,8 @@ describe("session coordination tool contracts", () => {
   });
 
   test("tape_search returns matching entries in the current phase", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-tape-search-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const tapeSearchWorkspace = mkdtempSync(join(tmpdir(), "brewva-tools-tape-search-"));
+    const runtime = new BrewvaRuntime({ cwd: tapeSearchWorkspace });
     const sessionId = "s12-search";
     runtime.context.onTurnStart(sessionId, 1);
 

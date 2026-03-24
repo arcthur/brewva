@@ -246,11 +246,46 @@ function countSessionPendingWal(runtime: BrewvaRuntime, sessionId: string): numb
   return runtime.turnWal.listPending().filter((row) => row.sessionId === sessionId).length;
 }
 
+function hasReplayEvent(runtime: BrewvaRuntime, sessionId: string, type: string): boolean {
+  return runtime.events.query(sessionId, { type, last: 1 }).length > 0;
+}
+
+function scoreDefaultReplaySession(runtime: BrewvaRuntime, sessionId: string): number {
+  if (hasReplayEvent(runtime, sessionId, "session_bootstrap")) {
+    return 3;
+  }
+  if (
+    hasReplayEvent(runtime, sessionId, "message_end") ||
+    hasReplayEvent(runtime, sessionId, "turn_start") ||
+    hasReplayEvent(runtime, sessionId, "agent_end") ||
+    hasReplayEvent(runtime, sessionId, "session_start")
+  ) {
+    return 2;
+  }
+  return 1;
+}
+
 function resolveTargetSession(runtime: BrewvaRuntime, requestedSessionId?: string): string | null {
   if (requestedSessionId && requestedSessionId.trim().length > 0) {
     return requestedSessionId.trim();
   }
-  return runtime.events.listReplaySessions(1)[0]?.sessionId ?? null;
+
+  return (
+    runtime.events
+      .listReplaySessions(50)
+      .map((session) => ({
+        sessionId: session.sessionId,
+        eventCount: session.eventCount,
+        lastEventAt: session.lastEventAt,
+        defaultScore: scoreDefaultReplaySession(runtime, session.sessionId),
+      }))
+      .toSorted(
+        (left, right) =>
+          right.defaultScore - left.defaultScore ||
+          right.lastEventAt - left.lastEventAt ||
+          left.sessionId.localeCompare(right.sessionId),
+      )[0]?.sessionId ?? null
+  );
 }
 
 function buildInspectReport(runtime: BrewvaRuntime, sessionId: string): InspectReport {

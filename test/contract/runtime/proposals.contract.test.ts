@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,20 +8,23 @@ import {
   type ProposalRecord,
 } from "@brewva/brewva-runtime";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
-
-function repoRoot(): string {
-  return process.cwd();
-}
+import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 function createWorkspace(): string {
   return mkdtempSync(join(tmpdir(), "brewva-proposals-"));
 }
 
+let workspace = "";
+
+beforeEach(() => {
+  workspace = createTestWorkspace("runtime-proposals-contract");
+});
+
 function createCleanRuntime(
   options: ConstructorParameters<typeof BrewvaRuntime>[0] = {},
 ): BrewvaRuntime {
   return new BrewvaRuntime({
-    cwd: repoRoot(),
+    cwd: workspace,
     config: createRuntimeConfig(),
     ...options,
   });
@@ -31,6 +34,7 @@ const originalDateNow = Date.now;
 
 afterEach(() => {
   Date.now = originalDateNow;
+  if (workspace) cleanupWorkspace(workspace);
 });
 
 describe("runtime proposals API", () => {
@@ -141,9 +145,9 @@ describe("runtime proposals API", () => {
   });
 
   test("operator approval requests rehydrate across runtime restart before and after approval", () => {
-    const workspace = createWorkspace();
+    const rehydrateWorkspace = createWorkspace();
     const sessionId = `runtime-proposals-commitment-rehydrate-${crypto.randomUUID()}`;
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = new BrewvaRuntime({ cwd: rehydrateWorkspace });
 
     const deferred = runtime.tools.start({
       sessionId,
@@ -155,7 +159,7 @@ describe("runtime proposals API", () => {
     expect(deferred.allowed).toBe(false);
     expect(typeof deferred.effectCommitmentRequestId).toBe("string");
 
-    const restarted = new BrewvaRuntime({ cwd: workspace });
+    const restarted = new BrewvaRuntime({ cwd: rehydrateWorkspace });
     const pendingAfterRestart = restarted.proposals.listPendingEffectCommitments(sessionId);
     expect(pendingAfterRestart).toHaveLength(1);
     expect(pendingAfterRestart[0]?.requestId).toBe(deferred.effectCommitmentRequestId);
@@ -172,7 +176,7 @@ describe("runtime proposals API", () => {
     );
     expect(accepted.ok).toBe(true);
 
-    const restartedAgain = new BrewvaRuntime({ cwd: workspace });
+    const restartedAgain = new BrewvaRuntime({ cwd: rehydrateWorkspace });
     expect(restartedAgain.proposals.listPendingEffectCommitments(sessionId)).toHaveLength(0);
 
     const resumed = restartedAgain.tools.start({
@@ -224,8 +228,8 @@ describe("runtime proposals API", () => {
   });
 
   test("durable linked tool outcomes consume approved requests and persist replay linkage", () => {
-    const workspace = createWorkspace();
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const durableWorkspace = createWorkspace();
+    const runtime = new BrewvaRuntime({ cwd: durableWorkspace });
     const sessionId = `runtime-proposals-commitment-consume-${crypto.randomUUID()}`;
 
     const deferred = runtime.tools.start({
@@ -277,7 +281,7 @@ describe("runtime proposals API", () => {
     })[0] as { payload?: { requestId?: string } } | undefined;
     expect(consumed?.payload?.requestId).toBe(pending[0]!.requestId);
 
-    const restarted = new BrewvaRuntime({ cwd: workspace });
+    const restarted = new BrewvaRuntime({ cwd: durableWorkspace });
     const replayed = restarted.tools.start({
       sessionId,
       toolCallId: "tc-exec-consume",
@@ -291,8 +295,8 @@ describe("runtime proposals API", () => {
   });
 
   test("linked runtime.tools.recordResult outcomes also consume approved requests", () => {
-    const workspace = createWorkspace();
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const recordResultWorkspace = createWorkspace();
+    const runtime = new BrewvaRuntime({ cwd: recordResultWorkspace });
     const sessionId = `runtime-proposals-commitment-record-result-${crypto.randomUUID()}`;
 
     const deferred = runtime.tools.start({
@@ -323,7 +327,7 @@ describe("runtime proposals API", () => {
       effectCommitmentRequestId: pending[0]!.requestId,
     });
 
-    const restarted = new BrewvaRuntime({ cwd: workspace });
+    const restarted = new BrewvaRuntime({ cwd: recordResultWorkspace });
     const replayed = restarted.tools.start({
       sessionId,
       toolCallId: "tc-exec-record-result",
@@ -337,8 +341,8 @@ describe("runtime proposals API", () => {
   });
 
   test("pending requests are not consumed by linked tool results before operator approval", () => {
-    const workspace = createWorkspace();
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const pendingLinkageWorkspace = createWorkspace();
+    const runtime = new BrewvaRuntime({ cwd: pendingLinkageWorkspace });
     const sessionId = `runtime-proposals-commitment-pending-linkage-${crypto.randomUUID()}`;
 
     const deferred = runtime.tools.start({
@@ -362,7 +366,7 @@ describe("runtime proposals API", () => {
       effectCommitmentRequestId: pending[0]!.requestId,
     });
 
-    const restarted = new BrewvaRuntime({ cwd: workspace });
+    const restarted = new BrewvaRuntime({ cwd: pendingLinkageWorkspace });
     expect(restarted.proposals.listPendingEffectCommitments(sessionId)).toHaveLength(1);
 
     const resumed = restarted.tools.start({

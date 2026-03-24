@@ -1,8 +1,8 @@
-import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   createGrepTool,
@@ -13,6 +13,7 @@ import {
   createTaskLedgerTools,
 } from "@brewva/brewva-tools";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
+import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 import { createScheduleToolRuntime } from "./tools-flow.helpers.js";
 
 const requireFromBrewvaTools = createRequire(
@@ -51,17 +52,63 @@ function requireTool<T extends { name: string }>(tools: T[], name: string): T {
   return tool;
 }
 
-function createCleanRuntime(cwd = process.cwd()): BrewvaRuntime {
+let workspace = "";
+
+beforeEach(() => {
+  workspace = createTestWorkspace("tool-input-aliases-contract");
+});
+
+afterEach(() => {
+  if (workspace) cleanupWorkspace(workspace);
+});
+
+function createCleanRuntime(cwd = workspace): BrewvaRuntime {
   return new BrewvaRuntime({
     cwd,
     config: createRuntimeConfig(),
   });
 }
 
+function writeFakeRipgrep(rootDir: string): void {
+  const scriptPath = join(rootDir, "rg");
+  writeFileSync(
+    scriptPath,
+    [
+      "#!/bin/sh",
+      "ignore_case=0",
+      "while [ $# -gt 0 ]; do",
+      '  case "$1" in',
+      "    --ignore-case)",
+      "      ignore_case=1",
+      "      shift",
+      "      ;;",
+      "    --)",
+      "      shift",
+      "      break",
+      "      ;;",
+      "    *)",
+      "      shift",
+      "      ;;",
+      "  esac",
+      "done",
+      'query="$1"',
+      'if [ "$ignore_case" -eq 1 ] && [ "$query" = "NEEDLE" ]; then',
+      "  printf './sample.txt:1:Needle\\n'",
+      "  printf './sample.txt:2:needle\\n'",
+      "  exit 0",
+      "fi",
+      "exit 1",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  chmodSync(scriptPath, 0o755);
+}
+
 describe("tool input alias contracts", () => {
   test("look_at keeps filePath alias as an execution-only compatibility path", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-look-at-alias-"));
-    const filePath = join(workspace, "sample.ts");
+    const lookAtWorkspace = mkdtempSync(join(tmpdir(), "brewva-look-at-alias-"));
+    const filePath = join(lookAtWorkspace, "sample.ts");
     writeFileSync(filePath, "export const alpha = 1;\n", "utf8");
 
     const tool = createLookAtTool();
@@ -247,43 +294,54 @@ describe("tool input alias contracts", () => {
   });
 
   test("grep exposes agent-facing case values and lowers insensitive to the runtime mode", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-grep-surface-"));
-    writeFileSync(join(workspace, "sample.txt"), "Needle\nneedle\n", "utf8");
+    const grepWorkspace = mkdtempSync(join(tmpdir(), "brewva-grep-surface-"));
+    writeFileSync(join(grepWorkspace, "sample.txt"), "Needle\nneedle\n", "utf8");
+    writeFakeRipgrep(grepWorkspace);
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createCleanRuntime(grepWorkspace);
     const tool = createGrepTool({ runtime });
+    const previousPath = process.env["PATH"];
+    process.env["PATH"] = [grepWorkspace, previousPath].filter(Boolean).join(delimiter);
 
-    expect(
-      Value.Check(tool.parameters, {
-        query: "needle",
-        case: "insensitive",
-      }),
-    ).toBe(true);
-    expect(
-      Value.Check(tool.parameters, {
-        query: "needle",
-        case: "ignore",
-      }),
-    ).toBe(false);
+    try {
+      expect(
+        Value.Check(tool.parameters, {
+          query: "NEEDLE",
+          case: "insensitive",
+        }),
+      ).toBe(true);
+      expect(
+        Value.Check(tool.parameters, {
+          query: "NEEDLE",
+          case: "ignore",
+        }),
+      ).toBe(false);
 
-    const result = await tool.execute(
-      "tc-grep-agent-surface",
-      {
-        query: "needle",
-        case: "insensitive",
-      } as never,
-      undefined,
-      undefined,
-      fakeContext("grep-agent-surface", workspace),
-    );
+      const result = await tool.execute(
+        "tc-grep-agent-surface",
+        {
+          query: "NEEDLE",
+          case: "insensitive",
+        } as never,
+        undefined,
+        undefined,
+        fakeContext("grep-agent-surface", workspace),
+      );
 
-    expect(extractTextContent(result)).toContain("matches_shown: 2");
+      expect(extractTextContent(result)).toContain("matches_shown: 2");
+    } finally {
+      if (previousPath === undefined) {
+        delete process.env["PATH"];
+      } else {
+        process.env["PATH"] = previousPath;
+      }
+    }
   });
 
   test("lsp_diagnostics keeps file_path alias as an execution-only compatibility path", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-lsp-alias-"));
+    const lspAliasWorkspace = mkdtempSync(join(tmpdir(), "brewva-lsp-alias-"));
     writeFileSync(
-      join(workspace, "tsconfig.json"),
+      join(lspAliasWorkspace, "tsconfig.json"),
       JSON.stringify(
         {
           compilerOptions: {
@@ -300,11 +358,11 @@ describe("tool input alias contracts", () => {
       ),
       "utf8",
     );
-    mkdirSync(join(workspace, "src"), { recursive: true });
-    const filePath = join(workspace, "src", "broken.ts");
+    mkdirSync(join(lspAliasWorkspace, "src"), { recursive: true });
+    const filePath = join(lspAliasWorkspace, "src", "broken.ts");
     writeFileSync(filePath, "export const broken: string = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = new BrewvaRuntime({ cwd: lspAliasWorkspace });
     const tool = requireTool(createLspTools({ runtime }), "lsp_diagnostics");
     const params = {
       file_path: filePath,
@@ -317,7 +375,7 @@ describe("tool input alias contracts", () => {
       params as never,
       undefined,
       undefined,
-      fakeContext("lsp-diagnostics-alias", workspace),
+      fakeContext("lsp-diagnostics-alias", lspAliasWorkspace),
     );
 
     const details = (result as { details?: Record<string, unknown> }).details;
@@ -346,8 +404,8 @@ describe("tool input alias contracts", () => {
   });
 
   test("obs_slo_assert accepts snake_case keys and severity aliases, then records canonical severity", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-obs-alias-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const obsAliasWorkspace = mkdtempSync(join(tmpdir(), "brewva-obs-alias-"));
+    const runtime = new BrewvaRuntime({ cwd: obsAliasWorkspace });
     const sessionId = "obs-slo-assert-alias";
     runtime.events.record({
       sessionId,

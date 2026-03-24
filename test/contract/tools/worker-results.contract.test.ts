@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,13 +6,24 @@ import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { createWorkerResultsApplyTool, createWorkerResultsMergeTool } from "@brewva/brewva-tools";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
+import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
 
 function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
-function createCleanRuntime(cwd = process.cwd()): BrewvaRuntime {
+let workspace = "";
+
+beforeEach(() => {
+  workspace = createTestWorkspace("worker-results-contract");
+});
+
+afterEach(() => {
+  if (workspace) cleanupWorkspace(workspace);
+});
+
+function createCleanRuntime(cwd = workspace): BrewvaRuntime {
   return new BrewvaRuntime({
     cwd,
     config: createRuntimeConfig(),
@@ -60,19 +71,24 @@ describe("worker results tools contract", () => {
   });
 
   test("worker_results_apply adopts a clean merged patch set into the parent workspace", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-worker-results-apply-"));
-    mkdirSync(join(workspace, "src"), { recursive: true });
+    const applyWorkspace = mkdtempSync(join(tmpdir(), "brewva-worker-results-apply-"));
+    mkdirSync(join(applyWorkspace, "src"), { recursive: true });
 
     const beforeText = "export const workerValue = 'before';\n";
     const afterText = "export const workerValue = 'after';\n";
-    const filePath = join(workspace, "src", "worker-value.ts");
-    const artifactDir = join(workspace, ".orchestrator", "subagent-patch-artifacts", "worker-ps");
+    const filePath = join(applyWorkspace, "src", "worker-value.ts");
+    const artifactDir = join(
+      applyWorkspace,
+      ".orchestrator",
+      "subagent-patch-artifacts",
+      "worker-ps",
+    );
     const artifactPath = join(artifactDir, "worker-value.ts");
     writeFileSync(filePath, beforeText, "utf8");
     mkdirSync(artifactDir, { recursive: true });
     writeFileSync(artifactPath, afterText, "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = new BrewvaRuntime({ cwd: applyWorkspace });
     const sessionId = "worker-results-apply";
     runtime.context.onTurnStart(sessionId, 1);
     runtime.session.recordWorkerResult(sessionId, {

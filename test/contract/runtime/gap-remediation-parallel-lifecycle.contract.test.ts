@@ -1,9 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
+import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 import {
   GAP_REMEDIATION_CONFIG_PATH,
   createGapRemediationConfig as createConfig,
@@ -15,7 +16,17 @@ function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
-function createCleanRuntime(cwd = process.cwd()): BrewvaRuntime {
+let workspace = "";
+
+beforeEach(() => {
+  workspace = createTestWorkspace("gap-remediation-contract");
+});
+
+afterEach(() => {
+  if (workspace) cleanupWorkspace(workspace);
+});
+
+function createCleanRuntime(cwd = workspace): BrewvaRuntime {
   return new BrewvaRuntime({
     cwd,
     config: createRuntimeConfig(),
@@ -87,21 +98,29 @@ describe("Gap remediation: parallel result lifecycle", () => {
   });
 
   test("applies a clean merged worker patchset through the public session API", async () => {
-    const workspace = createWorkspace("parallel-apply");
-    writeConfig(workspace, createConfig({}));
-    mkdirSync(join(workspace, "src"), { recursive: true });
+    const applyWorkspace = createWorkspace("parallel-apply");
+    writeConfig(applyWorkspace, createConfig({}));
+    mkdirSync(join(applyWorkspace, "src"), { recursive: true });
 
     const beforeText = "export const value = 'before';\n";
     const afterText = "export const value = 'after';\n";
-    const filePath = join(workspace, "src/value.ts");
+    const filePath = join(applyWorkspace, "src/value.ts");
     writeFileSync(filePath, beforeText, "utf8");
 
-    const artifactDir = join(workspace, ".orchestrator", "subagent-patch-artifacts", "ps-apply");
+    const artifactDir = join(
+      applyWorkspace,
+      ".orchestrator",
+      "subagent-patch-artifacts",
+      "ps-apply",
+    );
     mkdirSync(artifactDir, { recursive: true });
     const artifactPath = join(artifactDir, "value.ts");
     writeFileSync(artifactPath, afterText, "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
+    const runtime = new BrewvaRuntime({
+      cwd: applyWorkspace,
+      configPath: GAP_REMEDIATION_CONFIG_PATH,
+    });
     const sessionId = "parallel-apply-1";
     runtime.context.onTurnStart(sessionId, 1);
 
@@ -147,15 +166,18 @@ describe("Gap remediation: parallel result lifecycle", () => {
   });
 
   test("keeps worker results intact when merged patch application cannot resolve artifacts", async () => {
-    const workspace = createWorkspace("parallel-apply-missing-artifact");
-    writeConfig(workspace, createConfig({}));
-    mkdirSync(join(workspace, "src"), { recursive: true });
+    const missingArtifactWorkspace = createWorkspace("parallel-apply-missing-artifact");
+    writeConfig(missingArtifactWorkspace, createConfig({}));
+    mkdirSync(join(missingArtifactWorkspace, "src"), { recursive: true });
 
     const beforeText = "export const value = 1;\n";
-    const filePath = join(workspace, "src/value.ts");
+    const filePath = join(missingArtifactWorkspace, "src/value.ts");
     writeFileSync(filePath, beforeText, "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
+    const runtime = new BrewvaRuntime({
+      cwd: missingArtifactWorkspace,
+      configPath: GAP_REMEDIATION_CONFIG_PATH,
+    });
     const sessionId = "parallel-apply-missing-artifact-1";
     runtime.context.onTurnStart(sessionId, 1);
 
@@ -196,18 +218,23 @@ describe("Gap remediation: parallel result lifecycle", () => {
   });
 
   test("rehydrates delegated patch worker results from durable patch manifests after restart", async () => {
-    const workspace = createWorkspace("parallel-rehydrate-delegation");
-    writeConfig(workspace, createConfig({}));
-    mkdirSync(join(workspace, "src"), { recursive: true });
+    const rehydrateWorkspace = createWorkspace("parallel-rehydrate-delegation");
+    writeConfig(rehydrateWorkspace, createConfig({}));
+    mkdirSync(join(rehydrateWorkspace, "src"), { recursive: true });
 
     const beforeText = "export const value = 'before';\n";
     const afterText = "export const value = 'after';\n";
     const sessionId = "parallel-rehydrate-delegation-1";
-    const filePath = join(workspace, "src", "value.ts");
+    const filePath = join(rehydrateWorkspace, "src", "value.ts");
     writeFileSync(filePath, beforeText, "utf8");
 
     const patchSetId = "patch_rehydrate";
-    const artifactDir = join(workspace, ".orchestrator", "subagent-patch-artifacts", patchSetId);
+    const artifactDir = join(
+      rehydrateWorkspace,
+      ".orchestrator",
+      "subagent-patch-artifacts",
+      patchSetId,
+    );
     mkdirSync(artifactDir, { recursive: true });
     const patchFileRef = `.orchestrator/subagent-patch-artifacts/${patchSetId}/value.ts`;
     writeFileSync(join(artifactDir, "value.ts"), afterText, "utf8");
@@ -235,7 +262,10 @@ describe("Gap remediation: parallel result lifecycle", () => {
       "utf8",
     );
 
-    const writer = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
+    const writer = new BrewvaRuntime({
+      cwd: rehydrateWorkspace,
+      configPath: GAP_REMEDIATION_CONFIG_PATH,
+    });
     writer.events.record({
       sessionId,
       type: "subagent_completed",
@@ -259,7 +289,7 @@ describe("Gap remediation: parallel result lifecycle", () => {
     });
 
     const restarted = new BrewvaRuntime({
-      cwd: workspace,
+      cwd: rehydrateWorkspace,
       configPath: GAP_REMEDIATION_CONFIG_PATH,
     });
     restarted.context.onTurnStart(sessionId, 1);
