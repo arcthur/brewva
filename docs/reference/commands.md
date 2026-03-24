@@ -201,6 +201,27 @@ Flags:
 - `--session`
 - `--json`
 
+## Subcommand: `brewva insight`
+
+`brewva insight` is the cutoff-aware directory review entrypoint for a
+persisted session. It reuses the inspect base report, then adds evidence-backed
+findings about non-model issues such as scope drift, stale verification,
+shell-composition failures, tool contract friction, and durability problems.
+The report keeps write attribution strong and read attribution heuristic.
+
+- `brewva insight`: inspect the latest replayable session for the current working directory
+- `brewva insight <dir>`: inspect a specific directory inside the current workspace
+- `brewva insight --session <id> --dir <path>`: inspect a specific session and target directory
+- `brewva insight --json`: emit machine-readable JSON instead of text
+
+Flags:
+
+- `--cwd`
+- `--config`
+- `--session`
+- `--dir`
+- `--json`
+
 ## Subcommand: `brewva onboard`
 
 `brewva onboard` is a convenience wrapper over `brewva gateway install/uninstall`.
@@ -265,6 +286,9 @@ channel text commands are available:
 - `/new-agent <name>` or `/new-agent name=<name> model=<pattern[:thinking]>`
 - `/del-agent <name>` (soft delete)
 - `/agents`
+- `/insight [dir]` (inline deterministic review of the focused agent session)
+- `/insight @agent [dir]` (inline deterministic review of a specific agent session in the current conversation scope)
+  - Channel replies use a concise chat-friendly summary rather than the full CLI text layout.
 - `/focus @<agent>`
 - `/run @a,@b <task>`
 - `/discuss @a,@b [maxRounds=N] <topic>`

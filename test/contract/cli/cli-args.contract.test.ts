@@ -11,6 +11,7 @@ describe("brewva cli args", () => {
     expect(output).toContain("Brewva - AI-native coding agent CLI");
     expect(output).toContain("Usage:\n  brewva [options] [prompt]");
     expect(output).toContain("brewva onboard ...");
+    expect(output).toContain("brewva insight ...");
     expect(output).toContain("--agent <id>");
   });
 

@@ -42,7 +42,7 @@ describe("channel command router", () => {
     });
   });
 
-  test("parses run and discuss targets", () => {
+  test("parses run, discuss, and insight commands", () => {
     expect(router.match("/run @jack,@mike review this")).toEqual({
       kind: "run",
       agentIds: ["jack", "mike"],
@@ -54,6 +54,27 @@ describe("channel command router", () => {
       agentIds: ["jack", "mike"],
       topic: "design tradeoff",
       maxRounds: 4,
+    });
+
+    expect(router.match("/insight")).toEqual({
+      kind: "insight",
+      agentId: undefined,
+      directory: undefined,
+    });
+    expect(router.match("/insight src/runtime")).toEqual({
+      kind: "insight",
+      agentId: undefined,
+      directory: "src/runtime",
+    });
+    expect(router.match("/insight @jack")).toEqual({
+      kind: "insight",
+      agentId: "jack",
+      directory: undefined,
+    });
+    expect(router.match("/insight @jack src/runtime")).toEqual({
+      kind: "insight",
+      agentId: "jack",
+      directory: "src/runtime",
     });
   });
 
@@ -84,6 +105,10 @@ describe("channel command router", () => {
     expect(router.match("/focus")).toEqual({
       kind: "error",
       message: "Usage: /focus @agent",
+    });
+    expect(router.match("/insight @")).toEqual({
+      kind: "error",
+      message: "Usage: /insight [@agent] [dir]",
     });
   });
 });

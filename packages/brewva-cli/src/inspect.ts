@@ -498,4 +498,4 @@ export async function runInspectCli(argv: string[]): Promise<number> {
   return 0;
 }
 
-export { buildInspectReport };
+export { buildInspectReport, resolveTargetSession };

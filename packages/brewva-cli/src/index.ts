@@ -27,6 +27,9 @@ import {
   tryGatewayPrint,
   writeGatewayAssistantText,
 } from "./gateway-print.js";
+import { handleInsightChannelCommand } from "./insight-channel-command.js";
+import { createInsightCommandExtension } from "./insight-command-extension.js";
+import { runInsightCli } from "./insight.js";
 import { runInspectCli } from "./inspect.js";
 import { writeJsonLine } from "./json-lines.js";
 import { createBrewvaSession } from "./session.js";
@@ -101,6 +104,7 @@ Usage:
 Subcommands:
   brewva gateway ...   Local control-plane daemon commands
   brewva inspect ...   Replay-first session inspection
+  brewva insight ...   Cutoff-aware session review for a directory
   brewva onboard ...   One-shot onboarding helpers (daemon install/uninstall)
 
 Modes:
@@ -149,6 +153,7 @@ Examples:
   brewva --mode json "Summarize recent changes"
   brewva --task-file ./task.json
   brewva inspect --session <session-id>
+  brewva insight packages/brewva-runtime/src
   brewva --undo --session <session-id>
   brewva --replay --mode json --session <session-id>
   brewva onboard --install-daemon
@@ -773,6 +778,10 @@ async function run(): Promise<void> {
     process.exitCode = await runInspectCli(rawArgs.slice(1));
     return;
   }
+  if (rawArgs[0] === "insight") {
+    process.exitCode = await runInsightCli(rawArgs.slice(1));
+    return;
+  }
 
   const parseResult = parseCliArgs(rawArgs);
   if (parseResult.kind === "help" || parseResult.kind === "version") {
@@ -824,6 +833,9 @@ async function run(): Promise<void> {
       verbose: parsed.verbose,
       channel: parsed.channel,
       channelConfig: parsed.channelConfig,
+      dependencies: {
+        handleInsightCommand: handleInsightChannelCommand,
+      },
     });
     return;
   }
@@ -1011,12 +1023,20 @@ async function run(): Promise<void> {
     }
   }
 
-  const { session, runtime } = await createBrewvaSession({
+  const runtime = new BrewvaRuntime({
+    cwd: parsed.cwd,
+    configPath: parsed.configPath,
+    agentId: parsed.agentId,
+    governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
+  });
+  const { session } = await createBrewvaSession({
+    runtime,
     cwd: parsed.cwd,
     configPath: parsed.configPath,
     model: parsed.model,
     agentId: parsed.agentId,
     managedToolMode: parsed.managedToolMode,
+    extensionFactories: [createInsightCommandExtension(runtime)],
   });
 
   const getSessionId = (): string => session.sessionManager.getSessionId();
@@ -1123,6 +1143,8 @@ if (isBunMain ?? isNodeMain) {
 }
 
 export { parseArgs };
+export { handleInsightChannelCommand } from "./insight-channel-command.js";
+export { createInsightCommandExtension } from "./insight-command-extension.js";
 export { JsonLineWriter, type JsonLineWritable, writeJsonLine } from "./json-lines.js";
 export {
   resolveBackendWorkingCwd,

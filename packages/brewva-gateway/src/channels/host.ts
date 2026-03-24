@@ -169,6 +169,24 @@ export interface ChannelModeLauncherInput {
 
 export type ChannelModeLauncher = (input: ChannelModeLauncherInput) => ChannelModeLaunchBundle;
 
+export interface ChannelInsightCommandInput {
+  directory?: string;
+  turn: TurnEnvelope;
+  scopeKey: string;
+  focusedAgentId: string;
+  targetAgentId: string;
+  targetSession?: {
+    agentId: string;
+    runtime: BrewvaRuntime;
+    sessionId: string;
+  };
+}
+
+export interface ChannelInsightCommandResult {
+  text: string;
+  meta?: Record<string, unknown>;
+}
+
 export interface RunChannelModeDependencies {
   createSession?: (
     options?: Parameters<typeof createHostedSession>[0],
@@ -177,6 +195,9 @@ export interface RunChannelModeDependencies {
     session: HostedSessionResult["session"],
     prompt: string,
   ) => Promise<PromptTurnOutputs>;
+  handleInsightCommand?: (
+    input: ChannelInsightCommandInput,
+  ) => Promise<ChannelInsightCommandResult | string | null | undefined>;
   launchers?: Partial<Record<SupportedChannel, ChannelModeLauncher>>;
 }
 
@@ -703,6 +724,7 @@ function rewriteTurnText(turn: TurnEnvelope, text: string): TurnEnvelope {
 
 function isControlCommand(match: ChannelCommandMatch): boolean {
   return (
+    match.kind === "insight" ||
     match.kind === "new-agent" ||
     match.kind === "del-agent" ||
     match.kind === "focus" ||
@@ -717,6 +739,20 @@ function formatDispatchError(error: unknown): DispatchToAgentResult {
     agentId: "unknown",
     responseText: "",
     error: toErrorMessage(error),
+  };
+}
+
+function normalizeChannelInsightCommandResult(
+  result: ChannelInsightCommandResult | string | null | undefined,
+): ChannelInsightCommandResult {
+  if (typeof result === "string") {
+    return { text: result };
+  }
+  if (result && typeof result.text === "string") {
+    return result;
+  }
+  return {
+    text: "Insight is unavailable in this host.",
   };
 }
 
@@ -1652,6 +1688,44 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
 
     if (match.kind === "agents") {
       await sendControllerReply(turn, scopeKey, renderAgentsSnapshot(scopeKey));
+      return { handled: true };
+    }
+
+    if (match.kind === "insight") {
+      const focusedAgentId = registry.resolveFocus(scopeKey);
+      const targetAgentId = match.agentId ?? focusedAgentId;
+      if (!registry.isActive(targetAgentId)) {
+        await sendControllerReply(
+          turn,
+          scopeKey,
+          `Insight unavailable: agent @${targetAgentId} is not active in this workspace.`,
+          {
+            command: "insight",
+            agentId: targetAgentId,
+            status: "agent_not_active",
+          },
+        );
+        return { handled: true };
+      }
+
+      const targetSession = sessions.get(buildAgentScopedConversationKey(targetAgentId, scopeKey));
+      const result = normalizeChannelInsightCommandResult(
+        await options.dependencies?.handleInsightCommand?.({
+          directory: match.directory,
+          turn,
+          scopeKey,
+          focusedAgentId,
+          targetAgentId,
+          targetSession: targetSession
+            ? {
+                agentId: targetSession.agentId,
+                runtime: targetSession.runtime,
+                sessionId: targetSession.agentSessionId,
+              }
+            : undefined,
+        }),
+      );
+      await sendControllerReply(turn, scopeKey, result.text, result.meta);
       return { handled: true };
     }
 

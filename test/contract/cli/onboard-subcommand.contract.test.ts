@@ -6,7 +6,7 @@ type JsonObject = Record<string, unknown>;
 
 function runOnboard(args: string[]): SpawnSyncReturns<string> {
   const repoRoot = resolve(import.meta.dirname, "../../..");
-  return spawnSync("bun", ["run", "./packages/brewva-cli", "onboard", ...args], {
+  return spawnSync("bun", ["run", "start", "onboard", ...args], {
     cwd: repoRoot,
     encoding: "utf8",
   });

@@ -46,6 +46,21 @@ Typical usage:
 - `brewva inspect --session <session-id>`
 - `brewva inspect --json --session <session-id>`
 
+## Insight Subcommand (`brewva insight`)
+
+`brewva insight` is the cutoff-aware directory review view for a persisted
+session. It reuses the inspect base report, then adds deterministic findings
+about scope drift, verification hygiene, shell composition problems, tool
+contract friction, and durability issues, with explicit evidence gaps when only
+heuristic attribution is possible.
+
+Typical usage:
+
+- `brewva insight`
+- `brewva insight packages/brewva-runtime/src`
+- `brewva insight --session <session-id> --dir packages/brewva-cli/src`
+- `brewva insight --json packages/brewva-runtime/src`
+
 ## Onboard Subcommand (`brewva onboard`)
 
 `brewva onboard` is a wrapper around gateway service lifecycle:
@@ -194,6 +209,23 @@ Other Telegram flags are optional and mapped into channel-scoped config:
 `channelConfig.telegram.pollRetryMs`.
 Telegram channel skill policy does not currently have dedicated CLI flags; it is read from
 built-in default skill `telegram`.
+
+When `channels.orchestration.enabled=true`, channel orchestration commands include:
+
+- `/agents`
+- `/insight [dir]`
+- `/insight @agent [dir]`
+- `/new-agent <name>`
+- `/del-agent <name>`
+- `/focus @<agent>`
+- `/run @a,@b <task>`
+- `/discuss @a,@b [maxRounds=N] <topic>`
+- `@agent <task>`
+
+`/insight [dir]` reuses the same deterministic collector used by `brewva insight`,
+but reports on the currently focused agent session inline in the channel.
+`/insight @agent [dir]` overrides the current focus and targets a specific active agent session.
+Channel insight output is rendered as a concise chat-friendly summary rather than the full CLI layout.
 
 Webhook ingress can be enabled via environment variables (no additional CLI flags):
 

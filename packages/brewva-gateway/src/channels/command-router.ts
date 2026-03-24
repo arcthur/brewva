@@ -4,6 +4,7 @@ export type ChannelCommandMatch =
   | { kind: "none" }
   | { kind: "error"; message: string }
   | { kind: "agents" }
+  | { kind: "insight"; agentId?: string; directory?: string }
   | { kind: "new-agent"; agentId: string; model?: string }
   | { kind: "del-agent"; agentId: string }
   | { kind: "focus"; agentId: string }
@@ -16,7 +17,14 @@ function normalizeToken(token: string): string {
 }
 
 function parseAgentRef(raw: string): string | undefined {
-  const normalized = normalizeAgentId(raw.replace(/^@/, ""));
+  const stripped = raw.replace(/^@/u, "").trim();
+  if (!stripped) {
+    return undefined;
+  }
+  const normalized = normalizeAgentId(stripped);
+  if (normalized === "default" && stripped.toLowerCase() !== "default") {
+    return undefined;
+  }
   return normalized.length > 0 ? normalized : undefined;
 }
 
@@ -78,6 +86,28 @@ export class CommandRouter {
 
     if (command === "/agents") {
       return { kind: "agents" };
+    }
+
+    if (command === "/insight") {
+      if (!body) {
+        return { kind: "insight" };
+      }
+      const [firstToken, ...rest] = body.split(/\s+/u);
+      if ((firstToken ?? "").startsWith("@")) {
+        const agentId = parseAgentRef(firstToken ?? "");
+        if (!agentId) {
+          return { kind: "error", message: "Usage: /insight [@agent] [dir]" };
+        }
+        return {
+          kind: "insight",
+          agentId,
+          directory: rest.join(" ").trim() || undefined,
+        };
+      }
+      return {
+        kind: "insight",
+        directory: body || undefined,
+      };
     }
 
     if (command === "/new-agent") {

@@ -10,7 +10,7 @@ function runInspect(
   env: NodeJS.ProcessEnv = process.env,
 ): SpawnSyncReturns<string> {
   const repoRoot = resolve(import.meta.dirname, "../../..");
-  return spawnSync("bun", ["run", "./packages/brewva-cli", "inspect", ...args], {
+  return spawnSync("bun", ["run", "start", "inspect", ...args], {
     cwd: repoRoot,
     encoding: "utf8",
     env,
