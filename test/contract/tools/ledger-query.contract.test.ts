@@ -1,14 +1,21 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
+import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
-function repoRoot(): string {
-  return process.cwd();
-}
+let workspace = "";
+
+beforeEach(() => {
+  workspace = createTestWorkspace("ledger-query-contract");
+});
+
+afterEach(() => {
+  if (workspace) cleanupWorkspace(workspace);
+});
 
 function createCleanRuntime(): BrewvaRuntime {
   return new BrewvaRuntime({
-    cwd: repoRoot(),
+    cwd: workspace,
     config: createRuntimeConfig(),
   });
 }

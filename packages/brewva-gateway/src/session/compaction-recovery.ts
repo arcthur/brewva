@@ -4,41 +4,37 @@ import type { AgentSession, PromptOptions } from "@mariozechner/pi-coding-agent"
 const COMPACTION_RESUME_PROMPT =
   "Context compaction completed. Resume the interrupted turn from the current task and evidence state. Do not repeat completed tool side effects unless required for correctness. Finish the pending response.";
 
+const SESSION_COMPACTION_RECOVERY = Symbol("brewva.sessionCompactionRecovery");
+
 type PromptDispatchOptions = PromptOptions;
-type LegacyUserMessageContent = Parameters<AgentSession["sendUserMessage"]>[0];
-type LegacyUserMessageOptions = Parameters<AgentSession["sendUserMessage"]>[1];
-type LegacyUserMessageDeliverAs = NonNullable<LegacyUserMessageOptions>["deliverAs"];
-type LegacyUserMessagePart = Exclude<LegacyUserMessageContent, string>[number];
 
-interface PromptCapableCompactionRecoverySessionLike {
+interface CompactionRecoverySessionLike {
   prompt: AgentSession["prompt"];
-  followUp: AgentSession["followUp"];
   agent: {
     waitForIdle: () => Promise<void>;
   };
   sessionManager?: {
     getSessionId?: () => string;
   };
+  isStreaming?: boolean;
+  isCompacting?: boolean;
+  dispose?: () => void;
 }
 
-interface UserMessageCapableCompactionRecoverySessionLike {
-  sendUserMessage: AgentSession["sendUserMessage"];
-  agent: {
-    waitForIdle: () => Promise<void>;
-  };
-  sessionManager?: {
-    getSessionId?: () => string;
-  };
+interface CompactionRecoveryController {
+  readonly sessionId: string;
+  getRequestedGeneration(): number;
+  waitForSettled(afterGeneration?: number): Promise<void>;
+  dispose(): void;
 }
 
-export type CompactionRecoverySessionLike =
-  | PromptCapableCompactionRecoverySessionLike
-  | UserMessageCapableCompactionRecoverySessionLike;
+type CompactionRecoveryAwareSession = CompactionRecoverySessionLike & {
+  [SESSION_COMPACTION_RECOVERY]?: CompactionRecoveryController;
+};
 
 export interface CompactionRecoveryOptions {
   runtime?: BrewvaRuntime;
   sessionId?: string;
-  turnId?: string;
   promptOptions?: PromptDispatchOptions;
 }
 
@@ -47,108 +43,241 @@ function normalizeSessionId(input: CompactionRecoverySessionLike): string | unde
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
-function hasPromptDispatch(
-  input: CompactionRecoverySessionLike,
-): input is PromptCapableCompactionRecoverySessionLike {
-  return typeof (input as PromptCapableCompactionRecoverySessionLike).prompt === "function";
-}
-
-function hasLegacyUserMessageDispatch(
-  input: CompactionRecoverySessionLike,
-): input is UserMessageCapableCompactionRecoverySessionLike {
-  return (
-    typeof (input as UserMessageCapableCompactionRecoverySessionLike).sendUserMessage === "function"
-  );
-}
-
-function isLegacyUserMessagePart(value: unknown): value is LegacyUserMessagePart {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  return typeof (value as { type?: unknown }).type === "string";
-}
-
-function assertLegacyPromptOptionsSupported(promptOptions?: PromptDispatchOptions): void {
-  if (!promptOptions) {
-    return;
-  }
-  if (promptOptions.expandPromptTemplates === true) {
-    throw new Error("legacy sendUserMessage fallback does not support expandPromptTemplates=true");
-  }
-  if (typeof promptOptions.source === "string" && promptOptions.source !== "extension") {
-    throw new Error("legacy sendUserMessage fallback only supports source='extension'");
-  }
-}
-
-function buildLegacyUserMessageContent(
-  content: string,
-  promptOptions?: PromptDispatchOptions,
-): LegacyUserMessageContent {
-  const imageParts = promptOptions?.images ?? [];
-  if (imageParts.length === 0) {
-    return content;
-  }
-
-  const normalizedParts = imageParts.filter(isLegacyUserMessagePart);
-  if (normalizedParts.length !== imageParts.length) {
-    throw new Error("legacy sendUserMessage fallback requires image parts with a string type");
-  }
-
-  return [{ type: "text", text: content }, ...normalizedParts];
-}
-
-function toLegacyDeliverAs(
-  behavior: PromptDispatchOptions["streamingBehavior"] | undefined,
-): LegacyUserMessageDeliverAs {
-  return behavior === "steer" || behavior === "followUp" ? behavior : undefined;
-}
-
-async function dispatchPrompt(
-  session: CompactionRecoverySessionLike,
-  prompt: string,
-  promptOptions?: PromptDispatchOptions,
-): Promise<void> {
-  if (hasPromptDispatch(session)) {
-    await session.prompt(prompt, promptOptions);
-    return;
-  }
-  if (hasLegacyUserMessageDispatch(session)) {
-    assertLegacyPromptOptionsSupported(promptOptions);
-    await session.sendUserMessage(buildLegacyUserMessageContent(prompt, promptOptions), {
-      deliverAs: toLegacyDeliverAs(promptOptions?.streamingBehavior),
-    });
-    return;
-  }
-  throw new Error("session does not support prompt dispatch");
-}
-
-async function dispatchFollowUp(
-  session: CompactionRecoverySessionLike,
-  content: string,
-): Promise<void> {
-  if (hasPromptDispatch(session)) {
-    await session.followUp(content);
-    return;
-  }
-  if (hasLegacyUserMessageDispatch(session)) {
-    await session.sendUserMessage(content, { deliverAs: "followUp" });
-    return;
-  }
-  throw new Error("session does not support follow-up dispatch");
-}
-
 function buildResumeEventPayload(input: {
-  turnId?: string;
   sourceEventId: string;
   sourceTimestamp: number;
+  sourceTurn?: number;
   error?: string;
 }): Record<string, unknown> {
   return {
-    turnId: input.turnId ?? null,
     sourceEventId: input.sourceEventId,
     sourceTimestamp: input.sourceTimestamp,
+    sourceTurn: typeof input.sourceTurn === "number" ? input.sourceTurn : null,
     error: input.error ?? null,
   };
+}
+
+function waitForNextTick(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
+async function waitForCompactionToFinish(session: CompactionRecoverySessionLike): Promise<void> {
+  while (session.isCompacting === true) {
+    await waitForNextTick();
+  }
+}
+
+async function dispatchResumePrompt(session: CompactionRecoverySessionLike): Promise<void> {
+  const promptOptions: PromptDispatchOptions = {
+    expandPromptTemplates: false,
+    source: "extension",
+    ...(session.isStreaming === true ? { streamingBehavior: "followUp" as const } : {}),
+  };
+  await session.prompt(COMPACTION_RESUME_PROMPT, promptOptions);
+}
+
+function getInstalledCompactionRecovery(
+  session: CompactionRecoverySessionLike,
+): CompactionRecoveryController | undefined {
+  return (session as CompactionRecoveryAwareSession)[SESSION_COMPACTION_RECOVERY];
+}
+
+function installTrackedPrompt(session: CompactionRecoverySessionLike): {
+  getLatestPromptSettlement: () => Promise<void>;
+} {
+  const trackedSession = session as CompactionRecoveryAwareSession;
+  const originalPrompt = session.prompt.bind(session);
+  let latestPromptSettlement: Promise<void> = Promise.resolve();
+
+  trackedSession.prompt = (async (content: string, promptOptions?: PromptDispatchOptions) => {
+    const promptPromise = originalPrompt(content, promptOptions);
+    latestPromptSettlement = promptPromise.then(
+      () => undefined,
+      () => undefined,
+    );
+    return promptPromise;
+  }) as AgentSession["prompt"];
+
+  return {
+    getLatestPromptSettlement: () => latestPromptSettlement,
+  };
+}
+
+export function installSessionCompactionRecovery<T extends CompactionRecoverySessionLike>(
+  session: T,
+  options: {
+    runtime: BrewvaRuntime;
+    sessionId?: string;
+  },
+): T {
+  const existing = getInstalledCompactionRecovery(session);
+  if (existing) {
+    return session;
+  }
+
+  const sessionId = options.sessionId?.trim() || normalizeSessionId(session);
+  if (!sessionId) {
+    throw new Error("session compaction recovery requires a stable session id");
+  }
+
+  const { getLatestPromptSettlement } = installTrackedPrompt(session);
+  const seenCompactionEventIds = new Set<string>();
+  const pendingGenerationPromises = new Map<number, Promise<void>>();
+  let requestedGeneration = 0;
+  let completedGeneration = 0;
+  let disposed = false;
+  let disposePatched = false;
+
+  const unsubscribe = options.runtime.events.subscribe((event) => {
+    if (disposed) {
+      return;
+    }
+    if (event.sessionId !== sessionId) {
+      return;
+    }
+    if (event.type === "session_shutdown") {
+      controller.dispose();
+      return;
+    }
+    if (event.type !== "session_compact") {
+      return;
+    }
+    if (seenCompactionEventIds.has(event.id)) {
+      return;
+    }
+
+    seenCompactionEventIds.add(event.id);
+    requestedGeneration += 1;
+    const generation = requestedGeneration;
+    options.runtime.events.record({
+      sessionId,
+      type: "session_turn_compaction_resume_requested",
+      turn: event.turn,
+      payload: buildResumeEventPayload({
+        sourceEventId: event.id,
+        sourceTimestamp: event.timestamp,
+        sourceTurn: event.turn,
+      }),
+    });
+
+    const previousGeneration =
+      pendingGenerationPromises.get(generation - 1)?.catch(() => undefined) ?? Promise.resolve();
+    const currentGeneration = previousGeneration.then(async () => {
+      await getLatestPromptSettlement();
+      await waitForCompactionToFinish(session);
+      await session.agent.waitForIdle();
+
+      try {
+        await dispatchResumePrompt(session);
+        completedGeneration = Math.max(completedGeneration, generation);
+        options.runtime.events.record({
+          sessionId,
+          type: "session_turn_compaction_resume_dispatched",
+          turn: event.turn,
+          payload: buildResumeEventPayload({
+            sourceEventId: event.id,
+            sourceTimestamp: event.timestamp,
+            sourceTurn: event.turn,
+          }),
+        });
+      } catch (error) {
+        completedGeneration = Math.max(completedGeneration, generation);
+        options.runtime.events.record({
+          sessionId,
+          type: "session_turn_compaction_resume_failed",
+          turn: event.turn,
+          payload: buildResumeEventPayload({
+            sourceEventId: event.id,
+            sourceTimestamp: event.timestamp,
+            sourceTurn: event.turn,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        });
+        throw error;
+      }
+    });
+
+    pendingGenerationPromises.set(generation, currentGeneration);
+    void currentGeneration.catch(() => undefined);
+  });
+
+  const originalDispose =
+    typeof session.dispose === "function" ? session.dispose.bind(session) : undefined;
+
+  const controller: CompactionRecoveryController = {
+    sessionId,
+    getRequestedGeneration() {
+      return requestedGeneration;
+    },
+    async waitForSettled(afterGeneration = 0): Promise<void> {
+      while (true) {
+        await getLatestPromptSettlement();
+        await waitForCompactionToFinish(session);
+        await session.agent.waitForIdle();
+
+        const targetGeneration = requestedGeneration;
+        if (targetGeneration <= afterGeneration) {
+          if (requestedGeneration <= afterGeneration && session.isCompacting !== true) {
+            return;
+          }
+          continue;
+        }
+
+        const pending = pendingGenerationPromises.get(targetGeneration);
+        if (pending) {
+          await pending;
+        }
+
+        await getLatestPromptSettlement();
+        await waitForCompactionToFinish(session);
+        await session.agent.waitForIdle();
+
+        if (requestedGeneration === targetGeneration && completedGeneration >= targetGeneration) {
+          return;
+        }
+      }
+    },
+    dispose() {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
+      unsubscribe();
+      delete (session as CompactionRecoveryAwareSession)[SESSION_COMPACTION_RECOVERY];
+    },
+  };
+
+  (session as CompactionRecoveryAwareSession)[SESSION_COMPACTION_RECOVERY] = controller;
+
+  if (originalDispose && !disposePatched) {
+    disposePatched = true;
+    (session as CompactionRecoveryAwareSession).dispose = (() => {
+      controller.dispose();
+      return originalDispose();
+    }) as typeof session.dispose;
+  }
+
+  return session;
+}
+
+function getOrInstallCompactionRecovery(
+  session: CompactionRecoverySessionLike,
+  options: CompactionRecoveryOptions,
+): CompactionRecoveryController | undefined {
+  const existing = getInstalledCompactionRecovery(session);
+  if (existing) {
+    return existing;
+  }
+  if (!options.runtime) {
+    return undefined;
+  }
+  installSessionCompactionRecovery(session, {
+    runtime: options.runtime,
+    sessionId: options.sessionId,
+  });
+  return getInstalledCompactionRecovery(session);
 }
 
 export async function sendPromptWithCompactionRecovery(
@@ -156,115 +285,28 @@ export async function sendPromptWithCompactionRecovery(
   prompt: string,
   options: CompactionRecoveryOptions = {},
 ): Promise<void> {
-  const runtime = options.runtime;
-  const sessionId = options.sessionId?.trim() || normalizeSessionId(session);
-  const turnId = options.turnId?.trim();
-  const recoveryStartAt = Date.now();
+  const controller = getOrInstallCompactionRecovery(session, options);
+  const afterGeneration = controller?.getRequestedGeneration() ?? 0;
 
-  let queuedResumeGeneration = 0;
-  let observedResumeGeneration = 0;
-  let resumeDispatchPromise: Promise<void> = Promise.resolve();
-  const seenCompactionEventIds = new Set<string>();
-
-  const unsubscribe =
-    runtime && sessionId
-      ? runtime.events.subscribe((event) => {
-          if (event.sessionId !== sessionId) return;
-          if (event.type !== "session_compact") return;
-          if (event.timestamp < recoveryStartAt) return;
-          if (seenCompactionEventIds.has(event.id)) return;
-
-          seenCompactionEventIds.add(event.id);
-          queuedResumeGeneration += 1;
-          runtime.events.record({
-            sessionId,
-            type: "session_turn_compaction_resume_requested",
-            payload: buildResumeEventPayload({
-              turnId,
-              sourceEventId: event.id,
-              sourceTimestamp: event.timestamp,
-            }),
-          });
-
-          resumeDispatchPromise = resumeDispatchPromise.then(async () => {
-            try {
-              await dispatchFollowUp(session, COMPACTION_RESUME_PROMPT);
-              runtime.events.record({
-                sessionId,
-                type: "session_turn_compaction_resume_dispatched",
-                payload: buildResumeEventPayload({
-                  turnId,
-                  sourceEventId: event.id,
-                  sourceTimestamp: event.timestamp,
-                }),
-              });
-            } catch (error) {
-              runtime.events.record({
-                sessionId,
-                type: "session_turn_compaction_resume_failed",
-                payload: buildResumeEventPayload({
-                  turnId,
-                  sourceEventId: event.id,
-                  sourceTimestamp: event.timestamp,
-                  error: error instanceof Error ? error.message : String(error),
-                }),
-              });
-              throw error;
-            }
-          });
-        })
-      : undefined;
-
-  try {
-    await dispatchPrompt(session, prompt, options.promptOptions);
-
-    while (true) {
-      await session.agent.waitForIdle();
-      await Promise.resolve();
-
-      if (queuedResumeGeneration === observedResumeGeneration) {
-        break;
-      }
-
-      observedResumeGeneration = queuedResumeGeneration;
-      await resumeDispatchPromise;
-    }
-  } finally {
-    unsubscribe?.();
+  await session.prompt(prompt, options.promptOptions);
+  if (!controller) {
+    return;
   }
+  await controller.waitForSettled(afterGeneration);
 }
 
-export function wrapSessionWithCompactionRecovery<
-  T extends PromptCapableCompactionRecoverySessionLike,
->(
+export function wrapSessionWithSettledPrompts<T extends CompactionRecoverySessionLike>(
   session: T,
-  options: {
-    runtime?: BrewvaRuntime;
-    turnId?: string | (() => string | undefined);
-  } = {},
+  options: CompactionRecoveryOptions = {},
 ): T {
-  const originalPrompt = session.prompt.bind(session);
-  const originalFollowUp = session.followUp.bind(session);
-
   return new Proxy(session, {
     get(target, prop, receiver) {
       if (prop === "prompt") {
         return (content: string, promptOptions?: PromptDispatchOptions) =>
-          sendPromptWithCompactionRecovery(
-            {
-              prompt: originalPrompt,
-              followUp: originalFollowUp,
-              agent: target.agent,
-              sessionManager: target.sessionManager,
-            },
-            content,
-            {
-              runtime: options.runtime,
-              sessionId: target.sessionManager?.getSessionId?.(),
-              turnId: typeof options.turnId === "function" ? options.turnId() : options.turnId,
-              promptOptions,
-            },
-          );
+          sendPromptWithCompactionRecovery(target, content, {
+            ...options,
+            promptOptions,
+          });
       }
 
       const value = Reflect.get(target, prop, receiver);

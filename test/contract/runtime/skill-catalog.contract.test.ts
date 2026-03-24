@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   BrewvaRuntime,
   getSkillOutputContracts,
@@ -7,11 +7,22 @@ import {
   resolveSkillEffectLevel,
 } from "@brewva/brewva-runtime";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
+import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 import { repoRoot } from "./skill-contract.helpers.js";
+
+let workspace = "";
+
+beforeEach(() => {
+  workspace = createTestWorkspace("skill-catalog-contract");
+});
+
+afterEach(() => {
+  if (workspace) cleanupWorkspace(workspace);
+});
 
 function createCleanRuntime(): BrewvaRuntime {
   return new BrewvaRuntime({
-    cwd: repoRoot(),
+    cwd: workspace,
     config: createRuntimeConfig(),
   });
 }

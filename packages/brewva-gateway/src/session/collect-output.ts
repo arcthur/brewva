@@ -43,7 +43,6 @@ export interface CollectSessionPromptOutputOptions {
   onChunk?: (chunk: SessionStreamChunk) => void;
   runtime?: BrewvaRuntime;
   sessionId?: string;
-  turnId?: string;
 }
 
 function normalizeText(value: string | undefined): string {
@@ -267,7 +266,6 @@ export async function collectSessionPromptOutput(
     await sendPromptWithCompactionRecovery(session, prompt, {
       runtime: options?.runtime,
       sessionId: options?.sessionId,
-      turnId: options?.turnId,
     });
     return {
       assistantText: latestAssistantText,

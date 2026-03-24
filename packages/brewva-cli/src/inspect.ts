@@ -265,14 +265,17 @@ function scoreDefaultReplaySession(runtime: BrewvaRuntime, sessionId: string): n
   return 1;
 }
 
+function listAllReplaySessions(runtime: BrewvaRuntime) {
+  return runtime.events.listReplaySessions();
+}
+
 function resolveTargetSession(runtime: BrewvaRuntime, requestedSessionId?: string): string | null {
   if (requestedSessionId && requestedSessionId.trim().length > 0) {
     return requestedSessionId.trim();
   }
 
   return (
-    runtime.events
-      .listReplaySessions(50)
+    listAllReplaySessions(runtime)
       .map((session) => ({
         sessionId: session.sessionId,
         eventCount: session.eventCount,
@@ -290,7 +293,7 @@ function resolveTargetSession(runtime: BrewvaRuntime, requestedSessionId?: strin
 
 function buildInspectReport(runtime: BrewvaRuntime, sessionId: string): InspectReport {
   const replaySession =
-    runtime.events.listReplaySessions().find((entry) => entry.sessionId === sessionId) ?? null;
+    listAllReplaySessions(runtime).find((entry) => entry.sessionId === sessionId) ?? null;
   const events = runtime.events.query(sessionId);
   const taskEvents = runtime.events.query(sessionId, { type: TASK_EVENT_TYPE });
   const truthEvents = runtime.events.query(sessionId, { type: TRUTH_EVENT_TYPE });

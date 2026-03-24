@@ -8,6 +8,7 @@ import {
   ensureSessionShutdownRecorded,
   runChannelMode,
   runGatewayCli,
+  wrapSessionWithSettledPrompts,
 } from "@brewva/brewva-gateway";
 import {
   BrewvaConfigLoadError,
@@ -30,7 +31,7 @@ import {
 import { handleInsightChannelCommand } from "./insight-channel-command.js";
 import { createInsightCommandExtension } from "./insight-command-extension.js";
 import { runInsightCli } from "./insight.js";
-import { runInspectCli } from "./inspect.js";
+import { resolveTargetSession, runInspectCli } from "./inspect.js";
 import { writeJsonLine } from "./json-lines.js";
 import { createBrewvaSession } from "./session.js";
 
@@ -908,7 +909,7 @@ async function run(): Promise<void> {
       configPath: parsed.configPath,
       governancePort: createTrustedLocalGovernancePort(CLI_TRUSTED_LOCAL_GOVERNANCE),
     });
-    const targetSessionId = parsed.sessionId ?? runtime.events.listReplaySessions(1)[0]?.sessionId;
+    const targetSessionId = resolveTargetSession(runtime, parsed.sessionId);
     if (!targetSessionId) {
       console.error("Error: no replayable session found.");
       process.exitCode = 1;
@@ -1038,6 +1039,7 @@ async function run(): Promise<void> {
     managedToolMode: parsed.managedToolMode,
     extensionFactories: [createInsightCommandExtension(runtime)],
   });
+  const printSession = wrapSessionWithSettledPrompts(session, { runtime });
 
   const getSessionId = (): string => session.sessionManager.getSessionId();
   const initialSessionId = getSessionId();
@@ -1096,13 +1098,13 @@ async function run(): Promise<void> {
     }
 
     if (mode === "print-json") {
-      await runPrintMode(session, {
+      await runPrintMode(printSession, {
         mode: "json",
         initialMessage,
       });
       emitJsonBundle = true;
     } else {
-      await runPrintMode(session, {
+      await runPrintMode(printSession, {
         mode: "text",
         initialMessage,
       });
