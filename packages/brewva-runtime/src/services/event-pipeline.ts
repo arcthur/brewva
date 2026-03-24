@@ -405,20 +405,22 @@ export class EventPipelineService {
     return this.events.list(sessionId, query).map((event) => this.toStructuredEvent(event));
   }
 
-  listReplaySessions(limit = 20): BrewvaReplaySession[] {
+  listReplaySessions(limit?: number): BrewvaReplaySession[] {
     const sessionIds = this.events.listSessionIds();
     const rows: BrewvaReplaySession[] = [];
 
     for (const sessionId of sessionIds) {
       const events = this.events.list(sessionId);
       if (events.length === 0) continue;
-      const lastEventAt = events[events.length - 1]?.timestamp ?? 0;
       rows.push({
         sessionId,
         eventCount: events.length,
-        lastEventAt,
+        lastEventAt: events[events.length - 1]?.timestamp ?? 0,
       });
-      if (rows.length >= limit) break;
+    }
+
+    if (typeof limit === "number" && Number.isFinite(limit) && limit > 0) {
+      return rows.slice(0, limit);
     }
     return rows;
   }

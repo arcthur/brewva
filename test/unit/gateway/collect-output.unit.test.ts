@@ -7,10 +7,14 @@ import {
 
 type SessionLike = {
   subscribe: (listener: (event: AgentSessionEvent) => void) => () => void;
-  sendUserMessage: (content: string, options?: { deliverAs?: "followUp" }) => Promise<void>;
+  prompt: (content: string) => Promise<void>;
   agent: {
     waitForIdle: () => Promise<void>;
   };
+  sessionManager?: {
+    getSessionId?: () => string;
+  };
+  dispose?: () => void;
 };
 
 function createSessionMock(eventsToEmit: AgentSessionEvent[]): SessionLike {
@@ -22,7 +26,7 @@ function createSessionMock(eventsToEmit: AgentSessionEvent[]): SessionLike {
         listener = undefined;
       };
     },
-    async sendUserMessage(_content: string): Promise<void> {
+    async prompt(_content: string): Promise<void> {
       for (const event of eventsToEmit) {
         listener?.(event);
       }
@@ -175,7 +179,7 @@ describe("gateway collect output", () => {
     expect(output.toolOutputs[0]?.text).toContain("status: failed");
   });
 
-  test("given session_compact during the turn, when collecting output, then gateway dispatches a follow-up resume turn", async () => {
+  test("given session_compact during the turn, when collecting output, then gateway waits for the resumed turn", async () => {
     const eventBridge = createRuntimeEventBridge();
     const sentMessages: string[] = [];
     let listener: ((event: AgentSessionEvent) => void) | undefined;
@@ -186,7 +190,10 @@ describe("gateway collect output", () => {
           listener = undefined;
         };
       },
-      async sendUserMessage(content): Promise<void> {
+      sessionManager: {
+        getSessionId: () => "agent-session-1",
+      },
+      async prompt(content): Promise<void> {
         sentMessages.push(content);
         if (sentMessages.length === 1) {
           listener?.({
@@ -227,7 +234,6 @@ describe("gateway collect output", () => {
       {
         runtime: eventBridge.runtime as any,
         sessionId: "agent-session-1",
-        turnId: "turn-1",
       },
     );
 

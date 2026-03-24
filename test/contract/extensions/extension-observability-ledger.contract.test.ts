@@ -161,6 +161,83 @@ describe("Extension integration: observability ledger", () => {
     expect(runtime.ledger.listRows(sessionId)[0]?.verdict).toBe("inconclusive");
   });
 
+  test("given compaction interrupts live tool lifecycle after tool_result, when session_before_compact fires, then event stream closes tool_execution_end before compaction", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-compact-lifecycle-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "ext-compact-lifecycle-1";
+
+    const { api, handlers } = createMockExtensionAPI();
+    registerEventStream(api, runtime);
+    registerLedgerWriter(api, runtime);
+
+    const ctx = {
+      cwd: workspace,
+      sessionManager: {
+        getSessionId: () => sessionId,
+      },
+    };
+
+    invokeHandlers(handlers, "session_start", {}, ctx);
+    invokeHandlers(handlers, "turn_start", { turnIndex: 0, timestamp: Date.now() }, ctx);
+    invokeHandlers(
+      handlers,
+      "tool_execution_start",
+      {
+        toolCallId: "tc-compact",
+        toolName: "session_compact",
+      },
+      ctx,
+    );
+    invokeHandlers(
+      handlers,
+      "tool_call",
+      {
+        toolCallId: "tc-compact",
+        toolName: "session_compact",
+        input: { reason: "critical context pressure" },
+      },
+      ctx,
+    );
+    invokeHandlers(
+      handlers,
+      "tool_result",
+      {
+        toolCallId: "tc-compact",
+        toolName: "session_compact",
+        input: { reason: "critical context pressure" },
+        isError: false,
+        content: [
+          {
+            type: "text",
+            text: "Session compaction requested; the gateway will resume the interrupted turn after compaction.",
+          },
+        ],
+        details: { ok: true },
+      },
+      ctx,
+    );
+    invokeHandlers(
+      handlers,
+      "session_before_compact",
+      {
+        branchEntries: [{}, {}],
+      },
+      ctx,
+    );
+
+    const events = runtime.events.query(sessionId);
+    const eventTypes = events.map((event) => event.type);
+    expect(eventTypes.filter((type) => type === "tool_execution_end")).toHaveLength(1);
+    expect(eventTypes.filter((type) => type === "session_before_compact")).toHaveLength(1);
+    expect(eventTypes.filter((type) => type === "tool_result_recorded")).toHaveLength(1);
+    expect(eventTypes.indexOf("tool_result_recorded")).toBeLessThan(
+      eventTypes.indexOf("tool_execution_end"),
+    );
+    expect(eventTypes.indexOf("tool_execution_end")).toBeLessThan(
+      eventTypes.indexOf("session_before_compact"),
+    );
+  });
+
   test("given obs_query result override, when ledger writer records the tool result, then output_search can reuse the raw artifact", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-obs-query-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });

@@ -34,6 +34,7 @@ import {
   installHostedProviderCompatibilityLayer,
   registerHostedSessionProviderCompatibility,
 } from "../runtime-plugins/provider-compatibility.js";
+import { installSessionCompactionRecovery } from "../session/compaction-recovery.js";
 import {
   createDetachedSubagentBackgroundController,
   createHostedSubagentAdapter,
@@ -243,6 +244,8 @@ export async function createHostedSession(
     tools: builtinTools,
     customTools,
   });
+
+  installSessionCompactionRecovery(sessionResult.session, { runtime });
 
   const sessionId = sessionResult.session.sessionManager.getSessionId();
   registerHostedSessionProviderCompatibility({

@@ -834,7 +834,6 @@ export async function collectPromptTurnOutputs(
     await sendPromptWithCompactionRecovery(session, prompt, {
       runtime: options?.runtime,
       sessionId: options?.sessionId,
-      turnId: options?.turnId,
     });
     return {
       assistantText: latestAssistantText,

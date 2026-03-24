@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+  installSessionCompactionRecovery,
   sendPromptWithCompactionRecovery,
-  wrapSessionWithCompactionRecovery,
+  wrapSessionWithSettledPrompts,
 } from "../../../packages/brewva-gateway/src/session/compaction-recovery.js";
 
 function createRuntimeEventBridge() {
@@ -11,6 +12,7 @@ function createRuntimeEventBridge() {
       sessionId: string;
       type: string;
       timestamp: number;
+      turn?: number;
       payload?: Record<string, unknown>;
     }) => void
   >();
@@ -19,6 +21,7 @@ function createRuntimeEventBridge() {
     sessionId: string;
     type: string;
     timestamp: number;
+    turn?: number;
     payload?: Record<string, unknown>;
   }> = [];
 
@@ -31,12 +34,18 @@ function createRuntimeEventBridge() {
             listeners.delete(listener);
           };
         },
-        record(input: { sessionId: string; type: string; payload?: Record<string, unknown> }) {
+        record(input: {
+          sessionId: string;
+          type: string;
+          turn?: number;
+          payload?: Record<string, unknown>;
+        }) {
           const event = {
             id: `evt-${events.length + 1}`,
             sessionId: input.sessionId,
             type: input.type,
             timestamp: Date.now(),
+            turn: input.turn,
             payload: input.payload,
           };
           events.push(event);
@@ -51,66 +60,128 @@ function createRuntimeEventBridge() {
   };
 }
 
-describe("compaction recovery helper", () => {
-  test("serializes repeated compaction resumes within one prompt lifecycle", async () => {
+describe("compaction recovery controller", () => {
+  test("background recovery preserves prompt return timing for interactive sessions", async () => {
     const eventBridge = createRuntimeEventBridge();
     const promptedMessages: string[] = [];
-    const followUps: string[] = [];
-    let inFlightFollowUps = 0;
-    let maxInFlightFollowUps = 0;
-    let resolveFirstFollowUpReleased: (() => void) | undefined;
-    const firstFollowUpReleased = new Promise<void>((resolve) => {
-      resolveFirstFollowUpReleased = resolve;
+    let resolveResumePrompt: (() => void) | undefined;
+    const resumePromptReleased = new Promise<void>((resolve) => {
+      resolveResumePrompt = resolve;
     });
 
-    await sendPromptWithCompactionRecovery(
-      {
-        async prompt(content): Promise<void> {
-          promptedMessages.push(content);
+    const session = {
+      sessionManager: {
+        getSessionId: () => "agent-session-1",
+      },
+      async prompt(content: string): Promise<void> {
+        promptedMessages.push(content);
+        if (promptedMessages.length === 1) {
           eventBridge.runtime.events.record({
             sessionId: "agent-session-1",
             type: "session_compact",
+            turn: 7,
             payload: { entryId: "comp-1" },
           });
+          return;
+        }
+        await resumePromptReleased;
+      },
+      agent: {
+        async waitForIdle(): Promise<void> {
+          return;
         },
-        async followUp(content): Promise<void> {
-          followUps.push(content);
-          inFlightFollowUps += 1;
-          maxInFlightFollowUps = Math.max(maxInFlightFollowUps, inFlightFollowUps);
+      },
+      dispose(): void {
+        return;
+      },
+    };
 
-          try {
-            if (followUps.length === 1) {
-              eventBridge.runtime.events.record({
-                sessionId: "agent-session-1",
-                type: "session_compact",
-                payload: { entryId: "comp-2" },
-              });
-              setTimeout(() => {
-                resolveFirstFollowUpReleased?.();
-              }, 10);
-              await firstFollowUpReleased;
-            }
-          } finally {
-            inFlightFollowUps -= 1;
+    installSessionCompactionRecovery(session, {
+      runtime: eventBridge.runtime as any,
+    });
+
+    const initialPromptResult = await Promise.race([
+      session.prompt("interactive prompt").then(() => "resolved"),
+      new Promise<string>((resolve) => {
+        setTimeout(() => resolve("timed_out"), 20);
+      }),
+    ]);
+
+    expect(initialPromptResult).toBe("resolved");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(promptedMessages[0]).toBe("interactive prompt");
+    expect(promptedMessages[1]).toContain("Resume the interrupted turn");
+
+    resolveResumePrompt?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(
+      eventBridge.events.some(
+        (event) => event.type === "session_turn_compaction_resume_dispatched",
+      ),
+    ).toBe(true);
+  });
+
+  test("serializes repeated compaction resumes for settled prompt helpers", async () => {
+    const eventBridge = createRuntimeEventBridge();
+    const promptedMessages: string[] = [];
+    let inFlightResumePrompts = 0;
+    let maxInFlightResumePrompts = 0;
+    let resolveFirstResume: (() => void) | undefined;
+    const firstResumeReleased = new Promise<void>((resolve) => {
+      resolveFirstResume = resolve;
+    });
+
+    const session = {
+      sessionManager: {
+        getSessionId: () => "agent-session-2",
+      },
+      async prompt(content: string): Promise<void> {
+        promptedMessages.push(content);
+        if (promptedMessages.length === 1) {
+          eventBridge.runtime.events.record({
+            sessionId: "agent-session-2",
+            type: "session_compact",
+            turn: 3,
+            payload: { entryId: "comp-1" },
+          });
+          return;
+        }
+
+        inFlightResumePrompts += 1;
+        maxInFlightResumePrompts = Math.max(maxInFlightResumePrompts, inFlightResumePrompts);
+        try {
+          if (promptedMessages.length === 2) {
+            eventBridge.runtime.events.record({
+              sessionId: "agent-session-2",
+              type: "session_compact",
+              turn: 3,
+              payload: { entryId: "comp-2" },
+            });
+            setTimeout(() => {
+              resolveFirstResume?.();
+            }, 10);
+            await firstResumeReleased;
           }
-        },
-        agent: {
-          async waitForIdle(): Promise<void> {
-            return;
-          },
+        } finally {
+          inFlightResumePrompts -= 1;
+        }
+      },
+      agent: {
+        async waitForIdle(): Promise<void> {
+          return;
         },
       },
-      "initial prompt",
-      {
-        runtime: eventBridge.runtime as any,
-        sessionId: "agent-session-1",
-        turnId: "turn-1",
-      },
-    );
+    };
 
-    expect(promptedMessages).toEqual(["initial prompt"]);
-    expect(followUps).toHaveLength(2);
-    expect(maxInFlightFollowUps).toBe(1);
+    await sendPromptWithCompactionRecovery(session, "initial prompt", {
+      runtime: eventBridge.runtime as any,
+      sessionId: "agent-session-2",
+    });
+
+    expect(promptedMessages[0]).toBe("initial prompt");
+    expect(promptedMessages[1]).toContain("Resume the interrupted turn");
+    expect(promptedMessages[2]).toContain("Resume the interrupted turn");
+    expect(maxInFlightResumePrompts).toBe(1);
     expect(
       eventBridge.events.filter(
         (event) => event.type === "session_turn_compaction_resume_requested",
@@ -123,24 +194,22 @@ describe("compaction recovery helper", () => {
     ).toHaveLength(2);
   });
 
-  test("wrapSessionWithCompactionRecovery routes prompt through recovery while preserving session methods", async () => {
+  test("settled prompt wrapper is reserved for synchronous consumers and preserves bound methods", async () => {
     const eventBridge = createRuntimeEventBridge();
     const promptedMessages: string[] = [];
-    const followUps: string[] = [];
     const session = {
       sessionManager: {
-        getSessionId: () => "agent-session-2",
+        getSessionId: () => "agent-session-3",
       },
       async prompt(content: string): Promise<void> {
         promptedMessages.push(content);
-        eventBridge.runtime.events.record({
-          sessionId: "agent-session-2",
-          type: "session_compact",
-          payload: { entryId: "comp-1" },
-        });
-      },
-      async followUp(content: string): Promise<void> {
-        followUps.push(content);
+        if (promptedMessages.length === 1) {
+          eventBridge.runtime.events.record({
+            sessionId: "agent-session-3",
+            type: "session_compact",
+            payload: { entryId: "comp-1" },
+          });
+        }
       },
       agent: {
         async waitForIdle(): Promise<void> {
@@ -152,81 +221,18 @@ describe("compaction recovery helper", () => {
       },
     };
 
-    const wrapped = wrapSessionWithCompactionRecovery(session, {
+    installSessionCompactionRecovery(session, {
+      runtime: eventBridge.runtime as any,
+    });
+    const wrapped = wrapSessionWithSettledPrompts(session, {
       runtime: eventBridge.runtime as any,
     });
 
-    await wrapped.prompt("recover me");
+    await wrapped.prompt("print prompt");
 
-    expect(promptedMessages).toEqual(["recover me"]);
-    expect(followUps).toHaveLength(1);
-    expect(wrapped.marker()).toBe("agent-session-2");
-    expect(
-      eventBridge.events.some(
-        (event) => event.type === "session_turn_compaction_resume_dispatched",
-      ),
-    ).toBe(true);
-  });
-
-  test("falls back to sendUserMessage when prompt/followUp helpers are unavailable", async () => {
-    const eventBridge = createRuntimeEventBridge();
-    const deliveries: Array<{ content: string; deliverAs?: "steer" | "followUp" }> = [];
-
-    await sendPromptWithCompactionRecovery(
-      {
-        async sendUserMessage(content, options): Promise<void> {
-          const text =
-            typeof content === "string"
-              ? content
-              : content
-                  .filter(
-                    (
-                      part,
-                    ): part is {
-                      type: "text";
-                      text: string;
-                    } => part.type === "text" && typeof part.text === "string",
-                  )
-                  .map((part) => part.text)
-                  .join("\n");
-          deliveries.push({
-            content: text,
-            deliverAs: options?.deliverAs,
-          });
-
-          if (deliveries.length === 1) {
-            eventBridge.runtime.events.record({
-              sessionId: "agent-session-legacy",
-              type: "session_compact",
-              payload: { entryId: "comp-legacy-1" },
-            });
-          }
-        },
-        agent: {
-          async waitForIdle(): Promise<void> {
-            return;
-          },
-        },
-        sessionManager: {
-          getSessionId: () => "agent-session-legacy",
-        },
-      },
-      "legacy prompt",
-      {
-        runtime: eventBridge.runtime as any,
-        turnId: "turn-legacy-1",
-      },
-    );
-
-    expect(deliveries).toEqual([
-      {
-        content: "legacy prompt",
-        deliverAs: undefined,
-      },
-      {
-        content: expect.stringContaining("Resume the interrupted turn"),
-        deliverAs: "followUp",
-      },
-    ]);
+    expect(promptedMessages).toHaveLength(2);
+    expect(promptedMessages[0]).toBe("print prompt");
+    expect(promptedMessages[1]).toContain("Resume the interrupted turn");
+    expect(wrapped.marker()).toBe("agent-session-3");
   });
 });

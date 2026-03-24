@@ -122,4 +122,70 @@ describe("inspect subcommand", () => {
     },
     { timeout: 20_000 },
   );
+
+  test("prefers a bootstrapped replay session even when many newer synthetic runtime-only sessions exist", () => {
+    const workspace = createTestWorkspace("inspect-default-session");
+    const xdgConfigHome = join(workspace, ".xdg");
+    mkdirSync(join(xdgConfigHome, "brewva"), { recursive: true });
+    writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");
+    const previousXdgConfigHome = process.env["XDG_CONFIG_HOME"];
+
+    try {
+      process.env["XDG_CONFIG_HOME"] = xdgConfigHome;
+      const runtime = new BrewvaRuntime({
+        cwd: workspace,
+        config: structuredClone(DEFAULT_BREWVA_CONFIG),
+      });
+      const interactiveSessionId = "inspect-default-real-1";
+
+      runtime.events.record({
+        sessionId: interactiveSessionId,
+        type: "session_bootstrap",
+        payload: {
+          managedToolMode: "direct",
+        },
+      });
+      runtime.events.record({
+        sessionId: interactiveSessionId,
+        type: "session_start",
+        payload: {
+          cwd: workspace,
+        },
+      });
+      runtime.events.record({
+        sessionId: interactiveSessionId,
+        type: "message_end",
+        payload: {
+          role: "assistant",
+          contentItems: 1,
+          contentTextChars: 12,
+        },
+      });
+
+      for (let index = 0; index < 60; index += 1) {
+        const syntheticSessionId = `output-reg-${index}`;
+        runtime.skills.activate(syntheticSessionId, "repository-analysis");
+        runtime.skills.complete(syntheticSessionId, {
+          repository_snapshot: `synthetic registry session ${index}`,
+          impact_map: `synthetic impact map ${index}`,
+          unknowns: ["synthetic only"],
+        });
+      }
+
+      const result = runInspect(["--cwd", workspace, "--config", ".brewva/brewva.json", "--json"], {
+        ...process.env,
+        XDG_CONFIG_HOME: xdgConfigHome,
+      });
+      expect(result.status).toBe(0);
+
+      const payload = JSON.parse(result.stdout) as { sessionId: string };
+      expect(payload.sessionId).toBe(interactiveSessionId);
+    } finally {
+      if (previousXdgConfigHome === undefined) {
+        delete process.env["XDG_CONFIG_HOME"];
+      } else {
+        process.env["XDG_CONFIG_HOME"] = previousXdgConfigHome;
+      }
+    }
+  });
 });
