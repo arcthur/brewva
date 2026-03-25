@@ -63,6 +63,8 @@ export type SourceTrustTier = "system" | "internal" | "external";
 
 const SOURCE_TRUST_MAP: Record<string, SourceTrustTier> = {
   [CONTEXT_SOURCES.identity]: "system",
+  [CONTEXT_SOURCES.agentConstitution]: "internal",
+  [CONTEXT_SOURCES.agentMemory]: "internal",
   [CONTEXT_SOURCES.taskState]: "system",
   [CONTEXT_SOURCES.deliberationMemory]: "internal",
   [CONTEXT_SOURCES.optimizationContinuity]: "internal",

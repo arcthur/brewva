@@ -135,15 +135,28 @@ Current responsibilities:
 - `PersonaProfile`
   - renders stable identity/workstyle signals from
     `packages/brewva-runtime/src/context/identity.ts`
+- agent self bundle presentation
+  - exposes `identity.md`, `constitution.md`, and `memory.md` as explicit,
+    provenance-bearing narrative providers
+  - keeps editable self narration outside kernel authority
 - recovery presentation
   - exposes verification, rollbackability, approval requirements, and worker
     outcomes without prescribing the next step
+- delegation posture presentation
+  - exposes canonical delegated profiles `explore`, `plan`, `review`, and
+    `general`
+  - nudges model-native delegation for cross-file exploration and independent
+    review without introducing a planner
 - workflow inspection presentation
   - exposes explicit pull-based workflow surfaces such as `workflow_status`
     and working projection entries
   - summarizes derived workflow artifact signals and blockers without default
     turn-time injection
   - stays explicit and advisory-only instead of turning product UX into a hidden planner
+- closure presentation
+  - keeps verification and acceptance separate
+  - exposes acceptance as an operator-visible closure posture rather than a
+    model self-approval path
 - optimization protocol presentation
   - exposes objective iteration facts such as metric observations, guard
     results

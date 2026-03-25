@@ -1190,7 +1190,7 @@ export function createDeliberationMemoryContextProvider(input: {
     category: "narrative",
     order: 15,
     collect: (providerInput) => {
-      const retrievals = plane.retrieveCached(providerInput.promptText, input.maxArtifacts);
+      const retrievals = plane.retrieve(providerInput.promptText, input.maxArtifacts);
       for (const retrieval of retrievals) {
         providerInput.register({
           id: retrieval.artifact.id,

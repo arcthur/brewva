@@ -54,6 +54,7 @@ export const BREWVA_TOOL_SURFACE_BY_NAME = {
   subagent_status: "skill",
   subagent_cancel: "skill",
   task_add_item: "skill",
+  task_record_acceptance: "operator",
   task_record_blocker: "skill",
   task_resolve_blocker: "skill",
   task_set_spec: "skill",

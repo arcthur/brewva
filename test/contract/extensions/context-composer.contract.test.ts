@@ -204,8 +204,8 @@ describe("context composer", () => {
     const result = composeContextBlocks({
       runtime: createComposerRuntime("medium", 4, {
         pendingDelegations: [
-          { runId: "run-a", profile: "researcher", status: "running" },
-          { runId: "run-b", profile: "verifier", status: "pending" },
+          { runId: "run-a", profile: "explore", status: "running" },
+          { runId: "run-b", profile: "review", status: "pending" },
         ],
       }),
       sessionId: "compose-pending-delegations",
@@ -240,15 +240,15 @@ describe("context composer", () => {
     });
 
     expect(result.content).toContain("pending_delegations: 2");
-    expect(result.content).toContain("researcher/run-a:running");
-    expect(result.content).toContain("verifier/run-b:pending");
+    expect(result.content).toContain("explore/run-a:running");
+    expect(result.content).toContain("review/run-b:pending");
   });
 
   test("adds an explicit pending delegations section to compaction guidance", () => {
     const result = composeContextBlocks({
       runtime: createComposerRuntime("high", 9, {
         pendingDelegations: [
-          { runId: "run-c", profile: "researcher", status: "running" },
+          { runId: "run-c", profile: "explore", status: "running" },
           { runId: "run-d", profile: "patch-worker", status: "pending" },
         ],
       }),
@@ -285,7 +285,7 @@ describe("context composer", () => {
 
     expect(result.content).toContain("[PendingDelegations]");
     expect(result.content).toContain("count: 2");
-    expect(result.content).toContain("researcher/run-c:running");
+    expect(result.content).toContain("explore/run-c:running");
     expect(result.content).toContain("patch-worker/run-d:pending");
   });
 

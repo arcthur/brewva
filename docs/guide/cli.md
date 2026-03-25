@@ -52,7 +52,9 @@ Typical usage:
 session. It reuses the inspect base report, then adds deterministic findings
 about scope drift, verification hygiene, shell composition problems, tool
 contract friction, and durability issues, with explicit evidence gaps when only
-heuristic attribution is possible.
+heuristic attribution is possible. Write attribution comes from the persisted
+patch history in `.orchestrator/snapshots/<session>/patchsets.json`; read
+attribution remains heuristic and is derived from persisted tool arguments.
 
 Typical usage:
 

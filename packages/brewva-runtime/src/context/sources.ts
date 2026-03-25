@@ -2,6 +2,8 @@ export type ContextInjectionCategory = "narrative" | "constraint" | "diagnostic"
 
 export const CONTEXT_SOURCES = {
   identity: "brewva.identity",
+  agentConstitution: "brewva.agent-constitution",
+  agentMemory: "brewva.agent-memory",
   deliberationMemory: "brewva.deliberation-memory",
   optimizationContinuity: "brewva.optimization-continuity",
   skillPromotionDrafts: "brewva.skill-promotion-drafts",
@@ -15,6 +17,8 @@ export type ContextSourceId = (typeof CONTEXT_SOURCES)[keyof typeof CONTEXT_SOUR
 
 export const CONTEXT_SOURCE_CATEGORIES: Record<ContextSourceId, ContextInjectionCategory> = {
   [CONTEXT_SOURCES.identity]: "narrative",
+  [CONTEXT_SOURCES.agentConstitution]: "narrative",
+  [CONTEXT_SOURCES.agentMemory]: "narrative",
   [CONTEXT_SOURCES.deliberationMemory]: "narrative",
   [CONTEXT_SOURCES.optimizationContinuity]: "narrative",
   [CONTEXT_SOURCES.skillPromotionDrafts]: "narrative",

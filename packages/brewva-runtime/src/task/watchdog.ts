@@ -100,6 +100,10 @@ export function computeTaskSemanticProgressAt(input: {
       latest = maxTimestamp(latest, event.timestamp);
       break;
     }
+    if (payload.kind === "acceptance_set") {
+      latest = maxTimestamp(latest, event.timestamp);
+      break;
+    }
   }
 
   if (latest !== null) {

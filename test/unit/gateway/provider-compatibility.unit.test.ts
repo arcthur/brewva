@@ -111,6 +111,33 @@ describe("provider compatibility", () => {
     ]);
   });
 
+  test("repairs truncated JSON arguments by closing structural delimiters", () => {
+    const tools: ToolLike[] = [createSingleStringFieldTool("read_file", "path")];
+
+    const result = normalizeAssistantMessageToolCalls({
+      tools,
+      message: createAssistantMessage([
+        {
+          type: "toolCall",
+          id: "tc-2",
+          name: "read_file",
+          arguments: '{"path":"README.md"',
+        } as unknown as NormalizeInput["message"]["content"][number],
+      ]),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const toolCall = result.message.content[0];
+    expect(toolCall?.type).toBe("toolCall");
+    if (!toolCall || toolCall.type !== "toolCall") return;
+    expect(toolCall.arguments).toEqual({ path: "README.md" });
+    expect(result.records[0]?.repairKinds).toEqual([
+      "double_stringified_arguments",
+      "truncated_json_closed",
+    ]);
+  });
+
   test("fails fast when an embedded tool call references an unknown tool", () => {
     const result = normalizeAssistantMessageToolCalls({
       tools: [createSingleStringFieldTool("read_file", "path")],
@@ -188,6 +215,44 @@ describe("provider compatibility", () => {
       ],
       parallel_tool_calls: true,
       tool_choice: "auto",
+    });
+  });
+
+  test("raises an explicitly configured low tool output budget without inventing a new field", () => {
+    const registry = createModelCapabilityRegistry();
+    const model = {
+      id: "codex-mini-latest",
+      api: "openai-codex-responses",
+      provider: "openai-codex",
+    } as unknown as ModelLike;
+
+    const result = registry.patchRequest(model, {
+      tools: [
+        {
+          type: "function",
+          name: "read_file",
+        },
+      ],
+      max_output_tokens: 800,
+    });
+
+    expect(result.profileId).toBe("openai-codex-default");
+    expect(result.changed).toBe(true);
+    expect(result.patchKinds).toEqual([
+      "codex_parallel_tool_calls_defaulted",
+      "codex_tool_choice_defaulted",
+      "tool_output_budget_raised",
+    ]);
+    expect(result.payload).toEqual({
+      tools: [
+        {
+          type: "function",
+          name: "read_file",
+        },
+      ],
+      parallel_tool_calls: true,
+      tool_choice: "auto",
+      max_output_tokens: 3200,
     });
   });
 });

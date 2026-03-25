@@ -35,6 +35,8 @@ export * from "./governance/tool-governance.js";
 export * from "./events/store.js";
 export * from "./events/event-types.js";
 export * from "./state/file-change-tracker.js";
+export * from "./state/patch-history.js";
+export * from "./state/workspace-paths.js";
 export * from "./cost/tracker.js";
 export * from "./cost/assistant-usage.js";
 export * from "./task/spec.js";

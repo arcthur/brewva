@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { isAbsolute, relative, resolve } from "node:path";
+import { existsSync, statSync } from "node:fs";
+import { resolve } from "node:path";
 import { parseArgs as parseNodeArgs } from "node:util";
 import {
   BrewvaRuntime,
@@ -16,9 +16,15 @@ import {
   TOOL_RESULT_RECORDED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
+  collectPathCandidates,
+  collectPersistedPatchPaths,
   createTrustedLocalGovernancePort,
+  listPersistedPatchSets,
+  resolveWorkspacePath,
+  toWorkspaceRelativePath,
   type BrewvaEventRecord,
   type EvidenceLedgerRow,
+  type PersistedPatchSet,
 } from "@brewva/brewva-runtime";
 import { formatISO } from "date-fns";
 import { buildInspectReport, resolveTargetSession } from "./inspect.js";
@@ -32,7 +38,6 @@ const INSIGHT_PARSE_OPTIONS = {
   json: { type: "boolean" },
 } as const;
 
-const PATHISH_KEY_PATTERN = /(path|paths|file|files|cwd|workdir|dir|directory)/i;
 const IGNORED_WORKSPACE_PREFIXES = [".orchestrator/", ".brewva/", "node_modules/"] as const;
 const PARALLEL_SLOT_REJECTED_EVENT_TYPE = "parallel_slot_rejected";
 const OPS_INSIGHT_EVENT_TYPES = new Set<string>([
@@ -108,27 +113,6 @@ interface InsightDirectory {
   workspaceRelativePath: string;
 }
 
-interface PersistedPatchHistory {
-  version: 1;
-  sessionId: string;
-  updatedAt: number;
-  patchSets: PersistedPatchSet[];
-}
-
-interface PersistedPatchSet {
-  id: string;
-  createdAt: number;
-  summary?: string;
-  toolName: string;
-  appliedAt: number;
-  changes: PersistedPatchChange[];
-}
-
-interface PersistedPatchChange {
-  path: string;
-  action: string;
-}
-
 interface InsightBuildInput {
   runtime: BrewvaRuntime;
   sessionId: string;
@@ -165,12 +149,8 @@ function toIso(timestamp: number | null | undefined): string | null {
   return typeof timestamp === "number" && Number.isFinite(timestamp) ? formatISO(timestamp) : null;
 }
 
-function normalizeRelativePath(path: string): string {
-  return path.replaceAll("\\", "/");
-}
-
 function normalizePathForDisplay(path: string): string {
-  const normalized = normalizeRelativePath(path).trim();
+  const normalized = path.replaceAll("\\", "/").trim();
   return normalized.length > 0 ? normalized : ".";
 }
 
@@ -202,18 +182,6 @@ function isWorkspacePathIgnored(path: string): boolean {
   return IGNORED_WORKSPACE_PREFIXES.some(
     (prefix) => normalized === prefix.slice(0, -1) || normalized.startsWith(prefix),
   );
-}
-
-function toWorkspaceRelativePath(workspaceRoot: string, absolutePath: string): string | null {
-  const normalizedRoot = resolve(workspaceRoot);
-  const normalizedPath = resolve(absolutePath);
-  const rel = normalizeRelativePath(relative(normalizedRoot, normalizedPath));
-  if (!rel) return ".";
-  if (rel === ".") return ".";
-  if (rel.startsWith("../") || rel === "..") {
-    return null;
-  }
-  return rel;
 }
 
 export function resolveInsightDirectory(
@@ -257,77 +225,22 @@ export function resolveInsightDirectory(
   };
 }
 
-function readPatchHistory(
-  path: string,
-  sessionId: string,
-  cutoffTimestamp: number | null,
-): PersistedPatchSet[] {
-  if (!pathExists(path)) return [];
-
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf8")) as PersistedPatchHistory;
-    if (
-      !parsed ||
-      parsed.version !== 1 ||
-      parsed.sessionId !== sessionId ||
-      !Array.isArray(parsed.patchSets)
-    ) {
-      return [];
-    }
-
-    return parsed.patchSets.filter((patchSet) => {
-      if (!patchSet || typeof patchSet.id !== "string" || !Array.isArray(patchSet.changes)) {
-        return false;
-      }
-      if (cutoffTimestamp === null) return true;
-      return typeof patchSet.appliedAt === "number" && patchSet.appliedAt <= cutoffTimestamp;
-    });
-  } catch {
-    return [];
-  }
-}
-
-function collectPathCandidates(value: unknown, keyHint?: string, output: string[] = []): string[] {
-  if (typeof value === "string") {
-    if (!keyHint || PATHISH_KEY_PATTERN.test(keyHint)) {
-      output.push(value);
-    }
-    return output;
-  }
-
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      collectPathCandidates(item, keyHint, output);
-    }
-    return output;
-  }
-
-  if (!isRecord(value)) {
-    return output;
-  }
-
-  for (const [key, child] of Object.entries(value)) {
-    collectPathCandidates(child, key, output);
-  }
-  return output;
-}
-
 function resolveCandidatePathToWorkspace(input: {
   candidate: string;
   cwd: string;
   workspaceRoot: string;
 }): string | null {
-  const trimmed = input.candidate.trim();
-  if (!trimmed || trimmed.includes("\0")) {
+  const resolved = resolveWorkspacePath({
+    candidate: input.candidate,
+    cwd: input.cwd,
+    workspaceRoot: input.workspaceRoot,
+    allowWorkspaceRoot: true,
+    ignoredPrefixes: IGNORED_WORKSPACE_PREFIXES,
+  });
+  if (!resolved) {
     return null;
   }
-
-  const absolutePath = isAbsolute(trimmed) ? resolve(trimmed) : resolve(input.cwd, trimmed);
-  const workspaceRelativePath = toWorkspaceRelativePath(input.workspaceRoot, absolutePath);
-  if (!workspaceRelativePath || isWorkspacePathIgnored(workspaceRelativePath)) {
-    return null;
-  }
-  return workspaceRelativePath;
+  return resolved.relativePath;
 }
 
 function parseArgsSummary(argsSummary: string): Record<string, unknown> | null {
@@ -352,7 +265,9 @@ function collectHeuristicReadPaths(input: {
       continue;
     }
 
-    const candidates = collectPathCandidates(args);
+    const candidates = collectPathCandidates(args, {
+      allowUnkeyedString: true,
+    });
     for (const candidate of candidates) {
       const resolved = resolveCandidatePathToWorkspace({
         candidate,
@@ -388,17 +303,9 @@ function collectStrongTouchedPaths(events: BrewvaEventRecord[]): Set<string> {
 }
 
 function collectWritePaths(patchSets: PersistedPatchSet[]): Set<string> {
-  const collected = new Set<string>();
-  for (const patchSet of patchSets) {
-    for (const change of patchSet.changes) {
-      if (!change || typeof change.path !== "string") continue;
-      const normalized = normalizePathForDisplay(change.path);
-      if (!isWorkspacePathIgnored(normalized)) {
-        collected.add(normalized);
-      }
-    }
-  }
-  return collected;
+  return collectPersistedPatchPaths(patchSets, {
+    ignoredPrefixes: IGNORED_WORKSPACE_PREFIXES,
+  });
 }
 
 function countPathsInDirectory(paths: Iterable<string>, directory: string): number {
@@ -752,11 +659,11 @@ export function buildInsightReport(input: InsightBuildInput): SessionInsightRepo
   const ledgerRows = input.runtime.ledger
     .listRows(input.sessionId)
     .filter((row) => cutoffTimestamp === null || row.timestamp <= cutoffTimestamp);
-  const patchSets = readPatchHistory(
-    base.snapshots.patchHistoryPath,
-    input.sessionId,
+  const patchSets = listPersistedPatchSets({
+    path: base.snapshots.patchHistoryPath,
+    sessionId: input.sessionId,
     cutoffTimestamp,
-  );
+  });
   const strongTouchedPaths = collectStrongTouchedPaths(snapshotEvents);
   const writePaths = collectWritePaths(patchSets);
   const heuristicReadPaths = collectHeuristicReadPaths({

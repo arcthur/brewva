@@ -1,4 +1,5 @@
 import {
+  buildAcceptanceSetEvent,
   TASK_EVENT_TYPE,
   buildBlockerRecordedEvent,
   buildBlockerResolvedEvent,
@@ -10,6 +11,8 @@ import { normalizeTaskSpec } from "../task/spec.js";
 import type {
   BrewvaConfig,
   ContextBudgetUsage,
+  TaskAcceptanceRecordResult,
+  TaskAcceptanceState,
   TaskHealth,
   TaskBlockerRecordResult,
   TaskBlockerResolveResult,
@@ -127,6 +130,8 @@ export class TaskService {
     const hasVerifierBlocker = blockers.some((blocker) =>
       blocker.id.startsWith(VERIFIER_BLOCKER_PREFIX),
     );
+    const acceptanceRequired = state.spec?.acceptance?.required === true;
+    const acceptanceStatus = state.acceptance?.status ?? "pending";
 
     const activeTruthFacts = input.truthState.facts.filter((fact) => fact.status === "active");
     const severityRank = (severity: string): number => {
@@ -175,13 +180,30 @@ export class TaskService {
     } else {
       const desiredLevel = state.spec?.verification?.level ?? this.config.verification.defaultLevel;
       const report = this.evaluateCompletion(input.sessionId, desiredLevel);
-      phase = report.passed ? "done" : "verify";
-      health = report.passed ? "ok" : "verification_failed";
-      reason = report.passed
-        ? "verification_passed"
-        : report.missingEvidence.length > 0
-          ? `missing_evidence=${report.missingEvidence.join(",")}`
-          : "verification_missing";
+      if (!report.passed) {
+        phase = "verify";
+        health = "verification_failed";
+        reason =
+          report.missingEvidence.length > 0
+            ? `missing_evidence=${report.missingEvidence.join(",")}`
+            : "verification_missing";
+      } else if (!acceptanceRequired) {
+        phase = "done";
+        health = "ok";
+        reason = "verification_passed";
+      } else if (acceptanceStatus === "accepted") {
+        phase = "done";
+        health = "ok";
+        reason = "acceptance_accepted";
+      } else if (acceptanceStatus === "rejected") {
+        phase = "execute";
+        health = "acceptance_rejected";
+        reason = "acceptance_rejected";
+      } else {
+        phase = "ready_for_acceptance";
+        health = "acceptance_pending";
+        reason = "acceptance_required";
+      }
     }
 
     if (health === "ok" || health === "exploring") {
@@ -318,6 +340,41 @@ export class TaskService {
     if (!id) return { ok: false, error: "missing_id" };
 
     const payload = buildBlockerResolvedEvent(id);
+    this.recordEvent({
+      sessionId,
+      type: TASK_EVENT_TYPE,
+      payload,
+    });
+    this.alignTaskStatusAfterMutation(sessionId);
+    return { ok: true };
+  }
+
+  recordTaskAcceptance(
+    sessionId: string,
+    input: {
+      status: TaskAcceptanceState["status"];
+      decidedBy?: string;
+      notes?: string;
+    },
+  ): TaskAcceptanceRecordResult {
+    const status = input.status;
+    if (status !== "pending" && status !== "accepted" && status !== "rejected") {
+      return { ok: false, error: "invalid_status" };
+    }
+    const state = this.getTaskState(sessionId);
+    if (state.spec?.acceptance?.required !== true) {
+      return { ok: false, error: "acceptance_not_enabled" };
+    }
+    if (state.spec.acceptance.owner && state.spec.acceptance.owner !== "operator") {
+      return { ok: false, error: "acceptance_owner_unsupported" };
+    }
+
+    const payload = buildAcceptanceSetEvent({
+      status,
+      updatedAt: Date.now(),
+      decidedBy: input.decidedBy?.trim() || undefined,
+      notes: input.notes?.trim() || undefined,
+    });
     this.recordEvent({
       sessionId,
       type: TASK_EVENT_TYPE,

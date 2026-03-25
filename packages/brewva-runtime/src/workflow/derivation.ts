@@ -11,7 +11,7 @@ import {
   WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
 } from "../events/event-types.js";
 import { coerceGuardResultPayload, coerceMetricObservationPayload } from "../iteration/facts.js";
-import type { BrewvaEventRecord } from "../types.js";
+import type { BrewvaEventRecord, TaskState } from "../types.js";
 import type { JsonValue } from "../utils/json.js";
 
 export const WORKFLOW_ARTIFACT_KINDS = [
@@ -38,6 +38,7 @@ export type WorkflowPresenceStatus = "missing" | "ready";
 export type WorkflowLaneStatus = "missing" | "ready" | "stale" | "blocked" | "pending";
 export type WorkflowPlanningStatus = "missing" | "ready";
 export type WorkflowImplementationStatus = "missing" | "pending" | "ready" | "blocked";
+export type WorkflowAcceptanceStatus = "not_required" | WorkflowLaneStatus;
 
 export interface WorkflowArtifact {
   artifactId: string;
@@ -64,6 +65,7 @@ export interface WorkflowPosture {
   review: WorkflowLaneStatus;
   qa: WorkflowLaneStatus;
   verification: WorkflowLaneStatus;
+  acceptance: WorkflowAcceptanceStatus;
   ship: WorkflowLaneStatus;
   retro: WorkflowPresenceStatus;
   blockers: string[];
@@ -104,6 +106,7 @@ interface DeriveWorkflowStatusInput {
   sessionId: string;
   events: readonly BrewvaEventRecord[];
   blockers?: readonly TaskBlockerLike[];
+  taskState?: Pick<TaskState, "spec" | "status" | "acceptance">;
   pendingWorkerResults?: number;
   workspaceRoot?: string;
 }
@@ -904,12 +907,38 @@ function determineLaneStatus(
   return "ready";
 }
 
+function determineAcceptanceStatus(
+  taskState: DeriveWorkflowStatusInput["taskState"],
+): WorkflowAcceptanceStatus {
+  if (taskState?.spec?.acceptance?.required !== true) {
+    return "not_required";
+  }
+  if (taskState.acceptance?.status === "accepted") {
+    return "ready";
+  }
+  if (
+    taskState.acceptance?.status === "rejected" ||
+    taskState.status?.health === "acceptance_rejected"
+  ) {
+    return "blocked";
+  }
+  if (
+    taskState.acceptance?.status === "pending" ||
+    taskState.status?.phase === "ready_for_acceptance" ||
+    taskState.status?.health === "acceptance_pending"
+  ) {
+    return "pending";
+  }
+  return "missing";
+}
+
 function determineShipStatus(input: {
   latestArtifacts: Partial<Record<WorkflowArtifactKind, WorkflowArtifact>>;
   implementation: WorkflowImplementationStatus;
   review: WorkflowLaneStatus;
   qa: WorkflowLaneStatus;
   verification: WorkflowLaneStatus;
+  acceptance: WorkflowAcceptanceStatus;
   hasBlockers: boolean;
 }): WorkflowLaneStatus {
   const shipArtifact = input.latestArtifacts.ship;
@@ -923,6 +952,7 @@ function determineShipStatus(input: {
     input.qa === "stale" ||
     input.verification === "blocked" ||
     input.verification === "stale" ||
+    (input.acceptance !== "not_required" && input.acceptance !== "ready") ||
     input.hasBlockers;
 
   if (!shipArtifact) {
@@ -1017,6 +1047,7 @@ function createShipPostureArtifact(input: {
     metadata: {
       source: "workflow_status",
       ship: input.posture.ship,
+      acceptance: input.posture.acceptance,
       blockers: input.posture.blockers,
     },
   };
@@ -1101,6 +1132,7 @@ export function deriveWorkflowStatus(input: DeriveWorkflowStatusInput): Workflow
   const review = determineLaneStatus(latestArtifacts.review);
   const qa = determineLaneStatus(latestArtifacts.qa);
   const verification = determineLaneStatus(latestArtifacts.verification);
+  const acceptance = determineAcceptanceStatus(input.taskState);
 
   if (pendingWorkerResults > 0 && implementation !== "blocked") {
     implementation = "pending";
@@ -1157,9 +1189,21 @@ export function deriveWorkflowStatus(input: DeriveWorkflowStatusInput): Workflow
     review,
     qa,
     verification,
+    acceptance,
     hasBlockers: dedupedBlockers.length > 0,
   });
   const retro = determineRetroStatus(latestArtifacts);
+
+  if (acceptance === "pending") {
+    blockers.push("Acceptance required before closure.");
+  } else if (acceptance === "blocked") {
+    const notes = readString(input.taskState?.acceptance?.notes);
+    blockers.push(
+      notes
+        ? `Acceptance rejected; revise before closure (${compactText(notes, 120)}).`
+        : "Acceptance rejected; revise before closure.",
+    );
+  }
 
   if (latestArtifacts.ship?.state === "blocked") {
     blockers.push(compactText(latestArtifacts.ship.summary, 200));
@@ -1185,6 +1229,7 @@ export function deriveWorkflowStatus(input: DeriveWorkflowStatusInput): Workflow
     review,
     qa,
     verification,
+    acceptance,
     ship,
     retro,
     blockers: finalBlockers,

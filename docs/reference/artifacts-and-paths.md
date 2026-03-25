@@ -33,14 +33,23 @@ workspace.
 - Rollback snapshots: `.orchestrator/snapshots/<session>/*.snap`
   - per-file pre-mutation snapshots used only by rollback
 - Rollback patch history: `.orchestrator/snapshots/<session>/patchsets.json`
+  - shared persisted patch-set log used by rollback/undo and by `brewva insight` write attribution
 - Generated skill index: `.brewva/skills_index.json`
   - includes selected skill roots (`roots`) and the merged skill index (`skills`)
-- Agent identity profile (per-agent): `.brewva/agents/<agent-id>/identity.md`
+- Agent self bundle (per-agent):
+  - `.brewva/agents/<agent-id>/identity.md`
+  - `.brewva/agents/<agent-id>/constitution.md`
+  - `.brewva/agents/<agent-id>/memory.md`
   - `<agent-id>` comes from runtime option `agentId` (or `BREWVA_AGENT_ID`, fallback `default`)
   - id normalization: lowercase slug (`[a-z0-9._-]`, invalid separators mapped to `-`)
-  - required section headings: `Who I Am`, `How I Work`, `What I Care About`
-  - runtime renders those headings into the structured `[PersonaProfile]`
-    context block; files without those headings are ignored
+  - `identity.md` headings: `Who I Am`, `How I Work`, `What I Care About`
+  - `constitution.md` headings: `Operating Principles`, `Red Lines`, `Delegation Defaults`, `Verification Discipline`
+  - `memory.md` headings: `Stable Memory`, `Operator Preferences`, `Continuity Notes`
+  - runtime renders these into structured narrative context blocks with source provenance
+  - these files are operator-editable narrative inputs, not kernel authority
+- Heartbeat policy remains separate control-plane material:
+  - gateway heartbeat policy: `HEARTBEAT.md`
+  - heartbeat is not part of the agent self bundle
 
 Legacy operator-owned cognition directories such as `.brewva/cognition/**` may
 still exist in older workspaces, but they are not part of the current default

@@ -140,6 +140,7 @@ import type {
   TapeStatusState,
   TaskBlockerRecordResult,
   TaskBlockerResolveResult,
+  TaskAcceptanceRecordResult,
   TaskItemAddResult,
   TaskItemUpdateResult,
   TaskSpec,
@@ -436,6 +437,10 @@ export class BrewvaRuntime {
       sessionId: string,
       input: { id?: string; message: string; source?: string; truthFactId?: string },
     ): TaskBlockerRecordResult;
+    recordAcceptance(
+      sessionId: string,
+      input: { status: "pending" | "accepted" | "rejected"; decidedBy?: string; notes?: string },
+    ): TaskAcceptanceRecordResult;
     resolveBlocker(sessionId: string, blockerId: string): TaskBlockerResolveResult;
     getState(sessionId: string): TaskState;
   };
@@ -899,6 +904,8 @@ export class BrewvaRuntime {
         addItem: (sessionId, input) => this.taskService.addTaskItem(sessionId, input),
         updateItem: (sessionId, input) => this.taskService.updateTaskItem(sessionId, input),
         recordBlocker: (sessionId, input) => this.taskService.recordTaskBlocker(sessionId, input),
+        recordAcceptance: (sessionId, input) =>
+          this.taskService.recordTaskAcceptance(sessionId, input),
         resolveBlocker: (sessionId, blockerId) =>
           this.taskService.resolveTaskBlocker(sessionId, blockerId),
         getState: (sessionId) => this.getTaskState(sessionId),

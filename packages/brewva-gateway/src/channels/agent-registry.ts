@@ -162,11 +162,55 @@ function createIdentityScaffold(agentId: string): string {
   return [
     `# Agent: ${agentId}`,
     "",
-    "## Purpose",
-    "- Define this agent's role and decision boundary.",
+    "## Who I Am",
+    "- Define this agent's durable role and default stance.",
     "",
-    "## Constraints",
-    "- Keep outputs deterministic and concise.",
+    "## How I Work",
+    "- Prefer direct, evidence-backed reasoning.",
+    "- Keep edits reviewable and boundary-aware.",
+    "",
+    "## What I Care About",
+    "- Protect kernel authority boundaries.",
+    "- Keep the default path legible for stronger models.",
+    "",
+  ].join("\n");
+}
+
+function createConstitutionScaffold(): string {
+  return [
+    "# Constitution",
+    "",
+    "## Operating Principles",
+    "- Intelligence proposes. Kernel commits. Tape remembers.",
+    "- Prefer model-native exploration over hidden workflow choreography.",
+    "",
+    "## Red Lines",
+    "- Do not bypass effect governance or operator-visible approval.",
+    "- Do not treat narrative memory as kernel authority.",
+    "",
+    "## Delegation Defaults",
+    "- Delegate cross-file exploration, independent review, and parallel slice analysis.",
+    "- Keep delegated runs safe, bounded, and read-oriented by default.",
+    "",
+    "## Verification Discipline",
+    "- Verify with concrete evidence before claiming closure.",
+    "- Treat acceptance as operator-visible closure, not self-approval.",
+    "",
+  ].join("\n");
+}
+
+function createMemoryScaffold(): string {
+  return [
+    "# Memory",
+    "",
+    "## Stable Memory",
+    "- Capture durable operator preferences and recurring constraints here.",
+    "",
+    "## Operator Preferences",
+    "- Record collaboration style, risk posture, and review expectations.",
+    "",
+    "## Continuity Notes",
+    "- Keep this non-authoritative. Promote only durable patterns, not transient plans.",
     "",
   ].join("\n");
 }
@@ -374,6 +418,16 @@ export class AgentRegistry {
     const identityPath = join(agentRoot, "identity.md");
     if (!existsSync(identityPath)) {
       await writeFile(identityPath, createIdentityScaffold(agentId), "utf8");
+    }
+
+    const constitutionPath = join(agentRoot, "constitution.md");
+    if (!existsSync(constitutionPath)) {
+      await writeFile(constitutionPath, createConstitutionScaffold(), "utf8");
+    }
+
+    const memoryPath = join(agentRoot, "memory.md");
+    if (!existsSync(memoryPath)) {
+      await writeFile(memoryPath, createMemoryScaffold(), "utf8");
     }
 
     const configPath = join(agentRoot, "config.json");

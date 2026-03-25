@@ -294,7 +294,7 @@ describe("hosted subagent orchestrator", () => {
     const started = await adapter.start({
       fromSessionId: parentSessionId,
       request: {
-        profile: "researcher",
+        profile: "explore",
         mode: "single",
         packet: {
           objective: "Inspect the repository in the background.",
@@ -444,7 +444,7 @@ describe("hosted subagent orchestrator", () => {
     const started = await adapter.start({
       fromSessionId: parentSessionId,
       request: {
-        profile: "reviewer",
+        profile: "review",
         mode: "single",
         packet: {
           objective: "Review the runtime boundary changes.",

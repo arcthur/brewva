@@ -207,7 +207,9 @@ Flags:
 persisted session. It reuses the inspect base report, then adds evidence-backed
 findings about non-model issues such as scope drift, stale verification,
 shell-composition failures, tool contract friction, and durability problems.
-The report keeps write attribution strong and read attribution heuristic.
+The report keeps write attribution strong by using persisted patch history
+(`.orchestrator/snapshots/<session>/patchsets.json`) while read attribution
+remains heuristic from persisted tool arguments.
 
 - `brewva insight`: inspect the latest replayable session for the current working directory
 - `brewva insight <dir>`: inspect a specific directory inside the current workspace
@@ -402,7 +404,9 @@ Channel mode examples:
 ## Input Resolution Rules
 
 - `--task` and `--task-file` are mutually exclusive; providing both returns an error.
-- `--agent` selects `.brewva/agents/<agent-id>/identity.md` for session identity injection.
+- `--agent` selects the per-agent self bundle under `.brewva/agents/<agent-id>/`.
+  - runtime loads `identity.md`, `constitution.md`, and `memory.md` when present
+  - heartbeat policy remains separate control-plane material
 - Agent id precedence is: `--agent` -> `BREWVA_AGENT_ID` -> `default`.
 - If both a TaskSpec and prompt text are provided, prompt text overrides `TaskSpec.goal`.
 - If stdin/stdout is not a TTY and no explicit mode is set, CLI falls back to text print mode.

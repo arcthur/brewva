@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { buildCapabilityView, renderCapabilityView } from "@brewva/brewva-gateway/runtime-plugins";
 import {
+  createTaskLedgerTools,
   createExecTool,
   createGrepTool,
   createProcessTool,
@@ -228,7 +229,15 @@ describe("capability view", () => {
         }),
         expect.objectContaining({
           pathText: "convergenceCondition.phase",
-          acceptedValues: ["align", "investigate", "execute", "verify", "blocked", "done"],
+          acceptedValues: [
+            "align",
+            "investigate",
+            "execute",
+            "verify",
+            "ready_for_acceptance",
+            "blocked",
+            "done",
+          ],
         }),
       ]),
     );
@@ -272,6 +281,28 @@ describe("capability view", () => {
         includeInventory: true,
       })[2]?.content.includes("operator_hint: operator/full profile keeps these tools visible"),
     ).toBe(true);
+  });
+
+  test("marks operator acceptance closure as non-rollbackable", () => {
+    const runtime = createRuntimeFixture();
+    const acceptanceTool = createTaskLedgerTools({ runtime }).find(
+      (tool) => tool.name === "task_record_acceptance",
+    );
+    expect(acceptanceTool).toBeDefined();
+    if (!acceptanceTool) return;
+
+    const result = buildCapabilityView({
+      prompt: "inspect $task_record_acceptance",
+      allTools: [acceptanceTool],
+      activeToolNames: [],
+    });
+
+    expect(result.details[0]).toMatchObject({
+      name: "task_record_acceptance",
+      rollbackable: false,
+      requiresApproval: false,
+      boundary: "effectful",
+    });
   });
 
   test("records skill visibility hints when no skill-scoped tool is active", () => {

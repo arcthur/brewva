@@ -1,4 +1,5 @@
 import type {
+  TaskAcceptanceState,
   BrewvaEventRecord,
   TaskBlocker,
   TaskHealth,
@@ -26,6 +27,7 @@ type ItemAddedEvent = Extract<TaskLedgerEventPayload, { kind: "item_added" }>;
 type ItemUpdatedEvent = Extract<TaskLedgerEventPayload, { kind: "item_updated" }>;
 type BlockerRecordedEvent = Extract<TaskLedgerEventPayload, { kind: "blocker_recorded" }>;
 type BlockerResolvedEvent = Extract<TaskLedgerEventPayload, { kind: "blocker_resolved" }>;
+type AcceptanceSetEvent = Extract<TaskLedgerEventPayload, { kind: "acceptance_set" }>;
 
 function normalizeStatus(value: unknown): TaskItemStatus | undefined {
   if (value === "todo" || value === "doing" || value === "done" || value === "blocked") {
@@ -40,6 +42,7 @@ function normalizePhase(value: unknown): TaskPhase | undefined {
     value === "investigate" ||
     value === "execute" ||
     value === "verify" ||
+    value === "ready_for_acceptance" ||
     value === "blocked" ||
     value === "done"
   ) {
@@ -54,12 +57,39 @@ function normalizeHealth(value: unknown): TaskHealth | undefined {
     value === "exploring" ||
     value === "blocked" ||
     value === "verification_failed" ||
+    value === "acceptance_pending" ||
+    value === "acceptance_rejected" ||
     value === "budget_pressure" ||
     value === "unknown"
   ) {
     return value;
   }
   return undefined;
+}
+
+function normalizeAcceptanceStatus(value: unknown): TaskAcceptanceState["status"] | undefined {
+  if (value === "pending" || value === "accepted" || value === "rejected") {
+    return value;
+  }
+  return undefined;
+}
+
+function coerceTaskAcceptanceState(value: unknown): TaskAcceptanceState | null {
+  if (!isRecord(value)) return null;
+  const status = normalizeAcceptanceStatus(value.status);
+  const updatedAt =
+    typeof value.updatedAt === "number" && Number.isFinite(value.updatedAt)
+      ? value.updatedAt
+      : null;
+  if (!status || updatedAt === null) {
+    return null;
+  }
+  return {
+    status,
+    updatedAt,
+    decidedBy: normalizeNonEmptyString(value.decidedBy),
+    notes: normalizeNonEmptyString(value.notes),
+  };
 }
 
 function coerceTaskStatus(value: unknown): TaskStatus | null {
@@ -126,6 +156,7 @@ export function reduceTaskState(
     return {
       spec: payload.state.spec,
       status: payload.state.status,
+      acceptance: payload.state.acceptance,
       items: [...(payload.state.items ?? [])],
       blockers: [...(payload.state.blockers ?? [])],
       updatedAt: nextUpdatedAt,
@@ -221,6 +252,14 @@ export function reduceTaskState(
     return {
       ...state,
       blockers,
+      updatedAt,
+    };
+  }
+
+  if (payload.kind === "acceptance_set") {
+    return {
+      ...state,
+      acceptance: payload.acceptance,
       updatedAt,
     };
   }
@@ -327,6 +366,14 @@ export function buildBlockerResolvedEvent(blockerId: string): BlockerResolvedEve
   };
 }
 
+export function buildAcceptanceSetEvent(input: TaskAcceptanceState): AcceptanceSetEvent {
+  return {
+    schema: TASK_LEDGER_SCHEMA,
+    kind: "acceptance_set",
+    acceptance: input,
+  };
+}
+
 export function coerceTaskLedgerPayload(value: unknown): TaskLedgerEventPayload | null {
   if (!isRecord(value)) return null;
   if (value.schema !== TASK_LEDGER_SCHEMA) return null;
@@ -419,6 +466,16 @@ export function coerceTaskLedgerPayload(value: unknown): TaskLedgerEventPayload 
       schema: TASK_LEDGER_SCHEMA,
       kind,
       blockerId,
+    };
+  }
+
+  if (kind === "acceptance_set") {
+    const acceptance = coerceTaskAcceptanceState(value.acceptance);
+    if (!acceptance) return null;
+    return {
+      schema: TASK_LEDGER_SCHEMA,
+      kind,
+      acceptance,
     };
   }
 
@@ -518,6 +575,28 @@ export function formatTaskStateBlock(state: TaskState): string {
     }
   }
 
+  const acceptanceSpec = spec?.acceptance;
+  if (acceptanceSpec?.required) {
+    lines.push("acceptance.required=true");
+    if (acceptanceSpec.owner) {
+      lines.push(`acceptance.owner=${acceptanceSpec.owner}`);
+    }
+    if (acceptanceSpec.criteria && acceptanceSpec.criteria.length > 0) {
+      lines.push("acceptance.criteria:");
+      for (const criterion of acceptanceSpec.criteria.slice(0, 6)) {
+        lines.push(`- ${criterion}`);
+      }
+    }
+    const acceptance = state.acceptance;
+    lines.push(`acceptance.status=${acceptance?.status ?? "pending"}`);
+    if (acceptance?.decidedBy) {
+      lines.push(`acceptance.decidedBy=${acceptance.decidedBy}`);
+    }
+    if (acceptance?.notes) {
+      lines.push(`acceptance.notes=${acceptance.notes}`);
+    }
+  }
+
   return lines.join("\n");
 }
 
@@ -536,6 +615,10 @@ function coerceTaskState(value: unknown): TaskState | null {
 
   const statusValue = value.status;
   const status = statusValue ? (coerceTaskStatus(statusValue) ?? undefined) : undefined;
+  const acceptanceValue = value.acceptance;
+  const acceptance = acceptanceValue
+    ? (coerceTaskAcceptanceState(acceptanceValue) ?? undefined)
+    : undefined;
 
   const itemsValue = value.items;
   if (!Array.isArray(itemsValue)) return null;
@@ -575,6 +658,7 @@ function coerceTaskState(value: unknown): TaskState | null {
   return {
     spec,
     status,
+    acceptance,
     items,
     blockers,
     updatedAt,

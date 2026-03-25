@@ -110,7 +110,7 @@ describe("runtime facade coverage", () => {
 
     runtime.session.recordDelegationRun(sessionId, {
       runId: "delegation-1",
-      profile: "reviewer",
+      profile: "review",
       parentSessionId: sessionId,
       status: "running",
       createdAt: 10,
@@ -122,7 +122,7 @@ describe("runtime facade coverage", () => {
     expect(runtime.session.getDelegationRun(sessionId, "delegation-1")).toMatchObject({
       runId: "delegation-1",
       status: "running",
-      profile: "reviewer",
+      profile: "review",
     });
     expect(runtime.session.listDelegationRuns(sessionId)).toHaveLength(1);
   });
@@ -208,7 +208,7 @@ describe("runtime facade coverage", () => {
       timestamp: 200,
       payload: {
         runId: "delegation-timeout-1",
-        profile: "reviewer",
+        profile: "review",
         kind: "review",
         boundary: "safe",
         status: "running",
@@ -222,7 +222,7 @@ describe("runtime facade coverage", () => {
       timestamp: 260,
       payload: {
         runId: "delegation-timeout-1",
-        profile: "reviewer",
+        profile: "review",
         kind: "review",
         boundary: "safe",
         status: "timeout",

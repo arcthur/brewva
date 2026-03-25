@@ -133,4 +133,66 @@ describe("Task ledger", () => {
     );
     expect(injection.text).not.toContain("[Viewport]");
   });
+
+  test("holds closure at ready_for_acceptance until operator acceptance is recorded", () => {
+    const workspace = createTestWorkspace("task-ledger-acceptance");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "task-ledger-acceptance";
+
+    runtime.task.setSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Close the task with explicit operator acceptance",
+      verification: {
+        level: "quick",
+      },
+      acceptance: {
+        required: true,
+        owner: "operator",
+        criteria: ["Operator accepts the result as closure."],
+      },
+    });
+    runtime.task.addItem(sessionId, {
+      id: "item-1",
+      text: "Finish the implementation",
+      status: "done",
+    });
+
+    const pendingState = runtime.task.getState(sessionId);
+    expect(pendingState.status?.phase).toBe("ready_for_acceptance");
+    expect(pendingState.status?.health).toBe("acceptance_pending");
+    expect(pendingState.acceptance).toBeUndefined();
+
+    runtime.task.recordAcceptance(sessionId, {
+      status: "accepted",
+      decidedBy: "operator",
+      notes: "Closure accepted.",
+    });
+
+    const acceptedState = runtime.task.getState(sessionId);
+    expect(acceptedState.status?.phase).toBe("done");
+    expect(acceptedState.status?.reason).toBe("acceptance_accepted");
+    expect(acceptedState.acceptance?.status).toBe("accepted");
+  });
+
+  test("rejects acceptance writes when the task does not require explicit acceptance", () => {
+    const workspace = createTestWorkspace("task-ledger-acceptance-disabled");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "task-ledger-acceptance-disabled";
+
+    runtime.task.setSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Close without a separate acceptance lane",
+    });
+
+    expect(
+      runtime.task.recordAcceptance(sessionId, {
+        status: "accepted",
+        decidedBy: "operator",
+      }),
+    ).toEqual({
+      ok: false,
+      error: "acceptance_not_enabled",
+    });
+    expect(runtime.task.getState(sessionId).acceptance).toBeUndefined();
+  });
 });

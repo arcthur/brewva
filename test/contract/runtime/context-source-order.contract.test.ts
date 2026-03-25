@@ -117,6 +117,8 @@ describe("context source order integration", () => {
     });
     expect(runtime.context.listProviders()).toEqual([
       { source: CONTEXT_SOURCES.identity, category: "narrative", order: 10 },
+      { source: CONTEXT_SOURCES.agentConstitution, category: "narrative", order: 12 },
+      { source: CONTEXT_SOURCES.agentMemory, category: "narrative", order: 13 },
       { source: CONTEXT_SOURCES.runtimeStatus, category: "narrative", order: 20 },
       { source: CONTEXT_SOURCES.taskState, category: "narrative", order: 40 },
       { source: CONTEXT_SOURCES.projectionWorking, category: "narrative", order: 50 },
@@ -263,6 +265,8 @@ describe("context source order integration", () => {
 
     expect(runtime.context.listProviders()).toEqual([
       { source: CONTEXT_SOURCES.identity, category: "narrative", order: 10 },
+      { source: CONTEXT_SOURCES.agentConstitution, category: "narrative", order: 12 },
+      { source: CONTEXT_SOURCES.agentMemory, category: "narrative", order: 13 },
       { source: CONTEXT_SOURCES.runtimeStatus, category: "narrative", order: 20 },
       { source: CONTEXT_SOURCES.toolOutputsDistilled, category: "narrative", order: 30 },
       { source: CONTEXT_SOURCES.taskState, category: "narrative", order: 40 },

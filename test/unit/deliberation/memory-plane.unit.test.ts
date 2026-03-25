@@ -180,7 +180,7 @@ function createSessionInput(input: {
 }
 
 describe("deliberation memory plane", () => {
-  test("keeps provider collection read-only and serves artifacts after explicit sync", () => {
+  test("refreshes provider collection live and serves artifacts without a prior manual sync", () => {
     const workspace = createTestWorkspace("deliberation-memory-provider");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "deliberation-provider-session";
@@ -214,8 +214,8 @@ describe("deliberation memory plane", () => {
     });
 
     expect(provider.source).toBe(CONTEXT_SOURCES.deliberationMemory);
-    expect(beforeSyncEntries).toHaveLength(0);
-    expect(existsSync(statePath)).toBe(false);
+    expect(beforeSyncEntries.length).toBeGreaterThan(0);
+    expect(existsSync(statePath)).toBe(true);
 
     const plane = getOrCreateDeliberationMemoryPlane(runtime, {
       minRefreshIntervalMs: 1,

@@ -245,9 +245,9 @@ export async function createHostedSession(
     customTools,
   });
 
-  installSessionCompactionRecovery(sessionResult.session, { runtime });
+  const session = installSessionCompactionRecovery(sessionResult.session, { runtime });
 
-  const sessionId = sessionResult.session.sessionManager.getSessionId();
+  const sessionId = session.sessionManager.getSessionId();
   registerHostedSessionProviderCompatibility({
     sessionId,
     runtime,
@@ -271,6 +271,7 @@ export async function createHostedSession(
 
   return {
     ...sessionResult,
+    session,
     runtime,
   };
 }

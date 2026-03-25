@@ -62,6 +62,8 @@ describe("getSourceTrustTier", () => {
   });
 
   test("classifies internal sources", () => {
+    expect(getSourceTrustTier("brewva.agent-constitution")).toBe("internal");
+    expect(getSourceTrustTier("brewva.agent-memory")).toBe("internal");
     expect(getSourceTrustTier("brewva.deliberation-memory")).toBe("internal");
     expect(getSourceTrustTier("brewva.skill-promotion-drafts")).toBe("internal");
     expect(getSourceTrustTier("brewva.runtime-status")).toBe("internal");

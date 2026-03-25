@@ -62,6 +62,7 @@ Default tools registered by `buildBrewvaTools()`:
 - `task_set_spec`
 - `task_add_item`
 - `task_update_item`
+- `task_record_acceptance`
 - `task_record_blocker`
 - `task_resolve_blocker`
 - `task_view_state`
@@ -180,6 +181,7 @@ Current posture:
 - `task_set_spec`
 - `task_add_item`
 - `task_update_item`
+- `task_record_acceptance`
 - `task_record_blocker`
 - `task_resolve_blocker`
 - `task_view_state`
@@ -220,6 +222,7 @@ Managed Brewva tools expose exact metadata on the definition object:
 - `effects`
 - `defaultRisk`
 - `boundary`
+- `rollbackable`
 
 Current public boundary vocabulary:
 
@@ -353,10 +356,18 @@ Current mode contract:
 
 Semantics:
 
+- built-in delegated read-only postures are `explore`, `plan`, `review`, and
+  `general`; `patch-worker` remains the isolated write-capable profile
+- removed legacy built-ins such as `researcher`, `reviewer`, and `verifier`
+  now fail fast instead of aliasing to the canonical names
 - `safe` is the default execution boundary
 - `effectful` is reserved for isolated write-capable child runners
 - `supplemental` appends same-turn return context to the parent session
 - there is no proposal-backed return mode
+
+`task_record_acceptance` is an operator-visible closure write. It only succeeds
+when the active `TaskSpec` explicitly requires acceptance, and it does not
+create rollback receipts.
 
 ## `subagent_status` And `subagent_cancel`
 

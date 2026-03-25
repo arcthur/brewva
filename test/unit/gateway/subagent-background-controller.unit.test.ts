@@ -12,8 +12,8 @@ function createTempWorkspace(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 
-const RESEARCHER_PROFILE: HostedSubagentProfile = {
-  name: "researcher",
+const EXPLORE_PROFILE: HostedSubagentProfile = {
+  name: "explore",
   description: "Repository exploration worker.",
   resultMode: "exploration",
   prompt: "Inspect the repository and summarize findings.",
@@ -42,7 +42,7 @@ describe("detached subagent background controller", () => {
 
     const run = await controller.startRun({
       parentSessionId: "parent-bg-1",
-      profile: RESEARCHER_PROFILE,
+      profile: EXPLORE_PROFILE,
       packet: {
         objective: "Inspect the runtime package.",
       },
@@ -107,7 +107,7 @@ describe("detached subagent background controller", () => {
 
     const run = await controller.startRun({
       parentSessionId: "parent-bg-cancel",
-      profile: RESEARCHER_PROFILE,
+      profile: EXPLORE_PROFILE,
       packet: {
         objective: "Inspect the gateway package.",
       },
@@ -153,21 +153,21 @@ describe("detached subagent background controller", () => {
 
     const first = await controller.startRun({
       parentSessionId: "parent-bg-session",
-      profile: RESEARCHER_PROFILE,
+      profile: EXPLORE_PROFILE,
       packet: {
         objective: "Inspect runtime package.",
       },
     });
     await controller.startRun({
       parentSessionId: "parent-bg-session",
-      profile: RESEARCHER_PROFILE,
+      profile: EXPLORE_PROFILE,
       packet: {
         objective: "Inspect gateway package.",
       },
     });
     await controller.startRun({
       parentSessionId: "other-parent",
-      profile: RESEARCHER_PROFILE,
+      profile: EXPLORE_PROFILE,
       packet: {
         objective: "Ignore this run.",
       },

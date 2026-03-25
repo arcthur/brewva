@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { parseArgs as parseNodeArgs } from "node:util";
 import {
   BrewvaRuntime,
+  PATCH_HISTORY_FILE,
   TASK_EVENT_TYPE,
   TAPE_ANCHOR_EVENT_TYPE,
   TAPE_CHECKPOINT_EVENT_TYPE,
@@ -332,7 +333,7 @@ function buildInspectReport(runtime: BrewvaRuntime, sessionId: string): InspectR
     ".orchestrator/snapshots",
     sanitizeSessionIdForPath(sessionId),
   );
-  const patchHistoryPath = join(snapshotSessionDir, "patchsets.json");
+  const patchHistoryPath = join(snapshotSessionDir, PATCH_HISTORY_FILE);
 
   return {
     sessionId,

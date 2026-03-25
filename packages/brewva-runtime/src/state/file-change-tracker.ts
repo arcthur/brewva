@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
-import { basename, relative, resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import type {
   PatchApplyFailureReason,
   PatchFileAction,
@@ -9,11 +9,19 @@ import type {
 import { ensureDir, writeFileAtomic } from "../utils/fs.js";
 import { sha256 } from "../utils/hash.js";
 import { isMutationTool } from "../verification/classifier.js";
+import {
+  PATCH_HISTORY_FILE,
+  readPersistedPatchHistory,
+  type PersistedPatchHistory,
+} from "./patch-history.js";
+import {
+  collectPathCandidates,
+  normalizeWorkspaceRelativePath,
+  resolveWorkspacePath,
+} from "./workspace-paths.js";
 
 const EXTRA_MUTATION_TOOLS = new Set(["multi_edit"]);
-const CANDIDATE_PATH_KEY = /(path|file)/i;
 const MAX_HISTORY = 64;
-const PATCH_HISTORY_FILE = "patchsets.json";
 
 interface TrackedFileState {
   absolutePath: string;
@@ -43,32 +51,6 @@ interface AppliedMutation {
   >;
 }
 
-interface PersistedChange {
-  path: string;
-  action: PatchFileAction;
-  beforeExists: boolean;
-  beforeHash?: string;
-  afterHash?: string;
-  beforeSnapshotFile?: string;
-  artifactRef?: string;
-}
-
-interface PersistedPatchSet {
-  id: string;
-  createdAt: number;
-  summary?: string;
-  toolName: string;
-  appliedAt: number;
-  changes: PersistedChange[];
-}
-
-interface PersistedPatchHistory {
-  version: 1;
-  sessionId: string;
-  updatedAt: number;
-  patchSets: PersistedPatchSet[];
-}
-
 interface FileChangeTrackerOptions {
   snapshotsDir?: string;
   artifactsBaseDir?: string;
@@ -78,75 +60,10 @@ function sanitizeSessionId(sessionId: string): string {
   return sessionId.replaceAll(/[^\w.-]+/g, "_");
 }
 
-function normalizeRelativePath(path: string): string {
-  return path.replaceAll("\\", "/");
-}
-
 function shouldTrackMutationTool(toolName: string): boolean {
   const normalized = toolName.trim().toLowerCase();
   if (!normalized) return false;
   return isMutationTool(normalized) || EXTRA_MUTATION_TOOLS.has(normalized);
-}
-
-function collectPathCandidates(value: unknown, keyHint?: string, output: string[] = []): string[] {
-  if (typeof value === "string") {
-    if (keyHint && CANDIDATE_PATH_KEY.test(keyHint)) {
-      output.push(value);
-    }
-    return output;
-  }
-
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      collectPathCandidates(item, keyHint, output);
-    }
-    return output;
-  }
-
-  if (!value || typeof value !== "object") {
-    return output;
-  }
-
-  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    collectPathCandidates(child, key, output);
-  }
-  return output;
-}
-
-function resolveFilePath(
-  cwd: string,
-  candidate: string,
-): { absolutePath: string; relativePath: string } | undefined {
-  const trimmed = candidate.trim();
-  if (!trimmed || trimmed.includes("\0")) return undefined;
-
-  const absolutePath = resolve(cwd, trimmed);
-  const rel = relative(cwd, absolutePath);
-  if (!rel || rel === "." || rel.startsWith("..")) {
-    return undefined;
-  }
-  return {
-    absolutePath,
-    relativePath: normalizeRelativePath(rel),
-  };
-}
-
-function resolveWorkspaceRelativePath(
-  cwd: string,
-  candidate: string,
-): { absolutePath: string; relativePath: string } | undefined {
-  const trimmed = candidate.trim();
-  if (!trimmed || trimmed.includes("\0")) return undefined;
-
-  const absolutePath = resolve(cwd, trimmed);
-  const rel = normalizeRelativePath(relative(cwd, absolutePath));
-  if (!rel || rel === "." || rel.startsWith("..")) {
-    return undefined;
-  }
-  return {
-    absolutePath,
-    relativePath: rel,
-  };
 }
 
 function buildPatchSetId(now: number): string {
@@ -192,9 +109,15 @@ export class FileChangeTracker {
     }
 
     const trackedByPath = new Map<string, TrackedFileState>();
-    const candidates = collectPathCandidates(input.args ?? {});
+    const candidates = collectPathCandidates(input.args ?? {}, {
+      keyPattern: /(path|file)/i,
+    });
     for (const candidate of candidates) {
-      const resolvedPath = resolveFilePath(this.cwd, candidate);
+      const resolvedPath = resolveWorkspacePath({
+        candidate,
+        cwd: this.cwd,
+        workspaceRoot: this.cwd,
+      });
       if (!resolvedPath) continue;
       if (trackedByPath.has(resolvedPath.absolutePath)) continue;
       const snapshot = this.captureFileSnapshot(
@@ -307,7 +230,11 @@ export class FileChangeTracker {
     const artifactBuffers = new Map<string, Buffer>();
 
     for (const change of input.patchSet.changes) {
-      const resolvedPath = resolveWorkspaceRelativePath(this.cwd, change.path);
+      const resolvedPath = resolveWorkspacePath({
+        candidate: change.path,
+        cwd: this.cwd,
+        workspaceRoot: this.cwd,
+      });
       if (!resolvedPath) {
         return {
           ok: false,
@@ -355,7 +282,11 @@ export class FileChangeTracker {
       if (change.action !== "delete") {
         const artifactRef = change.artifactRef?.trim();
         const artifactPath = artifactRef
-          ? resolveWorkspaceRelativePath(this.cwd, artifactRef)
+          ? resolveWorkspacePath({
+              candidate: artifactRef,
+              cwd: this.cwd,
+              workspaceRoot: this.cwd,
+            })
           : undefined;
         if (!artifactRef || !artifactPath || !existsSync(artifactPath.absolutePath)) {
           return {
@@ -567,16 +498,13 @@ export class FileChangeTracker {
       if (!entry.isDirectory()) continue;
       const historyFile = resolve(this.snapshotsDir, entry.name, PATCH_HISTORY_FILE);
       if (!existsSync(historyFile)) continue;
-      try {
-        const parsed = JSON.parse(readFileSync(historyFile, "utf8")) as PersistedPatchHistory;
-        if (!parsed || parsed.version !== 1 || typeof parsed.sessionId !== "string") continue;
-        const updatedAt =
-          typeof parsed.updatedAt === "number" ? parsed.updatedAt : statSync(historyFile).mtimeMs;
-        if ((parsed.patchSets?.length ?? 0) > 0) {
-          candidates.push({ sessionId: parsed.sessionId, updatedAt });
-        }
-      } catch {
+      const parsed = readPersistedPatchHistory(historyFile);
+      if (!parsed) {
         continue;
+      }
+      const updatedAt = parsed.updatedAt || statSync(historyFile).mtimeMs;
+      if (parsed.patchSets.length > 0) {
+        candidates.push({ sessionId: parsed.sessionId, updatedAt });
       }
     }
 
@@ -752,21 +680,15 @@ export class FileChangeTracker {
       return;
     }
 
-    try {
-      const parsed = JSON.parse(readFileSync(historyPath, "utf8")) as PersistedPatchHistory;
-      if (
-        !parsed ||
-        parsed.version !== 1 ||
-        parsed.sessionId !== sessionId ||
-        !Array.isArray(parsed.patchSets)
-      ) {
-        this.historyBySession.set(sessionId, []);
-        return;
-      }
+    const parsed = readPersistedPatchHistory(historyPath);
+    if (!parsed || parsed.sessionId !== sessionId) {
+      this.historyBySession.set(sessionId, []);
+      return;
+    }
 
+    try {
       const history: AppliedMutation[] = [];
       for (const entry of parsed.patchSets) {
-        if (!entry || typeof entry.id !== "string" || !Array.isArray(entry.changes)) continue;
         const changes = entry.changes.map((change) => {
           const absolutePath = resolve(this.cwd, change.path);
           const beforeSnapshotPath = change.beforeSnapshotFile
@@ -774,8 +696,8 @@ export class FileChangeTracker {
             : undefined;
           return {
             absolutePath,
-            relativePath: normalizeRelativePath(change.path),
-            beforeExists: change.beforeExists,
+            relativePath: normalizeWorkspaceRelativePath(change.path),
+            beforeExists: change.beforeExists ?? false,
             beforeHash: change.beforeHash,
             beforeSnapshotPath,
             action: change.action,
