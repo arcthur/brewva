@@ -157,6 +157,8 @@ The authoritative registry lives in
 - `subagent_completed`
 - `subagent_failed`
 - `subagent_cancelled`
+- `subagent_outcome_parse_failed`
+- `subagent_delivery_surfaced`
 - `worker_results_applied`
 - `worker_results_apply_failed`
 
@@ -182,6 +184,10 @@ events and session state:
   - `workflow.iteration_guard`
 - `subagent_*`
   - delegated patch-worker lifecycle signals
+- `subagent_outcome_parse_failed`
+  - typed outcome extraction fell back to prose-only handling
+- `subagent_delivery_surfaced`
+  - replayable background delegation outcome became visible to the parent turn
 - `worker_results_applied` / `worker_results_apply_failed`
   - parent-controlled worker adoption outcomes
 
@@ -222,6 +228,8 @@ The audit-retained core includes:
 - `subagent_completed`
 - `subagent_failed`
 - `subagent_cancelled`
+- `subagent_outcome_parse_failed`
+- `subagent_delivery_surfaced`
 - `worker_results_applied`
 - `worker_results_apply_failed`
 - `skill_activated`
@@ -262,10 +270,19 @@ properties such as:
 - `kind`
 - `boundary`
 - `deliveryMode`
+- `deliveryHandoffState`
+- `deliveryReadyAt`
+- `deliverySurfacedAt`
 - `supplementalAppended`
 
 `worker_results_applied` and `worker_results_apply_failed` record the
 parent-controlled adoption outcome for child-produced patches.
+
+`subagent_outcome_parse_failed` records when typed-outcome extraction misses and
+the delegated run falls back to prose-only summary handling.
+
+`subagent_delivery_surfaced` records when a background delegation outcome is
+surfaced into a later parent turn and its replayable handoff state advances.
 
 Iteration fact events record objective optimization evidence only:
 

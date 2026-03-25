@@ -265,6 +265,7 @@ Read-only verification semantics:
 - `recordDelegationRun(sessionId, record)`
 - `getDelegationRun(sessionId, runId)`
 - `listDelegationRuns(sessionId, query?)`
+- `listPendingDelegationOutcomes(sessionId, query?)`
 - `clearState(sessionId)`
 - `onClearState(listener)`
 - `getHydration(sessionId)`
@@ -274,6 +275,14 @@ Worker-result adoption semantics:
 - `mergeWorkerResults(...)` is read-only and reports `empty | conflicts | merged`
 - `applyMergedWorkerResults(...)` mutates the parent workspace only after the
   parent explicitly adopts the merged result
+
+Delegation session semantics:
+
+- `listDelegationRuns(...)` exposes the full replay-hydrated child run ledger
+- `listPendingDelegationOutcomes(...)` is the stable derived handoff view for
+  late background outcomes that still await a parent turn
+- pending delegation outcomes remain explicit inspection state; they do not
+  auto-inject patches, auto-complete skills, or widen child authority
 
 ## Execution Model
 

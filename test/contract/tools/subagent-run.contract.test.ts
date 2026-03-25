@@ -277,6 +277,80 @@ describe("subagent_run tool", () => {
     });
   });
 
+  test("accepts executionShape-only requests and forwards completion predicates", async () => {
+    let capturedRequest: SubagentRunRequest | undefined;
+    const tool = createSubagentRunTool({
+      runtime: {
+        orchestration: {
+          subagents: {
+            run: async (input: { fromSessionId: string; request: SubagentRunRequest }) => {
+              capturedRequest = input.request;
+              return {
+                ok: true,
+                mode: input.request.mode,
+                profile: input.request.profile ?? input.request.executionShape?.resultMode,
+                outcomes: [
+                  {
+                    ok: true,
+                    runId: "run-derived-profile",
+                    profile: input.request.profile ?? "verification",
+                    kind: "verification" as const,
+                    status: "ok" as const,
+                    summary: "verification summary",
+                    metrics: { durationMs: 8 },
+                    evidenceRefs: [],
+                  },
+                ],
+              };
+            },
+          },
+        },
+      } as any,
+    });
+
+    const result = await tool.execute(
+      "tc-subagent-derived-shape",
+      {
+        executionShape: {
+          resultMode: "verification",
+          boundary: "safe",
+          model: "openai/gpt-5.4-mini",
+          managedToolMode: "direct",
+        },
+        objective: "verify the delegated runtime checks",
+        completionPredicate: {
+          source: "events",
+          type: "worker_results_applied",
+          match: {
+            workerId: "worker-12",
+          },
+          policy: "cancel_when_true",
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext("session-derived-shape"),
+    );
+
+    expect(capturedRequest?.profile).toBeUndefined();
+    expect(capturedRequest?.executionShape).toEqual({
+      resultMode: "verification",
+      boundary: "safe",
+      model: "openai/gpt-5.4-mini",
+      managedToolMode: "direct",
+    });
+    expect(capturedRequest?.packet?.completionPredicate).toEqual({
+      source: "events",
+      type: "worker_results_applied",
+      match: {
+        workerId: "worker-12",
+      },
+      policy: "cancel_when_true",
+    });
+    expect(extractText(result)).toContain("profile=verification");
+    expect((result.details as { ok?: boolean } | undefined)?.ok).toBe(true);
+  });
+
   test("can start delegated work in background mode", async () => {
     const tool = createSubagentRunTool({
       runtime: {

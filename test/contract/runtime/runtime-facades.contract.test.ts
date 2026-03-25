@@ -127,6 +127,56 @@ describe("runtime facade coverage", () => {
     expect(runtime.session.listDelegationRuns(sessionId)).toHaveLength(1);
   });
 
+  test("session facade exposes pending delegation outcomes as a derived handoff view", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createTestWorkspace("runtime-facade-pending-delegation-outcomes"),
+    });
+    const sessionId = "runtime-facade-pending-delegation-outcomes-1";
+
+    runtime.session.recordDelegationRun(sessionId, {
+      runId: "delegation-pending-outcome-1",
+      profile: "review",
+      parentSessionId: sessionId,
+      status: "completed",
+      createdAt: 10,
+      updatedAt: 15,
+      kind: "review",
+      summary: "Completed review outcome awaiting parent turn.",
+      delivery: {
+        mode: "supplemental",
+        handoffState: "pending_parent_turn",
+        readyAt: 15,
+        updatedAt: 15,
+      },
+    });
+    runtime.session.recordDelegationRun(sessionId, {
+      runId: "delegation-surfaced-outcome-1",
+      profile: "review",
+      parentSessionId: sessionId,
+      status: "completed",
+      createdAt: 11,
+      updatedAt: 16,
+      kind: "review",
+      summary: "Already surfaced outcome.",
+      delivery: {
+        mode: "supplemental",
+        handoffState: "surfaced",
+        readyAt: 14,
+        surfacedAt: 16,
+        updatedAt: 16,
+      },
+    });
+
+    expect(runtime.session.listPendingDelegationOutcomes(sessionId)).toMatchObject([
+      {
+        runId: "delegation-pending-outcome-1",
+        delivery: {
+          handoffState: "pending_parent_turn",
+        },
+      },
+    ]);
+  });
+
   test("delegation run state rehydrates from lifecycle events and merge receipts", () => {
     const workspace = createTestWorkspace("runtime-facade-delegation-hydration");
     const sessionId = "runtime-facade-delegation-hydration-1";
@@ -249,6 +299,42 @@ describe("runtime facade coverage", () => {
         updatedAt: 261,
       },
     });
+  });
+
+  test("pending delegation outcomes rehydrate through the public session facade after restart", () => {
+    const workspace = createTestWorkspace("runtime-facade-pending-delegation-outcome-hydration");
+    const sessionId = "runtime-facade-pending-delegation-outcome-hydration-1";
+    const writer = new BrewvaRuntime({ cwd: workspace });
+
+    writer.events.record({
+      sessionId,
+      type: "subagent_completed",
+      timestamp: 300,
+      payload: {
+        runId: "delegation-pending-outcome-hydrated-1",
+        profile: "review",
+        kind: "review",
+        boundary: "safe",
+        status: "completed",
+        summary: "Recovered background review outcome.",
+        deliveryMode: "supplemental",
+        deliveryHandoffState: "pending_parent_turn",
+        deliveryReadyAt: 300,
+        deliveryUpdatedAt: 300,
+      },
+    });
+
+    const reader = new BrewvaRuntime({ cwd: workspace });
+    expect(reader.session.listPendingDelegationOutcomes(sessionId)).toMatchObject([
+      {
+        runId: "delegation-pending-outcome-hydrated-1",
+        status: "completed",
+        delivery: {
+          handoffState: "pending_parent_turn",
+          readyAt: 300,
+        },
+      },
+    ]);
   });
 
   test("events.toStructured mirrors structured queries through the public events facade", () => {

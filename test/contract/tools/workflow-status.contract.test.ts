@@ -156,6 +156,68 @@ describe("workflow_status contract", () => {
     ).toBe("worker-1");
   });
 
+  test("reports pending delegation outcome handoffs alongside workflow posture", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-handoff-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "workflow-status-handoff";
+
+    runtime.session.recordDelegationRun(sessionId, {
+      runId: "delegation-handoff-1",
+      profile: "review",
+      parentSessionId: sessionId,
+      status: "completed",
+      createdAt: 1,
+      updatedAt: 2,
+      kind: "review",
+      summary: "Review completed and is waiting for parent surfacing.",
+      delivery: {
+        mode: "text_only",
+        handoffState: "pending_parent_turn",
+        readyAt: 2,
+        updatedAt: 2,
+      },
+    });
+
+    const tool = createWorkflowStatusTool({ runtime });
+    const result = await tool.execute(
+      "tc-workflow-status-handoff",
+      {},
+      undefined,
+      undefined,
+      mergeContext(sessionId, { cwd: workspace }),
+    );
+
+    const text = extractTextContent(result);
+    expect(text).toContain("pending_delegation_outcomes: 1");
+    expect(text).toContain("pending_delegation_outcome_runs:");
+    expect(text).toContain("- review/delegation-handoff-1: completed");
+    expect(
+      (
+        result.details as
+          | {
+              pendingDelegationOutcomes?: Array<{
+                runId: string;
+                profile: string;
+                label?: string;
+                status: string;
+                summary?: string;
+                handoffState?: string | null;
+              }>;
+            }
+          | undefined
+      )?.pendingDelegationOutcomes,
+    ).toEqual([
+      {
+        runId: "delegation-handoff-1",
+        profile: "review",
+        label: undefined,
+        status: "completed",
+        summary: "Review completed and is waiting for parent surfacing.",
+        handoffState: "pending_parent_turn",
+      },
+    ]);
+  });
+
   test("surfaces expanded workflow stages when specialist artifacts are present", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-expanded-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });

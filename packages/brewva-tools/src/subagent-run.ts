@@ -4,7 +4,9 @@ import type {
   BrewvaToolOptions,
   DelegationPacket,
   DelegationTaskPacket,
+  DelegationCompletionPredicate,
   SubagentDelegationMode,
+  SubagentExecutionShape,
   SubagentReturnMode,
   SubagentOutcome,
   SubagentRunRequest,
@@ -53,6 +55,22 @@ const WaitModeSchema = buildStringEnumSchema(
   },
 );
 
+const ResultModeSchema = buildStringEnumSchema(
+  ["exploration", "review", "verification", "patch"] as const,
+  {},
+  {
+    guidance: "Choose the delegated result contract the child must satisfy.",
+  },
+);
+
+const ManagedToolModeSchema = buildStringEnumSchema(
+  ["direct", "extension"] as const,
+  {},
+  {
+    guidance: "Direct is default. Extension may only narrow within the chosen preset.",
+  },
+);
+
 const ContextRefSchema = Type.Object({
   kind: Type.Union(
     [
@@ -63,11 +81,14 @@ const ContextRefSchema = Type.Object({
       Type.Literal("workspace_span"),
       Type.Literal("task"),
       Type.Literal("truth"),
+      Type.Literal("tool_result"),
     ],
     { description: "Reference kinds made available to the delegated run." },
   ),
   locator: Type.String({ minLength: 1, maxLength: 1000 }),
   summary: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
+  sourceSessionId: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
+  hash: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
 });
 
 const ExecutionHintsSchema = Type.Object({
@@ -81,6 +102,44 @@ const ExecutionHintsSchema = Type.Object({
     Type.Array(Type.String({ minLength: 1, maxLength: 200 }), { maxItems: 24 }),
   ),
 });
+
+const ExecutionShapeSchema = Type.Object({
+  resultMode: Type.Optional(ResultModeSchema),
+  boundary: Type.Optional(BoundarySchema),
+  model: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
+  managedToolMode: Type.Optional(ManagedToolModeSchema),
+});
+
+const CompletionPredicateSchema = Type.Union([
+  Type.Object({
+    source: Type.Literal("events"),
+    type: Type.String({ minLength: 1, maxLength: 200 }),
+    match: Type.Optional(
+      Type.Record(
+        Type.String({ minLength: 1, maxLength: 200 }),
+        Type.Union([
+          Type.String({ minLength: 1, maxLength: 500 }),
+          Type.Number(),
+          Type.Boolean(),
+          Type.Null(),
+        ]),
+      ),
+    ),
+    policy: Type.Literal("cancel_when_true"),
+  }),
+  Type.Object({
+    source: Type.Literal("worker_results"),
+    workerId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+    status: Type.Optional(
+      buildStringEnumSchema(
+        ["ok", "error", "skipped"] as const,
+        {},
+        { guidance: "Worker result status to match." },
+      ),
+    ),
+    policy: Type.Literal("cancel_when_true"),
+  }),
+]);
 
 const PacketFields = {
   objective: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
@@ -110,6 +169,7 @@ const PacketFields = {
       maxTurnTokens: Type.Optional(Type.Integer({ minimum: 1 })),
     }),
   ),
+  completionPredicate: Type.Optional(CompletionPredicateSchema),
   effectCeiling: Type.Optional(
     Type.Object({
       boundary: Type.Optional(BoundarySchema),
@@ -129,6 +189,7 @@ const TaskPacketSchema = Type.Object({
   executionHints: PacketFields.executionHints,
   contextRefs: PacketFields.contextRefs,
   contextBudget: PacketFields.contextBudget,
+  completionPredicate: PacketFields.completionPredicate,
   effectCeiling: PacketFields.effectCeiling,
 });
 
@@ -144,6 +205,7 @@ function hasSinglePacketInput(params: Record<string, unknown>): boolean {
     typeof params.executionHints === "object" ||
     Array.isArray(params.contextRefs) ||
     typeof params.contextBudget === "object" ||
+    typeof params.completionPredicate === "object" ||
     typeof params.effectCeiling === "object"
   );
 }
@@ -159,6 +221,7 @@ function toPacket(packet: {
   executionHints?: unknown;
   contextRefs?: unknown;
   contextBudget?: unknown;
+  completionPredicate?: unknown;
   effectCeiling?: unknown;
 }): DelegationPacket | undefined {
   const objective = typeof packet.objective === "string" ? packet.objective.trim() : "";
@@ -215,8 +278,95 @@ function toPacket(packet: {
                 : undefined,
           }
         : undefined,
+    completionPredicate: toCompletionPredicate(packet.completionPredicate),
     effectCeiling: boundary ? { boundary } : undefined,
   };
+}
+
+function toExecutionShape(value: unknown): SubagentExecutionShape | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const resultMode =
+    (value as { resultMode?: unknown }).resultMode === "exploration" ||
+    (value as { resultMode?: unknown }).resultMode === "review" ||
+    (value as { resultMode?: unknown }).resultMode === "verification" ||
+    (value as { resultMode?: unknown }).resultMode === "patch"
+      ? ((value as { resultMode: SubagentExecutionShape["resultMode"] }).resultMode ?? undefined)
+      : undefined;
+  const boundary = normalizeBoundary((value as { boundary?: unknown }).boundary);
+  const model =
+    typeof (value as { model?: unknown }).model === "string"
+      ? (value as { model: string }).model
+      : undefined;
+  const managedToolMode =
+    (value as { managedToolMode?: unknown }).managedToolMode === "direct" ||
+    (value as { managedToolMode?: unknown }).managedToolMode === "extension"
+      ? ((value as { managedToolMode: SubagentExecutionShape["managedToolMode"] })
+          .managedToolMode ?? undefined)
+      : undefined;
+  if (!resultMode && !boundary && !model && !managedToolMode) {
+    return undefined;
+  }
+  return {
+    resultMode,
+    boundary,
+    model,
+    managedToolMode,
+  };
+}
+
+function toCompletionPredicate(value: unknown): DelegationCompletionPredicate | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  if ((value as { source?: unknown }).source === "events") {
+    const type =
+      typeof (value as { type?: unknown }).type === "string"
+        ? (value as { type: string }).type
+        : undefined;
+    if (!type) {
+      return undefined;
+    }
+    const match =
+      typeof (value as { match?: unknown }).match === "object" &&
+      (value as { match?: unknown }).match !== null &&
+      !Array.isArray((value as { match?: unknown }).match)
+        ? (Object.fromEntries(
+            Object.entries((value as { match: Record<string, unknown> }).match).filter(
+              ([, entry]) =>
+                typeof entry === "string" ||
+                typeof entry === "number" ||
+                typeof entry === "boolean" ||
+                entry === null,
+            ),
+          ) as Record<string, string | number | boolean | null>)
+        : undefined;
+    return {
+      source: "events",
+      type,
+      match,
+      policy: "cancel_when_true",
+    };
+  }
+  if ((value as { source?: unknown }).source === "worker_results") {
+    const status =
+      (value as { status?: unknown }).status === "ok" ||
+      (value as { status?: unknown }).status === "error" ||
+      (value as { status?: unknown }).status === "skipped"
+        ? ((value as { status: "ok" | "error" | "skipped" }).status ?? undefined)
+        : undefined;
+    return {
+      source: "worker_results",
+      workerId:
+        typeof (value as { workerId?: unknown }).workerId === "string"
+          ? (value as { workerId: string }).workerId
+          : undefined,
+      status,
+      policy: "cancel_when_true",
+    };
+  }
+  return undefined;
 }
 
 function normalizeBoundary(value: unknown): SubagentExecutionBoundary | undefined {
@@ -416,14 +566,16 @@ function buildRunRequestFromParams(input: {
     typeof input.params.profile === "string" && input.params.profile.trim().length > 0
       ? input.params.profile
       : undefined;
-  if (!profile) {
+  const executionShape = toExecutionShape(input.params.executionShape);
+  if (!profile && !executionShape?.resultMode) {
     return {
       ok: false,
-      message: "Error: profile is required.",
+      message: "Error: profile or executionShape.resultMode is required.",
     };
   }
   const request: SubagentRunRequest = {
     profile,
+    executionShape,
     mode: input.mode,
     timeoutMs: typeof input.params.timeoutMs === "number" ? input.params.timeoutMs : undefined,
   };
@@ -581,7 +733,8 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
       "Keep objectives specific, pass only the context references the child needs, and avoid broad parent-context dumps.",
     ],
     parameters: Type.Object({
-      profile: Type.String({ minLength: 1, maxLength: 200 }),
+      profile: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+      executionShape: Type.Optional(ExecutionShapeSchema),
       mode: Type.Optional(ModeSchema),
       objective: PacketFields.objective,
       deliverable: PacketFields.deliverable,
@@ -593,6 +746,7 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
       executionHints: PacketFields.executionHints,
       contextRefs: PacketFields.contextRefs,
       contextBudget: PacketFields.contextBudget,
+      completionPredicate: PacketFields.completionPredicate,
       effectCeiling: PacketFields.effectCeiling,
       waitMode: Type.Optional(WaitModeSchema),
       timeoutMs: Type.Optional(Type.Integer({ minimum: 1 })),
@@ -627,7 +781,10 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
       return executeSubagentToolWithRequest({
         options,
         sessionId,
-        profile: params.profile,
+        profile:
+          builtRequest.request.profile ??
+          builtRequest.request.executionShape?.resultMode ??
+          "derived",
         mode,
         waitMode,
         returnMode,
@@ -656,7 +813,8 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
       "Prefer read-only profiles unless the workflow is explicitly ready to inspect and merge isolated patch results.",
     ],
     parameters: Type.Object({
-      profile: Type.String({ minLength: 1, maxLength: 200 }),
+      profile: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+      executionShape: Type.Optional(ExecutionShapeSchema),
       objective: PacketFields.objective,
       deliverable: PacketFields.deliverable,
       constraints: PacketFields.constraints,
@@ -667,6 +825,7 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
       executionHints: PacketFields.executionHints,
       contextRefs: PacketFields.contextRefs,
       contextBudget: PacketFields.contextBudget,
+      completionPredicate: PacketFields.completionPredicate,
       effectCeiling: PacketFields.effectCeiling,
       waitMode: Type.Optional(WaitModeSchema),
       timeoutMs: Type.Optional(Type.Integer({ minimum: 1 })),
@@ -700,7 +859,10 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
       return executeSubagentToolWithRequest({
         options,
         sessionId,
-        profile: params.profile,
+        profile:
+          builtRequest.request.profile ??
+          builtRequest.request.executionShape?.resultMode ??
+          "derived",
         mode: "parallel",
         waitMode,
         returnMode,

@@ -338,7 +338,16 @@ Current packet contract:
 - `executionHints?`
 - `contextRefs?`
 - `contextBudget?`
+- `completionPredicate?`
 - `effectCeiling.boundary?` (`safe` | `effectful`)
+
+Current execution-shape contract:
+
+- `profile?`
+- `executionShape.resultMode?` (`exploration` | `review` | `verification` | `patch`)
+- `executionShape.boundary?` (`safe` | `effectful`)
+- `executionShape.model?`
+- `executionShape.managedToolMode?` (`direct` | `extension`)
 
 Current delivery contract:
 
@@ -356,14 +365,25 @@ Current mode contract:
 
 Semantics:
 
-- built-in delegated read-only postures are `explore`, `plan`, `review`, and
-  `general`; `patch-worker` remains the isolated write-capable profile
-- removed legacy built-ins such as `researcher`, `reviewer`, and `verifier`
-  now fail fast instead of aliasing to the canonical names
+- built-in profiles remain stable presets: `explore`, `plan`, `review`,
+  `general`, `verification`, and `patch-worker`
+- profiles are compatibility presets, not the primary long-term delegation
+  contract; `executionShape` is the thinner runtime-facing contract
+- when both `profile` and `executionShape` are supplied, execution shape may
+  only narrow the resolved preset
+- when `profile` is omitted, the gateway resolves a default preset from
+  `executionShape.resultMode`
 - `safe` is the default execution boundary
 - `effectful` is reserved for isolated write-capable child runners
+- `contextRefs` are typed refs and may include `sourceSessionId` and advisory
+  `hash`
+- successful child outcomes may include typed `data` alongside `summary`,
+  `assistantText`, `evidenceRefs`, and `artifactRefs`
+- typed outcome extraction currently uses one sentinel-wrapped JSON block; if
+  extraction fails, the outcome degrades gracefully to text-only fields
 - `supplemental` appends same-turn return context to the parent session
-- there is no proposal-backed return mode
+- late detached outcomes surface through replay-visible pending delegation
+  outcome state instead of a proposal-backed return mode
 
 `task_record_acceptance` is an operator-visible closure write. It only succeeds
 when the active `TaskSpec` explicitly requires acceptance, and it does not
@@ -377,6 +397,8 @@ These tools inspect or stop existing delegated runs.
 
 - `live?`
 - `cancelable?`
+- `delivery.handoffState?`
+- `artifactRefs?`
 
 `subagent_cancel` records explicit cancellation intent. It does not erase run
 history.
@@ -434,7 +456,8 @@ Derived workflow inspection surface.
 - implementation may be `pending` when delegated patch results still await
   parent merge/apply
 - reports blockers such as stale review/QA/verification/ship evidence, task
-  blockers, and pending worker results
+  blockers, pending worker results, and pending delegation outcomes awaiting
+  a parent turn
 - optionally includes recent derived workflow artifacts
 
 This tool is advisory. It does not create a runtime-owned chain planner and it

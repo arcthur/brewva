@@ -75,6 +75,7 @@ This repository uses a layered documentation system:
 - Roadmap notes: `docs/research/roadmap-notes.md`
 - Effect governance RFC: `docs/research/rfc-effect-governance-and-contract-vnext.md`
 - Capability compression RFC: `docs/research/rfc-capability-compression-and-output-distillation.md`
+- Delegation protocol thinning RFC: `docs/research/rfc-delegation-protocol-thinning-and-replayable-outcomes.md`
 - Subagent delegation RFC: `docs/research/rfc-subagent-delegation-and-isolated-execution.md`
 - Pre-parse normalization RFC: `docs/research/rfc-preparse-normalization-model-capability-and-live-audit-split.md`
 - Workflow artifacts RFC: `docs/research/rfc-workflow-artifacts-and-posture-control-plane.md`

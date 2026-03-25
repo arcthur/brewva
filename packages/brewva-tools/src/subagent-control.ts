@@ -72,6 +72,7 @@ function summarizeRun(
     const delivery = [
       `mode=${run.delivery.mode}`,
       run.delivery.scopeId ? `scope=${run.delivery.scopeId}` : null,
+      run.delivery.handoffState ? `handoff=${run.delivery.handoffState}` : null,
       run.delivery.supplementalAppended ? "supplemental=yes" : null,
     ].filter(Boolean);
     if (delivery.length > 0) {
@@ -139,6 +140,9 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
                     mode: run.delivery.mode,
                     scopeId: run.delivery.scopeId,
                     label: run.delivery.label,
+                    handoffState: run.delivery.handoffState,
+                    readyAt: run.delivery.readyAt,
+                    surfacedAt: run.delivery.surfacedAt,
                     supplementalAppended: run.delivery.supplementalAppended,
                     updatedAt: run.delivery.updatedAt,
                   }

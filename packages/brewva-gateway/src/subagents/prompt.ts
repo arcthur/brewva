@@ -1,5 +1,6 @@
 import type { DelegationPacket, SubagentContextRef } from "@brewva/brewva-tools";
 import type { HostedSubagentProfile } from "./profiles.js";
+import { buildStructuredOutcomeContract, getCanonicalSubagentPrompt } from "./protocol.js";
 
 const APPROX_CHARS_PER_TOKEN = 4;
 
@@ -18,9 +19,15 @@ function renderContextRefs(
   const lines: string[] = [];
   let consumedTokens = 0;
   for (const ref of refs) {
-    const line = [`- [${ref.kind}] ${ref.locator}`, ref.summary ? ` :: ${ref.summary}` : ""].join(
-      "",
-    );
+    const annotations = [
+      ref.summary ? `summary=${ref.summary}` : null,
+      ref.sourceSessionId ? `sourceSession=${ref.sourceSessionId}` : null,
+      ref.hash ? `hash=${ref.hash}` : null,
+    ].filter(Boolean);
+    const line = [
+      `- [${ref.kind}] ${ref.locator}`,
+      annotations.length > 0 ? ` :: ${annotations.join(" | ")}` : "",
+    ].join("");
     const tokens = estimateTokens(line);
     if (maxInjectionTokens && lines.length > 0 && consumedTokens + tokens > maxInjectionTokens) {
       lines.push("- [truncated] Additional context references omitted to stay within budget.");
@@ -35,7 +42,9 @@ function renderContextRefs(
 export function buildDelegationPrompt(
   profile: HostedSubagentProfile,
   packet: DelegationPacket,
+  promptOverride?: string,
 ): string {
+  const prompt = promptOverride ?? profile.prompt ?? getCanonicalSubagentPrompt(profile.resultMode);
   const lines = [
     "# Delegated Subagent Run",
     "",
@@ -43,7 +52,7 @@ export function buildDelegationPrompt(
     `Description: ${profile.description}`,
     "",
     "## Operating Instructions",
-    profile.prompt,
+    prompt,
     "",
     "## Task",
     `Objective: ${packet.objective}`,
@@ -104,6 +113,11 @@ export function buildDelegationPrompt(
     "- Stay within the delegated scope. Do not broaden the task on your own.",
     "- Base claims on the supplied context references and the workspace evidence you inspect.",
     "- Return a concise, concrete answer that the parent agent can distill without replaying your full transcript.",
+  );
+  lines.push(
+    "",
+    "## Structured Outcome Contract",
+    ...buildStructuredOutcomeContract(profile.resultMode),
   );
 
   return lines.join("\n");

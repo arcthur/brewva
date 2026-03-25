@@ -33,8 +33,9 @@ flowchart TD
 2. Run explicit child work through `subagent_run` or `subagent_fanout`; there is
    no hidden authority escalation or auto-spawn path.
 3. For read-only delegation, return structured outcome data (`summary`,
-   `evidenceRefs`, optional `artifactRefs`) and optionally hand the result back
-   through `appendSupplementalInjection(...)` or a `context_packet` proposal.
+   `evidenceRefs`, optional typed `data`, optional `artifactRefs`) and hand the
+   result back either through same-turn `appendSupplementalInjection(...)` or a
+   replay-visible pending delegation outcome handoff.
 4. For patch-producing delegation, execute in an isolated snapshot workspace and
    persist a `WorkerResult` plus patch artifacts instead of mutating the parent
    workspace directly.
@@ -52,13 +53,20 @@ effort helpers.
 
 - detached child runs persist control files under
   `.orchestrator/subagent-runs/<runId>/`
+- detached runs also persist `delegation-context-manifest.json` so isolated
+  children receive explicit parent-selected evidence context rather than
+  ambient session access
 - `subagent_status` and `subagent_cancel` survive parent runtime restarts
 - hydration rebuilds delegation state from lifecycle events and durable run
   metadata
-- late outcomes may return through `context_packet` when inline same-turn
-  injection is no longer valid
+- `runtime.session.listPendingDelegationOutcomes(...)` is the stable derived
+  handoff view for late detached outcomes
+- hosted turns surface pending late results through a
+  `[CompletedDelegationOutcomes]` context block and mark them with
+  `subagent_delivery_surfaced`
 - derived workflow status treats pending worker results as ship blockers until
-  the parent explicitly merges or applies them
+  the parent explicitly merges or applies them, and also reports pending
+  delegation outcomes awaiting parent attention
 - these signals remain explicit inspection state; they do not auto-apply child
   work or force the parent into a stage machine
 
@@ -71,12 +79,17 @@ Note: use `runtime.tools.acquireParallelSlot(...)` to apply per-skill
   `packages/brewva-gateway/src/subagents/orchestrator.ts`
 - Detached background controller:
   `packages/brewva-gateway/src/subagents/background-controller.ts`
+- Detached run protocol and context manifest:
+  `packages/brewva-gateway/src/subagents/background-protocol.ts`
 - Isolated workspace capture:
   `packages/brewva-gateway/src/subagents/workspace.ts`
 - Runtime parallel and merge state:
   `packages/brewva-runtime/src/services/parallel.ts`
-- Workflow status derivation:
-  `packages/brewva-runtime/src/workflow/derivation.ts`
+- Parent-turn handoff surfacing:
+  `packages/brewva-gateway/src/runtime-plugins/context-composer.ts`,
+  `packages/brewva-gateway/src/runtime-plugins/context-transform.ts`
+- Workflow status inspection:
+  `packages/brewva-tools/src/workflow-status.ts`
 - Session hydration fold:
   `packages/brewva-runtime/src/services/session-hydration-fold-delegation.ts`
 - Parent-side tool surface:

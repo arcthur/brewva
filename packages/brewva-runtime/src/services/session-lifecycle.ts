@@ -14,6 +14,7 @@ import type {
   BrewvaEventRecord,
   DelegationRunQuery,
   DelegationRunRecord,
+  PendingDelegationOutcomeQuery,
   SessionHydrationIssue,
   SessionHydrationState,
 } from "../types.js";
@@ -132,6 +133,9 @@ export class SessionLifecycleService {
             mode: record.delivery.mode,
             scopeId: record.delivery.scopeId,
             label: record.delivery.label,
+            handoffState: record.delivery.handoffState,
+            readyAt: record.delivery.readyAt,
+            surfacedAt: record.delivery.surfacedAt,
             supplementalAppended: record.delivery.supplementalAppended,
             updatedAt: record.delivery.updatedAt,
           }
@@ -235,6 +239,18 @@ export class SessionLifecycleService {
       return runs.slice(0, Math.trunc(query.limit));
     }
     return runs;
+  }
+
+  listPendingDelegationOutcomes(
+    sessionId: string,
+    query: PendingDelegationOutcomeQuery = {},
+  ): DelegationRunRecord[] {
+    const runs = this.listDelegationRuns(sessionId, {
+      statuses: ["completed", "failed", "timeout", "cancelled"],
+      includeTerminal: true,
+      limit: query.limit,
+    });
+    return runs.filter((record) => record.delivery?.handoffState === "pending_parent_turn");
   }
 
   onClearState(listener: (sessionId: string) => void): () => void {

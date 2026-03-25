@@ -30,6 +30,12 @@ function createComposerRuntime(
   entriesSinceAnchor: number,
   options: {
     pendingDelegations?: Array<{ runId: string; profile: string; status: "pending" | "running" }>;
+    pendingDelegationOutcomes?: Array<{
+      runId: string;
+      profile: string;
+      status: "completed" | "failed" | "timeout" | "cancelled";
+      summary?: string;
+    }>;
   } = {},
 ): ContextComposerInput["runtime"] {
   return {
@@ -44,15 +50,40 @@ function createComposerRuntime(
       query: () => [],
     },
     session: {
-      listDelegationRuns: () =>
-        (options.pendingDelegations ?? []).map((run, index) => ({
-          runId: run.runId,
-          profile: run.profile,
-          parentSessionId: "compose-session",
-          status: run.status,
-          createdAt: index + 1,
-          updatedAt: index + 1,
-        })),
+      listDelegationRuns: (_sessionId, query) => {
+        const records = [
+          ...(options.pendingDelegations ?? []).map((run, index) => ({
+            runId: run.runId,
+            profile: run.profile,
+            parentSessionId: "compose-session",
+            status: run.status,
+            createdAt: index + 1,
+            updatedAt: index + 1,
+          })),
+          ...(options.pendingDelegationOutcomes ?? []).map((run, index) => ({
+            runId: run.runId,
+            profile: run.profile,
+            parentSessionId: "compose-session",
+            status: run.status,
+            createdAt: index + 11,
+            updatedAt: index + 11,
+            summary: run.summary,
+            delivery: {
+              mode: "text_only" as const,
+              handoffState: "pending_parent_turn" as const,
+              updatedAt: index + 11,
+              readyAt: index + 11,
+            },
+          })),
+        ];
+        const filtered =
+          query?.statuses && query.statuses.length > 0
+            ? records.filter((run) =>
+                (query.statuses as Array<string | undefined>).includes(run.status),
+              )
+            : records;
+        return filtered.slice(0, query?.limit ?? filtered.length);
+      },
     },
   } as ContextComposerInput["runtime"];
 }
@@ -287,6 +318,51 @@ describe("context composer", () => {
     expect(result.content).toContain("count: 2");
     expect(result.content).toContain("explore/run-c:running");
     expect(result.content).toContain("patch-worker/run-d:pending");
+  });
+
+  test("surfaces completed delegation outcomes for the next parent turn", () => {
+    const result = composeContextBlocks({
+      runtime: createComposerRuntime("low", 1, {
+        pendingDelegationOutcomes: [
+          {
+            runId: "run-outcome-a",
+            profile: "review",
+            status: "completed",
+            summary: "Review completed with one medium finding.",
+          },
+        ],
+      }),
+      sessionId: "compose-completed-outcomes",
+      gateStatus: {
+        required: false,
+        reason: null,
+        pressure: {
+          level: "low",
+          usageRatio: 0.18,
+          hardLimitRatio: 0.98,
+          compactionThresholdRatio: 0.8,
+        },
+        recentCompaction: false,
+        lastCompactionTurn: null,
+        turnsSinceCompaction: 1,
+        windowTurns: 4,
+      },
+      pendingCompactionReason: null,
+      capabilityView: buildCapabilityView({
+        prompt: "continue",
+        allTools: [],
+        activeToolNames: [],
+      }),
+      injectionAccepted: false,
+      admittedEntries: [],
+    });
+
+    expect(result.content).toContain("[CompletedDelegationOutcomes]");
+    expect(result.content).toContain("count: 1");
+    expect(result.content).toContain(
+      "- review/run-outcome-a: completed :: Review completed with one medium finding.",
+    );
+    expect(result.surfacedDelegationRunIds).toEqual(["run-outcome-a"]);
   });
 
   test("caps governance-heavy injections before they crowd out narrative blocks", () => {

@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { relative } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { DelegationRunRecord, SkillRoutingScope } from "@brewva/brewva-runtime";
 import type {
@@ -12,6 +13,7 @@ import {
   readDetachedSubagentCancelRequest,
   removeDetachedSubagentCancelRequest,
   removeDetachedSubagentLiveState,
+  resolveDetachedSubagentOutcomePath,
   type DetachedSubagentRunSpec,
   writeDetachedSubagentLiveState,
   writeDetachedSubagentOutcome,
@@ -26,17 +28,34 @@ import {
   aggregateChildCost,
   buildPatchArtifactRefs,
   buildWorkerResult,
-  resolveBuiltinToolNamesForRun,
-  resolveManagedToolNamesForRun,
-  resolveRequestedBoundary,
+  resolveDelegationExecutionPlan,
   resolveRunSummary,
   sanitizeFragment,
 } from "./shared.js";
 import {
+  extractStructuredOutcomeData,
+  summarizeStructuredOutcomeData,
+} from "./structured-outcome.js";
+import {
   capturePatchSetFromIsolatedWorkspace,
+  copyDelegationContextManifestToIsolatedWorkspace,
   createIsolatedWorkspace,
   type IsolatedWorkspaceHandle,
 } from "./workspace.js";
+
+function normalizeRelativePath(path: string): string {
+  return path.replaceAll("\\", "/");
+}
+
+function buildOutcomeArtifactRef(workspaceRoot: string, runId: string): SubagentOutcomeArtifactRef {
+  return {
+    kind: "delegation_outcome",
+    path: normalizeRelativePath(
+      relative(workspaceRoot, resolveDetachedSubagentOutcomePath(workspaceRoot, runId)),
+    ),
+    summary: `Detached delegation outcome for ${runId}`,
+  };
+}
 
 function buildLifecyclePayload(record: DelegationRunRecord): Record<string, unknown> {
   return {
@@ -56,6 +75,9 @@ function buildLifecyclePayload(record: DelegationRunRecord): Record<string, unkn
     deliveryMode: record.delivery?.mode ?? null,
     deliveryScopeId: record.delivery?.scopeId ?? null,
     deliveryLabel: record.delivery?.label ?? null,
+    deliveryHandoffState: record.delivery?.handoffState ?? null,
+    deliveryReadyAt: record.delivery?.readyAt ?? null,
+    deliverySurfacedAt: record.delivery?.surfacedAt ?? null,
     supplementalAppended: record.delivery?.supplementalAppended ?? null,
     deliveryUpdatedAt: record.delivery?.updatedAt ?? null,
   };
@@ -93,14 +115,13 @@ function applyDurableDelivery(input: {
   outcome: SubagentOutcome;
   delivery: NonNullable<SubagentRunRequest["delivery"]> | undefined;
 }): DelegationRunRecord["delivery"] | undefined {
-  if (!input.delivery) {
-    return undefined;
-  }
   const createdAt = Date.now();
   const deliveryRecord: NonNullable<DelegationRunRecord["delivery"]> = {
-    mode: input.delivery.returnMode,
-    scopeId: input.delivery.returnScopeId,
-    label: input.delivery.returnLabel,
+    mode: input.delivery?.returnMode ?? "text_only",
+    scopeId: input.delivery?.returnScopeId,
+    label: input.delivery?.returnLabel,
+    handoffState: "pending_parent_turn",
+    readyAt: createdAt,
     supplementalAppended: false,
     updatedAt: createdAt,
   };
@@ -111,7 +132,7 @@ async function loadSpec(path: string): Promise<DetachedSubagentRunSpec> {
   const raw = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
   const schema =
     typeof raw.schema === "string" ? raw.schema : "missing_detached_subagent_spec_schema";
-  if (schema !== "brewva.subagent-run-spec.v2") {
+  if (schema !== "brewva.subagent-run-spec.v3") {
     throw new Error(`unsupported_detached_subagent_spec_schema:${schema}`);
   }
   return raw as unknown as DetachedSubagentRunSpec;
@@ -203,7 +224,13 @@ async function main(): Promise<void> {
   let timeoutTriggered = false;
   let childSessionId: string | undefined;
   let profileRecord: HostedSubagentProfile = profile;
-  const requestedBoundary = resolveRequestedBoundary(profileRecord, packet);
+  const executionPlan = resolveDelegationExecutionPlan({
+    runtime: parentRuntime,
+    profile: profileRecord,
+    profileName: spec.profileName,
+    packet,
+    executionShape: spec.executionShape,
+  });
 
   const readCancelReason = (): string | undefined =>
     readDetachedSubagentCancelRequest(spec.workspaceRoot, spec.runId)?.reason;
@@ -218,27 +245,24 @@ async function main(): Promise<void> {
   });
 
   try {
-    if (requestedBoundary === "effectful") {
+    if (executionPlan.boundary === "effectful") {
       isolatedWorkspace = await createIsolatedWorkspace(spec.workspaceRoot);
+      await copyDelegationContextManifestToIsolatedWorkspace({
+        sourceRoot: spec.workspaceRoot,
+        isolatedRoot: isolatedWorkspace.root,
+        runId: spec.runId,
+      });
     }
     childSession = await createHostedSession({
       cwd: isolatedWorkspace?.root ?? spec.workspaceRoot,
       config: spec.config,
       configPath: spec.configPath,
-      model: profileRecord.model,
-      agentId: `subagent-${sanitizeFragment(profileRecord.name) || "worker"}`,
-      managedToolMode: profileRecord.managedToolMode ?? "direct",
+      model: executionPlan.model,
+      agentId: `subagent-${sanitizeFragment(spec.profileName) || "worker"}`,
+      managedToolMode: executionPlan.managedToolMode,
       enableSubagents: false,
-      managedToolNames: resolveManagedToolNamesForRun(
-        parentRuntime,
-        profileRecord,
-        requestedBoundary,
-      ),
-      builtinToolNames: resolveBuiltinToolNamesForRun(
-        parentRuntime,
-        profileRecord,
-        requestedBoundary,
-      ),
+      managedToolNames: executionPlan.managedToolNames,
+      builtinToolNames: executionPlan.builtinToolNames,
       routingScopes: normalizeRoutingScopes(spec.routingScopes),
     });
     childSessionId = childSession.session.sessionManager.getSessionId();
@@ -252,14 +276,14 @@ async function main(): Promise<void> {
         label: spec.label,
         parentSkill: parentRuntime.skills.getActive(spec.parentSessionId)?.name,
         kind: profileRecord.resultMode,
-        boundary: requestedBoundary,
+        boundary: executionPlan.boundary,
         delivery: existing?.delivery,
       }),
       status: "running",
       updatedAt: Date.now(),
       workerSessionId: childSessionId,
       kind: profileRecord.resultMode,
-      boundary: requestedBoundary,
+      boundary: executionPlan.boundary,
     };
     parentRuntime.session.recordDelegationRun(spec.parentSessionId, runningRecord);
     parentRuntime.events.record({
@@ -299,14 +323,36 @@ async function main(): Promise<void> {
       }
     }
 
-    const prompt = buildDelegationPrompt(profileRecord, packet);
+    const prompt = buildDelegationPrompt(profileRecord, packet, executionPlan.prompt);
     const output = await collectSessionPromptOutput(childSession.session, prompt);
     const childCostSummary = childSession.runtime.cost.getSummary(childSessionId);
     aggregateChildCost(parentRuntime, spec.parentSessionId, childCostSummary);
+    const structuredOutcome = extractStructuredOutcomeData({
+      resultMode: profileRecord.resultMode,
+      assistantText: output.assistantText,
+    });
+    if (structuredOutcome.parseError) {
+      parentRuntime.events.record({
+        sessionId: spec.parentSessionId,
+        type: "subagent_outcome_parse_failed",
+        payload: {
+          runId: spec.runId,
+          profile: spec.profileName,
+          label: spec.label ?? null,
+          kind: profileRecord.resultMode,
+          childSessionId,
+          error: structuredOutcome.parseError,
+        },
+      });
+    }
+    const structuredSummary = structuredOutcome.data
+      ? summarizeStructuredOutcomeData(structuredOutcome.data)
+      : undefined;
 
     const summary = resolveRunSummary(
-      output.assistantText,
-      `Delegated ${profileRecord.resultMode} run completed without a final assistant summary.`,
+      structuredOutcome.narrativeText || output.assistantText,
+      structuredSummary ??
+        `Delegated ${profileRecord.resultMode} run completed without a final assistant summary.`,
     );
     const patches = await capturePatchSetFromIsolatedWorkspace({
       sourceRoot: spec.workspaceRoot,
@@ -314,7 +360,7 @@ async function main(): Promise<void> {
       summary,
     });
 
-    if (requestedBoundary === "effectful") {
+    if (executionPlan.boundary === "effectful") {
       parentRuntime.session.recordWorkerResult(
         spec.parentSessionId,
         buildWorkerResult({
@@ -325,6 +371,7 @@ async function main(): Promise<void> {
       );
     }
 
+    const outcomeArtifactRef = buildOutcomeArtifactRef(spec.workspaceRoot, spec.runId);
     const outcome: SubagentOutcome = {
       ok: true,
       runId: spec.runId,
@@ -335,6 +382,7 @@ async function main(): Promise<void> {
       workerSessionId: childSessionId,
       summary,
       assistantText: output.assistantText.trim(),
+      data: structuredOutcome.data,
       metrics: {
         durationMs: Math.max(0, Date.now() - startedAt),
         inputTokens: childCostSummary.inputTokens,
@@ -343,17 +391,19 @@ async function main(): Promise<void> {
         costUsd: childCostSummary.totalCostUsd,
       },
       patches,
-      artifactRefs: buildPatchArtifactRefs(patches),
+      artifactRefs: [...(buildPatchArtifactRefs(patches) ?? []), outcomeArtifactRef],
       evidenceRefs: [
         {
-          sourceType: "event",
+          kind: "event",
           locator: `session:${childSessionId}:agent_end`,
           summary: "Child run completed",
+          sourceSessionId: childSessionId,
         },
         ...output.toolOutputs.slice(0, 8).map((toolOutput) => ({
-          sourceType: "tool_result" as const,
+          kind: "tool_result" as const,
           locator: `session:${childSessionId}:tool:${toolOutput.toolCallId}`,
           summary: `${toolOutput.toolName}:${toolOutput.verdict}`,
+          sourceSessionId: childSessionId,
         })),
       ],
     };
@@ -377,7 +427,7 @@ async function main(): Promise<void> {
       label: spec.label,
       parentSkill: parentRuntime.skills.getActive(spec.parentSessionId)?.name,
       kind: profileRecord.resultMode,
-      boundary: requestedBoundary,
+      boundary: executionPlan.boundary,
       summary,
       artifactRefs: outcome.artifactRefs?.map((ref) => ({ ...ref })),
       totalTokens: childCostSummary.totalTokens,
@@ -398,13 +448,16 @@ async function main(): Promise<void> {
       isolatedRoot: isolatedWorkspace?.root ?? spec.workspaceRoot,
       summary: message,
     }).catch(() => undefined);
-    const artifactRefs = buildPatchArtifactRefs(patches);
+    const artifactRefs = [
+      ...(buildPatchArtifactRefs(patches) ?? []),
+      buildOutcomeArtifactRef(spec.workspaceRoot, spec.runId),
+    ];
     const terminalStatus: DelegationRunRecord["status"] = timeoutTriggered
       ? "timeout"
       : cancellationReason
         ? "cancelled"
         : "failed";
-    if (requestedBoundary === "effectful") {
+    if (executionPlan.boundary === "effectful") {
       parentRuntime.session.recordWorkerResult(
         spec.parentSessionId,
         buildWorkerResult({
@@ -446,7 +499,7 @@ async function main(): Promise<void> {
       label: spec.label,
       parentSkill: parentRuntime.skills.getActive(spec.parentSessionId)?.name,
       kind: profileRecord.resultMode,
-      boundary: requestedBoundary,
+      boundary: executionPlan.boundary,
       summary: message,
       error: message,
       artifactRefs,

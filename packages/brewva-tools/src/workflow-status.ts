@@ -86,6 +86,12 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
       const events = options.runtime.events.query(sessionId);
       const taskState = options.runtime.task.getState(sessionId);
       const pendingWorkerResults = options.runtime.session.listWorkerResults(sessionId);
+      const pendingDelegationOutcomes = options.runtime.session.listPendingDelegationOutcomes(
+        sessionId,
+        {
+          limit: 6,
+        },
+      );
       const snapshot = deriveWorkflowStatus({
         sessionId,
         events,
@@ -128,6 +134,7 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         `ship: ${posture.ship}`,
         `retro: ${posture.retro}`,
         `pending_worker_results: ${snapshot.pendingWorkerResults}`,
+        `pending_delegation_outcomes: ${pendingDelegationOutcomes.length}`,
       ];
 
       if (posture.blockers.length > 0) {
@@ -138,6 +145,15 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
       } else {
         lines.push("blockers:");
         lines.push("- none");
+      }
+
+      if (pendingDelegationOutcomes.length > 0) {
+        lines.push("pending_delegation_outcome_runs:");
+        for (const run of pendingDelegationOutcomes) {
+          lines.push(
+            `- ${run.profile}/${run.label ?? run.runId}: ${run.status}${run.summary ? ` :: ${run.summary}` : ""}`,
+          );
+        }
       }
 
       if (includeArtifacts) {
@@ -163,6 +179,14 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
               workerId: result.workerId,
               status: result.status,
               summary: result.summary,
+            })),
+            pendingDelegationOutcomes: pendingDelegationOutcomes.map((run) => ({
+              runId: run.runId,
+              profile: run.profile,
+              label: run.label,
+              status: run.status,
+              summary: run.summary,
+              handoffState: run.delivery?.handoffState ?? null,
             })),
             updatedAt: snapshot.updatedAt,
           },

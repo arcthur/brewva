@@ -143,8 +143,10 @@ Current responsibilities:
   - exposes verification, rollbackability, approval requirements, and worker
     outcomes without prescribing the next step
 - delegation posture presentation
-  - exposes canonical delegated profiles `explore`, `plan`, `review`, and
-    `general`
+  - exposes delegation through a thin execution shape (`resultMode`,
+    `boundary`, optional model and managed-tool hints)
+  - keeps named profiles as stable presets rather than the primary
+    orchestration contract
   - nudges model-native delegation for cross-file exploration and independent
     review without introducing a planner
 - workflow inspection presentation
@@ -186,6 +188,7 @@ These surfaces are derived from durable events and session state such as:
 - iteration fact events such as metric observations and guard results
 - worker patch adoption or failure events
 - pending delegated worker results
+- pending delegation outcomes awaiting a parent turn
 
 The product goal is visibility and recovery guidance. The product must not
 convert those signals into a mandatory stage machine or a default injected lane

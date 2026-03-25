@@ -8,6 +8,7 @@ import type {
   SubagentExecutionBoundary,
   SubagentResultMode,
 } from "@brewva/brewva-tools";
+import { getCanonicalSubagentPrompt } from "./protocol.js";
 
 export type HostedSubagentBuiltinToolName = "read" | "edit" | "write";
 
@@ -15,7 +16,7 @@ export interface HostedSubagentProfile {
   name: string;
   description: string;
   resultMode: SubagentResultMode;
-  prompt: string;
+  prompt?: string;
   boundary?: SubagentExecutionBoundary;
   model?: string;
   entrySkill?: string;
@@ -201,8 +202,11 @@ function toProfile(
   const name = asString(source.name) ?? defaults?.name;
   const description = asString(source.description) ?? defaults?.description;
   const resultMode = asResultMode(source.resultMode) ?? defaults?.resultMode;
-  const prompt = asString(source.prompt) ?? defaults?.prompt;
-  if (!name || !description || !resultMode || !prompt) {
+  const prompt =
+    asString(source.prompt) ??
+    defaults?.prompt ??
+    (resultMode ? getCanonicalSubagentPrompt(resultMode) : undefined);
+  if (!name || !description || !resultMode) {
     return undefined;
   }
 
@@ -228,8 +232,7 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
     description:
       "Canonical read-only exploration profile for cross-file investigation and impact discovery.",
     resultMode: "exploration",
-    prompt:
-      "Explore the delegated objective with a repository-scout mindset. Prefer broad but bounded evidence gathering across relevant files, summarize concrete findings, and avoid implementation commitments.",
+    prompt: getCanonicalSubagentPrompt("exploration"),
     boundary: "safe",
     builtinToolNames: ["read"],
     managedToolNames: [
@@ -291,8 +294,7 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
     name: "review",
     description: "Canonical read-only review profile for correctness, regressions, and test risk.",
     resultMode: "review",
-    prompt:
-      "Review the delegated scope as a strict senior engineer. Prioritize correctness, regressions, missing tests, and contract drift. Keep the answer concrete and evidence-backed.",
+    prompt: getCanonicalSubagentPrompt("review"),
     boundary: "safe",
     builtinToolNames: ["read"],
     managedToolNames: [
@@ -350,13 +352,43 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
     },
     managedToolMode: "direct",
   },
+  verification: {
+    name: "verification",
+    description:
+      "Canonical read-only verification profile for checks, evidence, and confidence gaps.",
+    resultMode: "verification",
+    prompt: getCanonicalSubagentPrompt("verification"),
+    boundary: "safe",
+    builtinToolNames: ["read"],
+    managedToolNames: [
+      "grep",
+      "read_spans",
+      "look_at",
+      "toc_search",
+      "toc_document",
+      "ast_grep_search",
+      "lsp_diagnostics",
+      "lsp_find_references",
+      "lsp_goto_definition",
+      "lsp_symbols",
+      "ledger_query",
+      "output_search",
+      "tape_search",
+      "task_view_state",
+      "workflow_status",
+    ],
+    defaultContextBudget: {
+      maxInjectionTokens: 2000,
+      maxTurnTokens: 7000,
+    },
+    managedToolMode: "direct",
+  },
   "patch-worker": {
     name: "patch-worker",
     description:
       "Isolated patch worker that can read and edit files inside a snapshot-backed workspace.",
     resultMode: "patch",
-    prompt:
-      "Implement the delegated change inside the isolated workspace. Keep edits minimal, preserve surrounding behavior, and explain the patch and verification evidence concisely.",
+    prompt: getCanonicalSubagentPrompt("patch"),
     boundary: "effectful",
     builtinToolNames: ["read", "edit", "write"],
     managedToolNames: [

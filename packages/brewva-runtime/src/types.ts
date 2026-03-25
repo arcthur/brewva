@@ -1053,6 +1053,7 @@ export type DelegationRunStatus =
 
 export type DelegationOutcomeKind = "exploration" | "review" | "verification" | "patch";
 export type DelegationDeliveryMode = "text_only" | "supplemental";
+export type DelegationDeliveryHandoffState = "none" | "pending_parent_turn" | "surfaced";
 
 export interface DelegationArtifactRef {
   kind: string;
@@ -1064,6 +1065,9 @@ export interface DelegationDeliveryRecord {
   mode: DelegationDeliveryMode;
   scopeId?: string;
   label?: string;
+  handoffState?: DelegationDeliveryHandoffState;
+  readyAt?: number;
+  surfacedAt?: number;
   supplementalAppended?: boolean;
   updatedAt?: number;
 }
@@ -1092,6 +1096,10 @@ export interface DelegationRunQuery {
   runIds?: string[];
   statuses?: DelegationRunStatus[];
   includeTerminal?: boolean;
+  limit?: number;
+}
+
+export interface PendingDelegationOutcomeQuery {
   limit?: number;
 }
 

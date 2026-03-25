@@ -244,6 +244,209 @@ describe("hosted subagent orchestrator", () => {
     await rm(workspaceRoot, { recursive: true, force: true });
   });
 
+  test("captures structured verification outcomes from the child assistant response", async () => {
+    const workspaceRoot = createTempWorkspace("brewva-subagent-structured-success-");
+    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const parentSessionId = "parent-session-structured-success";
+
+    const adapter = createHostedSubagentAdapter({
+      runtime,
+      async createChildSession(input: HostedSubagentSessionOptions) {
+        const childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
+        const childSessionId = "child-structured-success";
+        const listeners = new Set<(event: AgentSessionEvent) => void>();
+
+        return {
+          runtime: childRuntime,
+          session: {
+            dispose() {},
+            async prompt() {
+              for (const listener of listeners) {
+                listener({
+                  type: "message_end",
+                  message: {
+                    role: "assistant",
+                    content: [
+                      {
+                        type: "text",
+                        text: [
+                          "Verification completed with one skipped check.",
+                          "<delegation_outcome_json>",
+                          JSON.stringify({
+                            kind: "verification",
+                            verdict: "inconclusive",
+                            checks: [
+                              {
+                                name: "unit",
+                                status: "pass",
+                                summary: "Unit coverage is green.",
+                                evidenceRefs: ["session:child-structured-success:agent_end"],
+                              },
+                              {
+                                name: "e2e",
+                                status: "skip",
+                                summary: "E2E lane was intentionally skipped.",
+                              },
+                            ],
+                          }),
+                          "</delegation_outcome_json>",
+                        ].join("\n"),
+                      },
+                    ],
+                  },
+                } as AgentSessionEvent);
+              }
+            },
+            agent: {
+              async waitForIdle() {},
+            },
+            sessionManager: {
+              getSessionId() {
+                return childSessionId;
+              },
+            },
+            subscribe(listener) {
+              listeners.add(listener);
+              return () => {
+                listeners.delete(listener);
+              };
+            },
+          },
+        };
+      },
+    });
+
+    const result = await adapter.run({
+      fromSessionId: parentSessionId,
+      request: {
+        profile: "verification",
+        mode: "single",
+        packet: {
+          objective: "Verify the runtime checks.",
+        },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    const outcome = result.outcomes[0];
+    expect(outcome?.ok).toBe(true);
+    if (!outcome || !outcome.ok) {
+      throw new Error("expected a successful verification outcome");
+    }
+
+    expect(outcome.kind).toBe("verification");
+    expect(outcome.data).toEqual({
+      kind: "verification",
+      verdict: "inconclusive",
+      checks: [
+        {
+          name: "unit",
+          status: "pass",
+          summary: "Unit coverage is green.",
+          evidenceRefs: ["session:child-structured-success:agent_end"],
+        },
+        {
+          name: "e2e",
+          status: "skip",
+          summary: "E2E lane was intentionally skipped.",
+        },
+      ],
+    });
+    expect(outcome.summary).toBe("Verification completed with one skipped check.");
+    expect(outcome.evidenceRefs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "event",
+          sourceSessionId: "child-structured-success",
+        }),
+      ]),
+    );
+    expect(
+      runtime.events.list(parentSessionId, { type: "subagent_outcome_parse_failed" }),
+    ).toHaveLength(0);
+
+    await rm(workspaceRoot, { recursive: true, force: true });
+  });
+
+  test("keeps the run successful when the structured outcome block is missing", async () => {
+    const workspaceRoot = createTempWorkspace("brewva-subagent-structured-fallback-");
+    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const parentSessionId = "parent-session-structured-fallback";
+
+    const adapter = createHostedSubagentAdapter({
+      runtime,
+      async createChildSession(input: HostedSubagentSessionOptions) {
+        const childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
+        const childSessionId = "child-structured-fallback";
+        const listeners = new Set<(event: AgentSessionEvent) => void>();
+
+        return {
+          runtime: childRuntime,
+          session: {
+            dispose() {},
+            async prompt() {
+              for (const listener of listeners) {
+                listener({
+                  type: "message_end",
+                  message: {
+                    role: "assistant",
+                    content: [
+                      {
+                        type: "text",
+                        text: "Verification completed, but only a prose summary is available.",
+                      },
+                    ],
+                  },
+                } as AgentSessionEvent);
+              }
+            },
+            agent: {
+              async waitForIdle() {},
+            },
+            sessionManager: {
+              getSessionId() {
+                return childSessionId;
+              },
+            },
+            subscribe(listener) {
+              listeners.add(listener);
+              return () => {
+                listeners.delete(listener);
+              };
+            },
+          },
+        };
+      },
+    });
+
+    const result = await adapter.run({
+      fromSessionId: parentSessionId,
+      request: {
+        profile: "verification",
+        mode: "single",
+        packet: {
+          objective: "Verify the runtime checks.",
+        },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    const outcome = result.outcomes[0];
+    expect(outcome?.ok).toBe(true);
+    if (!outcome || !outcome.ok) {
+      throw new Error("expected a successful verification outcome");
+    }
+
+    expect(outcome.kind).toBe("verification");
+    expect(outcome.data).toBeUndefined();
+    expect(outcome.summary).toBe("Verification completed, but only a prose summary is available.");
+    expect(
+      runtime.events.list(parentSessionId, { type: "subagent_outcome_parse_failed" }),
+    ).toHaveLength(1);
+
+    await rm(workspaceRoot, { recursive: true, force: true });
+  });
+
   test("tracks background runs and supports cancellation", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-background-");
     const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
@@ -482,6 +685,7 @@ describe("hosted subagent orchestrator", () => {
       delivery: {
         mode: "text_only",
         scopeId: "delegation-review",
+        handoffState: "pending_parent_turn",
       },
     });
 

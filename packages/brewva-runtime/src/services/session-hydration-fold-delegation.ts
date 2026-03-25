@@ -1,7 +1,9 @@
 import {
   SUBAGENT_CANCELLED_EVENT_TYPE,
   SUBAGENT_COMPLETED_EVENT_TYPE,
+  SUBAGENT_DELIVERY_SURFACED_EVENT_TYPE,
   SUBAGENT_FAILED_EVENT_TYPE,
+  SUBAGENT_OUTCOME_PARSE_FAILED_EVENT_TYPE,
   SUBAGENT_SPAWNED_EVENT_TYPE,
   WORKER_RESULTS_APPLIED_EVENT_TYPE,
 } from "../events/event-types.js";
@@ -32,6 +34,9 @@ function cloneRunRecord(record: DelegationRunRecord): DelegationRunRecord {
           mode: record.delivery.mode,
           scopeId: record.delivery.scopeId,
           label: record.delivery.label,
+          handoffState: record.delivery.handoffState,
+          readyAt: record.delivery.readyAt,
+          surfacedAt: record.delivery.surfacedAt,
           supplementalAppended: record.delivery.supplementalAppended,
           updatedAt: record.delivery.updatedAt,
         }
@@ -57,6 +62,12 @@ function readRunStatus(value: unknown): DelegationRunStatus | undefined {
 
 function readDeliveryMode(value: unknown): DelegationDeliveryRecord["mode"] | undefined {
   return value === "text_only" || value === "supplemental" ? value : undefined;
+}
+
+function readHandoffState(value: unknown): DelegationDeliveryRecord["handoffState"] | undefined {
+  return value === "none" || value === "pending_parent_turn" || value === "surfaced"
+    ? value
+    : undefined;
 }
 
 function readBoundary(value: unknown): ToolExecutionBoundary | undefined {
@@ -108,6 +119,9 @@ function mergeDeliveryRecord(
     mode,
     scopeId: readString(payload?.deliveryScopeId) ?? existing?.scopeId,
     label: readString(payload?.deliveryLabel) ?? existing?.label,
+    handoffState: readHandoffState(payload?.deliveryHandoffState) ?? existing?.handoffState,
+    readyAt: readNonNegativeNumber(payload?.deliveryReadyAt) ?? existing?.readyAt,
+    surfacedAt: readNonNegativeNumber(payload?.deliverySurfacedAt) ?? existing?.surfacedAt,
     supplementalAppended,
     updatedAt: updatedAt ?? existing?.updatedAt,
   };
@@ -205,6 +219,40 @@ export function createDelegationHydrationFold(): SessionHydrationFold<Delegation
             typeof payload?.costUsd === "number" && Number.isFinite(payload.costUsd)
               ? Math.max(0, payload.costUsd)
               : existing?.costUsd,
+        });
+        return;
+      }
+
+      if (event.type === SUBAGENT_OUTCOME_PARSE_FAILED_EVENT_TYPE) {
+        const runId = readString(payload?.runId);
+        if (!runId) {
+          return;
+        }
+        const existing = state.delegationRuns.get(runId);
+        if (!existing) {
+          return;
+        }
+        upsertRun(state, {
+          ...existing,
+          updatedAt: event.timestamp,
+          delivery: mergeDeliveryRecord(payload, existing.delivery, event.timestamp),
+        });
+        return;
+      }
+
+      if (event.type === SUBAGENT_DELIVERY_SURFACED_EVENT_TYPE) {
+        const runId = readString(payload?.runId);
+        if (!runId) {
+          return;
+        }
+        const existing = state.delegationRuns.get(runId);
+        if (!existing) {
+          return;
+        }
+        upsertRun(state, {
+          ...existing,
+          updatedAt: event.timestamp,
+          delivery: mergeDeliveryRecord(payload, existing.delivery, event.timestamp),
         });
         return;
       }

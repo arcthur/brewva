@@ -51,6 +51,7 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 - `docs/research/rfc-iteration-facts-and-model-native-optimization-protocols.md`
 - `docs/research/rfc-default-path-re-hardening-and-advisory-surface-narrowing.md`
 - `docs/research/rfc-deliberation-home-and-compounding-intelligence.md`
+- `docs/research/rfc-delegation-protocol-thinning-and-replayable-outcomes.md`
 
 ## Archived / superseded notes
 

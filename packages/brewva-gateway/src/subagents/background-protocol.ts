@@ -9,10 +9,14 @@ import {
 } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { BrewvaConfig, DelegationRunRecord, SkillRoutingScope } from "@brewva/brewva-runtime";
-import type { DelegationPacket, SubagentRunRequest } from "@brewva/brewva-tools";
+import type {
+  DelegationPacket,
+  SubagentExecutionShape,
+  SubagentRunRequest,
+} from "@brewva/brewva-tools";
 
 export interface DetachedSubagentRunSpec {
-  schema: "brewva.subagent-run-spec.v2";
+  schema: "brewva.subagent-run-spec.v3";
   runId: string;
   parentSessionId: string;
   workspaceRoot: string;
@@ -20,6 +24,7 @@ export interface DetachedSubagentRunSpec {
   configPath?: string;
   routingScopes?: SkillRoutingScope[];
   profileName: string;
+  executionShape?: SubagentExecutionShape;
   label?: string;
   packet: DelegationPacket;
   timeoutMs?: number;
@@ -100,6 +105,16 @@ export function resolveDetachedSubagentOutcomePath(workspaceRoot: string, runId:
   return resolve(resolveDetachedSubagentRunDir(workspaceRoot, runId), "outcome.json");
 }
 
+export function resolveDetachedSubagentContextManifestPath(
+  workspaceRoot: string,
+  runId: string,
+): string {
+  return resolve(
+    resolveDetachedSubagentRunDir(workspaceRoot, runId),
+    "delegation-context-manifest.json",
+  );
+}
+
 export function writeDetachedSubagentSpec(
   workspaceRoot: string,
   runId: string,
@@ -178,4 +193,12 @@ export function writeDetachedSubagentOutcome(
   outcome: unknown,
 ): void {
   writeJsonFile(resolveDetachedSubagentOutcomePath(workspaceRoot, runId), outcome);
+}
+
+export function writeDetachedSubagentContextManifest(
+  workspaceRoot: string,
+  runId: string,
+  manifest: unknown,
+): void {
+  writeJsonFile(resolveDetachedSubagentContextManifestPath(workspaceRoot, runId), manifest);
 }

@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import type { PatchFileAction, PatchSet } from "@brewva/brewva-runtime";
+import { resolveDetachedSubagentContextManifestPath } from "./background-protocol.js";
 
 const IGNORED_ROOT_SEGMENTS = new Set([".git", "node_modules", ".orchestrator"]);
 const IGNORED_RELATIVE_PATHS = new Set([".brewva/skills_index.json"]);
@@ -90,6 +91,22 @@ export async function createIsolatedWorkspace(
       await rm(tempRoot, { recursive: true, force: true });
     },
   };
+}
+
+export async function copyDelegationContextManifestToIsolatedWorkspace(input: {
+  sourceRoot: string;
+  isolatedRoot: string;
+  runId: string;
+}): Promise<string | undefined> {
+  const sourcePath = resolveDetachedSubagentContextManifestPath(input.sourceRoot, input.runId);
+  const targetPath = resolveDetachedSubagentContextManifestPath(input.isolatedRoot, input.runId);
+  await mkdir(dirname(targetPath), { recursive: true });
+  try {
+    await copyFile(sourcePath, targetPath);
+    return normalizeRelativePath(relative(input.isolatedRoot, targetPath));
+  } catch {
+    return undefined;
+  }
 }
 
 export async function capturePatchSetFromIsolatedWorkspace(input: {

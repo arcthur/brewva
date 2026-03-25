@@ -95,6 +95,7 @@ Boundary rule:
   - heartbeat triggers
   - scheduling triggers
   - subagent orchestration
+  - replayable delegation outcome handoff
   - future orchestration helpers
 
 Rings define authority. Planes define product behavior.

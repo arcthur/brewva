@@ -2,6 +2,7 @@ import type {
   BrewvaRuntime,
   DelegationRunQuery,
   DelegationRunRecord,
+  ManagedToolMode,
   PatchSet,
   ToolGovernanceDescriptor,
   ToolExecutionBoundary,
@@ -24,14 +25,16 @@ export type BrewvaManagedToolDefinition = ToolDefinition & {
 export type SubagentResultMode = "exploration" | "review" | "verification" | "patch";
 export type SubagentDelegationMode = "single" | "parallel";
 export type SubagentReturnMode = "text_only" | "supplemental";
-export type SubagentContextRefKind =
+export type DelegationRefKind =
   | "event"
   | "ledger"
   | "artifact"
   | "projection"
   | "workspace_span"
   | "task"
-  | "truth";
+  | "truth"
+  | "tool_result";
+export type SubagentContextRefKind = Exclude<DelegationRefKind, "tool_result"> | "tool_result";
 export type SubagentExecutionBoundary = ToolExecutionBoundary;
 
 export interface SubagentContextBudget {
@@ -39,17 +42,42 @@ export interface SubagentContextBudget {
   maxTurnTokens?: number;
 }
 
-export interface SubagentContextRef {
-  kind: SubagentContextRefKind;
+export interface DelegationRef {
+  kind: DelegationRefKind;
   locator: string;
   summary?: string;
+  sourceSessionId?: string;
+  hash?: string;
 }
+
+export type SubagentContextRef = DelegationRef;
 
 export interface SubagentExecutionHints {
   preferredTools?: string[];
   fallbackTools?: string[];
   preferredSkills?: string[];
 }
+
+export interface SubagentExecutionShape {
+  resultMode?: SubagentResultMode;
+  boundary?: SubagentExecutionBoundary;
+  model?: string;
+  managedToolMode?: ManagedToolMode;
+}
+
+export type DelegationCompletionPredicate =
+  | {
+      source: "events";
+      type: string;
+      match?: Record<string, string | number | boolean | null>;
+      policy: "cancel_when_true";
+    }
+  | {
+      source: "worker_results";
+      workerId?: string;
+      status?: "ok" | "error" | "skipped";
+      policy: "cancel_when_true";
+    };
 
 export interface DelegationPacket {
   objective: string;
@@ -62,6 +90,7 @@ export interface DelegationPacket {
   executionHints?: SubagentExecutionHints;
   contextRefs?: SubagentContextRef[];
   contextBudget?: SubagentContextBudget;
+  completionPredicate?: DelegationCompletionPredicate;
   effectCeiling?: {
     boundary?: SubagentExecutionBoundary;
   };
@@ -72,7 +101,8 @@ export interface DelegationTaskPacket extends DelegationPacket {
 }
 
 export interface SubagentRunRequest {
-  profile: string;
+  profile?: string;
+  executionShape?: SubagentExecutionShape;
   mode: SubagentDelegationMode;
   packet?: DelegationPacket;
   tasks?: DelegationTaskPacket[];
@@ -92,17 +122,63 @@ export interface SubagentOutcomeMetricSummary {
   costUsd?: number;
 }
 
-export interface SubagentOutcomeEvidenceRef {
-  sourceType: "event" | "ledger" | "tool_result";
-  locator: string;
-  summary?: string;
-}
+export type SubagentOutcomeEvidenceRef = DelegationRef;
 
 export interface SubagentOutcomeArtifactRef {
   kind: string;
   path: string;
   summary?: string;
 }
+
+export interface DelegationOutcomeFinding {
+  summary: string;
+  severity?: "critical" | "high" | "medium" | "low";
+  evidenceRefs?: string[];
+}
+
+export interface DelegationOutcomeCheck {
+  name: string;
+  status: "pass" | "fail" | "skip";
+  summary?: string;
+  evidenceRefs?: string[];
+}
+
+export interface DelegationOutcomeChange {
+  path: string;
+  action?: "add" | "modify" | "delete";
+  summary?: string;
+  evidenceRefs?: string[];
+}
+
+export interface ExplorationSubagentOutcomeData {
+  kind: "exploration";
+  findings?: DelegationOutcomeFinding[];
+  openQuestions?: string[];
+  nextSteps?: string[];
+}
+
+export interface ReviewSubagentOutcomeData {
+  kind: "review";
+  findings: DelegationOutcomeFinding[];
+}
+
+export interface VerificationSubagentOutcomeData {
+  kind: "verification";
+  checks: DelegationOutcomeCheck[];
+  verdict?: "pass" | "fail" | "inconclusive";
+}
+
+export interface PatchSubagentOutcomeData {
+  kind: "patch";
+  changes?: DelegationOutcomeChange[];
+  patchSummary?: string;
+}
+
+export type SubagentOutcomeData =
+  | ExplorationSubagentOutcomeData
+  | ReviewSubagentOutcomeData
+  | VerificationSubagentOutcomeData
+  | PatchSubagentOutcomeData;
 
 export interface SubagentOutcomeBase {
   runId: string;
@@ -113,6 +189,7 @@ export interface SubagentOutcomeBase {
   workerSessionId?: string;
   summary: string;
   assistantText?: string;
+  data?: SubagentOutcomeData;
   metrics: SubagentOutcomeMetricSummary;
   evidenceRefs: SubagentOutcomeEvidenceRef[];
   patches?: PatchSet;

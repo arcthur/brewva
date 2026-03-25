@@ -209,4 +209,93 @@ describe("context transform injection contract", () => {
     const result = results.find((candidate) => typeof candidate?.message?.content === "string");
     expect(result?.message?.content).not.toContain("[DelegationRecommendation]");
   });
+
+  test("surfaces completed delegation outcomes once and marks the handoff as surfaced", async () => {
+    const { api, handlers } = createMockExtensionAPI();
+    const sessionId = "s-completed-delegation-outcome";
+    const runtime = createRuntimeFixture({
+      context: {
+        checkAndRequestCompaction: () => false,
+        buildInjection: async () => ({
+          text: "",
+          entries: [],
+          accepted: false,
+          originalTokens: 0,
+          finalTokens: 0,
+          truncated: false,
+        }),
+      },
+    });
+
+    runtime.session.recordDelegationRun(sessionId, {
+      runId: "run-completed-1",
+      profile: "review",
+      parentSessionId: sessionId,
+      status: "completed",
+      createdAt: 1,
+      updatedAt: 2,
+      kind: "review",
+      summary: "Review completed and awaits parent consumption.",
+      delivery: {
+        mode: "text_only",
+        handoffState: "pending_parent_turn",
+        readyAt: 2,
+        updatedAt: 2,
+      },
+    });
+
+    registerContextTransform(api, runtime);
+
+    const firstResults = await invokeHandlersAsync<{
+      message?: {
+        content?: string;
+      };
+    }>(
+      handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "continue",
+        systemPrompt: "base prompt",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => sessionId,
+        },
+        getContextUsage: () => undefined,
+      },
+    );
+    const first = firstResults.find((candidate) => typeof candidate?.message?.content === "string");
+    expect(first?.message?.content).toContain("[CompletedDelegationOutcomes]");
+    expect(first?.message?.content).toContain("run-completed-1");
+    expect(
+      runtime.session.getDelegationRun(sessionId, "run-completed-1")?.delivery?.handoffState,
+    ).toBe("surfaced");
+    expect(runtime.events.list(sessionId, { type: "subagent_delivery_surfaced" })).toHaveLength(1);
+
+    const secondResults = await invokeHandlersAsync<{
+      message?: {
+        content?: string;
+      };
+    }>(
+      handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "continue",
+        systemPrompt: "base prompt",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => sessionId,
+        },
+        getContextUsage: () => undefined,
+      },
+    );
+    const second = secondResults.find(
+      (candidate) => typeof candidate?.message?.content === "string",
+    );
+    expect(second?.message?.content ?? "").not.toContain("[CompletedDelegationOutcomes]");
+    expect(runtime.events.list(sessionId, { type: "subagent_delivery_surfaced" })).toHaveLength(1);
+  });
 });

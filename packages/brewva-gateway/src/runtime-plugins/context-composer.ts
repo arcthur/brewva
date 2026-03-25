@@ -49,6 +49,12 @@ export type ContextComposerRuntime = {
       sessionId: string,
       query?: Pick<DelegationRunQuery, "statuses" | "includeTerminal" | "limit">,
     ) => DelegationRunRecord[];
+    listPendingDelegationOutcomes?: (
+      sessionId: string,
+      query?: {
+        limit?: number;
+      },
+    ) => DelegationRunRecord[];
   };
 };
 
@@ -71,6 +77,7 @@ export interface ContextComposerResult {
   blocks: ComposedContextBlock[];
   content: string;
   metrics: ContextComposerMetrics;
+  surfacedDelegationRunIds: string[];
 }
 
 interface InternalContextBlock extends ComposedContextBlock {
@@ -178,6 +185,27 @@ function listPendingDelegations(
   );
 }
 
+function listPendingDelegationOutcomes(
+  runtime: ContextComposerInput["runtime"],
+  sessionId: string,
+): DelegationRunRecord[] {
+  const pending = runtime.session?.listPendingDelegationOutcomes?.(sessionId, {
+    limit: 6,
+  });
+  if (pending) {
+    return pending;
+  }
+  return (
+    runtime.session
+      ?.listDelegationRuns?.(sessionId, {
+        statuses: ["completed", "failed", "timeout", "cancelled"],
+        includeTerminal: true,
+        limit: 6,
+      })
+      ?.filter((run) => run.delivery?.handoffState === "pending_parent_turn") ?? []
+  );
+}
+
 function formatPendingDelegationRuns(pendingDelegations: readonly DelegationRunRecord[]): string {
   return pendingDelegations
     .map((run) => `${run.profile}/${run.label ?? run.runId}:${run.status}`)
@@ -203,6 +231,7 @@ function buildOperationalDiagnosticsBlock(input: {
   requested: string[];
   includeTapeTelemetry: boolean;
   pendingDelegations: readonly DelegationRunRecord[];
+  pendingDelegationOutcomes: readonly DelegationRunRecord[];
   compact?: boolean;
 }): string {
   const requiredAction = input.gateStatus.required
@@ -215,13 +244,31 @@ function buildOperationalDiagnosticsBlock(input: {
     `context_pressure: ${input.gateStatus.pressure.level}`,
     `pending_compaction_reason: ${input.pendingCompactionReason ?? "none"}`,
     `pending_delegations: ${input.pendingDelegations.length}`,
+    `pending_delegation_outcomes: ${input.pendingDelegationOutcomes.length}`,
     `required_action: ${requiredAction}`,
   ];
   if (input.compact) {
-    return lines.join("\n");
+    return [
+      "[OperationalDiagnostics]",
+      `pending_compaction_reason: ${input.pendingCompactionReason ?? "none"}`,
+      `required_action: ${requiredAction}`,
+      ...(input.pendingDelegations.length > 0
+        ? [`pending_delegations: ${input.pendingDelegations.length}`]
+        : []),
+      ...(input.pendingDelegationOutcomes.length > 0
+        ? [`pending_delegation_outcomes: ${input.pendingDelegationOutcomes.length}`]
+        : []),
+    ].join("\n");
   }
   if (input.pendingDelegations.length > 0) {
     lines.push(`pending_delegation_runs: ${formatPendingDelegationRuns(input.pendingDelegations)}`);
+  }
+  if (input.pendingDelegationOutcomes.length > 0) {
+    lines.push(
+      `pending_delegation_outcome_runs: ${input.pendingDelegationOutcomes
+        .map((run) => `${run.profile}/${run.label ?? run.runId}:${run.status}`)
+        .join(", ")}`,
+    );
   }
   if (input.requested.length > 0) {
     lines.splice(1, 0, `requested_by: ${input.requested.map((name) => `$${name}`).join(", ")}`);
@@ -231,6 +278,25 @@ function buildOperationalDiagnosticsBlock(input: {
     lines.push(`tape_pressure: ${tapeStatus.tapePressure}`);
     lines.push(`tape_entries_since_anchor: ${tapeStatus.entriesSinceAnchor}`);
   }
+  return lines.join("\n");
+}
+
+function buildCompletedDelegationOutcomesBlock(input: {
+  pendingDelegationOutcomes: readonly DelegationRunRecord[];
+}): string {
+  const lines = [
+    "[CompletedDelegationOutcomes]",
+    `count: ${input.pendingDelegationOutcomes.length}`,
+  ];
+  if (input.pendingDelegationOutcomes.length === 0) {
+    return lines.join("\n");
+  }
+  lines.push(
+    ...input.pendingDelegationOutcomes.map(
+      (run) =>
+        `- ${run.profile}/${run.label ?? run.runId}: ${run.status}${run.summary ? ` :: ${run.summary}` : ""}`,
+    ),
+  );
   return lines.join("\n");
 }
 
@@ -595,6 +661,18 @@ function applyGovernanceBudgetCap(blocks: InternalContextBlock[]): InternalConte
     return current;
   }
 
+  if (hasPendingCompactionAdvisory && !hasCriticalCompactionGate) {
+    current = removeBlocksWhileOverCap(
+      current,
+      governanceCap,
+      (block) => block.id === "capability-view-summary" || block.id === "capability-view",
+    );
+    governanceTokens = measureGovernanceTokens(current);
+    if (governanceTokens <= governanceCap) {
+      return current;
+    }
+  }
+
   return removeBlocksWhileOverCap(
     current,
     governanceCap,
@@ -638,6 +716,7 @@ export function resolveSupplementalContextBlocks(
   const diagnosticRequests = shouldIncludeOperationalDiagnostics(input.capabilityView.requested);
   const includeTapeTelemetry = diagnosticRequests.length > 0;
   const pendingDelegations = listPendingDelegations(input.runtime, input.sessionId);
+  const pendingDelegationOutcomes = listPendingDelegationOutcomes(input.runtime, input.sessionId);
 
   if (
     pendingDelegations.length > 0 &&
@@ -654,12 +733,26 @@ export function resolveSupplementalContextBlocks(
       blocks.push(pendingDelegationsBlock);
     }
   }
+  if (pendingDelegationOutcomes.length > 0) {
+    const completedOutcomesBlock = makeBlock(
+      "completed-delegation-outcomes",
+      "diagnostic",
+      buildCompletedDelegationOutcomesBlock({
+        pendingDelegationOutcomes,
+      }),
+    );
+    if (completedOutcomesBlock) {
+      blocks.push(completedOutcomesBlock);
+    }
+  }
   if (
     diagnosticRequests.length > 0 ||
     input.gateStatus.required ||
     !!input.pendingCompactionReason
   ) {
-    const preferCompactDiagnostics = input.gateStatus.required && diagnosticRequests.length === 0;
+    const preferCompactDiagnostics =
+      diagnosticRequests.length === 0 &&
+      (input.gateStatus.required || !!input.pendingCompactionReason);
     const diagnosticBlock = makeBlock(
       "operational-diagnostics",
       "diagnostic",
@@ -671,6 +764,7 @@ export function resolveSupplementalContextBlocks(
         requested: diagnosticRequests,
         includeTapeTelemetry,
         pendingDelegations,
+        pendingDelegationOutcomes,
         compact: preferCompactDiagnostics,
       }),
       {
@@ -682,6 +776,7 @@ export function resolveSupplementalContextBlocks(
           requested: diagnosticRequests,
           includeTapeTelemetry,
           pendingDelegations,
+          pendingDelegationOutcomes,
           compact: true,
         }),
       },
@@ -754,6 +849,11 @@ export function composeContextBlocks(input: ContextComposerInput): ContextCompos
     blocks: publicBlocks,
     content: publicBlocks.map((block) => block.content).join("\n\n"),
     metrics,
+    surfacedDelegationRunIds: publicBlocks.some(
+      (block) => block.id === "completed-delegation-outcomes",
+    )
+      ? listPendingDelegationOutcomes(input.runtime, input.sessionId).map((run) => run.runId)
+      : [],
   };
 }
 

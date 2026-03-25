@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type {
+  BrewvaStructuredEvent,
   BrewvaConfig,
   BrewvaRuntime,
   DelegationRunQuery,
@@ -18,11 +19,13 @@ import { sleep } from "../utils/async.js";
 import {
   type DetachedSubagentRunSpec,
   listDetachedSubagentLiveStates,
+  readDetachedSubagentSpec,
   readDetachedSubagentCancelRequest,
   removeDetachedSubagentCancelRequest,
   removeDetachedSubagentLiveState,
   resolveDetachedSubagentSpecPath,
   writeDetachedSubagentCancelRequest,
+  writeDetachedSubagentContextManifest,
   writeDetachedSubagentLiveState,
   writeDetachedSubagentSpec,
 } from "./background-protocol.js";
@@ -33,7 +36,9 @@ export interface HostedSubagentBackgroundController {
   startRun(input: {
     parentSessionId: string;
     profile: HostedSubagentProfile;
+    profileName?: string;
     packet: DelegationPacket;
+    executionShape?: SubagentRunRequest["executionShape"];
     label?: string;
     timeoutMs?: number;
     delivery?: NonNullable<SubagentRunRequest["delivery"]>;
@@ -79,13 +84,11 @@ function buildDeliveryRecord(
   delivery: SubagentRunRequest["delivery"] | undefined,
   updatedAt: number,
 ): DelegationRunRecord["delivery"] {
-  if (!delivery) {
-    return undefined;
-  }
   return {
-    mode: delivery.returnMode,
-    scopeId: delivery.returnScopeId,
-    label: delivery.returnLabel,
+    mode: delivery?.returnMode ?? "text_only",
+    scopeId: delivery?.returnScopeId,
+    label: delivery?.returnLabel,
+    handoffState: "none",
     updatedAt,
   };
 }
@@ -108,6 +111,9 @@ function buildLifecyclePayload(record: DelegationRunRecord): Record<string, unkn
     deliveryMode: record.delivery?.mode ?? null,
     deliveryScopeId: record.delivery?.scopeId ?? null,
     deliveryLabel: record.delivery?.label ?? null,
+    deliveryHandoffState: record.delivery?.handoffState ?? null,
+    deliveryReadyAt: record.delivery?.readyAt ?? null,
+    deliverySurfacedAt: record.delivery?.surfacedAt ?? null,
     supplementalAppended: record.delivery?.supplementalAppended ?? null,
     deliveryUpdatedAt: record.delivery?.updatedAt ?? null,
   };
@@ -145,6 +151,43 @@ function defaultSpawnProcess(input: {
   return child;
 }
 
+function matchesEventPredicate(
+  event: BrewvaStructuredEvent,
+  parentSessionId: string,
+  predicate: Extract<NonNullable<DelegationPacket["completionPredicate"]>, { source: "events" }>,
+): boolean {
+  if (event.sessionId !== parentSessionId || event.type !== predicate.type) {
+    return false;
+  }
+  if (!predicate.match) {
+    return true;
+  }
+  const payload =
+    typeof event.payload === "object" && event.payload !== null && !Array.isArray(event.payload)
+      ? (event.payload as Record<string, unknown>)
+      : {};
+  return Object.entries(predicate.match).every(([key, value]) => payload[key] === value);
+}
+
+function matchesWorkerResultPredicate(
+  runtime: BrewvaRuntime,
+  parentSessionId: string,
+  predicate: Extract<
+    NonNullable<DelegationPacket["completionPredicate"]>,
+    { source: "worker_results" }
+  >,
+): boolean {
+  return runtime.session.listWorkerResults(parentSessionId).some((result) => {
+    if (predicate.workerId && result.workerId !== predicate.workerId) {
+      return false;
+    }
+    if (predicate.status && result.status !== predicate.status) {
+      return false;
+    }
+    return true;
+  });
+}
+
 export function createDetachedSubagentBackgroundController(
   options: DetachedBackgroundControllerOptions,
 ): HostedSubagentBackgroundController {
@@ -156,6 +199,13 @@ export function createDetachedSubagentBackgroundController(
     ((pid: number, signal: NodeJS.Signals) => {
       process.kill(pid, signal);
     });
+  const trackedPredicates = new Map<
+    string,
+    {
+      parentSessionId: string;
+      predicate: NonNullable<DelegationPacket["completionPredicate"]>;
+    }
+  >();
 
   const writeTerminalFailure = (
     record: DelegationRunRecord,
@@ -176,6 +226,7 @@ export function createDetachedSubagentBackgroundController(
           }
         : undefined,
     };
+    trackedPredicates.delete(record.runId);
     options.runtime.session.recordDelegationRun(record.parentSessionId, updated);
     options.runtime.events.record({
       sessionId: record.parentSessionId,
@@ -195,6 +246,7 @@ export function createDetachedSubagentBackgroundController(
       (entry) => entry.runId === record.runId && entry.parentSessionId === record.parentSessionId,
     );
     if (!liveState) {
+      trackedPredicates.delete(record.runId);
       if (!isTerminalStatus(record.status)) {
         const failed = writeTerminalFailure(record, "failed", "background_registry_missing");
         return {
@@ -223,6 +275,7 @@ export function createDetachedSubagentBackgroundController(
     );
     removeDetachedSubagentLiveState(options.runtime.workspaceRoot, record.runId);
     removeDetachedSubagentCancelRequest(options.runtime.workspaceRoot, record.runId);
+    trackedPredicates.delete(record.runId);
     if (isTerminalStatus(record.status)) {
       return {
         live: false,
@@ -243,15 +296,20 @@ export function createDetachedSubagentBackgroundController(
     };
   };
 
-  return {
+  const controller: HostedSubagentBackgroundController = {
     async startRun(input) {
       const runId = randomUUID();
       const createdAt = Date.now();
       const parentSkill = options.runtime.skills.getActive(input.parentSessionId)?.name;
-      const boundary = resolveRequestedBoundary(input.profile, input.packet);
+      const profileName = input.profileName ?? input.profile.name;
+      const boundary = resolveRequestedBoundary({
+        profile: input.profile,
+        executionShape: input.executionShape,
+        packet: input.packet,
+      });
       const initialRecord: DelegationRunRecord = {
         runId,
-        profile: input.profile.name,
+        profile: profileName,
         parentSessionId: input.parentSessionId,
         status: "pending",
         createdAt,
@@ -270,14 +328,15 @@ export function createDetachedSubagentBackgroundController(
       });
 
       const spec: DetachedSubagentRunSpec = {
-        schema: "brewva.subagent-run-spec.v2",
+        schema: "brewva.subagent-run-spec.v3",
         runId,
         parentSessionId: input.parentSessionId,
         workspaceRoot: options.runtime.workspaceRoot,
         config: cloneRuntimeConfig(options.runtime),
         configPath: options.configPath,
         routingScopes: options.routingScopes,
-        profileName: input.profile.name,
+        profileName,
+        executionShape: input.executionShape,
         label: input.label,
         packet: input.packet,
         timeoutMs: input.timeoutMs,
@@ -285,6 +344,15 @@ export function createDetachedSubagentBackgroundController(
         createdAt,
       };
       writeDetachedSubagentSpec(options.runtime.workspaceRoot, runId, spec);
+      writeDetachedSubagentContextManifest(options.runtime.workspaceRoot, runId, {
+        schema: "brewva.delegation-context-manifest.v1",
+        runId,
+        profile: profileName,
+        resultMode: input.profile.resultMode,
+        generatedAt: createdAt,
+        objective: input.packet.objective,
+        contextRefs: input.packet.contextRefs ?? [],
+      });
 
       let child: ChildProcess | undefined;
       try {
@@ -309,16 +377,63 @@ export function createDetachedSubagentBackgroundController(
         schema: "brewva.subagent-run-live.v1",
         runId,
         parentSessionId: input.parentSessionId,
-        profile: input.profile.name,
+        profile: profileName,
         pid,
         createdAt,
         updatedAt: createdAt,
         status: "pending",
         label: input.label,
       });
+      if (input.packet.completionPredicate) {
+        trackedPredicates.set(runId, {
+          parentSessionId: input.parentSessionId,
+          predicate: input.packet.completionPredicate,
+        });
+        const alreadyMatched =
+          input.packet.completionPredicate.source === "events"
+            ? options.runtime.events
+                .query(input.parentSessionId, { type: input.packet.completionPredicate.type })
+                .some((event) =>
+                  matchesEventPredicate(
+                    options.runtime.events.toStructured(event),
+                    input.parentSessionId,
+                    input.packet.completionPredicate as Extract<
+                      NonNullable<DelegationPacket["completionPredicate"]>,
+                      { source: "events" }
+                    >,
+                  ),
+                )
+            : matchesWorkerResultPredicate(
+                options.runtime,
+                input.parentSessionId,
+                input.packet.completionPredicate,
+              );
+        if (alreadyMatched) {
+          void controller.cancelRun({
+            parentSessionId: input.parentSessionId,
+            runId,
+            reason: "completion_predicate_satisfied",
+          });
+        }
+      }
       return cloneRecord(initialRecord);
     },
     async inspectLiveRuns({ parentSessionId, query }) {
+      for (const liveState of listDetachedSubagentLiveStates(options.runtime.workspaceRoot)) {
+        if (
+          liveState.parentSessionId !== parentSessionId ||
+          trackedPredicates.has(liveState.runId)
+        ) {
+          continue;
+        }
+        const spec = readDetachedSubagentSpec(options.runtime.workspaceRoot, liveState.runId);
+        if (spec?.packet.completionPredicate) {
+          trackedPredicates.set(liveState.runId, {
+            parentSessionId,
+            predicate: spec.packet.completionPredicate,
+          });
+        }
+      }
       const runs = options.runtime.session.listDelegationRuns(parentSessionId, query);
       const map = new Map<string, { live: boolean; cancelable: boolean }>();
       for (const run of runs) {
@@ -339,6 +454,7 @@ export function createDetachedSubagentBackgroundController(
         };
       }
       if (isTerminalStatus(existing.status)) {
+        trackedPredicates.delete(runId);
         return {
           ok: false,
           error: `already_terminal:${existing.status}`,
@@ -366,6 +482,7 @@ export function createDetachedSubagentBackgroundController(
         };
       }
 
+      trackedPredicates.delete(runId);
       writeDetachedSubagentCancelRequest(options.runtime.workspaceRoot, runId, {
         schema: "brewva.subagent-cancel-request.v1",
         runId,
@@ -414,6 +531,7 @@ export function createDetachedSubagentBackgroundController(
         (entry) => entry.parentSessionId === parentSessionId,
       );
       for (const liveState of liveStates) {
+        trackedPredicates.delete(liveState.runId);
         writeDetachedSubagentCancelRequest(options.runtime.workspaceRoot, liveState.runId, {
           schema: "brewva.subagent-cancel-request.v1",
           runId: liveState.runId,
@@ -428,4 +546,28 @@ export function createDetachedSubagentBackgroundController(
       }
     },
   };
+  options.runtime.events.subscribe((event) => {
+    for (const [runId, tracked] of trackedPredicates.entries()) {
+      if (tracked.parentSessionId !== event.sessionId) {
+        continue;
+      }
+      const matched =
+        tracked.predicate.source === "events"
+          ? matchesEventPredicate(event, tracked.parentSessionId, tracked.predicate)
+          : matchesWorkerResultPredicate(
+              options.runtime,
+              tracked.parentSessionId,
+              tracked.predicate,
+            );
+      if (!matched) {
+        continue;
+      }
+      void controller.cancelRun({
+        parentSessionId: tracked.parentSessionId,
+        runId,
+        reason: "completion_predicate_satisfied",
+      });
+    }
+  });
+  return controller;
 }

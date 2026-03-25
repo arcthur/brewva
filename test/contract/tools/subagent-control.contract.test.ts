@@ -54,6 +54,40 @@ describe("subagent control tools", () => {
     expect(extractText(result)).toContain("status=running");
   });
 
+  test("subagent_status includes replayable handoff metadata for completed runs", async () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createTestWorkspace("subagent-status-handoff-runtime"),
+    });
+    runtime.session.recordDelegationRun("session-status-handoff", {
+      runId: "run-status-handoff-1",
+      profile: "review",
+      parentSessionId: "session-status-handoff",
+      status: "completed",
+      createdAt: 1,
+      updatedAt: 3,
+      kind: "review",
+      summary: "Review completed and is pending parent surfacing.",
+      delivery: {
+        mode: "text_only",
+        handoffState: "pending_parent_turn",
+        readyAt: 2,
+        updatedAt: 3,
+      },
+    });
+
+    const tool = createSubagentStatusTool({ runtime });
+    const result = await tool.execute(
+      "tc-subagent-status-handoff",
+      {},
+      undefined,
+      undefined,
+      fakeContext("session-status-handoff"),
+    );
+
+    expect(extractText(result)).toContain("run-status-handoff-1");
+    expect(extractText(result)).toContain("delivery: mode=text_only handoff=pending_parent_turn");
+  });
+
   test("subagent_cancel delegates cancellation to the orchestration adapter", async () => {
     const tool = createSubagentCancelTool({
       runtime: {

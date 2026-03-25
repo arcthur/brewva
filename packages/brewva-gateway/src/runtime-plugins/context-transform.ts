@@ -105,6 +105,65 @@ function emitContextComposedEvent(
   });
 }
 
+function markSurfacedDelegationOutcomes(
+  runtime: BrewvaRuntime,
+  input: {
+    sessionId: string;
+    turn: number;
+    runIds: readonly string[];
+  },
+): void {
+  if (input.runIds.length === 0) {
+    return;
+  }
+  const surfacedAt = Date.now();
+  for (const runId of input.runIds) {
+    const existing = runtime.session.getDelegationRun(input.sessionId, runId);
+    if (!existing?.delivery || existing.delivery.handoffState !== "pending_parent_turn") {
+      continue;
+    }
+    const updated = {
+      ...existing,
+      updatedAt: surfacedAt,
+      delivery: {
+        ...existing.delivery,
+        handoffState: "surfaced" as const,
+        surfacedAt,
+        updatedAt: surfacedAt,
+      },
+    };
+    runtime.session.recordDelegationRun(input.sessionId, updated);
+    emitRuntimeEvent(runtime, {
+      sessionId: input.sessionId,
+      turn: input.turn,
+      type: "subagent_delivery_surfaced",
+      payload: {
+        runId: updated.runId,
+        profile: updated.profile,
+        label: updated.label ?? null,
+        kind: updated.kind ?? null,
+        boundary: updated.boundary ?? null,
+        parentSkill: updated.parentSkill ?? null,
+        childSessionId: updated.workerSessionId ?? null,
+        status: updated.status,
+        summary: updated.summary ?? null,
+        error: updated.error ?? null,
+        artifactRefs: updated.artifactRefs ?? [],
+        totalTokens: updated.totalTokens ?? null,
+        costUsd: updated.costUsd ?? null,
+        deliveryMode: updated.delivery.mode,
+        deliveryScopeId: updated.delivery.scopeId ?? null,
+        deliveryLabel: updated.delivery.label ?? null,
+        deliveryHandoffState: updated.delivery.handoffState ?? null,
+        deliveryReadyAt: updated.delivery.readyAt ?? null,
+        deliverySurfacedAt: updated.delivery.surfacedAt ?? null,
+        supplementalAppended: updated.delivery.supplementalAppended ?? null,
+        deliveryUpdatedAt: updated.delivery.updatedAt ?? null,
+      },
+    });
+  }
+}
+
 function normalizeRuntimeError(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) return error.message.trim();
   if (typeof error === "string" && error.trim().length > 0) return error.trim();
@@ -456,6 +515,11 @@ export function createContextTransformLifecycle(
           composed,
           injectionAccepted: false,
         });
+        markSurfacedDelegationOutcomes(runtime, {
+          sessionId,
+          turn: state.turnIndex,
+          runIds: composed.surfacedDelegationRunIds,
+        });
 
         return {
           systemPrompt: systemPromptWithContract,
@@ -551,6 +615,11 @@ export function createContextTransformLifecycle(
         turn: state.turnIndex,
         composed,
         injectionAccepted: injection.accepted,
+      });
+      markSurfacedDelegationOutcomes(runtime, {
+        sessionId,
+        turn: state.turnIndex,
+        runIds: composed.surfacedDelegationRunIds,
       });
 
       return {

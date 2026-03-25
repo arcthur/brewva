@@ -580,6 +580,10 @@ export class BrewvaRuntime {
       sessionId: string,
       query?: import("./types.js").DelegationRunQuery,
     ): import("./types.js").DelegationRunRecord[];
+    listPendingDelegationOutcomes(
+      sessionId: string,
+      query?: import("./types.js").PendingDelegationOutcomeQuery,
+    ): import("./types.js").DelegationRunRecord[];
     clearState(sessionId: string): void;
     onClearState(listener: (sessionId: string) => void): () => void;
     getHydration(sessionId: string): SessionHydrationState;
@@ -1014,6 +1018,8 @@ export class BrewvaRuntime {
           this.sessionLifecycleService.getDelegationRun(sessionId, runId),
         listDelegationRuns: (sessionId, query) =>
           this.sessionLifecycleService.listDelegationRuns(sessionId, query),
+        listPendingDelegationOutcomes: (sessionId, query) =>
+          this.sessionLifecycleService.listPendingDelegationOutcomes(sessionId, query),
         clearState: (sessionId) => this.sessionLifecycleService.clearSessionState(sessionId),
         onClearState: (listener) => this.sessionLifecycleService.onClearState(listener),
         getHydration: (sessionId) => {
