@@ -92,6 +92,7 @@ export const TOOL_CALL_NORMALIZATION_FAILED_EVENT_TYPE = "tool_call_normalizatio
 export const MODEL_CAPABILITY_PROFILE_SELECTED_EVENT_TYPE =
   "model_capability_profile_selected" as const;
 export const MODEL_REQUEST_PATCHED_EVENT_TYPE = "model_request_patched" as const;
+export const IDENTITY_PARSE_WARNING_EVENT_TYPE = "identity_parse_warning" as const;
 
 export const SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE = "schedule_recovery_deferred" as const;
 export const SCHEDULE_RECOVERY_SUMMARY_EVENT_TYPE = "schedule_recovery_summary" as const;
@@ -203,6 +204,7 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   TOOL_CALL_NORMALIZATION_FAILED_EVENT_TYPE,
   MODEL_CAPABILITY_PROFILE_SELECTED_EVENT_TYPE,
   MODEL_REQUEST_PATCHED_EVENT_TYPE,
+  IDENTITY_PARSE_WARNING_EVENT_TYPE,
   SCHEDULE_EVENT_TYPE,
   SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE,
   SCHEDULE_RECOVERY_SUMMARY_EVENT_TYPE,

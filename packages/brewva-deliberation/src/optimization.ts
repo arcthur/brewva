@@ -1265,13 +1265,13 @@ export function createOptimizationContinuityContextProvider(input: {
     category: "narrative",
     order: 17,
     collect: (providerInput) => {
-      const lineages = plane.listCached({
+      const lineages = plane.list({
         limit: Math.max(1, input.maxLineages ?? DEFAULT_MAX_RETRIEVAL),
       });
       if (!shouldInjectOptimizationLineages(providerInput.promptText, lineages)) {
         return;
       }
-      const retrievals = plane.retrieveCached(providerInput.promptText, input.maxLineages);
+      const retrievals = plane.retrieve(providerInput.promptText, input.maxLineages);
       for (const retrieval of retrievals) {
         providerInput.register({
           id: retrieval.artifact.id,

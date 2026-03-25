@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   installSessionCompactionRecovery,
-  sendPromptWithCompactionRecovery,
   wrapSessionWithSettledPrompts,
 } from "../../../packages/brewva-gateway/src/session/compaction-recovery.js";
 
@@ -96,12 +95,12 @@ describe("compaction recovery controller", () => {
       },
     };
 
-    installSessionCompactionRecovery(session, {
+    const wrapped = installSessionCompactionRecovery(session, {
       runtime: eventBridge.runtime as any,
     });
 
     const initialPromptResult = await Promise.race([
-      session.prompt("interactive prompt").then(() => "resolved"),
+      wrapped.prompt("interactive prompt").then(() => "resolved"),
       new Promise<string>((resolve) => {
         setTimeout(() => resolve("timed_out"), 20);
       }),
@@ -171,12 +170,20 @@ describe("compaction recovery controller", () => {
           return;
         },
       },
+      dispose(): void {
+        return;
+      },
     };
 
-    await sendPromptWithCompactionRecovery(session, "initial prompt", {
+    const installed = installSessionCompactionRecovery(session, {
       runtime: eventBridge.runtime as any,
       sessionId: "agent-session-2",
     });
+    const wrapped = wrapSessionWithSettledPrompts(installed, {
+      runtime: eventBridge.runtime as any,
+      sessionId: "agent-session-2",
+    });
+    await wrapped.prompt("initial prompt");
 
     expect(promptedMessages[0]).toBe("initial prompt");
     expect(promptedMessages[1]).toContain("Resume the interrupted turn");
@@ -206,7 +213,7 @@ describe("compaction recovery controller", () => {
       sessionManager: {
         getSessionId: () => "agent-session-queued",
       },
-      async prompt(): Promise<void> {
+      async prompt(_content: string, _options?: unknown): Promise<void> {
         return;
       },
       agent: {
@@ -214,16 +221,22 @@ describe("compaction recovery controller", () => {
           await idleReleased;
         },
       },
+      dispose(): void {
+        return;
+      },
     };
 
+    const wrapped = installSessionCompactionRecovery(session, {
+      runtime: eventBridge.runtime as any,
+      sessionId: "agent-session-queued",
+    });
+
     const queuedPromptResult = await Promise.race([
-      sendPromptWithCompactionRecovery(session, "queued prompt", {
-        runtime: eventBridge.runtime as any,
-        sessionId: "agent-session-queued",
-        promptOptions: {
+      wrapped
+        .prompt("queued prompt", {
           streamingBehavior: "followUp",
-        },
-      }).then(() => "resolved"),
+        })
+        .then(() => "resolved"),
       new Promise<string>((resolve) => {
         setTimeout(() => resolve("timed_out"), 20);
       }),
@@ -233,7 +246,7 @@ describe("compaction recovery controller", () => {
     expect(queuedPromptResult).toBe("resolved");
   });
 
-  test("settled prompt wrapper is reserved for synchronous consumers and preserves bound methods", async () => {
+  test("wrapped session intercepts internal this.prompt dispatch without rebinding methods", async () => {
     const eventBridge = createRuntimeEventBridge();
     const promptedMessages: string[] = [];
     const session = {
@@ -255,23 +268,103 @@ describe("compaction recovery controller", () => {
           return;
         },
       },
+      async delegatePrompt(content: string): Promise<void> {
+        await this.prompt(content);
+      },
       marker(): string {
         return this.sessionManager.getSessionId();
       },
+      dispose(): void {
+        return;
+      },
     };
 
-    installSessionCompactionRecovery(session, {
+    const installed = installSessionCompactionRecovery(session, {
       runtime: eventBridge.runtime as any,
     });
-    const wrapped = wrapSessionWithSettledPrompts(session, {
+    const wrapped = wrapSessionWithSettledPrompts(installed, {
       runtime: eventBridge.runtime as any,
     });
 
-    await wrapped.prompt("print prompt");
+    await wrapped.delegatePrompt("print prompt");
 
     expect(promptedMessages).toHaveLength(2);
     expect(promptedMessages[0]).toBe("print prompt");
     expect(promptedMessages[1]).toContain("Resume the interrupted turn");
     expect(wrapped.marker()).toBe("agent-session-3");
+  });
+
+  test("dispose on wrapped sessions tears down recovery without mutating the raw session", async () => {
+    const eventBridge = createRuntimeEventBridge();
+    const prompt = async (): Promise<void> => {
+      return;
+    };
+    const disposeCalls: string[] = [];
+    const session = {
+      sessionManager: {
+        getSessionId: () => "agent-session-4",
+      },
+      prompt,
+      agent: {
+        async waitForIdle(): Promise<void> {
+          return;
+        },
+      },
+      dispose(): void {
+        disposeCalls.push("disposed");
+      },
+    };
+
+    const wrapped = installSessionCompactionRecovery(session, {
+      runtime: eventBridge.runtime as any,
+    });
+
+    expect(session.prompt).toBe(prompt);
+
+    wrapped.dispose?.();
+    eventBridge.runtime.events.record({
+      sessionId: "agent-session-4",
+      type: "session_compact",
+      turn: 1,
+      payload: { entryId: "comp-1" },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(disposeCalls).toEqual(["disposed"]);
+    expect(
+      eventBridge.events.some((event) => event.type === "session_turn_compaction_resume_requested"),
+    ).toBe(false);
+  });
+
+  test("settled prompt wrappers are idempotent over installed sessions", () => {
+    const eventBridge = createRuntimeEventBridge();
+    const session = {
+      sessionManager: {
+        getSessionId: () => "agent-session-5",
+      },
+      async prompt(): Promise<void> {
+        return;
+      },
+      agent: {
+        async waitForIdle(): Promise<void> {
+          return;
+        },
+      },
+      dispose(): void {
+        return;
+      },
+    };
+
+    const installed = installSessionCompactionRecovery(session, {
+      runtime: eventBridge.runtime as any,
+    });
+    const wrapped = wrapSessionWithSettledPrompts(installed, {
+      runtime: eventBridge.runtime as any,
+    });
+    const wrappedAgain = wrapSessionWithSettledPrompts(installed, {
+      runtime: eventBridge.runtime as any,
+    });
+
+    expect(wrappedAgain).toBe(wrapped);
   });
 });

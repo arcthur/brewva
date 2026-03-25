@@ -72,6 +72,7 @@ export interface ToolGovernanceDescriptor {
   effects: ToolEffectClass[];
   defaultRisk?: ToolGovernanceRisk;
   boundary?: ToolExecutionBoundary;
+  rollbackable?: boolean;
 }
 
 export type ToolMutationStrategy =
@@ -394,6 +395,7 @@ export interface CreateBrewvaSessionOptions {
 }
 
 export type TaskSpecSchema = "brewva.task.v1";
+export type TaskAcceptanceOwner = "operator";
 
 export interface TaskSpec {
   schema: TaskSpecSchema;
@@ -408,17 +410,31 @@ export interface TaskSpec {
     level?: VerificationLevel;
     commands?: string[];
   };
+  acceptance?: {
+    required?: boolean;
+    owner?: TaskAcceptanceOwner;
+    criteria?: string[];
+  };
 }
 
 export type TaskItemStatus = "todo" | "doing" | "done" | "blocked";
 
-export type TaskPhase = "align" | "investigate" | "execute" | "verify" | "blocked" | "done";
+export type TaskPhase =
+  | "align"
+  | "investigate"
+  | "execute"
+  | "verify"
+  | "ready_for_acceptance"
+  | "blocked"
+  | "done";
 
 export type TaskHealth =
   | "ok"
   | "exploring"
   | "blocked"
   | "verification_failed"
+  | "acceptance_pending"
+  | "acceptance_rejected"
   | "budget_pressure"
   | "unknown";
 
@@ -446,9 +462,19 @@ export interface TaskBlocker {
   truthFactId?: string;
 }
 
+export type TaskAcceptanceStatus = "pending" | "accepted" | "rejected";
+
+export interface TaskAcceptanceState {
+  status: TaskAcceptanceStatus;
+  updatedAt: number;
+  decidedBy?: string;
+  notes?: string;
+}
+
 export interface TaskState {
   spec?: TaskSpec;
   status?: TaskStatus;
+  acceptance?: TaskAcceptanceState;
   items: TaskItem[];
   blockers: TaskBlocker[];
   updatedAt: number | null;
@@ -601,6 +627,7 @@ export type TaskItemAddResult = RuntimeResult<{ itemId: string }>;
 export type TaskItemUpdateResult = RuntimeResult;
 export type TaskBlockerRecordResult = RuntimeResult<{ blockerId: string }>;
 export type TaskBlockerResolveResult = RuntimeResult;
+export type TaskAcceptanceRecordResult = RuntimeResult;
 
 export interface ScheduleIntentListQuery {
   parentSessionId?: string;
@@ -655,6 +682,11 @@ export type TaskLedgerEventPayload =
       schema: "brewva.task.ledger.v1";
       kind: "blocker_resolved";
       blockerId: string;
+    }
+  | {
+      schema: "brewva.task.ledger.v1";
+      kind: "acceptance_set";
+      acceptance: TaskAcceptanceState;
     };
 
 export interface BrewvaConfig {

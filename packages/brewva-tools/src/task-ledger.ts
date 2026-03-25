@@ -1,5 +1,6 @@
 import {
   formatTaskStateBlock,
+  normalizeTaskAcceptanceOwner,
   TASK_AGENT_ITEM_STATUS_ALIASES,
   TASK_AGENT_ITEM_STATUS_RUNTIME_MAP,
   TASK_AGENT_ITEM_STATUS_VALUES,
@@ -50,6 +51,12 @@ function toRuntimeTaskItemStatus(value: unknown): TaskItemStatus | undefined {
     : undefined;
 }
 
+function toRuntimeTaskAcceptanceStatus(
+  value: unknown,
+): "pending" | "accepted" | "rejected" | undefined {
+  return value === "pending" || value === "accepted" || value === "rejected" ? value : undefined;
+}
+
 const taskSetSpecVerificationGuideline =
   "For read-only reviews, omit verification.level or use none; smoke, targeted, and full are the agent-facing verification levels when you need an execution plan.";
 
@@ -58,6 +65,25 @@ const taskItemStatusGuideline =
 
 const taskItemCanonicalGuideline =
   "Prefer canonical statuses pending, in_progress, blocked, and done so task state stays consistent.";
+
+const TASK_ACCEPTANCE_STATUS_VALUES = ["pending", "accepted", "rejected"] as const;
+const TASK_ACCEPTANCE_OWNER_VALUES = ["operator"] as const;
+const TaskAcceptanceStatusSchema = buildStringEnumSchema(
+  TASK_ACCEPTANCE_STATUS_VALUES,
+  {},
+  {
+    guidance:
+      "Use accepted when an operator closes the task, rejected when the result is not yet acceptable, and pending to reopen acceptance after new work.",
+  },
+);
+const TaskAcceptanceOwnerSchema = buildStringEnumSchema(
+  TASK_ACCEPTANCE_OWNER_VALUES,
+  {},
+  {
+    guidance:
+      "Only operator-owned acceptance is supported. Omit owner unless you need to state that closure is operator-controlled.",
+  },
+);
 
 export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinition[] {
   const taskSetSpec = defineBrewvaTool({
@@ -85,6 +111,13 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
           commands: Type.Optional(Type.Array(Type.String())),
         }),
       ),
+      acceptance: Type.Optional(
+        Type.Object({
+          required: Type.Optional(Type.Boolean()),
+          owner: Type.Optional(TaskAcceptanceOwnerSchema),
+          criteria: Type.Optional(Type.Array(Type.String())),
+        }),
+      ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
@@ -96,6 +129,16 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
               commands: params.verification?.commands,
             }
           : undefined;
+      const normalizedAcceptance =
+        params.acceptance?.required !== undefined ||
+        params.acceptance?.owner !== undefined ||
+        params.acceptance?.criteria !== undefined
+          ? {
+              required: params.acceptance?.required,
+              owner: normalizeTaskAcceptanceOwner(params.acceptance?.owner),
+              criteria: params.acceptance?.criteria,
+            }
+          : undefined;
 
       options.runtime.task.setSpec(sessionId, {
         schema: "brewva.task.v1",
@@ -104,6 +147,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
         expectedBehavior: params.expectedBehavior,
         constraints: params.constraints,
         verification: normalizedVerification,
+        acceptance: normalizedAcceptance,
       });
       return textResult("TaskSpec recorded.", { ok: true });
     },
@@ -210,6 +254,45 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
     },
   });
 
+  const taskRecordAcceptance = defineBrewvaTool({
+    name: "task_record_acceptance",
+    label: "Task Record Acceptance",
+    description: "Record operator-visible acceptance state for task closure.",
+    promptSnippet:
+      "Use this only for explicit operator acceptance closure, not for self-approval by the model.",
+    promptGuidelines: [
+      "Record accepted only when the operator accepts the current result as closure.",
+      "Use rejected to reopen the task with a clear closure gap, or pending to clear a previous decision.",
+    ],
+    parameters: Type.Object({
+      status: TaskAcceptanceStatusSchema,
+      decidedBy: Type.Optional(Type.String()),
+      notes: Type.Optional(Type.String()),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const sessionId = getSessionId(ctx);
+      const status = toRuntimeTaskAcceptanceStatus(params.status);
+      if (!status) {
+        return failTextResult("Acceptance update rejected (invalid_status).", {
+          ok: false,
+          error: "invalid_status",
+        });
+      }
+      const result = options.runtime.task.recordAcceptance(sessionId, {
+        status,
+        decidedBy: params.decidedBy,
+        notes: params.notes,
+      });
+      if (!result.ok) {
+        return failTextResult(
+          `Acceptance update rejected (${result.error ?? "unknown_error"}).`,
+          result,
+        );
+      }
+      return textResult(`Acceptance state recorded (${status}).`, result);
+    },
+  });
+
   const taskViewState = defineBrewvaTool({
     name: "task_view_state",
     label: "Task View State",
@@ -233,6 +316,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
     taskUpdateItem,
     taskRecordBlocker,
     taskResolveBlocker,
+    taskRecordAcceptance,
     taskViewState,
   ];
 }

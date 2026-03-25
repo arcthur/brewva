@@ -1,3 +1,4 @@
+import { normalizeTaskAcceptanceOwner } from "../task/spec.js";
 import type { SessionCostSummary, TaskSpec, TaskState, TruthState } from "../types.js";
 import { isRecord, normalizeNonEmptyString } from "../utils/coerce.js";
 
@@ -8,12 +9,22 @@ export const TAPE_ANCHOR_SCHEMA = "brewva.tape.anchor.v1" as const;
 export const TAPE_CHECKPOINT_SCHEMA = "brewva.tape.checkpoint.v3" as const;
 
 const TASK_ITEM_STATUSES = ["todo", "doing", "done", "blocked"] as const;
-const TASK_PHASES = ["align", "investigate", "execute", "verify", "blocked", "done"] as const;
+const TASK_PHASES = [
+  "align",
+  "investigate",
+  "execute",
+  "verify",
+  "ready_for_acceptance",
+  "blocked",
+  "done",
+] as const;
 const TASK_HEALTH_VALUES = [
   "ok",
   "exploring",
   "blocked",
   "verification_failed",
+  "acceptance_pending",
+  "acceptance_rejected",
   "budget_pressure",
   "unknown",
 ] as const;
@@ -117,6 +128,15 @@ function isTaskHealth(value: unknown): value is NonNullable<TaskState["status"]>
   return typeof value === "string" && (TASK_HEALTH_VALUES as readonly string[]).includes(value);
 }
 
+function isTaskAcceptanceStatus(
+  value: unknown,
+): value is NonNullable<TaskState["acceptance"]>["status"] {
+  return (
+    typeof value === "string" &&
+    (["pending", "accepted", "rejected"] as readonly string[]).includes(value)
+  );
+}
+
 function isTruthFactStatus(value: unknown): value is TruthState["facts"][number]["status"] {
   return typeof value === "string" && (TRUTH_FACT_STATUSES as readonly string[]).includes(value);
 }
@@ -210,6 +230,22 @@ function coerceCheckpointTaskState(value: unknown): TaskState | null {
           : undefined,
       };
     }
+    let acceptance: TaskSpec["acceptance"];
+    if (rawSpec.acceptance !== undefined) {
+      if (!isRecord(rawSpec.acceptance)) return null;
+      acceptance = {
+        required:
+          typeof rawSpec.acceptance.required === "boolean"
+            ? rawSpec.acceptance.required
+            : undefined,
+        owner: normalizeTaskAcceptanceOwner(rawSpec.acceptance.owner),
+        criteria: Array.isArray(rawSpec.acceptance.criteria)
+          ? rawSpec.acceptance.criteria.filter(
+              (item: unknown): item is string => typeof item === "string",
+            )
+          : undefined,
+      };
+    }
     spec = {
       schema: "brewva.task.v1",
       goal,
@@ -217,6 +253,7 @@ function coerceCheckpointTaskState(value: unknown): TaskState | null {
       expectedBehavior,
       constraints,
       verification,
+      acceptance,
     };
   }
 
@@ -242,6 +279,22 @@ function coerceCheckpointTaskState(value: unknown): TaskState | null {
     };
   }
 
+  let acceptance: TaskState["acceptance"] | undefined;
+  if (value.acceptance !== undefined) {
+    if (!isRecord(value.acceptance)) return null;
+    const acceptanceStatus = isTaskAcceptanceStatus(value.acceptance.status)
+      ? value.acceptance.status
+      : null;
+    const updatedAt = normalizeFiniteNumber(value.acceptance.updatedAt);
+    if (!acceptanceStatus || updatedAt === null) return null;
+    acceptance = {
+      status: acceptanceStatus,
+      updatedAt,
+      decidedBy: normalizeNonEmptyString(value.acceptance.decidedBy),
+      notes: normalizeNonEmptyString(value.acceptance.notes),
+    };
+  }
+
   let updatedAt: number | null = null;
   if (value.updatedAt !== null && value.updatedAt !== undefined) {
     const normalized = normalizeFiniteNumber(value.updatedAt);
@@ -252,6 +305,7 @@ function coerceCheckpointTaskState(value: unknown): TaskState | null {
   return {
     spec,
     status,
+    acceptance,
     items,
     blockers,
     updatedAt,

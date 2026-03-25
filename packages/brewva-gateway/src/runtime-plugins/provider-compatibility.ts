@@ -26,6 +26,7 @@ import {
 export type ToolCallNormalizationKind =
   | "content_embedded_single_call"
   | "double_stringified_arguments"
+  | "truncated_json_closed"
   | "provider_wrapper_unwrapped"
   | "primitive_to_object_coercion";
 
@@ -81,6 +82,7 @@ export type ModelRequestPatchKind =
   | "unsupported_reasoning_removed"
   | "unsupported_thinking_removed"
   | "temperature_clamped"
+  | "tool_output_budget_raised"
   | "codex_parallel_tool_calls_defaulted"
   | "codex_tool_choice_defaulted";
 
@@ -265,6 +267,60 @@ function parseJsonValue(text: string): unknown {
   return JSON.parse(text) as unknown;
 }
 
+function closeTruncatedJson(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+    return null;
+  }
+
+  const stack: string[] = [];
+  let inString = false;
+  let escaping = false;
+
+  for (const char of trimmed) {
+    if (escaping) {
+      escaping = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaping = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) {
+      continue;
+    }
+    if (char === "{" || char === "[") {
+      stack.push(char);
+      continue;
+    }
+    if (char === "}" || char === "]") {
+      const expected = char === "}" ? "{" : "[";
+      if (stack[stack.length - 1] === expected) {
+        stack.pop();
+        continue;
+      }
+      return null;
+    }
+  }
+
+  if (inString) {
+    return null;
+  }
+  if (stack.length === 0) {
+    return null;
+  }
+
+  const suffix = stack
+    .toReversed()
+    .map((entry) => (entry === "{" ? "}" : "]"))
+    .join("");
+  return `${trimmed}${suffix}`;
+}
+
 function createEmptyUsage(): AssistantMessage["usage"] {
   return {
     input: 0,
@@ -335,7 +391,17 @@ function normalizeArgumentsValue(
         candidate = parseJsonValue(trimmed);
         repairKinds.push("double_stringified_arguments");
       } catch {
-        candidate = toolCall.arguments;
+        const recovered = closeTruncatedJson(trimmed);
+        if (recovered) {
+          try {
+            candidate = parseJsonValue(recovered);
+            repairKinds.push("double_stringified_arguments", "truncated_json_closed");
+          } catch {
+            candidate = toolCall.arguments;
+          }
+        } else {
+          candidate = toolCall.arguments;
+        }
       }
     }
   }
@@ -743,6 +809,40 @@ function clampNumber(value: number, min: number | undefined, max: number | undef
   return current;
 }
 
+function raiseToolOutputBudget(
+  payload: Record<string, unknown>,
+  patchKinds: ModelRequestPatchKind[],
+): void {
+  if (!Array.isArray(payload.tools) || payload.tools.length === 0) {
+    return;
+  }
+  const minBudget = 3200;
+  const hasSnake = "max_output_tokens" in payload;
+  const hasCamel = "maxOutputTokens" in payload;
+  if (!hasSnake && !hasCamel) {
+    return;
+  }
+  const currentSnake =
+    typeof payload.max_output_tokens === "number" && Number.isFinite(payload.max_output_tokens)
+      ? payload.max_output_tokens
+      : undefined;
+  const currentCamel =
+    typeof payload.maxOutputTokens === "number" && Number.isFinite(payload.maxOutputTokens)
+      ? payload.maxOutputTokens
+      : undefined;
+  const current = Math.max(currentSnake ?? 0, currentCamel ?? 0);
+  if (current >= minBudget) {
+    return;
+  }
+  if (hasSnake) {
+    payload.max_output_tokens = minBudget;
+  }
+  if (hasCamel) {
+    payload.maxOutputTokens = minBudget;
+  }
+  patchKinds.push("tool_output_budget_raised");
+}
+
 function patchRequestPayload(
   profile: ModelCapabilityProfile,
   payload: unknown,
@@ -817,6 +917,8 @@ function patchRequestPayload(
       }
     }
   }
+
+  raiseToolOutputBudget(nextPayload, patchKinds);
 
   return {
     payload: nextPayload,

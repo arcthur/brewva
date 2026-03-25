@@ -90,7 +90,7 @@ function recordGoalLoopCompletion(input: {
 }
 
 describe("optimization continuity plane", () => {
-  test("keeps provider collection read-only and separates inherited lineages from fresh branches", () => {
+  test("refreshes provider collection live and separates inherited lineages from fresh branches", () => {
     const workspace = createTestWorkspace("optimization-continuity-plane");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const statePath = resolveOptimizationContinuityStatePath(workspace);
@@ -209,8 +209,8 @@ describe("optimization continuity plane", () => {
     });
 
     expect(provider.source).toBe(CONTEXT_SOURCES.optimizationContinuity);
-    expect(beforeSyncEntries).toHaveLength(0);
-    expect(existsSync(statePath)).toBe(false);
+    expect(beforeSyncEntries.length).toBeGreaterThan(0);
+    expect(existsSync(statePath)).toBe(true);
 
     const plane = getOrCreateOptimizationContinuityPlane(runtime, {
       minRefreshIntervalMs: 1,

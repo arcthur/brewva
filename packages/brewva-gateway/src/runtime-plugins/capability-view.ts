@@ -42,6 +42,16 @@ interface CapabilityEntry {
   rollbackable: boolean;
 }
 
+interface CapabilityManifestEntry {
+  name: string;
+  description: string;
+  boundary: ToolExecutionBoundary;
+  effects: ToolEffectClass[];
+  requiresApproval: boolean;
+  rollbackable: boolean;
+  loadWhen: string;
+}
+
 export interface CapabilityParameterDetail {
   pathText: string;
   acceptedValues: string[];
@@ -72,6 +82,7 @@ export interface BuildCapabilityViewInput {
 export interface CapabilityVisibilityInventory {
   availableTotal: number;
   visibleNames: string[];
+  visibleManifest: CapabilityManifestEntry[];
   visibleByBoundary: Record<ToolExecutionBoundary, number>;
   hiddenBySurface: Record<CapabilitySurface, number>;
   hints: CapabilityHintId[];
@@ -228,6 +239,7 @@ function createEmptyInventory(): CapabilityVisibilityInventory {
   return {
     availableTotal: 0,
     visibleNames: [],
+    visibleManifest: [],
     visibleByBoundary: {
       safe: 0,
       effectful: 0,
@@ -296,6 +308,20 @@ function formatVisibleNames(names: string[], maxCount: number): string {
     capped.push(`+${remaining} more`);
   }
   return capped.join(", ");
+}
+
+function resolveManifestLoadWhen(surface: CapabilitySurface): string {
+  if (surface === "base") return "always_on";
+  if (surface === "skill") return "active_or_accepted_skill";
+  if (surface === "operator") return "operator_or_meta_profile";
+  return "provider_specific";
+}
+
+function resolveManifestRisk(entry: CapabilityManifestEntry): "low" | "medium" | "high" {
+  if (entry.requiresApproval) return "high";
+  if (entry.boundary === "effectful") return "medium";
+  if (entry.effects.length > 0) return "medium";
+  return "low";
 }
 
 function formatFullDetailBlock(detail: CapabilityDetail): string {
@@ -394,6 +420,12 @@ function renderSummaryBlock(
       `visible_now_count: ${inventory.visibleNames.length}`,
       `visible_now: ${visibleNow}`,
       `visible_boundaries: safe=${inventory.visibleByBoundary.safe} effectful=${inventory.visibleByBoundary.effectful}`,
+      "manifest:",
+      ...inventory.visibleManifest.slice(0, 6).map((entry) => {
+        const risk = resolveManifestRisk(entry);
+        const duty = compactText(entry.description || "(no description)", 72);
+        return `- $${entry.name} | duty=${duty} | risk=${risk} | approval=${entry.requiresApproval ? "yes" : "no"} | rollback=${entry.rollbackable ? "yes" : "no"} | load_when=${entry.loadWhen}`;
+      }),
     ].join("\n"),
     compactContent: [
       "[CapabilityView]",
@@ -519,6 +551,15 @@ export function buildCapabilityView(input: BuildCapabilityViewInput): BuildCapab
   const inventory: CapabilityVisibilityInventory = {
     availableTotal: entries.length,
     visibleNames: visibleEntries.map((entry) => entry.name),
+    visibleManifest: visibleEntries.map((entry) => ({
+      name: entry.name,
+      description: entry.description,
+      boundary: entry.boundary,
+      effects: entry.effects,
+      requiresApproval: entry.requiresApproval,
+      rollbackable: entry.rollbackable,
+      loadWhen: resolveManifestLoadWhen(entry.surface),
+    })),
     visibleByBoundary: {
       safe: visibleEntries.filter((entry) => entry.boundary === "safe").length,
       effectful: visibleEntries.filter((entry) => entry.boundary === "effectful").length,

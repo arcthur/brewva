@@ -61,13 +61,21 @@ const CONVERGENCE_KIND_VALUES = [
   "all_of",
   "any_of",
 ] as const;
-const TASK_PHASE_VALUES = ["align", "investigate", "execute", "verify", "blocked", "done"] as const;
+const TASK_PHASE_VALUES = [
+  "align",
+  "investigate",
+  "execute",
+  "verify",
+  "ready_for_acceptance",
+  "blocked",
+  "done",
+] as const;
 const TaskPhaseSchema = buildStringEnumSchema(
   TASK_PHASE_VALUES,
   {},
   {
     guidance:
-      "Use task_phase when the schedule should stop after the task reaches a specific phase such as investigate, execute, verify, blocked, or done.",
+      "Use task_phase when the schedule should stop after the task reaches a specific phase such as investigate, execute, verify, ready_for_acceptance, blocked, or done.",
   },
 );
 

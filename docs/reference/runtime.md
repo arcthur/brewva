@@ -85,6 +85,8 @@ entries for the model, but they do not bypass kernel admission.
 Default runtime-owned injected sources:
 
 - `brewva.identity`
+- `brewva.agent-constitution`
+- `brewva.agent-memory`
 - `brewva.runtime-status`
 - `brewva.task-state`
 - `brewva.projection-working`
@@ -149,8 +151,19 @@ Tool-governance note:
 - `addItem(sessionId, input)`
 - `updateItem(sessionId, input)`
 - `recordBlocker(sessionId, input)`
+- `recordAcceptance(sessionId, input)`
 - `resolveBlocker(sessionId, blockerId)`
 - `getState(sessionId)`
+
+Task closure semantics:
+
+- verification remains evidence sufficiency
+- acceptance is an explicit operator-visible closure layer
+- when `TaskSpec.acceptance.required === true`, a verification pass moves the
+  task to `ready_for_acceptance`
+- only recorded acceptance moves the task to `done`
+- acceptance writes are non-rollbackable closure records rather than reversible
+  task-state edits
 
 ### `runtime.truth.*`
 

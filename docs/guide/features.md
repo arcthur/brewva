@@ -74,6 +74,7 @@
 - `task_set_spec`
 - `task_add_item`
 - `task_update_item`
+- `task_record_acceptance`
 - `task_record_blocker`
 - `task_resolve_blocker`
 - `task_view_state`
@@ -97,6 +98,9 @@ Tool registry source: `packages/brewva-tools/src/index.ts`
   not a generic implementation skill
 - `deliberation_memory` is the explicit surface for inspecting retained
   repository, user, agent, and loop memory artifacts
+- delegated read-only profiles are `explore`, `plan`, `review`, and `general`;
+  removed legacy aliases such as `researcher`, `reviewer`, and `verifier` now
+  fail fast
 - `optimization_continuity` is the inspection surface for deliberation-owned
   loop continuity, not a runtime-owned optimizer; its `attention` view surfaces
   overdue or long-running lineages for explicit review

@@ -203,6 +203,59 @@ describe("reversible mutation receipts", () => {
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
   });
 
+  test("acceptance closure writes do not create rollback receipts", () => {
+    const workspace = createWorkspace();
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = `reversible-acceptance-${crypto.randomUUID()}`;
+    runtime.context.onTurnStart(sessionId, 1);
+
+    runtime.task.setSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Close with operator acceptance",
+      acceptance: {
+        required: true,
+        owner: "operator",
+      },
+    });
+
+    const started = runtime.tools.start({
+      sessionId,
+      toolCallId: "tc-task-record-acceptance",
+      toolName: "task_record_acceptance",
+      args: {
+        status: "accepted",
+        decidedBy: "operator",
+      },
+    });
+
+    expect(started.allowed).toBe(true);
+    expect(started.mutationReceipt).toBeUndefined();
+
+    runtime.task.recordAcceptance(sessionId, {
+      status: "accepted",
+      decidedBy: "operator",
+    });
+    runtime.tools.finish({
+      sessionId,
+      toolCallId: "tc-task-record-acceptance",
+      toolName: "task_record_acceptance",
+      args: {
+        status: "accepted",
+        decidedBy: "operator",
+      },
+      outputText: "Acceptance state recorded (accepted).",
+      channelSuccess: true,
+      verdict: "pass",
+    });
+
+    expect(
+      runtime.events.query(sessionId, {
+        type: "reversible_mutation_recorded",
+      }),
+    ).toHaveLength(0);
+    expect(runtime.task.getState(sessionId).acceptance?.status).toBe("accepted");
+  });
+
   test("direct patchset rollback also retires the matching reversible mutation receipt", () => {
     const workspace = createWorkspace();
     mkdirSync(join(workspace, "src"), { recursive: true });

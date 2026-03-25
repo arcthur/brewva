@@ -332,4 +332,40 @@ describe("workflow_status contract", () => {
       (result.details as { artifacts?: Array<{ kind: string }> } | undefined)?.artifacts?.[0]?.kind,
     ).toBe("verification");
   });
+
+  test("surfaces acceptance as a separate closure posture", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-acceptance-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "workflow-status-acceptance";
+
+    runtime.task.setSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Land the closure UX",
+      acceptance: {
+        required: true,
+        owner: "operator",
+        criteria: ["Operator accepts the result before done."],
+      },
+    });
+    runtime.task.addItem(sessionId, {
+      id: "item-1",
+      text: "Finish the task",
+      status: "done",
+    });
+
+    const tool = createWorkflowStatusTool({ runtime });
+    const result = await tool.execute(
+      "tc-workflow-status-acceptance",
+      {},
+      undefined,
+      undefined,
+      mergeContext(sessionId, { cwd: workspace }),
+    );
+
+    const text = extractTextContent(result);
+    expect(text).toContain("acceptance: pending");
+    expect(text).toContain("ship: missing");
+    expect(text).toContain("Acceptance required before closure.");
+    expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("inconclusive");
+  });
 });

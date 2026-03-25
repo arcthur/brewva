@@ -125,6 +125,11 @@ function cloneTaskState(state: TaskState): TaskState {
           truthFactIds: state.status.truthFactIds ? [...state.status.truthFactIds] : undefined,
         }
       : undefined,
+    acceptance: state.acceptance
+      ? {
+          ...state.acceptance,
+        }
+      : undefined,
     items: state.items.map((item) => ({ ...item })),
     blockers: state.blockers.map((blocker) => ({ ...blocker })),
     updatedAt: state.updatedAt,

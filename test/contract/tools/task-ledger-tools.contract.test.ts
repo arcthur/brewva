@@ -21,6 +21,7 @@ function createTaskLedgerToolHarness(prefix: string) {
     taskSetSpec: findTool("task_set_spec"),
     taskAddItem: findTool("task_add_item"),
     taskUpdateItem: findTool("task_update_item"),
+    taskRecordAcceptance: findTool("task_record_acceptance"),
   };
 }
 
@@ -227,6 +228,89 @@ describe("task ledger tool aliases", () => {
 
       expect(extractTextContent(result)).toBe("Task item updated.");
       expect(runtime.task.getState(sessionId).items[0]?.status).toBe("doing");
+    } finally {
+      cleanupTestWorkspace(workspace);
+    }
+  });
+
+  test("task_record_acceptance records operator-visible acceptance state", async () => {
+    const { workspace, runtime, taskSetSpec, taskRecordAcceptance } = createTaskLedgerToolHarness(
+      "task-ledger-tool-acceptance",
+    );
+
+    try {
+      const sessionId = "task-ledger-tool-acceptance";
+      await taskSetSpec.execute(
+        "tc-task-set-spec-acceptance",
+        {
+          goal: "Ship the closure UX",
+          acceptance: {
+            required: true,
+            owner: "operator",
+            criteria: ["Operator confirms the result is acceptable."],
+          },
+        },
+        undefined,
+        undefined,
+        fakeContext(sessionId),
+      );
+
+      const result = await taskRecordAcceptance.execute(
+        "tc-task-record-acceptance",
+        {
+          status: "accepted",
+          decidedBy: "operator",
+          notes: "Closure accepted after inspection.",
+        },
+        undefined,
+        undefined,
+        fakeContext(sessionId),
+      );
+
+      expect(extractTextContent(result)).toBe("Acceptance state recorded (accepted).");
+      expect(runtime.task.getState(sessionId).acceptance).toEqual({
+        status: "accepted",
+        decidedBy: "operator",
+        notes: "Closure accepted after inspection.",
+        updatedAt: expect.any(Number),
+      });
+    } finally {
+      cleanupTestWorkspace(workspace);
+    }
+  });
+
+  test("task_record_acceptance rejects writes when acceptance is not enabled on the task", async () => {
+    const { workspace, runtime, taskSetSpec, taskRecordAcceptance } = createTaskLedgerToolHarness(
+      "task-ledger-tool-acceptance-disabled",
+    );
+
+    try {
+      const sessionId = "task-ledger-tool-acceptance-disabled";
+      await taskSetSpec.execute(
+        "tc-task-set-spec-no-acceptance",
+        {
+          goal: "Keep closure verification-only",
+        },
+        undefined,
+        undefined,
+        fakeContext(sessionId),
+      );
+
+      const result = await taskRecordAcceptance.execute(
+        "tc-task-record-acceptance-disabled",
+        {
+          status: "accepted",
+          decidedBy: "operator",
+        },
+        undefined,
+        undefined,
+        fakeContext(sessionId),
+      );
+
+      expect(extractTextContent(result)).toBe(
+        "Acceptance update rejected (acceptance_not_enabled).",
+      );
+      expect(runtime.task.getState(sessionId).acceptance).toBeUndefined();
     } finally {
       cleanupTestWorkspace(workspace);
     }

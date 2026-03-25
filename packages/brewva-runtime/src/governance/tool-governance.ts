@@ -10,11 +10,13 @@ function descriptor(input: {
   effects: ToolEffectClass[];
   defaultRisk?: ToolGovernanceRisk;
   boundary?: ToolExecutionBoundary;
+  rollbackable?: boolean;
 }): ToolGovernanceDescriptor {
   return {
     effects: input.effects,
     defaultRisk: input.defaultRisk,
     boundary: input.boundary ?? resolveToolExecutionBoundaryFromEffects(input.effects),
+    rollbackable: input.rollbackable,
   };
 }
 
@@ -23,6 +25,7 @@ function normalizeDescriptor(input: ToolGovernanceDescriptor): ToolGovernanceDes
     effects: [...new Set(input.effects)],
     defaultRisk: input.defaultRisk,
     boundary: input.boundary ?? resolveToolExecutionBoundaryFromEffects(input.effects),
+    rollbackable: input.rollbackable,
   };
 }
 
@@ -308,6 +311,11 @@ export const TOOL_GOVERNANCE_BY_NAME: Record<string, ToolGovernanceDescriptor> =
     effects: ["memory_write"],
     defaultRisk: "medium",
   }),
+  task_record_acceptance: descriptor({
+    effects: ["memory_write"],
+    defaultRisk: "medium",
+    rollbackable: false,
+  }),
   task_resolve_blocker: descriptor({
     effects: ["memory_write"],
     defaultRisk: "medium",
@@ -499,5 +507,8 @@ export function toolGovernanceRequiresEffectCommitment(
 export function toolGovernanceCreatesRollbackAnchor(
   toolDescriptor: ToolGovernanceDescriptor | undefined,
 ): boolean {
+  if (toolDescriptor?.rollbackable === false) {
+    return false;
+  }
   return toolEffectsCreateRollbackAnchor(toolDescriptor?.effects ?? []);
 }

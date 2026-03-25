@@ -575,7 +575,8 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
     promptSnippet:
       "Use isolated delegated runs for focused exploration, review, or verification without polluting the main context window.",
     promptGuidelines: [
-      "Prefer this for bounded investigations, reviews, or verifier-style checks.",
+      "Prefer canonical profiles explore, plan, review, and general for the default delegated posture.",
+      "Delegate when the task needs cross-3+-file investigation, an independent review pass, or parallel slice exploration.",
       "Use single for one delegated run and parallel to fan out multiple independent slices.",
       "Keep objectives specific, pass only the context references the child needs, and avoid broad parent-context dumps.",
     ],
@@ -649,6 +650,7 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
     promptSnippet:
       "Use this for explicit fan-out when several repository slices or verification lanes can run independently under the same delegated profile.",
     promptGuidelines: [
+      "Prefer canonical profiles explore, plan, review, and general unless a narrower internal profile is explicitly required.",
       "Use this when tasks are independent and a shared packet plus per-task objectives is clearer than one large delegated run.",
       "Keep each task label and objective specific so the parent can inspect outcomes separately.",
       "Prefer read-only profiles unless the workflow is explicitly ready to inspect and merge isolated patch results.",

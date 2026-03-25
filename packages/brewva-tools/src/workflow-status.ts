@@ -28,10 +28,12 @@ function overallVerdict(input: {
   qa: WorkflowLaneStatus;
   verification: WorkflowLaneStatus;
   ship: WorkflowLaneStatus;
+  acceptance: "not_required" | WorkflowLaneStatus;
 }): "pass" | "fail" | "inconclusive" {
   if (input.ship === "ready") return "pass";
   if (
     input.ship === "blocked" ||
+    input.acceptance === "blocked" ||
     laneVerdict(input.review) === "fail" ||
     laneVerdict(input.qa) === "fail" ||
     laneVerdict(input.verification) === "fail"
@@ -91,6 +93,11 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
           id: blocker.id,
           message: blocker.message,
         })),
+        taskState: {
+          spec: taskState.spec,
+          status: taskState.status,
+          acceptance: taskState.acceptance,
+        },
         pendingWorkerResults: pendingWorkerResults.length,
         workspaceRoot: options.runtime.workspaceRoot,
       });
@@ -100,6 +107,7 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         review: posture.review,
         qa: posture.qa,
         verification: posture.verification,
+        acceptance: posture.acceptance,
         ship: posture.ship,
       });
       const includeArtifacts = params.include_artifacts === true;
@@ -116,6 +124,7 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         `review: ${posture.review}`,
         `qa: ${posture.qa}`,
         `verification: ${posture.verification}`,
+        `acceptance: ${posture.acceptance}`,
         `ship: ${posture.ship}`,
         `retro: ${posture.retro}`,
         `pending_worker_results: ${snapshot.pendingWorkerResults}`,

@@ -24,6 +24,7 @@ function cloneGovernanceDescriptor(input: ToolGovernanceDescriptor): ToolGoverna
     effects: [...new Set(input.effects)],
     defaultRisk: input.defaultRisk,
     boundary: input.boundary,
+    rollbackable: input.rollbackable,
   };
 }
 

@@ -137,7 +137,7 @@ function recordGoalLoopState(runtime: BrewvaRuntime): { loopKey: string; parentS
 }
 
 describe("optimization continuity tool", () => {
-  test("lists and shows lineages while keeping provider state aligned", async () => {
+  test("lists and shows lineages while keeping provider state aligned with live refresh", async () => {
     const workspace = createTestWorkspace("optimization-continuity-tool");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const { loopKey, parentSessionId } = recordGoalLoopState(runtime);
@@ -156,7 +156,7 @@ describe("optimization continuity tool", () => {
       },
     });
     expect(provider.source).toBe(CONTEXT_SOURCES.optimizationContinuity);
-    expect(beforeListEntries).toHaveLength(0);
+    expect(beforeListEntries.length).toBeGreaterThan(0);
 
     const tool = createOptimizationContinuityTool({ runtime });
     const listResult = await tool.execute(

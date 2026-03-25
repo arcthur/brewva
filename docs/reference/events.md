@@ -139,6 +139,7 @@ The authoritative registry lives in
 
 - `context_composed`
 - `tool_surface_resolved`
+- `identity_parse_warning`
 - `model_capability_profile_selected`
 - `model_request_patched`
 - `task_stuck_detected`

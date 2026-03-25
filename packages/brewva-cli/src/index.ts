@@ -117,7 +117,7 @@ Options:
   --cwd <path>          Working directory
   --config <path>       Brewva config path (default: .brewva/brewva.json)
   --model <pattern>     Model override (supports provider/id and optional :thinking)
-  --agent <id>          Agent identity id (.brewva/agents/<id>/identity.md)
+  --agent <id>          Agent self bundle id (.brewva/agents/<id>/{identity,constitution,memory}.md)
   --task <json>         TaskSpec JSON (schema: brewva.task.v1)
   --task-file <path>    TaskSpec JSON file
   --managed-tools <extension|direct>

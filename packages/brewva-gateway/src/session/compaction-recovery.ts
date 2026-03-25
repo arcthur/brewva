@@ -5,7 +5,22 @@ import type { PromptDispatchSession } from "./contracts.js";
 const COMPACTION_RESUME_PROMPT =
   "Context compaction completed. Resume the interrupted turn from the current task and evidence state. Do not repeat completed tool side effects unless required for correctness. Finish the pending response.";
 
-const SESSION_COMPACTION_RECOVERY = Symbol("brewva.sessionCompactionRecovery");
+const controllerByRawSession = new WeakMap<
+  CompactionRecoverySessionLike,
+  InstalledCompactionRecoveryController
+>();
+const backgroundWrappedByRawSession = new WeakMap<
+  CompactionRecoverySessionLike,
+  CompactionRecoverySessionLike
+>();
+const settledWrappedByRawSession = new WeakMap<
+  CompactionRecoverySessionLike,
+  CompactionRecoverySessionLike
+>();
+const rawByWrappedSession = new WeakMap<
+  CompactionRecoverySessionLike,
+  CompactionRecoverySessionLike
+>();
 
 type PromptDispatchOptions = PromptOptions;
 
@@ -18,9 +33,9 @@ interface CompactionRecoveryController {
   dispose(): void;
 }
 
-type CompactionRecoveryAwareSession = CompactionRecoverySessionLike & {
-  [SESSION_COMPACTION_RECOVERY]?: CompactionRecoveryController;
-};
+interface InstalledCompactionRecoveryController extends CompactionRecoveryController {
+  dispatchPrompt(content: string, promptOptions?: PromptDispatchOptions): Promise<void>;
+}
 
 export interface CompactionRecoveryOptions {
   runtime?: BrewvaRuntime;
@@ -31,6 +46,10 @@ export interface CompactionRecoveryOptions {
 function normalizeSessionId(input: CompactionRecoverySessionLike): string | undefined {
   const value = input.sessionManager?.getSessionId?.();
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function resolveRawSession(session: CompactionRecoverySessionLike): CompactionRecoverySessionLike {
+  return rawByWrappedSession.get(session) ?? session;
 }
 
 function buildResumeEventPayload(input: {
@@ -53,72 +72,110 @@ function waitForNextTick(): Promise<void> {
   });
 }
 
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+  return (
+    (typeof value === "object" || typeof value === "function") &&
+    value !== null &&
+    typeof (value as { then?: unknown }).then === "function"
+  );
+}
+
 async function waitForCompactionToFinish(session: CompactionRecoverySessionLike): Promise<void> {
   while (session.isCompacting === true) {
     await waitForNextTick();
   }
 }
 
-async function dispatchResumePrompt(session: CompactionRecoverySessionLike): Promise<void> {
+async function dispatchResumePrompt(input: {
+  session: CompactionRecoverySessionLike;
+  dispatchPrompt: (content: string, promptOptions?: PromptDispatchOptions) => Promise<void>;
+}): Promise<void> {
   const promptOptions: PromptDispatchOptions = {
     expandPromptTemplates: false,
     source: "extension",
-    ...(session.isStreaming === true ? { streamingBehavior: "followUp" as const } : {}),
+    ...(input.session.isStreaming === true ? { streamingBehavior: "followUp" as const } : {}),
   };
-  await session.prompt(COMPACTION_RESUME_PROMPT, promptOptions);
+  await input.dispatchPrompt(COMPACTION_RESUME_PROMPT, promptOptions);
 }
 
-function getInstalledCompactionRecovery(
+function createCompactionRecoveryController(
   session: CompactionRecoverySessionLike,
-): CompactionRecoveryController | undefined {
-  return (session as CompactionRecoveryAwareSession)[SESSION_COMPACTION_RECOVERY];
-}
+  options: {
+    runtime: BrewvaRuntime;
+    sessionId?: string;
+  },
+): InstalledCompactionRecoveryController {
+  const rawSession = resolveRawSession(session);
+  const sessionId = options.sessionId?.trim() || normalizeSessionId(rawSession);
+  if (!sessionId) {
+    throw new Error("session compaction recovery requires a stable session id");
+  }
 
-function installTrackedPrompt(session: CompactionRecoverySessionLike): {
-  getLatestPromptSettlement: () => Promise<void>;
-} {
-  const trackedSession = session as CompactionRecoveryAwareSession;
-  const originalPrompt = session.prompt.bind(session);
+  const seenCompactionEventIds = new Set<string>();
+  const pendingGenerationPromises = new Map<number, Promise<void>>();
   let latestPromptSettlement: Promise<void> = Promise.resolve();
+  let requestedGeneration = 0;
+  let completedGeneration = 0;
+  let disposed = false;
+  const basePrompt = rawSession.prompt.bind(rawSession);
 
-  trackedSession.prompt = (async (content: string, promptOptions?: PromptDispatchOptions) => {
-    const promptPromise = originalPrompt(content, promptOptions);
+  const dispatchPrompt = async (
+    content: string,
+    promptOptions?: PromptDispatchOptions,
+  ): Promise<void> => {
+    const promptPromise = basePrompt(content, promptOptions);
     latestPromptSettlement = promptPromise.then(
       () => undefined,
       () => undefined,
     );
     return promptPromise;
-  }) as AgentSession["prompt"];
-
-  return {
-    getLatestPromptSettlement: () => latestPromptSettlement,
   };
-}
 
-export function installSessionCompactionRecovery<T extends CompactionRecoverySessionLike>(
-  session: T,
-  options: {
-    runtime: BrewvaRuntime;
-    sessionId?: string;
-  },
-): T {
-  const existing = getInstalledCompactionRecovery(session);
-  if (existing) {
-    return session;
-  }
+  const controller: InstalledCompactionRecoveryController = {
+    sessionId,
+    getRequestedGeneration() {
+      return requestedGeneration;
+    },
+    async dispatchPrompt(content: string, promptOptions?: PromptDispatchOptions): Promise<void> {
+      return dispatchPrompt(content, promptOptions);
+    },
+    async waitForSettled(afterGeneration = 0): Promise<void> {
+      while (true) {
+        await latestPromptSettlement;
+        await waitForCompactionToFinish(rawSession);
+        await rawSession.agent.waitForIdle();
 
-  const sessionId = options.sessionId?.trim() || normalizeSessionId(session);
-  if (!sessionId) {
-    throw new Error("session compaction recovery requires a stable session id");
-  }
+        const targetGeneration = requestedGeneration;
+        if (targetGeneration <= afterGeneration) {
+          if (requestedGeneration <= afterGeneration && rawSession.isCompacting !== true) {
+            return;
+          }
+          continue;
+        }
 
-  const { getLatestPromptSettlement } = installTrackedPrompt(session);
-  const seenCompactionEventIds = new Set<string>();
-  const pendingGenerationPromises = new Map<number, Promise<void>>();
-  let requestedGeneration = 0;
-  let completedGeneration = 0;
-  let disposed = false;
-  let disposePatched = false;
+        const pending = pendingGenerationPromises.get(targetGeneration);
+        if (pending) {
+          await pending;
+        }
+
+        await latestPromptSettlement;
+        await waitForCompactionToFinish(rawSession);
+        await rawSession.agent.waitForIdle();
+
+        if (requestedGeneration === targetGeneration && completedGeneration >= targetGeneration) {
+          return;
+        }
+      }
+    },
+    dispose() {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
+      unsubscribe();
+      controllerByRawSession.delete(rawSession);
+    },
+  };
 
   const unsubscribe = options.runtime.events.subscribe((event) => {
     if (disposed) {
@@ -155,12 +212,15 @@ export function installSessionCompactionRecovery<T extends CompactionRecoverySes
     const previousGeneration =
       pendingGenerationPromises.get(generation - 1)?.catch(() => undefined) ?? Promise.resolve();
     const currentGeneration = previousGeneration.then(async () => {
-      await getLatestPromptSettlement();
-      await waitForCompactionToFinish(session);
-      await session.agent.waitForIdle();
+      await latestPromptSettlement;
+      await waitForCompactionToFinish(rawSession);
+      await rawSession.agent.waitForIdle();
 
       try {
-        await dispatchResumePrompt(session);
+        await dispatchResumePrompt({
+          session: rawSession,
+          dispatchPrompt,
+        });
         completedGeneration = Math.max(completedGeneration, generation);
         options.runtime.events.record({
           sessionId,
@@ -193,81 +253,102 @@ export function installSessionCompactionRecovery<T extends CompactionRecoverySes
     void currentGeneration.catch(() => undefined);
   });
 
-  const originalDispose =
-    typeof session.dispose === "function" ? session.dispose.bind(session) : undefined;
+  controllerByRawSession.set(rawSession, controller);
+  return controller;
+}
 
-  const controller: CompactionRecoveryController = {
-    sessionId,
-    getRequestedGeneration() {
-      return requestedGeneration;
-    },
-    async waitForSettled(afterGeneration = 0): Promise<void> {
-      while (true) {
-        await getLatestPromptSettlement();
-        await waitForCompactionToFinish(session);
-        await session.agent.waitForIdle();
+function getInstalledCompactionRecovery(
+  session: CompactionRecoverySessionLike,
+): InstalledCompactionRecoveryController | undefined {
+  return controllerByRawSession.get(resolveRawSession(session));
+}
 
-        const targetGeneration = requestedGeneration;
-        if (targetGeneration <= afterGeneration) {
-          if (requestedGeneration <= afterGeneration && session.isCompacting !== true) {
-            return;
-          }
-          continue;
-        }
+function withTemporaryPromptInterception<T>(
+  session: CompactionRecoverySessionLike,
+  prompt: AgentSession["prompt"],
+  invoke: () => T,
+): T {
+  const hadOwnPrompt = Object.prototype.hasOwnProperty.call(session, "prompt");
+  const previousPromptDescriptor = Object.getOwnPropertyDescriptor(session, "prompt");
 
-        const pending = pendingGenerationPromises.get(targetGeneration);
-        if (pending) {
-          await pending;
-        }
+  Object.defineProperty(session, "prompt", {
+    configurable: true,
+    writable: true,
+    value: prompt,
+  });
 
-        await getLatestPromptSettlement();
-        await waitForCompactionToFinish(session);
-        await session.agent.waitForIdle();
-
-        if (requestedGeneration === targetGeneration && completedGeneration >= targetGeneration) {
-          return;
-        }
-      }
-    },
-    dispose() {
-      if (disposed) {
-        return;
-      }
-      disposed = true;
-      unsubscribe();
-      delete (session as CompactionRecoveryAwareSession)[SESSION_COMPACTION_RECOVERY];
-    },
+  const restore = () => {
+    if (hadOwnPrompt && previousPromptDescriptor) {
+      Object.defineProperty(session, "prompt", previousPromptDescriptor);
+      return;
+    }
+    delete (session as { prompt?: unknown }).prompt;
   };
 
-  (session as CompactionRecoveryAwareSession)[SESSION_COMPACTION_RECOVERY] = controller;
-
-  if (originalDispose && !disposePatched) {
-    disposePatched = true;
-    (session as CompactionRecoveryAwareSession).dispose = (() => {
-      controller.dispose();
-      return originalDispose();
-    }) as typeof session.dispose;
+  try {
+    const result = invoke();
+    if (isPromiseLike(result)) {
+      return Promise.resolve(result).finally(restore) as T;
+    }
+    restore();
+    return result;
+  } catch (error) {
+    restore();
+    throw error;
   }
-
-  return session;
 }
 
 function getOrInstallCompactionRecovery(
   session: CompactionRecoverySessionLike,
   options: CompactionRecoveryOptions,
-): CompactionRecoveryController | undefined {
-  const existing = getInstalledCompactionRecovery(session);
+): InstalledCompactionRecoveryController | undefined {
+  const rawSession = resolveRawSession(session);
+  const existing = getInstalledCompactionRecovery(rawSession);
   if (existing) {
     return existing;
   }
   if (!options.runtime) {
     return undefined;
   }
-  installSessionCompactionRecovery(session, {
+  return createCompactionRecoveryController(rawSession, {
     runtime: options.runtime,
     sessionId: options.sessionId,
   });
-  return getInstalledCompactionRecovery(session);
+}
+
+async function sendPromptWithBackgroundCompactionRecovery(
+  session: CompactionRecoverySessionLike,
+  prompt: string,
+  options: CompactionRecoveryOptions = {},
+): Promise<void> {
+  const rawSession = resolveRawSession(session);
+  const controller = getOrInstallCompactionRecovery(rawSession, options);
+  if (controller) {
+    await controller.dispatchPrompt(prompt, options.promptOptions);
+    return;
+  }
+  await rawSession.prompt(prompt, options.promptOptions);
+}
+
+export function installSessionCompactionRecovery<T extends CompactionRecoverySessionLike>(
+  session: T,
+  options: {
+    runtime: BrewvaRuntime;
+    sessionId?: string;
+  },
+): T {
+  const rawSession = resolveRawSession(session);
+  getOrInstallCompactionRecovery(rawSession, options);
+  const promptWithBackgroundRecovery: AgentSession["prompt"] = (content, promptOptions) =>
+    sendPromptWithBackgroundCompactionRecovery(rawSession, content, {
+      ...options,
+      promptOptions,
+    });
+
+  return createSessionFacade(rawSession as T, {
+    prompt: promptWithBackgroundRecovery,
+    wrappedSessions: backgroundWrappedByRawSession,
+  });
 }
 
 export async function sendPromptWithCompactionRecovery(
@@ -275,15 +356,21 @@ export async function sendPromptWithCompactionRecovery(
   prompt: string,
   options: CompactionRecoveryOptions = {},
 ): Promise<void> {
-  const controller = getOrInstallCompactionRecovery(session, options);
+  const rawSession = resolveRawSession(session);
+  const controller = getOrInstallCompactionRecovery(rawSession, options);
   const afterGeneration = controller?.getRequestedGeneration() ?? 0;
 
-  await session.prompt(prompt, options.promptOptions);
+  if (controller) {
+    await controller.dispatchPrompt(prompt, options.promptOptions);
+  } else {
+    await rawSession.prompt(prompt, options.promptOptions);
+  }
+
   if (!controller) {
     return;
   }
   if (
-    session.isStreaming === true &&
+    rawSession.isStreaming === true &&
     typeof options.promptOptions?.streamingBehavior === "string"
   ) {
     return;
@@ -295,23 +382,59 @@ export function wrapSessionWithSettledPrompts<T extends CompactionRecoverySessio
   session: T,
   options: CompactionRecoveryOptions = {},
 ): T {
-  return new Proxy(session, {
-    get(target, prop, receiver) {
+  const rawSession = resolveRawSession(session) as T;
+  const promptWithRecovery: AgentSession["prompt"] = (content, promptOptions) =>
+    sendPromptWithCompactionRecovery(rawSession, content, {
+      ...options,
+      promptOptions,
+    });
+
+  return createSessionFacade(rawSession, {
+    prompt: promptWithRecovery,
+    wrappedSessions: settledWrappedByRawSession,
+  });
+}
+
+function createSessionFacade<T extends CompactionRecoverySessionLike>(
+  session: T,
+  input: {
+    prompt: AgentSession["prompt"];
+    wrappedSessions: WeakMap<CompactionRecoverySessionLike, CompactionRecoverySessionLike>;
+  },
+): T {
+  const existing = input.wrappedSessions.get(session);
+  if (existing) {
+    return existing as T;
+  }
+
+  const wrapped = new Proxy(session, {
+    get(target, prop) {
       if (prop === "prompt") {
-        return (content: string, promptOptions?: PromptDispatchOptions) =>
-          sendPromptWithCompactionRecovery(target, content, {
-            ...options,
-            promptOptions,
-          });
+        return input.prompt;
       }
 
-      const value = Reflect.get(target, prop, receiver);
-      if (typeof value === "function") {
-        return value.bind(target);
+      const value = Reflect.get(target, prop, target);
+      if (typeof value !== "function") {
+        return value;
       }
-      return value;
+
+      if (prop === "dispose") {
+        return (...args: unknown[]) => {
+          getInstalledCompactionRecovery(target)?.dispose();
+          return Reflect.apply(value, target, args);
+        };
+      }
+
+      return (...args: unknown[]) =>
+        withTemporaryPromptInterception(target, input.prompt, () =>
+          Reflect.apply(value, target, args),
+        );
     },
   });
+
+  input.wrappedSessions.set(session, wrapped);
+  rawByWrappedSession.set(wrapped, session);
+  return wrapped;
 }
 
 export const COMPACTION_RECOVERY_TEST_ONLY = {

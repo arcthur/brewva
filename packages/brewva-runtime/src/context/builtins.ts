@@ -1,8 +1,13 @@
+import { IDENTITY_PARSE_WARNING_EVENT_TYPE } from "../events/event-types.js";
 import { buildTaskStateBlock } from "../runtime-helpers.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type { ProposalAdmissionService } from "../services/proposal-admission.js";
 import type { SkillLifecycleService } from "../services/skill-lifecycle.js";
-import { readIdentityProfile } from "./identity.js";
+import {
+  readAgentConstitutionProfile,
+  readAgentMemoryProfile,
+  readIdentityProfile,
+} from "./identity.js";
 import type { ContextSourceProvider, ContextSourceProviderRegistry } from "./provider.js";
 import { buildRuntimeStatusBlock } from "./runtime-status.js";
 import { CONTEXT_SOURCES } from "./sources.js";
@@ -34,6 +39,8 @@ export function createBuiltInContextSourceProviders(
 ): ContextSourceProvider[] {
   const providers: ContextSourceProvider[] = [
     createIdentityProvider(deps),
+    createAgentConstitutionProvider(deps),
+    createAgentMemoryProvider(deps),
     createRuntimeStatusProvider(deps),
     createTaskStateProvider(deps),
   ];
@@ -46,6 +53,80 @@ export function createBuiltInContextSourceProviders(
   }
 
   return providers;
+}
+
+function createAgentConstitutionProvider(
+  deps: BuiltInContextSourceProviderDeps,
+): ContextSourceProvider {
+  return {
+    source: CONTEXT_SOURCES.agentConstitution,
+    category: "narrative",
+    order: 12,
+    collect: (input) => {
+      let profile: ReturnType<typeof readAgentConstitutionProfile>;
+      try {
+        profile = readAgentConstitutionProfile({
+          workspaceRoot: deps.workspaceRoot,
+          agentId: deps.agentId,
+        });
+      } catch (error) {
+        deps.kernel.recordEvent({
+          sessionId: input.sessionId,
+          type: IDENTITY_PARSE_WARNING_EVENT_TYPE,
+          payload: {
+            agentId: deps.agentId,
+            fileName: "constitution.md",
+            reason: error instanceof Error ? error.message : "unknown_error",
+          },
+        });
+        return;
+      }
+      if (!profile) return;
+      const content = profile.content.trim();
+      if (!content) return;
+      input.register({
+        id: `agent-constitution-${profile.agentId}`,
+        content,
+        oncePerSession: true,
+      });
+    },
+  };
+}
+
+function createAgentMemoryProvider(deps: BuiltInContextSourceProviderDeps): ContextSourceProvider {
+  return {
+    source: CONTEXT_SOURCES.agentMemory,
+    category: "narrative",
+    order: 13,
+    collect: (input) => {
+      let profile: ReturnType<typeof readAgentMemoryProfile>;
+      try {
+        profile = readAgentMemoryProfile({
+          workspaceRoot: deps.workspaceRoot,
+          agentId: deps.agentId,
+        });
+      } catch (error) {
+        deps.kernel.recordEvent({
+          sessionId: input.sessionId,
+          type: IDENTITY_PARSE_WARNING_EVENT_TYPE,
+          payload: {
+            agentId: deps.agentId,
+            fileName: "memory.md",
+            reason: error instanceof Error ? error.message : "unknown_error",
+          },
+        });
+        return;
+      }
+      if (!profile) return;
+      const content = profile.content.trim();
+      if (!content) return;
+      input.register({
+        id: `agent-memory-${profile.agentId}`,
+        content,
+        oncePerSession: true,
+      });
+    },
+  };
 }
 
 function createIdentityProvider(deps: BuiltInContextSourceProviderDeps): ContextSourceProvider {
@@ -63,7 +144,7 @@ function createIdentityProvider(deps: BuiltInContextSourceProviderDeps): Context
       } catch (error) {
         deps.kernel.recordEvent({
           sessionId: input.sessionId,
-          type: "identity_parse_warning",
+          type: IDENTITY_PARSE_WARNING_EVENT_TYPE,
           payload: {
             agentId: deps.agentId,
             reason: error instanceof Error ? error.message : "unknown_error",

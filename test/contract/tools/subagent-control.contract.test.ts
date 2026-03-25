@@ -31,7 +31,7 @@ describe("subagent control tools", () => {
     });
     runtime.session.recordDelegationRun("session-status", {
       runId: "run-status-1",
-      profile: "reviewer",
+      profile: "review",
       parentSessionId: "session-status",
       status: "running",
       createdAt: 1,
@@ -62,14 +62,14 @@ describe("subagent control tools", () => {
             run: async (_input: { fromSessionId: string; request: SubagentRunRequest }) => ({
               ok: true,
               mode: "single",
-              profile: "researcher",
+              profile: "explore",
               outcomes: [],
             }),
             cancel: async (input: { fromSessionId: string; runId: string; reason?: string }) => ({
               ok: true,
               run: {
                 runId: input.runId,
-                profile: "researcher",
+                profile: "explore",
                 parentSessionId: input.fromSessionId,
                 status: "cancelled" as const,
                 createdAt: 1,

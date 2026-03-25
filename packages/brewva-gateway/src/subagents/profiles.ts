@@ -93,6 +93,18 @@ function asContextBudget(value: unknown): SubagentContextBudget | undefined {
   };
 }
 
+const REMOVED_LEGACY_SUBAGENT_PROFILES = {
+  researcher: "explore",
+  reviewer: "review",
+  verifier: "review",
+} as const satisfies Record<string, string>;
+
+function getRemovedLegacySubagentProfileReplacement(name: string): string | undefined {
+  return Object.hasOwn(REMOVED_LEGACY_SUBAGENT_PROFILES, name)
+    ? REMOVED_LEGACY_SUBAGENT_PROFILES[name as keyof typeof REMOVED_LEGACY_SUBAGENT_PROFILES]
+    : undefined;
+}
+
 const BOUNDARY_RANK: Record<SubagentExecutionBoundary, number> = {
   safe: 0,
   effectful: 1,
@@ -211,12 +223,13 @@ function toProfile(
 }
 
 export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentProfile>> = {
-  researcher: {
-    name: "researcher",
-    description: "Read-only repository scout for bounded investigation and impact analysis.",
+  explore: {
+    name: "explore",
+    description:
+      "Canonical read-only exploration profile for cross-file investigation and impact discovery.",
     resultMode: "exploration",
     prompt:
-      "Investigate the delegated objective with a repository-scout mindset. Focus on relevant files, summarize concrete findings, and keep conclusions tightly tied to evidence.",
+      "Explore the delegated objective with a repository-scout mindset. Prefer broad but bounded evidence gathering across relevant files, summarize concrete findings, and avoid implementation commitments.",
     boundary: "safe",
     builtinToolNames: ["read"],
     managedToolNames: [
@@ -234,6 +247,7 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
       "ledger_query",
       "tape_search",
       "task_view_state",
+      "workflow_status",
     ],
     defaultContextBudget: {
       maxInjectionTokens: 1800,
@@ -241,9 +255,41 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
     },
     managedToolMode: "direct",
   },
-  reviewer: {
-    name: "reviewer",
-    description: "Read-only reviewer for design, code, and regression risk analysis.",
+  plan: {
+    name: "plan",
+    description:
+      "Canonical read-only planning profile for shaping execution slices, risks, and verification intent.",
+    resultMode: "exploration",
+    prompt:
+      "Turn the delegated objective into a concise execution plan. Identify the critical path, likely risks, verification checkpoints, and delegation opportunities without editing code.",
+    boundary: "safe",
+    builtinToolNames: ["read"],
+    managedToolNames: [
+      "grep",
+      "read_spans",
+      "look_at",
+      "toc_search",
+      "toc_document",
+      "ast_grep_search",
+      "lsp_diagnostics",
+      "lsp_find_references",
+      "lsp_goto_definition",
+      "lsp_symbols",
+      "output_search",
+      "ledger_query",
+      "tape_search",
+      "task_view_state",
+      "workflow_status",
+    ],
+    defaultContextBudget: {
+      maxInjectionTokens: 1800,
+      maxTurnTokens: 6500,
+    },
+    managedToolMode: "direct",
+  },
+  review: {
+    name: "review",
+    description: "Canonical read-only review profile for correctness, regressions, and test risk.",
     resultMode: "review",
     prompt:
       "Review the delegated scope as a strict senior engineer. Prioritize correctness, regressions, missing tests, and contract drift. Keep the answer concrete and evidence-backed.",
@@ -264,6 +310,7 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
       "output_search",
       "tape_search",
       "task_view_state",
+      "workflow_status",
     ],
     defaultContextBudget: {
       maxInjectionTokens: 2000,
@@ -271,13 +318,13 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
     },
     managedToolMode: "direct",
   },
-  verifier: {
-    name: "verifier",
+  general: {
+    name: "general",
     description:
-      "Read-only verifier that inspects diagnostics, existing outputs, and recorded evidence.",
-    resultMode: "verification",
+      "Canonical general-purpose delegated profile for bounded read-only work when no sharper posture fits.",
+    resultMode: "exploration",
     prompt:
-      "Verify the delegated objective using only read-only evidence. Prefer diagnostics, previously recorded outputs, and explicit blockers over speculation.",
+      "Handle the delegated objective with a bounded, read-only assistant posture. Gather only the context you need, state assumptions explicitly, and keep the result concise and merge-friendly.",
     boundary: "safe",
     builtinToolNames: ["read"],
     managedToolNames: [
@@ -285,17 +332,21 @@ export const BUILTIN_SUBAGENT_PROFILES: Readonly<Record<string, HostedSubagentPr
       "read_spans",
       "look_at",
       "toc_search",
+      "toc_document",
+      "ast_grep_search",
       "lsp_diagnostics",
+      "lsp_find_references",
+      "lsp_goto_definition",
+      "lsp_symbols",
       "output_search",
       "ledger_query",
-      "obs_query",
-      "obs_snapshot",
       "tape_search",
       "task_view_state",
+      "workflow_status",
     ],
     defaultContextBudget: {
-      maxInjectionTokens: 1800,
-      maxTurnTokens: 7000,
+      maxInjectionTokens: 1600,
+      maxTurnTokens: 5500,
     },
     managedToolMode: "direct",
   },
@@ -365,11 +416,25 @@ export async function loadHostedSubagentProfiles(
       throw new Error(`invalid_subagent_profile:${entry.name}:root must be an object`);
     }
     const explicitBaseName = asString(parsed.extends);
+    if (explicitBaseName) {
+      const replacement = getRemovedLegacySubagentProfileReplacement(explicitBaseName);
+      if (replacement) {
+        throw new Error(
+          `invalid_subagent_profile:${entry.name}:legacy profile '${explicitBaseName}' has been removed; use '${replacement}' instead`,
+        );
+      }
+    }
     const sameNameBase = asString(parsed.name) ? profiles.get(asString(parsed.name)!) : undefined;
     const defaultProfile = explicitBaseName ? profiles.get(explicitBaseName) : sameNameBase;
     const profile = toProfile(parsed, defaultProfile);
     if (!profile) {
       throw new Error(`invalid_subagent_profile:${entry.name}:missing required fields`);
+    }
+    const replacement = getRemovedLegacySubagentProfileReplacement(profile.name);
+    if (replacement) {
+      throw new Error(
+        `invalid_subagent_profile:${entry.name}:legacy profile '${profile.name}' has been removed; use '${replacement}' instead`,
+      );
     }
     const overlayBase = profiles.get(profile.name);
     if (overlayBase) {

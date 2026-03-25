@@ -10,11 +10,11 @@ describe("subagent profiles", () => {
     const subagentDir = join(workspace, ".brewva", "subagents");
     mkdirSync(subagentDir, { recursive: true });
     writeFileSync(
-      join(subagentDir, "researcher.json"),
+      join(subagentDir, "explore.json"),
       JSON.stringify(
         {
-          extends: "researcher",
-          name: "researcher",
+          extends: "explore",
+          name: "explore",
           description: "Workspace-specific scout",
           model: "openai/gpt-5.4-mini",
           prompt: "Inspect only the explicitly delegated files and return a terse summary.",
@@ -26,7 +26,7 @@ describe("subagent profiles", () => {
     );
 
     const profiles = await loadHostedSubagentProfiles(workspace);
-    const profile = profiles.get("researcher");
+    const profile = profiles.get("explore");
     expect(profile).toBeDefined();
     expect(profile?.description).toBe("Workspace-specific scout");
     expect(profile?.model).toBe("openai/gpt-5.4-mini");
@@ -36,7 +36,7 @@ describe("subagent profiles", () => {
   test("truncates context references when prompt injection budget is small", () => {
     const prompt = buildDelegationPrompt(
       {
-        name: "researcher",
+        name: "explore",
         description: "Read-only scout",
         resultMode: "exploration",
         prompt: "Investigate and summarize.",
@@ -68,7 +68,7 @@ describe("subagent profiles", () => {
   test("renders active skill, required outputs, and execution hints in the delegated prompt", () => {
     const prompt = buildDelegationPrompt(
       {
-        name: "reviewer",
+        name: "review",
         description: "Read-only reviewer",
         resultMode: "review",
         prompt: "Review and summarize.",
@@ -106,10 +106,10 @@ describe("subagent profiles", () => {
     const subagentDir = join(workspace, ".brewva", "subagents");
     mkdirSync(subagentDir, { recursive: true });
     writeFileSync(
-      join(subagentDir, "researcher.json"),
+      join(subagentDir, "explore.json"),
       JSON.stringify(
         {
-          name: "researcher",
+          name: "explore",
           description: "Widened scout",
           resultMode: "exploration",
           prompt: "Inspect broadly.",
@@ -128,7 +128,37 @@ describe("subagent profiles", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toContain(
-        "invalid_subagent_profile:researcher:boundary cannot widen beyond the base profile",
+        "invalid_subagent_profile:explore:boundary cannot widen beyond the base profile",
+      );
+    }
+  });
+
+  test("rejects removed legacy profile names instead of aliasing them", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-profile-legacy-"));
+    const subagentDir = join(workspace, ".brewva", "subagents");
+    mkdirSync(subagentDir, { recursive: true });
+    writeFileSync(
+      join(subagentDir, "researcher.json"),
+      JSON.stringify(
+        {
+          name: "researcher",
+          description: "Legacy alias",
+          resultMode: "exploration",
+          prompt: "Inspect broadly.",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    try {
+      await loadHostedSubagentProfiles(workspace);
+      throw new Error("expected loadHostedSubagentProfiles to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "invalid_subagent_profile:researcher.json:legacy profile 'researcher' has been removed; use 'explore' instead",
       );
     }
   });
