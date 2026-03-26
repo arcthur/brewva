@@ -1,10 +1,10 @@
+import type { TaskState, ToolMutationRollbackResult } from "../contracts/index.js";
 import {
   REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE,
   VERIFICATION_STATE_RESET_EVENT_TYPE,
 } from "../events/event-types.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import { TASK_EVENT_TYPE, buildCheckpointSetEvent } from "../task/ledger.js";
-import type { TaskState, ToolMutationRollbackResult } from "../types.js";
 import type { FileChangeService } from "./file-change.js";
 import type {
   RecordedReversibleMutation,

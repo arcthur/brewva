@@ -44,12 +44,12 @@ export type ContextComposerRuntime = {
       query: ContextComposerEventQuery,
     ) => ContextComposerEventQueryResult;
   };
-  session?: {
-    listDelegationRuns?: (
+  delegation?: {
+    listRuns?: (
       sessionId: string,
       query?: Pick<DelegationRunQuery, "statuses" | "includeTerminal" | "limit">,
     ) => DelegationRunRecord[];
-    listPendingDelegationOutcomes?: (
+    listPendingOutcomes?: (
       sessionId: string,
       query?: {
         limit?: number;
@@ -177,7 +177,7 @@ function listPendingDelegations(
   sessionId: string,
 ): DelegationRunRecord[] {
   return (
-    runtime.session?.listDelegationRuns?.(sessionId, {
+    runtime.delegation?.listRuns?.(sessionId, {
       statuses: ["pending", "running"],
       includeTerminal: false,
       limit: 6,
@@ -189,15 +189,15 @@ function listPendingDelegationOutcomes(
   runtime: ContextComposerInput["runtime"],
   sessionId: string,
 ): DelegationRunRecord[] {
-  const pending = runtime.session?.listPendingDelegationOutcomes?.(sessionId, {
+  const pending = runtime.delegation?.listPendingOutcomes?.(sessionId, {
     limit: 6,
   });
   if (pending) {
     return pending;
   }
   return (
-    runtime.session
-      ?.listDelegationRuns?.(sessionId, {
+    runtime.delegation
+      ?.listRuns?.(sessionId, {
         statuses: ["completed", "failed", "timeout", "cancelled"],
         includeTerminal: true,
         limit: 6,

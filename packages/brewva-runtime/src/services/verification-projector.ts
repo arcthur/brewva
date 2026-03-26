@@ -1,12 +1,3 @@
-import {
-  GOVERNANCE_VERIFY_SPEC_FAILED_EVENT_TYPE,
-  GOVERNANCE_VERIFY_SPEC_PASSED_EVENT_TYPE,
-  TOOL_RESULT_RECORDED_EVENT_TYPE,
-  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-  VERIFICATION_STATE_RESET_EVENT_TYPE,
-  VERIFICATION_WRITE_MARKED_EVENT_TYPE,
-} from "../events/event-types.js";
-import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type {
   BrewvaStructuredEvent,
   TaskBlockerRecordResult,
@@ -16,7 +7,16 @@ import type {
   TruthFactStatus,
   TruthFactUpsertResult,
   VerificationCheckRun,
-} from "../types.js";
+} from "../contracts/index.js";
+import {
+  GOVERNANCE_VERIFY_SPEC_FAILED_EVENT_TYPE,
+  GOVERNANCE_VERIFY_SPEC_PASSED_EVENT_TYPE,
+  TOOL_RESULT_RECORDED_EVENT_TYPE,
+  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+  VERIFICATION_STATE_RESET_EVENT_TYPE,
+  VERIFICATION_WRITE_MARKED_EVENT_TYPE,
+} from "../events/event-types.js";
+import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import {
   coerceVerificationWriteMarkedPayload,
   readVerificationToolResultProjectionPayload,

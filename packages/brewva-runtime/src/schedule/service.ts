@@ -1,10 +1,6 @@
 import { resolve } from "node:path";
 import { addMilliseconds, subMilliseconds } from "date-fns";
 import { buildTurnEnvelope, type TurnEnvelope } from "../channels/turn.js";
-import {
-  SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE,
-  SCHEDULE_RECOVERY_SUMMARY_EVENT_TYPE,
-} from "../events/event-types.js";
 import type {
   BrewvaConfig,
   BrewvaEventQuery,
@@ -25,7 +21,11 @@ import type {
   TaskState,
   TurnWALRecord,
   TruthState,
-} from "../types.js";
+} from "../contracts/index.js";
+import {
+  SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE,
+  SCHEDULE_RECOVERY_SUMMARY_EVENT_TYPE,
+} from "../events/event-types.js";
 import {
   getNextCronRunAt,
   normalizeTimeZone,

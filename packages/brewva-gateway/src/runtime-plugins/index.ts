@@ -12,6 +12,7 @@ import {
   type BrewvaToolOrchestration,
 } from "@brewva/brewva-tools";
 import type { ExtensionFactory as UpstreamExtensionFactory } from "@mariozechner/pi-coding-agent";
+import type { HostedDelegationStore } from "../subagents/delegation-store.js";
 import { createCompletionGuardLifecycle, registerCompletionGuard } from "./completion-guard.js";
 import { createContextTransformLifecycle, registerContextTransform } from "./context-transform.js";
 import { createDeliberationMaintenanceLifecycle } from "./deliberation-maintenance.js";
@@ -33,17 +34,33 @@ export interface CreateHostedTurnPipelineOptions extends BrewvaRuntimeOptions {
   runtime?: BrewvaRuntime;
   registerTools?: boolean;
   orchestration?: BrewvaToolOrchestration;
+  delegationStore?: HostedDelegationStore;
   managedToolNames?: readonly string[];
   ports?: readonly TurnLifecyclePort[];
 }
 
 function buildManagedTools(
   runtime: BrewvaRuntime,
-  options: Pick<CreateHostedTurnPipelineOptions, "managedToolNames" | "orchestration">,
+  options: Pick<
+    CreateHostedTurnPipelineOptions,
+    "managedToolNames" | "orchestration" | "delegationStore"
+  >,
 ): ReturnType<typeof buildBrewvaTools> {
+  const delegationStore = options.delegationStore;
+  const delegation = delegationStore
+    ? {
+        listRuns: (sessionId: string, query?: Parameters<HostedDelegationStore["listRuns"]>[1]) =>
+          delegationStore.listRuns(sessionId, query),
+        listPendingOutcomes: (
+          sessionId: string,
+          query?: Parameters<HostedDelegationStore["listPendingOutcomes"]>[1],
+        ) => delegationStore.listPendingOutcomes(sessionId, query),
+      }
+    : undefined;
   return buildBrewvaTools({
     runtime,
     orchestration: options.orchestration,
+    delegation,
     toolNames: options.managedToolNames,
   });
 }
@@ -70,10 +87,13 @@ function registerHostedPipeline(
   runtimePluginApi: RuntimePluginApi,
   tools: ReturnType<typeof buildBrewvaTools>,
   registerTools: boolean,
+  delegationStore: HostedDelegationStore | undefined,
   userPorts: readonly TurnLifecyclePort[],
 ): void {
   const toolDefinitionsByName = new Map(tools.map((tool) => [tool.name, tool] as const));
-  const contextTransform = createContextTransformLifecycle(runtimePluginApi, runtime);
+  const contextTransform = createContextTransformLifecycle(runtimePluginApi, runtime, {
+    delegationStore,
+  });
   const deliberationMaintenance = createDeliberationMaintenanceLifecycle(runtime);
   const qualityGate = createQualityGateLifecycle(runtime, {
     toolDefinitionsByName,
@@ -136,7 +156,14 @@ export function createHostedTurnPipeline(
       }
     }
 
-    registerHostedPipeline(runtime, runtimePluginApi, allTools, registerTools, options.ports ?? []);
+    registerHostedPipeline(
+      runtime,
+      runtimePluginApi,
+      allTools,
+      registerTools,
+      options.delegationStore,
+      options.ports ?? [],
+    );
   };
 }
 

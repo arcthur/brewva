@@ -1,8 +1,8 @@
+import type { BrewvaEventQuery, BrewvaEventRecord } from "../contracts/index.js";
 import {
   ITERATION_GUARD_RECORDED_EVENT_TYPE,
   ITERATION_METRIC_OBSERVED_EVENT_TYPE,
 } from "../events/event-types.js";
-import type { BrewvaEventQuery, BrewvaEventRecord } from "../types.js";
 import type { JsonValue } from "../utils/json.js";
 
 export const ITERATION_FACTS_SCHEMA = "brewva.iteration-facts.v1" as const;
@@ -22,7 +22,7 @@ export type IterationMetricAggregation = (typeof ITERATION_METRIC_AGGREGATION_VA
 export const ITERATION_GUARD_STATUS_VALUES = ["pass", "fail", "inconclusive", "skipped"] as const;
 export type IterationGuardStatus = (typeof ITERATION_GUARD_STATUS_VALUES)[number];
 
-export const ITERATION_FACT_SESSION_SCOPE_VALUES = ["current_session", "parent_lineage"] as const;
+export const ITERATION_FACT_SESSION_SCOPE_VALUES = ["current_session"] as const;
 export type IterationFactSessionScope = (typeof ITERATION_FACT_SESSION_SCOPE_VALUES)[number];
 
 function isRecord(value: unknown): value is Record<string, unknown> {

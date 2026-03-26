@@ -2,6 +2,13 @@ import type { ContextBudgetManager } from "./context/budget.js";
 import type { ContextInjectionCollector } from "./context/injection.js";
 import type { VerificationOutcomeSnapshot } from "./context/runtime-status.js";
 import type { ToolOutputDistillationEntry } from "./context/tool-output-distilled.js";
+import type {
+  BrewvaConfig,
+  BrewvaEventRecord,
+  ContextBudgetUsage,
+  TaskState,
+  TruthState,
+} from "./contracts/index.js";
 import type { SessionCostTracker } from "./cost/tracker.js";
 import type { BrewvaEventStore } from "./events/store.js";
 import type { GovernancePort } from "./governance/port.js";
@@ -13,13 +20,6 @@ import type { RuntimeRecordEventInput } from "./services/event-pipeline.js";
 import type { RuntimeSessionStateStore } from "./services/session-state.js";
 import type { FileChangeTracker } from "./state/file-change-tracker.js";
 import type { TurnReplayEngine } from "./tape/replay-engine.js";
-import type {
-  BrewvaConfig,
-  BrewvaEventRecord,
-  ContextBudgetUsage,
-  TaskState,
-  TruthState,
-} from "./types.js";
 import type { VerificationGate } from "./verification/gate.js";
 
 export interface RuntimeKernelContext {

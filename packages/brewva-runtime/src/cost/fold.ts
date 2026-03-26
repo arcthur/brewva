@@ -1,4 +1,4 @@
-import type { BrewvaConfig, SessionCostSummary, SessionCostTotals } from "../types.js";
+import type { BrewvaConfig, SessionCostSummary, SessionCostTotals } from "../contracts/index.js";
 
 export interface CostUsageInput {
   model: string;

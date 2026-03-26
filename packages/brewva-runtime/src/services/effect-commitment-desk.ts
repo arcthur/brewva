@@ -1,4 +1,12 @@
 import { randomUUID } from "node:crypto";
+import type {
+  BrewvaEventRecord,
+  DecideEffectCommitmentInput,
+  DecideEffectCommitmentResult,
+  EvidenceRef,
+  PendingEffectCommitmentRequest,
+  ProposalEnvelope,
+} from "../contracts/index.js";
 import {
   DECISION_RECEIPT_RECORDED_EVENT_TYPE,
   EFFECT_COMMITMENT_APPROVAL_CONSUMED_EVENT_TYPE,
@@ -7,14 +15,6 @@ import {
   TOOL_RESULT_RECORDED_EVENT_TYPE,
 } from "../events/event-types.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
-import type {
-  BrewvaEventRecord,
-  DecideEffectCommitmentInput,
-  DecideEffectCommitmentResult,
-  EvidenceRef,
-  PendingEffectCommitmentRequest,
-  ProposalEnvelope,
-} from "../types.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import type {
   AuthorizeEffectCommitmentInput,

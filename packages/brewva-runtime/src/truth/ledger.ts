@@ -4,7 +4,7 @@ import type {
   TruthFactStatus,
   TruthLedgerEventPayload,
   TruthState,
-} from "../types.js";
+} from "../contracts/index.js";
 import { isRecord, normalizeNonEmptyString, normalizeStringArray } from "../utils/coerce.js";
 
 export const TRUTH_EVENT_TYPE = "truth_event";

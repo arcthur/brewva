@@ -1,4 +1,4 @@
-import type { TaskAcceptanceOwner, TaskSpec, VerificationLevel } from "../types.js";
+import type { TaskAcceptanceOwner, TaskSpec, VerificationLevel } from "../contracts/index.js";
 import { isRecord, normalizeNonEmptyString, normalizeStringArray } from "../utils/coerce.js";
 
 export const TASK_SPEC_VERIFICATION_LEVEL_VALUES = ["quick", "standard", "strict", "none"] as const;

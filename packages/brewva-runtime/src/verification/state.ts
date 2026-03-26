@@ -3,7 +3,7 @@ import type {
   VerificationCheckRun,
   VerificationEvidence,
   VerificationSessionState,
-} from "../types.js";
+} from "../contracts/index.js";
 
 const DEFAULT_TTL_MS = 15 * 60 * 1000;
 

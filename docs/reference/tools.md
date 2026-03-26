@@ -318,10 +318,8 @@ Behavior:
 - this tool does not prescribe the next step in a loop
 - fact history is durable and replay-visible through `runtime.events.*`
 - `session_scope` defaults to `current_session`
-- `session_scope=parent_lineage` resolves the owning parent session plus
-  `continuityMode=inherit` child sessions created by the scheduler
-- lineage queries do not mirror events into the parent; each returned record
-  keeps its true `sessionId`
+- cross-session lineage aggregation is a scheduler/control-plane concern, not
+  part of the runtime iteration-fact tool contract
 - `source` is the stable protocol filter for one loop or experiment lineage;
   bounded `goal-loop` runs should reuse `goal-loop:<loop_key>`
 - derived workflow artifacts may surface metric and guard evidence as advisory

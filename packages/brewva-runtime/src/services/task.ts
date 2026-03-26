@@ -1,13 +1,3 @@
-import {
-  buildAcceptanceSetEvent,
-  TASK_EVENT_TYPE,
-  buildBlockerRecordedEvent,
-  buildBlockerResolvedEvent,
-  buildItemAddedEvent,
-  buildItemUpdatedEvent,
-  buildStatusSetEvent,
-} from "../task/ledger.js";
-import { normalizeTaskSpec } from "../task/spec.js";
 import type {
   BrewvaConfig,
   ContextBudgetUsage,
@@ -26,7 +16,17 @@ import type {
   TruthState,
   VerificationLevel,
   VerificationReport,
-} from "../types.js";
+} from "../contracts/index.js";
+import {
+  buildAcceptanceSetEvent,
+  TASK_EVENT_TYPE,
+  buildBlockerRecordedEvent,
+  buildBlockerResolvedEvent,
+  buildItemAddedEvent,
+  buildItemUpdatedEvent,
+  buildStatusSetEvent,
+} from "../task/ledger.js";
+import { normalizeTaskSpec } from "../task/spec.js";
 import { resolveContextUsageRatio } from "../utils/token.js";
 import { VERIFIER_BLOCKER_PREFIX } from "../verification/verifier-blockers.js";
 import type { RuntimeCallback } from "./callback.js";

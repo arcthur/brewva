@@ -1,4 +1,4 @@
-import type { BrewvaConfig, SkillRoutingScope, VerificationLevel } from "../types.js";
+import type { BrewvaConfig, SkillRoutingScope, VerificationLevel } from "../contracts/index.js";
 
 const VALID_COST_ACTIONS = new Set(["warn", "block_tools"]);
 const VALID_SECURITY_MODES = new Set(["permissive", "standard", "strict"]);

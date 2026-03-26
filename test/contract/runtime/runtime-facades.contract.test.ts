@@ -102,256 +102,6 @@ describe("runtime facade coverage", () => {
     expect(runtime.session.listWorkerResults(sessionId)).toHaveLength(0);
   });
 
-  test("session facade records and lists delegation runs", () => {
-    const runtime = new BrewvaRuntime({
-      cwd: createTestWorkspace("runtime-facade-delegation-runs"),
-    });
-    const sessionId = "runtime-facade-delegation-runs-1";
-
-    runtime.session.recordDelegationRun(sessionId, {
-      runId: "delegation-1",
-      delegate: "review",
-      agentSpec: "review",
-      envelope: "readonly-reviewer",
-      skillName: "review",
-      parentSessionId: sessionId,
-      status: "running",
-      createdAt: 10,
-      updatedAt: 12,
-      kind: "review",
-      summary: "Reviewing patch boundaries.",
-    });
-
-    expect(runtime.session.getDelegationRun(sessionId, "delegation-1")).toMatchObject({
-      runId: "delegation-1",
-      status: "running",
-      delegate: "review",
-      agentSpec: "review",
-      envelope: "readonly-reviewer",
-      skillName: "review",
-    });
-    expect(runtime.session.listDelegationRuns(sessionId)).toHaveLength(1);
-  });
-
-  test("session facade exposes pending delegation outcomes as a derived handoff view", () => {
-    const runtime = new BrewvaRuntime({
-      cwd: createTestWorkspace("runtime-facade-pending-delegation-outcomes"),
-    });
-    const sessionId = "runtime-facade-pending-delegation-outcomes-1";
-
-    runtime.session.recordDelegationRun(sessionId, {
-      runId: "delegation-pending-outcome-1",
-      delegate: "review",
-      parentSessionId: sessionId,
-      status: "completed",
-      createdAt: 10,
-      updatedAt: 15,
-      kind: "review",
-      summary: "Completed review outcome awaiting parent turn.",
-      delivery: {
-        mode: "supplemental",
-        handoffState: "pending_parent_turn",
-        readyAt: 15,
-        updatedAt: 15,
-      },
-    });
-    runtime.session.recordDelegationRun(sessionId, {
-      runId: "delegation-surfaced-outcome-1",
-      delegate: "review",
-      parentSessionId: sessionId,
-      status: "completed",
-      createdAt: 11,
-      updatedAt: 16,
-      kind: "review",
-      summary: "Already surfaced outcome.",
-      delivery: {
-        mode: "supplemental",
-        handoffState: "surfaced",
-        readyAt: 14,
-        surfacedAt: 16,
-        updatedAt: 16,
-      },
-    });
-
-    expect(runtime.session.listPendingDelegationOutcomes(sessionId)).toMatchObject([
-      {
-        runId: "delegation-pending-outcome-1",
-        delivery: {
-          handoffState: "pending_parent_turn",
-        },
-      },
-    ]);
-  });
-
-  test("delegation run state rehydrates from lifecycle events and merge receipts", () => {
-    const workspace = createTestWorkspace("runtime-facade-delegation-hydration");
-    const sessionId = "runtime-facade-delegation-hydration-1";
-    const writer = new BrewvaRuntime({ cwd: workspace });
-
-    writer.events.record({
-      sessionId,
-      type: "subagent_spawned",
-      timestamp: 100,
-      payload: {
-        runId: "delegation-hydrated-1",
-        delegate: "patch-worker",
-        agentSpec: "patch-worker",
-        envelope: "patch-worker",
-        skillName: "implementation",
-        kind: "patch",
-        boundary: "effectful",
-        status: "running",
-        deliveryMode: "supplemental",
-        deliveryScopeId: "delegation-hydrated",
-      },
-    });
-    writer.events.record({
-      sessionId,
-      type: "subagent_completed",
-      timestamp: 120,
-      payload: {
-        runId: "delegation-hydrated-1",
-        delegate: "patch-worker",
-        agentSpec: "patch-worker",
-        envelope: "patch-worker",
-        skillName: "implementation",
-        kind: "patch",
-        childSessionId: "child-hydrated-1",
-        boundary: "effectful",
-        status: "completed",
-        summary: "Produced a patch candidate.",
-        artifactRefs: [
-          {
-            kind: "patch_file",
-            path: ".orchestrator/subagent-patch-artifacts/hydrated/a.ts",
-          },
-        ],
-        deliveryMode: "supplemental",
-        deliveryScopeId: "delegation-hydrated",
-        supplementalAppended: true,
-        deliveryUpdatedAt: 121,
-      },
-    });
-    writer.events.record({
-      sessionId,
-      type: "worker_results_applied",
-      timestamp: 150,
-      payload: {
-        workerIds: ["delegation-hydrated-1"],
-        appliedPaths: ["src/a.ts"],
-      },
-    });
-
-    const reader = new BrewvaRuntime({ cwd: workspace });
-    const runs = reader.session.listDelegationRuns(sessionId, {
-      statuses: ["merged"],
-    });
-    expect(runs).toHaveLength(1);
-    expect(runs[0]).toMatchObject({
-      runId: "delegation-hydrated-1",
-      status: "merged",
-      agentSpec: "patch-worker",
-      envelope: "patch-worker",
-      skillName: "implementation",
-      workerSessionId: "child-hydrated-1",
-      delivery: {
-        mode: "supplemental",
-        scopeId: "delegation-hydrated",
-        supplementalAppended: true,
-      },
-    });
-  });
-
-  test("delegation timeout and delivery handoff metadata survive runtime restart", () => {
-    const workspace = createTestWorkspace("runtime-facade-delegation-timeout");
-    const sessionId = "runtime-facade-delegation-timeout-1";
-    const writer = new BrewvaRuntime({ cwd: workspace });
-
-    writer.events.record({
-      sessionId,
-      type: "subagent_spawned",
-      timestamp: 200,
-      payload: {
-        runId: "delegation-timeout-1",
-        delegate: "review",
-        kind: "review",
-        boundary: "safe",
-        status: "running",
-        deliveryMode: "supplemental",
-        deliveryScopeId: "delegation-timeout",
-      },
-    });
-    writer.events.record({
-      sessionId,
-      type: "subagent_failed",
-      timestamp: 260,
-      payload: {
-        runId: "delegation-timeout-1",
-        delegate: "review",
-        kind: "review",
-        boundary: "safe",
-        status: "timeout",
-        summary: "Child run timed out after 5s.",
-        error: "timeout:5000",
-        deliveryMode: "supplemental",
-        deliveryScopeId: "delegation-timeout",
-        supplementalAppended: true,
-        deliveryUpdatedAt: 261,
-      },
-    });
-
-    const reader = new BrewvaRuntime({ cwd: workspace });
-    const run = reader.session.getDelegationRun(sessionId, "delegation-timeout-1");
-
-    expect(run).toMatchObject({
-      runId: "delegation-timeout-1",
-      status: "timeout",
-      summary: "Child run timed out after 5s.",
-      delivery: {
-        mode: "supplemental",
-        scopeId: "delegation-timeout",
-        supplementalAppended: true,
-        updatedAt: 261,
-      },
-    });
-  });
-
-  test("pending delegation outcomes rehydrate through the public session facade after restart", () => {
-    const workspace = createTestWorkspace("runtime-facade-pending-delegation-outcome-hydration");
-    const sessionId = "runtime-facade-pending-delegation-outcome-hydration-1";
-    const writer = new BrewvaRuntime({ cwd: workspace });
-
-    writer.events.record({
-      sessionId,
-      type: "subagent_completed",
-      timestamp: 300,
-      payload: {
-        runId: "delegation-pending-outcome-hydrated-1",
-        delegate: "review",
-        kind: "review",
-        boundary: "safe",
-        status: "completed",
-        summary: "Recovered background review outcome.",
-        deliveryMode: "supplemental",
-        deliveryHandoffState: "pending_parent_turn",
-        deliveryReadyAt: 300,
-        deliveryUpdatedAt: 300,
-      },
-    });
-
-    const reader = new BrewvaRuntime({ cwd: workspace });
-    expect(reader.session.listPendingDelegationOutcomes(sessionId)).toMatchObject([
-      {
-        runId: "delegation-pending-outcome-hydrated-1",
-        status: "completed",
-        delivery: {
-          handoffState: "pending_parent_turn",
-          readyAt: 300,
-        },
-      },
-    ]);
-  });
-
   test("events.toStructured mirrors structured queries through the public events facade", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.events.level = "debug";
@@ -459,7 +209,7 @@ describe("runtime facade coverage", () => {
     });
   });
 
-  test("iteration fact helpers can query parent lineage across inherited child sessions", () => {
+  test("iteration fact helpers stay scoped to the current session", () => {
     const runtime = new BrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-iteration-lineage"),
     });
@@ -600,33 +350,30 @@ describe("runtime facade coverage", () => {
       runtime.events.listMetricObservations(childSessionId, {
         metricKey: "coverage_pct",
         source: loopSource,
-        sessionScope: "parent_lineage",
+        sessionScope: "current_session",
       }),
     ).toEqual([
-      expect.objectContaining({ sessionId: parentSessionId, value: 72 }),
-      expect.objectContaining({ sessionId: childSessionId, value: 74 }),
-      expect.objectContaining({ sessionId: siblingSessionId, value: 76 }),
+      expect.objectContaining({
+        sessionId: childSessionId,
+        value: 74,
+      }),
     ]);
 
     expect(
       runtime.events.listMetricObservations(parentSessionId, {
         metricKey: "coverage_pct",
         source: loopSource,
-        sessionScope: "parent_lineage",
+        sessionScope: "current_session",
       }),
-    ).toEqual([
-      expect.objectContaining({ sessionId: parentSessionId, value: 72 }),
-      expect.objectContaining({ sessionId: childSessionId, value: 74 }),
-      expect.objectContaining({ sessionId: siblingSessionId, value: 76 }),
-    ]);
+    ).toEqual([expect.objectContaining({ sessionId: parentSessionId, value: 72 })]);
 
     expect(
       runtime.events.listGuardResults(childSessionId, {
         guardKey: "typecheck",
         source: loopSource,
-        sessionScope: "parent_lineage",
+        sessionScope: "current_session",
       }),
-    ).toHaveLength(3);
+    ).toHaveLength(1);
   });
 
   test("context facade normalizes usage ratios, reads stored pressure, and exposes compaction window turns", () => {

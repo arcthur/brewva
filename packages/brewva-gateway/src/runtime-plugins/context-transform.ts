@@ -5,8 +5,10 @@ import type {
 } from "@brewva/brewva-runtime";
 import { CONTEXT_COMPOSED_EVENT_TYPE, coerceContextBudgetUsage } from "@brewva/brewva-runtime";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { HostedDelegationStore } from "../subagents/delegation-store.js";
 import { prepareContextComposerSupport } from "./context-composer-support.js";
 import {
+  type ContextComposerRuntime,
   buildContextComposedEventPayload,
   composeContextBlocks,
   resolveSupplementalContextBlocks,
@@ -24,6 +26,7 @@ const CONTEXT_INJECTION_MESSAGE_TYPE = "brewva-context-injection";
 
 export interface ContextTransformOptions {
   autoCompactionWatchdogMs?: number;
+  delegationStore?: HostedDelegationStore;
 }
 
 export interface ContextTransformLifecycle {
@@ -105,63 +108,31 @@ function emitContextComposedEvent(
   });
 }
 
-function markSurfacedDelegationOutcomes(
+function createContextComposerRuntime(
   runtime: BrewvaRuntime,
+  delegationStore: HostedDelegationStore | undefined,
+): ContextComposerRuntime {
+  return {
+    events: runtime.events,
+    delegation: delegationStore
+      ? {
+          listRuns: (sessionId, query) => delegationStore.listRuns(sessionId, query),
+          listPendingOutcomes: (sessionId, query) =>
+            delegationStore.listPendingOutcomes(sessionId, query),
+        }
+      : undefined,
+  };
+}
+
+function markSurfacedDelegationOutcomes(
+  delegationStore: HostedDelegationStore | undefined,
   input: {
     sessionId: string;
     turn: number;
     runIds: readonly string[];
   },
 ): void {
-  if (input.runIds.length === 0) {
-    return;
-  }
-  const surfacedAt = Date.now();
-  for (const runId of input.runIds) {
-    const existing = runtime.session.getDelegationRun(input.sessionId, runId);
-    if (!existing?.delivery || existing.delivery.handoffState !== "pending_parent_turn") {
-      continue;
-    }
-    const updated = {
-      ...existing,
-      updatedAt: surfacedAt,
-      delivery: {
-        ...existing.delivery,
-        handoffState: "surfaced" as const,
-        surfacedAt,
-        updatedAt: surfacedAt,
-      },
-    };
-    runtime.session.recordDelegationRun(input.sessionId, updated);
-    emitRuntimeEvent(runtime, {
-      sessionId: input.sessionId,
-      turn: input.turn,
-      type: "subagent_delivery_surfaced",
-      payload: {
-        runId: updated.runId,
-        delegate: updated.delegate,
-        label: updated.label ?? null,
-        kind: updated.kind ?? null,
-        boundary: updated.boundary ?? null,
-        parentSkill: updated.parentSkill ?? null,
-        childSessionId: updated.workerSessionId ?? null,
-        status: updated.status,
-        summary: updated.summary ?? null,
-        error: updated.error ?? null,
-        artifactRefs: updated.artifactRefs ?? [],
-        totalTokens: updated.totalTokens ?? null,
-        costUsd: updated.costUsd ?? null,
-        deliveryMode: updated.delivery.mode,
-        deliveryScopeId: updated.delivery.scopeId ?? null,
-        deliveryLabel: updated.delivery.label ?? null,
-        deliveryHandoffState: updated.delivery.handoffState ?? null,
-        deliveryReadyAt: updated.delivery.readyAt ?? null,
-        deliverySurfacedAt: updated.delivery.surfacedAt ?? null,
-        supplementalAppended: updated.delivery.supplementalAppended ?? null,
-        deliveryUpdatedAt: updated.delivery.updatedAt ?? null,
-      },
-    });
-  }
+  delegationStore?.markSurfaced(input);
 }
 
 function normalizeRuntimeError(error: unknown): string {
@@ -204,6 +175,7 @@ export function createContextTransformLifecycle(
     1,
     Math.trunc(options.autoCompactionWatchdogMs ?? DEFAULT_AUTO_COMPACTION_WATCHDOG_MS),
   );
+  const contextComposerRuntime = createContextComposerRuntime(runtime, options.delegationStore);
 
   return {
     turnStart(event, ctx) {
@@ -480,7 +452,7 @@ export function createContextTransformLifecycle(
         injectionScopeId,
         blocks: [
           ...resolveSupplementalContextBlocks({
-            runtime,
+            runtime: contextComposerRuntime,
             sessionId,
             gateStatus,
             pendingCompactionReason,
@@ -499,7 +471,7 @@ export function createContextTransformLifecycle(
       if (gateStatus.required) {
         state.lastRuntimeGateRequired = true;
         const composed = composeContextBlocks({
-          runtime,
+          runtime: contextComposerRuntime,
           sessionId,
           gateStatus,
           pendingCompactionReason,
@@ -515,7 +487,7 @@ export function createContextTransformLifecycle(
           composed,
           injectionAccepted: false,
         });
-        markSurfacedDelegationOutcomes(runtime, {
+        markSurfacedDelegationOutcomes(options.delegationStore, {
           sessionId,
           turn: state.turnIndex,
           runIds: composed.surfacedDelegationRunIds,
@@ -575,7 +547,7 @@ export function createContextTransformLifecycle(
         injectionScopeId,
         blocks: [
           ...resolveSupplementalContextBlocks({
-            runtime,
+            runtime: contextComposerRuntime,
             sessionId,
             gateStatus,
             pendingCompactionReason,
@@ -600,7 +572,7 @@ export function createContextTransformLifecycle(
         });
       }
       const composed = composeContextBlocks({
-        runtime,
+        runtime: contextComposerRuntime,
         sessionId,
         gateStatus,
         pendingCompactionReason,
@@ -616,7 +588,7 @@ export function createContextTransformLifecycle(
         composed,
         injectionAccepted: injection.accepted,
       });
-      markSurfacedDelegationOutcomes(runtime, {
+      markSurfacedDelegationOutcomes(options.delegationStore, {
         sessionId,
         turn: state.turnIndex,
         runIds: composed.surfacedDelegationRunIds,

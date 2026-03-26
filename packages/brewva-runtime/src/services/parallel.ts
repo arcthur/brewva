@@ -1,16 +1,24 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { ParallelBudgetManager } from "../parallel/budget.js";
-import type { ParallelResultStore } from "../parallel/results.js";
-import type { RuntimeKernelContext } from "../runtime-kernel.js";
-import { resolveSecurityPolicy } from "../security/mode.js";
 import type {
+  BrewvaEventRecord,
   ParallelAcquireResult,
+  PatchSet,
   SkillDocument,
   WorkerApplyReport,
   WorkerMergeReport,
   WorkerResult,
-} from "../types.js";
+} from "../contracts/index.js";
+import {
+  SUBAGENT_CANCELLED_EVENT_TYPE,
+  SUBAGENT_COMPLETED_EVENT_TYPE,
+  SUBAGENT_FAILED_EVENT_TYPE,
+  WORKER_RESULTS_APPLIED_EVENT_TYPE,
+} from "../events/event-types.js";
+import type { ParallelBudgetManager } from "../parallel/budget.js";
+import type { ParallelResultStore } from "../parallel/results.js";
+import type { RuntimeKernelContext } from "../runtime-kernel.js";
+import { resolveSecurityPolicy } from "../security/mode.js";
 import type { FileChangeService } from "./file-change.js";
 import type { ResourceLeaseService } from "./resource-lease.js";
 import { RuntimeSessionStateStore } from "./session-state.js";
@@ -22,6 +30,7 @@ export interface ParallelServiceOptions {
   parallel: RuntimeKernelContext["parallel"];
   parallelResults: RuntimeKernelContext["parallelResults"];
   sessionState: RuntimeKernelContext["sessionState"];
+  eventStore: RuntimeKernelContext["eventStore"];
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
   recordEvent: RuntimeKernelContext["recordEvent"];
   fileChangeService: Pick<FileChangeService, "applyPatchSet">;
@@ -29,62 +38,152 @@ export interface ParallelServiceOptions {
   skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
 }
 
-function readPatchSetManifest(
-  workspaceRoot: string,
-  pathRef: string,
-): WorkerResult["patches"] | undefined {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function readArtifactRefPath(
+  payload: Record<string, unknown> | undefined,
+  kind: string,
+): string | undefined {
+  if (!Array.isArray(payload?.artifactRefs)) {
+    return undefined;
+  }
+  for (const entry of payload.artifactRefs) {
+    if (!isRecord(entry)) {
+      continue;
+    }
+    if (readString(entry.kind) !== kind) {
+      continue;
+    }
+    const path = readString(entry.path);
+    if (path) {
+      return path;
+    }
+  }
+  return undefined;
+}
+
+function readPatchSetManifest(workspaceRoot: string, pathRef: string): PatchSet | undefined {
   const filePath = resolve(workspaceRoot, pathRef);
   if (!existsSync(filePath)) {
     return undefined;
   }
   try {
-    const parsed = JSON.parse(readFileSync(filePath, "utf8")) as WorkerResult["patches"];
-    if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.changes)) {
+    const parsed = JSON.parse(readFileSync(filePath, "utf8")) as unknown;
+    if (!isRecord(parsed) || !Array.isArray(parsed.changes)) {
       return undefined;
     }
-    return parsed;
+    return parsed as unknown as PatchSet;
   } catch {
     return undefined;
   }
 }
 
+function buildRecoveredWorkerResult(
+  workspaceRoot: string,
+  event: BrewvaEventRecord,
+): WorkerResult | undefined {
+  const payload = isRecord(event.payload) ? event.payload : undefined;
+  const workerId = readString(payload?.runId);
+  if (!workerId) {
+    return undefined;
+  }
+  const kind = readString(payload?.kind);
+  const manifestRef = readArtifactRefPath(payload, "patch_manifest");
+  if (kind !== "patch" && !manifestRef) {
+    return undefined;
+  }
+
+  if (event.type === SUBAGENT_COMPLETED_EVENT_TYPE) {
+    const patches = manifestRef ? readPatchSetManifest(workspaceRoot, manifestRef) : undefined;
+    return {
+      workerId,
+      status: patches ? "ok" : "skipped",
+      summary: readString(payload?.summary) ?? "Recovered delegated patch outcome.",
+      patches,
+    };
+  }
+
+  if (event.type !== SUBAGENT_FAILED_EVENT_TYPE && event.type !== SUBAGENT_CANCELLED_EVENT_TYPE) {
+    return undefined;
+  }
+
+  return {
+    workerId,
+    status: "error",
+    summary:
+      readString(payload?.summary) ??
+      readString(payload?.error) ??
+      readString(payload?.reason) ??
+      "Recovered delegated patch failure.",
+    errorMessage:
+      readString(payload?.error) ??
+      readString(payload?.reason) ??
+      "Recovered delegated patch failure.",
+  };
+}
+
+function recoverWorkerResultsFromEvents(
+  sessionId: string,
+  workspaceRoot: string,
+  events: BrewvaEventRecord[],
+): WorkerResult[] {
+  const recovered = new Map<string, WorkerResult>();
+  for (const event of events) {
+    if (event.type === WORKER_RESULTS_APPLIED_EVENT_TYPE) {
+      const payload = isRecord(event.payload) ? event.payload : undefined;
+      const workerIds = Array.isArray(payload?.workerIds)
+        ? payload.workerIds.flatMap((value) =>
+            typeof value === "string" && value.trim().length > 0 ? [value.trim()] : [],
+          )
+        : [];
+      for (const workerId of workerIds) {
+        recovered.delete(workerId);
+      }
+      continue;
+    }
+
+    if (
+      event.type !== SUBAGENT_COMPLETED_EVENT_TYPE &&
+      event.type !== SUBAGENT_FAILED_EVENT_TYPE &&
+      event.type !== SUBAGENT_CANCELLED_EVENT_TYPE
+    ) {
+      continue;
+    }
+
+    const recoveredResult = buildRecoveredWorkerResult(workspaceRoot, event);
+    if (!recoveredResult) {
+      continue;
+    }
+    recovered.set(recoveredResult.workerId, recoveredResult);
+  }
+  return [...recovered.values()];
+}
+
 export function hydrateAndListWorkerResults(input: {
   sessionId: string;
   workspaceRoot: string;
-  sessionState: RuntimeSessionStateStore;
+  eventStore: RuntimeKernelContext["eventStore"];
   parallelResults: ParallelResultStore;
 }): WorkerResult[] {
-  const state = input.sessionState.getCell(input.sessionId);
   const existingWorkerIds = new Set(
     input.parallelResults.list(input.sessionId).map((result) => result.workerId),
   );
-  for (const run of state.delegationRuns.values()) {
-    if (existingWorkerIds.has(run.runId)) {
+  const recoveredResults = recoverWorkerResultsFromEvents(
+    input.sessionId,
+    input.workspaceRoot,
+    input.eventStore.list(input.sessionId),
+  );
+  for (const recovered of recoveredResults) {
+    if (existingWorkerIds.has(recovered.workerId)) {
       continue;
     }
-    if (run.kind !== "patch") {
-      continue;
-    }
-    if (run.status === "pending" || run.status === "running" || run.status === "merged") {
-      continue;
-    }
-    const manifestRef = run.artifactRefs?.find((ref) => ref.kind === "patch_manifest")?.path;
-    const patches = manifestRef
-      ? readPatchSetManifest(input.workspaceRoot, manifestRef)
-      : undefined;
-    const result: WorkerResult = {
-      workerId: run.runId,
-      status: run.status === "completed" ? (patches ? "ok" : "skipped") : "error",
-      summary:
-        run.summary ??
-        (run.status === "completed"
-          ? "Recovered delegated patch outcome."
-          : (run.error ?? "Recovered delegated patch failure.")),
-      patches,
-      errorMessage: run.status === "completed" ? undefined : run.error,
-    };
-    input.parallelResults.record(input.sessionId, result);
-    existingWorkerIds.add(run.runId);
+    input.parallelResults.record(input.sessionId, recovered);
   }
   return input.parallelResults.list(input.sessionId);
 }
@@ -95,6 +194,7 @@ export class ParallelService {
   private readonly parallel: ParallelBudgetManager;
   private readonly parallelResults: ParallelResultStore;
   private readonly sessionState: RuntimeSessionStateStore;
+  private readonly eventStore: RuntimeKernelContext["eventStore"];
   private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
   private readonly getCurrentTurn: (sessionId: string) => number;
   private readonly getEffectiveBudget: ResourceLeaseService["getEffectiveBudget"];
@@ -114,6 +214,7 @@ export class ParallelService {
     this.parallel = options.parallel;
     this.parallelResults = options.parallelResults;
     this.sessionState = options.sessionState;
+    this.eventStore = options.eventStore;
     this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
     this.getEffectiveBudget = (sessionId, contract, skillName) =>
@@ -159,7 +260,7 @@ export class ParallelService {
     return hydrateAndListWorkerResults({
       sessionId,
       workspaceRoot: this.workspaceRoot,
-      sessionState: this.sessionState,
+      eventStore: this.eventStore,
       parallelResults: this.parallelResults,
     });
   }
@@ -168,7 +269,7 @@ export class ParallelService {
     hydrateAndListWorkerResults({
       sessionId,
       workspaceRoot: this.workspaceRoot,
-      sessionState: this.sessionState,
+      eventStore: this.eventStore,
       parallelResults: this.parallelResults,
     });
     return this.parallelResults.merge(sessionId);
@@ -184,7 +285,7 @@ export class ParallelService {
     hydrateAndListWorkerResults({
       sessionId,
       workspaceRoot: this.workspaceRoot,
-      sessionState: this.sessionState,
+      eventStore: this.eventStore,
       parallelResults: this.parallelResults,
     });
     const merged = this.parallelResults.merge(sessionId);
@@ -265,24 +366,6 @@ export class ParallelService {
     }
 
     this.parallelResults.clear(sessionId);
-    const state = this.sessionState.getCell(sessionId);
-    const appliedAt = Date.now();
-    for (const workerId of merged.workerIds) {
-      const existing = state.delegationRuns.get(workerId);
-      if (!existing) {
-        continue;
-      }
-      state.delegationRuns.set(workerId, {
-        ...existing,
-        status: "merged",
-        updatedAt: appliedAt,
-        artifactRefs: existing.artifactRefs?.map((ref) => ({
-          kind: ref.kind,
-          path: ref.path,
-          summary: ref.summary,
-        })),
-      });
-    }
     this.recordEvent({
       sessionId,
       type: "worker_results_applied",

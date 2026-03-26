@@ -1,3 +1,4 @@
+import type { SessionCostSummary, SkillDocument } from "../contracts/index.js";
 import type { SessionCostTracker } from "../cost/tracker.js";
 import {
   GOVERNANCE_COST_ANOMALY_DETECTED_EVENT_TYPE,
@@ -5,7 +6,6 @@ import {
 } from "../events/event-types.js";
 import type { GovernancePort } from "../governance/port.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
-import type { SessionCostSummary, SkillDocument } from "../types.js";
 import type { LedgerService } from "./ledger.js";
 import type { SkillLifecycleService } from "./skill-lifecycle.js";
 

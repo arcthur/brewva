@@ -5,7 +5,7 @@ import type {
   PatchFileAction,
   PatchSet,
   RollbackResult,
-} from "../types.js";
+} from "../contracts/index.js";
 import { ensureDir, writeFileAtomic } from "../utils/fs.js";
 import { sha256 } from "../utils/hash.js";
 import { isMutationTool } from "../verification/classifier.js";

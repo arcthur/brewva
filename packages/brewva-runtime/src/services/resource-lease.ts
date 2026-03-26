@@ -1,10 +1,4 @@
 import { randomUUID } from "node:crypto";
-import {
-  RESOURCE_LEASE_CANCELLED_EVENT_TYPE,
-  RESOURCE_LEASE_EXPIRED_EVENT_TYPE,
-  RESOURCE_LEASE_GRANTED_EVENT_TYPE,
-} from "../events/event-types.js";
-import { resolveSkillDefaultLease, resolveSkillHardCeiling } from "../skills/facets.js";
 import type {
   ResourceBudgetLimits,
   ResourceLeaseBudget,
@@ -16,7 +10,13 @@ import type {
   SkillContract,
   SkillDocument,
   SkillResourceBudget,
-} from "../types.js";
+} from "../contracts/index.js";
+import {
+  RESOURCE_LEASE_CANCELLED_EVENT_TYPE,
+  RESOURCE_LEASE_EXPIRED_EVENT_TYPE,
+  RESOURCE_LEASE_GRANTED_EVENT_TYPE,
+} from "../events/event-types.js";
+import { resolveSkillDefaultLease, resolveSkillHardCeiling } from "../skills/facets.js";
 import { RuntimeSessionStateStore } from "./session-state.js";
 import type { SkillLifecycleService } from "./skill-lifecycle.js";
 

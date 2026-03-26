@@ -1,10 +1,4 @@
 import { randomUUID } from "node:crypto";
-import {
-  REVERSIBLE_MUTATION_PREPARED_EVENT_TYPE,
-  REVERSIBLE_MUTATION_RECORDED_EVENT_TYPE,
-} from "../events/event-types.js";
-import { toolGovernanceCreatesRollbackAnchor } from "../governance/tool-governance.js";
-import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type {
   PatchSet,
   TaskState,
@@ -12,7 +6,13 @@ import type {
   ToolMutationReceipt,
   ToolMutationRollbackKind,
   ToolMutationStrategy,
-} from "../types.js";
+} from "../contracts/index.js";
+import {
+  REVERSIBLE_MUTATION_PREPARED_EVENT_TYPE,
+  REVERSIBLE_MUTATION_RECORDED_EVENT_TYPE,
+} from "../events/event-types.js";
+import { toolGovernanceCreatesRollbackAnchor } from "../governance/tool-governance.js";
+import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import { stableJsonStringify } from "../utils/json.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 

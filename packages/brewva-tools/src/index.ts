@@ -28,13 +28,18 @@ import { createSubagentFanoutTool, createSubagentRunTool } from "./subagent-run.
 import { createTapeTools } from "./tape.js";
 import { createTaskLedgerTools } from "./task-ledger.js";
 import { createTocTools } from "./toc.js";
-import type { BrewvaToolOrchestration, BrewvaToolRuntime } from "./types.js";
+import type {
+  BrewvaToolDelegationQuery,
+  BrewvaToolOrchestration,
+  BrewvaToolRuntime,
+} from "./types.js";
 import { createWorkerResultsApplyTool, createWorkerResultsMergeTool } from "./worker-results.js";
 import { createWorkflowStatusTool } from "./workflow-status.js";
 
 export interface BuildBrewvaToolsOptions {
   runtime: BrewvaToolRuntime;
   orchestration?: BrewvaToolOrchestration;
+  delegation?: BrewvaToolDelegationQuery;
   toolNames?: readonly string[];
 }
 
@@ -43,6 +48,7 @@ export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefiniti
     {},
     options.runtime,
     options.orchestration ? { orchestration: options.orchestration } : {},
+    options.delegation ? { delegation: options.delegation } : {},
   ) as BrewvaToolRuntime;
 
   const tools = [
@@ -193,6 +199,7 @@ export type {
   SubagentStartResult,
   SubagentStatusResult,
   SubagentCancelResult,
+  BrewvaToolDelegationQuery,
   BrewvaToolMetadata,
   BrewvaToolRuntime,
 } from "./types.js";

@@ -3,7 +3,7 @@ import type {
   VerificationEvidence,
   VerificationEvidenceKind,
   VerificationEvidenceMode,
-} from "../types.js";
+} from "../contracts/index.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import type { ToolResultVerdict } from "../utils/tool-result.js";
 import { classifyEvidence } from "./classifier.js";

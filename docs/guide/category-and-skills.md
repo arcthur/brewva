@@ -85,5 +85,5 @@ These are no longer public skills:
 workflow or recovery docs. Today those runtime-owned semantics are implemented
 in code, not as routable skills.
 
-Skill configuration contract is defined in `packages/brewva-runtime/src/types.ts`
+Skill configuration contract is defined in `packages/brewva-runtime/src/contracts/index.ts`
 (`BrewvaConfig.skills`).

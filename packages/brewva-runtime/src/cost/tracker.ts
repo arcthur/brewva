@@ -1,4 +1,4 @@
-import type { BrewvaConfig, SessionCostSummary } from "../types.js";
+import type { BrewvaConfig, SessionCostSummary } from "../contracts/index.js";
 import {
   applyCostUpdatePayload,
   buildCostSummary,

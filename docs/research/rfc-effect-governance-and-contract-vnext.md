@@ -87,7 +87,7 @@ More concretely:
 
 Current pressure concentrates around these implementation anchors:
 
-- `packages/brewva-runtime/src/types.ts`
+- `packages/brewva-runtime/src/contracts/index.ts`
   - `SkillContract` puts outputs, tool policy, and budget on the same layer
 - `packages/brewva-runtime/src/security/tool-policy.ts`
   - access decisions are driven mainly by `tool name` and allowlists
@@ -345,7 +345,7 @@ Questions that remain relevant after implementation:
 
 ## Source Anchors
 
-- `packages/brewva-runtime/src/types.ts`
+- `packages/brewva-runtime/src/contracts/index.ts`
 - `packages/brewva-runtime/src/security/tool-policy.ts`
 - `packages/brewva-runtime/src/services/tool-gate.ts`
 - `packages/brewva-runtime/src/services/skill-lifecycle.ts`

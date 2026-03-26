@@ -1,4 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import type {
+  BrewvaEventRecord,
+  SessionHydrationIssue,
+  VerificationSessionState,
+} from "../../../packages/brewva-runtime/src/contracts/index.js";
 import {
   RESOURCE_LEASE_CANCELLED_EVENT_TYPE,
   RESOURCE_LEASE_GRANTED_EVENT_TYPE,
@@ -19,11 +24,6 @@ import {
   type SessionHydrationFoldContext,
 } from "../../../packages/brewva-runtime/src/services/session-hydration-fold.js";
 import { RuntimeSessionStateCell } from "../../../packages/brewva-runtime/src/services/session-state.js";
-import type {
-  BrewvaEventRecord,
-  SessionHydrationIssue,
-  VerificationSessionState,
-} from "../../../packages/brewva-runtime/src/types.js";
 import type { JsonValue } from "../../../packages/brewva-runtime/src/utils/json.js";
 import {
   buildVerificationToolResultProjectionPayload,

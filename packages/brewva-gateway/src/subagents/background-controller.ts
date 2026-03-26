@@ -29,6 +29,11 @@ import {
   writeDetachedSubagentLiveState,
   writeDetachedSubagentSpec,
 } from "./background-protocol.js";
+import {
+  HostedDelegationStore,
+  buildDelegationLifecyclePayload,
+  cloneDelegationRunRecord,
+} from "./delegation-store.js";
 import { resolveRequestedBoundary } from "./shared.js";
 import type { HostedDelegationTarget } from "./targets.js";
 
@@ -57,6 +62,7 @@ export interface HostedSubagentBackgroundController {
 
 interface DetachedBackgroundControllerOptions {
   runtime: BrewvaRuntime;
+  delegationStore?: HostedDelegationStore;
   configPath?: string;
   routingScopes?: SkillRoutingScope[];
   spawnProcess?: (input: {
@@ -66,18 +72,6 @@ interface DetachedBackgroundControllerOptions {
   }) => ChildProcess;
   isPidAlive?: (pid: number) => boolean;
   sendSignal?: (pid: number, signal: NodeJS.Signals) => void;
-}
-
-function cloneRecord(record: DelegationRunRecord): DelegationRunRecord {
-  return {
-    ...record,
-    artifactRefs: record.artifactRefs?.map((ref) => ({ ...ref })),
-    delivery: record.delivery
-      ? {
-          ...record.delivery,
-        }
-      : undefined,
-  };
 }
 
 function buildDeliveryRecord(
@@ -90,35 +84,6 @@ function buildDeliveryRecord(
     label: delivery?.returnLabel,
     handoffState: "none",
     updatedAt,
-  };
-}
-
-function buildLifecyclePayload(record: DelegationRunRecord): Record<string, unknown> {
-  return {
-    runId: record.runId,
-    delegate: record.delegate,
-    agentSpec: record.agentSpec ?? null,
-    envelope: record.envelope ?? null,
-    skillName: record.skillName ?? null,
-    label: record.label ?? null,
-    kind: record.kind ?? null,
-    boundary: record.boundary ?? null,
-    parentSkill: record.parentSkill ?? null,
-    childSessionId: record.workerSessionId ?? null,
-    status: record.status,
-    summary: record.summary ?? null,
-    error: record.error ?? null,
-    artifactRefs: record.artifactRefs ?? [],
-    totalTokens: record.totalTokens ?? null,
-    costUsd: record.costUsd ?? null,
-    deliveryMode: record.delivery?.mode ?? null,
-    deliveryScopeId: record.delivery?.scopeId ?? null,
-    deliveryLabel: record.delivery?.label ?? null,
-    deliveryHandoffState: record.delivery?.handoffState ?? null,
-    deliveryReadyAt: record.delivery?.readyAt ?? null,
-    deliverySurfacedAt: record.delivery?.surfacedAt ?? null,
-    supplementalAppended: record.delivery?.supplementalAppended ?? null,
-    deliveryUpdatedAt: record.delivery?.updatedAt ?? null,
   };
 }
 
@@ -194,6 +159,7 @@ function matchesWorkerResultPredicate(
 export function createDetachedSubagentBackgroundController(
   options: DetachedBackgroundControllerOptions,
 ): HostedSubagentBackgroundController {
+  const delegationStore = options.delegationStore ?? new HostedDelegationStore(options.runtime);
   const modulePath = fileURLToPath(new URL("./runner-main.js", import.meta.url));
   const spawnProcess = options.spawnProcess ?? defaultSpawnProcess;
   const isPidAlive = options.isPidAlive ?? isProcessAlive;
@@ -217,7 +183,7 @@ export function createDetachedSubagentBackgroundController(
   ): DelegationRunRecord => {
     const updatedAt = Date.now();
     const updated: DelegationRunRecord = {
-      ...cloneRecord(record),
+      ...cloneDelegationRunRecord(record),
       status: terminalStatus,
       updatedAt,
       summary: record.summary ?? reason,
@@ -230,12 +196,11 @@ export function createDetachedSubagentBackgroundController(
         : undefined,
     };
     trackedPredicates.delete(record.runId);
-    options.runtime.session.recordDelegationRun(record.parentSessionId, updated);
     options.runtime.events.record({
       sessionId: record.parentSessionId,
       type: terminalStatus === "cancelled" ? "subagent_cancelled" : "subagent_failed",
       payload: {
-        ...buildLifecyclePayload(updated),
+        ...buildDelegationLifecyclePayload(updated),
         reason,
       },
     });
@@ -330,11 +295,10 @@ export function createDetachedSubagentBackgroundController(
         boundary,
         delivery: buildDeliveryRecord(input.delivery, createdAt),
       };
-      options.runtime.session.recordDelegationRun(input.parentSessionId, initialRecord);
       options.runtime.events.record({
         sessionId: input.parentSessionId,
         type: "subagent_spawned",
-        payload: buildLifecyclePayload(initialRecord),
+        payload: buildDelegationLifecyclePayload(initialRecord),
       });
 
       const spec: DetachedSubagentRunSpec = {
@@ -431,7 +395,7 @@ export function createDetachedSubagentBackgroundController(
           });
         }
       }
-      return cloneRecord(initialRecord);
+      return cloneDelegationRunRecord(initialRecord);
     },
     async inspectLiveRuns({ parentSessionId, query }) {
       for (const liveState of listDetachedSubagentLiveStates(options.runtime.workspaceRoot)) {
@@ -449,7 +413,7 @@ export function createDetachedSubagentBackgroundController(
           });
         }
       }
-      const runs = options.runtime.session.listDelegationRuns(parentSessionId, query);
+      const runs = delegationStore.listRuns(parentSessionId, query);
       const map = new Map<string, { live: boolean; cancelable: boolean }>();
       for (const run of runs) {
         const inspection = await reconcileLiveState(run);
@@ -461,7 +425,7 @@ export function createDetachedSubagentBackgroundController(
       return map;
     },
     async cancelRun({ parentSessionId, runId, reason }) {
-      const existing = options.runtime.session.getDelegationRun(parentSessionId, runId);
+      const existing = delegationStore.getRun(parentSessionId, runId);
       if (!existing) {
         return {
           ok: false,
@@ -474,7 +438,7 @@ export function createDetachedSubagentBackgroundController(
           ok: false,
           error: `already_terminal:${existing.status}`,
           run: {
-            ...cloneRecord(existing),
+            ...cloneDelegationRunRecord(existing),
             live: false,
             cancelable: false,
           },
@@ -490,7 +454,7 @@ export function createDetachedSubagentBackgroundController(
           ok: reconciled.record.status === "cancelled",
           error: reconciled.record.status === "cancelled" ? undefined : `not_live:${runId}`,
           run: {
-            ...cloneRecord(reconciled.record),
+            ...cloneDelegationRunRecord(reconciled.record),
             live: false,
             cancelable: false,
           },
@@ -512,7 +476,7 @@ export function createDetachedSubagentBackgroundController(
 
       for (let attempt = 0; attempt < 40; attempt += 1) {
         await sleep(50);
-        const latest = options.runtime.session.getDelegationRun(parentSessionId, runId) ?? existing;
+        const latest = delegationStore.getRun(parentSessionId, runId) ?? existing;
         const reconciled = await reconcileLiveState(latest);
         if (isTerminalStatus(reconciled.record.status)) {
           return {
@@ -522,7 +486,7 @@ export function createDetachedSubagentBackgroundController(
                 ? undefined
                 : `cancel_not_observed:${reconciled.record.status}`,
             run: {
-              ...cloneRecord(reconciled.record),
+              ...cloneDelegationRunRecord(reconciled.record),
               live: false,
               cancelable: false,
             },
@@ -530,12 +494,12 @@ export function createDetachedSubagentBackgroundController(
         }
       }
 
-      const latest = options.runtime.session.getDelegationRun(parentSessionId, runId) ?? existing;
+      const latest = delegationStore.getRun(parentSessionId, runId) ?? existing;
       return {
         ok: false,
         error: `cancel_timeout:${runId}`,
         run: {
-          ...cloneRecord(latest),
+          ...cloneDelegationRunRecord(latest),
           live: true,
           cancelable: true,
         },

@@ -109,6 +109,7 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
+      const adapter = options.runtime.orchestration?.subagents;
       const query = {
         runIds: typeof params.runId === "string" ? [params.runId] : undefined,
         statuses: normalizeStatuses(params.statuses),
@@ -116,72 +117,74 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
           typeof params.includeTerminal === "boolean" ? params.includeTerminal : true,
         limit: typeof params.limit === "number" ? params.limit : undefined,
       };
-
-      const result = options.runtime.orchestration?.subagents?.status
-        ? await options.runtime.orchestration.subagents.status({
-            fromSessionId: sessionId,
-            query,
-          })
-        : {
-            ok: true as const,
-            runs: options.runtime.session.listDelegationRuns(sessionId, query).map((run) => ({
-              runId: run.runId,
-              delegate: run.delegate,
-              agentSpec: run.agentSpec,
-              envelope: run.envelope,
-              skillName: run.skillName,
-              parentSessionId: run.parentSessionId,
-              status: run.status,
-              createdAt: run.createdAt,
-              updatedAt: run.updatedAt,
-              label: run.label,
-              workerSessionId: run.workerSessionId,
-              parentSkill: run.parentSkill,
-              kind: run.kind,
-              boundary: run.boundary,
-              summary: run.summary,
-              error: run.error,
-              artifactRefs: run.artifactRefs?.map((ref) => ({
-                kind: ref.kind,
-                path: ref.path,
-                summary: ref.summary,
-              })),
-              delivery: run.delivery
-                ? {
-                    mode: run.delivery.mode,
-                    scopeId: run.delivery.scopeId,
-                    label: run.delivery.label,
-                    handoffState: run.delivery.handoffState,
-                    readyAt: run.delivery.readyAt,
-                    surfacedAt: run.delivery.surfacedAt,
-                    supplementalAppended: run.delivery.supplementalAppended,
-                    updatedAt: run.delivery.updatedAt,
-                  }
-                : undefined,
-              totalTokens: run.totalTokens,
-              costUsd: run.costUsd,
+      const readModelRuns = options.runtime.delegation?.listRuns?.(sessionId, query);
+      let readModelResult:
+        | {
+            ok: true;
+            runs: Array<DelegationRunRecord & { live?: boolean; cancelable?: boolean }>;
+          }
+        | undefined;
+      if (readModelRuns) {
+        readModelResult = {
+          ok: true,
+          runs: readModelRuns.map((run) =>
+            Object.assign({}, run, {
               live: false,
               cancelable: false,
-            })),
-          };
+            }),
+          ),
+        };
+      }
+      if (readModelResult && adapter?.status && readModelResult.runs.length > 0) {
+        const liveState = await adapter.status({
+          fromSessionId: sessionId,
+          query: {
+            runIds: readModelResult.runs.map((run) => run.runId),
+            includeTerminal: true,
+          },
+        });
+        if (liveState.ok) {
+          const liveByRunId = new Map(liveState.runs.map((run) => [run.runId, run] as const));
+          readModelResult.runs = readModelResult.runs.map((run) => {
+            const live = liveByRunId.get(run.runId);
+            return live
+              ? Object.assign({}, run, { live: live.live, cancelable: live.cancelable })
+              : run;
+          });
+        }
+      }
+      const resolved =
+        readModelResult ??
+        (adapter?.status
+          ? await adapter.status({
+              fromSessionId: sessionId,
+              query,
+            })
+          : undefined);
 
-      if (!result.ok) {
+      if (!resolved) {
+        return failTextResult("Subagent orchestration is unavailable in this session.", {
+          ok: false,
+        });
+      }
+
+      if (!resolved.ok) {
         return failTextResult(
-          `subagent_status failed: ${result.error ?? "unknown_error"}`,
-          result as unknown as Record<string, unknown>,
+          `subagent_status failed: ${resolved.error ?? "unknown_error"}`,
+          resolved as unknown as Record<string, unknown>,
         );
       }
 
-      if (result.runs.length === 0) {
+      if (resolved.runs.length === 0) {
         return textResult(
           "No matching subagent runs.",
-          result as unknown as Record<string, unknown>,
+          resolved as unknown as Record<string, unknown>,
         );
       }
 
       return textResult(
-        ["# Subagent Status", ...result.runs.map((run) => summarizeRun(run))].join("\n"),
-        result as unknown as Record<string, unknown>,
+        ["# Subagent Status", ...resolved.runs.map((run) => summarizeRun(run))].join("\n"),
+        resolved as unknown as Record<string, unknown>,
       );
     },
   });

@@ -7,7 +7,7 @@ import type {
   SkillOutputContract,
   SkillResourceBudget,
   ToolEffectClass,
-} from "../types.js";
+} from "../contracts/index.js";
 
 const READ_ONLY_EFFECTS: ToolEffectClass[] = ["workspace_read", "runtime_observe"];
 const EXECUTE_EFFECTS = new Set<ToolEffectClass>(["local_exec", "external_network"]);

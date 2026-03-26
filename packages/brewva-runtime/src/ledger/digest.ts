@@ -1,4 +1,4 @@
-import type { EvidenceLedgerRow, LedgerDigest } from "../types.js";
+import type { EvidenceLedgerRow, LedgerDigest } from "../contracts/index.js";
 import { estimateTokenCount } from "../utils/token.js";
 
 const INFRASTRUCTURE_TOOLS = new Set([

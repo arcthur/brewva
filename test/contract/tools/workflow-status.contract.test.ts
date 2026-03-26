@@ -2,9 +2,24 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { HostedDelegationStore } from "@brewva/brewva-gateway";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { createWorkflowStatusTool } from "@brewva/brewva-tools";
 import { extractTextContent, mergeContext } from "./tools-flow.helpers.js";
+
+function withDelegationStatus(runtime: BrewvaRuntime, store: HostedDelegationStore) {
+  const runtimeWithDelegation = Object.create(runtime) as BrewvaRuntime & {
+    delegation: {
+      listRuns: typeof store.listRuns;
+      listPendingOutcomes: typeof store.listPendingOutcomes;
+    };
+  };
+  runtimeWithDelegation.delegation = {
+    listRuns: (sessionId, query) => store.listRuns(sessionId, query),
+    listPendingOutcomes: (sessionId, query) => store.listPendingOutcomes(sessionId, query),
+  };
+  return runtimeWithDelegation;
+}
 
 describe("workflow_status contract", () => {
   test("reports stale review and verification after a later write", async () => {
@@ -160,25 +175,27 @@ describe("workflow_status contract", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-handoff-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "workflow-status-handoff";
+    const delegationStore = new HostedDelegationStore(runtime);
 
-    runtime.session.recordDelegationRun(sessionId, {
-      runId: "delegation-handoff-1",
-      delegate: "review",
-      parentSessionId: sessionId,
-      status: "completed",
-      createdAt: 1,
-      updatedAt: 2,
-      kind: "review",
-      summary: "Review completed and is waiting for parent surfacing.",
-      delivery: {
-        mode: "text_only",
-        handoffState: "pending_parent_turn",
-        readyAt: 2,
-        updatedAt: 2,
+    runtime.events.record({
+      sessionId,
+      type: "subagent_completed",
+      payload: {
+        runId: "delegation-handoff-1",
+        delegate: "review",
+        status: "completed",
+        kind: "review",
+        summary: "Review completed and is waiting for parent surfacing.",
+        deliveryMode: "text_only",
+        deliveryHandoffState: "pending_parent_turn",
+        deliveryReadyAt: 2,
+        deliveryUpdatedAt: 2,
       },
     });
 
-    const tool = createWorkflowStatusTool({ runtime });
+    const tool = createWorkflowStatusTool({
+      runtime: withDelegationStatus(runtime, delegationStore) as any,
+    });
     const result = await tool.execute(
       "tc-workflow-status-handoff",
       {},

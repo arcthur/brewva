@@ -324,6 +324,14 @@ export interface BrewvaToolOrchestration {
   };
 }
 
+export interface BrewvaToolDelegationQuery {
+  listRuns?(
+    sessionId: string,
+    query?: Pick<DelegationRunQuery, "runIds" | "statuses" | "includeTerminal" | "limit">,
+  ): DelegationRunRecord[];
+  listPendingOutcomes?(sessionId: string, query?: { limit?: number }): DelegationRunRecord[];
+}
+
 export type BrewvaToolRuntime = Pick<
   BrewvaRuntime,
   | "cwd"
@@ -342,6 +350,7 @@ export type BrewvaToolRuntime = Pick<
   | "proposals"
 > & {
   orchestration?: BrewvaToolOrchestration;
+  delegation?: BrewvaToolDelegationQuery;
 };
 
 export interface BrewvaToolOptions {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { HostedDelegationStore } from "@brewva/brewva-gateway";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   createSubagentCancelTool,
@@ -24,26 +25,42 @@ function extractText(result: { content?: Array<{ type: string; text?: string }> 
   );
 }
 
+function buildStatusRuntime(runtime: BrewvaRuntime, store: HostedDelegationStore) {
+  const runtimeWithDelegation = Object.create(runtime) as BrewvaRuntime & {
+    delegation: {
+      listRuns: typeof store.listRuns;
+      listPendingOutcomes: typeof store.listPendingOutcomes;
+    };
+  };
+  runtimeWithDelegation.delegation = {
+    listRuns: (sessionId, query) => store.listRuns(sessionId, query),
+    listPendingOutcomes: (sessionId, query) => store.listPendingOutcomes(sessionId, query),
+  };
+  return runtimeWithDelegation;
+}
+
 describe("subagent control tools", () => {
-  test("subagent_status lists persisted delegation runs through the runtime facade", async () => {
+  test("subagent_status lists persisted delegation runs through the delegation read model", async () => {
     const runtime = new BrewvaRuntime({
       cwd: createTestWorkspace("subagent-status-runtime"),
     });
-    runtime.session.recordDelegationRun("session-status", {
-      runId: "run-status-1",
-      delegate: "review",
-      agentSpec: "review",
-      envelope: "readonly-reviewer",
-      skillName: "review",
-      parentSessionId: "session-status",
-      status: "running",
-      createdAt: 1,
-      updatedAt: 2,
-      kind: "review",
-      summary: "Inspecting runtime deltas.",
+    const store = new HostedDelegationStore(runtime);
+    runtime.events.record({
+      sessionId: "session-status",
+      type: "subagent_spawned",
+      payload: {
+        runId: "run-status-1",
+        delegate: "review",
+        agentSpec: "review",
+        envelope: "readonly-reviewer",
+        skillName: "review",
+        status: "running",
+        kind: "review",
+        summary: "Inspecting runtime deltas.",
+      },
     });
 
-    const tool = createSubagentStatusTool({ runtime });
+    const tool = createSubagentStatusTool({ runtime: buildStatusRuntime(runtime, store) as any });
     const result = await tool.execute(
       "tc-subagent-status",
       {},
@@ -64,24 +81,24 @@ describe("subagent control tools", () => {
     const runtime = new BrewvaRuntime({
       cwd: createTestWorkspace("subagent-status-handoff-runtime"),
     });
-    runtime.session.recordDelegationRun("session-status-handoff", {
-      runId: "run-status-handoff-1",
-      delegate: "review",
-      parentSessionId: "session-status-handoff",
-      status: "completed",
-      createdAt: 1,
-      updatedAt: 3,
-      kind: "review",
-      summary: "Review completed and is pending parent surfacing.",
-      delivery: {
-        mode: "text_only",
-        handoffState: "pending_parent_turn",
-        readyAt: 2,
-        updatedAt: 3,
+    const store = new HostedDelegationStore(runtime);
+    runtime.events.record({
+      sessionId: "session-status-handoff",
+      type: "subagent_completed",
+      payload: {
+        runId: "run-status-handoff-1",
+        delegate: "review",
+        status: "completed",
+        kind: "review",
+        summary: "Review completed and is pending parent surfacing.",
+        deliveryMode: "text_only",
+        deliveryHandoffState: "pending_parent_turn",
+        deliveryReadyAt: 2,
+        deliveryUpdatedAt: 3,
       },
     });
 
-    const tool = createSubagentStatusTool({ runtime });
+    const tool = createSubagentStatusTool({ runtime: buildStatusRuntime(runtime, store) as any });
     const result = await tool.execute(
       "tc-subagent-status-handoff",
       {},

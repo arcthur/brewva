@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { HostedDelegationStore } from "@brewva/brewva-gateway";
 import type { SkillDocument } from "@brewva/brewva-runtime";
 import {
   CONTEXT_SOURCES,
@@ -226,25 +227,25 @@ describe("context transform injection contract", () => {
         }),
       },
     });
+    const delegationStore = new HostedDelegationStore(runtime);
 
-    runtime.session.recordDelegationRun(sessionId, {
-      runId: "run-completed-1",
-      delegate: "review",
-      parentSessionId: sessionId,
-      status: "completed",
-      createdAt: 1,
-      updatedAt: 2,
-      kind: "review",
-      summary: "Review completed and awaits parent consumption.",
-      delivery: {
-        mode: "text_only",
-        handoffState: "pending_parent_turn",
-        readyAt: 2,
-        updatedAt: 2,
+    runtime.events.record({
+      sessionId,
+      type: "subagent_completed",
+      payload: {
+        runId: "run-completed-1",
+        delegate: "review",
+        status: "completed",
+        kind: "review",
+        summary: "Review completed and awaits parent consumption.",
+        deliveryMode: "text_only",
+        deliveryHandoffState: "pending_parent_turn",
+        deliveryReadyAt: 2,
+        deliveryUpdatedAt: 2,
       },
     });
 
-    registerContextTransform(api, runtime);
+    registerContextTransform(api, runtime, { delegationStore });
 
     const firstResults = await invokeHandlersAsync<{
       message?: {
@@ -268,9 +269,9 @@ describe("context transform injection contract", () => {
     const first = firstResults.find((candidate) => typeof candidate?.message?.content === "string");
     expect(first?.message?.content).toContain("[CompletedDelegationOutcomes]");
     expect(first?.message?.content).toContain("run-completed-1");
-    expect(
-      runtime.session.getDelegationRun(sessionId, "run-completed-1")?.delivery?.handoffState,
-    ).toBe("surfaced");
+    expect(delegationStore.getRun(sessionId, "run-completed-1")?.delivery?.handoffState).toBe(
+      "surfaced",
+    );
     expect(runtime.events.list(sessionId, { type: "subagent_delivery_surfaced" })).toHaveLength(1);
 
     const secondResults = await invokeHandlersAsync<{

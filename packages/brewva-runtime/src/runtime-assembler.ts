@@ -6,6 +6,15 @@ import { ContextInjectionCollector } from "./context/injection.js";
 import { ContextSourceProviderRegistry } from "./context/provider.js";
 import type { VerificationOutcomeSnapshot } from "./context/runtime-status.js";
 import type { ToolOutputDistillationEntry } from "./context/tool-output-distilled.js";
+import type {
+  BrewvaConfig,
+  BrewvaEventRecord,
+  SessionCostSummary,
+  ToolExecutionBoundary,
+  ToolGovernanceDescriptor,
+  VerificationLevel,
+  VerificationReport,
+} from "./contracts/index.js";
 import { SessionCostTracker } from "./cost/tracker.js";
 import { DECISION_RECEIPT_RECORDED_EVENT_TYPE } from "./events/event-types.js";
 import { BrewvaEventStore } from "./events/store.js";
@@ -50,15 +59,6 @@ import { VerificationService } from "./services/verification.js";
 import { SkillRegistry } from "./skills/registry.js";
 import { FileChangeTracker } from "./state/file-change-tracker.js";
 import { TurnReplayEngine } from "./tape/replay-engine.js";
-import type {
-  BrewvaConfig,
-  BrewvaEventRecord,
-  SessionCostSummary,
-  ToolExecutionBoundary,
-  ToolGovernanceDescriptor,
-  VerificationLevel,
-  VerificationReport,
-} from "./types.js";
 import { VerificationGate } from "./verification/gate.js";
 
 export interface RuntimeCoreDependencies {
@@ -535,6 +535,7 @@ export function createRuntimeServiceDependencies(
     parallel: options.coreDependencies.parallel,
     parallelResults: options.coreDependencies.parallelResults,
     sessionState: options.sessionState,
+    eventStore: options.coreDependencies.eventStore,
     getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
     recordEvent: (input) => options.kernel.recordEvent(input),
     fileChangeService,

@@ -1,4 +1,4 @@
-import type { TaskItemStatus, VerificationLevel } from "../types.js";
+import type { TaskItemStatus, VerificationLevel } from "../contracts/index.js";
 
 export const TASK_AGENT_VERIFICATION_LEVEL_VALUES = ["smoke", "targeted", "full", "none"] as const;
 

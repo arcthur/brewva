@@ -1,13 +1,12 @@
 import type {
   BrewvaEventRecord,
-  DelegationRunRecord,
   ResourceLeaseRecord,
   SessionHydrationIssue,
   SkillOutputRecord,
   VerificationCheckRun,
   VerificationEvidence,
   VerificationSessionState,
-} from "../types.js";
+} from "../contracts/index.js";
 import type { RuntimeSessionStateCell } from "./session-state.js";
 
 export interface SessionHydrationFoldCallbacks {
@@ -84,10 +83,6 @@ export interface VerificationHydrationState {
 
 export interface LedgerHydrationState {
   lastLedgerCompactionTurn?: number;
-}
-
-export interface DelegationHydrationState {
-  delegationRuns: Map<string, DelegationRunRecord>;
 }
 
 export function readObjectRecord(value: unknown): Record<string, unknown> | null {

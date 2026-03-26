@@ -1,9 +1,3 @@
-import {
-  DECISION_RECEIPT_RECORDED_EVENT_TYPE,
-  PROPOSAL_DECIDED_EVENT_TYPE,
-  PROPOSAL_RECEIVED_EVENT_TYPE,
-} from "../events/event-types.js";
-import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type {
   BrewvaEventRecord,
   DecisionReceipt,
@@ -14,7 +8,13 @@ import type {
   ProposalListQuery,
   ProposalRecord,
   ToolGovernanceDescriptor,
-} from "../types.js";
+} from "../contracts/index.js";
+import {
+  DECISION_RECEIPT_RECORDED_EVENT_TYPE,
+  PROPOSAL_DECIDED_EVENT_TYPE,
+  PROPOSAL_RECEIVED_EVENT_TYPE,
+} from "../events/event-types.js";
+import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import {
   commitEffectCommitmentProposal,
   type AuthorizeEffectCommitmentInput,

@@ -1,4 +1,4 @@
-import type { ContextBudgetUsage } from "../types.js";
+import type { ContextBudgetUsage } from "../contracts/index.js";
 
 type UsageLike =
   | {

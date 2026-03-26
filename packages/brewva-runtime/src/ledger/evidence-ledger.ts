@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import type { EvidenceLedgerRow, EvidenceRecord, EvidenceQuery } from "../contracts/index.js";
 import { redactSecrets, redactUnknown } from "../security/redact.js";
-import type { EvidenceLedgerRow, EvidenceRecord, EvidenceQuery } from "../types.js";
 import { ensureDirForFile, writeFileAtomic } from "../utils/fs.js";
 import { sha256 } from "../utils/hash.js";
 

@@ -1,7 +1,7 @@
+import type { BrewvaStructuredEvent } from "../contracts/index.js";
 import { TOOL_RESULT_RECORDED_EVENT_TYPE } from "../events/event-types.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import { projectTruthFromToolResult } from "../truth/tool-result-projector.js";
-import type { BrewvaStructuredEvent } from "../types.js";
 import type { EventPipelineService } from "./event-pipeline.js";
 import type { TaskService } from "./task.js";
 import type { TruthService } from "./truth.js";

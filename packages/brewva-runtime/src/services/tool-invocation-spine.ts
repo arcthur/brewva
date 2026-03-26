@@ -1,5 +1,5 @@
+import type { PatchSet, ToolGovernanceDescriptor } from "../contracts/index.js";
 import { toolGovernanceCreatesRollbackAnchor } from "../governance/tool-governance.js";
-import type { PatchSet, ToolGovernanceDescriptor } from "../types.js";
 import type { FileChangeService } from "./file-change.js";
 import type { LedgerService } from "./ledger.js";
 import type { ReversibleMutationService } from "./reversible-mutation.js";

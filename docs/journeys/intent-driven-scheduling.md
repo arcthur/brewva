@@ -60,11 +60,11 @@ Lineage boundary notes:
 
 - each child session records its own iteration facts; the scheduler does not
   mirror those events back into the parent session
-- later inherited runs that need loop history must query `iteration_fact` with
-  `session_scope=parent_lineage` and a stable `source` such as
-  `goal-loop:<loop_key>`
-- `continuityMode=fresh` sessions are intentionally excluded from lineage-scoped
-  fact queries
+- later inherited runs that need loop history must reuse a stable `source` such
+  as `goal-loop:<loop_key>` and rely on scheduler/control-plane continuity
+  views rather than widening the runtime iteration-fact query contract
+- `continuityMode=fresh` sessions are intentionally excluded from inherited
+  continuity views
 - `optimization_continuity` is the explicit inspection surface for folded loop
   continuity, so operators or later runs can inspect continuation,
   convergence, escalation, and branch separation without turning the scheduler

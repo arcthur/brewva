@@ -190,9 +190,8 @@ ELIF execution crashed:
     outcome = "crash"
 ```
 
-When reading prior history, query `iteration_fact` with:
+When reading prior history, use the inherited-run lineage view and narrow with:
 
-- `session_scope = parent_lineage`
 - `source = "goal-loop:<loop_key>"`
 
 Do not use "latest event in the current session" as a proxy for loop history.

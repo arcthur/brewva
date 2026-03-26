@@ -1,3 +1,9 @@
+import type {
+  BrewvaConfig,
+  TaskState,
+  VerificationLevel,
+  VerificationReport,
+} from "../contracts/index.js";
 import {
   GOVERNANCE_VERIFY_SPEC_ERROR_EVENT_TYPE,
   GOVERNANCE_VERIFY_SPEC_FAILED_EVENT_TYPE,
@@ -6,7 +12,6 @@ import {
 } from "../events/event-types.js";
 import type { GovernancePort } from "../governance/port.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
-import type { BrewvaConfig, TaskState, VerificationLevel, VerificationReport } from "../types.js";
 import { runShellCommand } from "../utils/exec.js";
 import type { VerificationGate } from "../verification/gate.js";
 import type { LedgerService } from "./ledger.js";

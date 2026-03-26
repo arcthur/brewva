@@ -66,10 +66,10 @@ effort helpers.
   children receive explicit parent-selected evidence context rather than
   ambient session access
 - `subagent_status` and `subagent_cancel` survive parent runtime restarts
-- hydration rebuilds delegation state from lifecycle events and durable run
-  metadata
-- `runtime.session.listPendingDelegationOutcomes(...)` is the stable derived
-  handoff view for late detached outcomes
+- the control-plane delegation read model rebuilds run state from lifecycle
+  events and durable run metadata
+- `HostedDelegationStore.listPendingOutcomes(...)` is the stable derived handoff
+  view for late detached outcomes
 - hosted turns surface pending late results through a
   `[CompletedDelegationOutcomes]` context block and mark them with
   `subagent_delivery_surfaced`
@@ -102,8 +102,8 @@ Note: use `runtime.tools.acquireParallelSlot(...)` to apply per-skill
   `packages/brewva-gateway/src/runtime-plugins/context-transform.ts`
 - Workflow status inspection:
   `packages/brewva-tools/src/workflow-status.ts`
-- Session hydration fold:
-  `packages/brewva-runtime/src/services/session-hydration-fold-delegation.ts`
+- Delegation read model:
+  `packages/brewva-gateway/src/subagents/delegation-store.ts`
 - Parent-side tool surface:
   `packages/brewva-tools/src/subagent-run.ts`,
   `packages/brewva-tools/src/subagent-control.ts`,

@@ -1,4 +1,4 @@
-import type { ToolEffectClass } from "../types.js";
+import type { ToolEffectClass } from "../contracts/index.js";
 import type { GovernancePort } from "./port.js";
 
 export type TrustedLocalGovernanceProfile = "personal" | "team" | "restricted";

@@ -527,7 +527,7 @@ Target files:
 - `packages/brewva-runtime/src/services/tool-gate.ts`
 - `packages/brewva-runtime/src/services/effect-commitment-desk.ts`
 - `packages/brewva-runtime/src/services/ledger.ts`
-- `packages/brewva-runtime/src/types.ts`
+- `packages/brewva-runtime/src/contracts/index.ts`
 - `packages/brewva-runtime/src/runtime.ts`
 - `test/contract/runtime/proposals.contract.test.ts`
 - `docs/reference/runtime.md`
@@ -642,7 +642,7 @@ interface BrewvaRuntimeOptions {
 Target files:
 
 - `packages/brewva-runtime/src/runtime.ts`
-- `packages/brewva-runtime/src/types.ts` (add `DeepReadonly<BrewvaConfig>`)
+- `packages/brewva-runtime/src/contracts/index.ts` (contract barrel for `DeepReadonly<BrewvaConfig>`)
 - `packages/brewva-gateway/src/host/create-hosted-session.ts`
 
 Verification:
@@ -729,7 +729,7 @@ interface BrewvaEventQuery {
 
 Target files:
 
-- `packages/brewva-runtime/src/types.ts` (`BrewvaEventQuery`)
+- `packages/brewva-runtime/src/contracts/index.ts` (`BrewvaEventQuery`)
 - `packages/brewva-runtime/src/events/store.ts`
 - `packages/brewva-runtime/src/services/event-pipeline.ts`
 - `docs/reference/runtime.md`
@@ -993,7 +993,7 @@ recommended default is stated explicitly.
 - `packages/brewva-runtime/src/governance/port.ts`
 - `packages/brewva-runtime/src/security/tool-policy.ts`
 - `packages/brewva-runtime/src/config/normalize.ts`
-- `packages/brewva-runtime/src/types.ts`
+- `packages/brewva-runtime/src/contracts/index.ts`
 - `packages/brewva-runtime/src/`
 - `packages/brewva-gateway/src/subagents`
 - `packages/brewva-gateway/src/runtime-plugins/index.ts`

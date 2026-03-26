@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import type { SkillDocument } from "../../../packages/brewva-runtime/src/contracts/index.js";
 import {
   markContextCompacted,
   type ContextCompactionDeps,
 } from "../../../packages/brewva-runtime/src/services/context-compaction.js";
 import { RuntimeSessionStateStore } from "../../../packages/brewva-runtime/src/services/session-state.js";
-import type { SkillDocument } from "../../../packages/brewva-runtime/src/types.js";
 
 async function flushAsyncEvents(): Promise<void> {
   await Promise.resolve();

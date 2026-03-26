@@ -1,4 +1,4 @@
-import type { SkillOutputRecord } from "../types.js";
+import type { SkillOutputRecord } from "../contracts/index.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import type { SessionHydrationFold, SkillHydrationState } from "./session-hydration-fold.js";
 import { readNonNegativeNumber, readSkillName } from "./session-hydration-fold.js";

@@ -10,6 +10,31 @@ import { textResult, withVerdict } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
+async function listPendingDelegationOutcomes(options: BrewvaToolOptions, sessionId: string) {
+  const readModelResults = options.runtime.delegation?.listPendingOutcomes?.(sessionId, {
+    limit: 6,
+  });
+  if (readModelResults) {
+    return readModelResults;
+  }
+  const adapter = options.runtime.orchestration?.subagents;
+  if (!adapter?.status) {
+    return [];
+  }
+  const result = await adapter.status({
+    fromSessionId: sessionId,
+    query: {
+      statuses: ["completed", "failed", "timeout", "cancelled"],
+      includeTerminal: true,
+      limit: 6,
+    },
+  });
+  if (!result.ok) {
+    return [];
+  }
+  return result.runs.filter((run) => run.delivery?.handoffState === "pending_parent_turn");
+}
+
 function formatTimestamp(timestamp: number): string {
   if (!Number.isFinite(timestamp) || timestamp <= 0) {
     return "unknown";
@@ -86,12 +111,7 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
       const events = options.runtime.events.query(sessionId);
       const taskState = options.runtime.task.getState(sessionId);
       const pendingWorkerResults = options.runtime.session.listWorkerResults(sessionId);
-      const pendingDelegationOutcomes = options.runtime.session.listPendingDelegationOutcomes(
-        sessionId,
-        {
-          limit: 6,
-        },
-      );
+      const pendingDelegationOutcomes = await listPendingDelegationOutcomes(options, sessionId);
       const snapshot = deriveWorkflowStatus({
         sessionId,
         events,

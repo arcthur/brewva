@@ -1,3 +1,4 @@
+import type { BrewvaEventQuery, BrewvaEventRecord, TaskState } from "../contracts/index.js";
 import {
   TASK_STUCK_CLEARED_EVENT_TYPE,
   TASK_STUCK_DETECTED_EVENT_TYPE,
@@ -14,7 +15,6 @@ import {
   getTaskWatchdogOpenItemCount,
   toTaskWatchdogEventPayload,
 } from "../task/watchdog.js";
-import type { BrewvaEventQuery, BrewvaEventRecord, TaskState } from "../types.js";
 
 const DEFAULT_THRESHOLD_MS = 5 * 60_000;
 

@@ -241,9 +241,8 @@ Hosted-session event boundary notes:
 - iteration fact helpers persist and query receipt-grade objective facts:
   metric observations and guard results
 - iteration fact list helpers accept optional `source` and `sessionScope`
-  filters; `sessionScope=parent_lineage` resolves the owning parent session
-  plus scheduler-created `continuityMode=inherit` child sessions while keeping
-  each record's true `sessionId`
+  filters; the stable runtime contract only supports
+  `sessionScope=current_session`
 - live-only hosted events such as `message_update` and `tool_execution_update`
   are intentionally not replay-visible through the runtime event API
 - pre-parse compatibility evidence surfaces through durable ops telemetry such
@@ -279,10 +278,6 @@ Read-only verification semantics:
 - `applyMergedWorkerResults(sessionId, input)`
 - `clearWorkerResults(sessionId)`
 - `pollStall(sessionId, input?)`
-- `recordDelegationRun(sessionId, record)`
-- `getDelegationRun(sessionId, runId)`
-- `listDelegationRuns(sessionId, query?)`
-- `listPendingDelegationOutcomes(sessionId, query?)`
 - `clearState(sessionId)`
 - `onClearState(listener)`
 - `getHydration(sessionId)`
@@ -291,8 +286,8 @@ Delegation taxonomy:
 
 - `subagent_*` is the model/operator-facing tool family for starting,
   inspecting, and cancelling delegated child runs
-- `DelegationRunRecord` is the durable replay-hydrated child-run ledger surface
-  exposed through `runtime.session.*`
+- `DelegationRunRecord` is owned by the hosted control-plane read model, not by
+  `runtime.session.*`
 - `WorkerResult` is a child-produced patch/adoption artifact for patch-producing
   delegated runs; it is not the delegated run record itself
 
@@ -302,13 +297,10 @@ Worker-result adoption semantics:
 - `applyMergedWorkerResults(...)` mutates the parent workspace only after the
   parent explicitly adopts the merged result
 
-Delegation session semantics:
+Delegation inspection semantics:
 
-- `listDelegationRuns(...)` exposes the full replay-hydrated child run ledger
-- each delegation record preserves the resolved `delegate` plus optional
-  `agentSpec`, `envelope`, and `skillName` metadata when available
-- `listPendingDelegationOutcomes(...)` is the stable derived handoff view for
-  late background outcomes that still await a parent turn
+- hosted delegation status and pending handoff inspection are provided by the
+  gateway control-plane read model
 - pending delegation outcomes remain explicit inspection state; they do not
   auto-inject patches, auto-complete skills, or widen child authority
 

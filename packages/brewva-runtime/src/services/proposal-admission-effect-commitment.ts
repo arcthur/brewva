@@ -1,11 +1,11 @@
-import { toolGovernanceRequiresEffectCommitment } from "../governance/tool-governance.js";
 import type {
   DecisionReceipt,
   ProposalDecision,
   ProposalEnvelope,
   ToolEffectClass,
   ToolGovernanceDescriptor,
-} from "../types.js";
+} from "../contracts/index.js";
+import { toolGovernanceRequiresEffectCommitment } from "../governance/tool-governance.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import type { BuildDecisionReceipt } from "./proposal-admission-shared.js";
 

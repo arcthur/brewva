@@ -1,4 +1,4 @@
-import type { DecisionReceipt, ProposalDecision, ProposalEnvelope } from "../types.js";
+import type { DecisionReceipt, ProposalDecision, ProposalEnvelope } from "../contracts/index.js";
 
 export type BuildDecisionReceipt = (
   proposal: ProposalEnvelope,

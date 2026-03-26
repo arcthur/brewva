@@ -52,7 +52,7 @@ This avoids hidden coupling from scheduling internals back into facade methods.
 
 ## Shared Contract Surface
 
-Core contracts are defined in `packages/brewva-runtime/src/types.ts`, including:
+Core contracts are defined in `packages/brewva-runtime/src/contracts/index.ts`, including:
 
 - skill contracts and routing/scheduling types
 - ledger and truth/task payload contracts

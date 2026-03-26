@@ -1,4 +1,4 @@
-import type { BrewvaConfig } from "../types.js";
+import type { BrewvaConfig } from "../contracts/index.js";
 
 export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
   ui: {

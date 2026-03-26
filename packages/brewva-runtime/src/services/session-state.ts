@@ -1,9 +1,8 @@
 import type {
-  DelegationRunRecord,
   ResourceLeaseRecord,
   SessionHydrationState,
   SkillOutputRecord,
-} from "../types.js";
+} from "../contracts/index.js";
 
 interface ReservedContextInjectionTokens {
   primaryTokens: number;
@@ -24,7 +23,6 @@ export class RuntimeSessionStateCell {
   skillBudgetWarnings = new Set<string>();
   skillParallelWarnings = new Set<string>();
   resourceLeases = new Map<string, ResourceLeaseRecord>();
-  delegationRuns = new Map<string, DelegationRunRecord>();
   skillOutputs = new Map<string, SkillOutputRecord>();
   tapeCheckpointWriteInProgress = false;
   tapeCheckpointCounterInitialized = false;

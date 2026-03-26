@@ -1,3 +1,9 @@
+import type {
+  PatchApplyResult,
+  PatchSet,
+  RollbackResult,
+  SkillDocument,
+} from "../contracts/index.js";
 import { SessionCostTracker } from "../cost/tracker.js";
 import {
   VERIFICATION_STATE_RESET_EVENT_TYPE,
@@ -5,7 +11,6 @@ import {
 } from "../events/event-types.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import { FileChangeTracker } from "../state/file-change-tracker.js";
-import type { PatchApplyResult, PatchSet, RollbackResult, SkillDocument } from "../types.js";
 import { isMutationTool } from "../verification/classifier.js";
 import { buildVerificationWriteMarkedPayload } from "../verification/projector-payloads.js";
 import type { LedgerService } from "./ledger.js";

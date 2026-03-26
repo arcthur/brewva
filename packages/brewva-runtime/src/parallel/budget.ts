@@ -1,4 +1,4 @@
-import type { ParallelAcquireResult, BrewvaConfig } from "../types.js";
+import type { ParallelAcquireResult, BrewvaConfig } from "../contracts/index.js";
 
 interface SessionParallelState {
   active: Set<string>;

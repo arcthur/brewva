@@ -14,77 +14,6 @@ import {
   type ContextSourceProviderDescriptor,
 } from "./context/provider.js";
 import type { ToolOutputDistillationEntry } from "./context/tool-output-distilled.js";
-import { SessionCostTracker } from "./cost/tracker.js";
-import {
-  ITERATION_GUARD_RECORDED_EVENT_TYPE,
-  ITERATION_METRIC_OBSERVED_EVENT_TYPE,
-  TOOL_OUTPUT_DISTILLED_EVENT_TYPE,
-  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-} from "./events/event-types.js";
-import { BrewvaEventStore } from "./events/store.js";
-import type { GovernancePort } from "./governance/port.js";
-import {
-  createToolGovernanceRegistry,
-  getToolGovernanceResolution,
-} from "./governance/tool-governance.js";
-import {
-  applyFactWindow,
-  buildGuardResultPayload,
-  buildMetricObservationPayload,
-  coerceGuardResultPayload,
-  coerceMetricObservationPayload,
-  filterGuardResultRecords,
-  filterMetricObservationRecords,
-  getGuardResultEventQuery,
-  getMetricObservationEventQuery,
-  toGuardResultRecord,
-  toMetricObservationRecord,
-  type GuardResultInput,
-  type GuardResultQuery,
-  type GuardResultRecord,
-  type IterationFactSessionScope,
-  type MetricObservationInput,
-  type MetricObservationQuery,
-  type MetricObservationRecord,
-} from "./iteration/facts.js";
-import { EvidenceLedger } from "./ledger/evidence-ledger.js";
-import { ParallelBudgetManager } from "./parallel/budget.js";
-import { ParallelResultStore } from "./parallel/results.js";
-import { ProjectionEngine } from "./projection/engine.js";
-import {
-  createRuntimeCoreDependencies as assembleRuntimeCoreDependencies,
-  createRuntimeKernelContext as assembleRuntimeKernelContext,
-  createRuntimeServiceDependencies as assembleRuntimeServiceDependencies,
-} from "./runtime-assembler.js";
-import type { RuntimeKernelContext } from "./runtime-kernel.js";
-import { parseScheduleIntentEvent, SCHEDULE_EVENT_TYPE } from "./schedule/events.js";
-import { sanitizeContextText } from "./security/sanitize.js";
-import { ContextService } from "./services/context.js";
-import { CostService } from "./services/cost.js";
-import { EffectCommitmentDeskService } from "./services/effect-commitment-desk.js";
-import { EventPipelineService, type RuntimeRecordEventInput } from "./services/event-pipeline.js";
-import { FileChangeService } from "./services/file-change.js";
-import { LedgerService } from "./services/ledger.js";
-import { MutationRollbackService } from "./services/mutation-rollback.js";
-import { ParallelService } from "./services/parallel.js";
-import { ProposalAdmissionService } from "./services/proposal-admission.js";
-import { ResourceLeaseService } from "./services/resource-lease.js";
-import { ScheduleIntentService } from "./services/schedule-intent.js";
-import { SessionLifecycleService } from "./services/session-lifecycle.js";
-import { RuntimeSessionStateStore } from "./services/session-state.js";
-import { SkillLifecycleService } from "./services/skill-lifecycle.js";
-import { TapeService } from "./services/tape.js";
-import { TaskWatchdogService } from "./services/task-watchdog.js";
-import { TaskService } from "./services/task.js";
-import { ToolGateService } from "./services/tool-gate.js";
-import { ToolInvocationSpine } from "./services/tool-invocation-spine.js";
-import { TruthProjectorService } from "./services/truth-projector.js";
-import { TruthService } from "./services/truth.js";
-import { VerificationProjectorService } from "./services/verification-projector.js";
-import { VerificationService } from "./services/verification.js";
-import { SkillRegistry, type SkillRegistryLoadReport } from "./skills/registry.js";
-import { FileChangeTracker } from "./state/file-change-tracker.js";
-import { TurnReplayEngine } from "./tape/replay-engine.js";
 import type {
   ContextCompactionReason,
   ContextPressureLevel,
@@ -131,7 +60,6 @@ import type {
   ProposalKind,
   ProposalListQuery,
   ProposalRecord,
-  ScheduleIntentEventPayload,
   SessionHydrationState,
   SessionCostSummary,
   TapeSearchResult,
@@ -155,9 +83,81 @@ import type {
   WorkerResult,
   TruthFactResolveResult,
   TruthFactUpsertResult,
-} from "./types.js";
-import type { TaskItemStatus } from "./types.js";
-import type { TruthFactSeverity, TruthFactStatus, TruthState } from "./types.js";
+} from "./contracts/index.js";
+import type { TaskItemStatus } from "./contracts/index.js";
+import type { TruthFactSeverity, TruthFactStatus, TruthState } from "./contracts/index.js";
+import { SessionCostTracker } from "./cost/tracker.js";
+import {
+  ITERATION_GUARD_RECORDED_EVENT_TYPE,
+  ITERATION_METRIC_OBSERVED_EVENT_TYPE,
+  TOOL_OUTPUT_DISTILLED_EVENT_TYPE,
+  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+} from "./events/event-types.js";
+import { BrewvaEventStore } from "./events/store.js";
+import type { GovernancePort } from "./governance/port.js";
+import {
+  createToolGovernanceRegistry,
+  getToolGovernanceResolution,
+} from "./governance/tool-governance.js";
+import {
+  applyFactWindow,
+  buildGuardResultPayload,
+  buildMetricObservationPayload,
+  coerceGuardResultPayload,
+  coerceMetricObservationPayload,
+  filterGuardResultRecords,
+  filterMetricObservationRecords,
+  getGuardResultEventQuery,
+  getMetricObservationEventQuery,
+  toGuardResultRecord,
+  toMetricObservationRecord,
+  type GuardResultInput,
+  type GuardResultQuery,
+  type GuardResultRecord,
+  type IterationFactSessionScope,
+  type MetricObservationInput,
+  type MetricObservationQuery,
+  type MetricObservationRecord,
+} from "./iteration/facts.js";
+import { EvidenceLedger } from "./ledger/evidence-ledger.js";
+import { ParallelBudgetManager } from "./parallel/budget.js";
+import { ParallelResultStore } from "./parallel/results.js";
+import { ProjectionEngine } from "./projection/engine.js";
+import {
+  createRuntimeCoreDependencies as assembleRuntimeCoreDependencies,
+  createRuntimeKernelContext as assembleRuntimeKernelContext,
+  createRuntimeServiceDependencies as assembleRuntimeServiceDependencies,
+  type RuntimeCoreDependencies,
+  type RuntimeServiceDependencies,
+} from "./runtime-assembler.js";
+import type { RuntimeKernelContext } from "./runtime-kernel.js";
+import { sanitizeContextText } from "./security/sanitize.js";
+import { ContextService } from "./services/context.js";
+import { CostService } from "./services/cost.js";
+import { EffectCommitmentDeskService } from "./services/effect-commitment-desk.js";
+import { EventPipelineService, type RuntimeRecordEventInput } from "./services/event-pipeline.js";
+import { FileChangeService } from "./services/file-change.js";
+import { LedgerService } from "./services/ledger.js";
+import { MutationRollbackService } from "./services/mutation-rollback.js";
+import { ParallelService } from "./services/parallel.js";
+import { ProposalAdmissionService } from "./services/proposal-admission.js";
+import { ResourceLeaseService } from "./services/resource-lease.js";
+import { ScheduleIntentService } from "./services/schedule-intent.js";
+import { SessionLifecycleService } from "./services/session-lifecycle.js";
+import { RuntimeSessionStateStore } from "./services/session-state.js";
+import { SkillLifecycleService } from "./services/skill-lifecycle.js";
+import { TapeService } from "./services/tape.js";
+import { TaskWatchdogService } from "./services/task-watchdog.js";
+import { TaskService } from "./services/task.js";
+import { ToolGateService } from "./services/tool-gate.js";
+import { ToolInvocationSpine } from "./services/tool-invocation-spine.js";
+import { TruthProjectorService } from "./services/truth-projector.js";
+import { TruthService } from "./services/truth.js";
+import { VerificationProjectorService } from "./services/verification-projector.js";
+import { VerificationService } from "./services/verification.js";
+import { SkillRegistry, type SkillRegistryLoadReport } from "./skills/registry.js";
+import { FileChangeTracker } from "./state/file-change-tracker.js";
+import { TurnReplayEngine } from "./tape/replay-engine.js";
 import { normalizeToolResultVerdict } from "./utils/tool-result.js";
 import { VerificationGate } from "./verification/gate.js";
 
@@ -178,47 +178,6 @@ export interface VerifyCompletionOptions {
 type RuntimeConfigState = {
   config: BrewvaConfig;
   readonlyConfig: DeepReadonly<BrewvaConfig>;
-};
-
-type RuntimeCoreDependencies = {
-  skillRegistry: SkillRegistry;
-  evidenceLedger: EvidenceLedger;
-  verificationGate: VerificationGate;
-  parallel: ParallelBudgetManager;
-  parallelResults: ParallelResultStore;
-  eventStore: BrewvaEventStore;
-  turnWalStore: TurnWALStore;
-  contextBudget: ContextBudgetManager;
-  contextInjection: ContextInjectionCollector;
-  turnReplay: TurnReplayEngine;
-  fileChanges: FileChangeTracker;
-  costTracker: SessionCostTracker;
-  projectionEngine: ProjectionEngine;
-};
-
-type RuntimeServiceDependencies = {
-  proposalAdmissionService: ProposalAdmissionService;
-  skillLifecycleService: SkillLifecycleService;
-  taskService: TaskService;
-  truthService: TruthService;
-  ledgerService: LedgerService;
-  resourceLeaseService: ResourceLeaseService;
-  parallelService: ParallelService;
-  costService: CostService;
-  verificationService: VerificationService;
-  contextService: ContextService;
-  taskWatchdogService: TaskWatchdogService;
-  tapeService: TapeService;
-  eventPipeline: EventPipelineService;
-  truthProjectorService: TruthProjectorService;
-  verificationProjectorService: VerificationProjectorService;
-  scheduleIntentService: ScheduleIntentService;
-  fileChangeService: FileChangeService;
-  mutationRollbackService: MutationRollbackService;
-  sessionLifecycleService: SessionLifecycleService;
-  toolGateService: ToolGateService;
-  toolInvocationSpine: ToolInvocationSpine;
-  effectCommitmentDeskService: EffectCommitmentDeskService;
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -571,19 +530,6 @@ export class BrewvaRuntime {
         thresholdMs?: number;
       },
     ): void;
-    recordDelegationRun(sessionId: string, record: import("./types.js").DelegationRunRecord): void;
-    getDelegationRun(
-      sessionId: string,
-      runId: string,
-    ): import("./types.js").DelegationRunRecord | undefined;
-    listDelegationRuns(
-      sessionId: string,
-      query?: import("./types.js").DelegationRunQuery,
-    ): import("./types.js").DelegationRunRecord[];
-    listPendingDelegationOutcomes(
-      sessionId: string,
-      query?: import("./types.js").PendingDelegationOutcomeQuery,
-    ): import("./types.js").DelegationRunRecord[];
     clearState(sessionId: string): void;
     onClearState(listener: (sessionId: string) => void): () => void;
     getHydration(sessionId: string): SessionHydrationState;
@@ -1018,14 +964,6 @@ export class BrewvaRuntime {
             now: input?.now,
             thresholdMs: input?.thresholdMs,
           }),
-        recordDelegationRun: (sessionId, record) =>
-          this.sessionLifecycleService.recordDelegationRun(sessionId, record),
-        getDelegationRun: (sessionId, runId) =>
-          this.sessionLifecycleService.getDelegationRun(sessionId, runId),
-        listDelegationRuns: (sessionId, query) =>
-          this.sessionLifecycleService.listDelegationRuns(sessionId, query),
-        listPendingDelegationOutcomes: (sessionId, query) =>
-          this.sessionLifecycleService.listPendingDelegationOutcomes(sessionId, query),
         clearState: (sessionId) => this.sessionLifecycleService.clearSessionState(sessionId),
         onClearState: (listener) => this.sessionLifecycleService.onClearState(listener),
         getHydration: (sessionId) => {
@@ -1257,7 +1195,7 @@ export class BrewvaRuntime {
     toRecord: (event: BrewvaEventRecord) => TRecord | undefined,
   ): TRecord[] {
     const records: TRecord[] = [];
-    const sessionIds = this.resolveIterationFactSessionIds(sessionId, query.sessionScope);
+    const sessionIds = [sessionId];
     for (const candidateSessionId of sessionIds) {
       for (const event of this.eventStore.list(candidateSessionId, buildEventQuery(query))) {
         const record = toRecord(event);
@@ -1270,86 +1208,6 @@ export class BrewvaRuntime {
       (left, right) =>
         left.timestamp - right.timestamp || left.eventId.localeCompare(right.eventId),
     );
-  }
-
-  private resolveIterationFactSessionIds(
-    sessionId: string,
-    sessionScope: IterationFactSessionScope | undefined,
-  ): string[] {
-    if (sessionScope !== "parent_lineage") {
-      return [sessionId];
-    }
-
-    const scheduleEvents = this.collectScheduleIntentEvents();
-    const rootSessionId = this.resolveIterationLineageRootSessionId(sessionId, scheduleEvents);
-    const sessionIds = new Set<string>([rootSessionId]);
-
-    let progressed = true;
-    while (progressed) {
-      progressed = false;
-      for (const payload of scheduleEvents) {
-        if (payload.kind !== "intent_fired" || payload.continuityMode !== "inherit") {
-          continue;
-        }
-        const childSessionId =
-          typeof payload.childSessionId === "string" ? payload.childSessionId.trim() : "";
-        if (
-          !childSessionId ||
-          !sessionIds.has(payload.parentSessionId) ||
-          sessionIds.has(childSessionId)
-        ) {
-          continue;
-        }
-        sessionIds.add(childSessionId);
-        progressed = true;
-      }
-    }
-
-    return [...sessionIds];
-  }
-
-  private collectScheduleIntentEvents(): ScheduleIntentEventPayload[] {
-    const rows: BrewvaEventRecord[] = [];
-    for (const sessionId of this.eventStore.listSessionIds()) {
-      rows.push(...this.eventStore.list(sessionId, { type: SCHEDULE_EVENT_TYPE }));
-    }
-    return rows
-      .toSorted(
-        (left, right) => left.timestamp - right.timestamp || left.id.localeCompare(right.id),
-      )
-      .flatMap((row) => {
-        const payload = parseScheduleIntentEvent(row);
-        return payload ? [payload] : [];
-      });
-  }
-
-  private resolveIterationLineageRootSessionId(
-    sessionId: string,
-    scheduleEvents: readonly ScheduleIntentEventPayload[],
-  ): string {
-    const visited = new Set<string>();
-    let currentSessionId = sessionId;
-
-    while (!visited.has(currentSessionId)) {
-      visited.add(currentSessionId);
-      let parentSessionId: string | undefined;
-      for (let index = scheduleEvents.length - 1; index >= 0; index -= 1) {
-        const payload = scheduleEvents[index];
-        if (!payload || payload.kind !== "intent_fired" || payload.continuityMode !== "inherit") {
-          continue;
-        }
-        if (payload.childSessionId?.trim() === currentSessionId) {
-          parentSessionId = payload.parentSessionId;
-          break;
-        }
-      }
-      if (!parentSessionId || parentSessionId === currentSessionId) {
-        break;
-      }
-      currentSessionId = parentSessionId;
-    }
-
-    return currentSessionId;
   }
 
   private isContextBudgetEnabled(): boolean {

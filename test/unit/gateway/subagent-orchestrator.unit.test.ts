@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createHostedSubagentAdapter,
+  HostedDelegationStore,
   type HostedSubagentSessionOptions,
 } from "@brewva/brewva-gateway";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
@@ -229,8 +230,8 @@ describe("hosted subagent orchestrator", () => {
     expect(capturedEventsLevel).toBe("ops");
     expect(runtime.session.listWorkerResults(parentSessionId)).toEqual([
       expect.objectContaining({
-        workerId: expect.any(String),
         status: "skipped",
+        summary: "Observation only.",
       }),
     ]);
 
@@ -587,6 +588,7 @@ describe("hosted subagent orchestrator", () => {
   test("persists durable delivery metadata for background completion handoff", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-delivery-");
     const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const delegationStore = new HostedDelegationStore(runtime);
     const parentSessionId = "parent-session-delivery";
 
     const adapter = createHostedSubagentAdapter({
@@ -665,7 +667,7 @@ describe("hosted subagent orchestrator", () => {
     }
 
     for (let attempt = 0; attempt < 20; attempt += 1) {
-      const current = runtime.session.getDelegationRun(parentSessionId, runId);
+      const current = delegationStore.getRun(parentSessionId, runId);
       if (current?.status === "completed") {
         break;
       }

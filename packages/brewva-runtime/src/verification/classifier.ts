@@ -1,4 +1,4 @@
-import type { VerificationEvidence } from "../types.js";
+import type { VerificationEvidence } from "../contracts/index.js";
 import { isToolResultPass, type ToolResultVerdict } from "../utils/tool-result.js";
 
 const WRITE_TOOLS = new Set([

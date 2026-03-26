@@ -352,7 +352,7 @@ parent-facing product handoff, not basic durability.
 
 Promoted contract:
 
-- `runtime.session.listPendingDelegationOutcomes(...)` is the stable derived
+- `HostedDelegationStore.listPendingOutcomes(...)` is the stable derived
   handoff view for late detached outcomes
 - parent-turn context composition may surface those results through
   `[CompletedDelegationOutcomes]`
@@ -788,7 +788,7 @@ Recommended status: defer.
   `[CompletedDelegationOutcomes]`
 - `subagent_delivery_surfaced` records when a pending result has been shown to
   the parent
-- `runtime.session.listPendingDelegationOutcomes(...)` is the promoted derived
+- `HostedDelegationStore.listPendingOutcomes(...)` is the promoted derived
   inbox-style handoff surface
 
 ### Phase 3: Thin Execution Shape Promotion — `done`
@@ -871,4 +871,4 @@ This RFC is ready for promotion when:
 - `packages/brewva-runtime/src/services/parallel.ts`
 - `packages/brewva-gateway/src/subagents/structured-outcome.ts`
 - `packages/brewva-gateway/src/subagents/protocol.ts`
-- `packages/brewva-runtime/src/services/session-hydration-fold-delegation.ts`
+- `packages/brewva-gateway/src/subagents/delegation-store.ts`

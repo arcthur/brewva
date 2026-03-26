@@ -10,7 +10,12 @@ import {
   writeFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
-import type { BrewvaConfig, TurnWALRecord, TurnWALSource, TurnWALStatus } from "../types.js";
+import type {
+  BrewvaConfig,
+  TurnWALRecord,
+  TurnWALSource,
+  TurnWALStatus,
+} from "../contracts/index.js";
 import { ensureDir, writeFileAtomic } from "../utils/fs.js";
 import { assertTurnEnvelope, type TurnEnvelope } from "./turn.js";
 

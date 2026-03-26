@@ -1,9 +1,3 @@
-import type { RuntimeKernelContext } from "../runtime-kernel.js";
-import {
-  TRUTH_EVENT_TYPE,
-  buildTruthFactResolvedEvent,
-  buildTruthFactUpsertedEvent,
-} from "../truth/ledger.js";
 import type {
   TruthFact,
   TruthFactResolveResult,
@@ -11,7 +5,13 @@ import type {
   TruthFactStatus,
   TruthFactUpsertResult,
   TruthState,
-} from "../types.js";
+} from "../contracts/index.js";
+import type { RuntimeKernelContext } from "../runtime-kernel.js";
+import {
+  TRUTH_EVENT_TYPE,
+  buildTruthFactResolvedEvent,
+  buildTruthFactUpsertedEvent,
+} from "../truth/ledger.js";
 import { normalizeJsonRecord } from "../utils/json.js";
 
 export interface TruthServiceOptions {

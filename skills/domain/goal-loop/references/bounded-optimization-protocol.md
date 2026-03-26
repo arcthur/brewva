@@ -107,7 +107,7 @@ record.
 Scheduled inherited runs happen in child sessions. Therefore:
 
 - current-session history is not enough
-- cross-run history must be queried with `session_scope = parent_lineage`
+- cross-run history must be queried through the control-plane lineage view
 - loop history must be narrowed with `source = "goal-loop:<loop_key>"`
 
 This is how the protocol avoids mixing:

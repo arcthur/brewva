@@ -1,4 +1,4 @@
-import type { VerificationCheckRun } from "../types.js";
+import type { VerificationCheckRun } from "../contracts/index.js";
 
 export const VERIFIER_BLOCKER_PREFIX = "verifier:" as const;
 export const GOVERNANCE_BLOCKER_ID = "verifier:governance:verify-spec";

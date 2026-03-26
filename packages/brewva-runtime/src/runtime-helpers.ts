@@ -1,6 +1,6 @@
+import type { BrewvaEventCategory, TaskState } from "./contracts/index.js";
 import { TAPE_ANCHOR_EVENT_TYPE, TAPE_CHECKPOINT_EVENT_TYPE } from "./tape/events.js";
 import { formatTaskStateBlock } from "./task/ledger.js";
-import type { BrewvaEventCategory, TaskState } from "./types.js";
 
 export function inferEventCategory(type: string): BrewvaEventCategory {
   if (type === TAPE_ANCHOR_EVENT_TYPE || type === TAPE_CHECKPOINT_EVENT_TYPE) {

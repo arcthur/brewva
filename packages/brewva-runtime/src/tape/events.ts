@@ -1,5 +1,5 @@
+import type { SessionCostSummary, TaskSpec, TaskState, TruthState } from "../contracts/index.js";
 import { normalizeTaskAcceptanceOwner } from "../task/spec.js";
-import type { SessionCostSummary, TaskSpec, TaskState, TruthState } from "../types.js";
 import { isRecord, normalizeNonEmptyString } from "../utils/coerce.js";
 
 export const TAPE_ANCHOR_EVENT_TYPE = "anchor";

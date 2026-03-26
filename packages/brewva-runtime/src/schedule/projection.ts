@@ -1,6 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { ScheduleIntentProjectionRecord, ScheduleProjectionSnapshot } from "../types.js";
+import type {
+  ScheduleIntentProjectionRecord,
+  ScheduleProjectionSnapshot,
+} from "../contracts/index.js";
 import { writeFileAtomic } from "../utils/fs.js";
 
 interface ProjectionMetaLine {

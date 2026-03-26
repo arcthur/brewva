@@ -1,4 +1,4 @@
-import type { BrewvaEventRecord, ScheduleIntentEventPayload } from "../types.js";
+import type { BrewvaEventRecord, ScheduleIntentEventPayload } from "../contracts/index.js";
 
 export const SCHEDULE_EVENT_TYPE = "schedule_intent";
 

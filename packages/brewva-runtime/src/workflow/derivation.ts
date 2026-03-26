@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
+import type { BrewvaEventRecord, TaskState } from "../contracts/index.js";
 import {
   ITERATION_GUARD_RECORDED_EVENT_TYPE,
   ITERATION_METRIC_OBSERVED_EVENT_TYPE,
@@ -11,7 +12,6 @@ import {
   WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
 } from "../events/event-types.js";
 import { coerceGuardResultPayload, coerceMetricObservationPayload } from "../iteration/facts.js";
-import type { BrewvaEventRecord, TaskState } from "../types.js";
 import type { JsonValue } from "../utils/json.js";
 
 export const WORKFLOW_ARTIFACT_KINDS = [

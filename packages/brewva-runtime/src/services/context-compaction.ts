@@ -1,3 +1,4 @@
+import type { BrewvaEventRecord, SkillDocument } from "../contracts/index.js";
 import {
   GOVERNANCE_COMPACTION_INTEGRITY_CHECKED_EVENT_TYPE,
   GOVERNANCE_COMPACTION_INTEGRITY_ERROR_EVENT_TYPE,
@@ -8,7 +9,6 @@ import {
   sanitizeCompactionSummary,
   validateCompactionSummary,
 } from "../security/compaction-integrity.js";
-import type { BrewvaEventRecord, SkillDocument } from "../types.js";
 import type { RuntimeCallback } from "./callback.js";
 import type { RuntimeSessionStateStore } from "./session-state.js";
 

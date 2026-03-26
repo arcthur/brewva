@@ -1,5 +1,5 @@
 import type { ContextBudgetManager } from "../context/budget.js";
-import type { BrewvaConfig, ContextBudgetUsage } from "../types.js";
+import type { BrewvaConfig, ContextBudgetUsage } from "../contracts/index.js";
 import { estimateTokenCount, truncateTextToTokenBudget } from "../utils/token.js";
 import type { RuntimeSessionStateStore } from "./session-state.js";
 

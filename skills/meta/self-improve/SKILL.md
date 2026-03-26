@@ -95,9 +95,9 @@ Use this skill when:
 Identify patterns across reviews, runtime traces, failure artifacts, or
 iteration-fact history.
 
-When the learning target is one bounded optimization lineage:
+When the learning target spans scheduled inherited runs:
 
-- query `iteration_fact` with `session_scope = parent_lineage`
+- query `iteration_fact` across the control-plane lineage view for the inherited run family
 - narrow with `source = "goal-loop:<loop_key>"`
 - collect the concrete metric and guard records before naming a system lesson
 - use explicit reports, handoff artifacts, or verification outcomes for

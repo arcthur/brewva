@@ -4,7 +4,7 @@ import type {
   SessionCostSummary,
   VerificationLevel,
   VerificationReport,
-} from "../types.js";
+} from "../contracts/index.js";
 
 export interface GovernanceVerifySpecInput {
   sessionId: string;

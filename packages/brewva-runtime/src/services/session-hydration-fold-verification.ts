@@ -1,13 +1,13 @@
+import type {
+  VerificationCheckRun,
+  VerificationEvidence,
+  VerificationSessionState,
+} from "../contracts/index.js";
 import {
   TOOL_RESULT_RECORDED_EVENT_TYPE,
   VERIFICATION_STATE_RESET_EVENT_TYPE,
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
 } from "../events/event-types.js";
-import type {
-  VerificationCheckRun,
-  VerificationEvidence,
-  VerificationSessionState,
-} from "../types.js";
 import {
   coerceVerificationWriteMarkedPayload,
   readVerificationToolResultProjectionPayload,

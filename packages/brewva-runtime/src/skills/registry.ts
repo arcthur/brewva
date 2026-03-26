@@ -17,7 +17,7 @@ import type {
   SkillDocument,
   SkillRoutingScope,
   SkillsIndexEntry,
-} from "../types.js";
+} from "../contracts/index.js";
 import {
   createEmptySkillResources,
   mergeOverlayContract,

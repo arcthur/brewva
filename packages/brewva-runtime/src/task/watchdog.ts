@@ -1,8 +1,8 @@
+import type { BrewvaEventRecord, TaskState } from "../contracts/index.js";
 import {
   TASK_STUCK_CLEARED_EVENT_TYPE,
   TASK_STUCK_DETECTED_EVENT_TYPE,
 } from "../events/event-types.js";
-import type { BrewvaEventRecord, TaskState } from "../types.js";
 import { coerceTaskLedgerPayload } from "./ledger.js";
 
 export const TASK_WATCHDOG_SCHEMA = "brewva.task-watchdog.v1" as const;

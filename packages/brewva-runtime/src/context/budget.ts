@@ -4,7 +4,7 @@ import type {
   ContextCompactionReason,
   ContextInjectionDecision,
   BrewvaConfig,
-} from "../types.js";
+} from "../contracts/index.js";
 import {
   estimateTokenCount,
   normalizePercent,

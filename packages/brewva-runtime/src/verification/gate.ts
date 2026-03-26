@@ -1,4 +1,4 @@
-import type { BrewvaConfig, VerificationLevel, VerificationReport } from "../types.js";
+import type { BrewvaConfig, VerificationLevel, VerificationReport } from "../contracts/index.js";
 import { VerificationStateStore } from "./state.js";
 
 export interface VerificationGateOptions {

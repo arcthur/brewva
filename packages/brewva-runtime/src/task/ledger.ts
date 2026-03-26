@@ -10,7 +10,7 @@ import type {
   TaskSpec,
   TaskState,
   TaskStatus,
-} from "../types.js";
+} from "../contracts/index.js";
 import { isRecord, normalizeNonEmptyString, normalizeStringArray } from "../utils/coerce.js";
 import {
   formatTaskItemStatusForSurface,

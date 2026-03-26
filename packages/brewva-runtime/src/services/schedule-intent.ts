@@ -1,4 +1,3 @@
-import type { SchedulerService } from "../schedule/service.js";
 import type {
   ScheduleIntentCancelInput,
   ScheduleIntentCancelResult,
@@ -9,7 +8,8 @@ import type {
   ScheduleIntentUpdateInput,
   ScheduleIntentUpdateResult,
   ScheduleProjectionSnapshot,
-} from "../types.js";
+} from "../contracts/index.js";
+import type { SchedulerService } from "../schedule/service.js";
 import type { RuntimeCallback } from "./callback.js";
 
 export interface ScheduleIntentServiceOptions {

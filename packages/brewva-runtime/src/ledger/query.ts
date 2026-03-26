@@ -1,5 +1,5 @@
 import { formatISO } from "date-fns";
-import type { EvidenceLedgerRow } from "../types.js";
+import type { EvidenceLedgerRow } from "../contracts/index.js";
 
 export function formatLedgerRows(rows: EvidenceLedgerRow[]): string {
   if (rows.length === 0) {

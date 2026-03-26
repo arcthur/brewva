@@ -5,7 +5,7 @@ Configuration contract sources:
 - Defaults: `packages/brewva-runtime/src/config/defaults.ts`
 - Loader: `packages/brewva-runtime/src/config/loader.ts`
 - Normalizer: `packages/brewva-runtime/src/config/normalize.ts`
-- Type contract: `packages/brewva-runtime/src/types.ts`
+- Type contract: `packages/brewva-runtime/src/contracts/index.ts`
 - Schema: `packages/brewva-runtime/schema/brewva.schema.json`
 
 ## Top-Level Keys

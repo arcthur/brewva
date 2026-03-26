@@ -3,6 +3,11 @@ export {
   type HostedSubagentBackgroundController,
 } from "./background-controller.js";
 export {
+  HostedDelegationStore,
+  buildDelegationLifecyclePayload,
+  cloneDelegationRunRecord,
+} from "./delegation-store.js";
+export {
   createHostedSubagentAdapter,
   type HostedSubagentAdapterOptions,
   type HostedSubagentSessionOptions,

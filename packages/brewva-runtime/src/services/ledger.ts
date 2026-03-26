@@ -1,3 +1,9 @@
+import type {
+  BrewvaConfig,
+  EvidenceLedgerRow,
+  EvidenceQuery,
+  SkillDocument,
+} from "../contracts/index.js";
 import { TOOL_RESULT_RECORDED_EVENT_TYPE } from "../events/event-types.js";
 import {
   classifyToolFailure,
@@ -12,7 +18,6 @@ import {
   withToolFailureContextMetadata,
 } from "../ledger/tool-failure-context.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
-import type { BrewvaConfig, EvidenceLedgerRow, EvidenceQuery, SkillDocument } from "../types.js";
 import type { JsonValue } from "../utils/json.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import {

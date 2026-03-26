@@ -1,4 +1,10 @@
 import type { ToolFailureEntry } from "../context/tool-failures.js";
+import type {
+  BrewvaEventRecord,
+  SessionCostSummary,
+  TaskState,
+  TruthState,
+} from "../contracts/index.js";
 import {
   applyBudgetAlertPayload,
   applyCostUpdatePayload,
@@ -25,7 +31,6 @@ import {
   createEmptyTruthState,
   reduceTruthState,
 } from "../truth/ledger.js";
-import type { BrewvaEventRecord, SessionCostSummary, TaskState, TruthState } from "../types.js";
 import {
   TAPE_ANCHOR_EVENT_TYPE,
   TAPE_CHECKPOINT_EVENT_TYPE,

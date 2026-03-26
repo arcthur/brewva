@@ -1,9 +1,9 @@
+import type { ResourceLeaseBudget, ResourceLeaseRecord } from "../contracts/index.js";
 import {
   RESOURCE_LEASE_CANCELLED_EVENT_TYPE,
   RESOURCE_LEASE_EXPIRED_EVENT_TYPE,
   RESOURCE_LEASE_GRANTED_EVENT_TYPE,
 } from "../events/event-types.js";
-import type { ResourceLeaseBudget, ResourceLeaseRecord } from "../types.js";
 import type {
   ResourceLeaseHydrationState,
   SessionHydrationFold,

@@ -18,6 +18,7 @@ import {
   writeDetachedSubagentLiveState,
   writeDetachedSubagentOutcome,
 } from "./background-protocol.js";
+import { HostedDelegationStore, buildDelegationLifecyclePayload } from "./delegation-store.js";
 import { buildDelegationPrompt } from "./prompt.js";
 import {
   aggregateChildCost,
@@ -51,35 +52,6 @@ function buildOutcomeArtifactRef(workspaceRoot: string, runId: string): Subagent
       relative(workspaceRoot, resolveDetachedSubagentOutcomePath(workspaceRoot, runId)),
     ),
     summary: `Detached delegation outcome for ${runId}`,
-  };
-}
-
-function buildLifecyclePayload(record: DelegationRunRecord): Record<string, unknown> {
-  return {
-    runId: record.runId,
-    delegate: record.delegate,
-    agentSpec: record.agentSpec ?? null,
-    envelope: record.envelope ?? null,
-    skillName: record.skillName ?? null,
-    label: record.label ?? null,
-    kind: record.kind ?? null,
-    boundary: record.boundary ?? null,
-    parentSkill: record.parentSkill ?? null,
-    childSessionId: record.workerSessionId ?? null,
-    status: record.status,
-    summary: record.summary ?? null,
-    error: record.error ?? null,
-    artifactRefs: record.artifactRefs ?? [],
-    totalTokens: record.totalTokens ?? null,
-    costUsd: record.costUsd ?? null,
-    deliveryMode: record.delivery?.mode ?? null,
-    deliveryScopeId: record.delivery?.scopeId ?? null,
-    deliveryLabel: record.delivery?.label ?? null,
-    deliveryHandoffState: record.delivery?.handoffState ?? null,
-    deliveryReadyAt: record.delivery?.readyAt ?? null,
-    deliverySurfacedAt: record.delivery?.surfacedAt ?? null,
-    supplementalAppended: record.delivery?.supplementalAppended ?? null,
-    deliveryUpdatedAt: record.delivery?.updatedAt ?? null,
   };
 }
 
@@ -170,7 +142,8 @@ async function main(): Promise<void> {
     configPath: spec.configPath,
     routingScopes: normalizeRoutingScopes(spec.routingScopes),
   });
-  const existing = parentRuntime.session.getDelegationRun(spec.parentSessionId, spec.runId);
+  const delegationStore = new HostedDelegationStore(parentRuntime);
+  const existing = delegationStore.getRun(spec.parentSessionId, spec.runId);
   const target = spec.target;
   if (!target) {
     const failed = {
@@ -187,11 +160,10 @@ async function main(): Promise<void> {
       error: `missing_delegate_target:${spec.delegate}`,
       summary: `missing_delegate_target:${spec.delegate}`,
     };
-    parentRuntime.session.recordDelegationRun(spec.parentSessionId, failed);
     parentRuntime.events.record({
       sessionId: spec.parentSessionId,
       type: "subagent_failed",
-      payload: buildLifecyclePayload(failed),
+      payload: buildDelegationLifecyclePayload(failed),
     });
     removeDetachedSubagentLiveState(spec.workspaceRoot, spec.runId);
     process.exitCode = 1;
@@ -215,11 +187,10 @@ async function main(): Promise<void> {
       error: "missing_delegation_packet",
       summary: "missing_delegation_packet",
     };
-    parentRuntime.session.recordDelegationRun(spec.parentSessionId, failed);
     parentRuntime.events.record({
       sessionId: spec.parentSessionId,
       type: "subagent_failed",
-      payload: buildLifecyclePayload(failed),
+      payload: buildDelegationLifecyclePayload(failed),
     });
     removeDetachedSubagentLiveState(spec.workspaceRoot, spec.runId);
     process.exitCode = 1;
@@ -277,7 +248,7 @@ async function main(): Promise<void> {
     childSessionId = childSession.session.sessionManager.getSessionId();
 
     const runningRecord: DelegationRunRecord = {
-      ...(parentRuntime.session.getDelegationRun(spec.parentSessionId, spec.runId) ?? {
+      ...(delegationStore.getRun(spec.parentSessionId, spec.runId) ?? {
         runId: spec.runId,
         delegate: spec.delegate,
         agentSpec: targetRecord.agentSpecName,
@@ -297,11 +268,10 @@ async function main(): Promise<void> {
       kind: targetRecord.resultMode,
       boundary: executionPlan.boundary,
     };
-    parentRuntime.session.recordDelegationRun(spec.parentSessionId, runningRecord);
     parentRuntime.events.record({
       sessionId: spec.parentSessionId,
       type: "subagent_spawned",
-      payload: buildLifecyclePayload(runningRecord),
+      payload: buildDelegationLifecyclePayload(runningRecord),
     });
     writeDetachedSubagentLiveState(spec.workspaceRoot, spec.runId, {
       schema: "brewva.subagent-run-live.v1",
@@ -473,7 +443,7 @@ async function main(): Promise<void> {
       delivery: spec.delivery,
     });
     const completedRecord: DelegationRunRecord = {
-      ...(parentRuntime.session.getDelegationRun(spec.parentSessionId, spec.runId) ?? {
+      ...(delegationStore.getRun(spec.parentSessionId, spec.runId) ?? {
         runId: spec.runId,
         delegate: spec.delegate,
         agentSpec: targetRecord.agentSpecName,
@@ -495,11 +465,10 @@ async function main(): Promise<void> {
       costUsd: childCostSummary.totalCostUsd,
       delivery,
     };
-    parentRuntime.session.recordDelegationRun(spec.parentSessionId, completedRecord);
     parentRuntime.events.record({
       sessionId: spec.parentSessionId,
       type: "subagent_completed",
-      payload: buildLifecyclePayload(completedRecord),
+      payload: buildDelegationLifecyclePayload(completedRecord),
     });
     writeDetachedSubagentOutcome(spec.workspaceRoot, spec.runId, outcome);
   } catch (error) {
@@ -551,7 +520,7 @@ async function main(): Promise<void> {
       delivery: spec.delivery,
     });
     const failedRecord: DelegationRunRecord = {
-      ...(parentRuntime.session.getDelegationRun(spec.parentSessionId, spec.runId) ?? {
+      ...(delegationStore.getRun(spec.parentSessionId, spec.runId) ?? {
         runId: spec.runId,
         delegate: spec.delegate,
         agentSpec: targetRecord.agentSpecName,
@@ -572,12 +541,11 @@ async function main(): Promise<void> {
       artifactRefs,
       delivery,
     };
-    parentRuntime.session.recordDelegationRun(spec.parentSessionId, failedRecord);
     parentRuntime.events.record({
       sessionId: spec.parentSessionId,
       type: terminalStatus === "cancelled" ? "subagent_cancelled" : "subagent_failed",
       payload: {
-        ...buildLifecyclePayload(failedRecord),
+        ...buildDelegationLifecyclePayload(failedRecord),
         reason: cancellationReason ?? null,
       },
     });

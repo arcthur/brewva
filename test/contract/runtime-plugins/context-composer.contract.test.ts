@@ -49,8 +49,11 @@ function createComposerRuntime(
       }),
       query: () => [],
     },
-    session: {
-      listDelegationRuns: (_sessionId, query) => {
+    delegation: {
+      listRuns: (
+        _sessionId: string,
+        query: { statuses?: string[]; limit?: number } | undefined,
+      ) => {
         const records = [
           ...(options.pendingDelegations ?? []).map((run, index) => ({
             runId: run.runId,

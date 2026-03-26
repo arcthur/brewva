@@ -34,7 +34,7 @@
 - `BrewvaRuntime` stays domain-based, not a flat method bag. Keep the public API organized under the existing runtime domains in `packages/brewva-runtime/src/runtime.ts`.
 - Current runtime domain groups are `runtime.skills.*`, `runtime.proposals.*`, `runtime.context.*`, `runtime.tools.*`, `runtime.task.*`, `runtime.truth.*`, `runtime.ledger.*`, `runtime.schedule.*`, `runtime.turnWal.*`, `runtime.events.*`, `runtime.verification.*`, `runtime.cost.*`, and `runtime.session.*`.
 - Integration direction is async-first; do not add parallel sync facade APIs.
-- Preserve the current security, event-level, and fail-fast config semantics described in `packages/brewva-runtime/src/types.ts`, `packages/brewva-runtime/src/security/mode.ts`, and `docs/reference/configuration.md`.
+- Preserve the current security, event-level, and fail-fast config semantics described in `packages/brewva-runtime/src/contracts/index.ts`, `packages/brewva-runtime/src/security/mode.ts`, and `docs/reference/configuration.md`.
 - Preserve the current runtime execution shape: shared invocation spine first, then execution boundary policy (`safe`, `effectful`), then receipt-bearing effect authorization or rollback.
 - Preserve the current context model: deterministic single-path injection, explicit context source labels, working-only projection, explicit workflow inspection surfaces, and WAL-based turn durability/recovery.
 - Keep `governancePort` governance-only and do not re-expose removed internal tuning knobs unless they represent a clear user-facing decision boundary.
@@ -77,7 +77,7 @@
 
 ## Where To Look
 
-- Runtime API and contracts: `packages/brewva-runtime/src/runtime.ts`, `packages/brewva-runtime/src/types.ts`
+- Runtime API and contracts: `packages/brewva-runtime/src/runtime.ts`, `packages/brewva-runtime/src/contracts/index.ts`
 - Runtime config and semantics: `packages/brewva-runtime/src/config/defaults.ts`, `packages/brewva-runtime/src/config/normalize.ts`, `packages/brewva-runtime/src/security/mode.ts`, `packages/brewva-runtime/src/services/event-pipeline.ts`
 - Runtime context and durability: `packages/brewva-runtime/src/context/arena.ts`, `packages/brewva-runtime/src/context/injection-orchestrator.ts`, `packages/brewva-runtime/src/services/context*.ts`, `packages/brewva-runtime/src/channels/turn-wal*.ts`, `packages/brewva-runtime/src/governance/port.ts`
 - Runtime authorization / rollback / diagnostics: `packages/brewva-runtime/src/services/tool-gate.ts`, `packages/brewva-runtime/src/services/effect-commitment-desk.ts`, `packages/brewva-runtime/src/services/reversible-mutation.ts`, `packages/brewva-runtime/src/services/mutation-rollback.ts`, `packages/brewva-runtime/src/services/task-watchdog.ts`

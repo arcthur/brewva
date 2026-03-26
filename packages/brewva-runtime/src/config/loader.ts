@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import type { BrewvaConfig } from "../types.js";
+import type { BrewvaConfig } from "../contracts/index.js";
 import { DEFAULT_BREWVA_CONFIG } from "./defaults.js";
 import { deepMerge } from "./merge.js";
 import { normalizeBrewvaConfig } from "./normalize.js";

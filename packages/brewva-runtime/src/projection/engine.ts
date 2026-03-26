@@ -1,8 +1,8 @@
+import type { BrewvaEventRecord } from "../contracts/index.js";
 import {
   PROJECTION_INGESTED_EVENT_TYPE,
   PROJECTION_REFRESHED_EVENT_TYPE,
 } from "../events/event-types.js";
-import type { BrewvaEventRecord } from "../types.js";
 import { extractProjectionFromEvent } from "./extractor.js";
 import { ProjectionStore } from "./store.js";
 import type { WorkingProjectionSnapshot } from "./types.js";

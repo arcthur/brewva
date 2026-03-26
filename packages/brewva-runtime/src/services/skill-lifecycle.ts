@@ -1,6 +1,3 @@
-import { getSkillOutputContracts, listSkillOutputs } from "../skills/facets.js";
-import type { SkillRegistry } from "../skills/registry.js";
-import { parseTaskSpec } from "../task/spec.js";
 import type {
   SkillActivationResult,
   SkillDocument,
@@ -8,7 +5,10 @@ import type {
   SkillOutputValidationResult,
   TaskSpec,
   TaskState,
-} from "../types.js";
+} from "../contracts/index.js";
+import { getSkillOutputContracts, listSkillOutputs } from "../skills/facets.js";
+import type { SkillRegistry } from "../skills/registry.js";
+import { parseTaskSpec } from "../task/spec.js";
 import type { RuntimeCallback } from "./callback.js";
 import { RuntimeSessionStateStore } from "./session-state.js";
 

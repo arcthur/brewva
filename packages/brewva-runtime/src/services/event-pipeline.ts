@@ -1,4 +1,11 @@
 import { formatISO } from "date-fns";
+import type {
+  BrewvaEventCategory,
+  BrewvaEventQuery,
+  BrewvaEventRecord,
+  BrewvaReplaySession,
+  BrewvaStructuredEvent,
+} from "../contracts/index.js";
 import {
   AGENT_END_EVENT_TYPE,
   BUDGET_ALERT_EVENT_TYPE,
@@ -92,13 +99,6 @@ import { SCHEDULE_EVENT_TYPE } from "../schedule/events.js";
 import { TAPE_ANCHOR_EVENT_TYPE, TAPE_CHECKPOINT_EVENT_TYPE } from "../tape/events.js";
 import { TASK_EVENT_TYPE } from "../task/ledger.js";
 import { TRUTH_EVENT_TYPE } from "../truth/ledger.js";
-import type {
-  BrewvaEventCategory,
-  BrewvaEventQuery,
-  BrewvaEventRecord,
-  BrewvaReplaySession,
-  BrewvaStructuredEvent,
-} from "../types.js";
 import type { RuntimeCallback } from "./callback.js";
 
 const AUDIT_EVENT_TYPES = new Set<string>([

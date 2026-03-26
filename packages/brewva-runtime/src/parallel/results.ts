@@ -4,7 +4,7 @@ import type {
   PatchSet,
   WorkerMergeReport,
   WorkerResult,
-} from "../types.js";
+} from "../contracts/index.js";
 
 interface PatchOrigin {
   workerId: string;

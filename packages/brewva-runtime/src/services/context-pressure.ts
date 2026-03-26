@@ -7,7 +7,7 @@ import type {
   ContextCompactionReason,
   ContextPressureLevel,
   ContextPressureStatus,
-} from "../types.js";
+} from "../contracts/index.js";
 import { resolveContextUsageRatio } from "../utils/token.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import type { RuntimeCallback } from "./callback.js";

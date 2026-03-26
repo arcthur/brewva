@@ -3,7 +3,7 @@ import type {
   ToolExecutionBoundary,
   ToolGovernanceDescriptor,
   ToolGovernanceRisk,
-} from "../types.js";
+} from "../contracts/index.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 
 function descriptor(input: {

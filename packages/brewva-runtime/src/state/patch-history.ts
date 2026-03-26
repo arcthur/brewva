@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import type { PatchFileAction } from "../types.js";
+import type { PatchFileAction } from "../contracts/index.js";
 import { isIgnoredWorkspacePath, normalizeWorkspaceRelativePath } from "./workspace-paths.js";
 
 export const PATCH_HISTORY_FILE = "patchsets.json";

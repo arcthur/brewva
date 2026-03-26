@@ -1,4 +1,4 @@
-import type { ContextBudgetUsage, TruthState } from "../types.js";
+import type { ContextBudgetUsage, TruthState } from "../contracts/index.js";
 import { sha256 } from "../utils/hash.js";
 import { resolveContextUsageRatio } from "../utils/token.js";
 import type {

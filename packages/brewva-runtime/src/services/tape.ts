@@ -1,12 +1,3 @@
-import {
-  TAPE_ANCHOR_EVENT_TYPE,
-  TAPE_CHECKPOINT_EVENT_TYPE,
-  buildTapeAnchorPayload,
-  buildTapeCheckpointPayload,
-  coerceTapeAnchorPayload,
-  type TapeCheckpointEvidenceState,
-  type TapeCheckpointProjectionState,
-} from "../tape/events.js";
 import type {
   BrewvaConfig,
   BrewvaEventQuery,
@@ -21,7 +12,16 @@ import type {
   TapeStatusState,
   TaskState,
   TruthState,
-} from "../types.js";
+} from "../contracts/index.js";
+import {
+  TAPE_ANCHOR_EVENT_TYPE,
+  TAPE_CHECKPOINT_EVENT_TYPE,
+  buildTapeAnchorPayload,
+  buildTapeCheckpointPayload,
+  coerceTapeAnchorPayload,
+  type TapeCheckpointEvidenceState,
+  type TapeCheckpointProjectionState,
+} from "../tape/events.js";
 import type { RuntimeCallback } from "./callback.js";
 import { RuntimeSessionStateStore } from "./session-state.js";
 

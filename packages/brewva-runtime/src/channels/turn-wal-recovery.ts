@@ -3,7 +3,7 @@ import type {
   TurnWALRecord,
   TurnWALRecoveryResult,
   TurnWALSource,
-} from "../types.js";
+} from "../contracts/index.js";
 import { TurnWALStore } from "./turn-wal.js";
 
 export interface TurnWALRecoverHandlerInput {

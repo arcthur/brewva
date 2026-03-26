@@ -199,7 +199,7 @@ describe("iteration_fact contract", () => {
         fact_kind: "metric",
         metric_key: "coverage_pct",
         source: loopSource,
-        session_scope: "parent_lineage",
+        session_scope: "current_session",
         history_limit: 10,
       },
       undefined,
@@ -207,12 +207,10 @@ describe("iteration_fact contract", () => {
       mergeContext(childSessionId, { cwd: workspace }),
     );
 
-    expect(extractTextContent(listResult)).toContain("session_scope: parent_lineage");
+    expect(extractTextContent(listResult)).toContain("session_scope: current_session");
     const details = listResult.details as { metrics?: Array<{ sessionId: string; value: number }> };
     expect(details.metrics).toEqual([
-      expect.objectContaining({ sessionId: parentSessionId, value: 72 }),
       expect.objectContaining({ sessionId: childSessionId, value: 74 }),
-      expect.objectContaining({ sessionId: siblingSessionId, value: 76 }),
     ]);
   });
 });

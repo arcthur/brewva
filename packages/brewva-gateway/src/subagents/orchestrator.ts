@@ -26,6 +26,7 @@ import type { SubscribablePromptSession } from "../session/contracts.js";
 import type { HostedSubagentBackgroundController } from "./background-controller.js";
 import { writeDetachedSubagentContextManifest } from "./background-protocol.js";
 import { loadHostedDelegationCatalog } from "./catalog.js";
+import { HostedDelegationStore, cloneDelegationRunRecord } from "./delegation-store.js";
 import { buildDelegationPrompt } from "./prompt.js";
 import {
   aggregateChildCost,
@@ -81,6 +82,7 @@ export interface HostedSubagentAdapterOptions {
   runtime: BrewvaRuntime;
   createChildSession(input: HostedSubagentSessionOptions): Promise<HostedSubagentSessionResult>;
   backgroundController?: HostedSubagentBackgroundController;
+  delegationStore?: HostedDelegationStore;
 }
 
 function mergeTaskPacket(
@@ -180,25 +182,6 @@ function isTerminalRunStatus(status: DelegationRunRecord["status"]): boolean {
     status === "cancelled" ||
     status === "merged"
   );
-}
-
-function cloneDelegationRunRecord(record: DelegationRunRecord): DelegationRunRecord {
-  return {
-    ...record,
-    artifactRefs: record.artifactRefs?.map((ref) => ({ ...ref })),
-    delivery: record.delivery
-      ? {
-          mode: record.delivery.mode,
-          scopeId: record.delivery.scopeId,
-          label: record.delivery.label,
-          handoffState: record.delivery.handoffState,
-          readyAt: record.delivery.readyAt,
-          surfacedAt: record.delivery.surfacedAt,
-          supplementalAppended: record.delivery.supplementalAppended,
-          updatedAt: record.delivery.updatedAt,
-        }
-      : undefined,
-  };
 }
 
 function resolveDelegationRecordIdentity(input: {
@@ -336,23 +319,13 @@ function preparePendingParentTurnDelivery(): DelegationDeliveryResult {
   };
 }
 
-function upsertDelegationRunRecord(
-  runtime: BrewvaRuntime,
-  sessionId: string,
-  record: DelegationRunRecord,
-): DelegationRunRecord {
-  const cloned = cloneDelegationRunRecord(record);
-  runtime.session.recordDelegationRun(sessionId, cloned);
-  return cloned;
-}
-
 function resolveRunRecords(
-  runtime: BrewvaRuntime,
+  delegationStore: HostedDelegationStore,
   sessionId: string,
   query: DelegationRunQuery | undefined,
 ): DelegationRunRecord[] {
-  return runtime.session
-    .listDelegationRuns(sessionId, query)
+  return delegationStore
+    .listRuns(sessionId, query)
     .map((record) => cloneDelegationRunRecord(record));
 }
 
@@ -384,6 +357,7 @@ function createLaunchErrorResult(input: {
 export function createHostedSubagentAdapter(
   options: HostedSubagentAdapterOptions,
 ): NonNullable<BrewvaToolOrchestration["subagents"]> {
+  const delegationStore = options.delegationStore ?? new HostedDelegationStore(options.runtime);
   const liveRunsByParentSession = new Map<string, Map<string, LiveHostedDelegationRun>>();
 
   function getLiveRuns(sessionId: string): Map<string, LiveHostedDelegationRun> {
@@ -536,7 +510,7 @@ export function createHostedSubagentAdapter(
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
     const immediateFailure = (error: string): LiveHostedDelegationRun => {
-      const failedRecord = upsertDelegationRunRecord(options.runtime, input.parentSessionId, {
+      const failedRecord: DelegationRunRecord = {
         runId,
         ...resolveDelegationRecordIdentity({ target: input.target }),
         parentSessionId: input.parentSessionId,
@@ -549,7 +523,7 @@ export function createHostedSubagentAdapter(
         summary: error,
         error,
         delivery: buildDeliveryRecordFromRequest(input.delivery, Date.now()),
-      });
+      };
       options.runtime.events.record({
         sessionId: input.parentSessionId,
         type: "subagent_failed",
@@ -613,7 +587,7 @@ export function createHostedSubagentAdapter(
       return immediateFailure(`parallel_slot_rejected:${parallel.reason ?? "unknown"}`);
     }
 
-    const initialRecord = upsertDelegationRunRecord(options.runtime, input.parentSessionId, {
+    const initialRecord: DelegationRunRecord = {
       runId,
       ...resolveDelegationRecordIdentity({ target: input.target }),
       parentSessionId: input.parentSessionId,
@@ -625,7 +599,7 @@ export function createHostedSubagentAdapter(
       kind: input.target.resultMode,
       boundary: executionPlan.boundary,
       delivery: buildDeliveryRecordFromRequest(input.delivery, startedAt),
-    });
+    };
 
     options.runtime.events.record({
       sessionId: input.parentSessionId,
@@ -650,7 +624,7 @@ export function createHostedSubagentAdapter(
     const liveRun: LiveHostedDelegationRun = {
       record: initialRecord,
       async cancel(reason) {
-        const latest = options.runtime.session.getDelegationRun(input.parentSessionId, runId);
+        const latest = delegationStore.getRun(input.parentSessionId, runId);
         if (!latest) {
           return cloneDelegationRunRecord(initialRecord);
         }
@@ -665,13 +639,11 @@ export function createHostedSubagentAdapter(
         }
         await liveRun.outcomePromise.catch(() => undefined);
         return (
-          options.runtime.session.getDelegationRun(input.parentSessionId, runId) ??
-          cloneDelegationRunRecord(latest)
+          delegationStore.getRun(input.parentSessionId, runId) ?? cloneDelegationRunRecord(latest)
         );
       },
       getView() {
-        const latest =
-          options.runtime.session.getDelegationRun(input.parentSessionId, runId) ?? liveRun.record;
+        const latest = delegationStore.getRun(input.parentSessionId, runId) ?? liveRun.record;
         const terminal = isTerminalRunStatus(latest.status);
         return {
           ...cloneDelegationRunRecord(latest),
@@ -736,13 +708,13 @@ export function createHostedSubagentAdapter(
         if (timeoutTriggered && child.session.abort) {
           await child.session.abort().catch(() => undefined);
         }
-        upsertDelegationRunRecord(options.runtime, input.parentSessionId, {
-          ...(options.runtime.session.getDelegationRun(input.parentSessionId, runId) ??
-            initialRecord),
+        const runningRecord: DelegationRunRecord = {
+          ...(delegationStore.getRun(input.parentSessionId, runId) ?? initialRecord),
           status: "running",
           updatedAt: Date.now(),
           workerSessionId: childSessionId,
-        });
+        };
+        liveRun.record = cloneDelegationRunRecord(runningRecord);
         options.runtime.events.record({
           sessionId: input.parentSessionId,
           type: "subagent_spawned",
@@ -916,9 +888,8 @@ export function createHostedSubagentAdapter(
             : preparePendingParentTurnDelivery()
           : undefined;
 
-        const completedRecord = upsertDelegationRunRecord(options.runtime, input.parentSessionId, {
-          ...(options.runtime.session.getDelegationRun(input.parentSessionId, runId) ??
-            initialRecord),
+        const completedRecord: DelegationRunRecord = {
+          ...(delegationStore.getRun(input.parentSessionId, runId) ?? initialRecord),
           ...resolveDelegationRecordIdentity({
             target: input.target,
             delegatedSkillName: delegatedSkill,
@@ -930,13 +901,13 @@ export function createHostedSubagentAdapter(
           error: undefined,
           artifactRefs: outcome.artifactRefs?.map((ref) => ({ ...ref })),
           delivery: mergeDeliveryRecord(
-            options.runtime.session.getDelegationRun(input.parentSessionId, runId)?.delivery ??
+            delegationStore.getRun(input.parentSessionId, runId)?.delivery ??
               initialRecord.delivery,
             deliveryResult,
           ),
           totalTokens: childCostSummary.totalTokens,
           costUsd: childCostSummary.totalCostUsd,
-        });
+        };
         liveRun.record = completedRecord;
         options.runtime.events.record({
           sessionId: input.parentSessionId,
@@ -1046,9 +1017,8 @@ export function createHostedSubagentAdapter(
             : preparePendingParentTurnDelivery()
           : undefined;
 
-        const updatedRecord = upsertDelegationRunRecord(options.runtime, input.parentSessionId, {
-          ...(options.runtime.session.getDelegationRun(input.parentSessionId, runId) ??
-            initialRecord),
+        const updatedRecord: DelegationRunRecord = {
+          ...(delegationStore.getRun(input.parentSessionId, runId) ?? initialRecord),
           ...resolveDelegationRecordIdentity({
             target: input.target,
             delegatedSkillName: input.target.skillName,
@@ -1060,13 +1030,13 @@ export function createHostedSubagentAdapter(
           error: message,
           artifactRefs,
           delivery: mergeDeliveryRecord(
-            options.runtime.session.getDelegationRun(input.parentSessionId, runId)?.delivery ??
+            delegationStore.getRun(input.parentSessionId, runId)?.delivery ??
               initialRecord.delivery,
             deliveryResult,
           ),
           totalTokens: terminalCostSummary?.totalTokens,
           costUsd: terminalCostSummary?.totalCostUsd,
-        });
+        };
         liveRun.record = updatedRecord;
         options.runtime.events.record({
           sessionId: input.parentSessionId,
@@ -1124,6 +1094,7 @@ export function createHostedSubagentAdapter(
   }
 
   options.runtime.session.onClearState((sessionId) => {
+    delegationStore.clearSession(sessionId);
     if (options.backgroundController?.cancelSessionRuns) {
       void options.backgroundController.cancelSessionRuns(sessionId, "parent_session_cleared");
     }
@@ -1246,7 +1217,7 @@ export function createHostedSubagentAdapter(
             query,
           })
         : undefined;
-      const persistedRuns = resolveRunRecords(options.runtime, fromSessionId, query);
+      const persistedRuns = resolveRunRecords(delegationStore, fromSessionId, query);
       const liveRuns = liveRunsByParentSession.get(fromSessionId);
       const runs = persistedRuns.map((record) => {
         const liveRun = liveRuns?.get(record.runId);
@@ -1304,7 +1275,7 @@ export function createHostedSubagentAdapter(
       }
       const liveRun = liveRunsByParentSession.get(fromSessionId)?.get(runId);
       if (!liveRun) {
-        const persisted = options.runtime.session.getDelegationRun(fromSessionId, runId);
+        const persisted = delegationStore.getRun(fromSessionId, runId);
         if (!persisted) {
           return {
             ok: false,

@@ -10,6 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
+import type { BrewvaConfig, BrewvaEventQuery, BrewvaEventRecord } from "../contracts/index.js";
 import { redactUnknown } from "../security/redact.js";
 import {
   TAPE_ANCHOR_EVENT_TYPE,
@@ -17,7 +18,6 @@ import {
   type TapeAnchorPayload,
   type TapeCheckpointPayload,
 } from "../tape/events.js";
-import type { BrewvaConfig, BrewvaEventQuery, BrewvaEventRecord } from "../types.js";
 import { ensureDir, ensureDirForFile } from "../utils/fs.js";
 import { normalizeJsonRecord } from "../utils/json.js";
 

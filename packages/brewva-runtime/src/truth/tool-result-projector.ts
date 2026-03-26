@@ -1,11 +1,4 @@
 import { relative, resolve } from "node:path";
-import {
-  extractEvidenceArtifacts,
-  type CommandFailureClass,
-  type EvidenceArtifact,
-} from "../evidence/artifacts.js";
-import { parseTscDiagnostics } from "../evidence/tsc.js";
-import { redactSecrets } from "../security/redact.js";
 import type {
   TaskBlockerRecordResult,
   TaskBlockerResolveResult,
@@ -14,7 +7,14 @@ import type {
   TruthFactSeverity,
   TruthFactUpsertResult,
   TruthState,
-} from "../types.js";
+} from "../contracts/index.js";
+import {
+  extractEvidenceArtifacts,
+  type CommandFailureClass,
+  type EvidenceArtifact,
+} from "../evidence/artifacts.js";
+import { parseTscDiagnostics } from "../evidence/tsc.js";
+import { redactSecrets } from "../security/redact.js";
 import { sha256 } from "../utils/hash.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import {

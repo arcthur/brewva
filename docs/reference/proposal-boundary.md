@@ -2,7 +2,7 @@
 
 Boundary contract sources:
 
-- Runtime types: `packages/brewva-runtime/src/types.ts`
+- Runtime contracts: `packages/brewva-runtime/src/contracts/index.ts`
 - Runtime facade: `packages/brewva-runtime/src/runtime.ts`
 - Proposal admission: `packages/brewva-runtime/src/services/proposal-admission.ts`
 - Effect-commitment admission: `packages/brewva-runtime/src/services/proposal-admission-effect-commitment.ts`

@@ -21,7 +21,7 @@ import type {
   SkillResourceSet,
   SkillRoutingPolicy,
   ToolEffectClass,
-} from "../types.js";
+} from "../contracts/index.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 
 interface ParsedFrontmatter {

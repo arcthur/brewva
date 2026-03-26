@@ -1,7 +1,7 @@
+import type { BrewvaEventRecord } from "../contracts/index.js";
 import { TASK_EVENT_TYPE, coerceTaskLedgerPayload } from "../task/ledger.js";
 import { formatTaskVerificationLevelForSurface } from "../task/surface.js";
 import { TRUTH_EVENT_TYPE, coerceTruthLedgerPayload } from "../truth/ledger.js";
-import type { BrewvaEventRecord } from "../types.js";
 import { deriveWorkflowArtifactsFromEvent } from "../workflow/derivation.js";
 import type {
   ProjectionExtractionResult,

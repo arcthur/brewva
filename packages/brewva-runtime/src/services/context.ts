@@ -13,9 +13,6 @@ import {
   type ContextSourceProviderDescriptor,
   ContextSourceProviderRegistry,
 } from "../context/provider.js";
-import type { GovernancePort } from "../governance/port.js";
-import type { RuntimeKernelContext } from "../runtime-kernel.js";
-import { sanitizeByTrust, wrapByTrust } from "../security/sanitize.js";
 import type {
   BrewvaConfig,
   BrewvaEventRecord,
@@ -26,7 +23,10 @@ import type {
   ContextPressureStatus,
   SkillDocument,
   TruthState,
-} from "../types.js";
+} from "../contracts/index.js";
+import type { GovernancePort } from "../governance/port.js";
+import type { RuntimeKernelContext } from "../runtime-kernel.js";
+import { sanitizeByTrust, wrapByTrust } from "../security/sanitize.js";
 import { type ContextCompactionDeps, markContextCompacted } from "./context-compaction.js";
 import { ContextPressureService } from "./context-pressure.js";
 import {
