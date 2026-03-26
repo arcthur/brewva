@@ -279,6 +279,8 @@ Worker-result adoption semantics:
 Delegation session semantics:
 
 - `listDelegationRuns(...)` exposes the full replay-hydrated child run ledger
+- each delegation record preserves the resolved `delegate` plus optional
+  `agentSpec`, `envelope`, and `skillName` metadata when available
 - `listPendingDelegationOutcomes(...)` is the stable derived handoff view for
   late background outcomes that still await a parent turn
 - pending delegation outcomes remain explicit inspection state; they do not

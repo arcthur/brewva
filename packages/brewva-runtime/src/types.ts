@@ -1074,7 +1074,10 @@ export interface DelegationDeliveryRecord {
 
 export interface DelegationRunRecord {
   runId: string;
-  profile: string;
+  delegate: string;
+  agentSpec?: string;
+  envelope?: string;
+  skillName?: string;
   parentSessionId: string;
   status: DelegationRunStatus;
   createdAt: number;

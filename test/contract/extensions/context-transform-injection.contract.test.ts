@@ -229,7 +229,7 @@ describe("context transform injection contract", () => {
 
     runtime.session.recordDelegationRun(sessionId, {
       runId: "run-completed-1",
-      profile: "review",
+      delegate: "review",
       parentSessionId: sessionId,
       status: "completed",
       createdAt: 1,

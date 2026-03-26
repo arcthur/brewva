@@ -98,14 +98,14 @@ Tool registry source: `packages/brewva-tools/src/index.ts`
   not a generic implementation skill
 - `deliberation_memory` is the explicit surface for inspecting retained
   repository, user, agent, and loop memory artifacts
-- delegated read-only profiles are `explore`, `plan`, `review`, and `general`;
-  removed legacy aliases such as `researcher`, `reviewer`, and `verifier` now
-  fail fast
+- built-in read-only agent specs are `explore`, `plan`, `review`, and
+  `general`; removed legacy aliases such as `researcher`, `reviewer`, and
+  `verifier` now fail fast
 - `optimization_continuity` is the inspection surface for deliberation-owned
   loop continuity, not a runtime-owned optimizer; its `attention` view surfaces
   overdue or long-running lineages for explicit review
 - `predict-review` is an advisory multi-perspective debate skill built on
-  public delegation tools and existing subagent profiles
+  public delegation tools and existing built-in agent specs / envelopes
 - `self-improve` distills repeated evidence, including iteration-fact history,
   into explicit improvement hypotheses
 - `skill_promotion` exposes the post-execution promotion pipeline for reviewing

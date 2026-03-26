@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createDetachedSubagentBackgroundController,
-  type HostedSubagentProfile,
+  type HostedDelegationTarget,
 } from "@brewva/brewva-gateway";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 
@@ -12,11 +12,14 @@ function createTempWorkspace(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 
-const EXPLORE_PROFILE: HostedSubagentProfile = {
+const EXPLORE_TARGET: HostedDelegationTarget = {
   name: "explore",
   description: "Repository exploration worker.",
   resultMode: "exploration",
-  prompt: "Inspect the repository and summarize findings.",
+  executorPreamble: "Inspect the repository and summarize findings.",
+  agentSpecName: "explore",
+  envelopeName: "readonly-scout",
+  skillName: "repository-analysis",
   boundary: "safe",
   builtinToolNames: ["read"],
 };
@@ -42,7 +45,7 @@ describe("detached subagent background controller", () => {
 
     const run = await controller.startRun({
       parentSessionId: "parent-bg-1",
-      profile: EXPLORE_PROFILE,
+      target: EXPLORE_TARGET,
       packet: {
         objective: "Inspect the runtime package.",
       },
@@ -68,6 +71,9 @@ describe("detached subagent background controller", () => {
       ),
     ) as {
       schema: string;
+      agentSpecName?: string;
+      envelopeName?: string;
+      skillName?: string;
       config: {
         infrastructure?: {
           events?: {
@@ -76,8 +82,16 @@ describe("detached subagent background controller", () => {
         };
       };
     };
-    expect(spec.schema).toBe("brewva.subagent-run-spec.v3");
+    expect(spec.schema).toBe("brewva.subagent-run-spec.v5");
+    expect(spec.agentSpecName).toBe("explore");
+    expect(spec.envelopeName).toBe("readonly-scout");
+    expect(spec.skillName).toBe("repository-analysis");
     expect(spec.config.infrastructure?.events?.level).toBe("audit");
+    expect(runtime.session.getDelegationRun("parent-bg-1", run.runId)).toMatchObject({
+      agentSpec: "explore",
+      envelope: "readonly-scout",
+      skillName: "repository-analysis",
+    });
 
     pidAlive = false;
   });
@@ -107,7 +121,7 @@ describe("detached subagent background controller", () => {
 
     const run = await controller.startRun({
       parentSessionId: "parent-bg-predicate-event",
-      profile: EXPLORE_PROFILE,
+      target: EXPLORE_TARGET,
       packet: {
         objective: "Inspect the runtime package until merge evidence exists.",
         completionPredicate: {
@@ -171,7 +185,7 @@ describe("detached subagent background controller", () => {
 
     const run = await controller.startRun({
       parentSessionId: "parent-bg-predicate-worker",
-      profile: EXPLORE_PROFILE,
+      target: EXPLORE_TARGET,
       packet: {
         objective: "Inspect the gateway package until worker application succeeds.",
         completionPredicate: {
@@ -238,7 +252,7 @@ describe("detached subagent background controller", () => {
 
     const run = await controller.startRun({
       parentSessionId: "parent-bg-cancel",
-      profile: EXPLORE_PROFILE,
+      target: EXPLORE_TARGET,
       packet: {
         objective: "Inspect the gateway package.",
       },
@@ -284,21 +298,21 @@ describe("detached subagent background controller", () => {
 
     const first = await controller.startRun({
       parentSessionId: "parent-bg-session",
-      profile: EXPLORE_PROFILE,
+      target: EXPLORE_TARGET,
       packet: {
         objective: "Inspect runtime package.",
       },
     });
     await controller.startRun({
       parentSessionId: "parent-bg-session",
-      profile: EXPLORE_PROFILE,
+      target: EXPLORE_TARGET,
       packet: {
         objective: "Inspect gateway package.",
       },
     });
     await controller.startRun({
       parentSessionId: "other-parent",
-      profile: EXPLORE_PROFILE,
+      target: EXPLORE_TARGET,
       packet: {
         objective: "Ignore this run.",
       },

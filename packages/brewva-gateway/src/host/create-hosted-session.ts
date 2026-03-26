@@ -38,7 +38,7 @@ import { installSessionCompactionRecovery } from "../session/compaction-recovery
 import {
   createDetachedSubagentBackgroundController,
   createHostedSubagentAdapter,
-  type HostedSubagentBuiltinToolName,
+  type HostedDelegationBuiltinToolName,
 } from "../subagents/index.js";
 
 export interface HostedSessionResult extends CreateAgentSessionResult {
@@ -50,13 +50,13 @@ export interface CreateHostedSessionOptions extends RuntimeCreateBrewvaSessionOp
   extensionFactories?: ExtensionFactory[];
   orchestration?: BrewvaToolOrchestration;
   managedToolNames?: readonly string[];
-  builtinToolNames?: readonly HostedSubagentBuiltinToolName[];
+  builtinToolNames?: readonly HostedDelegationBuiltinToolName[];
   enableSubagents?: boolean;
   scopeId?: string;
 }
 
 function resolveBuiltinTools(
-  builtinToolNames: readonly HostedSubagentBuiltinToolName[] | undefined,
+  builtinToolNames: readonly HostedDelegationBuiltinToolName[] | undefined,
 ): Array<typeof readTool | typeof editTool | typeof writeTool> {
   const requested = new Set(builtinToolNames ?? ["read", "edit", "write"]);
   const tools: Array<typeof readTool | typeof editTool | typeof writeTool> = [];

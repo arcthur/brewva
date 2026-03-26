@@ -155,12 +155,6 @@ const PacketFields = {
     }),
   ),
   activeSkillName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
-  entrySkill: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
-  requiredOutputs: Type.Optional(
-    Type.Array(Type.String({ minLength: 1, maxLength: 200 }), {
-      maxItems: 24,
-    }),
-  ),
   executionHints: Type.Optional(ExecutionHintsSchema),
   contextRefs: Type.Optional(Type.Array(ContextRefSchema, { maxItems: 48 })),
   contextBudget: Type.Optional(
@@ -184,8 +178,6 @@ const TaskPacketSchema = Type.Object({
   constraints: PacketFields.constraints,
   sharedNotes: PacketFields.sharedNotes,
   activeSkillName: PacketFields.activeSkillName,
-  entrySkill: PacketFields.entrySkill,
-  requiredOutputs: PacketFields.requiredOutputs,
   executionHints: PacketFields.executionHints,
   contextRefs: PacketFields.contextRefs,
   contextBudget: PacketFields.contextBudget,
@@ -200,8 +192,6 @@ function hasSinglePacketInput(params: Record<string, unknown>): boolean {
     Array.isArray(params.constraints) ||
     Array.isArray(params.sharedNotes) ||
     typeof params.activeSkillName === "string" ||
-    typeof params.entrySkill === "string" ||
-    Array.isArray(params.requiredOutputs) ||
     typeof params.executionHints === "object" ||
     Array.isArray(params.contextRefs) ||
     typeof params.contextBudget === "object" ||
@@ -216,8 +206,6 @@ function toPacket(packet: {
   constraints?: unknown;
   sharedNotes?: unknown;
   activeSkillName?: unknown;
-  entrySkill?: unknown;
-  requiredOutputs?: unknown;
   executionHints?: unknown;
   contextRefs?: unknown;
   contextBudget?: unknown;
@@ -240,8 +228,6 @@ function toPacket(packet: {
     sharedNotes: Array.isArray(packet.sharedNotes) ? packet.sharedNotes : undefined,
     activeSkillName:
       typeof packet.activeSkillName === "string" ? packet.activeSkillName : undefined,
-    entrySkill: typeof packet.entrySkill === "string" ? packet.entrySkill : undefined,
-    requiredOutputs: Array.isArray(packet.requiredOutputs) ? packet.requiredOutputs : undefined,
     executionHints:
       typeof packet.executionHints === "object" && packet.executionHints !== null
         ? {
@@ -395,6 +381,33 @@ function includesSupplementalReturn(mode: SubagentReturnMode): boolean {
   return mode === "supplemental";
 }
 
+const REMOVED_DELEGATION_FIELDS = ["profile", "entrySkill", "requiredOutputs"] as const;
+
+function collectRemovedDelegationFields(params: Record<string, unknown>): string[] {
+  const removed = new Set<string>();
+  for (const field of REMOVED_DELEGATION_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(params, field)) {
+      removed.add(field);
+    }
+  }
+  if (Array.isArray(params.tasks)) {
+    for (const task of params.tasks) {
+      if (typeof task !== "object" || task === null) {
+        continue;
+      }
+      for (const field of REMOVED_DELEGATION_FIELDS) {
+        if (field === "profile") {
+          continue;
+        }
+        if (Object.prototype.hasOwnProperty.call(task, field)) {
+          removed.add(`tasks[].${field}`);
+        }
+      }
+    }
+  }
+  return [...removed];
+}
+
 function toTask(task: Record<string, unknown>): DelegationTaskPacket {
   const packet = toPacket(task);
   if (!packet) {
@@ -438,7 +451,7 @@ function summarizeOutcomeForDelivery(outcome: SubagentOutcome): string {
 }
 
 function buildDeliveryContent(input: {
-  profile: string;
+  delegate: string;
   mode: SubagentDelegationMode;
   result: {
     ok: boolean;
@@ -446,7 +459,7 @@ function buildDeliveryContent(input: {
   };
 }): string {
   const lines = [
-    `Delegation outcome for profile=${input.profile}`,
+    `Delegation outcome for delegate=${input.delegate}`,
     `Mode: ${input.mode}`,
     ...input.result.outcomes.slice(0, 8).map((outcome) => summarizeOutcomeForDelivery(outcome)),
   ];
@@ -458,7 +471,7 @@ function buildDeliveryContent(input: {
 
 function summarizeStartedRun(run: {
   runId: string;
-  profile: string;
+  delegate: string;
   status: string;
   label?: string;
   kind?: string;
@@ -478,7 +491,7 @@ function summarizeStartedRun(run: {
 function deliverSubagentOutcome(input: {
   runtime: BrewvaToolOptions["runtime"];
   sessionId: string;
-  profile: string;
+  delegate: string;
   mode: SubagentDelegationMode;
   outcomes: SubagentOutcome[];
   returnMode: SubagentReturnMode;
@@ -494,7 +507,7 @@ function deliverSubagentOutcome(input: {
   };
 } {
   const content = buildDeliveryContent({
-    profile: input.profile,
+    delegate: input.delegate,
     mode: input.mode,
     result: {
       ok: input.outcomes.every((outcome) => outcome.ok),
@@ -516,7 +529,7 @@ function deliverSubagentOutcome(input: {
       input.sessionId,
       content,
       undefined,
-      input.returnScopeId ?? `subagent:${input.profile}`,
+      input.returnScopeId ?? `subagent:${input.delegate}`,
     );
     delivery.supplemental = {
       attempted: true,
@@ -558,23 +571,59 @@ function buildDeliveryRequest(
   };
 }
 
+function resolveDelegationLabel(
+  request: Pick<
+    SubagentRunRequest,
+    "agentSpec" | "envelope" | "skillName" | "fallbackResultMode" | "executionShape"
+  >,
+): string {
+  return (
+    request.agentSpec ??
+    request.envelope ??
+    request.skillName ??
+    request.executionShape?.resultMode ??
+    request.fallbackResultMode ??
+    "general"
+  );
+}
+
 function buildRunRequestFromParams(input: {
   params: Record<string, unknown>;
   mode: SubagentDelegationMode;
 }): { ok: true; request: SubagentRunRequest } | { ok: false; message: string } {
-  const profile =
-    typeof input.params.profile === "string" && input.params.profile.trim().length > 0
-      ? input.params.profile
-      : undefined;
-  const executionShape = toExecutionShape(input.params.executionShape);
-  if (!profile && !executionShape?.resultMode) {
+  const removedFields = collectRemovedDelegationFields(input.params);
+  if (removedFields.length > 0) {
     return {
       ok: false,
-      message: "Error: profile or executionShape.resultMode is required.",
+      message: `Error: legacy delegation fields are no longer supported: ${removedFields.join(", ")}.`,
     };
   }
+
+  const agentSpec =
+    typeof input.params.agentSpec === "string" && input.params.agentSpec.trim().length > 0
+      ? input.params.agentSpec
+      : undefined;
+  const envelope =
+    typeof input.params.envelope === "string" && input.params.envelope.trim().length > 0
+      ? input.params.envelope
+      : undefined;
+  const explicitSkillName =
+    typeof input.params.skillName === "string" && input.params.skillName.trim().length > 0
+      ? input.params.skillName
+      : undefined;
+  const executionShape = toExecutionShape(input.params.executionShape);
+  const fallbackResultMode =
+    input.params.fallbackResultMode === "exploration" ||
+    input.params.fallbackResultMode === "review" ||
+    input.params.fallbackResultMode === "verification" ||
+    input.params.fallbackResultMode === "patch"
+      ? (input.params.fallbackResultMode as SubagentRunRequest["fallbackResultMode"])
+      : undefined;
   const request: SubagentRunRequest = {
-    profile,
+    agentSpec,
+    envelope,
+    skillName: explicitSkillName,
+    fallbackResultMode,
     executionShape,
     mode: input.mode,
     timeoutMs: typeof input.params.timeoutMs === "number" ? input.params.timeoutMs : undefined,
@@ -618,7 +667,7 @@ function buildRunRequestFromParams(input: {
 async function executeSubagentToolWithRequest(input: {
   options: BrewvaToolOptions;
   sessionId: string;
-  profile: string;
+  delegate: string;
   mode: SubagentDelegationMode;
   waitMode: "completion" | "start";
   returnMode: SubagentReturnMode;
@@ -652,12 +701,12 @@ async function executeSubagentToolWithRequest(input: {
     });
     const lines = [
       input.mode === "single"
-        ? `${input.startVerb} for profile=${input.profile}`
-        : `${input.startVerb} for profile=${input.profile} (${started.runs.length} runs)`,
+        ? `${input.startVerb} for delegate=${input.delegate}`
+        : `${input.startVerb} for delegate=${input.delegate} (${started.runs.length} runs)`,
       ...started.runs.map((run) =>
         summarizeStartedRun({
           runId: run.runId,
-          profile: run.profile,
+          delegate: run.delegate,
           status: run.status,
           label: run.label,
           kind: run.kind,
@@ -680,7 +729,7 @@ async function executeSubagentToolWithRequest(input: {
   });
   if (!result.ok) {
     return failTextResult(
-      `${input.completionVerb} failed for profile=${input.profile}: ${result.error ?? "unknown_error"}`,
+      `${input.completionVerb} failed for delegate=${input.delegate}: ${result.error ?? "unknown_error"}`,
       result as unknown as Record<string, unknown>,
     );
   }
@@ -688,14 +737,14 @@ async function executeSubagentToolWithRequest(input: {
   const failures = result.outcomes.filter((outcome) => !outcome.ok);
   const header =
     input.mode === "single"
-      ? `${input.completionVerb} completed for profile=${input.profile}`
-      : `${input.completionVerb} completed for profile=${input.profile} (${result.outcomes.length} runs)`;
+      ? `${input.completionVerb} completed for delegate=${input.delegate}`
+      : `${input.completionVerb} completed for delegate=${input.delegate} (${result.outcomes.length} runs)`;
   const delivery =
     result.outcomes.length > 0 && input.returnMode !== "text_only"
       ? deliverSubagentOutcome({
           runtime: input.options.runtime,
           sessionId: input.sessionId,
-          profile: input.profile,
+          delegate: input.delegate,
           mode: input.mode,
           outcomes: result.outcomes,
           returnMode: input.returnMode,
@@ -723,17 +772,21 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
     name: "subagent_run",
     label: "Subagent Run",
     description:
-      "Delegate a bounded task to an isolated subagent profile and return structured results.",
+      "Delegate a bounded task to an isolated worker configuration and return structured results.",
     promptSnippet:
       "Use isolated delegated runs for focused exploration, review, or verification without polluting the main context window.",
     promptGuidelines: [
-      "Prefer canonical profiles explore, plan, review, and general for the default delegated posture.",
+      "Prefer canonical agent specs explore, plan, review, and general for the default delegated posture.",
       "Delegate when the task needs cross-3+-file investigation, an independent review pass, or parallel slice exploration.",
       "Use single for one delegated run and parallel to fan out multiple independent slices.",
+      "Use agentSpec for named reusable workers, envelope for runtime posture, and skillName for explicit semantic contracts.",
       "Keep objectives specific, pass only the context references the child needs, and avoid broad parent-context dumps.",
     ],
     parameters: Type.Object({
-      profile: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+      agentSpec: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+      envelope: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+      skillName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+      fallbackResultMode: Type.Optional(ResultModeSchema),
       executionShape: Type.Optional(ExecutionShapeSchema),
       mode: Type.Optional(ModeSchema),
       objective: PacketFields.objective,
@@ -741,8 +794,6 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
       constraints: PacketFields.constraints,
       sharedNotes: PacketFields.sharedNotes,
       activeSkillName: PacketFields.activeSkillName,
-      entrySkill: PacketFields.entrySkill,
-      requiredOutputs: PacketFields.requiredOutputs,
       executionHints: PacketFields.executionHints,
       contextRefs: PacketFields.contextRefs,
       contextBudget: PacketFields.contextBudget,
@@ -781,10 +832,7 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
       return executeSubagentToolWithRequest({
         options,
         sessionId,
-        profile:
-          builtRequest.request.profile ??
-          builtRequest.request.executionShape?.resultMode ??
-          "derived",
+        delegate: resolveDelegationLabel(builtRequest.request),
         mode,
         waitMode,
         returnMode,
@@ -803,25 +851,26 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
     name: "subagent_fanout",
     label: "Subagent Fanout",
     description:
-      "Launch multiple isolated delegated runs under one profile for independent slices of work.",
+      "Launch multiple isolated delegated runs under one worker configuration for independent slices of work.",
     promptSnippet:
-      "Use this for explicit fan-out when several repository slices or verification lanes can run independently under the same delegated profile.",
+      "Use this for explicit fan-out when several repository slices or verification lanes can run independently under the same delegated setup.",
     promptGuidelines: [
-      "Prefer canonical profiles explore, plan, review, and general unless a narrower internal profile is explicitly required.",
+      "Prefer canonical agent specs explore, plan, review, and general unless a narrower internal worker is explicitly required.",
       "Use this when tasks are independent and a shared packet plus per-task objectives is clearer than one large delegated run.",
       "Keep each task label and objective specific so the parent can inspect outcomes separately.",
-      "Prefer read-only profiles unless the workflow is explicitly ready to inspect and merge isolated patch results.",
+      "Prefer read-only envelopes unless the workflow is explicitly ready to inspect and merge isolated patch results.",
     ],
     parameters: Type.Object({
-      profile: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+      agentSpec: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+      envelope: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+      skillName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+      fallbackResultMode: Type.Optional(ResultModeSchema),
       executionShape: Type.Optional(ExecutionShapeSchema),
       objective: PacketFields.objective,
       deliverable: PacketFields.deliverable,
       constraints: PacketFields.constraints,
       sharedNotes: PacketFields.sharedNotes,
       activeSkillName: PacketFields.activeSkillName,
-      entrySkill: PacketFields.entrySkill,
-      requiredOutputs: PacketFields.requiredOutputs,
       executionHints: PacketFields.executionHints,
       contextRefs: PacketFields.contextRefs,
       contextBudget: PacketFields.contextBudget,
@@ -859,10 +908,7 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
       return executeSubagentToolWithRequest({
         options,
         sessionId,
-        profile:
-          builtRequest.request.profile ??
-          builtRequest.request.executionShape?.resultMode ??
-          "derived",
+        delegate: resolveDelegationLabel(builtRequest.request),
         mode: "parallel",
         waitMode,
         returnMode,

@@ -31,12 +31,12 @@ describe("subagent_run tool", () => {
             run: async (input: { fromSessionId: string; request: SubagentRunRequest }) => ({
               ok: true,
               mode: input.request.mode,
-              profile: input.request.profile,
+              delegate: input.request.agentSpec ?? input.request.envelope ?? "general",
               outcomes: [
                 {
                   ok: true,
                   runId: "run-1",
-                  profile: input.request.profile,
+                  delegate: input.request.agentSpec ?? input.request.envelope ?? "general",
                   kind: "exploration" as const,
                   summary: `summary:${input.request.packet?.objective}`,
                   assistantText: "done",
@@ -57,7 +57,7 @@ describe("subagent_run tool", () => {
     const result = await tool.execute(
       "tc-subagent-1",
       {
-        profile: "explore",
+        agentSpec: "explore",
         objective: "trace the gateway entrypoints",
       },
       undefined,
@@ -66,7 +66,7 @@ describe("subagent_run tool", () => {
     );
 
     const text = extractText(result);
-    expect(text).toContain("profile=explore");
+    expect(text).toContain("delegate=explore");
     expect(text).toContain("summary:trace the gateway entrypoints");
     expect((result.details as { ok?: boolean } | undefined)?.ok).toBe(true);
   });
@@ -79,7 +79,7 @@ describe("subagent_run tool", () => {
             run: async () => ({
               ok: true,
               mode: "parallel",
-              profile: "explore",
+              delegate: "explore",
               outcomes: [],
             }),
           },
@@ -90,7 +90,7 @@ describe("subagent_run tool", () => {
     const result = await tool.execute(
       "tc-subagent-2",
       {
-        profile: "explore",
+        agentSpec: "explore",
         mode: "parallel",
       },
       undefined,
@@ -102,6 +102,45 @@ describe("subagent_run tool", () => {
     expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("fail");
   });
 
+  test("rejects removed legacy delegation fields", async () => {
+    let adapterCalled = false;
+    const tool = createSubagentRunTool({
+      runtime: {
+        orchestration: {
+          subagents: {
+            run: async () => {
+              adapterCalled = true;
+              return {
+                ok: true,
+                mode: "single",
+                delegate: "general",
+                outcomes: [],
+              };
+            },
+          },
+        },
+      } as any,
+    });
+
+    const result = await tool.execute(
+      "tc-subagent-legacy-fields",
+      {
+        agentSpec: "review",
+        objective: "review the runtime boundary handling",
+        requiredOutputs: ["findings"],
+      },
+      undefined,
+      undefined,
+      fakeContext("session-legacy"),
+    );
+
+    expect(adapterCalled).toBe(false);
+    expect(extractText(result)).toContain(
+      "legacy delegation fields are no longer supported: requiredOutputs",
+    );
+    expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("fail");
+  });
+
   test("marks mixed parallel results as failed", async () => {
     const tool = createSubagentRunTool({
       runtime: {
@@ -110,13 +149,13 @@ describe("subagent_run tool", () => {
             run: async () => ({
               ok: true,
               mode: "parallel",
-              profile: "review",
+              delegate: "review",
               outcomes: [
                 {
                   ok: true,
                   runId: "run-ok",
                   label: "slice-a",
-                  profile: "review",
+                  delegate: "review",
                   kind: "review" as const,
                   summary: "No issues found in slice A.",
                   assistantText: "No issues found in slice A.",
@@ -127,7 +166,7 @@ describe("subagent_run tool", () => {
                   ok: false,
                   runId: "run-fail",
                   label: "slice-b",
-                  profile: "review",
+                  delegate: "review",
                   error: "timeout",
                   metrics: { durationMs: 20 },
                 },
@@ -141,7 +180,7 @@ describe("subagent_run tool", () => {
     const result = await tool.execute(
       "tc-subagent-3",
       {
-        profile: "review",
+        agentSpec: "review",
         mode: "parallel",
         tasks: [
           { label: "slice-a", objective: "review runtime" },
@@ -184,12 +223,12 @@ describe("subagent_run tool", () => {
             run: async () => ({
               ok: true,
               mode: "single",
-              profile: "explore",
+              delegate: "explore",
               outcomes: [
                 {
                   ok: true,
                   runId: "run-supplemental",
-                  profile: "explore",
+                  delegate: "explore",
                   kind: "exploration" as const,
                   status: "ok" as const,
                   workerSessionId: "child-supplemental",
@@ -209,7 +248,7 @@ describe("subagent_run tool", () => {
     const result = await tool.execute(
       "tc-subagent-supplemental",
       {
-        profile: "explore",
+        agentSpec: "explore",
         objective: "summarize repository impact",
         returnMode: "supplemental",
         returnScopeId: "delegation-leaf",
@@ -224,7 +263,7 @@ describe("subagent_run tool", () => {
       sessionId: "session-supplemental",
       scopeId: "delegation-leaf",
     });
-    expect(appendCalls[0]?.text).toContain("Delegation outcome for profile=explore");
+    expect(appendCalls[0]?.text).toContain("Delegation outcome for delegate=explore");
     expect(extractText(result)).toContain("supplemental delivery accepted");
   });
 
@@ -239,7 +278,7 @@ describe("subagent_run tool", () => {
               return {
                 ok: true,
                 mode: input.request.mode,
-                profile: input.request.profile,
+                delegate: input.request.agentSpec ?? input.request.envelope ?? "general",
                 outcomes: [],
               };
             },
@@ -251,10 +290,9 @@ describe("subagent_run tool", () => {
     await tool.execute(
       "tc-subagent-packet-shape",
       {
-        profile: "review",
+        agentSpec: "review",
         objective: "review the changed runtime boundaries",
         activeSkillName: "review",
-        requiredOutputs: ["findings", "verification_evidence"],
         executionHints: {
           preferredTools: ["lsp_diagnostics"],
           fallbackTools: ["grep"],
@@ -268,7 +306,6 @@ describe("subagent_run tool", () => {
 
     expect(capturedRequest?.packet).toMatchObject({
       activeSkillName: "review",
-      requiredOutputs: ["findings", "verification_evidence"],
       executionHints: {
         preferredTools: ["lsp_diagnostics"],
         fallbackTools: ["grep"],
@@ -288,12 +325,20 @@ describe("subagent_run tool", () => {
               return {
                 ok: true,
                 mode: input.request.mode,
-                profile: input.request.profile ?? input.request.executionShape?.resultMode,
+                delegate:
+                  input.request.agentSpec ??
+                  input.request.envelope ??
+                  input.request.executionShape?.resultMode ??
+                  "general",
                 outcomes: [
                   {
                     ok: true,
-                    runId: "run-derived-profile",
-                    profile: input.request.profile ?? "verification",
+                    runId: "run-derived-delegate",
+                    delegate:
+                      input.request.agentSpec ??
+                      input.request.envelope ??
+                      input.request.executionShape?.resultMode ??
+                      "verification",
                     kind: "verification" as const,
                     status: "ok" as const,
                     summary: "verification summary",
@@ -332,7 +377,7 @@ describe("subagent_run tool", () => {
       fakeContext("session-derived-shape"),
     );
 
-    expect(capturedRequest?.profile).toBeUndefined();
+    expect(capturedRequest?.agentSpec).toBeUndefined();
     expect(capturedRequest?.executionShape).toEqual({
       resultMode: "verification",
       boundary: "safe",
@@ -347,8 +392,53 @@ describe("subagent_run tool", () => {
       },
       policy: "cancel_when_true",
     });
-    expect(extractText(result)).toContain("profile=verification");
+    expect(extractText(result)).toContain("delegate=verification");
     expect((result.details as { ok?: boolean } | undefined)?.ok).toBe(true);
+  });
+
+  test("forwards skill-first delegation fields to the subagent adapter", async () => {
+    let capturedRequest: SubagentRunRequest | undefined;
+    const tool = createSubagentRunTool({
+      runtime: {
+        orchestration: {
+          subagents: {
+            run: async (input: { fromSessionId: string; request: SubagentRunRequest }) => {
+              capturedRequest = input.request;
+              return {
+                ok: true,
+                mode: input.request.mode,
+                delegate: input.request.agentSpec ?? input.request.envelope ?? "general",
+                outcomes: [],
+              };
+            },
+          },
+        },
+      } as any,
+    });
+
+    await tool.execute(
+      "tc-subagent-skill-first",
+      {
+        agentSpec: "review",
+        envelope: "readonly-reviewer",
+        skillName: "review",
+        fallbackResultMode: "review",
+        objective: "Review the delegation runtime changes",
+      },
+      undefined,
+      undefined,
+      fakeContext("session-skill-first"),
+    );
+
+    expect(capturedRequest).toMatchObject({
+      agentSpec: "review",
+      envelope: "readonly-reviewer",
+      skillName: "review",
+      fallbackResultMode: "review",
+      packet: {
+        objective: "Review the delegation runtime changes",
+      },
+    });
   });
 
   test("can start delegated work in background mode", async () => {
@@ -359,17 +449,17 @@ describe("subagent_run tool", () => {
             run: async () => ({
               ok: true,
               mode: "single",
-              profile: "explore",
+              delegate: "explore",
               outcomes: [],
             }),
             start: async (input: { fromSessionId: string; request: SubagentRunRequest }) => ({
               ok: true,
               mode: input.request.mode,
-              profile: input.request.profile,
+              delegate: input.request.agentSpec ?? input.request.envelope ?? "general",
               runs: [
                 {
                   runId: "run-background-1",
-                  profile: input.request.profile,
+                  delegate: input.request.agentSpec ?? input.request.envelope ?? "general",
                   parentSessionId: input.fromSessionId,
                   status: "pending",
                   createdAt: 1,
@@ -386,7 +476,7 @@ describe("subagent_run tool", () => {
     const result = await tool.execute(
       "tc-subagent-start",
       {
-        profile: "explore",
+        agentSpec: "explore",
         objective: "scan the runtime surface",
         waitMode: "start",
       },
@@ -395,7 +485,7 @@ describe("subagent_run tool", () => {
       fakeContext("session-start"),
     );
 
-    expect(extractText(result)).toContain("subagent_run started for profile=explore");
+    expect(extractText(result)).toContain("subagent_run started for delegate=explore");
     expect(extractText(result)).toContain("run-background-1");
     expect((result.details as { ok?: boolean } | undefined)?.ok).toBe(true);
   });
@@ -411,13 +501,13 @@ describe("subagent_run tool", () => {
               return {
                 ok: true,
                 mode: input.request.mode,
-                profile: input.request.profile,
+                delegate: input.request.agentSpec ?? input.request.envelope ?? "general",
                 outcomes: [
                   {
                     ok: true,
                     runId: "fanout-1",
                     label: "gateway",
-                    profile: input.request.profile,
+                    delegate: input.request.agentSpec ?? input.request.envelope ?? "general",
                     kind: "exploration" as const,
                     status: "ok" as const,
                     summary: "gateway slice complete",
@@ -435,7 +525,7 @@ describe("subagent_run tool", () => {
     const result = await tool.execute(
       "tc-subagent-fanout",
       {
-        profile: "explore",
+        agentSpec: "explore",
         activeSkillName: "repository-analysis",
         tasks: [
           { label: "gateway", objective: "inspect gateway entrypoints" },
@@ -449,7 +539,7 @@ describe("subagent_run tool", () => {
 
     expect(capturedRequest?.mode).toBe("parallel");
     expect(capturedRequest?.tasks).toHaveLength(2);
-    expect(extractText(result)).toContain("subagent_fanout completed for profile=explore");
+    expect(extractText(result)).toContain("subagent_fanout completed for delegate=explore");
     expect((result.details as { ok?: boolean } | undefined)?.ok).toBe(true);
   });
 });

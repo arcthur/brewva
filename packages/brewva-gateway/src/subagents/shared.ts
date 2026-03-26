@@ -6,6 +6,11 @@ import type {
   ToolExecutionBoundary,
   WorkerResult,
 } from "@brewva/brewva-runtime";
+import {
+  listSkillFallbackTools,
+  listSkillPreferredTools,
+  resolveSkillEffectLevel,
+} from "@brewva/brewva-runtime";
 import type {
   DelegationPacket,
   SubagentExecutionBoundary,
@@ -13,8 +18,17 @@ import type {
   SubagentOutcomeArtifactRef,
   SubagentRunRequest,
 } from "@brewva/brewva-tools";
-import type { HostedSubagentBuiltinToolName, HostedSubagentProfile } from "./profiles.js";
-import { getCanonicalSubagentPrompt, getDefaultProfileNameForResultMode } from "./protocol.js";
+import {
+  assertHostedExecutionEnvelopeTightening,
+  buildHostedDelegationTargetFromAgentSpec,
+  buildSyntheticHostedDelegationTarget,
+  deriveDefaultAgentSpecNameForResultMode,
+  deriveDefaultAgentSpecNameForSkillName,
+  resolveHostedExecutionEnvelope,
+  type HostedDelegationCatalog,
+} from "./catalog.js";
+import { getCanonicalSubagentPrompt } from "./protocol.js";
+import type { HostedDelegationBuiltinToolName, HostedDelegationTarget } from "./targets.js";
 
 const ALL_BUILTIN_SUBAGENT_TOOLS = ["read", "edit", "write"] as const;
 const PATCH_MANIFEST_FILE_NAME = "patchset.json";
@@ -24,7 +38,7 @@ const BOUNDARY_RANK: Record<ToolExecutionBoundary, number> = {
   effectful: 1,
 };
 
-function isBuiltinSubagentToolName(value: string): value is HostedSubagentBuiltinToolName {
+function isBuiltinSubagentToolName(value: string): value is HostedDelegationBuiltinToolName {
   return value === "read" || value === "edit" || value === "write";
 }
 
@@ -44,19 +58,19 @@ function mostRestrictiveBoundary(
   );
 }
 
-export interface ResolvedDelegationProfile {
-  profile: HostedSubagentProfile;
-  profileName: string;
+export interface ResolvedDelegationTarget {
+  target: HostedDelegationTarget;
+  delegate: string;
 }
 
 export interface ResolvedDelegationExecutionPlan {
-  profile: HostedSubagentProfile;
-  profileName: string;
+  target: HostedDelegationTarget;
+  delegate: string;
   packet: DelegationPacket;
   boundary: SubagentExecutionBoundary;
   model?: string;
   managedToolMode: ManagedToolMode;
-  builtinToolNames: HostedSubagentBuiltinToolName[];
+  builtinToolNames: HostedDelegationBuiltinToolName[];
   managedToolNames: string[];
   prompt: string;
 }
@@ -82,6 +96,23 @@ export function resolveRunSummary(text: string, fallback: string): string {
   return summary || fallback;
 }
 
+export function formatSkillValidationError(input: {
+  skillName: string;
+  missing: readonly string[];
+  invalid: ReadonlyArray<{ name: string; reason: string }>;
+}): string {
+  const parts: string[] = [];
+  if (input.missing.length > 0) {
+    parts.push(`missing=${input.missing.join(",")}`);
+  }
+  if (input.invalid.length > 0) {
+    parts.push(
+      `invalid=${input.invalid.map((entry) => `${entry.name}:${entry.reason}`).join(",")}`,
+    );
+  }
+  return `subagent_skill_outputs_invalid:${input.skillName}${parts.length > 0 ? `:${parts.join(";")}` : ""}`;
+}
+
 function boundaryWithinCeiling(
   boundary: ToolExecutionBoundary | undefined,
   ceiling: SubagentExecutionBoundary,
@@ -96,73 +127,106 @@ function hintedToolNames(packet: DelegationPacket | undefined): string[] {
   ]);
 }
 
+function resolveSkillToolHints(runtime: BrewvaRuntime, skillName: string | undefined): string[] {
+  if (!skillName) {
+    return [];
+  }
+  const skill = runtime.skills.get(skillName);
+  if (!skill) {
+    return [];
+  }
+  return uniqueStrings([
+    ...listSkillPreferredTools(skill.contract),
+    ...listSkillFallbackTools(skill.contract),
+  ]);
+}
+
 function mergeBuiltinToolNames(
-  profile: HostedSubagentProfile,
+  target: HostedDelegationTarget,
   packet: DelegationPacket | undefined,
   boundary: SubagentExecutionBoundary,
-): HostedSubagentBuiltinToolName[] {
+  skillToolNames: readonly string[],
+): HostedDelegationBuiltinToolName[] {
   const defaults =
-    profile.builtinToolNames ??
+    target.builtinToolNames ??
     (boundary === "effectful" ? [...ALL_BUILTIN_SUBAGENT_TOOLS] : ["read"]);
-  const hinted = hintedToolNames(packet).filter(
-    (toolName): toolName is HostedSubagentBuiltinToolName => isBuiltinSubagentToolName(toolName),
+  const hinted = uniqueStrings([...skillToolNames, ...hintedToolNames(packet)]).filter(
+    (toolName): toolName is HostedDelegationBuiltinToolName => isBuiltinSubagentToolName(toolName),
   );
   return [...new Set([...defaults, ...hinted])];
 }
 
 function mergeManagedToolNames(
-  profile: HostedSubagentProfile,
+  target: HostedDelegationTarget,
   packet: DelegationPacket | undefined,
+  skillToolNames: readonly string[],
 ): string[] {
-  const hinted = hintedToolNames(packet).filter((toolName) => !isBuiltinSubagentToolName(toolName));
-  return uniqueStrings([...(profile.managedToolNames ?? []), ...hinted]);
+  const hinted = uniqueStrings([...skillToolNames, ...hintedToolNames(packet)]).filter(
+    (toolName) => !isBuiltinSubagentToolName(toolName),
+  );
+  return uniqueStrings([...(target.managedToolNames ?? []), ...hinted]);
 }
 
 export function assertDelegationShapeNarrowing(
-  profile: HostedSubagentProfile,
+  target: HostedDelegationTarget,
   executionShape: SubagentExecutionShape | undefined,
 ): void {
   if (!executionShape) {
     return;
   }
-  if (executionShape.resultMode && executionShape.resultMode !== profile.resultMode) {
+  if (executionShape.resultMode && executionShape.resultMode !== target.resultMode) {
     throw new Error("subagent_result_mode_override_not_allowed");
   }
-  const profileBoundary = profile.boundary ?? "safe";
+  const targetBoundary = target.boundary ?? "safe";
   if (
     executionShape.boundary &&
-    BOUNDARY_RANK[executionShape.boundary] > BOUNDARY_RANK[profileBoundary]
+    BOUNDARY_RANK[executionShape.boundary] > BOUNDARY_RANK[targetBoundary]
   ) {
     throw new Error("subagent_effect_ceiling_widening_not_allowed");
   }
-  if (profile.managedToolMode === "direct" && executionShape.managedToolMode === "extension") {
+  if (target.managedToolMode === "direct" && executionShape.managedToolMode === "extension") {
     throw new Error("subagent_managed_tool_mode_widening_not_allowed");
   }
 }
 
 export function resolveRequestedBoundary(input: {
-  profile: HostedSubagentProfile;
+  target: HostedDelegationTarget;
   executionShape?: SubagentExecutionShape;
   packet?: DelegationPacket;
+  skillBoundaryCeiling?: SubagentExecutionBoundary;
 }): SubagentExecutionBoundary {
-  assertDelegationShapeNarrowing(input.profile, input.executionShape);
-  const profileBoundary = input.profile.boundary ?? "safe";
+  assertDelegationShapeNarrowing(input.target, input.executionShape);
+  const targetBoundary = input.target.boundary ?? "safe";
   const shapeBoundary = input.executionShape?.boundary;
   const packetBoundary = input.packet?.effectCeiling?.boundary;
-  const effectiveCeiling = mostRestrictiveBoundary(profileBoundary, shapeBoundary);
+  const effectiveCeiling = mostRestrictiveBoundary(
+    targetBoundary,
+    shapeBoundary,
+    input.skillBoundaryCeiling,
+  );
   if (packetBoundary && BOUNDARY_RANK[packetBoundary] > BOUNDARY_RANK[effectiveCeiling]) {
     throw new Error("subagent_effect_ceiling_widening_not_allowed");
   }
-  return mostRestrictiveBoundary(profileBoundary, shapeBoundary, packetBoundary);
+  return mostRestrictiveBoundary(
+    targetBoundary,
+    shapeBoundary,
+    packetBoundary,
+    input.skillBoundaryCeiling,
+  );
 }
 
 export function resolveBuiltinToolNamesForRun(
   runtime: BrewvaRuntime,
-  profile: HostedSubagentProfile,
+  target: HostedDelegationTarget,
   boundary: SubagentExecutionBoundary,
   packet?: DelegationPacket,
-): HostedSubagentBuiltinToolName[] {
-  const requested = mergeBuiltinToolNames(profile, packet, boundary);
+): HostedDelegationBuiltinToolName[] {
+  const requested = mergeBuiltinToolNames(
+    target,
+    packet,
+    boundary,
+    resolveSkillToolHints(runtime, target.skillName),
+  );
   return requested.filter((toolName) =>
     boundaryWithinCeiling(runtime.tools.getGovernanceDescriptor(toolName)?.boundary, boundary),
   );
@@ -170,11 +234,15 @@ export function resolveBuiltinToolNamesForRun(
 
 export function resolveManagedToolNamesForRun(
   runtime: BrewvaRuntime,
-  profile: HostedSubagentProfile,
+  target: HostedDelegationTarget,
   boundary: SubagentExecutionBoundary,
   packet?: DelegationPacket,
 ): string[] {
-  const requested = mergeManagedToolNames(profile, packet);
+  const requested = mergeManagedToolNames(
+    target,
+    packet,
+    resolveSkillToolHints(runtime, target.skillName),
+  );
   return requested.filter((toolName) => {
     if (
       toolName === "subagent_run" ||
@@ -191,72 +259,143 @@ export function resolveManagedToolNamesForRun(
   });
 }
 
-export function resolveDelegationProfile(input: {
-  profiles: ReadonlyMap<string, HostedSubagentProfile>;
-  request: Pick<SubagentRunRequest, "profile" | "executionShape">;
-}): ResolvedDelegationProfile {
-  if (input.request.profile) {
-    const profile = input.profiles.get(input.request.profile);
-    if (!profile) {
-      throw new Error(`unknown_profile:${input.request.profile}`);
+export function resolveDelegationTarget(input: {
+  request: Pick<
+    SubagentRunRequest,
+    "agentSpec" | "envelope" | "skillName" | "fallbackResultMode" | "executionShape"
+  >;
+  catalog: HostedDelegationCatalog;
+}): ResolvedDelegationTarget {
+  const requestedAgentSpec = input.request.agentSpec?.trim();
+  const resolvedAgentSpecName =
+    requestedAgentSpec ??
+    (!input.request.envelope
+      ? (deriveDefaultAgentSpecNameForSkillName(input.request.skillName) ??
+        (input.request.executionShape?.resultMode
+          ? deriveDefaultAgentSpecNameForResultMode(input.request.executionShape.resultMode)
+          : input.request.fallbackResultMode
+            ? deriveDefaultAgentSpecNameForResultMode(input.request.fallbackResultMode)
+            : "general"))
+      : undefined);
+
+  const resolvedAgentSpec = resolvedAgentSpecName
+    ? input.catalog.agentSpecs.get(resolvedAgentSpecName)
+    : undefined;
+
+  if (resolvedAgentSpecName && !resolvedAgentSpec) {
+    throw new Error(`unknown_agent_spec:${resolvedAgentSpecName}`);
+  }
+
+  if (resolvedAgentSpec) {
+    if (
+      input.request.skillName &&
+      resolvedAgentSpec.skillName &&
+      input.request.skillName !== resolvedAgentSpec.skillName
+    ) {
+      throw new Error("conflicting_agent_spec_and_skill_name");
     }
-    assertDelegationShapeNarrowing(profile, input.request.executionShape);
+    const baseEnvelope = resolveHostedExecutionEnvelope(input.catalog, resolvedAgentSpec.envelope);
+    const requestedEnvelope = resolveHostedExecutionEnvelope(input.catalog, input.request.envelope);
+    if (!baseEnvelope) {
+      throw new Error(`unknown_envelope:${resolvedAgentSpec.envelope}`);
+    }
+    if (input.request.envelope && !requestedEnvelope) {
+      throw new Error(`unknown_envelope:${input.request.envelope}`);
+    }
+    if (requestedEnvelope && requestedEnvelope.name !== baseEnvelope.name) {
+      assertHostedExecutionEnvelopeTightening(
+        baseEnvelope,
+        requestedEnvelope,
+        "conflicting_agent_spec_and_envelope",
+      );
+    }
+    const envelope = requestedEnvelope ?? baseEnvelope;
+    const target = buildHostedDelegationTargetFromAgentSpec({
+      agentSpec: {
+        ...resolvedAgentSpec,
+        skillName: input.request.skillName ?? resolvedAgentSpec.skillName,
+        fallbackResultMode:
+          input.request.fallbackResultMode ??
+          input.request.executionShape?.resultMode ??
+          resolvedAgentSpec.fallbackResultMode,
+      },
+      envelope,
+    });
+    assertDelegationShapeNarrowing(target, input.request.executionShape);
     return {
-      profile,
-      profileName: profile.name,
+      target,
+      delegate: target.agentSpecName ?? target.name,
     };
   }
 
-  const resultMode = input.request.executionShape?.resultMode;
-  if (!resultMode) {
-    throw new Error("missing_profile_or_execution_shape_result_mode");
+  if (input.request.envelope) {
+    const envelope = resolveHostedExecutionEnvelope(input.catalog, input.request.envelope);
+    if (!envelope) {
+      throw new Error(`unknown_envelope:${input.request.envelope}`);
+    }
+    const target = buildSyntheticHostedDelegationTarget({
+      name: input.request.skillName
+        ? `adhoc-${sanitizeFragment(input.request.skillName)}`
+        : `adhoc-${envelope.name}`,
+      description: input.request.skillName
+        ? `Ad hoc delegated worker for skill=${input.request.skillName} on envelope=${envelope.name}.`
+        : `Ad hoc delegated worker on envelope=${envelope.name}.`,
+      envelope,
+      skillName: input.request.skillName,
+      fallbackResultMode:
+        input.request.fallbackResultMode ?? input.request.executionShape?.resultMode,
+    });
+    assertDelegationShapeNarrowing(target, input.request.executionShape);
+    return {
+      target,
+      delegate: target.envelopeName ?? target.name,
+    };
   }
-  const defaultProfileName = getDefaultProfileNameForResultMode(resultMode);
-  const profile = input.profiles.get(defaultProfileName);
-  if (!profile) {
-    throw new Error(`unknown_default_profile:${defaultProfileName}`);
-  }
-  assertDelegationShapeNarrowing(profile, {
-    ...input.request.executionShape,
-    resultMode,
-  });
-  return {
-    profile,
-    profileName: profile.name,
-  };
+
+  throw new Error("missing_agent_spec_or_envelope");
 }
 
 export function resolveDelegationExecutionPlan(input: {
   runtime: BrewvaRuntime;
-  profile: HostedSubagentProfile;
-  profileName?: string;
+  target: HostedDelegationTarget;
+  delegate?: string;
   packet: DelegationPacket;
   executionShape?: SubagentExecutionShape;
 }): ResolvedDelegationExecutionPlan {
+  const delegatedSkillName = input.target.skillName;
+  const skill = delegatedSkillName ? input.runtime.skills.get(delegatedSkillName) : undefined;
+  const skillBoundaryCeiling =
+    skill && resolveSkillEffectLevel(skill.contract) === "read_only" ? "safe" : undefined;
   const boundary = resolveRequestedBoundary({
-    profile: input.profile,
+    target: input.target,
     executionShape: input.executionShape,
     packet: input.packet,
+    skillBoundaryCeiling,
   });
   const managedToolMode =
-    input.executionShape?.managedToolMode ?? input.profile.managedToolMode ?? "direct";
-  const prompt = input.profile.prompt ?? getCanonicalSubagentPrompt(input.profile.resultMode);
+    input.executionShape?.managedToolMode ?? input.target.managedToolMode ?? "direct";
+  const prompt =
+    input.target.executorPreamble ?? getCanonicalSubagentPrompt(input.target.resultMode);
   return {
-    profile: input.profile,
-    profileName: input.profileName ?? input.profile.name,
+    target: input.target,
+    delegate:
+      input.delegate ??
+      input.target.agentSpecName ??
+      input.target.envelopeName ??
+      input.target.name,
     packet: input.packet,
     boundary,
-    model: input.executionShape?.model ?? input.profile.model,
+    model: input.executionShape?.model ?? input.target.model,
     managedToolMode,
     builtinToolNames: resolveBuiltinToolNamesForRun(
       input.runtime,
-      input.profile,
+      { ...input.target, skillName: delegatedSkillName },
       boundary,
       input.packet,
     ),
     managedToolNames: resolveManagedToolNamesForRun(
       input.runtime,
-      input.profile,
+      { ...input.target, skillName: delegatedSkillName },
       boundary,
       input.packet,
     ),

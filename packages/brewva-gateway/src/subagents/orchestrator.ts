@@ -25,19 +25,15 @@ import { collectSessionPromptOutput } from "../session/collect-output.js";
 import type { SubscribablePromptSession } from "../session/contracts.js";
 import type { HostedSubagentBackgroundController } from "./background-controller.js";
 import { writeDetachedSubagentContextManifest } from "./background-protocol.js";
-import {
-  loadHostedSubagentProfiles,
-  mergeDelegationPacketWithProfileDefaults,
-  type HostedSubagentBuiltinToolName,
-  type HostedSubagentProfile,
-} from "./profiles.js";
+import { loadHostedDelegationCatalog } from "./catalog.js";
 import { buildDelegationPrompt } from "./prompt.js";
 import {
   aggregateChildCost,
   buildPatchArtifactRefs,
   buildWorkerResult,
+  formatSkillValidationError,
   resolveDelegationExecutionPlan,
-  resolveDelegationProfile,
+  resolveDelegationTarget,
   resolveRunSummary,
   sanitizeFragment,
 } from "./shared.js";
@@ -45,6 +41,11 @@ import {
   extractStructuredOutcomeData,
   summarizeStructuredOutcomeData,
 } from "./structured-outcome.js";
+import {
+  mergeDelegationPacketWithTargetDefaults,
+  type HostedDelegationBuiltinToolName,
+  type HostedDelegationTarget,
+} from "./targets.js";
 import {
   capturePatchSetFromIsolatedWorkspace,
   copyDelegationContextManifestToIsolatedWorkspace,
@@ -58,7 +59,7 @@ export interface HostedSubagentSessionOptions {
   cwd?: string;
   configPath?: string;
   config?: BrewvaConfig;
-  builtinToolNames?: readonly HostedSubagentBuiltinToolName[];
+  builtinToolNames?: readonly HostedDelegationBuiltinToolName[];
   managedToolNames?: readonly string[];
   managedToolMode?: ManagedToolMode;
   enableSubagents?: boolean;
@@ -86,17 +87,14 @@ function mergeTaskPacket(
   sharedPacket: DelegationPacket | undefined,
   taskPacket: DelegationTaskPacket,
 ): DelegationPacket {
+  const effectCeilingBoundary =
+    taskPacket.effectCeiling?.boundary ?? sharedPacket?.effectCeiling?.boundary;
   return {
     objective: taskPacket.objective,
     deliverable: taskPacket.deliverable ?? sharedPacket?.deliverable,
     constraints: [...(sharedPacket?.constraints ?? []), ...(taskPacket.constraints ?? [])],
     sharedNotes: [...(sharedPacket?.sharedNotes ?? []), ...(taskPacket.sharedNotes ?? [])],
     activeSkillName: taskPacket.activeSkillName ?? sharedPacket?.activeSkillName,
-    entrySkill: taskPacket.entrySkill ?? sharedPacket?.entrySkill,
-    requiredOutputs: [
-      ...(sharedPacket?.requiredOutputs ?? []),
-      ...(taskPacket.requiredOutputs ?? []),
-    ],
     executionHints: {
       preferredTools: [
         ...(sharedPacket?.executionHints?.preferredTools ?? []),
@@ -117,15 +115,16 @@ function mergeTaskPacket(
       ...taskPacket.contextBudget,
     },
     completionPredicate: taskPacket.completionPredicate ?? sharedPacket?.completionPredicate,
-    effectCeiling: {
-      boundary: taskPacket.effectCeiling?.boundary ?? sharedPacket?.effectCeiling?.boundary,
-    },
+    effectCeiling: effectCeilingBoundary ? { boundary: effectCeilingBoundary } : undefined,
   };
 }
 
 function buildFailureOutcome(input: {
   runId: string;
-  profile: string;
+  delegate: string;
+  agentSpec?: string;
+  envelope?: string;
+  skillName?: string;
   label?: string;
   workerSessionId?: string;
   artifactRefs?: SubagentOutcomeArtifactRef[];
@@ -135,7 +134,10 @@ function buildFailureOutcome(input: {
   return {
     ok: false,
     runId: input.runId,
-    profile: input.profile,
+    delegate: input.delegate,
+    agentSpec: input.agentSpec,
+    envelope: input.envelope,
+    skillName: input.skillName,
     label: input.label,
     status: "error",
     workerSessionId: input.workerSessionId,
@@ -199,6 +201,22 @@ function cloneDelegationRunRecord(record: DelegationRunRecord): DelegationRunRec
   };
 }
 
+function resolveDelegationRecordIdentity(input: {
+  target: HostedDelegationTarget;
+  delegatedSkillName?: string;
+}): Pick<DelegationRunRecord, "delegate" | "agentSpec" | "envelope" | "skillName"> {
+  return {
+    delegate: input.target.agentSpecName ?? input.target.envelopeName ?? input.target.name,
+    agentSpec: input.target.agentSpecName,
+    envelope: input.target.envelopeName,
+    skillName: input.delegatedSkillName ?? input.target.skillName,
+  };
+}
+
+function resolveDelegationLabel(target: HostedDelegationTarget): string {
+  return target.agentSpecName ?? target.envelopeName ?? target.skillName ?? target.name;
+}
+
 function summarizeOutcomeForDelivery(outcome: SubagentOutcome): string {
   if (!outcome.ok) {
     return `- ${outcome.label ?? outcome.runId}: ${outcome.status} (${outcome.error})`;
@@ -217,12 +235,12 @@ function summarizeOutcomeForDelivery(outcome: SubagentOutcome): string {
 }
 
 function buildDelegationDeliveryContent(input: {
-  profile: string;
+  delegate: string;
   mode: "single";
   outcome: SubagentOutcome;
 }): string {
   return [
-    `Delegation outcome for profile=${input.profile}`,
+    `Delegation outcome for delegate=${input.delegate}`,
     `Mode: ${input.mode}`,
     summarizeOutcomeForDelivery(input.outcome),
   ].join("\n");
@@ -282,13 +300,13 @@ function mergeDeliveryRecord(
 function deliverDelegationOutcome(input: {
   runtime: BrewvaRuntime;
   sessionId: string;
-  profile: string;
+  delegate: string;
   outcome: SubagentOutcome;
   delivery: NonNullable<SubagentRunRequest["delivery"]>;
 }): DelegationDeliveryResult {
   const createdAt = Date.now();
   const content = buildDelegationDeliveryContent({
-    profile: input.profile,
+    delegate: input.delegate,
     mode: "single",
     outcome: input.outcome,
   });
@@ -298,7 +316,7 @@ function deliverDelegationOutcome(input: {
       input.sessionId,
       content,
       undefined,
-      input.delivery.returnScopeId ?? `subagent:${input.profile}`,
+      input.delivery.returnScopeId ?? `subagent:${input.delegate}`,
     );
     supplementalAppended = true;
   }
@@ -350,13 +368,13 @@ interface LiveHostedDelegationRun {
 
 function createLaunchErrorResult(input: {
   mode: SubagentRunRequest["mode"];
-  profile: string;
+  delegate: string;
   error: string;
 }): SubagentRunResult & SubagentStartResult {
   return {
     ok: false,
     mode: input.mode,
-    profile: input.profile,
+    delegate: input.delegate,
     outcomes: [],
     runs: [],
     error: input.error,
@@ -395,8 +413,8 @@ export function createHostedSubagentAdapter(
   }): Promise<
     | {
         ok: true;
-        profile: HostedSubagentProfile;
-        profileName: string;
+        target: HostedDelegationTarget;
+        delegate: string;
         runs: Array<{
           label?: string;
           packet: DelegationPacket;
@@ -407,15 +425,18 @@ export function createHostedSubagentAdapter(
         error: string;
       }
   > {
-    const profiles = await loadHostedSubagentProfiles(options.runtime.workspaceRoot);
-    let resolvedProfile;
+    const catalog = await loadHostedDelegationCatalog(options.runtime.workspaceRoot);
+    let resolvedTarget;
     try {
-      resolvedProfile = resolveDelegationProfile({
-        profiles,
+      resolvedTarget = resolveDelegationTarget({
         request: {
-          profile: input.request.profile,
+          agentSpec: input.request.agentSpec,
+          envelope: input.request.envelope,
+          skillName: input.request.skillName,
+          fallbackResultMode: input.request.fallbackResultMode,
           executionShape: input.request.executionShape,
         },
+        catalog,
       });
     } catch (error) {
       return {
@@ -424,16 +445,25 @@ export function createHostedSubagentAdapter(
       };
     }
 
-    const sharedPacket = mergeDelegationPacketWithProfileDefaults(
-      resolvedProfile.profile,
+    const sharedPacket = mergeDelegationPacketWithTargetDefaults(
+      resolvedTarget.target,
       input.request.packet,
     );
+    if (
+      resolvedTarget.target.skillName &&
+      !options.runtime.skills.get(resolvedTarget.target.skillName)
+    ) {
+      return {
+        ok: false,
+        error: `unknown_skill:${resolvedTarget.target.skillName}`,
+      };
+    }
     try {
       if (sharedPacket) {
         resolveDelegationExecutionPlan({
           runtime: options.runtime,
-          profile: resolvedProfile.profile,
-          profileName: resolvedProfile.profileName,
+          target: resolvedTarget.target,
+          delegate: resolvedTarget.delegate,
           packet: sharedPacket,
           executionShape: input.request.executionShape,
         });
@@ -454,8 +484,8 @@ export function createHostedSubagentAdapter(
       }
       return {
         ok: true,
-        profile: resolvedProfile.profile,
-        profileName: resolvedProfile.profileName,
+        target: resolvedTarget.target,
+        delegate: resolvedTarget.delegate,
         runs: [{ packet: sharedPacket }],
       };
     }
@@ -470,8 +500,8 @@ export function createHostedSubagentAdapter(
 
     return {
       ok: true,
-      profile: resolvedProfile.profile,
-      profileName: resolvedProfile.profileName,
+      target: resolvedTarget.target,
+      delegate: resolvedTarget.delegate,
       runs: tasks.map((task) => ({
         label: task.label,
         packet: mergeTaskPacket(sharedPacket, task),
@@ -481,8 +511,8 @@ export function createHostedSubagentAdapter(
 
   function startDelegationRun(input: {
     parentSessionId: string;
-    profile: HostedSubagentProfile;
-    profileName?: string;
+    target: HostedDelegationTarget;
+    delegate?: string;
     packet: DelegationPacket;
     executionShape?: SubagentRunRequest["executionShape"];
     label?: string;
@@ -492,7 +522,7 @@ export function createHostedSubagentAdapter(
     const runId = randomUUID();
     const startedAt = Date.now();
     const parentSkill = options.runtime.skills.getActive(input.parentSessionId)?.name;
-    const profileName = input.profileName ?? input.profile.name;
+    const delegate = input.delegate ?? resolveDelegationLabel(input.target);
 
     let child: HostedSubagentSessionResult | undefined;
     let isolatedWorkspace: IsolatedWorkspaceHandle | undefined;
@@ -508,14 +538,14 @@ export function createHostedSubagentAdapter(
     const immediateFailure = (error: string): LiveHostedDelegationRun => {
       const failedRecord = upsertDelegationRunRecord(options.runtime, input.parentSessionId, {
         runId,
-        profile: input.profile.name,
+        ...resolveDelegationRecordIdentity({ target: input.target }),
         parentSessionId: input.parentSessionId,
         status: "failed",
         createdAt: startedAt,
         updatedAt: Date.now(),
         label: input.label,
         parentSkill,
-        kind: input.profile.resultMode,
+        kind: input.target.resultMode,
         summary: error,
         error,
         delivery: buildDeliveryRecordFromRequest(input.delivery, Date.now()),
@@ -525,9 +555,12 @@ export function createHostedSubagentAdapter(
         type: "subagent_failed",
         payload: {
           runId,
-          profile: input.profile.name,
+          delegate,
+          agentSpec: input.target.agentSpecName ?? null,
+          envelope: input.target.envelopeName ?? null,
+          skillName: input.target.skillName ?? null,
           label: input.label ?? null,
-          kind: input.profile.resultMode,
+          kind: input.target.resultMode,
           parentSkill: parentSkill ?? null,
           error,
           status: "failed",
@@ -541,7 +574,10 @@ export function createHostedSubagentAdapter(
         outcomePromise: Promise.resolve(
           buildFailureOutcome({
             runId,
-            profile: input.profile.name,
+            delegate,
+            agentSpec: input.target.agentSpecName,
+            envelope: input.target.envelopeName,
+            skillName: input.target.skillName,
             label: input.label,
             error,
             startedAt,
@@ -563,8 +599,8 @@ export function createHostedSubagentAdapter(
     try {
       executionPlan = resolveDelegationExecutionPlan({
         runtime: options.runtime,
-        profile: input.profile,
-        profileName,
+        target: input.target,
+        delegate,
         packet: input.packet,
         executionShape: input.executionShape,
       });
@@ -579,14 +615,14 @@ export function createHostedSubagentAdapter(
 
     const initialRecord = upsertDelegationRunRecord(options.runtime, input.parentSessionId, {
       runId,
-      profile: input.profile.name,
+      ...resolveDelegationRecordIdentity({ target: input.target }),
       parentSessionId: input.parentSessionId,
       status: "pending",
       createdAt: startedAt,
       updatedAt: startedAt,
       label: input.label,
       parentSkill,
-      kind: input.profile.resultMode,
+      kind: input.target.resultMode,
       boundary: executionPlan.boundary,
       delivery: buildDeliveryRecordFromRequest(input.delivery, startedAt),
     });
@@ -596,9 +632,12 @@ export function createHostedSubagentAdapter(
       type: "subagent_spawned",
       payload: {
         runId,
-        profile: input.profile.name,
+        delegate,
+        agentSpec: input.target.agentSpecName ?? null,
+        envelope: input.target.envelopeName ?? null,
+        skillName: input.target.skillName ?? null,
         label: input.label ?? null,
-        kind: input.profile.resultMode,
+        kind: input.target.resultMode,
         boundary: executionPlan.boundary,
         parentSkill: parentSkill ?? null,
         status: "pending",
@@ -643,7 +682,10 @@ export function createHostedSubagentAdapter(
       outcomePromise: Promise.resolve(
         buildFailureOutcome({
           runId,
-          profile: input.profile.name,
+          delegate,
+          agentSpec: input.target.agentSpecName,
+          envelope: input.target.envelopeName,
+          skillName: input.target.skillName,
           label: input.label,
           error: "uninitialized",
           startedAt,
@@ -664,8 +706,8 @@ export function createHostedSubagentAdapter(
         writeDetachedSubagentContextManifest(options.runtime.workspaceRoot, runId, {
           schema: "brewva.delegation-context-manifest.v1",
           runId,
-          profile: profileName,
-          resultMode: input.profile.resultMode,
+          delegate,
+          resultMode: input.target.resultMode,
           generatedAt: Date.now(),
           objective: input.packet.objective,
           contextRefs: input.packet.contextRefs ?? [],
@@ -680,7 +722,7 @@ export function createHostedSubagentAdapter(
         }
 
         child = await options.createChildSession({
-          agentId: `subagent-${sanitizeFragment(profileName) || "worker"}`,
+          agentId: `subagent-${sanitizeFragment(delegate) || "worker"}`,
           model: executionPlan.model,
           cwd: isolatedWorkspace?.root,
           config: structuredClone(options.runtime.config) as BrewvaConfig,
@@ -706,9 +748,12 @@ export function createHostedSubagentAdapter(
           type: "subagent_spawned",
           payload: {
             runId,
-            profile: input.profile.name,
+            delegate,
+            agentSpec: input.target.agentSpecName ?? null,
+            envelope: input.target.envelopeName ?? null,
+            skillName: input.target.skillName ?? null,
             label: input.label ?? null,
-            kind: input.profile.resultMode,
+            kind: input.target.resultMode,
             boundary: executionPlan.boundary,
             childSessionId,
             parentSkill: parentSkill ?? null,
@@ -719,22 +764,34 @@ export function createHostedSubagentAdapter(
           },
         });
 
-        const activationSkill = input.packet.entrySkill ?? input.profile.entrySkill;
-        if (activationSkill) {
-          const activation = child.runtime.skills.activate(childSessionId, activationSkill);
+        const delegatedSkill = input.target.skillName;
+        const skillDocument = delegatedSkill
+          ? options.runtime.skills.get(delegatedSkill)
+          : undefined;
+        if (delegatedSkill && !skillDocument) {
+          throw new Error(`unknown_skill:${delegatedSkill}`);
+        }
+        if (delegatedSkill) {
+          const activation = child.runtime.skills.activate(childSessionId, delegatedSkill);
           if (!activation.ok) {
             throw new Error(`subagent_entry_skill_failed:${activation.reason}`);
           }
         }
 
-        const prompt = buildDelegationPrompt(input.profile, input.packet, executionPlan.prompt);
+        const prompt = buildDelegationPrompt({
+          target: input.target,
+          packet: input.packet,
+          promptOverride: executionPlan.prompt,
+          skill: skillDocument,
+        });
         const output = await collectSessionPromptOutput(child.session, prompt);
         const childCostSummary = child.runtime.cost.getSummary(childSessionId);
         aggregateChildCost(options.runtime, input.parentSessionId, childCostSummary);
         childCostAggregated = true;
         const structuredOutcome = extractStructuredOutcomeData({
-          resultMode: input.profile.resultMode,
+          resultMode: input.target.resultMode,
           assistantText: output.assistantText,
+          skillName: delegatedSkill,
         });
         if (structuredOutcome.parseError) {
           options.runtime.events.record({
@@ -742,18 +799,48 @@ export function createHostedSubagentAdapter(
             type: "subagent_outcome_parse_failed",
             payload: {
               runId,
-              profile: profileName,
+              delegate,
               label: input.label ?? null,
-              kind: input.profile.resultMode,
+              kind: input.target.resultMode,
               childSessionId,
               error: structuredOutcome.parseError,
             },
           });
         }
+        const skillValidation =
+          delegatedSkill && childSessionId
+            ? child.runtime.skills.validateOutputs(
+                childSessionId,
+                structuredOutcome.skillOutputs ?? {},
+              )
+            : undefined;
+        if (delegatedSkill && skillValidation && !skillValidation.ok) {
+          options.runtime.events.record({
+            sessionId: input.parentSessionId,
+            type: "subagent_skill_output_validation_failed",
+            payload: {
+              runId,
+              delegate,
+              label: input.label ?? null,
+              kind: input.target.resultMode,
+              childSessionId,
+              skillName: delegatedSkill,
+              missing: skillValidation.missing,
+              invalid: skillValidation.invalid,
+            },
+          });
+          throw new Error(
+            formatSkillValidationError({
+              skillName: delegatedSkill,
+              missing: skillValidation.missing,
+              invalid: skillValidation.invalid,
+            }),
+          );
+        }
         const fallbackSummary =
           structuredOutcome.data && summarizeStructuredOutcomeData(structuredOutcome.data)
             ? summarizeStructuredOutcomeData(structuredOutcome.data)!
-            : `Delegated ${input.profile.resultMode} run completed without a final assistant summary.`;
+            : `Delegated ${input.target.resultMode} run completed without a final assistant summary.`;
         const summary = resolveRunSummary(
           structuredOutcome.narrativeText || output.assistantText,
           fallbackSummary,
@@ -779,14 +866,19 @@ export function createHostedSubagentAdapter(
         const outcome: SubagentOutcomeSuccess = {
           ok: true,
           runId,
-          profile: input.profile.name,
+          delegate,
+          agentSpec: input.target.agentSpecName,
+          envelope: input.target.envelopeName,
+          skillName: delegatedSkill,
           label: input.label,
-          kind: input.profile.resultMode,
+          kind: input.target.resultMode,
           status: "ok",
           workerSessionId: childSessionId,
           summary,
           assistantText: output.assistantText.trim(),
           data: structuredOutcome.data,
+          skillOutputs: structuredOutcome.skillOutputs,
+          skillValidation,
           metrics: {
             durationMs: Math.max(0, Date.now() - startedAt),
             inputTokens: childCostSummary.inputTokens,
@@ -817,7 +909,7 @@ export function createHostedSubagentAdapter(
             ? deliverDelegationOutcome({
                 runtime: options.runtime,
                 sessionId: input.parentSessionId,
-                profile: input.profile.name,
+                delegate,
                 outcome,
                 delivery: input.delivery,
               })
@@ -827,6 +919,10 @@ export function createHostedSubagentAdapter(
         const completedRecord = upsertDelegationRunRecord(options.runtime, input.parentSessionId, {
           ...(options.runtime.session.getDelegationRun(input.parentSessionId, runId) ??
             initialRecord),
+          ...resolveDelegationRecordIdentity({
+            target: input.target,
+            delegatedSkillName: delegatedSkill,
+          }),
           status: "completed",
           updatedAt: Date.now(),
           workerSessionId: childSessionId,
@@ -847,9 +943,12 @@ export function createHostedSubagentAdapter(
           type: "subagent_completed",
           payload: {
             runId,
-            profile: input.profile.name,
+            delegate,
+            agentSpec: input.target.agentSpecName ?? null,
+            envelope: input.target.envelopeName ?? null,
+            skillName: delegatedSkill ?? null,
             label: input.label ?? null,
-            kind: input.profile.resultMode,
+            kind: input.target.resultMode,
             childSessionId,
             boundary: executionPlan.boundary,
             parentSkill: parentSkill ?? null,
@@ -910,7 +1009,10 @@ export function createHostedSubagentAdapter(
             ? ({
                 ok: false,
                 runId,
-                profile: input.profile.name,
+                delegate,
+                agentSpec: input.target.agentSpecName,
+                envelope: input.target.envelopeName,
+                skillName: input.target.skillName,
                 label: input.label,
                 status: terminalStatus,
                 workerSessionId: childSessionId,
@@ -922,7 +1024,10 @@ export function createHostedSubagentAdapter(
               } satisfies SubagentOutcome)
             : buildFailureOutcome({
                 runId,
-                profile: input.profile.name,
+                delegate,
+                agentSpec: input.target.agentSpecName,
+                envelope: input.target.envelopeName,
+                skillName: input.target.skillName,
                 label: input.label,
                 workerSessionId: childSessionId,
                 artifactRefs,
@@ -934,7 +1039,7 @@ export function createHostedSubagentAdapter(
             ? deliverDelegationOutcome({
                 runtime: options.runtime,
                 sessionId: input.parentSessionId,
-                profile: input.profile.name,
+                delegate,
                 outcome,
                 delivery: input.delivery,
               })
@@ -944,6 +1049,10 @@ export function createHostedSubagentAdapter(
         const updatedRecord = upsertDelegationRunRecord(options.runtime, input.parentSessionId, {
           ...(options.runtime.session.getDelegationRun(input.parentSessionId, runId) ??
             initialRecord),
+          ...resolveDelegationRecordIdentity({
+            target: input.target,
+            delegatedSkillName: input.target.skillName,
+          }),
           status: terminalStatus,
           updatedAt: Date.now(),
           workerSessionId: childSessionId,
@@ -964,9 +1073,12 @@ export function createHostedSubagentAdapter(
           type: terminalStatus === "cancelled" ? "subagent_cancelled" : "subagent_failed",
           payload: {
             runId,
-            profile: input.profile.name,
+            delegate,
+            agentSpec: input.target.agentSpecName ?? null,
+            envelope: input.target.envelopeName ?? null,
+            skillName: input.target.skillName ?? null,
             label: input.label ?? null,
-            kind: input.profile.resultMode,
+            kind: input.target.resultMode,
             childSessionId: childSessionId ?? null,
             boundary: executionPlan.boundary ?? null,
             parentSkill: parentSkill ?? null,
@@ -1031,7 +1143,12 @@ export function createHostedSubagentAdapter(
       if (!launchPlan.ok) {
         return createLaunchErrorResult({
           mode: request.mode,
-          profile: request.profile ?? request.executionShape?.resultMode ?? "derived",
+          delegate:
+            request.agentSpec ??
+            request.envelope ??
+            request.skillName ??
+            request.executionShape?.resultMode ??
+            "derived",
           error: launchPlan.error,
         });
       }
@@ -1039,8 +1156,8 @@ export function createHostedSubagentAdapter(
       const liveRuns = launchPlan.runs.map((run) =>
         startDelegationRun({
           parentSessionId: fromSessionId,
-          profile: launchPlan.profile,
-          profileName: launchPlan.profileName,
+          target: launchPlan.target,
+          delegate: launchPlan.delegate,
           packet: run.packet,
           executionShape: request.executionShape,
           label: run.label,
@@ -1051,7 +1168,7 @@ export function createHostedSubagentAdapter(
       return {
         ok: outcomes.every((outcome) => outcome.ok),
         mode: request.mode,
-        profile: request.profile ?? launchPlan.profileName,
+        delegate: launchPlan.delegate,
         outcomes,
         error: outcomes.find((outcome) => !outcome.ok)?.error,
       };
@@ -1061,13 +1178,18 @@ export function createHostedSubagentAdapter(
       if (!launchPlan.ok) {
         const failure = createLaunchErrorResult({
           mode: request.mode,
-          profile: request.profile ?? request.executionShape?.resultMode ?? "derived",
+          delegate:
+            request.agentSpec ??
+            request.envelope ??
+            request.skillName ??
+            request.executionShape?.resultMode ??
+            "derived",
           error: launchPlan.error,
         });
         return {
           ok: failure.ok,
           mode: failure.mode,
-          profile: failure.profile,
+          delegate: failure.delegate,
           runs: failure.runs,
           error: failure.error,
         };
@@ -1078,8 +1200,8 @@ export function createHostedSubagentAdapter(
           launchPlan.runs.map((run) =>
             options.backgroundController!.startRun({
               parentSessionId: fromSessionId,
-              profile: launchPlan.profile,
-              profileName: launchPlan.profileName,
+              target: launchPlan.target,
+              delegate: launchPlan.delegate,
               packet: run.packet,
               executionShape: request.executionShape,
               label: run.label,
@@ -1091,7 +1213,7 @@ export function createHostedSubagentAdapter(
         return {
           ok: runs.every((run) => run.status !== "failed"),
           mode: request.mode,
-          profile: request.profile ?? launchPlan.profileName,
+          delegate: launchPlan.delegate,
           runs: runs.map((run) => cloneDelegationRunRecord(run)),
           error: runs.find((run) => run.status === "failed")?.error,
         };
@@ -1100,8 +1222,8 @@ export function createHostedSubagentAdapter(
       const liveRuns = launchPlan.runs.map((run) =>
         startDelegationRun({
           parentSessionId: fromSessionId,
-          profile: launchPlan.profile,
-          profileName: launchPlan.profileName,
+          target: launchPlan.target,
+          delegate: launchPlan.delegate,
           packet: run.packet,
           executionShape: request.executionShape,
           label: run.label,
@@ -1112,7 +1234,7 @@ export function createHostedSubagentAdapter(
       return {
         ok: liveRuns.every((run) => run.record.status !== "failed"),
         mode: request.mode,
-        profile: request.profile ?? launchPlan.profileName,
+        delegate: launchPlan.delegate,
         runs: liveRuns.map((run) => cloneDelegationRunRecord(run.record)),
         error: liveRuns.find((run) => run.record.status === "failed")?.record.error,
       };
@@ -1131,7 +1253,7 @@ export function createHostedSubagentAdapter(
         const backgroundLive = backgroundLiveStates?.get(record.runId);
         return {
           runId: record.runId,
-          profile: record.profile,
+          delegate: record.delegate,
           parentSessionId: record.parentSessionId,
           status: record.status,
           createdAt: record.createdAt,

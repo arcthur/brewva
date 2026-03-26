@@ -139,7 +139,7 @@ function markSurfacedDelegationOutcomes(
       type: "subagent_delivery_surfaced",
       payload: {
         runId: updated.runId,
-        profile: updated.profile,
+        delegate: updated.delegate,
         label: updated.label ?? null,
         kind: updated.kind ?? null,
         boundary: updated.boundary ?? null,

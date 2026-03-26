@@ -29,10 +29,10 @@ function createComposerRuntime(
   tapePressure: "low" | "medium" | "high",
   entriesSinceAnchor: number,
   options: {
-    pendingDelegations?: Array<{ runId: string; profile: string; status: "pending" | "running" }>;
+    pendingDelegations?: Array<{ runId: string; delegate: string; status: "pending" | "running" }>;
     pendingDelegationOutcomes?: Array<{
       runId: string;
-      profile: string;
+      delegate: string;
       status: "completed" | "failed" | "timeout" | "cancelled";
       summary?: string;
     }>;
@@ -54,7 +54,7 @@ function createComposerRuntime(
         const records = [
           ...(options.pendingDelegations ?? []).map((run, index) => ({
             runId: run.runId,
-            profile: run.profile,
+            delegate: run.delegate,
             parentSessionId: "compose-session",
             status: run.status,
             createdAt: index + 1,
@@ -62,7 +62,7 @@ function createComposerRuntime(
           })),
           ...(options.pendingDelegationOutcomes ?? []).map((run, index) => ({
             runId: run.runId,
-            profile: run.profile,
+            delegate: run.delegate,
             parentSessionId: "compose-session",
             status: run.status,
             createdAt: index + 11,
@@ -235,8 +235,8 @@ describe("context composer", () => {
     const result = composeContextBlocks({
       runtime: createComposerRuntime("medium", 4, {
         pendingDelegations: [
-          { runId: "run-a", profile: "explore", status: "running" },
-          { runId: "run-b", profile: "review", status: "pending" },
+          { runId: "run-a", delegate: "explore", status: "running" },
+          { runId: "run-b", delegate: "review", status: "pending" },
         ],
       }),
       sessionId: "compose-pending-delegations",
@@ -279,8 +279,8 @@ describe("context composer", () => {
     const result = composeContextBlocks({
       runtime: createComposerRuntime("high", 9, {
         pendingDelegations: [
-          { runId: "run-c", profile: "explore", status: "running" },
-          { runId: "run-d", profile: "patch-worker", status: "pending" },
+          { runId: "run-c", delegate: "explore", status: "running" },
+          { runId: "run-d", delegate: "patch-worker", status: "pending" },
         ],
       }),
       sessionId: "compose-compaction-pending-delegations",
@@ -326,7 +326,7 @@ describe("context composer", () => {
         pendingDelegationOutcomes: [
           {
             runId: "run-outcome-a",
-            profile: "review",
+            delegate: "review",
             status: "completed",
             summary: "Review completed with one medium finding.",
           },

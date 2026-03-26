@@ -8,12 +8,24 @@ export {
   type HostedSubagentSessionOptions,
 } from "./orchestrator.js";
 export {
-  BUILTIN_SUBAGENT_PROFILES,
-  loadHostedSubagentProfiles,
-  mergeDelegationPacketWithProfileDefaults,
-  type HostedSubagentBuiltinToolName,
-  type HostedSubagentProfile,
-} from "./profiles.js";
+  mergeDelegationPacketWithTargetDefaults,
+  type HostedDelegationBuiltinToolName,
+  type HostedDelegationTarget,
+} from "./targets.js";
+export {
+  BUILTIN_AGENT_SPECS,
+  BUILTIN_EXECUTION_ENVELOPES,
+  buildHostedDelegationTargetFromAgentSpec,
+  buildSyntheticHostedDelegationTarget,
+  deriveDefaultAgentSpecNameForResultMode,
+  deriveDefaultAgentSpecNameForSkillName,
+  deriveFallbackResultModeForSkillName,
+  loadHostedDelegationCatalog,
+  resolveHostedExecutionEnvelope,
+  type HostedAgentSpec,
+  type HostedDelegationCatalog,
+  type HostedExecutionEnvelope,
+} from "./catalog.js";
 export { buildDelegationPrompt } from "./prompt.js";
 export {
   createIsolatedWorkspace,

@@ -333,21 +333,32 @@ Current packet contract:
 - `constraints?`
 - `sharedNotes?`
 - `activeSkillName?`
-- `entrySkill?`
-- `requiredOutputs?`
 - `executionHints?`
 - `contextRefs?`
 - `contextBudget?`
 - `completionPredicate?`
 - `effectCeiling.boundary?` (`safe` | `effectful`)
+  - optional per-run boundary narrowing only
 
-Current execution-shape contract:
+Current delegation selector contract:
 
-- `profile?`
+- `agentSpec?`
+  - named delegated worker configuration
+- `envelope?`
+  - explicit runtime posture override or ad hoc runtime posture
+- `skillName?`
+  - explicit delegated semantic contract
+- `fallbackResultMode?`
+  - transport-level fallback schema for ad hoc runs without `skillName`
 - `executionShape.resultMode?` (`exploration` | `review` | `verification` | `patch`)
 - `executionShape.boundary?` (`safe` | `effectful`)
+  - optional preset narrowing only
 - `executionShape.model?`
 - `executionShape.managedToolMode?` (`direct` | `extension`)
+
+When `skillName` is present, the delegated output contract is owned by the
+skill document and validated through `skillOutputs`. There is no separate
+packet-level required-output list.
 
 Current delivery contract:
 
@@ -365,18 +376,26 @@ Current mode contract:
 
 Semantics:
 
-- built-in profiles remain stable presets: `explore`, `plan`, `review`,
+- built-in agent specs remain stable presets: `explore`, `plan`, `review`,
   `general`, `verification`, and `patch-worker`
-- profiles are compatibility presets, not the primary long-term delegation
-  contract; `executionShape` is the thinner runtime-facing contract
-- when both `profile` and `executionShape` are supplied, execution shape may
-  only narrow the resolved preset
-- when `profile` is omitted, the gateway resolves a default preset from
-  `executionShape.resultMode`
+- built-in execution envelopes are:
+  `readonly-scout`, `readonly-planner`, `readonly-reviewer`,
+  `readonly-general`, `verification-runner`, and `patch-worker`
+- `agentSpec` supplies default `skillName`, envelope, and executor posture
+- `envelope` may be used alone for ad hoc objective-only delegation, but such
+  runs should also supply `fallbackResultMode` unless a named `agentSpec`
+  already implies it
+- when both `agentSpec` and `envelope` are supplied, the request envelope may
+  only narrow the agent spec envelope; widening is rejected
+- when no explicit worker is supplied, the gateway resolves a default agent
+  spec from `skillName`, `fallbackResultMode`, or `executionShape.resultMode`
 - `safe` is the default execution boundary
 - `effectful` is reserved for isolated write-capable child runners
 - `contextRefs` are typed refs and may include `sourceSessionId` and advisory
   `hash`
+- when `skillName` is present, the child prompt includes the delegated skill
+  body and output contracts directly, and successful outcomes may include
+  `skillOutputs` plus runner-produced `skillValidation`
 - successful child outcomes may include typed `data` alongside `summary`,
   `assistantText`, `evidenceRefs`, and `artifactRefs`
 - typed outcome extraction currently uses one sentinel-wrapped JSON block; if
@@ -384,6 +403,9 @@ Semantics:
 - `supplemental` appends same-turn return context to the parent session
 - late detached outcomes surface through replay-visible pending delegation
   outcome state instead of a proposal-backed return mode
+- workspace-defined delegated workers live under `.brewva/subagents/*.json`
+  and may declare `kind: "envelope"` or `kind: "agentSpec"` with `extends`
+  support; overrides remain narrowing-only
 
 `task_record_acceptance` is an operator-visible closure write. It only succeeds
 when the active `TaskSpec` explicitly requires acceptance, and it does not
@@ -395,6 +417,9 @@ These tools inspect or stop existing delegated runs.
 
 `subagent_status` returns run state plus:
 
+- `agentSpec?`
+- `envelope?`
+- `skillName?`
 - `live?`
 - `cancelable?`
 - `delivery.handoffState?`

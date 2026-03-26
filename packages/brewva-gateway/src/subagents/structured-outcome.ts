@@ -28,6 +28,10 @@ function readStringArray(value: unknown): string[] | undefined {
   return items.length > 0 ? items : undefined;
 }
 
+function readObject(value: unknown): Record<string, unknown> | undefined {
+  return isRecord(value) ? { ...value } : undefined;
+}
+
 function readFinding(value: unknown): DelegationOutcomeFinding | undefined {
   if (typeof value === "string") {
     const summary = readString(value);
@@ -191,10 +195,12 @@ export function summarizeStructuredOutcomeData(data: SubagentOutcomeData): strin
 export function extractStructuredOutcomeData(input: {
   resultMode: SubagentResultMode;
   assistantText: string;
+  skillName?: string;
 }): {
   data?: SubagentOutcomeData;
   narrativeText: string;
   parseError?: string;
+  skillOutputs?: Record<string, unknown>;
 } {
   const normalized = normalizeJsonBlock(input.assistantText);
   if (!normalized.rawJson) {
@@ -212,15 +218,26 @@ export function extractStructuredOutcomeData(input: {
       parseError: error instanceof Error ? error.message : String(error),
     };
   }
+  const parsedSkillName = isRecord(parsed) ? readString(parsed.skillName) : undefined;
+  if (input.skillName && parsedSkillName && parsedSkillName !== input.skillName) {
+    return {
+      narrativeText: normalized.narrativeText,
+      parseError: `unexpected_skill_name:${parsedSkillName}`,
+      skillOutputs: isRecord(parsed) ? readObject(parsed.skillOutputs) : undefined,
+    };
+  }
   const data = parseOutcomeData(input.resultMode, parsed);
+  const skillOutputs = isRecord(parsed) ? readObject(parsed.skillOutputs) : undefined;
   if (!data) {
     return {
       narrativeText: normalized.narrativeText,
       parseError: "invalid_structured_outcome_payload",
+      skillOutputs,
     };
   }
   return {
     data,
     narrativeText: normalized.narrativeText,
+    skillOutputs,
   };
 }

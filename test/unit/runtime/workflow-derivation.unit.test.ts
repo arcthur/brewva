@@ -336,7 +336,8 @@ describe("workflow derivation", () => {
           timestamp: 120,
           payload: {
             runId: "patch-worker-1",
-            profile: "patch-worker",
+            delegate: "patch-worker",
+            skillName: "review",
             kind: "patch",
             summary: "Patch worker completed and awaits parent merge/apply.",
           },
@@ -347,6 +348,9 @@ describe("workflow derivation", () => {
     expect(status.posture.implementation).toBe("pending");
     expect(status.posture.ship).toBe("blocked");
     expect(status.posture.blockers).toContain("Worker patch result is pending parent merge/apply.");
+    expect(
+      status.artifacts.find((artifact) => artifact.kind === "worker_patch")?.sourceSkillNames,
+    ).toEqual(["review"]);
   });
 
   test("does not mark ship posture freshness stale from unrelated blocker wording", () => {

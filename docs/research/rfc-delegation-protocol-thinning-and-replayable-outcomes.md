@@ -2,9 +2,9 @@
 
 ## Document Metadata
 
-- Status: `promoted`
+- Status: `archived`
 - Owner: runtime maintainers
-- Last reviewed: `2026-03-25`
+- Last reviewed: `2026-03-26`
 - Promotion target:
   - `docs/architecture/system-architecture.md`
   - `docs/architecture/cognitive-product-architecture.md`
@@ -14,6 +14,8 @@
   - `docs/journeys/background-and-parallelism.md`
 
 ## Direct Conclusion
+
+This RFC is now a historical transition record.
 
 Brewva should keep its constitutional split:
 
@@ -44,7 +46,16 @@ The execution-shape contract, typed refs and outcomes, replayable late-result
 handoff, and completion predicates described here have now been implemented and
 promoted into stable architecture, reference, and journey docs.
 
-This research note is kept as a promoted status pointer and rationale record.
+Historical note:
+
+This file captures an intermediate phase between the original `subagent
+profile` model and the final skill-first delegation model.
+Some transition details discussed here, including legacy profile-based request
+shapes and packet-level `entrySkill`, were not kept in the final public
+contract.
+
+Read current delegation semantics from stable docs and the promoted
+skill-first delegation RFC.
 
 ## Problem Statement And Scope
 
@@ -846,7 +857,7 @@ This RFC is ready for promotion when:
 - `packages/brewva-tools/src/subagent-run.ts`
 - `packages/brewva-tools/src/workflow-status.ts`
 - `packages/brewva-tools/src/subagent-control.ts`
-- `packages/brewva-gateway/src/subagents/profiles.ts`
+- `packages/brewva-gateway/src/subagents/targets.ts`
 - `packages/brewva-gateway/src/subagents/shared.ts`
 - `packages/brewva-gateway/src/subagents/prompt.ts`
 - `packages/brewva-gateway/src/subagents/orchestrator.ts`

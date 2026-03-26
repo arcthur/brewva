@@ -1,6 +1,12 @@
+import {
+  getSkillOutputContracts,
+  listSkillOutputs,
+  type SkillDocument,
+  type SkillOutputContract,
+} from "@brewva/brewva-runtime";
 import type { DelegationPacket, SubagentContextRef } from "@brewva/brewva-tools";
-import type { HostedSubagentProfile } from "./profiles.js";
 import { buildStructuredOutcomeContract, getCanonicalSubagentPrompt } from "./protocol.js";
+import type { HostedDelegationTarget } from "./targets.js";
 
 const APPROX_CHARS_PER_TOKEN = 4;
 
@@ -39,69 +45,130 @@ function renderContextRefs(
   return lines;
 }
 
-export function buildDelegationPrompt(
-  profile: HostedSubagentProfile,
-  packet: DelegationPacket,
-  promptOverride?: string,
+function renderSkillOutputContract(
+  name: string,
+  contract: SkillOutputContract | undefined,
 ): string {
-  const prompt = promptOverride ?? profile.prompt ?? getCanonicalSubagentPrompt(profile.resultMode);
+  if (!contract) {
+    return `- ${name}: provide a non-empty value.`;
+  }
+  if (contract.kind === "text") {
+    const parts = [
+      typeof contract.minWords === "number" ? `minWords=${contract.minWords}` : null,
+      typeof contract.minLength === "number" ? `minLength=${contract.minLength}` : null,
+    ].filter(Boolean);
+    return `- ${name}: text${parts.length > 0 ? ` (${parts.join(", ")})` : ""}.`;
+  }
+  if (contract.kind === "json") {
+    const parts = [
+      typeof contract.minItems === "number" ? `minItems=${contract.minItems}` : null,
+      typeof contract.minKeys === "number" ? `minKeys=${contract.minKeys}` : null,
+    ].filter(Boolean);
+    return `- ${name}: json${parts.length > 0 ? ` (${parts.join(", ")})` : ""}.`;
+  }
+  return `- ${name}: enum (${contract.values.join(", ")}).`;
+}
+
+function renderSkillContractSection(skill: SkillDocument): string[] {
+  const outputNames = listSkillOutputs(skill.contract);
+  const outputContracts = getSkillOutputContracts(skill.contract);
+  const lines = [
+    "",
+    "## Delegated Skill",
+    `Skill: ${skill.name}`,
+    `Description: ${skill.description}`,
+  ];
+  if (outputNames.length > 0) {
+    lines.push(
+      "",
+      "### Required Skill Outputs",
+      ...outputNames.map((name) => renderSkillOutputContract(name, outputContracts[name])),
+    );
+  }
+  lines.push("", "### Skill Body", skill.markdown.trim());
+  return lines;
+}
+
+export function buildDelegationPrompt(input: {
+  target: HostedDelegationTarget;
+  delegate?: string;
+  packet: DelegationPacket;
+  promptOverride?: string;
+  skill?: SkillDocument;
+}): string {
+  const prompt =
+    input.promptOverride ??
+    input.target.executorPreamble ??
+    getCanonicalSubagentPrompt(input.target.resultMode);
   const lines = [
     "# Delegated Subagent Run",
     "",
-    `Profile: ${profile.name}`,
-    `Description: ${profile.description}`,
+    `Delegate: ${input.delegate ?? input.target.agentSpecName ?? input.target.envelopeName ?? input.target.name}`,
+    `Description: ${input.target.description}`,
+  ];
+
+  if (input.target.agentSpecName) {
+    lines.push(`Agent spec: ${input.target.agentSpecName}`);
+  }
+  if (input.target.envelopeName) {
+    lines.push(`Envelope: ${input.target.envelopeName}`);
+  }
+
+  lines.push(
     "",
-    "## Operating Instructions",
+    "## Executor Preamble",
     prompt,
     "",
     "## Task",
-    `Objective: ${packet.objective}`,
-  ];
+    `Objective: ${input.packet.objective}`,
+  );
 
-  if (packet.deliverable) {
-    lines.push(`Deliverable: ${packet.deliverable}`);
+  if (input.packet.deliverable) {
+    lines.push(`Deliverable: ${input.packet.deliverable}`);
   }
-  if (packet.activeSkillName) {
-    lines.push(`Parent skill: ${packet.activeSkillName}`);
+  if (input.packet.activeSkillName) {
+    lines.push(`Parent skill: ${input.packet.activeSkillName}`);
   }
-  if (packet.entrySkill) {
-    lines.push(`Entry skill: ${packet.entrySkill}`);
+  if (input.target.skillName) {
+    lines.push(`Delegated skill: ${input.target.skillName}`);
   }
-  if (packet.effectCeiling?.boundary) {
-    lines.push(`Effect ceiling: ${packet.effectCeiling.boundary}`);
+  if (input.packet.effectCeiling?.boundary) {
+    lines.push(`Effect ceiling: ${input.packet.effectCeiling.boundary}`);
   }
-  if (packet.contextBudget?.maxTurnTokens) {
-    lines.push(`Turn token ceiling: ${packet.contextBudget.maxTurnTokens}`);
+  if (input.packet.contextBudget?.maxTurnTokens) {
+    lines.push(`Turn token ceiling: ${input.packet.contextBudget.maxTurnTokens}`);
   }
-  if (packet.requiredOutputs && packet.requiredOutputs.length > 0) {
-    lines.push(`Required outputs: ${packet.requiredOutputs.join(", ")}`);
+
+  if (input.skill) {
+    lines.push(...renderSkillContractSection(input.skill));
   }
-  if (packet.constraints && packet.constraints.length > 0) {
-    lines.push("", "## Constraints", ...packet.constraints.map((item) => `- ${item}`));
+
+  if (input.packet.constraints && input.packet.constraints.length > 0) {
+    lines.push("", "## Constraints", ...input.packet.constraints.map((item) => `- ${item}`));
   }
-  if (packet.sharedNotes && packet.sharedNotes.length > 0) {
-    lines.push("", "## Shared Notes", ...packet.sharedNotes.map((item) => `- ${item}`));
+  if (input.packet.sharedNotes && input.packet.sharedNotes.length > 0) {
+    lines.push("", "## Shared Notes", ...input.packet.sharedNotes.map((item) => `- ${item}`));
   }
   if (
-    packet.executionHints?.preferredTools?.length ||
-    packet.executionHints?.fallbackTools?.length ||
-    packet.executionHints?.preferredSkills?.length
+    input.packet.executionHints?.preferredTools?.length ||
+    input.packet.executionHints?.fallbackTools?.length ||
+    input.packet.executionHints?.preferredSkills?.length
   ) {
     lines.push("", "## Execution Hints");
-    if (packet.executionHints.preferredTools?.length) {
-      lines.push(`Preferred tools: ${packet.executionHints.preferredTools.join(", ")}`);
+    if (input.packet.executionHints.preferredTools?.length) {
+      lines.push(`Preferred tools: ${input.packet.executionHints.preferredTools.join(", ")}`);
     }
-    if (packet.executionHints.fallbackTools?.length) {
-      lines.push(`Fallback tools: ${packet.executionHints.fallbackTools.join(", ")}`);
+    if (input.packet.executionHints.fallbackTools?.length) {
+      lines.push(`Fallback tools: ${input.packet.executionHints.fallbackTools.join(", ")}`);
     }
-    if (packet.executionHints.preferredSkills?.length) {
-      lines.push(`Preferred skills: ${packet.executionHints.preferredSkills.join(", ")}`);
+    if (input.packet.executionHints.preferredSkills?.length) {
+      lines.push(`Preferred skills: ${input.packet.executionHints.preferredSkills.join(", ")}`);
     }
   }
 
   const contextRefLines = renderContextRefs(
-    packet.contextRefs,
-    packet.contextBudget?.maxInjectionTokens,
+    input.packet.contextRefs,
+    input.packet.contextBudget?.maxInjectionTokens,
   );
   if (contextRefLines.length > 0) {
     lines.push("", "## Context References", ...contextRefLines);
@@ -117,7 +184,11 @@ export function buildDelegationPrompt(
   lines.push(
     "",
     "## Structured Outcome Contract",
-    ...buildStructuredOutcomeContract(profile.resultMode),
+    ...buildStructuredOutcomeContract({
+      resultMode: input.target.resultMode,
+      skillName: input.skill?.name ?? input.target.skillName,
+      skillOutputNames: input.skill ? listSkillOutputs(input.skill.contract) : undefined,
+    }),
   );
 
   return lines.join("\n");

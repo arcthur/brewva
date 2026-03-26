@@ -208,7 +208,7 @@ function listPendingDelegationOutcomes(
 
 function formatPendingDelegationRuns(pendingDelegations: readonly DelegationRunRecord[]): string {
   return pendingDelegations
-    .map((run) => `${run.profile}/${run.label ?? run.runId}:${run.status}`)
+    .map((run) => `${run.delegate}/${run.label ?? run.runId}:${run.status}`)
     .join(", ");
 }
 
@@ -266,7 +266,7 @@ function buildOperationalDiagnosticsBlock(input: {
   if (input.pendingDelegationOutcomes.length > 0) {
     lines.push(
       `pending_delegation_outcome_runs: ${input.pendingDelegationOutcomes
-        .map((run) => `${run.profile}/${run.label ?? run.runId}:${run.status}`)
+        .map((run) => `${run.delegate}/${run.label ?? run.runId}:${run.status}`)
         .join(", ")}`,
     );
   }
@@ -294,7 +294,7 @@ function buildCompletedDelegationOutcomesBlock(input: {
   lines.push(
     ...input.pendingDelegationOutcomes.map(
       (run) =>
-        `- ${run.profile}/${run.label ?? run.runId}: ${run.status}${run.summary ? ` :: ${run.summary}` : ""}`,
+        `- ${run.delegate}/${run.label ?? run.runId}: ${run.status}${run.summary ? ` :: ${run.summary}` : ""}`,
     ),
   );
   return lines.join("\n");

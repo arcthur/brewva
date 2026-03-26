@@ -18,16 +18,12 @@ import {
   writeDetachedSubagentLiveState,
   writeDetachedSubagentOutcome,
 } from "./background-protocol.js";
-import {
-  loadHostedSubagentProfiles,
-  mergeDelegationPacketWithProfileDefaults,
-  type HostedSubagentProfile,
-} from "./profiles.js";
 import { buildDelegationPrompt } from "./prompt.js";
 import {
   aggregateChildCost,
   buildPatchArtifactRefs,
   buildWorkerResult,
+  formatSkillValidationError,
   resolveDelegationExecutionPlan,
   resolveRunSummary,
   sanitizeFragment,
@@ -36,6 +32,7 @@ import {
   extractStructuredOutcomeData,
   summarizeStructuredOutcomeData,
 } from "./structured-outcome.js";
+import { mergeDelegationPacketWithTargetDefaults, type HostedDelegationTarget } from "./targets.js";
 import {
   capturePatchSetFromIsolatedWorkspace,
   copyDelegationContextManifestToIsolatedWorkspace,
@@ -60,7 +57,10 @@ function buildOutcomeArtifactRef(workspaceRoot: string, runId: string): Subagent
 function buildLifecyclePayload(record: DelegationRunRecord): Record<string, unknown> {
   return {
     runId: record.runId,
-    profile: record.profile,
+    delegate: record.delegate,
+    agentSpec: record.agentSpec ?? null,
+    envelope: record.envelope ?? null,
+    skillName: record.skillName ?? null,
     label: record.label ?? null,
     kind: record.kind ?? null,
     boundary: record.boundary ?? null,
@@ -85,7 +85,10 @@ function buildLifecyclePayload(record: DelegationRunRecord): Record<string, unkn
 
 function buildFailureOutcome(input: {
   runId: string;
-  profile: string;
+  delegate: string;
+  agentSpec?: string;
+  envelope?: string;
+  skillName?: string;
   label?: string;
   workerSessionId?: string;
   artifactRefs?: SubagentOutcomeArtifactRef[];
@@ -96,7 +99,10 @@ function buildFailureOutcome(input: {
   return {
     ok: false,
     runId: input.runId,
-    profile: input.profile,
+    delegate: input.delegate,
+    agentSpec: input.agentSpec,
+    envelope: input.envelope,
+    skillName: input.skillName,
     label: input.label,
     status: input.status ?? "error",
     workerSessionId: input.workerSessionId,
@@ -111,7 +117,7 @@ function buildFailureOutcome(input: {
 function applyDurableDelivery(input: {
   runtime: BrewvaRuntime;
   sessionId: string;
-  profile: string;
+  delegate: string;
   outcome: SubagentOutcome;
   delivery: NonNullable<SubagentRunRequest["delivery"]> | undefined;
 }): DelegationRunRecord["delivery"] | undefined {
@@ -132,10 +138,13 @@ async function loadSpec(path: string): Promise<DetachedSubagentRunSpec> {
   const raw = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
   const schema =
     typeof raw.schema === "string" ? raw.schema : "missing_detached_subagent_spec_schema";
-  if (schema !== "brewva.subagent-run-spec.v3") {
+  if (schema !== "brewva.subagent-run-spec.v5") {
     throw new Error(`unsupported_detached_subagent_spec_schema:${schema}`);
   }
-  return raw as unknown as DetachedSubagentRunSpec;
+  return {
+    ...raw,
+    schema: "brewva.subagent-run-spec.v5",
+  } as unknown as DetachedSubagentRunSpec;
 }
 
 function normalizeRoutingScopes(
@@ -162,13 +171,12 @@ async function main(): Promise<void> {
     routingScopes: normalizeRoutingScopes(spec.routingScopes),
   });
   const existing = parentRuntime.session.getDelegationRun(spec.parentSessionId, spec.runId);
-  const profiles = await loadHostedSubagentProfiles(spec.workspaceRoot);
-  const profile = profiles.get(spec.profileName);
-  if (!profile) {
+  const target = spec.target;
+  if (!target) {
     const failed = {
       ...(existing ?? {
         runId: spec.runId,
-        profile: spec.profileName,
+        delegate: spec.delegate,
         parentSessionId: spec.parentSessionId,
         status: "failed" as const,
         createdAt: spec.createdAt,
@@ -176,8 +184,8 @@ async function main(): Promise<void> {
       }),
       status: "failed" as const,
       updatedAt: Date.now(),
-      error: `unknown_profile:${spec.profileName}`,
-      summary: `unknown_profile:${spec.profileName}`,
+      error: `missing_delegate_target:${spec.delegate}`,
+      summary: `missing_delegate_target:${spec.delegate}`,
     };
     parentRuntime.session.recordDelegationRun(spec.parentSessionId, failed);
     parentRuntime.events.record({
@@ -190,12 +198,13 @@ async function main(): Promise<void> {
     return;
   }
 
-  const packet = mergeDelegationPacketWithProfileDefaults(profile, spec.packet);
+  const delegationTarget = target;
+  const packet = mergeDelegationPacketWithTargetDefaults(delegationTarget, spec.packet);
   if (!packet) {
     const failed = {
       ...(existing ?? {
         runId: spec.runId,
-        profile: spec.profileName,
+        delegate: spec.delegate,
         parentSessionId: spec.parentSessionId,
         status: "failed" as const,
         createdAt: spec.createdAt,
@@ -223,11 +232,11 @@ async function main(): Promise<void> {
   let cancellationReason: string | undefined;
   let timeoutTriggered = false;
   let childSessionId: string | undefined;
-  let profileRecord: HostedSubagentProfile = profile;
+  let targetRecord: HostedDelegationTarget = delegationTarget;
   const executionPlan = resolveDelegationExecutionPlan({
     runtime: parentRuntime,
-    profile: profileRecord,
-    profileName: spec.profileName,
+    target: targetRecord,
+    delegate: spec.delegate,
     packet,
     executionShape: spec.executionShape,
   });
@@ -258,7 +267,7 @@ async function main(): Promise<void> {
       config: spec.config,
       configPath: spec.configPath,
       model: executionPlan.model,
-      agentId: `subagent-${sanitizeFragment(spec.profileName) || "worker"}`,
+      agentId: `subagent-${sanitizeFragment(spec.delegate) || "worker"}`,
       managedToolMode: executionPlan.managedToolMode,
       enableSubagents: false,
       managedToolNames: executionPlan.managedToolNames,
@@ -270,19 +279,22 @@ async function main(): Promise<void> {
     const runningRecord: DelegationRunRecord = {
       ...(parentRuntime.session.getDelegationRun(spec.parentSessionId, spec.runId) ?? {
         runId: spec.runId,
-        profile: spec.profileName,
+        delegate: spec.delegate,
+        agentSpec: targetRecord.agentSpecName,
+        envelope: targetRecord.envelopeName,
+        skillName: targetRecord.skillName,
         parentSessionId: spec.parentSessionId,
         createdAt: spec.createdAt,
         label: spec.label,
         parentSkill: parentRuntime.skills.getActive(spec.parentSessionId)?.name,
-        kind: profileRecord.resultMode,
+        kind: targetRecord.resultMode,
         boundary: executionPlan.boundary,
         delivery: existing?.delivery,
       }),
       status: "running",
       updatedAt: Date.now(),
       workerSessionId: childSessionId,
-      kind: profileRecord.resultMode,
+      kind: targetRecord.resultMode,
       boundary: executionPlan.boundary,
     };
     parentRuntime.session.recordDelegationRun(spec.parentSessionId, runningRecord);
@@ -295,7 +307,7 @@ async function main(): Promise<void> {
       schema: "brewva.subagent-run-live.v1",
       runId: spec.runId,
       parentSessionId: spec.parentSessionId,
-      profile: spec.profileName,
+      delegate: spec.delegate,
       pid: process.pid,
       createdAt: spec.createdAt,
       updatedAt: Date.now(),
@@ -315,21 +327,32 @@ async function main(): Promise<void> {
       timeout.unref?.();
     }
 
-    const activationSkill = packet.entrySkill ?? profileRecord.entrySkill;
-    if (activationSkill) {
-      const activation = childSession.runtime.skills.activate(childSessionId, activationSkill);
+    const delegatedSkill = targetRecord.skillName;
+    const skillDocument = delegatedSkill ? parentRuntime.skills.get(delegatedSkill) : undefined;
+    if (delegatedSkill && !skillDocument) {
+      throw new Error(`unknown_skill:${delegatedSkill}`);
+    }
+    if (delegatedSkill) {
+      const activation = childSession.runtime.skills.activate(childSessionId, delegatedSkill);
       if (!activation.ok) {
         throw new Error(`subagent_entry_skill_failed:${activation.reason}`);
       }
     }
 
-    const prompt = buildDelegationPrompt(profileRecord, packet, executionPlan.prompt);
+    const prompt = buildDelegationPrompt({
+      target: targetRecord,
+      delegate: spec.delegate,
+      packet,
+      promptOverride: executionPlan.prompt,
+      skill: skillDocument,
+    });
     const output = await collectSessionPromptOutput(childSession.session, prompt);
     const childCostSummary = childSession.runtime.cost.getSummary(childSessionId);
     aggregateChildCost(parentRuntime, spec.parentSessionId, childCostSummary);
     const structuredOutcome = extractStructuredOutcomeData({
-      resultMode: profileRecord.resultMode,
+      resultMode: targetRecord.resultMode,
       assistantText: output.assistantText,
+      skillName: delegatedSkill,
     });
     if (structuredOutcome.parseError) {
       parentRuntime.events.record({
@@ -337,13 +360,43 @@ async function main(): Promise<void> {
         type: "subagent_outcome_parse_failed",
         payload: {
           runId: spec.runId,
-          profile: spec.profileName,
+          delegate: spec.delegate,
           label: spec.label ?? null,
-          kind: profileRecord.resultMode,
+          kind: targetRecord.resultMode,
           childSessionId,
           error: structuredOutcome.parseError,
         },
       });
+    }
+    const skillValidation =
+      delegatedSkill && childSessionId
+        ? childSession.runtime.skills.validateOutputs(
+            childSessionId,
+            structuredOutcome.skillOutputs ?? {},
+          )
+        : undefined;
+    if (delegatedSkill && skillValidation && !skillValidation.ok) {
+      parentRuntime.events.record({
+        sessionId: spec.parentSessionId,
+        type: "subagent_skill_output_validation_failed",
+        payload: {
+          runId: spec.runId,
+          delegate: spec.delegate,
+          label: spec.label ?? null,
+          kind: targetRecord.resultMode,
+          childSessionId,
+          skillName: delegatedSkill,
+          missing: skillValidation.missing,
+          invalid: skillValidation.invalid,
+        },
+      });
+      throw new Error(
+        formatSkillValidationError({
+          skillName: delegatedSkill,
+          missing: skillValidation.missing,
+          invalid: skillValidation.invalid,
+        }),
+      );
     }
     const structuredSummary = structuredOutcome.data
       ? summarizeStructuredOutcomeData(structuredOutcome.data)
@@ -352,7 +405,7 @@ async function main(): Promise<void> {
     const summary = resolveRunSummary(
       structuredOutcome.narrativeText || output.assistantText,
       structuredSummary ??
-        `Delegated ${profileRecord.resultMode} run completed without a final assistant summary.`,
+        `Delegated ${targetRecord.resultMode} run completed without a final assistant summary.`,
     );
     const patches = await capturePatchSetFromIsolatedWorkspace({
       sourceRoot: spec.workspaceRoot,
@@ -375,14 +428,19 @@ async function main(): Promise<void> {
     const outcome: SubagentOutcome = {
       ok: true,
       runId: spec.runId,
-      profile: spec.profileName,
+      delegate: spec.delegate,
+      agentSpec: targetRecord.agentSpecName,
+      envelope: targetRecord.envelopeName,
+      skillName: delegatedSkill,
       label: spec.label,
-      kind: profileRecord.resultMode,
+      kind: targetRecord.resultMode,
       status: "ok",
       workerSessionId: childSessionId,
       summary,
       assistantText: output.assistantText.trim(),
       data: structuredOutcome.data,
+      skillOutputs: structuredOutcome.skillOutputs,
+      skillValidation,
       metrics: {
         durationMs: Math.max(0, Date.now() - startedAt),
         inputTokens: childCostSummary.inputTokens,
@@ -410,14 +468,17 @@ async function main(): Promise<void> {
     const delivery = applyDurableDelivery({
       runtime: parentRuntime,
       sessionId: spec.parentSessionId,
-      profile: spec.profileName,
+      delegate: spec.delegate,
       outcome,
       delivery: spec.delivery,
     });
     const completedRecord: DelegationRunRecord = {
       ...(parentRuntime.session.getDelegationRun(spec.parentSessionId, spec.runId) ?? {
         runId: spec.runId,
-        profile: spec.profileName,
+        delegate: spec.delegate,
+        agentSpec: targetRecord.agentSpecName,
+        envelope: targetRecord.envelopeName,
+        skillName: delegatedSkill,
         parentSessionId: spec.parentSessionId,
         createdAt: spec.createdAt,
       }),
@@ -426,7 +487,7 @@ async function main(): Promise<void> {
       workerSessionId: childSessionId,
       label: spec.label,
       parentSkill: parentRuntime.skills.getActive(spec.parentSessionId)?.name,
-      kind: profileRecord.resultMode,
+      kind: targetRecord.resultMode,
       boundary: executionPlan.boundary,
       summary,
       artifactRefs: outcome.artifactRefs?.map((ref) => ({ ...ref })),
@@ -470,7 +531,10 @@ async function main(): Promise<void> {
     }
     const outcome = buildFailureOutcome({
       runId: spec.runId,
-      profile: spec.profileName,
+      delegate: spec.delegate,
+      agentSpec: targetRecord.agentSpecName,
+      envelope: targetRecord.envelopeName,
+      skillName: targetRecord.skillName,
       label: spec.label,
       workerSessionId: childSessionId,
       artifactRefs,
@@ -482,14 +546,17 @@ async function main(): Promise<void> {
     const delivery = applyDurableDelivery({
       runtime: parentRuntime,
       sessionId: spec.parentSessionId,
-      profile: spec.profileName,
+      delegate: spec.delegate,
       outcome,
       delivery: spec.delivery,
     });
     const failedRecord: DelegationRunRecord = {
       ...(parentRuntime.session.getDelegationRun(spec.parentSessionId, spec.runId) ?? {
         runId: spec.runId,
-        profile: spec.profileName,
+        delegate: spec.delegate,
+        agentSpec: targetRecord.agentSpecName,
+        envelope: targetRecord.envelopeName,
+        skillName: targetRecord.skillName,
         parentSessionId: spec.parentSessionId,
         createdAt: spec.createdAt,
       }),
@@ -498,7 +565,7 @@ async function main(): Promise<void> {
       workerSessionId: childSessionId,
       label: spec.label,
       parentSkill: parentRuntime.skills.getActive(spec.parentSessionId)?.name,
-      kind: profileRecord.resultMode,
+      kind: targetRecord.resultMode,
       boundary: executionPlan.boundary,
       summary: message,
       error: message,

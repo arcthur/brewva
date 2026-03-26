@@ -11,19 +11,26 @@ import { dirname, resolve } from "node:path";
 import type { BrewvaConfig, DelegationRunRecord, SkillRoutingScope } from "@brewva/brewva-runtime";
 import type {
   DelegationPacket,
+  SubagentResultMode,
   SubagentExecutionShape,
   SubagentRunRequest,
 } from "@brewva/brewva-tools";
+import type { HostedDelegationTarget } from "./targets.js";
 
 export interface DetachedSubagentRunSpec {
-  schema: "brewva.subagent-run-spec.v3";
+  schema: "brewva.subagent-run-spec.v5";
   runId: string;
   parentSessionId: string;
   workspaceRoot: string;
   config: BrewvaConfig;
   configPath?: string;
   routingScopes?: SkillRoutingScope[];
-  profileName: string;
+  delegate: string;
+  target?: HostedDelegationTarget;
+  skillName?: string;
+  envelopeName?: string;
+  agentSpecName?: string;
+  fallbackResultMode?: SubagentResultMode;
   executionShape?: SubagentExecutionShape;
   label?: string;
   packet: DelegationPacket;
@@ -36,7 +43,7 @@ export interface DetachedSubagentLiveState {
   schema: "brewva.subagent-run-live.v1";
   runId: string;
   parentSessionId: string;
-  profile: string;
+  delegate: string;
   pid: number;
   createdAt: number;
   updatedAt: number;

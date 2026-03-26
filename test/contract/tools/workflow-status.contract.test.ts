@@ -163,7 +163,7 @@ describe("workflow_status contract", () => {
 
     runtime.session.recordDelegationRun(sessionId, {
       runId: "delegation-handoff-1",
-      profile: "review",
+      delegate: "review",
       parentSessionId: sessionId,
       status: "completed",
       createdAt: 1,
@@ -197,7 +197,7 @@ describe("workflow_status contract", () => {
           | {
               pendingDelegationOutcomes?: Array<{
                 runId: string;
-                profile: string;
+                delegate: string;
                 label?: string;
                 status: string;
                 summary?: string;
@@ -209,7 +209,7 @@ describe("workflow_status contract", () => {
     ).toEqual([
       {
         runId: "delegation-handoff-1",
-        profile: "review",
+        delegate: "review",
         label: undefined,
         status: "completed",
         summary: "Review completed and is waiting for parent surfacing.",

@@ -67,7 +67,7 @@ Implementation anchors:
 - `packages/brewva-gateway/src/runtime-plugins/provider-compatibility.ts`
 - `packages/brewva-gateway/src/host/create-hosted-session.ts`
 
-There is no longer a reduced runtime-core bridge profile. Hosted sessions use
+There is no longer a reduced runtime-core bridge variant. Hosted sessions use
 one lifecycle shape whether tools are registered by the extension factory or
 provided directly by the host.
 

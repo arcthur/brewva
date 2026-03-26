@@ -29,14 +29,14 @@ import {
   writeDetachedSubagentLiveState,
   writeDetachedSubagentSpec,
 } from "./background-protocol.js";
-import type { HostedSubagentProfile } from "./profiles.js";
 import { resolveRequestedBoundary } from "./shared.js";
+import type { HostedDelegationTarget } from "./targets.js";
 
 export interface HostedSubagentBackgroundController {
   startRun(input: {
     parentSessionId: string;
-    profile: HostedSubagentProfile;
-    profileName?: string;
+    target: HostedDelegationTarget;
+    delegate?: string;
     packet: DelegationPacket;
     executionShape?: SubagentRunRequest["executionShape"];
     label?: string;
@@ -96,7 +96,10 @@ function buildDeliveryRecord(
 function buildLifecyclePayload(record: DelegationRunRecord): Record<string, unknown> {
   return {
     runId: record.runId,
-    profile: record.profile,
+    delegate: record.delegate,
+    agentSpec: record.agentSpec ?? null,
+    envelope: record.envelope ?? null,
+    skillName: record.skillName ?? null,
     label: record.label ?? null,
     kind: record.kind ?? null,
     boundary: record.boundary ?? null,
@@ -301,22 +304,29 @@ export function createDetachedSubagentBackgroundController(
       const runId = randomUUID();
       const createdAt = Date.now();
       const parentSkill = options.runtime.skills.getActive(input.parentSessionId)?.name;
-      const profileName = input.profileName ?? input.profile.name;
+      const delegate =
+        input.delegate ??
+        input.target.agentSpecName ??
+        input.target.envelopeName ??
+        input.target.name;
       const boundary = resolveRequestedBoundary({
-        profile: input.profile,
+        target: input.target,
         executionShape: input.executionShape,
         packet: input.packet,
       });
       const initialRecord: DelegationRunRecord = {
         runId,
-        profile: profileName,
+        delegate,
+        agentSpec: input.target.agentSpecName,
+        envelope: input.target.envelopeName,
+        skillName: input.target.skillName,
         parentSessionId: input.parentSessionId,
         status: "pending",
         createdAt,
         updatedAt: createdAt,
         label: input.label,
         parentSkill,
-        kind: input.profile.resultMode,
+        kind: input.target.resultMode,
         boundary,
         delivery: buildDeliveryRecord(input.delivery, createdAt),
       };
@@ -328,14 +338,19 @@ export function createDetachedSubagentBackgroundController(
       });
 
       const spec: DetachedSubagentRunSpec = {
-        schema: "brewva.subagent-run-spec.v3",
+        schema: "brewva.subagent-run-spec.v5",
         runId,
         parentSessionId: input.parentSessionId,
         workspaceRoot: options.runtime.workspaceRoot,
         config: cloneRuntimeConfig(options.runtime),
         configPath: options.configPath,
         routingScopes: options.routingScopes,
-        profileName,
+        delegate,
+        target: input.target,
+        skillName: input.target.skillName,
+        envelopeName: input.target.envelopeName,
+        agentSpecName: input.target.agentSpecName,
+        fallbackResultMode: input.target.fallbackResultMode,
         executionShape: input.executionShape,
         label: input.label,
         packet: input.packet,
@@ -347,8 +362,8 @@ export function createDetachedSubagentBackgroundController(
       writeDetachedSubagentContextManifest(options.runtime.workspaceRoot, runId, {
         schema: "brewva.delegation-context-manifest.v1",
         runId,
-        profile: profileName,
-        resultMode: input.profile.resultMode,
+        delegate,
+        resultMode: input.target.resultMode,
         generatedAt: createdAt,
         objective: input.packet.objective,
         contextRefs: input.packet.contextRefs ?? [],
@@ -377,7 +392,7 @@ export function createDetachedSubagentBackgroundController(
         schema: "brewva.subagent-run-live.v1",
         runId,
         parentSessionId: input.parentSessionId,
-        profile: profileName,
+        delegate,
         pid,
         createdAt,
         updatedAt: createdAt,

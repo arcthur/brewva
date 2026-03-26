@@ -151,7 +151,7 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         lines.push("pending_delegation_outcome_runs:");
         for (const run of pendingDelegationOutcomes) {
           lines.push(
-            `- ${run.profile}/${run.label ?? run.runId}: ${run.status}${run.summary ? ` :: ${run.summary}` : ""}`,
+            `- ${run.delegate}/${run.label ?? run.runId}: ${run.status}${run.summary ? ` :: ${run.summary}` : ""}`,
           );
         }
       }
@@ -182,7 +182,7 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
             })),
             pendingDelegationOutcomes: pendingDelegationOutcomes.map((run) => ({
               runId: run.runId,
-              profile: run.profile,
+              delegate: run.delegate,
               label: run.label,
               status: run.status,
               summary: run.summary,

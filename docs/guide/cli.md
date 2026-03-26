@@ -166,7 +166,7 @@ session:
 
 Both modes keep the same tool policy, compaction gate, ledger write, event
 stream, and lifecycle-port behavior. There is no reduced runtime-core bridge
-profile anymore.
+variant anymore.
 
 `--backend` selects the primary session backend:
 

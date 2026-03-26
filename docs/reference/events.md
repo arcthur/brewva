@@ -266,7 +266,7 @@ properties such as:
 `subagent_*` lifecycle events carry delegated-run state such as:
 
 - `runId`
-- `profile`
+- `delegate`
 - `kind`
 - `boundary`
 - `deliveryMode`

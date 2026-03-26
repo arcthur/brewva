@@ -56,7 +56,15 @@ function summarizeRun(
     run.live ? "live=yes" : "live=no",
     run.cancelable ? "cancelable=yes" : "cancelable=no",
   ].filter(Boolean);
-  const lines = [`- ${run.label ?? run.runId} (${run.profile}): ${head.join(" ")}`];
+  const lines = [`- ${run.label ?? run.runId} (${run.delegate}): ${head.join(" ")}`];
+  const delegateIdentity = [
+    run.agentSpec ? `agentSpec=${run.agentSpec}` : null,
+    run.envelope ? `envelope=${run.envelope}` : null,
+    run.skillName ? `delegatedSkill=${run.skillName}` : null,
+  ].filter(Boolean);
+  if (delegateIdentity.length > 0) {
+    lines.push(`  delegate: ${delegateIdentity.join(" ")}`);
+  }
   if (run.summary) {
     lines.push(`  ${run.summary}`);
   } else if (run.error) {
@@ -118,7 +126,10 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
             ok: true as const,
             runs: options.runtime.session.listDelegationRuns(sessionId, query).map((run) => ({
               runId: run.runId,
-              profile: run.profile,
+              delegate: run.delegate,
+              agentSpec: run.agentSpec,
+              envelope: run.envelope,
+              skillName: run.skillName,
               parentSessionId: run.parentSessionId,
               status: run.status,
               createdAt: run.createdAt,

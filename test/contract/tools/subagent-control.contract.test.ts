@@ -31,7 +31,10 @@ describe("subagent control tools", () => {
     });
     runtime.session.recordDelegationRun("session-status", {
       runId: "run-status-1",
-      profile: "review",
+      delegate: "review",
+      agentSpec: "review",
+      envelope: "readonly-reviewer",
+      skillName: "review",
       parentSessionId: "session-status",
       status: "running",
       createdAt: 1,
@@ -52,6 +55,9 @@ describe("subagent control tools", () => {
     expect(extractText(result)).toContain("# Subagent Status");
     expect(extractText(result)).toContain("run-status-1");
     expect(extractText(result)).toContain("status=running");
+    expect(extractText(result)).toContain(
+      "delegate: agentSpec=review envelope=readonly-reviewer delegatedSkill=review",
+    );
   });
 
   test("subagent_status includes replayable handoff metadata for completed runs", async () => {
@@ -60,7 +66,7 @@ describe("subagent control tools", () => {
     });
     runtime.session.recordDelegationRun("session-status-handoff", {
       runId: "run-status-handoff-1",
-      profile: "review",
+      delegate: "review",
       parentSessionId: "session-status-handoff",
       status: "completed",
       createdAt: 1,
@@ -96,14 +102,14 @@ describe("subagent control tools", () => {
             run: async (_input: { fromSessionId: string; request: SubagentRunRequest }) => ({
               ok: true,
               mode: "single",
-              profile: "explore",
+              delegate: "explore",
               outcomes: [],
             }),
             cancel: async (input: { fromSessionId: string; runId: string; reason?: string }) => ({
               ok: true,
               run: {
                 runId: input.runId,
-                profile: "explore",
+                delegate: "explore",
                 parentSessionId: input.fromSessionId,
                 status: "cancelled" as const,
                 createdAt: 1,

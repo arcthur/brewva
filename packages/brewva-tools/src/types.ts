@@ -4,6 +4,7 @@ import type {
   DelegationRunRecord,
   ManagedToolMode,
   PatchSet,
+  SkillOutputValidationResult,
   ToolGovernanceDescriptor,
   ToolExecutionBoundary,
 } from "@brewva/brewva-runtime";
@@ -85,8 +86,6 @@ export interface DelegationPacket {
   constraints?: string[];
   sharedNotes?: string[];
   activeSkillName?: string;
-  entrySkill?: string;
-  requiredOutputs?: string[];
   executionHints?: SubagentExecutionHints;
   contextRefs?: SubagentContextRef[];
   contextBudget?: SubagentContextBudget;
@@ -101,7 +100,10 @@ export interface DelegationTaskPacket extends DelegationPacket {
 }
 
 export interface SubagentRunRequest {
-  profile?: string;
+  agentSpec?: string;
+  envelope?: string;
+  skillName?: string;
+  fallbackResultMode?: SubagentResultMode;
   executionShape?: SubagentExecutionShape;
   mode: SubagentDelegationMode;
   packet?: DelegationPacket;
@@ -182,7 +184,10 @@ export type SubagentOutcomeData =
 
 export interface SubagentOutcomeBase {
   runId: string;
-  profile: string;
+  delegate: string;
+  agentSpec?: string;
+  envelope?: string;
+  skillName?: string;
   label?: string;
   kind: SubagentResultMode;
   status: "ok" | "error" | "cancelled" | "timeout";
@@ -190,6 +195,8 @@ export interface SubagentOutcomeBase {
   summary: string;
   assistantText?: string;
   data?: SubagentOutcomeData;
+  skillOutputs?: Record<string, unknown>;
+  skillValidation?: SkillOutputValidationResult;
   metrics: SubagentOutcomeMetricSummary;
   evidenceRefs: SubagentOutcomeEvidenceRef[];
   patches?: PatchSet;
@@ -204,7 +211,10 @@ export interface SubagentOutcomeSuccess extends SubagentOutcomeBase {
 export interface SubagentOutcomeFailure {
   ok: false;
   runId: string;
-  profile: string;
+  delegate: string;
+  agentSpec?: string;
+  envelope?: string;
+  skillName?: string;
   label?: string;
   status: "error" | "cancelled" | "timeout";
   workerSessionId?: string;
@@ -218,7 +228,7 @@ export type SubagentOutcome = SubagentOutcomeSuccess | SubagentOutcomeFailure;
 export interface SubagentRunResult {
   ok: boolean;
   mode: SubagentDelegationMode;
-  profile: string;
+  delegate: string;
   outcomes: SubagentOutcome[];
   error?: string;
 }
@@ -226,7 +236,7 @@ export interface SubagentRunResult {
 export interface SubagentStartResult {
   ok: boolean;
   mode: SubagentDelegationMode;
-  profile: string;
+  delegate: string;
   runs: DelegationRunRecord[];
   error?: string;
 }

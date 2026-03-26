@@ -271,7 +271,7 @@ describe("Gap remediation: parallel result lifecycle", () => {
       type: "subagent_completed",
       payload: {
         runId: "delegated-patch-1",
-        profile: "patch-worker",
+        delegate: "patch-worker",
         kind: "patch",
         status: "completed",
         summary: "Detached patch worker finished.",

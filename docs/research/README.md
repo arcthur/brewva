@@ -42,18 +42,24 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 
 ## Promoted notes (status pointers)
 
+- `docs/research/rfc-skill-first-delegation-and-execution-envelopes.md`
 - `docs/research/rfc-effect-governance-and-contract-vnext.md`
 - `docs/research/rfc-capability-compression-and-output-distillation.md`
-- `docs/research/rfc-subagent-delegation-and-isolated-execution.md`
 - `docs/research/rfc-preparse-normalization-model-capability-and-live-audit-split.md`
 - `docs/research/rfc-repository-fitness-plane-and-runtime-boundary.md`
 - `docs/research/rfc-workflow-artifacts-and-posture-control-plane.md`
 - `docs/research/rfc-iteration-facts-and-model-native-optimization-protocols.md`
 - `docs/research/rfc-default-path-re-hardening-and-advisory-surface-narrowing.md`
 - `docs/research/rfc-deliberation-home-and-compounding-intelligence.md`
-- `docs/research/rfc-delegation-protocol-thinning-and-replayable-outcomes.md`
 
 ## Archived / superseded notes
 
+- `docs/research/rfc-subagent-delegation-and-isolated-execution.md`
+- `docs/research/rfc-delegation-protocol-thinning-and-replayable-outcomes.md`
 - `docs/research/rfc-invocation-spine-and-posture-runtime-vnext.md`
 - `docs/research/rfc-runtime-decomposition-and-deliberation-thickening.md`
+
+Archived and superseded notes may intentionally describe historical
+terminology, including the older delegation `profile` model. Current
+delegation contracts should be read from stable docs and the promoted
+skill-first delegation RFC.

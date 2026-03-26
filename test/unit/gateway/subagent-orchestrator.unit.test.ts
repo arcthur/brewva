@@ -85,7 +85,7 @@ describe("hosted subagent orchestrator", () => {
     const result = await adapter.run({
       fromSessionId: parentSessionId,
       request: {
-        profile: "patch-worker",
+        agentSpec: "patch-worker",
         mode: "single",
         packet: {
           objective: "Update the exported message constant.",
@@ -155,7 +155,7 @@ describe("hosted subagent orchestrator", () => {
     await rm(workspaceRoot, { recursive: true, force: true });
   });
 
-  test("allows packet boundary to narrow a patch-worker profile back to safe", async () => {
+  test("allows packet boundary to narrow a patch-worker target back to safe", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-narrow-");
     const runtimeConfig = structuredClone(DEFAULT_BREWVA_CONFIG);
     runtimeConfig.infrastructure.events.level = "ops";
@@ -213,7 +213,7 @@ describe("hosted subagent orchestrator", () => {
     const result = await adapter.run({
       fromSessionId: parentSessionId,
       request: {
-        profile: "patch-worker",
+        agentSpec: "patch-worker",
         mode: "single",
         packet: {
           objective: "Inspect the module without changing files.",
@@ -319,7 +319,7 @@ describe("hosted subagent orchestrator", () => {
     const result = await adapter.run({
       fromSessionId: parentSessionId,
       request: {
-        profile: "verification",
+        agentSpec: "verification",
         mode: "single",
         packet: {
           objective: "Verify the runtime checks.",
@@ -422,7 +422,7 @@ describe("hosted subagent orchestrator", () => {
     const result = await adapter.run({
       fromSessionId: parentSessionId,
       request: {
-        profile: "verification",
+        agentSpec: "verification",
         mode: "single",
         packet: {
           objective: "Verify the runtime checks.",
@@ -497,7 +497,7 @@ describe("hosted subagent orchestrator", () => {
     const started = await adapter.start({
       fromSessionId: parentSessionId,
       request: {
-        profile: "explore",
+        agentSpec: "explore",
         mode: "single",
         packet: {
           objective: "Inspect the repository in the background.",
@@ -617,7 +617,7 @@ describe("hosted subagent orchestrator", () => {
                   type: "message_end",
                   message: {
                     role: "assistant",
-                    content: [{ type: "text", text: "Background review completed." }],
+                    content: [{ type: "text", text: "Background delegated run completed." }],
                   },
                 } as AgentSessionEvent);
               }
@@ -647,10 +647,10 @@ describe("hosted subagent orchestrator", () => {
     const started = await adapter.start({
       fromSessionId: parentSessionId,
       request: {
-        profile: "review",
+        agentSpec: "general",
         mode: "single",
         packet: {
-          objective: "Review the runtime boundary changes.",
+          objective: "Inspect the runtime boundary changes.",
         },
         delivery: {
           returnMode: "text_only",

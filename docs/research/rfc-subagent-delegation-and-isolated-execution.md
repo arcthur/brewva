@@ -2,9 +2,9 @@
 
 ## Document Metadata
 
-- Status: `promoted`
+- Status: `archived`
 - Owner: runtime maintainers
-- Last reviewed: `2026-03-20`
+- Last reviewed: `2026-03-26`
 - Promotion target:
   - `docs/architecture/system-architecture.md`
   - `docs/architecture/cognitive-product-architecture.md`
@@ -19,6 +19,15 @@
 This RFC is now best read as a design record plus regression checklist. Stable
 contracts and workflows have been promoted into architecture, reference, and
 journey docs.
+
+Historical note:
+
+This document describes Brewva's first delegation phase, when the execution
+abstraction was centered on `subagent profile`.
+The current implementation has moved on to `ExecutionEnvelope`, `AgentSpec`,
+and `HostedDelegationTarget`.
+References to `profile` in this RFC are historical and should not be read as
+the current public delegation contract.
 
 Brewva should adopt subagents, but not as a new kernel-owned authority object
 and not as a replacement for skills.

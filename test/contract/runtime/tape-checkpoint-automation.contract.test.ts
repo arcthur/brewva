@@ -377,7 +377,7 @@ requires: []
       timestamp: 120,
       payload: {
         runId: "patch-worker-1",
-        profile: "patch-worker",
+        delegate: "patch-worker",
         kind: "patch",
         summary: "Patch worker completed and awaits parent merge/apply.",
       },

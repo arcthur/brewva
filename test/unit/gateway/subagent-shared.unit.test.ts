@@ -1,21 +1,22 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import type { HostedSubagentProfile } from "../../../packages/brewva-gateway/src/subagents/profiles.js";
+import { loadHostedDelegationCatalog } from "../../../packages/brewva-gateway/src/subagents/catalog.js";
 import {
   assertDelegationShapeNarrowing,
   resolveDelegationExecutionPlan,
-  resolveDelegationProfile,
+  resolveDelegationTarget,
 } from "../../../packages/brewva-gateway/src/subagents/shared.js";
+import type { HostedDelegationTarget } from "../../../packages/brewva-gateway/src/subagents/targets.js";
 
-function makeProfile(overrides: Partial<HostedSubagentProfile> = {}): HostedSubagentProfile {
+function makeTarget(overrides: Partial<HostedDelegationTarget> = {}): HostedDelegationTarget {
   return {
     name: "review",
     description: "Read-only reviewer",
     resultMode: "review",
-    prompt: "Review and summarize.",
+    executorPreamble: "Review and summarize.",
     boundary: "safe",
     builtinToolNames: ["read"],
     managedToolNames: ["grep"],
@@ -26,20 +27,20 @@ function makeProfile(overrides: Partial<HostedSubagentProfile> = {}): HostedSuba
 
 describe("subagent shared execution resolution", () => {
   test("assertDelegationShapeNarrowing rejects widening overrides", () => {
-    const profile = makeProfile();
+    const target = makeTarget();
 
     expect(() =>
-      assertDelegationShapeNarrowing(profile, {
+      assertDelegationShapeNarrowing(target, {
         boundary: "effectful",
       }),
     ).toThrow("subagent_effect_ceiling_widening_not_allowed");
     expect(() =>
-      assertDelegationShapeNarrowing(profile, {
+      assertDelegationShapeNarrowing(target, {
         resultMode: "patch",
       }),
     ).toThrow("subagent_result_mode_override_not_allowed");
     expect(() =>
-      assertDelegationShapeNarrowing(profile, {
+      assertDelegationShapeNarrowing(target, {
         managedToolMode: "extension",
       }),
     ).toThrow("subagent_managed_tool_mode_widening_not_allowed");
@@ -49,7 +50,7 @@ describe("subagent shared execution resolution", () => {
     const runtime = new BrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-subagent-shared-plan-")),
     });
-    const profile = makeProfile({
+    const target = makeTarget({
       boundary: "effectful",
       builtinToolNames: ["read"],
       managedToolNames: [],
@@ -57,15 +58,12 @@ describe("subagent shared execution resolution", () => {
 
     const plan = resolveDelegationExecutionPlan({
       runtime,
-      profile,
+      target,
       packet: {
         objective: "Review the gateway deltas.",
         executionHints: {
           preferredTools: ["edit", "grep"],
           fallbackTools: ["write", "subagent_run"],
-        },
-        effectCeiling: {
-          boundary: "safe",
         },
       },
       executionShape: {
@@ -83,26 +81,10 @@ describe("subagent shared execution resolution", () => {
     expect(plan.prompt).toBe("Review and summarize.");
   });
 
-  test("resolveDelegationProfile derives a default preset from executionShape.resultMode", () => {
-    const profiles = new Map<string, HostedSubagentProfile>([
-      ["review", makeProfile()],
-      [
-        "verification",
-        {
-          name: "verification",
-          description: "Verification runner",
-          resultMode: "verification",
-          prompt: "Verify and summarize.",
-          boundary: "safe",
-          builtinToolNames: ["read"],
-          managedToolNames: ["grep"],
-          managedToolMode: "direct",
-        },
-      ],
-    ]);
-
-    const resolved = resolveDelegationProfile({
-      profiles,
+  test("resolveDelegationTarget derives a default agent spec from executionShape.resultMode", async () => {
+    const catalog = await loadHostedDelegationCatalog(process.cwd());
+    const resolved = resolveDelegationTarget({
+      catalog,
       request: {
         executionShape: {
           resultMode: "verification",
@@ -111,7 +93,189 @@ describe("subagent shared execution resolution", () => {
       },
     });
 
-    expect(resolved.profileName).toBe("verification");
-    expect(resolved.profile.resultMode).toBe("verification");
+    expect(resolved.delegate).toBe("verification");
+    expect(resolved.target.resultMode).toBe("verification");
+  });
+
+  test("resolveDelegationTarget materializes a skill-first agent spec through the catalog", async () => {
+    const catalog = await loadHostedDelegationCatalog(process.cwd());
+    const resolved = resolveDelegationTarget({
+      catalog,
+      request: {
+        agentSpec: "review",
+      },
+    });
+
+    expect(resolved.delegate).toBe("review");
+    expect(resolved.target.agentSpecName).toBe("review");
+    expect(resolved.target.envelopeName).toBe("readonly-reviewer");
+    expect(resolved.target.skillName).toBe("review");
+    expect(resolved.target.resultMode).toBe("review");
+  });
+
+  test("resolveDelegationTarget supports explicit envelope-only ad hoc runs", async () => {
+    const catalog = await loadHostedDelegationCatalog(process.cwd());
+    const resolved = resolveDelegationTarget({
+      catalog,
+      request: {
+        envelope: "readonly-scout",
+      },
+    });
+
+    expect(resolved.delegate).toBe("readonly-scout");
+    expect(resolved.target.envelopeName).toBe("readonly-scout");
+    expect(resolved.target.skillName).toBeUndefined();
+    expect(resolved.target.resultMode).toBe("exploration");
+  });
+
+  test("resolveDelegationTarget fails fast on unknown agent specs even when an envelope is supplied", async () => {
+    const catalog = await loadHostedDelegationCatalog(process.cwd());
+
+    expect(() =>
+      resolveDelegationTarget({
+        catalog,
+        request: {
+          agentSpec: "does-not-exist",
+          envelope: "readonly-scout",
+        },
+      }),
+    ).toThrow("unknown_agent_spec:does-not-exist");
+  });
+
+  test("resolveDelegationTarget resolves a workspace agent spec by name", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-agent-spec-"));
+    const subagentDir = join(workspace, ".brewva", "subagents");
+    mkdirSync(subagentDir, { recursive: true });
+    writeFileSync(
+      join(subagentDir, "tight-reviewer.json"),
+      JSON.stringify(
+        {
+          kind: "envelope",
+          name: "tight-reviewer",
+          extends: "readonly-reviewer",
+          description: "Workspace-specific narrowed reviewer envelope",
+          managedToolNames: ["grep", "read_spans"],
+          defaultContextBudget: {
+            maxTurnTokens: 2400,
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    writeFileSync(
+      join(subagentDir, "review.json"),
+      JSON.stringify(
+        {
+          kind: "agentSpec",
+          name: "review",
+          extends: "review",
+          description: "Workspace review delegate",
+          envelope: "tight-reviewer",
+          executorPreamble: "Operate as a workspace-specific reviewer.",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const catalog = await loadHostedDelegationCatalog(workspace);
+    const resolved = resolveDelegationTarget({
+      catalog,
+      request: {
+        agentSpec: "review",
+      },
+    });
+
+    expect(resolved.delegate).toBe("review");
+    expect(resolved.target.agentSpecName).toBe("review");
+    expect(resolved.target.envelopeName).toBe("tight-reviewer");
+    expect(resolved.target.executorPreamble).toBe("Operate as a workspace-specific reviewer.");
+  });
+
+  test("resolveDelegationTarget allows request envelopes that narrow an agent spec envelope", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-envelope-narrow-"));
+    const subagentDir = join(workspace, ".brewva", "subagents");
+    mkdirSync(subagentDir, { recursive: true });
+    writeFileSync(
+      join(subagentDir, "tight-reviewer.json"),
+      JSON.stringify(
+        {
+          kind: "envelope",
+          name: "tight-reviewer",
+          extends: "readonly-reviewer",
+          description: "Narrowed reviewer envelope",
+          managedToolNames: ["grep", "read_spans", "look_at"],
+          defaultContextBudget: {
+            maxTurnTokens: 3200,
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    writeFileSync(
+      join(subagentDir, "ultra-tight-reviewer.json"),
+      JSON.stringify(
+        {
+          kind: "envelope",
+          name: "ultra-tight-reviewer",
+          extends: "tight-reviewer",
+          description: "Further narrowed reviewer envelope",
+          managedToolNames: ["grep", "read_spans"],
+          defaultContextBudget: {
+            maxTurnTokens: 1600,
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    writeFileSync(
+      join(subagentDir, "security-review.json"),
+      JSON.stringify(
+        {
+          kind: "agentSpec",
+          name: "security-review",
+          description: "Security-focused review worker",
+          skillName: "review",
+          envelope: "tight-reviewer",
+          fallbackResultMode: "review",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const catalog = await loadHostedDelegationCatalog(workspace);
+    const resolved = resolveDelegationTarget({
+      catalog,
+      request: {
+        agentSpec: "security-review",
+        envelope: "ultra-tight-reviewer",
+      },
+    });
+
+    expect(resolved.target.agentSpecName).toBe("security-review");
+    expect(resolved.target.envelopeName).toBe("ultra-tight-reviewer");
+  });
+
+  test("resolveDelegationTarget rejects request envelopes that widen an agent spec envelope", async () => {
+    const catalog = await loadHostedDelegationCatalog(process.cwd());
+
+    expect(() =>
+      resolveDelegationTarget({
+        catalog,
+        request: {
+          agentSpec: "review",
+          envelope: "patch-worker",
+        },
+      }),
+    ).toThrow("conflicting_agent_spec_and_envelope:boundary cannot widen beyond the base envelope");
   });
 });

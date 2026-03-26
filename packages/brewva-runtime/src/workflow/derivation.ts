@@ -623,7 +623,8 @@ function extractSubagentPatchArtifact(event: BrewvaEventRecord): WorkflowDraftAr
   if (!isRecord(payload)) return [];
   if (readString(payload.kind) !== "patch") return [];
 
-  const profile = readString(payload.profile);
+  const delegate = readString(payload.delegate);
+  const skillName = readString(payload.skillName);
   const summary =
     compactJsonValue(payload.summary, 200) ??
     (event.type === SUBAGENT_COMPLETED_EVENT_TYPE
@@ -635,13 +636,13 @@ function extractSubagentPatchArtifact(event: BrewvaEventRecord): WorkflowDraftAr
       event,
       kind: "worker_patch",
       summary,
-      sourceSkillNames: profile ? [profile] : [],
+      sourceSkillNames: skillName ? [skillName] : [],
       outputKeys: [],
       freshness: "fresh",
       state: event.type === SUBAGENT_COMPLETED_EVENT_TYPE ? "pending" : "blocked",
       metadata: {
         source: event.type,
-        profile: profile ?? null,
+        delegate: delegate ?? null,
         runId: readString(payload.runId) ?? null,
       },
     }),

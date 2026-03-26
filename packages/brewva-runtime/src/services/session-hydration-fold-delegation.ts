@@ -101,6 +101,17 @@ function readArtifactRefs(
   return refs.length > 0 ? refs : undefined;
 }
 
+function readRunMetadata(
+  payload: Record<string, unknown> | null,
+  existing: DelegationRunRecord | undefined,
+): Pick<DelegationRunRecord, "agentSpec" | "envelope" | "skillName"> {
+  return {
+    agentSpec: readString(payload?.agentSpec) ?? existing?.agentSpec,
+    envelope: readString(payload?.envelope) ?? existing?.envelope,
+    skillName: readString(payload?.skillName) ?? existing?.skillName,
+  };
+}
+
 function mergeDeliveryRecord(
   payload: Record<string, unknown> | null,
   existing: DelegationDeliveryRecord | undefined,
@@ -153,14 +164,15 @@ export function createDelegationHydrationFold(): SessionHydrationFold<Delegation
       const payload = readEventPayload(event);
       if (event.type === SUBAGENT_SPAWNED_EVENT_TYPE) {
         const runId = readString(payload?.runId);
-        const profile = readString(payload?.profile);
-        if (!runId || !profile) {
+        const delegate = readString(payload?.delegate);
+        if (!runId || !delegate) {
           return;
         }
         const existing = state.delegationRuns.get(runId);
         upsertRun(state, {
           runId,
-          profile,
+          delegate,
+          ...readRunMetadata(payload, existing),
           parentSessionId: event.sessionId,
           status: readRunStatus(payload?.status) ?? "running",
           createdAt: existing?.createdAt ?? event.timestamp,
@@ -194,7 +206,8 @@ export function createDelegationHydrationFold(): SessionHydrationFold<Delegation
         const existing = state.delegationRuns.get(runId);
         upsertRun(state, {
           runId,
-          profile: readString(payload?.profile) ?? existing?.profile ?? "unknown",
+          delegate: readString(payload?.delegate) ?? existing?.delegate ?? "unknown",
+          ...readRunMetadata(payload, existing),
           parentSessionId: event.sessionId,
           status: "completed",
           createdAt: existing?.createdAt ?? event.timestamp,
@@ -275,7 +288,8 @@ export function createDelegationHydrationFold(): SessionHydrationFold<Delegation
               : "failed";
         upsertRun(state, {
           runId,
-          profile: readString(payload?.profile) ?? existing?.profile ?? "unknown",
+          delegate: readString(payload?.delegate) ?? existing?.delegate ?? "unknown",
+          ...readRunMetadata(payload, existing),
           parentSessionId: event.sessionId,
           status:
             statusFromPayload ??

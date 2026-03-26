@@ -31,19 +31,25 @@ flowchart TD
 
 1. Acquire per-session concurrency budget through the runtime slot gate.
 2. Run explicit child work through `subagent_run` or `subagent_fanout`; there is
-   no hidden authority escalation or auto-spawn path.
-3. For read-only delegation, return structured outcome data (`summary`,
-   `evidenceRefs`, optional typed `data`, optional `artifactRefs`) and hand the
-   result back either through same-turn `appendSupplementalInjection(...)` or a
-   replay-visible pending delegation outcome handoff.
-4. For patch-producing delegation, execute in an isolated snapshot workspace and
+   no hidden authority escalation or auto-spawn path. Named delegated workers
+   now resolve through `agentSpec` and `ExecutionEnvelope`.
+3. When `skillName` is present, the child prompt is assembled from:
+   executor preamble, delegated skill body, task packet, context refs, and
+   output contracts. The child runner validates returned `skillOutputs` before
+   handing the result back to the parent.
+4. For read-only delegation, return structured outcome data (`summary`,
+   `evidenceRefs`, optional typed `data`, optional `artifactRefs`,
+   optional `skillOutputs`) and hand the result back either through same-turn
+   `appendSupplementalInjection(...)` or a replay-visible pending delegation
+   outcome handoff.
+5. For patch-producing delegation, execute in an isolated snapshot workspace and
    persist a `WorkerResult` plus patch artifacts instead of mutating the parent
    workspace directly.
-5. Let the parent session inspect and adopt child patch results explicitly via
+6. Let the parent session inspect and adopt child patch results explicitly via
    `worker_results_merge` and `worker_results_apply`.
-6. Feed pending or applied worker outcomes back into derived workflow status so
+7. Feed pending or applied worker outcomes back into derived workflow status so
    ship state remains blocked until parent-controlled merge/apply completes.
-7. Release slots, persist lifecycle state, and keep pending child runs visible
+8. Release slots, persist lifecycle state, and keep pending child runs visible
    to compaction through a dedicated `PendingDelegations` section.
 
 ## Background Runs And Recovery
@@ -53,6 +59,9 @@ effort helpers.
 
 - detached child runs persist control files under
   `.orchestrator/subagent-runs/<runId>/`
+- workspace-defined `agentSpec` / `envelope` files still live under
+  `.brewva/subagents/*.json` during migration; custom files support
+  narrowing-only `extends` chains
 - detached runs also persist `delegation-context-manifest.json` so isolated
   children receive explicit parent-selected evidence context rather than
   ambient session access
@@ -77,6 +86,9 @@ Note: use `runtime.tools.acquireParallelSlot(...)` to apply per-skill
 
 - Delegation orchestration:
   `packages/brewva-gateway/src/subagents/orchestrator.ts`
+- Delegation catalog and workspace config loading:
+  `packages/brewva-gateway/src/subagents/catalog.ts`,
+  `packages/brewva-gateway/src/subagents/config-files.ts`
 - Detached background controller:
   `packages/brewva-gateway/src/subagents/background-controller.ts`
 - Detached run protocol and context manifest:

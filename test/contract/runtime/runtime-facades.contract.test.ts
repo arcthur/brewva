@@ -110,7 +110,10 @@ describe("runtime facade coverage", () => {
 
     runtime.session.recordDelegationRun(sessionId, {
       runId: "delegation-1",
-      profile: "review",
+      delegate: "review",
+      agentSpec: "review",
+      envelope: "readonly-reviewer",
+      skillName: "review",
       parentSessionId: sessionId,
       status: "running",
       createdAt: 10,
@@ -122,7 +125,10 @@ describe("runtime facade coverage", () => {
     expect(runtime.session.getDelegationRun(sessionId, "delegation-1")).toMatchObject({
       runId: "delegation-1",
       status: "running",
-      profile: "review",
+      delegate: "review",
+      agentSpec: "review",
+      envelope: "readonly-reviewer",
+      skillName: "review",
     });
     expect(runtime.session.listDelegationRuns(sessionId)).toHaveLength(1);
   });
@@ -135,7 +141,7 @@ describe("runtime facade coverage", () => {
 
     runtime.session.recordDelegationRun(sessionId, {
       runId: "delegation-pending-outcome-1",
-      profile: "review",
+      delegate: "review",
       parentSessionId: sessionId,
       status: "completed",
       createdAt: 10,
@@ -151,7 +157,7 @@ describe("runtime facade coverage", () => {
     });
     runtime.session.recordDelegationRun(sessionId, {
       runId: "delegation-surfaced-outcome-1",
-      profile: "review",
+      delegate: "review",
       parentSessionId: sessionId,
       status: "completed",
       createdAt: 11,
@@ -188,7 +194,10 @@ describe("runtime facade coverage", () => {
       timestamp: 100,
       payload: {
         runId: "delegation-hydrated-1",
-        profile: "patch-worker",
+        delegate: "patch-worker",
+        agentSpec: "patch-worker",
+        envelope: "patch-worker",
+        skillName: "implementation",
         kind: "patch",
         boundary: "effectful",
         status: "running",
@@ -202,7 +211,10 @@ describe("runtime facade coverage", () => {
       timestamp: 120,
       payload: {
         runId: "delegation-hydrated-1",
-        profile: "patch-worker",
+        delegate: "patch-worker",
+        agentSpec: "patch-worker",
+        envelope: "patch-worker",
+        skillName: "implementation",
         kind: "patch",
         childSessionId: "child-hydrated-1",
         boundary: "effectful",
@@ -238,6 +250,9 @@ describe("runtime facade coverage", () => {
     expect(runs[0]).toMatchObject({
       runId: "delegation-hydrated-1",
       status: "merged",
+      agentSpec: "patch-worker",
+      envelope: "patch-worker",
+      skillName: "implementation",
       workerSessionId: "child-hydrated-1",
       delivery: {
         mode: "supplemental",
@@ -258,7 +273,7 @@ describe("runtime facade coverage", () => {
       timestamp: 200,
       payload: {
         runId: "delegation-timeout-1",
-        profile: "review",
+        delegate: "review",
         kind: "review",
         boundary: "safe",
         status: "running",
@@ -272,7 +287,7 @@ describe("runtime facade coverage", () => {
       timestamp: 260,
       payload: {
         runId: "delegation-timeout-1",
-        profile: "review",
+        delegate: "review",
         kind: "review",
         boundary: "safe",
         status: "timeout",
@@ -312,7 +327,7 @@ describe("runtime facade coverage", () => {
       timestamp: 300,
       payload: {
         runId: "delegation-pending-outcome-hydrated-1",
-        profile: "review",
+        delegate: "review",
         kind: "review",
         boundary: "safe",
         status: "completed",

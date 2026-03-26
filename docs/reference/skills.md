@@ -18,21 +18,32 @@ Skill taxonomy is now split by role:
 
 This keeps lifecycle choreography out of the public catalog.
 
-## Skills vs Subagents
+## Skills vs Delegation
 
-Skills and subagents solve different problems and stay intentionally separate.
+Skills and delegated workers solve different problems and stay intentionally
+separate.
 
 - `skill`
   - semantic contract for the work
   - expected outputs, effect ceilings, completion rules, and budget ceilings
-- `subagent profile`
-  - isolated execution strategy for a delegated slice of work
-  - model/tool surface narrowing, result mode, and boundary defaults
+- `execution envelope`
+  - runtime posture for delegated work
+  - boundary, model/tool surface narrowing, and runtime budgets
+- `agent spec`
+  - named delegated worker configuration
+  - composes a default `skillName` with an envelope and an optional thin
+    executor preamble
 
 Current rules:
 
-- a child run may preload or prefer one or more skills, but it does not create
-  a second authoritative skill lifecycle by default
+- a child run may bind a delegated skill directly or through an `agentSpec`
+- when `skillName` is present, the runner injects the skill body and output
+  contract into the child prompt rather than relying on a follow-up `skill_load`
+  call
+- child runtime skill activation is still used for inspection and validation
+  surfaces, but it does not create a second authoritative skill lifecycle
+- the runner validates returned `skillOutputs` against the delegated skill
+  contract after the child returns
 - the parent session remains the authority that owns active skill state,
   completion, and patch adoption
 - patch-producing child runs return `WorkerResult` / patch artifacts for the
@@ -246,8 +257,9 @@ inject them when relevant, but `deliberation_memory` remains the inspection
 surface for reviewing retained artifacts, scores, and evidence.
 
 `predict-review` is an advisory multi-perspective skill. It uses public
-delegation tools and existing built-in subagent profiles to generate competing
-hypotheses, but it does not create runtime authority or bypass verification.
+delegation tools and existing built-in agent specs / envelopes to generate
+competing hypotheses, but it does not create runtime authority or bypass
+verification.
 
 ## Hidden-By-Default Skills
 
