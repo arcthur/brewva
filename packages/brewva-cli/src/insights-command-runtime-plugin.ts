@@ -1,18 +1,14 @@
 import type { RuntimePlugin, RuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import {
-  buildInsightReport,
-  clampText,
-  formatInsightText,
-  resolveInsightDirectory,
-} from "./insight.js";
+import { buildProjectInsightsReport, formatProjectInsightsText } from "./insights.js";
+import { clampText, resolveInspectDirectory } from "./inspect-analysis.js";
 
-const DEFAULT_WIDGET_ID = "brewva-insight";
+const DEFAULT_WIDGET_ID = "brewva-insights";
 const DEFAULT_MAX_WIDGET_LINES = 28;
 const DEFAULT_MAX_LINE_CHARS = 220;
 
-function clearInsightWidget(ctx: ExtensionContext, widgetId: string): void {
+function clearInsightsWidget(ctx: ExtensionContext, widgetId: string): void {
   if (!ctx.hasUI) return;
   ctx.ui.setWidget(widgetId, undefined, {
     placement: "belowEditor",
@@ -25,23 +21,21 @@ function toWidgetLines(text: string, maxLines: number, maxLineChars: number): st
     return rawLines;
   }
   const kept = rawLines.slice(0, Math.max(1, maxLines - 1));
-  kept.push(`...[insight truncated: ${rawLines.length - kept.length} more lines]`);
+  kept.push(`...[insights truncated: ${rawLines.length - kept.length} more lines]`);
   return kept;
 }
 
-function resolveVerdictNotifyLevel(
-  verdict: ReturnType<typeof buildInsightReport>["verdict"],
-): "info" | "warning" {
-  if (verdict === "questionable" || verdict === "mixed") return "warning";
+function resolveInsightsNotifyLevel(input: {
+  analyzedSessions: number;
+  failedSessions: number;
+}): "info" | "warning" {
+  if (input.failedSessions > 0 || input.analyzedSessions === 0) {
+    return "warning";
+  }
   return "info";
 }
 
-function normalizeCommandArgs(args: string): string | undefined {
-  const trimmed = args.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-export function createInsightCommandRuntimePlugin(
+export function createInsightsCommandRuntimePlugin(
   runtime: BrewvaRuntime,
   options: {
     widgetId?: string;
@@ -58,24 +52,24 @@ export function createInsightCommandRuntimePlugin(
 
   return (runtimePluginApi: RuntimePluginApi) => {
     runtimePluginApi.on("session_start", async (_event, ctx) => {
-      clearInsightWidget(ctx, widgetId);
+      clearInsightsWidget(ctx, widgetId);
     });
     runtimePluginApi.on("session_switch", async (_event, ctx) => {
-      clearInsightWidget(ctx, widgetId);
+      clearInsightsWidget(ctx, widgetId);
     });
     runtimePluginApi.on("session_shutdown", async (_event, ctx) => {
-      clearInsightWidget(ctx, widgetId);
+      clearInsightsWidget(ctx, widgetId);
     });
 
-    runtimePluginApi.registerCommand("insight", {
+    runtimePluginApi.registerCommand("insights", {
       description:
-        "Review the current Brewva session for a directory without entering a model turn (usage: /insight [dir] | /insight clear)",
+        "Multi-session aggregated insights for a directory (usage: /insights [dir] | /insights clear)",
       handler: async (args, ctx) => {
-        const normalizedArgs = normalizeCommandArgs(args);
+        const normalizedArgs = args.trim();
         if (normalizedArgs === "clear") {
-          clearInsightWidget(ctx, widgetId);
+          clearInsightsWidget(ctx, widgetId);
           if (ctx.hasUI) {
-            ctx.ui.notify("Insight widget cleared.", "info");
+            ctx.ui.notify("Insights widget cleared.", "info");
           }
           return;
         }
@@ -85,23 +79,29 @@ export function createInsightCommandRuntimePlugin(
         }
 
         try {
-          const directory = resolveInsightDirectory(runtime, normalizedArgs, undefined);
-          const report = buildInsightReport({
+          const directory = resolveInspectDirectory(
             runtime,
-            sessionId: ctx.sessionManager.getSessionId(),
+            normalizedArgs.length > 0 ? normalizedArgs : undefined,
+            undefined,
+          );
+          const report = buildProjectInsightsReport({
+            runtime,
             directory,
           });
-          const text = formatInsightText(report);
+          const text = formatProjectInsightsText(report);
           ctx.ui.setWidget(widgetId, toWidgetLines(text, maxWidgetLines, maxLineChars), {
             placement: "belowEditor",
           });
           ctx.ui.notify(
-            `Insight updated for ${report.directory} (${report.verdict}). Use /insight clear to dismiss.`,
-            resolveVerdictNotifyLevel(report.verdict),
+            `Insights updated for ${report.directory || "."} (${report.window.analyzedSessions} analyzed, ${report.window.failedSessions} failed). Use /insights clear to dismiss.`,
+            resolveInsightsNotifyLevel({
+              analyzedSessions: report.window.analyzedSessions,
+              failedSessions: report.window.failedSessions,
+            }),
           );
         } catch (error) {
           ctx.ui.notify(
-            `Insight failed: ${error instanceof Error ? error.message : String(error)}`,
+            `Insights failed: ${error instanceof Error ? error.message : String(error)}`,
             "warning",
           );
         }

@@ -4,7 +4,8 @@ export type ChannelCommandMatch =
   | { kind: "none" }
   | { kind: "error"; message: string }
   | { kind: "agents" }
-  | { kind: "insight"; agentId?: string; directory?: string }
+  | { kind: "inspect"; agentId?: string; directory?: string }
+  | { kind: "insights"; agentId?: string; directory?: string }
   | { kind: "update"; instructions?: string }
   | { kind: "new-agent"; agentId: string; model?: string }
   | { kind: "del-agent"; agentId: string }
@@ -89,24 +90,46 @@ export class CommandRouter {
       return { kind: "agents" };
     }
 
-    if (command === "/insight") {
+    if (command === "/inspect") {
       if (!body) {
-        return { kind: "insight" };
+        return { kind: "inspect" };
       }
       const [firstToken, ...rest] = body.split(/\s+/u);
       if ((firstToken ?? "").startsWith("@")) {
         const agentId = parseAgentRef(firstToken ?? "");
         if (!agentId) {
-          return { kind: "error", message: "Usage: /insight [@agent] [dir]" };
+          return { kind: "error", message: "Usage: /inspect [@agent] [dir]" };
         }
         return {
-          kind: "insight",
+          kind: "inspect",
           agentId,
           directory: rest.join(" ").trim() || undefined,
         };
       }
       return {
-        kind: "insight",
+        kind: "inspect",
+        directory: body || undefined,
+      };
+    }
+
+    if (command === "/insights") {
+      if (!body) {
+        return { kind: "insights" };
+      }
+      const [firstToken, ...rest] = body.split(/\s+/u);
+      if ((firstToken ?? "").startsWith("@")) {
+        const agentId = parseAgentRef(firstToken ?? "");
+        if (!agentId) {
+          return { kind: "error", message: "Usage: /insights [@agent] [dir]" };
+        }
+        return {
+          kind: "insights",
+          agentId,
+          directory: rest.join(" ").trim() || undefined,
+        };
+      }
+      return {
+        kind: "insights",
         directory: body || undefined,
       };
     }
@@ -208,6 +231,10 @@ export class CommandRouter {
       };
     }
 
-    return { kind: "none" };
+    return {
+      kind: "error",
+      message:
+        "Unknown command. Use /inspect, /insights, /agents, /update, /new-agent, /del-agent, /focus, /run, or /discuss.",
+    };
   }
 }

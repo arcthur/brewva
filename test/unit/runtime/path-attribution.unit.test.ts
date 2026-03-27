@@ -11,7 +11,7 @@ import {
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("shared path attribution helpers", () => {
-  test("share patch history parsing and workspace path normalization across runtime and insight", () => {
+  test("share patch history parsing and workspace path normalization across runtime and inspect analysis", () => {
     const workspace = createTestWorkspace("path-attribution-unit");
     const patchHistoryPath = join(
       workspace,

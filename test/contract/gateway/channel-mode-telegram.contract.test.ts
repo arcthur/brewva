@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { handleInsightChannelCommand } from "@brewva/brewva-cli";
+import { handleInspectChannelCommand, handleInsightsChannelCommand } from "@brewva/brewva-cli";
 import {
   DEFAULT_TELEGRAM_SKILL_NAME,
   runChannelMode,
@@ -130,8 +130,8 @@ describe("gateway contract: telegram channel dispatch", () => {
     ]);
   });
 
-  test("channel orchestration handles /insight inline without a model turn", async () => {
-    const workspace = createTestWorkspace("channel-telegram-insight");
+  test("channel orchestration handles /inspect inline without a model turn", async () => {
+    const workspace = createTestWorkspace("channel-telegram-inspect");
     mkdirSync(join(workspace, "src"), { recursive: true });
     writeFileSync(join(workspace, "src", "index.ts"), "export const ok = true;\n", "utf8");
     const configPath = writeChannelConfig(workspace, { orchestrationEnabled: true });
@@ -155,14 +155,14 @@ describe("gateway contract: telegram channel dispatch", () => {
           );
           await input.onInboundTurn(
             createInboundTurn({
-              turnId: "turn-insight-1",
-              text: "/insight src",
+              turnId: "turn-inspect-1",
+              text: "/inspect src",
             }),
           );
           await waitUntil(
             () => outboundTurns.length >= 2,
             5_000,
-            "timed out waiting for channel insight reply",
+            "timed out waiting for channel inspect reply",
           );
           abortController.abort();
         },
@@ -187,7 +187,7 @@ describe("gateway contract: telegram channel dispatch", () => {
           toolOutputs: [],
         };
       },
-      handleInsightCommand: handleInsightChannelCommand,
+      handleInspectCommand: handleInspectChannelCommand,
       launchers: {
         telegram: launcher,
       },
@@ -211,22 +211,118 @@ describe("gateway contract: telegram channel dispatch", () => {
     expect(capturedPrompts).toHaveLength(1);
     expect(capturedPrompts[0]).toContain("hello from channel e2e");
 
-    const insightText = outboundTurns[1]?.parts[0];
-    expect(insightText).toEqual(
+    const inspectText = outboundTurns[1]?.parts[0];
+    expect(inspectText).toEqual(
       expect.objectContaining({
         type: "text",
       }),
     );
-    const text = insightText && "text" in insightText ? insightText.text : "";
-    expect(text).toContain("Insight @default —");
+    const text = inspectText && "text" in inspectText ? inspectText.text : "";
+    expect(text).toContain("Inspect @default —");
     expect(text).toContain("Dir: src");
     expect(text).toContain("Mode: ");
     expect(text).toContain("Scope: ");
     expect(text).toContain("Findings:");
   });
 
-  test("channel orchestration lets /insight target an explicit agent instead of the current focus", async () => {
-    const workspace = createTestWorkspace("channel-telegram-insight-explicit-agent");
+  test("channel orchestration handles /insights inline with the aggregate report surface", async () => {
+    const workspace = createTestWorkspace("channel-telegram-inspects");
+    mkdirSync(join(workspace, "src"), { recursive: true });
+    writeFileSync(join(workspace, "src", "index.ts"), "export const ok = true;\n", "utf8");
+    const configPath = writeChannelConfig(workspace, { orchestrationEnabled: true });
+    const channelConfig = {
+      telegram: {
+        token: "bot-token",
+      },
+    };
+    const capturedPrompts: string[] = [];
+    const outboundTurns: TurnEnvelope[] = [];
+    const abortController = new AbortController();
+
+    const launcher: ChannelModeLauncher = (input) => {
+      const bridge = {
+        async start(): Promise<void> {
+          await input.onInboundTurn(
+            createInboundTurn({
+              turnId: "turn-agent-insights-1",
+              text: "hello from channel e2e",
+            }),
+          );
+          await input.onInboundTurn(
+            createInboundTurn({
+              turnId: "turn-insights-1",
+              text: "/insights .",
+            }),
+          );
+          await waitUntil(
+            () => outboundTurns.length >= 2,
+            5_000,
+            "timed out waiting for channel insights reply",
+          );
+          abortController.abort();
+        },
+        async stop(): Promise<void> {
+          return;
+        },
+        async sendTurn(turn: TurnEnvelope): Promise<Record<string, never>> {
+          outboundTurns.push(turn);
+          return {};
+        },
+      };
+      return {
+        bridge: bridge as unknown as ChannelTurnBridge,
+      };
+    };
+
+    const dependencies: RunChannelModeDependencies = {
+      collectPromptTurnOutputs: async (_session, prompt) => {
+        capturedPrompts.push(prompt);
+        return {
+          assistantText: "ACK_FROM_FAKE_PROMPT_EXECUTOR",
+          toolOutputs: [],
+        };
+      },
+      handleInspectCommand: handleInspectChannelCommand,
+      handleInsightsCommand: handleInsightsChannelCommand,
+      launchers: {
+        telegram: launcher,
+      },
+    };
+
+    try {
+      await runChannelMode({
+        cwd: workspace,
+        configPath,
+        managedToolMode: "direct",
+        verbose: false,
+        channel: "telegram",
+        channelConfig,
+        shutdownSignal: abortController.signal,
+        dependencies,
+      });
+    } finally {
+      cleanupTestWorkspace(workspace);
+    }
+
+    expect(capturedPrompts).toHaveLength(1);
+
+    const insightsText = outboundTurns[1]?.parts[0];
+    expect(insightsText).toEqual(
+      expect.objectContaining({
+        type: "text",
+      }),
+    );
+    const text = insightsText && "text" in insightsText ? insightsText.text : "";
+    expect(text).toContain("Insights @default");
+    expect(text).toContain("Dirs:");
+    expect(text).toContain("Friction:");
+    expect(text).toContain("Verification:");
+    expect(text).not.toContain("Brewva Project Insights");
+    expect(text.split("\n").length).toBeLessThanOrEqual(5);
+  });
+
+  test("channel orchestration lets /inspect target an explicit agent instead of the current focus", async () => {
+    const workspace = createTestWorkspace("channel-telegram-inspect-explicit-agent");
     mkdirSync(join(workspace, "src"), { recursive: true });
     writeFileSync(join(workspace, "src", "index.ts"), "export const ok = true;\n", "utf8");
     const configPath = writeChannelConfig(workspace, { orchestrationEnabled: true });
@@ -262,14 +358,14 @@ describe("gateway contract: telegram channel dispatch", () => {
           );
           await input.onInboundTurn(
             createInboundTurn({
-              turnId: "turn-insight-explicit-1",
-              text: "/insight @default src",
+              turnId: "turn-inspect-explicit-1",
+              text: "/inspect @default src",
             }),
           );
           await waitUntil(
             () => outboundTurns.length >= 4,
             5_000,
-            "timed out waiting for explicit-agent insight reply",
+            "timed out waiting for explicit-agent inspect reply",
           );
           abortController.abort();
         },
@@ -294,7 +390,7 @@ describe("gateway contract: telegram channel dispatch", () => {
           toolOutputs: [],
         };
       },
-      handleInsightCommand: handleInsightChannelCommand,
+      handleInspectCommand: handleInspectChannelCommand,
       launchers: {
         telegram: launcher,
       },
@@ -322,7 +418,7 @@ describe("gateway contract: telegram channel dispatch", () => {
     const explicitInsightText = outboundTurns[3]?.parts[0];
     const text =
       explicitInsightText && "text" in explicitInsightText ? explicitInsightText.text : "";
-    expect(text).toContain("Insight @default —");
+    expect(text).toContain("Inspect @default —");
     expect(text).toContain("Focus: @analyst · explicit target: @default");
     expect(text).toContain("Dir: src");
   });
@@ -376,7 +472,7 @@ describe("gateway contract: telegram channel dispatch", () => {
           toolOutputs: [],
         };
       },
-      handleInsightCommand: handleInsightChannelCommand,
+      handleInspectCommand: handleInspectChannelCommand,
       launchers: {
         telegram: launcher,
       },
@@ -486,7 +582,7 @@ describe("gateway contract: telegram channel dispatch", () => {
           toolOutputs: [],
         };
       },
-      handleInsightCommand: handleInsightChannelCommand,
+      handleInspectCommand: handleInspectChannelCommand,
       launchers: {
         telegram: launcher,
       },

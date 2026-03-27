@@ -28,9 +28,11 @@ import {
   tryGatewayPrint,
   writeGatewayAssistantText,
 } from "./gateway-print.js";
-import { handleInsightChannelCommand } from "./insight-channel-command.js";
-import { createInsightCommandRuntimePlugin } from "./insight-command-runtime-plugin.js";
-import { runInsightCli } from "./insight.js";
+import { handleInsightsChannelCommand } from "./insights-channel-command.js";
+import { createInsightsCommandRuntimePlugin } from "./insights-command-runtime-plugin.js";
+import { runInsightsCli } from "./insights.js";
+import { handleInspectChannelCommand } from "./inspect-channel-command.js";
+import { createInspectCommandRuntimePlugin } from "./inspect-command-runtime-plugin.js";
 import { resolveTargetSession, runInspectCli } from "./inspect.js";
 import { writeJsonLine } from "./json-lines.js";
 import { createBrewvaSession } from "./session.js";
@@ -107,8 +109,8 @@ Usage:
 
 Subcommands:
   brewva gateway ...   Local control-plane daemon commands
-  brewva inspect ...   Replay-first session inspection
-  brewva insight ...   Cutoff-aware session review for a directory
+  brewva inspect ...   Replay-first session inspection with deterministic analysis
+  brewva insights ...  Multi-session aggregated project insights
   brewva onboard ...   One-shot onboarding helpers (daemon install/uninstall)
 
 Modes:
@@ -157,7 +159,7 @@ Examples:
   brewva --mode json "Summarize recent changes"
   brewva --task-file ./task.json
   brewva inspect --session <session-id>
-  brewva insight packages/brewva-runtime/src
+  brewva inspect packages/brewva-runtime/src
   brewva --undo --session <session-id>
   brewva --replay --mode json --session <session-id>
   brewva onboard --install-daemon
@@ -788,7 +790,14 @@ async function run(): Promise<void> {
     return;
   }
   if (rawArgs[0] === "insight") {
-    process.exitCode = await runInsightCli(rawArgs.slice(1));
+    console.error(
+      "Error: unknown subcommand. Use 'brewva inspect', 'brewva insights', 'brewva onboard', or 'brewva gateway'.",
+    );
+    process.exitCode = 1;
+    return;
+  }
+  if (rawArgs[0] === "insights") {
+    process.exitCode = await runInsightsCli(rawArgs.slice(1));
     return;
   }
 
@@ -843,7 +852,8 @@ async function run(): Promise<void> {
       channel: parsed.channel,
       channelConfig: parsed.channelConfig,
       dependencies: {
-        handleInsightCommand: handleInsightChannelCommand,
+        handleInspectCommand: handleInspectChannelCommand,
+        handleInsightsCommand: handleInsightsChannelCommand,
       },
     });
     return;
@@ -1046,7 +1056,8 @@ async function run(): Promise<void> {
     agentId: parsed.agentId,
     managedToolMode: parsed.managedToolMode,
     runtimePlugins: [
-      createInsightCommandRuntimePlugin(runtime),
+      createInspectCommandRuntimePlugin(runtime),
+      createInsightsCommandRuntimePlugin(runtime),
       createUpdateCommandRuntimePlugin(runtime),
     ],
   });
@@ -1156,8 +1167,10 @@ if (isBunMain ?? isNodeMain) {
 }
 
 export { parseArgs };
-export { handleInsightChannelCommand } from "./insight-channel-command.js";
-export { createInsightCommandRuntimePlugin } from "./insight-command-runtime-plugin.js";
+export { handleInspectChannelCommand } from "./inspect-channel-command.js";
+export { createInspectCommandRuntimePlugin } from "./inspect-command-runtime-plugin.js";
+export { handleInsightsChannelCommand } from "./insights-channel-command.js";
+export { createInsightsCommandRuntimePlugin } from "./insights-command-runtime-plugin.js";
 export { createUpdateCommandRuntimePlugin } from "./update-command-runtime-plugin.js";
 export { JsonLineWriter, type JsonLineWritable, writeJsonLine } from "./json-lines.js";
 export {

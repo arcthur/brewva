@@ -1,8 +1,6 @@
 import { existsSync, statSync } from "node:fs";
-import { resolve } from "node:path";
-import { parseArgs as parseNodeArgs } from "node:util";
+import { posix as pathPosix, resolve } from "node:path";
 import {
-  BrewvaRuntime,
   CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE,
   EXEC_BLOCKED_ISOLATION_EVENT_TYPE,
   EXEC_FALLBACK_HOST_EVENT_TYPE,
@@ -18,25 +16,15 @@ import {
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
   collectPathCandidates,
   collectPersistedPatchPaths,
-  createTrustedLocalGovernancePort,
   listPersistedPatchSets,
   resolveWorkspacePath,
   toWorkspaceRelativePath,
   type BrewvaEventRecord,
+  type BrewvaRuntime,
   type EvidenceLedgerRow,
   type PersistedPatchSet,
 } from "@brewva/brewva-runtime";
 import { formatISO } from "date-fns";
-import { buildInspectReport, resolveTargetSession } from "./inspect.js";
-
-const INSIGHT_PARSE_OPTIONS = {
-  help: { type: "boolean", short: "h" },
-  cwd: { type: "string" },
-  config: { type: "string" },
-  session: { type: "string" },
-  dir: { type: "string" },
-  json: { type: "boolean" },
-} as const;
 
 const IGNORED_WORKSPACE_PREFIXES = [".orchestrator/", ".brewva/", "node_modules/"] as const;
 const PARALLEL_SLOT_REJECTED_EVENT_TYPE = "parallel_slot_rejected";
@@ -53,10 +41,9 @@ const RUNTIME_PRESSURE_EVENT_TYPES = new Set<string>([
   SKILL_PARALLEL_WARNING_EVENT_TYPE,
 ]);
 
-type InspectReport = ReturnType<typeof buildInspectReport>;
-type InsightMode = "audit" | "ops_if_available";
-type InsightVerdict = "reasonable" | "mixed" | "questionable" | "insufficient_evidence";
-type InsightFindingCode =
+type InspectAnalysisMode = "audit" | "ops_if_available";
+type InspectVerdict = "reasonable" | "mixed" | "questionable" | "insufficient_evidence";
+type InspectFindingCode =
   | "durability"
   | "tool_contract"
   | "shell_composition"
@@ -64,21 +51,21 @@ type InsightFindingCode =
   | "verification_hygiene"
   | "ops_environment"
   | "runtime_pressure";
-type InsightFindingSeverity = "info" | "warn" | "error";
-type InsightFindingConfidence = "low" | "medium" | "high";
+type InspectFindingSeverity = "info" | "warn" | "error";
+type InspectFindingConfidence = "low" | "medium" | "high";
 
-interface InsightCutoff {
+interface InspectCutoff {
   latestEventId: string | null;
   timestamp: string | null;
 }
 
-interface InsightCoverage {
+interface InspectCoverage {
   writeAttribution: "strong";
   readAttribution: "heuristic";
   opsTelemetryAvailable: boolean;
 }
 
-interface InsightScope {
+interface InspectScope {
   touchedInDir: number;
   touchedOutOfDir: number;
   writesInDir: number;
@@ -87,62 +74,70 @@ interface InsightScope {
   readsOutOfDirHeuristic: number;
 }
 
-interface InsightFinding {
-  code: InsightFindingCode;
-  severity: InsightFindingSeverity;
-  confidence: InsightFindingConfidence;
+interface InspectActivityDirectory {
+  path: string;
+  touched: number;
+  writes: number;
+  reads: number;
+}
+
+interface InspectFinding {
+  code: InspectFindingCode;
+  severity: InspectFindingSeverity;
+  confidence: InspectFindingConfidence;
   summary: string;
   evidenceRefs: string[];
 }
 
-interface SessionInsightReport {
-  sessionId: string;
-  directory: string;
-  cutoff: InsightCutoff;
-  mode: InsightMode;
-  base: InspectReport;
-  coverage: InsightCoverage;
-  scope: InsightScope;
-  findings: InsightFinding[];
-  evidenceGaps: string[];
-  verdict: InsightVerdict;
-}
-
-interface InsightDirectory {
+interface InspectDirectory {
   absolutePath: string;
   workspaceRelativePath: string;
 }
 
-interface InsightBuildInput {
-  runtime: BrewvaRuntime;
-  sessionId: string;
-  directory: InsightDirectory;
+interface InspectBaseReportForAnalysis {
+  hydration: {
+    status: "cold" | "ready" | "degraded";
+    issueCount: number;
+    issues: Array<{
+      eventId: string;
+    }>;
+  };
+  task: {
+    goal: string | null;
+  };
+  verification: {
+    outcome: string | null;
+    reason: string | null;
+  };
+  ledger: {
+    path: string;
+    integrityReason: string | null;
+  };
+  turnWal: {
+    filePath: string;
+  };
+  snapshots: {
+    patchHistoryPath: string;
+    patchHistoryExists: boolean;
+  };
+  consistency: {
+    ledgerIntegrity: "ok" | "invalid";
+    pendingTurnWal: number;
+  };
 }
 
-function printInsightHelp(): void {
-  console.log(`Brewva Insight - cutoff-aware session review for a directory
-
-Usage:
-  brewva insight [directory] [options]
-
-Options:
-  --cwd <path>       Working directory
-  --config <path>    Brewva config path (default: .brewva/brewva.json)
-  --session <id>     Inspect a specific replay session
-  --dir <path>       Target directory (alternative to positional argument)
-  --json             Emit JSON output
-  -h, --help         Show help
-
-Examples:
-  brewva insight
-  brewva insight packages/brewva-runtime/src
-  brewva insight --session <session-id> --dir packages/brewva-cli/src
-  brewva insight --json packages/brewva-runtime/src`);
-}
-
-export function clampText(value: string, maxChars: number): string {
-  if (value.length <= maxChars) return value;
-  return `${value.slice(0, Math.max(1, maxChars - 3))}...`;
+interface InspectAnalysisReport {
+  directory: string;
+  cutoff: InspectCutoff;
+  mode: InspectAnalysisMode;
+  coverage: InspectCoverage;
+  scope: InspectScope;
+  activity: {
+    directories: InspectActivityDirectory[];
+  };
+  findings: InspectFinding[];
+  evidenceGaps: string[];
+  verdict: InspectVerdict;
 }
 
 function toIso(timestamp: number | null | undefined): string | null {
@@ -184,45 +179,13 @@ function isWorkspacePathIgnored(path: string): boolean {
   );
 }
 
-export function resolveInsightDirectory(
-  runtime: BrewvaRuntime,
-  positionalDir: string | undefined,
-  optionDir: string | undefined,
-): InsightDirectory {
-  if (positionalDir && optionDir) {
-    throw new Error("use either a positional directory or --dir, not both");
+function directoryFromWorkspacePath(path: string): string {
+  const normalized = normalizePathForDisplay(path);
+  if (normalized === ".") {
+    return ".";
   }
-
-  const requested = positionalDir ?? optionDir;
-  const absolutePath = requested ? resolve(runtime.cwd, requested) : resolve(runtime.cwd);
-  if (!pathExists(absolutePath)) {
-    throw new Error(`directory does not exist: ${absolutePath}`);
-  }
-
-  let stats: ReturnType<typeof statSync>;
-  try {
-    stats = statSync(absolutePath);
-  } catch (error) {
-    throw new Error(
-      `failed to stat insight directory (${absolutePath}): ${error instanceof Error ? error.message : String(error)}`,
-      {
-        cause: error,
-      },
-    );
-  }
-  if (!stats.isDirectory()) {
-    throw new Error(`insight target must be a directory: ${absolutePath}`);
-  }
-
-  const workspaceRelativePath = toWorkspaceRelativePath(runtime.workspaceRoot, absolutePath);
-  if (workspaceRelativePath === null) {
-    throw new Error(`insight directory must stay inside workspace root: ${runtime.workspaceRoot}`);
-  }
-
-  return {
-    absolutePath,
-    workspaceRelativePath,
-  };
+  const directory = pathPosix.dirname(normalized);
+  return directory === "" ? "." : directory;
 }
 
 function resolveCandidatePathToWorkspace(input: {
@@ -318,6 +281,57 @@ function countPathsInDirectory(paths: Iterable<string>, directory: string): numb
   return count;
 }
 
+function buildActivityDirectories(input: {
+  touchedPaths: Iterable<string>;
+  writePaths: Iterable<string>;
+  heuristicReadPaths: Iterable<string>;
+}): InspectActivityDirectory[] {
+  const buckets = new Map<
+    string,
+    { touchedPaths: Set<string>; writePaths: Set<string>; readPaths: Set<string> }
+  >();
+
+  const ensureBucket = (path: string) => {
+    const directory = directoryFromWorkspacePath(path);
+    const existing = buckets.get(directory);
+    if (existing) {
+      return existing;
+    }
+    const created = {
+      touchedPaths: new Set<string>(),
+      writePaths: new Set<string>(),
+      readPaths: new Set<string>(),
+    };
+    buckets.set(directory, created);
+    return created;
+  };
+
+  for (const path of input.touchedPaths) {
+    ensureBucket(path).touchedPaths.add(path);
+  }
+  for (const path of input.writePaths) {
+    ensureBucket(path).writePaths.add(path);
+  }
+  for (const path of input.heuristicReadPaths) {
+    ensureBucket(path).readPaths.add(path);
+  }
+
+  return [...buckets.entries()]
+    .map(([path, bucket]) => ({
+      path,
+      touched: bucket.touchedPaths.size,
+      writes: bucket.writePaths.size,
+      reads: bucket.readPaths.size,
+    }))
+    .toSorted(
+      (left, right) =>
+        right.writes - left.writes ||
+        right.touched - left.touched ||
+        right.reads - left.reads ||
+        left.path.localeCompare(right.path),
+    );
+}
+
 function topEvidenceRefs(input: {
   eventIds?: string[];
   ledgerIds?: string[];
@@ -356,7 +370,7 @@ function collectPayloadStringValues(
   ).slice(0, maxItems);
 }
 
-function buildDurabilityFinding(base: InspectReport): InsightFinding | null {
+function buildDurabilityFinding(base: InspectBaseReportForAnalysis): InspectFinding | null {
   const issues: string[] = [];
   const eventIds: string[] = [];
 
@@ -388,7 +402,7 @@ function buildDurabilityFinding(base: InspectReport): InsightFinding | null {
   };
 }
 
-function buildToolContractFinding(events: BrewvaEventRecord[]): InsightFinding | null {
+function buildToolContractFinding(events: BrewvaEventRecord[]): InspectFinding | null {
   const warnings = events.filter((event) => event.type === TOOL_CONTRACT_WARNING_EVENT_TYPE);
   const blocked = events.filter((event) => event.type === TOOL_CALL_BLOCKED_EVENT_TYPE);
   if (warnings.length === 0 && blocked.length === 0) {
@@ -415,7 +429,7 @@ function buildToolContractFinding(events: BrewvaEventRecord[]): InsightFinding |
   };
 }
 
-function buildShellCompositionFinding(events: BrewvaEventRecord[]): InsightFinding | null {
+function buildShellCompositionFinding(events: BrewvaEventRecord[]): InspectFinding | null {
   const matches = events.filter((event) => {
     if (event.type !== TOOL_RESULT_RECORDED_EVENT_TYPE) return false;
     return (
@@ -454,12 +468,12 @@ function buildShellCompositionFinding(events: BrewvaEventRecord[]): InsightFindi
 }
 
 function buildScopeDriftFinding(input: {
-  directory: InsightDirectory;
+  directory: InspectDirectory;
   strongTouchedPaths: Set<string>;
   writePaths: Set<string>;
   heuristicReadPaths: Set<string>;
-  scope: InsightScope;
-}): InsightFinding | null {
+  scope: InspectScope;
+}): InspectFinding | null {
   const strongTouchedInDir = countPathsInDirectory(
     input.strongTouchedPaths,
     input.directory.workspaceRelativePath,
@@ -474,8 +488,8 @@ function buildScopeDriftFinding(input: {
   }
 
   let summary: string | null = null;
-  let severity: InsightFindingSeverity = "warn";
-  let confidence: InsightFindingConfidence = "medium";
+  let severity: InspectFindingSeverity = "warn";
+  let confidence: InspectFindingConfidence = "medium";
 
   if (input.scope.writesInDir === 0 && input.scope.writesOutOfDir > 0) {
     summary = `No persisted writes landed in target directory '${input.directory.workspaceRelativePath}', but ${input.scope.writesOutOfDir} write path(s) landed outside it.`;
@@ -514,9 +528,9 @@ function buildScopeDriftFinding(input: {
 
 function buildVerificationHygieneFinding(input: {
   events: BrewvaEventRecord[];
-  scope: InsightScope;
-  base: InspectReport;
-}): InsightFinding | null {
+  scope: InspectScope;
+  base: InspectBaseReportForAnalysis;
+}): InspectFinding | null {
   const writes = input.events.filter(
     (event) => event.type === VERIFICATION_WRITE_MARKED_EVENT_TYPE,
   );
@@ -563,7 +577,7 @@ function buildVerificationHygieneFinding(input: {
   return null;
 }
 
-function buildOpsEnvironmentFinding(events: BrewvaEventRecord[]): InsightFinding | null {
+function buildOpsEnvironmentFinding(events: BrewvaEventRecord[]): InspectFinding | null {
   const opsEvents = events.filter((event) => OPS_INSIGHT_EVENT_TYPES.has(event.type));
   if (opsEvents.length === 0) {
     return null;
@@ -598,7 +612,7 @@ function buildOpsEnvironmentFinding(events: BrewvaEventRecord[]): InsightFinding
   };
 }
 
-function buildRuntimePressureFinding(events: BrewvaEventRecord[]): InsightFinding | null {
+function buildRuntimePressureFinding(events: BrewvaEventRecord[]): InspectFinding | null {
   const pressureEvents = events.filter((event) => RUNTIME_PRESSURE_EVENT_TYPES.has(event.type));
   if (pressureEvents.length === 0) {
     return null;
@@ -634,7 +648,7 @@ function buildRuntimePressureFinding(events: BrewvaEventRecord[]): InsightFindin
   };
 }
 
-function resolveVerdict(findings: InsightFinding[], eventCount: number): InsightVerdict {
+function resolveVerdict(findings: InspectFinding[], eventCount: number): InspectVerdict {
   if (eventCount === 0) return "insufficient_evidence";
   if (findings.some((finding) => finding.severity === "error")) {
     return "questionable";
@@ -645,16 +659,77 @@ function resolveVerdict(findings: InsightFinding[], eventCount: number): Insight
   return findings.length === 0 ? "reasonable" : "mixed";
 }
 
-export function buildInsightReport(input: InsightBuildInput): SessionInsightReport {
+function renderFinding(finding: InspectFinding, index: number): string[] {
+  const lines = [
+    `${index + 1}. [${finding.severity}] code=${finding.code} confidence=${finding.confidence}`,
+    `   ${finding.summary}`,
+  ];
+  if (finding.evidenceRefs.length > 0) {
+    lines.push(`   evidence: ${finding.evidenceRefs.join(", ")}`);
+  }
+  return lines;
+}
+
+export function clampText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, Math.max(1, maxChars - 3))}...`;
+}
+
+export function resolveInspectDirectory(
+  runtime: BrewvaRuntime,
+  positionalDir: string | undefined,
+  optionDir: string | undefined,
+): InspectDirectory {
+  if (positionalDir && optionDir) {
+    throw new Error("use either a positional directory or --dir, not both");
+  }
+
+  const requested = positionalDir ?? optionDir;
+  const absolutePath = requested ? resolve(runtime.cwd, requested) : resolve(runtime.cwd);
+  if (!pathExists(absolutePath)) {
+    throw new Error(`directory does not exist: ${absolutePath}`);
+  }
+
+  let stats: ReturnType<typeof statSync>;
+  try {
+    stats = statSync(absolutePath);
+  } catch (error) {
+    throw new Error(
+      `failed to stat inspect directory (${absolutePath}): ${error instanceof Error ? error.message : String(error)}`,
+      {
+        cause: error,
+      },
+    );
+  }
+  if (!stats.isDirectory()) {
+    throw new Error(`inspect target must be a directory: ${absolutePath}`);
+  }
+
+  const workspaceRelativePath = toWorkspaceRelativePath(runtime.workspaceRoot, absolutePath);
+  if (workspaceRelativePath === null) {
+    throw new Error(`inspect directory must stay inside workspace root: ${runtime.workspaceRoot}`);
+  }
+
+  return {
+    absolutePath,
+    workspaceRelativePath,
+  };
+}
+
+export function buildInspectAnalysis(input: {
+  runtime: BrewvaRuntime;
+  sessionId: string;
+  directory: InspectDirectory;
+  base: InspectBaseReportForAnalysis;
+}): InspectAnalysisReport {
   const snapshotEvents = input.runtime.events.query(input.sessionId);
   const cutoffEvent = snapshotEvents[snapshotEvents.length - 1] ?? null;
   const cutoffTimestamp = cutoffEvent?.timestamp ?? null;
-  const base = buildInspectReport(input.runtime, input.sessionId);
   const ledgerRows = input.runtime.ledger
     .listRows(input.sessionId)
     .filter((row) => cutoffTimestamp === null || row.timestamp <= cutoffTimestamp);
   const patchSets = listPersistedPatchSets({
-    path: base.snapshots.patchHistoryPath,
+    path: input.base.snapshots.patchHistoryPath,
     sessionId: input.sessionId,
     cutoffTimestamp,
   });
@@ -671,7 +746,7 @@ export function buildInsightReport(input: InsightBuildInput): SessionInsightRepo
     ...heuristicReadPaths,
   ]);
 
-  const scope: InsightScope = {
+  const scope: InspectScope = {
     touchedInDir: countPathsInDirectory(touchedPaths, input.directory.workspaceRelativePath),
     touchedOutOfDir:
       touchedPaths.size -
@@ -687,10 +762,15 @@ export function buildInsightReport(input: InsightBuildInput): SessionInsightRepo
       heuristicReadPaths.size -
       countPathsInDirectory(heuristicReadPaths, input.directory.workspaceRelativePath),
   };
+  const activityDirectories = buildActivityDirectories({
+    touchedPaths,
+    writePaths,
+    heuristicReadPaths,
+  });
 
   const opsTelemetryAvailable = input.runtime.config.infrastructure.events.level !== "audit";
   const findings = [
-    buildDurabilityFinding(base),
+    buildDurabilityFinding(input.base),
     buildToolContractFinding(snapshotEvents),
     buildShellCompositionFinding(snapshotEvents),
     buildScopeDriftFinding({
@@ -703,11 +783,11 @@ export function buildInsightReport(input: InsightBuildInput): SessionInsightRepo
     buildVerificationHygieneFinding({
       events: snapshotEvents,
       scope,
-      base,
+      base: input.base,
     }),
     opsTelemetryAvailable ? buildOpsEnvironmentFinding(snapshotEvents) : null,
     opsTelemetryAvailable ? buildRuntimePressureFinding(snapshotEvents) : null,
-  ].filter((finding): finding is InsightFinding => finding !== null);
+  ].filter((finding): finding is InspectFinding => finding !== null);
 
   const evidenceGaps: string[] = [
     "Read attribution is heuristic and derived primarily from persisted tool argument summaries.",
@@ -717,7 +797,7 @@ export function buildInsightReport(input: InsightBuildInput): SessionInsightRepo
       "Current session recorded audit-level events only; ops-only telemetry such as exec backend routing and tool-call normalization failures is unavailable.",
     );
   }
-  if (!base.snapshots.patchHistoryExists && writePaths.size === 0) {
+  if (!input.base.snapshots.patchHistoryExists && writePaths.size === 0) {
     evidenceGaps.push(
       "No persisted patch history was available for the target session, so write-scope analysis may undercount mutation attempts.",
     );
@@ -729,51 +809,48 @@ export function buildInsightReport(input: InsightBuildInput): SessionInsightRepo
   }
 
   return {
-    sessionId: input.sessionId,
     directory: input.directory.workspaceRelativePath,
     cutoff: {
       latestEventId: cutoffEvent?.id ?? null,
       timestamp: toIso(cutoffTimestamp),
     },
     mode: opsTelemetryAvailable ? "ops_if_available" : "audit",
-    base,
     coverage: {
       writeAttribution: "strong",
       readAttribution: "heuristic",
       opsTelemetryAvailable,
     },
     scope,
+    activity: {
+      directories: activityDirectories,
+    },
     findings,
     evidenceGaps: uniqueStrings(evidenceGaps),
     verdict: resolveVerdict(findings, snapshotEvents.length),
   };
 }
 
-function renderFinding(finding: InsightFinding, index: number): string[] {
+export function formatInspectAnalysisText(report: InspectAnalysisReport): string {
   const lines = [
-    `${index + 1}. [${finding.severity}] code=${finding.code} confidence=${finding.confidence}`,
-    `   ${finding.summary}`,
+    `Analysis: directory=${report.directory} verdict=${report.verdict} mode=${report.mode}`,
+    `Analysis cutoff: event=${report.cutoff.latestEventId ?? "n/a"} timestamp=${report.cutoff.timestamp ?? "n/a"}`,
+    `Analysis coverage: write=${report.coverage.writeAttribution} read=${report.coverage.readAttribution} ops=${report.coverage.opsTelemetryAvailable ? "yes" : "no"}`,
+    `Analysis scope: touchedIn=${report.scope.touchedInDir} touchedOut=${report.scope.touchedOutOfDir} writesIn=${report.scope.writesInDir} writesOut=${report.scope.writesOutOfDir} readsIn=${report.scope.readsInDirHeuristic} readsOut=${report.scope.readsOutOfDirHeuristic}`,
   ];
-  if (finding.evidenceRefs.length > 0) {
-    lines.push(`   evidence: ${finding.evidenceRefs.join(", ")}`);
+
+  if (report.activity.directories.length > 0) {
+    lines.push(
+      `Analysis directories: ${report.activity.directories
+        .slice(0, 5)
+        .map(
+          (directory) =>
+            `${directory.path}[writes=${directory.writes},touched=${directory.touched},reads=${directory.reads}]`,
+        )
+        .join(" ")}`,
+    );
   }
-  return lines;
-}
 
-export function formatInsightText(report: SessionInsightReport): string {
-  const lines = [
-    `Session: ${report.sessionId}`,
-    `Directory: ${report.directory}`,
-    `Cutoff: event=${report.cutoff.latestEventId ?? "n/a"} timestamp=${report.cutoff.timestamp ?? "n/a"}`,
-    `Mode: ${report.mode}`,
-    `Verdict: ${report.verdict}`,
-    `Coverage: write=${report.coverage.writeAttribution} read=${report.coverage.readAttribution} ops=${report.coverage.opsTelemetryAvailable ? "yes" : "no"}`,
-    `Scope: touchedIn=${report.scope.touchedInDir} touchedOut=${report.scope.touchedOutOfDir} writesIn=${report.scope.writesInDir} writesOut=${report.scope.writesOutOfDir} readsIn=${report.scope.readsInDirHeuristic} readsOut=${report.scope.readsOutOfDirHeuristic}`,
-    `Base: hydration=${report.base.hydration.status} verification=${report.base.verification.outcome ?? "n/a"} ledger=${report.base.consistency.ledgerIntegrity} projectionWorking=${report.base.projection.workingExists ? "present" : "missing"} pendingTurnWal=${report.base.consistency.pendingTurnWal}`,
-    "",
-    "Findings:",
-  ];
-
+  lines.push("", "Analysis findings:");
   if (report.findings.length === 0) {
     lines.push("- none");
   } else {
@@ -782,7 +859,7 @@ export function formatInsightText(report: SessionInsightReport): string {
     }
   }
 
-  lines.push("", "Evidence gaps:");
+  lines.push("", "Analysis evidence gaps:");
   if (report.evidenceGaps.length === 0) {
     lines.push("- none");
   } else {
@@ -794,73 +871,18 @@ export function formatInsightText(report: SessionInsightReport): string {
   return lines.join("\n");
 }
 
-function printInsightText(report: SessionInsightReport): void {
-  console.log(formatInsightText(report));
-}
-
-export async function runInsightCli(argv: string[]): Promise<number> {
-  let parsed: ReturnType<typeof parseNodeArgs>;
-  try {
-    parsed = parseNodeArgs({
-      args: argv,
-      options: INSIGHT_PARSE_OPTIONS,
-      allowPositionals: true,
-      strict: true,
-    });
-  } catch (error) {
-    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
-    return 1;
-  }
-
-  if (parsed.values.help === true) {
-    printInsightHelp();
-    return 0;
-  }
-  if (parsed.positionals.length > 1) {
-    console.error(
-      `Error: unexpected positional args for insight: ${parsed.positionals.slice(1).join(" ")}`,
-    );
-    return 1;
-  }
-
-  const runtime = new BrewvaRuntime({
-    cwd: typeof parsed.values.cwd === "string" ? parsed.values.cwd : undefined,
-    configPath: typeof parsed.values.config === "string" ? parsed.values.config : undefined,
-    governancePort: createTrustedLocalGovernancePort({ profile: "personal" }),
-  });
-  const targetSessionId = resolveTargetSession(
-    runtime,
-    typeof parsed.values.session === "string" ? parsed.values.session : undefined,
-  );
-  if (!targetSessionId) {
-    console.error("Error: no replayable session found.");
-    return 1;
-  }
-
-  let directory: InsightDirectory;
-  try {
-    directory = resolveInsightDirectory(
-      runtime,
-      typeof parsed.positionals[0] === "string" ? parsed.positionals[0] : undefined,
-      typeof parsed.values.dir === "string" ? parsed.values.dir : undefined,
-    );
-  } catch (error) {
-    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
-    return 1;
-  }
-
-  const report = buildInsightReport({
-    runtime,
-    sessionId: targetSessionId,
-    directory,
-  });
-
-  if (parsed.values.json === true) {
-    console.log(JSON.stringify(report, null, 2));
-  } else {
-    printInsightText(report);
-  }
-  return 0;
-}
-
-export type { SessionInsightReport, InsightFinding };
+export type {
+  InspectActivityDirectory,
+  InspectAnalysisReport,
+  InspectCoverage,
+  InspectCutoff,
+  InspectDirectory,
+  InspectFinding,
+  InspectFindingCode,
+  InspectFindingConfidence,
+  InspectFindingSeverity,
+  InspectAnalysisMode,
+  InspectScope,
+  InspectVerdict,
+  InspectBaseReportForAnalysis,
+};

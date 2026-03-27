@@ -30,7 +30,7 @@ For operational details, see `docs/guide/gateway-control-plane-daemon.md`.
 
 ## Inspect Subcommand (`brewva inspect`)
 
-`brewva inspect` is the replay-first operator view for a persisted session.
+`brewva inspect` is the canonical replay-first operator view for a persisted session.
 It summarizes:
 
 - session hydration status and any degraded replay issues
@@ -39,29 +39,15 @@ It summarizes:
 - latest verification outcome
 - ledger chain status
 - projection/WAL/snapshot artifact paths
+- deterministic directory-scoped diagnostics and evidence gaps
 
 Typical usage:
 
 - `brewva inspect`
+- `brewva inspect packages/brewva-runtime/src`
+- `brewva inspect --dir packages/brewva-cli/src`
 - `brewva inspect --session <session-id>`
 - `brewva inspect --json --session <session-id>`
-
-## Insight Subcommand (`brewva insight`)
-
-`brewva insight` is the cutoff-aware directory review view for a persisted
-session. It reuses the inspect base report, then adds deterministic findings
-about scope drift, verification hygiene, shell composition problems, tool
-contract friction, and durability issues, with explicit evidence gaps when only
-heuristic attribution is possible. Write attribution comes from the persisted
-patch history in `.orchestrator/snapshots/<session>/patchsets.json`; read
-attribution remains heuristic and is derived from persisted tool arguments.
-
-Typical usage:
-
-- `brewva insight`
-- `brewva insight packages/brewva-runtime/src`
-- `brewva insight --session <session-id> --dir packages/brewva-cli/src`
-- `brewva insight --json packages/brewva-runtime/src`
 
 ## Onboard Subcommand (`brewva onboard`)
 
@@ -215,8 +201,8 @@ built-in default skill `telegram`.
 When `channels.orchestration.enabled=true`, channel orchestration commands include:
 
 - `/agents`
-- `/insight [dir]`
-- `/insight @agent [dir]`
+- `/inspect [dir]`
+- `/inspect @agent [dir]`
 - `/update [operator hints]`
 - `/new-agent <name>`
 - `/del-agent <name>`
@@ -225,10 +211,11 @@ When `channels.orchestration.enabled=true`, channel orchestration commands inclu
 - `/discuss @a,@b [maxRounds=N] <topic>`
 - `@agent <task>`
 
-`/insight [dir]` reuses the same deterministic collector used by `brewva insight`,
-but reports on the currently focused agent session inline in the channel.
-`/insight @agent [dir]` overrides the current focus and targets a specific active agent session.
-Channel insight output is rendered as a concise chat-friendly summary rather than the full CLI layout.
+`/inspect [dir]` is the canonical channel command for the same deterministic analysis
+layer used by `brewva inspect`, but reports on the currently focused agent session inline
+in the channel. `/inspect @agent [dir]` overrides the current focus and targets a specific
+active agent session. Channel inspect output is rendered as a concise chat-friendly summary
+rather than the full CLI layout.
 
 `/update [operator hints]` is available in interactive mode and channel orchestration.
 It queues a shared LLM-driven Brewva upgrade workflow that must review the relevant
