@@ -19,13 +19,9 @@ export interface ToolGovernanceDescriptor {
   rollbackable?: boolean;
 }
 
-export type ToolMutationStrategy =
-  | "workspace_patchset"
-  | "task_state_journal"
-  | "artifact_write"
-  | "generic_journal";
+export type ToolMutationStrategy = "workspace_patchset";
 
-export type ToolMutationRollbackKind = "patchset" | "task_state_replay" | "artifact_ref" | "none";
+export type ToolMutationRollbackKind = "patchset";
 
 export interface ToolMutationReceipt {
   id: string;
@@ -46,7 +42,6 @@ export type PatchSetRollbackFailureReason =
 
 export type ToolMutationRollbackFailureReason =
   | "no_mutation_receipt"
-  | "unsupported_rollback"
   | PatchSetRollbackFailureReason;
 
 export interface ToolMutationRollbackResult extends RollbackOutcome<ToolMutationRollbackFailureReason> {

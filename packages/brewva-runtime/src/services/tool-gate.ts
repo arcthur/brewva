@@ -3,7 +3,7 @@ import type {
   BrewvaEventRecord,
   ContextBudgetUsage,
   DecisionReceipt,
-  ProposalEnvelope,
+  EffectCommitmentProposal,
   SkillDocument,
   ToolExecutionBoundary,
   ToolGovernanceDescriptor,
@@ -134,7 +134,7 @@ export class ToolGateService {
   ) => void;
   private readonly submitProposal: (
     sessionId: string,
-    proposal: ProposalEnvelope,
+    proposal: EffectCommitmentProposal,
   ) => DecisionReceipt;
   private readonly prepareEffectCommitmentResume: EffectCommitmentDeskService["prepareResume"];
   private readonly getEffectCommitmentRequestIdForProposal: (
@@ -477,7 +477,7 @@ export class ToolGateService {
     input: StartToolCallInput,
     evidenceEvent: BrewvaEventRecord,
     argsIdentity: { digest: string; summary?: string },
-  ): ProposalEnvelope | undefined {
+  ): EffectCommitmentProposal | undefined {
     const normalizedToolName = normalizeToolName(input.toolName);
     const descriptor = this.resolveToolGovernanceDescriptor(normalizedToolName);
     if (!descriptor) {

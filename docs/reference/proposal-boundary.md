@@ -46,7 +46,7 @@ Optional field:
 
 `EvidenceRef` captures provenance. It does not itself authorize anything.
 
-### `ProposalEnvelope`
+### `EffectCommitmentProposal`
 
 Fields:
 
@@ -60,9 +60,7 @@ Fields:
 - `expiresAt?`
 - `createdAt`
 
-Current proposal kind:
-
-- `effect_commitment`
+This is the only public proposal shape.
 
 ### `DecisionReceipt`
 
@@ -152,8 +150,8 @@ Approval state is layered on top through:
 - `effect_commitment_approval_decided`
 - `effect_commitment_approval_consumed`
 
-`runtime.proposals.list(sessionId, query?)` returns newest-first proposal
-records by receipt timestamp.
+`runtime.proposals.list(sessionId, query?)` returns newest-first
+`EffectCommitmentRecord` values by receipt timestamp.
 
 The operator desk surface lives in the same domain:
 

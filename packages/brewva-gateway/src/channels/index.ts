@@ -2,8 +2,6 @@ export * from "./host.js";
 export * from "./acl.js";
 export * from "./agent-registry.js";
 export * from "./agent-runtime-manager.js";
-export * from "./approval-routing.js";
-export * from "./approval-state.js";
 export * from "./channel-a2a-runtime-plugin.js";
 export * from "./command-router.js";
 export * from "./coordinator.js";

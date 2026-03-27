@@ -8,6 +8,28 @@ Primary class: `packages/brewva-runtime/src/runtime.ts`.
 execution is delegated to services under `packages/brewva-runtime/src/services/`
 and replay/state folding is handled by `TurnReplayEngine`.
 
+## Durability Posture
+
+`BrewvaRuntime` exposes both authoritative replay surfaces and derived working
+views.
+
+The public runtime follows the repository durability taxonomy:
+
+- `durable source of truth`
+  - event tape, checkpoints, task/truth/schedule intent events, proposal
+    receipts, approval events, and linked tool outcomes
+- `durable transient`
+  - `runtime.turnWal.*` crash-recovery state and rollback patch/snapshot
+    material used by undo
+- `rebuildable state`
+  - working projection, `workflow_status`, and other explicit inspection views
+    rebuilt from durable truth plus workspace state
+- `cache`
+  - host or channel helper state outside the runtime replay contract
+
+The runtime never requires channel helper state or projection cache files to
+reconstruct commitment history or approval truth after restart.
+
 Public access is organized into domain APIs. Alongside those domains, runtime
 exposes read-only identity and environment state:
 
@@ -42,8 +64,8 @@ exposes read-only identity and environment state:
 
 Proposal boundary semantics:
 
-- the public proposal kind is now only `effect_commitment`
-- `list(sessionId, query?)` returns `ProposalRecord[]` newest first by receipt
+- proposal admission is effect-commitment-only
+- `list(sessionId, query?)` returns `EffectCommitmentRecord[]` newest first by receipt
   timestamp
 - approval-bearing requests are replay-hydrated from tape after restart
 - accepted approval does not auto-apply to later matching calls; the caller
@@ -161,6 +183,8 @@ Tool-governance note:
 - custom or third-party tools may register runtime-scoped exact descriptors
 - regex hint fallback remains available as a migration path
 - `rollbackLastMutation(...)` is the receipt-aware rollback surface
+  - only receipt-backed rollbackable mutations participate; audit-only
+    `memory_write` flows do not imply a rollback anchor
 
 ### `runtime.task.*`
 
@@ -193,8 +217,14 @@ Task closure semantics:
 - `getDigest(sessionId)`
 - `query(sessionId, query)`
 - `listRows(sessionId?)`
-- `verifyChain(sessionId)`
+- `verifyIntegrity(sessionId)`
 - `getPath()`
+
+Ledger note:
+
+- evidence rows are durable evidence material, but `verifyIntegrity(...)`
+  validates local row coherence, not anti-tamper or distributed-security
+  guarantees
 
 ### `runtime.schedule.*`
 
@@ -203,6 +233,12 @@ Task closure semantics:
 - `updateIntent(sessionId, input)`
 - `listIntents(query?)`
 - `getProjectionSnapshot()`
+
+Schedule note:
+
+- schedule intent events remain the authoritative replay surface
+- `getProjectionSnapshot()` is a rebuildable derived view rather than a
+  correctness prerequisite
 
 ### `runtime.turnWal.*`
 

@@ -327,7 +327,7 @@ describe("capability view", () => {
     expect(result.inventory.hints).toContain("load_or_accept_skill");
   });
 
-  test("captures effect boundaries and rollback hints for mutable tools", () => {
+  test("captures effect boundaries for mutable task tools without rollback hints", () => {
     const result = buildCapabilityView({
       prompt: "inspect $task_set_spec",
       allTools: [
@@ -341,7 +341,7 @@ describe("capability view", () => {
     });
 
     expect(result.details[0]?.boundary).toBe("effectful");
-    expect(result.details[0]?.rollbackable).toBe(true);
+    expect(result.details[0]?.rollbackable).toBe(false);
     expect(result.details[0]?.effects).toEqual(["memory_write"]);
   });
 

@@ -199,8 +199,6 @@ const OPS_EVENT_TYPES = new Set<string>([
   MODEL_REQUEST_PATCHED_EVENT_TYPE,
   "channel_agent_created",
   "channel_agent_deleted",
-  "channel_approval_routing_persisted",
-  "channel_approval_state_persisted",
   CHANNEL_COMMAND_RECEIVED_EVENT_TYPE,
   "channel_command_rejected",
   "channel_conversation_bound",

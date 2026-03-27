@@ -1,7 +1,6 @@
 import { IDENTITY_PARSE_WARNING_EVENT_TYPE } from "../events/event-types.js";
 import { buildTaskStateBlock } from "../runtime-helpers.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
-import type { ProposalAdmissionService } from "../services/proposal-admission.js";
 import type { SkillLifecycleService } from "../services/skill-lifecycle.js";
 import {
   readAgentConstitutionProfile,
@@ -21,7 +20,6 @@ export interface BuiltInContextSourceProviderDeps {
   workspaceRoot: string;
   agentId: string;
   kernel: RuntimeKernelContext;
-  proposalAdmissionService: Pick<ProposalAdmissionService, "getLatestProposalRecord">;
   skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
 }
 

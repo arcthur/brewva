@@ -1,8 +1,6 @@
 import type { ToolEffectClass, ToolGovernanceRisk } from "./governance.js";
 import type { RuntimeResult } from "./shared.js";
 
-export type ProposalKind = "effect_commitment";
-
 export type ProposalDecision = "accept" | "reject" | "defer";
 
 export type EvidenceSourceType =
@@ -33,18 +31,12 @@ export interface EffectCommitmentProposalPayload {
   argsSummary?: string;
 }
 
-export type ProposalPayloadByKind = {
-  effect_commitment: EffectCommitmentProposalPayload;
-};
-
-export type ProposalPayload = ProposalPayloadByKind[ProposalKind];
-
-export interface ProposalEnvelope<K extends ProposalKind = ProposalKind> {
+export interface EffectCommitmentProposal {
   id: string;
-  kind: K;
+  kind: "effect_commitment";
   issuer: string;
   subject: string;
-  payload: ProposalPayloadByKind[K];
+  payload: EffectCommitmentProposalPayload;
   evidenceRefs: EvidenceRef[];
   confidence?: number;
   expiresAt?: number;
@@ -67,13 +59,12 @@ export interface DecisionReceipt {
   timestamp: number;
 }
 
-export interface ProposalRecord<K extends ProposalKind = ProposalKind> {
-  proposal: ProposalEnvelope<K>;
+export interface EffectCommitmentRecord {
+  proposal: EffectCommitmentProposal;
   receipt: DecisionReceipt;
 }
 
-export interface ProposalListQuery {
-  kind?: ProposalKind;
+export interface EffectCommitmentListQuery {
   decision?: ProposalDecision;
   limit?: number;
 }

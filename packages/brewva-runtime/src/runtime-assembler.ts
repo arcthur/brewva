@@ -247,6 +247,7 @@ export function createRuntimeCoreDependencies(
     rootDir: resolve(options.workspaceRoot, options.config.projection.dir),
     workingFile: options.config.projection.workingFile,
     maxWorkingChars: options.config.projection.maxWorkingChars,
+    listEvents: (sessionId) => eventStore.list(sessionId),
     recordEvent: (eventInput) => options.recordEvent(eventInput),
   });
 
@@ -420,7 +421,6 @@ export function createRuntimeServiceDependencies(
     workspaceRoot: options.workspaceRoot,
     agentId: options.agentId,
     kernel: options.kernel,
-    proposalAdmissionService,
     skillLifecycleService,
   });
   const contextService = new ContextService({
@@ -446,7 +446,6 @@ export function createRuntimeServiceDependencies(
     recordEvent: (input) => options.kernel.recordEvent(input),
   });
   const reversibleMutationService = new ReversibleMutationService({
-    getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
     getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
     recordEvent: (input) => options.kernel.recordEvent(input),
     resolveToolGovernanceDescriptor: (toolName) =>

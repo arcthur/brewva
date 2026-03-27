@@ -9,7 +9,7 @@ function createWorkspace(): string {
 }
 
 describe("reversible mutation receipts", () => {
-  test("task mutations emit a task-state journal receipt", () => {
+  test("task mutations stay audit-only and do not emit rollback receipts", () => {
     const workspace = createWorkspace();
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = `reversible-task-${crypto.randomUUID()}`;
@@ -26,8 +26,7 @@ describe("reversible mutation receipts", () => {
 
     expect(started.allowed).toBe(true);
     expect(started.boundary).toBe("effectful");
-    expect(started.mutationReceipt?.strategy).toBe("task_state_journal");
-    expect(started.mutationReceipt?.rollbackKind).toBe("task_state_replay");
+    expect(started.mutationReceipt).toBeUndefined();
 
     const nextSpec: TaskSpec = {
       schema: "brewva.task.v1",
@@ -50,19 +49,8 @@ describe("reversible mutation receipts", () => {
       type: "reversible_mutation_recorded",
       last: 1,
     })[0];
-    expect(receiptEvent?.payload?.receipt).toBeDefined();
-    expect(receiptEvent?.payload?.changed).toBe(true);
-    expect(receiptEvent?.payload?.rollbackRef).toBe(
-      `event-journal://${started.mutationReceipt?.id ?? ""}`,
-    );
-    expect(receiptEvent?.payload?.beforeTaskState).toEqual({
-      items: [],
-      blockers: [],
-      updatedAt: null,
-    });
-    expect(
-      (receiptEvent?.payload?.afterTaskState as { spec?: { goal?: string } })?.spec?.goal,
-    ).toBe(nextSpec.goal);
+    expect(receiptEvent).toBeUndefined();
+    expect(runtime.task.getState(sessionId).spec?.goal).toBe(nextSpec.goal);
   });
 
   test("workspace mutations emit patchset-backed reversible receipts", () => {
@@ -117,7 +105,7 @@ describe("reversible mutation receipts", () => {
     ).toBe(true);
   });
 
-  test("task-state journal mutations can be rolled back through runtime.tools.rollbackLastMutation", () => {
+  test("task mutations do not enter runtime.tools.rollbackLastMutation", () => {
     const workspace = createWorkspace();
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = `reversible-task-rollback-${crypto.randomUUID()}`;
@@ -149,16 +137,15 @@ describe("reversible mutation receipts", () => {
     });
 
     const rollback = runtime.tools.rollbackLastMutation(sessionId);
-    expect(rollback.ok).toBe(true);
-    expect(rollback.strategy).toBe("task_state_journal");
-    expect(runtime.task.getState(sessionId).spec).toBeUndefined();
+    expect(rollback.ok).toBe(false);
+    expect(rollback.reason).toBe("no_mutation_receipt");
+    expect(runtime.task.getState(sessionId).spec?.goal).toBe("Apply and rollback task state");
 
     const rollbackEvent = runtime.events.query(sessionId, {
       type: "reversible_mutation_rolled_back",
       last: 1,
     })[0];
-    expect(rollbackEvent?.payload?.strategy).toBe("task_state_journal");
-    expect(rollbackEvent?.payload?.ok).toBe(true);
+    expect(rollbackEvent).toBeUndefined();
   });
 
   test("workspace patchset mutations can be rolled back through runtime.tools.rollbackLastMutation", () => {

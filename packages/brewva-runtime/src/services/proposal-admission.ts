@@ -1,12 +1,11 @@
 import type {
   BrewvaEventRecord,
   DecisionReceipt,
+  EffectCommitmentListQuery,
+  EffectCommitmentProposal,
+  EffectCommitmentRecord,
   EvidenceRef,
   ProposalDecision,
-  ProposalEnvelope,
-  ProposalKind,
-  ProposalListQuery,
-  ProposalRecord,
   ToolGovernanceDescriptor,
 } from "../contracts/index.js";
 import {
@@ -51,11 +50,8 @@ export class ProposalAdmissionService {
     this.authorizeEffectCommitment = (input) => options.effectCommitmentAuthorizer(input);
   }
 
-  submitProposal<K extends ProposalKind>(
-    sessionId: string,
-    proposal: ProposalEnvelope<K>,
-  ): DecisionReceipt {
-    const normalizedProposal = this.normalizeProposalEnvelope(proposal);
+  submitProposal(sessionId: string, proposal: EffectCommitmentProposal): DecisionReceipt {
+    const normalizedProposal = this.normalizeEffectCommitmentProposal(proposal);
     const turn = this.getCurrentTurn(sessionId);
 
     this.recordEvent({
@@ -99,11 +95,13 @@ export class ProposalAdmissionService {
     return structuredClone(receipt);
   }
 
-  listProposalRecords(sessionId: string, query: ProposalListQuery = {}): ProposalRecord[] {
+  listProposalRecords(
+    sessionId: string,
+    query: EffectCommitmentListQuery = {},
+  ): EffectCommitmentRecord[] {
     const records = this.listDecisionReceiptEvents(sessionId)
-      .map((event) => this.readProposalRecord(event.payload))
-      .filter((record): record is ProposalRecord => record !== null)
-      .filter((record) => (query.kind ? record.proposal.kind === query.kind : true))
+      .map((event) => this.readEffectCommitmentRecord(event.payload))
+      .filter((record): record is EffectCommitmentRecord => record !== null)
       .filter((record) => (query.decision ? record.receipt.decision === query.decision : true))
       .toSorted((left, right) => {
         if (right.receipt.timestamp !== left.receipt.timestamp) {
@@ -123,17 +121,19 @@ export class ProposalAdmissionService {
 
   getLatestProposalRecord(
     sessionId: string,
-    kind: ProposalKind,
     decision?: ProposalDecision,
-  ): ProposalRecord | undefined {
-    return this.listProposalRecords(sessionId, { kind, decision, limit: 1 })[0];
+  ): EffectCommitmentRecord | undefined {
+    return this.listProposalRecords(sessionId, { decision, limit: 1 })[0];
   }
 
-  private readProposalRecord(payload: unknown): ProposalRecord | null {
+  private readEffectCommitmentRecord(payload: unknown): EffectCommitmentRecord | null {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
       return null;
     }
-    const candidate = payload as { proposal?: ProposalEnvelope; receipt?: DecisionReceipt };
+    const candidate = payload as {
+      proposal?: EffectCommitmentProposal;
+      receipt?: DecisionReceipt;
+    };
     if (!candidate.proposal || !candidate.receipt) {
       return null;
     }
@@ -143,9 +143,9 @@ export class ProposalAdmissionService {
     };
   }
 
-  private normalizeProposalEnvelope<K extends ProposalKind>(
-    proposal: ProposalEnvelope<K>,
-  ): ProposalEnvelope<K> {
+  private normalizeEffectCommitmentProposal(
+    proposal: EffectCommitmentProposal,
+  ): EffectCommitmentProposal {
     return {
       ...proposal,
       id: proposal.id.trim(),
@@ -190,7 +190,7 @@ export class ProposalAdmissionService {
 
   private decideProposal(
     sessionId: string,
-    proposal: ProposalEnvelope,
+    proposal: EffectCommitmentProposal,
     turn: number,
   ): DecisionReceipt {
     if (!proposal.id || !proposal.issuer || !proposal.subject) {
@@ -246,7 +246,7 @@ export class ProposalAdmissionService {
   }
 
   private buildDecisionReceipt(
-    proposal: ProposalEnvelope,
+    proposal: EffectCommitmentProposal,
     decision: ProposalDecision,
     policyBasis: string[],
     reasons: string[],

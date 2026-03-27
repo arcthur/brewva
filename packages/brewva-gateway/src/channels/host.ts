@@ -35,8 +35,6 @@ import { clampText, ensureSessionShutdownRecorded } from "../utils/runtime.js";
 import { isOwnerAuthorized } from "./acl.js";
 import { AgentRegistry } from "./agent-registry.js";
 import { AgentRuntimeManager } from "./agent-runtime-manager.js";
-import { ApprovalRoutingStore } from "./approval-routing.js";
-import { ApprovalStateStore } from "./approval-state.js";
 import {
   createChannelA2ARuntimePlugin,
   type ChannelA2AAdapter,
@@ -156,34 +154,6 @@ export interface ChannelModeLauncherInput {
   resolveIngestedSessionId?: (
     turn: TurnEnvelope,
   ) => Promise<string | undefined> | string | undefined;
-  resolveApprovalState?: (params: {
-    conversationId: string;
-    requestId: string;
-    actionId: string;
-  }) =>
-    | {
-        screenId?: string;
-        stateKey?: string;
-        state?: unknown;
-      }
-    | null
-    | undefined;
-  persistApprovalState?: (params: {
-    conversationId: string;
-    requestId: string;
-    snapshot: {
-      screenId?: string;
-      stateKey?: string;
-      state?: unknown;
-    };
-  }) => void;
-  persistApprovalRouting?: (params: {
-    conversationId: string;
-    requestId: string;
-    agentId?: string;
-    agentSessionId?: string;
-    turnId?: string;
-  }) => void;
 }
 
 export type ChannelModeLauncher = (input: ChannelModeLauncherInput) => ChannelModeLaunchBundle;
@@ -474,12 +444,9 @@ const CHANNEL_LAUNCHERS: Record<SupportedChannel, ChannelModeLauncher> = {
         adapter: {
           inbound: {
             callbackSecret,
-            resolveApprovalState: input.resolveApprovalState,
           },
           outbound: {
             callbackSecret,
-            persistApprovalState: input.persistApprovalState,
-            persistApprovalRouting: input.persistApprovalRouting,
           },
         },
         transport: {
@@ -507,12 +474,9 @@ const CHANNEL_LAUNCHERS: Record<SupportedChannel, ChannelModeLauncher> = {
       adapter: {
         inbound: {
           callbackSecret,
-          resolveApprovalState: input.resolveApprovalState,
         },
         outbound: {
           callbackSecret,
-          persistApprovalState: input.persistApprovalState,
-          persistApprovalRouting: input.persistApprovalRouting,
         },
       },
       resolveIngestedSessionId: input.resolveIngestedSessionId,
@@ -973,12 +937,6 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
   });
 
   const registry = await AgentRegistry.create({
-    workspaceRoot: runtime.workspaceRoot,
-  });
-  const approvalRouting = ApprovalRoutingStore.create({
-    workspaceRoot: runtime.workspaceRoot,
-  });
-  const approvalState = ApprovalStateStore.create({
     workspaceRoot: runtime.workspaceRoot,
   });
   const runtimeManager = new AgentRuntimeManager({
@@ -1935,14 +1893,40 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
     return { handled: false };
   };
 
-  const resolveApprovalTargetAgentId = (turn: TurnEnvelope): string | undefined => {
+  const resolveApprovalTargetAgentId = (
+    turn: TurnEnvelope,
+    scopeKey: string,
+  ): string | undefined => {
     if (!orchestrationConfig.enabled) return undefined;
     if (turn.kind !== "approval") return undefined;
     const requestId = turn.approval?.requestId?.trim() ?? "";
     if (!requestId) return undefined;
-    const mapped = approvalRouting.resolveAgentId(turn.conversationId, requestId);
-    if (mapped && registry.isActive(mapped)) {
-      return mapped;
+
+    const matchesPendingRequest = (state: ConversationSessionState): boolean => {
+      if (!registry.isActive(state.agentId)) {
+        return false;
+      }
+      return state.runtime.proposals
+        .listPendingEffectCommitments(state.agentSessionId)
+        .some((pending) => pending.requestId === requestId);
+    };
+
+    for (const state of sessions.values()) {
+      if (state.scopeKey !== scopeKey) {
+        continue;
+      }
+      if (matchesPendingRequest(state)) {
+        return state.agentId;
+      }
+    }
+
+    for (const state of sessions.values()) {
+      if (state.scopeKey === scopeKey) {
+        continue;
+      }
+      if (matchesPendingRequest(state)) {
+        return state.agentId;
+      }
     }
     return undefined;
   };
@@ -1999,7 +1983,7 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
       }
 
       const fallbackAgentId = orchestrationConfig.enabled
-        ? (resolveApprovalTargetAgentId(turn) ?? registry.resolveFocus(scopeKey))
+        ? (resolveApprovalTargetAgentId(turn, scopeKey) ?? registry.resolveFocus(scopeKey))
         : runtime.agentId;
       await processUserTurnOnAgent(turn, walId, scopeKey, fallbackAgentId);
       turnWalStore.markDone(walId);
@@ -2155,54 +2139,6 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
     bundle = channelLaunchers[channel]({
       runtime,
       channelConfig: options.channelConfig,
-      resolveApprovalState: (params) => {
-        return approvalState.resolve(params);
-      },
-      persistApprovalState: (params) => {
-        const result = approvalState.record({
-          conversationId: params.conversationId,
-          requestId: params.requestId,
-          snapshot: params.snapshot,
-        });
-        if (!result.ok) return;
-        const resolvedStateKey = result.snapshot?.stateKey ?? params.snapshot.stateKey;
-        runtime.events.record({
-          sessionId: turnWalStore.scope,
-          type: "channel_approval_state_persisted",
-          payload: {
-            conversationId: params.conversationId,
-            requestId: params.requestId,
-            stateKey: resolvedStateKey ?? null,
-            hasStateKey: Boolean(resolvedStateKey),
-            hasState: params.snapshot.state !== undefined,
-            storedState: result.storedState === true,
-            generatedStateKey: result.generatedStateKey === true,
-          },
-          skipTapeCheckpoint: true,
-        });
-      },
-      persistApprovalRouting: (params) => {
-        if (!orchestrationConfig.enabled) return;
-        approvalRouting.record({
-          conversationId: params.conversationId,
-          requestId: params.requestId,
-          agentId: params.agentId,
-          agentSessionId: params.agentSessionId,
-          turnId: params.turnId,
-        });
-        runtime.events.record({
-          sessionId: turnWalStore.scope,
-          type: "channel_approval_routing_persisted",
-          payload: {
-            conversationId: params.conversationId,
-            requestId: params.requestId,
-            agentId: params.agentId,
-            agentSessionId: params.agentSessionId,
-            turnId: params.turnId,
-          },
-          skipTapeCheckpoint: true,
-        });
-      },
       resolveIngestedSessionId: (turn) => {
         const scopeKey = resolveScopeKey(turn);
         let targetAgentId = orchestrationConfig.enabled
@@ -2210,7 +2146,7 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
           : runtime.agentId;
 
         if (orchestrationConfig.enabled) {
-          const approvalAgentId = resolveApprovalTargetAgentId(turn);
+          const approvalAgentId = resolveApprovalTargetAgentId(turn, scopeKey);
           if (approvalAgentId) {
             targetAgentId = approvalAgentId;
           }

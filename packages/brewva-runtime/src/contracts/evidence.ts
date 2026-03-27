@@ -14,8 +14,6 @@ export interface EvidenceRecord {
 
 export interface EvidenceLedgerRow extends EvidenceRecord {
   sessionId: string;
-  previousHash: string;
-  hash: string;
   metadata?: Record<string, JsonValue>;
 }
 

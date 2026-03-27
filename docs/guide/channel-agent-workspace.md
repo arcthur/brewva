@@ -52,8 +52,8 @@ This override happens in runtime manager code and cannot be bypassed by agent-lo
 ## Recovery and Lifecycle
 
 - Registry persists in `.brewva/channel/agent-registry.json`.
-- Telegram inline approval callbacks route back to the originating agent when a mapping exists in `.brewva/channel/approval-routing.json` (otherwise they fall back to the current focus).
-- Telegram callback state snapshots persist in `.brewva/channel/approval-state.json` (index) and `.brewva/channel/approval-state/<stateKey>.json` (blob) so callbacks can be rehydrated after process restarts.
+- Telegram inline approval callbacks route by scanning active runtimes for the matching pending effect-commitment request; if no active runtime matches, they fall back to the current focus.
+- Telegram screen state is process-local cache only. There is no durable `.brewva/channel/approval-state*` or `.brewva/channel/approval-routing.json` recovery contract.
 - Worker runtimes are lazy-created on first routing hit.
 - Runtime pool uses `maxLiveRuntimes` + idle TTL eviction.
 - `/del-agent` performs soft delete and tears down active sessions for that agent.

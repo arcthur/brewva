@@ -70,6 +70,7 @@ This repository uses a layered documentation system:
 - Research playbook: `docs/research/README.md`
 - Architecture doc precision review RFC: `docs/research/rfc-architecture-doc-precision-review.md`
 - Boundary-first subtraction and model-native recovery RFC: `docs/research/rfc-boundary-first-subtraction-and-model-native-recovery.md`
+- Durability taxonomy RFC: `docs/research/rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md`
 - Default-path re-hardening RFC: `docs/research/rfc-default-path-re-hardening-and-advisory-surface-narrowing.md`
 - Repository fitness plane and runtime boundary RFC: `docs/research/rfc-repository-fitness-plane-and-runtime-boundary.md`
 - Roadmap notes: `docs/research/roadmap-notes.md`

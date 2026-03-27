@@ -1,10 +1,6 @@
-import type { TaskState, ToolMutationRollbackResult } from "../contracts/index.js";
-import {
-  REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE,
-  VERIFICATION_STATE_RESET_EVENT_TYPE,
-} from "../events/event-types.js";
+import type { ToolMutationRollbackResult } from "../contracts/index.js";
+import { REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE } from "../events/event-types.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
-import { TASK_EVENT_TYPE, buildCheckpointSetEvent } from "../task/ledger.js";
 import type { FileChangeService } from "./file-change.js";
 import type {
   RecordedReversibleMutation,
@@ -31,13 +27,9 @@ function buildBaseResult(
     rollbackKind: mutation.receipt.rollbackKind,
     restoredPaths: [],
     failedPaths: [],
-    reason: "unsupported_rollback",
+    reason: "no_patchset",
     ...overrides,
   };
-}
-
-function cloneTaskState(state: TaskState): TaskState {
-  return structuredClone(state);
 }
 
 export class MutationRollbackService {
@@ -69,54 +61,21 @@ export class MutationRollbackService {
     }
 
     let result: ToolMutationRollbackResult;
-    if (mutation.receipt.strategy === "workspace_patchset") {
-      if (!mutation.patchSetId) {
-        result = buildBaseResult(mutation, {
-          ok: false,
-          restoredPaths: [],
-          failedPaths: [],
-          reason: "no_patchset",
-        });
-      } else {
-        const rollback = this.rollbackPatchSet(sessionId, mutation.patchSetId);
-        result = buildBaseResult(mutation, {
-          ok: rollback.ok,
-          patchSetId: mutation.patchSetId ?? undefined,
-          restoredPaths: [...rollback.restoredPaths],
-          failedPaths: [...rollback.failedPaths],
-          reason: rollback.reason,
-        });
-      }
-    } else if (mutation.receipt.strategy === "task_state_journal" && mutation.beforeTaskState) {
-      const turn = this.getCurrentTurn(sessionId);
-      this.recordEvent({
-        sessionId,
-        type: TASK_EVENT_TYPE,
-        turn,
-        payload: buildCheckpointSetEvent(
-          cloneTaskState(mutation.beforeTaskState),
-        ) as unknown as Record<string, unknown>,
-      });
-      this.recordEvent({
-        sessionId,
-        type: VERIFICATION_STATE_RESET_EVENT_TYPE,
-        turn,
-        payload: {
-          reason: "mutation_rollback",
-          receiptId: mutation.receipt.id,
-        },
-      });
-      result = buildBaseResult(mutation, {
-        ok: true,
-        restoredPaths: ["task_state"],
-        failedPaths: [],
-      });
-    } else {
+    if (!mutation.patchSetId) {
       result = buildBaseResult(mutation, {
         ok: false,
         restoredPaths: [],
         failedPaths: [],
-        reason: "unsupported_rollback",
+        reason: "no_patchset",
+      });
+    } else {
+      const rollback = this.rollbackPatchSet(sessionId, mutation.patchSetId);
+      result = buildBaseResult(mutation, {
+        ok: rollback.ok,
+        patchSetId: mutation.patchSetId ?? undefined,
+        restoredPaths: [...rollback.restoredPaths],
+        failedPaths: [...rollback.failedPaths],
+        reason: rollback.reason,
       });
     }
 

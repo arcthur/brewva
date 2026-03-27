@@ -48,10 +48,7 @@ export function toolEffectsRequireEffectCommitment(effects: readonly ToolEffectC
 }
 
 export function toolEffectsCreateRollbackAnchor(effects: readonly ToolEffectClass[]): boolean {
-  return (
-    !toolEffectsRequireEffectCommitment(effects) &&
-    effects.some((effect) => effect === "workspace_write" || effect === "memory_write")
-  );
+  return !toolEffectsRequireEffectCommitment(effects) && effects.includes("workspace_write");
 }
 
 function sameEffects(

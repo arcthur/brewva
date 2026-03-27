@@ -9,7 +9,7 @@ import {
 } from "./gap-remediation.helpers.js";
 
 describe("Gap remediation: ledger compaction and redaction", () => {
-  test("checkpointEveryTurns compacts session ledger and preserves hash chain", async () => {
+  test("checkpointEveryTurns compacts session ledger and preserves local integrity", async () => {
     const workspace = createWorkspace("ledger");
     writeConfig(
       workspace,
@@ -38,8 +38,8 @@ describe("Gap remediation: ledger compaction and redaction", () => {
     expect(rows.some((row) => row.tool === "ledger_checkpoint")).toBe(true);
     expect(rows.length).toBeLessThan(6);
 
-    const chain = runtime.ledger.verifyChain(sessionId);
-    expect(chain.valid).toBe(true);
+    const integrity = runtime.ledger.verifyIntegrity(sessionId);
+    expect(integrity.valid).toBe(true);
   });
 
   test("secret values are redacted before ledger persistence", async () => {
@@ -87,7 +87,7 @@ describe("Gap remediation: ledger compaction and redaction", () => {
     expect(rows.length).toBe(1);
     expect(rows[0]?.tool).toBe("read");
 
-    const chain = runtime.ledger.verifyChain(sessionId);
-    expect(chain.valid).toBe(true);
+    const integrity = runtime.ledger.verifyIntegrity(sessionId);
+    expect(integrity.valid).toBe(true);
   });
 });

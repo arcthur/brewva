@@ -27,6 +27,23 @@ same query fields:
 
 Result order remains tape order from oldest to newest.
 
+## Durability Classification
+
+The central registry contains more than one durability class.
+
+- `durable source of truth`
+  - event families retained on tape and used for replay, receipts, task/truth
+    folding, approval truth, and other authoritative outcomes
+- `rebuildable state`
+  - derived-state telemetry such as projection refresh signals that may be
+    persisted but are not semantic replay inputs
+- `cache`
+  - live-stream or UX-only surfaces that are not retained on durable tape
+
+`durable transient` does not primarily appear as a runtime event family here.
+That class is represented by turn WAL and rollback material outside the event
+registry.
+
 ## Central Registry
 
 The authoritative registry lives in
@@ -41,6 +58,9 @@ The authoritative registry lives in
 - `schedule_intent`
 - `projection_ingested`
 - `projection_refreshed`
+
+`projection_ingested` and `projection_refreshed` describe rebuildable-state
+maintenance. They do not promote projection files into source-of-truth inputs.
 
 ### Session, Turn, And Hosted Lifecycle
 
@@ -245,6 +265,10 @@ The audit-retained core includes:
 - `rollback`
 - schedule lifecycle events
 
+This audit-retained set is the effective `durable source of truth` subset of
+the event registry. It is the part of the registry that replay, restart, and
+receipt linkage depend on.
+
 `tool_result_recorded` is the durable outcome event. When present,
 `effectCommitmentRequestId` and `toolCallId` link the result back to the exact
 approval-bearing request that authorized it.
@@ -255,6 +279,9 @@ degradation without dropping the source event.
 `message_update` and `tool_execution_update` now remain only in the hosted
 session live stream and are no longer written to the durable tape. The durable
 side keeps only the `message_end` summary and the `tool_execution_end` result.
+
+Those live-stream-only surfaces are `cache`-class transport views, not replay
+inputs.
 
 ## Operational Semantics
 

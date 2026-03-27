@@ -41,7 +41,8 @@ Session runtime maps are managed by
 Cross-process reconstruction is tape-first:
 
 - `TurnReplayEngine` rebuilds state via checkpoint + delta
-- folded slices include task/truth/cost/evidence/projection state
+- folded slices include task/truth/cost/evidence replay state; projection
+  remains rebuildable derived state
 - runtime bootstrap hydration restores control-plane state from persisted events
 
 ## Scheduling Boundary

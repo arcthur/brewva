@@ -47,6 +47,9 @@ import type {
   DecideEffectCommitmentInput,
   DecideEffectCommitmentResult,
   DecisionReceipt,
+  EffectCommitmentListQuery,
+  EffectCommitmentProposal,
+  EffectCommitmentRecord,
   PendingEffectCommitmentRequest,
   ToolExecutionBoundary,
   ToolGovernanceDescriptor,
@@ -56,10 +59,6 @@ import type {
   SkillActivationResult,
   SkillOutputValidationResult,
   SkillRoutingScope,
-  ProposalEnvelope,
-  ProposalKind,
-  ProposalListQuery,
-  ProposalRecord,
   SessionHydrationState,
   SessionCostSummary,
   TapeSearchResult,
@@ -225,11 +224,8 @@ export class BrewvaRuntime {
     getConsumedOutputs(sessionId: string, targetSkillName: string): Record<string, unknown>;
   };
   declare readonly proposals: {
-    submit<K extends ProposalKind>(
-      sessionId: string,
-      proposal: ProposalEnvelope<K>,
-    ): DecisionReceipt;
-    list(sessionId: string, query?: ProposalListQuery): ProposalRecord[];
+    submit(sessionId: string, proposal: EffectCommitmentProposal): DecisionReceipt;
+    list(sessionId: string, query?: EffectCommitmentListQuery): EffectCommitmentRecord[];
     listPendingEffectCommitments(sessionId: string): PendingEffectCommitmentRequest[];
     decideEffectCommitment(
       sessionId: string,
@@ -423,7 +419,7 @@ export class BrewvaRuntime {
     getDigest(sessionId: string): string;
     query(sessionId: string, query: EvidenceQuery): string;
     listRows(sessionId?: string): EvidenceLedgerRow[];
-    verifyChain(sessionId: string): { valid: boolean; reason?: string };
+    verifyIntegrity(sessionId: string): { valid: boolean; reason?: string };
     getPath(): string;
   };
   declare readonly schedule: {
@@ -876,7 +872,7 @@ export class BrewvaRuntime {
         getDigest: (sessionId) => this.ledgerService.getLedgerDigest(sessionId),
         query: (sessionId, query) => this.ledgerService.queryLedger(sessionId, query),
         listRows: (sessionId) => this.ledgerService.listLedgerRows(sessionId),
-        verifyChain: (sessionId) => this.ledgerService.verifyLedgerChain(sessionId),
+        verifyIntegrity: (sessionId) => this.ledgerService.verifyLedgerIntegrity(sessionId),
         getPath: () => this.ledgerService.getLedgerPath(),
       },
       schedule: {

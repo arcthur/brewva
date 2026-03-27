@@ -12,8 +12,6 @@ import {
   buildTelegramInboundDedupeKey,
   projectTelegramUpdateToTurn,
   renderTurnToTelegramRequests,
-  type TelegramApprovalStatePersistParams,
-  type TelegramApprovalStateResolveParams,
   type TelegramApprovalStateSnapshot,
   type TelegramInboundProjectionOptions,
   type TelegramOutboundRenderOptions,
@@ -23,9 +21,9 @@ import type { TelegramOutboundRequest, TelegramUpdate } from "./types.js";
 const TELEGRAM_DEDUPE_MAX_ENTRIES_DEFAULT = 2048;
 const TELEGRAM_DEDUPE_MAX_ENTRIES_MIN = 32;
 const TELEGRAM_DEDUPE_MAX_ENTRIES_MAX = 50_000;
-const TELEGRAM_APPROVAL_STATE_MAX_ENTRIES_DEFAULT = 2048;
-const TELEGRAM_APPROVAL_STATE_MAX_ENTRIES_MIN = 32;
-const TELEGRAM_APPROVAL_STATE_MAX_ENTRIES_MAX = 50_000;
+const TELEGRAM_APPROVAL_CACHE_MAX_ENTRIES_DEFAULT = 2048;
+const TELEGRAM_APPROVAL_CACHE_MAX_ENTRIES_MIN = 32;
+const TELEGRAM_APPROVAL_CACHE_MAX_ENTRIES_MAX = 50_000;
 
 export const TELEGRAM_CHANNEL_DEFAULT_CAPABILITIES: ChannelCapabilities = {
   streaming: false,
@@ -66,6 +64,12 @@ export interface TelegramCallbackAckOptions {
 export interface TelegramApprovalStateOptions {
   enabled?: boolean;
   maxEntries?: number;
+}
+
+interface TelegramApprovalStateCacheEntry {
+  conversationId: string;
+  requestId: string;
+  snapshot: TelegramApprovalStateSnapshot;
 }
 
 export interface TelegramChannelInteractionPolicy {
@@ -114,14 +118,14 @@ function resolveDedupeMaxEntries(input: number | undefined): number {
   );
 }
 
-function resolveApprovalStateMaxEntries(input: number | undefined): number {
+function resolveApprovalStateCacheMaxEntries(input: number | undefined): number {
   if (typeof input !== "number" || !Number.isFinite(input)) {
-    return TELEGRAM_APPROVAL_STATE_MAX_ENTRIES_DEFAULT;
+    return TELEGRAM_APPROVAL_CACHE_MAX_ENTRIES_DEFAULT;
   }
   const floored = Math.floor(input);
   return Math.max(
-    TELEGRAM_APPROVAL_STATE_MAX_ENTRIES_MIN,
-    Math.min(TELEGRAM_APPROVAL_STATE_MAX_ENTRIES_MAX, floored),
+    TELEGRAM_APPROVAL_CACHE_MAX_ENTRIES_MIN,
+    Math.min(TELEGRAM_APPROVAL_CACHE_MAX_ENTRIES_MAX, floored),
   );
 }
 
@@ -143,7 +147,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
 
   private startContext: AdapterStartContext | null = null;
   private readonly inboundDedupeState = new Map<string, DedupeStatus>();
-  private readonly approvalStateStore = new Map<string, TelegramApprovalStateSnapshot>();
+  private readonly approvalStateCache = new Map<string, TelegramApprovalStateSnapshot>();
   private readonly dedupeEnabled: boolean;
   private readonly dedupeMaxEntries: number;
   private readonly callbackAckEnabled: boolean;
@@ -167,7 +171,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
       options.callbackAck?.cacheTimeSeconds,
     );
     this.approvalStateEnabled = options.approvalState?.enabled ?? true;
-    this.approvalStateMaxEntries = resolveApprovalStateMaxEntries(
+    this.approvalStateMaxEntries = resolveApprovalStateCacheMaxEntries(
       options.approvalState?.maxEntries,
     );
     this.interactionPolicy = {
@@ -205,7 +209,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     } catch (error) {
       this.startContext = null;
       this.inboundDedupeState.clear();
-      this.approvalStateStore.clear();
+      this.approvalStateCache.clear();
       throw error;
     }
   }
@@ -215,18 +219,18 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     await this.options.transport.stop();
     this.startContext = null;
     this.inboundDedupeState.clear();
-    this.approvalStateStore.clear();
+    this.approvalStateCache.clear();
   }
 
   async sendTurn(turn: TurnEnvelope): Promise<AdapterSendResult> {
     const outboundOptions = this.options.outbound;
-    const requests = this.interactionPolicy.renderOutboundRequests(turn, {
+    const renderOptions = {
       ...outboundOptions,
-      persistApprovalState: (params) => {
-        this.persistApprovalState(params);
-        outboundOptions?.persistApprovalState?.(params);
+      cacheApprovalState: (params: TelegramApprovalStateCacheEntry) => {
+        this.cacheApprovalState(params);
       },
-    });
+    };
+    const requests = this.interactionPolicy.renderOutboundRequests(turn, renderOptions);
     if (requests.length === 0) {
       return {};
     }
@@ -277,7 +281,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     }
   }
 
-  private buildApprovalStateStoreKey(params: {
+  private buildApprovalStateCacheKey(params: {
     conversationId: string;
     requestId: string;
   }): string {
@@ -307,7 +311,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     };
   }
 
-  private persistApprovalState(params: TelegramApprovalStatePersistParams): void {
+  private cacheApprovalState(params: TelegramApprovalStateCacheEntry): void {
     if (!this.approvalStateEnabled) {
       return;
     }
@@ -315,31 +319,33 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     if (!snapshot) {
       return;
     }
-    const key = this.buildApprovalStateStoreKey(params);
-    if (this.approvalStateStore.has(key)) {
-      this.approvalStateStore.delete(key);
+    const key = this.buildApprovalStateCacheKey(params);
+    if (this.approvalStateCache.has(key)) {
+      this.approvalStateCache.delete(key);
     }
-    this.approvalStateStore.set(key, snapshot);
-    while (this.approvalStateStore.size > this.approvalStateMaxEntries) {
-      const oldest = this.approvalStateStore.keys().next().value;
+    this.approvalStateCache.set(key, snapshot);
+    while (this.approvalStateCache.size > this.approvalStateMaxEntries) {
+      const oldest = this.approvalStateCache.keys().next().value;
       if (!oldest) break;
-      this.approvalStateStore.delete(oldest);
+      this.approvalStateCache.delete(oldest);
     }
   }
 
-  private resolveApprovalState(
-    params: TelegramApprovalStateResolveParams,
-  ): TelegramApprovalStateSnapshot | undefined {
+  private restoreApprovalStateFromCache(params: {
+    conversationId: string;
+    requestId: string;
+    actionId: string;
+  }): TelegramApprovalStateSnapshot | undefined {
     if (!this.approvalStateEnabled) {
       return undefined;
     }
-    const key = this.buildApprovalStateStoreKey(params);
-    const snapshot = this.approvalStateStore.get(key);
+    const key = this.buildApprovalStateCacheKey(params);
+    const snapshot = this.approvalStateCache.get(key);
     if (!snapshot) {
       return undefined;
     }
-    this.approvalStateStore.delete(key);
-    this.approvalStateStore.set(key, snapshot);
+    this.approvalStateCache.delete(key);
+    this.approvalStateCache.set(key, snapshot);
     return snapshot;
   }
 
@@ -356,11 +362,15 @@ export class TelegramChannelAdapter implements ChannelAdapter {
 
     try {
       const inboundOptions = this.options.inbound;
-      const projected = this.interactionPolicy.projectInboundTurn(update, {
+      const projectionOptions = {
         ...inboundOptions,
-        resolveApprovalState: (params) =>
-          inboundOptions?.resolveApprovalState?.(params) ?? this.resolveApprovalState(params),
-      });
+        restoreApprovalStateFromCache: (params: {
+          conversationId: string;
+          requestId: string;
+          actionId: string;
+        }) => this.restoreApprovalStateFromCache(params),
+      };
+      const projected = this.interactionPolicy.projectInboundTurn(update, projectionOptions);
       if (!projected) {
         this.finishInboundProcessing(dedupeKey, true);
         return;

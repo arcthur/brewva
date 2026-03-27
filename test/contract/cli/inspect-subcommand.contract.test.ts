@@ -97,8 +97,8 @@ describe("inspect subcommand", () => {
           task: { goal: string | null; blockers: number };
           truth: { activeFacts: number };
           verification: { outcome: string | null; failedChecks: string[] };
-          ledger: { chainValid: boolean; rows: number };
-          consistency: { ledgerChain: string };
+          ledger: { integrityValid: boolean; rows: number };
+          consistency: { ledgerIntegrity: string };
           bootstrap: { routingEnabled: boolean | null };
         };
 
@@ -109,8 +109,8 @@ describe("inspect subcommand", () => {
         expect(payload.verification.outcome).toBe("fail");
         expect(payload.verification.failedChecks).toEqual(["tests"]);
         expect(payload.ledger.rows).toBeGreaterThan(0);
-        expect(payload.ledger.chainValid).toBe(true);
-        expect(payload.consistency.ledgerChain).toBe("ok");
+        expect(payload.ledger.integrityValid).toBe(true);
+        expect(payload.consistency.ledgerIntegrity).toBe("ok");
         expect(payload.bootstrap.routingEnabled).toBe(false);
       } finally {
         if (previousXdgConfigHome === undefined) {

@@ -170,6 +170,44 @@ State visibility rule:
 - performance-only caches may remain local, but losing them must not widen
   authority or change replayable commitments
 
+## Durability Taxonomy
+
+Stable durability language is narrower than the broader state taxonomy above.
+
+The repository uses four durability classes:
+
+- `durable source of truth`
+  - losing the surface changes authority, committed history, authorization, or
+    replay outcomes
+- `durable transient`
+  - bounded crash-recovery, dedupe, or rollback material that is not final
+    authority
+- `rebuildable state`
+  - persisted derived state that may be dropped and reconstructed from durable
+    truth plus workspace state
+- `cache`
+  - latency or UX helper material whose loss must not change correctness
+
+Default mappings in Brewva:
+
+- event tape, checkpoints, receipts, task/truth/schedule intent events
+  - `durable source of truth`
+- turn WAL and rollback patch/snapshot history
+  - `durable transient`
+- working projection, workflow posture, and other derived inspection products
+  - `rebuildable state`
+- channel helper state, routing hints, and other UX continuity helpers
+  - `cache`
+
+Boundary rule:
+
+- no advisory plane may claim source-of-truth durability just because it is
+  persisted
+- rebuildable and cache-class surfaces must never become hidden authority
+  inputs
+- `Control Plane` surfaces default to `cache` unless an explicit crash-recovery
+  argument narrows them into `durable transient`
+
 ## Core Kernel
 
 ### Trust Layer
