@@ -48,7 +48,7 @@ workspace.
 - Rollback snapshots (`durable transient`): `.orchestrator/snapshots/<session>/*.snap`
   - per-file pre-mutation snapshots used only by rollback
 - Rollback patch history (`durable transient`): `.orchestrator/snapshots/<session>/patchsets.json`
-  - shared persisted patch-set log used by rollback/undo and by `brewva insight` write attribution
+  - shared persisted patch-set log used by rollback/undo and by deterministic inspect analysis write attribution
 
 The remaining `.brewva/**` entries below are operator-authored configuration or
 helper material, not session-state durability surfaces in the taxonomy above.

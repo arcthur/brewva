@@ -17,6 +17,19 @@ function runInspect(
   });
 }
 
+function runSubcommand(
+  subcommand: string,
+  args: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): SpawnSyncReturns<string> {
+  const repoRoot = resolve(import.meta.dirname, "../../..");
+  return spawnSync("bun", ["run", "start", subcommand, ...args], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env,
+  });
+}
+
 describe("inspect subcommand", () => {
   test(
     "rebuilds a replay-first session report from persisted artifacts",
@@ -100,6 +113,11 @@ describe("inspect subcommand", () => {
           ledger: { integrityValid: boolean; rows: number };
           consistency: { ledgerIntegrity: string };
           bootstrap: { routingEnabled: boolean | null };
+          analysis?: {
+            directory: string;
+            verdict: string;
+            findings: Array<{ code: string }>;
+          };
         };
 
         expect(payload.sessionId).toBe(sessionId);
@@ -112,6 +130,11 @@ describe("inspect subcommand", () => {
         expect(payload.ledger.integrityValid).toBe(true);
         expect(payload.consistency.ledgerIntegrity).toBe("ok");
         expect(payload.bootstrap.routingEnabled).toBe(false);
+        expect(payload.analysis?.directory).toBe(".");
+        expect(payload.analysis?.verdict).toBe("mixed");
+        expect(
+          payload.analysis?.findings.some((finding) => finding.code === "verification_hygiene"),
+        ).toBe(true);
       } finally {
         if (previousXdgConfigHome === undefined) {
           delete process.env["XDG_CONFIG_HOME"];
@@ -187,5 +210,165 @@ describe("inspect subcommand", () => {
         process.env["XDG_CONFIG_HOME"] = previousXdgConfigHome;
       }
     }
+  });
+
+  test(
+    "can inspect a directory-scoped deterministic analysis directly from inspect",
+    () => {
+      const workspace = createTestWorkspace("inspect-directory-analysis");
+      const xdgConfigHome = join(workspace, ".xdg");
+      mkdirSync(join(xdgConfigHome, "brewva"), { recursive: true });
+      writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");
+      mkdirSync(join(workspace, "src"), { recursive: true });
+      mkdirSync(join(workspace, "other"), { recursive: true });
+      writeFileSync(join(workspace, "src", "in-scope.ts"), "export const inScope = 1;\n", "utf8");
+      writeFileSync(
+        join(workspace, "other", "out-of-scope.ts"),
+        "export const outOfScope = 1;\n",
+        "utf8",
+      );
+      const previousXdgConfigHome = process.env["XDG_CONFIG_HOME"];
+
+      try {
+        process.env["XDG_CONFIG_HOME"] = xdgConfigHome;
+        const runtime = new BrewvaRuntime({
+          cwd: workspace,
+          config: structuredClone(DEFAULT_BREWVA_CONFIG),
+        });
+        const sessionId = "inspect-analysis-session-1";
+
+        runtime.events.record({
+          sessionId,
+          type: "session_bootstrap",
+          payload: {
+            managedToolMode: "direct",
+            skillLoad: {
+              routingEnabled: false,
+              routingScopes: ["core", "domain"],
+              routableSkills: [],
+              hiddenSkills: [],
+            },
+          },
+        });
+        runtime.context.onTurnStart(sessionId, 1);
+        runtime.task.setSpec(sessionId, {
+          schema: "brewva.task.v1",
+          goal: "Inspect session behavior in src",
+        });
+        runtime.tools.markCall(sessionId, "edit");
+        runtime.tools.trackCallStart({
+          sessionId,
+          toolCallId: "edit-1",
+          toolName: "edit",
+          args: {
+            path: "other/out-of-scope.ts",
+          },
+        });
+        writeFileSync(
+          join(workspace, "other", "out-of-scope.ts"),
+          "export const outOfScope = 2;\n",
+          "utf8",
+        );
+        runtime.tools.trackCallEnd({
+          sessionId,
+          toolCallId: "edit-1",
+          toolName: "edit",
+          channelSuccess: true,
+        });
+        runtime.tools.recordResult({
+          sessionId,
+          toolName: "exec",
+          args: {
+            command: "bash -lc 'if then'",
+          },
+          outputText: "bash: -c: line 1: syntax error near unexpected token `then'",
+          channelSuccess: false,
+        });
+        runtime.events.record({
+          sessionId,
+          type: "tool_contract_warning",
+          payload: {
+            skill: "repository-analysis",
+            toolName: "grep",
+            reason: "Prefer structural navigation before broad text search.",
+          },
+        });
+
+        const result = runInspect(
+          [
+            "--cwd",
+            workspace,
+            "--config",
+            ".brewva/brewva.json",
+            "--session",
+            sessionId,
+            "--json",
+            "src",
+          ],
+          {
+            ...process.env,
+            XDG_CONFIG_HOME: xdgConfigHome,
+          },
+        );
+        expect(result.status).toBe(0);
+
+        const payload = JSON.parse(result.stdout) as {
+          analysis: {
+            directory: string;
+            coverage: {
+              writeAttribution: string;
+              readAttribution: string;
+              opsTelemetryAvailable: boolean;
+            };
+            scope: {
+              writesInDir: number;
+              writesOutOfDir: number;
+            };
+            findings: Array<{ code: string }>;
+            evidenceGaps: string[];
+            verdict: string;
+          };
+          snapshots: { patchHistoryExists: boolean };
+        };
+
+        expect(payload.analysis.directory).toBe("src");
+        expect(payload.analysis.coverage.writeAttribution).toBe("strong");
+        expect(payload.analysis.coverage.readAttribution).toBe("heuristic");
+        expect(payload.analysis.coverage.opsTelemetryAvailable).toBe(false);
+        expect(payload.analysis.scope.writesInDir).toBe(0);
+        expect(payload.analysis.scope.writesOutOfDir).toBeGreaterThanOrEqual(1);
+        expect(payload.snapshots.patchHistoryExists).toBe(true);
+        expect(payload.analysis.findings.some((finding) => finding.code === "tool_contract")).toBe(
+          true,
+        );
+        expect(
+          payload.analysis.findings.some((finding) => finding.code === "shell_composition"),
+        ).toBe(true);
+        expect(payload.analysis.findings.some((finding) => finding.code === "scope_drift")).toBe(
+          true,
+        );
+        expect(
+          payload.analysis.findings.some((finding) => finding.code === "verification_hygiene"),
+        ).toBe(true);
+        expect(payload.analysis.verdict).toBe("questionable");
+        expect(
+          payload.analysis.evidenceGaps.some((gap) => gap.includes("audit-level events only")),
+        ).toBe(true);
+      } finally {
+        if (previousXdgConfigHome === undefined) {
+          delete process.env["XDG_CONFIG_HOME"];
+        } else {
+          process.env["XDG_CONFIG_HOME"] = previousXdgConfigHome;
+        }
+      }
+    },
+    { timeout: 20_000 },
+  );
+
+  test("rejects the removed single-session alias before prompt execution", () => {
+    const result = runSubcommand("insight", []);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("unknown subcommand");
+    expect(result.stderr).toContain("brewva inspect");
   });
 });

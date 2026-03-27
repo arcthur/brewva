@@ -42,7 +42,7 @@ describe("channel command router", () => {
     });
   });
 
-  test("parses run, discuss, and insight commands", () => {
+  test("parses run, discuss, inspect, and insights commands", () => {
     expect(router.match("/run @jack,@mike review this")).toEqual({
       kind: "run",
       agentIds: ["jack", "mike"],
@@ -56,23 +56,43 @@ describe("channel command router", () => {
       maxRounds: 4,
     });
 
-    expect(router.match("/insight")).toEqual({
-      kind: "insight",
+    expect(router.match("/inspect")).toEqual({
+      kind: "inspect",
       agentId: undefined,
       directory: undefined,
     });
-    expect(router.match("/insight src/runtime")).toEqual({
-      kind: "insight",
+    expect(router.match("/inspect src/runtime")).toEqual({
+      kind: "inspect",
       agentId: undefined,
       directory: "src/runtime",
     });
-    expect(router.match("/insight @jack")).toEqual({
-      kind: "insight",
+    expect(router.match("/inspect @jack")).toEqual({
+      kind: "inspect",
       agentId: "jack",
       directory: undefined,
     });
-    expect(router.match("/insight @jack src/runtime")).toEqual({
-      kind: "insight",
+    expect(router.match("/inspect @jack src/runtime")).toEqual({
+      kind: "inspect",
+      agentId: "jack",
+      directory: "src/runtime",
+    });
+    expect(router.match("/insights")).toEqual({
+      kind: "insights",
+      agentId: undefined,
+      directory: undefined,
+    });
+    expect(router.match("/insights src/runtime")).toEqual({
+      kind: "insights",
+      agentId: undefined,
+      directory: "src/runtime",
+    });
+    expect(router.match("/insights @jack")).toEqual({
+      kind: "insights",
+      agentId: "jack",
+      directory: undefined,
+    });
+    expect(router.match("/insights @jack src/runtime")).toEqual({
+      kind: "insights",
       agentId: "jack",
       directory: "src/runtime",
     });
@@ -115,9 +135,18 @@ describe("channel command router", () => {
       kind: "error",
       message: "Usage: /focus @agent",
     });
-    expect(router.match("/insight @")).toEqual({
+    expect(router.match("/inspect @")).toEqual({
       kind: "error",
-      message: "Usage: /insight [@agent] [dir]",
+      message: "Usage: /inspect [@agent] [dir]",
+    });
+    expect(router.match("/unknown")).toEqual({
+      kind: "error",
+      message:
+        "Unknown command. Use /inspect, /insights, /agents, /update, /new-agent, /del-agent, /focus, /run, or /discuss.",
+    });
+    expect(router.match("/insights @")).toEqual({
+      kind: "error",
+      message: "Usage: /insights [@agent] [dir]",
     });
   });
 });

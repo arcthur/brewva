@@ -15,12 +15,20 @@ import {
   type BrewvaEventRecord,
 } from "@brewva/brewva-runtime";
 import { formatISO } from "date-fns";
+import {
+  buildInspectAnalysis,
+  formatInspectAnalysisText,
+  resolveInspectDirectory,
+  type InspectAnalysisReport,
+  type InspectDirectory,
+} from "./inspect-analysis.js";
 
 const INSPECT_PARSE_OPTIONS = {
   help: { type: "boolean", short: "h" },
   cwd: { type: "string" },
   config: { type: "string" },
   session: { type: "string" },
+  dir: { type: "string" },
   json: { type: "boolean" },
 } as const;
 
@@ -46,6 +54,7 @@ interface InspectVerification {
 interface InspectReport {
   sessionId: string;
   workspaceRoot: string;
+  analysis?: InspectAnalysisReport;
   hydration: {
     status: "cold" | "ready" | "degraded";
     hydratedAt: string | null;
@@ -122,21 +131,29 @@ interface InspectReport {
   };
 }
 
+interface SessionInspectReport extends InspectAnalysisReport {
+  sessionId: string;
+  base: InspectReport;
+}
+
 function printInspectHelp(): void {
-  console.log(`Brewva Inspect - replay-first session inspection
+  console.log(`Brewva Inspect - replay-first session inspection with deterministic analysis
 
 Usage:
-  brewva inspect [options]
+  brewva inspect [directory] [options]
 
 Options:
   --cwd <path>       Working directory
   --config <path>    Brewva config path (default: .brewva/brewva.json)
   --session <id>     Inspect a specific replay session
+  --dir <path>       Target directory for deterministic analysis (alternative to positional argument)
   --json             Emit JSON output
   -h, --help         Show help
 
 Examples:
   brewva inspect
+  brewva inspect packages/brewva-runtime/src
+  brewva inspect --dir packages/brewva-cli/src
   brewva inspect --session <session-id>
   brewva inspect --json --session <session-id>`);
 }
@@ -287,7 +304,13 @@ function resolveTargetSession(runtime: BrewvaRuntime, requestedSessionId?: strin
   );
 }
 
-function buildInspectReport(runtime: BrewvaRuntime, sessionId: string): InspectReport {
+function buildInspectReport(
+  runtime: BrewvaRuntime,
+  sessionId: string,
+  options: {
+    directory?: InspectDirectory;
+  } = {},
+): InspectReport {
   const replaySession =
     listAllReplaySessions(runtime).find((entry) => entry.sessionId === sessionId) ?? null;
   const events = runtime.events.query(sessionId);
@@ -327,7 +350,7 @@ function buildInspectReport(runtime: BrewvaRuntime, sessionId: string): InspectR
   );
   const patchHistoryPath = join(snapshotSessionDir, PATCH_HISTORY_FILE);
 
-  return {
+  const report: InspectReport = {
     sessionId,
     workspaceRoot: runtime.workspaceRoot,
     hydration: {
@@ -420,9 +443,38 @@ function buildInspectReport(runtime: BrewvaRuntime, sessionId: string): InspectR
       pendingTurnWal: countSessionPendingWal(runtime, sessionId),
     },
   };
+
+  if (options.directory) {
+    report.analysis = buildInspectAnalysis({
+      runtime,
+      sessionId,
+      directory: options.directory,
+      base: report,
+    });
+  }
+
+  return report;
 }
 
-function printInspectText(report: InspectReport): void {
+function buildSessionInspectReport(input: {
+  runtime: BrewvaRuntime;
+  sessionId: string;
+  directory: InspectDirectory;
+}): SessionInspectReport {
+  const base = buildInspectReport(input.runtime, input.sessionId, {
+    directory: input.directory,
+  });
+  if (!base.analysis) {
+    throw new Error("inspect analysis was not attached to the session report");
+  }
+  return {
+    ...base.analysis,
+    sessionId: input.sessionId,
+    base,
+  };
+}
+
+function formatInspectText(report: InspectReport): string {
   const lines = [
     `Session: ${report.sessionId}`,
     `Workspace: ${report.workspaceRoot}`,
@@ -465,8 +517,15 @@ function printInspectText(report: InspectReport): void {
   if (report.verification.reason) {
     lines.push(`Verification reason: ${report.verification.reason}`);
   }
+  if (report.analysis) {
+    lines.push("", formatInspectAnalysisText(report.analysis));
+  }
 
-  console.log(lines.join("\n"));
+  return lines.join("\n");
+}
+
+function printInspectText(report: InspectReport): void {
+  console.log(formatInspectText(report));
 }
 
 function renderNullableBoolean(value: boolean | null): string {
@@ -484,7 +543,7 @@ export async function runInspectCli(argv: string[]): Promise<number> {
     parsed = parseNodeArgs({
       args: argv,
       options: INSPECT_PARSE_OPTIONS,
-      allowPositionals: false,
+      allowPositionals: true,
       strict: true,
     });
   } catch (error) {
@@ -495,6 +554,12 @@ export async function runInspectCli(argv: string[]): Promise<number> {
   if (parsed.values.help === true) {
     printInspectHelp();
     return 0;
+  }
+  if (parsed.positionals.length > 1) {
+    console.error(
+      `Error: unexpected positional args for inspect: ${parsed.positionals.slice(1).join(" ")}`,
+    );
+    return 1;
   }
 
   const runtime = new BrewvaRuntime({
@@ -511,7 +576,21 @@ export async function runInspectCli(argv: string[]): Promise<number> {
     return 1;
   }
 
-  const report = buildInspectReport(runtime, targetSessionId);
+  let directory: InspectDirectory;
+  try {
+    directory = resolveInspectDirectory(
+      runtime,
+      typeof parsed.positionals[0] === "string" ? parsed.positionals[0] : undefined,
+      typeof parsed.values.dir === "string" ? parsed.values.dir : undefined,
+    );
+  } catch (error) {
+    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    return 1;
+  }
+
+  const report = buildInspectReport(runtime, targetSessionId, {
+    directory,
+  });
   if (parsed.values.json === true) {
     console.log(JSON.stringify(report, null, 2));
   } else {
@@ -520,4 +599,11 @@ export async function runInspectCli(argv: string[]): Promise<number> {
   return 0;
 }
 
-export { buildInspectReport, resolveTargetSession };
+export {
+  buildInspectReport,
+  buildSessionInspectReport,
+  formatInspectText,
+  resolveInspectDirectory,
+  resolveTargetSession,
+};
+export type { InspectReport, SessionInspectReport };

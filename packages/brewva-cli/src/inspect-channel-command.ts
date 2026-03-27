@@ -1,21 +1,22 @@
 import type {
-  ChannelInsightCommandInput,
-  ChannelInsightCommandResult,
+  ChannelInspectCommandInput,
+  ChannelInspectCommandResult,
 } from "@brewva/brewva-gateway";
-import { buildInsightReport, clampText, resolveInsightDirectory } from "./insight.js";
+import { clampText, resolveInspectDirectory } from "./inspect-analysis.js";
+import { buildSessionInspectReport } from "./inspect.js";
 
 const MAX_FINDINGS = 3;
 const MAX_GAPS = 2;
 const MAX_SUMMARY_CHARS = 160;
 
-type InsightReport = ReturnType<typeof buildInsightReport>;
+type InspectReport = ReturnType<typeof buildSessionInspectReport>;
 
 function normalizeDirectoryArg(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
 }
 
-function formatFindingLine(finding: InsightReport["findings"][number]): string {
+function formatFindingLine(finding: InspectReport["findings"][number]): string {
   return `- ${finding.severity.toUpperCase()} ${finding.code}: ${clampText(finding.summary, MAX_SUMMARY_CHARS)}`;
 }
 
@@ -23,7 +24,7 @@ function formatGapLine(gap: string): string {
   return `- ${clampText(gap, MAX_SUMMARY_CHARS)}`;
 }
 
-function formatScopeLine(report: InsightReport): string {
+function formatScopeLine(report: InspectReport): string {
   return [
     `Scope: writes ${report.scope.writesInDir}/${report.scope.writesOutOfDir} in/out`,
     `touched ${report.scope.touchedInDir}/${report.scope.touchedOutOfDir} in/out`,
@@ -31,7 +32,7 @@ function formatScopeLine(report: InsightReport): string {
   ].join(" · ");
 }
 
-function formatCoverageLine(report: InsightReport): string {
+function formatCoverageLine(report: InspectReport): string {
   return [
     `Mode: ${report.mode}`,
     `ops=${report.coverage.opsTelemetryAvailable ? "yes" : "no"}`,
@@ -40,12 +41,12 @@ function formatCoverageLine(report: InsightReport): string {
   ].join(" · ");
 }
 
-function formatInsightChannelText(input: {
+function formatInspectChannelText(input: {
   agentId: string;
   focusedAgentId: string;
-  report: InsightReport;
+  report: InspectReport;
 }): string {
-  const lines = [`Insight @${input.agentId} — ${input.report.verdict}`];
+  const lines = [`Inspect @${input.agentId} — ${input.report.verdict}`];
 
   if (input.agentId !== input.focusedAgentId) {
     lines.push(`Focus: @${input.focusedAgentId} · explicit target: @${input.agentId}`);
@@ -84,16 +85,16 @@ function formatInsightChannelText(input: {
   return lines.join("\n");
 }
 
-export async function handleInsightChannelCommand(
-  input: ChannelInsightCommandInput,
-): Promise<ChannelInsightCommandResult> {
+export async function handleInspectChannelCommand(
+  input: ChannelInspectCommandInput,
+): Promise<ChannelInspectCommandResult> {
   const directoryArg = normalizeDirectoryArg(input.directory);
 
   if (directoryArg === "clear") {
     return {
-      text: "Channel insight is sent inline and does not persist, so there is nothing to clear.",
+      text: "Channel inspect output is sent inline and does not persist, so there is nothing to clear.",
       meta: {
-        command: "insight",
+        command: "inspect",
         mode: "inline",
       },
     };
@@ -101,30 +102,30 @@ export async function handleInsightChannelCommand(
 
   if (!input.targetSession) {
     return {
-      text: `Insight unavailable: no active session exists for @${input.targetAgentId} in this conversation yet. Send that agent a message first.`,
+      text: `Inspect unavailable: no active session exists for @${input.targetAgentId} in this conversation yet. Send that agent a message first.`,
       meta: {
-        command: "insight",
+        command: "inspect",
         agentId: input.targetAgentId,
         status: "no_active_session",
       },
     };
   }
 
-  const directory = resolveInsightDirectory(input.targetSession.runtime, directoryArg, undefined);
-  const report = buildInsightReport({
+  const directory = resolveInspectDirectory(input.targetSession.runtime, directoryArg, undefined);
+  const report = buildSessionInspectReport({
     runtime: input.targetSession.runtime,
     sessionId: input.targetSession.sessionId,
     directory,
   });
 
   return {
-    text: formatInsightChannelText({
+    text: formatInspectChannelText({
       agentId: input.targetAgentId,
       focusedAgentId: input.focusedAgentId,
       report,
     }),
     meta: {
-      command: "insight",
+      command: "inspect",
       agentId: input.targetAgentId,
       agentSessionId: input.targetSession.sessionId,
       directory: report.directory,
