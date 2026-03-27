@@ -5,7 +5,7 @@ import { join } from "node:path";
 import {
   BrewvaRuntime,
   createTrustedLocalGovernancePort,
-  type ProposalRecord,
+  type EffectCommitmentRecord,
 } from "@brewva/brewva-runtime";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
@@ -60,9 +60,8 @@ describe("runtime proposals API", () => {
       last: 1,
     })[0];
     const listed = runtime.proposals.list(sessionId, {
-      kind: "effect_commitment",
       limit: 1,
-    })[0] as ProposalRecord | undefined;
+    })[0] as EffectCommitmentRecord | undefined;
     expect(listed?.proposal.payload.toolName).toBe("exec");
     expect(listed?.proposal.payload.toolCallId).toBe("tc-exec-commitment");
     expect(listed?.receipt.decision).toBe("accept");
@@ -412,9 +411,7 @@ describe("runtime proposals API", () => {
     });
     expect(first.allowed).toBe(true);
     expect(
-      runtime.proposals
-        .list(sessionId, { kind: "effect_commitment" })
-        .filter((record) => record.receipt.decision === "accept"),
+      runtime.proposals.list(sessionId).filter((record) => record.receipt.decision === "accept"),
     ).toHaveLength(1);
 
     const duplicate = runtime.tools.start({
@@ -427,9 +424,7 @@ describe("runtime proposals API", () => {
     expect(duplicate.allowed).toBe(false);
     expect(duplicate.reason).toContain("effect_commitment_request_in_flight:");
     expect(
-      runtime.proposals
-        .list(sessionId, { kind: "effect_commitment" })
-        .filter((record) => record.receipt.decision === "accept"),
+      runtime.proposals.list(sessionId).filter((record) => record.receipt.decision === "accept"),
     ).toHaveLength(1);
 
     runtime.tools.finish({
@@ -554,9 +549,8 @@ describe("runtime proposals API", () => {
     expect(started.reason).toContain("operator review required");
 
     const listed = runtime.proposals.list(sessionId, {
-      kind: "effect_commitment",
       limit: 1,
-    })[0] as ProposalRecord | undefined;
+    })[0] as EffectCommitmentRecord | undefined;
     expect(listed?.receipt.decision).toBe("defer");
     expect(listed?.receipt.policyBasis).toContain("test_governance_port");
   });
@@ -575,6 +569,6 @@ describe("runtime proposals API", () => {
     expect(started.allowed).toBe(true);
     expect(started.boundary).toBe("safe");
     expect(started.commitmentReceipt).toBeUndefined();
-    expect(runtime.proposals.list(sessionId, { kind: "effect_commitment" })).toHaveLength(0);
+    expect(runtime.proposals.list(sessionId)).toHaveLength(0);
   });
 });

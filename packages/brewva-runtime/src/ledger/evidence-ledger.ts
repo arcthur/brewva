@@ -52,9 +52,7 @@ function parseRows(path: string): EvidenceLedgerRow[] {
 
 export class EvidenceLedger {
   private readonly filePath: string;
-  private loadedIndex = false;
   private fileHasContent = false;
-  private lastHashBySession = new Map<string, string>();
 
   constructor(filePath: string) {
     this.filePath = resolve(filePath);
@@ -66,9 +64,6 @@ export class EvidenceLedger {
   }
 
   append(input: AppendInput): EvidenceLedgerRow {
-    this.ensureIndexLoaded();
-    const previousHash = this.lastHashBySession.get(input.sessionId) ?? "root";
-
     const timestamp = Date.now();
     const id = `ev_${timestamp}_${Math.random().toString(36).slice(2, 10)}`;
     const rawOutput = redactSecrets(input.fullOutput ?? input.outputSummary);
@@ -80,7 +75,7 @@ export class EvidenceLedger {
       ? (redactUnknown(input.metadata) as EvidenceLedgerRow["metadata"])
       : undefined;
 
-    const recordBody: Omit<EvidenceLedgerRow, "hash"> = {
+    const row: EvidenceLedgerRow = {
       id,
       timestamp,
       turn: input.turn,
@@ -91,20 +86,12 @@ export class EvidenceLedger {
       outputHash,
       verdict: input.verdict,
       sessionId: input.sessionId,
-      previousHash,
       metadata,
-    };
-
-    const hash = sha256(JSON.stringify(recordBody));
-    const row: EvidenceLedgerRow = {
-      ...recordBody,
-      hash,
     };
 
     const prefix = this.fileHasContent ? "\n" : "";
     writeFileSync(this.filePath, `${prefix}${JSON.stringify(row)}`, { flag: "a" });
     this.fileHasContent = true;
-    this.lastHashBySession.set(input.sessionId, row.hash);
 
     return row;
   }
@@ -143,9 +130,11 @@ export class EvidenceLedger {
     ].join(" | ");
 
     const checkpointId = `cp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-    const checkpointBody: Omit<EvidenceLedgerRow, "hash" | "previousHash"> = {
+    const checkpointRow: EvidenceLedgerRow = {
       id: checkpointId,
-      timestamp: Date.now(),
+      // Preserve session-local temporal ordering after compaction so integrity
+      // checks stay monotonic even when the checkpoint is written later.
+      timestamp: lastCompacted.timestamp,
       turn: lastCompacted.turn,
       skill: undefined,
       tool: "ledger_checkpoint",
@@ -161,18 +150,10 @@ export class EvidenceLedger {
         toTurn: lastCompacted.turn,
       },
     };
-
-    const keptBodies: Array<Omit<EvidenceLedgerRow, "hash" | "previousHash">> = keptRows.map(
-      (row) => {
-        const { hash: _hash, previousHash: _previousHash, ...body } = row;
-        return body;
-      },
-    );
-
-    const rebuiltSessionRows = this.rehashSessionRows([checkpointBody, ...keptBodies]);
     const checkpointInsertAt = sessionPositions[compactedRows.length - 1];
     if (checkpointInsertAt === undefined) return undefined;
     const keepPositions = sessionPositions.slice(compactedRows.length);
+    const rebuiltSessionRows = [checkpointRow, ...keptRows];
     const targetPositions = [checkpointInsertAt, ...keepPositions];
 
     const insertMap = new Map<number, EvidenceLedgerRow>();
@@ -214,10 +195,6 @@ export class EvidenceLedger {
     return rows.filter((row) => row.sessionId === sessionId);
   }
 
-  clearSessionCache(sessionId: string): void {
-    this.lastHashBySession.delete(sessionId);
-  }
-
   query(sessionId: string, query: EvidenceQuery): EvidenceLedgerRow[] {
     let rows = this.list(sessionId);
 
@@ -243,41 +220,54 @@ export class EvidenceLedger {
     return rows;
   }
 
-  verifyChain(sessionId: string): { valid: boolean; reason?: string } {
+  verifyIntegrity(sessionId: string): { valid: boolean; reason?: string } {
     const rows = this.list(sessionId);
-    let previousHash = "root";
+    let previousTimestamp = 0;
+    let seenCheckpoint = false;
+
     for (const row of rows) {
-      if (row.previousHash !== previousHash) {
-        return { valid: false, reason: `invalid previous hash at ${row.id}` };
+      if (!row.id.trim()) {
+        return { valid: false, reason: "ledger_row_missing_id" };
       }
-      const { hash, ...body } = row;
-      const expected = sha256(JSON.stringify(body));
-      if (hash !== expected) {
-        return { valid: false, reason: `invalid hash at ${row.id}` };
+      if (!row.sessionId.trim()) {
+        return { valid: false, reason: `ledger_row_missing_session:${row.id}` };
       }
-      previousHash = row.hash;
+      if (!row.tool.trim()) {
+        return { valid: false, reason: `ledger_row_missing_tool:${row.id}` };
+      }
+      if (!Number.isFinite(row.timestamp) || row.timestamp <= 0) {
+        return { valid: false, reason: `ledger_row_invalid_timestamp:${row.id}` };
+      }
+      if (!Number.isFinite(row.turn) || row.turn < 0) {
+        return { valid: false, reason: `ledger_row_invalid_turn:${row.id}` };
+      }
+      if (row.timestamp < previousTimestamp) {
+        return { valid: false, reason: `ledger_row_out_of_order:${row.id}` };
+      }
+      if (!row.outputHash.trim()) {
+        return { valid: false, reason: `ledger_row_missing_output_hash:${row.id}` };
+      }
+      if (row.tool === "ledger_checkpoint") {
+        if (seenCheckpoint) {
+          return { valid: false, reason: `ledger_duplicate_checkpoint:${row.id}` };
+        }
+        seenCheckpoint = true;
+        const compacted = row.metadata?.["compacted"];
+        const kept = row.metadata?.["kept"];
+        if (
+          typeof compacted !== "number" ||
+          !Number.isFinite(compacted) ||
+          compacted <= 0 ||
+          typeof kept !== "number" ||
+          !Number.isFinite(kept) ||
+          kept <= 0
+        ) {
+          return { valid: false, reason: `ledger_checkpoint_invalid_metadata:${row.id}` };
+        }
+      }
+      previousTimestamp = row.timestamp;
     }
     return { valid: true };
-  }
-
-  private rehashSessionRows(
-    rows: Array<Omit<EvidenceLedgerRow, "hash" | "previousHash">>,
-  ): EvidenceLedgerRow[] {
-    let previousHash = "root";
-    const out: EvidenceLedgerRow[] = [];
-
-    for (const body of rows) {
-      const withPreviousHash: Omit<EvidenceLedgerRow, "hash"> = {
-        ...body,
-        previousHash,
-      };
-      const hash = sha256(JSON.stringify(withPreviousHash));
-      const row: EvidenceLedgerRow = { ...withPreviousHash, hash };
-      out.push(row);
-      previousHash = row.hash;
-    }
-
-    return out;
   }
 
   private writeAllRows(rows: EvidenceLedgerRow[]): void {
@@ -286,43 +276,14 @@ export class EvidenceLedger {
   }
 
   private resetIndex(): void {
-    this.loadedIndex = false;
     this.fileHasContent = false;
-    this.lastHashBySession.clear();
-  }
-
-  private ensureIndexLoaded(): void {
-    if (this.loadedIndex) return;
-    this.loadedIndex = true;
-
     if (!existsSync(this.filePath)) {
-      this.fileHasContent = false;
       return;
     }
-
     try {
       this.fileHasContent = statSync(this.filePath).size > 0;
     } catch {
       this.fileHasContent = false;
-      return;
-    }
-
-    if (!this.fileHasContent) return;
-
-    const lines = readFileSync(this.filePath, "utf8")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    for (const line of lines) {
-      try {
-        const row = JSON.parse(line) as EvidenceLedgerRow;
-        if (row && typeof row.sessionId === "string" && typeof row.hash === "string") {
-          this.lastHashBySession.set(row.sessionId, row.hash);
-        }
-      } catch {
-        continue;
-      }
     }
   }
 }

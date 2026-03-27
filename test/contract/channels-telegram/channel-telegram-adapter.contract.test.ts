@@ -195,7 +195,7 @@ describe("channel telegram adapter", () => {
     });
   });
 
-  test("restores persisted telegram-ui state in callback approval turn", async () => {
+  test("restores cached telegram-ui state in callback approval turn", async () => {
     const transport = createTransport();
     const secret = "callback-secret";
     const adapter = new TelegramChannelAdapter({

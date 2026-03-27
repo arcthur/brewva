@@ -95,18 +95,14 @@ interface InspectReport {
   ledger: {
     path: string;
     rows: number;
-    chainValid: boolean;
-    chainReason: string | null;
+    integrityValid: boolean;
+    integrityReason: string | null;
   };
   projection: {
     enabled: boolean;
     rootDir: string;
     workingPath: string;
     workingExists: boolean;
-    unitsPath: string;
-    unitsExists: boolean;
-    statePath: string;
-    stateExists: boolean;
   };
   turnWal: {
     enabled: boolean;
@@ -121,8 +117,7 @@ interface InspectReport {
     patchHistoryExists: boolean;
   };
   consistency: {
-    ledgerChain: "ok" | "invalid";
-    projectionWorking: "present" | "missing" | "disabled";
+    ledgerIntegrity: "ok" | "invalid";
     pendingTurnWal: number;
   };
 }
@@ -309,7 +304,7 @@ function buildInspectReport(runtime: BrewvaRuntime, sessionId: string): InspectR
   )?.payload;
   const skillState = buildSkillInspection(events);
   const verification = buildVerificationInspection(runtime, sessionId);
-  const ledgerChain = runtime.ledger.verifyChain(sessionId);
+  const ledgerIntegrity = runtime.ledger.verifyIntegrity(sessionId);
   const ledgerRows = runtime.ledger.listRows(sessionId);
 
   const projectionRoot = resolve(runtime.workspaceRoot, runtime.config.projection.dir);
@@ -319,9 +314,6 @@ function buildInspectReport(runtime: BrewvaRuntime, sessionId: string): InspectR
     `sess_${encodeSessionIdForPath(sessionId)}`,
     runtime.config.projection.workingFile,
   );
-  const projectionUnitsPath = join(projectionRoot, "units.jsonl");
-  const projectionStatePath = join(projectionRoot, "state.json");
-
   const walFilePath = resolve(
     runtime.workspaceRoot,
     runtime.config.infrastructure.turnWal.dir,
@@ -402,18 +394,14 @@ function buildInspectReport(runtime: BrewvaRuntime, sessionId: string): InspectR
     ledger: {
       path: runtime.ledger.getPath(),
       rows: ledgerRows.length,
-      chainValid: ledgerChain.valid,
-      chainReason: ledgerChain.reason ?? null,
+      integrityValid: ledgerIntegrity.valid,
+      integrityReason: ledgerIntegrity.reason ?? null,
     },
     projection: {
       enabled: runtime.config.projection.enabled,
       rootDir: projectionRoot,
       workingPath: projectionWorkingPath,
       workingExists: pathExists(projectionWorkingPath),
-      unitsPath: projectionUnitsPath,
-      unitsExists: pathExists(projectionUnitsPath),
-      statePath: projectionStatePath,
-      stateExists: pathExists(projectionStatePath),
     },
     turnWal: {
       enabled: runtime.config.infrastructure.turnWal.enabled,
@@ -428,12 +416,7 @@ function buildInspectReport(runtime: BrewvaRuntime, sessionId: string): InspectR
       patchHistoryExists: pathExists(patchHistoryPath),
     },
     consistency: {
-      ledgerChain: ledgerChain.valid ? "ok" : "invalid",
-      projectionWorking: !runtime.config.projection.enabled
-        ? "disabled"
-        : pathExists(projectionWorkingPath)
-          ? "present"
-          : "missing",
+      ledgerIntegrity: ledgerIntegrity.valid ? "ok" : "invalid",
       pendingTurnWal: countSessionPendingWal(runtime, sessionId),
     },
   };
@@ -453,15 +436,15 @@ function printInspectText(report: InspectReport): void {
     `Truth: active=${report.truth.activeFacts}/${report.truth.totalFacts} updatedAt=${report.truth.updatedAt ?? "n/a"}`,
     `Skills: active=${report.skills.activeSkill ?? "none"} completed=${renderList(report.skills.completedSkills)}`,
     `Verification: outcome=${report.verification.outcome ?? "n/a"} level=${report.verification.level ?? "n/a"} failed=${renderList(report.verification.failedChecks)} missing=${renderList(report.verification.missingEvidence)}`,
-    `Ledger: rows=${report.ledger.rows} chain=${report.ledger.chainValid ? "valid" : "invalid"} path=${report.ledger.path}`,
-    `Projection: enabled=${report.projection.enabled ? "yes" : "no"} working=${report.consistency.projectionWorking} path=${report.projection.workingPath}`,
+    `Ledger: rows=${report.ledger.rows} integrity=${report.ledger.integrityValid ? "valid" : "invalid"} path=${report.ledger.path}`,
+    `Projection: enabled=${report.projection.enabled ? "yes" : "no"} working=${report.projection.workingExists ? "present" : "missing"} path=${report.projection.workingPath}`,
     `Turn WAL: enabled=${report.turnWal.enabled ? "yes" : "no"} pending=${report.turnWal.pendingCount} sessionPending=${report.turnWal.pendingSessionCount} file=${report.turnWal.filePath}`,
     `Snapshots: sessionDir=${report.snapshots.sessionDirExists ? "present" : "missing"} patchHistory=${report.snapshots.patchHistoryExists ? "present" : "missing"} path=${report.snapshots.patchHistoryPath}`,
-    `Consistency: ledger=${report.consistency.ledgerChain} projectionWorking=${report.consistency.projectionWorking} pendingTurnWal=${report.consistency.pendingTurnWal}`,
+    `Consistency: ledger=${report.consistency.ledgerIntegrity} pendingTurnWal=${report.consistency.pendingTurnWal}`,
   ];
 
-  if (report.ledger.chainReason) {
-    lines.push(`Ledger reason: ${report.ledger.chainReason}`);
+  if (report.ledger.integrityReason) {
+    lines.push(`Ledger reason: ${report.ledger.integrityReason}`);
   }
   if (report.hydration.latestEventId) {
     lines.push(`Hydration latestEventId: ${report.hydration.latestEventId}`);

@@ -22,6 +22,28 @@
   the runtime plugin package
 - Channel gateway (`--channel`): run adapter bridge loop; bind conversations to scopes, then scopes to agent sessions, and dispatch inbound turns serially per scope
 
+## Durability Boundaries
+
+Session lifecycle behavior is anchored to the repository durability taxonomy:
+
+- `durable source of truth`
+  - event tape, checkpoints, proposal receipts, approval events, task/truth
+    events, and schedule intent events
+- `durable transient`
+  - turn WAL and rollback patch/snapshot history used for bounded recovery or
+    undo
+- `rebuildable state`
+  - working projection files and workflow posture derived from replayable
+    events
+- `cache`
+  - channel UI helper state or routing hints outside the replay contract
+
+Deletion consequences:
+
+- removing projection files must not change replay correctness
+- removing channel helper state must not break approval truth or exact resume
+- removing turn WAL can affect in-flight recovery, but not historical truth
+
 ## Recovery Path
 
 - On `SIGINT`/`SIGTERM`, CLI records `session_interrupted`, waits for agent idle (bounded by graceful timeout), then exits.
@@ -34,3 +56,6 @@
   source tape events using deterministic projection extraction rules.
   `projection_ingested` and `projection_refreshed` remain projection telemetry,
   not semantic rebuild inputs.
+- Channel approval helper state is not part of recovery correctness.
+  Approval truth and request resolution remain replay-derived from durable
+  runtime events, with optional process-local UI cache only.

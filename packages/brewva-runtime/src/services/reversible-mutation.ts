@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
   PatchSet,
-  TaskState,
   ToolGovernanceDescriptor,
   ToolMutationReceipt,
   ToolMutationRollbackKind,
@@ -13,12 +12,10 @@ import {
 } from "../events/event-types.js";
 import { toolGovernanceCreatesRollbackAnchor } from "../governance/tool-governance.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
-import { stableJsonStringify } from "../utils/json.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 
 interface PendingReversibleMutation {
   receipt: ToolMutationReceipt;
-  beforeTaskState?: TaskState;
 }
 
 export interface RecordedReversibleMutation {
@@ -26,9 +23,6 @@ export interface RecordedReversibleMutation {
   changed: boolean;
   rollbackRef?: string | null;
   patchSetId?: string | null;
-  beforeTaskState?: TaskState;
-  afterTaskState?: TaskState;
-  artifactRef?: string | null;
 }
 
 export interface PrepareReversibleMutationInput {
@@ -48,37 +42,12 @@ export interface RecordReversibleMutationInput {
 }
 
 export interface ReversibleMutationServiceOptions {
-  getTaskState: RuntimeKernelContext["getTaskState"];
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
   recordEvent: RuntimeKernelContext["recordEvent"];
   resolveToolGovernanceDescriptor: (toolName: string) => ToolGovernanceDescriptor | undefined;
 }
 
-function cloneTaskState(state: TaskState): TaskState {
-  return structuredClone(state);
-}
-
-function summarizeTaskState(state: TaskState | undefined): Record<string, unknown> | null {
-  if (!state) {
-    return null;
-  }
-  return {
-    hasSpec: Boolean(state.spec),
-    itemCount: state.items.length,
-    blockerCount: state.blockers.length,
-    phase: state.status?.phase ?? null,
-    health: state.status?.health ?? null,
-  };
-}
-
-function sameTaskState(left: TaskState | undefined, right: TaskState | undefined): boolean {
-  return stableJsonStringify(left ?? null) === stableJsonStringify(right ?? null);
-}
-
-function resolveMutationStrategy(
-  toolName: string,
-  descriptor: ToolGovernanceDescriptor | undefined,
-): {
+function resolveMutationStrategy(descriptor: ToolGovernanceDescriptor | undefined): {
   strategy: ToolMutationStrategy;
   rollbackKind: ToolMutationRollbackKind;
 } | null {
@@ -91,16 +60,7 @@ function resolveMutationStrategy(
       rollbackKind: "patchset",
     };
   }
-  if (descriptor.effects.includes("memory_write")) {
-    return {
-      strategy: "task_state_journal",
-      rollbackKind: "task_state_replay",
-    };
-  }
-  return {
-    strategy: "generic_journal",
-    rollbackKind: "none",
-  };
+  return null;
 }
 
 function buildReceipt(input: {
@@ -130,46 +90,7 @@ function buildReceipt(input: {
   };
 }
 
-function readNestedRecord(
-  input: Record<string, unknown> | undefined,
-  key: string,
-): Record<string, unknown> | undefined {
-  const value = input?.[key];
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
-function readArtifactDetails(
-  metadata: Record<string, unknown> | undefined,
-): Record<string, unknown> {
-  const details = readNestedRecord(metadata, "details");
-  return {
-    artifactRef:
-      typeof details?.artifactRef === "string" && details.artifactRef.trim().length > 0
-        ? details.artifactRef.trim()
-        : null,
-    fileName:
-      typeof details?.fileName === "string" && details.fileName.trim().length > 0
-        ? details.fileName.trim()
-        : null,
-    lane:
-      typeof details?.lane === "string" && details.lane.trim().length > 0
-        ? details.lane.trim()
-        : null,
-    kind:
-      typeof details?.kind === "string" && details.kind.trim().length > 0
-        ? details.kind.trim()
-        : null,
-    action:
-      typeof details?.action === "string" && details.action.trim().length > 0
-        ? details.action.trim()
-        : null,
-  };
-}
-
 export class ReversibleMutationService {
-  private readonly getTaskState: (sessionId: string) => TaskState;
   private readonly getCurrentTurn: (sessionId: string) => number;
   private readonly recordEvent: RuntimeKernelContext["recordEvent"];
   private readonly resolveToolGovernanceDescriptor: (
@@ -180,7 +101,6 @@ export class ReversibleMutationService {
   private readonly rolledBackReceiptIdsBySession = new Map<string, Set<string>>();
 
   constructor(options: ReversibleMutationServiceOptions) {
-    this.getTaskState = (sessionId) => options.getTaskState(sessionId);
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
     this.recordEvent = (input) => options.recordEvent(input);
     this.resolveToolGovernanceDescriptor = (toolName) =>
@@ -189,7 +109,7 @@ export class ReversibleMutationService {
 
   prepare(input: PrepareReversibleMutationInput): ToolMutationReceipt | undefined {
     const descriptor = this.resolveToolGovernanceDescriptor(input.toolName);
-    const resolved = resolveMutationStrategy(input.toolName, descriptor);
+    const resolved = resolveMutationStrategy(descriptor);
     if (!resolved) {
       return undefined;
     }
@@ -206,10 +126,6 @@ export class ReversibleMutationService {
     });
     const pending: PendingReversibleMutation = {
       receipt,
-      beforeTaskState:
-        resolved.strategy === "task_state_journal"
-          ? cloneTaskState(this.getTaskState(input.sessionId))
-          : undefined,
     };
     this.getPendingSession(input.sessionId).set(input.toolCallId, pending);
     this.recordEvent({
@@ -219,7 +135,6 @@ export class ReversibleMutationService {
       timestamp,
       payload: {
         receipt,
-        beforeTaskSummary: summarizeTaskState(pending.beforeTaskState),
       },
     });
     return receipt;
@@ -260,35 +175,6 @@ export class ReversibleMutationService {
           path: change.path,
           action: change.action,
         })) ?? [];
-    } else if (pending.receipt.strategy === "task_state_journal") {
-      const afterTaskState = cloneTaskState(this.getTaskState(input.sessionId));
-      basePayload.changed = !sameTaskState(pending.beforeTaskState, afterTaskState);
-      basePayload.beforeTaskState = pending.beforeTaskState ?? null;
-      basePayload.afterTaskState = afterTaskState;
-      basePayload.beforeTaskSummary = summarizeTaskState(pending.beforeTaskState);
-      basePayload.afterTaskSummary = summarizeTaskState(afterTaskState);
-      basePayload.rollbackRef = `event-journal://${pending.receipt.id}`;
-      recorded.changed = !sameTaskState(pending.beforeTaskState, afterTaskState);
-      recorded.beforeTaskState = pending.beforeTaskState
-        ? cloneTaskState(pending.beforeTaskState)
-        : undefined;
-      recorded.afterTaskState = cloneTaskState(afterTaskState);
-      recorded.rollbackRef = `event-journal://${pending.receipt.id}`;
-    } else if (pending.receipt.strategy === "artifact_write") {
-      const artifactDetails = readArtifactDetails(input.metadata);
-      basePayload.changed = artifactDetails.artifactRef !== null;
-      basePayload.rollbackRef =
-        artifactDetails.artifactRef !== null
-          ? `artifact://${artifactDetails.artifactRef as string}`
-          : null;
-      recorded.changed = artifactDetails.artifactRef !== null;
-      recorded.rollbackRef =
-        artifactDetails.artifactRef !== null
-          ? `artifact://${artifactDetails.artifactRef as string}`
-          : null;
-      recorded.artifactRef =
-        typeof artifactDetails.artifactRef === "string" ? artifactDetails.artifactRef : null;
-      Object.assign(basePayload, artifactDetails);
     } else {
       basePayload.rollbackRef = null;
       recorded.rollbackRef = null;

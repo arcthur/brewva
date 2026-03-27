@@ -182,7 +182,6 @@ export class SessionLifecycleService {
     this.turnReplay.clear(sessionId);
 
     this.events.clearSessionCache(sessionId);
-    this.ledger.clearSessionCache(sessionId);
   }
 
   private hydrateSessionStateFromEvents(sessionId: string): void {
@@ -199,12 +198,6 @@ export class SessionLifecycleService {
       };
       return;
     }
-
-    this.projectionEngine.rebuildSessionFromTape({
-      sessionId,
-      events,
-      mode: "missing_only",
-    });
 
     const replayState = this.prepareHydrationReplayState(sessionId, events);
     const hydrationRun = this.createHydrationRun(sessionId, state);

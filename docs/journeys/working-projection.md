@@ -7,7 +7,8 @@ re-hardened default path.
 
 Keep projection state deterministic, auditable, and bounded:
 
-- runtime projects source-backed records from tape events into `units.jsonl`
+- runtime derives source-backed records from durable tape events and may persist
+  them as rebuildable state in `units.jsonl`
 - runtime publishes a bounded working snapshot as an ordered entry list into `sessions/sess_<base64url(sessionId)>/working.md`
 - context injection consumes only `brewva.projection-working`
 
@@ -25,18 +26,21 @@ There is no recall lane and no external recall branch in the default runtime.
    - the built-in `brewva.projection-working` context provider injects only the working snapshot
    - injection still respects global context budget and compaction gate
 4. Replay/recovery:
-   - on restart, runtime rebuilds projection from source tape events when projection files are missing
+   - on restart, runtime does not require projection files to hydrate correctness state
+   - when projection cache files are missing, runtime rebuilds them on demand from durable tape
 
-## Persisted Artifacts
+## Rebuildable Artifacts
 
-- `.orchestrator/projection/units.jsonl`
-- `.orchestrator/projection/sessions/sess_<base64url(sessionId)>/working.md`
-- `.orchestrator/projection/state.json`
+- `.orchestrator/projection/units.jsonl` (`rebuildable state`)
+- `.orchestrator/projection/sessions/sess_<base64url(sessionId)>/working.md` (`rebuildable state` export)
+- `.orchestrator/projection/state.json` (`rebuildable state` metadata)
 
 ## Contract Notes
 
 - Working projection is a projection, not source-of-truth.
 - Tape events remain the source-of-truth.
+- Projection files are optional rebuildable helpers, not hydration
+  prerequisites.
 - Tape checkpoint projection state is metadata-only (`updatedAt`, `unitCount`);
   it is observational and not a restorable semantic unit snapshot.
 - Projection entries are keyed by source identity, not by heuristic importance classes.

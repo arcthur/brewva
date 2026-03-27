@@ -143,8 +143,8 @@ describe("channel telegram telegram-ui rendering", () => {
     expect(firstDecoded?.actionId).not.toBe(secondDecoded?.actionId);
   });
 
-  test("keeps explicit long request ids distinct for routing persistence", () => {
-    const persistedRequestIds: string[] = [];
+  test("keeps explicit long request ids distinct for inline callback routing", () => {
+    const decodedRequestIds: string[] = [];
     const turn: TurnEnvelope = {
       schema: "brewva.turn.v1",
       kind: "assistant",
@@ -188,34 +188,37 @@ describe("channel telegram telegram-ui rendering", () => {
       ],
     };
 
-    renderTurnToTelegramRequests(turn, {
+    const requests = renderTurnToTelegramRequests(turn, {
       inlineApproval: true,
       callbackSecret: "callback-secret",
-      persistApprovalRouting: (params) => {
-        persistedRequestIds.push(params.requestId);
-      },
     });
+    for (const request of requests) {
+      if (request.method !== "sendMessage") {
+        continue;
+      }
+      const keyboard = (
+        request.params.reply_markup as {
+          inline_keyboard?: Array<Array<{ callback_data?: string }>>;
+        }
+      )?.inline_keyboard;
+      const callbackData = (keyboard?.[0]?.[0]?.callback_data ?? "").toString();
+      const decoded = decodeTelegramApprovalCallback(callbackData, "callback-secret", {
+        context: "12345",
+      });
+      if (decoded?.requestId) {
+        decodedRequestIds.push(decoded.requestId);
+      }
+    }
 
-    expect(persistedRequestIds).toHaveLength(2);
-    expect(new Set(persistedRequestIds).size).toBe(2);
-    expect(
-      Math.max(...persistedRequestIds.map((requestId) => requestId.length)),
-    ).toBeLessThanOrEqual(20);
+    expect(decodedRequestIds).toHaveLength(2);
+    expect(new Set(decodedRequestIds).size).toBe(2);
+    expect(Math.max(...decodedRequestIds.map((requestId) => requestId.length))).toBeLessThanOrEqual(
+      20,
+    );
   });
 
-  test("persists and restores telegram-ui state via projection hooks", () => {
+  test("callback turns remain valid without cached approval state", () => {
     const secret = "callback-secret";
-    let persisted:
-      | {
-          conversationId: string;
-          requestId: string;
-          snapshot: {
-            screenId?: string;
-            stateKey?: string;
-            state?: unknown;
-          };
-        }
-      | undefined;
     const turn: TurnEnvelope = {
       schema: "brewva.turn.v1",
       kind: "assistant",
@@ -249,17 +252,6 @@ describe("channel telegram telegram-ui rendering", () => {
     const requests = renderTurnToTelegramRequests(turn, {
       inlineApproval: true,
       callbackSecret: secret,
-      persistApprovalState: (params) => {
-        persisted = params;
-      },
-    });
-    expect(persisted).toBeDefined();
-    expect(persisted?.conversationId).toBe("12345");
-    expect(persisted?.snapshot.screenId).toBe("deploy-confirm");
-    expect(persisted?.snapshot.stateKey).toBe("deploy-confirm-st");
-    expect(persisted?.snapshot.state).toEqual({
-      flow: "deploy",
-      step: "confirm",
     });
 
     const callbackData = (
@@ -286,39 +278,23 @@ describe("channel telegram telegram-ui rendering", () => {
     };
     const callbackTurn = projectTelegramUpdateToTurn(callbackUpdate, {
       callbackSecret: secret,
-      resolveApprovalState: (params) => {
-        if (
-          !persisted ||
-          params.conversationId !== persisted.conversationId ||
-          params.requestId !== persisted.requestId
-        ) {
-          return undefined;
-        }
-        return persisted.snapshot;
-      },
     });
 
     expect(callbackTurn).toBeDefined();
     if (!callbackTurn) return;
 
     expect(callbackTurn.kind).toBe("approval");
-    expect(callbackTurn.approval?.detail).toContain("screen: deploy-confirm");
-    expect(callbackTurn.approval?.detail).toContain("state_key: deploy-confirm-st");
+    expect(callbackTurn.approval?.requestId).toBeTruthy();
 
     const firstPart = callbackTurn.parts[0];
     expect(firstPart?.type).toBe("text");
     if (firstPart && firstPart.type === "text") {
-      expect(firstPart.text).toContain(
-        "state_path: .brewva/channel/approval-state/deploy-confirm-st.json",
-      );
+      expect(firstPart.text).not.toContain("state_path:");
     }
 
-    expect(callbackTurn.meta?.approvalScreenId).toBe("deploy-confirm");
-    expect(callbackTurn.meta?.approvalStateKey).toBe("deploy-confirm-st");
-    expect(callbackTurn.meta?.approvalState).toEqual({
-      flow: "deploy",
-      step: "confirm",
-    });
+    expect(callbackTurn.meta?.approvalScreenId).toBeUndefined();
+    expect(callbackTurn.meta?.approvalStateKey).toBeUndefined();
+    expect(callbackTurn.meta?.approvalState).toBeUndefined();
   });
 
   test("renders multiple telegram-ui blocks from one assistant message", () => {
@@ -496,15 +472,7 @@ next
     ).toBe(true);
   });
 
-  test("persists approval routing when inline callbacks are enabled", () => {
-    const captured: Array<{
-      conversationId: string;
-      requestId: string;
-      agentId?: string;
-      agentSessionId?: string;
-      turnId?: string;
-    }> = [];
-
+  test("inline callbacks encode request ids without durable routing state", () => {
     const turn: TurnEnvelope = {
       schema: "brewva.turn.v1",
       kind: "assistant",
@@ -551,17 +519,19 @@ next
     const requests = renderTurnToTelegramRequests(turn, {
       inlineApproval: true,
       callbackSecret: "callback-secret",
-      persistApprovalRouting: (params) => {
-        captured.push(params);
-      },
     });
 
     expect(requests.length).toBeGreaterThan(0);
-    expect(captured).toHaveLength(1);
-    expect(captured[0]?.conversationId).toBe("12345");
-    expect(captured[0]?.agentId).toBe("jack");
-    expect(captured[0]?.agentSessionId).toBe("agent-session");
-    expect(captured[0]?.turnId).toBe("t1");
-    expect(captured[0]?.requestId).toMatch(/^[a-z0-9_-]+_[0-9a-f]{8}$/iu);
+    const callbackData = (
+      (
+        requests[0]?.params.reply_markup as {
+          inline_keyboard?: Array<Array<{ callback_data?: string }>>;
+        }
+      )?.inline_keyboard?.[0]?.[0]?.callback_data ?? ""
+    ).toString();
+    const decoded = decodeTelegramApprovalCallback(callbackData, "callback-secret", {
+      context: "12345",
+    });
+    expect(decoded?.requestId).toMatch(/^[a-z0-9_-]+_[0-9a-f]{8}$/iu);
   });
 });

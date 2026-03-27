@@ -13,6 +13,7 @@ export interface ProjectionEngineOptions {
   rootDir: string;
   workingFile: string;
   maxWorkingChars: number;
+  listEvents?: (sessionId: string) => BrewvaEventRecord[];
   recordEvent?: (input: {
     sessionId: string;
     type: string;
@@ -35,6 +36,7 @@ export class ProjectionEngine {
   private readonly rootDir: string;
   private readonly workingFile: string;
   private readonly maxWorkingChars: number;
+  private readonly listEvents?: ProjectionEngineOptions["listEvents"];
   private readonly recordEvent?: ProjectionEngineOptions["recordEvent"];
   private store: ProjectionStore | null = null;
   private readonly dirtySessions = new Set<string>();
@@ -44,6 +46,7 @@ export class ProjectionEngine {
     this.rootDir = options.rootDir;
     this.workingFile = options.workingFile;
     this.maxWorkingChars = Math.max(200, options.maxWorkingChars);
+    this.listEvents = options.listEvents;
     this.recordEvent = options.recordEvent;
   }
 
@@ -82,6 +85,13 @@ export class ProjectionEngine {
 
     const force = input.force === true;
     const store = this.getStore();
+    if (!store.hasUnits(input.sessionId) && this.listEvents) {
+      this.replaySessionEvents({
+        sessionId: input.sessionId,
+        events: this.listEvents(input.sessionId),
+        mode: "always",
+      });
+    }
     const cached = store.getWorkingSnapshot(input.sessionId);
     if (!force && !this.dirtySessions.has(input.sessionId)) {
       if (cached) return cached;
@@ -144,18 +154,7 @@ export class ProjectionEngine {
       };
     }
 
-    let replayedEvents = 0;
-    let upsertedUnits = 0;
-    let resolvedUnits = 0;
-
-    for (const event of input.events) {
-      const extraction = extractProjectionFromEvent(event);
-      if (extraction.upserts.length === 0 && extraction.resolves.length === 0) continue;
-      replayedEvents += 1;
-      const ingested = store.ingestExtraction(extraction, event.timestamp);
-      upsertedUnits += ingested.upsertedUnits;
-      resolvedUnits += ingested.resolvedUnits;
-    }
+    const { replayedEvents, upsertedUnits, resolvedUnits } = this.replaySessionEvents(input);
 
     if (replayedEvents === 0) {
       return {
@@ -189,5 +188,46 @@ export class ProjectionEngine {
       });
     }
     return this.store;
+  }
+
+  private replaySessionEvents(input: {
+    sessionId: string;
+    events: BrewvaEventRecord[];
+    mode?: "missing_only" | "always";
+  }): {
+    replayedEvents: number;
+    upsertedUnits: number;
+    resolvedUnits: number;
+  } {
+    const store = this.getStore();
+    const mode = input.mode ?? "missing_only";
+    if (mode === "missing_only" && store.hasUnits(input.sessionId)) {
+      return {
+        replayedEvents: 0,
+        upsertedUnits: 0,
+        resolvedUnits: 0,
+      };
+    }
+
+    let replayedEvents = 0;
+    let upsertedUnits = 0;
+    let resolvedUnits = 0;
+
+    for (const event of input.events) {
+      const extraction = extractProjectionFromEvent(event);
+      if (extraction.upserts.length === 0 && extraction.resolves.length === 0) {
+        continue;
+      }
+      replayedEvents += 1;
+      const ingested = store.ingestExtraction(extraction, event.timestamp);
+      upsertedUnits += ingested.upsertedUnits;
+      resolvedUnits += ingested.resolvedUnits;
+    }
+
+    return {
+      replayedEvents,
+      upsertedUnits,
+      resolvedUnits,
+    };
   }
 }

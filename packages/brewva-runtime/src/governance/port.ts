@@ -1,6 +1,6 @@
 import type {
+  EffectCommitmentProposal,
   ProposalDecision,
-  ProposalEnvelope,
   SessionCostSummary,
   VerificationLevel,
   VerificationReport,
@@ -40,7 +40,7 @@ export interface GovernanceCompactionIntegrityOutput {
 
 export interface GovernanceAuthorizeEffectCommitmentInput {
   sessionId: string;
-  proposal: ProposalEnvelope;
+  proposal: EffectCommitmentProposal;
   turn: number;
 }
 

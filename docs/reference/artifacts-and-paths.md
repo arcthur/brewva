@@ -4,36 +4,55 @@
 
 Runtime artifact paths are resolved from the workspace root (`nearest .brewva/brewva.json` or `.git` ancestor), not the leaf execution subdirectory.
 
+## Durability Classes
+
+This document uses the durability taxonomy defined in
+`docs/research/rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md`.
+
+- `durable source of truth`: losing the surface changes authority, committed
+  history, or replay outcomes
+- `durable transient`: bounded crash-recovery or rollback material that is not
+  final truth
+- `rebuildable state`: persisted derived state that can be reconstructed from
+  durable truth plus workspace state
+- `cache`: latency or UX helper material that may be dropped without changing
+  correctness
+
 ## Root Ownership
 
-- `.orchestrator/`: kernel durability, replay, rollback, and event/projection state
+- `.orchestrator/`: kernel durability, replay, rollback, and rebuildable derived caches
 - `.brewva/`: operator config, control-plane state, addons, channel metadata, and optional non-kernel helper material
 
 The split is intentional: kernel replay/state stays isolated from operator and
 gateway control-plane material, even though both roots live under the same
 workspace.
 
-- Evidence ledger: `.orchestrator/ledger/evidence.jsonl`
-- Event stream (event tape): `.orchestrator/events/sess_<base64url(sessionId)>.jsonl`
+- Evidence ledger (`durable source of truth`): `.orchestrator/ledger/evidence.jsonl`
+- Event stream (event tape, `durable source of truth`): `.orchestrator/events/sess_<base64url(sessionId)>.jsonl`
   - file name uses a reversible base64url encoding of the UTF-8 `sessionId` to avoid filesystem collisions and preserve the original identifier
   - only `sess_*.jsonl` files are treated as event tape shards; non-prefixed JSONL files in the directory are ignored by the runtime
   - includes audit-retained receipts by default, plus optional ops/debug
     telemetry when `infrastructure.events.level` is raised
   - for example, `tool_parallel_read` appears only at `debug` level
-- Projection units log: `.orchestrator/projection/units.jsonl`
-- Working projection markdown: `.orchestrator/projection/sessions/sess_<base64url(sessionId)>/working.md`
-- Projection state: `.orchestrator/projection/state.json`
-- Projection refresh advisory lock (ephemeral): `.orchestrator/projection/.refresh.lock`
-- Optional control-plane session artifacts: `.orchestrator/artifacts/sessions/sess_<base64url(sessionId)>/*`
+- Projection units cache (`rebuildable state`): `.orchestrator/projection/units.jsonl`
+- Working projection export (`rebuildable state`): `.orchestrator/projection/sessions/sess_<base64url(sessionId)>/working.md`
+- Projection cache state (`rebuildable state`): `.orchestrator/projection/state.json`
+- Projection refresh advisory lock (`cache`): `.orchestrator/projection/.refresh.lock`
+- Optional control-plane session artifacts (`cache`): `.orchestrator/artifacts/sessions/sess_<base64url(sessionId)>/*`
   - reserved for non-kernel helper outputs when an optional control-plane path
     is installed
   - not part of the kernel replay contract
-- Tape checkpoints: `checkpoint` events embedded in the per-session event tape (`.orchestrator/events/sess_<base64url(sessionId)>.jsonl`)
-- Runtime recovery source: event tape replay (`checkpoint + delta`); no standalone runtime session-state snapshot file
-- Rollback snapshots: `.orchestrator/snapshots/<session>/*.snap`
+- Tape checkpoints (`durable source of truth`): `checkpoint` events embedded in the per-session event tape (`.orchestrator/events/sess_<base64url(sessionId)>.jsonl`)
+- Runtime recovery source (`durable source of truth`): event tape replay (`checkpoint + delta`); no standalone runtime session-state snapshot file
+- Projection cache is never a recovery precondition; runtime may rebuild it on demand from durable tape plus task/truth state
+- Rollback snapshots (`durable transient`): `.orchestrator/snapshots/<session>/*.snap`
   - per-file pre-mutation snapshots used only by rollback
-- Rollback patch history: `.orchestrator/snapshots/<session>/patchsets.json`
+- Rollback patch history (`durable transient`): `.orchestrator/snapshots/<session>/patchsets.json`
   - shared persisted patch-set log used by rollback/undo and by `brewva insight` write attribution
+
+The remaining `.brewva/**` entries below are operator-authored configuration or
+helper material, not session-state durability surfaces in the taxonomy above.
+
 - Generated skill index: `.brewva/skills_index.json`
   - includes selected skill roots (`roots`) and the merged skill index (`skills`)
 - Agent self bundle (per-agent):

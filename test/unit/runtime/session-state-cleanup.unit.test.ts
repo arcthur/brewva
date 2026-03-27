@@ -36,9 +36,6 @@ type RuntimeInternals = {
   eventStore: {
     fileHasContent: Map<string, boolean>;
   };
-  evidenceLedger: {
-    lastHashBySession: Map<string, unknown>;
-  };
   turnReplay: {
     hasSession: (session: string) => boolean;
   };
@@ -104,7 +101,6 @@ describe("session state cleanup", () => {
     expect(internals.costTracker.sessions.has(sessionId)).toBe(true);
     expect(internals.verificationGate.stateStore.sessions.has(sessionId)).toBe(true);
     expect(internals.eventStore.fileHasContent.size).toBe(1);
-    expect(internals.evidenceLedger.lastHashBySession.has(sessionId)).toBe(true);
 
     runtime.session.clearState(sessionId);
 
@@ -116,7 +112,6 @@ describe("session state cleanup", () => {
     expect(internals.parallel.sessions.has(sessionId)).toBe(false);
     expect(internals.parallelResults.sessions.has(sessionId)).toBe(false);
     expect(internals.eventStore.fileHasContent.size).toBe(0);
-    expect(internals.evidenceLedger.lastHashBySession.has(sessionId)).toBe(false);
   });
 
   test("keeps replay cache hot and incrementally updates task replay view", async () => {

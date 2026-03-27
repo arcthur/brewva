@@ -65,7 +65,7 @@ flowchart LR
   IN["Prompt / Tool IO / Usage"] --> RT["BrewvaRuntime"]
   RT --> EV["event tape (.orchestrator/events/*.jsonl)"]
   RT --> LD["evidence ledger (.orchestrator/ledger/evidence.jsonl)"]
-  RT --> MEM["working projection (.orchestrator/projection/units.jsonl + sessions/sess_<id>/working.md)"]
+  RT --> MEM["working projection cache/export (.orchestrator/projection/units.jsonl + sessions/sess_<id>/working.md)"]
   RT --> SNAP["rollback snapshots (.orchestrator/snapshots/<session>/*)"]
 ```
 
@@ -110,8 +110,8 @@ tool gate.
 ```mermaid
 flowchart TD
   EVT["event append"] --> EX["ProjectionExtractor (deterministic rules)"]
-  EX --> U["units.jsonl upsert/resolve"]
-  U --> W["session working snapshot refresh"]
+  EX --> U["rebuildable projection cache upsert/resolve"]
+  U --> W["session working snapshot refresh/export"]
   W --> INJ["inject brewva.projection-working"]
 ```
 
@@ -121,8 +121,8 @@ flowchart TD
 flowchart TD
   A["startup"] --> B["load event tape"]
   B --> C["TurnReplayEngine (checkpoint + delta)"]
-  C --> D["hydrate task/truth/cost/verification/projection state"]
-  D --> E["if projection files missing: rebuild projection from tape"]
+  C --> D["hydrate task/truth/cost/verification replay state"]
+  D --> E["if rebuildable projection files are missing: rebuild from tape"]
 ```
 
 ## Rollback Flow
@@ -145,8 +145,6 @@ flowchart TD
   A["rollbackLastMutation(sessionId)"] --> B["resolve latest rollback candidate"]
   B --> C{"strategy?"}
   C -->|workspace_patchset| D["rollback tracked patch set"]
-  C -->|task_state_journal| E["restore prior task state + emit verification_state_reset"]
-  C -->|artifact_write / generic_journal| F["return unsupported_rollback"]
-  D --> G["emit rollback event trail"]
-  E --> G
+  C -->|none available| E["return no_mutation_receipt"]
+  D --> F["emit rollback event trail"]
 ```

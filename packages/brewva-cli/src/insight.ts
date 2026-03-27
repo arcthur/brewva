@@ -364,13 +364,10 @@ function buildDurabilityFinding(base: InspectReport): InsightFinding | null {
     issues.push(`hydration degraded (${base.hydration.issueCount} issue(s))`);
     eventIds.push(...base.hydration.issues.map((issue) => issue.eventId));
   }
-  if (base.consistency.ledgerChain === "invalid") {
+  if (base.consistency.ledgerIntegrity === "invalid") {
     issues.push(
-      `ledger chain invalid${base.ledger.chainReason ? `: ${base.ledger.chainReason}` : ""}`,
+      `ledger integrity invalid${base.ledger.integrityReason ? `: ${base.ledger.integrityReason}` : ""}`,
     );
-  }
-  if (base.consistency.projectionWorking === "missing") {
-    issues.push("projection working snapshot missing while projection is enabled");
   }
   if (base.consistency.pendingTurnWal > 0) {
     issues.push(`pending turn WAL entries=${base.consistency.pendingTurnWal}`);
@@ -387,10 +384,7 @@ function buildDurabilityFinding(base: InspectReport): InsightFinding | null {
       : "warn",
     confidence: "high",
     summary: `Durability and replay consistency issues detected: ${issues.join("; ")}.`,
-    evidenceRefs: topEvidenceRefs({
-      eventIds,
-      paths: [base.ledger.path, base.projection.workingPath, base.turnWal.filePath],
-    }),
+    evidenceRefs: topEvidenceRefs({ eventIds, paths: [base.ledger.path, base.turnWal.filePath] }),
   };
 }
 
@@ -775,7 +769,7 @@ export function formatInsightText(report: SessionInsightReport): string {
     `Verdict: ${report.verdict}`,
     `Coverage: write=${report.coverage.writeAttribution} read=${report.coverage.readAttribution} ops=${report.coverage.opsTelemetryAvailable ? "yes" : "no"}`,
     `Scope: touchedIn=${report.scope.touchedInDir} touchedOut=${report.scope.touchedOutOfDir} writesIn=${report.scope.writesInDir} writesOut=${report.scope.writesOutOfDir} readsIn=${report.scope.readsInDirHeuristic} readsOut=${report.scope.readsOutOfDirHeuristic}`,
-    `Base: hydration=${report.base.hydration.status} verification=${report.base.verification.outcome ?? "n/a"} ledger=${report.base.consistency.ledgerChain} projection=${report.base.consistency.projectionWorking} pendingTurnWal=${report.base.consistency.pendingTurnWal}`,
+    `Base: hydration=${report.base.hydration.status} verification=${report.base.verification.outcome ?? "n/a"} ledger=${report.base.consistency.ledgerIntegrity} projectionWorking=${report.base.projection.workingExists ? "present" : "missing"} pendingTurnWal=${report.base.consistency.pendingTurnWal}`,
     "",
     "Findings:",
   ];

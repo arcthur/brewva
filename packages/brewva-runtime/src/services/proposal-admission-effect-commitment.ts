@@ -1,7 +1,7 @@
 import type {
   DecisionReceipt,
+  EffectCommitmentProposal,
   ProposalDecision,
-  ProposalEnvelope,
   ToolEffectClass,
   ToolGovernanceDescriptor,
 } from "../contracts/index.js";
@@ -11,7 +11,7 @@ import type { BuildDecisionReceipt } from "./proposal-admission-shared.js";
 
 export interface AuthorizeEffectCommitmentInput {
   sessionId: string;
-  proposal: ProposalEnvelope;
+  proposal: EffectCommitmentProposal;
   descriptor: ToolGovernanceDescriptor;
   turn: number;
 }
@@ -26,7 +26,7 @@ export interface EffectCommitmentAuthorizationDecision {
 
 interface EffectCommitmentProposalCommitInput {
   sessionId: string;
-  proposal: ProposalEnvelope;
+  proposal: EffectCommitmentProposal;
   turn: number;
   buildDecisionReceipt: BuildDecisionReceipt;
   resolveToolGovernanceDescriptor: (toolName: string) => ToolGovernanceDescriptor | undefined;

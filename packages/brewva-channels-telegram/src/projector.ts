@@ -51,13 +51,13 @@ interface TelegramUiProjection {
   stateSnapshot?: TelegramApprovalStateSnapshot;
 }
 
-export interface TelegramApprovalStateResolveParams {
+interface TelegramApprovalStateCacheLookup {
   conversationId: string;
   requestId: string;
   actionId: string;
 }
 
-export interface TelegramApprovalStatePersistParams {
+interface TelegramApprovalStateCacheEntry {
   conversationId: string;
   requestId: string;
   snapshot: TelegramApprovalStateSnapshot;
@@ -67,25 +67,31 @@ export interface TelegramInboundProjectionOptions {
   callbackSecret?: string;
   includeBotMessages?: boolean;
   now?: () => number;
-  resolveApprovalState?: (
-    params: TelegramApprovalStateResolveParams,
-  ) => TelegramApprovalStateSnapshot | null | undefined;
 }
 
 export interface TelegramOutboundRenderOptions {
   inlineApproval?: boolean;
   callbackSecret?: string;
   maxTextLength?: number;
-  persistApprovalState?: (params: TelegramApprovalStatePersistParams) => void;
-  persistApprovalRouting?: (params: TelegramApprovalRoutingPersistParams) => void;
 }
 
-export interface TelegramApprovalRoutingPersistParams {
+interface TelegramApprovalRoutingPersistParams {
   conversationId: string;
   requestId: string;
   agentId?: string;
   agentSessionId?: string;
   turnId?: string;
+}
+
+interface InternalTelegramInboundProjectionOptions extends TelegramInboundProjectionOptions {
+  restoreApprovalStateFromCache?: (
+    params: TelegramApprovalStateCacheLookup,
+  ) => TelegramApprovalStateSnapshot | null | undefined;
+}
+
+interface InternalTelegramOutboundRenderOptions extends TelegramOutboundRenderOptions {
+  cacheApprovalState?: (params: TelegramApprovalStateCacheEntry) => void;
+  cacheApprovalRoutingHint?: (params: TelegramApprovalRoutingPersistParams) => void;
 }
 
 function nowMs(options?: TelegramInboundProjectionOptions): number {
@@ -650,8 +656,9 @@ function projectCallbackQueryToApprovalTurn(
     [callback.from.first_name, callback.from.last_name].filter(Boolean).join(" ").trim() ||
     callback.from.username ||
     String(callback.from.id);
+  const internalOptions = options as InternalTelegramInboundProjectionOptions | undefined;
   const restoredState = normalizeApprovalStateSnapshot(
-    options?.resolveApprovalState?.({
+    internalOptions?.restoreApprovalStateFromCache?.({
       conversationId,
       requestId: decision.requestId,
       actionId: decision.actionId,
@@ -661,9 +668,6 @@ function projectCallbackQueryToApprovalTurn(
   const partText = [`approval ${decision.requestId} -> ${decision.actionId}`];
   if (stateDetail) {
     partText.push(stateDetail);
-  }
-  if (restoredState?.stateKey) {
-    partText.push(`state_path: .brewva/channel/approval-state/${restoredState.stateKey}.json`);
   }
 
   const projected = coerceTurnEnvelope({
@@ -779,6 +783,7 @@ export function renderTurnToTelegramRequests(
   turn: TurnEnvelope,
   options: TelegramOutboundRenderOptions = {},
 ): TelegramOutboundRequest[] {
+  const internalOptions = options as InternalTelegramOutboundRenderOptions;
   const maxTextLength = Math.max(1, Math.floor(options.maxTextLength ?? TELEGRAM_TEXT_LIMIT));
   const chatId = turn.conversationId;
   const messageThreadId = parseThreadId(turn.threadId);
@@ -898,9 +903,9 @@ export function renderTurnToTelegramRequests(
 
     if (inlineEnabled && callbackSecret) {
       try {
-        if (options.persistApprovalRouting) {
+        if (internalOptions.cacheApprovalRoutingHint) {
           try {
-            options.persistApprovalRouting({
+            internalOptions.cacheApprovalRoutingHint({
               conversationId: chatId,
               requestId: approvalPayload.requestId,
               agentId: originAgentId || undefined,
@@ -908,7 +913,7 @@ export function renderTurnToTelegramRequests(
               turnId: turn.turnId,
             });
           } catch {
-            // Best effort routing persistence; do not break inline approvals.
+            // Best effort routing hint cache; do not break inline approvals.
           }
         }
 
@@ -920,7 +925,7 @@ export function renderTurnToTelegramRequests(
         );
         const snapshot = projection?.stateSnapshot ?? turnMetaApprovalState;
         if (snapshot) {
-          options.persistApprovalState?.({
+          internalOptions.cacheApprovalState?.({
             conversationId: chatId,
             requestId: approvalPayload.requestId,
             snapshot,

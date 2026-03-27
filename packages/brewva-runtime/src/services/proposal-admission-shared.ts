@@ -1,7 +1,11 @@
-import type { DecisionReceipt, ProposalDecision, ProposalEnvelope } from "../contracts/index.js";
+import type {
+  DecisionReceipt,
+  EffectCommitmentProposal,
+  ProposalDecision,
+} from "../contracts/index.js";
 
 export type BuildDecisionReceipt = (
-  proposal: ProposalEnvelope,
+  proposal: EffectCommitmentProposal,
   decision: ProposalDecision,
   policyBasis: string[],
   reasons: string[],

@@ -352,8 +352,8 @@ export class LedgerService {
     return this.ledger.list(sessionId);
   }
 
-  verifyLedgerChain(sessionId: string): { valid: boolean; reason?: string } {
-    return this.ledger.verifyChain(sessionId);
+  verifyLedgerIntegrity(sessionId: string): { valid: boolean; reason?: string } {
+    return this.ledger.verifyIntegrity(sessionId);
   }
 
   getLedgerPath(): string {

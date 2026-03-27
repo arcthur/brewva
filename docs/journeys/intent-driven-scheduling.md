@@ -26,7 +26,8 @@ flowchart TD
 ## Key Steps
 
 1. Agent declares intent through `schedule_intent` (one-shot or cron).
-2. Runtime appends `schedule_intent` events and updates projection state.
+2. Runtime appends `schedule_intent` events and updates rebuildable schedule
+   projection state.
 3. Daemon startup runs `recover()`: rebuild projection, clear stale leases,
    and catch up missed intents.
 4. On fire, daemon creates a child session, injects wakeup context, and runs a turn.

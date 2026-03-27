@@ -4,8 +4,8 @@ import type {
   DecideEffectCommitmentInput,
   DecideEffectCommitmentResult,
   EvidenceRef,
+  EffectCommitmentProposal,
   PendingEffectCommitmentRequest,
-  ProposalEnvelope,
 } from "../contracts/index.js";
 import {
   DECISION_RECEIPT_RECORDED_EVENT_TYPE,
@@ -25,7 +25,7 @@ type EffectCommitmentRequestState = "pending" | "accepted" | "rejected" | "consu
 
 interface EffectCommitmentRequestRecord {
   request: PendingEffectCommitmentRequest;
-  proposal: ProposalEnvelope;
+  proposal: EffectCommitmentProposal;
   state: EffectCommitmentRequestState;
   actor?: string;
   reason?: string;
@@ -50,7 +50,7 @@ function clonePendingRequest(
   };
 }
 
-function cloneProposal(proposal: ProposalEnvelope): ProposalEnvelope {
+function cloneProposal(proposal: EffectCommitmentProposal): EffectCommitmentProposal {
   return {
     ...proposal,
     payload: {
@@ -73,7 +73,7 @@ export type ResumeEffectCommitmentResult =
   | {
       ok: true;
       requestId: string;
-      proposal: ProposalEnvelope;
+      proposal: EffectCommitmentProposal;
     }
   | {
       ok: false;
@@ -350,7 +350,7 @@ export class EffectCommitmentDeskService {
   }
 
   private createRequestRecord(
-    proposal: ProposalEnvelope,
+    proposal: EffectCommitmentProposal,
     turn: number,
   ): EffectCommitmentRequestRecord {
     return this.createHydratedRecord({
@@ -392,9 +392,9 @@ export class EffectCommitmentDeskService {
       return;
     }
 
-    const proposalsById = new Map<string, ProposalEnvelope>();
+    const proposalsById = new Map<string, EffectCommitmentProposal>();
     for (const event of events) {
-      const proposal = this.readProposalEnvelopeFromEvent(event);
+      const proposal = this.readEffectCommitmentProposalFromEvent(event);
       if (proposal) {
         proposalsById.set(proposal.id, proposal);
       }
@@ -468,7 +468,7 @@ export class EffectCommitmentDeskService {
       decision?: "accept" | "reject";
     },
     event: BrewvaEventRecord,
-    proposalsById: ReadonlyMap<string, ProposalEnvelope>,
+    proposalsById: ReadonlyMap<string, EffectCommitmentProposal>,
   ): EffectCommitmentRequestRecord | undefined {
     const existing = state.recordsByRequestId.get(payload.requestId);
     if (existing) {
@@ -489,13 +489,15 @@ export class EffectCommitmentDeskService {
     return created;
   }
 
-  private readProposalEnvelopeFromEvent(event: BrewvaEventRecord): ProposalEnvelope | undefined {
+  private readEffectCommitmentProposalFromEvent(
+    event: BrewvaEventRecord,
+  ): EffectCommitmentProposal | undefined {
     if (event.type === DECISION_RECEIPT_RECORDED_EVENT_TYPE) {
       const payload =
         event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
           ? (event.payload as Record<string, unknown>)
           : null;
-      return this.readProposalEnvelope(payload?.proposal);
+      return this.readEffectCommitmentProposal(payload?.proposal);
     }
     if (event.type !== EFFECT_COMMITMENT_APPROVAL_REQUESTED_EVENT_TYPE) {
       return undefined;
@@ -504,14 +506,14 @@ export class EffectCommitmentDeskService {
       event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
         ? (event.payload as Record<string, unknown>)
         : null;
-    return this.readProposalEnvelope(payload?.proposal);
+    return this.readEffectCommitmentProposal(payload?.proposal);
   }
 
-  private readProposalEnvelope(payload: unknown): ProposalEnvelope | undefined {
+  private readEffectCommitmentProposal(payload: unknown): EffectCommitmentProposal | undefined {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
       return undefined;
     }
-    const candidate = payload as Partial<ProposalEnvelope>;
+    const candidate = payload as Partial<EffectCommitmentProposal>;
     if (
       candidate.kind !== "effect_commitment" ||
       typeof candidate.id !== "string" ||
@@ -590,7 +592,7 @@ export class EffectCommitmentDeskService {
 
   private readApprovalRequestedEvent(
     event: BrewvaEventRecord,
-    proposalsById: ReadonlyMap<string, ProposalEnvelope>,
+    proposalsById: ReadonlyMap<string, EffectCommitmentProposal>,
   ): EffectCommitmentRequestRecord | undefined {
     const payload =
       event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
@@ -607,7 +609,9 @@ export class EffectCommitmentDeskService {
       return undefined;
     }
     const proposal =
-      this.readProposalEnvelope(payload.proposal) ?? proposalsById.get(proposalId) ?? undefined;
+      this.readEffectCommitmentProposal(payload.proposal) ??
+      proposalsById.get(proposalId) ??
+      undefined;
     if (!proposal) {
       return undefined;
     }
@@ -693,7 +697,7 @@ export class EffectCommitmentDeskService {
 
   private createHydratedRecord(input: {
     requestId: string;
-    proposal: ProposalEnvelope;
+    proposal: EffectCommitmentProposal;
     turn?: number;
     createdAt: number;
   }): EffectCommitmentRequestRecord {
