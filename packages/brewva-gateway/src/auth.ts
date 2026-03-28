@@ -12,10 +12,14 @@ export function readGatewayToken(
 
 export function loadOrCreateGatewayToken(
   tokenFilePath: string,
-  stateStore: Pick<GatewayStateStore, "readToken" | "writeToken"> = defaultStateStore,
+  stateStore: Pick<
+    GatewayStateStore,
+    "readToken" | "writeToken" | "reconcileReadToken"
+  > = defaultStateStore,
 ): string {
   const existing = readGatewayToken(tokenFilePath, stateStore);
   if (existing) {
+    stateStore.reconcileReadToken?.(tokenFilePath, existing);
     return existing;
   }
 

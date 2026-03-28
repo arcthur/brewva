@@ -1,6 +1,47 @@
 import type { SecurityEnforcementPreference, VerificationLevel } from "./shared.js";
 import type { SkillContractOverride, SkillRoutingScope } from "./skill.js";
 
+export interface BrewvaSecurityBoundaryNetworkRule {
+  host: string;
+  ports: number[];
+}
+
+export interface BrewvaSecurityBoundaryPolicy {
+  commandDenyList: string[];
+  filesystem: {
+    readAllow: string[];
+    writeAllow: string[];
+    writeDeny: string[];
+  };
+  network: {
+    mode: "inherit" | "deny" | "allowlist";
+    allowLoopback: boolean;
+    outbound: BrewvaSecurityBoundaryNetworkRule[];
+  };
+}
+
+export interface BrewvaSecurityCredentialBinding {
+  toolNames: string[];
+  envVar: string;
+  credentialRef: string;
+}
+
+export interface BrewvaSecurityCredentialsConfig {
+  path: string;
+  masterKeyEnv: string;
+  allowDerivedKeyFallback: boolean;
+  sandboxApiKeyRef?: string;
+  gatewayTokenRef?: string;
+  bindings: BrewvaSecurityCredentialBinding[];
+}
+
+export interface BrewvaSecurityExactCallLoopConfig {
+  enabled: boolean;
+  threshold: number;
+  mode: "warn" | "block";
+  exemptTools: string[];
+}
+
 export interface BrewvaConfig {
   ui: {
     quietStartup: boolean;
@@ -38,14 +79,17 @@ export interface BrewvaConfig {
       skillMaxToolCallsMode: SecurityEnforcementPreference;
       skillMaxParallelMode: SecurityEnforcementPreference;
     };
+    boundaryPolicy: BrewvaSecurityBoundaryPolicy;
+    loopDetection: {
+      exactCall: BrewvaSecurityExactCallLoopConfig;
+    };
+    credentials: BrewvaSecurityCredentialsConfig;
     execution: {
       backend: "host" | "sandbox" | "best_available";
       enforceIsolation: boolean;
       fallbackToHost: boolean;
-      commandDenyList: string[];
       sandbox: {
         serverUrl: string;
-        apiKey?: string;
         defaultImage: string;
         memory: number;
         cpus: number;
@@ -172,7 +216,14 @@ export interface BrewvaConfigFile {
   ledger?: Partial<BrewvaConfig["ledger"]>;
   tape?: Partial<BrewvaConfig["tape"]>;
   projection?: DeepPartial<BrewvaConfig["projection"]>;
-  security?: Partial<Omit<BrewvaConfig["security"], "execution">> & {
+  security?: Partial<
+    Omit<BrewvaConfig["security"], "execution" | "boundaryPolicy" | "loopDetection" | "credentials">
+  > & {
+    boundaryPolicy?: DeepPartial<BrewvaConfig["security"]["boundaryPolicy"]>;
+    loopDetection?: DeepPartial<BrewvaConfig["security"]["loopDetection"]>;
+    credentials?: Partial<Omit<BrewvaConfig["security"]["credentials"], "bindings">> & {
+      bindings?: DeepPartial<BrewvaConfig["security"]["credentials"]["bindings"]>;
+    };
     execution?: Partial<Omit<BrewvaConfig["security"]["execution"], "sandbox">> & {
       sandbox?: Partial<BrewvaConfig["security"]["execution"]["sandbox"]>;
     };

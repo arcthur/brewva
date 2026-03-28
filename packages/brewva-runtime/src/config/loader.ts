@@ -82,6 +82,22 @@ const REMOVED_PROJECTION_FIELDS = new Set<string>([
   "global",
 ]);
 
+function includesRemovedExecutionFieldError(errors: ReadonlyArray<string>): boolean {
+  return errors.some(
+    (error) =>
+      error.includes('/security/execution: unknown property "commandDenyList"') ||
+      error.includes('/security/execution/sandbox: unknown property "apiKey"'),
+  );
+}
+
+function formatSchemaInvalidMessage(errors: ReadonlyArray<string>): string {
+  const message = `Config does not match schema: ${errors.join("; ")}`;
+  if (!includesRemovedExecutionFieldError(errors)) {
+    return message;
+  }
+  return `${message}. Run 'brewva config migrate --write' to update the file.`;
+}
+
 function collectRemovedFieldErrors(parsed: Record<string, unknown>): string[] {
   const errors: string[] = [];
   const projection = parsed["projection"];
@@ -122,7 +138,7 @@ function readConfigFile(configPath: string): Partial<BrewvaConfig> | undefined {
   if (removedFieldErrors.length > 0) {
     throw new BrewvaConfigLoadError({
       code: "config_schema_invalid",
-      message: `Config does not match schema: ${removedFieldErrors.join("; ")}`,
+      message: formatSchemaInvalidMessage(removedFieldErrors),
       configPath,
     });
   }
@@ -140,7 +156,7 @@ function readConfigFile(configPath: string): Partial<BrewvaConfig> | undefined {
     if (validation.errors.length > 0) {
       throw new BrewvaConfigLoadError({
         code: "config_schema_invalid",
-        message: `Config does not match schema: ${validation.errors.join("; ")}`,
+        message: formatSchemaInvalidMessage(validation.errors),
         configPath,
       });
     }

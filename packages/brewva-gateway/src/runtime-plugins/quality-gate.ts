@@ -190,6 +190,10 @@ export function createQualityGateLifecycle(
       const toolCallId = normalizeField(rawEvent.toolCallId);
       const toolName = normalizeField(rawEvent.toolName);
       const args = isRecord(rawEvent.input) ? rawEvent.input : undefined;
+      const cwd =
+        typeof (ctx as { cwd?: unknown }).cwd === "string" && (ctx as { cwd?: string }).cwd?.trim()
+          ? (ctx as { cwd: string }).cwd
+          : undefined;
       const usage = coerceContextBudgetUsage(
         typeof (ctx as { getContextUsage?: () => unknown }).getContextUsage === "function"
           ? (ctx as { getContextUsage: () => unknown }).getContextUsage()
@@ -200,6 +204,7 @@ export function createQualityGateLifecycle(
         toolCallId,
         toolName,
         args,
+        cwd,
         usage,
       });
       if (!started.allowed) {

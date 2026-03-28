@@ -35,4 +35,40 @@ describe("BrewvaConfigFile typing", () => {
 
     expect(config.infrastructure?.costTracking?.maxCostUsdPerSession).toBeNull();
   });
+
+  test("supports boundary policy, credential vault, and exact-call loop guard overlay shapes", () => {
+    const config: BrewvaConfigFile = {
+      security: {
+        boundaryPolicy: {
+          network: {
+            mode: "allowlist",
+            outbound: [{ host: "*.openai.com", ports: [443] }],
+          },
+        },
+        credentials: {
+          gatewayTokenRef: "vault://gateway/token",
+          sandboxApiKeyRef: "vault://sandbox/apiKey",
+          bindings: [
+            {
+              toolNames: ["exec"],
+              envVar: "OPENAI_API_KEY",
+              credentialRef: "vault://openai/apiKey",
+            },
+          ],
+        },
+        loopDetection: {
+          exactCall: {
+            enabled: true,
+            threshold: 4,
+            mode: "block",
+            exemptTools: ["skill_complete"],
+          },
+        },
+      },
+    };
+
+    expect(config.security?.credentials?.gatewayTokenRef).toBe("vault://gateway/token");
+    expect(config.security?.boundaryPolicy?.network?.outbound?.[0]?.host).toBe("*.openai.com");
+    expect(config.security?.loopDetection?.exactCall?.mode).toBe("block");
+  });
 });

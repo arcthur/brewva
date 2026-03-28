@@ -9,10 +9,17 @@ interface ReservedContextInjectionTokens {
   supplementalTokens: number;
 }
 
+export interface ConsecutiveToolCallState {
+  toolName: string;
+  hash: string;
+  count: number;
+}
+
 export class RuntimeSessionStateCell {
   activeSkill?: string;
   turn = 0;
   toolCalls = 0;
+  consecutiveToolCall?: ConsecutiveToolCallState;
   effectCommitmentRequestIdsByToolCallId = new Map<string, string>();
   inflightEffectCommitmentRequestIds = new Set<string>();
   lastInjectedContextFingerprintByScope = new Map<string, string>();

@@ -140,6 +140,13 @@ maintenance. They do not promote projection files into source-of-truth inputs.
 - `iteration_metric_observed`
 - `iteration_guard_recorded`
 
+Current guard notes:
+
+- exact-call loop protection records `iteration_guard_recorded` with
+  `guardKey=exact_call_loop`
+- when exact-call protection runs in `block` mode, runtime also emits
+  `tool_call_blocked` with the same reason text
+
 ### Proposal And Governance
 
 - `proposal_received`

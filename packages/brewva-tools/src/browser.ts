@@ -156,6 +156,51 @@ function formatBrowserLabel(toolName: string): string {
   return words.map((word) => `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`).join(" ");
 }
 
+function enforceRuntimeToolAccess(input: {
+  options: BrewvaToolOptions;
+  sessionId: string;
+  toolName: string;
+  args?: Record<string, unknown>;
+  cwd: string;
+}): { allowed: true } | { allowed: false; result: ReturnType<typeof failTextResult> } {
+  const runtimeTools = input.options.runtime.tools;
+  if (typeof runtimeTools?.explainAccess !== "function") {
+    return { allowed: true };
+  }
+
+  const decision = runtimeTools.explainAccess({
+    sessionId: input.sessionId,
+    toolName: input.toolName,
+    args: input.args,
+    cwd: input.cwd,
+  });
+  if (decision.allowed) {
+    return { allowed: true };
+  }
+
+  input.options.runtime.events.record?.({
+    sessionId: input.sessionId,
+    type: "tool_call_blocked",
+    payload: {
+      toolName: input.toolName,
+      reason: decision.reason ?? "Tool call blocked by runtime policy.",
+    },
+  });
+
+  return {
+    allowed: false,
+    result: failTextResult(
+      `[${formatBrowserLabel(input.toolName)}]\nstatus: failed\nreason: ${
+        decision.reason ?? "Tool call blocked by runtime policy."
+      }`,
+      {
+        ok: false,
+        reason: decision.reason ?? "tool_blocked_by_runtime_policy",
+      },
+    ),
+  };
+}
+
 function formatFailureOutput(result: BrowserCommandFailure): string {
   const sections = [result.stderr.trim(), result.stdout.trim()].filter((value) => value.length > 0);
   const combined = sections.join("\n").trim();
@@ -494,8 +539,19 @@ export function createBrowserTools(
       url: Type.String({ minLength: 1 }),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-      const sessionName = resolveBrowserSessionName(getSessionId(ctx));
+      const sessionId = getSessionId(ctx);
+      const sessionName = resolveBrowserSessionName(sessionId);
       const cwd = resolveBaseCwd(options, ctx);
+      const access = enforceRuntimeToolAccess({
+        options,
+        sessionId,
+        toolName: "browser_open",
+        args: { url: params.url },
+        cwd,
+      });
+      if (!access.allowed) {
+        return access.result;
+      }
       const result = await executeBrowserCommand(
         {
           sessionName,

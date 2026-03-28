@@ -201,11 +201,23 @@ describe("live: microsandbox isolation", () => {
             security: {
               mode: "permissive",
               sanitizeContext: true,
+              boundaryPolicy: {
+                commandDenyList: [],
+                filesystem: {
+                  readAllow: [],
+                  writeAllow: [],
+                  writeDeny: [],
+                },
+                network: {
+                  mode: "inherit",
+                  allowLoopback: true,
+                  outbound: [],
+                },
+              },
               execution: {
                 backend: "host",
                 enforceIsolation: true,
                 fallbackToHost: true,
-                commandDenyList: [],
                 sandbox: {
                   serverUrl: server.serverUrl,
                   defaultImage: "microsandbox/node",
@@ -282,11 +294,23 @@ describe("live: microsandbox isolation", () => {
             security: {
               mode: "standard",
               sanitizeContext: true,
+              boundaryPolicy: {
+                commandDenyList: [],
+                filesystem: {
+                  readAllow: [],
+                  writeAllow: [],
+                  writeDeny: [],
+                },
+                network: {
+                  mode: "inherit",
+                  allowLoopback: true,
+                  outbound: [],
+                },
+              },
               execution: {
                 backend: "sandbox",
                 enforceIsolation: false,
                 fallbackToHost: true,
-                commandDenyList: [],
                 sandbox: {
                   serverUrl: server.serverUrl,
                   defaultImage: "microsandbox/node",
@@ -325,11 +349,23 @@ describe("live: microsandbox isolation", () => {
             security: {
               mode: "standard",
               sanitizeContext: true,
+              boundaryPolicy: {
+                commandDenyList: [],
+                filesystem: {
+                  readAllow: [],
+                  writeAllow: [],
+                  writeDeny: [],
+                },
+                network: {
+                  mode: "inherit",
+                  allowLoopback: true,
+                  outbound: [],
+                },
+              },
               execution: {
                 backend: "best_available",
                 enforceIsolation: false,
                 fallbackToHost: true,
-                commandDenyList: [],
                 sandbox: {
                   serverUrl: "http://127.0.0.1:1",
                   defaultImage: "microsandbox/node",

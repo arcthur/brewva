@@ -12,10 +12,30 @@ const SECRET_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
   },
 ];
 
+const RUNTIME_SECRETS = new Set<string>();
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+export function registerRuntimeSecret(value: string): () => void {
+  const normalized = value.trim();
+  if (normalized.length < 6) {
+    return () => undefined;
+  }
+  RUNTIME_SECRETS.add(normalized);
+  return () => {
+    RUNTIME_SECRETS.delete(normalized);
+  };
+}
+
 export function redactSecrets(text: string): string {
   let output = text;
   for (const { pattern, replacement } of SECRET_PATTERNS) {
     output = output.replace(pattern, replacement);
+  }
+  for (const secret of RUNTIME_SECRETS) {
+    output = output.replace(new RegExp(escapeRegExp(secret), "gu"), "[redacted]");
   }
   return output;
 }
