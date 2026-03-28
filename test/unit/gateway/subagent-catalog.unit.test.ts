@@ -125,4 +125,67 @@ describe("subagent delegation catalog", () => {
       );
     }
   });
+
+  test("loads Markdown-authored agent overlays from .brewva/agents", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-agent-markdown-"));
+    const agentDir = join(workspace, ".brewva", "agents");
+    mkdirSync(agentDir, { recursive: true });
+    writeFileSync(
+      join(agentDir, "review.md"),
+      [
+        "---",
+        "extends: review",
+        "description: Workspace review delegate",
+        "envelope: readonly-reviewer",
+        "---",
+        "Focus on rollback posture, governance boundaries, and operator-facing regressions.",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const catalog = await loadHostedDelegationCatalog(workspace);
+    const agentSpec = catalog.agentSpecs.get("review");
+
+    expect(agentSpec).toMatchObject({
+      name: "review",
+      description: "Workspace review delegate",
+      envelope: "readonly-reviewer",
+      skillName: "review",
+      fallbackResultMode: "review",
+      executorPreamble:
+        "Operate as a strict read-only reviewer. Keep findings concrete, high-signal, and evidence-backed.",
+      instructionsMarkdown:
+        "Focus on rollback posture, governance boundaries, and operator-facing regressions.",
+    });
+    expect(catalog.workspaceAgentSpecNames.has("review")).toBe(true);
+  });
+
+  test("loads Markdown-authored agent overlays from .config/brewva/agents", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-agent-config-root-"));
+    const configAgentDir = join(workspace, ".config", "brewva", "agents");
+    mkdirSync(configAgentDir, { recursive: true });
+    writeFileSync(
+      join(configAgentDir, "ops-review.md"),
+      [
+        "---",
+        "extends: review",
+        "description: Config-root review delegate",
+        "envelope: readonly-reviewer",
+        "---",
+        "Focus on config-managed governance checks.",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const catalog = await loadHostedDelegationCatalog(workspace);
+    expect(catalog.agentSpecs.get("ops-review")).toMatchObject({
+      name: "ops-review",
+      description: "Config-root review delegate",
+      envelope: "readonly-reviewer",
+      skillName: "review",
+      fallbackResultMode: "review",
+      instructionsMarkdown: "Focus on config-managed governance checks.",
+    });
+    expect(catalog.workspaceAgentSpecNames.has("ops-review")).toBe(true);
+  });
 });

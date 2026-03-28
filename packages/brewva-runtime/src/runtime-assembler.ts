@@ -61,6 +61,7 @@ import { VerificationService } from "./services/verification.js";
 import { SkillRegistry } from "./skills/registry.js";
 import { FileChangeTracker } from "./state/file-change-tracker.js";
 import { TurnReplayEngine } from "./tape/replay-engine.js";
+import { resolveTaskTargetRoots } from "./task/targeting.js";
 import { VerificationGate } from "./verification/gate.js";
 
 export interface RuntimeCoreDependencies {
@@ -323,6 +324,17 @@ export function createRuntimeServiceDependencies(
     getTruthState: (sessionId) => options.kernel.getTruthState(sessionId),
     evaluateCompletion: (sessionId, level) => options.evaluateCompletion(sessionId, level),
     recordEvent: (input) => options.kernel.recordEvent(input),
+  });
+  options.coreDependencies.verificationGate.bindSessionIntrospection({
+    cwd: options.cwd,
+    workspaceRoot: options.workspaceRoot,
+    getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
+    getTargetRoots: (sessionId) =>
+      resolveTaskTargetRoots({
+        cwd: options.cwd,
+        workspaceRoot: options.workspaceRoot,
+        spec: options.kernel.getTaskState(sessionId).spec,
+      }),
   });
   const skillLifecycleService = new SkillLifecycleService({
     skills: options.coreDependencies.skillRegistry,

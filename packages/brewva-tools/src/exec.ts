@@ -22,6 +22,7 @@ import {
   type ManagedExecFinishedSession,
   type ManagedExecRunningSession,
 } from "./exec-process-registry.js";
+import { isPathInsideRoots, resolveToolTargetScope } from "./target-scope.js";
 import type { BrewvaToolRuntime } from "./types.js";
 import { attachCanonicalParameterKeys } from "./utils/input-alias.js";
 import { textResult, withVerdict } from "./utils/result.js";
@@ -760,8 +761,8 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
     parameters: ExecSchema,
     async execute(toolCallId, params, signal, _onUpdate, ctx) {
       const ownerSessionId = getSessionId(ctx);
-      const baseCwd =
-        typeof ctx.cwd === "string" && ctx.cwd.trim().length > 0 ? ctx.cwd : process.cwd();
+      const targetScope = resolveToolTargetScope(options?.runtime, ctx);
+      const baseCwd = targetScope.baseCwd;
       const command = normalizeCommand(params.command);
       if (!command) {
         return textResult(
@@ -772,6 +773,20 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
 
       const requestedWorkdir = normalizeOptionalString(params.workdir);
       const hostCwd = resolveWorkdir(baseCwd, requestedWorkdir);
+      if (!isPathInsideRoots(hostCwd, targetScope.allowedRoots)) {
+        return textResult(
+          `Exec rejected (workdir_outside_target): ${hostCwd}`,
+          withVerdict(
+            {
+              status: "failed",
+              reason: "workdir_outside_target",
+              requestedCwd: hostCwd,
+              allowedRoots: targetScope.allowedRoots,
+            },
+            "fail",
+          ),
+        );
+      }
       const sandboxRequestedCwd = requestedWorkdir ? hostCwd : undefined;
       const boundEnv =
         options?.runtime?.session?.resolveCredentialBindings?.(ownerSessionId, "exec") ?? {};

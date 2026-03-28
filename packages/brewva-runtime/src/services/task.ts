@@ -28,7 +28,10 @@ import {
 } from "../task/ledger.js";
 import { normalizeTaskSpec } from "../task/spec.js";
 import { resolveContextUsageRatio } from "../utils/token.js";
-import { VERIFIER_BLOCKER_PREFIX } from "../verification/verifier-blockers.js";
+import {
+  GOVERNANCE_BLOCKER_ID,
+  VERIFIER_BLOCKER_PREFIX,
+} from "../verification/verifier-blockers.js";
 import type { RuntimeCallback } from "./callback.js";
 
 export interface TaskStatusAlignmentInput {
@@ -127,8 +130,15 @@ export class TaskService {
     const blockers = state.blockers ?? [];
     const items = state.items ?? [];
     const openItems = items.filter((item) => item.status !== "done");
-    const hasVerifierBlocker = blockers.some((blocker) =>
+    const verifierBlockers = blockers.filter((blocker) =>
       blocker.id.startsWith(VERIFIER_BLOCKER_PREFIX),
+    );
+    const hasSoftVerifierBlocker = verifierBlockers.some(
+      (blocker) => blocker.id !== GOVERNANCE_BLOCKER_ID,
+    );
+    const hasHardBlocker = blockers.some(
+      (blocker) =>
+        !blocker.id.startsWith(VERIFIER_BLOCKER_PREFIX) || blocker.id === GOVERNANCE_BLOCKER_ID,
     );
     const acceptanceRequired = state.spec?.acceptance?.required === true;
     const acceptanceStatus = state.acceptance?.status ?? "pending";
@@ -152,31 +162,33 @@ export class TaskService {
     let health: TaskHealth = "unknown";
     let reason: string | undefined;
 
-    if (!hasSpec && blockers.length === 0) {
+    if (!hasSpec && !hasHardBlocker && !hasSoftVerifierBlocker) {
       phase = openItems.length > 0 ? "execute" : "investigate";
       health = "exploring";
       reason =
         openItems.length > 0
           ? `spec_missing_open_items=${openItems.length}`
           : "exploring_without_spec";
-    } else if (!hasSpec && blockers.length > 0) {
+    } else if (!hasSpec && hasHardBlocker) {
       phase = "blocked";
-      health = hasVerifierBlocker ? "verification_failed" : "blocked";
-      reason = hasVerifierBlocker
-        ? "verification_blockers_present_without_spec"
-        : "blockers_present_without_spec";
-    } else if (blockers.length > 0) {
+      health = "blocked";
+      reason = "blockers_present_without_spec";
+    } else if (hasHardBlocker) {
       phase = "blocked";
-      health = hasVerifierBlocker ? "verification_failed" : "blocked";
-      reason = hasVerifierBlocker ? "verification_blockers_present" : "blockers_present";
-    } else if (items.length === 0) {
-      phase = "investigate";
-      health = "ok";
-      reason = "no_task_items";
+      health = "blocked";
+      reason = "blockers_present";
     } else if (openItems.length > 0) {
       phase = "execute";
       health = "ok";
       reason = `open_items=${openItems.length}`;
+    } else if (hasSoftVerifierBlocker) {
+      phase = "verify";
+      health = "verification_failed";
+      reason = "verification_blockers_present";
+    } else if (items.length === 0) {
+      phase = "investigate";
+      health = "ok";
+      reason = "no_task_items";
     } else {
       const desiredLevel = state.spec?.verification?.level ?? this.config.verification.defaultLevel;
       const report = this.evaluateCompletion(input.sessionId, desiredLevel);

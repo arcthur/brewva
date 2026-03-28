@@ -170,17 +170,18 @@ function isBenignSearchNoMatchFailure(input: {
   return isSearchCommand;
 }
 
-function resolveCommandFailureFact(
+function resolveActiveCommandFailureFacts(
   ctx: TruthToolResultProjectorContext,
   sessionId: string,
-  factId: string,
 ): void {
   const truthState = ctx.getTruthState(sessionId);
-  const active = truthState.facts.find((fact) => fact.id === factId && fact.status === "active");
-  if (active) {
-    ctx.resolveTruthFact(sessionId, factId);
+  for (const fact of truthState.facts) {
+    if (fact.kind !== "command_failure" || fact.status !== "active") {
+      continue;
+    }
+    ctx.resolveTruthFact(sessionId, fact.id);
+    resolveTruthBackedBlocker(ctx, sessionId, fact.id);
   }
-  resolveTruthBackedBlocker(ctx, sessionId, factId);
 }
 
 function resolveCommandFailureClass(failure: EvidenceArtifact | undefined): CommandFailureClass {
@@ -595,7 +596,7 @@ function projectExecTruth(
   }
 
   if (isToolResultPass(input.verdict)) {
-    resolveCommandFailureFact(ctx, input.sessionId, factId);
+    resolveActiveCommandFailureFacts(ctx, input.sessionId);
     return;
   }
 
@@ -613,14 +614,16 @@ function projectExecTruth(
       exitCode,
     })
   ) {
-    resolveCommandFailureFact(ctx, input.sessionId, factId);
+    resolveActiveCommandFailureFacts(ctx, input.sessionId);
     return;
   }
 
   if (failureClass !== "execution") {
-    resolveCommandFailureFact(ctx, input.sessionId, factId);
+    resolveActiveCommandFailureFacts(ctx, input.sessionId);
     return;
   }
+
+  resolveActiveCommandFailureFacts(ctx, input.sessionId);
 
   const summary =
     exitCode === null
@@ -645,13 +648,6 @@ function projectExecTruth(
       failedAssertions: Array.isArray(failure?.failedAssertions) ? failure?.failedAssertions : [],
       stackTrace: Array.isArray(failure?.stackTrace) ? failure?.stackTrace : [],
     },
-  });
-
-  recordTruthBackedBlocker(ctx, input.sessionId, {
-    blockerId: factId,
-    truthFactId: factId,
-    message: summary,
-    source: "truth_extractor",
   });
 }
 

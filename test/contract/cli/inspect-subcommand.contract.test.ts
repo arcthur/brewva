@@ -3,6 +3,7 @@ import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { patchProcessEnv } from "../../helpers/global-state.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function runInspect(
@@ -38,10 +39,11 @@ describe("inspect subcommand", () => {
       const xdgConfigHome = join(workspace, ".xdg");
       mkdirSync(join(xdgConfigHome, "brewva"), { recursive: true });
       writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");
-      const previousXdgConfigHome = process.env["XDG_CONFIG_HOME"];
+      const restoreEnv = patchProcessEnv({
+        XDG_CONFIG_HOME: xdgConfigHome,
+      });
 
       try {
-        process.env["XDG_CONFIG_HOME"] = xdgConfigHome;
         const runtime = new BrewvaRuntime({
           cwd: workspace,
           config: structuredClone(DEFAULT_BREWVA_CONFIG),
@@ -136,11 +138,7 @@ describe("inspect subcommand", () => {
           payload.analysis?.findings.some((finding) => finding.code === "verification_hygiene"),
         ).toBe(true);
       } finally {
-        if (previousXdgConfigHome === undefined) {
-          delete process.env["XDG_CONFIG_HOME"];
-        } else {
-          process.env["XDG_CONFIG_HOME"] = previousXdgConfigHome;
-        }
+        restoreEnv();
       }
     },
     { timeout: 20_000 },
@@ -151,10 +149,11 @@ describe("inspect subcommand", () => {
     const xdgConfigHome = join(workspace, ".xdg");
     mkdirSync(join(xdgConfigHome, "brewva"), { recursive: true });
     writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");
-    const previousXdgConfigHome = process.env["XDG_CONFIG_HOME"];
+    const restoreEnv = patchProcessEnv({
+      XDG_CONFIG_HOME: xdgConfigHome,
+    });
 
     try {
-      process.env["XDG_CONFIG_HOME"] = xdgConfigHome;
       const runtime = new BrewvaRuntime({
         cwd: workspace,
         config: structuredClone(DEFAULT_BREWVA_CONFIG),
@@ -204,11 +203,7 @@ describe("inspect subcommand", () => {
       const payload = JSON.parse(result.stdout) as { sessionId: string };
       expect(payload.sessionId).toBe(interactiveSessionId);
     } finally {
-      if (previousXdgConfigHome === undefined) {
-        delete process.env["XDG_CONFIG_HOME"];
-      } else {
-        process.env["XDG_CONFIG_HOME"] = previousXdgConfigHome;
-      }
+      restoreEnv();
     }
   });
 
@@ -227,10 +222,11 @@ describe("inspect subcommand", () => {
         "export const outOfScope = 1;\n",
         "utf8",
       );
-      const previousXdgConfigHome = process.env["XDG_CONFIG_HOME"];
+      const restoreEnv = patchProcessEnv({
+        XDG_CONFIG_HOME: xdgConfigHome,
+      });
 
       try {
-        process.env["XDG_CONFIG_HOME"] = xdgConfigHome;
         const runtime = new BrewvaRuntime({
           cwd: workspace,
           config: structuredClone(DEFAULT_BREWVA_CONFIG),
@@ -355,11 +351,7 @@ describe("inspect subcommand", () => {
           payload.analysis.evidenceGaps.some((gap) => gap.includes("audit-level events only")),
         ).toBe(true);
       } finally {
-        if (previousXdgConfigHome === undefined) {
-          delete process.env["XDG_CONFIG_HOME"];
-        } else {
-          process.env["XDG_CONFIG_HOME"] = previousXdgConfigHome;
-        }
+        restoreEnv();
       }
     },
     { timeout: 20_000 },

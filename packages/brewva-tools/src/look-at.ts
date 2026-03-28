@@ -1,7 +1,9 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { extname, resolve } from "node:path";
+import { extname } from "node:path";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { resolveScopedPath, resolveToolTargetScope } from "./target-scope.js";
+import type { BrewvaToolRuntime } from "./types.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
@@ -109,7 +111,7 @@ function extractRelevantText(text: string, goal: string): RelevantTextResult {
   };
 }
 
-export function createLookAtTool(): ToolDefinition {
+export function createLookAtTool(options?: { runtime?: BrewvaToolRuntime }): ToolDefinition {
   return defineBrewvaTool({
     name: "look_at",
     label: "Look At",
@@ -118,8 +120,14 @@ export function createLookAtTool(): ToolDefinition {
       file_path: Type.String(),
       goal: Type.String(),
     }),
-    async execute(_id, params) {
-      const absolute = resolve(params.file_path);
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const scope = resolveToolTargetScope(options?.runtime, ctx);
+      const absolute = resolveScopedPath(params.file_path, scope);
+      if (!absolute) {
+        return failTextResult(
+          `look_at rejected: path escapes target roots (${scope.allowedRoots.join(", ")}).`,
+        );
+      }
       if (!existsSync(absolute)) {
         return failTextResult(`Error: File not found: ${absolute}`);
       }

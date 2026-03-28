@@ -1,4 +1,4 @@
-export const DELIBERATION_MEMORY_STATE_SCHEMA = "brewva.deliberation.memory.v1" as const;
+export const DELIBERATION_MEMORY_STATE_SCHEMA = "brewva.deliberation.memory.v2" as const;
 
 export const DELIBERATION_MEMORY_ARTIFACT_KINDS = [
   "repository_strategy_memory",
@@ -9,7 +9,7 @@ export const DELIBERATION_MEMORY_ARTIFACT_KINDS = [
 
 export type DeliberationMemoryArtifactKind = (typeof DELIBERATION_MEMORY_ARTIFACT_KINDS)[number];
 
-export const DELIBERATION_MEMORY_SCOPE_VALUES = ["workspace", "user", "agent", "loop"] as const;
+export const DELIBERATION_MEMORY_SCOPE_VALUES = ["repository", "user", "agent", "loop"] as const;
 export type DeliberationMemoryApplicabilityScope =
   (typeof DELIBERATION_MEMORY_SCOPE_VALUES)[number];
 

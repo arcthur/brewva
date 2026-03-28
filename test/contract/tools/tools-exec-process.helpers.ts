@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import type { BrewvaToolRuntime } from "@brewva/brewva-tools";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
@@ -31,11 +32,20 @@ export function createRuntimeForExecTests(input?: {
   serverUrl?: string;
   boundEnv?: Record<string, string>;
   sandboxApiKey?: string;
+  cwd?: string;
+  targetRoots?: string[];
 }) {
   const mode = input?.mode ?? "standard";
   const enforceIsolation = input?.enforceIsolation ?? false;
   const events: Array<{ type?: string; payload?: Record<string, unknown> }> = [];
+  const cwd = resolve(input?.cwd ?? process.cwd());
+  const targetRoots =
+    input?.targetRoots && input.targetRoots.length > 0
+      ? input.targetRoots.map((root) => resolve(root))
+      : [cwd];
   const runtime = {
+    cwd,
+    workspaceRoot: cwd,
     config: {
       security: {
         mode,
@@ -93,6 +103,12 @@ export function createRuntimeForExecTests(input?: {
     session: {
       resolveCredentialBindings: () => ({ ...input?.boundEnv }),
       resolveSandboxApiKey: () => input?.sandboxApiKey,
+    },
+    task: {
+      getTargetDescriptor: () => ({
+        primaryRoot: targetRoots[0] ?? cwd,
+        roots: targetRoots,
+      }),
     },
   };
   return { runtime: runtime as unknown as BrewvaToolRuntime, events };

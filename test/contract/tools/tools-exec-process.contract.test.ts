@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createExecTool, createProcessTool } from "@brewva/brewva-tools";
 import {
   createRuntimeForExecTests,
@@ -235,5 +238,35 @@ describe("exec/process tool flow", () => {
     const text = extractTextContent(result);
     expect(text).toContain("sk-bound-credential");
     expect(text).not.toContain("user-supplied-value");
+  });
+
+  test("exec rejects workdir values outside the task target roots", async () => {
+    const allowedRoot = mkdtempSync(join(tmpdir(), "brewva-exec-allowed-root-"));
+    const outsideRoot = mkdtempSync(join(tmpdir(), "brewva-exec-outside-root-"));
+    const { runtime } = createRuntimeForExecTests({
+      mode: "permissive",
+      backend: "host",
+      cwd: allowedRoot,
+      targetRoots: [allowedRoot],
+    });
+    const execTool = createExecTool({ runtime });
+    const sessionId = "s13-exec-workdir-outside-target";
+
+    const result = await execTool.execute(
+      "tc-exec-workdir-outside-target",
+      {
+        command: "pwd",
+        workdir: outsideRoot,
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const details = result.details as { status?: string; verdict?: string; reason?: string };
+    expect(details.status).toBe("failed");
+    expect(details.verdict).toBe("fail");
+    expect(details.reason).toBe("workdir_outside_target");
+    expect(extractTextContent(result)).toContain("Exec rejected (workdir_outside_target)");
   });
 });

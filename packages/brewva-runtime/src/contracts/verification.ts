@@ -1,6 +1,6 @@
 import type { VerificationLevel } from "./shared.js";
 
-export type VerificationEvidenceKind = "lsp_clean" | "test_or_build_passed";
+export type VerificationEvidenceKind = "lsp_clean" | "test_or_build_passed" | "command_passed";
 
 export type VerificationEvidenceMode = "heuristic" | "compiler" | "command" | "lsp_native";
 

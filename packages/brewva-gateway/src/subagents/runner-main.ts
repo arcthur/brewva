@@ -19,6 +19,7 @@ import {
   writeDetachedSubagentOutcome,
 } from "./background-protocol.js";
 import { HostedDelegationStore, buildDelegationLifecyclePayload } from "./delegation-store.js";
+import { createDelegationModelRoutingContextFromAgentDir } from "./model-routing.js";
 import { buildDelegationPrompt } from "./prompt.js";
 import {
   aggregateChildCost,
@@ -110,12 +111,12 @@ async function loadSpec(path: string): Promise<DetachedSubagentRunSpec> {
   const raw = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
   const schema =
     typeof raw.schema === "string" ? raw.schema : "missing_detached_subagent_spec_schema";
-  if (schema !== "brewva.subagent-run-spec.v5") {
+  if (schema !== "brewva.subagent-run-spec.v6") {
     throw new Error(`unsupported_detached_subagent_spec_schema:${schema}`);
   }
   return {
     ...raw,
-    schema: "brewva.subagent-run-spec.v5",
+    schema: "brewva.subagent-run-spec.v6",
   } as unknown as DetachedSubagentRunSpec;
 }
 
@@ -204,12 +205,15 @@ async function main(): Promise<void> {
   let timeoutTriggered = false;
   let childSessionId: string | undefined;
   let targetRecord: HostedDelegationTarget = delegationTarget;
+  const modelRouting = createDelegationModelRoutingContextFromAgentDir();
   const executionPlan = resolveDelegationExecutionPlan({
     runtime: parentRuntime,
     target: targetRecord,
     delegate: spec.delegate,
     packet,
     executionShape: spec.executionShape,
+    modelRouting,
+    preselectedModelRoute: spec.modelRoute,
   });
 
   const readCancelReason = (): string | undefined =>
@@ -260,6 +264,7 @@ async function main(): Promise<void> {
         parentSkill: parentRuntime.skills.getActive(spec.parentSessionId)?.name,
         kind: targetRecord.resultMode,
         boundary: executionPlan.boundary,
+        modelRoute: executionPlan.modelRoute,
         delivery: existing?.delivery,
       }),
       status: "running",
@@ -267,6 +272,7 @@ async function main(): Promise<void> {
       workerSessionId: childSessionId,
       kind: targetRecord.resultMode,
       boundary: executionPlan.boundary,
+      modelRoute: executionPlan.modelRoute,
     };
     parentRuntime.events.record({
       sessionId: spec.parentSessionId,
@@ -459,6 +465,7 @@ async function main(): Promise<void> {
       parentSkill: parentRuntime.skills.getActive(spec.parentSessionId)?.name,
       kind: targetRecord.resultMode,
       boundary: executionPlan.boundary,
+      modelRoute: executionPlan.modelRoute,
       summary,
       artifactRefs: outcome.artifactRefs?.map((ref) => ({ ...ref })),
       totalTokens: childCostSummary.totalTokens,
@@ -536,6 +543,7 @@ async function main(): Promise<void> {
       parentSkill: parentRuntime.skills.getActive(spec.parentSessionId)?.name,
       kind: targetRecord.resultMode,
       boundary: executionPlan.boundary,
+      modelRoute: executionPlan.modelRoute,
       summary: message,
       error: message,
       artifactRefs,

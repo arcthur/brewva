@@ -34,7 +34,8 @@ import {
   buildDelegationLifecyclePayload,
   cloneDelegationRunRecord,
 } from "./delegation-store.js";
-import { resolveRequestedBoundary } from "./shared.js";
+import type { DelegationModelRoutingContext } from "./model-routing.js";
+import { resolveDelegationExecutionPlan, type ResolvedDelegationExecutionPlan } from "./shared.js";
 import type { HostedDelegationTarget } from "./targets.js";
 
 export interface HostedSubagentBackgroundController {
@@ -65,6 +66,7 @@ interface DetachedBackgroundControllerOptions {
   delegationStore?: HostedDelegationStore;
   configPath?: string;
   routingScopes?: SkillRoutingScope[];
+  modelRouting?: DelegationModelRoutingContext;
   spawnProcess?: (input: {
     modulePath: string;
     specPath: string;
@@ -274,11 +276,37 @@ export function createDetachedSubagentBackgroundController(
         input.target.agentSpecName ??
         input.target.envelopeName ??
         input.target.name;
-      const boundary = resolveRequestedBoundary({
-        target: input.target,
-        executionShape: input.executionShape,
-        packet: input.packet,
-      });
+      let executionPlan: ResolvedDelegationExecutionPlan;
+      try {
+        executionPlan = resolveDelegationExecutionPlan({
+          runtime: options.runtime,
+          target: input.target,
+          delegate,
+          packet: input.packet,
+          executionShape: input.executionShape,
+          modelRouting: options.modelRouting,
+        });
+      } catch (error) {
+        return writeTerminalFailure(
+          {
+            runId,
+            delegate,
+            agentSpec: input.target.agentSpecName,
+            envelope: input.target.envelopeName,
+            skillName: input.target.skillName,
+            parentSessionId: input.parentSessionId,
+            status: "failed",
+            createdAt,
+            updatedAt: createdAt,
+            label: input.label,
+            parentSkill,
+            kind: input.target.resultMode,
+            delivery: buildDeliveryRecord(input.delivery, createdAt),
+          },
+          "failed",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
       const initialRecord: DelegationRunRecord = {
         runId,
         delegate,
@@ -292,7 +320,8 @@ export function createDetachedSubagentBackgroundController(
         label: input.label,
         parentSkill,
         kind: input.target.resultMode,
-        boundary,
+        boundary: executionPlan.boundary,
+        modelRoute: executionPlan.modelRoute,
         delivery: buildDeliveryRecord(input.delivery, createdAt),
       };
       options.runtime.events.record({
@@ -302,7 +331,7 @@ export function createDetachedSubagentBackgroundController(
       });
 
       const spec: DetachedSubagentRunSpec = {
-        schema: "brewva.subagent-run-spec.v5",
+        schema: "brewva.subagent-run-spec.v6",
         runId,
         parentSessionId: input.parentSessionId,
         workspaceRoot: options.runtime.workspaceRoot,
@@ -316,6 +345,7 @@ export function createDetachedSubagentBackgroundController(
         agentSpecName: input.target.agentSpecName,
         fallbackResultMode: input.target.fallbackResultMode,
         executionShape: input.executionShape,
+        modelRoute: executionPlan.modelRoute,
         label: input.label,
         packet: input.packet,
         timeoutMs: input.timeoutMs,

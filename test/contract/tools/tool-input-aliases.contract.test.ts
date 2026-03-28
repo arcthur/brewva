@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
@@ -12,6 +12,7 @@ import {
   createScheduleIntentTool,
   createTaskLedgerTools,
 } from "@brewva/brewva-tools";
+import { patchProcessEnv } from "../../helpers/global-state.js";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 import { createScheduleToolRuntime } from "./tools-flow.helpers.js";
@@ -110,24 +111,37 @@ describe("tool input alias contracts", () => {
     const lookAtWorkspace = mkdtempSync(join(tmpdir(), "brewva-look-at-alias-"));
     const filePath = join(lookAtWorkspace, "sample.ts");
     writeFileSync(filePath, "export const alpha = 1;\n", "utf8");
+    const runtime = createCleanRuntime();
+    const sessionId = "tc-look-at-file-path-alias";
+    runtime.task.setSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Inspect an explicitly targeted external file.",
+      targets: {
+        files: [filePath],
+      },
+    });
 
-    const tool = createLookAtTool();
+    const tool = createLookAtTool({ runtime });
     const params = {
       filePath,
       goal: "trace transaction rollback boundary",
     };
 
-    expect(Value.Check(tool.parameters, params)).toBe(false);
-    const result = await tool.execute(
-      "tc-look-at-file-path-alias",
-      params as never,
-      undefined,
-      undefined,
-      {} as never,
-    );
-    expect(
-      extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
-    ).toContain("look_at unavailable");
+    try {
+      expect(Value.Check(tool.parameters, params)).toBe(false);
+      const result = await tool.execute(
+        "tc-look-at-file-path-alias",
+        params as never,
+        undefined,
+        undefined,
+        fakeContext(sessionId, workspace),
+      );
+      expect(
+        extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
+      ).toContain("look_at unavailable");
+    } finally {
+      rmSync(lookAtWorkspace, { recursive: true, force: true });
+    }
   });
 
   test("task_set_spec accepts snake_case expected_behavior alias and stores canonical field", async () => {
@@ -300,8 +314,9 @@ describe("tool input alias contracts", () => {
 
     const runtime = createCleanRuntime(grepWorkspace);
     const tool = createGrepTool({ runtime });
-    const previousPath = process.env["PATH"];
-    process.env["PATH"] = [grepWorkspace, previousPath].filter(Boolean).join(delimiter);
+    const restoreEnv = patchProcessEnv({
+      PATH: [grepWorkspace, process.env["PATH"]].filter(Boolean).join(delimiter),
+    });
 
     try {
       expect(
@@ -330,11 +345,7 @@ describe("tool input alias contracts", () => {
 
       expect(extractTextContent(result)).toContain("matches_shown: 2");
     } finally {
-      if (previousPath === undefined) {
-        delete process.env["PATH"];
-      } else {
-        process.env["PATH"] = previousPath;
-      }
+      restoreEnv();
     }
   });
 

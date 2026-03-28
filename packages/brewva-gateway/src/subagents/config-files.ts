@@ -1,20 +1,30 @@
 import { existsSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import type { ManagedToolMode } from "@brewva/brewva-runtime";
 import type {
   SubagentContextBudget,
   SubagentExecutionBoundary,
   SubagentResultMode,
 } from "@brewva/brewva-tools";
+import { parse as parseYaml } from "yaml";
 
 export type HostedDelegationBuiltinToolName = "read" | "edit" | "write";
 export type HostedWorkspaceSubagentConfigKind = "envelope" | "agentSpec";
+export type HostedWorkspaceSubagentConfigSource = "json" | "markdown";
+
+interface ParsedFrontmatter {
+  body: string;
+  data: Record<string, unknown>;
+}
+
+const FRONTMATTER_REGEX = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
 
 export interface HostedWorkspaceSubagentConfigFile {
   fileName: string;
   filePath: string;
   kind: HostedWorkspaceSubagentConfigKind;
+  source: HostedWorkspaceSubagentConfigSource;
   parsed: Record<string, unknown>;
 }
 
@@ -109,9 +119,15 @@ function normalizeWorkspaceSubagentConfigKind(
 
 export function classifyHostedWorkspaceSubagentConfig(
   source: Record<string, unknown>,
+  options: {
+    defaultKind?: HostedWorkspaceSubagentConfigKind;
+  } = {},
 ): HostedWorkspaceSubagentConfigKind {
   const explicitKind = asString(source.kind);
   if (!explicitKind) {
+    if (options.defaultKind) {
+      return options.defaultKind;
+    }
     throw new Error("missing required kind");
   }
   const normalized = normalizeWorkspaceSubagentConfigKind(explicitKind);
@@ -121,27 +137,73 @@ export function classifyHostedWorkspaceSubagentConfig(
   return normalized;
 }
 
-export async function readHostedWorkspaceSubagentConfigFiles(
-  workspaceRoot: string,
-): Promise<HostedWorkspaceSubagentConfigFile[]> {
-  const root = resolve(workspaceRoot, ".brewva", "subagents");
-  if (!existsSync(root)) {
+function parseFrontmatter(markdown: string): ParsedFrontmatter {
+  const match = markdown.match(FRONTMATTER_REGEX);
+  if (!match) {
+    return {
+      body: markdown,
+      data: {},
+    };
+  }
+  const yamlText = match[1] ?? "";
+  const body = match[2] ?? "";
+  const parsed = parseYaml(yamlText);
+  return {
+    body,
+    data:
+      typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {},
+  };
+}
+
+function parseHostedWorkspaceAgentMarkdownConfig(input: {
+  fileName: string;
+  raw: string;
+}): Record<string, unknown> {
+  const frontmatter = parseFrontmatter(input.raw);
+  const parsed: Record<string, unknown> = {
+    ...frontmatter.data,
+    name: asString(frontmatter.data.name) ?? basename(input.fileName, ".md"),
+  };
+  const trimmedBody = frontmatter.body.trim();
+  if (trimmedBody.length > 0) {
+    parsed.instructionsMarkdown = trimmedBody;
+  }
+  return parsed;
+}
+
+async function readHostedWorkspaceConfigDirectory(input: {
+  directory: string;
+  extension: ".json" | ".md";
+  source: HostedWorkspaceSubagentConfigSource;
+}): Promise<HostedWorkspaceSubagentConfigFile[]> {
+  if (!existsSync(input.directory)) {
     return [];
   }
 
   const files: HostedWorkspaceSubagentConfigFile[] = [];
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.endsWith(".json")) {
+  const entries = readdirSync(input.directory, { withFileTypes: true }).toSorted((left, right) =>
+    left.name.localeCompare(right.name),
+  );
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(input.extension)) {
       continue;
     }
-    const filePath = resolve(root, entry.name);
+    const filePath = resolve(input.directory, entry.name);
     const raw = await readFile(filePath, "utf8");
     if (!raw.trim()) {
       continue;
     }
     let parsed: unknown;
     try {
-      parsed = JSON.parse(raw);
+      parsed =
+        input.extension === ".json"
+          ? JSON.parse(raw)
+          : parseHostedWorkspaceAgentMarkdownConfig({
+              fileName: entry.name,
+              raw,
+            });
     } catch (error) {
       throw new Error(
         `invalid_subagent_config:${entry.name}:${error instanceof Error ? error.message : String(error)}`,
@@ -153,7 +215,9 @@ export async function readHostedWorkspaceSubagentConfigFiles(
     }
     let kind: HostedWorkspaceSubagentConfigKind;
     try {
-      kind = classifyHostedWorkspaceSubagentConfig(parsed);
+      kind = classifyHostedWorkspaceSubagentConfig(parsed, {
+        defaultKind: input.extension === ".md" ? "agentSpec" : undefined,
+      });
     } catch (error) {
       throw new Error(
         `invalid_subagent_config:${entry.name}:${error instanceof Error ? error.message : String(error)}`,
@@ -164,9 +228,34 @@ export async function readHostedWorkspaceSubagentConfigFiles(
       fileName: entry.name,
       filePath,
       kind,
+      source: input.source,
       parsed,
     });
   }
 
   return files;
+}
+
+export async function readHostedWorkspaceSubagentConfigFiles(
+  workspaceRoot: string,
+): Promise<HostedWorkspaceSubagentConfigFile[]> {
+  const files = await Promise.all([
+    readHostedWorkspaceConfigDirectory({
+      directory: resolve(workspaceRoot, ".brewva", "subagents"),
+      extension: ".json",
+      source: "json",
+    }),
+    readHostedWorkspaceConfigDirectory({
+      directory: resolve(workspaceRoot, ".brewva", "agents"),
+      extension: ".md",
+      source: "markdown",
+    }),
+    readHostedWorkspaceConfigDirectory({
+      directory: resolve(workspaceRoot, ".config", "brewva", "agents"),
+      extension: ".md",
+      source: "markdown",
+    }),
+  ]);
+
+  return files.flat().toSorted((left, right) => left.filePath.localeCompare(right.filePath));
 }

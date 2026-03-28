@@ -36,6 +36,7 @@ import {
 import { installSessionCompactionRecovery } from "../session/compaction-recovery.js";
 import {
   createDetachedSubagentBackgroundController,
+  createDelegationModelRoutingContext,
   HostedDelegationStore,
   createHostedSubagentAdapter,
   type HostedDelegationBuiltinToolName,
@@ -220,20 +221,23 @@ function createHostedOrchestration(input: {
   runtime: BrewvaRuntime;
   delegationStore: HostedDelegationStore | undefined;
   cwd: string;
+  modelRegistry: ModelRegistry;
 }): BrewvaToolOrchestration | undefined {
-  const { options, runtime, delegationStore, cwd } = input;
+  const { options, runtime, delegationStore, cwd, modelRegistry } = input;
   if (options.enableSubagents === false || options.orchestration?.subagents) {
     return options.orchestration;
   }
 
   const subagents = createHostedSubagentAdapter({
     runtime,
+    modelRouting: createDelegationModelRoutingContext(modelRegistry),
     delegationStore,
     backgroundController: createDetachedSubagentBackgroundController({
       runtime,
       delegationStore,
       configPath: options.configPath,
       routingScopes: options.routingScopes,
+      modelRouting: createDelegationModelRoutingContext(modelRegistry),
     }),
     createChildSession: (childOptions) =>
       createHostedSession({
@@ -338,6 +342,7 @@ export async function createHostedSession(
     runtime,
     delegationStore,
     cwd: environment.cwd,
+    modelRegistry: environment.modelRegistry,
   });
 
   const settingsManager = SettingsManager.create(environment.cwd, environment.agentDir);

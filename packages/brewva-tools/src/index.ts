@@ -56,7 +56,7 @@ export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefiniti
     ...createTocTools({ runtime }),
     ...createAstGrepTools(),
     createReadSpansTool({ runtime }),
-    createLookAtTool(),
+    createLookAtTool({ runtime }),
     createGrepTool({ runtime }),
     createExecTool({ runtime }),
     ...createBrowserTools({ runtime }),

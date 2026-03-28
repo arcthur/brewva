@@ -102,4 +102,42 @@ describe("Task status alignment", () => {
     expect(injection.text).toContain("status.phase=execute");
     expect(injection.text).toContain("status.health=exploring");
   });
+
+  test("hard blockers dominate open task items", async () => {
+    const workspace = createTestWorkspace("task-status-hard-blocker");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "task-status-hard-blocker-1";
+
+    runtime.task.setSpec(sessionId, { schema: "brewva.task.v1", goal: "Do a thing" });
+    runtime.task.addItem(sessionId, { text: "Implement the fix" });
+    runtime.task.recordBlocker(sessionId, {
+      id: "blocker:environment",
+      message: "Missing runtime dependency",
+      source: "environment",
+    });
+
+    const state = runtime.task.getState(sessionId);
+    expect(state.status?.phase).toBe("blocked");
+    expect(state.status?.health).toBe("blocked");
+    expect(state.status?.reason).toBe("blockers_present");
+  });
+
+  test("governance blockers are treated as hard blockers even when work remains", async () => {
+    const workspace = createTestWorkspace("task-status-governance-blocker");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "task-status-governance-blocker-1";
+
+    runtime.task.setSpec(sessionId, { schema: "brewva.task.v1", goal: "Do a thing" });
+    runtime.task.addItem(sessionId, { text: "Implement the fix" });
+    runtime.task.recordBlocker(sessionId, {
+      id: "verifier:governance:verify-spec",
+      message: "Spec rejected by governance",
+      source: "governance",
+    });
+
+    const state = runtime.task.getState(sessionId);
+    expect(state.status?.phase).toBe("blocked");
+    expect(state.status?.health).toBe("blocked");
+    expect(state.status?.reason).toBe("blockers_present");
+  });
 });

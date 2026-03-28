@@ -145,4 +145,37 @@ describe("delegation prompt and catalog composition", () => {
       );
     }
   });
+
+  test("defaults markdown workspace subagent files to agentSpec", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-markdown-kind-"));
+    const agentDir = join(workspace, ".brewva", "agents");
+    mkdirSync(agentDir, { recursive: true });
+    writeFileSync(
+      join(agentDir, "reviewer.md"),
+      [
+        "---",
+        'name: "reviewer"',
+        'description: "Markdown-backed reviewer"',
+        'envelope: "readonly-reviewer"',
+        'skillName: "review"',
+        "---",
+        "",
+        "Operate as a strict reviewer and summarize the highest-risk findings.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const catalog = await loadHostedDelegationCatalog(workspace);
+    expect(catalog.agentSpecs.get("reviewer")).toEqual(
+      expect.objectContaining({
+        name: "reviewer",
+        description: "Markdown-backed reviewer",
+        envelope: "readonly-reviewer",
+        skillName: "review",
+        instructionsMarkdown:
+          "Operate as a strict reviewer and summarize the highest-risk findings.",
+      }),
+    );
+  });
 });

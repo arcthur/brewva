@@ -155,6 +155,7 @@ function createVerificationOutcome(input: {
 
 function createSessionInput(input: {
   sessionId: string;
+  targetRoots?: string[];
   taskSpecs?: TaskSpecObservation[];
   workflowArtifacts?: WorkflowArtifact[];
   metricRecords?: MetricObservationRecord[];
@@ -168,6 +169,7 @@ function createSessionInput(input: {
   };
   return {
     sessionId: input.sessionId,
+    targetRoots: input.targetRoots ?? ["/repo/workspace"],
     events: [],
     workflowArtifacts: input.workflowArtifacts ?? [],
     taskSpecs: input.taskSpecs ?? [],
@@ -234,7 +236,7 @@ describe("deliberation memory plane", () => {
     expect(existsSync(statePath)).toBe(true);
     expect(afterSyncEntries.length).toBeGreaterThan(0);
     expect(afterSyncEntries[0]?.content).toContain(
-      "[DeliberationMemory:repository_strategy_memory]",
+      "[DeliberationMemory:repository_strategy_memory:",
     );
     expect(afterSyncEntries[0]?.content).toContain("Repository Working Contract");
   });
@@ -435,7 +437,7 @@ describe("deliberation memory plane", () => {
       sessions,
     });
 
-    expect(state.schema).toBe("brewva.deliberation.memory.v1");
+    expect(state.schema).toBe("brewva.deliberation.memory.v2");
     expect(state.artifacts.some((artifact) => artifact.kind === "repository_strategy_memory")).toBe(
       true,
     );
@@ -448,7 +450,9 @@ describe("deliberation memory plane", () => {
     expect(state.artifacts.some((artifact) => artifact.kind === "loop_memory")).toBe(true);
 
     const repositoryContract = state.artifacts.find(
-      (artifact) => artifact.id === "repository-working-contract",
+      (artifact) =>
+        artifact.kind === "repository_strategy_memory" &&
+        artifact.title === "Repository Working Contract",
     );
     expect(repositoryContract?.content).toContain("bun run check");
     expect(repositoryContract?.content).toContain("no backward compatibility");

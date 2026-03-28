@@ -31,6 +31,13 @@ export {
   type HostedDelegationCatalog,
   type HostedExecutionEnvelope,
 } from "./catalog.js";
+export {
+  createDelegationModelRoutingContext,
+  createDelegationModelRoutingContextFromAgentDir,
+  resolveDelegationModelRoute,
+  type DelegationModelRoutingContext,
+  type ResolvedDelegationModelRoute,
+} from "./model-routing.js";
 export { buildDelegationPrompt } from "./prompt.js";
 export {
   createIsolatedWorkspace,

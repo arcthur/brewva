@@ -28,7 +28,6 @@ describe("S-004/S-005 verification gate", () => {
     runtime.tools.markCall(sessionId, "edit");
     const blocked = runtime.verification.evaluate(sessionId);
     expect(blocked.passed).toBe(false);
-    expect(blocked.missingEvidence).toContain("lsp_diagnostics");
     expect(blocked.missingEvidence).toContain("test_or_build");
 
     runtime.tools.recordResult({
@@ -71,7 +70,6 @@ describe("S-004/S-005 verification gate", () => {
     runtime.tools.markCall(sessionId, "multi_edit");
     const blocked = runtime.verification.evaluate(sessionId);
     expect(blocked.passed).toBe(false);
-    expect(blocked.missingEvidence).toContain("lsp_diagnostics");
     expect(blocked.missingEvidence).toContain("test_or_build");
   });
 

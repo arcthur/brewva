@@ -93,6 +93,9 @@ Optional channel tools:
 
 Notes:
 
+- `lsp_*`, `toc_*`, `look_at`, `read_spans`, `grep`, and `ast_grep_*` resolve
+  file access against the current task target roots; when a task target
+  descriptor is present they cannot escape the allowed roots
 - `lsp_diagnostics.severity` canonical values are
   `error | warning | information | hint | all`
 - `toc_document` is the preferred structural overview tool
@@ -131,6 +134,14 @@ Notes:
 
 These tools are the preferred path for evidence reuse and replay inspection.
 
+Scope notes:
+
+- `exec` shares the same target-root descriptor as code-navigation tools;
+  `exec.workdir` must stay inside the current task target roots before host or
+  sandbox routing is evaluated
+- `process` is the explicit follow-up surface for background `exec` sessions;
+  long-running commands are not an implicit hidden control plane
+
 `workflow_status` is advisory only. It derives workflow status and ship posture
 from runtime events and session state, but it does not prescribe or
 enforce a workflow path. The default hosted path does not maintain a hidden
@@ -141,6 +152,8 @@ this surface.
 artifacts that would otherwise only appear through hosted context injection.
 It lists retained artifacts, shows retention metadata, and runs query-scored
 retrieval without creating new memory or mutating runtime truth.
+Repository-scoped retrieval filters repository artifacts to the current task
+target roots instead of mixing unrelated repositories that share a workspace.
 
 ### Browser Automation
 
@@ -165,6 +178,9 @@ Current posture:
 - browser sessions are scoped per Brewva session
 - default artifacts are written under `.orchestrator/browser-artifacts/<session>`
 - explicit browser artifact paths must stay inside the workspace root
+- browser artifact path rules are stricter than task-target-root scoping for
+  code and exec tools; browser outputs remain workspace-root scoped even when a
+  task targets external repositories
 - `browser_snapshot`, `browser_diff_snapshot`, and `browser_get` with
   `field=text` retain workspace artifacts; when outputs are too large, hosted
   sessions expose distilled summaries to the model instead of feeding the full
@@ -477,6 +493,9 @@ Deliberation-owned bounded optimization inspection surface.
 Explicit inspection surface for deliberation memory artifacts.
 
 - lists retained repository, user, agent, and loop memory artifacts
+- repository-scoped retrieval filters repository artifacts to the current task
+  target roots and preserves artifact identity instead of collapsing different
+  repositories into a single workspace bucket
 - shows evidence-backed retention metadata such as band, decay, and retention
   score
 - supports query-scored retrieval so the model or operator can inspect why a

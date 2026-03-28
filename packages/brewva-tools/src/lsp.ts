@@ -7,6 +7,7 @@ import { Type } from "@sinclair/typebox";
 import { differenceInMilliseconds } from "date-fns";
 import { escapeRegexLiteral } from "./shared/query.js";
 import { walkWorkspaceFiles } from "./shared/workspace-walk.js";
+import { resolveScopedPath, resolveToolTargetScope } from "./target-scope.js";
 import type { BrewvaToolRuntime } from "./types.js";
 import { runCommand } from "./utils/exec.js";
 import { buildStringEnumSchema, normalizeStringEnumAlias } from "./utils/input-alias.js";
@@ -428,6 +429,11 @@ function applyRename(
 }
 
 export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolDefinition[] {
+  const resolveLspScope = (ctx: unknown) => resolveToolTargetScope(options?.runtime, ctx);
+  const resolveLspCwd = (ctx: unknown) => resolveLspScope(ctx).baseCwd;
+  const resolveLspFilePath = (ctx: unknown, filePath: string): string | null =>
+    resolveScopedPath(filePath, resolveLspScope(ctx));
+
   const lspGotoDefinition = defineBrewvaTool({
     name: "lsp_goto_definition",
     label: "LSP Go To Definition",
@@ -439,10 +445,15 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
       character: Type.Number({ minimum: 0 }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      if (!existsSync(params.filePath))
-        return failTextResult(`Error: File not found: ${params.filePath}`);
+      const targetFilePath = resolveLspFilePath(ctx, params.filePath);
+      if (!targetFilePath) {
+        return failTextResult("Error: file path escapes current task target roots.");
+      }
+      if (!existsSync(targetFilePath)) {
+        return failTextResult(`Error: File not found: ${targetFilePath}`);
+      }
 
-      const symbol = wordAt(params.filePath, params.line, params.character);
+      const symbol = wordAt(targetFilePath, params.line, params.character);
       if (!symbol) return inconclusiveTextResult("No symbol found at cursor.");
 
       const scan: LspParallelReadContext = {
@@ -451,7 +462,7 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
         toolName: "lsp_goto_definition",
         config: resolveParallelReadConfig(options?.runtime),
       };
-      const matches = await findDefinition(ctx.cwd, symbol, scan, params.filePath, 1);
+      const matches = await findDefinition(resolveLspCwd(ctx), symbol, scan, targetFilePath, 1);
       if (matches.length === 0) {
         return inconclusiveTextResult(`No definition found for '${symbol}'.`);
       }
@@ -474,10 +485,15 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
       includeDeclaration: Type.Optional(Type.Boolean()),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      if (!existsSync(params.filePath))
-        return failTextResult(`Error: File not found: ${params.filePath}`);
+      const targetFilePath = resolveLspFilePath(ctx, params.filePath);
+      if (!targetFilePath) {
+        return failTextResult("Error: file path escapes current task target roots.");
+      }
+      if (!existsSync(targetFilePath)) {
+        return failTextResult(`Error: File not found: ${targetFilePath}`);
+      }
 
-      const symbol = wordAt(params.filePath, params.line, params.character);
+      const symbol = wordAt(targetFilePath, params.line, params.character);
       if (!symbol) return inconclusiveTextResult("No symbol found at cursor.");
 
       const scan: LspParallelReadContext = {
@@ -486,9 +502,11 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
         toolName: "lsp_find_references",
         config: resolveParallelReadConfig(options?.runtime),
       };
-      let refs = await findReferences(ctx.cwd, symbol, scan, 500);
+      let refs = await findReferences(resolveLspCwd(ctx), symbol, scan, 500);
       if (params.includeDeclaration === false) {
-        const defs = new Set(await findDefinition(ctx.cwd, symbol, scan, params.filePath));
+        const defs = new Set(
+          await findDefinition(resolveLspCwd(ctx), symbol, scan, targetFilePath),
+        );
         refs = refs.filter((line) => !defs.has(line));
       }
 
@@ -527,21 +545,26 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
       const limit = params.limit ?? 50;
 
       if (scope === "document") {
-        if (!existsSync(params.filePath))
-          return failTextResult(`Error: File not found: ${params.filePath}`);
+        const targetFilePath = resolveLspFilePath(ctx, params.filePath);
+        if (!targetFilePath) {
+          return failTextResult("Error: file path escapes current task target roots.");
+        }
+        if (!existsSync(targetFilePath)) {
+          return failTextResult(`Error: File not found: ${targetFilePath}`);
+        }
         let targetStat: import("node:fs").Stats;
         try {
-          targetStat = statSync(params.filePath);
+          targetStat = statSync(targetFilePath);
         } catch (error) {
           return failTextResult(`Error: ${error instanceof Error ? error.message : String(error)}`);
         }
         if (!targetStat.isFile()) {
-          return failTextResult(`Error: Path is not a file: ${params.filePath}`);
+          return failTextResult(`Error: Path is not a file: ${targetFilePath}`);
         }
 
         let symbols: string[];
         try {
-          symbols = listSymbolsInFile(params.filePath, limit);
+          symbols = listSymbolsInFile(targetFilePath, limit);
         } catch (error) {
           return failTextResult(`Error: ${error instanceof Error ? error.message : String(error)}`);
         }
@@ -560,7 +583,7 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
         toolName: "lsp_symbols",
         config: resolveParallelReadConfig(options?.runtime),
       };
-      const refs = await findReferences(ctx.cwd, params.query, scan, limit);
+      const refs = await findReferences(resolveLspCwd(ctx), params.query, scan, limit);
       return refs.length > 0
         ? textResult(refs.join("\n"))
         : inconclusiveTextResult("No symbols found");
@@ -583,19 +606,23 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       try {
+        const targetFilePath = resolveLspFilePath(ctx, params.filePath);
+        if (!targetFilePath) {
+          return failTextResult("Error: file path escapes current task target roots.");
+        }
         const severity = normalizeStringEnumAlias(
           params.severity,
           LSP_DIAGNOSTIC_SEVERITIES,
           LSP_DIAGNOSTIC_SEVERITY_ALIASES,
         );
-        const run = await diagnostics(ctx.cwd, params.filePath, severity);
+        const run = await diagnostics(resolveLspCwd(ctx), targetFilePath, severity);
         return textResult(
           run.text,
           withVerdict(
             {
               status: run.status,
               reason: run.reason ?? null,
-              filePath: params.filePath,
+              filePath: targetFilePath,
               severity: severity ?? "all",
               exitCode: run.exitCode,
               filteredLineCount: run.filteredLineCount,
@@ -623,10 +650,15 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
       character: Type.Number({ minimum: 0 }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      if (!existsSync(params.filePath))
-        return failTextResult(`Error: File not found: ${params.filePath}`);
+      const targetFilePath = resolveLspFilePath(ctx, params.filePath);
+      if (!targetFilePath) {
+        return failTextResult("Error: file path escapes current task target roots.");
+      }
+      if (!existsSync(targetFilePath)) {
+        return failTextResult(`Error: File not found: ${targetFilePath}`);
+      }
 
-      const symbol = wordAt(params.filePath, params.line, params.character);
+      const symbol = wordAt(targetFilePath, params.line, params.character);
       if (!symbol) {
         return inconclusiveTextResult("Rename not available: cursor is not on a symbol.");
       }
@@ -637,8 +669,8 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
         toolName: "lsp_prepare_rename",
         config: resolveParallelReadConfig(options?.runtime),
       };
-      const refs = await findReferences(dirname(resolve(params.filePath)), symbol, scan, 1000);
-      const definitions = await findDefinition(ctx.cwd, symbol, scan, params.filePath);
+      const refs = await findReferences(dirname(resolve(targetFilePath)), symbol, scan, 1000);
+      const definitions = await findDefinition(resolveLspCwd(ctx), symbol, scan, targetFilePath);
       return textResult(`Rename available for '${symbol}'. Estimated references: ${refs.length}.`, {
         symbol,
         references: refs.length,
@@ -658,17 +690,22 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
       newName: Type.String(),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      if (!existsSync(params.filePath))
-        return failTextResult(`Error: File not found: ${params.filePath}`);
+      const targetFilePath = resolveLspFilePath(ctx, params.filePath);
+      if (!targetFilePath) {
+        return failTextResult("Error: file path escapes current task target roots.");
+      }
+      if (!existsSync(targetFilePath)) {
+        return failTextResult(`Error: File not found: ${targetFilePath}`);
+      }
 
-      const symbol = wordAt(params.filePath, params.line, params.character);
+      const symbol = wordAt(targetFilePath, params.line, params.character);
       if (!symbol) return failTextResult("Error: cursor is not on a symbol.");
 
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(params.newName)) {
         return failTextResult("Error: newName must be a valid identifier.");
       }
 
-      const result = applyRename(ctx.cwd, symbol, params.newName);
+      const result = applyRename(resolveLspCwd(ctx), symbol, params.newName);
       return textResult(
         `Renamed '${symbol}' to '${params.newName}'. Files changed: ${result.filesChanged}, replacements: ${result.replacements}.`,
         result,

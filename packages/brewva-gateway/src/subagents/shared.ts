@@ -1,5 +1,6 @@
 import type {
   BrewvaRuntime,
+  DelegationModelRouteRecord,
   ManagedToolMode,
   PatchSet,
   SessionCostSummary,
@@ -27,6 +28,10 @@ import {
   resolveHostedExecutionEnvelope,
   type HostedDelegationCatalog,
 } from "./catalog.js";
+import {
+  resolveDelegationModelRoute,
+  type DelegationModelRoutingContext,
+} from "./model-routing.js";
 import { getCanonicalSubagentPrompt } from "./protocol.js";
 import type { HostedDelegationBuiltinToolName, HostedDelegationTarget } from "./targets.js";
 
@@ -69,6 +74,7 @@ export interface ResolvedDelegationExecutionPlan {
   packet: DelegationPacket;
   boundary: SubagentExecutionBoundary;
   model?: string;
+  modelRoute?: DelegationModelRouteRecord;
   managedToolMode: ManagedToolMode;
   builtinToolNames: HostedDelegationBuiltinToolName[];
   managedToolNames: string[];
@@ -361,6 +367,8 @@ export function resolveDelegationExecutionPlan(input: {
   delegate?: string;
   packet: DelegationPacket;
   executionShape?: SubagentExecutionShape;
+  modelRouting?: DelegationModelRoutingContext;
+  preselectedModelRoute?: DelegationModelRouteRecord;
 }): ResolvedDelegationExecutionPlan {
   const delegatedSkillName = input.target.skillName;
   const skill = delegatedSkillName ? input.runtime.skills.get(delegatedSkillName) : undefined;
@@ -376,6 +384,13 @@ export function resolveDelegationExecutionPlan(input: {
     input.executionShape?.managedToolMode ?? input.target.managedToolMode ?? "direct";
   const prompt =
     input.target.executorPreamble ?? getCanonicalSubagentPrompt(input.target.resultMode);
+  const routedModel = resolveDelegationModelRoute({
+    target: input.target,
+    packet: input.packet,
+    executionShape: input.executionShape,
+    modelRouting: input.modelRouting,
+    preselectedModelRoute: input.preselectedModelRoute,
+  });
   return {
     target: input.target,
     delegate:
@@ -385,7 +400,8 @@ export function resolveDelegationExecutionPlan(input: {
       input.target.name,
     packet: input.packet,
     boundary,
-    model: input.executionShape?.model ?? input.target.model,
+    model: routedModel.model,
+    modelRoute: routedModel.modelRoute,
     managedToolMode,
     builtinToolNames: resolveBuiltinToolNamesForRun(
       input.runtime,

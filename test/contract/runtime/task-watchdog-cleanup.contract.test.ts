@@ -1,14 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { patchDateNow } from "../../helpers/global-state.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("task watchdog cleanup", () => {
   test("records a cleared event on turn start after semantic progress resumes", () => {
-    const originalNow = Date.now;
     let now = 1_730_000_000_000;
-
-    Date.now = () => now;
+    const restoreNow = patchDateNow(() => now);
     try {
       const runtime = new BrewvaRuntime({
         cwd: createTestWorkspace("watchdog-cleanup"),
@@ -55,7 +54,7 @@ describe("task watchdog cleanup", () => {
         resumedProgressAt: 1_730_000_001_400,
       });
     } finally {
-      Date.now = originalNow;
+      restoreNow();
     }
   });
 });

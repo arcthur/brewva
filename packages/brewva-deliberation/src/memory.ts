@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { TaskSpec, TruthState, WorkflowArtifact } from "@brewva/brewva-runtime";
 import {
   CONTEXT_SOURCES,
@@ -116,6 +117,7 @@ export interface TaskSpecObservation {
 
 export interface SessionMemoryInput {
   sessionId: string;
+  targetRoots: string[];
   events: BrewvaEventRecord[];
   workflowArtifacts: WorkflowArtifact[];
   taskSpecs: TaskSpecObservation[];
@@ -211,11 +213,15 @@ function createArtifact(input: {
   };
 }
 
+function hashRepositoryRoot(root: string): string {
+  return createHash("sha256").update(root).digest("hex").slice(0, 12);
+}
+
 function resolveScopeRetentionBias(
   scope: DeliberationMemoryArtifact["applicabilityScope"],
 ): number {
   switch (scope) {
-    case "workspace":
+    case "repository":
       return 1;
     case "user":
       return 0.94;
@@ -454,6 +460,7 @@ function collectVerificationOutcomes(
 function buildSessionMemoryInput(
   sessionId: string,
   events: BrewvaEventRecord[],
+  targetRoots: readonly string[] = [],
 ): SessionMemoryInput {
   const truthEvents = events.filter((event) => {
     if (event.type !== TRUTH_EVENT_TYPE) return false;
@@ -461,6 +468,7 @@ function buildSessionMemoryInput(
   });
   return {
     sessionId,
+    targetRoots: [...targetRoots],
     events,
     workflowArtifacts: deriveWorkflowArtifacts(events),
     taskSpecs: collectTaskSpecs(events),
@@ -472,9 +480,10 @@ function buildSessionMemoryInput(
   };
 }
 
-export type DeliberationMemoryRuntime = Pick<BrewvaRuntime, "workspaceRoot" | "events">;
+export type DeliberationMemoryRuntime = Pick<BrewvaRuntime, "workspaceRoot" | "events" | "task">;
 
 function buildRepositoryWorkingContract(
+  repositoryRoot: string,
   sessions: readonly SessionMemoryInput[],
 ): DeliberationMemoryArtifact | undefined {
   const taskSpecs = sessions.flatMap((session) => session.taskSpecs);
@@ -544,11 +553,11 @@ function buildRepositoryWorkingContract(
   }
 
   return createArtifact({
-    id: "repository-working-contract",
+    id: `repository-working-contract:${hashRepositoryRoot(repositoryRoot)}`,
     kind: "repository_strategy_memory",
     title: "Repository Working Contract",
     summary,
-    content: lines.join(" "),
+    content: [`Repository root: ${repositoryRoot}.`, ...lines].join(" "),
     tags: [
       ...verificationLevelPreview,
       ...verificationCommandPreview,
@@ -558,16 +567,18 @@ function buildRepositoryWorkingContract(
     confidenceScore: 0.58 + Math.min(0.28, sessionIds.length * 0.06),
     firstCapturedAt: Math.min(...taskSpecs.map((entry) => entry.timestamp)),
     lastValidatedAt: Math.max(...taskSpecs.map((entry) => entry.timestamp)),
-    applicabilityScope: "workspace",
+    applicabilityScope: "repository",
     sessionIds,
     evidence,
     metadata: {
+      repositoryRoot,
       taskSpecCount: taskSpecs.length,
     },
   });
 }
 
 function buildRecentWorkflowSignal(
+  repositoryRoot: string,
   sessions: readonly SessionMemoryInput[],
 ): DeliberationMemoryArtifact | undefined {
   const candidates = sessions
@@ -591,16 +602,16 @@ function buildRecentWorkflowSignal(
     (artifact) => `${titleCaseKind(artifact.kind)}: ${compactText(artifact.summary, 180)}`,
   );
   return createArtifact({
-    id: "repository-recent-workflow-signals",
+    id: `repository-recent-workflow-signals:${hashRepositoryRoot(repositoryRoot)}`,
     kind: "repository_strategy_memory",
     title: "Recent Repository Strategy Signals",
     summary: lines.slice(0, 2).join(" "),
-    content: lines.join(" "),
+    content: [`Repository root: ${repositoryRoot}.`, ...lines].join(" "),
     tags: candidates.flatMap((artifact) => [artifact.kind, ...artifact.sourceSkillNames]),
     confidenceScore: 0.52 + Math.min(0.2, candidates.length * 0.05),
     firstCapturedAt: Math.min(...candidates.map((artifact) => artifact.producedAt)),
     lastValidatedAt: Math.max(...candidates.map((artifact) => artifact.producedAt)),
-    applicabilityScope: "workspace",
+    applicabilityScope: "repository",
     sessionIds: uniqueStrings(candidates.map((artifact) => artifact.sessionId)),
     evidence: candidates.flatMap((artifact) =>
       artifact.sourceEventIds.map((eventId) => ({
@@ -610,7 +621,43 @@ function buildRecentWorkflowSignal(
         timestamp: artifact.producedAt,
       })),
     ),
+    metadata: {
+      repositoryRoot,
+    },
   });
+}
+
+function groupSessionsByRepositoryRoot(
+  sessions: readonly SessionMemoryInput[],
+): Map<string, SessionMemoryInput[]> {
+  const grouped = new Map<string, SessionMemoryInput[]>();
+  for (const session of sessions) {
+    const roots = session.targetRoots.length > 0 ? session.targetRoots : ["(unknown)"];
+    for (const root of roots) {
+      const current = grouped.get(root) ?? [];
+      current.push(session);
+      grouped.set(root, current);
+    }
+  }
+  return grouped;
+}
+
+function buildRepositoryArtifacts(
+  sessions: readonly SessionMemoryInput[],
+): DeliberationMemoryArtifact[] {
+  const grouped = groupSessionsByRepositoryRoot(sessions);
+  const artifacts: DeliberationMemoryArtifact[] = [];
+  for (const [repositoryRoot, repositorySessions] of grouped.entries()) {
+    const contract = buildRepositoryWorkingContract(repositoryRoot, repositorySessions);
+    if (contract) {
+      artifacts.push(contract);
+    }
+    const workflowSignal = buildRecentWorkflowSignal(repositoryRoot, repositorySessions);
+    if (workflowSignal) {
+      artifacts.push(workflowSignal);
+    }
+  }
+  return artifacts;
 }
 
 function buildUserCollaborationProfile(
@@ -875,8 +922,7 @@ export function buildDeliberationMemoryState(input: {
   const now = input.now ?? input.updatedAt ?? Date.now();
   const artifacts = pruneDeliberationMemoryArtifacts(
     [
-      buildRepositoryWorkingContract(input.sessions),
-      buildRecentWorkflowSignal(input.sessions),
+      ...buildRepositoryArtifacts(input.sessions),
       buildUserCollaborationProfile(input.sessions),
       buildAgentCapabilityProfile(input.sessions),
       ...buildLoopMemories(input.sessions),
@@ -926,11 +972,13 @@ function resolveScopeWeight(
 export function retrieveDeliberationMemoryArtifacts(input: {
   state: DeliberationMemoryState;
   promptText: string;
+  targetRoots?: readonly string[];
   now?: number;
   limit?: number;
 }): DeliberationMemoryRetrieval[] {
   const now = input.now ?? Date.now();
   const queryTokens = new Set(tokenize(input.promptText));
+  const targetRoots = new Set((input.targetRoots ?? []).map((root) => root.trim()).filter(Boolean));
   const perKindCap: Record<DeliberationMemoryArtifact["kind"], number> = {
     repository_strategy_memory: 2,
     user_collaboration_profile: 1,
@@ -954,6 +1002,13 @@ export function retrieveDeliberationMemoryArtifacts(input: {
             artifact.tags.some((tag) => tokenize(tag).includes(token)),
           ).length / queryTokens.size;
     const scopeWeight = resolveScopeWeight(artifact, queryTokens);
+    const artifactRepositoryRoot = getArtifactRepositoryRoot(artifact);
+    const repositoryScopeWeight =
+      artifact.kind !== "repository_strategy_memory" || targetRoots.size === 0
+        ? 1
+        : artifactRepositoryRoot && targetRoots.has(artifactRepositoryRoot)
+          ? 1
+          : 0;
     return {
       artifact,
       score:
@@ -961,13 +1016,22 @@ export function retrieveDeliberationMemoryArtifacts(input: {
         tagScore * 0.12 +
         retention.retentionScore * 0.26 +
         retention.retrievalBias * 0.09 +
-        scopeWeight * 0.15,
+        scopeWeight * 0.15 +
+        repositoryScopeWeight * 0.2,
     };
   });
 
   const selected: DeliberationMemoryRetrieval[] = [];
   const kindCounts = new Map<DeliberationMemoryArtifact["kind"], number>();
   for (const entry of scored.toSorted((left, right) => right.score - left.score)) {
+    const artifactRepositoryRoot = getArtifactRepositoryRoot(entry.artifact);
+    if (
+      entry.artifact.kind === "repository_strategy_memory" &&
+      targetRoots.size > 0 &&
+      (!artifactRepositoryRoot || !targetRoots.has(artifactRepositoryRoot))
+    ) {
+      continue;
+    }
     const limit = perKindCap[entry.artifact.kind];
     const currentCount = kindCounts.get(entry.artifact.kind) ?? 0;
     if (currentCount >= limit) continue;
@@ -982,9 +1046,12 @@ export function retrieveDeliberationMemoryArtifacts(input: {
 
 function renderContextEntry(artifact: DeliberationMemoryArtifact): string {
   const retention = artifact.metadata?.retention;
+  const repositoryRoot =
+    typeof artifact.metadata?.repositoryRoot === "string" ? artifact.metadata.repositoryRoot : null;
   return [
-    `[DeliberationMemory:${artifact.kind}]`,
+    `[DeliberationMemory:${artifact.kind}:${artifact.id}]`,
     `title: ${artifact.title}`,
+    repositoryRoot ? `repository_root: ${repositoryRoot}` : "",
     `summary: ${artifact.summary}`,
     `confidence: ${artifact.confidenceScore.toFixed(2)}`,
     retention ? `retention: ${retention.band} (${retention.retentionScore.toFixed(2)})` : "",
@@ -993,6 +1060,12 @@ function renderContextEntry(artifact: DeliberationMemoryArtifact): string {
   ]
     .filter((line) => line.length > 0)
     .join("\n");
+}
+
+function getArtifactRepositoryRoot(artifact: DeliberationMemoryArtifact): string | null {
+  return typeof artifact.metadata?.repositoryRoot === "string"
+    ? artifact.metadata.repositoryRoot
+    : null;
 }
 
 function createEmptyDeliberationMemoryState(
@@ -1077,16 +1150,25 @@ export class DeliberationMemoryPlane {
     return this.state?.artifacts.find((artifact) => artifact.id === normalizedId);
   }
 
-  retrieve(promptText: string, limit = DEFAULT_MAX_RETRIEVAL): DeliberationMemoryRetrieval[] {
+  retrieve(
+    promptText: string,
+    limit = DEFAULT_MAX_RETRIEVAL,
+    targetRoots: readonly string[] = [],
+  ): DeliberationMemoryRetrieval[] {
     const state = this.sync();
     return retrieveDeliberationMemoryArtifacts({
       state,
       promptText,
+      targetRoots,
       limit,
     });
   }
 
-  retrieveCached(promptText: string, limit = DEFAULT_MAX_RETRIEVAL): DeliberationMemoryRetrieval[] {
+  retrieveCached(
+    promptText: string,
+    limit = DEFAULT_MAX_RETRIEVAL,
+    targetRoots: readonly string[] = [],
+  ): DeliberationMemoryRetrieval[] {
     const state = this.state;
     if (!state) {
       return [];
@@ -1094,6 +1176,7 @@ export class DeliberationMemoryPlane {
     return retrieveDeliberationMemoryArtifacts({
       state,
       promptText,
+      targetRoots,
       limit,
     });
   }
@@ -1145,7 +1228,11 @@ export class DeliberationMemoryPlane {
     }
 
     const sessions = digests.map((digest) =>
-      buildSessionMemoryInput(digest.sessionId, this.runtime.events.list(digest.sessionId)),
+      buildSessionMemoryInput(
+        digest.sessionId,
+        this.runtime.events.list(digest.sessionId),
+        this.runtime.task.getTargetDescriptor(digest.sessionId).roots,
+      ),
     );
     const nextState = buildDeliberationMemoryState({
       updatedAt: now,
@@ -1190,7 +1277,11 @@ export function createDeliberationMemoryContextProvider(input: {
     category: "narrative",
     order: 15,
     collect: (providerInput) => {
-      const retrievals = plane.retrieve(providerInput.promptText, input.maxArtifacts);
+      const retrievals = plane.retrieve(
+        providerInput.promptText,
+        input.maxArtifacts,
+        input.runtime.task.getTargetDescriptor(providerInput.sessionId).roots,
+      );
       for (const retrieval of retrievals) {
         providerInput.register({
           id: retrieval.artifact.id,

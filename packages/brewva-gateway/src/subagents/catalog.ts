@@ -35,6 +35,7 @@ export interface HostedAgentSpec {
   skillName?: string;
   fallbackResultMode?: SubagentResultMode;
   executorPreamble?: string;
+  instructionsMarkdown?: string;
 }
 
 export interface HostedDelegationCatalog {
@@ -45,6 +46,7 @@ export interface HostedDelegationCatalog {
 }
 
 const MAX_EXECUTOR_PREAMBLE_LENGTH = 600;
+const MAX_AGENT_INSTRUCTIONS_MARKDOWN_LENGTH = 4_000;
 
 const BOUNDARY_RANK: Record<SubagentExecutionBoundary, number> = {
   safe: 0,
@@ -135,6 +137,14 @@ function assertHostedAgentSpecTightening(input: {
       `${context}:executorPreamble exceeds ${MAX_EXECUTOR_PREAMBLE_LENGTH} characters`,
     );
   }
+  if (
+    candidate.instructionsMarkdown &&
+    candidate.instructionsMarkdown.length > MAX_AGENT_INSTRUCTIONS_MARKDOWN_LENGTH
+  ) {
+    throw new Error(
+      `${context}:instructionsMarkdown exceeds ${MAX_AGENT_INSTRUCTIONS_MARKDOWN_LENGTH} characters`,
+    );
+  }
 
   const baseEnvelope = resolveHostedExecutionEnvelope(catalog, base.envelope);
   const candidateEnvelope = resolveHostedExecutionEnvelope(catalog, candidate.envelope);
@@ -180,9 +190,19 @@ function toAgentSpec(
     return undefined;
   }
   const executorPreamble = asString(source.executorPreamble) ?? defaults?.executorPreamble;
+  const instructionsMarkdown =
+    asString(source.instructionsMarkdown) ?? defaults?.instructionsMarkdown;
   if (executorPreamble && executorPreamble.length > MAX_EXECUTOR_PREAMBLE_LENGTH) {
     throw new Error(
       `invalid_agent_spec:${name}:executorPreamble exceeds ${MAX_EXECUTOR_PREAMBLE_LENGTH} characters`,
+    );
+  }
+  if (
+    instructionsMarkdown &&
+    instructionsMarkdown.length > MAX_AGENT_INSTRUCTIONS_MARKDOWN_LENGTH
+  ) {
+    throw new Error(
+      `invalid_agent_spec:${name}:instructionsMarkdown exceeds ${MAX_AGENT_INSTRUCTIONS_MARKDOWN_LENGTH} characters`,
     );
   }
   return {
@@ -192,6 +212,7 @@ function toAgentSpec(
     skillName: asString(source.skillName) ?? defaults?.skillName,
     fallbackResultMode: asResultMode(source.fallbackResultMode) ?? defaults?.fallbackResultMode,
     executorPreamble,
+    instructionsMarkdown,
   };
 }
 
@@ -523,6 +544,7 @@ export function buildHostedDelegationTargetFromAgentSpec(input: {
     description: input.agentSpec.description,
     resultMode,
     executorPreamble: input.agentSpec.executorPreamble,
+    instructionsMarkdown: input.agentSpec.instructionsMarkdown,
     boundary: input.envelope.boundary ?? "safe",
     model: input.envelope.model,
     skillName: input.agentSpec.skillName,
@@ -543,6 +565,7 @@ export function buildSyntheticHostedDelegationTarget(input: {
   skillName?: string;
   fallbackResultMode?: SubagentResultMode;
   executorPreamble?: string;
+  instructionsMarkdown?: string;
 }): HostedDelegationTarget {
   const resultMode =
     input.fallbackResultMode ??
@@ -553,6 +576,7 @@ export function buildSyntheticHostedDelegationTarget(input: {
     description: input.description,
     resultMode,
     executorPreamble: input.executorPreamble,
+    instructionsMarkdown: input.instructionsMarkdown,
     boundary: input.envelope.boundary ?? "safe",
     model: input.envelope.model,
     skillName: input.skillName,

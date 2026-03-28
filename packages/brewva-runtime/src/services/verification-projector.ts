@@ -169,6 +169,7 @@ export class VerificationProjectorService {
       const payload = coerceVerificationWriteMarkedPayload(event.payload);
       if (!payload) return;
       this.stateStore.markWriteAt(event.sessionId, event.timestamp);
+      this.clearVerificationFailures(event.sessionId);
       return;
     }
 
@@ -208,6 +209,19 @@ export class VerificationProjectorService {
 
     if (event.type === GOVERNANCE_VERIFY_SPEC_PASSED_EVENT_TYPE) {
       this.applyGovernancePass(event.sessionId);
+    }
+  }
+
+  private clearVerificationFailures(sessionId: string): void {
+    const taskState = this.getTaskState(sessionId);
+    for (const blocker of taskState.blockers) {
+      if (!blocker.id.startsWith(VERIFIER_BLOCKER_PREFIX)) {
+        continue;
+      }
+      this.resolveTaskBlocker(sessionId, blocker.id);
+      if (blocker.truthFactId) {
+        this.resolveTruthFact(sessionId, blocker.truthFactId);
+      }
     }
   }
 

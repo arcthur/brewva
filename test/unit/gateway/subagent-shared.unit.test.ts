@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
 import { loadHostedDelegationCatalog } from "../../../packages/brewva-gateway/src/subagents/catalog.js";
 import {
   assertDelegationShapeNarrowing,
@@ -22,6 +23,30 @@ function makeTarget(overrides: Partial<HostedDelegationTarget> = {}): HostedDele
     managedToolNames: ["grep"],
     managedToolMode: "direct",
     ...overrides,
+  };
+}
+
+function buildAvailableModel(input: {
+  provider: string;
+  id: string;
+  name: string;
+}): ReturnType<ModelRegistry["getAll"]>[number] {
+  return {
+    provider: input.provider,
+    id: input.id,
+    name: input.name,
+    api: "openai-responses",
+    baseUrl: "https://example.test",
+    reasoning: true,
+    input: ["text"],
+    cost: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+    },
+    contextWindow: 200_000,
+    maxTokens: 16_384,
   };
 }
 
@@ -70,10 +95,26 @@ describe("subagent shared execution resolution", () => {
         boundary: "safe",
         model: "openai/gpt-5.4-mini",
       },
+      modelRouting: {
+        availableModels: [
+          buildAvailableModel({
+            provider: "openai",
+            id: "gpt-5.4-mini",
+            name: "GPT-5.4 Mini",
+          }),
+        ],
+      },
     });
 
     expect(plan.boundary).toBe("safe");
     expect(plan.model).toBe("openai/gpt-5.4-mini");
+    expect(plan.modelRoute).toEqual({
+      selectedModel: "openai/gpt-5.4-mini",
+      requestedModel: "openai/gpt-5.4-mini",
+      source: "execution_shape",
+      mode: "explicit",
+      reason: "Explicit executionShape model override.",
+    });
     expect(plan.managedToolMode).toBe("direct");
     expect(plan.builtinToolNames).toEqual(["read"]);
     expect(plan.managedToolNames).toContain("grep");

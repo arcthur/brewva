@@ -134,6 +134,7 @@
         "@sinclair/typebox": "^0.34.48",
         "ajv": "^8.18.0",
         "ws": "^8.19.0",
+        "yaml": "^2.8.2",
       },
     },
     "packages/brewva-ingress": {
@@ -156,6 +157,7 @@
       "name": "@brewva/brewva-skill-broker",
       "version": "0.1.0",
       "dependencies": {
+        "@brewva/brewva-deliberation": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
       },
     },
@@ -163,6 +165,7 @@
       "name": "@brewva/brewva-tools",
       "version": "0.1.0",
       "dependencies": {
+        "@brewva/brewva-deliberation": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
         "@brewva/brewva-skill-broker": "workspace:*",
         "@mariozechner/pi-coding-agent": "^0.61.1",

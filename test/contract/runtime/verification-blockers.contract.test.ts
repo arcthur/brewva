@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { createTestConfig } from "../../fixtures/config.js";
 import { createTestWorkspace, writeTestConfig } from "../../helpers/workspace.js";
@@ -485,5 +487,127 @@ describe("Verification blockers", () => {
     const outcome = latestOutcomePayload(runtime, sessionId);
     expect(outcome?.outcome).toBe("fail");
     expect(outcome?.commandsExecuted).toEqual(expect.arrayContaining(["type-check", "tests"]));
+  });
+
+  test("executes package scripts through the project package manager instead of raw script bodies", async () => {
+    const workspace = createTestWorkspace("verification-package-script-runner");
+    mkdirSync(join(workspace, "node_modules", ".bin"), { recursive: true });
+    writeFileSync(
+      join(workspace, "package.json"),
+      JSON.stringify(
+        {
+          name: "verification-runner",
+          packageManager: "bun@1.3.10",
+          scripts: {
+            test: "vitest",
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    writeFileSync(
+      join(workspace, "node_modules", ".bin", "vitest"),
+      "#!/bin/sh\nprintf 'vitest-ok\\n'\n",
+      "utf8",
+    );
+    chmodSync(join(workspace, "node_modules", ".bin", "vitest"), 0o755);
+    writeConfig(
+      workspace,
+      createTestConfig(
+        {
+          verification: {
+            defaultLevel: "standard",
+            checks: {
+              quick: ["tests"],
+              standard: ["tests"],
+              strict: ["tests"],
+            },
+            commands: {
+              tests: "false",
+            },
+          },
+        },
+        { eventsLevel: "debug" },
+      ),
+    );
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    const sessionId = "verification-package-script-runner-1";
+    runtime.tools.markCall(sessionId, "edit");
+
+    const report = await runtime.verification.verify(sessionId, "standard", {
+      executeCommands: true,
+      timeoutMs: 5_000,
+    });
+
+    expect(report.passed).toBe(true);
+    const verifyRow = runtime.ledger
+      .listRows(sessionId)
+      .find((row) => row.tool === "brewva_verify" && row.metadata?.check === "tests");
+    expect(verifyRow?.metadata?.command).toBe("bun run test");
+  });
+
+  test("runs verification checks for every target root in a multi-root task", async () => {
+    const workspace = createTestWorkspace("verification-multi-root");
+    const repoA = join(workspace, "repo-a");
+    const repoB = join(workspace, "repo-b");
+    mkdirSync(repoA, { recursive: true });
+    mkdirSync(repoB, { recursive: true });
+    mkdirSync(join(repoA, ".git"), { recursive: true });
+    mkdirSync(join(repoB, ".git"), { recursive: true });
+    writeFileSync(join(repoA, "app.ts"), "export const a = 1;\n", "utf8");
+    writeFileSync(join(repoB, "app.ts"), "export const b = 2;\n", "utf8");
+    writeConfig(
+      workspace,
+      createTestConfig(
+        {
+          verification: {
+            defaultLevel: "standard",
+            checks: {
+              quick: ["tests"],
+              standard: ["tests"],
+              strict: ["tests"],
+            },
+            commands: {
+              tests: "pwd",
+            },
+          },
+        },
+        { eventsLevel: "debug" },
+      ),
+    );
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    const sessionId = "verification-multi-root-1";
+    runtime.task.setSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Verify both repositories.",
+      targets: {
+        files: [join(repoA, "app.ts"), join(repoB, "app.ts")],
+      },
+    });
+    runtime.tools.markCall(sessionId, "edit");
+
+    const report = await runtime.verification.verify(sessionId, "standard", {
+      executeCommands: true,
+      timeoutMs: 5_000,
+    });
+
+    expect(report.passed).toBe(true);
+    expect(report.checks).toHaveLength(2);
+    const verifyRows = runtime.ledger
+      .listRows(sessionId)
+      .filter(
+        (row) =>
+          row.tool === "brewva_verify" &&
+          typeof row.metadata?.check === "string" &&
+          row.metadata.check.startsWith("tests@"),
+      );
+    expect(verifyRows).toHaveLength(2);
+    expect(verifyRows.map((row) => row.argsSummary)).toEqual(
+      expect.arrayContaining([expect.stringContaining(repoA), expect.stringContaining(repoB)]),
+    );
   });
 });

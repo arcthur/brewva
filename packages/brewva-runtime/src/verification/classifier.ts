@@ -59,6 +59,15 @@ export function classifyEvidence(input: {
 
   if (toolName === "exec") {
     const cmd = getCommand(input.args);
+    if (cmd) {
+      evidence.push({
+        kind: "command_passed",
+        timestamp: input.now,
+        tool: input.toolName,
+        detail: cmd.slice(0, 200),
+        mode: "command",
+      });
+    }
     if (cmd && TEST_PATTERNS.some((pattern) => pattern.test(cmd))) {
       evidence.push({
         kind: "test_or_build_passed",

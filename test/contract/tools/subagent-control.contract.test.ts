@@ -57,6 +57,14 @@ describe("subagent control tools", () => {
         status: "running",
         kind: "review",
         summary: "Inspecting runtime deltas.",
+        modelRoute: {
+          selectedModel: "openai/gpt-5.4:medium",
+          source: "policy",
+          mode: "auto",
+          policyId: "review-and-verification",
+          requestedModel: "gpt-5.4:medium",
+          reason: "Review and verification work should bias toward higher-fidelity reasoning.",
+        },
       },
     });
 
@@ -74,6 +82,9 @@ describe("subagent control tools", () => {
     expect(extractText(result)).toContain("status=running");
     expect(extractText(result)).toContain(
       "delegate: agentSpec=review envelope=readonly-reviewer delegatedSkill=review",
+    );
+    expect(extractText(result)).toContain(
+      "model: openai/gpt-5.4:medium source=policy mode=auto policy=review-and-verification requested=gpt-5.4:medium",
     );
   });
 

@@ -1,7 +1,7 @@
 import { existsSync, statSync } from "node:fs";
-import { resolve } from "node:path";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { resolveScopedPath, resolveToolTargetScope } from "./target-scope.js";
 import { readSourceTextWithCache, registerTocSourceCacheRuntime } from "./toc-cache.js";
 import type { BrewvaToolRuntime } from "./types.js";
 import { getToolSessionId } from "./utils/parallel-read.js";
@@ -64,11 +64,13 @@ export function createReadSpansTool(options?: { runtime?: BrewvaToolRuntime }): 
       ),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      const baseDir =
-        ctx && typeof ctx === "object" && typeof (ctx as { cwd?: unknown }).cwd === "string"
-          ? (ctx as { cwd: string }).cwd
-          : process.cwd();
-      const absolutePath = resolve(baseDir, params.file_path);
+      const scope = resolveToolTargetScope(options?.runtime, ctx);
+      const absolutePath = resolveScopedPath(params.file_path, scope);
+      if (!absolutePath) {
+        return failTextResult(
+          `read_spans rejected: path escapes target roots (${scope.allowedRoots.join(", ")}).`,
+        );
+      }
       if (!existsSync(absolutePath)) {
         return failTextResult(`Error: File not found: ${absolutePath}`);
       }

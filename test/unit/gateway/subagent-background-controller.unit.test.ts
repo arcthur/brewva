@@ -84,7 +84,7 @@ describe("detached subagent background controller", () => {
         };
       };
     };
-    expect(spec.schema).toBe("brewva.subagent-run-spec.v5");
+    expect(spec.schema).toBe("brewva.subagent-run-spec.v6");
     expect(spec.agentSpecName).toBe("explore");
     expect(spec.envelopeName).toBe("readonly-scout");
     expect(spec.skillName).toBe("repository-analysis");

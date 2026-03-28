@@ -70,6 +70,7 @@ import type {
   TaskAcceptanceRecordResult,
   TaskItemAddResult,
   TaskItemUpdateResult,
+  TaskTargetDescriptor,
   TaskSpec,
   TaskState,
   TurnWALRecord,
@@ -158,6 +159,7 @@ import { VerificationService } from "./services/verification.js";
 import { SkillRegistry, type SkillRegistryLoadReport } from "./skills/registry.js";
 import { FileChangeTracker } from "./state/file-change-tracker.js";
 import { TurnReplayEngine } from "./tape/replay-engine.js";
+import { resolvePrimaryTaskTargetRoot, resolveTaskTargetRoots } from "./task/targeting.js";
 import { normalizeToolResultVerdict } from "./utils/tool-result.js";
 import { VerificationGate } from "./verification/gate.js";
 
@@ -405,6 +407,7 @@ export class BrewvaRuntime {
       input: { status: "pending" | "accepted" | "rejected"; decidedBy?: string; notes?: string },
     ): TaskAcceptanceRecordResult;
     resolveBlocker(sessionId: string, blockerId: string): TaskBlockerResolveResult;
+    getTargetDescriptor(sessionId: string): TaskTargetDescriptor;
     getState(sessionId: string): TaskState;
   };
   declare readonly truth: {
@@ -876,6 +879,7 @@ export class BrewvaRuntime {
           this.taskService.recordTaskAcceptance(sessionId, input),
         resolveBlocker: (sessionId, blockerId) =>
           this.taskService.resolveTaskBlocker(sessionId, blockerId),
+        getTargetDescriptor: (sessionId) => this.getTaskTargetDescriptor(sessionId),
         getState: (sessionId) => this.getTaskState(sessionId),
       },
       truth: {
@@ -1001,6 +1005,24 @@ export class BrewvaRuntime {
 
   private getTaskState(sessionId: string): TaskState {
     return this.turnReplay.getTaskState(sessionId);
+  }
+
+  private getTaskTargetDescriptor(sessionId: string): TaskTargetDescriptor {
+    this.sessionLifecycleService.ensureHydrated(sessionId);
+    const spec = this.getTaskState(sessionId).spec;
+    const roots = resolveTaskTargetRoots({
+      cwd: this.cwd,
+      workspaceRoot: this.workspaceRoot,
+      spec,
+    });
+    return {
+      primaryRoot: resolvePrimaryTaskTargetRoot({
+        cwd: this.cwd,
+        workspaceRoot: this.workspaceRoot,
+        spec,
+      }),
+      roots,
+    };
   }
 
   private getTruthState(sessionId: string): TruthState {

@@ -7,6 +7,7 @@ import {
   buildWorkerTestHarnessEnv,
   WORKER_TEST_HARNESS_ENV_KEYS,
 } from "../../../packages/brewva-gateway/src/session/worker-test-harness.js";
+import { patchProcessEnv } from "../../helpers/global-state.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace, writeTestConfig } from "../../helpers/workspace.js";
 
@@ -57,29 +58,6 @@ function createWorkerTestEnv(overrides: {
       thresholdMs: overrides.thresholdMs,
     },
   });
-}
-
-function applyProcessEnv(overrides: Record<string, string | undefined>): () => void {
-  const previous = new Map<string, string | undefined>();
-  for (const key of WORKER_TEST_HARNESS_ENV_KEYS) {
-    previous.set(key, process.env[key]);
-    const value = overrides[key];
-    if (typeof value === "string") {
-      process.env[key] = value;
-      continue;
-    }
-    delete process.env[key];
-  }
-
-  return () => {
-    for (const [key, value] of previous) {
-      if (typeof value === "string") {
-        process.env[key] = value;
-        continue;
-      }
-      delete process.env[key];
-    }
-  };
 }
 
 describe("session supervisor watchdog bridge", () => {
@@ -205,15 +183,18 @@ describe("session supervisor watchdog bridge", () => {
   test("ambient watchdog env is ignored without explicit worker test overrides", async () => {
     const workspace = createTestWorkspace("supervisor-watchdog-worker-ambient-env");
     writeTestConfig(workspace, createOpsRuntimeConfig(), TEST_CONFIG_PATH);
-    const restoreEnv = applyProcessEnv(
-      buildWorkerTestHarnessEnv({
-        enabled: false,
-        watchdog: {
-          taskGoal: "This ambient env should not bootstrap worker task state",
-          pollIntervalMs: 1_000,
-          thresholdMs: 1_000,
-        },
-      }),
+    const envOverrides = buildWorkerTestHarnessEnv({
+      enabled: false,
+      watchdog: {
+        taskGoal: "This ambient env should not bootstrap worker task state",
+        pollIntervalMs: 1_000,
+        thresholdMs: 1_000,
+      },
+    });
+    const restoreEnv = patchProcessEnv(
+      Object.fromEntries(
+        WORKER_TEST_HARNESS_ENV_KEYS.map((key) => [key, envOverrides[key]]),
+      ) as Record<string, string | undefined>,
     );
 
     const supervisor = new SessionSupervisor({

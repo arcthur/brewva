@@ -36,7 +36,8 @@
     "@mariozechner/pi-coding-agent": "^0.61.1",
     "@sinclair/typebox": "^0.34.48",
     "ajv": "^8.18.0",
-    "ws": "^8.19.0"
+    "ws": "^8.19.0",
+    "yaml": "^2.8.2"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

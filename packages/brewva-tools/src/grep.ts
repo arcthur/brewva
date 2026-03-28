@@ -1,11 +1,16 @@
 import { spawn } from "node:child_process";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { relative, resolve } from "node:path";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { resolveToolTargetScope, isPathInsideRoots, resolveScopedPath } from "./target-scope.js";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema, normalizeStringEnumAlias } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
 import { defineBrewvaTool } from "./utils/tool.js";
+
+interface GrepToolOptions extends BrewvaToolOptions {
+  ripgrepCommand?: string;
+}
 
 type GrepCase = "smart" | "ignore" | "sensitive";
 const GREP_CASE_VALUES = ["smart", "insensitive", "sensitive"] as const;
@@ -180,30 +185,7 @@ function resolveRipgrepExitCode(
   return -1;
 }
 
-function isPathInsideRoot(path: string, root: string): boolean {
-  const resolvedPath = resolve(path);
-  const resolvedRoot = resolve(root);
-  if (resolvedPath === resolvedRoot) return true;
-  const rootPrefix = resolvedRoot.endsWith(sep) ? resolvedRoot : `${resolvedRoot}${sep}`;
-  return resolvedPath.startsWith(rootPrefix);
-}
-
-function normalizeSearchPath(input: {
-  value: string;
-  cwd: string;
-  workspaceRoot: string;
-}): string | null {
-  const absolutePath = isAbsolute(input.value)
-    ? resolve(input.value)
-    : resolve(input.cwd, input.value);
-  if (!isPathInsideRoot(absolutePath, input.workspaceRoot)) {
-    return null;
-  }
-  const relativePath = relative(input.cwd, absolutePath);
-  return relativePath.length > 0 ? relativePath : ".";
-}
-
-export function createGrepTool(options: BrewvaToolOptions): ToolDefinition {
+export function createGrepTool(options: GrepToolOptions): ToolDefinition {
   return defineBrewvaTool({
     name: "grep",
     label: "Grep",
@@ -221,17 +203,19 @@ export function createGrepTool(options: BrewvaToolOptions): ToolDefinition {
       timeout_ms: Type.Optional(Type.Number({ minimum: 100, maximum: 120000, default: 30000 })),
       workdir: Type.Optional(Type.String()),
     }),
-    async execute(_toolCallId, params, signal) {
-      const baseCwd = resolve(options.runtime.cwd ?? process.cwd());
-      const workspaceRoot = resolve(options.runtime.workspaceRoot ?? baseCwd);
-      const cwd = params.workdir ? resolve(baseCwd, params.workdir) : baseCwd;
-      if (!isPathInsideRoot(cwd, workspaceRoot)) {
-        return failTextResult(`grep rejected: workdir escapes workspace root (${workspaceRoot}).`, {
-          ok: false,
-          reason: "workdir_outside_workspace",
-          workdir: cwd,
-          workspaceRoot,
-        });
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      const scope = resolveToolTargetScope(options.runtime, ctx);
+      const cwd = params.workdir ? resolve(scope.baseCwd, params.workdir) : scope.baseCwd;
+      if (!isPathInsideRoots(cwd, scope.allowedRoots)) {
+        return failTextResult(
+          `grep rejected: workdir escapes target roots (${scope.allowedRoots.join(", ")}).`,
+          {
+            ok: false,
+            reason: "workdir_outside_target",
+            workdir: cwd,
+            targetRoots: scope.allowedRoots,
+          },
+        );
       }
       const maxLines = clampInt(params.max_lines, 200, { min: 1, max: 500 });
       const timeoutMs = clampInt(params.timeout_ms, 30_000, { min: 100, max: 120_000 });
@@ -240,20 +224,19 @@ export function createGrepTool(options: BrewvaToolOptions): ToolDefinition {
       const requestedPaths = (params.paths ?? ["."]).map((entry) => entry.trim()).filter(Boolean);
       const paths: string[] = [];
       for (const entry of requestedPaths.length > 0 ? requestedPaths : ["."]) {
-        const normalized = normalizeSearchPath({
-          value: entry,
-          cwd,
-          workspaceRoot,
-        });
-        if (!normalized) {
-          return failTextResult(`grep rejected: path escapes workspace root (${entry}).`, {
+        const absolutePath = resolveScopedPath(entry, scope, { relativeTo: cwd });
+        if (!absolutePath) {
+          return failTextResult(`grep rejected: path escapes target roots (${entry}).`, {
             ok: false,
-            reason: "path_outside_workspace",
+            reason: "path_outside_target",
             path: entry,
-            workspaceRoot,
+            targetRoots: scope.allowedRoots,
           });
         }
-        paths.push(normalized);
+        const relativePath = relative(cwd, absolutePath);
+        paths.push(
+          relativePath.length > 0 && !relativePath.startsWith("..") ? relativePath : absolutePath,
+        );
       }
       const globs = (params.glob ?? []).map((entry) => entry.trim()).filter(Boolean);
       const caseMode = normalizeGrepCase(params.case);
@@ -280,13 +263,18 @@ export function createGrepTool(options: BrewvaToolOptions): ToolDefinition {
       args.push(...(paths.length > 0 ? paths : ["."]));
 
       try {
-        const result = await runRipgrep({
-          cwd,
-          args,
-          maxLines,
-          timeoutMs,
-          signal,
-        });
+        const result = await runRipgrep(
+          {
+            cwd,
+            args,
+            maxLines,
+            timeoutMs,
+            signal,
+          },
+          {
+            command: options.ripgrepCommand,
+          },
+        );
 
         const header = [
           "# Grep",

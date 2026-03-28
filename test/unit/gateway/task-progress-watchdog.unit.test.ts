@@ -4,15 +4,14 @@ import {
   TASK_PROGRESS_WATCHDOG_TEST_ONLY,
   TaskProgressWatchdog,
 } from "../../../packages/brewva-gateway/src/session/task-progress-watchdog.js";
+import { patchDateNow } from "../../helpers/global-state.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("task progress watchdog", () => {
   test("records an idle diagnostic event when task progress stalls", () => {
-    const originalNow = Date.now;
     let now = 1_710_000_000_000;
-
-    Date.now = () => now;
+    const restoreNow = patchDateNow(() => now);
     try {
       const runtime = new BrewvaRuntime({
         cwd: createTestWorkspace("watchdog-detect"),
@@ -54,15 +53,13 @@ describe("task progress watchdog", () => {
       watchdog.poll();
       expect(runtime.events.query(sessionId, { type: "task_stuck_detected" })).toHaveLength(1);
     } finally {
-      Date.now = originalNow;
+      restoreNow();
     }
   });
 
   test("ignores sessions without explicit task state", async () => {
-    const originalNow = Date.now;
     let now = 1_719_000_000_000;
-
-    Date.now = () => now;
+    const restoreNow = patchDateNow(() => now);
     try {
       const runtime = new BrewvaRuntime({
         cwd: createTestWorkspace("watchdog-no-task-state"),
@@ -82,12 +79,11 @@ describe("task progress watchdog", () => {
 
       expect(runtime.events.query(sessionId, { type: "task_stuck_detected" })).toEqual([]);
     } finally {
-      Date.now = originalNow;
+      restoreNow();
     }
   });
 
   test("start schedules a single poller, stop clears it, and threshold sanitization clamps overrides", () => {
-    const originalNow = Date.now;
     let now = 1_725_000_000_000;
     let scheduledCallback: (() => void) | null = null;
     let scheduledDelayMs = 0;
@@ -96,7 +92,7 @@ describe("task progress watchdog", () => {
     const intervalHandle = setInterval(() => {}, 60_000);
     clearInterval(intervalHandle);
 
-    Date.now = () => now;
+    const restoreNow = patchDateNow(() => now);
     try {
       const runtime = new BrewvaRuntime({
         cwd: createTestWorkspace("watchdog-lifecycle"),
@@ -158,7 +154,7 @@ describe("task progress watchdog", () => {
       watchdog.stop();
       expect(stopCalls).toBe(1);
     } finally {
-      Date.now = originalNow;
+      restoreNow();
     }
   });
 });

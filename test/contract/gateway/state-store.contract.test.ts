@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FileGatewayStateStore, loadOrCreateGatewayToken } from "@brewva/brewva-gateway";
+import { patchProcessEnv } from "../../helpers/global-state.js";
 
 describe("gateway file state store", () => {
   test("given token value, when writing and reading token, then newline normalization is preserved", () => {
@@ -67,8 +68,9 @@ describe("gateway file state store", () => {
 
   test("given vault-backed token storage, when writing token, then pointer file is persisted and token resolves through the vault", () => {
     const root = mkdtempSync(join(tmpdir(), "brewva-state-store-vault-"));
-    const previousVaultKey = process.env.BREWVA_VAULT_KEY;
-    process.env.BREWVA_VAULT_KEY = "state-store-test-key";
+    const restoreEnv = patchProcessEnv({
+      BREWVA_VAULT_KEY: "state-store-test-key",
+    });
     try {
       const tokenPath = join(root, "gateway.token");
       const vaultPath = join(root, "credentials.vault");
@@ -88,19 +90,16 @@ describe("gateway file state store", () => {
       expect(store.readToken(tokenPath)).toBe("token-123");
       expect(new FileGatewayStateStore().readToken(tokenPath)).toBe("token-123");
     } finally {
-      if (previousVaultKey === undefined) {
-        delete process.env.BREWVA_VAULT_KEY;
-      } else {
-        process.env.BREWVA_VAULT_KEY = previousVaultKey;
-      }
+      restoreEnv();
       rmSync(root, { recursive: true, force: true });
     }
   });
 
   test("given a raw gateway token and a vault-backed state store, when loading the token, then storage migrates to the configured vault pointer", () => {
     const root = mkdtempSync(join(tmpdir(), "brewva-state-store-vault-migrate-"));
-    const previousVaultKey = process.env.BREWVA_VAULT_KEY;
-    process.env.BREWVA_VAULT_KEY = "state-store-migrate-key";
+    const restoreEnv = patchProcessEnv({
+      BREWVA_VAULT_KEY: "state-store-migrate-key",
+    });
     try {
       const tokenPath = join(root, "gateway.token");
       const vaultPath = join(root, "credentials.vault");
@@ -118,19 +117,16 @@ describe("gateway file state store", () => {
       expect(readFileSync(tokenPath, "utf8")).not.toContain("token-123");
       expect(store.readToken(tokenPath)).toBe("token-123");
     } finally {
-      if (previousVaultKey === undefined) {
-        delete process.env.BREWVA_VAULT_KEY;
-      } else {
-        process.env.BREWVA_VAULT_KEY = previousVaultKey;
-      }
+      restoreEnv();
       rmSync(root, { recursive: true, force: true });
     }
   });
 
   test("given a vault-backed token file and a plain state store, when loading the token, then the pointer file stays intact", () => {
     const root = mkdtempSync(join(tmpdir(), "brewva-state-store-pointer-preserve-"));
-    const previousVaultKey = process.env.BREWVA_VAULT_KEY;
-    process.env.BREWVA_VAULT_KEY = "state-store-pointer-key";
+    const restoreEnv = patchProcessEnv({
+      BREWVA_VAULT_KEY: "state-store-pointer-key",
+    });
     try {
       const tokenPath = join(root, "gateway.token");
       const vaultPath = join(root, "credentials.vault");
@@ -146,19 +142,16 @@ describe("gateway file state store", () => {
       expect(loadOrCreateGatewayToken(tokenPath, new FileGatewayStateStore())).toBe("token-123");
       expect(readFileSync(tokenPath, "utf8")).toBe(pointerFile);
     } finally {
-      if (previousVaultKey === undefined) {
-        delete process.env.BREWVA_VAULT_KEY;
-      } else {
-        process.env.BREWVA_VAULT_KEY = previousVaultKey;
-      }
+      restoreEnv();
       rmSync(root, { recursive: true, force: true });
     }
   });
 
   test("given a vault-backed token pointer that already matches the configured vault, when loading the token, then state store does not rewrite pointer or vault contents", () => {
     const root = mkdtempSync(join(tmpdir(), "brewva-state-store-pointer-stable-"));
-    const previousVaultKey = process.env.BREWVA_VAULT_KEY;
-    process.env.BREWVA_VAULT_KEY = "state-store-stable-key";
+    const restoreEnv = patchProcessEnv({
+      BREWVA_VAULT_KEY: "state-store-stable-key",
+    });
     try {
       const tokenPath = join(root, "gateway.token");
       const vaultPath = join(root, "credentials.vault");
@@ -177,19 +170,16 @@ describe("gateway file state store", () => {
       expect(readFileSync(tokenPath, "utf8")).toBe(pointerBefore);
       expect(readFileSync(vaultPath, "utf8")).toBe(vaultBefore);
     } finally {
-      if (previousVaultKey === undefined) {
-        delete process.env.BREWVA_VAULT_KEY;
-      } else {
-        process.env.BREWVA_VAULT_KEY = previousVaultKey;
-      }
+      restoreEnv();
       rmSync(root, { recursive: true, force: true });
     }
   });
 
   test("given an unreadable vault-backed token pointer, when loading the gateway token, then startup fails closed instead of rotating silently", () => {
     const root = mkdtempSync(join(tmpdir(), "brewva-state-store-vault-fail-closed-"));
-    const previousVaultKey = process.env.BREWVA_VAULT_KEY;
-    process.env.BREWVA_VAULT_KEY = "state-store-correct-key";
+    const restoreEnv = patchProcessEnv({
+      BREWVA_VAULT_KEY: "state-store-correct-key",
+    });
     try {
       const tokenPath = join(root, "gateway.token");
       const vaultPath = join(root, "credentials.vault");
@@ -204,15 +194,14 @@ describe("gateway file state store", () => {
       store.writeToken(tokenPath, "token-123");
       const pointerFile = readFileSync(tokenPath, "utf8");
 
-      process.env.BREWVA_VAULT_KEY = "state-store-wrong-key";
+      const restoreWrongKey = patchProcessEnv({
+        BREWVA_VAULT_KEY: "state-store-wrong-key",
+      });
       expect(() => loadOrCreateGatewayToken(tokenPath, new FileGatewayStateStore())).toThrow();
+      restoreWrongKey();
       expect(readFileSync(tokenPath, "utf8")).toBe(pointerFile);
     } finally {
-      if (previousVaultKey === undefined) {
-        delete process.env.BREWVA_VAULT_KEY;
-      } else {
-        process.env.BREWVA_VAULT_KEY = previousVaultKey;
-      }
+      restoreEnv();
       rmSync(root, { recursive: true, force: true });
     }
   });

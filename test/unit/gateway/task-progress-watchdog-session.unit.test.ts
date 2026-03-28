@@ -1,18 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { createGatewaySession } from "../../../packages/brewva-gateway/src/session/create-session.js";
 import { TaskProgressWatchdog } from "../../../packages/brewva-gateway/src/session/task-progress-watchdog.js";
+import { patchDateNow } from "../../helpers/global-state.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("gateway session watchdog integration", () => {
   test("records idle detection for a real gateway session id", async () => {
-    const originalNow = Date.now;
     let now = 1_740_000_000_000;
     let scheduledCallback: (() => void) | null = null;
     const intervalHandle = setInterval(() => {}, 60_000);
     clearInterval(intervalHandle);
 
-    Date.now = () => now;
+    const restoreNow = patchDateNow(() => now);
     const result = await createGatewaySession({
       cwd: createTestWorkspace("gateway-watchdog-session"),
       config: createOpsRuntimeConfig(),
@@ -73,7 +73,7 @@ describe("gateway session watchdog integration", () => {
 
       watchdog.stop();
     } finally {
-      Date.now = originalNow;
+      restoreNow();
       result.session.dispose();
     }
   });

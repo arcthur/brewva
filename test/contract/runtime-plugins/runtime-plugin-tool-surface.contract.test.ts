@@ -401,6 +401,6 @@ describe("tool surface runtime plugin", () => {
 
     expect(extensionApi.activeTools).toContain("toc_document");
     expect(extensionApi.activeTools).toContain("lsp_symbols");
-    expect(extensionApi.activeTools).not.toContain("process");
+    expect(extensionApi.activeTools).toContain("process");
   });
 });

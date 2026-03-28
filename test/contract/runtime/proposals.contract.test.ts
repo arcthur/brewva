@@ -30,13 +30,6 @@ function createCleanRuntime(
   });
 }
 
-const originalDateNow = Date.now;
-
-afterEach(() => {
-  Date.now = originalDateNow;
-  if (workspace) cleanupWorkspace(workspace);
-});
-
 describe("runtime proposals API", () => {
   test("approval-bound tool starts emit accepted effect_commitment receipts", () => {
     const runtime = createCleanRuntime({
@@ -571,4 +564,8 @@ describe("runtime proposals API", () => {
     expect(started.commitmentReceipt).toBeUndefined();
     expect(runtime.proposals.list(sessionId)).toHaveLength(0);
   });
+});
+
+afterEach(() => {
+  if (workspace) cleanupWorkspace(workspace);
 });

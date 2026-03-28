@@ -206,6 +206,11 @@ Task closure semantics:
 
 - verification remains evidence sufficiency
 - acceptance is an explicit operator-visible closure layer
+- non-verifier blockers, including governance-owned verifier blockers, are hard
+  blockers and keep the task in `blocked`
+- ordinary verifier blockers are verification debt, not execution erasure; if
+  task items remain open the task stays in `execute`, and it moves to `verify`
+  only after execute items are complete
 - when `TaskSpec.acceptance.required === true`, a verification pass moves the
   task to `ready_for_acceptance`
 - only recorded acceptance moves the task to `done`
@@ -306,6 +311,15 @@ Read-only verification semantics:
 - skipped read-only evaluation records `outcome="skipped"` rather than `pass`
 - verification evidence is replayed from tape via
   `verification_write_marked` and `tool_result_recorded.verificationProjection`
+- default verification checks are expanded per target root for the active task;
+  multi-root tasks therefore record separate check identities and check-run
+  provenance per root
+- auto-discovered package verification scripts execute through the root package
+  manager command (`bun run`, `pnpm run`, `yarn`, or `npm run`) rather than the
+  raw script body
+- command-backed checks are tracked as `command_passed` evidence and replay into
+  root-scoped `checkRuns`; verification freshness is judged against the most
+  recent `verification_write_marked` boundary
 
 ### `runtime.cost.*`
 

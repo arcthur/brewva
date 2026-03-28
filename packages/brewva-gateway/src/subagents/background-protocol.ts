@@ -8,7 +8,12 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
-import type { BrewvaConfig, DelegationRunRecord, SkillRoutingScope } from "@brewva/brewva-runtime";
+import type {
+  BrewvaConfig,
+  DelegationModelRouteRecord,
+  DelegationRunRecord,
+  SkillRoutingScope,
+} from "@brewva/brewva-runtime";
 import type {
   DelegationPacket,
   SubagentResultMode,
@@ -18,7 +23,7 @@ import type {
 import type { HostedDelegationTarget } from "./targets.js";
 
 export interface DetachedSubagentRunSpec {
-  schema: "brewva.subagent-run-spec.v5";
+  schema: "brewva.subagent-run-spec.v6";
   runId: string;
   parentSessionId: string;
   workspaceRoot: string;
@@ -32,6 +37,7 @@ export interface DetachedSubagentRunSpec {
   agentSpecName?: string;
   fallbackResultMode?: SubagentResultMode;
   executionShape?: SubagentExecutionShape;
+  modelRoute?: DelegationModelRouteRecord;
   label?: string;
   packet: DelegationPacket;
   timeoutMs?: number;

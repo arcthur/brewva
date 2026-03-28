@@ -43,6 +43,37 @@ function writeFakeRipgrep(workspace: string): string {
   return scriptPath;
 }
 
+function writeMatchingRipgrep(workspace: string): string {
+  const scriptPath = join(workspace, "fake-rg-match.sh");
+  writeFileSync(
+    scriptPath,
+    [
+      "#!/bin/sh",
+      "query=",
+      "last=",
+      'for arg in "$@"; do',
+      '  last="$arg"',
+      "done",
+      'for arg in "$@"; do',
+      '  if [ "$arg" = "--" ]; then',
+      "    shift",
+      '    query="$1"',
+      "    break",
+      "  fi",
+      "done",
+      'if [ -n "$query" ] && [ -f "$last" ] && grep -q "$query" "$last"; then',
+      '  printf "%s:1:export const outside = true;\\n" "$last"',
+      "  exit 0",
+      "fi",
+      "exit 1",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  chmodSync(scriptPath, 0o755);
+  return scriptPath;
+}
+
 describe("grep tool", () => {
   test("treats max_lines truncation as a successful bounded result", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-grep-tool-"));
@@ -66,7 +97,7 @@ describe("grep tool", () => {
     expect(result.lines).toHaveLength(2);
   });
 
-  test("rejects workdir values outside the workspace root", async () => {
+  test("rejects workdir values outside the task target roots", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-grep-workdir-"));
     const outside = mkdtempSync(join(tmpdir(), "brewva-grep-workdir-outside-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });
@@ -85,11 +116,11 @@ describe("grep tool", () => {
 
     const text = extractText(result as { content: Array<{ type: string; text?: string }> });
     const details = result.details as { reason?: string } | undefined;
-    expect(text).toContain("workdir escapes workspace root");
-    expect(details?.reason).toBe("workdir_outside_workspace");
+    expect(text).toContain("workdir escapes target roots");
+    expect(details?.reason).toBe("workdir_outside_target");
   });
 
-  test("rejects search paths outside the workspace root", async () => {
+  test("rejects search paths outside the task target roots", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-grep-path-"));
     const outside = mkdtempSync(join(tmpdir(), "brewva-grep-path-outside-"));
     const outsideFile = join(outside, "outside.ts");
@@ -110,7 +141,39 @@ describe("grep tool", () => {
 
     const text = extractText(result as { content: Array<{ type: string; text?: string }> });
     const details = result.details as { reason?: string } | undefined;
-    expect(text).toContain("path escapes workspace root");
-    expect(details?.reason).toBe("path_outside_workspace");
+    expect(text).toContain("path escapes target roots");
+    expect(details?.reason).toBe("path_outside_target");
+  });
+
+  test("allows cross-repo search when the task target roots explicitly include that repo", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-grep-cross-root-"));
+    const externalRepo = mkdtempSync(join(tmpdir(), "brewva-grep-cross-root-external-"));
+    const externalFile = join(externalRepo, "outside.ts");
+    writeFileSync(externalFile, "export const outside = true;\n", "utf8");
+    const fakeRipgrep = writeMatchingRipgrep(workspace);
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "grep-cross-root-1";
+    runtime.task.setSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Inspect an external repository",
+      targets: {
+        files: [externalRepo],
+      },
+    });
+    const tool = createGrepTool({ runtime, ripgrepCommand: fakeRipgrep });
+
+    const result = await tool.execute(
+      "tc-grep-cross-root",
+      {
+        query: "outside",
+        paths: [externalFile],
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId, workspace),
+    );
+
+    const text = extractText(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("# Grep");
   });
 });

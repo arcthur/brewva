@@ -193,14 +193,25 @@ requires: []
     config.verification.checks.standard = ["type-check"];
     config.verification.checks.strict = ["type-check"];
     const sessionId = "verification-evidence-rehydrate-1";
+    const sourceDir = join(workspace, "src");
+    const sourceFile = join(sourceDir, "app.ts");
+    mkdirSync(sourceDir, { recursive: true });
+    writeFileSync(sourceFile, "export const app = true;\n", "utf8");
 
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    runtime.task.setSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Rehydrate verification evidence from tape.",
+      targets: {
+        files: [sourceFile],
+      },
+    });
     runtime.tools.markCall(sessionId, "edit");
     runtime.tools.recordResult({
       sessionId,
       toolName: "lsp_diagnostics",
       args: {
-        filePath: "src/app.ts",
+        filePath: sourceFile,
         severity: "all",
       },
       outputText: "No diagnostics found",

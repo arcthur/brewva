@@ -17,7 +17,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function normalizeEvidenceKind(value: unknown): VerificationEvidenceKind | null {
-  if (value === "lsp_clean" || value === "test_or_build_passed") {
+  if (value === "lsp_clean" || value === "test_or_build_passed" || value === "command_passed") {
     return value;
   }
   return null;

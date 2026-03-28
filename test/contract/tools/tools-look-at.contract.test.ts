@@ -1,14 +1,42 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { createLookAtTool } from "@brewva/brewva-tools";
+import { createRuntimeConfig } from "../../helpers/runtime.js";
 
 function extractTextContent(result: { content: Array<{ type: string; text?: string }> }): string {
   const textPart = result.content.find(
     (item) => item.type === "text" && typeof item.text === "string",
   );
   return textPart?.text ?? "";
+}
+
+function createScopedLookAtTool(sessionId: string, filePath: string) {
+  const cwd = dirname(filePath);
+  const runtime = new BrewvaRuntime({
+    cwd,
+    config: createRuntimeConfig(),
+  });
+  runtime.task.setSpec(sessionId, {
+    schema: "brewva.task.v1",
+    goal: "Inspect an explicitly targeted file.",
+    targets: {
+      files: [filePath],
+    },
+  });
+  return {
+    tool: createLookAtTool({ runtime }),
+    context: {
+      cwd,
+      sessionManager: {
+        getSessionId() {
+          return sessionId;
+        },
+      },
+    } as never,
+  };
 }
 
 describe("look_at tool", () => {
@@ -21,7 +49,7 @@ describe("look_at tool", () => {
       "utf8",
     );
 
-    const tool = createLookAtTool();
+    const { tool, context } = createScopedLookAtTool("tc-look-at-unavailable", filePath);
     const result = await tool.execute(
       "tc-look-at-unavailable",
       {
@@ -30,7 +58,7 @@ describe("look_at tool", () => {
       },
       undefined,
       undefined,
-      {} as never,
+      context,
     );
 
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
@@ -48,7 +76,7 @@ describe("look_at tool", () => {
     const filePath = join(workspace, "sample.ts");
     writeFileSync(filePath, "export const alpha = 1;\n", "utf8");
 
-    const tool = createLookAtTool();
+    const { tool, context } = createScopedLookAtTool("tc-look-at-keywords", filePath);
     const result = await tool.execute(
       "tc-look-at-keywords",
       {
@@ -57,7 +85,7 @@ describe("look_at tool", () => {
       },
       undefined,
       undefined,
-      {} as never,
+      context,
     );
 
     const details = (result as { details?: Record<string, unknown> }).details;
@@ -71,7 +99,7 @@ describe("look_at tool", () => {
     const filePath = join(workspace, "sample.ts");
     writeFileSync(filePath, ["const 回滚边界 = true;", "const alpha = 1;"].join("\n"), "utf8");
 
-    const tool = createLookAtTool();
+    const { tool, context } = createScopedLookAtTool("tc-look-at-unicode", filePath);
     const result = await tool.execute(
       "tc-look-at-unicode",
       {
@@ -80,7 +108,7 @@ describe("look_at tool", () => {
       },
       undefined,
       undefined,
-      {} as never,
+      context,
     );
 
     const details = (result as { details?: Record<string, unknown> }).details;

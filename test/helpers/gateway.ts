@@ -3,6 +3,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GatewayDaemon } from "@brewva/brewva-gateway";
+import { patchProcessEnv } from "./global-state.js";
 
 export type GatewayWorkerHarnessConfig = {
   enabled?: boolean;
@@ -106,15 +107,7 @@ export async function startGatewayDaemonHarness(input: {
   const env = buildGatewayWorkerHarnessEnv({
     fakeAssistantText: input.fakeAssistantText,
   });
-  const previous = new Map<string, string | undefined>();
-  for (const [key, value] of Object.entries(env)) {
-    previous.set(key, process.env[key]);
-    if (typeof value === "string") {
-      process.env[key] = value;
-    } else {
-      delete process.env[key];
-    }
-  }
+  const restoreEnv = patchProcessEnv(env);
 
   await daemon.start();
   const runtime = daemon.getRuntimeInfo();
@@ -132,13 +125,7 @@ export async function startGatewayDaemonHarness(input: {
       await daemon.stop("test_dispose").catch(() => undefined);
       await daemon.waitForStop().catch(() => undefined);
       rmSync(root, { recursive: true, force: true });
-      for (const [key, value] of previous) {
-        if (typeof value === "string") {
-          process.env[key] = value;
-        } else {
-          delete process.env[key];
-        }
-      }
+      restoreEnv();
     },
   };
 }

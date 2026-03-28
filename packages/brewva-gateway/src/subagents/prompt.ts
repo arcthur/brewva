@@ -114,14 +114,13 @@ export function buildDelegationPrompt(input: {
     lines.push(`Envelope: ${input.target.envelopeName}`);
   }
 
-  lines.push(
-    "",
-    "## Executor Preamble",
-    prompt,
-    "",
-    "## Task",
-    `Objective: ${input.packet.objective}`,
-  );
+  lines.push("", "## Executor Preamble", prompt);
+
+  if (input.target.instructionsMarkdown) {
+    lines.push("", "## Agent Overlay", input.target.instructionsMarkdown.trim());
+  }
+
+  lines.push("", "## Task", `Objective: ${input.packet.objective}`);
 
   if (input.packet.deliverable) {
     lines.push(`Deliverable: ${input.packet.deliverable}`);

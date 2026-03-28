@@ -106,6 +106,20 @@ Project-specific shared context and overlays are discovered from:
 - `verification.commands.lint`: `bun run lint`
 - `verification.commands.diff-review`: `git diff --stat`
 
+Verification plan semantics:
+
+- default verification plans are adaptive rather than a fixed static template;
+  runtime expands the configured check names against the current task target
+  roots
+- multi-root tasks expand default verification checks per target root, and
+  check names may be suffixed with a stable root label when more than one root
+  is active
+- auto-discovered `package.json` scripts run through the root package manager
+  command (`bun run`, `pnpm run`, `yarn`, or `npm run`) instead of executing
+  the raw script body directly
+- `verification.commands.*` remain the fallback commands when no matching
+  package script is discovered for a root
+
 ### `ledger`
 
 - `ledger.path`: `.orchestrator/ledger/evidence.jsonl`
@@ -357,7 +371,10 @@ sha256("brewva:" + hostname + ":" + homedir)
 - `enforceIsolation=true` forces `backend=sandbox` and disables host fallback regardless of other inputs.
 - `strict` always disables host fallback.
 - `exec.timeout` overrides `security.execution.sandbox.timeout` per command.
-- `exec.workdir` and `exec.env` are forwarded into sandbox commands via a shell wrapper (`cd` + `export`).
+- `exec.workdir` is validated against the current task target roots before
+  backend routing; out-of-scope directories are rejected for both host and
+  sandbox execution.
+- `exec.workdir` and `exec.env` are forwarded into sandbox commands via a shell wrapper (`cd` + `export`) only after target-root validation succeeds.
 
 ### `security.execution` Resolution Order
 
@@ -396,6 +413,9 @@ Notes:
 - When sandbox execution fails and host fallback is enabled, runtime applies a short backoff window before retrying sandbox (`exec_fallback_host.reason=sandbox_unavailable_cached`) to avoid repeated sandbox error churn.
 - Repeated sandbox failures in the same session can trigger a temporary session pin (`exec_fallback_host.reason=sandbox_unavailable_session_pinned`) so subsequent exec calls bypass sandbox until the pin TTL expires.
 - If `exec.workdir` is omitted, sandbox execution defaults to `/` and does not inherit host runtime cwd.
+- Omitting `exec.workdir` does not widen authority: runtime still resolves
+  target-root scope first and rejects explicit directories outside the current
+  task target roots.
 - `security.boundaryPolicy.commandDenyList` is the active best-effort command deny list.
 - sandbox API key resolution uses the vault ref from `security.credentials.sandboxApiKeyRef`.
 - `security.execution.commandDenyList` and `security.execution.sandbox.apiKey` are invalid in active config. Rewrite or delete them with `brewva config migrate` before normal runtime use.

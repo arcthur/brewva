@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -8,14 +8,9 @@ import {
   buildScheduleIntentFiredEvent,
 } from "@brewva/brewva-runtime";
 import { setStaticContextPressureThresholds } from "../../fixtures/config.js";
+import { patchDateNow } from "../../helpers/global-state.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
-
-const originalDateNow = Date.now;
-
-afterEach(() => {
-  Date.now = originalDateNow;
-});
 
 function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
@@ -24,44 +19,48 @@ function sha256(text: string): string {
 describe("runtime facade coverage", () => {
   test("session.pollStall records and deduplicates watchdog detection through the public session API", () => {
     let now = 1_740_000_000_000;
-    Date.now = () => now;
+    const restoreNow = patchDateNow(() => now);
 
-    const runtime = new BrewvaRuntime({
-      cwd: createTestWorkspace("runtime-facade-poll-stall"),
-      config: createOpsRuntimeConfig(),
-    });
-    const sessionId = "runtime-facade-poll-stall-1";
+    try {
+      const runtime = new BrewvaRuntime({
+        cwd: createTestWorkspace("runtime-facade-poll-stall"),
+        config: createOpsRuntimeConfig(),
+      });
+      const sessionId = "runtime-facade-poll-stall-1";
 
-    now = 1_740_000_000_100;
-    runtime.task.setSpec(sessionId, {
-      schema: "brewva.task.v1",
-      goal: "Detect stalled execution through the public runtime facade",
-    });
+      now = 1_740_000_000_100;
+      runtime.task.setSpec(sessionId, {
+        schema: "brewva.task.v1",
+        goal: "Detect stalled execution through the public runtime facade",
+      });
 
-    runtime.session.pollStall(sessionId, {
-      now: now + 1_001,
-      thresholdMs: 1_000,
-    });
+      runtime.session.pollStall(sessionId, {
+        now: now + 1_001,
+        thresholdMs: 1_000,
+      });
 
-    const state = runtime.task.getState(sessionId);
-    expect(state.blockers).toEqual([]);
+      const state = runtime.task.getState(sessionId);
+      expect(state.blockers).toEqual([]);
 
-    const detected = runtime.events.query(sessionId, {
-      type: "task_stuck_detected",
-    });
-    expect(detected).toHaveLength(1);
-    expect(detected[0]?.payload).toMatchObject({
-      schema: "brewva.task-watchdog.v1",
-      thresholdMs: 1_000,
-      idleMs: 1_001,
-    });
+      const detected = runtime.events.query(sessionId, {
+        type: "task_stuck_detected",
+      });
+      expect(detected).toHaveLength(1);
+      expect(detected[0]?.payload).toMatchObject({
+        schema: "brewva.task-watchdog.v1",
+        thresholdMs: 1_000,
+        idleMs: 1_001,
+      });
 
-    runtime.session.pollStall(sessionId, {
-      now: now + 1_500,
-      thresholdMs: 1_000,
-    });
+      runtime.session.pollStall(sessionId, {
+        now: now + 1_500,
+        thresholdMs: 1_000,
+      });
 
-    expect(runtime.events.query(sessionId, { type: "task_stuck_detected" })).toHaveLength(1);
+      expect(runtime.events.query(sessionId, { type: "task_stuck_detected" })).toHaveLength(1);
+    } finally {
+      restoreNow();
+    }
   });
 
   test("session.onClearState listeners can unsubscribe and listener failures do not block teardown", () => {

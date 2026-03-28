@@ -10,6 +10,7 @@ import {
   type BrewvaStructuredEvent,
   type DelegationArtifactRef,
   type DelegationDeliveryRecord,
+  type DelegationModelRouteRecord,
   type DelegationRunQuery,
   type DelegationRunRecord,
   type DelegationRunStatus,
@@ -69,9 +70,21 @@ function cloneArtifactRef(ref: DelegationArtifactRef): DelegationArtifactRef {
   };
 }
 
+function cloneModelRoute(route: DelegationModelRouteRecord): DelegationModelRouteRecord {
+  return {
+    selectedModel: route.selectedModel,
+    source: route.source,
+    mode: route.mode,
+    reason: route.reason,
+    policyId: route.policyId,
+    requestedModel: route.requestedModel,
+  };
+}
+
 export function cloneDelegationRunRecord(record: DelegationRunRecord): DelegationRunRecord {
   return {
     ...record,
+    modelRoute: record.modelRoute ? cloneModelRoute(record.modelRoute) : undefined,
     artifactRefs: record.artifactRefs?.map((ref) => cloneArtifactRef(ref)),
     delivery: record.delivery
       ? {
@@ -113,6 +126,36 @@ function readArtifactRefs(
     ];
   });
   return refs.length > 0 ? refs : undefined;
+}
+
+function readModelRoute(
+  payload: Record<string, unknown> | null,
+  existing: DelegationRunRecord | undefined,
+): DelegationModelRouteRecord | undefined {
+  const raw = payload?.modelRoute;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return existing?.modelRoute;
+  }
+  const selectedModel = readString((raw as { selectedModel?: unknown }).selectedModel);
+  const source = (raw as { source?: unknown }).source;
+  const mode = (raw as { mode?: unknown }).mode;
+  const reason = readString((raw as { reason?: unknown }).reason);
+  if (
+    !selectedModel ||
+    (source !== "execution_shape" && source !== "target" && source !== "policy") ||
+    (mode !== "explicit" && mode !== "auto") ||
+    !reason
+  ) {
+    return existing?.modelRoute;
+  }
+  return {
+    selectedModel,
+    source,
+    mode,
+    reason,
+    policyId: readString((raw as { policyId?: unknown }).policyId),
+    requestedModel: readString((raw as { requestedModel?: unknown }).requestedModel),
+  };
 }
 
 function readRunMetadata(
@@ -191,6 +234,7 @@ export function buildDelegationLifecyclePayload(
     artifactRefs: record.artifactRefs ?? [],
     totalTokens: record.totalTokens ?? null,
     costUsd: record.costUsd ?? null,
+    modelRoute: record.modelRoute ?? null,
     deliveryMode: record.delivery?.mode ?? null,
     deliveryScopeId: record.delivery?.scopeId ?? null,
     deliveryLabel: record.delivery?.label ?? null,
@@ -233,6 +277,7 @@ function applyDelegationEvent(
           ? (readString(payload?.kind) as DelegationRunRecord["kind"])
           : existing?.kind,
       boundary: readBoundary(payload?.boundary) ?? existing?.boundary,
+      modelRoute: readModelRoute(payload, existing),
       summary: existing?.summary,
       error: existing?.error,
       artifactRefs: existing?.artifactRefs,
@@ -268,6 +313,7 @@ function applyDelegationEvent(
           ? (readString(payload?.kind) as DelegationRunRecord["kind"])
           : existing?.kind,
       boundary: readBoundary(payload?.boundary) ?? existing?.boundary,
+      modelRoute: readModelRoute(payload, existing),
       summary: readString(payload?.summary) ?? existing?.summary,
       error: undefined,
       artifactRefs: readArtifactRefs(payload) ?? existing?.artifactRefs,
@@ -293,6 +339,7 @@ function applyDelegationEvent(
     upsertRun(runs, {
       ...existing,
       updatedAt: event.timestamp,
+      modelRoute: readModelRoute(payload, existing),
       delivery: mergeDeliveryRecord(payload, existing.delivery, event.timestamp),
     });
     return;
@@ -310,6 +357,7 @@ function applyDelegationEvent(
     upsertRun(runs, {
       ...existing,
       updatedAt: event.timestamp,
+      modelRoute: readModelRoute(payload, existing),
       delivery: mergeDeliveryRecord(payload, existing.delivery, event.timestamp),
     });
     return;
@@ -349,6 +397,7 @@ function applyDelegationEvent(
           ? (readString(payload?.kind) as DelegationRunRecord["kind"])
           : existing?.kind,
       boundary: readBoundary(payload?.boundary) ?? existing?.boundary,
+      modelRoute: readModelRoute(payload, existing),
       summary: readString(payload?.summary) ?? existing?.summary,
       error:
         readString(payload?.error) ??

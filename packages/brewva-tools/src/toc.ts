@@ -1,10 +1,11 @@
 import { existsSync, statSync } from "node:fs";
-import { basename, extname, relative, resolve } from "node:path";
+import { basename, extname, relative } from "node:path";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import ts from "typescript";
 import { escapeRegexLiteral, tokenizeSearchTerms } from "./shared/query.js";
 import { DEFAULT_SKIPPED_WORKSPACE_DIRS, walkWorkspaceFiles } from "./shared/workspace-walk.js";
+import { resolveScopedPath, resolveToolTargetScope, type ToolTargetScope } from "./target-scope.js";
 import {
   readSourceTextWithCache,
   registerTocSourceCacheRuntime,
@@ -618,16 +619,12 @@ function cacheLookup(input: {
   };
 }
 
-function resolveBaseDir(ctx: unknown, runtime?: BrewvaToolRuntime): string {
-  const cwd =
-    ctx && typeof ctx === "object" && typeof (ctx as { cwd?: unknown }).cwd === "string"
-      ? (ctx as { cwd: string }).cwd
-      : runtime?.cwd;
-  return resolve(cwd ?? process.cwd());
+function resolveBaseDir(ctx: unknown, runtime?: BrewvaToolRuntime): ToolTargetScope {
+  return resolveToolTargetScope(runtime, ctx);
 }
 
-function resolveAbsolutePath(baseDir: string, target: string): string {
-  return resolve(baseDir, target);
+function resolveAbsolutePath(scope: ToolTargetScope, target: string): string | null {
+  return resolveScopedPath(target, scope);
 }
 
 function walkTocFiles(paths: string[]): { files: string[]; scopeOverflow: boolean } {
@@ -1056,8 +1053,13 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
       file_path: Type.String({ minLength: 1 }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      const baseDir = resolveBaseDir(ctx, options?.runtime);
-      const absolutePath = resolveAbsolutePath(baseDir, params.file_path);
+      const scope = resolveBaseDir(ctx, options?.runtime);
+      const absolutePath = resolveAbsolutePath(scope, params.file_path);
+      if (!absolutePath) {
+        return failTextResult(
+          `toc_document rejected: path escapes target roots (${scope.allowedRoots.join(", ")}).`,
+        );
+      }
       if (!existsSync(absolutePath)) {
         return failTextResult(`Error: File not found: ${absolutePath}`);
       }
@@ -1131,7 +1133,7 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
         durationMs: Date.now() - startedAt,
       });
 
-      return textResult(buildDocumentText(lookup.toc, baseDir), {
+      return textResult(buildDocumentText(lookup.toc, scope.baseCwd), {
         status: "ok",
         filePath: absolutePath,
         cacheHit: lookup.cacheHit,
@@ -1162,8 +1164,15 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
       ),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      const baseDir = resolveBaseDir(ctx, options?.runtime);
-      const roots = (params.paths ?? ["."]).map((entry) => resolveAbsolutePath(baseDir, entry));
+      const scope = resolveBaseDir(ctx, options?.runtime);
+      const roots = (params.paths ?? ["."])
+        .map((entry) => resolveAbsolutePath(scope, entry))
+        .filter((entry): entry is string => Boolean(entry));
+      if (roots.length === 0) {
+        return failTextResult(
+          `toc_search rejected: paths escape target roots (${scope.allowedRoots.join(", ")}).`,
+        );
+      }
       const sessionId = getToolSessionId(ctx);
       const sessionKey = resolveTocSessionKey(sessionId);
       const query = params.query.trim().toLowerCase();
@@ -1200,7 +1209,7 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
           summarizeScopeOverflow({
             query: params.query.trim(),
             candidateFiles: walk.files.length,
-            baseDir,
+            baseDir: scope.baseCwd,
           }),
           {
             status: UNAVAILABLE_STATUS,
@@ -1268,7 +1277,7 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
           } else {
             cacheMisses += 1;
           }
-          allMatches.push(...searchDocument(lookup.toc, baseDir, query, tokens));
+          allMatches.push(...searchDocument(lookup.toc, scope.baseCwd, query, tokens));
         } catch {
           skippedFiles += 1;
           continue;
@@ -1344,7 +1353,7 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
             query: params.query.trim(),
             preview,
             summary: searchSummary,
-            baseDir,
+            baseDir: scope.baseCwd,
           }),
           {
             status: UNAVAILABLE_STATUS,
@@ -1398,7 +1407,7 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
             query: params.query.trim(),
             preview,
             summary: searchSummary,
-            baseDir,
+            baseDir: scope.baseCwd,
           }),
           {
             status: UNAVAILABLE_STATUS,
@@ -1417,17 +1426,20 @@ export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
       }
 
       const matches = allMatches.slice(0, limit);
-      return textResult(summarizeSearch(params.query.trim(), matches, searchSummary, baseDir), {
-        status: "ok",
-        indexedFiles,
-        candidateFiles,
-        cacheHits,
-        cacheMisses,
-        skippedFiles,
-        oversizedFiles,
-        indexedBytes,
-        matchesReturned: matches.length,
-      });
+      return textResult(
+        summarizeSearch(params.query.trim(), matches, searchSummary, scope.baseCwd),
+        {
+          status: "ok",
+          indexedFiles,
+          candidateFiles,
+          cacheHits,
+          cacheMisses,
+          skippedFiles,
+          oversizedFiles,
+          indexedBytes,
+          matchesReturned: matches.length,
+        },
+      );
     },
   });
 

@@ -319,18 +319,19 @@ export class VerificationService {
     const state = this.verification.stateStore.get(sessionId);
     if (!state.lastWriteAt) return;
 
-    const checks = this.config.verification.checks[level] ?? [];
-    for (const checkName of checks) {
-      const command = this.config.verification.commands[checkName];
+    const plan = this.verification.resolvePlan(sessionId, level);
+    for (const check of plan.checks) {
+      const command = check.command;
       if (!command) continue;
-      if (checkName === "diff-review") continue;
+      if (check.name === "diff-review") continue;
+      const verificationCwd = check.cwd ?? plan.targetRoots[0] ?? this.cwd;
 
-      const existing = state.checkRuns[checkName];
+      const existing = state.checkRuns[check.name];
       const isFresh = existing && existing.ok && existing.timestamp >= state.lastWriteAt;
       if (isFresh) continue;
 
       const result = await runShellCommand(command, {
-        cwd: this.cwd,
+        cwd: verificationCwd,
         timeoutMs: options.timeoutMs,
         maxOutputChars: 200_000,
       });
@@ -343,13 +344,13 @@ export class VerificationService {
       this.recordToolResult({
         sessionId,
         toolName: "brewva_verify",
-        args: { check: checkName, command },
+        args: { check: check.name, command, cwd: verificationCwd },
         outputText: outputSummary,
         channelSuccess: ok,
         verdict: ok ? "pass" : "fail",
         metadata: {
           source: "verification_gate",
-          check: checkName,
+          check: check.name,
           command,
           exitCode: result.exitCode,
           durationMs: result.durationMs,

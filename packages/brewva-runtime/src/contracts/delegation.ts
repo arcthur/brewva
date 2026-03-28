@@ -12,11 +12,22 @@ export type DelegationRunStatus =
 export type DelegationOutcomeKind = "exploration" | "review" | "verification" | "patch";
 export type DelegationDeliveryMode = "text_only" | "supplemental";
 export type DelegationDeliveryHandoffState = "none" | "pending_parent_turn" | "surfaced";
+export type DelegationModelRouteSource = "execution_shape" | "target" | "policy";
+export type DelegationModelRouteMode = "explicit" | "auto";
 
 export interface DelegationArtifactRef {
   kind: string;
   path: string;
   summary?: string;
+}
+
+export interface DelegationModelRouteRecord {
+  selectedModel: string;
+  source: DelegationModelRouteSource;
+  mode: DelegationModelRouteMode;
+  reason: string;
+  policyId?: string;
+  requestedModel?: string;
 }
 
 export interface DelegationDeliveryRecord {
@@ -45,6 +56,7 @@ export interface DelegationRunRecord {
   parentSkill?: string;
   kind?: DelegationOutcomeKind;
   boundary?: ToolExecutionBoundary;
+  modelRoute?: DelegationModelRouteRecord;
   summary?: string;
   error?: string;
   artifactRefs?: DelegationArtifactRef[];

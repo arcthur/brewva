@@ -23,6 +23,11 @@ export interface TaskSpec {
   };
 }
 
+export interface TaskTargetDescriptor {
+  primaryRoot: string;
+  roots: string[];
+}
+
 export type TaskItemStatus = "todo" | "doing" | "done" | "blocked";
 
 export type TaskPhase =

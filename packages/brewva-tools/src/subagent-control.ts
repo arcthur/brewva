@@ -70,6 +70,17 @@ function summarizeRun(
   } else if (run.error) {
     lines.push(`  error: ${run.error}`);
   }
+  if (run.modelRoute) {
+    const route = [
+      run.modelRoute.selectedModel,
+      `source=${run.modelRoute.source}`,
+      `mode=${run.modelRoute.mode}`,
+      run.modelRoute.policyId ? `policy=${run.modelRoute.policyId}` : null,
+      run.modelRoute.requestedModel ? `requested=${run.modelRoute.requestedModel}` : null,
+    ].filter(Boolean);
+    lines.push(`  model: ${route.join(" ")}`);
+    lines.push(`  routeReason: ${run.modelRoute.reason}`);
+  }
   if (run.workerSessionId) {
     lines.push(`  workerSessionId: ${run.workerSessionId}`);
   }

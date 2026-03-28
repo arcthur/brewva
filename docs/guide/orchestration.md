@@ -30,3 +30,33 @@ Orchestration is driven by runtime state management plus runtime-plugin lifecycl
 - Event store: `packages/brewva-runtime/src/events/store.ts`
 - Tape replay engine: `packages/brewva-runtime/src/tape/replay-engine.ts`
 - Cost tracker: `packages/brewva-runtime/src/cost/tracker.ts`
+
+## Delegated Worker Overlays
+
+Delegated worker authoring now has two layers:
+
+- runtime postures remain JSON-backed under `.brewva/subagents/*.json`
+- authored worker overlays live under `.brewva/agents/*.md`
+
+Markdown worker files compile into the existing hosted `agentSpec` surface. The
+frontmatter controls the structural fields (`name`, `extends`, `envelope`,
+`skillName`, `fallbackResultMode`, `executorPreamble`), while the Markdown body
+becomes additive authored instructions rendered in the delegated prompt.
+Authority still comes from the normalized hosted catalog, not from ad hoc prompt
+text outside the narrowing rules.
+
+## Inspectable Delegation Routing
+
+Delegated model routing stays in the hosted control plane rather than the
+runtime kernel.
+
+- explicit `executionShape.model` remains the highest-priority override
+- envelope-pinned models remain explicit target defaults
+- when neither is present, the gateway may auto-apply a policy-backed route for
+  child sessions
+- route decisions are persisted on the delegation record so
+  `subagent_status` can report the selected model, source, policy id, and
+  rationale
+
+This keeps delegated routing visible and reviewable instead of turning it into a
+hidden planner.

@@ -27,6 +27,7 @@ import type { HostedSubagentBackgroundController } from "./background-controller
 import { writeDetachedSubagentContextManifest } from "./background-protocol.js";
 import { loadHostedDelegationCatalog } from "./catalog.js";
 import { HostedDelegationStore, cloneDelegationRunRecord } from "./delegation-store.js";
+import type { DelegationModelRoutingContext } from "./model-routing.js";
 import { buildDelegationPrompt } from "./prompt.js";
 import {
   aggregateChildCost,
@@ -83,6 +84,7 @@ export interface HostedSubagentAdapterOptions {
   createChildSession(input: HostedSubagentSessionOptions): Promise<HostedSubagentSessionResult>;
   backgroundController?: HostedSubagentBackgroundController;
   delegationStore?: HostedDelegationStore;
+  modelRouting?: DelegationModelRoutingContext;
 }
 
 function mergeTaskPacket(
@@ -440,6 +442,7 @@ export function createHostedSubagentAdapter(
           delegate: resolvedTarget.delegate,
           packet: sharedPacket,
           executionShape: input.request.executionShape,
+          modelRouting: options.modelRouting,
         });
       }
     } catch (error) {
@@ -577,6 +580,7 @@ export function createHostedSubagentAdapter(
         delegate,
         packet: input.packet,
         executionShape: input.executionShape,
+        modelRouting: options.modelRouting,
       });
     } catch (error) {
       return immediateFailure(error instanceof Error ? error.message : String(error));
@@ -598,6 +602,7 @@ export function createHostedSubagentAdapter(
       parentSkill,
       kind: input.target.resultMode,
       boundary: executionPlan.boundary,
+      modelRoute: executionPlan.modelRoute,
       delivery: buildDeliveryRecordFromRequest(input.delivery, startedAt),
     };
 
@@ -613,6 +618,7 @@ export function createHostedSubagentAdapter(
         label: input.label ?? null,
         kind: input.target.resultMode,
         boundary: executionPlan.boundary,
+        modelRoute: executionPlan.modelRoute ?? null,
         parentSkill: parentSkill ?? null,
         status: "pending",
         deliveryMode: input.delivery?.returnMode ?? null,
@@ -713,6 +719,7 @@ export function createHostedSubagentAdapter(
           status: "running",
           updatedAt: Date.now(),
           workerSessionId: childSessionId,
+          modelRoute: executionPlan.modelRoute,
         };
         liveRun.record = cloneDelegationRunRecord(runningRecord);
         options.runtime.events.record({
@@ -727,6 +734,7 @@ export function createHostedSubagentAdapter(
             label: input.label ?? null,
             kind: input.target.resultMode,
             boundary: executionPlan.boundary,
+            modelRoute: executionPlan.modelRoute ?? null,
             childSessionId,
             parentSkill: parentSkill ?? null,
             status: "running",
@@ -897,6 +905,7 @@ export function createHostedSubagentAdapter(
           status: "completed",
           updatedAt: Date.now(),
           workerSessionId: childSessionId,
+          modelRoute: executionPlan.modelRoute,
           summary,
           error: undefined,
           artifactRefs: outcome.artifactRefs?.map((ref) => ({ ...ref })),
@@ -922,6 +931,7 @@ export function createHostedSubagentAdapter(
             kind: input.target.resultMode,
             childSessionId,
             boundary: executionPlan.boundary,
+            modelRoute: executionPlan.modelRoute ?? null,
             parentSkill: parentSkill ?? null,
             status: "completed",
             summary,
@@ -1026,6 +1036,7 @@ export function createHostedSubagentAdapter(
           status: terminalStatus,
           updatedAt: Date.now(),
           workerSessionId: childSessionId,
+          modelRoute: executionPlan.modelRoute,
           summary: message,
           error: message,
           artifactRefs,
@@ -1051,6 +1062,7 @@ export function createHostedSubagentAdapter(
             kind: input.target.resultMode,
             childSessionId: childSessionId ?? null,
             boundary: executionPlan.boundary ?? null,
+            modelRoute: executionPlan.modelRoute ?? null,
             parentSkill: parentSkill ?? null,
             error: message,
             reason: cancellationReason ?? null,
