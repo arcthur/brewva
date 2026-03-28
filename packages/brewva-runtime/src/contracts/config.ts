@@ -260,7 +260,7 @@ export interface BrewvaConfigFile {
     costTracking?: Partial<
       Omit<BrewvaConfig["infrastructure"]["costTracking"], "maxCostUsdPerSession">
     > & {
-      maxCostUsdPerSession?: number | null;
+      maxCostUsdPerSession?: number;
     };
     turnWal?: Partial<BrewvaConfig["infrastructure"]["turnWal"]>;
   };

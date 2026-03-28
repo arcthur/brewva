@@ -164,7 +164,7 @@
                   "type": "boolean"
                 },
                 "maxCostUsdPerSession": {
-                  "type": ["number", "null"]
+                  "type": "number"
                 }
               }
             },

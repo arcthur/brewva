@@ -7,6 +7,7 @@ import {
   buildScheduleIntentFiredEvent,
 } from "@brewva/brewva-runtime";
 import { createOptimizationContinuityTool } from "@brewva/brewva-tools";
+import { patchDateNow } from "../../helpers/global-state.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function extractText(result: { content: Array<{ type: string; text?: string }> }): string {
@@ -138,80 +139,89 @@ function recordGoalLoopState(runtime: BrewvaRuntime): { loopKey: string; parentS
 
 describe("optimization continuity tool", () => {
   test("lists and shows lineages while keeping provider state aligned with live refresh", async () => {
-    const workspace = createTestWorkspace("optimization-continuity-tool");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
-    const { loopKey, parentSessionId } = recordGoalLoopState(runtime);
+    const restoreNow = patchDateNow(() => 1_710_100_500_000);
+    try {
+      const workspace = createTestWorkspace("optimization-continuity-tool");
+      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const { loopKey, parentSessionId } = recordGoalLoopState(runtime);
 
-    const provider = createOptimizationContinuityContextProvider({
-      runtime,
-      maxLineages: 2,
-      minRefreshIntervalMs: 1,
-    });
-    const beforeListEntries: Array<{ id: string; content: string }> = [];
-    provider.collect({
-      sessionId: parentSessionId,
-      promptText: "continue the goal-loop and inspect convergence",
-      register: (entry) => {
-        beforeListEntries.push(entry);
-      },
-    });
-    expect(provider.source).toBe(CONTEXT_SOURCES.optimizationContinuity);
-    expect(beforeListEntries.length).toBeGreaterThan(0);
+      const provider = createOptimizationContinuityContextProvider({
+        runtime,
+        maxLineages: 2,
+        minRefreshIntervalMs: 0,
+      });
+      const beforeListEntries: Array<{ id: string; content: string }> = [];
+      provider.collect({
+        sessionId: parentSessionId,
+        promptText: "continue the goal-loop and inspect convergence",
+        register: (entry) => {
+          beforeListEntries.push(entry);
+        },
+      });
+      expect(provider.source).toBe(CONTEXT_SOURCES.optimizationContinuity);
+      expect(beforeListEntries.length).toBeGreaterThan(0);
 
-    const tool = createOptimizationContinuityTool({ runtime });
-    const listResult = await tool.execute(
-      "tc-optimization-continuity-list",
-      { action: "list", loop_key: loopKey } as never,
-      undefined,
-      undefined,
-      {} as never,
-    );
-    const listText = extractText(listResult as { content: Array<{ type: string; text?: string }> });
-    const listDetails = listResult.details as { lineages?: Array<{ id: string }> } | undefined;
-    expect(listText).toContain("# Optimization Continuity Lineages");
-    expect(listDetails?.lineages).toHaveLength(2);
+      const tool = createOptimizationContinuityTool({ runtime });
+      const listResult = await tool.execute(
+        "tc-optimization-continuity-list",
+        { action: "list", loop_key: loopKey } as never,
+        undefined,
+        undefined,
+        {} as never,
+      );
+      const listText = extractText(
+        listResult as { content: Array<{ type: string; text?: string }> },
+      );
+      const listDetails = listResult.details as { lineages?: Array<{ id: string }> } | undefined;
+      expect(listText).toContain("# Optimization Continuity Lineages");
+      expect(listDetails?.lineages).toHaveLength(2);
 
-    const afterListEntries: Array<{ id: string; content: string }> = [];
-    provider.collect({
-      sessionId: parentSessionId,
-      promptText: "continue the goal-loop and inspect convergence",
-      register: (entry) => {
-        afterListEntries.push(entry);
-      },
-    });
-    expect(afterListEntries.length).toBeGreaterThan(0);
+      const afterListEntries: Array<{ id: string; content: string }> = [];
+      provider.collect({
+        sessionId: parentSessionId,
+        promptText: "continue the goal-loop and inspect convergence",
+        register: (entry) => {
+          afterListEntries.push(entry);
+        },
+      });
+      expect(afterListEntries.length).toBeGreaterThan(0);
 
-    const inheritedLineageId = listDetails?.lineages?.find((entry) =>
-      entry.id.includes(parentSessionId),
-    )?.id;
-    expect(typeof inheritedLineageId).toBe("string");
+      const inheritedLineageId = listDetails?.lineages?.find((entry) =>
+        entry.id.includes(parentSessionId),
+      )?.id;
+      expect(typeof inheritedLineageId).toBe("string");
 
-    const showResult = await tool.execute(
-      "tc-optimization-continuity-show",
-      { action: "show", lineage_id: inheritedLineageId! } as never,
-      undefined,
-      undefined,
-      {} as never,
-    );
-    const showText = extractText(showResult as { content: Array<{ type: string; text?: string }> });
-    expect(showText).toContain("# Optimization Continuity");
-    expect(showText).toContain("## Continuation");
-    expect(showText).toContain("status: scheduled");
+      const showResult = await tool.execute(
+        "tc-optimization-continuity-show",
+        { action: "show", lineage_id: inheritedLineageId! } as never,
+        undefined,
+        undefined,
+        {} as never,
+      );
+      const showText = extractText(
+        showResult as { content: Array<{ type: string; text?: string }> },
+      );
+      expect(showText).toContain("# Optimization Continuity");
+      expect(showText).toContain("## Continuation");
+      expect(showText).toContain("status: scheduled");
 
-    const ambiguousResult = await tool.execute(
-      "tc-optimization-continuity-ambiguous",
-      { action: "show", loop_key: loopKey } as never,
-      undefined,
-      undefined,
-      {} as never,
-    );
-    const ambiguousText = extractText(
-      ambiguousResult as { content: Array<{ type: string; text?: string }> },
-    );
-    expect(ambiguousText).toContain("Multiple lineages share loop_key");
-    expect((ambiguousResult.details as { error?: string } | undefined)?.error).toBe(
-      "multiple_lineages_for_loop_key",
-    );
+      const ambiguousResult = await tool.execute(
+        "tc-optimization-continuity-ambiguous",
+        { action: "show", loop_key: loopKey } as never,
+        undefined,
+        undefined,
+        {} as never,
+      );
+      const ambiguousText = extractText(
+        ambiguousResult as { content: Array<{ type: string; text?: string }> },
+      );
+      expect(ambiguousText).toContain("Multiple lineages share loop_key");
+      expect((ambiguousResult.details as { error?: string } | undefined)?.error).toBe(
+        "multiple_lineages_for_loop_key",
+      );
+    } finally {
+      restoreNow();
+    }
   });
 
   test("surfaces operator attention when a lineage is overdue or running too long", async () => {

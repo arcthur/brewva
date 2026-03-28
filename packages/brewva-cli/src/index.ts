@@ -21,7 +21,7 @@ import {
 } from "@brewva/brewva-runtime";
 import { InteractiveMode, runPrintMode } from "@mariozechner/pi-coding-agent";
 import { formatISO } from "date-fns";
-import { runConfigCli } from "./config.js";
+import { createAgentOverlaysCommandRuntimePlugin } from "./agent-overlays-command-runtime-plugin.js";
 import { runCredentialsCli } from "./credentials.js";
 import { runDaemon } from "./daemon-mode.js";
 import {
@@ -37,12 +37,14 @@ import { handleInspectChannelCommand } from "./inspect-channel-command.js";
 import { createInspectCommandRuntimePlugin } from "./inspect-command-runtime-plugin.js";
 import { resolveTargetSession, runInspectCli } from "./inspect.js";
 import { writeJsonLine } from "./json-lines.js";
+import { handleQuestionsChannelCommand } from "./questions-channel-command.js";
+import { createQuestionsCommandRuntimePlugin } from "./questions-command-runtime-plugin.js";
 import { createBrewvaSession } from "./session.js";
 import { createUpdateCommandRuntimePlugin } from "./update-command-runtime-plugin.js";
 
 const NODE_VERSION_RANGE = "^20.19.0 || >=22.12.0";
 const BREWVA_SKIP_VERSION_CHECK_ENV = "BREWVA_SKIP_VERSION_CHECK";
-const LEGACY_PI_SKIP_VERSION_CHECK_ENV = "PI_SKIP_VERSION_CHECK";
+const PI_SKIP_VERSION_CHECK_ENV = "PI_SKIP_VERSION_CHECK";
 
 type Semver = Readonly<{ major: number; minor: number; patch: number }>;
 
@@ -110,7 +112,6 @@ Usage:
   brewva [options] [prompt]
 
 Subcommands:
-  brewva config ...       Config rewrite
   brewva credentials ...  Encrypted credential vault management
   brewva gateway ...   Local control-plane daemon commands
   brewva inspect ...   Replay-first session inspection with deterministic analysis
@@ -125,7 +126,7 @@ Modes:
 Options:
   --cwd <path>          Working directory
   --config <path>       Brewva config path (default: .brewva/brewva.json)
-  --model <pattern>     Model override (supports provider/id and optional :thinking)
+  --model <id>          Model override (exact model id or provider/id, plus optional :thinking)
   --agent <id>          Agent self bundle id (.brewva/agents/<id>/{identity,constitution,memory}.md)
   --task <json>         TaskSpec JSON (schema: brewva.task.v1)
   --task-file <path>    TaskSpec JSON file
@@ -164,7 +165,6 @@ Examples:
   brewva --task-file ./task.json
   brewva inspect --session <session-id>
   brewva inspect packages/brewva-runtime/src
-  brewva config migrate --write
   brewva credentials list
   brewva credentials add --ref vault://openai/apiKey --from-env OPENAI_API_KEY
   brewva --undo --session <session-id>
@@ -266,14 +266,7 @@ const CLI_PARSE_OPTIONS = {
   verbose: { type: "boolean" },
 } as const;
 
-const ROOT_SUBCOMMANDS = new Set([
-  "config",
-  "credentials",
-  "gateway",
-  "inspect",
-  "insights",
-  "onboard",
-]);
+const ROOT_SUBCOMMANDS = new Set(["credentials", "gateway", "inspect", "insights", "onboard"]);
 
 function resolveCliRootOptionSpec(token: string): {
   kind: "string" | "boolean";
@@ -782,12 +775,10 @@ function applyDefaultInteractiveEnv(mode: CliMode): void {
   if (mode !== "interactive") return;
   const skipVersionCheck = process.env[BREWVA_SKIP_VERSION_CHECK_ENV];
   if (skipVersionCheck !== undefined) {
-    process.env[LEGACY_PI_SKIP_VERSION_CHECK_ENV] = skipVersionCheck;
+    process.env[PI_SKIP_VERSION_CHECK_ENV] = skipVersionCheck;
     return;
   }
-  if (process.env[LEGACY_PI_SKIP_VERSION_CHECK_ENV] === undefined) {
-    process.env[LEGACY_PI_SKIP_VERSION_CHECK_ENV] = "1";
-  }
+  process.env[PI_SKIP_VERSION_CHECK_ENV] = "1";
 }
 
 function printReplayText(
@@ -855,7 +846,7 @@ async function run(): Promise<void> {
   const rawArgs = process.argv.slice(2);
   if (rawArgs[0] === "insight") {
     console.error(
-      "Error: unknown subcommand. Use 'brewva config', 'brewva credentials', 'brewva inspect', 'brewva insights', 'brewva onboard', or 'brewva gateway'.",
+      "Error: unknown subcommand. Use 'brewva credentials', 'brewva inspect', 'brewva insights', 'brewva onboard', or 'brewva gateway'.",
     );
     process.exitCode = 1;
     return;
@@ -870,10 +861,6 @@ async function run(): Promise<void> {
   }
   if (subcommand?.name === "credentials") {
     process.exitCode = await runCredentialsCli(subcommand.args);
-    return;
-  }
-  if (subcommand?.name === "config") {
-    process.exitCode = await runConfigCli(subcommand.args);
     return;
   }
   if (subcommand?.name === "onboard") {
@@ -942,6 +929,7 @@ async function run(): Promise<void> {
       dependencies: {
         handleInspectCommand: handleInspectChannelCommand,
         handleInsightsCommand: handleInsightsChannelCommand,
+        handleQuestionsCommand: handleQuestionsChannelCommand,
       },
     });
     return;
@@ -1146,6 +1134,8 @@ async function run(): Promise<void> {
     runtimePlugins: [
       createInspectCommandRuntimePlugin(runtime),
       createInsightsCommandRuntimePlugin(runtime),
+      createQuestionsCommandRuntimePlugin(runtime),
+      createAgentOverlaysCommandRuntimePlugin(runtime),
       createUpdateCommandRuntimePlugin(runtime),
     ],
   });
@@ -1259,6 +1249,9 @@ export { handleInspectChannelCommand } from "./inspect-channel-command.js";
 export { createInspectCommandRuntimePlugin } from "./inspect-command-runtime-plugin.js";
 export { handleInsightsChannelCommand } from "./insights-channel-command.js";
 export { createInsightsCommandRuntimePlugin } from "./insights-command-runtime-plugin.js";
+export { handleQuestionsChannelCommand } from "./questions-channel-command.js";
+export { createQuestionsCommandRuntimePlugin } from "./questions-command-runtime-plugin.js";
+export { createAgentOverlaysCommandRuntimePlugin } from "./agent-overlays-command-runtime-plugin.js";
 export { createUpdateCommandRuntimePlugin } from "./update-command-runtime-plugin.js";
 export { JsonLineWriter, type JsonLineWritable, writeJsonLine } from "./json-lines.js";
 export {

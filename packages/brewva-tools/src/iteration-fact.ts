@@ -13,10 +13,10 @@ import { defineBrewvaTool } from "./utils/tool.js";
 
 const ITERATION_ACTION_VALUES = ["record_metric", "record_guard", "list"] as const;
 
-const IterationActionSchema = buildStringEnumSchema(ITERATION_ACTION_VALUES, {}, {});
-const MetricAggregationSchema = buildStringEnumSchema(ITERATION_METRIC_AGGREGATION_VALUES, {}, {});
-const GuardStatusSchema = buildStringEnumSchema(ITERATION_GUARD_STATUS_VALUES, {}, {});
-const SessionScopeSchema = buildStringEnumSchema(ITERATION_FACT_SESSION_SCOPE_VALUES, {}, {});
+const IterationActionSchema = buildStringEnumSchema(ITERATION_ACTION_VALUES, {});
+const MetricAggregationSchema = buildStringEnumSchema(ITERATION_METRIC_AGGREGATION_VALUES, {});
+const GuardStatusSchema = buildStringEnumSchema(ITERATION_GUARD_STATUS_VALUES, {});
+const SessionScopeSchema = buildStringEnumSchema(ITERATION_FACT_SESSION_SCOPE_VALUES, {});
 
 function readMetricAggregation(
   value: unknown,
@@ -103,7 +103,7 @@ export function createIterationFactTool(options: BrewvaToolOptions): ToolDefinit
       history_limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
       session_scope: Type.Optional(SessionScopeSchema),
       fact_kind: Type.Optional(
-        buildStringEnumSchema(["metric", "guard", "all"] as const, {}, { recommendedValue: "all" }),
+        buildStringEnumSchema(["metric", "guard", "all"] as const, { recommendedValue: "all" }),
       ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {

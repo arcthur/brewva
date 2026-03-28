@@ -1,4 +1,8 @@
 import { type BrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  maybeAdjudicateLatestTaskStall,
+  type TaskStallAdjudicator,
+} from "./task-stall-adjudication.js";
 
 type IntervalHandle = ReturnType<typeof setInterval>;
 
@@ -11,6 +15,7 @@ export interface TaskProgressWatchdogOptions {
   now?: () => number;
   pollIntervalMs?: number;
   thresholdMs?: number;
+  adjudicator?: TaskStallAdjudicator;
   setIntervalFn?: (callback: () => void, delayMs: number) => IntervalHandle;
   clearIntervalFn?: (handle: IntervalHandle) => void;
 }
@@ -27,6 +32,7 @@ export class TaskProgressWatchdog {
   private readonly now: () => number;
   private readonly pollIntervalMs: number;
   private readonly thresholdMs: number;
+  private readonly adjudicator?: TaskStallAdjudicator;
   private readonly setIntervalFn: TaskProgressWatchdogOptions["setIntervalFn"];
   private readonly clearIntervalFn: TaskProgressWatchdogOptions["clearIntervalFn"];
   private timer: IntervalHandle | null = null;
@@ -37,6 +43,7 @@ export class TaskProgressWatchdog {
     this.now = options.now ?? (() => Date.now());
     this.pollIntervalMs = sanitizeDelayMs(options.pollIntervalMs, DEFAULT_POLL_INTERVAL_MS);
     this.thresholdMs = sanitizeDelayMs(options.thresholdMs, DEFAULT_THRESHOLD_MS);
+    this.adjudicator = options.adjudicator;
     this.setIntervalFn =
       options.setIntervalFn ?? ((callback, delayMs) => setInterval(callback, delayMs));
     this.clearIntervalFn = options.clearIntervalFn ?? ((handle) => clearInterval(handle));
@@ -58,9 +65,16 @@ export class TaskProgressWatchdog {
   }
 
   poll(): void {
+    const polledAt = this.now();
     this.runtime.session.pollStall(this.sessionId, {
-      now: this.now(),
+      now: polledAt,
       thresholdMs: this.thresholdMs,
+    });
+    maybeAdjudicateLatestTaskStall({
+      runtime: this.runtime,
+      sessionId: this.sessionId,
+      adjudicator: this.adjudicator,
+      now: () => polledAt,
     });
   }
 }

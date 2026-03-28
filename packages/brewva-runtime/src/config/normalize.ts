@@ -305,12 +305,12 @@ function normalizeSecurityConfig(
     : {};
   if (Object.hasOwn(securityExecutionInput, "commandDenyList")) {
     throw new Error(
-      "security.execution.commandDenyList must not appear in active config. Move entries to security.boundaryPolicy.commandDenyList, then run `brewva config migrate --write` if you are updating an existing file.",
+      "security.execution.commandDenyList must not appear in active config. Move entries to security.boundaryPolicy.commandDenyList.",
     );
   }
   if (Object.hasOwn(securityExecutionSandboxInput, "apiKey")) {
     throw new Error(
-      "security.execution.sandbox.apiKey must not appear in active config. Import the secret into the credential vault, set security.credentials.sandboxApiKeyRef, then run `brewva config migrate --write` if you are updating an existing file.",
+      "security.execution.sandbox.apiKey must not appear in active config. Import the secret into the credential vault and set security.credentials.sandboxApiKeyRef.",
     );
   }
   const normalizedSecurityMode = VALID_SECURITY_MODES.has(securityInput.mode as string)
@@ -751,13 +751,10 @@ function normalizeInfrastructureConfig(
     },
     costTracking: {
       enabled: normalizeBoolean(costTrackingInput.enabled, defaults.costTracking.enabled),
-      maxCostUsdPerSession:
-        costTrackingInput.maxCostUsdPerSession === null
-          ? 0
-          : normalizeNonNegativeNumber(
-              costTrackingInput.maxCostUsdPerSession,
-              defaults.costTracking.maxCostUsdPerSession,
-            ),
+      maxCostUsdPerSession: normalizeNonNegativeNumber(
+        costTrackingInput.maxCostUsdPerSession,
+        defaults.costTracking.maxCostUsdPerSession,
+      ),
       alertThresholdRatio: normalizeUnitInterval(
         costTrackingInput.alertThresholdRatio,
         defaults.costTracking.alertThresholdRatio,

@@ -174,7 +174,7 @@ describe("exec/process tool flow", () => {
     ).rejects.toThrow("Process exited");
   });
 
-  test("exec accepts timeout_ms and interprets large timeout values as milliseconds", async () => {
+  test("exec interprets large timeout values as milliseconds", async () => {
     const { runtime, events } = createRuntimeForExecTests({
       mode: "permissive",
       backend: "host",
@@ -182,20 +182,8 @@ describe("exec/process tool flow", () => {
     const execTool = createExecTool({ runtime });
     const sessionId = "s13-exec-timeout-ms";
 
-    const resultFromTimeoutMs = await execTool.execute(
-      "tc-exec-timeout-ms-1",
-      {
-        command: "echo timeout-ms",
-        timeout_ms: 120_000,
-      },
-      undefined,
-      undefined,
-      fakeContext(sessionId),
-    );
-    expect(extractTextContent(resultFromTimeoutMs)).toContain("timeout-ms");
-
     const resultFromLargeTimeout = await execTool.execute(
-      "tc-exec-timeout-ms-2",
+      "tc-exec-timeout-ms-1",
       {
         command: "echo timeout-large",
         timeout: 120_000,
@@ -208,7 +196,7 @@ describe("exec/process tool flow", () => {
 
     const routedEvents = events.filter((event) => event.type === "exec_routed");
     expect(routedEvents[0]?.payload?.requestedTimeoutSec).toBe(120);
-    expect(routedEvents[1]?.payload?.requestedTimeoutSec).toBe(120);
+    expect(routedEvents).toHaveLength(1);
   });
 
   test("credential bindings override user-provided env for exec", async () => {

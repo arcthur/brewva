@@ -17,14 +17,10 @@ const SUBAGENT_STATUS_VALUES = [
   "merged",
 ] as const;
 
-const StatusSchema = buildStringEnumSchema(
-  SUBAGENT_STATUS_VALUES,
-  {},
-  {
-    guidance:
-      "Use pending or running for active delegation only. Include completed, failed, timeout, cancelled, or merged when inspecting terminal history.",
-  },
-);
+const StatusSchema = buildStringEnumSchema(SUBAGENT_STATUS_VALUES, {
+  guidance:
+    "Use pending or running for active delegation only. Include completed, failed, timeout, cancelled, or merged when inspecting terminal history.",
+});
 
 function normalizeStatuses(value: unknown): DelegationRunStatus[] | undefined {
   if (!Array.isArray(value)) {

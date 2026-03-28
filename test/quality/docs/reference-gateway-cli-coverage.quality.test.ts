@@ -42,7 +42,6 @@ describe("docs/reference gateway CLI coverage", () => {
 
     const expectedCommands = [
       "start",
-      "run",
       "install",
       "uninstall",
       "status",

@@ -7,11 +7,7 @@ import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import type { TSchema } from "@sinclair/typebox";
 import { getBrewvaToolSurface } from "../surface.js";
 import type { BrewvaManagedToolDefinition, BrewvaToolMetadata } from "../types.js";
-import {
-  applyTopLevelCaseAliases,
-  lowerStringEnumContractParameters,
-  projectCanonicalTopLevelParameters,
-} from "./input-alias.js";
+import { lowerStringEnumContractParameters } from "./input-alias.js";
 
 export function defineTool<TParams extends TSchema, TDetails = unknown>(
   tool: ToolDefinition<TParams, TDetails>,
@@ -63,8 +59,6 @@ export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
     throw new Error(`managed Brewva tool '${normalizedName}' is missing governance metadata`);
   }
 
-  const aliasedParameters = applyTopLevelCaseAliases(tool.parameters);
-  const agentParameters = projectCanonicalTopLevelParameters(tool.parameters);
   const execute: ToolDefinition<TParams, TDetails>["execute"] = async (
     toolCallId,
     params,
@@ -72,19 +66,12 @@ export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
     onUpdate,
     ctx,
   ) => {
-    const normalizedParams = aliasedParameters.normalize(params);
-    const loweredParams = lowerStringEnumContractParameters(agentParameters, normalizedParams);
-    return await tool.execute(
-      toolCallId,
-      loweredParams as Parameters<typeof tool.execute>[1],
-      signal,
-      onUpdate,
-      ctx,
-    );
+    const loweredParams = lowerStringEnumContractParameters(tool.parameters, params);
+    return await tool.execute(toolCallId, loweredParams, signal, onUpdate, ctx);
   };
   const managed = {
     ...(tool as unknown as Record<string, unknown>),
-    parameters: agentParameters,
+    parameters: tool.parameters,
     execute,
   } as unknown as BrewvaManagedToolDefinition;
   Object.defineProperty(managed, "brewva", {
@@ -98,7 +85,7 @@ export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
     enumerable: false,
     configurable: false,
     writable: false,
-    value: agentParameters,
+    value: tool.parameters,
   });
   return managed;
 }

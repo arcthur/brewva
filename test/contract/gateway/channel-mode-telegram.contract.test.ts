@@ -1,13 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { handleInspectChannelCommand, handleInsightsChannelCommand } from "@brewva/brewva-cli";
 import {
+  handleInspectChannelCommand,
+  handleInsightsChannelCommand,
+  handleQuestionsChannelCommand,
+} from "@brewva/brewva-cli";
+import {
+  OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
   DEFAULT_TELEGRAM_SKILL_NAME,
   runChannelMode,
   type ChannelModeLauncher,
   type RunChannelModeDependencies,
 } from "@brewva/brewva-gateway";
+import { createHostedSession } from "@brewva/brewva-gateway/host";
 import type { ChannelTurnBridge, TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { waitUntil } from "../../helpers/process.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
@@ -16,6 +22,10 @@ function writeChannelConfig(
   workspace: string,
   options: {
     orchestrationEnabled?: boolean;
+    orchestrationLimits?: {
+      maxLiveRuntimes?: number;
+      idleRuntimeTtlMs?: number;
+    };
   } = {},
 ): string {
   const configPath = join(workspace, ".brewva", "brewva.json");
@@ -26,6 +36,10 @@ function writeChannelConfig(
         channels: {
           orchestration: {
             enabled: options.orchestrationEnabled ?? false,
+            limits: {
+              maxLiveRuntimes: options.orchestrationLimits?.maxLiveRuntimes,
+              idleRuntimeTtlMs: options.orchestrationLimits?.idleRuntimeTtlMs,
+            },
           },
         },
       },
@@ -48,6 +62,11 @@ function createInboundTurn(input: { turnId: string; text: string }): TurnEnvelop
     timestamp: Date.now(),
     parts: [{ type: "text", text: input.text }],
   };
+}
+
+function readTurnText(turn: TurnEnvelope | undefined): string {
+  const part = turn?.parts[0];
+  return part && "text" in part ? part.text : "";
 }
 
 describe("gateway contract: telegram channel dispatch", () => {
@@ -319,6 +338,567 @@ describe("gateway contract: telegram channel dispatch", () => {
     expect(text).toContain("Verification:");
     expect(text).not.toContain("Brewva Project Insights");
     expect(text.split("\n").length).toBeLessThanOrEqual(5);
+  });
+
+  test("channel orchestration handles /questions inline without a model turn", async () => {
+    const workspace = createTestWorkspace("channel-telegram-questions");
+    const configPath = writeChannelConfig(workspace, { orchestrationEnabled: true });
+    const channelConfig = {
+      telegram: {
+        token: "bot-token",
+      },
+    };
+    const capturedPrompts: string[] = [];
+    const outboundTurns: TurnEnvelope[] = [];
+    const abortController = new AbortController();
+    let hostedSession:
+      | {
+          runtime: Awaited<ReturnType<typeof createHostedSession>>["runtime"];
+          sessionId: string;
+        }
+      | undefined;
+
+    const launcher: ChannelModeLauncher = (input) => {
+      const bridge = {
+        async start(): Promise<void> {
+          await input.onInboundTurn(
+            createInboundTurn({
+              turnId: "turn-agent-questions-1",
+              text: "hello from channel e2e",
+            }),
+          );
+          await waitUntil(
+            () => outboundTurns.length >= 1 && hostedSession !== undefined,
+            5_000,
+            "timed out waiting for agent session bootstrap",
+          );
+          hostedSession!.runtime.events.record({
+            sessionId: hostedSession!.sessionId,
+            type: "skill_completed",
+            payload: {
+              skillName: "design",
+              outputs: {
+                open_questions: ["Should the update target the daemon or the print path?"],
+              },
+            },
+          });
+          await input.onInboundTurn(
+            createInboundTurn({
+              turnId: "turn-questions-1",
+              text: "/questions",
+            }),
+          );
+          await waitUntil(
+            () => outboundTurns.length >= 2,
+            5_000,
+            "timed out waiting for channel questions reply",
+          );
+          abortController.abort();
+        },
+        async stop(): Promise<void> {
+          return;
+        },
+        async sendTurn(turn: TurnEnvelope): Promise<Record<string, never>> {
+          outboundTurns.push(turn);
+          return {};
+        },
+      };
+      return {
+        bridge: bridge as unknown as ChannelTurnBridge,
+      };
+    };
+
+    const dependencies: RunChannelModeDependencies = {
+      createSession: async (options) => {
+        const result = await createHostedSession(options);
+        hostedSession = {
+          runtime: result.runtime,
+          sessionId: result.session.sessionManager.getSessionId(),
+        };
+        return result;
+      },
+      collectPromptTurnOutputs: async (_session, prompt) => {
+        capturedPrompts.push(prompt);
+        return {
+          assistantText: "ACK_FROM_FAKE_PROMPT_EXECUTOR",
+          toolOutputs: [],
+        };
+      },
+      handleQuestionsCommand: handleQuestionsChannelCommand,
+      launchers: {
+        telegram: launcher,
+      },
+    };
+
+    try {
+      await runChannelMode({
+        cwd: workspace,
+        configPath,
+        managedToolMode: "direct",
+        verbose: false,
+        channel: "telegram",
+        channelConfig,
+        shutdownSignal: abortController.signal,
+        dependencies,
+      });
+    } finally {
+      cleanupTestWorkspace(workspace);
+    }
+
+    expect(capturedPrompts).toHaveLength(1);
+    const questionsText = outboundTurns[1]?.parts[0];
+    expect(questionsText).toEqual(
+      expect.objectContaining({
+        type: "text",
+      }),
+    );
+    const text = questionsText && "text" in questionsText ? questionsText.text : "";
+    expect(text).toContain("Questions @default");
+    expect(text).toContain("Open questions:");
+    expect(text).toContain("Should the update target the daemon or the print path?");
+    expect(text).toContain("Use /answer [@agent] <question-id> <answer> to resolve one.");
+  });
+
+  test("channel orchestration routes /answer through the focused agent and records the answer event", async () => {
+    const workspace = createTestWorkspace("channel-telegram-answer");
+    const configPath = writeChannelConfig(workspace, { orchestrationEnabled: true });
+    const channelConfig = {
+      telegram: {
+        token: "bot-token",
+      },
+    };
+    const capturedPrompts: string[] = [];
+    const outboundTurns: TurnEnvelope[] = [];
+    const abortController = new AbortController();
+    let observedAnswerEventCount = 0;
+    let hostedSession:
+      | {
+          runtime: Awaited<ReturnType<typeof createHostedSession>>["runtime"];
+          sessionId: string;
+          questionId?: string;
+        }
+      | undefined;
+
+    const launcher: ChannelModeLauncher = (input) => {
+      const bridge = {
+        async start(): Promise<void> {
+          await input.onInboundTurn(
+            createInboundTurn({
+              turnId: "turn-agent-answer-1",
+              text: "hello from channel e2e",
+            }),
+          );
+          await waitUntil(
+            () => outboundTurns.length >= 1 && hostedSession !== undefined,
+            5_000,
+            "timed out waiting for agent session bootstrap",
+          );
+          const questionEvent = hostedSession!.runtime.events.record({
+            sessionId: hostedSession!.sessionId,
+            type: "skill_completed",
+            payload: {
+              skillName: "design",
+              outputs: {
+                open_questions: ["Should the update target the daemon or the print path?"],
+              },
+            },
+          });
+          hostedSession!.questionId = `skill:${questionEvent?.id}:1`;
+          await input.onInboundTurn(
+            createInboundTurn({
+              turnId: "turn-answer-1",
+              text: `/answer ${hostedSession!.questionId} Target the daemon path first.`,
+            }),
+          );
+          await waitUntil(
+            () =>
+              capturedPrompts.length >= 2 &&
+              (hostedSession?.runtime.events
+                .query(hostedSession.sessionId)
+                .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE).length ??
+                0) >= 1,
+            5_000,
+            "timed out waiting for answer routing prompt and event",
+          );
+          observedAnswerEventCount =
+            hostedSession?.runtime.events
+              .query(hostedSession.sessionId)
+              .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE).length ?? 0;
+          abortController.abort();
+        },
+        async stop(): Promise<void> {
+          return;
+        },
+        async sendTurn(turn: TurnEnvelope): Promise<Record<string, never>> {
+          outboundTurns.push(turn);
+          return {};
+        },
+      };
+      return {
+        bridge: bridge as unknown as ChannelTurnBridge,
+      };
+    };
+
+    const dependencies: RunChannelModeDependencies = {
+      createSession: async (options) => {
+        const result = await createHostedSession(options);
+        hostedSession = {
+          runtime: result.runtime,
+          sessionId: result.session.sessionManager.getSessionId(),
+        };
+        return result;
+      },
+      collectPromptTurnOutputs: async (_session, prompt) => {
+        capturedPrompts.push(prompt);
+        return {
+          assistantText: "ACK_FROM_FAKE_PROMPT_EXECUTOR",
+          toolOutputs: [],
+        };
+      },
+      handleQuestionsCommand: handleQuestionsChannelCommand,
+      launchers: {
+        telegram: launcher,
+      },
+    };
+
+    try {
+      await runChannelMode({
+        cwd: workspace,
+        configPath,
+        managedToolMode: "direct",
+        verbose: false,
+        channel: "telegram",
+        channelConfig,
+        shutdownSignal: abortController.signal,
+        dependencies,
+      });
+    } finally {
+      cleanupTestWorkspace(workspace);
+    }
+
+    expect(capturedPrompts).toHaveLength(2);
+    expect(capturedPrompts[1]).toContain(`Question ID: ${hostedSession?.questionId}`);
+    expect(capturedPrompts[1]).toContain("Answer: Target the daemon path first.");
+    expect(observedAnswerEventCount).toBe(1);
+  });
+
+  test("channel orchestration keeps /questions and /answer durable after agent session eviction", async () => {
+    const workspace = createTestWorkspace("channel-telegram-durable-questions-after-eviction");
+    const configPath = writeChannelConfig(workspace, {
+      orchestrationEnabled: true,
+      orchestrationLimits: {
+        maxLiveRuntimes: 1,
+      },
+    });
+    const channelConfig = {
+      telegram: {
+        token: "bot-token",
+      },
+    };
+    const capturedPrompts: string[] = [];
+    const outboundTurns: TurnEnvelope[] = [];
+    const abortController = new AbortController();
+    let observedQuestionSurface:
+      | {
+          sessionIds: string[];
+          liveSessionId?: string;
+        }
+      | undefined;
+    let observedAnswerEventCount = 0;
+    let defaultSession:
+      | {
+          runtime: Awaited<ReturnType<typeof createHostedSession>>["runtime"];
+          sessionId: string;
+          questionId?: string;
+        }
+      | undefined;
+
+    const launcher: ChannelModeLauncher = (input) => {
+      const bridge = {
+        async start(): Promise<void> {
+          await input.onInboundTurn(
+            createInboundTurn({
+              turnId: "turn-default-evicted-1",
+              text: "hello default agent",
+            }),
+          );
+          await waitUntil(
+            () => outboundTurns.length >= 1 && defaultSession !== undefined,
+            5_000,
+            "timed out waiting for default agent session bootstrap",
+          );
+          const questionEvent = defaultSession!.runtime.events.record({
+            sessionId: defaultSession!.sessionId,
+            type: "skill_completed",
+            payload: {
+              skillName: "design",
+              outputs: {
+                open_questions: ["Should the update target the daemon or the print path?"],
+              },
+            },
+          });
+          defaultSession!.questionId = `skill:${questionEvent?.id}:1`;
+
+          await input.onInboundTurn(
+            createInboundTurn({
+              turnId: "turn-create-analyst-1",
+              text: "/new-agent analyst",
+            }),
+          );
+          await input.onInboundTurn(
+            createInboundTurn({
+              turnId: "turn-analyst-evict-1",
+              text: "@analyst hello analyst",
+            }),
+          );
+          await waitUntil(
+            () => capturedPrompts.length >= 2,
+            5_000,
+            "timed out waiting for analyst prompt after default eviction",
+          );
+
+          await input.onInboundTurn(
+            createInboundTurn({
+              turnId: "turn-questions-after-evict-1",
+              text: "/questions @default",
+            }),
+          );
+          await waitUntil(
+            () =>
+              outboundTurns.some((turn) =>
+                readTurnText(turn).includes(
+                  "Should the update target the daemon or the print path?",
+                ),
+              ),
+            5_000,
+            "timed out waiting for durable questions reply after eviction",
+          );
+
+          await input.onInboundTurn(
+            createInboundTurn({
+              turnId: "turn-answer-after-evict-1",
+              text: `/answer @default ${defaultSession!.questionId} Target the daemon path first.`,
+            }),
+          );
+          await waitUntil(
+            () =>
+              capturedPrompts.some((prompt) =>
+                prompt.includes(`Question ID: ${defaultSession!.questionId}`),
+              ) &&
+              (defaultSession?.runtime.events
+                .query(defaultSession.sessionId)
+                .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE).length ??
+                0) >= 1,
+            5_000,
+            "timed out waiting for durable answer routing after eviction",
+          );
+          observedAnswerEventCount =
+            defaultSession?.runtime.events
+              .query(defaultSession.sessionId)
+              .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE).length ?? 0;
+          abortController.abort();
+        },
+        async stop(): Promise<void> {
+          return;
+        },
+        async sendTurn(turn: TurnEnvelope): Promise<Record<string, never>> {
+          outboundTurns.push(turn);
+          return {};
+        },
+      };
+      return {
+        bridge: bridge as unknown as ChannelTurnBridge,
+      };
+    };
+
+    const dependencies: RunChannelModeDependencies = {
+      createSession: async (options) => {
+        const result = await createHostedSession(options);
+        if ((options?.runtime?.agentId ?? "default") === "default" && !defaultSession) {
+          defaultSession = {
+            runtime: result.runtime,
+            sessionId: result.session.sessionManager.getSessionId(),
+          };
+        }
+        return result;
+      },
+      collectPromptTurnOutputs: async (_session, prompt) => {
+        capturedPrompts.push(prompt);
+        return {
+          assistantText: "ACK_FROM_FAKE_PROMPT_EXECUTOR",
+          toolOutputs: [],
+        };
+      },
+      handleQuestionsCommand: async (input) => {
+        observedQuestionSurface = input.questionSurface
+          ? {
+              sessionIds: [...input.questionSurface.sessionIds],
+              liveSessionId: input.questionSurface.liveSessionId,
+            }
+          : undefined;
+        return handleQuestionsChannelCommand(input);
+      },
+      launchers: {
+        telegram: launcher,
+      },
+    };
+
+    try {
+      await runChannelMode({
+        cwd: workspace,
+        configPath,
+        managedToolMode: "direct",
+        verbose: false,
+        channel: "telegram",
+        channelConfig,
+        shutdownSignal: abortController.signal,
+        dependencies,
+      });
+    } finally {
+      cleanupTestWorkspace(workspace);
+    }
+
+    const questionsReply = outboundTurns.find((turn) =>
+      readTurnText(turn).includes("Questions @default"),
+    );
+    expect(readTurnText(questionsReply)).toContain(
+      "Should the update target the daemon or the print path?",
+    );
+    expect(observedQuestionSurface?.liveSessionId).toBeUndefined();
+    expect(observedQuestionSurface?.sessionIds).toContain(defaultSession?.sessionId ?? "");
+    expect(
+      capturedPrompts.some((prompt) =>
+        prompt.includes(`Question ID: ${defaultSession?.questionId}`),
+      ),
+    ).toBe(true);
+    expect(observedAnswerEventCount).toBe(1);
+  });
+
+  test("channel orchestration records answer receipts before a routed answer turn fails", async () => {
+    const workspace = createTestWorkspace("channel-telegram-answer-receipt-before-route-failure");
+    const configPath = writeChannelConfig(workspace, { orchestrationEnabled: true });
+    const channelConfig = {
+      telegram: {
+        token: "bot-token",
+      },
+    };
+    const outboundTurns: TurnEnvelope[] = [];
+    const abortController = new AbortController();
+    let promptCount = 0;
+    let observedAnswerEventCount = 0;
+    let defaultSession:
+      | {
+          runtime: Awaited<ReturnType<typeof createHostedSession>>["runtime"];
+          sessionId: string;
+          questionId?: string;
+        }
+      | undefined;
+
+    const launcher: ChannelModeLauncher = (input) => {
+      const bridge = {
+        async start(): Promise<void> {
+          await input.onInboundTurn(
+            createInboundTurn({
+              turnId: "turn-answer-receipt-1",
+              text: "hello default agent",
+            }),
+          );
+          await waitUntil(
+            () => outboundTurns.length >= 1 && defaultSession !== undefined,
+            5_000,
+            "timed out waiting for default session bootstrap",
+          );
+          const questionEvent = defaultSession!.runtime.events.record({
+            sessionId: defaultSession!.sessionId,
+            type: "skill_completed",
+            payload: {
+              skillName: "design",
+              outputs: {
+                open_questions: ["Should the update target the daemon or the print path?"],
+              },
+            },
+          });
+          defaultSession!.questionId = `skill:${questionEvent?.id}:1`;
+
+          await input.onInboundTurn(
+            createInboundTurn({
+              turnId: "turn-answer-receipt-failure-1",
+              text: `/answer ${defaultSession!.questionId} Target the daemon path first.`,
+            }),
+          );
+          await waitUntil(
+            () =>
+              promptCount >= 2 &&
+              (defaultSession?.runtime.events
+                .query(defaultSession.sessionId)
+                .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE).length ??
+                0) >= 1,
+            5_000,
+            "timed out waiting for durable answer receipt after route failure",
+          );
+          observedAnswerEventCount =
+            defaultSession?.runtime.events
+              .query(defaultSession.sessionId)
+              .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE).length ?? 0;
+          abortController.abort();
+        },
+        async stop(): Promise<void> {
+          return;
+        },
+        async sendTurn(turn: TurnEnvelope): Promise<Record<string, never>> {
+          outboundTurns.push(turn);
+          return {};
+        },
+      };
+      return {
+        bridge: bridge as unknown as ChannelTurnBridge,
+      };
+    };
+
+    const dependencies: RunChannelModeDependencies = {
+      createSession: async (options) => {
+        const result = await createHostedSession(options);
+        if ((options?.runtime?.agentId ?? "default") === "default" && !defaultSession) {
+          defaultSession = {
+            runtime: result.runtime,
+            sessionId: result.session.sessionManager.getSessionId(),
+          };
+        }
+        return result;
+      },
+      collectPromptTurnOutputs: async () => {
+        promptCount += 1;
+        if (promptCount >= 2) {
+          throw new Error("simulated_answer_route_failure");
+        }
+        return {
+          assistantText: "ACK_FROM_FAKE_PROMPT_EXECUTOR",
+          toolOutputs: [],
+        };
+      },
+      launchers: {
+        telegram: launcher,
+      },
+    };
+
+    try {
+      await runChannelMode({
+        cwd: workspace,
+        configPath,
+        managedToolMode: "direct",
+        verbose: false,
+        channel: "telegram",
+        channelConfig,
+        shutdownSignal: abortController.signal,
+        dependencies,
+      });
+    } finally {
+      cleanupTestWorkspace(workspace);
+    }
+
+    expect(promptCount).toBe(2);
+    expect(outboundTurns).toHaveLength(1);
+    expect(observedAnswerEventCount).toBe(1);
   });
 
   test("channel orchestration lets /inspect target an explicit agent instead of the current focus", async () => {

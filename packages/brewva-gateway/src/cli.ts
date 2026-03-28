@@ -1717,7 +1717,7 @@ export async function runGatewayCli(
     };
   }
 
-  if (command === "start" || command === "run") {
+  if (command === "start") {
     return {
       handled: true,
       exitCode: await handleStart(rest),

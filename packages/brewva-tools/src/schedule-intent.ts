@@ -10,49 +10,30 @@ import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { addMilliseconds, formatISO } from "date-fns";
 import type { BrewvaToolOptions } from "./types.js";
-import {
-  attachStringEnumContractPaths,
-  buildStringEnumSchema,
-  normalizeStringEnumAlias,
-} from "./utils/input-alias.js";
+import { attachStringEnumContractPaths, buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
 const SCHEDULE_ACTION_VALUES = ["create", "update", "cancel", "list"] as const;
-const ScheduleActionSchema = buildStringEnumSchema(
-  SCHEDULE_ACTION_VALUES,
-  {},
-  {
-    guidance:
-      "Use create to schedule new work, update to patch an existing intent, cancel to stop an intent, and list to inspect recorded intents.",
-  },
-);
+const ScheduleActionSchema = buildStringEnumSchema(SCHEDULE_ACTION_VALUES, {
+  guidance:
+    "Use create to schedule new work, update to patch an existing intent, cancel to stop an intent, and list to inspect recorded intents.",
+});
 
 const CONTINUITY_MODE_VALUES = ["inherit", "fresh"] as const;
-const ContinuityModeSchema = buildStringEnumSchema(
-  CONTINUITY_MODE_VALUES,
-  {},
-  {
-    recommendedValue: "inherit",
-    guidance:
-      "Use inherit to keep the scheduled work attached to the current session and goal lineage. Use fresh for a detached follow-up branch.",
-  },
-);
+const ContinuityModeSchema = buildStringEnumSchema(CONTINUITY_MODE_VALUES, {
+  recommendedValue: "inherit",
+  guidance:
+    "Use inherit to keep the scheduled work attached to the current session and goal lineage. Use fresh for a detached follow-up branch.",
+});
 
 const SCHEDULE_LIST_STATUSES = ["all", "active", "cancelled", "converged", "error"] as const;
-const SCHEDULE_LIST_STATUS_ALIASES = {
-  canceled: "cancelled",
-} as const;
-const ListStatusSchema = buildStringEnumSchema(
-  SCHEDULE_LIST_STATUSES,
-  SCHEDULE_LIST_STATUS_ALIASES,
-  {
-    recommendedValue: "all",
-    guidance:
-      "Use all by default. Filter to active, cancelled, converged, or error only when narrowing the listing.",
-  },
-);
+const ListStatusSchema = buildStringEnumSchema(SCHEDULE_LIST_STATUSES, {
+  recommendedValue: "all",
+  guidance:
+    "Use all by default. Filter to active, cancelled, converged, or error only when narrowing the listing.",
+});
 
 const CONVERGENCE_KIND_VALUES = [
   "truth_resolved",
@@ -70,14 +51,10 @@ const TASK_PHASE_VALUES = [
   "blocked",
   "done",
 ] as const;
-const TaskPhaseSchema = buildStringEnumSchema(
-  TASK_PHASE_VALUES,
-  {},
-  {
-    guidance:
-      "Use task_phase when the schedule should stop after the task reaches a specific phase such as investigate, execute, verify, ready_for_acceptance, blocked, or done.",
-  },
-);
+const TaskPhaseSchema = buildStringEnumSchema(TASK_PHASE_VALUES, {
+  guidance:
+    "Use task_phase when the schedule should stop after the task reaches a specific phase such as investigate, execute, verify, ready_for_acceptance, blocked, or done.",
+});
 
 const ConvergencePredicateSchema = attachStringEnumContractPaths(
   Type.Recursive((Self) =>
@@ -109,7 +86,6 @@ const ConvergencePredicateSchema = attachStringEnumContractPaths(
       path: ["kind"],
       contract: {
         canonicalValues: CONVERGENCE_KIND_VALUES,
-        aliases: {},
         guidance:
           "Use truth_resolved for fact-based convergence, task_phase for task-state convergence, max_runs for bounded retries, and all_of or any_of to compose multiple predicates.",
       },
@@ -136,11 +112,7 @@ function formatIntentSummary(intent: ScheduleIntentProjectionRecord): string {
 }
 
 function toStatusFilter(value: unknown): ScheduleIntentStatus | undefined {
-  const normalized = normalizeStringEnumAlias(
-    value,
-    SCHEDULE_LIST_STATUSES,
-    SCHEDULE_LIST_STATUS_ALIASES,
-  );
+  const normalized = typeof value === "string" ? value : undefined;
   if (
     normalized === "active" ||
     normalized === "cancelled" ||
@@ -153,11 +125,11 @@ function toStatusFilter(value: unknown): ScheduleIntentStatus | undefined {
 }
 
 function normalizeContinuityMode(value: unknown): ScheduleContinuityMode | undefined {
-  return normalizeStringEnumAlias(value, CONTINUITY_MODE_VALUES);
+  return value === "inherit" || value === "fresh" ? value : undefined;
 }
 
 function normalizeTaskPhase(value: unknown): TaskPhase | undefined {
-  return normalizeStringEnumAlias(value, TASK_PHASE_VALUES);
+  return TASK_PHASE_VALUES.includes(value as never) ? (value as TaskPhase) : undefined;
 }
 
 function normalizeConvergencePredicate(value: unknown): ConvergencePredicate | undefined {
@@ -529,12 +501,7 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
       }
 
       const statusFilter = toStatusFilter(params.status);
-      const statusLabel =
-        normalizeStringEnumAlias(
-          params.status,
-          SCHEDULE_LIST_STATUSES,
-          SCHEDULE_LIST_STATUS_ALIASES,
-        ) ?? "all";
+      const statusLabel = typeof params.status === "string" ? params.status : "all";
       const listQuery = {
         parentSessionId: params.includeAllSessions ? undefined : sessionId,
         status: statusFilter,

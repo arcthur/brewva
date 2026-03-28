@@ -132,4 +132,43 @@ describe("subagent model routing", () => {
       policyId: "frontend-design",
     });
   });
+
+  test("does not treat substring matches as execution keywords", () => {
+    const resolved = resolveDelegationModelRoute({
+      target: makeTarget({
+        resultMode: "exploration",
+      }),
+      packet: {
+        objective: "Inspect the prefix handling in the router before changing anything.",
+      },
+      modelRouting: {
+        availableModels: [...AVAILABLE_MODELS],
+      },
+    });
+
+    expect(resolved.model).toBeUndefined();
+    expect(resolved.modelRoute).toBeUndefined();
+  });
+
+  test("lets explicit execution intent outrank frontend surface keywords", () => {
+    const resolved = resolveDelegationModelRoute({
+      target: makeTarget({
+        resultMode: "patch",
+      }),
+      packet: {
+        objective: "Fix the React component layout without broad refactors.",
+      },
+      modelRouting: {
+        availableModels: [...AVAILABLE_MODELS],
+      },
+    });
+
+    expect(resolved.model).toBe("openai/gpt-5.3-codex-spark:high");
+    expect(resolved.modelRoute).toMatchObject({
+      selectedModel: "openai/gpt-5.3-codex-spark:high",
+      source: "policy",
+      mode: "auto",
+      policyId: "fast-patch-loop",
+    });
+  });
 });

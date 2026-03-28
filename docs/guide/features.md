@@ -12,6 +12,8 @@
 - Event-first runtime persistence and replay
 - Cost observability and threshold-based budget alerts
 - Derived workflow artifacts and explicit advisory inspection surfaces
+- Durable stall adjudication surfaced through workflow inspection rather than a
+  hidden recovery planner
 - Objective iteration fact persistence and lineage-aware query for
   model-native optimization loops
 - Deliberation memory retention, pruning, and explicit inspection surfaces for
@@ -91,11 +93,13 @@ Tool registry source: `packages/brewva-tools/src/index.ts`
 ## Skill Surface
 
 - Core capability skills: `repository-analysis`, `discovery`, `strategy-review`, `design`, `implementation`, `debugging`, `review`, `qa`, `ship`, `retro`
-- Domain capability skills: `agent-browser`, `frontend-design`, `github`, `telegram`, `structured-extraction`, `goal-loop`, `predict-review`
+- Domain capability skills: `agent-browser`, `ci-iteration`, `frontend-design`, `github`, `telegram`, `structured-extraction`, `goal-loop`, `predict-review`
 - Operator skills: `runtime-forensics`, `git-ops`
 - Meta skills: `skill-authoring`, `self-improve`
 - `goal-loop` is the bounded continuity and objective optimization protocol,
   not a generic implementation skill
+- `ci-iteration` is the bounded PR / CI repair-loop skill for explicit retry,
+  verification, and handoff posture
 - `deliberation_memory` is the explicit surface for inspecting retained
   repository, user, agent, and loop memory artifacts
 - built-in read-only agent specs are `explore`, `plan`, `review`, and

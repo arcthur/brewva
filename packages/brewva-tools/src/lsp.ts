@@ -10,7 +10,7 @@ import { walkWorkspaceFiles } from "./shared/workspace-walk.js";
 import { resolveScopedPath, resolveToolTargetScope } from "./target-scope.js";
 import type { BrewvaToolRuntime } from "./types.js";
 import { runCommand } from "./utils/exec.js";
-import { buildStringEnumSchema, normalizeStringEnumAlias } from "./utils/input-alias.js";
+import { buildStringEnumSchema } from "./utils/input-alias.js";
 import {
   type ParallelReadConfig,
   getToolSessionId,
@@ -38,16 +38,7 @@ const CODE_EXTENSIONS = new Set([
 ]);
 
 const LSP_DIAGNOSTIC_SEVERITIES = ["error", "warning", "information", "hint", "all"] as const;
-const LSP_DIAGNOSTIC_SEVERITY_ALIASES = {
-  warn: "warning",
-  info: "information",
-} as const;
 const LSP_SYMBOL_SCOPE_VALUES = ["document", "workspace"] as const;
-const LSP_SYMBOL_SCOPE_ALIASES = {
-  file: "document",
-  repo: "workspace",
-  project: "workspace",
-} as const;
 
 const require = createRequire(import.meta.url);
 const TSC_BIN_PATH = require.resolve("typescript/bin/tsc");
@@ -529,7 +520,7 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
     parameters: Type.Object({
       filePath: Type.String(),
       scope: Type.Optional(
-        buildStringEnumSchema(LSP_SYMBOL_SCOPE_VALUES, LSP_SYMBOL_SCOPE_ALIASES, {
+        buildStringEnumSchema(LSP_SYMBOL_SCOPE_VALUES, {
           recommendedValue: "document",
           guidance:
             "Use document by default. Use workspace only when you need a cross-repo symbol search, and provide query for workspace scope.",
@@ -539,9 +530,9 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
       limit: Type.Optional(Type.Number({ minimum: 1, maximum: 1000 })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      const scope =
-        normalizeStringEnumAlias(params.scope, LSP_SYMBOL_SCOPE_VALUES, LSP_SYMBOL_SCOPE_ALIASES) ??
-        "document";
+      const scope = LSP_SYMBOL_SCOPE_VALUES.includes(params.scope as never)
+        ? params.scope
+        : "document";
       const limit = params.limit ?? 50;
 
       if (scope === "document") {
@@ -597,7 +588,7 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
     parameters: Type.Object({
       filePath: Type.String(),
       severity: Type.Optional(
-        buildStringEnumSchema(LSP_DIAGNOSTIC_SEVERITIES, LSP_DIAGNOSTIC_SEVERITY_ALIASES, {
+        buildStringEnumSchema(LSP_DIAGNOSTIC_SEVERITIES, {
           recommendedValue: "all",
           guidance:
             "Use all by default. Narrow to error, warning, information, or hint only when you need a filtered diagnostic slice.",
@@ -610,11 +601,11 @@ export function createLspTools(options?: { runtime?: BrewvaToolRuntime }): ToolD
         if (!targetFilePath) {
           return failTextResult("Error: file path escapes current task target roots.");
         }
-        const severity = normalizeStringEnumAlias(
-          params.severity,
-          LSP_DIAGNOSTIC_SEVERITIES,
-          LSP_DIAGNOSTIC_SEVERITY_ALIASES,
-        );
+        const severity =
+          typeof params.severity === "string" &&
+          (LSP_DIAGNOSTIC_SEVERITIES as readonly string[]).includes(params.severity)
+            ? params.severity
+            : undefined;
         const run = await diagnostics(resolveLspCwd(ctx), targetFilePath, severity);
         return textResult(
           run.text,

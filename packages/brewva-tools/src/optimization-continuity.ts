@@ -12,8 +12,8 @@ import { defineBrewvaTool } from "./utils/tool.js";
 
 const ACTION_VALUES = ["list", "show", "attention"] as const;
 
-const ActionSchema = buildStringEnumSchema(ACTION_VALUES, {}, {});
-const StatusSchema = buildStringEnumSchema(OPTIMIZATION_LINEAGE_STATUS_VALUES, {}, {});
+const ActionSchema = buildStringEnumSchema(ACTION_VALUES, {});
+const StatusSchema = buildStringEnumSchema(OPTIMIZATION_LINEAGE_STATUS_VALUES, {});
 
 function readStatus(
   value: unknown,

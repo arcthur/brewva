@@ -17,6 +17,7 @@ export function inferEventCategory(type: string): BrewvaEventCategory {
     return "session";
   if (type.startsWith("turn_") || type.startsWith("channel_turn_")) return "turn";
   if (type.startsWith("iteration_")) return "state";
+  if (type.startsWith("task_stall_") || type.startsWith("task_stuck_")) return "state";
   if (type.includes("tool") || type.startsWith("patch_") || type === "rollback") return "tool";
   if (type.startsWith("context_")) return "context";
   if (type.startsWith("cost_") || type.startsWith("budget_")) return "cost";

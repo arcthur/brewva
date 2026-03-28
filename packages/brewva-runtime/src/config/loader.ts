@@ -82,20 +82,8 @@ const REMOVED_PROJECTION_FIELDS = new Set<string>([
   "global",
 ]);
 
-function includesRemovedExecutionFieldError(errors: ReadonlyArray<string>): boolean {
-  return errors.some(
-    (error) =>
-      error.includes('/security/execution: unknown property "commandDenyList"') ||
-      error.includes('/security/execution/sandbox: unknown property "apiKey"'),
-  );
-}
-
 function formatSchemaInvalidMessage(errors: ReadonlyArray<string>): string {
-  const message = `Config does not match schema: ${errors.join("; ")}`;
-  if (!includesRemovedExecutionFieldError(errors)) {
-    return message;
-  }
-  return `${message}. Run 'brewva config migrate --write' to update the file.`;
+  return `Config does not match schema: ${errors.join("; ")}`;
 }
 
 function collectRemovedFieldErrors(parsed: Record<string, unknown>): string[] {

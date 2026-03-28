@@ -21,7 +21,7 @@ semantics are actually allowed.
 sequenceDiagram
   participant U as User
   participant CLI as brewva-cli
-  participant COMP as "Provider Compatibility"
+  participant HOST as "Hosted Session"
   participant RT as BrewvaRuntime
   participant EXT as brewva-gateway/runtime-plugins
   participant TOOLS as brewva-tools
@@ -31,12 +31,8 @@ sequenceDiagram
   CLI->>EXT: before_agent_start
   EXT->>RT: context.observeUsage + context.buildInjection
   RT->>STORE: read/update working projection state (units + working)
-  CLI->>COMP: provider request payload
-  COMP->>COMP: resolve capability profile + patch request
-  COMP-->>CLI: normalized provider request
-  CLI->>COMP: assistant completion
-  COMP->>COMP: normalize structured tool call or fail fast
-  COMP-->>CLI: admitted completion event
+  CLI->>HOST: provider request + assistant completion
+  HOST-->>CLI: hosted completion event
   CLI->>EXT: tool_call
   EXT->>RT: tools.start (policy + budget + compaction gate)
   CLI->>TOOLS: execute
@@ -50,12 +46,11 @@ sequenceDiagram
 ```mermaid
 flowchart TD
   A["create runtime"] --> B["create hosted turn pipeline"]
-  B --> C["install hosted provider compatibility"]
-  C --> D["host provides managed tools directly"]
-  D --> E["before_agent_start: hosted context + tool surface"]
-  E --> F["provider request patch + pre-parse normalization"]
-  F --> G["tool_call: tool gate + invocation spine"]
-  G --> H["tool_result: ledger + event stream + distillation"]
+  B --> C["host provides managed tools directly"]
+  C --> D["before_agent_start: hosted context + tool surface"]
+  D --> E["provider request + assistant completion"]
+  E --> F["tool_call: quality gate + invocation spine"]
+  F --> G["tool_result: ledger + event stream + distillation"]
 ```
 
 ## Persistence Flow
@@ -80,30 +75,25 @@ flowchart LR
   AUDIT["Durable audit tape"] --> A1["message_end summary"]
   AUDIT --> A2["tool_execution_end summary"]
   AUDIT --> A4["approval + delegation lifecycle"]
-
-  OPS["Durable ops tape (level >= ops)"] --> O1["tool_call_normalized / tool_call_normalization_failed"]
 ```
 
 Live activity stays channel-oriented and ephemeral. Durable tape keeps replay,
 evidence, and recovery semantics.
 
-## Hosted Provider Compatibility Flow
+## Hosted Admission Flow
 
 ```mermaid
 flowchart TD
-  A["hosted session bootstrap"] --> B["install provider compatibility layer"]
-  B --> C["register session-scoped runtime + registry"]
-  C --> D["provider request patching"]
-  D --> E["model/provider response"]
-  E --> F{"structured tool call admissible?"}
-  F -->|yes| G["emit normalized completion into hosted session"]
-  F -->|no| H["emit normalization failure error"]
-  G --> I["quality-gate tool_call admission"]
+  A["hosted session bootstrap"] --> B["register hosted pipeline + runtime hooks"]
+  B --> C["provider request / model response"]
+  C --> D{"structured tool call admitted?"}
+  D -->|yes| E["quality-gate tool_call admission"]
+  D -->|no| F["hosted session error to caller"]
 ```
 
-The compatibility seam sits before runtime authority. It can repair structural
-shape, but it cannot grant permission, invent semantic intent, or bypass the
-tool gate.
+The hosted path does not use a separate provider-compatibility seam. Runtime
+authority begins at admitted hosted events such as `tool_call`; permission and
+governance remain kernel-owned.
 
 ## Working Projection Flow
 

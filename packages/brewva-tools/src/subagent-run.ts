@@ -22,54 +22,33 @@ const SUBAGENT_BOUNDARY_VALUES = ["safe", "effectful"] as const;
 const SUBAGENT_RETURN_MODE_VALUES = ["text_only", "supplemental"] as const;
 const SUBAGENT_WAIT_MODE_VALUES = ["completion", "start"] as const;
 
-const ModeSchema = buildStringEnumSchema(
-  SUBAGENT_MODE_VALUES,
-  {},
-  {
-    guidance: "Use single for one delegated run and parallel for fan-out execution.",
-  },
-);
+const ModeSchema = buildStringEnumSchema(SUBAGENT_MODE_VALUES, {
+  guidance: "Use single for one delegated run and parallel for fan-out execution.",
+});
 
-const BoundarySchema = buildStringEnumSchema(
-  SUBAGENT_BOUNDARY_VALUES,
-  {},
-  {
-    guidance: "Safe is the default. Effectful is reserved for isolated write-capable runners.",
-  },
-);
+const BoundarySchema = buildStringEnumSchema(SUBAGENT_BOUNDARY_VALUES, {
+  guidance: "Safe is the default. Effectful is reserved for isolated write-capable runners.",
+});
 
-const ReturnModeSchema = buildStringEnumSchema(
-  SUBAGENT_RETURN_MODE_VALUES,
-  {},
-  {
-    guidance: "Use supplemental for same-turn hidden reinjection only.",
-  },
-);
+const ReturnModeSchema = buildStringEnumSchema(SUBAGENT_RETURN_MODE_VALUES, {
+  guidance: "Use supplemental for same-turn hidden reinjection only.",
+});
 
-const WaitModeSchema = buildStringEnumSchema(
-  SUBAGENT_WAIT_MODE_VALUES,
-  {},
-  {
-    guidance:
-      "Use completion to wait for delegated results in the current turn, or start to launch background delegation and inspect it later with subagent_status/subagent_cancel.",
-  },
-);
+const WaitModeSchema = buildStringEnumSchema(SUBAGENT_WAIT_MODE_VALUES, {
+  guidance:
+    "Use completion to wait for delegated results in the current turn, or start to launch background delegation and inspect it later with subagent_status/subagent_cancel.",
+});
 
 const ResultModeSchema = buildStringEnumSchema(
   ["exploration", "review", "verification", "patch"] as const,
-  {},
   {
     guidance: "Choose the delegated result contract the child must satisfy.",
   },
 );
 
-const ManagedToolModeSchema = buildStringEnumSchema(
-  ["direct", "runtime_plugin"] as const,
-  {},
-  {
-    guidance: "Direct is default. Runtime plugin mode may only narrow within the chosen preset.",
-  },
-);
+const ManagedToolModeSchema = buildStringEnumSchema(["direct", "runtime_plugin"] as const, {
+  guidance: "Direct is default. Runtime plugin mode may only narrow within the chosen preset.",
+});
 
 const ContextRefSchema = Type.Object({
   kind: Type.Union(
@@ -131,11 +110,9 @@ const CompletionPredicateSchema = Type.Union([
     source: Type.Literal("worker_results"),
     workerId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
     status: Type.Optional(
-      buildStringEnumSchema(
-        ["ok", "error", "skipped"] as const,
-        {},
-        { guidance: "Worker result status to match." },
-      ),
+      buildStringEnumSchema(["ok", "error", "skipped"] as const, {
+        guidance: "Worker result status to match.",
+      }),
     ),
     policy: Type.Literal("cancel_when_true"),
   }),

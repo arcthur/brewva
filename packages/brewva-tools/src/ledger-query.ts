@@ -1,23 +1,24 @@
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
-import { buildStringEnumSchema, normalizeStringEnumAlias } from "./utils/input-alias.js";
+import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
 const LEDGER_VERDICT_VALUES = ["pass", "fail", "inconclusive"] as const;
-const LedgerVerdictSchema = buildStringEnumSchema(
-  LEDGER_VERDICT_VALUES,
-  {},
-  {
-    guidance:
-      "Filter by verdict only when narrowing prior evidence. Use inconclusive for partial or non-terminal results.",
-  },
-);
+const LedgerVerdictSchema = buildStringEnumSchema(LEDGER_VERDICT_VALUES, {
+  guidance:
+    "Filter by verdict only when narrowing prior evidence. Use inconclusive for partial or non-terminal results.",
+});
 
 function normalizeLedgerVerdict(value: unknown): "pass" | "fail" | "inconclusive" | undefined {
-  return normalizeStringEnumAlias(value, LEDGER_VERDICT_VALUES);
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  return LEDGER_VERDICT_VALUES.includes(value as (typeof LEDGER_VERDICT_VALUES)[number])
+    ? (value as "pass" | "fail" | "inconclusive")
+    : undefined;
 }
 
 export function createLedgerQueryTool(options: BrewvaToolOptions): ToolDefinition {

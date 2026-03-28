@@ -13,6 +13,7 @@ describe("brewva cli args", () => {
     expect(output).toContain("brewva onboard ...");
     expect(output).toContain("brewva inspect ...");
     expect(output).toContain("--agent <id>");
+    expect(output).not.toContain("brewva config");
     expect(output).not.toContain("same flow as pi");
     expect(output).toContain("Run channel host mode");
     expect(output).not.toContain("channel gateway mode");

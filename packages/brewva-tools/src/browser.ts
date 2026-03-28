@@ -14,29 +14,18 @@ const DEFAULT_BROWSER_COMMAND = "agent-browser";
 const DEFAULT_BROWSER_ARTIFACT_DIR = ".orchestrator/browser-artifacts";
 
 const BROWSER_LOAD_STATE_VALUES = ["domcontentloaded", "load", "networkidle"] as const;
-const BrowserLoadStateSchema = buildStringEnumSchema(
-  BROWSER_LOAD_STATE_VALUES,
-  {
-    dom_content_loaded: "domcontentloaded",
-    network_idle: "networkidle",
-  },
-  {
-    recommendedValue: "networkidle",
-    guidance:
-      "Use networkidle by default. Use load or domcontentloaded only when the page keeps long-lived connections open.",
-  },
-);
+const BrowserLoadStateSchema = buildStringEnumSchema(BROWSER_LOAD_STATE_VALUES, {
+  recommendedValue: "networkidle",
+  guidance:
+    "Use networkidle by default. Use load or domcontentloaded only when the page keeps long-lived connections open.",
+});
 
 const BROWSER_GET_FIELD_VALUES = ["title", "url", "text"] as const;
-const BrowserGetFieldSchema = buildStringEnumSchema(
-  BROWSER_GET_FIELD_VALUES,
-  {},
-  {
-    recommendedValue: "text",
-    guidance:
-      "Use title or url for compact page identity checks. Use text only when you need rendered content from a specific selector.",
-  },
-);
+const BrowserGetFieldSchema = buildStringEnumSchema(BROWSER_GET_FIELD_VALUES, {
+  recommendedValue: "text",
+  guidance:
+    "Use title or url for compact page identity checks. Use text only when you need rendered content from a specific selector.",
+});
 
 type BrowserLoadState = (typeof BROWSER_LOAD_STATE_VALUES)[number];
 type BrowserGetField = (typeof BROWSER_GET_FIELD_VALUES)[number];

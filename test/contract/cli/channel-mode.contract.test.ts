@@ -48,7 +48,7 @@ describe("channel mode prompt output collector", () => {
   test("normalizes supported channels", () => {
     expect(SUPPORTED_CHANNELS).toEqual(["telegram"]);
     expect(resolveSupportedChannel("telegram")).toBe("telegram");
-    expect(resolveSupportedChannel("TG")).toBe("telegram");
+    expect(resolveSupportedChannel("TG")).toBeNull();
     expect(resolveSupportedChannel("discord")).toBeNull();
   });
 

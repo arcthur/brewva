@@ -1,5 +1,8 @@
 import {
+  TASK_STALL_ADJUDICATED_EVENT_TYPE,
+  coerceTaskStallAdjudicatedPayload,
   deriveWorkflowStatus,
+  type BrewvaEventRecord,
   type WorkflowArtifact,
   type WorkflowLaneStatus,
 } from "@brewva/brewva-runtime";
@@ -90,6 +93,20 @@ function selectArtifactsForDisplay(
   );
 }
 
+function readLatestStallAdjudication(events: BrewvaEventRecord[]) {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (!event || event.type !== TASK_STALL_ADJUDICATED_EVENT_TYPE) {
+      continue;
+    }
+    const payload = coerceTaskStallAdjudicatedPayload(event.payload);
+    if (payload) {
+      return payload;
+    }
+  }
+  return null;
+}
+
 export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefinition {
   return defineBrewvaTool({
     name: "workflow_status",
@@ -112,6 +129,7 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
       const taskState = options.runtime.task.getState(sessionId);
       const pendingWorkerResults = options.runtime.session.listWorkerResults(sessionId);
       const pendingDelegationOutcomes = await listPendingDelegationOutcomes(options, sessionId);
+      const stallAdjudication = readLatestStallAdjudication(events);
       const snapshot = deriveWorkflowStatus({
         sessionId,
         events,
@@ -156,6 +174,16 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         `pending_worker_results: ${snapshot.pendingWorkerResults}`,
         `pending_delegation_outcomes: ${pendingDelegationOutcomes.length}`,
       ];
+
+      if (stallAdjudication) {
+        lines.push(
+          `stall_adjudication: ${stallAdjudication.decision} source=${stallAdjudication.source} detected_at=${formatTimestamp(
+            stallAdjudication.detectedAt,
+          )} :: ${stallAdjudication.rationale}`,
+        );
+      } else {
+        lines.push("stall_adjudication: none");
+      }
 
       if (posture.blockers.length > 0) {
         lines.push("blockers:");
@@ -208,6 +236,7 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
               summary: run.summary,
               handoffState: run.delivery?.handoffState ?? null,
             })),
+            stallAdjudication,
             updatedAt: snapshot.updatedAt,
           },
           verdict,

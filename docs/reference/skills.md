@@ -235,6 +235,7 @@ prompt-only behavior:
 ### Domain
 
 - `agent-browser`
+- `ci-iteration`
 - `frontend-design`
 - `github`
 - `predict-review`
@@ -254,6 +255,10 @@ runtime still does not own loop strategy or choose the next experiment.
 Deliberation-owned memory artifacts are likewise explicit. Hosted sessions may
 inject them when relevant, but `deliberation_memory` remains the inspection
 surface for reviewing retained artifacts, scores, and evidence.
+
+`ci-iteration` is the bounded repair-loop skill for PR and CI closure work. It
+keeps retry posture explicit through baseline snapshots, bounded iteration
+plans, verification evidence, and concrete stop or handoff conditions.
 
 `predict-review` is an advisory multi-perspective skill. It uses public
 delegation tools and existing built-in agent specs / envelopes to generate

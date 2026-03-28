@@ -8,14 +8,10 @@ import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
 const RESOURCE_LEASE_ACTION_VALUES = ["request", "list", "cancel"] as const;
-const LeaseActionSchema = buildStringEnumSchema(
-  RESOURCE_LEASE_ACTION_VALUES,
-  {},
-  {
-    guidance:
-      "Use request to ask for a temporary budget increase, list to inspect active leases, and cancel to release an existing lease.",
-  },
-);
+const LeaseActionSchema = buildStringEnumSchema(RESOURCE_LEASE_ACTION_VALUES, {
+  guidance:
+    "Use request to ask for a temporary budget increase, list to inspect active leases, and cancel to release an existing lease.",
+});
 
 function formatLease(lease: ResourceLeaseRecord): string {
   const budget = [

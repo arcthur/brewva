@@ -14,10 +14,10 @@ import { defineBrewvaTool } from "./utils/tool.js";
 const ACTION_VALUES = ["list", "show", "review", "promote"] as const;
 const REVIEW_DECISION_VALUES = ["approve", "reject", "reopen"] as const;
 
-const ActionSchema = buildStringEnumSchema(ACTION_VALUES, {}, {});
-const StatusSchema = buildStringEnumSchema(SKILL_PROMOTION_STATUSES, {}, {});
-const ReviewDecisionSchema = buildStringEnumSchema(REVIEW_DECISION_VALUES, {}, {});
-const TargetKindSchema = buildStringEnumSchema(SKILL_PROMOTION_TARGET_KINDS, {}, {});
+const ActionSchema = buildStringEnumSchema(ACTION_VALUES, {});
+const StatusSchema = buildStringEnumSchema(SKILL_PROMOTION_STATUSES, {});
+const ReviewDecisionSchema = buildStringEnumSchema(REVIEW_DECISION_VALUES, {});
+const TargetKindSchema = buildStringEnumSchema(SKILL_PROMOTION_TARGET_KINDS, {});
 
 function readStatus(value: unknown): (typeof SKILL_PROMOTION_STATUSES)[number] | undefined {
   return typeof value === "string" &&

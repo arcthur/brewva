@@ -243,8 +243,7 @@ Telegram channel skill policy is now built-in and no longer configurable via
 - `infrastructure.costTracking.maxCostUsdPerSession`: `0`
 - `infrastructure.costTracking.alertThresholdRatio`: `0.8`
 - `infrastructure.costTracking.actionOnExceed`: `warn`
-  `0` is the legacy unlimited sentinel. Config files may also use `null` to
-  express the same no-cap behavior more explicitly.
+  `0` disables the session cost cap.
 - `infrastructure.turnWal.enabled`: `true`
 - `infrastructure.turnWal.dir`: `.orchestrator/turn-wal`
 - `infrastructure.turnWal.defaultTtlMs`: `300000`
@@ -418,7 +417,7 @@ Notes:
   task target roots.
 - `security.boundaryPolicy.commandDenyList` is the active best-effort command deny list.
 - sandbox API key resolution uses the vault ref from `security.credentials.sandboxApiKeyRef`.
-- `security.execution.commandDenyList` and `security.execution.sandbox.apiKey` are invalid in active config. Rewrite or delete them with `brewva config migrate` before normal runtime use.
+- `security.execution.commandDenyList` and `security.execution.sandbox.apiKey` are invalid in active config. Rewrite or delete them in the config file before normal runtime use.
 
 ## Event Level Model
 
@@ -467,10 +466,8 @@ With `infrastructure.costTracking.enabled=false`:
 - session budget blocking is disabled (`budget.blocked=false`, `budget.sessionExceeded=false`)
 - budget alerts are suppressed (`alerts=[]`)
 
-For config files, `maxCostUsdPerSession=null` is the explicit unlimited
-sentinel. `maxCostUsdPerSession=0` remains a backward-compatible alias and
-normalizes to the same no-cap behavior. `enabled` is still the explicit policy
-switch for whether budget enforcement/alerts run.
+`maxCostUsdPerSession=0` disables the session budget cap. `enabled` is still
+the explicit policy switch for whether budget enforcement/alerts run.
 
 ## Turn WAL Model
 

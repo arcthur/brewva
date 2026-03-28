@@ -65,6 +65,7 @@ maintenance. They do not promote projection files into source-of-truth inputs.
 ### Session, Turn, And Hosted Lifecycle
 
 - `channel_command_received`
+- `operator_question_answered`
 - `channel_session_bound`
 - `channel_update_requested`
 - `channel_update_lock_blocked`
@@ -98,8 +99,6 @@ maintenance. They do not promote projection files into source-of-truth inputs.
 - `tool_output_distilled`
 - `tool_output_artifact_persisted`
 - `tool_output_search`
-- `tool_call_normalized`
-- `tool_call_normalization_failed`
 - `observability_query_executed`
 - `observability_assertion_recorded`
 - `resource_lease_granted`
@@ -170,10 +169,10 @@ Current guard notes:
 - `context_composed`
 - `tool_surface_resolved`
 - `identity_parse_warning`
-- `model_capability_profile_selected`
-- `model_request_patched`
 - `task_stuck_detected`
 - `task_stuck_cleared`
+- `task_stall_adjudicated`
+- `task_stall_adjudication_error`
 
 ### Schedule, Subagent, And Worker
 
@@ -208,6 +207,9 @@ events and session state:
 - `verification_write_marked`
   - implementation-side write signal that can stale downstream review, QA, and
     verification artifacts
+- `task_stall_adjudicated`
+  - durable advisory stall classification used by inspection surfaces such as
+    `workflow_status`
 - `iteration_metric_observed`
   - `workflow.iteration_metric`
 - `iteration_guard_recorded`
@@ -227,6 +229,11 @@ authority events.
 
 Those surfaces are explicit inspection views. They do not become a default
 turn-time workflow brief or a hidden next-step controller.
+
+`operator_question_answered` is not a derived workflow artifact. It is the
+durable operator-input receipt for the questionnaire surface exposed through
+`/questions` and `/answer`. The answer itself remains explicit, replay-visible
+session input rather than hidden channel-local state.
 
 ## Audit-Critical Families
 
@@ -250,6 +257,7 @@ The audit-retained core includes:
 - `proposal_received`
 - `proposal_decided`
 - `decision_receipt_recorded`
+- `operator_question_answered`
 - `effect_commitment_approval_requested`
 - `effect_commitment_approval_decided`
 - `effect_commitment_approval_consumed`
@@ -336,10 +344,3 @@ Iteration fact events record objective optimization evidence only:
 Workflow posture is computed from those durable families plus current task
 blockers and pending worker-result state. The resulting advisory surfaces remain
 inspection-only and may not prescribe a single legal workflow path.
-
-`tool_call_normalized` and `tool_call_normalization_failed` record whether the
-pre-parse compatibility layer repaired or rejected a tool call. They are ops
-telemetry rather than audit-default commitment memory.
-`model_capability_profile_selected` and `model_request_patched` record which
-capability profile the provider/model adapter selected and which request
-patches it applied.

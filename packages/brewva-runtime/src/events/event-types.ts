@@ -21,6 +21,7 @@ export const RESOURCE_LEASE_EXPIRED_EVENT_TYPE = "resource_lease_expired" as con
 export const AGENT_END_EVENT_TYPE = "agent_end" as const;
 export const BUDGET_ALERT_EVENT_TYPE = "budget_alert" as const;
 export const CHANNEL_COMMAND_RECEIVED_EVENT_TYPE = "channel_command_received" as const;
+export const OPERATOR_QUESTION_ANSWERED_EVENT_TYPE = "operator_question_answered" as const;
 export const CHANNEL_SESSION_BOUND_EVENT_TYPE = "channel_session_bound" as const;
 export const CHANNEL_UPDATE_LOCK_BLOCKED_EVENT_TYPE = "channel_update_lock_blocked" as const;
 export const CHANNEL_UPDATE_REQUESTED_EVENT_TYPE = "channel_update_requested" as const;
@@ -74,6 +75,8 @@ export const VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE = "verification_outcome_re
 export const VERIFICATION_STATE_RESET_EVENT_TYPE = "verification_state_reset" as const;
 export const TASK_STUCK_DETECTED_EVENT_TYPE = "task_stuck_detected" as const;
 export const TASK_STUCK_CLEARED_EVENT_TYPE = "task_stuck_cleared" as const;
+export const TASK_STALL_ADJUDICATED_EVENT_TYPE = "task_stall_adjudicated" as const;
+export const TASK_STALL_ADJUDICATION_ERROR_EVENT_TYPE = "task_stall_adjudication_error" as const;
 export const TOOL_EFFECT_GATE_SELECTED_EVENT_TYPE = "tool_effect_gate_selected" as const;
 export const REVERSIBLE_MUTATION_PREPARED_EVENT_TYPE = "reversible_mutation_prepared" as const;
 export const REVERSIBLE_MUTATION_RECORDED_EVENT_TYPE = "reversible_mutation_recorded" as const;
@@ -90,11 +93,6 @@ export const PROJECTION_INGESTED_EVENT_TYPE = "projection_ingested" as const;
 export const PROJECTION_REFRESHED_EVENT_TYPE = "projection_refreshed" as const;
 export const CONTEXT_COMPOSED_EVENT_TYPE = "context_composed" as const;
 export const TOOL_SURFACE_RESOLVED_EVENT_TYPE = "tool_surface_resolved" as const;
-export const TOOL_CALL_NORMALIZED_EVENT_TYPE = "tool_call_normalized" as const;
-export const TOOL_CALL_NORMALIZATION_FAILED_EVENT_TYPE = "tool_call_normalization_failed" as const;
-export const MODEL_CAPABILITY_PROFILE_SELECTED_EVENT_TYPE =
-  "model_capability_profile_selected" as const;
-export const MODEL_REQUEST_PATCHED_EVENT_TYPE = "model_request_patched" as const;
 export const IDENTITY_PARSE_WARNING_EVENT_TYPE = "identity_parse_warning" as const;
 
 export const SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE = "schedule_recovery_deferred" as const;
@@ -150,6 +148,7 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   AGENT_END_EVENT_TYPE,
   BUDGET_ALERT_EVENT_TYPE,
   CHANNEL_COMMAND_RECEIVED_EVENT_TYPE,
+  OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
   CHANNEL_SESSION_BOUND_EVENT_TYPE,
   CHANNEL_UPDATE_LOCK_BLOCKED_EVENT_TYPE,
   CHANNEL_UPDATE_REQUESTED_EVENT_TYPE,
@@ -197,6 +196,8 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   VERIFICATION_STATE_RESET_EVENT_TYPE,
   TASK_STUCK_DETECTED_EVENT_TYPE,
   TASK_STUCK_CLEARED_EVENT_TYPE,
+  TASK_STALL_ADJUDICATED_EVENT_TYPE,
+  TASK_STALL_ADJUDICATION_ERROR_EVENT_TYPE,
   TOOL_EFFECT_GATE_SELECTED_EVENT_TYPE,
   REVERSIBLE_MUTATION_PREPARED_EVENT_TYPE,
   REVERSIBLE_MUTATION_RECORDED_EVENT_TYPE,
@@ -208,10 +209,6 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   PROJECTION_REFRESHED_EVENT_TYPE,
   CONTEXT_COMPOSED_EVENT_TYPE,
   TOOL_SURFACE_RESOLVED_EVENT_TYPE,
-  TOOL_CALL_NORMALIZED_EVENT_TYPE,
-  TOOL_CALL_NORMALIZATION_FAILED_EVENT_TYPE,
-  MODEL_CAPABILITY_PROFILE_SELECTED_EVENT_TYPE,
-  MODEL_REQUEST_PATCHED_EVENT_TYPE,
   IDENTITY_PARSE_WARNING_EVENT_TYPE,
   SCHEDULE_EVENT_TYPE,
   SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE,

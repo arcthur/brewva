@@ -1,6 +1,5 @@
 import { recordAssistantUsageFromMessage, type BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { releaseHostedSessionProviderCompatibility } from "./provider-compatibility.js";
 import {
   clearRuntimeTurnClock,
   getCurrentRuntimeTurn,
@@ -299,7 +298,6 @@ export function registerEventStream(extensionApi: ExtensionAPI, runtime: BrewvaR
     observedToolCallsBySession.delete(sessionId);
     pendingToolResultsBySession.delete(sessionId);
     clearRuntimeTurnClock(sessionId);
-    releaseHostedSessionProviderCompatibility(sessionId);
     runtime.session.clearState(sessionId);
     return undefined;
   });

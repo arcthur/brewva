@@ -3,13 +3,11 @@ import { normalizeChannelId } from "./channel-id.js";
 
 export interface AdapterRegistration {
   id: string;
-  aliases?: string[];
   create: () => ChannelAdapter;
 }
 
 interface RegistryEntry {
   id: string;
-  aliases: string[];
   create: () => ChannelAdapter;
 }
 
@@ -17,24 +15,8 @@ function normalizeToken(value: string): string {
   return normalizeChannelId(value);
 }
 
-function normalizeAliases(aliases: string[] | undefined, id: string): string[] {
-  if (!aliases || aliases.length === 0) {
-    return [];
-  }
-  const seen = new Set<string>();
-  for (const alias of aliases) {
-    const normalized = normalizeToken(alias);
-    if (!normalized || normalized === id) {
-      continue;
-    }
-    seen.add(normalized);
-  }
-  return Array.from(seen);
-}
-
 export class ChannelAdapterRegistry {
   private readonly entries = new Map<string, RegistryEntry>();
-  private readonly aliasToId = new Map<string, string>();
 
   register(input: AdapterRegistration): string {
     const id = normalizeToken(input.id);
@@ -45,37 +27,16 @@ export class ChannelAdapterRegistry {
       throw new Error(`adapter already registered: ${id}`);
     }
 
-    const aliases = normalizeAliases(input.aliases, id);
-    for (const alias of [id, ...aliases]) {
-      const owner = this.aliasToId.get(alias);
-      if (owner && owner !== id) {
-        throw new Error(`adapter alias already registered: ${alias} -> ${owner}`);
-      }
-    }
-
-    this.entries.set(id, { id, aliases, create: input.create });
-    this.aliasToId.set(id, id);
-    for (const alias of aliases) {
-      this.aliasToId.set(alias, id);
-    }
+    this.entries.set(id, { id, create: input.create });
     return id;
   }
 
   unregister(idOrAlias: string): boolean {
-    const id = this.resolveId(idOrAlias);
+    const id = normalizeToken(idOrAlias);
     if (!id) {
       return false;
     }
-    const entry = this.entries.get(id);
-    if (!entry) {
-      return false;
-    }
-    this.entries.delete(id);
-    this.aliasToId.delete(id);
-    for (const alias of entry.aliases) {
-      this.aliasToId.delete(alias);
-    }
-    return true;
+    return this.entries.delete(id);
   }
 
   resolveId(idOrAlias: string): string | undefined {
@@ -83,7 +44,7 @@ export class ChannelAdapterRegistry {
     if (!normalized) {
       return undefined;
     }
-    return this.aliasToId.get(normalized);
+    return this.entries.has(normalized) ? normalized : undefined;
   }
 
   createAdapter(idOrAlias: string): ChannelAdapter | undefined {
@@ -103,9 +64,9 @@ export class ChannelAdapterRegistry {
     return adapter;
   }
 
-  list(): Array<{ id: string; aliases: string[] }> {
+  list(): Array<{ id: string }> {
     return Array.from(this.entries.values())
-      .map((entry) => ({ id: entry.id, aliases: [...entry.aliases] }))
+      .map((entry) => ({ id: entry.id }))
       .toSorted((a, b) => a.id.localeCompare(b.id));
   }
 }

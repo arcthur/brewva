@@ -51,7 +51,7 @@ brewva gateway rotate-token --json
 
 ## Lifecycle and Operational Commands
 
-- `start` (`run` alias): start daemon (foreground by default, use `--detach` for background).
+- `start`: start daemon (foreground by default, use `--detach` for background).
 - `status`: health probe and deep status (`--deep`, `--json` supported).
 - `stop`: graceful stop; use `--force` as fallback.
 - `install`: install OS supervisor service (macOS `launchd`, Linux `systemd --user`).

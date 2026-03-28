@@ -5,7 +5,7 @@ import {
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../types.js";
-import { buildStringEnumSchema, normalizeStringEnumAlias } from "../utils/input-alias.js";
+import { buildStringEnumSchema } from "../utils/input-alias.js";
 import { inconclusiveTextResult, textResult } from "../utils/result.js";
 import { getSessionId } from "../utils/session.js";
 import { defineBrewvaTool } from "../utils/tool.js";
@@ -33,10 +33,6 @@ import {
 const DEFAULT_MIN_SAMPLES = 1;
 const MAX_MIN_SAMPLES = 10_000;
 const OBS_ASSERT_SEVERITIES = ["info", "warn", "error"] as const;
-const OBS_ASSERT_SEVERITY_ALIASES = {
-  information: "info",
-  warning: "warn",
-} as const;
 
 function resolveNextStep(verdict: "pass" | "fail" | "inconclusive"): string {
   if (verdict === "pass") {
@@ -74,7 +70,7 @@ export function createObsSloAssertTool(options: BrewvaToolOptions): ToolDefiniti
       windowMinutes: Type.Optional(Type.Integer({ minimum: 1, maximum: 10_080 })),
       minSamples: Type.Optional(Type.Integer({ minimum: 1, maximum: MAX_MIN_SAMPLES })),
       severity: Type.Optional(
-        buildStringEnumSchema(OBS_ASSERT_SEVERITIES, OBS_ASSERT_SEVERITY_ALIASES, {
+        buildStringEnumSchema(OBS_ASSERT_SEVERITIES, {
           recommendedValue: "warn",
           guidance:
             "Use warn for notable degradation, error for hard failure, and info for lightweight supporting evidence.",
@@ -83,12 +79,11 @@ export function createObsSloAssertTool(options: BrewvaToolOptions): ToolDefiniti
     }),
     async execute(toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const severity =
-        normalizeStringEnumAlias(
-          params.severity,
-          OBS_ASSERT_SEVERITIES,
-          OBS_ASSERT_SEVERITY_ALIASES,
-        ) ?? "warn";
+      const severity = (OBS_ASSERT_SEVERITIES as readonly string[]).includes(
+        params.severity as string,
+      )
+        ? params.severity
+        : "warn";
       const throttleState = computeObservabilityThrottle({
         events: getObservabilityThrottleEvents(
           options.runtime,

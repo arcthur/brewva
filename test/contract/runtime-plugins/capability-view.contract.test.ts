@@ -205,7 +205,7 @@ describe("capability view", () => {
     });
     expect(rendered[2]?.content).toContain("param.case:");
     expect(rendered[2]?.content).toContain("values=smart|insensitive|sensitive");
-    expect(rendered[2]?.content).toContain("aliases=case-insensitive->insensitive");
+    expect(rendered[2]?.content).not.toContain("aliases=");
   });
 
   test("renders nested enum contract details for schedule intent predicates", () => {
@@ -385,7 +385,7 @@ describe("capability view", () => {
     expect(rendered[2]?.content).not.toContain("description:");
   });
 
-  test("uses canonical parameter keys for managed tools that keep explicit alias fields", () => {
+  test("uses canonical parameter keys for managed tools without legacy execution aliases", () => {
     const result = buildCapabilityView({
       prompt: "inspect $exec and $process",
       allTools: [createExecTool(), createProcessTool()],

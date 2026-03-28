@@ -292,11 +292,9 @@ Hosted-session event boundary notes:
   `sessionScope=current_session`
 - live-only hosted events such as `message_update` and `tool_execution_update`
   are intentionally not replay-visible through the runtime event API
-- pre-parse compatibility evidence surfaces through durable ops telemetry such
-  as `tool_call_normalized` and `tool_call_normalization_failed` when
-  `infrastructure.events.level >= ops`
-- model capability selection and request patch telemetry are emitted by the
-  hosted gateway adapter, not by the runtime kernel itself
+- hosted sessions do not expose a separate provider-normalization event family;
+  durable replay surfaces start at admitted runtime events such as `tool_call`,
+  `tool_result_recorded`, and related governance receipts
 
 ### `runtime.verification.*`
 

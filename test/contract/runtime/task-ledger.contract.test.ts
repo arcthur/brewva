@@ -44,29 +44,11 @@ describe("Task ledger", () => {
     expect(state.spec?.goal).toBe("Refactor context injection");
   });
 
-  test("parseTaskSpec normalizes common verification aliases to canonical task values", () => {
-    const inspectionSpec = parseTaskSpec({
-      goal: "Review architecture",
-      verification: {
-        level: "inspection",
-        commands: ["review docs only"],
-      },
-    });
-    expect(inspectionSpec).toEqual({
-      ok: true,
-      spec: {
-        schema: "brewva.task.v1",
-        goal: "Review architecture",
-        verification: {
-          commands: ["review docs only"],
-        },
-      },
-    });
-
+  test("parseTaskSpec rejects removed or invalid enum values", () => {
     const fullSpec = parseTaskSpec({
       goal: "Validate implementation",
       verification: {
-        level: "full",
+        level: "strict",
         commands: ["bun test"],
       },
     });
@@ -80,6 +62,46 @@ describe("Task ledger", () => {
           commands: ["bun test"],
         },
       },
+    });
+
+    expect(
+      parseTaskSpec({
+        goal: "Review architecture",
+        verification: {
+          level: "none",
+        },
+      }),
+    ).toEqual({
+      ok: true,
+      spec: {
+        schema: "brewva.task.v1",
+        goal: "Review architecture",
+      },
+    });
+
+    expect(
+      parseTaskSpec({
+        goal: "Review architecture",
+        verification: {
+          level: "inspection",
+          commands: ["review docs only"],
+        },
+      }),
+    ).toEqual({
+      ok: false,
+      error: "TaskSpec verification.level must be one of: quick, standard, strict, none.",
+    });
+
+    expect(
+      parseTaskSpec({
+        goal: "Close with unsupported owner",
+        acceptance: {
+          owner: "model",
+        },
+      }),
+    ).toEqual({
+      ok: false,
+      error: "TaskSpec acceptance.owner must be one of: operator.",
     });
   });
 

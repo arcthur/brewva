@@ -44,21 +44,14 @@ function readLiteralUnionValues(schema: unknown): string[] {
     .filter((value): value is string => value !== null);
 }
 
-describe("task ledger tool aliases", () => {
-  test("task_set_spec exposes agent-facing verification levels and lowers them to runtime values", async () => {
+describe("task ledger tool contracts", () => {
+  test("task_set_spec exposes canonical agent-facing verification levels and lowers them to runtime values", async () => {
     const { workspace, runtime, taskSetSpec } = createTaskLedgerToolHarness(
       "task-ledger-tool-set-spec",
     );
 
     try {
       const sessionId = "task-ledger-tool-set-spec";
-      const inspectionInput = {
-        goal: "Review docs",
-        verification: {
-          level: "inspection",
-          commands: ["bun test test/quality/docs"],
-        },
-      };
       const smokeInput = {
         goal: "Review docs",
         verification: {
@@ -93,24 +86,10 @@ describe("task ledger tool aliases", () => {
         }
       ).properties?.verification?.properties?.level;
       expect(readLiteralUnionValues(verificationLevelSchema)).toContain("none");
-      expect(readLiteralUnionValues(verificationLevelSchema)).toContain("inspection");
       expect(readLiteralUnionValues(verificationLevelSchema)).toContain("smoke");
       expect(readLiteralUnionValues(verificationLevelSchema)).toContain("targeted");
       expect(readLiteralUnionValues(verificationLevelSchema)).toContain("full");
       expect(readLiteralUnionValues(verificationLevelSchema)).not.toContain("standard");
-
-      const inspectionResult = await taskSetSpec.execute(
-        "tc-task-set-spec-inspection-alias",
-        inspectionInput,
-        undefined,
-        undefined,
-        fakeContext(sessionId),
-      );
-
-      expect(extractTextContent(inspectionResult)).toBe("TaskSpec recorded.");
-      expect(runtime.task.getState(sessionId).spec?.verification).toEqual({
-        commands: ["bun test test/quality/docs"],
-      });
 
       await taskSetSpec.execute(
         "tc-task-set-spec-smoke-alias",
@@ -173,7 +152,6 @@ describe("task ledger tool aliases", () => {
       ).properties?.status;
       expect(readLiteralUnionValues(statusSchema)).toContain("pending");
       expect(readLiteralUnionValues(statusSchema)).toContain("in_progress");
-      expect(readLiteralUnionValues(statusSchema)).toContain("in-progress");
       expect(readLiteralUnionValues(statusSchema)).not.toContain("doing");
 
       const result = await taskAddItem.execute(
@@ -206,7 +184,7 @@ describe("task ledger tool aliases", () => {
 
       const input = {
         id: "item-1",
-        status: "in-progress",
+        status: "in_progress",
       };
 
       const statusSchema = (
@@ -216,7 +194,7 @@ describe("task ledger tool aliases", () => {
           };
         }
       ).properties?.status;
-      expect(readLiteralUnionValues(statusSchema)).toContain("in-progress");
+      expect(readLiteralUnionValues(statusSchema)).toContain("in_progress");
 
       const result = await taskUpdateItem.execute(
         "tc-task-update-item-alias",
@@ -311,6 +289,38 @@ describe("task ledger tool aliases", () => {
         "Acceptance update rejected (acceptance_not_enabled).",
       );
       expect(runtime.task.getState(sessionId).acceptance).toBeUndefined();
+    } finally {
+      cleanupTestWorkspace(workspace);
+    }
+  });
+
+  test("removed verification and status aliases are no longer exposed", () => {
+    const { workspace, taskSetSpec, taskAddItem } = createTaskLedgerToolHarness(
+      "task-ledger-tool-canonical-only",
+    );
+
+    try {
+      const verificationLevelSchema = (
+        taskSetSpec.parameters as {
+          properties?: {
+            verification?: {
+              properties?: {
+                level?: unknown;
+              };
+            };
+          };
+        }
+      ).properties?.verification?.properties?.level;
+      const statusSchema = (
+        taskAddItem.parameters as {
+          properties?: {
+            status?: unknown;
+          };
+        }
+      ).properties?.status;
+      expect(readLiteralUnionValues(verificationLevelSchema)).not.toContain("inspection");
+      expect(readLiteralUnionValues(verificationLevelSchema)).not.toContain("investigate");
+      expect(readLiteralUnionValues(statusSchema)).not.toContain("in-progress");
     } finally {
       cleanupTestWorkspace(workspace);
     }

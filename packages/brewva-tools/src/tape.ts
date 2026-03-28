@@ -13,15 +13,11 @@ import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
 const TAPE_SEARCH_SCOPE_VALUES = ["current_phase", "all_phases", "anchors_only"] as const;
-const TapeSearchScopeSchema = buildStringEnumSchema(
-  TAPE_SEARCH_SCOPE_VALUES,
-  {},
-  {
-    recommendedValue: "current_phase",
-    guidance:
-      "Use current_phase by default. Use all_phases for a full-history scan and anchors_only when you only need phase handoff or checkpoint anchors.",
-  },
-);
+const TapeSearchScopeSchema = buildStringEnumSchema(TAPE_SEARCH_SCOPE_VALUES, {
+  recommendedValue: "current_phase",
+  guidance:
+    "Use current_phase by default. Use all_phases for a full-history scan and anchors_only when you only need phase handoff or checkpoint anchors.",
+});
 
 function normalizeQuery(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;

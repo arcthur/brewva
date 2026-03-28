@@ -94,8 +94,8 @@ describe("resolveBrewvaModelSelection", () => {
     expect(resolved.thinkingLevel).toBe("high");
   });
 
-  test("supports fuzzy matching and prefers alias models over dated variants", () => {
-    const resolved = resolveBrewvaModelSelection("Alpha", createRegistry());
+  test("supports exact unique model ids without a provider prefix", () => {
+    const resolved = resolveBrewvaModelSelection("alpha", createRegistry());
 
     expect(resolved.model?.provider).toBe("demo");
     expect(resolved.model?.id).toBe("alpha");
@@ -119,9 +119,12 @@ describe("resolveBrewvaModelSelection", () => {
     );
   });
 
-  test("throws for ambiguous fuzzy matches instead of silently picking one", () => {
+  test("rejects display-name and fuzzy model lookups now that exact ids are canonical", () => {
+    expect(() => resolveBrewvaModelSelection("Alpha", createRegistry())).toThrow(
+      'Model "Alpha" was not found in the configured Brewva model registry.',
+    );
     expect(() => resolveBrewvaModelSelection("mini", createRegistry())).toThrow(
-      'Model "mini" is ambiguous.',
+      'Model "mini" was not found in the configured Brewva model registry.',
     );
   });
 });

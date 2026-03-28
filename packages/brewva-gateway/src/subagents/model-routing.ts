@@ -16,12 +16,12 @@ interface DelegationRoutingPolicy {
   id: string;
   reason: string;
   candidateModels: readonly string[];
-  matches(input: {
+  score(input: {
     target: HostedDelegationTarget;
     packet: DelegationPacket;
-    objectiveText: string;
+    keywordText: string;
     effectiveSkillName?: string;
-  }): boolean;
+  }): number;
 }
 
 export interface DelegationModelRoutingContext {
@@ -71,8 +71,22 @@ const EXECUTION_KEYWORDS = [
   "ship",
 ] as const;
 
-function hasAnyKeyword(haystack: string, keywords: readonly string[]): boolean {
-  return keywords.some((keyword) => haystack.includes(keyword));
+function normalizeKeywordText(value: string): string {
+  const normalized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return normalized.length > 0 ? ` ${normalized} ` : " ";
+}
+
+function countKeywordMatches(haystack: string, keywords: readonly string[]): number {
+  let matches = 0;
+  for (const keyword of keywords) {
+    if (haystack.includes(normalizeKeywordText(keyword))) {
+      matches += 1;
+    }
+  }
+  return matches;
 }
 
 function normalizeObjectiveText(packet: DelegationPacket): string {
@@ -98,12 +112,12 @@ function formatSelectedModel(input: {
 
 function createRegistryAdapter(
   availableModels: RegisteredModel[],
-): Pick<PiModelRegistry, "getAll"> & PiModelRegistry {
+): Pick<PiModelRegistry, "getAll"> {
   return {
     getAll() {
       return availableModels;
     },
-  } as Pick<PiModelRegistry, "getAll"> & PiModelRegistry;
+  };
 }
 
 function resolveModelTextAgainstInventory(
@@ -131,50 +145,44 @@ const ROUTING_POLICIES: readonly DelegationRoutingPolicy[] = [
   {
     id: "frontend-design",
     reason: "Frontend-heavy delegation benefits from a design-strong route when available.",
-    candidateModels: [
-      "anthropic/claude-opus-4.1",
-      "claude-opus-4.1",
-      "opus",
-      "openai/gpt-5.4:high",
-      "gpt-5.4:high",
-    ],
-    matches({ objectiveText }) {
-      return hasAnyKeyword(objectiveText, FRONTEND_KEYWORDS);
+    candidateModels: ["anthropic/claude-opus-4.1", "openai/gpt-5.4:high"],
+    score({ keywordText, effectiveSkillName }) {
+      const keywordMatches = countKeywordMatches(keywordText, FRONTEND_KEYWORDS);
+      if (keywordMatches === 0) {
+        return 0;
+      }
+      return (
+        keywordMatches +
+        (effectiveSkillName === "design" || effectiveSkillName === "frontend" ? 2 : 0)
+      );
     },
   },
   {
     id: "deep-reasoning",
     reason: "Reasoning-heavy delegation should prefer a frontier reasoning model.",
-    candidateModels: [
-      "openai/gpt-5.4:high",
-      "gpt-5.4:high",
-      "openai/gpt-5.4-mini:high",
-      "gpt-5.4-mini:high",
-    ],
-    matches({ target, objectiveText, effectiveSkillName }) {
-      return (
-        effectiveSkillName === "design" ||
-        (target.resultMode === "exploration" &&
-          hasAnyKeyword(objectiveText, DEEP_REASONING_KEYWORDS))
-      );
+    candidateModels: ["openai/gpt-5.4:high", "openai/gpt-5.4-mini:high"],
+    score({ target, keywordText, effectiveSkillName }) {
+      if (effectiveSkillName === "design") {
+        return 8;
+      }
+      if (target.resultMode !== "exploration") {
+        return 0;
+      }
+      const keywordMatches = countKeywordMatches(keywordText, DEEP_REASONING_KEYWORDS);
+      return keywordMatches > 0 ? 4 + keywordMatches : 0;
     },
   },
   {
     id: "review-and-verification",
     reason: "Review and verification work should bias toward higher-fidelity reasoning.",
-    candidateModels: [
-      "openai/gpt-5.4:medium",
-      "gpt-5.4:medium",
-      "openai/gpt-5.4-mini:medium",
-      "gpt-5.4-mini:medium",
-    ],
-    matches({ target, effectiveSkillName }) {
-      return (
-        target.resultMode === "review" ||
+    candidateModels: ["openai/gpt-5.4:medium", "openai/gpt-5.4-mini:medium"],
+    score({ target, effectiveSkillName }) {
+      return target.resultMode === "review" ||
         target.resultMode === "verification" ||
         effectiveSkillName === "review" ||
         effectiveSkillName === "qa"
-      );
+        ? 8
+        : 0;
     },
   },
   {
@@ -182,19 +190,20 @@ const ROUTING_POLICIES: readonly DelegationRoutingPolicy[] = [
     reason: "Execution-first patch work should prefer a fast coding-oriented model.",
     candidateModels: [
       "openai/gpt-5.3-codex-spark:high",
-      "gpt-5.3-codex-spark:high",
       "openai/gpt-5.3-codex:medium",
-      "gpt-5.3-codex:medium",
       "openai/gpt-5.4-mini:medium",
-      "gpt-5.4-mini:medium",
     ],
-    matches({ target, objectiveText, effectiveSkillName }) {
-      return (
-        target.resultMode === "patch" ||
-        effectiveSkillName === "implementation" ||
-        effectiveSkillName === "ship" ||
-        hasAnyKeyword(objectiveText, EXECUTION_KEYWORDS)
-      );
+    score({ target, keywordText, effectiveSkillName }) {
+      const keywordMatches = countKeywordMatches(keywordText, EXECUTION_KEYWORDS);
+      let score = 0;
+      if (target.resultMode === "patch") {
+        score += 3;
+      }
+      if (effectiveSkillName === "implementation" || effectiveSkillName === "ship") {
+        score += 2;
+      }
+      score += keywordMatches * 4;
+      return score;
     },
   },
 ] as const;
@@ -263,38 +272,46 @@ export function resolveDelegationModelRoute(input: {
     return {};
   }
 
-  const objectiveText = normalizeObjectiveText(input.packet);
+  const keywordText = normalizeKeywordText(normalizeObjectiveText(input.packet));
   const effectiveSkillName = input.target.skillName ?? input.packet.activeSkillName;
+  let resolvedRoute: ResolvedDelegationModelRoute | undefined;
+  let resolvedScore = 0;
+
+  // Choose the highest-signal policy instead of relying on fragile array order.
+  // Execution cues intentionally outrank surface-domain keywords when both are present.
   for (const policy of ROUTING_POLICIES) {
-    if (
-      !policy.matches({
-        target: input.target,
-        packet: input.packet,
-        objectiveText,
-        effectiveSkillName,
-      })
-    ) {
+    const score = policy.score({
+      target: input.target,
+      packet: input.packet,
+      keywordText,
+      effectiveSkillName,
+    });
+    if (score <= 0) {
       continue;
     }
     for (const candidateModel of policy.candidateModels) {
       try {
         const selectedModel = resolveModelTextAgainstInventory(candidateModel, input.modelRouting);
-        return {
-          model: selectedModel,
-          modelRoute: {
-            selectedModel,
-            requestedModel: candidateModel,
-            source: "policy",
-            mode: "auto",
-            reason: policy.reason,
-            policyId: policy.id,
-          },
-        };
+        if (score > resolvedScore) {
+          resolvedScore = score;
+          resolvedRoute = {
+            model: selectedModel,
+            modelRoute: {
+              selectedModel,
+              requestedModel: candidateModel,
+              source: "policy",
+              mode: "auto",
+              reason: policy.reason,
+              policyId: policy.id,
+            },
+          };
+        }
+        break;
       } catch {
         // Try the next candidate pattern before falling back to the target defaults.
       }
     }
   }
 
-  return {};
+  return resolvedRoute ?? {};
 }

@@ -235,6 +235,68 @@ describe("workflow_status contract", () => {
     ]);
   });
 
+  test("surfaces the latest stall adjudication as advisory workflow state", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-stall-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "workflow-status-stall";
+
+    runtime.events.record({
+      sessionId,
+      type: "task_stall_adjudicated",
+      timestamp: 200,
+      payload: {
+        schema: "brewva.task-stall-adjudication.v1",
+        detectedAt: 150,
+        baselineProgressAt: 100,
+        adjudicatedAt: 200,
+        decision: "compact_recommended",
+        source: "heuristic",
+        rationale: "Tape pressure is high while the session is stalled.",
+        signalSummary: ["tape_pressure_high", "recent_tool_failures=3"],
+        tapePressure: "high",
+        blockerCount: 0,
+        blockedToolCount: 0,
+        failureCount: 3,
+        pendingWorkerResults: 0,
+        verificationLastOutcome: "fail",
+        verificationPassed: false,
+        verificationSkipped: false,
+      },
+    });
+
+    const tool = createWorkflowStatusTool({ runtime });
+    const result = await tool.execute(
+      "tc-workflow-status-stall",
+      {},
+      undefined,
+      undefined,
+      mergeContext(sessionId, { cwd: workspace }),
+    );
+
+    const text = extractTextContent(result);
+    expect(text).toContain("stall_adjudication: compact_recommended source=heuristic");
+    expect(text).toContain("Tape pressure is high while the session is stalled.");
+    expect(
+      (
+        result.details as
+          | {
+              stallAdjudication?: {
+                decision: string;
+                source: string;
+                rationale: string;
+              };
+            }
+          | undefined
+      )?.stallAdjudication,
+    ).toEqual(
+      expect.objectContaining({
+        decision: "compact_recommended",
+        source: "heuristic",
+        rationale: "Tape pressure is high while the session is stalled.",
+      }),
+    );
+  });
+
   test("surfaces expanded workflow stages when specialist artifacts are present", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-expanded-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });

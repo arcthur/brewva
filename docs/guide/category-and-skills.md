@@ -39,7 +39,7 @@ replacement.
 ## Current Inventory
 
 - Core: `repository-analysis`, `discovery`, `strategy-review`, `design`, `implementation`, `debugging`, `review`, `qa`, `ship`, `retro`
-- Domain: `agent-browser`, `frontend-design`, `github`, `telegram`, `structured-extraction`, `goal-loop`, `predict-review`
+- Domain: `agent-browser`, `ci-iteration`, `frontend-design`, `github`, `telegram`, `structured-extraction`, `goal-loop`, `predict-review`
 - Operator: `runtime-forensics`, `git-ops`
 - Meta: `skill-authoring`, `self-improve`
 - Overlays: `repository-analysis`, `design`, `implementation`, `debugging`, `review`, `runtime-forensics`
@@ -49,6 +49,8 @@ Special protocol posture:
 
 - `goal-loop` owns bounded continuity, explicit cadence, and objective
   iteration-fact discipline
+- `ci-iteration` owns bounded PR / CI repair loops, explicit retry contracts,
+  and verification-backed stop conditions
 - `predict-review` owns advisory multi-perspective debate and hypothesis
   ranking, not runtime authority
 - `self-improve` mines repeated evidence into learning backlog items rather
