@@ -49,11 +49,39 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
       skillMaxToolCallsMode: "inherit",
       skillMaxParallelMode: "inherit",
     },
+    boundaryPolicy: {
+      commandDenyList: [],
+      filesystem: {
+        readAllow: [],
+        writeAllow: [],
+        writeDeny: [],
+      },
+      network: {
+        mode: "inherit",
+        allowLoopback: true,
+        outbound: [],
+      },
+    },
+    loopDetection: {
+      exactCall: {
+        enabled: true,
+        threshold: 3,
+        mode: "warn",
+        exemptTools: [],
+      },
+    },
+    credentials: {
+      path: ".brewva/credentials.vault",
+      masterKeyEnv: "BREWVA_VAULT_KEY",
+      allowDerivedKeyFallback: true,
+      sandboxApiKeyRef: "vault://sandbox/apiKey",
+      gatewayTokenRef: "vault://gateway/token",
+      bindings: [],
+    },
     execution: {
       backend: "best_available",
       enforceIsolation: false,
       fallbackToHost: false,
-      commandDenyList: [],
       sandbox: {
         serverUrl: "http://127.0.0.1:5555",
         defaultImage: "microsandbox/node",

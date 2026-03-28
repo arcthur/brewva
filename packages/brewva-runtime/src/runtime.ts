@@ -133,6 +133,7 @@ import type { RuntimeKernelContext } from "./runtime-kernel.js";
 import { sanitizeContextText } from "./security/sanitize.js";
 import { ContextService } from "./services/context.js";
 import { CostService } from "./services/cost.js";
+import type { CredentialVaultService } from "./services/credential-vault.js";
 import { EffectCommitmentDeskService } from "./services/effect-commitment-desk.js";
 import { EventPipelineService, type RuntimeRecordEventInput } from "./services/event-pipeline.js";
 import { FileChangeService } from "./services/file-change.js";
@@ -300,7 +301,13 @@ export class BrewvaRuntime {
   };
   declare readonly tools: {
     checkAccess(sessionId: string, toolName: string): { allowed: boolean; reason?: string };
-    explainAccess(input: { sessionId: string; toolName: string; usage?: ContextBudgetUsage }): {
+    explainAccess(input: {
+      sessionId: string;
+      toolName: string;
+      args?: Record<string, unknown>;
+      cwd?: string;
+      usage?: ContextBudgetUsage;
+    }): {
       allowed: boolean;
       reason?: string;
       warning?: string;
@@ -313,6 +320,7 @@ export class BrewvaRuntime {
       toolCallId: string;
       toolName: string;
       args?: Record<string, unknown>;
+      cwd?: string;
       usage?: ContextBudgetUsage;
       recordLifecycleEvent?: boolean;
       effectCommitmentRequestId?: string;
@@ -529,6 +537,8 @@ export class BrewvaRuntime {
     clearState(sessionId: string): void;
     onClearState(listener: (sessionId: string) => void): () => void;
     getHydration(sessionId: string): SessionHydrationState;
+    resolveCredentialBindings(sessionId: string, toolName: string): Record<string, string>;
+    resolveSandboxApiKey(sessionId: string): string | undefined;
   };
 
   declare private readonly evidenceLedger: EvidenceLedger;
@@ -549,6 +559,7 @@ export class BrewvaRuntime {
   private readonly kernel: RuntimeKernelContext;
   declare private readonly contextService: ContextService;
   declare private readonly costService: CostService;
+  declare private readonly credentialVaultService: CredentialVaultService;
   declare private readonly eventPipeline: EventPipelineService;
   declare private readonly effectCommitmentDeskService: EffectCommitmentDeskService;
   declare private readonly fileChangeService: FileChangeService;
@@ -795,7 +806,12 @@ export class BrewvaRuntime {
         checkAccess: (sessionId, toolName) =>
           this.toolGateService.checkToolAccess(sessionId, toolName),
         explainAccess: (input) => {
-          const access = this.toolGateService.explainToolAccess(input.sessionId, input.toolName);
+          const access = this.toolGateService.explainToolAccessWithArgs(
+            input.sessionId,
+            input.toolName,
+            input.args,
+            input.cwd,
+          );
           if (!access.allowed) {
             return {
               allowed: false,
@@ -965,6 +981,19 @@ export class BrewvaRuntime {
         getHydration: (sessionId) => {
           this.sessionLifecycleService.ensureHydrated(sessionId);
           return this.sessionLifecycleService.getHydrationState(sessionId);
+        },
+        resolveCredentialBindings: (sessionId, toolName) => {
+          this.sessionLifecycleService.ensureHydrated(sessionId);
+          return this.credentialVaultService.resolveToolBindings(
+            toolName,
+            this.runtimeConfig.security.credentials.bindings,
+          );
+        },
+        resolveSandboxApiKey: (sessionId) => {
+          this.sessionLifecycleService.ensureHydrated(sessionId);
+          return this.credentialVaultService.resolveConfiguredSecret(
+            this.runtimeConfig.security.credentials.sandboxApiKeyRef,
+          );
         },
       },
     };

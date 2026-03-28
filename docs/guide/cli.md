@@ -28,6 +28,44 @@ In addition to `brewva [flags]` primary modes, the CLI exposes control-plane sub
 `brewva gateway` and `--channel` are different execution paths: the former is the local control-plane daemon, while the latter is channel ingress/egress orchestration.
 For operational details, see `docs/guide/gateway-control-plane-daemon.md`.
 
+## Config Subcommand (`brewva config`)
+
+`brewva config` is the explicit config migration surface for invalid
+execution-security fields. The command is:
+
+- `brewva config migrate`
+- `brewva config migrate --write`
+- `brewva config migrate --json`
+
+Behavior:
+
+- dry-run by default; nothing is written unless `--write` is present
+- targets the selected config file (`--config`) or the default project config path
+- imports inline sandbox API keys into the encrypted vault and deletes the
+  inline field from config
+- keeps raw secret values out of CLI output
+- if invalid execution fields remain in config, normal CLI commands fail fast
+  during config load and require `brewva config migrate` first
+
+Root-level flags may appear before the subcommand, for example
+`brewva --cwd /repo config migrate --json`.
+
+## Credentials Subcommand (`brewva credentials`)
+
+`brewva credentials` is the encrypted credential vault management surface.
+It supports:
+
+- `brewva credentials list`
+- `brewva credentials add --ref <vault://...> --value <secret>`
+- `brewva credentials add --ref <vault://...> --from-env <ENV_VAR>`
+- `brewva credentials remove --ref <vault://...>`
+- `brewva credentials discover`
+
+The subcommand accepts the shared `--cwd`, `--config`, and `--json` flags, and
+also uses `--ref`, `--value`, and `--from-env` on the `add` / `remove` paths.
+Root-level flags may appear before the subcommand, for example
+`brewva --cwd /repo credentials list`.
+
 ## Inspect Subcommand (`brewva inspect`)
 
 `brewva inspect` is the canonical replay-first operator view for a persisted session.
@@ -84,6 +122,9 @@ Useful flags:
 
 - `--cwd`
 - `--config`
+- `--write`
+- `--ref`
+- `--from-env`
 - `--model`
 - `--agent`
 - `--task`

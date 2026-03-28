@@ -331,6 +331,115 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "boundaryPolicy": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "commandDenyList": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "filesystem": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "readAllow": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "writeAllow": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "writeDeny": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "network": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "allowLoopback": {
+                      "type": "boolean"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": ["inherit", "deny", "allowlist"]
+                    },
+                    "outbound": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "host": {
+                            "type": "string"
+                          },
+                          "ports": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "credentials": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "allowDerivedKeyFallback": {
+                  "type": "boolean"
+                },
+                "bindings": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "credentialRef": {
+                        "type": "string"
+                      },
+                      "envVar": {
+                        "type": "string"
+                      },
+                      "toolNames": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "gatewayTokenRef": {
+                  "type": "string"
+                },
+                "masterKeyEnv": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "sandboxApiKeyRef": {
+                  "type": "string"
+                }
+              }
+            },
             "enforcement": {
               "type": "object",
               "additionalProperties": false,
@@ -363,12 +472,6 @@
                   "type": "string",
                   "enum": ["host", "sandbox", "best_available"]
                 },
-                "commandDenyList": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
                 "enforceIsolation": {
                   "type": "boolean"
                 },
@@ -379,9 +482,6 @@
                   "type": "object",
                   "additionalProperties": false,
                   "properties": {
-                    "apiKey": {
-                      "type": "string"
-                    },
                     "cpus": {
                       "type": "number"
                     },
@@ -395,6 +495,34 @@
                       "type": "string"
                     },
                     "timeout": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            },
+            "loopDetection": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "exactCall": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "exemptTools": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": ["warn", "block"]
+                    },
+                    "threshold": {
                       "type": "number"
                     }
                   }

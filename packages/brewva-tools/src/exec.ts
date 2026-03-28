@@ -1,12 +1,16 @@
 import { createHash } from "node:crypto";
-import { basename, resolve } from "node:path";
+import { resolve } from "node:path";
 import {
   DEFAULT_BREWVA_CONFIG,
   EXEC_BLOCKED_ISOLATION_EVENT_TYPE,
   EXEC_FALLBACK_HOST_EVENT_TYPE,
   EXEC_ROUTED_EVENT_TYPE,
   EXEC_SANDBOX_ERROR_EVENT_TYPE,
+  classifyToolBoundaryRequest,
+  evaluateBoundaryClassification,
+  resolveBoundaryPolicy,
   type BrewvaConfig,
+  type ResolvedBoundaryPolicy,
 } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
@@ -51,17 +55,12 @@ const SANDBOX_SESSION_PIN_TTL_MS = 15 * 60_000;
 const SANDBOX_SESSION_PIN_FAILURE_THRESHOLD = 2;
 const VALID_ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 const DENY_LIST_BEST_EFFORT_MESSAGE =
-  "security.execution.commandDenyList is best-effort and must not be treated as a hard security boundary.";
-
-const ENV_ASSIGNMENT_TOKEN = /^[A-Za-z_][A-Za-z0-9_]*=.*/u;
-const COMMAND_PREFIX_TOKENS = new Set(["sudo", "command", "time"]);
-const SHELL_WRAPPER_TOKENS = new Set(["sh", "bash", "zsh", "dash", "ksh", "mksh", "ash"]);
-const MAX_COMMAND_PARSE_DEPTH = 2;
+  "security.boundaryPolicy.commandDenyList is best-effort and must not be treated as a complete shell security boundary.";
 const TOOL_NAME_COMMAND_HINTS = new Set(["session_compact"]);
 
 type SecurityMode = BrewvaConfig["security"]["mode"];
 type ExecutionBackend = BrewvaConfig["security"]["execution"]["backend"];
-type SandboxConfig = BrewvaConfig["security"]["execution"]["sandbox"];
+type SandboxConfig = BrewvaConfig["security"]["execution"]["sandbox"] & { apiKey?: string };
 type MicrosandboxSdk = Pick<typeof import("microsandbox"), "NodeSandbox">;
 
 type RecordedExecEvent =
@@ -79,6 +78,7 @@ interface ResolvedExecutionPolicy {
   allowHostFallback: boolean;
   denyListBestEffort: true;
   commandDenyList: Set<string>;
+  boundaryPolicy: ResolvedBoundaryPolicy;
   sandbox: SandboxConfig;
 }
 
@@ -188,254 +188,6 @@ function isTruthyEnvFlag(value: string | undefined): boolean {
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
 }
 
-function normalizeCommandToken(token: string): string {
-  const trimmed = token.trim();
-  if (trimmed.length === 0) return "";
-  const withoutQuotes = trimmed.replace(/^["']+|["']+$/gu, "");
-  const normalized = withoutQuotes.toLowerCase();
-  if (normalized.length === 0) return "";
-  return normalized.includes("/") ? basename(normalized) : normalized;
-}
-
-function tokenizeCommand(command: string): string[] {
-  const tokens: string[] = [];
-  let current = "";
-  let quote: '"' | "'" | null = null;
-  let escaped = false;
-
-  const input = command.trim();
-  for (const char of input) {
-    if (escaped) {
-      current += char;
-      escaped = false;
-      continue;
-    }
-
-    if (char === "\\" && quote !== "'") {
-      escaped = true;
-      continue;
-    }
-
-    if (quote) {
-      if (char === quote) {
-        quote = null;
-      } else {
-        current += char;
-      }
-      continue;
-    }
-
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-
-    if (/\s/u.test(char)) {
-      if (current.length > 0) {
-        tokens.push(current);
-        current = "";
-      }
-      continue;
-    }
-
-    current += char;
-  }
-
-  if (current.length > 0) {
-    tokens.push(current);
-  }
-  return tokens;
-}
-
-interface PrimaryCommandDescriptor {
-  token: string;
-  tokenIndex: number;
-  tokens: string[];
-}
-
-function resolvePrimaryCommandDescriptor(command: string): PrimaryCommandDescriptor | undefined {
-  const tokens = tokenizeCommand(command);
-  let envMode = false;
-
-  for (const [tokenIndex, token] of tokens.entries()) {
-    const normalizedToken = normalizeCommandToken(token);
-    if (!normalizedToken) continue;
-
-    if (ENV_ASSIGNMENT_TOKEN.test(token)) {
-      continue;
-    }
-
-    if (normalizedToken === "env") {
-      envMode = true;
-      continue;
-    }
-
-    if (envMode && token.startsWith("-")) {
-      continue;
-    }
-
-    if (COMMAND_PREFIX_TOKENS.has(normalizedToken)) {
-      continue;
-    }
-
-    return {
-      token: normalizedToken,
-      tokenIndex,
-      tokens,
-    };
-  }
-
-  return undefined;
-}
-
-function resolveShellInlineScript(descriptor: PrimaryCommandDescriptor): string | undefined {
-  if (!SHELL_WRAPPER_TOKENS.has(descriptor.token)) {
-    return undefined;
-  }
-
-  for (let index = descriptor.tokenIndex + 1; index < descriptor.tokens.length; index += 1) {
-    const token = descriptor.tokens[index]!;
-    if (token === "--") {
-      return undefined;
-    }
-
-    if (token.startsWith("--")) {
-      if (token === "--command") {
-        return descriptor.tokens[index + 1];
-      }
-      if (token.startsWith("--command=")) {
-        const inlineScript = token.slice("--command=".length);
-        return inlineScript.length > 0 ? inlineScript : undefined;
-      }
-      continue;
-    }
-
-    if (!token.startsWith("-")) {
-      return undefined;
-    }
-
-    const normalizedFlags = token.replace(/^-+/u, "");
-    if (normalizedFlags.length === 0) {
-      continue;
-    }
-
-    const cIndex = normalizedFlags.indexOf("c");
-    if (cIndex === -1) {
-      continue;
-    }
-
-    const inlineScript = normalizedFlags.slice(cIndex + 1);
-    if (inlineScript.length > 0) {
-      return inlineScript;
-    }
-
-    return descriptor.tokens[index + 1];
-  }
-
-  return undefined;
-}
-
-function splitShellCommandSegments(command: string): string[] {
-  const segments: string[] = [];
-  let current = "";
-  let quote: '"' | "'" | null = null;
-  let escaped = false;
-
-  const pushCurrent = () => {
-    const normalized = current.trim();
-    if (normalized.length > 0) {
-      segments.push(normalized);
-    }
-    current = "";
-  };
-
-  for (let index = 0; index < command.length; index += 1) {
-    const char = command[index]!;
-
-    if (escaped) {
-      current += char;
-      escaped = false;
-      continue;
-    }
-
-    if (char === "\\" && quote !== "'") {
-      current += char;
-      escaped = true;
-      continue;
-    }
-
-    if (quote) {
-      current += char;
-      if (char === quote) {
-        quote = null;
-      }
-      continue;
-    }
-
-    if (char === '"' || char === "'") {
-      quote = char;
-      current += char;
-      continue;
-    }
-
-    if (char === ";" || char === "\n") {
-      pushCurrent();
-      continue;
-    }
-
-    if (char === "&" && command[index + 1] === "&") {
-      pushCurrent();
-      index += 1;
-      continue;
-    }
-
-    if (char === "|") {
-      pushCurrent();
-      if (command[index + 1] === "|") {
-        index += 1;
-      }
-      continue;
-    }
-
-    current += char;
-  }
-
-  pushCurrent();
-  return segments;
-}
-
-function collectPrimaryCommandTokens(command: string, depth = 0): string[] {
-  if (depth > MAX_COMMAND_PARSE_DEPTH) {
-    return [];
-  }
-
-  const descriptor = resolvePrimaryCommandDescriptor(command);
-  if (!descriptor) {
-    return [];
-  }
-
-  const tokens = [descriptor.token];
-  const inlineScript = resolveShellInlineScript(descriptor);
-  if (!inlineScript) {
-    return tokens;
-  }
-
-  const nestedTokens = resolvePrimaryCommandTokens(inlineScript, depth + 1);
-  return [...new Set([...tokens, ...nestedTokens])];
-}
-
-function resolvePrimaryCommandTokens(command: string, depth = 0): string[] {
-  if (depth > MAX_COMMAND_PARSE_DEPTH) {
-    return [];
-  }
-
-  const segments = splitShellCommandSegments(command);
-  const tokens = segments
-    .flatMap((segment) => collectPrimaryCommandTokens(segment, depth))
-    .filter((token) => token.length > 0);
-  return [...new Set(tokens)];
-}
-
 function resolveMisroutedToolName(primaryTokens: string[]): string | undefined {
   return primaryTokens.find((token) => TOOL_NAME_COMMAND_HINTS.has(token));
 }
@@ -486,9 +238,13 @@ async function waitForCompletionOrYield(
   return winner as ManagedExecFinishedSession;
 }
 
-function resolveExecutionPolicy(runtime?: BrewvaToolRuntime): ResolvedExecutionPolicy {
+function resolveExecutionPolicy(
+  runtime?: BrewvaToolRuntime,
+  sandboxApiKeyOverride?: string,
+): ResolvedExecutionPolicy {
   const security = runtime?.config?.security ?? DEFAULT_BREWVA_CONFIG.security;
   const execution = security.execution;
+  const boundaryPolicy = resolveBoundaryPolicy(security as BrewvaConfig["security"]);
   const enforceIsolation =
     execution.enforceIsolation || isTruthyEnvFlag(process.env.BREWVA_ENFORCE_EXEC_ISOLATION);
   const configuredBackend = execution.backend;
@@ -511,15 +267,12 @@ function resolveExecutionPolicy(runtime?: BrewvaToolRuntime): ResolvedExecutionP
     enforceIsolation,
     allowHostFallback,
     denyListBestEffort: true,
-    commandDenyList: new Set(
-      execution.commandDenyList
-        .map((entry) => normalizeCommandToken(entry))
-        .filter((entry) => entry.length > 0),
-    ),
+    commandDenyList: boundaryPolicy.commandDenyList,
+    boundaryPolicy,
     sandbox: {
       ...execution.sandbox,
       serverUrl: normalizeOptionalString(process.env.MSB_SERVER_URL) ?? execution.sandbox.serverUrl,
-      apiKey: normalizeOptionalString(process.env.MSB_API_KEY) ?? execution.sandbox.apiKey,
+      apiKey: sandboxApiKeyOverride,
     },
   };
 }
@@ -1020,15 +773,32 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
       const requestedWorkdir = normalizeOptionalString(params.workdir);
       const hostCwd = resolveWorkdir(baseCwd, requestedWorkdir);
       const sandboxRequestedCwd = requestedWorkdir ? hostCwd : undefined;
-      const requestedEnv = params.env ? { ...params.env } : undefined;
+      const boundEnv =
+        options?.runtime?.session?.resolveCredentialBindings?.(ownerSessionId, "exec") ?? {};
+      const requestedEnv =
+        params.env || Object.keys(boundEnv).length > 0
+          ? {
+              ...params.env,
+              ...boundEnv,
+            }
+          : undefined;
       const requestedEnvKeys = Object.keys(requestedEnv ?? {});
       const hostEnv = requestedEnv ? { ...process.env, ...requestedEnv } : process.env;
       const timeoutSec = resolveTimeoutSec(params);
       const background = params.background === true;
       const yieldMs = background ? 0 : resolveYieldMs(params);
 
-      const policy = resolveExecutionPolicy(options?.runtime);
-      const primaryTokens = resolvePrimaryCommandTokens(command);
+      const policy = resolveExecutionPolicy(
+        options?.runtime,
+        options?.runtime?.session?.resolveSandboxApiKey?.(ownerSessionId),
+      );
+      const boundaryClassification = classifyToolBoundaryRequest({
+        toolName: "exec",
+        args: params as Record<string, unknown>,
+        cwd: baseCwd,
+        workspaceRoot: options?.runtime?.workspaceRoot,
+      });
+      const primaryTokens = boundaryClassification.detectedCommands;
       const misroutedToolName = resolveMisroutedToolName(primaryTokens);
       if (misroutedToolName) {
         const reason = `Command '${misroutedToolName}' is a Brewva tool name. Call tool '${misroutedToolName}' directly instead of using exec.`;
@@ -1051,9 +821,12 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
         throw new Error(`exec_blocked_isolation: ${reason}`);
       }
 
-      const deniedCommand = primaryTokens.find((token) => policy.commandDenyList.has(token));
-      if (deniedCommand) {
-        const reason = `Command '${deniedCommand}' is denied by security.execution.commandDenyList.`;
+      const boundaryDecision = evaluateBoundaryClassification(
+        policy.boundaryPolicy,
+        boundaryClassification,
+      );
+      if (!boundaryDecision.allowed) {
+        const deniedCommand = primaryTokens.find((token) => policy.commandDenyList.has(token));
         recordExecEvent(
           options?.runtime,
           ownerSessionId,
@@ -1065,12 +838,14 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
             payload: {
               detectedCommands: primaryTokens,
               deniedCommand,
-              reason,
-              denyListPolicy: DENY_LIST_BEST_EFFORT_MESSAGE,
+              requestedCwd: boundaryClassification.requestedCwd ?? null,
+              targetHosts: boundaryClassification.targetHosts.map((target) => target.host),
+              reason: boundaryDecision.reason,
+              denyListPolicy: deniedCommand ? DENY_LIST_BEST_EFFORT_MESSAGE : undefined,
             },
           }),
         );
-        throw new Error(`exec_blocked_isolation: ${reason}`);
+        throw new Error(`exec_blocked_isolation: ${boundaryDecision.reason}`);
       }
 
       const preferredBackend = policy.backend;

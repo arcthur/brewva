@@ -167,8 +167,14 @@ injected workflow advisory or `workflow_status` context source.
 
 Tool semantics:
 
+- `explainAccess(input)` accepts optional `args` and `cwd` so runtime can
+  explain boundary-policy decisions for tools such as `exec` and
+  `browser_open` without executing them
 - `start(input)` accepts optional `effectCommitmentRequestId` when resuming an
   operator-approved effect commitment
+- `start(input)` also accepts optional `cwd`; exact-call loop detection and
+  boundary-policy evaluation run on the same shared invocation path before tool
+  execution proceeds
 - deferred approval-bearing starts return the same
   `effectCommitmentRequestId` on the result surface
 - `finish(input)` and `recordResult(input)` use `channelSuccess` for transport
@@ -317,6 +323,8 @@ Read-only verification semantics:
 - `clearState(sessionId)`
 - `onClearState(listener)`
 - `getHydration(sessionId)`
+- `resolveCredentialBindings(sessionId, toolName)`
+- `resolveSandboxApiKey(sessionId)`
 
 Delegation taxonomy:
 
@@ -332,6 +340,15 @@ Worker-result adoption semantics:
 - `mergeWorkerResults(...)` is read-only and reports `empty | conflicts | merged`
 - `applyMergedWorkerResults(...)` mutates the parent workspace only after the
   parent explicitly adopts the merged result
+
+Execution-secret semantics:
+
+- `resolveCredentialBindings(...)` returns the env var map resolved from
+  `security.credentials.bindings` for the requested tool
+- `resolveSandboxApiKey(...)` resolves the configured sandbox API key ref from
+  the encrypted credential vault
+- these helpers are execution-layer surfaces for trusted host/runtime adapters;
+  they are not a model-facing secret read API
 
 Delegation inspection semantics:
 

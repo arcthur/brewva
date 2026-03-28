@@ -21,6 +21,8 @@ import {
 } from "@brewva/brewva-runtime";
 import { InteractiveMode, runPrintMode } from "@mariozechner/pi-coding-agent";
 import { formatISO } from "date-fns";
+import { runConfigCli } from "./config.js";
+import { runCredentialsCli } from "./credentials.js";
 import { runDaemon } from "./daemon-mode.js";
 import {
   resolveBackendWorkingCwd,
@@ -108,6 +110,8 @@ Usage:
   brewva [options] [prompt]
 
 Subcommands:
+  brewva config ...       Config rewrite
+  brewva credentials ...  Encrypted credential vault management
   brewva gateway ...   Local control-plane daemon commands
   brewva inspect ...   Replay-first session inspection with deterministic analysis
   brewva insights ...  Multi-session aggregated project insights
@@ -160,6 +164,9 @@ Examples:
   brewva --task-file ./task.json
   brewva inspect --session <session-id>
   brewva inspect packages/brewva-runtime/src
+  brewva config migrate --write
+  brewva credentials list
+  brewva credentials add --ref vault://openai/apiKey --from-env OPENAI_API_KEY
   brewva --undo --session <session-id>
   brewva --replay --mode json --session <session-id>
   brewva onboard --install-daemon
@@ -258,6 +265,78 @@ const CLI_PARSE_OPTIONS = {
   session: { type: "string" },
   verbose: { type: "boolean" },
 } as const;
+
+const ROOT_SUBCOMMANDS = new Set([
+  "config",
+  "credentials",
+  "gateway",
+  "inspect",
+  "insights",
+  "onboard",
+]);
+
+function resolveCliRootOptionSpec(token: string): {
+  kind: "string" | "boolean";
+  consumesInlineValue: boolean;
+} | null {
+  if (token.startsWith("--")) {
+    const [name, inlineValue] = token.slice(2).split("=", 2);
+    const spec = CLI_PARSE_OPTIONS[name as keyof typeof CLI_PARSE_OPTIONS];
+    if (!spec) {
+      return null;
+    }
+    return {
+      kind: spec.type,
+      consumesInlineValue: inlineValue !== undefined,
+    };
+  }
+
+  if (!token.startsWith("-") || token.length !== 2) {
+    return null;
+  }
+
+  const short = token.slice(1);
+  for (const spec of Object.values(CLI_PARSE_OPTIONS)) {
+    if ("short" in spec && spec.short === short) {
+      return {
+        kind: spec.type,
+        consumesInlineValue: false,
+      };
+    }
+  }
+  return null;
+}
+
+function resolveRootSubcommand(argv: string[]): { name: string; args: string[] } | undefined {
+  const prefix: string[] = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index]!;
+    if (!token.startsWith("-")) {
+      if (!ROOT_SUBCOMMANDS.has(token)) {
+        return undefined;
+      }
+      return {
+        name: token,
+        args: [...prefix, ...argv.slice(index + 1)],
+      };
+    }
+
+    const spec = resolveCliRootOptionSpec(token);
+    if (!spec) {
+      return undefined;
+    }
+    prefix.push(token);
+    if (spec.kind === "string" && !spec.consumesInlineValue) {
+      const next = argv[index + 1];
+      if (next === undefined) {
+        return undefined;
+      }
+      prefix.push(next);
+      index += 1;
+    }
+  }
+  return undefined;
+}
 
 const ONBOARD_PARSE_OPTIONS = {
   help: { type: "boolean", short: "h" },
@@ -774,30 +853,39 @@ function printGatewayCostSummary(input: {
 async function run(): Promise<void> {
   process.title = "brewva";
   const rawArgs = process.argv.slice(2);
-  if (rawArgs[0] === "gateway") {
-    const gatewayResult = await runGatewayCli(rawArgs.slice(1));
+  if (rawArgs[0] === "insight") {
+    console.error(
+      "Error: unknown subcommand. Use 'brewva config', 'brewva credentials', 'brewva inspect', 'brewva insights', 'brewva onboard', or 'brewva gateway'.",
+    );
+    process.exitCode = 1;
+    return;
+  }
+  const subcommand = resolveRootSubcommand(rawArgs);
+  if (subcommand?.name === "gateway") {
+    const gatewayResult = await runGatewayCli(subcommand.args);
     if (gatewayResult.handled) {
       process.exitCode = gatewayResult.exitCode;
       return;
     }
   }
-  if (rawArgs[0] === "onboard") {
-    process.exitCode = await runOnboardCli(rawArgs.slice(1));
+  if (subcommand?.name === "credentials") {
+    process.exitCode = await runCredentialsCli(subcommand.args);
     return;
   }
-  if (rawArgs[0] === "inspect") {
-    process.exitCode = await runInspectCli(rawArgs.slice(1));
+  if (subcommand?.name === "config") {
+    process.exitCode = await runConfigCli(subcommand.args);
     return;
   }
-  if (rawArgs[0] === "insight") {
-    console.error(
-      "Error: unknown subcommand. Use 'brewva inspect', 'brewva insights', 'brewva onboard', or 'brewva gateway'.",
-    );
-    process.exitCode = 1;
+  if (subcommand?.name === "onboard") {
+    process.exitCode = await runOnboardCli(subcommand.args);
     return;
   }
-  if (rawArgs[0] === "insights") {
-    process.exitCode = await runInsightsCli(rawArgs.slice(1));
+  if (subcommand?.name === "inspect") {
+    process.exitCode = await runInspectCli(subcommand.args);
+    return;
+  }
+  if (subcommand?.name === "insights") {
+    process.exitCode = await runInsightsCli(subcommand.args);
     return;
   }
 

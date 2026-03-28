@@ -207,4 +207,33 @@ describe("exec/process tool flow", () => {
     expect(routedEvents[0]?.payload?.requestedTimeoutSec).toBe(120);
     expect(routedEvents[1]?.payload?.requestedTimeoutSec).toBe(120);
   });
+
+  test("credential bindings override user-provided env for exec", async () => {
+    const { runtime } = createRuntimeForExecTests({
+      mode: "permissive",
+      backend: "host",
+      boundEnv: {
+        OPENAI_API_KEY: "sk-bound-credential",
+      },
+    });
+    const execTool = createExecTool({ runtime });
+    const sessionId = "s13-exec-bound-env";
+
+    const result = await execTool.execute(
+      "tc-exec-bound-env",
+      {
+        command: 'node -e "process.stdout.write(process.env.OPENAI_API_KEY || \\"\\" )"',
+        env: {
+          OPENAI_API_KEY: "user-supplied-value",
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result);
+    expect(text).toContain("sk-bound-credential");
+    expect(text).not.toContain("user-supplied-value");
+  });
 });

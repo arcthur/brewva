@@ -251,4 +251,119 @@ describe("Brewva config loader normalization", () => {
     expect(typeof resolved).toBe("string");
     expect(resolved.endsWith("brewva/brewva.json")).toBe(true);
   });
+
+  test("fails fast when security.execution.commandDenyList is present in config files", () => {
+    const workspace = createTestWorkspace("execution-command-deny-list-present");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          security: {
+            execution: {
+              commandDenyList: ["node"],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
+      /unknown property "commandDenyList"/,
+    );
+    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
+      /brewva config migrate --write/,
+    );
+  });
+
+  test("fails fast when security.execution.sandbox.apiKey is present in config files", () => {
+    const workspace = createTestWorkspace("inline-sandbox-api-key-present");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          security: {
+            execution: {
+              sandbox: {
+                apiKey: "inline-secret",
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
+      /unknown property "apiKey"/,
+    );
+    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
+      /brewva config migrate --write/,
+    );
+  });
+
+  test("fails fast on direct runtime config when security.execution.commandDenyList appears", () => {
+    const workspace = createTestWorkspace("direct-runtime-command-deny-list");
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG) as unknown as Record<string, unknown>;
+    config["security"] = {
+      ...DEFAULT_BREWVA_CONFIG.security,
+      execution: {
+        ...DEFAULT_BREWVA_CONFIG.security.execution,
+        commandDenyList: ["node"],
+        sandbox: {
+          ...DEFAULT_BREWVA_CONFIG.security.execution.sandbox,
+          apiKey: "inline-secret",
+        },
+      },
+    };
+
+    expect(
+      () =>
+        new BrewvaRuntime({
+          cwd: workspace,
+          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+        }),
+    ).toThrow(/security\.execution\.commandDenyList must not appear in active config/);
+    expect(
+      () =>
+        new BrewvaRuntime({
+          cwd: workspace,
+          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+        }),
+    ).toThrow(/brewva config migrate --write/);
+  });
+
+  test("fails fast on direct runtime config when security.execution.sandbox.apiKey appears", () => {
+    const workspace = createTestWorkspace("direct-runtime-inline-sandbox-api-key");
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG) as unknown as Record<string, unknown>;
+    config["security"] = {
+      ...DEFAULT_BREWVA_CONFIG.security,
+      execution: {
+        ...DEFAULT_BREWVA_CONFIG.security.execution,
+        sandbox: {
+          ...DEFAULT_BREWVA_CONFIG.security.execution.sandbox,
+          apiKey: "inline-secret",
+        },
+      },
+    };
+
+    expect(
+      () =>
+        new BrewvaRuntime({
+          cwd: workspace,
+          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+        }),
+    ).toThrow(/security\.execution\.sandbox\.apiKey must not appear in active config/);
+    expect(
+      () =>
+        new BrewvaRuntime({
+          cwd: workspace,
+          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+        }),
+    ).toThrow(/brewva config migrate --write/);
+  });
 });

@@ -218,6 +218,49 @@ Authority should not be based primarily on static tool allowlists. It should be
 based on effect classes and explicit governance boundaries such as resource
 ceilings.
 
+## Deployment Boundary Ownership
+
+Deployment boundary policy is now a stable part of the governance model.
+
+The architectural split is:
+
+- tool governance descriptors classify what kind of effect a tool carries
+- deployment boundary policy constrains where that effect may land in a
+  specific deployment
+- execution adapters enforce the resulting decision at the concrete tool
+  boundary
+
+That means hostnames, filesystem roots, and similar deployment-specific rules
+do not belong inside `ToolGovernanceDescriptor`.
+They belong in runtime config and are evaluated on the shared invocation path
+for the small set of tools that need argument-aware classification.
+
+Current implementation notes:
+
+- `runtime.tools.start(...)` remains the single shared authorization entrypoint
+- `ToolGateService` applies boundary-policy checks only for classified
+  high-risk tools such as `exec` and browser entrypoints
+- `runtime.tools.explainAccess(...)` can explain boundary-policy decisions
+  without executing the tool
+
+## Secret And Guard Ownership
+
+Two adjacent controls now follow the same architectural rule: kernel-owned
+authority, model-invisible payloads.
+
+- durable secrets live in the credential vault and are referenced by opaque
+  refs rather than inline config or model-visible arguments
+- gateway token storage and tool credential bindings resolve those refs only at
+  the execution boundary
+- exact-call loop protection stays inside the existing tool gate rather than
+  creating a second guard framework or public security domain
+
+The result stays aligned with the core principle of this document:
+
+- effect descriptors classify authority
+- deployment policy narrows reachable world surface
+- vault and guard state stay runtime-owned and auditable
+
 Examples of higher-value governance targets include:
 
 - whether workspace reads are allowed

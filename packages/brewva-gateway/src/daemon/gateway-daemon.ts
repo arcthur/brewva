@@ -336,8 +336,6 @@ export class GatewayDaemon {
         ? Number(options.healthHttpPort)
         : undefined;
     this.healthHttpPath = normalizeHealthPath(options.healthHttpPath);
-    this.stateStore = options.stateStore ?? new FileGatewayStateStore();
-
     ensureDirectoryCwd(options.cwd);
     const resolvedCwd = resolve(options.cwd);
     const workspaceRoot = resolveWorkspaceRootDir(resolvedCwd);
@@ -345,6 +343,20 @@ export class GatewayDaemon {
       cwd: resolvedCwd,
       configPath: options.configPath,
     });
+    this.stateStore =
+      options.stateStore ??
+      new FileGatewayStateStore(
+        runtimeConfig.security.credentials.gatewayTokenRef
+          ? {
+              tokenVault: {
+                vaultPath: resolve(workspaceRoot, runtimeConfig.security.credentials.path),
+                credentialRef: runtimeConfig.security.credentials.gatewayTokenRef,
+                masterKeyEnv: runtimeConfig.security.credentials.masterKeyEnv,
+                allowDerivedKeyFallback: runtimeConfig.security.credentials.allowDerivedKeyFallback,
+              },
+            }
+          : undefined,
+      );
     this.turnWalStore = options.sessionBackend
       ? undefined
       : new TurnWALStore({

@@ -27,7 +27,10 @@ export function createRuntimeForExecTests(input?: {
   enforceIsolation?: boolean;
   fallbackToHost?: boolean;
   commandDenyList?: string[];
+  boundaryCommandDenyList?: string[];
   serverUrl?: string;
+  boundEnv?: Record<string, string>;
+  sandboxApiKey?: string;
 }) {
   const mode = input?.mode ?? "standard";
   const enforceIsolation = input?.enforceIsolation ?? false;
@@ -37,11 +40,40 @@ export function createRuntimeForExecTests(input?: {
       security: {
         mode,
         sanitizeContext: true,
+        boundaryPolicy: {
+          commandDenyList: input?.boundaryCommandDenyList ?? input?.commandDenyList ?? [],
+          filesystem: {
+            readAllow: [],
+            writeAllow: [],
+            writeDeny: [],
+          },
+          network: {
+            mode: "inherit",
+            allowLoopback: true,
+            outbound: [],
+          },
+        },
+        loopDetection: {
+          exactCall: {
+            enabled: true,
+            threshold: 3,
+            mode: "warn",
+            exemptTools: [],
+          },
+        },
+        credentials: {
+          path: ".brewva/credentials.vault",
+          masterKeyEnv: "BREWVA_VAULT_KEY",
+          allowDerivedKeyFallback: true,
+          sandboxApiKeyRef: "vault://sandbox/apiKey",
+          gatewayTokenRef: "vault://gateway/token",
+          bindings: [],
+        },
         execution: {
           backend: input?.backend ?? "best_available",
           enforceIsolation,
           fallbackToHost: input?.fallbackToHost ?? false,
-          commandDenyList: input?.commandDenyList ?? [],
+          commandDenyList: [],
           sandbox: {
             serverUrl: input?.serverUrl ?? "http://127.0.0.1:5555",
             defaultImage: "microsandbox/node",
@@ -57,6 +89,10 @@ export function createRuntimeForExecTests(input?: {
         events.push(event);
         return undefined;
       },
+    },
+    session: {
+      resolveCredentialBindings: () => ({ ...input?.boundEnv }),
+      resolveSandboxApiKey: () => input?.sandboxApiKey,
     },
   };
   return { runtime: runtime as unknown as BrewvaToolRuntime, events };

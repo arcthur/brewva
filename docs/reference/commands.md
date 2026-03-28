@@ -14,6 +14,31 @@ Implementation source: `packages/brewva-cli/src/index.ts`.
 - Scheduler daemon mode (`--daemon`)
 - Channel gateway mode (`--channel`)
 
+## Subcommand: `brewva config`
+
+`brewva config` is the operator-facing config migration surface for invalid
+execution-security fields. `brewva config migrate` scans the target config
+file, previews the rewrite plan, and optionally applies it in place.
+
+- `brewva config migrate`: analyze the target config file and report pending rewrites
+- `brewva config migrate --write`: write the migrated config and import inline sandbox secrets into the encrypted vault
+- `brewva config migrate --json`: emit machine-readable migration results
+
+Flags:
+
+- `--cwd`
+- `--config`
+- `--write`
+- `--json`
+
+Notes:
+
+- root-level flags may appear before the subcommand, for example `brewva --cwd /repo config migrate`
+- `migrate` is dry-run by default; it writes only when `--write` is present
+- raw secret values are never emitted in CLI output; inline sandbox keys are imported into the configured vault ref and deleted from config
+- if invalid execution fields are still present in config, normal runtime and non-`config` CLI paths fail fast at config load time
+- `brewva config migrate` is the explicit migration tool for invalid config files
+
 ## Subcommand: `brewva gateway`
 
 The primary CLI also exposes control-plane subcommands via `brewva gateway ...`.
@@ -179,6 +204,34 @@ Platform notes for supervisor install:
 - `brewva gateway stop`: `0` stopped (or already not running), `2` process still alive after timeout/fallback.
 - `brewva gateway install`: `0` success, `1` invalid input or supervisor operation failure.
 - `brewva gateway uninstall`: `0` success, `1` invalid input.
+
+## Subcommand: `brewva credentials`
+
+`brewva credentials` is the operator-facing encrypted credential vault
+management surface. It stores durable secrets in the runtime vault file,
+supports discovery of common ambient provider keys, and keeps raw secret values
+out of normal CLI output.
+
+- `brewva credentials list`: list stored vault refs with masked values
+- `brewva credentials add --ref <vault://...> --value <secret>`: store a secret directly
+- `brewva credentials add --ref <vault://...> --from-env <ENV_VAR>`: import a secret from the current environment
+- `brewva credentials remove --ref <vault://...>`: delete a stored secret
+- `brewva credentials discover`: inspect common ambient provider env vars without importing them
+
+Flags:
+
+- `--cwd`
+- `--config`
+- `--json`
+- `--ref` (`add`, `remove`)
+- `--value` (`add`)
+- `--from-env` (`add`)
+
+Notes:
+
+- root-level flags such as `--cwd` and `--config` may appear before the subcommand, for example `brewva --cwd /repo credentials list`
+- `discover` is advisory only; it does not write to the vault
+- stored values are encrypted at rest and `list` emits masked values only
 
 ## Subcommand: `brewva inspect`
 

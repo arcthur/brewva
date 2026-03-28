@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { createBrowserTools } from "@brewva/brewva-tools";
 
 function fakeContext(sessionId: string, cwd: string): any {
@@ -255,5 +255,34 @@ describe("browser tools", () => {
     expect(details.artifacts?.[0]?.kind).toBe("browser_get_text");
     expect(existsSync(artifactPath)).toBe(true);
     expect(readFileSync(artifactPath, "utf8")).toContain("Rendered text for main");
+  });
+
+  test("browser_open enforces boundary policy in direct mode", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-browser-boundary-"));
+    const logPath = join(workspace, "browser-args.log");
+    const fakeBrowser = writeFakeAgentBrowser(workspace, logPath);
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.security.boundaryPolicy.network.mode = "allowlist";
+    config.security.boundaryPolicy.network.outbound = [{ host: "allowed.example", ports: [443] }];
+    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const tools = createBrowserTools({ runtime }, { command: fakeBrowser });
+    const openTool = tools.find((tool) => tool.name === "browser_open");
+
+    const result = await openTool!.execute(
+      "tc-browser-open-boundary",
+      {
+        url: "https://blocked.example/app",
+      },
+      undefined,
+      undefined,
+      fakeContext("browser-boundary-1", workspace),
+    );
+
+    const text = extractText(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("outside security.boundaryPolicy.network.allowlist");
+    expect(runtime.events.query("browser-boundary-1", { type: "tool_call_blocked" })).toHaveLength(
+      1,
+    );
+    expect(existsSync(logPath)).toBe(false);
   });
 });

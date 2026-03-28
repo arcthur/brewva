@@ -3,6 +3,8 @@ import type { BrewvaConfig, SkillRoutingScope, VerificationLevel } from "../cont
 const VALID_COST_ACTIONS = new Set(["warn", "block_tools"]);
 const VALID_SECURITY_MODES = new Set(["permissive", "standard", "strict"]);
 const VALID_SECURITY_ENFORCEMENT_MODES = new Set(["off", "warn", "enforce", "inherit"]);
+const VALID_BOUNDARY_NETWORK_MODES = new Set(["inherit", "deny", "allowlist"]);
+const VALID_EXACT_CALL_LOOP_MODES = new Set(["warn", "block"]);
 const VALID_EXECUTION_BACKENDS = new Set(["host", "sandbox", "best_available"]);
 const VALID_EVENT_LEVELS = new Set(["audit", "ops", "debug"]);
 const VALID_VERIFICATION_LEVELS = new Set<VerificationLevel>(["quick", "standard", "strict"]);
@@ -70,6 +72,15 @@ function normalizeLowercaseStringArray(value: unknown, fallback: string[]): stri
   const normalized = normalizeStringArray(value, fallback)
     .map((entry) => entry.toLowerCase())
     .filter((entry) => entry.length > 0);
+  return [...new Set(normalized)];
+}
+
+function normalizePositiveIntegerArray(value: unknown, fallback: number[]): number[] {
+  if (!Array.isArray(value)) return [...fallback];
+  const normalized = value
+    .filter((entry): entry is number => typeof entry === "number" && Number.isFinite(entry))
+    .map((entry) => Math.floor(entry))
+    .filter((entry) => entry > 0);
   return [...new Set(normalized)];
 }
 
@@ -212,6 +223,57 @@ function normalizeProjectionConfig(
   };
 }
 
+function normalizeBoundaryNetworkRules(
+  value: unknown,
+  fallback: BrewvaConfig["security"]["boundaryPolicy"]["network"]["outbound"],
+): BrewvaConfig["security"]["boundaryPolicy"]["network"]["outbound"] {
+  if (!Array.isArray(value)) {
+    return fallback.map((entry) => ({
+      host: entry.host,
+      ports: [...entry.ports],
+    }));
+  }
+
+  const normalized: BrewvaConfig["security"]["boundaryPolicy"]["network"]["outbound"] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) continue;
+    const host = normalizeOptionalNonEmptyString(entry.host)?.toLowerCase();
+    if (!host) continue;
+    normalized.push({
+      host,
+      ports: normalizePositiveIntegerArray(entry.ports, []),
+    });
+  }
+  return normalized;
+}
+
+function normalizeCredentialBindings(
+  value: unknown,
+  fallback: BrewvaConfig["security"]["credentials"]["bindings"],
+): BrewvaConfig["security"]["credentials"]["bindings"] {
+  if (!Array.isArray(value)) {
+    return fallback.map((entry) => ({
+      toolNames: [...entry.toolNames],
+      envVar: entry.envVar,
+      credentialRef: entry.credentialRef,
+    }));
+  }
+
+  const normalized: BrewvaConfig["security"]["credentials"]["bindings"] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) continue;
+    const envVar = normalizeOptionalNonEmptyString(entry.envVar);
+    const credentialRef = normalizeOptionalNonEmptyString(entry.credentialRef);
+    if (!envVar || !credentialRef) continue;
+    normalized.push({
+      toolNames: normalizeLowercaseStringArray(entry.toolNames, []),
+      envVar,
+      credentialRef,
+    });
+  }
+  return normalized;
+}
+
 function normalizeSecurityConfig(
   securityInput: AnyRecord,
   defaults: BrewvaConfig["security"],
@@ -223,6 +285,34 @@ function normalizeSecurityConfig(
   const securityExecutionSandboxInput = isRecord(securityExecutionInput.sandbox)
     ? securityExecutionInput.sandbox
     : {};
+  const securityBoundaryPolicyInput = isRecord(securityInput.boundaryPolicy)
+    ? securityInput.boundaryPolicy
+    : {};
+  const securityBoundaryFilesystemInput = isRecord(securityBoundaryPolicyInput.filesystem)
+    ? securityBoundaryPolicyInput.filesystem
+    : {};
+  const securityBoundaryNetworkInput = isRecord(securityBoundaryPolicyInput.network)
+    ? securityBoundaryPolicyInput.network
+    : {};
+  const securityLoopDetectionInput = isRecord(securityInput.loopDetection)
+    ? securityInput.loopDetection
+    : {};
+  const securityLoopExactCallInput = isRecord(securityLoopDetectionInput.exactCall)
+    ? securityLoopDetectionInput.exactCall
+    : {};
+  const securityCredentialsInput = isRecord(securityInput.credentials)
+    ? securityInput.credentials
+    : {};
+  if (Object.hasOwn(securityExecutionInput, "commandDenyList")) {
+    throw new Error(
+      "security.execution.commandDenyList must not appear in active config. Move entries to security.boundaryPolicy.commandDenyList, then run `brewva config migrate --write` if you are updating an existing file.",
+    );
+  }
+  if (Object.hasOwn(securityExecutionSandboxInput, "apiKey")) {
+    throw new Error(
+      "security.execution.sandbox.apiKey must not appear in active config. Import the secret into the credential vault, set security.credentials.sandboxApiKeyRef, then run `brewva config migrate --write` if you are updating an existing file.",
+    );
+  }
   const normalizedSecurityMode = VALID_SECURITY_MODES.has(securityInput.mode as string)
     ? (securityInput.mode as BrewvaConfig["security"]["mode"])
     : defaults.mode;
@@ -274,21 +364,93 @@ function normalizeSecurityConfig(
         "security.enforcement.skillMaxParallelMode",
       ),
     },
+    boundaryPolicy: {
+      commandDenyList: normalizeLowercaseStringArray(
+        securityBoundaryPolicyInput.commandDenyList,
+        defaults.boundaryPolicy.commandDenyList,
+      ),
+      filesystem: {
+        readAllow: normalizeStringArray(
+          securityBoundaryFilesystemInput.readAllow,
+          defaults.boundaryPolicy.filesystem.readAllow,
+        ),
+        writeAllow: normalizeStringArray(
+          securityBoundaryFilesystemInput.writeAllow,
+          defaults.boundaryPolicy.filesystem.writeAllow,
+        ),
+        writeDeny: normalizeStringArray(
+          securityBoundaryFilesystemInput.writeDeny,
+          defaults.boundaryPolicy.filesystem.writeDeny,
+        ),
+      },
+      network: {
+        mode: normalizeStrictStringEnum(
+          securityBoundaryNetworkInput.mode,
+          defaults.boundaryPolicy.network.mode,
+          VALID_BOUNDARY_NETWORK_MODES,
+          "security.boundaryPolicy.network.mode",
+        ),
+        allowLoopback: normalizeBoolean(
+          securityBoundaryNetworkInput.allowLoopback,
+          defaults.boundaryPolicy.network.allowLoopback,
+        ),
+        outbound: normalizeBoundaryNetworkRules(
+          securityBoundaryNetworkInput.outbound,
+          defaults.boundaryPolicy.network.outbound,
+        ),
+      },
+    },
+    loopDetection: {
+      exactCall: {
+        enabled: normalizeBoolean(
+          securityLoopExactCallInput.enabled,
+          defaults.loopDetection.exactCall.enabled,
+        ),
+        threshold: normalizePositiveInteger(
+          securityLoopExactCallInput.threshold,
+          defaults.loopDetection.exactCall.threshold,
+        ),
+        mode: normalizeStrictStringEnum(
+          securityLoopExactCallInput.mode,
+          defaults.loopDetection.exactCall.mode,
+          VALID_EXACT_CALL_LOOP_MODES,
+          "security.loopDetection.exactCall.mode",
+        ),
+        exemptTools: normalizeLowercaseStringArray(
+          securityLoopExactCallInput.exemptTools,
+          defaults.loopDetection.exactCall.exemptTools,
+        ),
+      },
+    },
+    credentials: {
+      path: normalizeNonEmptyString(securityCredentialsInput.path, defaults.credentials.path),
+      masterKeyEnv: normalizeNonEmptyString(
+        securityCredentialsInput.masterKeyEnv,
+        defaults.credentials.masterKeyEnv,
+      ),
+      allowDerivedKeyFallback: normalizeBoolean(
+        securityCredentialsInput.allowDerivedKeyFallback,
+        defaults.credentials.allowDerivedKeyFallback,
+      ),
+      sandboxApiKeyRef:
+        normalizeOptionalNonEmptyString(securityCredentialsInput.sandboxApiKeyRef) ??
+        defaults.credentials.sandboxApiKeyRef,
+      gatewayTokenRef:
+        normalizeOptionalNonEmptyString(securityCredentialsInput.gatewayTokenRef) ??
+        defaults.credentials.gatewayTokenRef,
+      bindings: normalizeCredentialBindings(
+        securityCredentialsInput.bindings,
+        defaults.credentials.bindings,
+      ),
+    },
     execution: {
       backend: normalizedExecutionBackend,
       enforceIsolation: normalizedExecutionEnforceIsolation,
       fallbackToHost: normalizedExecutionFallback,
-      commandDenyList: normalizeLowercaseStringArray(
-        securityExecutionInput.commandDenyList,
-        defaults.execution.commandDenyList,
-      ),
       sandbox: {
         serverUrl:
           normalizeOptionalNonEmptyString(securityExecutionSandboxInput.serverUrl) ??
           defaults.execution.sandbox.serverUrl,
-        apiKey:
-          normalizeOptionalNonEmptyString(securityExecutionSandboxInput.apiKey) ??
-          defaults.execution.sandbox.apiKey,
         defaultImage:
           normalizeOptionalNonEmptyString(securityExecutionSandboxInput.defaultImage) ??
           defaults.execution.sandbox.defaultImage,

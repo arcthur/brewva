@@ -209,6 +209,59 @@ describe("runtime facade coverage", () => {
     });
   });
 
+  test("tools.start exact-call guard resets when tool name or args change", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createTestWorkspace("runtime-facade-exact-call-guard"),
+      config: createOpsRuntimeConfig((config) => {
+        config.security.loopDetection.exactCall.enabled = true;
+        config.security.loopDetection.exactCall.threshold = 3;
+        config.security.loopDetection.exactCall.mode = "block";
+      }),
+    });
+    const sessionId = "runtime-facade-exact-call-guard-1";
+    runtime.tools.registerGovernanceDescriptor("browser_snapshot", {
+      effects: ["runtime_observe"],
+      boundary: "safe",
+      defaultRisk: "low",
+    });
+    runtime.tools.registerGovernanceDescriptor("browser_get", {
+      effects: ["runtime_observe"],
+      boundary: "safe",
+      defaultRisk: "low",
+    });
+
+    const start = (toolCallId: string, toolName: string, args: Record<string, unknown>) =>
+      runtime.tools.start({
+        sessionId,
+        toolCallId,
+        toolName,
+        args,
+        cwd: runtime.cwd,
+      });
+
+    expect(start("tc-1", "browser_snapshot", { interactive: true }).allowed).toBe(true);
+    expect(start("tc-2", "browser_snapshot", { interactive: true }).allowed).toBe(true);
+    expect(start("tc-3", "browser_snapshot", { interactive: false }).allowed).toBe(true);
+    expect(start("tc-4", "browser_snapshot", { interactive: true }).allowed).toBe(true);
+    expect(start("tc-5", "browser_get", { field: "text" }).allowed).toBe(true);
+    expect(start("tc-6", "browser_snapshot", { interactive: true }).allowed).toBe(true);
+    expect(start("tc-7", "browser_snapshot", { interactive: true }).allowed).toBe(true);
+
+    const blocked = start("tc-8", "browser_snapshot", { interactive: true });
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.reason).toContain("identical arguments 3 times consecutively");
+
+    expect(runtime.events.listGuardResults(sessionId, { guardKey: "exact_call_loop" })).toEqual([
+      expect.objectContaining({
+        guardKey: "exact_call_loop",
+        status: "fail",
+      }),
+    ]);
+
+    runtime.tools.unregisterGovernanceDescriptor("browser_snapshot");
+    runtime.tools.unregisterGovernanceDescriptor("browser_get");
+  });
+
   test("iteration fact helpers stay scoped to the current session", () => {
     const runtime = new BrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-iteration-lineage"),

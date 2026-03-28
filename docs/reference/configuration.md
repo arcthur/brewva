@@ -131,10 +131,26 @@ Project-specific shared context and overlays are discovered from:
 - `security.enforcement.skillMaxTokensMode`: `inherit`
 - `security.enforcement.skillMaxToolCallsMode`: `inherit`
 - `security.enforcement.skillMaxParallelMode`: `inherit`
+- `security.boundaryPolicy.commandDenyList`: `[]`
+- `security.boundaryPolicy.filesystem.readAllow`: `[]`
+- `security.boundaryPolicy.filesystem.writeAllow`: `[]`
+- `security.boundaryPolicy.filesystem.writeDeny`: `[]`
+- `security.boundaryPolicy.network.mode`: `inherit`
+- `security.boundaryPolicy.network.allowLoopback`: `true`
+- `security.boundaryPolicy.network.outbound`: `[]`
+- `security.loopDetection.exactCall.enabled`: `true`
+- `security.loopDetection.exactCall.threshold`: `3`
+- `security.loopDetection.exactCall.mode`: `warn`
+- `security.loopDetection.exactCall.exemptTools`: `[]`
+- `security.credentials.path`: `.brewva/credentials.vault`
+- `security.credentials.masterKeyEnv`: `BREWVA_VAULT_KEY`
+- `security.credentials.allowDerivedKeyFallback`: `true`
+- `security.credentials.sandboxApiKeyRef`: `vault://sandbox/apiKey`
+- `security.credentials.gatewayTokenRef`: `vault://gateway/token`
+- `security.credentials.bindings`: `[]`
 - `security.execution.backend`: `best_available`
 - `security.execution.enforceIsolation`: `false`
 - `security.execution.fallbackToHost`: `false`
-- `security.execution.commandDenyList`: `[]`
 - `security.execution.sandbox.serverUrl`: `http://127.0.0.1:5555`
 - `security.execution.sandbox.defaultImage`: `microsandbox/node`
 - `security.execution.sandbox.memory`: `512`
@@ -252,6 +268,88 @@ bypass normal skill effect authorization and per-skill budget enforcement to
 avoid deadlocks during recovery. These tools may still be blocked by the
 critical context compaction gate.
 
+### `security.boundaryPolicy`
+
+`security.boundaryPolicy` is the deployment-level execution boundary model.
+It complements effect classification; it does not replace `security.mode`,
+skill contracts, or tool governance descriptors.
+
+- `commandDenyList`
+  - best-effort shell preflight deny list for `exec`
+- `filesystem.readAllow`
+  - optional allowlist roots for read-scoped execution cwd checks
+- `filesystem.writeAllow`
+  - optional allowlist roots for write-scoped execution cwd checks
+- `filesystem.writeDeny`
+  - deny-first roots that block execution even when an allowlist also matches
+- `network.mode`
+  - `inherit`: follow the network posture implied by `security.mode`
+  - `deny`: block all non-loopback outbound targets
+  - `allowlist`: require every detected outbound target to match an outbound rule
+- `network.allowLoopback`
+  - allow `localhost`, `127.0.0.0/8`, and `::1` even when network restrictions are active
+- `network.outbound`
+  - allowlist rules of `{ host, ports[] }`
+  - `host` may be exact (`api.openai.com`) or wildcard-suffix (`*.openai.com`)
+  - empty `ports` means any port for that host rule
+
+`network.mode=inherit` resolves to:
+
+- `permissive` -> no outbound restriction
+- `standard` -> allowlist with `allowLoopback=true`
+- `strict` -> deny with `allowLoopback=true`
+
+Current classifier coverage is intentionally narrow:
+
+- `exec` classifies detected commands, requested cwd, and explicit URL targets
+- `browser_open` classifies the requested URL host/port
+- other tools continue to rely on effect-class governance unless they opt into
+  boundary classification
+
+### `security.loopDetection.exactCall`
+
+`security.loopDetection.exactCall` is a lightweight syntactic guard inside the
+shared tool-gate start path.
+
+- runtime tracks one consecutive-call slot per session
+- the slot stores the most recent normalized tool name plus a stable hash of
+  args
+- when either the tool name or args hash changes, the counter resets
+- when the same tool+args pair reaches `threshold`, runtime records
+  `iteration_guard_recorded` with `guardKey=exact_call_loop`
+- `mode=warn` appends advisory text to the tool result path
+- `mode=block` also emits `tool_call_blocked` and denies execution
+- `exemptTools` applies after tool-name normalization
+
+### `security.credentials`
+
+`security.credentials` configures the encrypted credential vault and the
+execution-time secret binding model.
+
+- `path`
+  - vault file path, resolved from workspace root
+- `masterKeyEnv`
+  - environment variable containing the explicit vault master key
+- `allowDerivedKeyFallback`
+  - if `true`, runtime may derive a machine-local fallback key when
+    `masterKeyEnv` is unset
+- `sandboxApiKeyRef`
+  - vault ref used by sandbox execution when a sandbox API key is needed
+- `gatewayTokenRef`
+  - vault ref used for gateway daemon token persistence
+- `bindings`
+  - list of `{ toolNames, envVar, credentialRef }`
+  - bindings resolve only for the named tools after tool-name normalization
+  - resolved secret values are injected into the execution environment and are
+    not written to normal audit/event/tape payloads
+
+The current vault implementation uses AES-256-GCM. If `masterKeyEnv` is not
+set and fallback is enabled, the fallback key is derived as:
+
+```text
+sha256("brewva:" + hostname + ":" + homedir)
+```
+
 `security.execution` controls command isolation for `exec`:
 
 - `backend=best_available` prefers sandbox first; host fallback is implicit (always allowed unless strict/enforced isolation).
@@ -298,7 +396,9 @@ Notes:
 - When sandbox execution fails and host fallback is enabled, runtime applies a short backoff window before retrying sandbox (`exec_fallback_host.reason=sandbox_unavailable_cached`) to avoid repeated sandbox error churn.
 - Repeated sandbox failures in the same session can trigger a temporary session pin (`exec_fallback_host.reason=sandbox_unavailable_session_pinned`) so subsequent exec calls bypass sandbox until the pin TTL expires.
 - If `exec.workdir` is omitted, sandbox execution defaults to `/` and does not inherit host runtime cwd.
-- `commandDenyList` is a best-effort UX guard and is evaluated before backend execution; the hard boundary is sandbox isolation.
+- `security.boundaryPolicy.commandDenyList` is the active best-effort command deny list.
+- sandbox API key resolution uses the vault ref from `security.credentials.sandboxApiKeyRef`.
+- `security.execution.commandDenyList` and `security.execution.sandbox.apiKey` are invalid in active config. Rewrite or delete them with `brewva config migrate` before normal runtime use.
 
 ## Event Level Model
 
@@ -412,7 +512,7 @@ On load, config JSON is schema-validated:
 - schema loader failures are startup-blocking
 - runtime normalization (`normalizeBrewvaConfig(...)`) runs only after schema validation passes
 
-This means malformed or removed fields are never silently applied as active runtime policy.
+This means malformed or unsupported fields are never silently applied as active runtime policy.
 
 ## Current Limitations
 

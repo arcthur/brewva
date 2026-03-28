@@ -33,6 +33,8 @@ import {
 } from "./security/control-plane-tools.js";
 import { ContextService } from "./services/context.js";
 import { CostService } from "./services/cost.js";
+import { createCredentialVaultServiceFromSecurityConfig } from "./services/credential-vault.js";
+import type { CredentialVaultService } from "./services/credential-vault.js";
 import { EffectCommitmentDeskService } from "./services/effect-commitment-desk.js";
 import { EventPipelineService, type RuntimeRecordEventInput } from "./services/event-pipeline.js";
 import { FileChangeService } from "./services/file-change.js";
@@ -78,6 +80,7 @@ export interface RuntimeCoreDependencies {
 }
 
 export interface RuntimeServiceDependencies {
+  credentialVaultService: CredentialVaultService;
   proposalAdmissionService: ProposalAdmissionService;
   skillLifecycleService: SkillLifecycleService;
   taskService: TaskService;
@@ -304,6 +307,10 @@ export function createRuntimeKernelContext(
 export function createRuntimeServiceDependencies(
   options: RuntimeServiceAssemblyOptions,
 ): RuntimeServiceDependencies {
+  const credentialVaultService = createCredentialVaultServiceFromSecurityConfig(
+    options.workspaceRoot,
+    options.config.security,
+  );
   const taskService = new TaskService({
     config: options.config,
     isContextBudgetEnabled: () => options.kernel.isContextBudgetEnabled(),
@@ -564,6 +571,7 @@ export function createRuntimeServiceDependencies(
     contextService,
   });
   const toolGateService = new ToolGateService({
+    workspaceRoot: options.workspaceRoot,
     securityConfig: options.config.security,
     costTracker: options.coreDependencies.costTracker,
     sessionState: options.sessionState,
@@ -592,6 +600,7 @@ export function createRuntimeServiceDependencies(
   });
 
   return {
+    credentialVaultService,
     proposalAdmissionService,
     skillLifecycleService,
     taskService,

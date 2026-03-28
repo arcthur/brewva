@@ -12,6 +12,7 @@ import type {
 import type { SessionCostTracker } from "../cost/tracker.js";
 import {
   GOVERNANCE_METADATA_MISSING_EVENT_TYPE,
+  ITERATION_GUARD_RECORDED_EVENT_TYPE,
   TOOL_EFFECT_GATE_SELECTED_EVENT_TYPE,
 } from "../events/event-types.js";
 import {
@@ -19,7 +20,13 @@ import {
   toolGovernanceRequiresEffectCommitment,
   type ToolGovernanceDescriptorSource,
 } from "../governance/tool-governance.js";
+import { buildGuardResultPayload, coerceGuardResultPayload } from "../iteration/facts.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
+import {
+  classifyToolBoundaryRequest,
+  evaluateBoundaryClassification,
+  resolveBoundaryPolicy,
+} from "../security/boundary-policy.js";
 import { resolveSecurityPolicy } from "../security/mode.js";
 import { checkToolAccess as evaluateSkillToolAccess } from "../security/tool-policy.js";
 import { sha256 } from "../utils/hash.js";
@@ -52,6 +59,7 @@ export interface StartToolCallInput {
   toolCallId: string;
   toolName: string;
   args?: Record<string, unknown>;
+  cwd?: string;
   usage?: ContextBudgetUsage;
   recordLifecycleEvent?: boolean;
   effectCommitmentRequestId?: string;
@@ -80,6 +88,7 @@ export interface ToolCompletionContext {
 }
 
 export interface ToolGateServiceOptions {
+  workspaceRoot: string;
   securityConfig: RuntimeKernelContext["config"]["security"];
   costTracker: RuntimeKernelContext["costTracker"];
   sessionState: RuntimeKernelContext["sessionState"];
@@ -100,6 +109,8 @@ export interface ToolGateServiceOptions {
 }
 
 export class ToolGateService {
+  private readonly workspaceRoot: string;
+  private readonly securityConfig: RuntimeKernelContext["config"]["security"];
   private readonly securityPolicy: ReturnType<typeof resolveSecurityPolicy>;
   private readonly costTracker: SessionCostTracker;
   private readonly sessionState: RuntimeSessionStateStore;
@@ -143,6 +154,8 @@ export class ToolGateService {
   ) => string | undefined;
 
   constructor(options: ToolGateServiceOptions) {
+    this.workspaceRoot = options.workspaceRoot;
+    this.securityConfig = options.securityConfig;
     this.securityPolicy = resolveSecurityPolicy(options.securityConfig);
     this.costTracker = options.costTracker;
     this.sessionState = options.sessionState;
@@ -369,6 +382,15 @@ export class ToolGateService {
   }
 
   explainToolAccess(sessionId: string, toolName: string): ToolAccessExplanation {
+    return this.explainToolAccessWithArgs(sessionId, toolName);
+  }
+
+  explainToolAccessWithArgs(
+    sessionId: string,
+    toolName: string,
+    args?: Record<string, unknown>,
+    cwd?: string,
+  ): ToolAccessExplanation {
     const state = this.sessionState.getCell(sessionId);
     const skill = this.getActiveSkill(sessionId);
     const normalizedToolName = normalizeToolName(toolName);
@@ -389,6 +411,11 @@ export class ToolGateService {
 
     if (!access.allowed) {
       return { allowed: false, reason: access.reason };
+    }
+
+    const boundary = this.evaluateBoundaryPolicy(sessionId, toolName, args, cwd);
+    if (!boundary.allowed) {
+      return boundary;
     }
 
     const budget = this.costTracker.getBudgetStatus(sessionId);
@@ -448,7 +475,131 @@ export class ToolGateService {
 
     return {
       allowed: true,
-      warning: access.warning,
+      warning:
+        [access.warning, boundary.advisory]
+          .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+          .join("; ") || undefined,
+    };
+  }
+
+  private recordGuardResult(
+    sessionId: string,
+    input: {
+      guardKey: string;
+      status: "pass" | "fail" | "inconclusive" | "skipped";
+      summary: string;
+      details?: Record<string, string | number | boolean | null>;
+    },
+  ): void {
+    const payload = coerceGuardResultPayload(
+      buildGuardResultPayload({
+        guardKey: input.guardKey,
+        status: input.status,
+        source: "runtime.tool_gate",
+        summary: input.summary,
+        details: input.details,
+        turn: this.getCurrentTurn(sessionId),
+      }),
+    );
+    if (!payload) {
+      return;
+    }
+    this.recordEvent({
+      sessionId,
+      type: ITERATION_GUARD_RECORDED_EVENT_TYPE,
+      turn: this.getCurrentTurn(sessionId),
+      payload: payload as unknown as Record<string, unknown>,
+    });
+  }
+
+  private checkCallDeduplication(input: StartToolCallInput): ToolAccessDecision {
+    const config = this.securityConfig.loopDetection.exactCall;
+    const normalizedToolName = normalizeToolName(input.toolName);
+    if (!config.enabled || this.alwaysAllowedToolSet.has(normalizedToolName)) {
+      return { allowed: true };
+    }
+    if (config.exemptTools.includes(normalizedToolName)) {
+      return { allowed: true };
+    }
+
+    const serializedArgs = stableJsonStringify(input.args ?? {});
+    const hash = sha256(`${normalizedToolName}:${serializedArgs}`);
+    const state = this.sessionState.getCell(input.sessionId);
+    const previous = state.consecutiveToolCall;
+
+    if (previous && previous.toolName === normalizedToolName && previous.hash === hash) {
+      previous.count += 1;
+    } else {
+      state.consecutiveToolCall = {
+        toolName: normalizedToolName,
+        hash,
+        count: 1,
+      };
+    }
+
+    const current = state.consecutiveToolCall;
+    if (!current || current.count < config.threshold) {
+      return { allowed: true };
+    }
+
+    const reason = `Tool '${normalizedToolName}' called with identical arguments ${current.count} times consecutively.`;
+    this.recordGuardResult(input.sessionId, {
+      guardKey: "exact_call_loop",
+      status: config.mode === "block" ? "fail" : "inconclusive",
+      summary: reason,
+      details: {
+        toolName: normalizedToolName,
+        threshold: config.threshold,
+        count: current.count,
+        hashPrefix: current.hash.slice(0, 12),
+      },
+    });
+
+    if (config.mode === "warn") {
+      return {
+        allowed: true,
+        advisory: reason,
+      };
+    }
+
+    this.recordEvent({
+      sessionId: input.sessionId,
+      type: "tool_call_blocked",
+      turn: this.getCurrentTurn(input.sessionId),
+      payload: {
+        toolName: normalizedToolName,
+        reason,
+      },
+    });
+    return {
+      allowed: false,
+      reason,
+    };
+  }
+
+  private evaluateBoundaryPolicy(
+    sessionId: string,
+    toolName: string,
+    args?: Record<string, unknown>,
+    cwd?: string,
+  ): ToolAccessDecision {
+    const classification = classifyToolBoundaryRequest({
+      toolName,
+      args,
+      cwd,
+      workspaceRoot: this.workspaceRoot,
+    });
+    const evaluation = evaluateBoundaryClassification(
+      resolveBoundaryPolicy(this.securityConfig),
+      classification,
+    );
+    if (evaluation.allowed) {
+      return { allowed: true };
+    }
+
+    return {
+      allowed: false,
+      reason: evaluation.reason,
     };
   }
 
@@ -803,6 +954,39 @@ export class ToolGateService {
       };
     }
 
+    const deduplication = this.checkCallDeduplication(input);
+    if (!deduplication.allowed) {
+      return {
+        ...deduplication,
+        boundary,
+      };
+    }
+    const advisoryMessages = [deduplication.advisory].filter(
+      (value): value is string => typeof value === "string" && value.trim().length > 0,
+    );
+
+    const boundaryDecision = this.evaluateBoundaryPolicy(
+      input.sessionId,
+      input.toolName,
+      input.args,
+      input.cwd,
+    );
+    if (!boundaryDecision.allowed) {
+      this.recordEvent({
+        sessionId: input.sessionId,
+        type: "tool_call_blocked",
+        turn: this.getCurrentTurn(input.sessionId),
+        payload: {
+          toolName: normalizeToolName(input.toolName),
+          reason: boundaryDecision.reason ?? "Tool call blocked by boundary policy.",
+        },
+      });
+      return {
+        ...boundaryDecision,
+        boundary,
+      };
+    }
+
     const compaction = this.checkContextCompactionGate(
       input.sessionId,
       input.toolName,
@@ -823,6 +1007,7 @@ export class ToolGateService {
       return {
         allowed: true,
         boundary,
+        advisory: advisoryMessages.join("; ") || undefined,
         commitmentReceipt: commitment.commitmentReceipt,
         effectCommitmentRequestId: commitment.effectCommitmentRequestId,
       };
@@ -831,6 +1016,7 @@ export class ToolGateService {
     return {
       allowed: true,
       boundary,
+      advisory: advisoryMessages.join("; ") || undefined,
     };
   }
 
