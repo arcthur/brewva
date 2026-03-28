@@ -96,6 +96,66 @@ describe("subagent delegation catalog", () => {
     }
   });
 
+  test("rejects legacy workspace subagent kind aliases", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-catalog-legacy-kind-"));
+    const subagentDir = join(workspace, ".brewva", "subagents");
+    mkdirSync(subagentDir, { recursive: true });
+    writeFileSync(
+      join(subagentDir, "legacy-review.json"),
+      JSON.stringify(
+        {
+          kind: "agent-spec",
+          name: "legacy-review",
+          description: "Legacy alias should be rejected",
+          envelope: "readonly-reviewer",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    try {
+      await loadHostedDelegationCatalog(workspace);
+      throw new Error("expected loadHostedDelegationCatalog to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "invalid_subagent_config:legacy-review.json:unknown kind 'agent-spec'",
+      );
+    }
+  });
+
+  test("rejects legacy envelope aliases in workspace overlays", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-catalog-legacy-envelope-"));
+    const subagentDir = join(workspace, ".brewva", "subagents");
+    mkdirSync(subagentDir, { recursive: true });
+    writeFileSync(
+      join(subagentDir, "tight-scout.json"),
+      JSON.stringify(
+        {
+          kind: "envelope",
+          name: "tight-scout",
+          extends: "explore",
+          description: "Legacy alias should not resolve as an envelope base",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    try {
+      await loadHostedDelegationCatalog(workspace);
+      throw new Error("expected loadHostedDelegationCatalog to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "invalid_execution_envelope:tight-scout.json:unknown base 'explore'",
+      );
+    }
+  });
+
   test("rejects agent specs that widen their base envelope", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-catalog-widen-agent-"));
     const subagentDir = join(workspace, ".brewva", "subagents");
@@ -187,5 +247,31 @@ describe("subagent delegation catalog", () => {
       instructionsMarkdown: "Focus on config-managed governance checks.",
     });
     expect(catalog.workspaceAgentSpecNames.has("ops-review")).toBe(true);
+  });
+
+  test("parses Markdown-authored agent overlays with CRLF frontmatter", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-agent-markdown-crlf-"));
+    const agentDir = join(workspace, ".brewva", "agents");
+    mkdirSync(agentDir, { recursive: true });
+    writeFileSync(
+      join(agentDir, "reviewer.md"),
+      [
+        "---",
+        "extends: review",
+        "description: Windows-authored review delegate",
+        "envelope: readonly-reviewer",
+        "---",
+        "Focus on durable operator-facing regressions.",
+      ].join("\r\n"),
+      "utf8",
+    );
+
+    const catalog = await loadHostedDelegationCatalog(workspace);
+    expect(catalog.agentSpecs.get("reviewer")).toMatchObject({
+      name: "reviewer",
+      description: "Windows-authored review delegate",
+      envelope: "readonly-reviewer",
+      instructionsMarkdown: "Focus on durable operator-facing regressions.",
+    });
   });
 });

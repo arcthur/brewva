@@ -125,6 +125,8 @@ If the user did not explicitly ask for the write, stop at a draft `issue_brief`,
   communication.
 - Use `ci` when the decisive evidence lives in checks, workflow runs, or job
   logs.
+- Hand off to `ci-iteration` when the work has moved from CI triage into a
+  bounded repair loop with explicit retry and verification posture.
 - Use `api_query` only when the request is metadata-heavy and not well served by
   the higher-level workflows.
 

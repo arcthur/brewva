@@ -157,15 +157,9 @@ export function createQualityGateLifecycle(
 
     const lines = ["[InvocationRepair]", "retry with the canonical parameter contract:"];
     for (const mismatch of mismatches.slice(0, 4)) {
-      const aliasMappings = Object.entries(mismatch.contract.aliases)
-        .map(([alias, canonical]) => `${alias}->${canonical}`)
-        .toSorted();
       const parts = [
         `got="${truncateText(mismatch.received, 60)}"`,
         `accepted=${mismatch.contract.canonicalValues.join("|")}`,
-        aliasMappings.length > 0
-          ? `aliases=${truncateText(aliasMappings.slice(0, 8).join(", "), 220)}`
-          : undefined,
         mismatch.contract.defaultValue ? `default=${mismatch.contract.defaultValue}` : undefined,
         mismatch.contract.recommendedValue
           ? `recommended=${mismatch.contract.recommendedValue}`

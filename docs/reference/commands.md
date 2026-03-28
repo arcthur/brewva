@@ -1,6 +1,8 @@
 # Reference: Commands (CLI Surface)
 
-Brewva does not expose a slash-command registry. Its command surface is the CLI flag set.
+Brewva 的主命令面仍然是 CLI flag / subcommand，但 interactive session 和 channel host
+也暴露一组很薄的 slash-command veneers。它们不是新的 kernel authority；只是
+inspectable control-plane / runtime-plugin entrypoints。
 
 Implementation source: `packages/brewva-cli/src/index.ts`.
 
@@ -14,37 +16,59 @@ Implementation source: `packages/brewva-cli/src/index.ts`.
 - Scheduler daemon mode (`--daemon`)
 - Channel gateway mode (`--channel`)
 
-## Subcommand: `brewva config`
+## Interactive Runtime-Plugin Commands
 
-`brewva config` is the operator-facing config migration surface for invalid
-execution-security fields. `brewva config migrate` scans the target config
-file, previews the rewrite plan, and optionally applies it in place.
+Embedded interactive sessions register a small operator command set through
+runtime plugins:
 
-- `brewva config migrate`: analyze the target config file and report pending rewrites
-- `brewva config migrate --write`: write the migrated config and import inline sandbox secrets into the encrypted vault
-- `brewva config migrate --json`: emit machine-readable migration results
+- `/inspect [dir] | /inspect clear`
+- `/insights [dir] | /insights clear`
+- `/questions | /questions clear`
+- `/answer <question-id> <answer>`
+- `/agent-overlays | /agent-overlays validate | /agent-overlays <name> | /agent-overlays clear`
+- `/update [operator hints]`
 
-Flags:
+These commands are thin session-local veneers over existing replay, workflow,
+delegation, authored-overlay, and update surfaces. They do not introduce hidden
+planner state or generic self-command injection.
 
-- `--cwd`
-- `--config`
-- `--write`
-- `--json`
+## Channel Orchestration Commands
 
-Notes:
+When `channels.orchestration.enabled=true`, channel hosts expose a small
+control-plane command set:
 
-- root-level flags may appear before the subcommand, for example `brewva --cwd /repo config migrate`
-- `migrate` is dry-run by default; it writes only when `--write` is present
-- raw secret values are never emitted in CLI output; inline sandbox keys are imported into the configured vault ref and deleted from config
-- if invalid execution fields are still present in config, normal runtime and non-`config` CLI paths fail fast at config load time
-- `brewva config migrate` is the explicit migration tool for invalid config files
+- `/agents`
+- `/cost [@agent] [top=N]`
+- `/questions [@agent]`
+- `/answer [@agent] <question-id> <answer>`
+- `/inspect [@agent] [dir]`
+- `/insights [@agent] [dir]`
+- `/update [operator hints]`
+- `/new-agent <name> [model=<exact-id[:thinking]>]`
+- `/del-agent <name>`
+- `/focus @agent`
+- `/run @a,@b <task>`
+- `/discuss @a,@b [maxRounds=N] <topic>`
+- `@agent <task>`
+
+`/questions` and `/answer` are the operator questionnaire surface described by
+the overlay RFC: open questions remain derived from durable session state, and
+answering a question records `operator_question_answered` before the answer is
+routed back into the target session.
+
+## Config Loading
+
+Brewva no longer exposes `brewva config`.
+
+If removed or invalid config fields are present, normal CLI and runtime startup
+fail fast at config load time. Rewrite or delete those fields in the config
+file before rerunning Brewva.
 
 ## Subcommand: `brewva gateway`
 
 The primary CLI also exposes control-plane subcommands via `brewva gateway ...`.
 
 - `start`
-- `run` (alias of `start`)
 - `install`
 - `uninstall`
 - `status`
@@ -62,7 +86,7 @@ Loopback-only host policy applies to gateway start/probe/control (`--host` must 
 
 ### Gateway Subcommand Flags
 
-`brewva gateway start` / `run`:
+`brewva gateway start`:
 
 - `--detach`
 - `--foreground`
@@ -311,7 +335,7 @@ Daemon mode rejects incompatible input surfaces:
 - inline prompt text
 
 `--channel` runs channel host orchestration.
-Supported channel ids are `telegram` and alias `tg`.
+Supported channel ids are `telegram`.
 Channel mode rejects incompatible input surfaces:
 
 - `--daemon`
@@ -343,9 +367,10 @@ For Cloudflare Worker + Fly ingress deployment steps, see:
 When channel orchestration is enabled (`channels.orchestration.enabled=true`),
 channel text commands are available:
 
-- `/new-agent <name>` or `/new-agent name=<name> model=<pattern[:thinking]>`
+- `/new-agent <name>` or `/new-agent name=<name> model=<exact-id[:thinking]>`
 - `/del-agent <name>` (soft delete)
 - `/agents`
+- `/cost [@agent] [top=N]` (focused-agent cost view veneer over the typed `inspect_cost` operator action and `cost_view`)
 - `/inspect [dir]` (canonical inline deterministic review of the focused agent session)
 - `/inspect @agent [dir]` (canonical inline deterministic review of a specific agent session in the current conversation scope)
 - `/update [operator hints]` (route the focused agent through the shared Brewva upgrade workflow; changelog review and validation are required before completion)
@@ -456,7 +481,7 @@ Advanced gateway discovery overrides (environment variables):
 Channel mode examples:
 
 - `bun run start -- --channel telegram --telegram-token <bot-token>`
-- `bun run start -- --channel tg --telegram-token <bot-token> --telegram-poll-timeout 15`
+- `bun run start -- --channel telegram --telegram-token <bot-token> --telegram-poll-timeout 15`
 - `BREWVA_TELEGRAM_WEBHOOK_ENABLED=1 BREWVA_TELEGRAM_INGRESS_HMAC_SECRET=<secret> bun run start -- --channel telegram --telegram-token <bot-token>`
 
 ## Input Resolution Rules

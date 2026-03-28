@@ -22,21 +22,19 @@ function toModelKey(model: RegisteredModel): string {
 function dedupeMatches(matches: RegisteredModel[]): RegisteredModel[] {
   const unique = new Map<string, RegisteredModel>();
   for (const model of matches) {
-    unique.set(toModelKey(model).toLowerCase(), model);
+    unique.set(toModelKey(model), model);
   }
   return [...unique.values()];
 }
 
-function collectMatches(
+function collectExactMatches(
   pattern: string,
   availableModels: RegisteredModel[],
-  predicate: (candidate: string, normalizedPattern: string) => boolean,
 ): RegisteredModel[] {
-  const normalizedPattern = pattern.toLowerCase();
   return dedupeMatches(
     availableModels.filter((model) => {
-      const candidates = [model.id, `${model.provider}/${model.id}`, model.name ?? ""];
-      return candidates.some((candidate) => predicate(candidate.toLowerCase(), normalizedPattern));
+      const candidates = [model.id, `${model.provider}/${model.id}`];
+      return candidates.some((candidate) => candidate === pattern);
     }),
   );
 }
@@ -55,34 +53,11 @@ function toMatchResult(matches: RegisteredModel[]): ModelMatchResult {
   return {};
 }
 
-function findModelMatch(pattern: string, availableModels: RegisteredModel[]): ModelMatchResult {
-  const exact = collectMatches(
-    pattern,
-    availableModels,
-    (candidate, normalizedPattern) => candidate === normalizedPattern,
-  );
-  if (exact.length > 0) {
-    return toMatchResult(exact);
-  }
-
-  const prefix = collectMatches(pattern, availableModels, (candidate, normalizedPattern) =>
-    candidate.startsWith(normalizedPattern),
-  );
-  if (prefix.length > 0) {
-    return toMatchResult(prefix);
-  }
-
-  const substring = collectMatches(pattern, availableModels, (candidate, normalizedPattern) =>
-    candidate.includes(normalizedPattern),
-  );
-  return toMatchResult(substring);
-}
-
 function parseModelPattern(
   pattern: string,
   availableModels: RegisteredModel[],
 ): ModelMatchResult & { thinkingLevel?: BrewvaThinkingLevel } {
-  const directMatch = findModelMatch(pattern, availableModels);
+  const directMatch = toMatchResult(collectExactMatches(pattern, availableModels));
   if (directMatch.model || directMatch.ambiguous) {
     return directMatch;
   }
@@ -98,7 +73,7 @@ function parseModelPattern(
     return { model: undefined };
   }
 
-  const resolved = parseModelPattern(prefix, availableModels);
+  const resolved = toMatchResult(collectExactMatches(prefix, availableModels));
   if (!resolved.model || resolved.ambiguous) {
     return resolved;
   }
@@ -106,18 +81,6 @@ function parseModelPattern(
     model: resolved.model,
     thinkingLevel: suffix,
   };
-}
-
-function findExactModel(
-  pattern: string,
-  availableModels: RegisteredModel[],
-): RegisteredModel | undefined {
-  const lowered = pattern.toLowerCase();
-  return availableModels.find(
-    (model) =>
-      model.id.toLowerCase() === lowered ||
-      `${model.provider}/${model.id}`.toLowerCase() === lowered,
-  );
 }
 
 export interface BrewvaModelSelection {
@@ -132,7 +95,7 @@ function formatAmbiguousModelError(pattern: string, matches: RegisteredModel[]):
 
 export function resolveBrewvaModelSelection(
   modelText: string | undefined,
-  registry: ModelRegistry,
+  registry: Pick<ModelRegistry, "getAll">,
 ): BrewvaModelSelection {
   const normalized = modelText?.trim();
   if (!normalized) {
@@ -144,62 +107,12 @@ export function resolveBrewvaModelSelection(
     throw new Error("No models are available in the Brewva model registry.");
   }
 
-  const providerMap = new Map<string, string>();
-  for (const model of availableModels) {
-    providerMap.set(model.provider.toLowerCase(), model.provider);
-  }
-
-  let provider: string | undefined;
-  let pattern = normalized;
-  let inferredProvider = false;
-
-  const slashIndex = normalized.indexOf("/");
-  if (slashIndex !== -1) {
-    const maybeProvider = normalized.substring(0, slashIndex);
-    const canonicalProvider = providerMap.get(maybeProvider.toLowerCase());
-    if (canonicalProvider) {
-      provider = canonicalProvider;
-      pattern = normalized.substring(slashIndex + 1);
-      inferredProvider = true;
-    }
-  }
-
-  if (!provider) {
-    const exact = findExactModel(normalized, availableModels);
-    if (exact) {
-      return { model: exact };
-    }
-  }
-
-  const candidates = provider
-    ? availableModels.filter((model) => model.provider === provider)
-    : availableModels;
-  const resolved = parseModelPattern(pattern, candidates);
+  const resolved = parseModelPattern(normalized, availableModels);
   if (resolved.ambiguous) {
-    throw formatAmbiguousModelError(
-      provider ? `${provider}/${pattern}` : pattern,
-      resolved.ambiguous,
-    );
+    throw formatAmbiguousModelError(normalized, resolved.ambiguous);
   }
   if (resolved.model) {
     return resolved;
   }
-
-  if (inferredProvider) {
-    const exact = findExactModel(normalized, availableModels);
-    if (exact) {
-      return { model: exact };
-    }
-
-    const fallback = parseModelPattern(normalized, availableModels);
-    if (fallback.ambiguous) {
-      throw formatAmbiguousModelError(normalized, fallback.ambiguous);
-    }
-    if (fallback.model) {
-      return fallback;
-    }
-  }
-
-  const display = provider ? `${provider}/${pattern}` : normalized;
-  throw new Error(`Model "${display}" was not found in the configured Brewva model registry.`);
+  throw new Error(`Model "${normalized}" was not found in the configured Brewva model registry.`);
 }

@@ -419,6 +419,9 @@ Semantics:
   spec from `skillName`, `fallbackResultMode`, or `executionShape.resultMode`
 - `safe` is the default execution boundary
 - `effectful` is reserved for isolated write-capable child runners
+- delegated child model selection is inspectable: explicit
+  `executionShape.model`, target-pinned models, and policy-backed auto routes
+  all persist route metadata on the run record
 - `contextRefs` are typed refs and may include `sourceSessionId` and advisory
   `hash`
 - when `skillName` is present, the child prompt includes the delegated skill
@@ -432,8 +435,11 @@ Semantics:
 - late detached outcomes surface through replay-visible pending delegation
   outcome state instead of a proposal-backed return mode
 - workspace-defined delegated workers live under `.brewva/subagents/*.json`
-  and may declare `kind: "envelope"` or `kind: "agentSpec"` with `extends`
-  support; overrides remain narrowing-only
+  and must declare `kind: "envelope"` or `kind: "agentSpec"` with `extends`
+  support; markdown worker files under `.brewva/agents/*.md` and
+  `.config/brewva/agents/*.md` default to `agentSpec`; their frontmatter
+  compiles into the hosted worker spec and the body becomes additive authored
+  instructions; overrides remain narrowing-only
 
 `task_record_acceptance` is an operator-visible closure write. It only succeeds
 when the active `TaskSpec` explicitly requires acceptance, and it does not
@@ -448,6 +454,7 @@ These tools inspect or stop existing delegated runs.
 - `agentSpec?`
 - `envelope?`
 - `skillName?`
+- `modelRoute?`
 - `live?`
 - `cancelable?`
 - `delivery.handoffState?`
@@ -511,6 +518,9 @@ Derived workflow inspection surface.
   verification, ship, and retro posture
 - implementation may be `pending` when delegated patch results still await
   parent merge/apply
+- surfaces the latest durable stall adjudication when the control plane has
+  classified an idle session as `continue`, `nudge`,
+  `compact_recommended`, or `abort_recommended`
 - reports blockers such as stale review/QA/verification/ship evidence, task
   blockers, pending worker results, and pending delegation outcomes awaiting
   a parent turn

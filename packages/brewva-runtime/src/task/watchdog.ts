@@ -1,11 +1,14 @@
+import type { TapePressureLevel } from "../contracts/context.js";
 import type { BrewvaEventRecord, TaskState } from "../contracts/index.js";
 import {
+  TASK_STALL_ADJUDICATED_EVENT_TYPE,
   TASK_STUCK_CLEARED_EVENT_TYPE,
   TASK_STUCK_DETECTED_EVENT_TYPE,
 } from "../events/event-types.js";
 import { coerceTaskLedgerPayload } from "./ledger.js";
 
 export const TASK_WATCHDOG_SCHEMA = "brewva.task-watchdog.v1" as const;
+export const TASK_STALL_ADJUDICATION_SCHEMA = "brewva.task-stall-adjudication.v1" as const;
 
 export interface TaskStuckDetectedPayload {
   schema: typeof TASK_WATCHDOG_SCHEMA;
@@ -22,6 +25,31 @@ export interface TaskStuckClearedPayload {
   clearedAt: number;
   resumedProgressAt: number;
   openItemCount: number;
+}
+
+export type TaskStallAdjudicationDecision =
+  | "continue"
+  | "nudge"
+  | "compact_recommended"
+  | "abort_recommended";
+
+export interface TaskStallAdjudicatedPayload {
+  schema: typeof TASK_STALL_ADJUDICATION_SCHEMA;
+  detectedAt: number;
+  baselineProgressAt: number;
+  adjudicatedAt: number;
+  decision: TaskStallAdjudicationDecision;
+  source: "heuristic" | "hook";
+  rationale: string;
+  signalSummary: string[];
+  tapePressure: TapePressureLevel;
+  blockerCount: number;
+  blockedToolCount: number;
+  failureCount: number;
+  pendingWorkerResults: number;
+  verificationLastOutcome: "pass" | "fail" | "skipped" | null;
+  verificationPassed: boolean;
+  verificationSkipped: boolean;
 }
 
 export interface TaskWatchdogEligibility {
@@ -133,8 +161,17 @@ export function buildTaskStuckClearedPayload(
   };
 }
 
+export function buildTaskStallAdjudicatedPayload(
+  input: Omit<TaskStallAdjudicatedPayload, "schema">,
+): TaskStallAdjudicatedPayload {
+  return {
+    schema: TASK_STALL_ADJUDICATION_SCHEMA,
+    ...input,
+  };
+}
+
 export function toTaskWatchdogEventPayload(
-  payload: TaskStuckDetectedPayload | TaskStuckClearedPayload,
+  payload: TaskStuckDetectedPayload | TaskStuckClearedPayload | TaskStallAdjudicatedPayload,
 ): Record<string, unknown> {
   return { ...payload };
 }
@@ -167,6 +204,81 @@ export function coerceTaskStuckDetectedPayload(value: unknown): TaskStuckDetecte
   };
 }
 
+export function coerceTaskStallAdjudicatedPayload(
+  value: unknown,
+): TaskStallAdjudicatedPayload | null {
+  if (!isRecord(value) || value.schema !== TASK_STALL_ADJUDICATION_SCHEMA) {
+    return null;
+  }
+  const detectedAt = Number(value.detectedAt);
+  const baselineProgressAt = Number(value.baselineProgressAt);
+  const adjudicatedAt = Number(value.adjudicatedAt);
+  const decision = value.decision;
+  const source = value.source;
+  const rationale = typeof value.rationale === "string" ? value.rationale : null;
+  const signalSummary = Array.isArray(value.signalSummary)
+    ? value.signalSummary.filter((entry): entry is string => typeof entry === "string")
+    : null;
+  const tapePressure = value.tapePressure;
+  const blockerCount = Number(value.blockerCount);
+  const blockedToolCount = Number(value.blockedToolCount);
+  const failureCount = Number(value.failureCount);
+  const pendingWorkerResults = Number(value.pendingWorkerResults);
+  const verificationLastOutcome = value.verificationLastOutcome;
+  const verificationPassed = value.verificationPassed;
+  const verificationSkipped = value.verificationSkipped;
+  if (
+    !Number.isFinite(detectedAt) ||
+    !Number.isFinite(baselineProgressAt) ||
+    !Number.isFinite(adjudicatedAt) ||
+    (decision !== "continue" &&
+      decision !== "nudge" &&
+      decision !== "compact_recommended" &&
+      decision !== "abort_recommended") ||
+    (source !== "heuristic" && source !== "hook") ||
+    rationale === null ||
+    signalSummary === null ||
+    (tapePressure !== "none" &&
+      tapePressure !== "low" &&
+      tapePressure !== "medium" &&
+      tapePressure !== "high") ||
+    !Number.isFinite(blockerCount) ||
+    !Number.isFinite(blockedToolCount) ||
+    !Number.isFinite(failureCount) ||
+    !Number.isFinite(pendingWorkerResults) ||
+    (verificationLastOutcome !== null &&
+      verificationLastOutcome !== "pass" &&
+      verificationLastOutcome !== "fail" &&
+      verificationLastOutcome !== "skipped") ||
+    typeof verificationPassed !== "boolean" ||
+    typeof verificationSkipped !== "boolean"
+  ) {
+    return null;
+  }
+  return {
+    schema: TASK_STALL_ADJUDICATION_SCHEMA,
+    detectedAt,
+    baselineProgressAt,
+    adjudicatedAt,
+    decision,
+    source,
+    rationale,
+    signalSummary,
+    tapePressure,
+    blockerCount,
+    blockedToolCount,
+    failureCount,
+    pendingWorkerResults,
+    verificationLastOutcome,
+    verificationPassed,
+    verificationSkipped,
+  };
+}
+
 export function isTaskWatchdogEventType(type: string): boolean {
-  return type === TASK_STUCK_DETECTED_EVENT_TYPE || type === TASK_STUCK_CLEARED_EVENT_TYPE;
+  return (
+    type === TASK_STUCK_DETECTED_EVENT_TYPE ||
+    type === TASK_STUCK_CLEARED_EVENT_TYPE ||
+    type === TASK_STALL_ADJUDICATED_EVENT_TYPE
+  );
 }

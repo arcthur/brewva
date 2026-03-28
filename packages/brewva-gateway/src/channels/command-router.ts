@@ -4,6 +4,9 @@ export type ChannelCommandMatch =
   | { kind: "none" }
   | { kind: "error"; message: string }
   | { kind: "agents" }
+  | { kind: "cost"; agentId?: string; top?: number }
+  | { kind: "questions"; agentId?: string }
+  | { kind: "answer"; agentId?: string; questionId: string; answerText: string }
   | { kind: "inspect"; agentId?: string; directory?: string }
   | { kind: "insights"; agentId?: string; directory?: string }
   | { kind: "update"; instructions?: string }
@@ -90,6 +93,89 @@ export class CommandRouter {
       return { kind: "agents" };
     }
 
+    if (command === "/cost") {
+      if (!body) {
+        return { kind: "cost" };
+      }
+      const tokens = body.split(/\s+/u).filter((token) => token.length > 0);
+      let agentId: string | undefined;
+      let tokenIndex = 0;
+      if ((tokens[0] ?? "").startsWith("@")) {
+        agentId = parseAgentRef(tokens[0] ?? "");
+        if (!agentId) {
+          return { kind: "error", message: "Usage: /cost [@agent] [top=N]" };
+        }
+        tokenIndex = 1;
+      }
+      let top: number | undefined;
+      for (const token of tokens.slice(tokenIndex)) {
+        const topMatch = /^top=(.+)$/u.exec(token);
+        if (!topMatch?.[1]) {
+          return { kind: "error", message: "Usage: /cost [@agent] [top=N]" };
+        }
+        const parsedTop = parsePositiveInteger(topMatch[1]);
+        if (!parsedTop || top !== undefined) {
+          return { kind: "error", message: "Usage: /cost [@agent] [top=N]" };
+        }
+        top = parsedTop;
+      }
+      if (!agentId && top === undefined && tokens.length > 0) {
+        return { kind: "error", message: "Usage: /cost [@agent] [top=N]" };
+      }
+      return {
+        kind: "cost",
+        agentId,
+        top,
+      };
+    }
+
+    if (command === "/questions") {
+      if (!body) {
+        return { kind: "questions" };
+      }
+      const [firstToken, ...rest] = body.split(/\s+/u);
+      if (!(firstToken ?? "").startsWith("@") || rest.length > 0) {
+        return { kind: "error", message: "Usage: /questions [@agent]" };
+      }
+      const agentId = parseAgentRef(firstToken ?? "");
+      if (!agentId) {
+        return { kind: "error", message: "Usage: /questions [@agent]" };
+      }
+      return { kind: "questions", agentId };
+    }
+
+    if (command === "/answer") {
+      if (!body) {
+        return { kind: "error", message: "Usage: /answer [@agent] <question-id> <answer>" };
+      }
+      const tokens = body.split(/\s+/u).filter((token) => token.length > 0);
+      const firstToken = tokens[0] ?? "";
+      if (firstToken.startsWith("@")) {
+        const agentId = parseAgentRef(firstToken);
+        const questionId = tokens[1]?.trim();
+        const answerText = tokens.slice(2).join(" ").trim();
+        if (!agentId || !questionId || !answerText) {
+          return { kind: "error", message: "Usage: /answer [@agent] <question-id> <answer>" };
+        }
+        return {
+          kind: "answer",
+          agentId,
+          questionId,
+          answerText,
+        };
+      }
+      const questionId = firstToken.trim();
+      const answerText = tokens.slice(1).join(" ").trim();
+      if (!questionId || !answerText) {
+        return { kind: "error", message: "Usage: /answer [@agent] <question-id> <answer>" };
+      }
+      return {
+        kind: "answer",
+        questionId,
+        answerText,
+      };
+    }
+
     if (command === "/inspect") {
       if (!body) {
         return { kind: "inspect" };
@@ -143,7 +229,10 @@ export class CommandRouter {
 
     if (command === "/new-agent") {
       if (!body)
-        return { kind: "error", message: "Usage: /new-agent <name> [model=<pattern[:thinking]>]" };
+        return {
+          kind: "error",
+          message: "Usage: /new-agent <name> [model=<exact-id[:thinking]>]",
+        };
 
       const nameIs = /^name\s+is\s+(\S+)(?:\s+|$)/iu.exec(body);
       let agentId = nameIs?.[1] ? parseAgentRef(nameIs[1]) : undefined;
@@ -234,7 +323,7 @@ export class CommandRouter {
     return {
       kind: "error",
       message:
-        "Unknown command. Use /inspect, /insights, /agents, /update, /new-agent, /del-agent, /focus, /run, or /discuss.",
+        "Unknown command. Use /inspect, /insights, /cost, /questions, /answer, /agents, /update, /new-agent, /del-agent, /focus, /run, or /discuss.",
     };
   }
 }

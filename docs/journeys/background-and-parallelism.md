@@ -62,9 +62,15 @@ effort helpers.
 - workspace-defined `agentSpec` / `envelope` files still live under
   `.brewva/subagents/*.json` during migration; custom files support
   narrowing-only `extends` chains
+- authored delegated-worker overlays may also live under `.brewva/agents/*.md`
+  or `.config/brewva/agents/*.md`; the Markdown body compiles into additive
+  worker instructions rather than bypassing the hosted catalog
 - detached runs also persist `delegation-context-manifest.json` so isolated
   children receive explicit parent-selected evidence context rather than
   ambient session access
+- delegated runs persist inspectable model-route metadata so
+  `subagent_status` can report whether the selected child model came from the
+  requested execution shape, the target preset, or an auto-applied policy
 - `subagent_status` and `subagent_cancel` survive parent runtime restarts
 - the control-plane delegation read model rebuilds run state from lifecycle
   events and durable run metadata

@@ -16,9 +16,9 @@ import { defineBrewvaTool } from "./utils/tool.js";
 
 const ACTION_VALUES = ["list", "show", "retrieve", "stats"] as const;
 
-const ActionSchema = buildStringEnumSchema(ACTION_VALUES, {}, {});
-const KindSchema = buildStringEnumSchema(DELIBERATION_MEMORY_ARTIFACT_KINDS, {}, {});
-const ScopeSchema = buildStringEnumSchema(DELIBERATION_MEMORY_SCOPE_VALUES, {}, {});
+const ActionSchema = buildStringEnumSchema(ACTION_VALUES, {});
+const KindSchema = buildStringEnumSchema(DELIBERATION_MEMORY_ARTIFACT_KINDS, {});
+const ScopeSchema = buildStringEnumSchema(DELIBERATION_MEMORY_SCOPE_VALUES, {});
 
 function readKind(value: unknown): (typeof DELIBERATION_MEMORY_ARTIFACT_KINDS)[number] | undefined {
   return typeof value === "string" &&

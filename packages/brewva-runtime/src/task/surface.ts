@@ -4,14 +4,6 @@ export const TASK_AGENT_VERIFICATION_LEVEL_VALUES = ["smoke", "targeted", "full"
 
 export type TaskAgentVerificationLevel = (typeof TASK_AGENT_VERIFICATION_LEVEL_VALUES)[number];
 
-export const TASK_AGENT_VERIFICATION_LEVEL_ALIASES = {
-  inspection: "none",
-  investigate: "none",
-  readonly: "none",
-  read_only: "none",
-  "read-only": "none",
-} as const satisfies Readonly<Record<string, TaskAgentVerificationLevel>>;
-
 export const TASK_AGENT_VERIFICATION_LEVEL_RUNTIME_MAP = {
   smoke: "quick",
   targeted: "standard",
@@ -30,10 +22,6 @@ const TASK_RUNTIME_TO_AGENT_VERIFICATION_LEVEL = {
 export const TASK_AGENT_ITEM_STATUS_VALUES = ["pending", "in_progress", "done", "blocked"] as const;
 
 export type TaskAgentItemStatus = (typeof TASK_AGENT_ITEM_STATUS_VALUES)[number];
-
-export const TASK_AGENT_ITEM_STATUS_ALIASES = {
-  "in-progress": "in_progress",
-} as const satisfies Readonly<Record<string, TaskAgentItemStatus>>;
 
 export const TASK_AGENT_ITEM_STATUS_RUNTIME_MAP = {
   pending: "todo",

@@ -155,43 +155,26 @@ function resolveLoopKeyFromSource(source: string | undefined): string | undefine
   return source.slice(GOAL_LOOP_PREFIX.length).trim() || undefined;
 }
 
-function readNamedObject(
+function readObjectField(
   value: Record<string, unknown> | undefined,
-  keys: readonly string[],
+  key: string,
 ): Record<string, unknown> | undefined {
-  for (const key of keys) {
-    const candidate = value?.[key];
-    if (isRecord(candidate)) {
-      return candidate;
-    }
-  }
-  return undefined;
+  const candidate = value?.[key];
+  return isRecord(candidate) ? candidate : undefined;
 }
 
-function readNamedString(
+function readStringField(
   value: Record<string, unknown> | undefined,
-  keys: readonly string[],
+  key: string,
 ): string | undefined {
-  for (const key of keys) {
-    const candidate = readString(value?.[key]);
-    if (candidate) {
-      return candidate;
-    }
-  }
-  return undefined;
+  return readString(value?.[key]);
 }
 
-function readNamedNumber(
+function readNumberField(
   value: Record<string, unknown> | undefined,
-  keys: readonly string[],
+  key: string,
 ): number | undefined {
-  for (const key of keys) {
-    const candidate = readNumber(value?.[key]);
-    if (candidate !== undefined) {
-      return candidate;
-    }
-  }
-  return undefined;
+  return readNumber(value?.[key]);
 }
 
 function summarizeUnknown(value: unknown, maxChars = 120): string | undefined {
@@ -230,24 +213,113 @@ function deriveLoopKeyFromIterationKey(value: string | undefined): string | unde
   return deriveLoopKeyFromRunKey(normalized.slice(0, markerIndex).trim());
 }
 
+interface LineageProgressKey {
+  runIndex?: number;
+  runLabel?: string;
+  stageRank: number;
+  stageIndex?: number;
+  rawKey?: string;
+}
+
+function parseLineageProgressKey(input: {
+  runKey?: string;
+  iterationKey?: string;
+}): LineageProgressKey | undefined {
+  const iterationKey = readString(input.iterationKey);
+  const runKey = readString(input.runKey);
+  const source = iterationKey ?? runKey;
+  if (!source) return undefined;
+
+  const runMatch = source.match(/(?:^|\/)run-([^/]+)/);
+  const runLabel = runMatch?.[1]?.trim();
+  const runIndex = runLabel && /^\d+$/.test(runLabel) ? Number.parseInt(runLabel, 10) : undefined;
+
+  if (iterationKey?.endsWith("/baseline")) {
+    return {
+      runIndex,
+      runLabel,
+      stageRank: 0,
+      stageIndex: 0,
+      rawKey: iterationKey,
+    };
+  }
+
+  const iterationMatch = iterationKey?.match(/(?:^|\/)iter-(\d+)/);
+  if (iterationMatch) {
+    return {
+      runIndex,
+      runLabel,
+      stageRank: 1,
+      stageIndex: Number.parseInt(iterationMatch[1] ?? "0", 10),
+      rawKey: iterationKey,
+    };
+  }
+
+  if (iterationKey) {
+    return {
+      runIndex,
+      runLabel,
+      stageRank: 2,
+      rawKey: iterationKey,
+    };
+  }
+
+  return {
+    runIndex,
+    runLabel,
+    stageRank: 3,
+    rawKey: runKey,
+  };
+}
+
+function compareLineageProgressKeys(
+  left: LineageProgressKey | undefined,
+  right: LineageProgressKey | undefined,
+): number {
+  if (!left && !right) return 0;
+  if (!left) return -1;
+  if (!right) return 1;
+
+  if (left.runIndex !== undefined || right.runIndex !== undefined) {
+    if (left.runIndex === undefined) return 1;
+    if (right.runIndex === undefined) return -1;
+    if (left.runIndex !== right.runIndex) {
+      return left.runIndex - right.runIndex;
+    }
+  }
+
+  const runLabelCompare = (left.runLabel ?? "").localeCompare(right.runLabel ?? "");
+  if (runLabelCompare !== 0) return runLabelCompare;
+
+  if (left.stageRank !== right.stageRank) {
+    return left.stageRank - right.stageRank;
+  }
+
+  const stageIndexCompare = (left.stageIndex ?? 0) - (right.stageIndex ?? 0);
+  if (stageIndexCompare !== 0) return stageIndexCompare;
+
+  return (left.rawKey ?? "").localeCompare(right.rawKey ?? "");
+}
+
+function compareRecordIdentity(
+  left: { timestamp: number; eventId: string },
+  right: { timestamp: number; eventId: string },
+): number {
+  return left.timestamp - right.timestamp || left.eventId.localeCompare(right.eventId);
+}
+
 function resolveLoopKeyFromGoalLoopOutputs(outputs: Record<string, unknown>): string | undefined {
-  const loopContract = readNamedObject(outputs, ["loop_contract", "loopContract"]);
-  const continuationPlan = readNamedObject(outputs, ["continuation_plan", "continuationPlan"]);
-  const iterationReport = readNamedObject(outputs, ["iteration_report", "iterationReport"]);
-  const convergenceReport = readNamedObject(outputs, ["convergence_report", "convergenceReport"]);
+  const loopContract = readObjectField(outputs, "loop_contract");
+  const continuationPlan = readObjectField(outputs, "continuation_plan");
+  const iterationReport = readObjectField(outputs, "iteration_report");
+  const convergenceReport = readObjectField(outputs, "convergence_report");
 
   return (
-    readNamedString(loopContract, ["loop_key", "loopKey"]) ??
-    resolveLoopKeyFromSource(readNamedString(loopContract, ["goal_ref", "goalRef"])) ??
-    readNamedString(continuationPlan, ["loop_key", "loopKey"]) ??
-    resolveLoopKeyFromSource(
-      readNamedString(continuationPlan, ["goal_ref", "goalRef", "source"]),
-    ) ??
-    deriveLoopKeyFromIterationKey(
-      readNamedString(iterationReport, ["iteration_key", "iterationKey"]),
-    ) ??
-    deriveLoopKeyFromRunKey(readNamedString(iterationReport, ["run_key", "runKey"])) ??
-    deriveLoopKeyFromRunKey(readNamedString(convergenceReport, ["run_key", "runKey"]))
+    readStringField(loopContract, "loop_key") ??
+    readStringField(continuationPlan, "loop_key") ??
+    deriveLoopKeyFromIterationKey(readStringField(iterationReport, "iteration_key")) ??
+    deriveLoopKeyFromRunKey(readStringField(iterationReport, "run_key")) ??
+    deriveLoopKeyFromRunKey(readStringField(convergenceReport, "run_key"))
   );
 }
 
@@ -324,7 +396,7 @@ function collectGoalLoopCompletions(
     if (event.type !== SKILL_COMPLETED_EVENT_TYPE) continue;
     if (!isRecord(event.payload)) continue;
     const skillName = readString(event.payload.skillName);
-    const outputs = readNamedObject(event.payload, ["outputs"]);
+    const outputs = readObjectField(event.payload, "outputs");
     if (!skillName || !outputs) continue;
     if (skillName !== "goal-loop" && !outputs.loop_contract && !outputs.iteration_report) {
       continue;
@@ -337,10 +409,10 @@ function collectGoalLoopCompletions(
       timestamp: event.timestamp,
       skillName,
       loopKey,
-      loopContract: readNamedObject(outputs, ["loop_contract", "loopContract"]),
-      iterationReport: readNamedObject(outputs, ["iteration_report", "iterationReport"]),
-      convergenceReport: readNamedObject(outputs, ["convergence_report", "convergenceReport"]),
-      continuationPlan: readNamedObject(outputs, ["continuation_plan", "continuationPlan"]),
+      loopContract: readObjectField(outputs, "loop_contract"),
+      iterationReport: readObjectField(outputs, "iteration_report"),
+      convergenceReport: readObjectField(outputs, "convergence_report"),
+      continuationPlan: readObjectField(outputs, "continuation_plan"),
     });
   }
   return records;
@@ -432,15 +504,70 @@ function deriveMetricTrend(input: {
 }
 
 function extractRunKey(value: Record<string, unknown> | undefined): string | undefined {
-  return readNamedString(value, ["run_key", "runKey"]);
+  return readStringField(value, "run_key");
 }
 
 function extractIterationKey(value: Record<string, unknown> | undefined): string | undefined {
-  return readNamedString(value, ["iteration_key", "iterationKey"]);
+  return readStringField(value, "iteration_key");
 }
 
 function extractIterationOutcome(value: Record<string, unknown> | undefined): string | undefined {
-  return readNamedString(value, ["outcome", "status", "result"]);
+  return readStringField(value, "outcome");
+}
+
+function compareMetricRecords(
+  left: MetricObservationRecord,
+  right: MetricObservationRecord,
+): number {
+  return (
+    compareLineageProgressKeys(
+      parseLineageProgressKey({ iterationKey: left.iterationKey }),
+      parseLineageProgressKey({ iterationKey: right.iterationKey }),
+    ) || compareRecordIdentity(left, right)
+  );
+}
+
+function compareGuardRecords(left: GuardResultRecord, right: GuardResultRecord): number {
+  return (
+    compareLineageProgressKeys(
+      parseLineageProgressKey({ iterationKey: left.iterationKey }),
+      parseLineageProgressKey({ iterationKey: right.iterationKey }),
+    ) || compareRecordIdentity(left, right)
+  );
+}
+
+function compareGoalLoopCompletions(
+  left: GoalLoopSkillCompletion,
+  right: GoalLoopSkillCompletion,
+): number {
+  return (
+    compareLineageProgressKeys(
+      parseLineageProgressKey({
+        runKey: extractRunKey(left.iterationReport) ?? extractRunKey(left.convergenceReport),
+        iterationKey: extractIterationKey(left.iterationReport),
+      }),
+      parseLineageProgressKey({
+        runKey: extractRunKey(right.iterationReport) ?? extractRunKey(right.convergenceReport),
+        iterationKey: extractIterationKey(right.iterationReport),
+      }),
+    ) || compareRecordIdentity(left, right)
+  );
+}
+
+function compareScheduleIntentRecords(
+  left: ScheduleIntentRecord,
+  right: ScheduleIntentRecord,
+): number {
+  const leftRunIndex = readNumber(left.payload.runIndex);
+  const rightRunIndex = readNumber(right.payload.runIndex);
+  if (leftRunIndex !== undefined || rightRunIndex !== undefined) {
+    if (leftRunIndex === undefined) return 1;
+    if (rightRunIndex === undefined) return -1;
+    if (leftRunIndex !== rightRunIndex) {
+      return leftRunIndex - rightRunIndex;
+    }
+  }
+  return compareRecordIdentity(left, right);
 }
 
 function extractContinuationSummary(
@@ -463,35 +590,18 @@ function extractContinuationSummary(
     return record.payload.nextRunAt !== undefined || record.payload.kind === "intent_created";
   });
   const nextTiming =
-    readNamedString(continuationPlan, ["next_run_timing", "nextRunTiming", "timing"]) ??
-    summarizeUnknown(cadence);
+    readStringField(continuationPlan, "next_run_timing") ?? summarizeUnknown(cadence);
+  const nextRunAt =
+    readNumberField(continuationPlan, "next_run_at") ?? nextSchedule?.payload.nextRunAt;
   return {
-    nextOwner: readNamedString(continuationPlan, [
-      "next_owner",
-      "nextOwner",
-      "owner",
-      "handoff_owner",
-    ]),
-    nextTrigger: readNamedString(continuationPlan, [
-      "next_run_trigger",
-      "nextRunTrigger",
-      "trigger",
-    ]),
+    nextOwner: readStringField(continuationPlan, "next_owner"),
+    nextTrigger: readStringField(continuationPlan, "next_run_trigger"),
     nextTiming,
-    nextObjective: readNamedString(continuationPlan, [
-      "next_run_objective",
-      "nextRunObjective",
-      "objective",
-    ]),
+    nextObjective: readStringField(continuationPlan, "next_run_objective"),
     scheduleIntentId:
-      readNamedString(continuationPlan, ["schedule_intent_id", "scheduleIntentId"]) ??
-      nextSchedule?.payload.intentId,
-    nextRunAt:
-      readNamedNumber(continuationPlan, ["next_run_at", "nextRunAt"]) ??
-      nextSchedule?.payload.nextRunAt,
-    scheduled:
-      (readNamedNumber(continuationPlan, ["next_run_at", "nextRunAt"]) ??
-        nextSchedule?.payload.nextRunAt) !== undefined,
+      readStringField(continuationPlan, "schedule_intent_id") ?? nextSchedule?.payload.intentId,
+    nextRunAt,
+    scheduled: nextRunAt !== undefined,
   };
 }
 
@@ -500,18 +610,11 @@ function deriveConvergenceSnapshot(input: {
   convergenceTimestamp?: number;
   continuationScheduled: boolean;
 }): OptimizationLineageArtifact["convergence"] {
-  const status = readNamedString(input.convergenceReport, ["status", "outcome", "decision"]);
-  const reasonCode = readNamedString(input.convergenceReport, [
-    "reason_code",
-    "reasonCode",
-    "reason",
-  ]);
+  const status = readStringField(input.convergenceReport, "status");
+  const reasonCode = readStringField(input.convergenceReport, "reason_code");
   const summary =
-    readNamedString(input.convergenceReport, [
-      "summary",
-      "metric_trajectory_summary",
-      "metricTrajectorySummary",
-    ]) ?? summarizeUnknown(input.convergenceReport, 220);
+    readStringField(input.convergenceReport, "metric_trajectory_summary") ??
+    summarizeUnknown(input.convergenceReport, 220);
   if (!status && !reasonCode && !summary) {
     return undefined;
   }
@@ -534,15 +637,9 @@ function deriveEscalationSnapshot(input: {
   escalationPolicy?: Record<string, unknown>;
   convergence?: OptimizationLineageArtifact["convergence"];
 }): OptimizationLineageArtifact["escalation"] {
-  const owner = readNamedString(input.escalationPolicy, [
-    "owner",
-    "next_owner",
-    "nextOwner",
-    "handoff_owner",
-  ]);
+  const owner = readStringField(input.escalationPolicy, "owner");
   const trigger =
-    readNamedString(input.escalationPolicy, ["trigger", "condition", "when", "reason"]) ??
-    input.convergence?.reasonCode;
+    readStringField(input.escalationPolicy, "trigger") ?? input.convergence?.reasonCode;
   const convergenceText =
     `${input.convergence?.status ?? ""} ${input.convergence?.reasonCode ?? ""}`
       .toLowerCase()
@@ -615,37 +712,36 @@ function buildMetricSnapshot(input: {
   contract?: Record<string, unknown>;
   metrics: readonly MetricObservationRecord[];
 }): OptimizationLineageArtifact["metric"] {
-  const metricConfig = readNamedObject(input.contract, ["metric"]);
-  const baselineConfig = readNamedObject(input.contract, ["baseline"]);
-  const metricKey =
-    readNamedString(metricConfig, ["key", "metric_key", "name"]) ?? input.metrics.at(-1)?.metricKey;
+  const metricConfig = readObjectField(input.contract, "metric");
+  const baselineConfig = readObjectField(input.contract, "baseline");
+  const metricKey = readStringField(metricConfig, "key") ?? input.metrics.at(-1)?.metricKey;
   if (!metricKey) return undefined;
   const metricValues = input.metrics.map((entry) => entry.value);
-  const direction = readNamedString(metricConfig, ["direction", "goal"]);
-  const baselineValue =
-    readNamedNumber(baselineConfig, ["value", "metric_value", "baseline_value"]) ??
-    input.metrics[0]?.value;
-  const latestValue = input.metrics.at(-1)?.value;
-  const previousValue = input.metrics.length > 1 ? input.metrics.at(-2)?.value : undefined;
+  const direction = readStringField(metricConfig, "direction");
+  const baselineValue = readNumberField(baselineConfig, "value") ?? input.metrics[0]?.value;
+  const latestMetric = input.metrics.at(-1);
+  const previousMetric = input.metrics.length > 1 ? input.metrics.at(-2) : undefined;
   return {
     metricKey,
     direction,
-    unit: readNamedString(metricConfig, ["unit"]) ?? input.metrics.at(-1)?.unit,
-    aggregation:
-      readNamedString(metricConfig, ["aggregation"]) ?? input.metrics.at(-1)?.aggregation,
-    minDelta: readNamedNumber(metricConfig, ["min_delta", "minDelta"]),
+    unit: readStringField(metricConfig, "unit") ?? latestMetric?.unit,
+    aggregation: readStringField(metricConfig, "aggregation") ?? latestMetric?.aggregation,
+    minDelta: readNumberField(metricConfig, "min_delta"),
     baselineValue,
-    latestValue,
+    latestValue: latestMetric?.value,
     bestValue: deriveBestMetricValue(metricValues, inferDirection(direction)),
     trend: deriveMetricTrend({
       direction,
       baselineValue,
-      latestValue,
-      previousValue,
-      minDelta: readNamedNumber(metricConfig, ["min_delta", "minDelta"]),
+      latestValue: latestMetric?.value,
+      previousValue: previousMetric?.value,
+      minDelta: readNumberField(metricConfig, "min_delta"),
     }),
     observationCount: input.metrics.length,
-    lastObservedAt: input.metrics.at(-1)?.timestamp,
+    lastObservedAt:
+      input.metrics.length > 0
+        ? Math.max(...input.metrics.map((entry) => entry.timestamp))
+        : undefined,
   };
 }
 
@@ -653,19 +749,22 @@ function buildGuardSnapshot(input: {
   contract?: Record<string, unknown>;
   guards: readonly GuardResultRecord[];
 }): OptimizationLineageArtifact["guard"] {
-  const guardConfig = readNamedObject(input.contract, ["guard"]);
-  const guardKey =
-    readNamedString(guardConfig, ["key", "guard_key", "name"]) ?? input.guards.at(-1)?.guardKey;
+  const guardConfig = readObjectField(input.contract, "guard");
+  const guardKey = readStringField(guardConfig, "key") ?? input.guards.at(-1)?.guardKey;
   if (!guardKey) return undefined;
   const statusCounts: Record<string, number> = {};
   for (const guard of input.guards) {
     statusCounts[guard.status] = (statusCounts[guard.status] ?? 0) + 1;
   }
+  const latestGuard = input.guards.at(-1);
   return {
     guardKey,
-    lastStatus: input.guards.at(-1)?.status,
+    lastStatus: latestGuard?.status,
     observationCount: input.guards.length,
-    lastObservedAt: input.guards.at(-1)?.timestamp,
+    lastObservedAt:
+      input.guards.length > 0
+        ? Math.max(...input.guards.map((entry) => entry.timestamp))
+        : undefined,
     statusCounts,
   };
 }
@@ -819,16 +918,10 @@ function buildOptimizationLineages(
   for (const group of grouped.values()) {
     const loopKey = resolveLoopKeyFromSource(group.goalRef);
     if (!loopKey) continue;
-    const sortedMetrics = group.metrics.toSorted((left, right) => left.timestamp - right.timestamp);
-    const sortedGuards = group.guards.toSorted((left, right) => left.timestamp - right.timestamp);
-    const sortedSchedules = group.schedules.toSorted(
-      (left, right) =>
-        left.timestamp - right.timestamp || left.eventId.localeCompare(right.eventId),
-    );
-    const sortedCompletions = group.completions.toSorted(
-      (left, right) =>
-        left.timestamp - right.timestamp || left.eventId.localeCompare(right.eventId),
-    );
+    const sortedMetrics = group.metrics.toSorted(compareMetricRecords);
+    const sortedGuards = group.guards.toSorted(compareGuardRecords);
+    const sortedSchedules = group.schedules.toSorted(compareScheduleIntentRecords);
+    const sortedCompletions = group.completions.toSorted(compareGoalLoopCompletions);
     const latestContract = sortedCompletions
       .toReversed()
       .find((entry) => entry.loopContract)?.loopContract;
@@ -844,7 +937,7 @@ function buildOptimizationLineages(
 
     const continuation = extractContinuationSummary(
       latestContinuationPlan,
-      readNamedObject(latestContract, ["cadence"]),
+      readObjectField(latestContract, "cadence"),
       sortedSchedules,
     );
     const convergence = deriveConvergenceSnapshot({
@@ -853,7 +946,7 @@ function buildOptimizationLineages(
       continuationScheduled: continuation.scheduled,
     });
     const escalation = deriveEscalationSnapshot({
-      escalationPolicy: readNamedObject(latestContract, ["escalation_policy", "escalationPolicy"]),
+      escalationPolicy: readObjectField(latestContract, "escalation_policy"),
       convergence,
     });
     const recentOutcomes = sortedCompletions
@@ -928,10 +1021,10 @@ function buildOptimizationLineages(
       loopKey,
       goalRef: group.goalRef,
       rootSessionId: group.rootSessionId,
-      goal: readNamedString(latestContract, ["goal"]),
+      goal: readStringField(latestContract, "goal"),
       summary: buildSummary({
         loopKey,
-        goal: readNamedString(latestContract, ["goal"]),
+        goal: readStringField(latestContract, "goal"),
         metric,
         guard,
         status,
@@ -940,7 +1033,7 @@ function buildOptimizationLineages(
       }),
       scope: readStringArray(latestContract?.scope),
       continuityMode:
-        readNamedString(latestContract, ["continuity_mode", "continuityMode"]) ??
+        readStringField(latestContract, "continuity_mode") ??
         sortedSchedules.at(-1)?.payload.continuityMode,
       status,
       runCount,

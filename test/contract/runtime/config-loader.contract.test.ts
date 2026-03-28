@@ -166,7 +166,7 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.skills.routing.scopes).toEqual(["domain", "operator"]);
   });
 
-  test("treats null session cost cap as the explicit unlimited sentinel", () => {
+  test("rejects null session cost cap now that zero is the only unlimited sentinel", () => {
     const workspace = createTestWorkspace("cost-cap-null-sentinel");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
@@ -184,8 +184,9 @@ describe("Brewva config loader normalization", () => {
       "utf8",
     );
 
-    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
-    expect(loaded.infrastructure.costTracking.maxCostUsdPerSession).toBe(0);
+    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
+      /maxCostUsdPerSession/,
+    );
   });
 
   test("fails fast on removed skills.selector config", () => {
@@ -273,9 +274,6 @@ describe("Brewva config loader normalization", () => {
     expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
       /unknown property "commandDenyList"/,
     );
-    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
-      /brewva config migrate --write/,
-    );
   });
 
   test("fails fast when security.execution.sandbox.apiKey is present in config files", () => {
@@ -301,9 +299,6 @@ describe("Brewva config loader normalization", () => {
     expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
       /unknown property "apiKey"/,
     );
-    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
-      /brewva config migrate --write/,
-    );
   });
 
   test("fails fast on direct runtime config when security.execution.commandDenyList appears", () => {
@@ -328,13 +323,6 @@ describe("Brewva config loader normalization", () => {
           config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
         }),
     ).toThrow(/security\.execution\.commandDenyList must not appear in active config/);
-    expect(
-      () =>
-        new BrewvaRuntime({
-          cwd: workspace,
-          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-        }),
-    ).toThrow(/brewva config migrate --write/);
   });
 
   test("fails fast on direct runtime config when security.execution.sandbox.apiKey appears", () => {
@@ -358,12 +346,5 @@ describe("Brewva config loader normalization", () => {
           config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
         }),
     ).toThrow(/security\.execution\.sandbox\.apiKey must not appear in active config/);
-    expect(
-      () =>
-        new BrewvaRuntime({
-          cwd: workspace,
-          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-        }),
-    ).toThrow(/brewva config migrate --write/);
   });
 });

@@ -24,24 +24,18 @@ import {
 } from "./exec-process-registry.js";
 import { isPathInsideRoots, resolveToolTargetScope } from "./target-scope.js";
 import type { BrewvaToolRuntime } from "./types.js";
-import { attachCanonicalParameterKeys } from "./utils/input-alias.js";
 import { textResult, withVerdict } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
-const ExecSchema = attachCanonicalParameterKeys(
-  Type.Object({
-    command: Type.String({ minLength: 1 }),
-    workdir: Type.Optional(Type.String()),
-    env: Type.Optional(Type.Record(Type.String(), Type.String())),
-    yieldMs: Type.Optional(Type.Integer({ minimum: 0, maximum: 120_000 })),
-    yield_ms: Type.Optional(Type.Integer({ minimum: 0, maximum: 120_000 })),
-    background: Type.Optional(Type.Boolean()),
-    timeout: Type.Optional(Type.Number({ minimum: 1, maximum: 7_200_000 })),
-    timeout_ms: Type.Optional(Type.Integer({ minimum: 1, maximum: 7_200_000 })),
-  }),
-  ["command", "workdir", "env", "yieldMs", "background", "timeout"],
-);
+const ExecSchema = Type.Object({
+  command: Type.String({ minLength: 1 }),
+  workdir: Type.Optional(Type.String()),
+  env: Type.Optional(Type.Record(Type.String(), Type.String())),
+  yieldMs: Type.Optional(Type.Integer({ minimum: 0, maximum: 120_000 })),
+  background: Type.Optional(Type.Boolean()),
+  timeout: Type.Optional(Type.Number({ minimum: 1, maximum: 7_200_000 })),
+});
 
 const DEFAULT_YIELD_MS = 10_000;
 const MAX_TIMEOUT_SEC = 7_200;
@@ -142,33 +136,21 @@ function resolveWorkdir(baseCwd: string, value: unknown): string {
   return resolve(baseCwd, trimmed);
 }
 
-function resolveYieldMs(params: { yieldMs?: unknown; yield_ms?: unknown }): number {
-  const raw = typeof params.yieldMs === "number" ? params.yieldMs : params.yield_ms;
+function resolveYieldMs(params: { yieldMs?: unknown }): number {
+  const raw = params.yieldMs;
   if (typeof raw !== "number" || !Number.isFinite(raw)) return DEFAULT_YIELD_MS;
   return Math.max(0, Math.min(120_000, Math.trunc(raw)));
 }
 
-function resolveTimeoutSec(params: {
-  timeout?: unknown;
-  timeout_ms?: unknown;
-}): number | undefined {
+function resolveTimeoutSec(params: { timeout?: unknown }): number | undefined {
   const clampSeconds = (seconds: number): number => Math.max(1, Math.min(MAX_TIMEOUT_SEC, seconds));
-
-  const timeoutMs = params.timeout_ms;
-  if (typeof timeoutMs === "number" && Number.isFinite(timeoutMs)) {
-    const normalizedMs = Math.max(1, Math.min(MAX_TIMEOUT_MS, timeoutMs));
-    return clampSeconds(normalizedMs / 1_000);
-  }
 
   const timeout = params.timeout;
   if (typeof timeout !== "number" || !Number.isFinite(timeout)) {
     return undefined;
   }
 
-  // Values above 1000 are unambiguously milliseconds (1000ms = 1s minimum
-  // practical timeout). Values <= MAX_TIMEOUT_SEC are treated as seconds.
-  // This avoids the dead zone where e.g. 10800 (intending 3h in seconds)
-  // would be silently converted to ~10.8 seconds.
+  // Values above 1000 are treated as milliseconds. Smaller values remain seconds.
   if (timeout > 1_000) {
     const normalizedMs = Math.max(1, Math.min(MAX_TIMEOUT_MS, timeout));
     return clampSeconds(normalizedMs / 1_000);

@@ -5,8 +5,6 @@ to miss when reading individual module docs.
 
 ## Runtime Surface
 
-- `runtime.skills.complete(sessionId, output, options?)` accepts `options` for
-  compatibility, but current runtime flow only persists/uses `output`.
 - `runtime.events.subscribe(...)` is in-process and ephemeral.
 
 ## Event Pipeline

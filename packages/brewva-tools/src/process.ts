@@ -16,45 +16,36 @@ import {
   type ManagedExecFinishedSession,
   type ManagedExecRunningSession,
 } from "./exec-process-registry.js";
-import { attachCanonicalParameterKeys, buildStringEnumSchema } from "./utils/input-alias.js";
+import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { textResult, type ToolResultVerdict, withVerdict } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
 const PROCESS_ACTION_VALUES = ["list", "poll", "log", "write", "kill", "clear", "remove"] as const;
-const ProcessActionSchema = buildStringEnumSchema(
-  PROCESS_ACTION_VALUES,
-  {},
-  {
-    guidance:
-      "Use list to inspect sessions, poll for incremental output, log for stored logs, write for stdin, kill to stop a running session, clear to prune completed sessions, and remove to delete a stored session record.",
-  },
-);
+const ProcessActionSchema = buildStringEnumSchema(PROCESS_ACTION_VALUES, {
+  guidance:
+    "Use list to inspect sessions, poll for incremental output, log for stored logs, write for stdin, kill to stop a running session, clear to prune completed sessions, and remove to delete a stored session record.",
+});
 
-const ProcessSchema = attachCanonicalParameterKeys(
-  Type.Object({
-    action: ProcessActionSchema,
-    sessionId: Type.Optional(Type.String()),
-    session_id: Type.Optional(Type.String()),
-    data: Type.Optional(Type.String()),
-    eof: Type.Optional(Type.Boolean()),
-    offset: Type.Optional(Type.Integer({ minimum: 0 })),
-    limit: Type.Optional(Type.Integer({ minimum: 0 })),
-    timeout: Type.Optional(Type.Number({ minimum: 0, maximum: MAX_POLL_WAIT_MS })),
-    timeout_ms: Type.Optional(Type.Integer({ minimum: 0, maximum: MAX_POLL_WAIT_MS })),
-  }),
-  ["action", "sessionId", "data", "eof", "offset", "limit", "timeout"],
-);
+const ProcessSchema = Type.Object({
+  action: ProcessActionSchema,
+  sessionId: Type.Optional(Type.String()),
+  data: Type.Optional(Type.String()),
+  eof: Type.Optional(Type.Boolean()),
+  offset: Type.Optional(Type.Integer({ minimum: 0 })),
+  limit: Type.Optional(Type.Integer({ minimum: 0 })),
+  timeout: Type.Optional(Type.Number({ minimum: 0, maximum: MAX_POLL_WAIT_MS })),
+});
 
-function pickSessionId(params: { sessionId?: unknown; session_id?: unknown }): string | undefined {
-  const candidate = typeof params.sessionId === "string" ? params.sessionId : params.session_id;
+function pickSessionId(params: { sessionId?: unknown }): string | undefined {
+  const candidate = params.sessionId;
   if (typeof candidate !== "string") return undefined;
   const trimmed = candidate.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function resolvePollTimeoutMs(params: { timeout?: unknown; timeout_ms?: unknown }): number {
-  const raw = typeof params.timeout === "number" ? params.timeout : params.timeout_ms;
+function resolvePollTimeoutMs(params: { timeout?: unknown }): number {
+  const raw = params.timeout;
   if (typeof raw !== "number" || !Number.isFinite(raw)) return 0;
   return Math.max(0, Math.min(MAX_POLL_WAIT_MS, Math.trunc(raw)));
 }

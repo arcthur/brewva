@@ -1,10 +1,8 @@
 import {
   formatTaskStateBlock,
   normalizeTaskAcceptanceOwner,
-  TASK_AGENT_ITEM_STATUS_ALIASES,
   TASK_AGENT_ITEM_STATUS_RUNTIME_MAP,
   TASK_AGENT_ITEM_STATUS_VALUES,
-  TASK_AGENT_VERIFICATION_LEVEL_ALIASES,
   TASK_AGENT_VERIFICATION_LEVEL_RUNTIME_MAP,
   TASK_AGENT_VERIFICATION_LEVEL_VALUES,
   type TaskItemStatus,
@@ -18,28 +16,20 @@ import { failTextResult, textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
-const VerificationLevelSchema = buildStringEnumSchema(
-  TASK_AGENT_VERIFICATION_LEVEL_VALUES,
-  TASK_AGENT_VERIFICATION_LEVEL_ALIASES,
-  {
-    recommendedValue: "none",
-    guidance:
-      "Use smoke for a quick executable check, targeted for focused verification, and full for broad validation. For read-only review, omit this field or use none.",
-    omitGuidance: "Omit this field or use none for read-only review and investigation.",
-    runtimeValueMap: TASK_AGENT_VERIFICATION_LEVEL_RUNTIME_MAP,
-  },
-);
+const VerificationLevelSchema = buildStringEnumSchema(TASK_AGENT_VERIFICATION_LEVEL_VALUES, {
+  recommendedValue: "none",
+  guidance:
+    "Use smoke for a quick executable check, targeted for focused verification, and full for broad validation. For read-only review, omit this field or use none.",
+  omitGuidance: "Omit this field or use none for read-only review and investigation.",
+  runtimeValueMap: TASK_AGENT_VERIFICATION_LEVEL_RUNTIME_MAP,
+});
 
-const TaskItemStatusSchema = buildStringEnumSchema(
-  TASK_AGENT_ITEM_STATUS_VALUES,
-  TASK_AGENT_ITEM_STATUS_ALIASES,
-  {
-    recommendedValue: "pending",
-    guidance:
-      "Use pending for not-started work, in_progress for active work, blocked for waiting, and done for finished work.",
-    runtimeValueMap: TASK_AGENT_ITEM_STATUS_RUNTIME_MAP,
-  },
-);
+const TaskItemStatusSchema = buildStringEnumSchema(TASK_AGENT_ITEM_STATUS_VALUES, {
+  recommendedValue: "pending",
+  guidance:
+    "Use pending for not-started work, in_progress for active work, blocked for waiting, and done for finished work.",
+  runtimeValueMap: TASK_AGENT_ITEM_STATUS_RUNTIME_MAP,
+});
 
 function toRuntimeVerificationLevel(value: unknown): VerificationLevel | undefined {
   return value === "quick" || value === "standard" || value === "strict" ? value : undefined;
@@ -68,22 +58,14 @@ const taskItemCanonicalGuideline =
 
 const TASK_ACCEPTANCE_STATUS_VALUES = ["pending", "accepted", "rejected"] as const;
 const TASK_ACCEPTANCE_OWNER_VALUES = ["operator"] as const;
-const TaskAcceptanceStatusSchema = buildStringEnumSchema(
-  TASK_ACCEPTANCE_STATUS_VALUES,
-  {},
-  {
-    guidance:
-      "Use accepted when an operator closes the task, rejected when the result is not yet acceptable, and pending to reopen acceptance after new work.",
-  },
-);
-const TaskAcceptanceOwnerSchema = buildStringEnumSchema(
-  TASK_ACCEPTANCE_OWNER_VALUES,
-  {},
-  {
-    guidance:
-      "Only operator-owned acceptance is supported. Omit owner unless you need to state that closure is operator-controlled.",
-  },
-);
+const TaskAcceptanceStatusSchema = buildStringEnumSchema(TASK_ACCEPTANCE_STATUS_VALUES, {
+  guidance:
+    "Use accepted when an operator closes the task, rejected when the result is not yet acceptable, and pending to reopen acceptance after new work.",
+});
+const TaskAcceptanceOwnerSchema = buildStringEnumSchema(TASK_ACCEPTANCE_OWNER_VALUES, {
+  guidance:
+    "Only operator-owned acceptance is supported. Omit owner unless you need to state that closure is operator-controlled.",
+});
 
 export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinition[] {
   const taskSetSpec = defineBrewvaTool({

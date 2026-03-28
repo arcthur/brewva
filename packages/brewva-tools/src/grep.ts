@@ -4,7 +4,7 @@ import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { resolveToolTargetScope, isPathInsideRoots, resolveScopedPath } from "./target-scope.js";
 import type { BrewvaToolOptions } from "./types.js";
-import { buildStringEnumSchema, normalizeStringEnumAlias } from "./utils/input-alias.js";
+import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
@@ -14,14 +14,7 @@ interface GrepToolOptions extends BrewvaToolOptions {
 
 type GrepCase = "smart" | "ignore" | "sensitive";
 const GREP_CASE_VALUES = ["smart", "insensitive", "sensitive"] as const;
-const GREP_CASE_ALIASES = {
-  smart_case: "smart",
-  "case-insensitive": "insensitive",
-  case_insensitive: "insensitive",
-  "case-sensitive": "sensitive",
-  case_sensitive: "sensitive",
-} as const;
-const GREP_CASE_SCHEMA = buildStringEnumSchema(GREP_CASE_VALUES, GREP_CASE_ALIASES, {
+const GREP_CASE_SCHEMA = buildStringEnumSchema(GREP_CASE_VALUES, {
   defaultValue: "smart",
   recommendedValue: "smart",
   guidance:
@@ -35,11 +28,10 @@ function normalizeGrepCase(value: unknown): GrepCase {
   if (value === "ignore" || value === "sensitive" || value === "smart") {
     return value;
   }
-  const normalized = normalizeStringEnumAlias(value, GREP_CASE_VALUES, GREP_CASE_ALIASES);
-  if (normalized === "insensitive") {
+  if (value === "insensitive") {
     return "ignore";
   }
-  if (normalized === "sensitive") {
+  if (value === "sensitive") {
     return "sensitive";
   }
   return "smart";

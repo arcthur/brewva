@@ -359,21 +359,12 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
   },
   "patch-worker": {
     name: "patch-worker",
-    description: "Execution-first isolated patch worker compatibility preset.",
+    description: "Execution-first isolated patch worker preset.",
     envelope: "patch-worker",
     fallbackResultMode: "patch",
     executorPreamble:
       "Operate as an isolated patch worker. Keep edits minimal, preserve surrounding behavior, and summarize the patch concisely.",
   },
-} as const;
-
-const ENVELOPE_ALIASES: Readonly<Record<string, string>> = {
-  explore: "readonly-scout",
-  plan: "readonly-planner",
-  review: "readonly-reviewer",
-  general: "readonly-general",
-  verification: "verification-runner",
-  "patch-worker": "patch-worker",
 } as const;
 
 const DEFAULT_AGENT_SPEC_BY_SKILL_NAME: Readonly<Record<string, string>> = {
@@ -509,8 +500,7 @@ export function resolveHostedExecutionEnvelope(
   if (!name) {
     return undefined;
   }
-  const aliased = ENVELOPE_ALIASES[name] ?? name;
-  return catalog.envelopes.get(aliased);
+  return catalog.envelopes.get(name);
 }
 
 export function deriveFallbackResultModeForSkillName(

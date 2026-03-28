@@ -24,16 +24,16 @@ describe("BrewvaConfigFile typing", () => {
     expect(config.infrastructure?.toolFailureInjection?.enabled).toBe(false);
   });
 
-  test("accepts null as the explicit unlimited session-cost sentinel", () => {
+  test("uses numeric zero as the explicit unlimited session-cost sentinel", () => {
     const config: BrewvaConfigFile = {
       infrastructure: {
         costTracking: {
-          maxCostUsdPerSession: null,
+          maxCostUsdPerSession: 0,
         },
       },
     };
 
-    expect(config.infrastructure?.costTracking?.maxCostUsdPerSession).toBeNull();
+    expect(config.infrastructure?.costTracking?.maxCostUsdPerSession).toBe(0);
   });
 
   test("supports boundary policy, credential vault, and exact-call loop guard overlay shapes", () => {

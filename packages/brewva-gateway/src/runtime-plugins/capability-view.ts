@@ -55,7 +55,6 @@ interface CapabilityManifestEntry {
 export interface CapabilityParameterDetail {
   pathText: string;
   acceptedValues: string[];
-  aliasMappings: string[];
   defaultValue?: string;
   recommendedValue?: string;
   guidance?: string;
@@ -191,16 +190,12 @@ function extractParameterKeys(parameters: unknown): string[] {
 function mapCapabilityParameterDetail(
   entry: StringEnumContractEntry,
 ): CapabilityParameterDetail | null {
-  const aliasMappings = Object.entries(entry.contract.aliases)
-    .map(([alias, canonical]) => `${alias}->${canonical}`)
-    .toSorted();
   if (entry.pathText.length === 0) {
     return null;
   }
   return {
     pathText: entry.pathText,
     acceptedValues: [...entry.contract.canonicalValues],
-    aliasMappings,
     defaultValue: entry.contract.defaultValue,
     recommendedValue: entry.contract.recommendedValue,
     guidance: entry.contract.guidance,
@@ -345,9 +340,6 @@ function formatFullDetailBlock(detail: CapabilityDetail): string {
   for (const parameterDetail of detail.parameterDetails) {
     const detailParts = [
       `values=${parameterDetail.acceptedValues.join("|")}`,
-      parameterDetail.aliasMappings.length > 0
-        ? `aliases=${parameterDetail.aliasMappings.join(", ")}`
-        : undefined,
       parameterDetail.defaultValue ? `default=${parameterDetail.defaultValue}` : undefined,
       parameterDetail.recommendedValue
         ? `recommended=${parameterDetail.recommendedValue}`
@@ -389,9 +381,6 @@ function formatCompactDetailBlock(detail: CapabilityDetail): string {
   for (const parameterDetail of detail.parameterDetails.slice(0, 3)) {
     const detailParts = [
       `values=${parameterDetail.acceptedValues.join("|")}`,
-      parameterDetail.aliasMappings.length > 0
-        ? `aliases=${parameterDetail.aliasMappings.slice(0, 4).join(", ")}`
-        : undefined,
       parameterDetail.defaultValue ? `default=${parameterDetail.defaultValue}` : undefined,
     ].filter((part): part is string => Boolean(part));
     lines.push(`param.${parameterDetail.pathText}: ${detailParts.join(" ; ")}`);

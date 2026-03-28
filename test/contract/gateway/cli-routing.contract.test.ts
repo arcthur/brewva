@@ -29,6 +29,22 @@ describe("gateway cli routing", () => {
     expect(errors.join("\n")).toContain("unknown gateway command");
   });
 
+  test("does not keep the removed run alias for start", async () => {
+    const originalError = console.error;
+    const errors: string[] = [];
+    console.error = (...args: unknown[]) => {
+      errors.push(args.map((value) => String(value)).join(" "));
+    };
+    try {
+      const result = await runGatewayCli(["run"]);
+      expect(result.handled).toBe(true);
+      expect(result.exitCode).toBe(1);
+    } finally {
+      console.error = originalError;
+    }
+    expect(errors.join("\n")).toContain("unknown gateway command");
+  });
+
   test("handles help without fallback mode", async () => {
     const result = await runGatewayCli(["help"]);
     expect(result.handled).toBe(true);

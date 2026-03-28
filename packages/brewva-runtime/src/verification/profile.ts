@@ -46,10 +46,20 @@ function hasTargetExtension(
   );
 }
 
-function readPackageManifest(root: string): PackageManifest {
-  const packageJsonPath = resolve(root, "package.json");
+function readPackageManifest(
+  root: string,
+  manifestCache?: Map<string, PackageManifest>,
+): PackageManifest {
+  const normalizedRoot = resolve(root);
+  const cached = manifestCache?.get(normalizedRoot);
+  if (cached) {
+    return cached;
+  }
+  const packageJsonPath = resolve(normalizedRoot, "package.json");
   if (!existsSync(packageJsonPath)) {
-    return { scripts: {} };
+    const emptyManifest = { scripts: {} };
+    manifestCache?.set(normalizedRoot, emptyManifest);
+    return emptyManifest;
   }
   try {
     const parsed = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
@@ -65,20 +75,28 @@ function readPackageManifest(root: string): PackageManifest {
             ),
           )
         : {};
-    return {
+    const manifest = {
       scripts,
       packageManager:
         typeof parsed.packageManager === "string" && parsed.packageManager.trim().length > 0
           ? parsed.packageManager.trim()
           : undefined,
     };
+    manifestCache?.set(normalizedRoot, manifest);
+    return manifest;
   } catch {
-    return { scripts: {} };
+    const emptyManifest = { scripts: {} };
+    manifestCache?.set(normalizedRoot, emptyManifest);
+    return emptyManifest;
   }
 }
 
-function firstScriptName(root: string, names: readonly string[]): string | undefined {
-  const scripts = readPackageManifest(root).scripts;
+function firstScriptName(
+  root: string,
+  names: readonly string[],
+  manifest?: PackageManifest,
+): string | undefined {
+  const scripts = (manifest ?? readPackageManifest(root)).scripts;
   for (const name of names) {
     if (typeof scripts[name] === "string" && scripts[name].trim().length > 0) {
       return name;
@@ -102,9 +120,13 @@ function resolvePackageManager(
   return "npm";
 }
 
-function buildPackageScriptCommand(root: string, scriptName: string): string {
-  const manifest = readPackageManifest(root);
-  const packageManager = resolvePackageManager(root, manifest);
+function buildPackageScriptCommand(
+  root: string,
+  scriptName: string,
+  manifest?: PackageManifest,
+): string {
+  const resolvedManifest = manifest ?? readPackageManifest(root);
+  const packageManager = resolvePackageManager(root, resolvedManifest);
   if (packageManager === "bun") {
     return `bun run ${scriptName}`;
   }
@@ -117,9 +139,13 @@ function buildPackageScriptCommand(root: string, scriptName: string): string {
   return `npm run ${scriptName}`;
 }
 
-function firstScriptCommand(root: string, names: readonly string[]): string | undefined {
-  const scriptName = firstScriptName(root, names);
-  return scriptName ? buildPackageScriptCommand(root, scriptName) : undefined;
+function firstScriptCommand(
+  root: string,
+  names: readonly string[],
+  manifest?: PackageManifest,
+): string | undefined {
+  const scriptName = firstScriptName(root, names, manifest);
+  return scriptName ? buildPackageScriptCommand(root, scriptName, manifest) : undefined;
 }
 
 function hasFile(root: string, relativePath: string): boolean {
@@ -198,18 +224,20 @@ function resolveDefaultChecks(input: {
   const roots = input.targetRoots.length > 0 ? [...input.targetRoots] : [process.cwd()];
   const hasTypeScriptTargets = hasTargetExtension(input.taskState, [".ts", ".tsx"]);
   const checks: VerificationPlanCheck[] = [];
+  const manifestCache = new Map<string, PackageManifest>();
 
   for (const root of roots) {
+    const manifest = readPackageManifest(root, manifestCache);
     const hasTypeScriptRoot = hasFile(root, "tsconfig.json") || hasFile(root, "jsconfig.json");
     const hasLintConfigRoot = hasAnyLintConfig(root);
     const typecheckCommand =
-      firstScriptCommand(root, ["typecheck", "type-check", "check"]) ??
+      firstScriptCommand(root, ["typecheck", "type-check", "check"], manifest) ??
       input.config.verification.commands["type-check"];
     const lintCommand =
-      firstScriptCommand(root, ["lint"]) ??
+      firstScriptCommand(root, ["lint"], manifest) ??
       (hasLintConfigRoot ? input.config.verification.commands.lint : undefined);
     const testsCommand =
-      firstScriptCommand(root, ["test", "build", "verify", "check"]) ??
+      firstScriptCommand(root, ["test", "build", "verify", "check"], manifest) ??
       input.config.verification.commands.tests;
 
     for (const name of input.config.verification.checks[input.level] ?? []) {

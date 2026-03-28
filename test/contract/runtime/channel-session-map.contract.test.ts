@@ -8,7 +8,7 @@ import {
 describe("channel session mapping", () => {
   test("given raw channel and conversation id, when building raw conversation key, then channel is normalized and conversation id is preserved", () => {
     expect(buildRawConversationKey(" Telegram ", " 12345 ")).toBe("telegram:12345");
-    expect(buildRawConversationKey("tg", "group:42")).toBe("telegram:group:42");
+    expect(buildRawConversationKey("telegram", "group:42")).toBe("telegram:group:42");
   });
 
   test("given same conversation and normalized channel, when building channel session id, then id is deterministic and channel-scoped", () => {

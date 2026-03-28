@@ -16,21 +16,20 @@ function createAdapter(id: string): ChannelAdapter {
 }
 
 describe("channel adapter registry", () => {
-  test("given adapter registration with aliases, when resolving ids, then builtin alias normalization is applied", () => {
+  test("given adapter registration without aliases, when resolving ids, then only canonical ids are accepted", () => {
     const registry = new ChannelAdapterRegistry();
     registry.register({
       id: "telegram",
-      aliases: ["tg"],
       create: () => createAdapter("telegram"),
     });
 
     expect(registry.resolveId("telegram")).toBe("telegram");
-    expect(registry.resolveId("tg")).toBe("telegram");
-    expect(registry.resolveId("TG")).toBe("telegram");
-    expect(registry.list()).toEqual([{ id: "telegram", aliases: [] }]);
+    expect(registry.resolveId("TG")).toBeUndefined();
+    expect(registry.resolveId("tg")).toBeUndefined();
+    expect(registry.list()).toEqual([{ id: "telegram" }]);
   });
 
-  test("given conflicting adapter ids or aliases, when registering adapter, then registry rejects duplicates", () => {
+  test("given conflicting adapter ids, when registering adapter, then registry rejects duplicates", () => {
     const registry = new ChannelAdapterRegistry();
     registry.register({
       id: "telegram",
@@ -42,19 +41,6 @@ describe("channel adapter registry", () => {
         create: () => createAdapter("telegram"),
       }),
     ).toThrow("adapter already registered: telegram");
-
-    registry.register({
-      id: "discord",
-      aliases: ["dc"],
-      create: () => createAdapter("discord"),
-    });
-    expect(() =>
-      registry.register({
-        id: "dummy",
-        aliases: ["dc"],
-        create: () => createAdapter("dummy"),
-      }),
-    ).toThrow("adapter alias already registered: dc -> discord");
   });
 
   test("given adapter factory output id mismatch, when creating adapter, then registry throws mismatch error", () => {
@@ -74,15 +60,13 @@ describe("channel adapter registry", () => {
     );
   });
 
-  test("given adapter with aliases, when unregistering by alias, then alias and primary id are removed", () => {
+  test("given adapter id, when unregistering, then the adapter is removed", () => {
     const registry = new ChannelAdapterRegistry();
     registry.register({
       id: "telegram",
-      aliases: ["telegram-bot"],
       create: () => createAdapter("telegram"),
     });
-    expect(registry.unregister("telegram-bot")).toBe(true);
+    expect(registry.unregister("telegram")).toBe(true);
     expect(registry.resolveId("telegram")).toBeUndefined();
-    expect(registry.resolveId("telegram-bot")).toBeUndefined();
   });
 });

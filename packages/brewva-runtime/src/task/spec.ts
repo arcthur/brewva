@@ -5,29 +5,25 @@ export const TASK_SPEC_VERIFICATION_LEVEL_VALUES = ["quick", "standard", "strict
 
 export type TaskSpecVerificationLevelInput = (typeof TASK_SPEC_VERIFICATION_LEVEL_VALUES)[number];
 
-export const TASK_SPEC_VERIFICATION_LEVEL_ALIASES = {
-  smoke: "quick",
-  targeted: "standard",
-  full: "strict",
-  inspection: "none",
-  investigate: "none",
-  readonly: "none",
-  read_only: "none",
-  "read-only": "none",
-} as const satisfies Readonly<Record<string, TaskSpecVerificationLevelInput>>;
-
 export function normalizeTaskSpecVerificationLevel(value: unknown): VerificationLevel | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized =
-    value in TASK_SPEC_VERIFICATION_LEVEL_ALIASES
-      ? TASK_SPEC_VERIFICATION_LEVEL_ALIASES[
-          value as keyof typeof TASK_SPEC_VERIFICATION_LEVEL_ALIASES
-        ]
-      : value;
+  const normalized = normalizeNonEmptyString(value);
+  if (!normalized || normalized === "none") {
+    return undefined;
+  }
   if (normalized === "quick" || normalized === "standard" || normalized === "strict") {
     return normalized;
   }
   return undefined;
+}
+
+function isTaskSpecVerificationLevelInput(value: unknown): value is TaskSpecVerificationLevelInput {
+  const normalized = normalizeNonEmptyString(value);
+  return (
+    normalized === "quick" ||
+    normalized === "standard" ||
+    normalized === "strict" ||
+    normalized === "none"
+  );
 }
 
 export function normalizeTaskAcceptanceOwner(value: unknown): TaskAcceptanceOwner | undefined {
@@ -112,17 +108,37 @@ export function parseTaskSpec(
     : undefined;
 
   const verificationRaw = input.verification;
+  const verificationLevelRaw = isRecord(verificationRaw) ? verificationRaw.level : undefined;
+  const verificationLevel = normalizeTaskSpecVerificationLevel(verificationLevelRaw);
+  if (
+    verificationLevelRaw !== undefined &&
+    verificationLevelRaw !== null &&
+    !isTaskSpecVerificationLevelInput(verificationLevelRaw)
+  ) {
+    return {
+      ok: false,
+      error: "TaskSpec verification.level must be one of: quick, standard, strict, none.",
+    };
+  }
   const verification = isRecord(verificationRaw)
     ? {
-        level: normalizeTaskSpecVerificationLevel(verificationRaw.level),
+        level: verificationLevel,
         commands: normalizeStringArray(verificationRaw.commands),
       }
     : undefined;
   const acceptanceRaw = input.acceptance;
+  const acceptanceOwnerRaw = isRecord(acceptanceRaw) ? acceptanceRaw.owner : undefined;
+  const acceptanceOwner = normalizeTaskAcceptanceOwner(acceptanceOwnerRaw);
+  if (acceptanceOwnerRaw !== undefined && acceptanceOwnerRaw !== null && !acceptanceOwner) {
+    return {
+      ok: false,
+      error: "TaskSpec acceptance.owner must be one of: operator.",
+    };
+  }
   const acceptance = isRecord(acceptanceRaw)
     ? {
         required: typeof acceptanceRaw.required === "boolean" ? acceptanceRaw.required : undefined,
-        owner: normalizeTaskAcceptanceOwner(acceptanceRaw.owner),
+        owner: acceptanceOwner,
         criteria: normalizeStringArray(acceptanceRaw.criteria),
       }
     : undefined;

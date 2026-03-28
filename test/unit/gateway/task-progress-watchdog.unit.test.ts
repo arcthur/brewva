@@ -48,10 +48,18 @@ describe("task progress watchdog", () => {
         idleMs: TASK_PROGRESS_WATCHDOG_TEST_ONLY.DEFAULT_THRESHOLD_MS + 1,
         openItemCount: 0,
       });
+      const adjudicated = runtime.events.query(sessionId, { type: "task_stall_adjudicated" });
+      expect(adjudicated).toHaveLength(1);
+      expect(adjudicated[0]?.payload).toMatchObject({
+        schema: "brewva.task-stall-adjudication.v1",
+        decision: "continue",
+        source: "heuristic",
+      });
 
       now += 60_000;
       watchdog.poll();
       expect(runtime.events.query(sessionId, { type: "task_stuck_detected" })).toHaveLength(1);
+      expect(runtime.events.query(sessionId, { type: "task_stall_adjudicated" })).toHaveLength(1);
     } finally {
       restoreNow();
     }
@@ -149,10 +157,69 @@ describe("task progress watchdog", () => {
         thresholdMs: 1_000,
         idleMs: 1_001,
       });
+      const adjudicated = runtime.events.query(sessionId, {
+        type: "task_stall_adjudicated",
+        last: 1,
+      })[0];
+      expect(adjudicated?.payload).toMatchObject({
+        schema: "brewva.task-stall-adjudication.v1",
+        decision: "continue",
+      });
 
       watchdog.stop();
       watchdog.stop();
       expect(stopCalls).toBe(1);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("records hook-backed adjudication when a custom stall adjudicator is provided", () => {
+    let now = 1_726_000_000_000;
+    const restoreNow = patchDateNow(() => now);
+    try {
+      const runtime = new BrewvaRuntime({
+        cwd: createTestWorkspace("watchdog-hook-adjudication"),
+        config: createOpsRuntimeConfig(),
+      });
+      const sessionId = "watchdog-hook-adjudication-1";
+
+      now = 1_726_000_000_100;
+      runtime.task.setSpec(sessionId, {
+        schema: "brewva.task.v1",
+        goal: "Exercise hook-backed stall adjudication",
+      });
+      runtime.task.recordBlocker(sessionId, {
+        message: "Awaiting operator decision on retry scope",
+        source: "unit_test",
+      });
+
+      const watchdog = new TaskProgressWatchdog({
+        runtime,
+        sessionId,
+        now: () => now,
+        adjudicator: (packet) => ({
+          decision: "nudge",
+          rationale: `Hook inspected ${packet.task.blockerCount} blocker(s).`,
+          signalSummary: ["custom_hook"],
+          source: "hook",
+        }),
+      });
+
+      now += TASK_PROGRESS_WATCHDOG_TEST_ONLY.DEFAULT_THRESHOLD_MS + 1;
+      watchdog.poll();
+
+      const adjudicated = runtime.events.query(sessionId, {
+        type: "task_stall_adjudicated",
+        last: 1,
+      })[0];
+      expect(adjudicated?.payload).toMatchObject({
+        schema: "brewva.task-stall-adjudication.v1",
+        decision: "nudge",
+        source: "hook",
+        rationale: "Hook inspected 1 blocker(s).",
+        signalSummary: ["custom_hook"],
+      });
     } finally {
       restoreNow();
     }

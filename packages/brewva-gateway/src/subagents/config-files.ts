@@ -18,7 +18,7 @@ interface ParsedFrontmatter {
   data: Record<string, unknown>;
 }
 
-const FRONTMATTER_REGEX = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
+const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n)?([\s\S]*)$/;
 
 export interface HostedWorkspaceSubagentConfigFile {
   fileName: string;
@@ -99,19 +99,10 @@ export function asContextBudget(value: unknown): SubagentContextBudget | undefin
 function normalizeWorkspaceSubagentConfigKind(
   value: string | undefined,
 ): HostedWorkspaceSubagentConfigKind | undefined {
-  if (!value) {
-    return undefined;
-  }
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "envelope") {
+  if (value === "envelope") {
     return "envelope";
   }
-  if (
-    normalized === "agentspec" ||
-    normalized === "agent-spec" ||
-    normalized === "agent" ||
-    normalized === "spec"
-  ) {
+  if (value === "agentSpec") {
     return "agentSpec";
   }
   return undefined;

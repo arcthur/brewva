@@ -36,7 +36,8 @@ Orchestration is driven by runtime state management plus runtime-plugin lifecycl
 Delegated worker authoring now has two layers:
 
 - runtime postures remain JSON-backed under `.brewva/subagents/*.json`
-- authored worker overlays live under `.brewva/agents/*.md`
+- authored worker overlays live under `.brewva/agents/*.md` or
+  `.config/brewva/agents/*.md`
 
 Markdown worker files compile into the existing hosted `agentSpec` surface. The
 frontmatter controls the structural fields (`name`, `extends`, `envelope`,
@@ -44,6 +45,10 @@ frontmatter controls the structural fields (`name`, `extends`, `envelope`,
 becomes additive authored instructions rendered in the delegated prompt.
 Authority still comes from the normalized hosted catalog, not from ad hoc prompt
 text outside the narrowing rules.
+
+Overlay frontmatter is canonical-only. Worker kind values, envelope names, and
+goal-loop style protocol fields do not keep compatibility aliases in this
+surface.
 
 ## Inspectable Delegation Routing
 
@@ -60,3 +65,37 @@ runtime kernel.
 
 This keeps delegated routing visible and reviewable instead of turning it into a
 hidden planner.
+
+## Inspectable Stall Adjudication
+
+Stall detection still starts with `runtime.session.pollStall(...)`, but the
+gateway worker now adds a second, inspectable adjudication step.
+
+- `task_stuck_detected` remains the idle-threshold detection signal
+- the worker builds a bounded inspection packet from task state, verification
+  state, tape pressure, recent failed tool outcomes, blocked tool calls, and
+  pending worker results
+- the adjudicator records a durable `task_stall_adjudicated` event with
+  `continue`, `nudge`, `compact_recommended`, or `abort_recommended`
+- inspection surfaces such as `workflow_status` can expose that recommendation
+  without turning it into hidden autonomous session control
+
+The current default policy is heuristic, but the durable packet and event shape
+are stable enough for future hook-backed or model-backed adjudicators without
+changing the inspection contract.
+
+## Thin Operator Question And Overlay Surfaces
+
+The overlay/operator RFC is now closed through thin command veneers rather than
+new kernel state:
+
+- `/questions` inspects unresolved session questions derived from durable
+  `skill_completed` outputs and delegated exploration outcome artifacts
+- `/answer` records `operator_question_answered` and routes the answer back into
+  the active session as explicit operator input
+- `/agent-overlays` inspects and validates Markdown-authored delegated-worker
+  overlays against the hosted catalog narrowing rules
+
+This keeps questionnaire flow, authored overlay inspection, and delegated
+worker ergonomics in the control plane. The runtime kernel still owns replay,
+governance, rollback, and event truth.

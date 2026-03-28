@@ -34,32 +34,38 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
    - `docs/journeys/` for operator workflows
 4. Keep research pages as concise status pointers or archive them.
 
+## Proposed notes
+
+There are no `proposed` research notes right now.
+
 ## Active notes
 
-- `docs/research/rfc-architecture-doc-precision-review.md`
-- `docs/research/rfc-boundary-first-subtraction-and-model-native-recovery.md`
 - `docs/research/roadmap-notes.md`
 
 ## Promoted notes (status pointers)
 
-- `docs/research/rfc-skill-first-delegation-and-execution-envelopes.md`
-- `docs/research/rfc-effect-governance-and-contract-vnext.md`
-- `docs/research/rfc-capability-compression-and-output-distillation.md`
-- `docs/research/rfc-preparse-normalization-model-capability-and-live-audit-split.md`
-- `docs/research/rfc-repository-fitness-plane-and-runtime-boundary.md`
+- `docs/research/rfc-architecture-doc-precision-review.md`
+- `docs/research/rfc-boundary-first-subtraction-and-model-native-recovery.md`
 - `docs/research/rfc-boundary-policy-credential-vault-and-loop-guard.md`
-- `docs/research/rfc-workflow-artifacts-and-posture-control-plane.md`
-- `docs/research/rfc-iteration-facts-and-model-native-optimization-protocols.md`
+- `docs/research/rfc-capability-compression-and-output-distillation.md`
 - `docs/research/rfc-default-path-re-hardening-and-advisory-surface-narrowing.md`
 - `docs/research/rfc-deliberation-home-and-compounding-intelligence.md`
 - `docs/research/rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md`
+- `docs/research/rfc-effect-governance-and-contract-vnext.md`
+- `docs/research/rfc-inspectable-operator-experience-overlays.md`
+- `docs/research/rfc-iteration-facts-and-model-native-optimization-protocols.md`
+- `docs/research/rfc-model-native-product-reconstruction-and-closure-vnext.md`
+- `docs/research/rfc-preparse-normalization-model-capability-and-live-audit-split.md`
+- `docs/research/rfc-repository-fitness-plane-and-runtime-boundary.md`
+- `docs/research/rfc-skill-first-delegation-and-execution-envelopes.md`
+- `docs/research/rfc-workflow-artifacts-and-posture-control-plane.md`
 
 ## Archived / superseded notes
 
-- `docs/research/rfc-subagent-delegation-and-isolated-execution.md`
 - `docs/research/rfc-delegation-protocol-thinning-and-replayable-outcomes.md`
 - `docs/research/rfc-invocation-spine-and-posture-runtime-vnext.md`
 - `docs/research/rfc-runtime-decomposition-and-deliberation-thickening.md`
+- `docs/research/rfc-subagent-delegation-and-isolated-execution.md`
 
 Archived and superseded notes may intentionally describe historical
 terminology, including the older delegation `profile` model. Current

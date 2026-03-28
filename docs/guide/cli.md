@@ -28,27 +28,13 @@ In addition to `brewva [flags]` primary modes, the CLI exposes control-plane sub
 `brewva gateway` and `--channel` are different execution paths: the former is the local control-plane daemon, while the latter is channel ingress/egress orchestration.
 For operational details, see `docs/guide/gateway-control-plane-daemon.md`.
 
-## Config Subcommand (`brewva config`)
+## Config Loading
 
-`brewva config` is the explicit config migration surface for invalid
-execution-security fields. The command is:
+`brewva config` has been removed.
 
-- `brewva config migrate`
-- `brewva config migrate --write`
-- `brewva config migrate --json`
-
-Behavior:
-
-- dry-run by default; nothing is written unless `--write` is present
-- targets the selected config file (`--config`) or the default project config path
-- imports inline sandbox API keys into the encrypted vault and deletes the
-  inline field from config
-- keeps raw secret values out of CLI output
-- if invalid execution fields remain in config, normal CLI commands fail fast
-  during config load and require `brewva config migrate` first
-
-Root-level flags may appear before the subcommand, for example
-`brewva --cwd /repo config migrate --json`.
+If removed or invalid config fields remain in the selected config file, normal
+CLI startup fails fast during config load. Rewrite or delete those fields
+before rerunning Brewva.
 
 ## Credentials Subcommand (`brewva credentials`)
 
@@ -227,7 +213,7 @@ It cannot be combined with `--print`/`--json`/`--mode`, `--undo`/`--replay`,
 It also requires `schedule.enabled=true` and `infrastructure.events.enabled=true`.
 
 `--channel` runs gateway mode for channel ingress/egress.
-Current supported value is `telegram` (alias `tg`).
+Current supported value is `telegram`.
 It cannot be combined with `--daemon`, `--undo`/`--replay`, `--task`/`--task-file`,
 non-interactive output flags (`--print`/`--json`/`--mode`), or inline prompt text.
 For `--channel telegram`, `--telegram-token` is required.
@@ -242,6 +228,9 @@ built-in default skill `telegram`.
 When `channels.orchestration.enabled=true`, channel orchestration commands include:
 
 - `/agents`
+- `/cost [@agent] [top=N]`
+- `/questions [@agent]`
+- `/answer [@agent] <question-id> <answer>`
 - `/inspect [dir]`
 - `/inspect @agent [dir]`
 - `/update [operator hints]`
@@ -251,6 +240,15 @@ When `channels.orchestration.enabled=true`, channel orchestration commands inclu
 - `/run @a,@b <task>`
 - `/discuss @a,@b [maxRounds=N] <topic>`
 - `@agent <task>`
+
+Embedded interactive sessions also register a small runtime-plugin command set:
+
+- `/inspect [dir] | /inspect clear`
+- `/insights [dir] | /insights clear`
+- `/questions | /questions clear`
+- `/answer <question-id> <answer>`
+- `/agent-overlays | /agent-overlays validate | /agent-overlays <name> | /agent-overlays clear`
+- `/update [operator hints]`
 
 `/inspect [dir]` is the canonical channel command for the same deterministic analysis
 layer used by `brewva inspect`, but reports on the currently focused agent session inline
@@ -263,6 +261,23 @@ It queues a shared LLM-driven Brewva upgrade workflow that must review the relev
 changelog or release notes, apply only the required Brewva-owned migrations
 (config/schema/state), and finish with validation before reporting success.
 In channel mode, `/update` targets the currently focused agent.
+
+`/cost [@agent] [top=N]` is the thin operator veneer for the typed
+`inspect_cost` action over the same session cost surface exposed through
+`cost_view`. It resolves to the focused agent by default, supports explicit
+`@agent` targeting, and keeps the output replay-safe and deterministic instead
+of routing through a generic self-command path.
+
+`/questions [@agent]` inspects unresolved questions derived from `skill_completed`
+and delegated exploration outcomes for the targeted live session.
+`/answer [@agent] <question-id> <answer>` records a durable
+`operator_question_answered` event and then routes the answer back into the
+target session as explicit operator input. This keeps the questionnaire surface
+replay-visible instead of hiding it inside transient channel state.
+
+`/agent-overlays` is the author-facing interactive inspect / validate surface
+for Markdown-authored delegated-worker overlays under `.brewva/agents/*.md` and
+`.config/brewva/agents/*.md`.
 
 Webhook ingress can be enabled via environment variables (no additional CLI flags):
 
@@ -285,8 +300,7 @@ For the complete Worker + Fly webhook deployment path, see:
 `docs/guide/telegram-webhook-edge-ingress.md`
 
 To temporarily restore startup version-check notifications, launch with an
-empty Brewva override. Legacy upstream `PI_SKIP_VERSION_CHECK` is still
-honored for compatibility:
+empty Brewva override:
 
 ```bash
 BREWVA_SKIP_VERSION_CHECK= bun run start
@@ -305,7 +319,7 @@ bun run start -- --replay --mode json --session <session-id>
 bun run start -- --version
 bun run start -- onboard --install-daemon
 bun run start -- --channel telegram --telegram-token <bot-token>
-bun run start -- --channel tg --telegram-token <bot-token> --telegram-poll-timeout 15
+bun run start -- --channel telegram --telegram-token <bot-token> --telegram-poll-timeout 15
 BREWVA_TELEGRAM_WEBHOOK_ENABLED=1 BREWVA_TELEGRAM_INGRESS_HMAC_SECRET=<secret> bun run start -- --channel telegram --telegram-token <bot-token>
 ```
 

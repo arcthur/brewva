@@ -12,7 +12,7 @@ function extractTextContent(result: { content: Array<{ type: string; text?: stri
 }
 
 describe("managed Brewva tool schemas", () => {
-  test("read_spans exposes a canonical schema and still accepts aliased input", async () => {
+  test("read_spans exposes a canonical schema without legacy alias paths", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-managed-tool-schema-"));
     const tool = createReadSpansTool();
 
@@ -34,7 +34,7 @@ describe("managed Brewva tool schemas", () => {
     const result = await tool.execute(
       "tc-read-spans-managed-schema",
       {
-        filePath: "missing.ts",
+        file_path: "missing.ts",
         spans: [{ start_line: 1, end_line: 2 }],
       } as never,
       undefined,
@@ -47,7 +47,7 @@ describe("managed Brewva tool schemas", () => {
     );
   });
 
-  test("manual alias schemas expose canonical keys while execution still accepts legacy aliases", async () => {
+  test("manual alias schemas expose canonical keys without legacy execution aliases", async () => {
     const tool = createProcessTool();
     const parameters = tool.parameters as {
       properties?: Record<string, unknown>;
@@ -65,8 +65,8 @@ describe("managed Brewva tool schemas", () => {
       "tc-process-managed-schema",
       {
         action: "poll",
-        session_id: "missing-session",
-        timeout_ms: 0,
+        sessionId: "missing-session",
+        timeout: 0,
       } as never,
       undefined,
       undefined,

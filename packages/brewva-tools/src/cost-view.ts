@@ -1,3 +1,4 @@
+import type { SessionCostSummary } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { formatISO } from "date-fns";
@@ -16,6 +17,51 @@ function formatTopRows<T>(
   return rows.slice(0, options.limit).map(([name, value]) => options.line(name, value));
 }
 
+export function formatCostViewText(summary: SessionCostSummary, top: number): string {
+  const skillRows = Object.entries(summary.skills).toSorted(
+    (a, b) => b[1].totalCostUsd - a[1].totalCostUsd,
+  );
+  const toolRows = Object.entries(summary.tools).toSorted(
+    (a, b) => b[1].allocatedCostUsd - a[1].allocatedCostUsd,
+  );
+
+  const rawTotalTokens = summary.totalTokens + summary.cacheReadTokens;
+  const lines = [
+    "# Cost View",
+    `- tracked tokens (excludes cache read): ${summary.totalTokens}`,
+    `- cache read tokens: ${summary.cacheReadTokens}`,
+    `- raw tokens (tracked + cache read): ${rawTotalTokens}`,
+    `- total cost usd: ${summary.totalCostUsd.toFixed(6)}`,
+    `- budget action: ${summary.budget.action}`,
+    `- budget blocked: ${summary.budget.blocked}`,
+    "",
+    "## Top Skills",
+    ...formatTopRows(skillRows, {
+      limit: top,
+      line: (name, value) =>
+        `- ${name}: usd=${value.totalCostUsd.toFixed(6)}, tracked_tokens=${value.totalTokens}, cache_read_tokens=${value.cacheReadTokens}, raw_tokens=${value.totalTokens + value.cacheReadTokens}, usage=${value.usageCount}, turns=${value.turns}`,
+    }),
+    "",
+    "## Top Tools",
+    ...formatTopRows(toolRows, {
+      limit: top,
+      line: (name, value) =>
+        `- ${name}: calls=${value.callCount}, allocated_usd=${value.allocatedCostUsd.toFixed(6)}, allocated_tokens=${value.allocatedTokens.toFixed(2)}`,
+    }),
+  ];
+
+  if (summary.alerts.length > 0) {
+    lines.push("", "## Alerts");
+    for (const alert of summary.alerts.slice(-top)) {
+      lines.push(
+        `- ${formatISO(alert.timestamp)} ${alert.kind} scope=${alert.scope} cost=${alert.costUsd.toFixed(6)} threshold=${alert.thresholdUsd.toFixed(6)}`,
+      );
+    }
+  }
+
+  return lines.join("\n");
+}
+
 export function createCostViewTool(options: BrewvaToolOptions): ToolDefinition {
   return defineBrewvaTool({
     name: "cost_view",
@@ -29,48 +75,7 @@ export function createCostViewTool(options: BrewvaToolOptions): ToolDefinition {
       const top = typeof params.top === "number" ? Math.max(1, Math.trunc(params.top)) : 5;
       const summary = options.runtime.cost.getSummary(sessionId);
 
-      const skillRows = Object.entries(summary.skills).toSorted(
-        (a, b) => b[1].totalCostUsd - a[1].totalCostUsd,
-      );
-      const toolRows = Object.entries(summary.tools).toSorted(
-        (a, b) => b[1].allocatedCostUsd - a[1].allocatedCostUsd,
-      );
-
-      const rawTotalTokens = summary.totalTokens + summary.cacheReadTokens;
-      const lines = [
-        "# Cost View",
-        `- tracked tokens (excludes cache read): ${summary.totalTokens}`,
-        `- cache read tokens: ${summary.cacheReadTokens}`,
-        `- raw tokens (tracked + cache read): ${rawTotalTokens}`,
-        `- total cost usd: ${summary.totalCostUsd.toFixed(6)}`,
-        `- budget action: ${summary.budget.action}`,
-        `- budget blocked: ${summary.budget.blocked}`,
-        "",
-        "## Top Skills",
-        ...formatTopRows(skillRows, {
-          limit: top,
-          line: (name, value) =>
-            `- ${name}: usd=${value.totalCostUsd.toFixed(6)}, tracked_tokens=${value.totalTokens}, cache_read_tokens=${value.cacheReadTokens}, raw_tokens=${value.totalTokens + value.cacheReadTokens}, usage=${value.usageCount}, turns=${value.turns}`,
-        }),
-        "",
-        "## Top Tools",
-        ...formatTopRows(toolRows, {
-          limit: top,
-          line: (name, value) =>
-            `- ${name}: calls=${value.callCount}, allocated_usd=${value.allocatedCostUsd.toFixed(6)}, allocated_tokens=${value.allocatedTokens.toFixed(2)}`,
-        }),
-      ];
-
-      if (summary.alerts.length > 0) {
-        lines.push("", "## Alerts");
-        for (const alert of summary.alerts.slice(-top)) {
-          lines.push(
-            `- ${formatISO(alert.timestamp)} ${alert.kind} scope=${alert.scope} cost=${alert.costUsd.toFixed(6)} threshold=${alert.thresholdUsd.toFixed(6)}`,
-          );
-        }
-      }
-
-      return textResult(lines.join("\n"), {
+      return textResult(formatCostViewText(summary, top), {
         sessionId,
         summary,
       });

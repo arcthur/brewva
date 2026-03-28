@@ -4,8 +4,10 @@ import { createTelegramIngressServer, type TelegramIngressAuth } from "@brewva/b
 import {
   BrewvaRuntime,
   CHANNEL_COMMAND_RECEIVED_EVENT_TYPE,
+  CHANNEL_SESSION_BOUND_EVENT_TYPE,
   CHANNEL_UPDATE_LOCK_BLOCKED_EVENT_TYPE,
   CHANNEL_UPDATE_REQUESTED_EVENT_TYPE,
+  OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
   createTrustedLocalGovernancePort,
   type ManagedToolMode,
 } from "@brewva/brewva-runtime";
@@ -18,9 +20,15 @@ import {
   type TurnEnvelope,
   type TurnPart,
 } from "@brewva/brewva-runtime/channels";
+import { formatCostViewText } from "@brewva/brewva-tools";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import { ConversationBindingStore } from "../conversations/binding-store.js";
 import { createHostedSession, type HostedSessionResult } from "../host/create-hosted-session.js";
+import {
+  buildOperatorQuestionAnswerPrompt,
+  buildOperatorQuestionAnsweredPayload,
+  resolveOpenQuestionInSessions,
+} from "../operator-questions.js";
 import {
   createRuntimeTelegramChannelBridge,
   resolveToolDisplayStatus,
@@ -43,6 +51,7 @@ import { CommandRouter, type ChannelCommandMatch } from "./command-router.js";
 import { ChannelCoordinator } from "./coordinator.js";
 import type { AgentSessionUsage } from "./eviction.js";
 import { selectIdleEvictableAgentsByTtl, selectLruEvictableAgent } from "./eviction.js";
+import { resolveChannelOperatorAction } from "./operator-actions.js";
 import { resolveChannelOrchestrationConfig } from "./orchestration-config.js";
 import { buildAgentScopedConversationKey, buildRoutingScopeKey } from "./routing-scope.js";
 import {
@@ -194,6 +203,23 @@ export interface ChannelInsightsCommandResult {
   meta?: Record<string, unknown>;
 }
 
+export interface ChannelQuestionsCommandInput {
+  turn: TurnEnvelope;
+  scopeKey: string;
+  focusedAgentId: string;
+  targetAgentId: string;
+  questionSurface?: {
+    runtime: BrewvaRuntime;
+    sessionIds: string[];
+    liveSessionId?: string;
+  };
+}
+
+export interface ChannelQuestionsCommandResult {
+  text: string;
+  meta?: Record<string, unknown>;
+}
+
 export interface RunChannelModeDependencies {
   createSession?: (
     options?: Parameters<typeof createHostedSession>[0],
@@ -208,11 +234,22 @@ export interface RunChannelModeDependencies {
   handleInsightsCommand?: (
     input: ChannelInsightsCommandInput,
   ) => Promise<ChannelInsightsCommandResult | string | null | undefined>;
+  handleQuestionsCommand?: (
+    input: ChannelQuestionsCommandInput,
+  ) => Promise<ChannelQuestionsCommandResult | string | null | undefined>;
   launchers?: Partial<Record<SupportedChannel, ChannelModeLauncher>>;
 }
 
 function normalizeText(value: string | undefined): string {
   return (value ?? "").trim();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
 function toErrorMessage(error: unknown): string {
@@ -728,6 +765,9 @@ function rewriteTurnText(turn: TurnEnvelope, text: string): TurnEnvelope {
 
 function isControlCommand(match: ChannelCommandMatch): boolean {
   return (
+    match.kind === "cost" ||
+    match.kind === "questions" ||
+    match.kind === "answer" ||
     match.kind === "inspect" ||
     match.kind === "insights" ||
     match.kind === "update" ||
@@ -773,6 +813,20 @@ function normalizeChannelInsightsCommandResult(
   }
   return {
     text: "Insights are unavailable in this host.",
+  };
+}
+
+function normalizeChannelQuestionsCommandResult(
+  result: ChannelQuestionsCommandResult | string | null | undefined,
+): ChannelQuestionsCommandResult {
+  if (typeof result === "string") {
+    return { text: result };
+  }
+  if (result && typeof result.text === "string") {
+    return result;
+  }
+  return {
+    text: "Questions are unavailable in this host.",
   };
 }
 
@@ -1349,6 +1403,88 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
     }
   };
 
+  const getOrCreateAgentRuntime = async (agentId: string): Promise<BrewvaRuntime> => {
+    let workerRuntime: BrewvaRuntime | undefined;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        workerRuntime = await runtimeManager.getOrCreateRuntime(agentId);
+        break;
+      } catch (error) {
+        if (toErrorMessage(error) !== "runtime_capacity_exhausted" || attempt > 0) {
+          throw error;
+        }
+        const reclaimed = await evictLeastRecentlyUsedAgentRuntime();
+        if (!reclaimed) {
+          throw error;
+        }
+      }
+    }
+    if (!workerRuntime) {
+      throw new Error("runtime_unavailable");
+    }
+    return workerRuntime;
+  };
+
+  const listChannelBoundSessionIds = (input: {
+    runtime: BrewvaRuntime;
+    scopeKey: string;
+    agentId: string;
+  }): string[] => {
+    const matches: Array<{ sessionId: string; boundAt: number }> = [];
+    for (const sessionId of input.runtime.events.listSessionIds()) {
+      const binding = input.runtime.events.query(sessionId, {
+        type: CHANNEL_SESSION_BOUND_EVENT_TYPE,
+        last: 1,
+      })[0];
+      if (!binding) {
+        continue;
+      }
+      const payload = isRecord(binding.payload) ? binding.payload : null;
+      const bindingScopeKey = readString(payload?.scopeKey);
+      const bindingAgentId = readString(payload?.agentId);
+      if (bindingScopeKey !== input.scopeKey || bindingAgentId !== input.agentId) {
+        continue;
+      }
+      matches.push({
+        sessionId,
+        boundAt: binding.timestamp,
+      });
+    }
+    return matches
+      .toSorted(
+        (left, right) =>
+          right.boundAt - left.boundAt || left.sessionId.localeCompare(right.sessionId),
+      )
+      .map((entry) => entry.sessionId);
+  };
+
+  const resolveQuestionSurface = async (
+    scopeKey: string,
+    agentId: string,
+    targetSession?: ConversationSessionState,
+  ): Promise<ChannelQuestionsCommandInput["questionSurface"] | undefined> => {
+    const questionRuntime = targetSession?.runtime ?? (await getOrCreateAgentRuntime(agentId));
+    const liveSessionId = targetSession?.agentSessionId;
+    const sessionIds = Array.from(
+      new Set([
+        ...(liveSessionId ? [liveSessionId] : []),
+        ...listChannelBoundSessionIds({
+          runtime: questionRuntime,
+          scopeKey,
+          agentId,
+        }),
+      ]),
+    );
+    if (sessionIds.length === 0) {
+      return undefined;
+    }
+    return {
+      runtime: questionRuntime,
+      sessionIds,
+      liveSessionId,
+    };
+  };
+
   const executePromptForAgent = async (input: {
     scopeKey: string;
     agentId: string;
@@ -1635,17 +1771,23 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
     match: ChannelCommandMatch,
     turn: TurnEnvelope,
     scopeKey: string,
-  ): Promise<{ handled: boolean; routeAgentId?: string; routeTask?: string }> => {
+  ): Promise<{
+    handled: boolean;
+    routeAgentId?: string;
+    routeTask?: string;
+  }> => {
     if (match.kind === "none") {
       return { handled: false };
     }
 
+    const operatorAction = resolveChannelOperatorAction(match);
     runtime.events.record({
       sessionId: turn.sessionId,
       type: CHANNEL_COMMAND_RECEIVED_EVENT_TYPE,
       payload: {
         scopeKey,
         command: match.kind,
+        actionKind: operatorAction?.kind ?? null,
         turnId: turn.turnId,
         conversationId: turn.conversationId,
       },
@@ -1704,6 +1846,187 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
     if (match.kind === "agents") {
       await sendControllerReply(turn, scopeKey, renderAgentsSnapshot(scopeKey));
       return { handled: true };
+    }
+
+    if (operatorAction?.kind === "inspect_cost") {
+      const focusedAgentId = registry.resolveFocus(scopeKey);
+      const targetAgentId = operatorAction.agentId ?? focusedAgentId;
+      if (!registry.isActive(targetAgentId)) {
+        await sendControllerReply(
+          turn,
+          scopeKey,
+          `Cost view unavailable: agent @${targetAgentId} is not active in this workspace.`,
+          {
+            command: "cost",
+            agentId: targetAgentId,
+            status: "agent_not_active",
+          },
+        );
+        return { handled: true };
+      }
+      const targetSession = sessions.get(buildAgentScopedConversationKey(targetAgentId, scopeKey));
+      if (!targetSession) {
+        await sendControllerReply(
+          turn,
+          scopeKey,
+          `Cost view unavailable: agent @${targetAgentId} does not have a live session.`,
+          {
+            command: "cost",
+            agentId: targetAgentId,
+            status: "session_not_found",
+          },
+        );
+        return { handled: true };
+      }
+      const top = typeof operatorAction.top === "number" ? operatorAction.top : 5;
+      await sendControllerReply(
+        turn,
+        scopeKey,
+        formatCostViewText(
+          targetSession.runtime.cost.getSummary(targetSession.agentSessionId),
+          top,
+        ),
+        {
+          command: "cost",
+          agentId: targetAgentId,
+          top,
+        },
+      );
+      return { handled: true };
+    }
+
+    if (operatorAction?.kind === "inspect_questions") {
+      const focusedAgentId = registry.resolveFocus(scopeKey);
+      const targetAgentId = operatorAction.agentId ?? focusedAgentId;
+      if (!registry.isActive(targetAgentId)) {
+        await sendControllerReply(
+          turn,
+          scopeKey,
+          `Questions unavailable: agent @${targetAgentId} is not active in this workspace.`,
+          {
+            command: "questions",
+            agentId: targetAgentId,
+            status: "agent_not_active",
+          },
+        );
+        return { handled: true };
+      }
+      const targetSession = sessions.get(buildAgentScopedConversationKey(targetAgentId, scopeKey));
+      let questionSurface: ChannelQuestionsCommandInput["questionSurface"] | undefined;
+      try {
+        questionSurface = await resolveQuestionSurface(scopeKey, targetAgentId, targetSession);
+      } catch (error) {
+        await sendControllerReply(
+          turn,
+          scopeKey,
+          `Questions unavailable: failed to load durable session history for @${targetAgentId} (${toErrorMessage(error)}).`,
+          {
+            command: "questions",
+            agentId: targetAgentId,
+            status: "question_surface_unavailable",
+          },
+        );
+        return { handled: true };
+      }
+      const result = normalizeChannelQuestionsCommandResult(
+        await options.dependencies?.handleQuestionsCommand?.({
+          turn,
+          scopeKey,
+          focusedAgentId,
+          targetAgentId,
+          questionSurface,
+        }),
+      );
+      await sendControllerReply(turn, scopeKey, result.text, result.meta);
+      return { handled: true };
+    }
+
+    if (operatorAction?.kind === "answer_question") {
+      const focusedAgentId = registry.resolveFocus(scopeKey);
+      const targetAgentId = operatorAction.agentId ?? focusedAgentId;
+      if (!registry.isActive(targetAgentId)) {
+        await sendControllerReply(
+          turn,
+          scopeKey,
+          `Answer unavailable: agent @${targetAgentId} is not active in this workspace.`,
+          {
+            command: "answer",
+            agentId: targetAgentId,
+            questionId: operatorAction.questionId,
+            status: "agent_not_active",
+          },
+        );
+        return { handled: true };
+      }
+      const targetSession = sessions.get(buildAgentScopedConversationKey(targetAgentId, scopeKey));
+      let questionSurface: ChannelQuestionsCommandInput["questionSurface"] | undefined;
+      try {
+        questionSurface = await resolveQuestionSurface(scopeKey, targetAgentId, targetSession);
+      } catch (error) {
+        await sendControllerReply(
+          turn,
+          scopeKey,
+          `Answer unavailable: failed to load durable session history for @${targetAgentId} (${toErrorMessage(error)}).`,
+          {
+            command: "answer",
+            agentId: targetAgentId,
+            questionId: operatorAction.questionId,
+            status: "question_surface_unavailable",
+          },
+        );
+        return { handled: true };
+      }
+      if (!questionSurface) {
+        await sendControllerReply(
+          turn,
+          scopeKey,
+          `Answer unavailable: no durable session history exists for @${targetAgentId} in this conversation yet. Send that agent a message first.`,
+          {
+            command: "answer",
+            agentId: targetAgentId,
+            questionId: operatorAction.questionId,
+            status: "session_not_found",
+          },
+        );
+        return { handled: true };
+      }
+      const question = await resolveOpenQuestionInSessions(
+        questionSurface.runtime,
+        questionSurface.sessionIds,
+        operatorAction.questionId,
+      );
+      if (!question) {
+        await sendControllerReply(
+          turn,
+          scopeKey,
+          `Answer unavailable: no open question '${operatorAction.questionId}' was found for @${targetAgentId}. Use /questions${targetAgentId === focusedAgentId ? "" : ` @${targetAgentId}`} first.`,
+          {
+            command: "answer",
+            agentId: targetAgentId,
+            questionId: operatorAction.questionId,
+            status: "question_not_found",
+          },
+        );
+        return { handled: true };
+      }
+      // Record the operator receipt before routing so the answer survives turn failures or session eviction.
+      questionSurface.runtime.events.record({
+        sessionId: question.sessionId,
+        type: OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
+        payload: buildOperatorQuestionAnsweredPayload({
+          question,
+          answerText: operatorAction.answerText,
+          source: "channel",
+        }),
+      });
+      return {
+        handled: false,
+        routeAgentId: targetAgentId,
+        routeTask: buildOperatorQuestionAnswerPrompt({
+          question,
+          answerText: operatorAction.answerText,
+        }),
+      };
     }
 
     if (match.kind === "inspect") {

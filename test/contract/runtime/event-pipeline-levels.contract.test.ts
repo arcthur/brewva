@@ -264,87 +264,6 @@ describe("event pipeline level classification", () => {
     ).toHaveLength(0);
   });
 
-  test("keeps normalization telemetry at ops level but drops it at audit level", () => {
-    const auditRuntime = new BrewvaRuntime({
-      cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-normalizer-")),
-      config: createAuditConfig(),
-    });
-    const opsRuntime = new BrewvaRuntime({
-      cwd: mkdtempSync(join(tmpdir(), "brewva-events-ops-normalizer-")),
-      config: createOpsConfig(),
-    });
-    const sessionId = "normalizer-level-session";
-
-    auditRuntime.events.record({
-      sessionId,
-      type: "tool_call_normalized",
-      payload: {
-        toolCallId: "tc-1",
-        toolName: "exec",
-        repairKinds: ["double_stringified_arguments"],
-      },
-    });
-    auditRuntime.events.record({
-      sessionId,
-      type: "tool_call_normalization_failed",
-      payload: {
-        reason: "invalid_arguments",
-        candidateToolName: "exec",
-      },
-    });
-    opsRuntime.events.record({
-      sessionId,
-      type: "tool_call_normalized",
-      payload: {
-        toolCallId: "tc-1",
-        toolName: "exec",
-        repairKinds: ["double_stringified_arguments"],
-      },
-    });
-    opsRuntime.events.record({
-      sessionId,
-      type: "tool_call_normalization_failed",
-      payload: {
-        reason: "invalid_arguments",
-        candidateToolName: "exec",
-      },
-    });
-    auditRuntime.events.record({
-      sessionId,
-      type: "model_capability_profile_selected",
-      payload: {
-        provider: "openai",
-        api: "openai-responses",
-        model: "gpt-5.4",
-        profileId: "openai-responses-default",
-      },
-    });
-    opsRuntime.events.record({
-      sessionId,
-      type: "model_request_patched",
-      payload: {
-        provider: "anthropic",
-        api: "anthropic-messages",
-        model: "claude-sonnet-4",
-        profileId: "anthropic-default",
-        patchKinds: ["anthropic_named_tool_choice_wrapper_fixed"],
-      },
-    });
-
-    expect(auditRuntime.events.query(sessionId, { type: "tool_call_normalized" })).toHaveLength(0);
-    expect(
-      auditRuntime.events.query(sessionId, { type: "tool_call_normalization_failed" }),
-    ).toHaveLength(0);
-    expect(opsRuntime.events.query(sessionId, { type: "tool_call_normalized" })).toHaveLength(1);
-    expect(
-      opsRuntime.events.query(sessionId, { type: "tool_call_normalization_failed" }),
-    ).toHaveLength(1);
-    expect(
-      auditRuntime.events.query(sessionId, { type: "model_capability_profile_selected" }),
-    ).toHaveLength(0);
-    expect(auditRuntime.events.query(sessionId, { type: "model_request_patched" })).toHaveLength(0);
-  });
-
   test("keeps approval and delegation lifecycle events at audit level because replay depends on them", () => {
     const runtime = new BrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-replay-critical-")),
@@ -464,45 +383,49 @@ describe("event pipeline level classification", () => {
     expect(opsRuntime.events.query(sessionId, { type: "task_stuck_detected" })).toHaveLength(1);
   });
 
-  test("classifies model compatibility telemetry as session events at ops level", () => {
-    const runtime = new BrewvaRuntime({
-      cwd: mkdtempSync(join(tmpdir(), "brewva-events-ops-model-compat-")),
+  test("keeps task stall adjudication at audit level because inspection surfaces depend on it", () => {
+    const auditRuntime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-stall-adjudication-")),
+      config: createAuditConfig(),
+    });
+    const opsRuntime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-events-ops-stall-adjudication-")),
       config: createOpsConfig(),
     });
-    const sessionId = "ops-level-model-compat-session";
+    const sessionId = "stall-adjudication-level-session";
 
-    runtime.events.record({
-      sessionId,
-      type: "model_capability_profile_selected",
-      payload: {
-        provider: "openai",
-        api: "openai-responses",
-        model: "gpt-5.4",
-        profileId: "openai-responses-default",
-      },
-    });
-    runtime.events.record({
-      sessionId,
-      type: "model_request_patched",
-      payload: {
-        provider: "openai-codex",
-        api: "openai-codex-responses",
-        model: "codex-mini-latest",
-        profileId: "openai-codex-default",
-        patchKinds: ["codex_parallel_tool_calls_defaulted"],
-      },
-    });
+    for (const runtime of [auditRuntime, opsRuntime]) {
+      runtime.events.record({
+        sessionId,
+        type: "task_stall_adjudicated",
+        payload: {
+          schema: "brewva.task-stall-adjudication.v1",
+          detectedAt: 301000,
+          baselineProgressAt: 1000,
+          adjudicatedAt: 301500,
+          decision: "nudge",
+          source: "heuristic",
+          rationale: "Recorded blockers explain the stall.",
+          signalSummary: ["blockers=1"],
+          tapePressure: "low",
+          blockerCount: 1,
+          blockedToolCount: 0,
+          failureCount: 0,
+          pendingWorkerResults: 0,
+          verificationLastOutcome: null,
+          verificationPassed: false,
+          verificationSkipped: false,
+        },
+      });
+    }
 
+    expect(auditRuntime.events.query(sessionId, { type: "task_stall_adjudicated" })).toHaveLength(
+      1,
+    );
+    expect(opsRuntime.events.query(sessionId, { type: "task_stall_adjudicated" })).toHaveLength(1);
     expect(
-      runtime.events.query(sessionId, { type: "model_capability_profile_selected" }),
-    ).toHaveLength(1);
-    expect(runtime.events.query(sessionId, { type: "model_request_patched" })).toHaveLength(1);
-    expect(
-      runtime.events.queryStructured(sessionId, { type: "model_capability_profile_selected" })[0]
+      auditRuntime.events.queryStructured(sessionId, { type: "task_stall_adjudicated" })[0]
         ?.category,
-    ).toBe("session");
-    expect(
-      runtime.events.queryStructured(sessionId, { type: "model_request_patched" })[0]?.category,
-    ).toBe("session");
+    ).toBe("state");
   });
 });
