@@ -1,9 +1,4 @@
 import {
-  type DelegationRunQuery,
-  type DelegationRunRecord,
-  type BrewvaEventRecord,
-  type BrewvaEventQuery,
-  type BrewvaRuntime,
   type ContextCompactionGateStatus,
   type ContextInjectionCategory,
   type ContextInjectionEntry,
@@ -13,50 +8,20 @@ import {
   type BuildCapabilityViewResult,
   type CapabilityRenderedBlock,
 } from "./capability-view.js";
+import { applyGovernanceBudgetCap } from "./context-composer-governance.js";
+import {
+  listPendingDelegationOutcomes,
+  resolveSupplementalContextBlocks,
+  type ContextComposerSupplementalRuntime,
+} from "./context-composer-supplemental.js";
 import { formatPercent } from "./context-shared.js";
 import { estimateTokens } from "./tool-output-distiller.js";
 
-const GOVERNANCE_TOKEN_CAP_RATIO = 0.15;
-const MIN_GOVERNANCE_TOKEN_CAP = 96;
-const MIN_CAPABILITY_VIEW_TOKENS = 48;
-const CHARS_PER_TOKEN = 3.5;
 const CAPABILITY_VIEW_INVENTORY_RATIO_THRESHOLD = 0.35;
 const CAPABILITY_VIEW_COMPACT_RATIO_THRESHOLD = 0.2;
 
 export type ContextBlockCategory = ContextInjectionCategory;
-
-type ContextComposerEventQuery = Pick<Exclude<BrewvaEventQuery, undefined>, "type" | "last">;
-
-type ContextComposerEventQueryResult = Array<
-  Pick<BrewvaEventRecord, "payload" | "turn" | "timestamp">
->;
-
-type ContextComposerTapeStatus = Pick<
-  ReturnType<BrewvaRuntime["events"]["getTapeStatus"]>,
-  "tapePressure" | "entriesSinceAnchor"
->;
-
-export type ContextComposerRuntime = {
-  events: {
-    getTapeStatus(sessionId: string): ContextComposerTapeStatus;
-    query?: (
-      sessionId: string,
-      query: ContextComposerEventQuery,
-    ) => ContextComposerEventQueryResult;
-  };
-  delegation?: {
-    listRuns?: (
-      sessionId: string,
-      query?: Pick<DelegationRunQuery, "statuses" | "includeTerminal" | "limit">,
-    ) => DelegationRunRecord[];
-    listPendingOutcomes?: (
-      sessionId: string,
-      query?: {
-        limit?: number;
-      },
-    ) => DelegationRunRecord[];
-  };
-};
+export type ContextComposerRuntime = ContextComposerSupplementalRuntime;
 
 export interface ComposedContextBlock {
   id: string;
@@ -105,15 +70,6 @@ export interface ContextComposerInput {
   supplementalBlocks?: readonly ComposedContextBlock[];
   includeDefaultSupplementalBlocks?: boolean;
 }
-
-const DIAGNOSTIC_CAPABILITY_NAMES = new Set<string>([
-  "cost_view",
-  "obs_query",
-  "obs_slo_assert",
-  "obs_snapshot",
-  "tape_info",
-  "tape_search",
-]);
 
 function makeBlock(
   id: string,
@@ -172,138 +128,6 @@ function buildCompactionAdvisoryBlock(input: {
   ].join("\n");
 }
 
-function listPendingDelegations(
-  runtime: ContextComposerInput["runtime"],
-  sessionId: string,
-): DelegationRunRecord[] {
-  return (
-    runtime.delegation?.listRuns?.(sessionId, {
-      statuses: ["pending", "running"],
-      includeTerminal: false,
-      limit: 6,
-    }) ?? []
-  );
-}
-
-function listPendingDelegationOutcomes(
-  runtime: ContextComposerInput["runtime"],
-  sessionId: string,
-): DelegationRunRecord[] {
-  const pending = runtime.delegation?.listPendingOutcomes?.(sessionId, {
-    limit: 6,
-  });
-  if (pending) {
-    return pending;
-  }
-  return (
-    runtime.delegation
-      ?.listRuns?.(sessionId, {
-        statuses: ["completed", "failed", "timeout", "cancelled"],
-        includeTerminal: true,
-        limit: 6,
-      })
-      ?.filter((run) => run.delivery?.handoffState === "pending_parent_turn") ?? []
-  );
-}
-
-function formatPendingDelegationRuns(pendingDelegations: readonly DelegationRunRecord[]): string {
-  return pendingDelegations
-    .map((run) => `${run.delegate}/${run.label ?? run.runId}:${run.status}`)
-    .join(", ");
-}
-
-function buildPendingDelegationsBlock(input: {
-  pendingDelegations: readonly DelegationRunRecord[];
-}): string {
-  const lines = ["[PendingDelegations]", `count: ${input.pendingDelegations.length}`];
-  if (input.pendingDelegations.length === 0) {
-    return lines.join("\n");
-  }
-  lines.push(`runs: ${formatPendingDelegationRuns(input.pendingDelegations)}`);
-  return lines.join("\n");
-}
-
-function buildOperationalDiagnosticsBlock(input: {
-  runtime: ContextComposerInput["runtime"];
-  sessionId: string;
-  gateStatus: ContextCompactionGateStatus;
-  pendingCompactionReason?: string | null;
-  requested: string[];
-  includeTapeTelemetry: boolean;
-  pendingDelegations: readonly DelegationRunRecord[];
-  pendingDelegationOutcomes: readonly DelegationRunRecord[];
-  compact?: boolean;
-}): string {
-  const requiredAction = input.gateStatus.required
-    ? "session_compact_now"
-    : input.pendingCompactionReason
-      ? "session_compact_recommended"
-      : "none";
-  const lines = [
-    "[OperationalDiagnostics]",
-    `context_pressure: ${input.gateStatus.pressure.level}`,
-    `pending_compaction_reason: ${input.pendingCompactionReason ?? "none"}`,
-    `pending_delegations: ${input.pendingDelegations.length}`,
-    `pending_delegation_outcomes: ${input.pendingDelegationOutcomes.length}`,
-    `required_action: ${requiredAction}`,
-  ];
-  if (input.compact) {
-    return [
-      "[OperationalDiagnostics]",
-      `pending_compaction_reason: ${input.pendingCompactionReason ?? "none"}`,
-      `required_action: ${requiredAction}`,
-      ...(input.pendingDelegations.length > 0
-        ? [`pending_delegations: ${input.pendingDelegations.length}`]
-        : []),
-      ...(input.pendingDelegationOutcomes.length > 0
-        ? [`pending_delegation_outcomes: ${input.pendingDelegationOutcomes.length}`]
-        : []),
-    ].join("\n");
-  }
-  if (input.pendingDelegations.length > 0) {
-    lines.push(`pending_delegation_runs: ${formatPendingDelegationRuns(input.pendingDelegations)}`);
-  }
-  if (input.pendingDelegationOutcomes.length > 0) {
-    lines.push(
-      `pending_delegation_outcome_runs: ${input.pendingDelegationOutcomes
-        .map((run) => `${run.delegate}/${run.label ?? run.runId}:${run.status}`)
-        .join(", ")}`,
-    );
-  }
-  if (input.requested.length > 0) {
-    lines.splice(1, 0, `requested_by: ${input.requested.map((name) => `$${name}`).join(", ")}`);
-  }
-  if (input.includeTapeTelemetry) {
-    const tapeStatus = input.runtime.events.getTapeStatus(input.sessionId);
-    lines.push(`tape_pressure: ${tapeStatus.tapePressure}`);
-    lines.push(`tape_entries_since_anchor: ${tapeStatus.entriesSinceAnchor}`);
-  }
-  return lines.join("\n");
-}
-
-function buildCompletedDelegationOutcomesBlock(input: {
-  pendingDelegationOutcomes: readonly DelegationRunRecord[];
-}): string {
-  const lines = [
-    "[CompletedDelegationOutcomes]",
-    `count: ${input.pendingDelegationOutcomes.length}`,
-  ];
-  if (input.pendingDelegationOutcomes.length === 0) {
-    return lines.join("\n");
-  }
-  lines.push(
-    ...input.pendingDelegationOutcomes.map(
-      (run) =>
-        `- ${run.delegate}/${run.label ?? run.runId}: ${run.status}${run.summary ? ` :: ${run.summary}` : ""}`,
-    ),
-  );
-  return lines.join("\n");
-}
-
-function shouldIncludeOperationalDiagnostics(requested: string[]): string[] {
-  return requested.filter((name) => DIAGNOSTIC_CAPABILITY_NAMES.has(name));
-}
-
 function compareCategory(left: ContextBlockCategory, right: ContextBlockCategory): number {
   const order: Record<ContextBlockCategory, number> = {
     narrative: 0,
@@ -338,105 +162,6 @@ function buildMetrics<T extends Pick<ComposedContextBlock, "category" | "estimat
     diagnosticTokens,
     narrativeRatio: totalTokens > 0 ? narrativeTokens / totalTokens : 0,
   };
-}
-
-function truncateContentToTokenBudget(content: string, maxTokens: number): string {
-  const maxChars = Math.max(1, Math.floor(Math.max(1, maxTokens) * CHARS_PER_TOKEN));
-  if (content.length <= maxChars) {
-    return content;
-  }
-  if (maxChars <= 3) {
-    return content.slice(0, maxChars);
-  }
-  return `${content.slice(0, maxChars - 3)}...`;
-}
-
-function rebuildBlock(
-  block: InternalContextBlock,
-  content: string,
-  options: {
-    compactContent?: string;
-  } = {},
-): InternalContextBlock | null {
-  return makeBlock(block.id, block.category, content, {
-    compactContent: options.compactContent,
-  });
-}
-
-function compactBlock(block: InternalContextBlock): InternalContextBlock | null {
-  if (!block.compactContent) {
-    return block;
-  }
-  return rebuildBlock(block, block.compactContent);
-}
-
-function measureGovernanceTokens(blocks: InternalContextBlock[]): number {
-  return blocks.reduce((sum, block) => {
-    if (block.category === "constraint" || block.category === "diagnostic") {
-      return sum + block.estimatedTokens;
-    }
-    return sum;
-  }, 0);
-}
-
-function isDiagnosticCapabilityDetailBlock(block: InternalContextBlock): boolean {
-  if (!block.id.startsWith("capability-detail:")) {
-    return false;
-  }
-  const toolName = block.id.slice("capability-detail:".length);
-  return DIAGNOSTIC_CAPABILITY_NAMES.has(toolName);
-}
-
-function removeBlocksWhileOverCap(
-  blocks: InternalContextBlock[],
-  governanceCap: number,
-  predicate: (block: InternalContextBlock) => boolean,
-): InternalContextBlock[] {
-  let governanceTokens = measureGovernanceTokens(blocks);
-  if (governanceTokens <= governanceCap) {
-    return blocks;
-  }
-  return blocks.filter((block) => {
-    if (!predicate(block)) {
-      return true;
-    }
-    if (governanceTokens <= governanceCap) {
-      return true;
-    }
-    governanceTokens -=
-      block.category === "constraint" || block.category === "diagnostic"
-        ? block.estimatedTokens
-        : 0;
-    return false;
-  });
-}
-
-function compactBlocksWhileOverCap(
-  blocks: InternalContextBlock[],
-  governanceCap: number,
-  predicate: (block: InternalContextBlock) => boolean,
-): InternalContextBlock[] {
-  const current = [...blocks];
-  let governanceTokens = measureGovernanceTokens(current);
-  if (governanceTokens <= governanceCap) {
-    return current;
-  }
-  for (let index = 0; index < current.length; index += 1) {
-    const block = current[index];
-    if (!block || !predicate(block) || !block.compactContent) {
-      continue;
-    }
-    if (governanceTokens <= governanceCap) {
-      break;
-    }
-    const compacted = compactBlock(block);
-    if (!compacted || compacted.estimatedTokens >= block.estimatedTokens) {
-      continue;
-    }
-    governanceTokens -= block.estimatedTokens - compacted.estimatedTokens;
-    current[index] = compacted;
-  }
-  return current;
 }
 
 function estimateRenderedBlockTokens(blocks: CapabilityRenderedBlock[]): number {
@@ -510,176 +235,6 @@ function buildCapabilityBlocks(
   });
 }
 
-function applyGovernanceBudgetCap(blocks: InternalContextBlock[]): InternalContextBlock[] {
-  if (blocks.length === 0) {
-    return blocks;
-  }
-
-  let current = [...blocks];
-  const hasCriticalCompactionGate = current.some((block) => block.id === "compaction-gate");
-  const hasNarrativeBlocks = current.some((block) => block.category === "narrative");
-  if (hasCriticalCompactionGate && !hasNarrativeBlocks) {
-    current = current.filter((block) => block.id !== "operational-diagnostics");
-  }
-  let metrics = buildMetrics(current);
-  const hasPendingCompactionAdvisory = current.some((block) => block.id === "compaction-advisory");
-  const governanceCap = Math.max(
-    hasPendingCompactionAdvisory && !hasCriticalCompactionGate
-      ? MIN_GOVERNANCE_TOKEN_CAP + 32
-      : MIN_GOVERNANCE_TOKEN_CAP,
-    Math.floor(metrics.totalTokens * GOVERNANCE_TOKEN_CAP_RATIO),
-  );
-  let governanceTokens = metrics.constraintTokens + metrics.diagnosticTokens;
-  if (governanceTokens <= governanceCap) {
-    return current;
-  }
-
-  current = removeBlocksWhileOverCap(
-    current,
-    governanceCap,
-    (block) => block.category === "diagnostic" && block.id !== "operational-diagnostics",
-  );
-
-  governanceTokens = measureGovernanceTokens(current);
-  if (governanceTokens <= governanceCap) {
-    return current;
-  }
-
-  current = removeBlocksWhileOverCap(
-    current,
-    governanceCap,
-    (block) => block.id === "capability-view-inventory",
-  );
-
-  governanceTokens = measureGovernanceTokens(current);
-  if (governanceTokens <= governanceCap) {
-    return current;
-  }
-
-  current = removeBlocksWhileOverCap(
-    current,
-    governanceCap,
-    (block) => block.id === "compaction-advisory",
-  );
-
-  governanceTokens = measureGovernanceTokens(current);
-  if (governanceTokens <= governanceCap) {
-    return current;
-  }
-
-  current = compactBlocksWhileOverCap(
-    current,
-    governanceCap,
-    (block) => block.id.startsWith("capability-detail:") || block.id === "capability-view-policy",
-  );
-
-  governanceTokens = measureGovernanceTokens(current);
-  if (governanceTokens <= governanceCap) {
-    return current;
-  }
-
-  current = compactBlocksWhileOverCap(
-    current,
-    governanceCap,
-    (block) => block.id === "capability-view-summary",
-  );
-
-  governanceTokens = measureGovernanceTokens(current);
-  if (governanceTokens <= governanceCap) {
-    return current;
-  }
-
-  current = removeBlocksWhileOverCap(
-    current,
-    governanceCap,
-    (block) => block.id === "capability-view-policy",
-  );
-
-  governanceTokens = measureGovernanceTokens(current);
-  if (governanceTokens <= governanceCap) {
-    return current;
-  }
-
-  current = removeBlocksWhileOverCap(current, governanceCap, isDiagnosticCapabilityDetailBlock);
-
-  governanceTokens = measureGovernanceTokens(current);
-  if (governanceTokens <= governanceCap) {
-    return current;
-  }
-
-  current = compactBlocksWhileOverCap(
-    current,
-    governanceCap,
-    (block) => block.id === "operational-diagnostics",
-  );
-
-  governanceTokens = measureGovernanceTokens(current);
-  if (governanceTokens <= governanceCap) {
-    return current;
-  }
-
-  const capabilityIndex = current.findIndex(
-    (block) => block.id === "capability-view-summary" || block.id === "capability-view",
-  );
-  if (capabilityIndex < 0) {
-    return removeBlocksWhileOverCap(
-      current,
-      governanceCap,
-      (block) => block.id === "operational-diagnostics",
-    );
-  }
-
-  const otherGovernanceTokens = current.reduce((sum, block, index) => {
-    if (index === capabilityIndex) {
-      return sum;
-    }
-    if (block.category === "constraint" || block.category === "diagnostic") {
-      return sum + block.estimatedTokens;
-    }
-    return sum;
-  }, 0);
-  const capabilityBudget = Math.max(
-    MIN_CAPABILITY_VIEW_TOKENS,
-    governanceCap - otherGovernanceTokens,
-  );
-  const capabilityBlock = current[capabilityIndex]!;
-  if (capabilityBlock.estimatedTokens <= capabilityBudget) {
-    return current;
-  }
-
-  const truncatedCapability = rebuildBlock(
-    capabilityBlock,
-    truncateContentToTokenBudget(capabilityBlock.content, capabilityBudget),
-  );
-  if (!truncatedCapability) {
-    current = current.filter((_, index) => index !== capabilityIndex);
-  } else {
-    current[capabilityIndex] = truncatedCapability;
-  }
-  governanceTokens = measureGovernanceTokens(current);
-  if (governanceTokens <= governanceCap) {
-    return current;
-  }
-
-  if (hasPendingCompactionAdvisory && !hasCriticalCompactionGate) {
-    current = removeBlocksWhileOverCap(
-      current,
-      governanceCap,
-      (block) => block.id === "capability-view-summary" || block.id === "capability-view",
-    );
-    governanceTokens = measureGovernanceTokens(current);
-    if (governanceTokens <= governanceCap) {
-      return current;
-    }
-  }
-
-  return removeBlocksWhileOverCap(
-    current,
-    governanceCap,
-    (block) => block.id === "operational-diagnostics",
-  );
-}
-
 function toPublicBlock(block: InternalContextBlock): ComposedContextBlock {
   const { compactContent: _compactContent, ...publicBlock } = block;
   return publicBlock;
@@ -706,88 +261,7 @@ function normalizeSupplementalBlocks(
   });
 }
 
-export function resolveSupplementalContextBlocks(
-  input: Pick<
-    ContextComposerInput,
-    "runtime" | "sessionId" | "gateStatus" | "pendingCompactionReason" | "capabilityView"
-  >,
-): ComposedContextBlock[] {
-  const blocks: InternalContextBlock[] = [];
-  const diagnosticRequests = shouldIncludeOperationalDiagnostics(input.capabilityView.requested);
-  const includeTapeTelemetry = diagnosticRequests.length > 0;
-  const pendingDelegations = listPendingDelegations(input.runtime, input.sessionId);
-  const pendingDelegationOutcomes = listPendingDelegationOutcomes(input.runtime, input.sessionId);
-
-  if (
-    pendingDelegations.length > 0 &&
-    (input.gateStatus.required || !!input.pendingCompactionReason)
-  ) {
-    const pendingDelegationsBlock = makeBlock(
-      "pending-delegations",
-      "constraint",
-      buildPendingDelegationsBlock({
-        pendingDelegations,
-      }),
-    );
-    if (pendingDelegationsBlock) {
-      blocks.push(pendingDelegationsBlock);
-    }
-  }
-  if (pendingDelegationOutcomes.length > 0) {
-    const completedOutcomesBlock = makeBlock(
-      "completed-delegation-outcomes",
-      "diagnostic",
-      buildCompletedDelegationOutcomesBlock({
-        pendingDelegationOutcomes,
-      }),
-    );
-    if (completedOutcomesBlock) {
-      blocks.push(completedOutcomesBlock);
-    }
-  }
-  if (
-    diagnosticRequests.length > 0 ||
-    input.gateStatus.required ||
-    !!input.pendingCompactionReason
-  ) {
-    const preferCompactDiagnostics =
-      diagnosticRequests.length === 0 &&
-      (input.gateStatus.required || !!input.pendingCompactionReason);
-    const diagnosticBlock = makeBlock(
-      "operational-diagnostics",
-      "diagnostic",
-      buildOperationalDiagnosticsBlock({
-        runtime: input.runtime,
-        sessionId: input.sessionId,
-        gateStatus: input.gateStatus,
-        pendingCompactionReason: input.pendingCompactionReason,
-        requested: diagnosticRequests,
-        includeTapeTelemetry,
-        pendingDelegations,
-        pendingDelegationOutcomes,
-        compact: preferCompactDiagnostics,
-      }),
-      {
-        compactContent: buildOperationalDiagnosticsBlock({
-          runtime: input.runtime,
-          sessionId: input.sessionId,
-          gateStatus: input.gateStatus,
-          pendingCompactionReason: input.pendingCompactionReason,
-          requested: diagnosticRequests,
-          includeTapeTelemetry,
-          pendingDelegations,
-          pendingDelegationOutcomes,
-          compact: true,
-        }),
-      },
-    );
-    if (diagnosticBlock) {
-      blocks.push(diagnosticBlock);
-    }
-  }
-
-  return blocks.map(toPublicBlock);
-}
+export { resolveSupplementalContextBlocks } from "./context-composer-supplemental.js";
 
 export function composeContextBlocks(input: ContextComposerInput): ContextComposerResult {
   const blocks: InternalContextBlock[] = [];
@@ -842,6 +316,7 @@ export function composeContextBlocks(input: ContextComposerInput): ContextCompos
       const categoryDiff = compareCategory(left.category, right.category);
       return categoryDiff;
     }),
+    buildMetrics,
   );
   const publicBlocks = ordered.map(toPublicBlock);
   const metrics = buildMetrics(publicBlocks);

@@ -3,6 +3,8 @@
 Implementation anchors:
 
 - `packages/brewva-gateway/src/runtime-plugins/context-composer.ts`
+- `packages/brewva-gateway/src/runtime-plugins/context-composer-governance.ts`
+- `packages/brewva-gateway/src/runtime-plugins/context-composer-supplemental.ts`
 - `packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.ts`
 - `packages/brewva-gateway/src/runtime-plugins/context-contract.ts`
 - `packages/brewva-gateway/src/runtime-plugins/context-transform.ts` (lifecycle shell only)
