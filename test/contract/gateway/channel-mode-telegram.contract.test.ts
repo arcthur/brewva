@@ -1188,7 +1188,7 @@ describe("gateway contract: telegram channel dispatch", () => {
       const part = turn.parts[0];
       return part?.type === "text" ? [part.text] : [];
     });
-    expect(outboundTexts.some((text) => text.includes("Update already in progress"))).toBe(true);
+    expect(outboundTexts.join("\n")).toContain("Update already in progress");
     expect(outboundTexts).toContain("UPDATE_ACK_AFTER_LOCK");
   });
 });

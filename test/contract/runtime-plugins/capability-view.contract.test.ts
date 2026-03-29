@@ -7,6 +7,7 @@ import {
   createProcessTool,
   createScheduleIntentTool,
 } from "@brewva/brewva-tools";
+import { requireDefined } from "../../helpers/assertions.js";
 import { createRuntimeFixture } from "./fixtures/runtime.js";
 
 describe("capability view", () => {
@@ -285,11 +286,10 @@ describe("capability view", () => {
 
   test("marks operator acceptance closure as non-rollbackable", () => {
     const runtime = createRuntimeFixture();
-    const acceptanceTool = createTaskLedgerTools({ runtime }).find(
-      (tool) => tool.name === "task_record_acceptance",
+    const acceptanceTool = requireDefined(
+      createTaskLedgerTools({ runtime }).find((tool) => tool.name === "task_record_acceptance"),
+      "missing task_record_acceptance tool",
     );
-    expect(acceptanceTool).toBeDefined();
-    if (!acceptanceTool) return;
 
     const result = buildCapabilityView({
       prompt: "inspect $task_record_acceptance",

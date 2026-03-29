@@ -35,7 +35,7 @@ describe("Gap remediation: ledger compaction and redaction", () => {
     }
 
     const rows = runtime.ledger.listRows(sessionId);
-    expect(rows.some((row) => row.tool === "ledger_checkpoint")).toBe(true);
+    expect(rows.map((row) => row.tool)).toContain("ledger_checkpoint");
     expect(rows.length).toBeLessThan(6);
 
     const integrity = runtime.ledger.verifyIntegrity(sessionId);

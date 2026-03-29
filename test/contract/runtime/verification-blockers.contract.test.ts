@@ -3,6 +3,7 @@ import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { createTestConfig } from "../../fixtures/config.js";
+import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace, writeTestConfig } from "../../helpers/workspace.js";
 
 function writeConfig(
@@ -29,6 +30,10 @@ function latestOutcomePayload(runtime: BrewvaRuntime, sessionId: string) {
         }>;
       }
     | undefined;
+}
+
+function blockerIds(runtime: BrewvaRuntime, sessionId: string): string[] {
+  return runtime.task.getState(sessionId).blockers.map((blocker) => blocker.id);
 }
 
 describe("Verification blockers", () => {
@@ -66,9 +71,11 @@ describe("Verification blockers", () => {
     expect(report1.passed).toBe(false);
 
     const state1 = runtime.task.getState(sessionId);
-    const blocker1 = state1.blockers.find((blocker) => blocker.id === "verifier:tests");
-    expect(blocker1).toBeDefined();
-    expect(blocker1?.truthFactId).toBe("truth:verifier:tests");
+    const blocker1 = requireDefined(
+      state1.blockers.find((blocker) => blocker.id === "verifier:tests"),
+      "expected verifier:tests blocker after failing verification",
+    );
+    expect(blocker1.truthFactId).toBe("truth:verifier:tests");
     expect(
       runtime.truth.getState(sessionId).facts.find((fact) => fact.id === "truth:verifier:tests")
         ?.status,
@@ -102,9 +109,7 @@ describe("Verification blockers", () => {
       timeoutMs: 5_000,
     });
     expect(report2.passed).toBe(true);
-    expect(
-      reloaded.task.getState(sessionId).blockers.some((item) => item.id === "verifier:tests"),
-    ).toBe(false);
+    expect(blockerIds(reloaded, sessionId)).not.toContain("verifier:tests");
     expect(
       reloaded.truth.getState(sessionId).facts.find((fact) => fact.id === "truth:verifier:tests")
         ?.status,
@@ -150,7 +155,7 @@ describe("Verification blockers", () => {
 
     expect(report.passed).toBe(true);
     const blockers = runtime.task.getState(sessionId).blockers;
-    expect(blockers.some((item) => item.id === "verifier:governance:verify-spec")).toBe(true);
+    expect(blockers.map((item) => item.id)).toContain("verifier:governance:verify-spec");
     const events = runtime.events.query(sessionId, { type: "governance_verify_spec_failed" });
     expect(events.length).toBeGreaterThan(0);
     const structured = runtime.events.queryStructured(sessionId, {
@@ -197,11 +202,7 @@ describe("Verification blockers", () => {
       timeoutMs: 5_000,
     });
     expect(first.passed).toBe(true);
-    expect(
-      runtime.task
-        .getState(sessionId)
-        .blockers.some((item) => item.id === "verifier:governance:verify-spec"),
-    ).toBe(true);
+    expect(blockerIds(runtime, sessionId)).toContain("verifier:governance:verify-spec");
 
     mode = "pass";
     runtime.tools.markCall(sessionId, "edit");
@@ -210,11 +211,7 @@ describe("Verification blockers", () => {
       timeoutMs: 5_000,
     });
     expect(second.passed).toBe(true);
-    expect(
-      runtime.task
-        .getState(sessionId)
-        .blockers.some((item) => item.id === "verifier:governance:verify-spec"),
-    ).toBe(false);
+    expect(blockerIds(runtime, sessionId)).not.toContain("verifier:governance:verify-spec");
     expect(
       runtime.events.query(sessionId, {
         type: "governance_verify_spec_passed",
@@ -340,9 +337,7 @@ describe("Verification blockers", () => {
 
     expect(report.passed).toBe(false);
     expect(report.missingEvidence).toContain("tests");
-    expect(
-      runtime.task.getState(sessionId).blockers.some((blocker) => blocker.id === "verifier:tests"),
-    ).toBe(true);
+    expect(blockerIds(runtime, sessionId)).toContain("verifier:tests");
     expect(
       runtime.truth.getState(sessionId).facts.find((fact) => fact.id === "truth:verifier:tests")
         ?.status,
@@ -410,9 +405,7 @@ describe("Verification blockers", () => {
 
     expect(report.passed).toBe(false);
     expect(report.missingEvidence).toContain("tests");
-    expect(
-      runtime.task.getState(sessionId).blockers.some((blocker) => blocker.id === "verifier:tests"),
-    ).toBe(true);
+    expect(blockerIds(runtime, sessionId)).toContain("verifier:tests");
 
     const outcome = latestOutcomePayload(runtime, sessionId);
     expect(outcome?.outcome).toBe("fail");

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createHostedTurnPipeline } from "@brewva/brewva-gateway/runtime-plugins";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import type { ToolInfo } from "@mariozechner/pi-coding-agent";
+import { requireDefined } from "../../helpers/assertions.js";
 import { createMockRuntimePluginApi, invokeHandlerAsync } from "../../helpers/runtime-plugin.js";
 import { createRuntimeFixture } from "./fixtures/runtime.js";
 
@@ -17,21 +18,23 @@ describe("managed tool registration modes", () => {
     await runtimePlugin(api.api);
 
     const readSpans = api.api.getAllTools().find((tool) => tool.name === "read_spans");
-    const parameters = readSpans?.parameters as
-      | {
-          anyOf?: unknown;
-          allOf?: unknown;
-          properties?: Record<string, unknown>;
-          required?: string[];
-        }
-      | undefined;
+    const parameters = requireDefined(
+      readSpans?.parameters as
+        | {
+            anyOf?: unknown;
+            allOf?: unknown;
+            properties?: Record<string, unknown>;
+            required?: string[];
+          }
+        | undefined,
+      "missing canonical parameters for read_spans",
+    );
 
-    expect(parameters).toBeDefined();
-    expect(parameters?.anyOf).toBeUndefined();
-    expect(parameters?.allOf).toBeUndefined();
-    expect(parameters?.properties?.file_path).toBeDefined();
-    expect(parameters?.properties?.filePath).toBeUndefined();
-    expect(parameters?.required).toEqual(["file_path", "spans"]);
+    expect(parameters.anyOf).toBeUndefined();
+    expect(parameters.allOf).toBeUndefined();
+    requireDefined(parameters.properties?.file_path, "missing file_path parameter in read_spans");
+    expect(parameters.properties?.filePath).toBeUndefined();
+    expect(parameters.required).toEqual(["file_path", "spans"]);
   });
 
   test("registerTools only affects tool registration, not hosted pipeline handler surfaces", async () => {

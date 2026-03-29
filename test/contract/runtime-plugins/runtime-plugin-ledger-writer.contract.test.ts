@@ -108,7 +108,7 @@ describe("Runtime plugin gaps: ledger writer", () => {
     expect(finished).toHaveLength(1);
   });
 
-  test("given legacy status-only tool_result, when ledger writer runs, then status does not override the latest verdict model", () => {
+  test("given status-only legacy tool_result details, when ledger writer runs, then status does not override the verdict model", () => {
     const { api, handlers } = createMockRuntimePluginApi();
 
     const finished: any[] = [];

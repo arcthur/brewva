@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createAstGrepTools } from "@brewva/brewva-tools";
+import { requireDefined } from "../../helpers/assertions.js";
 import {
   createRuntime,
   extractTextContent,
@@ -10,17 +11,23 @@ import {
   workspaceWithSampleFiles,
 } from "./tools-parallel-read.helpers.js";
 
+function requireTool<T extends { name: string }>(tools: T[], name: string): T {
+  return requireDefined(
+    tools.find((tool) => tool.name === name),
+    `Expected tool ${name}.`,
+  );
+}
+
 describe("tool parallel read ast-grep fallbacks", () => {
   test("ast_grep_search returns unavailable when sg execution fails", async () => {
     const workspace = workspaceWithSampleFiles("brewva-tools-astgrep-file-cwd-");
     const runtime = createRuntime(workspace);
     const sessionId = "parallel-read-astgrep-file-cwd";
     const tools = createAstGrepTools();
-    const astGrepSearch = tools.find((tool) => tool.name === "ast_grep_search");
-    expect(astGrepSearch).toBeDefined();
+    const astGrepSearch = requireTool(tools, "ast_grep_search");
 
     const fileCwd = join(workspace, "src/a.ts");
-    const result = await astGrepSearch!.execute(
+    const result = await astGrepSearch.execute(
       "tc-astgrep-search-file-cwd",
       {
         pattern: "valueA",
@@ -45,11 +52,10 @@ describe("tool parallel read ast-grep fallbacks", () => {
     const runtime = createRuntime(workspace);
     const sessionId = "parallel-read-astgrep-replace-fallback";
     const tools = createAstGrepTools();
-    const astGrepReplace = tools.find((tool) => tool.name === "ast_grep_replace");
-    expect(astGrepReplace).toBeDefined();
+    const astGrepReplace = requireTool(tools, "ast_grep_replace");
 
     const invalidCwd = join(workspace, "missing-cwd");
-    const result = await astGrepReplace!.execute(
+    const result = await astGrepReplace.execute(
       "tc-astgrep-replace-fallback",
       {
         pattern: "valueA",
@@ -76,12 +82,11 @@ describe("tool parallel read ast-grep fallbacks", () => {
     const runtime = createRuntime(workspace);
     const sessionId = "parallel-read-astgrep-replace-apply";
     const tools = createAstGrepTools();
-    const astGrepReplace = tools.find((tool) => tool.name === "ast_grep_replace");
-    expect(astGrepReplace).toBeDefined();
+    const astGrepReplace = requireTool(tools, "ast_grep_replace");
 
     const invalidCwd = join(workspace, "missing-cwd");
     const targetFile = join(workspace, "src/a.ts");
-    const result = await astGrepReplace!.execute(
+    const result = await astGrepReplace.execute(
       "tc-astgrep-replace-apply",
       {
         pattern: "valueA",

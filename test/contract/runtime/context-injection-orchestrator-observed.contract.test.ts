@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { requireDefined } from "../../helpers/assertions.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -78,22 +79,22 @@ describe("Context injection orchestrator characterization", () => {
     expect(injection.text).toContain("[WorkingProjection]");
     expect(injection.text).toContain("\n\n");
 
-    const injectedEvent = runtime.events.query(sessionId, { type: "context_injected", last: 1 })[0];
-    expect(injectedEvent).toBeDefined();
-    const payload = injectedEvent?.payload as
-      | {
-          sourceCount?: number;
-          finalTokens?: number;
-          originalTokens?: number;
-          degradationApplied?: boolean;
-          usagePercent?: number | null;
-        }
-      | undefined;
-    expect(payload?.sourceCount).toBeGreaterThanOrEqual(4);
-    expect(payload?.finalTokens).toBeGreaterThan(0);
-    expect(payload?.originalTokens).toBeGreaterThanOrEqual(payload?.finalTokens ?? 0);
-    expect(payload?.degradationApplied).toBe(false);
-    expect(payload?.usagePercent).toBe(0.2);
+    const injectedEvent = requireDefined(
+      runtime.events.query(sessionId, { type: "context_injected", last: 1 })[0],
+      "expected context_injected event",
+    );
+    const payload = injectedEvent.payload as {
+      sourceCount?: number;
+      finalTokens?: number;
+      originalTokens?: number;
+      degradationApplied?: boolean;
+      usagePercent?: number | null;
+    };
+    expect(payload.sourceCount).toBeGreaterThanOrEqual(4);
+    expect(payload.finalTokens).toBeGreaterThan(0);
+    expect(payload.originalTokens).toBeGreaterThanOrEqual(payload.finalTokens ?? 0);
+    expect(payload.degradationApplied).toBe(false);
+    expect(payload.usagePercent).toBe(0.2);
   });
 
   test("drops duplicate fingerprint in same scope and emits context_injection_dropped", async () => {
@@ -129,13 +130,15 @@ describe("Context injection orchestrator characterization", () => {
     expect(second.accepted).toBe(false);
     expect(second.text).toBe("");
 
-    const dropped = runtime.events.query(sessionId, {
-      type: "context_injection_dropped",
-      last: 1,
-    })[0];
-    expect(dropped).toBeDefined();
-    const payload = dropped?.payload as { reason?: string; originalTokens?: number } | undefined;
-    expect(payload?.reason).toBe("duplicate_content");
-    expect(payload?.originalTokens).toBeGreaterThan(0);
+    const dropped = requireDefined(
+      runtime.events.query(sessionId, {
+        type: "context_injection_dropped",
+        last: 1,
+      })[0],
+      "expected context_injection_dropped event",
+    );
+    const payload = dropped.payload as { reason?: string; originalTokens?: number };
+    expect(payload.reason).toBe("duplicate_content");
+    expect(payload.originalTokens).toBeGreaterThan(0);
   });
 });

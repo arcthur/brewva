@@ -3,7 +3,7 @@ import { TurnReplayEngine, type BrewvaEventRecord } from "@brewva/brewva-runtime
 import { anchorEvent, toolResultFailureEvent } from "./turn-replay-engine.helpers.js";
 
 describe("TurnReplayEngine cost and evidence folding", () => {
-  test("folds cost/evidence/projection state and prunes stale failures after 3 anchors", () => {
+  test("folds cost, projection, and stale failures after anchor expiry", () => {
     const sessionId = "replay-engine-folded-extended";
     const events: BrewvaEventRecord[] = [
       {
@@ -14,7 +14,7 @@ describe("TurnReplayEngine cost and evidence folding", () => {
         turn: 1,
         payload: {
           model: "test/model",
-          skill: "repository-analysis",
+          skill: "test/replay",
           inputTokens: 10,
           outputTokens: 5,
           cacheReadTokens: 0,

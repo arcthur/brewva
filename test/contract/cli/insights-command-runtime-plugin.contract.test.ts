@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { createInsightsCommandRuntimePlugin } from "@brewva/brewva-cli";
 import type { RuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 type RegisteredCommand = {
@@ -115,8 +116,10 @@ describe("insights interactive command runtime plugin", () => {
     const { api, commands } = createCommandApiMock();
     await createInsightsCommandRuntimePlugin(runtime)(api);
 
-    const command = commands.get("insights");
-    expect(command).toBeDefined();
+    const command = requireDefined(
+      commands.get("insights"),
+      "expected insights command registration",
+    );
 
     const widgets: Array<{ id: string; lines?: string[]; options?: Record<string, unknown> }> = [];
     const notifications: Array<{ message: string; level: string }> = [];
@@ -132,7 +135,7 @@ describe("insights interactive command runtime plugin", () => {
       },
     };
 
-    await command!.handler(".", ctx);
+    await command.handler(".", ctx);
 
     expect(widgets.length).toBeGreaterThan(0);
     expect(widgets.at(-1)?.id).toBe("brewva-insights");
@@ -155,8 +158,10 @@ describe("insights interactive command runtime plugin", () => {
 
     const { api, commands } = createCommandApiMock();
     await createInsightsCommandRuntimePlugin(runtime)(api);
-    const command = commands.get("insights");
-    expect(command).toBeDefined();
+    const command = requireDefined(
+      commands.get("insights"),
+      "expected insights command registration",
+    );
 
     const widgets: Array<{ id: string; lines?: string[]; options?: Record<string, unknown> }> = [];
     const notifications: Array<{ message: string; level: string }> = [];
@@ -172,7 +177,7 @@ describe("insights interactive command runtime plugin", () => {
       },
     };
 
-    await command!.handler("clear", ctx);
+    await command.handler("clear", ctx);
 
     expect(widgets).toHaveLength(1);
     expect(widgets[0]).toEqual({

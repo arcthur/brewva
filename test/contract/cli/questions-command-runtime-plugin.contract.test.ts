@@ -8,6 +8,7 @@ import {
   DEFAULT_BREWVA_CONFIG,
   OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
 } from "@brewva/brewva-runtime";
+import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 type RegisteredCommand = {
@@ -51,6 +52,10 @@ function createCommandApiMock(): {
   return { api, commands, sentMessages, handlers };
 }
 
+function requireCommand(commands: Map<string, RegisteredCommand>, name: string): RegisteredCommand {
+  return requireDefined(commands.get(name), `Expected ${name} command to be registered.`);
+}
+
 describe("questions interactive command runtime plugin", () => {
   test("renders open questions into a widget without mutating event history", async () => {
     const workspace = createTestWorkspace("questions-command-runtime-plugin");
@@ -60,24 +65,29 @@ describe("questions interactive command runtime plugin", () => {
       config: structuredClone(DEFAULT_BREWVA_CONFIG),
     });
     const sessionId = "questions-command-session-1";
-    const questionEvent = runtime.events.record({
-      sessionId,
-      type: "skill_completed",
-      payload: {
-        skillName: "design",
-        outputs: {
-          open_questions: ["Which deployment target should the gateway use?"],
+    const questionEvent = requireDefined(
+      runtime.events.record({
+        sessionId,
+        type: "skill_completed",
+        payload: {
+          skillName: "design",
+          outputs: {
+            open_questions: ["Which deployment target should the gateway use?"],
+          },
         },
-      },
-    });
-    expect(questionEvent).toBeDefined();
+      }),
+      "Expected question event to be recorded.",
+    );
+    const questionEventId = requireNonEmptyString(
+      questionEvent.id,
+      "Expected recorded question event id.",
+    );
 
     const beforeEventCount = runtime.events.query(sessionId).length;
     const { api, commands } = createCommandApiMock();
     await createQuestionsCommandRuntimePlugin(runtime)(api);
 
-    const questionsCommand = commands.get("questions");
-    expect(questionsCommand).toBeDefined();
+    const questionsCommand = requireCommand(commands, "questions");
 
     const widgets: Array<{ id: string; lines?: string[]; options?: Record<string, unknown> }> = [];
     const notifications: Array<{ message: string; level: string }> = [];
@@ -96,14 +106,14 @@ describe("questions interactive command runtime plugin", () => {
       },
     };
 
-    await questionsCommand!.handler("", ctx);
+    await questionsCommand.handler("", ctx);
 
     expect(runtime.events.query(sessionId)).toHaveLength(beforeEventCount);
     expect(widgets.at(-1)?.id).toBe("brewva-questions");
     expect(widgets.at(-1)?.options?.placement).toBe("belowEditor");
     const rendered = (widgets.at(-1)?.lines ?? []).join("\n");
     expect(rendered).toContain("Open questions: 1");
-    expect(rendered).toContain(questionEvent?.id ?? "");
+    expect(rendered).toContain(questionEventId);
     expect(rendered).toContain("Which deployment target should the gateway use?");
     expect(notifications.at(-1)?.message).toContain("Questions updated (1 open).");
   });
@@ -116,23 +126,25 @@ describe("questions interactive command runtime plugin", () => {
       config: structuredClone(DEFAULT_BREWVA_CONFIG),
     });
     const sessionId = "questions-answer-session-1";
-    const questionEvent = runtime.events.record({
-      sessionId,
-      type: "skill_completed",
-      payload: {
-        skillName: "design",
-        outputs: {
-          open_questions: ["Which deployment target should the gateway use?"],
+    const questionEvent = requireDefined(
+      runtime.events.record({
+        sessionId,
+        type: "skill_completed",
+        payload: {
+          skillName: "design",
+          outputs: {
+            open_questions: ["Which deployment target should the gateway use?"],
+          },
         },
-      },
-    });
-    const questionId = `skill:${questionEvent?.id}:1`;
+      }),
+      "Expected answerable question event to be recorded.",
+    );
+    const questionId = `skill:${requireNonEmptyString(questionEvent.id, "Expected question event id.")}:1`;
 
     const { api, commands, sentMessages } = createCommandApiMock();
     await createQuestionsCommandRuntimePlugin(runtime)(api);
 
-    const answerCommand = commands.get("answer");
-    expect(answerCommand).toBeDefined();
+    const answerCommand = requireCommand(commands, "answer");
 
     const notifications: Array<{ message: string; level: string }> = [];
     const ctx = {
@@ -148,7 +160,7 @@ describe("questions interactive command runtime plugin", () => {
       },
     };
 
-    await answerCommand!.handler(`${questionId} Use the gateway daemon path.`, ctx);
+    await answerCommand.handler(`${questionId} Use the gateway daemon path.`, ctx);
 
     expect(sentMessages).toHaveLength(1);
     expect(sentMessages[0]?.options).toEqual({ deliverAs: "followUp" });

@@ -194,7 +194,7 @@ describe("TurnReplayEngine core replay", () => {
       "checkpoint-item",
       "fresh-item",
     ]);
-    expect(view.taskState.items.some((item) => item.text === "stale-item")).toBe(false);
+    expect(view.taskState.items.map((item) => item.text)).not.toContain("stale-item");
     expect(view.truthState.facts.map((fact) => fact.id)).toEqual(["fact-checkpoint", "fact-new"]);
   });
 

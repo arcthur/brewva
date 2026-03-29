@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createExecTool } from "@brewva/brewva-tools";
+import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
 import { createRuntimeForExecTests, fakeContext } from "./tools-exec-process.helpers.js";
 
 describe("exec command guardrails", () => {
@@ -24,11 +25,15 @@ describe("exec command guardrails", () => {
       ),
     ).rejects.toThrow("exec_blocked_isolation");
 
-    expect(events.some((event) => event.type === "exec_blocked_isolation")).toBe(true);
-    const blocked = events.find((event) => event.type === "exec_blocked_isolation");
-    const denyListPolicy = blocked?.payload?.denyListPolicy;
-    expect(typeof denyListPolicy).toBe("string");
-    expect(denyListPolicy as string).toContain("best-effort");
+    const blocked = requireDefined(
+      events.find((event) => event.type === "exec_blocked_isolation"),
+      "Expected exec_blocked_isolation event.",
+    );
+    const denyListPolicy = requireNonEmptyString(
+      blocked.payload?.denyListPolicy,
+      "Expected denyListPolicy.",
+    );
+    expect(denyListPolicy).toContain("best-effort");
   });
 
   test("exec rejects brewva tool-name command misroutes", async () => {
@@ -77,6 +82,9 @@ describe("exec command guardrails", () => {
       ),
     ).rejects.toThrow("exec_blocked_isolation");
 
-    expect(events.some((event) => event.type === "exec_blocked_isolation")).toBe(true);
+    requireDefined(
+      events.find((event) => event.type === "exec_blocked_isolation"),
+      "Expected blocked shell-wrapper event.",
+    );
   });
 });

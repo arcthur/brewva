@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createA2ATools } from "@brewva/brewva-tools";
+import { requireDefined } from "../../helpers/assertions.js";
 
 function fakeContext(sessionId: string): any {
   return {
@@ -16,6 +17,13 @@ function extractText(result: { content?: Array<{ type: string; text?: string }> 
     (part) => part.type === "text" && typeof part.text === "string",
   );
   return text?.text ?? "";
+}
+
+function requireTool<T extends { name: string }>(tools: T[], name: string): T {
+  return requireDefined(
+    tools.find((tool) => tool.name === name),
+    `Expected tool ${name}.`,
+  );
 }
 
 describe("channel a2a tools", () => {
@@ -36,10 +44,9 @@ describe("channel a2a tools", () => {
       },
     });
 
-    const send = tools.find((tool) => tool.name === "agent_send");
-    expect(send).toBeDefined();
+    const send = requireTool(tools, "agent_send");
 
-    const result = await send!.execute(
+    const result = await send.execute(
       "tc-1",
       { toAgentId: "mike", message: "ping" },
       undefined,
@@ -69,10 +76,9 @@ describe("channel a2a tools", () => {
       },
     });
 
-    const broadcast = tools.find((tool) => tool.name === "agent_broadcast");
-    expect(broadcast).toBeDefined();
+    const broadcast = requireTool(tools, "agent_broadcast");
 
-    const result = await broadcast!.execute(
+    const result = await broadcast.execute(
       "tc-2",
       { toAgentIds: ["jack", "mike"], message: "review" },
       undefined,
@@ -101,10 +107,9 @@ describe("channel a2a tools", () => {
       },
     });
 
-    const list = tools.find((tool) => tool.name === "agent_list");
-    expect(list).toBeDefined();
+    const list = requireTool(tools, "agent_list");
 
-    const result = await list!.execute(
+    const result = await list.execute(
       "tc-3",
       { includeDeleted: true },
       undefined,

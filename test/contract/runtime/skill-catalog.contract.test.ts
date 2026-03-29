@@ -30,17 +30,22 @@ function createCleanRuntime(): BrewvaRuntime {
 describe("repository catalog contracts", () => {
   test("runtime loads the new v2 catalog names", () => {
     const runtime = createCleanRuntime();
+    const loadedSkillNames = runtime.skills.list().map((skill) => skill.name);
 
-    expect(runtime.skills.get("repository-analysis")).toBeDefined();
-    expect(runtime.skills.get("discovery")).toBeDefined();
-    expect(runtime.skills.get("strategy-review")).toBeDefined();
-    expect(runtime.skills.get("design")).toBeDefined();
-    expect(runtime.skills.get("implementation")).toBeDefined();
-    expect(runtime.skills.get("qa")).toBeDefined();
-    expect(runtime.skills.get("ship")).toBeDefined();
-    expect(runtime.skills.get("retro")).toBeDefined();
-    expect(runtime.skills.get("runtime-forensics")).toBeDefined();
-    expect(runtime.skills.get("skill-authoring")).toBeDefined();
+    expect(loadedSkillNames).toEqual(
+      expect.arrayContaining([
+        "repository-analysis",
+        "discovery",
+        "strategy-review",
+        "design",
+        "implementation",
+        "qa",
+        "ship",
+        "retro",
+        "runtime-forensics",
+        "skill-authoring",
+      ]),
+    );
   });
 
   test("review remains read_only and standalone by contract", () => {

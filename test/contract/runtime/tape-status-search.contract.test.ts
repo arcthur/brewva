@@ -3,6 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { requireNonEmptyString } from "../../helpers/assertions.js";
 
 describe("tape status and search", () => {
   test("recordTapeHandoff writes anchor and resets entriesSinceAnchor", async () => {
@@ -29,7 +30,7 @@ describe("tape status and search", () => {
     if (!handoff.ok) {
       throw new Error(handoff.error);
     }
-    expect(handoff.eventId).toBeDefined();
+    requireNonEmptyString(handoff.eventId, "missing tape handoff event id");
 
     const after = runtime.events.getTapeStatus(sessionId);
     expect(after.lastAnchor?.name).toBe("investigation-done");

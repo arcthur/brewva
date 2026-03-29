@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { assertCliSuccess, runCliSync } from "../../helpers/cli.js";
 import { writeMinimalConfig } from "../../helpers/config.js";
-import { findFinalBundle, isRecord, parseJsonLines } from "../../helpers/events.js";
+import { isRecord, parseJsonLines, requireFinalBundle } from "../../helpers/events.js";
 import { runLive } from "../../helpers/live.js";
 import { cleanupWorkspace, createWorkspace } from "../../helpers/workspace.js";
 
@@ -50,14 +50,14 @@ describe("live: task spec plumbing", () => {
 
       assertCliSuccess(run, "task-spec-inline");
 
-      const bundle = findFinalBundle(parseJsonLines(run.stdout, { strict: true }));
-      expect(bundle).toBeDefined();
-
-      const payload = findTaskSpecSetPayload(bundle?.events ?? []);
-      expect(payload).toBeDefined();
-      expect(payload?.kind).toBe("spec_set");
-      expect(payload?.spec.schema).toBe("brewva.task.v1");
-      expect(payload?.spec.goal).toBe(goal);
+      const bundle = requireFinalBundle(parseJsonLines(run.stdout, { strict: true }), "task spec");
+      const payload = findTaskSpecSetPayload(bundle.events);
+      if (!payload) {
+        throw new Error("Expected task_event spec_set payload in final bundle.");
+      }
+      expect(payload.kind).toBe("spec_set");
+      expect(payload.spec.schema).toBe("brewva.task.v1");
+      expect(payload.spec.goal).toBe(goal);
     } finally {
       cleanupWorkspace(workspace);
     }
@@ -84,14 +84,14 @@ describe("live: task spec plumbing", () => {
 
       assertCliSuccess(run, "task-spec-file");
 
-      const bundle = findFinalBundle(parseJsonLines(run.stdout, { strict: true }));
-      expect(bundle).toBeDefined();
-
-      const payload = findTaskSpecSetPayload(bundle?.events ?? []);
-      expect(payload).toBeDefined();
-      expect(payload?.kind).toBe("spec_set");
-      expect(payload?.spec.schema).toBe("brewva.task.v1");
-      expect(payload?.spec.goal).toBe(goal);
+      const bundle = requireFinalBundle(parseJsonLines(run.stdout, { strict: true }), "task file");
+      const payload = findTaskSpecSetPayload(bundle.events);
+      if (!payload) {
+        throw new Error("Expected task_event spec_set payload in final bundle.");
+      }
+      expect(payload.kind).toBe("spec_set");
+      expect(payload.spec.schema).toBe("brewva.task.v1");
+      expect(payload.spec.goal).toBe(goal);
     } finally {
       cleanupWorkspace(workspace);
     }
@@ -131,7 +131,7 @@ describe("live: task spec plumbing", () => {
       expect(run.error).toBeUndefined();
       expect(run.status).toBe(1);
       expect(run.stdout.trim()).toBe("");
-      expect(run.stderr.includes("Error: use only one of --task or --task-file.")).toBe(true);
+      expect(run.stderr).toContain("Error: use only one of --task or --task-file.");
     } finally {
       cleanupWorkspace(workspace);
     }
@@ -147,7 +147,7 @@ describe("live: task spec plumbing", () => {
       expect(run.error).toBeUndefined();
       expect(run.status).toBe(1);
       expect(run.stdout.trim()).toBe("");
-      expect(run.stderr.includes("Error: failed to parse TaskSpec JSON (")).toBe(true);
+      expect(run.stderr).toContain("Error: failed to parse TaskSpec JSON (");
     } finally {
       cleanupWorkspace(workspace);
     }
@@ -165,8 +165,8 @@ describe("live: task spec plumbing", () => {
       expect(run.error).toBeUndefined();
       expect(run.status).toBe(1);
       expect(run.stdout.trim()).toBe("");
-      expect(run.stderr.includes("Error: failed to read TaskSpec file (")).toBe(true);
-      expect(run.stderr.includes("missing-task.json")).toBe(true);
+      expect(run.stderr).toContain("Error: failed to read TaskSpec file (");
+      expect(run.stderr).toContain("missing-task.json");
     } finally {
       cleanupWorkspace(workspace);
     }

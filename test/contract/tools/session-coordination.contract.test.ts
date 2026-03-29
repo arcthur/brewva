@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { createSessionCompactTool, createTapeTools } from "@brewva/brewva-tools";
+import { requireDefined } from "../../helpers/assertions.js";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 import { extractTextContent, fakeContext, mergeContext } from "./tools-flow.helpers.js";
@@ -23,6 +24,13 @@ function createCleanRuntime(cwd = workspace): BrewvaRuntime {
     cwd,
     config: createRuntimeConfig(),
   });
+}
+
+function requireTool<T extends { name: string }>(tools: T[], name: string): T {
+  return requireDefined(
+    tools.find((tool) => tool.name === name),
+    `Expected tool ${name}.`,
+  );
 }
 
 describe("session coordination tool contracts", () => {
@@ -144,12 +152,10 @@ describe("session coordination tool contracts", () => {
     });
 
     const tools = createTapeTools({ runtime });
-    const tapeHandoff = tools.find((tool) => tool.name === "tape_handoff");
-    const tapeInfo = tools.find((tool) => tool.name === "tape_info");
-    expect(tapeHandoff).toBeDefined();
-    expect(tapeInfo).toBeDefined();
+    const tapeHandoff = requireTool(tools, "tape_handoff");
+    const tapeInfo = requireTool(tools, "tape_info");
 
-    const handoffResult = await tapeHandoff!.execute(
+    const handoffResult = await tapeHandoff.execute(
       "tc-handoff",
       {
         name: "investigation-done",
@@ -192,7 +198,7 @@ describe("session coordination tool contracts", () => {
       } as Record<string, unknown>,
     });
 
-    const infoResult = await tapeInfo!.execute(
+    const infoResult = await tapeInfo.execute(
       "tc-info",
       {},
       undefined,
@@ -233,10 +239,9 @@ describe("session coordination tool contracts", () => {
     });
 
     const tools = createTapeTools({ runtime });
-    const tapeSearch = tools.find((tool) => tool.name === "tape_search");
-    expect(tapeSearch).toBeDefined();
+    const tapeSearch = requireTool(tools, "tape_search");
 
-    const result = await tapeSearch!.execute(
+    const result = await tapeSearch.execute(
       "tc-search",
       { query: "flaky", scope: "current_phase" },
       undefined,

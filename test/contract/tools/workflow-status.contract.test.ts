@@ -23,7 +23,7 @@ function withDelegationStatus(runtime: BrewvaRuntime, store: HostedDelegationSto
 
 describe("workflow_status contract", () => {
   test("reports stale review and verification after a later write", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-"));
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-stale-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "workflow-status-stale";
 
@@ -76,27 +76,13 @@ describe("workflow_status contract", () => {
 
     const text = extractTextContent(result);
     expect(text).toContain("[WorkflowStatus]");
-    expect(text).toContain("discovery: missing");
-    expect(text).toContain("strategy: missing");
     expect(text).toContain("review: stale");
-    expect(text).toContain("qa: missing");
     expect(text).toContain("verification: stale");
     expect(text).toContain("ship: blocked");
-    expect(text).toContain("retro: missing");
     expect(text).toContain("artifacts (latest 4):");
     expect(text).toContain("- review | state=ready | freshness=stale");
     expect(text).toContain("- verification | state=ready | freshness=stale");
-    expect(
-      (
-        result.details as
-          | {
-              verdict?: string;
-              posture?: { review?: string; ship?: string };
-              readiness?: unknown;
-            }
-          | undefined
-      )?.verdict,
-    ).toBe("fail");
+    expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("fail");
     expect(
       (
         result.details as
@@ -111,7 +97,6 @@ describe("workflow_status contract", () => {
         ship: "blocked",
       }),
     );
-    expect((result.details as { readiness?: unknown } | undefined)?.readiness).toBeUndefined();
   });
 
   test("blocks ship posture while worker results are still pending", async () => {

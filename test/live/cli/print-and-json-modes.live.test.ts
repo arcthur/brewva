@@ -7,11 +7,11 @@ import {
 import { writeMinimalConfig } from "../../helpers/config.js";
 import {
   countEventType,
-  findFinalBundle,
   firstIndexOf,
-  latestEventFile,
   parseEventFile,
   parseJsonLines,
+  requireFinalBundle,
+  requireLatestEventFile,
 } from "../../helpers/events.js";
 import { runLive } from "../../helpers/live.js";
 import { cleanupWorkspace, createWorkspace } from "../../helpers/workspace.js";
@@ -33,9 +33,8 @@ describe("live: print and json modes", () => {
       assertCliSuccess(result, "print-mode");
       expect(result.stdout).toContain("E2E-PRINT-OK");
 
-      const eventFile = latestEventFile(workspace);
-      expect(eventFile).toBeDefined();
-      const events = parseEventFile(eventFile!, { strict: true });
+      const eventFile = requireLatestEventFile(workspace, "print mode");
+      const events = parseEventFile(eventFile, { strict: true });
 
       expect(countEventType(events, "session_start")).toBeGreaterThanOrEqual(1);
       expect(countEventType(events, "turn_start")).toBeGreaterThanOrEqual(1);
@@ -63,19 +62,17 @@ describe("live: print and json modes", () => {
       assertCliSuccess(result, "json-mode");
 
       const lines = parseJsonLines(result.stdout, { strict: true });
-      const bundle = findFinalBundle(lines);
-      expect(bundle).toBeDefined();
-      expect(bundle?.schema).toBe("brewva.stream.v1");
-      expect(bundle?.type).toBe("brewva_event_bundle");
-      expect(typeof bundle?.sessionId).toBe("string");
-      expect(bundle?.sessionId.length ?? 0).toBeGreaterThan(0);
-      expect(Array.isArray(bundle?.events)).toBe(true);
-      expect(bundle?.events.length ?? 0).toBeGreaterThanOrEqual(4);
+      const bundle = requireFinalBundle(lines, "json mode stdout");
+      expect(bundle.sessionId.length).toBeGreaterThan(0);
+      expect(bundle.events.length).toBeGreaterThanOrEqual(4);
 
-      expect(typeof bundle?.costSummary?.totalTokens).toBe("number");
-      expect(typeof bundle?.costSummary?.totalCostUsd).toBe("number");
+      const totalTokens = bundle.costSummary?.totalTokens;
+      const totalCostUsd = bundle.costSummary?.totalCostUsd;
+      if (typeof totalTokens !== "number" || typeof totalCostUsd !== "number") {
+        throw new Error("Expected numeric costSummary totals in final bundle.");
+      }
 
-      const events = bundle!.events;
+      const events = bundle.events;
       const sessionStart = firstIndexOf(events, "session_start");
       const turnStart = firstIndexOf(events, "turn_start");
       const turnEnd = firstIndexOf(events, "turn_end");
@@ -107,7 +104,7 @@ describe("live: print and json modes", () => {
       }
       assertCliSuccess(result, "piped-stdin");
       expect(result.stdout.trim().length).toBeGreaterThan(0);
-      expect(latestEventFile(workspace)).toBeDefined();
+      requireLatestEventFile(workspace, "piped stdin fallback");
     } finally {
       cleanupWorkspace(workspace);
     }

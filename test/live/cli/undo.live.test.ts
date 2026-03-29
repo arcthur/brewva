@@ -9,7 +9,11 @@ import {
   skipLiveForProviderRateLimitResult,
 } from "../../helpers/cli.js";
 import { writeMinimalConfig } from "../../helpers/config.js";
-import { type BrewvaEventBundle, findFinalBundle, parseJsonLines } from "../../helpers/events.js";
+import {
+  type BrewvaEventBundle,
+  parseJsonLines,
+  requireFinalBundle,
+} from "../../helpers/events.js";
 import { runLive } from "../../helpers/live.js";
 import { cleanupWorkspace, createWorkspace } from "../../helpers/workspace.js";
 
@@ -46,9 +50,8 @@ describe("live: undo", () => {
         }
         assertCliSuccess(run, "undo-edit-run");
 
-        bundle = findFinalBundle(parseJsonLines(run.stdout, { strict: true }));
-        expect(bundle).toBeDefined();
-        sessionId = bundle?.sessionId ?? "";
+        bundle = requireFinalBundle(parseJsonLines(run.stdout, { strict: true }), "undo edit run");
+        sessionId = bundle.sessionId;
         expect(sessionId.length).toBeGreaterThan(0);
 
         afterEdit = readFileSync(fixturePath, "utf8");
@@ -68,9 +71,10 @@ describe("live: undo", () => {
         return;
       }
 
-      expect(bundle).toBeDefined();
-      const eventTypes = new Set((bundle?.events ?? []).map((event) => event.type));
-      expect(eventTypes.has("patch_recorded")).toBe(true);
+      if (!bundle) {
+        throw new Error("Expected final bundle from edit run.");
+      }
+      expect(bundle.events.map((event) => event.type)).toContain("patch_recorded");
 
       const historyFile = join(
         workspace,
@@ -119,7 +123,7 @@ describe("live: undo", () => {
     try {
       const undo = runCliSync(workspace, ["--undo"]);
       assertCliSuccess(undo, "undo-empty");
-      expect(undo.stdout.includes("No rollback applied (no_patchset).")).toBe(true);
+      expect(undo.stdout).toContain("No rollback applied (no_patchset).");
     } finally {
       cleanupWorkspace(workspace);
     }

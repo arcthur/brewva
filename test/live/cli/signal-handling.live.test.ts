@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import { hasProviderRateLimitText, skipLiveForProviderRateLimit } from "../../helpers/cli.js";
 import { writeMinimalConfig } from "../../helpers/config.js";
-import { latestEventFile, parseEventFile } from "../../helpers/events.js";
+import { parseEventFile, requireLatestEventFile } from "../../helpers/events.js";
 import { runLive } from "../../helpers/live.js";
 import { cleanupWorkspace, createWorkspace, repoRoot } from "../../helpers/workspace.js";
 
@@ -19,16 +19,25 @@ async function waitForEventType(
 ): Promise<string> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const eventFile = latestEventFile(workspace);
-    if (eventFile) {
+    try {
+      const eventFile = requireLatestEventFile(workspace, `wait for ${eventType}`);
       const events = parseEventFile(eventFile);
       if (events.some((event) => event.type === eventType)) {
         return eventFile;
       }
+    } catch {
+      // Event file persistence is asynchronous; keep polling until timeout.
     }
     await delay(250);
   }
   throw new Error(`Timed out waiting for event type: ${eventType}`);
+}
+
+function assertInterruptedExit(exit: { code: number | null; signal: NodeJS.Signals | null }): void {
+  if (exit.code === 130 || exit.signal === "SIGINT") {
+    return;
+  }
+  throw new Error(`Expected SIGINT exit, received code=${exit.code} signal=${exit.signal}.`);
 }
 
 async function waitForExit(
@@ -97,12 +106,11 @@ describe("live: signal handling", () => {
       expect(killed).toBe(true);
 
       const exit = await waitForExit(child, 60_000);
-      expect(exit.code === 130 || exit.signal === "SIGINT").toBe(true);
+      assertInterruptedExit(exit);
 
-      const eventFile = latestEventFile(workspace);
-      expect(eventFile).toBeDefined();
-      const events = parseEventFile(eventFile!, { strict: true });
-      expect(events.some((event) => event.type === "session_interrupted")).toBe(true);
+      const eventFile = requireLatestEventFile(workspace, "signal live session");
+      const events = parseEventFile(eventFile, { strict: true });
+      expect(events.map((event) => event.type)).toContain("session_interrupted");
     } catch (error) {
       if (skipLiveForProviderRateLimit("signal.live", stdout, stderr)) {
         return;
@@ -169,15 +177,14 @@ describe("live: signal handling", () => {
       expect(killed).toBe(true);
 
       const exit = await waitForExit(child, 60_000);
-      expect(exit.code === 130 || exit.signal === "SIGINT").toBe(true);
+      assertInterruptedExit(exit);
 
-      expect(stdout.includes('"type":"brewva_event_bundle"')).toBe(false);
-      expect(stdout.includes('"schema":"brewva.stream.v1"')).toBe(false);
+      expect(stdout).not.toContain('"type":"brewva_event_bundle"');
+      expect(stdout).not.toContain('"schema":"brewva.stream.v1"');
 
-      const eventFile = latestEventFile(workspace);
-      expect(eventFile).toBeDefined();
-      const events = parseEventFile(eventFile!, { strict: true });
-      expect(events.some((event) => event.type === "session_interrupted")).toBe(true);
+      const eventFile = requireLatestEventFile(workspace, "signal json session");
+      const events = parseEventFile(eventFile, { strict: true });
+      expect(events.map((event) => event.type)).toContain("session_interrupted");
     } catch (error) {
       if (skipLiveForProviderRateLimit("signal-json.live", stdout, stderr)) {
         return;

@@ -4,8 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerEventStream, registerQualityGate } from "@brewva/brewva-gateway/runtime-plugins";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { requireDefined, requireNumber, requireRecord } from "../../helpers/assertions.js";
 import { createMockRuntimePluginApi, invokeHandlers } from "../../helpers/runtime-plugin.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
+
+function findBlockedResult(results: unknown[]): unknown {
+  return requireDefined(
+    results.find((result) => (result as { block?: boolean })?.block === true),
+    "Expected blocked runtime-plugin result.",
+  );
+}
 
 describe("Runtime plugin integration: observability guardrails", () => {
   test("given blocked tool_call, when handlers run with stopOnBlock, then tool_call is recorded and tool_call_marked is omitted", () => {
@@ -64,7 +72,7 @@ blocktool`,
       { stopOnBlock: true },
     );
 
-    expect(results.some((result) => (result as { block?: boolean })?.block === true)).toBe(true);
+    findBlockedResult(results);
     expect(runtime.events.query(sessionId, { type: "tool_call", last: 1 })).toHaveLength(1);
     expect(runtime.events.query(sessionId, { type: "tool_call_marked", last: 1 })).toHaveLength(0);
     expect(
@@ -134,7 +142,7 @@ maxcalls`,
       },
       { stopOnBlock: true },
     );
-    expect(blocked.some((result) => (result as { block?: boolean })?.block === true)).toBe(true);
+    findBlockedResult(blocked);
 
     const lifecycle = invokeHandlers(
       handlers,
@@ -152,18 +160,21 @@ maxcalls`,
       },
       { stopOnBlock: true },
     );
-    expect(lifecycle.some((result) => (result as { block?: boolean })?.block === true)).toBe(false);
+    expect(lifecycle.find((result) => (result as { block?: boolean })?.block === true)).toBe(
+      undefined,
+    );
 
     expect(runtime.events.query(sessionId, { type: "tool_call" })).toHaveLength(2);
     expect(runtime.events.query(sessionId, { type: "tool_call_marked" })).toHaveLength(2);
     const blockedEvents = runtime.events.query(sessionId, { type: "tool_call_blocked" });
-    expect(
-      blockedEvents.some(
+    requireDefined(
+      blockedEvents.find(
         (event) =>
           typeof event.payload?.reason === "string" &&
           event.payload.reason.includes("maxToolCalls"),
       ),
-    ).toBe(true);
+      "Expected maxToolCalls blocked event.",
+    );
   });
 
   test("given assistant delta events, when the message completes, then only the durable message_end summary is persisted", () => {
@@ -222,8 +233,11 @@ maxcalls`,
     const ends = runtime.events.query(sessionId, { type: "message_end" });
     expect(ends).toHaveLength(1);
     const payload = ends[0]?.payload as { health?: { score?: number; windowChars?: number } };
-    expect(payload.health).toBeTruthy();
-    expect(typeof payload.health?.score).toBe("number");
-    expect(payload.health?.windowChars).toBe(3);
+    const health = requireRecord(payload.health, "Expected message_end health summary.") as {
+      score?: unknown;
+      windowChars?: unknown;
+    };
+    requireNumber(health.score, "Expected numeric health.score.");
+    expect(health.windowChars).toBe(3);
   });
 });

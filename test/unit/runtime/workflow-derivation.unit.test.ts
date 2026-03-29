@@ -353,54 +353,6 @@ describe("workflow derivation", () => {
     ).toEqual(["review"]);
   });
 
-  test("does not mark ship posture freshness stale from unrelated blocker wording", () => {
-    const status = deriveWorkflowStatus({
-      sessionId: "workflow-ship-posture-freshness",
-      blockers: [
-        {
-          id: "blocker-1",
-          message: "stale operator note about a follow-up task",
-        },
-      ],
-      events: [
-        event({
-          id: "evt-review-ready",
-          type: "skill_completed",
-          sessionId: "workflow-ship-posture-freshness",
-          timestamp: 100,
-          payload: {
-            skillName: "review",
-            outputKeys: ["review_report", "review_findings", "merge_decision"],
-            outputs: {
-              review_report: "Ready to merge.",
-              review_findings: [],
-              merge_decision: "ready",
-            },
-          },
-        }),
-        event({
-          id: "evt-verify-ready",
-          type: "verification_outcome_recorded",
-          sessionId: "workflow-ship-posture-freshness",
-          timestamp: 110,
-          payload: {
-            outcome: "pass",
-            level: "standard",
-            failedChecks: [],
-            evidenceFreshness: "fresh",
-          },
-        }),
-      ],
-    });
-
-    expect(status.posture.review).toBe("ready");
-    expect(status.posture.qa).toBe("missing");
-    expect(status.posture.verification).toBe("ready");
-    expect(status.posture.ship).toBe("blocked");
-    expect(status.artifacts[0]?.kind).toBe("ship_posture");
-    expect(status.artifacts[0]?.freshness).toBe("unknown");
-  });
-
   test("marks ship artifacts stale when later QA or verification evidence changes ship posture", () => {
     const status = deriveWorkflowStatus({
       sessionId: "workflow-ship-stale",

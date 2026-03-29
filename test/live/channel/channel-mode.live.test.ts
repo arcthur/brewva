@@ -276,13 +276,14 @@ describe("live: channel mode", () => {
         const sendRequest = fakeApi.capture.requests.find(
           (entry) => entry.method === "sendMessage",
         );
-        expect(sendRequest).toBeDefined();
-        const chatId = sendRequest?.params.chat_id;
-        expect(typeof chatId === "string" || typeof chatId === "number").toBe(true);
-        expect(Number(chatId)).toBe(12345);
-        const text = sendRequest?.params.text;
-        expect(typeof text).toBe("string");
-        const outboundText = typeof text === "string" ? text : "";
+        if (!sendRequest) {
+          throw new Error("Expected sendMessage request to be captured.");
+        }
+        expect(String(sendRequest.params.chat_id)).toBe("12345");
+        const outboundText = sendRequest.params.text;
+        if (typeof outboundText !== "string") {
+          throw new Error("Expected sendMessage payload text to be a string.");
+        }
         expect(outboundText).toContain("Focus:");
         expect(outboundText).toContain("Agents:");
         expect(outboundText).toContain("@default");

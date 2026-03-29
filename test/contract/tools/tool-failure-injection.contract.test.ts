@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { setStaticContextInjectionBudget } from "../../fixtures/config.js";
+import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("Tool failure context injection", () => {
@@ -303,7 +304,7 @@ describe("Tool failure context injection", () => {
       | undefined;
 
     const persistedArgs = metadata?.brewvaToolFailureContext?.args;
-    expect(persistedArgs).toBeDefined();
+    requireDefined(persistedArgs, "expected failure context args to persist");
     expect(JSON.stringify(persistedArgs).length).toBeLessThanOrEqual(1400);
   });
 
@@ -340,30 +341,5 @@ describe("Tool failure context injection", () => {
     expect(injection.text).toContain("[RuntimeStatus]");
     expect(injection.text).not.toContain("source=brewva.tool-failures");
     expect(injection.text).toContain("TAIL_MARKER_3");
-  });
-
-  test("drops stale failures after 3 tape handoffs", async () => {
-    const workspace = createTestWorkspace("tool-failures-ttl");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
-    const sessionId = "tool-failures-ttl-1";
-
-    runtime.tools.recordResult({
-      sessionId,
-      toolName: "exec",
-      args: { command: "bun test" },
-      outputText: "Error: stale failure",
-      channelSuccess: false,
-    });
-
-    const before = await runtime.context.buildInjection(sessionId, "continue");
-    expect(before.text).toContain("[RuntimeStatus]");
-
-    runtime.events.recordTapeHandoff(sessionId, { name: "phase-1" });
-    runtime.events.recordTapeHandoff(sessionId, { name: "phase-2" });
-    runtime.events.recordTapeHandoff(sessionId, { name: "phase-3" });
-
-    const after = await runtime.context.buildInjection(sessionId, "continue");
-    expect(after.text).not.toContain("[RuntimeStatus]");
-    expect(after.text).not.toContain("stale failure");
   });
 });

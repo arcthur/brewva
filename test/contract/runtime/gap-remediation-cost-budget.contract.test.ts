@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { requireDefined } from "../../helpers/assertions.js";
 import {
   GAP_REMEDIATION_CONFIG_PATH,
   createGapRemediationConfig as createConfig,
@@ -75,7 +76,7 @@ describe("Gap remediation: cost view and budget linkage", () => {
     const summary = runtime.cost.getSummary(sessionId);
     expect(summary.totalCostUsd).toBeGreaterThan(0.01);
     expect(summary.budget.blocked).toBe(true);
-    expect(summary.skills["(none)"]).toBeDefined();
+    requireDefined(summary.skills["(none)"], "expected default skill bucket in cost summary");
     expect(summary.tools.edit?.callCount).toBe(1);
 
     const access = runtime.tools.checkAccess(sessionId, "read");

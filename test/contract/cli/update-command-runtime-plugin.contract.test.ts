@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { createUpdateCommandRuntimePlugin } from "@brewva/brewva-cli";
 import type { RuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 type RegisteredCommand = {
@@ -34,6 +35,10 @@ function createCommandApiMock(): {
   return { api, commands, sentMessages };
 }
 
+function requireCommand(commands: Map<string, RegisteredCommand>, name: string): RegisteredCommand {
+  return requireDefined(commands.get(name), `Expected ${name} command to be registered.`);
+}
+
 describe("update interactive command runtime plugin", () => {
   test("queues the changelog-driven update workflow as a user message", async () => {
     const workspace = createTestWorkspace("update-command-runtime-plugin");
@@ -46,8 +51,7 @@ describe("update interactive command runtime plugin", () => {
     const { api, commands, sentMessages } = createCommandApiMock();
     await createUpdateCommandRuntimePlugin(runtime)(api);
 
-    const command = commands.get("update");
-    expect(command).toBeDefined();
+    const command = requireCommand(commands, "update");
 
     const notifications: Array<{ message: string; level: string }> = [];
     const ctx = {
@@ -60,7 +64,7 @@ describe("update interactive command runtime plugin", () => {
       },
     };
 
-    await command!.handler("target=latest", ctx);
+    await command.handler("target=latest", ctx);
 
     expect(sentMessages).toHaveLength(1);
     expect(sentMessages[0]?.options).toBeUndefined();
@@ -84,8 +88,7 @@ describe("update interactive command runtime plugin", () => {
     const { api, commands, sentMessages } = createCommandApiMock();
     await createUpdateCommandRuntimePlugin(runtime)(api);
 
-    const command = commands.get("update");
-    expect(command).toBeDefined();
+    const command = requireCommand(commands, "update");
 
     const notifications: Array<{ message: string; level: string }> = [];
     const ctx = {
@@ -98,7 +101,7 @@ describe("update interactive command runtime plugin", () => {
       },
     };
 
-    await command!.handler("", ctx);
+    await command.handler("", ctx);
 
     expect(sentMessages).toHaveLength(1);
     expect(sentMessages[0]?.options).toEqual({ deliverAs: "followUp" });

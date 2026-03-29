@@ -156,7 +156,7 @@ describe("tool surface runtime plugin", () => {
     expect(extensionApi.activeTools).toContain("exec");
     expect(extensionApi.activeTools).toContain("skill_complete");
     expect(extensionApi.activeTools).not.toContain("obs_query");
-    expect(events.some((event) => event.type === "tool_surface_resolved")).toBe(true);
+    expect(events.map((event) => event.type)).toContain("tool_surface_resolved");
   });
 
   test("explicit capability requests can surface managed tools for one turn", async () => {

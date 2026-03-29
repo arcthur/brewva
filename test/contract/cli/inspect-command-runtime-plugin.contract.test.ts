@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { createInspectCommandRuntimePlugin } from "@brewva/brewva-cli";
 import type { RuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 type RegisteredCommand = {
@@ -40,6 +41,10 @@ function createCommandApiMock(): {
   } as unknown as RuntimePluginApi;
 
   return { api, commands, handlers };
+}
+
+function requireCommand(commands: Map<string, RegisteredCommand>, name: string): RegisteredCommand {
+  return requireDefined(commands.get(name), `Expected ${name} command to be registered.`);
 }
 
 describe("inspect interactive command runtime plugin", () => {
@@ -106,8 +111,7 @@ describe("inspect interactive command runtime plugin", () => {
       maxWidgetLines: 64,
     })(api);
 
-    const inspectCommand = commands.get("inspect");
-    expect(inspectCommand).toBeDefined();
+    const inspectCommand = requireCommand(commands, "inspect");
 
     const widgets: Array<{ id: string; lines?: string[]; options?: Record<string, unknown> }> = [];
     const notifications: Array<{ message: string; level: string }> = [];
@@ -126,7 +130,7 @@ describe("inspect interactive command runtime plugin", () => {
       },
     };
 
-    await inspectCommand!.handler("src", ctx);
+    await inspectCommand.handler("src", ctx);
 
     expect(runtime.events.query(sessionId)).toHaveLength(beforeEventCount);
     expect(widgets.length).toBeGreaterThan(0);
@@ -149,8 +153,7 @@ describe("inspect interactive command runtime plugin", () => {
 
     const { api, commands } = createCommandApiMock();
     await createInspectCommandRuntimePlugin(runtime)(api);
-    const command = commands.get("inspect");
-    expect(command).toBeDefined();
+    const command = requireCommand(commands, "inspect");
 
     const widgets: Array<{ id: string; lines?: string[]; options?: Record<string, unknown> }> = [];
     const notifications: Array<{ message: string; level: string }> = [];
@@ -169,7 +172,7 @@ describe("inspect interactive command runtime plugin", () => {
       },
     };
 
-    await command!.handler("clear", ctx);
+    await command.handler("clear", ctx);
 
     expect(widgets).toHaveLength(1);
     expect(widgets[0]).toEqual({

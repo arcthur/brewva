@@ -62,7 +62,7 @@ describe("context transform session hook contract", () => {
 
     expect(injectionCalls).toBe(0);
     expect(result.message?.content).toContain("[ContextCompactionGate]");
-    expect(eventPayloads.some((event) => event.type === "skill_routing_selection")).toBe(false);
+    expect(eventPayloads.map((event) => event.type)).not.toContain("skill_routing_selection");
   });
 
   test("arms the critical gate for non-session_compact flows and clears it after compaction", async () => {

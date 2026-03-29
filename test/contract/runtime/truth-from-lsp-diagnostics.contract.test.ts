@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("Truth extraction from lsp_diagnostics", () => {
@@ -21,15 +22,19 @@ describe("Truth extraction from lsp_diagnostics", () => {
     });
 
     const truth1 = runtime.truth.getState(sessionId);
-    const fact1 = truth1.facts.find((fact) => fact.kind === "diagnostic");
-    expect(fact1).not.toBeUndefined();
-    expect(fact1?.status).toBe("active");
-    expect(fact1?.summary).toContain("TS2322");
+    const fact1 = requireDefined(
+      truth1.facts.find((fact) => fact.kind === "diagnostic"),
+      "Expected active diagnostic truth fact.",
+    );
+    expect(fact1.status).toBe("active");
+    expect(fact1.summary).toContain("TS2322");
 
     const task1 = runtime.task.getState(sessionId);
-    const blocker1 = task1.blockers.find((blocker) => blocker.id === fact1?.id);
-    expect(blocker1).not.toBeUndefined();
-    expect(blocker1?.truthFactId).toBe(fact1?.id);
+    const blocker1 = requireDefined(
+      task1.blockers.find((blocker) => blocker.id === fact1.id),
+      "Expected blocker linked to diagnostic fact.",
+    );
+    expect(blocker1.truthFactId).toBe(fact1.id);
 
     runtime.tools.recordResult({
       sessionId,
@@ -40,12 +45,14 @@ describe("Truth extraction from lsp_diagnostics", () => {
     });
 
     const truth2 = runtime.truth.getState(sessionId);
-    const fact2 = truth2.facts.find((fact) => fact.id === fact1?.id);
-    expect(fact2).not.toBeUndefined();
-    expect(fact2?.status).toBe("resolved");
+    const fact2 = requireDefined(
+      truth2.facts.find((fact) => fact.id === fact1.id),
+      "Expected diagnostic fact after clean rerun.",
+    );
+    expect(fact2.status).toBe("resolved");
 
     const task2 = runtime.task.getState(sessionId);
-    expect(task2.blockers.some((blocker) => blocker.id === fact1?.id)).toBe(false);
+    expect(task2.blockers.map((blocker) => blocker.id)).not.toContain(fact1.id);
   });
 
   test("clean output resolves only diagnostic facts for that file", () => {
@@ -85,14 +92,15 @@ describe("Truth extraction from lsp_diagnostics", () => {
     const bar = truth.facts.find(
       (fact) => fact.summary.includes("src/bar.ts") && fact.summary.includes("TS2304"),
     );
-    expect(foo).not.toBeUndefined();
-    expect(bar).not.toBeUndefined();
-    expect(foo?.status).toBe("resolved");
-    expect(bar?.status).toBe("active");
+    const fooFact = requireDefined(foo, "Expected foo diagnostic fact.");
+    const barFact = requireDefined(bar, "Expected bar diagnostic fact.");
+    expect(fooFact.status).toBe("resolved");
+    expect(barFact.status).toBe("active");
 
     const task = runtime.task.getState(sessionId);
-    expect(task.blockers.some((blocker) => blocker.id === bar?.id)).toBe(true);
-    expect(task.blockers.some((blocker) => blocker.id === foo?.id)).toBe(false);
+    const blockerIds = task.blockers.map((blocker) => blocker.id);
+    expect(blockerIds).toContain(barFact.id);
+    expect(blockerIds).not.toContain(fooFact.id);
   });
 
   test("stale diagnostic codes resolve when unfiltered output changes", () => {
@@ -128,14 +136,15 @@ describe("Truth extraction from lsp_diagnostics", () => {
       (fact) => fact.summary.includes("src/foo.ts") && fact.summary.includes("TS2304"),
     );
 
-    expect(ts2322).not.toBeUndefined();
-    expect(ts2304).not.toBeUndefined();
-    expect(ts2322?.status).toBe("active");
-    expect(ts2304?.status).toBe("resolved");
+    const ts2322Fact = requireDefined(ts2322, "Expected TS2322 fact.");
+    const ts2304Fact = requireDefined(ts2304, "Expected TS2304 fact.");
+    expect(ts2322Fact.status).toBe("active");
+    expect(ts2304Fact.status).toBe("resolved");
 
     const task = runtime.task.getState(sessionId);
-    expect(task.blockers.some((blocker) => blocker.id === ts2322?.id)).toBe(true);
-    expect(task.blockers.some((blocker) => blocker.id === ts2304?.id)).toBe(false);
+    const blockerIds = task.blockers.map((blocker) => blocker.id);
+    expect(blockerIds).toContain(ts2322Fact.id);
+    expect(blockerIds).not.toContain(ts2304Fact.id);
   });
 
   test("scope-mismatch unavailable output does not resolve active facts", () => {
@@ -171,7 +180,7 @@ describe("Truth extraction from lsp_diagnostics", () => {
     const fact = truth.facts.find(
       (entry) => entry.summary.includes("src/foo.ts") && entry.summary.includes("TS2322"),
     );
-    expect(fact).not.toBeUndefined();
-    expect(fact?.status).toBe("active");
+    const activeFact = requireDefined(fact, "Expected scope-mismatch to preserve active fact.");
+    expect(activeFact.status).toBe("active");
   });
 });

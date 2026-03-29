@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { requireNonEmptyString } from "../../helpers/assertions.js";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 import {
@@ -149,7 +150,7 @@ describe("Gap remediation: parallel result lifecycle", () => {
     });
 
     expect(report.status).toBe("applied");
-    expect(report.appliedPatchSetId).toBeDefined();
+    requireNonEmptyString(report.appliedPatchSetId, "missing applied patch set id");
     expect(report.appliedPaths).toEqual(["src/value.ts"]);
     expect(readFileSync(filePath, "utf8")).toBe(afterText);
     expect(runtime.session.listWorkerResults(sessionId)).toHaveLength(0);

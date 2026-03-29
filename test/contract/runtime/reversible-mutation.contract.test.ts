@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime, type TaskSpec } from "@brewva/brewva-runtime";
+import { requireDefined, requireNonEmptyString, requireRecord } from "../../helpers/assertions.js";
 
 function createWorkspace(): string {
   return mkdtempSync(join(tmpdir(), "brewva-reversible-mutation-"));
@@ -93,15 +94,26 @@ describe("reversible mutation receipts", () => {
       verdict: "pass",
     });
 
-    const receiptEvent = runtime.events.query(sessionId, {
-      type: "reversible_mutation_recorded",
-      last: 1,
-    })[0];
-    expect(receiptEvent?.payload?.receipt).toBeDefined();
-    expect(receiptEvent?.payload?.changed).toBe(true);
-    expect(typeof receiptEvent?.payload?.patchSetId).toBe("string");
+    const receiptEvent = requireDefined(
+      runtime.events.query(sessionId, {
+        type: "reversible_mutation_recorded",
+        last: 1,
+      })[0],
+      "expected reversible_mutation_recorded event",
+    );
+    const receiptPayload = receiptEvent.payload as {
+      receipt?: unknown;
+      changed?: boolean;
+      patchSetId?: unknown;
+      rollbackRef?: unknown;
+    };
+    requireRecord(receiptPayload.receipt, "expected reversible mutation receipt payload");
+    expect(receiptPayload.changed).toBe(true);
+    requireNonEmptyString(receiptPayload.patchSetId, "missing patchSetId for reversible mutation");
     expect(
-      (receiptEvent?.payload?.rollbackRef as string | undefined)?.startsWith("patchset://"),
+      requireNonEmptyString(receiptPayload.rollbackRef, "missing rollbackRef").startsWith(
+        "patchset://",
+      ),
     ).toBe(true);
   });
 

@@ -7,6 +7,7 @@ import {
   buildScheduleIntentCreatedEvent,
   parseScheduleIntentEvent,
 } from "@brewva/brewva-runtime";
+import { requireDefined } from "../../helpers/assertions.js";
 import {
   createSchedulerConfig,
   createWorkspace,
@@ -284,9 +285,11 @@ describe("scheduler service recovery contract", () => {
 
     const events = runtime.events.query(sessionId, { type: SCHEDULE_EVENT_TYPE });
     const parsed = events.map((event) => parseScheduleIntentEvent(event)).filter(Boolean);
-    const cancelled = parsed.find((event) => event?.kind === "intent_cancelled");
-    expect(cancelled).toBeDefined();
-    expect(cancelled?.error?.startsWith("circuit_open:")).toBe(true);
+    const cancelled = requireDefined(
+      parsed.find((event) => event?.kind === "intent_cancelled"),
+      "expected intent_cancelled event after circuit opens",
+    );
+    expect(cancelled.error).toMatch(/^circuit_open:/);
 
     const snapshot = scheduler.snapshot();
     const state = snapshot.intents.find((intent) => intent.intentId === "intent-circuit-1");
@@ -332,10 +335,12 @@ describe("scheduler service recovery contract", () => {
 
     const events = runtime.events.query(sessionId, { type: SCHEDULE_EVENT_TYPE });
     const parsed = events.map((event) => parseScheduleIntentEvent(event)).filter(Boolean);
-    const fired = parsed.find((event) => event?.kind === "intent_fired");
+    const fired = requireDefined(
+      parsed.find((event) => event?.kind === "intent_fired"),
+      "expected intent_fired event after retry failure",
+    );
     const cancelled = parsed.find((event) => event?.kind === "intent_cancelled");
-    expect(fired).toBeDefined();
-    expect(fired?.error).toBe("boom-once");
+    expect(fired.error).toBe("boom-once");
     expect(cancelled).toBeUndefined();
 
     const state = scheduler
@@ -445,12 +450,14 @@ describe("scheduler service recovery contract", () => {
       return;
     }
 
-    const daemonIntent = daemonScheduler
-      .snapshot()
-      .intents.find((intent) => intent.intentId === created.intent.intentId);
-    expect(daemonIntent).toBeDefined();
-    expect(daemonIntent?.status).toBe("active");
-    expect(daemonIntent?.reason).toBe("created externally");
+    const daemonIntent = requireDefined(
+      daemonScheduler
+        .snapshot()
+        .intents.find((intent) => intent.intentId === created.intent.intentId),
+      "expected daemon scheduler to observe external intent",
+    );
+    expect(daemonIntent.status).toBe("active");
+    expect(daemonIntent.reason).toBe("created externally");
 
     daemonScheduler.stop();
     externalScheduler.stop();

@@ -1,10 +1,29 @@
 import { describe, expect, test } from "bun:test";
 import { createExecTool } from "@brewva/brewva-tools";
 import {
+  requireDefined,
+  requireNonEmptyString,
+  requireNumber,
+  requireRecord,
+} from "../../helpers/assertions.js";
+import {
   createRuntimeForExecTests,
   extractTextContent,
   fakeContext,
 } from "./tools-exec-process.helpers.js";
+
+type RecordedEvent = { type?: string; payload?: Record<string, unknown> };
+
+function requireEvent(events: RecordedEvent[], type: string): RecordedEvent {
+  return requireDefined(
+    events.find((event) => event.type === type),
+    `Expected ${type} event.`,
+  );
+}
+
+function eventTypes(events: RecordedEvent[]): string[] {
+  return events.flatMap((event) => (typeof event.type === "string" ? [event.type] : []));
+}
 
 describe("exec sandbox routing", () => {
   test("standard mode falls back to host when sandbox backend is unavailable", async () => {
@@ -29,17 +48,24 @@ describe("exec sandbox routing", () => {
 
     expect(extractTextContent(result)).toContain("fallback-ok");
     expect((result.details as { backend?: string }).backend).toBe("host");
-    expect(events.some((event) => event.type === "exec_routed")).toBe(true);
-    expect(events.some((event) => event.type === "exec_sandbox_error")).toBe(true);
-    expect(events.some((event) => event.type === "exec_fallback_host")).toBe(true);
-    const routedPayload = events.find((event) => event.type === "exec_routed")?.payload ?? {};
+    expect(eventTypes(events)).toContain("exec_routed");
+    expect(eventTypes(events)).toContain("exec_sandbox_error");
+    expect(eventTypes(events)).toContain("exec_fallback_host");
+    const routedPayload = requireRecord(
+      requireEvent(events, "exec_routed").payload,
+      "Expected exec_routed payload.",
+    );
     expect(routedPayload.routingPolicy).toBe("best_available");
     expect(routedPayload.command).toBeUndefined();
-    expect(typeof routedPayload.commandHash).toBe("string");
-    expect((routedPayload.commandHash as string).length).toBe(64);
-    expect(typeof routedPayload.commandRedacted).toBe("string");
-    expect(routedPayload.commandRedacted as string).toContain("<redacted>");
-    expect(routedPayload.commandRedacted as string).not.toContain("super-secret-token");
+    expect(requireNonEmptyString(routedPayload.commandHash, "Expected commandHash.")).toHaveLength(
+      64,
+    );
+    const commandRedacted = requireNonEmptyString(
+      routedPayload.commandRedacted,
+      "Expected commandRedacted.",
+    );
+    expect(commandRedacted).toContain("<redacted>");
+    expect(commandRedacted).not.toContain("super-secret-token");
   });
 
   test("standard mode with backend=best_available falls back to host even when fallbackToHost is false", async () => {
@@ -67,7 +93,7 @@ describe("exec sandbox routing", () => {
     expect(routed?.payload?.configuredBackend).toBe("best_available");
     expect(routed?.payload?.resolvedBackend).toBe("sandbox");
     expect(routed?.payload?.routingPolicy).toBe("best_available");
-    expect(events.some((event) => event.type === "exec_fallback_host")).toBe(true);
+    expect(eventTypes(events)).toContain("exec_fallback_host");
   });
 
   test("standard mode with backend=best_available falls back to host when fallbackToHost is true", async () => {
@@ -97,7 +123,7 @@ describe("exec sandbox routing", () => {
     expect(routed?.payload?.resolvedBackend).toBe("sandbox");
     expect(routed?.payload?.fallbackToHost).toBe(true);
     expect(routed?.payload?.routingPolicy).toBe("best_available");
-    expect(events.some((event) => event.type === "exec_fallback_host")).toBe(true);
+    expect(eventTypes(events)).toContain("exec_fallback_host");
   });
 
   test("standard mode caches sandbox failures and skips immediate sandbox retries", async () => {
@@ -191,9 +217,13 @@ describe("exec sandbox routing", () => {
       (event) => event.type === "exec_fallback_host",
     );
     expect(secondFallback?.payload?.reason).toBe("sandbox_execution_error");
-    expect(typeof secondFallback?.payload?.sessionPinnedUntil).toBe("number");
-    expect(typeof secondFallback?.payload?.sessionPinTtlMs).toBe("number");
-    expect((secondFallback?.payload?.sessionPinTtlMs as number) > 0).toBe(true);
+    requireNumber(
+      secondFallback?.payload?.sessionPinnedUntil,
+      "Expected numeric sessionPinnedUntil.",
+    );
+    expect(
+      requireNumber(secondFallback?.payload?.sessionPinTtlMs, "Expected numeric sessionPinTtlMs."),
+    ).toBeGreaterThan(0);
 
     const third = await thirdExec.execute(
       "tc-exec-session-pinned-3",
@@ -205,12 +235,16 @@ describe("exec sandbox routing", () => {
       fakeContext(sessionId),
     );
     expect(extractTextContent(third)).toContain("third-session-pin");
-    expect(thirdAttempt.events.some((event) => event.type === "exec_sandbox_error")).toBe(false);
+    expect(eventTypes(thirdAttempt.events)).not.toContain("exec_sandbox_error");
 
     const thirdFallback = thirdAttempt.events.find((event) => event.type === "exec_fallback_host");
     expect(thirdFallback?.payload?.reason).toBe("sandbox_unavailable_session_pinned");
-    expect(typeof thirdFallback?.payload?.sessionPinMsRemaining).toBe("number");
-    expect((thirdFallback?.payload?.sessionPinMsRemaining as number) > 0).toBe(true);
+    expect(
+      requireNumber(
+        thirdFallback?.payload?.sessionPinMsRemaining,
+        "Expected numeric sessionPinMsRemaining.",
+      ),
+    ).toBeGreaterThan(0);
   });
 
   test("strict mode fails closed when sandbox backend is unavailable", async () => {
@@ -235,10 +269,10 @@ describe("exec sandbox routing", () => {
       ),
     ).rejects.toThrow("exec_blocked_isolation");
 
-    expect(events.some((event) => event.type === "exec_routed")).toBe(true);
-    expect(events.some((event) => event.type === "exec_sandbox_error")).toBe(true);
-    expect(events.some((event) => event.type === "exec_blocked_isolation")).toBe(true);
-    expect(events.some((event) => event.type === "exec_fallback_host")).toBe(false);
+    expect(eventTypes(events)).toContain("exec_routed");
+    expect(eventTypes(events)).toContain("exec_sandbox_error");
+    expect(eventTypes(events)).toContain("exec_blocked_isolation");
+    expect(eventTypes(events)).not.toContain("exec_fallback_host");
   });
 
   test("standard sandbox mode fails closed when fallbackToHost is false", async () => {
@@ -265,8 +299,8 @@ describe("exec sandbox routing", () => {
 
     const routed = events.find((event) => event.type === "exec_routed");
     expect(routed?.payload?.routingPolicy).toBe("fail_closed");
-    expect(events.some((event) => event.type === "exec_fallback_host")).toBe(false);
-    expect(events.some((event) => event.type === "exec_blocked_isolation")).toBe(true);
+    expect(eventTypes(events)).not.toContain("exec_fallback_host");
+    expect(eventTypes(events)).toContain("exec_blocked_isolation");
   });
 
   test("enforce isolation overrides permissive host routing and fails closed", async () => {
@@ -292,15 +326,14 @@ describe("exec sandbox routing", () => {
       ),
     ).rejects.toThrow("exec_blocked_isolation");
 
-    const routed = events.find((event) => event.type === "exec_routed");
-    expect(routed).toBeDefined();
-    expect(routed?.payload?.configuredBackend).toBe("host");
-    expect(routed?.payload?.resolvedBackend).toBe("sandbox");
-    expect(routed?.payload?.routingPolicy).toBe("fail_closed");
-    expect(routed?.payload?.fallbackToHost).toBe(false);
-    expect(routed?.payload?.enforceIsolation).toBe(true);
-    expect(events.some((event) => event.type === "exec_sandbox_error")).toBe(true);
-    expect(events.some((event) => event.type === "exec_blocked_isolation")).toBe(true);
-    expect(events.some((event) => event.type === "exec_fallback_host")).toBe(false);
+    const routed = requireEvent(events, "exec_routed");
+    expect(routed.payload?.configuredBackend).toBe("host");
+    expect(routed.payload?.resolvedBackend).toBe("sandbox");
+    expect(routed.payload?.routingPolicy).toBe("fail_closed");
+    expect(routed.payload?.fallbackToHost).toBe(false);
+    expect(routed.payload?.enforceIsolation).toBe(true);
+    expect(eventTypes(events)).toContain("exec_sandbox_error");
+    expect(eventTypes(events)).toContain("exec_blocked_isolation");
+    expect(eventTypes(events)).not.toContain("exec_fallback_host");
   });
 });

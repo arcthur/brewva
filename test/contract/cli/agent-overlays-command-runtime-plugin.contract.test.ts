@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { createAgentOverlaysCommandRuntimePlugin } from "@brewva/brewva-cli";
 import type { RuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 type RegisteredCommand = {
@@ -49,8 +50,10 @@ Keep findings short and concrete.
 
     const { api, commands } = createCommandApiMock();
     await createAgentOverlaysCommandRuntimePlugin(runtime)(api);
-    const command = commands.get("agent-overlays");
-    expect(command).toBeDefined();
+    const command = requireDefined(
+      commands.get("agent-overlays"),
+      "expected agent-overlays command registration",
+    );
 
     const widgets: Array<{ id: string; lines?: string[]; options?: Record<string, unknown> }> = [];
     const notifications: Array<{ message: string; level: string }> = [];
@@ -66,7 +69,7 @@ Keep findings short and concrete.
       },
     };
 
-    await command!.handler("validate", ctx);
+    await command.handler("validate", ctx);
 
     expect(widgets.at(-1)?.id).toBe("brewva-agent-overlays");
     expect(widgets.at(-1)?.options?.placement).toBe("belowEditor");

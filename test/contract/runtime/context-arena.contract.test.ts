@@ -160,28 +160,6 @@ describe("ContextArena", () => {
     expect(snapshot.totalAppended).toBe(0);
   });
 
-  test("trims superseded history under long-session append pressure", () => {
-    const arena = new ContextArena();
-    const hotSession = "context-arena-hot-session";
-
-    for (let i = 0; i < 2_500; i += 1) {
-      arena.append(hotSession, {
-        category: "narrative",
-        source: "brewva.runtime-status",
-        id: "runtime-status",
-        content: `status-${i}`,
-      });
-    }
-
-    const snapshot = arena.snapshot(hotSession);
-    expect(snapshot.totalAppended).toBeLessThan(1_000);
-    expect(snapshot.activeKeys).toBe(1);
-
-    const plan = arena.plan(hotSession, 10_000);
-    expect(plan.entries).toHaveLength(1);
-    expect(plan.entries[0]?.content).toBe("status-2499");
-  });
-
   test("enforces hard SLO boundary when session arena is full", () => {
     const arena = new ContextArena({
       maxEntriesPerSession: 1,

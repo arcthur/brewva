@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { connectGatewayClient, readGatewayToken } from "@brewva/brewva-gateway";
+import { requireNonEmptyString } from "../../helpers/assertions.js";
 import {
   closeRawSocket,
   connectRawAuthenticated,
@@ -50,13 +51,13 @@ describe("gateway daemon lifecycle", () => {
       expect(closePayloads.length).toBe(6);
       for (const payload of closePayloads) {
         expect(payload.closed).toBe(false);
-        expect(payload.sessionId.startsWith("ghost-")).toBe(true);
+        expect(payload.sessionId).toMatch(/^ghost-/);
       }
 
       const healthPayloads = results.filter(
         (value) => value && typeof value === "object" && (value as { ok?: unknown }).ok === true,
       ) as Array<{ ok: boolean }>;
-      expect(healthPayloads.length >= 6).toBe(true);
+      expect(healthPayloads.length).toBeGreaterThanOrEqual(6);
     } finally {
       if (client) {
         await client.close().catch(() => undefined);
@@ -134,8 +135,10 @@ describe("gateway daemon lifecycle", () => {
       wsRotator = null;
       wsPeer = null;
 
-      const nextToken = readGatewayToken(harness.tokenFilePath);
-      expect(nextToken).toBeDefined();
+      const nextToken = requireNonEmptyString(
+        readGatewayToken(harness.tokenFilePath),
+        "expected rotated gateway token",
+      );
       expect(nextToken).not.toBe(harness.token);
 
       let oldTokenError: unknown;

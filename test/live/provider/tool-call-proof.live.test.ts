@@ -8,7 +8,7 @@ import {
   skipLiveForProviderRateLimitResult,
 } from "../../helpers/cli.js";
 import { writeMinimalConfig } from "../../helpers/config.js";
-import { findFinalBundle, isRecord, parseJsonLines } from "../../helpers/events.js";
+import { isRecord, parseJsonLines, requireFinalBundle } from "../../helpers/events.js";
 import { runLive } from "../../helpers/live.js";
 import { cleanupWorkspace, createWorkspace } from "../../helpers/workspace.js";
 
@@ -30,7 +30,7 @@ describe("live: tool call proof", () => {
         return;
       }
       assertCliSuccess(run, "tool-proof");
-      expect(run.stdout.includes(token)).toBe(true);
+      expect(run.stdout).toContain(token);
     } finally {
       cleanupWorkspace(workspace);
     }
@@ -55,32 +55,26 @@ describe("live: tool call proof", () => {
       assertCliSuccess(run, "managed-tools-direct");
 
       const lines = parseJsonLines(run.stdout, { strict: true });
-      const bundle = findFinalBundle(lines);
-      expect(bundle).toBeDefined();
-      expect(bundle?.schema).toBe("brewva.stream.v1");
-      expect(bundle?.type).toBe("brewva_event_bundle");
-      expect(bundle?.events.length ?? 0).toBeGreaterThanOrEqual(2);
-      expect(run.stdout.includes("NO-EXT-OK")).toBe(true);
+      const bundle = requireFinalBundle(lines, "managed tools direct");
+      expect(bundle.events.length).toBeGreaterThanOrEqual(2);
+      expect(run.stdout).toContain("NO-EXT-OK");
 
       const nonBundleLines = lines.filter((line) => {
         if (!isRecord(line)) return false;
         return !(line.schema === "brewva.stream.v1" && line.type === "brewva_event_bundle");
       });
       expect(nonBundleLines.length).toBeGreaterThan(0);
-      expect(
-        nonBundleLines.some(
-          (line) => isRecord(line) && typeof line.type === "string" && line.type === "turn_end",
-        ),
-      ).toBe(true);
-      expect(
-        nonBundleLines.some(
-          (line) => isRecord(line) && typeof line.type === "string" && line.type === "agent_end",
-        ),
-      ).toBe(true);
+      const nonBundleEventTypes = nonBundleLines
+        .filter((line): line is Record<string, unknown> & { type: string } => {
+          return isRecord(line) && typeof line.type === "string";
+        })
+        .map((line) => line.type);
+      expect(nonBundleEventTypes).toContain("turn_end");
+      expect(nonBundleEventTypes).toContain("agent_end");
 
-      const eventTypes = new Set((bundle?.events ?? []).map((event) => event.type));
-      expect(eventTypes.has("session_start")).toBe(true);
-      expect(eventTypes.has("agent_end")).toBe(true);
+      const eventTypes = bundle.events.map((event) => event.type);
+      expect(eventTypes).toContain("session_start");
+      expect(eventTypes).toContain("agent_end");
     } finally {
       cleanupWorkspace(workspace);
     }

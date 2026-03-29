@@ -17,6 +17,7 @@ import {
   ModelRegistry,
   SessionManager,
 } from "@mariozechner/pi-coding-agent";
+import { requireNonEmptyString } from "../../helpers/assertions.js";
 import { createMockRuntimePluginApi, invokeHandlers } from "../../helpers/runtime-plugin.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 
@@ -196,8 +197,8 @@ describe("Runtime plugin integration: observability injection", () => {
     expect(observedPayload?.rawChars).toBeGreaterThan(0);
     expect(observedPayload?.rawBytes).toBeGreaterThan(0);
     expect(observedPayload?.rawTokens).toBeGreaterThan(0);
-    expect(typeof observedPayload?.contextPressure).toBe("string");
-    expect(typeof observedPayload?.artifactRef).toBe("string");
+    requireNonEmptyString(observedPayload?.contextPressure, "Expected contextPressure.");
+    requireNonEmptyString(observedPayload?.artifactRef, "Expected observed artifactRef.");
 
     const artifactPersisted = runtime.events.query(sessionId, {
       type: "tool_output_artifact_persisted",
@@ -239,8 +240,14 @@ describe("Runtime plugin integration: observability injection", () => {
     expect(payload?.outputObservation?.rawChars).toBeGreaterThan(0);
     expect(payload?.outputObservation?.rawBytes).toBeGreaterThan(0);
     expect(payload?.outputObservation?.rawTokens).toBeGreaterThan(0);
-    expect(typeof payload?.outputObservation?.artifactRef).toBe("string");
-    expect(typeof payload?.outputArtifact?.artifactRef).toBe("string");
+    requireNonEmptyString(
+      payload?.outputObservation?.artifactRef,
+      "Expected outputObservation artifactRef.",
+    );
+    requireNonEmptyString(
+      payload?.outputArtifact?.artifactRef,
+      "Expected outputArtifact artifactRef.",
+    );
     expect(payload?.outputDistillation).toBeNull();
     expect(runtime.events.query(sessionId, { type: "tool_result", last: 1 })).toHaveLength(0);
 

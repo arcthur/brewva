@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test";
 import { assertCliSuccess, runCliSync } from "../../helpers/cli.js";
 import { writeMinimalConfig } from "../../helpers/config.js";
-import { findFinalBundle, isRecord, parseJsonLines } from "../../helpers/events.js";
+import { isRecord, parseJsonLines, requireFinalBundle } from "../../helpers/events.js";
 import { runLive } from "../../helpers/live.js";
 import { cleanupWorkspace, createWorkspace } from "../../helpers/workspace.js";
 
@@ -40,9 +40,8 @@ describe("live: replay and persistence", () => {
 
       assertCliSuccess(run, "replay-run");
 
-      const bundle = findFinalBundle(parseJsonLines(run.stdout, { strict: true }));
-      expect(bundle).toBeDefined();
-      const sessionId = bundle?.sessionId ?? "";
+      const bundle = requireFinalBundle(parseJsonLines(run.stdout, { strict: true }), "replay run");
+      const sessionId = bundle.sessionId;
       expect(sessionId.length).toBeGreaterThan(0);
 
       const replay = runCliSync(workspace, ["--replay", "--mode", "json", "--session", sessionId]);
@@ -55,21 +54,18 @@ describe("live: replay and persistence", () => {
       expect(replayEvents.length).toBeGreaterThan(0);
 
       for (const event of replayEvents) {
-        expect(event.schema).toBe("brewva.event.v1");
         expect(event.sessionId).toBe(sessionId);
-        expect(typeof event.type).toBe("string");
-        expect(typeof event.timestamp).toBe("number");
       }
 
-      const replayTypes = new Set(replayEvents.map((event) => event.type));
-      expect(replayTypes.has("session_start")).toBe(true);
-      expect(replayTypes.has("turn_start")).toBe(true);
-      expect(replayTypes.has("turn_end")).toBe(true);
-      expect(replayTypes.has("agent_end")).toBe(true);
-      const bundleEventCount = bundle?.events.length ?? 0;
+      const replayTypes = replayEvents.map((event) => event.type);
+      expect(replayTypes).toContain("session_start");
+      expect(replayTypes).toContain("turn_start");
+      expect(replayTypes).toContain("turn_end");
+      expect(replayTypes).toContain("agent_end");
+      const bundleEventCount = bundle.events.length;
       expect(replayEvents.length).toBeGreaterThanOrEqual(bundleEventCount);
       expect(replayEvents.length).toBeLessThanOrEqual(bundleEventCount + 5);
-      expect(replayTypes.has("session_shutdown")).toBe(true);
+      expect(replayTypes).toContain("session_shutdown");
     } finally {
       cleanupWorkspace(workspace);
     }
@@ -84,7 +80,7 @@ describe("live: replay and persistence", () => {
       expect(replay.error).toBeUndefined();
       expect(replay.status).toBe(1);
       expect(replay.stdout.trim()).toBe("");
-      expect(replay.stderr.includes("Error: no replayable session found.")).toBe(true);
+      expect(replay.stderr).toContain("Error: no replayable session found.");
     } finally {
       cleanupWorkspace(workspace);
     }

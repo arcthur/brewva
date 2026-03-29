@@ -1,6 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
+
+function activeCommandFailureIds(runtime: BrewvaRuntime, sessionId: string): string[] {
+  return runtime.truth
+    .getState(sessionId)
+    .facts.filter((fact) => fact.kind === "command_failure" && fact.status === "active")
+    .map((fact) => fact.id);
+}
+
+function taskBlockerIds(runtime: BrewvaRuntime, sessionId: string): string[] {
+  return runtime.task.getState(sessionId).blockers.map((blocker) => blocker.id);
+}
 
 describe("Truth extraction from evidence artifacts", () => {
   test("records attempt-scoped command_failure truth facts and clears on success", async () => {
@@ -92,10 +104,12 @@ describe("Truth extraction from evidence artifacts", () => {
       },
     });
 
-    const failureFact = runtime.truth
-      .getState(sessionId)
-      .facts.find((fact) => fact.kind === "command_failure" && fact.status === "active");
-    expect(failureFact).toBeDefined();
+    const failureFact = requireDefined(
+      runtime.truth
+        .getState(sessionId)
+        .facts.find((fact) => fact.kind === "command_failure" && fact.status === "active"),
+      "expected active command_failure fact after failed exec result",
+    );
     expect(runtime.task.getState(sessionId).blockers).toHaveLength(0);
 
     runtime.tools.recordResult({
@@ -112,7 +126,7 @@ describe("Truth extraction from evidence artifacts", () => {
     });
 
     const truth = runtime.truth.getState(sessionId);
-    const sameFact = truth.facts.find((fact) => fact.id === failureFact?.id);
+    const sameFact = truth.facts.find((fact) => fact.id === failureFact.id);
     expect(sameFact?.status).toBe("resolved");
 
     const recorded = runtime.events.query(sessionId, {
@@ -132,9 +146,7 @@ describe("Truth extraction from evidence artifacts", () => {
 
     const task = runtime.task.getState(sessionId);
     expect(task.blockers).toHaveLength(0);
-    expect(
-      truth.facts.some((fact) => fact.kind === "command_failure" && fact.status === "active"),
-    ).toBe(false);
+    expect(activeCommandFailureIds(runtime, sessionId)).toHaveLength(0);
   });
 
   test("records invocation validation failureClass for non-exec tool failures", () => {
@@ -187,10 +199,7 @@ describe("Truth extraction from evidence artifacts", () => {
       },
     });
 
-    const truth = runtime.truth.getState(sessionId);
-    expect(
-      truth.facts.some((fact) => fact.kind === "command_failure" && fact.status === "active"),
-    ).toBe(false);
+    expect(activeCommandFailureIds(runtime, sessionId)).toHaveLength(0);
 
     const task = runtime.task.getState(sessionId);
     expect(task.blockers.length).toBe(0);
@@ -212,10 +221,7 @@ describe("Truth extraction from evidence artifacts", () => {
       },
     });
 
-    const truth = runtime.truth.getState(sessionId);
-    expect(
-      truth.facts.some((fact) => fact.kind === "command_failure" && fact.status === "active"),
-    ).toBe(false);
+    expect(activeCommandFailureIds(runtime, sessionId)).toHaveLength(0);
 
     const task = runtime.task.getState(sessionId);
     expect(task.blockers.length).toBe(0);
@@ -237,10 +243,7 @@ describe("Truth extraction from evidence artifacts", () => {
       },
     });
 
-    const truth = runtime.truth.getState(sessionId);
-    expect(
-      truth.facts.some((fact) => fact.kind === "command_failure" && fact.status === "active"),
-    ).toBe(false);
+    expect(activeCommandFailureIds(runtime, sessionId)).toHaveLength(0);
 
     const task = runtime.task.getState(sessionId);
     expect(task.blockers.length).toBe(0);
@@ -262,10 +265,7 @@ describe("Truth extraction from evidence artifacts", () => {
       },
     });
 
-    const truth = runtime.truth.getState(sessionId);
-    expect(
-      truth.facts.some((fact) => fact.kind === "command_failure" && fact.status === "active"),
-    ).toBe(false);
+    expect(activeCommandFailureIds(runtime, sessionId)).toHaveLength(0);
 
     const task = runtime.task.getState(sessionId);
     expect(task.blockers.length).toBe(0);
@@ -308,16 +308,16 @@ describe("Truth extraction from evidence artifacts", () => {
       },
     });
 
-    const failFact = runtime.truth
-      .getState(sessionId)
-      .facts.find(
-        (fact) => fact.kind === "observability_slo_violation" && fact.status === "active",
-      );
-    expect(failFact).toBeDefined();
-    expect(failFact?.details?.queryRef).toBe(".orchestrator/tool-output-artifacts/sample-1.json");
-    expect(
-      runtime.task.getState(sessionId).blockers.some((blocker) => blocker.id === failFact?.id),
-    ).toBe(true);
+    const failFact = requireDefined(
+      runtime.truth
+        .getState(sessionId)
+        .facts.find(
+          (fact) => fact.kind === "observability_slo_violation" && fact.status === "active",
+        ),
+      "expected active observability_slo_violation fact after failing assertion",
+    );
+    expect(failFact.details?.queryRef).toBe(".orchestrator/tool-output-artifacts/sample-1.json");
+    expect(taskBlockerIds(runtime, sessionId)).toContain(failFact.id);
 
     runtime.tools.recordResult({
       sessionId,
@@ -341,7 +341,7 @@ describe("Truth extraction from evidence artifacts", () => {
     });
 
     expect(
-      runtime.truth.getState(sessionId).facts.find((fact) => fact.id === failFact?.id)?.status,
+      runtime.truth.getState(sessionId).facts.find((fact) => fact.id === failFact.id)?.status,
     ).toBe("active");
 
     runtime.tools.recordResult({
@@ -366,11 +366,9 @@ describe("Truth extraction from evidence artifacts", () => {
     });
 
     expect(
-      runtime.truth.getState(sessionId).facts.find((fact) => fact.id === failFact?.id)?.status,
+      runtime.truth.getState(sessionId).facts.find((fact) => fact.id === failFact.id)?.status,
     ).toBe("resolved");
-    expect(
-      runtime.task.getState(sessionId).blockers.some((blocker) => blocker.id === failFact?.id),
-    ).toBe(false);
+    expect(taskBlockerIds(runtime, sessionId)).not.toContain(failFact.id);
   });
 
   test("uses explicit verdicts for exec truth sync even when the tool channel succeeds", () => {
@@ -390,10 +388,12 @@ describe("Truth extraction from evidence artifacts", () => {
       },
     });
 
-    const activeFailure = runtime.truth
-      .getState(sessionId)
-      .facts.find((fact) => fact.kind === "command_failure" && fact.status === "active");
-    expect(activeFailure).toBeDefined();
+    const activeFailure = requireDefined(
+      runtime.truth
+        .getState(sessionId)
+        .facts.find((fact) => fact.kind === "command_failure" && fact.status === "active"),
+      "expected active command_failure fact after explicit fail verdict",
+    );
     expect(runtime.task.getState(sessionId).blockers).toHaveLength(0);
 
     runtime.tools.recordResult({
@@ -409,7 +409,7 @@ describe("Truth extraction from evidence artifacts", () => {
     });
 
     expect(
-      runtime.truth.getState(sessionId).facts.find((fact) => fact.id === activeFailure?.id)?.status,
+      runtime.truth.getState(sessionId).facts.find((fact) => fact.id === activeFailure.id)?.status,
     ).toBe("active");
 
     runtime.tools.recordResult({
@@ -425,7 +425,7 @@ describe("Truth extraction from evidence artifacts", () => {
     });
 
     expect(
-      runtime.truth.getState(sessionId).facts.find((fact) => fact.id === activeFailure?.id)?.status,
+      runtime.truth.getState(sessionId).facts.find((fact) => fact.id === activeFailure.id)?.status,
     ).toBe("resolved");
     expect(runtime.task.getState(sessionId).blockers).toHaveLength(0);
   });

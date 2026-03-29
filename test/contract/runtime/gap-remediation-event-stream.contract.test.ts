@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { appendFileSync, readFileSync } from "node:fs";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { requireArray, requireRecord } from "../../helpers/assertions.js";
 import {
   GAP_REMEDIATION_CONFIG_PATH,
   createGapRemediationConfig as createConfig,
@@ -58,16 +59,17 @@ describe("Gap remediation: event stream safety", () => {
     expect("missing" in payload).toBe(false);
     expect(payload.nan).toBe(0);
     expect(payload.inf).toBe(0);
-    expect(payload.nested).toBeDefined();
-    expect(payload.nested?.value).toBe(0);
-    const nestedItems = payload.nested?.arr;
-    expect(nestedItems).toBeDefined();
-    expect(nestedItems?.[0]).toBe(1);
-    expect(nestedItems?.[1]).toBe(0);
-    expect(nestedItems?.[2]).toBe(0);
-    const nestedObject = nestedItems?.[3];
-    expect(typeof nestedObject).toBe("object");
-    expect("x" in (nestedObject as Record<string, unknown>)).toBe(false);
+    const nested = requireRecord(payload.nested, "Expected normalized nested payload.") as {
+      value?: number;
+      arr?: unknown;
+    };
+    expect(nested.value).toBe(0);
+    const nestedItems = requireArray(nested.arr, "Expected normalized nested array.");
+    expect(nestedItems[0]).toBe(1);
+    expect(nestedItems[1]).toBe(0);
+    expect(nestedItems[2]).toBe(0);
+    const nestedObject = requireRecord(nestedItems[3], "Expected normalized nested object.");
+    expect("x" in nestedObject).toBe(false);
     expect((nestedObject as { y?: number }).y).toBe(2);
   });
 

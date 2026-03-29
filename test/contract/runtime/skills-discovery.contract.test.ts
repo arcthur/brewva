@@ -7,6 +7,7 @@ import {
   BrewvaRuntime,
   discoverSkillRegistryRoots,
 } from "@brewva/brewva-runtime";
+import { requireDefined } from "../../helpers/assertions.js";
 
 function writeSkill(filePath: string, input: { name: string }): void {
   mkdirSync(dirname(filePath), { recursive: true });
@@ -72,19 +73,20 @@ describe("skill discovery and loading", () => {
     });
 
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    expect(runtime.skills.get("commitcraft")).toBeDefined();
+    requireDefined(runtime.skills.get("commitcraft"), "expected commitcraft skill to load");
 
     const roots = discoverSkillRegistryRoots({
       cwd: workspace,
       configuredRoots: runtime.config.skills.roots ?? [],
     });
-    expect(
-      roots.some(
+    requireDefined(
+      roots.find(
         (entry) =>
           entry.source === "project_root" &&
           entry.skillDir === resolve(workspace, ".brewva/skills"),
       ),
-    ).toBe(true);
+      "expected project skill root to be discovered",
+    );
   });
 
   test("does not load ancestor .brewva skills when running from nested cwd", () => {
@@ -102,8 +104,8 @@ describe("skill discovery and loading", () => {
       cwd: nested,
       configuredRoots: runtime.config.skills.roots ?? [],
     });
-    expect(roots.some((entry) => entry.skillDir === resolve(workspace, ".brewva/skills"))).toBe(
-      false,
+    expect(roots.map((entry) => entry.skillDir)).not.toContain(
+      resolve(workspace, ".brewva/skills"),
     );
   });
 
@@ -118,7 +120,7 @@ describe("skill discovery and loading", () => {
     config.skills.roots = [external];
 
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
-    expect(runtime.skills.get("externalcraft")).toBeDefined();
+    requireDefined(runtime.skills.get("externalcraft"), "expected externalcraft skill to load");
   });
 
   test("fails fast when two non-overlay skills share the same name", () => {
@@ -140,7 +142,7 @@ describe("skill discovery and loading", () => {
     });
 
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    expect(runtime.skills.get("ops-helper")).toBeDefined();
+    requireDefined(runtime.skills.get("ops-helper"), "expected ops-helper skill to load");
 
     const report = runtime.skills.getLoadReport();
     expect(report.hiddenSkills).toContain("ops-helper");
@@ -218,12 +220,11 @@ describe("skill discovery and loading", () => {
     );
 
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    const skill = runtime.skills.get("foo");
-    expect(skill).toBeDefined();
-    expect(skill?.markdown).toContain("Project Context: project-rules");
-    expect(skill?.overlayFiles).toContain(resolve(overlayPath));
-    expect(skill?.sharedContextFiles).toContain(resolve(sharedContextPath));
-    expect(skill?.contract.resources?.defaultLease?.maxToolCalls).toBe(5);
+    const skill = requireDefined(runtime.skills.get("foo"), "expected foo skill to load");
+    expect(skill.markdown).toContain("Project Context: project-rules");
+    expect(skill.overlayFiles).toContain(resolve(overlayPath));
+    expect(skill.sharedContextFiles).toContain(resolve(sharedContextPath));
+    expect(skill.contract.resources?.defaultLease?.maxToolCalls).toBe(5);
   });
 
   test("project overlays can specialize execution hints while tightening effect policy", () => {

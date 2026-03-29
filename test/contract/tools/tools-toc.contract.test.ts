@@ -3,6 +3,7 @@ import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, type BrewvaConfig } from "@brewva/brewva-runtime";
 import { createReadSpansTool, createTocTools } from "@brewva/brewva-tools";
+import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function createTocWorkspace(prefix: string): string {
@@ -102,14 +103,20 @@ function createDirectorySymlink(target: string, linkPath: string): void {
   symlinkSync(target, linkPath, process.platform === "win32" ? "junction" : "dir");
 }
 
+function requireTool<T extends { name: string }>(tools: T[], name: string): T {
+  return requireDefined(
+    tools.find((tool) => tool.name === name),
+    `Expected tool ${name}.`,
+  );
+}
+
 describe("TOC tools", () => {
   test("toc_document returns imports, symbols, summaries, and public methods only", async () => {
     const workspace = createTocWorkspace("brewva-toc-document-");
     const filePath = sampleFile(workspace);
-    const tool = createTocTools().find((entry) => entry.name === "toc_document");
-    expect(tool).toBeDefined();
+    const tool = requireTool(createTocTools(), "toc_document");
 
-    const result = await tool!.execute(
+    const result = await tool.execute(
       "tc-toc-document",
       { file_path: filePath },
       undefined,
@@ -140,17 +147,16 @@ describe("TOC tools", () => {
     const runtime = createRuntime(workspace);
     const filePath = sampleFile(workspace);
     const sessionId = "toc-cache-session";
-    const tool = createTocTools({ runtime }).find((entry) => entry.name === "toc_document");
-    expect(tool).toBeDefined();
+    const tool = requireTool(createTocTools({ runtime }), "toc_document");
 
-    await tool!.execute(
+    await tool.execute(
       "tc-toc-document-1",
       { file_path: filePath },
       undefined,
       undefined,
       fakeContext(sessionId, workspace),
     );
-    await tool!.execute(
+    await tool.execute(
       "tc-toc-document-2",
       { file_path: filePath },
       undefined,
@@ -185,10 +191,9 @@ describe("TOC tools", () => {
       ),
       "utf8",
     );
-    const tool = createTocTools().find((entry) => entry.name === "toc_document");
-    expect(tool).toBeDefined();
+    const tool = requireTool(createTocTools(), "toc_document");
 
-    const functionResult = await tool!.execute(
+    const functionResult = await tool.execute(
       "tc-toc-default-function",
       { file_path: functionFile },
       undefined,
@@ -201,7 +206,7 @@ describe("TOC tools", () => {
     expect(functionText).toContain("name=default");
     expect(functionText).toContain('signature="export default function(name: string): string"');
 
-    const classResult = await tool!.execute(
+    const classResult = await tool.execute(
       "tc-toc-default-class",
       { file_path: classFile },
       undefined,
@@ -222,10 +227,9 @@ describe("TOC tools", () => {
     const runtime = createRuntime(workspace);
     const filePath = sampleFile(workspace);
     const sessionId = "toc-cache-clear-session";
-    const tool = createTocTools({ runtime }).find((entry) => entry.name === "toc_document");
-    expect(tool).toBeDefined();
+    const tool = requireTool(createTocTools({ runtime }), "toc_document");
 
-    await tool!.execute(
+    await tool.execute(
       "tc-toc-cache-clear-1",
       { file_path: filePath },
       undefined,
@@ -233,7 +237,7 @@ describe("TOC tools", () => {
       fakeContext(sessionId, workspace),
     );
     runtime.session.clearState(sessionId);
-    await tool!.execute(
+    await tool.execute(
       "tc-toc-cache-clear-2",
       { file_path: filePath },
       undefined,
@@ -250,10 +254,9 @@ describe("TOC tools", () => {
   test("toc_document includes interfaces, type aliases, and enums", async () => {
     const workspace = createTocWorkspace("brewva-toc-declarations-");
     const filePath = declarationFile(workspace);
-    const tool = createTocTools().find((entry) => entry.name === "toc_document");
-    expect(tool).toBeDefined();
+    const tool = requireTool(createTocTools(), "toc_document");
 
-    const result = await tool!.execute(
+    const result = await tool.execute(
       "tc-toc-declarations",
       { file_path: filePath },
       undefined,
@@ -274,10 +277,9 @@ describe("TOC tools", () => {
     const workspace = createTocWorkspace("brewva-toc-document-large-");
     const filePath = join(workspace, "src/huge.ts");
     writeFileSync(filePath, `export const payload = "${"x".repeat(1_100_000)}";\n`, "utf8");
-    const tool = createTocTools().find((entry) => entry.name === "toc_document");
-    expect(tool).toBeDefined();
+    const tool = requireTool(createTocTools(), "toc_document");
 
-    const result = await tool!.execute(
+    const result = await tool.execute(
       "tc-toc-document-large",
       { file_path: filePath },
       undefined,
@@ -303,10 +305,9 @@ describe("TOC tools", () => {
     );
     const runtime = createRuntime(workspace);
     const sessionId = "toc-search-session";
-    const tool = createTocTools({ runtime }).find((entry) => entry.name === "toc_search");
-    expect(tool).toBeDefined();
+    const tool = requireTool(createTocTools({ runtime }), "toc_search");
 
-    const result = await tool!.execute(
+    const result = await tool.execute(
       "tc-toc-search",
       {
         query: "start turn runtime facade",
@@ -341,10 +342,9 @@ describe("TOC tools", () => {
       "utf8",
     );
     writeFileSync(join(workspace, "src/util.ts"), "export function runtime(): void {}\n", "utf8");
-    const tool = createTocTools().find((entry) => entry.name === "toc_search");
-    expect(tool).toBeDefined();
+    const tool = requireTool(createTocTools(), "toc_search");
 
-    const result = await tool!.execute(
+    const result = await tool.execute(
       "tc-toc-ranking",
       {
         query: "runtime",
@@ -357,7 +357,10 @@ describe("TOC tools", () => {
     );
 
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
-    const firstMatchLine = text.split("\n").find((line) => line.startsWith("- score="));
+    const firstMatchLine = requireDefined(
+      text.split("\n").find((line) => line.startsWith("- score=")),
+      "Expected top-ranked TOC search match.",
+    );
     expect(firstMatchLine).toContain("kind=function name=runtime");
   });
 
@@ -365,10 +368,9 @@ describe("TOC tools", () => {
     const workspace = createTocWorkspace("brewva-toc-symlink-");
     sampleFile(workspace);
     createDirectorySymlink(join(workspace, "src"), join(workspace, "src/loop"));
-    const tool = createTocTools().find((entry) => entry.name === "toc_search");
-    expect(tool).toBeDefined();
+    const tool = requireTool(createTocTools(), "toc_search");
 
-    const result = await tool!.execute(
+    const result = await tool.execute(
       "tc-toc-symlink",
       {
         query: "runtime facade",
@@ -394,10 +396,9 @@ describe("TOC tools", () => {
         "utf8",
       );
     }
-    const tool = createTocTools().find((entry) => entry.name === "toc_search");
-    expect(tool).toBeDefined();
+    const tool = requireTool(createTocTools(), "toc_search");
 
-    const result = await tool!.execute(
+    const result = await tool.execute(
       "tc-toc-scope-overflow",
       {
         query: "item",
@@ -421,10 +422,9 @@ describe("TOC tools", () => {
     writeFileSync(join(workspace, "src/a.ts"), "export function createAlpha(): void {}\n", "utf8");
     writeFileSync(join(workspace, "src/b.ts"), "export function createBeta(): void {}\n", "utf8");
     writeFileSync(join(workspace, "src/c.ts"), "export function createGamma(): void {}\n", "utf8");
-    const tool = createTocTools().find((entry) => entry.name === "toc_search");
-    expect(tool).toBeDefined();
+    const tool = requireTool(createTocTools(), "toc_search");
 
-    const result = await tool!.execute(
+    const result = await tool.execute(
       "tc-toc-broad",
       {
         query: "create",
@@ -454,10 +454,9 @@ describe("TOC tools", () => {
 
       try {
         const runtime = createRuntime(workspace);
-        const tool = createTocTools({ runtime }).find((entry) => entry.name === "toc_search");
-        expect(tool).toBeDefined();
+        const tool = requireTool(createTocTools({ runtime }), "toc_search");
 
-        const result = await tool!.execute(
+        const result = await tool.execute(
           "tc-toc-unreadable",
           {
             query: "runtime facade",
@@ -517,11 +516,10 @@ describe("TOC tools", () => {
     const runtime = createRuntime(workspace);
     const filePath = sampleFile(workspace);
     const sessionId = "read-spans-cache-session";
-    const tocTool = createTocTools({ runtime }).find((entry) => entry.name === "toc_document");
+    const tocTool = requireTool(createTocTools({ runtime }), "toc_document");
     const readTool = createReadSpansTool({ runtime });
-    expect(tocTool).toBeDefined();
 
-    await tocTool!.execute(
+    await tocTool.execute(
       "tc-toc-before-read-spans",
       { file_path: filePath },
       undefined,

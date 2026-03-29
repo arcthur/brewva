@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { extractEvidenceArtifacts } from "@brewva/brewva-runtime";
+import { requireArray, requireRecord } from "../../helpers/assertions.js";
 
 describe("Evidence artifact extraction", () => {
   test("extracts command_failure artifacts from exec output", () => {
@@ -35,9 +36,9 @@ describe("Evidence artifact extraction", () => {
     expect(artifact.command).toBe("bun test");
     expect(artifact.failureClass).toBe("execution");
     expect(artifact.exitCode).toBe(1);
-    expect(Array.isArray(artifact.failingTests)).toBe(true);
-    expect(Array.isArray(artifact.failedAssertions)).toBe(true);
-    expect(Array.isArray(artifact.stackTrace)).toBe(true);
+    requireArray(artifact.failingTests, "Expected failingTests array.");
+    requireArray(artifact.failedAssertions, "Expected failedAssertions array.");
+    requireArray(artifact.stackTrace, "Expected stackTrace array.");
   });
 
   test("classifies invocation validation failures for exec", () => {
@@ -139,9 +140,9 @@ describe("Evidence artifact extraction", () => {
     expect(artifact.filePath).toBe("src/foo.ts");
     expect(artifact.severityFilter).toBe("all");
     expect(artifact.count).toBe(2);
-    expect(Array.isArray(artifact.codes)).toBe(true);
-    expect(typeof artifact.countsByCode).toBe("object");
-    expect(Array.isArray(artifact.diagnostics)).toBe(true);
+    requireArray(artifact.codes, "Expected codes array.");
+    requireRecord(artifact.countsByCode, "Expected countsByCode record.");
+    requireArray(artifact.diagnostics, "Expected diagnostics array.");
   });
 
   test("extracts tsc_diagnostics artifacts from lsp_diagnostics structured details", () => {
@@ -188,7 +189,7 @@ describe("Evidence artifact extraction", () => {
     expect(artifact.kind).toBe("tsc_diagnostics");
     expect(artifact.count).toBe(2);
     expect(artifact.countsByCode).toEqual({ TS2322: 1, TS2304: 1 });
-    expect(Array.isArray(artifact.diagnostics)).toBe(true);
+    requireArray(artifact.diagnostics, "Expected diagnostics array.");
   });
 
   test("does not extract diagnostics artifacts when output is clean", () => {

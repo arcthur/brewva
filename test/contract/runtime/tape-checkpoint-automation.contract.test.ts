@@ -78,9 +78,12 @@ describe("tape checkpoint automation", () => {
         truth?: { facts?: Array<{ id?: string }> };
       };
     };
+    const checkpointTaskTexts =
+      checkpointPayload.state?.task?.items?.map((item) => item.text) ?? [];
+    const checkpointTruthIds = checkpointPayload.state?.truth?.facts?.map((fact) => fact.id) ?? [];
     expect(checkpointPayload.schema).toBe("brewva.tape.checkpoint.v3");
-    expect(checkpointPayload.state?.task?.items?.some((item) => item.text === "item-1")).toBe(true);
-    expect(checkpointPayload.state?.truth?.facts?.some((fact) => fact.id === "truth-1")).toBe(true);
+    expect(checkpointTaskTexts).toContain("item-1");
+    expect(checkpointTruthIds).toContain("truth-1");
 
     runtime.truth.upsertFact(sessionId, {
       id: "truth-2",
@@ -94,8 +97,9 @@ describe("tape checkpoint automation", () => {
     const taskState = reloaded.task.getState(sessionId);
     const truthState = reloaded.truth.getState(sessionId);
     expect(taskState.items.map((item) => item.text)).toEqual(["item-1", "item-2", "item-3"]);
-    expect(truthState.facts.some((fact) => fact.id === "truth-1")).toBe(true);
-    expect(truthState.facts.some((fact) => fact.id === "truth-2")).toBe(true);
+    expect(truthState.facts.map((fact) => fact.id)).toEqual(
+      expect.arrayContaining(["truth-1", "truth-2"]),
+    );
   });
 
   test("rehydrates active skill and tool-call budget state from tape after restart", async () => {

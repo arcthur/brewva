@@ -397,7 +397,7 @@ describe("gateway daemon control-plane methods", () => {
           timeoutMs: undefined,
         },
       ]);
-      expect(stopCalls.some((call) => call.sessionId === "shared-session")).toBe(false);
+      expect(stopCalls.map((call) => call.sessionId)).not.toContain("shared-session");
     } finally {
       harness.dispose();
     }

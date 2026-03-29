@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { requireDefined } from "../../helpers/assertions.js";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -33,9 +34,11 @@ describe("skill output registry", () => {
     };
     runtime.skills.complete(sessionId, outputs);
 
-    const stored = runtime.skills.getOutputs(sessionId, "repository-analysis");
-    expect(stored).toBeDefined();
-    expect(stored?.repository_snapshot).toContain("monorepo");
+    const stored = requireDefined(
+      runtime.skills.getOutputs(sessionId, "repository-analysis"),
+      "Expected stored repository-analysis outputs.",
+    );
+    expect(stored.repository_snapshot).toContain("monorepo");
   });
 
   test("getConsumedOutputs returns matching outputs for downstream skills", async () => {
@@ -99,9 +102,11 @@ describe("skill output registry", () => {
     };
     runtime.skills.complete(sessionId, outputs);
 
-    const event = runtime.events.query(sessionId, { type: "skill_completed", last: 1 })[0];
-    expect(event).toBeDefined();
-    const payload = (event?.payload ?? {}) as {
+    const event = requireDefined(
+      runtime.events.query(sessionId, { type: "skill_completed", last: 1 })[0],
+      "Expected skill_completed event.",
+    );
+    const payload = (event.payload ?? {}) as {
       skillName?: string;
       outputKeys?: string[];
       outputs?: Record<string, unknown>;
@@ -116,9 +121,11 @@ describe("skill output registry", () => {
     const sessionId = `skill-activated-event-${Date.now()}`;
     runtime.skills.activate(sessionId, "repository-analysis");
 
-    const event = runtime.events.query(sessionId, { type: "skill_activated", last: 1 })[0];
-    expect(event).toBeDefined();
-    const payload = (event?.payload ?? {}) as {
+    const event = requireDefined(
+      runtime.events.query(sessionId, { type: "skill_activated", last: 1 })[0],
+      "Expected skill_activated event.",
+    );
+    const payload = (event.payload ?? {}) as {
       skillName?: string;
     };
     expect(payload.skillName).toBe("repository-analysis");

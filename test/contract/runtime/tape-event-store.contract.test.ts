@@ -7,6 +7,7 @@ import {
   buildTapeAnchorPayload,
   buildTapeCheckpointPayload,
 } from "@brewva/brewva-runtime";
+import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("BrewvaEventStore tape helpers", () => {
@@ -80,13 +81,12 @@ describe("BrewvaEventStore tape helpers", () => {
     const workspace = createTestWorkspace("tape-store-incremental");
     const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
     const sessionId = "tape-store-incremental-1";
-    const first = store.append({
+    store.append({
       sessionId,
       type: "session_start",
       payload: { source: "test" },
       timestamp: 100,
     });
-    expect(first).toBeDefined();
     expect(store.list(sessionId)).toHaveLength(1);
 
     const eventsDir = DEFAULT_BREWVA_CONFIG.infrastructure.events.dir;
@@ -128,20 +128,21 @@ describe("BrewvaEventStore tape helpers", () => {
 
     const ids = new Set<string>();
     for (let index = 0; index < 200; index += 1) {
-      const row = store.append({
-        sessionId,
-        type: "test_event",
-        payload: { index },
-        timestamp: 1735689600000,
-      });
-      expect(row).toBeDefined();
-      if (!row) continue;
+      const row = requireDefined(
+        store.append({
+          sessionId,
+          type: "test_event",
+          payload: { index },
+          timestamp: 1735689600000,
+        }),
+        `expected event row for index ${index}`,
+      );
       ids.add(row.id);
     }
 
     expect(ids.size).toBe(200);
     for (const id of ids.values()) {
-      expect(id.startsWith("evt_1735689600000_")).toBe(true);
+      expect(id).toMatch(/^evt_1735689600000_/);
     }
   });
 
@@ -158,9 +159,11 @@ describe("BrewvaEventStore tape helpers", () => {
     });
 
     const eventsRoot = join(workspace, DEFAULT_BREWVA_CONFIG.infrastructure.events.dir);
-    const fileName = readdirSync(eventsRoot).find((name) => name.endsWith(".jsonl"));
-    expect(fileName).toBeDefined();
-    const eventFilePath = join(eventsRoot, fileName ?? "missing.jsonl");
+    const fileName = requireDefined(
+      readdirSync(eventsRoot).find((name) => name.endsWith(".jsonl")),
+      "expected event file for malformed payload test",
+    );
+    const eventFilePath = join(eventsRoot, fileName);
     writeFileSync(
       eventFilePath,
       `\n${JSON.stringify({
@@ -195,9 +198,7 @@ describe("BrewvaEventStore tape helpers", () => {
       timestamp: 100,
     });
 
-    const row = store.list(sessionId)[0];
-    expect(row).toBeDefined();
-    if (!row) return;
+    const row = requireDefined(store.list(sessionId)[0], "expected cached event row");
 
     expect(Object.isFrozen(row)).toBe(true);
     expect(Object.isFrozen(row.payload)).toBe(true);

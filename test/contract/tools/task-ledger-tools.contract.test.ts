@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { createTaskLedgerTools } from "@brewva/brewva-tools";
+import { requireDefined } from "../../helpers/assertions.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
 
@@ -9,11 +10,11 @@ function createTaskLedgerToolHarness(prefix: string) {
   const runtime = new BrewvaRuntime({ cwd: workspace });
   const tools = createTaskLedgerTools({ runtime });
 
-  const findTool = (name: string) => {
-    const tool = tools.find((entry) => entry.name === name);
-    expect(tool, `missing tool ${name}`).toBeDefined();
-    return tool!;
-  };
+  const findTool = (name: string) =>
+    requireDefined(
+      tools.find((entry) => entry.name === name),
+      `missing tool ${name}`,
+    );
 
   return {
     workspace,

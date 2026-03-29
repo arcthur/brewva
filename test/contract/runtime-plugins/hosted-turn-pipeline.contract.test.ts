@@ -240,7 +240,7 @@ describe("hosted turn pipeline", () => {
 
     expect(beforeStart?.systemPrompt).toContain("[Brewva Context Contract]");
     expect(beforeStart?.message?.content).toContain("[ContextCompactionGate]");
-    expect(calls.events.some((event) => event.type === "context_composed")).toBe(true);
+    expect(calls.events.map((event) => event.type)).toContain("context_composed");
     expect(calls.observedContext).toHaveLength(1);
     expect(calls.observedContext[0]?.sessionId).toBe("hosted-before-start");
   });

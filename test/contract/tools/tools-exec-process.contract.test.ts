@@ -3,6 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createExecTool, createProcessTool } from "@brewva/brewva-tools";
+import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
 import {
   createRuntimeForExecTests,
   extractTextContent,
@@ -36,9 +37,10 @@ describe("exec/process tool flow", () => {
     };
     expect(startDetails.status).toBe("running");
     expect(startDetails.verdict).toBe("inconclusive");
-    expect(typeof startDetails.sessionId).toBe("string");
-
-    const sessionHandle = startDetails.sessionId ?? "";
+    const sessionHandle = requireNonEmptyString(
+      startDetails.sessionId,
+      "Expected background exec sessionId.",
+    );
     let observedDone = false;
     let finalStatus: string | undefined;
     let finalVerdict: string | undefined;
@@ -99,8 +101,10 @@ describe("exec/process tool flow", () => {
       undefined,
       fakeContext(sessionId),
     );
-    const sessionHandle = (started.details as { sessionId?: string }).sessionId;
-    expect(typeof sessionHandle).toBe("string");
+    const sessionHandle = requireNonEmptyString(
+      (started.details as { sessionId?: string }).sessionId,
+      "Expected process session handle.",
+    );
 
     const killed = await processTool.execute(
       "tc-process-kill",
@@ -126,8 +130,11 @@ describe("exec/process tool flow", () => {
       undefined,
       fakeContext(sessionId),
     );
-    const pollStatus = (polled.details as { status?: string }).status;
-    expect(pollStatus === "completed" || pollStatus === "failed").toBe(true);
+    const pollStatus = requireDefined(
+      (polled.details as { status?: string }).status,
+      "expected polled process status",
+    );
+    expect(["completed", "failed"]).toContain(pollStatus);
   });
 
   test("exec rejects missing command with explicit fail verdict", async () => {

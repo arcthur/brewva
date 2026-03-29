@@ -9,6 +9,7 @@ import {
   resolveParallelReadConfig,
   type BrewvaToolRuntime,
 } from "@brewva/brewva-tools";
+import { requireDefined, requireNumber, requireRecord } from "../../helpers/assertions.js";
 import {
   createRuntime,
   expectTelemetryCountersConsistent,
@@ -18,16 +19,22 @@ import {
   workspaceWithSampleFiles,
 } from "./tools-parallel-read.helpers.js";
 
+function requireTool<T extends { name: string }>(tools: T[], name: string): T {
+  return requireDefined(
+    tools.find((tool) => tool.name === name),
+    `Expected tool ${name}.`,
+  );
+}
+
 describe("tool parallel read lsp integration", () => {
   test("given buildBrewvaTools runtime context, when lsp workspace scan runs, then parallel-read telemetry is emitted", async () => {
     const workspace = workspaceWithSampleFiles("brewva-tools-build-runtime-");
     const runtime = createRuntime(workspace);
     const sessionId = "parallel-read-build-runtime";
     const tools = buildBrewvaTools({ runtime });
-    const lspSymbols = tools.find((tool) => tool.name === "lsp_symbols");
-    expect(lspSymbols).toBeDefined();
+    const lspSymbols = requireTool(tools, "lsp_symbols");
 
-    await lspSymbols!.execute(
+    await lspSymbols.execute(
       "tc-build-lsp-symbols",
       {
         filePath: join(workspace, "src/a.ts"),
@@ -42,8 +49,8 @@ describe("tool parallel read lsp integration", () => {
     const payloads = getParallelReadPayloads(runtime, sessionId).filter(
       (payload) => payload.toolName === "lsp_symbols",
     );
-    expect(payloads.length > 0).toBe(true);
-    expect(payloads.some((payload) => payload.operation === "find_references")).toBe(true);
+    expect(payloads.length).toBeGreaterThan(0);
+    expect(payloads.map((payload) => String(payload.operation))).toContain("find_references");
   });
 
   test("lsp workspace scan emits parallel telemetry when runtime parallel is enabled", async () => {
@@ -51,10 +58,9 @@ describe("tool parallel read lsp integration", () => {
     const runtime = createRuntime(workspace);
     const sessionId = "parallel-read-enabled";
     const tools = createLspTools({ runtime });
-    const lspSymbols = tools.find((tool) => tool.name === "lsp_symbols");
-    expect(lspSymbols).toBeDefined();
+    const lspSymbols = requireTool(tools, "lsp_symbols");
 
-    const result = await lspSymbols!.execute(
+    const result = await lspSymbols.execute(
       "tc-lsp-symbols-enabled",
       {
         filePath: join(workspace, "src/a.ts"),
@@ -66,24 +72,25 @@ describe("tool parallel read lsp integration", () => {
       fakeContext(sessionId, workspace),
     );
     expect(
-      extractTextContent(result as { content: Array<{ type: string; text?: string }> }).length > 0,
-    ).toBe(true);
+      extractTextContent(result as { content: Array<{ type: string; text?: string }> }).length,
+    ).toBeGreaterThan(0);
 
-    const telemetry = runtime.events
-      .query(sessionId, { type: "tool_parallel_read" })
-      .find((event) => event.payload?.toolName === "lsp_symbols")?.payload;
-    expect(telemetry).toBeDefined();
-    expect(telemetry?.mode).toBe("parallel");
-    expect(typeof telemetry?.batchSize).toBe("number");
-    expect((telemetry?.batchSize as number) > 1).toBe(true);
-    expect(telemetry?.reason).toBe("runtime_parallel_budget");
-    expect(typeof telemetry?.scannedFiles).toBe("number");
-    expect(typeof telemetry?.loadedFiles).toBe("number");
-    expect(typeof telemetry?.failedFiles).toBe("number");
-    expect(typeof telemetry?.durationMs).toBe("number");
-    if (telemetry) {
-      expectTelemetryCountersConsistent(telemetry as unknown as Record<string, unknown>);
-    }
+    const telemetry = requireRecord(
+      runtime.events
+        .query(sessionId, { type: "tool_parallel_read" })
+        .find((event) => event.payload?.toolName === "lsp_symbols")?.payload,
+      "Expected lsp_symbols parallel-read telemetry.",
+    );
+    expect(telemetry.mode).toBe("parallel");
+    expect(
+      requireNumber(telemetry.batchSize, "Expected numeric telemetry.batchSize."),
+    ).toBeGreaterThan(1);
+    expect(telemetry.reason).toBe("runtime_parallel_budget");
+    requireNumber(telemetry.scannedFiles, "Expected numeric telemetry.scannedFiles.");
+    requireNumber(telemetry.loadedFiles, "Expected numeric telemetry.loadedFiles.");
+    requireNumber(telemetry.failedFiles, "Expected numeric telemetry.failedFiles.");
+    requireNumber(telemetry.durationMs, "Expected numeric telemetry.durationMs.");
+    expectTelemetryCountersConsistent(telemetry);
   });
 
   test("lsp workspace scan emits sequential telemetry when runtime parallel is disabled", async () => {
@@ -93,10 +100,9 @@ describe("tool parallel read lsp integration", () => {
     const runtime = createRuntime(workspace, config);
     const sessionId = "parallel-read-disabled";
     const tools = createLspTools({ runtime });
-    const lspSymbols = tools.find((tool) => tool.name === "lsp_symbols");
-    expect(lspSymbols).toBeDefined();
+    const lspSymbols = requireTool(tools, "lsp_symbols");
 
-    await lspSymbols!.execute(
+    await lspSymbols.execute(
       "tc-lsp-symbols-disabled",
       {
         filePath: join(workspace, "src/a.ts"),
@@ -108,16 +114,16 @@ describe("tool parallel read lsp integration", () => {
       fakeContext(sessionId, workspace),
     );
 
-    const telemetry = runtime.events
-      .query(sessionId, { type: "tool_parallel_read" })
-      .find((event) => event.payload?.toolName === "lsp_symbols")?.payload;
-    expect(telemetry).toBeDefined();
-    expect(telemetry?.mode).toBe("sequential");
-    expect(telemetry?.batchSize).toBe(1);
-    expect(telemetry?.reason).toBe("parallel_disabled");
-    if (telemetry) {
-      expectTelemetryCountersConsistent(telemetry as unknown as Record<string, unknown>);
-    }
+    const telemetry = requireRecord(
+      runtime.events
+        .query(sessionId, { type: "tool_parallel_read" })
+        .find((event) => event.payload?.toolName === "lsp_symbols")?.payload,
+      "Expected sequential lsp_symbols telemetry.",
+    );
+    expect(telemetry.mode).toBe("sequential");
+    expect(telemetry.batchSize).toBe(1);
+    expect(telemetry.reason).toBe("parallel_disabled");
+    expectTelemetryCountersConsistent(telemetry);
   });
 
   test("lsp workspace scan acquires and releases runtime parallel slots when available", async () => {
@@ -146,10 +152,9 @@ describe("tool parallel read lsp integration", () => {
     } as unknown as BrewvaToolRuntime;
     const sessionId = "parallel-read-slot-integration";
     const tools = createLspTools({ runtime });
-    const lspSymbols = tools.find((tool) => tool.name === "lsp_symbols");
-    expect(lspSymbols).toBeDefined();
+    const lspSymbols = requireTool(tools, "lsp_symbols");
 
-    await lspSymbols!.execute(
+    await lspSymbols.execute(
       "tc-lsp-symbols-slot-integration",
       {
         filePath: join(workspace, "src/a.ts"),
@@ -161,12 +166,14 @@ describe("tool parallel read lsp integration", () => {
       fakeContext(sessionId, workspace),
     );
 
-    expect(
-      calls.some((entry) => entry.startsWith(`acquire:${sessionId}:tool_parallel_read:`)),
-    ).toBe(true);
-    expect(
-      calls.some((entry) => entry.startsWith(`release:${sessionId}:tool_parallel_read:`)),
-    ).toBe(true);
+    requireDefined(
+      calls.find((entry) => entry.startsWith(`acquire:${sessionId}:tool_parallel_read:`)),
+      "Expected parallel read slot acquisition call.",
+    );
+    requireDefined(
+      calls.find((entry) => entry.startsWith(`release:${sessionId}:tool_parallel_read:`)),
+      "Expected parallel read slot release call.",
+    );
   });
 
   test("lsp workspace low-limit scan avoids eager over-read", async () => {
@@ -174,10 +181,9 @@ describe("tool parallel read lsp integration", () => {
     const runtime = createRuntime(workspace);
     const sessionId = "parallel-read-low-limit";
     const tools = createLspTools({ runtime });
-    const lspSymbols = tools.find((tool) => tool.name === "lsp_symbols");
-    expect(lspSymbols).toBeDefined();
+    const lspSymbols = requireTool(tools, "lsp_symbols");
 
-    const result = await lspSymbols!.execute(
+    const result = await lspSymbols.execute(
       "tc-lsp-symbols-low-limit",
       {
         filePath: join(workspace, "src/a.ts"),
@@ -190,21 +196,19 @@ describe("tool parallel read lsp integration", () => {
       fakeContext(sessionId, workspace),
     );
     expect(
-      extractTextContent(result as { content: Array<{ type: string; text?: string }> }).includes(
-        "export",
-      ),
-    ).toBe(true);
+      extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
+    ).toContain("export");
 
-    const telemetry = runtime.events
-      .query(sessionId, { type: "tool_parallel_read" })
-      .find((event) => event.payload?.toolName === "lsp_symbols")?.payload;
-    expect(telemetry).toBeDefined();
-    expect(telemetry?.scannedFiles).toBe(1);
-    expect(telemetry?.loadedFiles).toBe(1);
-    expect(telemetry?.failedFiles).toBe(0);
-    if (telemetry) {
-      expectTelemetryCountersConsistent(telemetry as unknown as Record<string, unknown>);
-    }
+    const telemetry = requireRecord(
+      runtime.events
+        .query(sessionId, { type: "tool_parallel_read" })
+        .find((event) => event.payload?.toolName === "lsp_symbols")?.payload,
+      "Expected low-limit lsp_symbols telemetry.",
+    );
+    expect(telemetry.scannedFiles).toBe(1);
+    expect(telemetry.loadedFiles).toBe(1);
+    expect(telemetry.failedFiles).toBe(0);
+    expectTelemetryCountersConsistent(telemetry);
   });
 
   test("lsp_find_references with includeDeclaration=false emits both reference and definition scans", async () => {
@@ -212,10 +216,9 @@ describe("tool parallel read lsp integration", () => {
     const runtime = createRuntime(workspace);
     const sessionId = "parallel-read-findrefs";
     const tools = createLspTools({ runtime });
-    const lspFindReferences = tools.find((tool) => tool.name === "lsp_find_references");
-    expect(lspFindReferences).toBeDefined();
+    const lspFindReferences = requireTool(tools, "lsp_find_references");
 
-    const result = await lspFindReferences!.execute(
+    const result = await lspFindReferences.execute(
       "tc-lsp-findrefs",
       {
         filePath: join(workspace, "src/a.ts"),
@@ -228,17 +231,15 @@ describe("tool parallel read lsp integration", () => {
       fakeContext(sessionId, workspace),
     );
     expect(
-      extractTextContent(result as { content: Array<{ type: string; text?: string }> }).includes(
-        "valueA",
-      ),
-    ).toBe(true);
+      extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
+    ).toContain("valueA");
 
     const payloads = getParallelReadPayloads(runtime, sessionId).filter(
       (payload) => payload.toolName === "lsp_find_references",
     );
-    const operations = new Set(payloads.map((payload) => String(payload.operation)));
-    expect(operations.has("find_references")).toBe(true);
-    expect(operations.has("find_definition")).toBe(true);
+    const operations = payloads.map((payload) => String(payload.operation));
+    expect(operations).toContain("find_references");
+    expect(operations).toContain("find_definition");
   });
 
   test("lsp_goto_definition emits definition scan telemetry", async () => {
@@ -246,10 +247,9 @@ describe("tool parallel read lsp integration", () => {
     const runtime = createRuntime(workspace);
     const sessionId = "parallel-read-goto-definition";
     const tools = createLspTools({ runtime });
-    const lspGotoDefinition = tools.find((tool) => tool.name === "lsp_goto_definition");
-    expect(lspGotoDefinition).toBeDefined();
+    const lspGotoDefinition = requireTool(tools, "lsp_goto_definition");
 
-    const result = await lspGotoDefinition!.execute(
+    const result = await lspGotoDefinition.execute(
       "tc-lsp-goto-definition",
       {
         filePath: join(workspace, "src/a.ts"),
@@ -261,23 +261,21 @@ describe("tool parallel read lsp integration", () => {
       fakeContext(sessionId, workspace),
     );
     expect(
-      extractTextContent(result as { content: Array<{ type: string; text?: string }> }).includes(
-        "valueA",
-      ),
-    ).toBe(true);
+      extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
+    ).toContain("valueA");
 
     const payloads = getParallelReadPayloads(runtime, sessionId).filter(
       (payload) => payload.toolName === "lsp_goto_definition",
     );
-    expect(payloads.some((payload) => payload.operation === "find_definition")).toBe(true);
-    const definitionTelemetry = payloads.find((payload) => payload.operation === "find_definition");
-    expect(definitionTelemetry).toBeDefined();
-    if (definitionTelemetry) {
-      expect(definitionTelemetry.scannedFiles).toBe(1);
-      expect(definitionTelemetry.loadedFiles).toBe(1);
-      expect(definitionTelemetry.failedFiles).toBe(0);
-      expectTelemetryCountersConsistent(definitionTelemetry);
-    }
+    expect(payloads.map((payload) => String(payload.operation))).toContain("find_definition");
+    const definitionTelemetry = requireDefined(
+      payloads.find((payload) => payload.operation === "find_definition"),
+      "Expected find_definition telemetry payload.",
+    );
+    expect(definitionTelemetry.scannedFiles).toBe(1);
+    expect(definitionTelemetry.loadedFiles).toBe(1);
+    expect(definitionTelemetry.failedFiles).toBe(0);
+    expectTelemetryCountersConsistent(definitionTelemetry);
   });
 
   test("lsp_prepare_rename emits both reference and definition scan telemetry", async () => {
@@ -285,10 +283,9 @@ describe("tool parallel read lsp integration", () => {
     const runtime = createRuntime(workspace);
     const sessionId = "parallel-read-prepare-rename";
     const tools = createLspTools({ runtime });
-    const lspPrepareRename = tools.find((tool) => tool.name === "lsp_prepare_rename");
-    expect(lspPrepareRename).toBeDefined();
+    const lspPrepareRename = requireTool(tools, "lsp_prepare_rename");
 
-    const result = await lspPrepareRename!.execute(
+    const result = await lspPrepareRename.execute(
       "tc-lsp-prepare-rename",
       {
         filePath: join(workspace, "src/b.ts"),
@@ -300,17 +297,15 @@ describe("tool parallel read lsp integration", () => {
       fakeContext(sessionId, workspace),
     );
     expect(
-      extractTextContent(result as { content: Array<{ type: string; text?: string }> }).includes(
-        "Rename available",
-      ),
-    ).toBe(true);
+      extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
+    ).toContain("Rename available");
 
     const payloads = getParallelReadPayloads(runtime, sessionId).filter(
       (payload) => payload.toolName === "lsp_prepare_rename",
     );
-    const operations = new Set(payloads.map((payload) => String(payload.operation)));
-    expect(operations.has("find_references")).toBe(true);
-    expect(operations.has("find_definition")).toBe(true);
+    const operations = payloads.map((payload) => String(payload.operation));
+    expect(operations).toContain("find_references");
+    expect(operations).toContain("find_definition");
   });
 
   test("lsp_symbols in document scope does not emit parallel telemetry", async () => {
@@ -318,10 +313,9 @@ describe("tool parallel read lsp integration", () => {
     const runtime = createRuntime(workspace);
     const sessionId = "parallel-read-doc-scope";
     const tools = createLspTools({ runtime });
-    const lspSymbols = tools.find((tool) => tool.name === "lsp_symbols");
-    expect(lspSymbols).toBeDefined();
+    const lspSymbols = requireTool(tools, "lsp_symbols");
 
-    const result = await lspSymbols!.execute(
+    const result = await lspSymbols.execute(
       "tc-lsp-symbols-document",
       {
         filePath: join(workspace, "src/a.ts"),
@@ -334,10 +328,8 @@ describe("tool parallel read lsp integration", () => {
     );
 
     expect(
-      extractTextContent(result as { content: Array<{ type: string; text?: string }> }).includes(
-        "valueA",
-      ),
-    ).toBe(true);
+      extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
+    ).toContain("valueA");
     expect(getParallelReadPayloads(runtime, sessionId)).toHaveLength(0);
   });
 
@@ -346,10 +338,9 @@ describe("tool parallel read lsp integration", () => {
     const runtime = createRuntime(workspace);
     const sessionId = "parallel-read-doc-scope-dir";
     const tools = createLspTools({ runtime });
-    const lspSymbols = tools.find((tool) => tool.name === "lsp_symbols");
-    expect(lspSymbols).toBeDefined();
+    const lspSymbols = requireTool(tools, "lsp_symbols");
 
-    const result = await lspSymbols!.execute(
+    const result = await lspSymbols.execute(
       "tc-lsp-symbols-document-dir",
       {
         filePath: join(workspace, "src"),
@@ -374,10 +365,9 @@ describe("tool parallel read lsp integration", () => {
     const runtime = createRuntime(workspace, config);
     const sessionId = "parallel-read-batch-cap";
     const tools = createLspTools({ runtime });
-    const lspSymbols = tools.find((tool) => tool.name === "lsp_symbols");
-    expect(lspSymbols).toBeDefined();
+    const lspSymbols = requireTool(tools, "lsp_symbols");
 
-    await lspSymbols!.execute(
+    await lspSymbols.execute(
       "tc-lsp-symbols-batch-cap",
       {
         filePath: join(workspace, "src/a.ts"),
@@ -392,21 +382,20 @@ describe("tool parallel read lsp integration", () => {
     const payloads = getParallelReadPayloads(runtime, sessionId).filter(
       (payload) => payload.toolName === "lsp_symbols",
     );
-    expect(payloads.length > 0).toBe(true);
-    expect(payloads.some((payload) => payload.batchSize === 64)).toBe(true);
-    if (payloads[0]) {
-      expectTelemetryCountersConsistent(payloads[0]);
-    }
+    expect(payloads.length).toBeGreaterThan(0);
+    expect(payloads.map((payload) => payload.batchSize)).toContain(64);
+    expectTelemetryCountersConsistent(
+      requireDefined(payloads[0], "Expected at least one batch-cap telemetry payload."),
+    );
   });
 
   test("does not emit telemetry when session id is unavailable in tool context", async () => {
     const workspace = workspaceWithSampleFiles("brewva-tools-no-session-");
     const runtime = createRuntime(workspace);
     const tools = createLspTools({ runtime });
-    const lspSymbols = tools.find((tool) => tool.name === "lsp_symbols");
-    expect(lspSymbols).toBeDefined();
+    const lspSymbols = requireTool(tools, "lsp_symbols");
 
-    await lspSymbols!.execute(
+    await lspSymbols.execute(
       "tc-lsp-symbols-no-session",
       {
         filePath: join(workspace, "src/a.ts"),
@@ -433,10 +422,9 @@ describe("tool parallel read lsp integration", () => {
       const runtime = createRuntime(workspace);
       const sessionId = "parallel-read-failures";
       const tools = createLspTools({ runtime });
-      const lspSymbols = tools.find((tool) => tool.name === "lsp_symbols");
-      expect(lspSymbols).toBeDefined();
+      const lspSymbols = requireTool(tools, "lsp_symbols");
 
-      await lspSymbols!.execute(
+      await lspSymbols.execute(
         "tc-lsp-symbols-read-failures",
         {
           filePath: join(workspace, "src/a.ts"),
@@ -451,14 +439,18 @@ describe("tool parallel read lsp integration", () => {
       const payloads = getParallelReadPayloads(runtime, sessionId).filter(
         (payload) => payload.toolName === "lsp_symbols",
       );
-      expect(payloads.length > 0).toBe(true);
-      const failedFiles = Number(payloads[0]?.failedFiles ?? 0);
-      expect(Number.isFinite(failedFiles)).toBe(true);
-      if (payloads[0]) {
-        expectTelemetryCountersConsistent(payloads[0]);
-      }
+      expect(payloads.length).toBeGreaterThan(0);
+      const firstPayload = requireDefined(
+        payloads[0],
+        "Expected at least one read-failure telemetry payload.",
+      );
+      const failedFiles = requireNumber(
+        firstPayload.failedFiles,
+        "Expected numeric failedFiles telemetry.",
+      );
+      expectTelemetryCountersConsistent(firstPayload);
       if (process.platform !== "win32") {
-        expect(failedFiles >= 1).toBe(true);
+        expect(failedFiles).toBeGreaterThanOrEqual(1);
       }
     } finally {
       chmodSync(unreadable, 0o644);
@@ -470,11 +462,10 @@ describe("tool parallel read lsp integration", () => {
     const runtime = createRuntime(workspace);
     const sessionId = "parallel-read-invalid-cwd-file";
     const tools = createLspTools({ runtime });
-    const lspSymbols = tools.find((tool) => tool.name === "lsp_symbols");
-    expect(lspSymbols).toBeDefined();
+    const lspSymbols = requireTool(tools, "lsp_symbols");
 
     const fileCwd = join(workspace, "src/a.ts");
-    const result = await lspSymbols!.execute(
+    const result = await lspSymbols.execute(
       "tc-lsp-symbols-invalid-cwd-file",
       {
         filePath: fileCwd,
@@ -492,11 +483,11 @@ describe("tool parallel read lsp integration", () => {
     const payloads = getParallelReadPayloads(runtime, sessionId).filter(
       (payload) => payload.toolName === "lsp_symbols",
     );
-    expect(payloads.length > 0).toBe(true);
-    expect(payloads.some((payload) => payload.scannedFiles === 0)).toBe(true);
-    if (payloads[0]) {
-      expectTelemetryCountersConsistent(payloads[0]);
-    }
+    expect(payloads.length).toBeGreaterThan(0);
+    expect(payloads.map((payload) => payload.scannedFiles)).toContain(0);
+    expectTelemetryCountersConsistent(
+      requireDefined(payloads[0], "Expected invalid-cwd telemetry payload."),
+    );
   });
 
   test(
@@ -529,10 +520,9 @@ describe("tool parallel read lsp integration", () => {
       writeFileSync(join(workspace, "src/b/foo.ts"), "export const broken: string = 1;\n", "utf8");
 
       const tools = createLspTools({ runtime });
-      const lspDiagnostics = tools.find((tool) => tool.name === "lsp_diagnostics");
-      expect(lspDiagnostics).toBeDefined();
+      const lspDiagnostics = requireTool(tools, "lsp_diagnostics");
 
-      const result = await lspDiagnostics!.execute(
+      const result = await lspDiagnostics.execute(
         "tc-lsp-diagnostics-scope-mismatch",
         {
           filePath: join(workspace, "src/a/foo.ts"),
@@ -547,12 +537,14 @@ describe("tool parallel read lsp integration", () => {
         result as { content: Array<{ type: string; text?: string }> },
       );
       expect(text).toContain("No matching diagnostics for the requested file/severity scope.");
-      const details = (result as { details?: Record<string, unknown> }).details;
-      expect(details?.status).toBe("unavailable");
-      expect(details?.verdict).toBe("inconclusive");
-      expect(details?.reason).toBe("diagnostics_scope_mismatch");
-      expect(typeof details?.exitCode).toBe("number");
-      expect((details?.exitCode as number) !== 0).toBe(true);
+      const details = requireRecord(
+        (result as { details?: Record<string, unknown> }).details,
+        "Expected diagnostics mismatch details.",
+      );
+      expect(details.status).toBe("unavailable");
+      expect(details.verdict).toBe("inconclusive");
+      expect(details.reason).toBe("diagnostics_scope_mismatch");
+      expect(requireNumber(details.exitCode, "Expected numeric diagnostics exitCode.")).not.toBe(0);
     },
     { timeout: 15_000 },
   );

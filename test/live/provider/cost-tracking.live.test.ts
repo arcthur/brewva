@@ -5,7 +5,7 @@ import {
   skipLiveForProviderRateLimitResult,
 } from "../../helpers/cli.js";
 import { writeMinimalConfig } from "../../helpers/config.js";
-import { findFinalBundle, isRecord, parseJsonLines } from "../../helpers/events.js";
+import { isRecord, parseJsonLines, requireFinalBundle } from "../../helpers/events.js";
 import { runLive } from "../../helpers/live.js";
 import { cleanupWorkspace, createWorkspace } from "../../helpers/workspace.js";
 
@@ -26,15 +26,16 @@ describe("live: cost tracking visibility", () => {
       }
       assertCliSuccess(run, "cost-json");
 
-      const bundle = findFinalBundle(parseJsonLines(run.stdout, { strict: true }));
-      expect(bundle).toBeDefined();
+      const bundle = requireFinalBundle(parseJsonLines(run.stdout, { strict: true }), "cost json");
+      const totalTokens = bundle.costSummary?.totalTokens;
+      const totalCostUsd = bundle.costSummary?.totalCostUsd;
+      if (typeof totalTokens !== "number" || typeof totalCostUsd !== "number") {
+        throw new Error("Expected numeric costSummary totals in final bundle.");
+      }
+      expect(totalTokens).toBeGreaterThanOrEqual(0);
+      expect(totalCostUsd).toBeGreaterThanOrEqual(0);
 
-      expect(typeof bundle?.costSummary?.totalTokens).toBe("number");
-      expect((bundle?.costSummary?.totalTokens as number) >= 0).toBe(true);
-      expect(typeof bundle?.costSummary?.totalCostUsd).toBe("number");
-      expect((bundle?.costSummary?.totalCostUsd as number) >= 0).toBe(true);
-
-      const costUpdates = (bundle?.events ?? []).filter((event) => event.type === "cost_update");
+      const costUpdates = bundle.events.filter((event) => event.type === "cost_update");
       for (const event of costUpdates) {
         if (!isRecord(event.payload)) continue;
         if (event.payload.totalTokens !== undefined) {
@@ -71,7 +72,7 @@ describe("live: cost tracking visibility", () => {
       assertCliSuccess(run, "cost-print");
 
       if (run.stderr.includes("[cost] session=")) {
-        expect(/\[cost\] session=\S+\s+tokens=\d+/.test(run.stderr)).toBe(true);
+        expect(run.stderr).toMatch(/\[cost\] session=\S+\s+tokens=\d+/);
       } else {
         console.warn(
           "[cost-tracking.live] [cost] summary line is absent; this can happen when usage data is unavailable.",

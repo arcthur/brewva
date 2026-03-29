@@ -25,19 +25,15 @@ describe("Gap remediation: structured replay events", () => {
     const structured = runtime.events.queryStructured(sessionId);
     expect(structured.length).toBe(3);
     expect(structured[0]?.schema).toBe("brewva.event.v1");
-    expect(
-      structured.some((event) => event.type === "session_start" && event.category === "session"),
-    ).toBe(true);
-    expect(
-      structured.some(
-        (event) => event.type === "channel_session_bound" && event.category === "session",
-      ),
-    ).toBe(true);
-    expect(
-      structured.some((event) => event.type === "tool_call" && event.category === "tool"),
-    ).toBe(true);
+    expect(structured.map((event) => `${event.type}:${event.category}`)).toEqual(
+      expect.arrayContaining([
+        "session_start:session",
+        "channel_session_bound:session",
+        "tool_call:tool",
+      ]),
+    );
 
     const sessions = runtime.events.listReplaySessions();
-    expect(sessions.some((entry) => entry.sessionId === sessionId)).toBe(true);
+    expect(sessions.map((entry) => entry.sessionId)).toContain(sessionId);
   });
 });

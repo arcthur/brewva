@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime, type BrewvaStructuredEvent } from "@brewva/brewva-runtime";
+import { requireDefined } from "../../helpers/assertions.js";
 import {
   GAP_REMEDIATION_CONFIG_PATH,
   createGapRemediationConfig as createConfig,
@@ -30,13 +31,18 @@ describe("Gap remediation: live event subscription", () => {
       channelSuccess: true,
     });
 
-    expect(received.some((event) => event.schema === "brewva.event.v1")).toBe(true);
-    expect(
-      received.some((event) => event.type === "session_start" && event.category === "session"),
-    ).toBe(true);
-    expect(
-      received.some((event) => event.type === "tool_result_recorded" && event.category === "tool"),
-    ).toBe(true);
+    requireDefined(
+      received.find((event) => event.schema === "brewva.event.v1"),
+      "Expected structured Brewva event.",
+    );
+    requireDefined(
+      received.find((event) => event.type === "session_start" && event.category === "session"),
+      "Expected session_start subscription event.",
+    );
+    requireDefined(
+      received.find((event) => event.type === "tool_result_recorded" && event.category === "tool"),
+      "Expected tool_result_recorded subscription event.",
+    );
 
     unsubscribe();
     const before = received.length;

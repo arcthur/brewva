@@ -33,6 +33,14 @@ export function latestEventFile(workspace: string): string | undefined {
   return candidates[0]?.file;
 }
 
+export function requireLatestEventFile(workspace: string, context = "workspace"): string {
+  const eventFile = latestEventFile(workspace);
+  if (!eventFile) {
+    throw new Error(`Expected persisted event file for ${context}.`);
+  }
+  return eventFile;
+}
+
 export function parseEventFile(
   filePath: string,
   options?: { strict?: boolean },
@@ -183,6 +191,14 @@ export function findFinalBundle(lines: unknown[]): BrewvaEventBundle | undefined
     return row as BrewvaEventBundle;
   }
   return undefined;
+}
+
+export function requireFinalBundle(lines: unknown[], context = "stdout"): BrewvaEventBundle {
+  const bundle = findFinalBundle(lines);
+  if (!bundle) {
+    throw new Error(`Expected final brewva_event_bundle in ${context}.`);
+  }
+  return bundle;
 }
 
 export function countEventType(events: Array<{ type?: string }>, eventType: string): number {

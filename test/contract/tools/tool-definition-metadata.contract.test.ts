@@ -6,6 +6,7 @@ import {
   getBrewvaToolMetadata,
   getBrewvaToolSurface,
 } from "@brewva/brewva-tools";
+import { requireDefined } from "../../helpers/assertions.js";
 
 describe("managed Brewva tool definition metadata", () => {
   test("default Brewva tool bundle attaches surface and governance metadata", () => {
@@ -13,11 +14,26 @@ describe("managed Brewva tool definition metadata", () => {
     const tools = buildBrewvaTools({ runtime });
 
     for (const tool of tools) {
-      const metadata = getBrewvaToolMetadata(tool);
-      expect(metadata, `missing metadata for ${tool.name}`).toBeDefined();
-      expect(metadata?.surface).toBe(getBrewvaToolSurface(tool.name));
-      expect(metadata?.governance).toEqual(TOOL_GOVERNANCE_BY_NAME[tool.name]);
-      expect(getExactToolGovernanceDescriptor(tool.name)).toEqual(metadata?.governance);
+      const metadata = requireDefined(
+        getBrewvaToolMetadata(tool),
+        `missing metadata for ${tool.name}`,
+      );
+      const expectedSurface = requireDefined(
+        getBrewvaToolSurface(tool.name),
+        `missing tool surface for ${tool.name}`,
+      );
+      const expectedGovernance = requireDefined(
+        TOOL_GOVERNANCE_BY_NAME[tool.name],
+        `missing governance metadata for ${tool.name}`,
+      );
+      expect(metadata.surface).toBe(expectedSurface);
+      expect(metadata.governance).toEqual(expectedGovernance);
+      expect(
+        requireDefined(
+          getExactToolGovernanceDescriptor(tool.name),
+          `missing exact governance descriptor for ${tool.name}`,
+        ),
+      ).toEqual(metadata.governance);
     }
   });
 
@@ -35,11 +51,26 @@ describe("managed Brewva tool definition metadata", () => {
     });
 
     for (const tool of tools) {
-      const metadata = getBrewvaToolMetadata(tool);
-      expect(metadata, `missing metadata for ${tool.name}`).toBeDefined();
-      expect(metadata?.surface).toBe(getBrewvaToolSurface(tool.name));
-      expect(metadata?.governance).toEqual(TOOL_GOVERNANCE_BY_NAME[tool.name]);
-      expect(getExactToolGovernanceDescriptor(tool.name)).toEqual(metadata?.governance);
+      const metadata = requireDefined(
+        getBrewvaToolMetadata(tool),
+        `missing metadata for ${tool.name}`,
+      );
+      const expectedSurface = requireDefined(
+        getBrewvaToolSurface(tool.name),
+        `missing tool surface for ${tool.name}`,
+      );
+      const expectedGovernance = requireDefined(
+        TOOL_GOVERNANCE_BY_NAME[tool.name],
+        `missing governance metadata for ${tool.name}`,
+      );
+      expect(metadata.surface).toBe(expectedSurface);
+      expect(metadata.governance).toEqual(expectedGovernance);
+      expect(
+        requireDefined(
+          getExactToolGovernanceDescriptor(tool.name),
+          `missing exact governance descriptor for ${tool.name}`,
+        ),
+      ).toEqual(metadata.governance);
     }
   });
 });

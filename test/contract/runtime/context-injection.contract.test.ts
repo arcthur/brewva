@@ -144,7 +144,7 @@ describe("Context injection collector", () => {
     expect(plan.entries).toHaveLength(1);
     expect(plan.entries[0]?.id).toBe("large");
     expect(plan.entries[0]?.truncated).toBe(true);
-    expect(plan.entries.some((entry) => entry.id === "small")).toBe(false);
+    expect(plan.entries.map((entry) => entry.id)).not.toContain("small");
   });
 
   test("accounts for entry separators when planning token budget", () => {

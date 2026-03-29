@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import { requireNonEmptyString } from "../../helpers/assertions.js";
 import { assertCliSuccess, runCli } from "../../helpers/cli.js";
 import { writeMinimalConfig } from "../../helpers/config.js";
-import { isRecord, latestEventFile, parseEventFile, parseJsonLines } from "../../helpers/events.js";
+import {
+  isRecord,
+  parseEventFile,
+  parseJsonLines,
+  requireLatestEventFile,
+} from "../../helpers/events.js";
 import { startGatewayDaemonHarness } from "../../helpers/gateway.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -51,14 +57,14 @@ describe("cli contract: gateway-backed json replay", () => {
       );
       assertCliSuccess(run, "system-json-run");
 
-      const eventFile = latestEventFile(workspace);
-      expect(eventFile).toBeDefined();
-      const persistedEvents = parseEventFile(eventFile!, { strict: true });
-      const sessionId = persistedEvents.find(
-        (event) => typeof event.sessionId === "string" && event.sessionId.trim().length > 0,
-      )?.sessionId;
-      expect(typeof sessionId).toBe("string");
-      expect((sessionId as string).length).toBeGreaterThan(0);
+      const eventFile = requireLatestEventFile(workspace, "gateway-backed json replay");
+      const persistedEvents = parseEventFile(eventFile, { strict: true });
+      const sessionId = requireNonEmptyString(
+        persistedEvents.find(
+          (event) => typeof event.sessionId === "string" && event.sessionId.trim().length > 0,
+        )?.sessionId,
+        "Expected persisted sessionId for replay.",
+      );
 
       const replay = await runCli(workspace, [
         "--cwd",
@@ -69,7 +75,7 @@ describe("cli contract: gateway-backed json replay", () => {
         "--mode",
         "json",
         "--session",
-        sessionId as string,
+        sessionId,
       ]);
       assertCliSuccess(replay, "system-json-replay");
 
@@ -78,9 +84,7 @@ describe("cli contract: gateway-backed json replay", () => {
       );
       expect(replayEvents.length).toBeGreaterThan(0);
       expect(new Set(replayEvents.map((event) => event.type))).toContain("agent_end");
-      expect(new Set(replayEvents.map((event) => event.sessionId))).toEqual(
-        new Set([sessionId as string]),
-      );
+      expect(new Set(replayEvents.map((event) => event.sessionId))).toEqual(new Set([sessionId]));
     } finally {
       await harness.dispose();
       cleanupTestWorkspace(workspace);

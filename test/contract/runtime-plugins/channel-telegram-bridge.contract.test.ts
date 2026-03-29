@@ -117,7 +117,7 @@ describe("runtime telegram channel bridge helper", () => {
 
     expect(inboundTurns).toHaveLength(1);
     expect(inboundTurns[0]?.kind).toBe("user");
-    expect(events.some((entry) => entry.type === "channel_turn_ingested")).toBe(true);
+    expect(events.map((entry) => entry.type)).toContain("channel_turn_ingested");
   });
 
   test("given outbound assistant turn, when bridge sends telegram message, then emitted telemetry is recorded", async () => {
@@ -159,6 +159,6 @@ describe("runtime telegram channel bridge helper", () => {
     const result = await bridge.sendTurn(OUTBOUND_TURN);
 
     expect(result.providerMessageId).toBe("99");
-    expect(events.some((entry) => entry.type === "channel_turn_emitted")).toBe(true);
+    expect(events.map((entry) => entry.type)).toContain("channel_turn_emitted");
   });
 });

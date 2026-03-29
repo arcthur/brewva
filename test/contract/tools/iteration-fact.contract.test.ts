@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime, buildScheduleIntentFiredEvent } from "@brewva/brewva-runtime";
 import { createIterationFactTool } from "@brewva/brewva-tools";
+import { requireNonEmptyString } from "../../helpers/assertions.js";
 import { extractTextContent, mergeContext } from "./tools-flow.helpers.js";
 
 describe("iteration_fact contract", () => {
@@ -52,8 +53,8 @@ describe("iteration_fact contract", () => {
 
     expect(extractTextContent(metricResult)).toContain("Metric observation recorded");
     expect(extractTextContent(guardResult)).toContain("Guard result recorded");
-    expect(metricEventId).toBeDefined();
-    expect(guardEventId).toBeDefined();
+    requireNonEmptyString(metricEventId, "missing metric event id");
+    requireNonEmptyString(guardEventId, "missing guard event id");
 
     const listResult = await tool.execute(
       "tc-iteration-list",

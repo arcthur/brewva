@@ -7,6 +7,7 @@ import {
   SessionBackendStateError,
   SessionSupervisor,
 } from "@brewva/brewva-gateway";
+import { requireDefined } from "../../helpers/assertions.js";
 
 interface SentPromptMessage {
   kind: "send";
@@ -289,11 +290,7 @@ describe("session supervisor safeguards", () => {
         activeTurnId: "turn-1",
       });
 
-      const firstMessage = sentMessages[0];
-      expect(firstMessage).toBeDefined();
-      if (!firstMessage) {
-        throw new Error("expected first worker message");
-      }
+      const firstMessage = requireDefined(sentMessages[0], "expected first worker message");
 
       supervisor.testHooks.dispatchWorkerMessage("queued-session", {
         kind: "result",
@@ -333,11 +330,7 @@ describe("session supervisor safeguards", () => {
         activeTurnId: "turn-2",
       });
 
-      const secondMessage = sentMessages[1];
-      expect(secondMessage).toBeDefined();
-      if (!secondMessage) {
-        throw new Error("expected second worker message");
-      }
+      const secondMessage = requireDefined(sentMessages[1], "expected second worker message");
 
       supervisor.testHooks.dispatchWorkerMessage("queued-session", {
         kind: "result",
@@ -405,9 +398,9 @@ describe("session supervisor safeguards", () => {
         source: "heartbeat",
       });
 
-      expect(sentMessage).toBeDefined();
-      expect(sentMessage?.kind).toBe("send");
-      expect(sentMessage?.payload.trigger).toBeUndefined();
+      const heartbeatMessage = requireDefined(sentMessage, "expected heartbeat worker message");
+      expect(heartbeatMessage.kind).toBe("send");
+      expect(heartbeatMessage.payload.trigger).toBeUndefined();
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

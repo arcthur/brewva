@@ -6,6 +6,7 @@ import {
   type TelegramUpdate,
 } from "@brewva/brewva-channels-telegram";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
+import { requireArray, requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
 
 describe("channel telegram telegram-ui rendering", () => {
   test("renders telegram-ui blocks from assistant text as inline callbacks", () => {
@@ -48,34 +49,43 @@ describe("channel telegram telegram-ui rendering", () => {
       inlineApproval: true,
       callbackSecret: "callback-secret",
     });
-    const first = requests[0];
-    const firstText = typeof first?.params.text === "string" ? first.params.text : "";
-    expect(first?.method).toBe("sendMessage");
-    expect(typeof first?.params.reply_markup).toBe("object");
+    const first = requireDefined(requests[0], "Expected first Telegram request.");
+    const firstText = typeof first.params.text === "string" ? first.params.text : "";
+    expect(first.method).toBe("sendMessage");
+    const replyMarkup = requireDefined(
+      first.params.reply_markup as {
+        inline_keyboard?: Array<Array<{ callback_data?: string }>>;
+      },
+      "Expected inline keyboard reply markup.",
+    );
     expect(firstText).toContain("Please choose deployment action.");
     expect(firstText).not.toContain("telegram-ui");
-    const inlineKeyboard = (
-      first?.params.reply_markup as {
-        inline_keyboard?: Array<Array<{ callback_data?: string }>>;
-      }
-    )?.inline_keyboard;
+    const inlineKeyboard = requireArray<Array<{ callback_data?: string }>>(
+      replyMarkup.inline_keyboard,
+      "Expected inline keyboard reply markup.",
+    );
     expect(inlineKeyboard).toHaveLength(1);
-    expect(inlineKeyboard?.[0]).toHaveLength(2);
+    expect(inlineKeyboard[0]).toHaveLength(2);
 
-    const callbackData = (inlineKeyboard?.[0]?.[0]?.callback_data ?? "").toString();
-    const decoded = decodeTelegramApprovalCallback(callbackData, "callback-secret", {
-      context: "12345",
-    });
-    expect(decoded?.actionId).toBe("confirm");
-    expect(typeof decoded?.requestId).toBe("string");
-    expect((decoded?.requestId ?? "").length).toBeGreaterThan(0);
+    const callbackData = (inlineKeyboard[0]?.[0]?.callback_data ?? "").toString();
+    const decoded = requireDefined(
+      decodeTelegramApprovalCallback(callbackData, "callback-secret", {
+        context: "12345",
+      }),
+      "Expected decoded confirm callback payload.",
+    );
+    expect(decoded.actionId).toBe("confirm");
+    const requestId = requireNonEmptyString(decoded.requestId, "Expected decoded requestId.");
 
     const cancelCallbackData = (inlineKeyboard?.[0]?.[1]?.callback_data ?? "").toString();
-    const cancelDecoded = decodeTelegramApprovalCallback(cancelCallbackData, "callback-secret", {
-      context: "12345",
-    });
-    expect(cancelDecoded?.actionId).toBe("cancel");
-    expect(cancelDecoded?.requestId).toBe(decoded?.requestId);
+    const cancelDecoded = requireDefined(
+      decodeTelegramApprovalCallback(cancelCallbackData, "callback-secret", {
+        context: "12345",
+      }),
+      "Expected decoded cancel callback payload.",
+    );
+    expect(cancelDecoded.actionId).toBe("cancel");
+    expect(cancelDecoded.requestId).toBe(requestId);
   });
 
   test("keeps distinct callbacks when long action ids share a prefix", () => {
@@ -115,32 +125,50 @@ describe("channel telegram telegram-ui rendering", () => {
       callbackSecret: "callback-secret",
     });
 
-    const inlineKeyboard = (
-      requests[0]?.params.reply_markup as {
+    const first = requireDefined(
+      requests[0],
+      "Expected first Telegram request for long action ids.",
+    );
+    const replyMarkup = requireDefined(
+      first.params.reply_markup as {
         inline_keyboard?: Array<Array<{ callback_data?: string }>>;
-      }
-    )?.inline_keyboard;
+      },
+      "Expected inline keyboard for long action ids.",
+    );
+    const inlineKeyboard = requireArray<Array<{ callback_data?: string }>>(
+      replyMarkup.inline_keyboard,
+      "Expected inline keyboard for long action ids.",
+    );
     expect(inlineKeyboard).toHaveLength(1);
-    expect(inlineKeyboard?.[0]).toHaveLength(2);
+    expect(inlineKeyboard[0]).toHaveLength(2);
 
-    const firstDecoded = decodeTelegramApprovalCallback(
-      (inlineKeyboard?.[0]?.[0]?.callback_data ?? "").toString(),
-      "callback-secret",
-      {
-        context: "12345",
-      },
+    const firstDecoded = requireDefined(
+      decodeTelegramApprovalCallback(
+        (inlineKeyboard[0]?.[0]?.callback_data ?? "").toString(),
+        "callback-secret",
+        {
+          context: "12345",
+        },
+      ),
+      "Expected first decoded long-action callback.",
     );
-    const secondDecoded = decodeTelegramApprovalCallback(
-      (inlineKeyboard?.[0]?.[1]?.callback_data ?? "").toString(),
-      "callback-secret",
-      {
-        context: "12345",
-      },
+    const secondDecoded = requireDefined(
+      decodeTelegramApprovalCallback(
+        (inlineKeyboard[0]?.[1]?.callback_data ?? "").toString(),
+        "callback-secret",
+        {
+          context: "12345",
+        },
+      ),
+      "Expected second decoded long-action callback.",
     );
 
-    expect(firstDecoded?.actionId).toBeTruthy();
-    expect(secondDecoded?.actionId).toBeTruthy();
-    expect(firstDecoded?.actionId).not.toBe(secondDecoded?.actionId);
+    const firstActionId = requireNonEmptyString(firstDecoded.actionId, "Expected first actionId.");
+    const secondActionId = requireNonEmptyString(
+      secondDecoded.actionId,
+      "Expected second actionId.",
+    );
+    expect(firstActionId).not.toBe(secondActionId);
   });
 
   test("keeps explicit long request ids distinct for inline callback routing", () => {
@@ -276,15 +304,18 @@ describe("channel telegram telegram-ui rendering", () => {
         data: callbackData,
       },
     };
-    const callbackTurn = projectTelegramUpdateToTurn(callbackUpdate, {
-      callbackSecret: secret,
-    });
-
-    expect(callbackTurn).toBeDefined();
-    if (!callbackTurn) return;
+    const callbackTurn = requireDefined(
+      projectTelegramUpdateToTurn(callbackUpdate, {
+        callbackSecret: secret,
+      }),
+      "Expected callback turn to be projected.",
+    );
 
     expect(callbackTurn.kind).toBe("approval");
-    expect(callbackTurn.approval?.requestId).toBeTruthy();
+    requireNonEmptyString(
+      callbackTurn.approval?.requestId,
+      "Expected approval requestId on callback turn.",
+    );
 
     const firstPart = callbackTurn.parts[0];
     expect(firstPart?.type).toBe("text");
@@ -462,14 +493,12 @@ next
     });
     const messages = requests.filter((entry) => entry.method === "sendMessage");
     expect(messages.length).toBeGreaterThan(0);
-    expect(messages.some((entry) => entry.params.reply_markup !== undefined)).toBe(false);
+    expect(messages.filter((entry) => entry.params.reply_markup !== undefined)).toHaveLength(0);
     expect(
-      messages.some(
-        (entry) =>
-          typeof entry.params.text === "string" &&
-          entry.params.text.includes("Reply with: confirm or cancel"),
-      ),
-    ).toBe(true);
+      messages
+        .map((entry) => (typeof entry.params.text === "string" ? entry.params.text : ""))
+        .join("\n"),
+    ).toContain("Reply with: confirm or cancel");
   });
 
   test("inline callbacks encode request ids without durable routing state", () => {
