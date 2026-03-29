@@ -1,32 +1,22 @@
-import type {
-  BrewvaRuntime,
-  ContextCompactionGateStatus,
-  ContextInjectionEntry,
-} from "@brewva/brewva-runtime";
-import { CONTEXT_COMPOSED_EVENT_TYPE, coerceContextBudgetUsage } from "@brewva/brewva-runtime";
+import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { coerceContextBudgetUsage } from "@brewva/brewva-runtime";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import type { HostedDelegationStore } from "../subagents/delegation-store.js";
-import { prepareContextComposerSupport } from "./context-composer-support.js";
 import {
-  type ContextComposerRuntime,
-  buildContextComposedEventPayload,
-  composeContextBlocks,
-  resolveSupplementalContextBlocks,
-} from "./context-composer.js";
-import { applyContextContract } from "./context-contract.js";
+  createHostedCompactionController,
+  type HostedManualCompact,
+} from "./hosted-compaction-controller.js";
 import {
-  extractCompactionEntryId,
-  extractCompactionSummary,
-  resolveInjectionScopeId,
-} from "./context-shared.js";
-import { appendSupplementalContextBlocks } from "./context-supplemental.js";
-import { clearRuntimeTurnClock, observeRuntimeTurnStart } from "./runtime-turn-clock.js";
-
-const CONTEXT_INJECTION_MESSAGE_TYPE = "brewva-context-injection";
+  createHostedContextInjectionPipeline,
+  type HostedContextInjectionResult,
+} from "./hosted-context-injection-pipeline.js";
+import { createHostedContextTelemetry } from "./hosted-context-telemetry.js";
+import { createRuntimeTurnClockStore, type RuntimeTurnClockStore } from "./runtime-turn-clock.js";
 
 export interface ContextTransformOptions {
   autoCompactionWatchdogMs?: number;
   delegationStore?: HostedDelegationStore;
+  turnClock?: RuntimeTurnClockStore;
 }
 
 export interface ContextTransformLifecycle {
@@ -34,134 +24,49 @@ export interface ContextTransformLifecycle {
   context: (event: unknown, ctx: unknown) => undefined;
   sessionCompact: (event: unknown, ctx: unknown) => undefined;
   sessionShutdown: (event: unknown, ctx: unknown) => undefined;
-  beforeAgentStart: (event: unknown, ctx: unknown) => Promise<Record<string, unknown>>;
+  beforeAgentStart: (event: unknown, ctx: unknown) => Promise<HostedContextInjectionResult>;
 }
 
-interface CompactionGateState {
-  turnIndex: number;
-  lastRuntimeGateRequired: boolean;
-  autoCompactionInFlight: boolean;
-  autoCompactionWatchdog: ReturnType<typeof setTimeout> | null;
-  deferredAutoCompactionReason: string | null;
+interface RuntimePluginSessionManager {
+  getSessionId: () => string;
+  getLeafId?: () => string | null | undefined;
 }
 
-const DEFAULT_AUTO_COMPACTION_WATCHDOG_MS = 30_000;
-const AUTO_COMPACTION_WATCHDOG_ERROR = "auto_compaction_watchdog_timeout";
+interface RuntimePluginLifecycleContext {
+  sessionManager: RuntimePluginSessionManager;
+  hasUI?: boolean;
+  isIdle?: () => boolean;
+  getContextUsage?: () => unknown;
+  compact?: HostedManualCompact;
+}
 
-function getOrCreateGateState(
-  store: Map<string, CompactionGateState>,
-  sessionId: string,
-): CompactionGateState {
-  const existing = store.get(sessionId);
-  if (existing) return existing;
-  const created: CompactionGateState = {
-    turnIndex: 0,
-    lastRuntimeGateRequired: false,
-    autoCompactionInFlight: false,
-    autoCompactionWatchdog: null,
-    deferredAutoCompactionReason: null,
+interface TurnStartEvent {
+  turnIndex?: unknown;
+  timestamp?: unknown;
+}
+
+interface SessionCompactEvent {
+  compactionEntry?: {
+    id?: unknown;
+    summary?: unknown;
+    content?: unknown;
+    text?: unknown;
   };
-  store.set(sessionId, created);
-  return created;
+  fromExtension?: unknown;
 }
 
-function clearAutoCompactionState(state: CompactionGateState): void {
-  state.autoCompactionInFlight = false;
-  state.deferredAutoCompactionReason = null;
-  if (state.autoCompactionWatchdog) {
-    clearTimeout(state.autoCompactionWatchdog);
-    state.autoCompactionWatchdog = null;
-  }
+interface BeforeAgentStartEvent {
+  prompt?: unknown;
+  systemPrompt?: unknown;
 }
 
-function emitRuntimeEvent(
-  runtime: BrewvaRuntime,
-  input: {
-    sessionId: string;
-    turn: number;
-    type: string;
-    payload: Record<string, unknown>;
-  },
-): void {
-  runtime.events.record({
-    sessionId: input.sessionId,
-    turn: input.turn,
-    type: input.type,
-    payload: input.payload,
-  });
+function asLifecycleContext(ctx: unknown): RuntimePluginLifecycleContext {
+  return ctx as RuntimePluginLifecycleContext;
 }
 
-function emitContextComposedEvent(
-  runtime: BrewvaRuntime,
-  input: {
-    sessionId: string;
-    turn: number;
-    composed: ReturnType<typeof composeContextBlocks>;
-    injectionAccepted: boolean;
-  },
-): void {
-  emitRuntimeEvent(runtime, {
-    sessionId: input.sessionId,
-    turn: input.turn,
-    type: CONTEXT_COMPOSED_EVENT_TYPE,
-    payload: buildContextComposedEventPayload(input.composed, input.injectionAccepted),
-  });
-}
-
-function createContextComposerRuntime(
-  runtime: BrewvaRuntime,
-  delegationStore: HostedDelegationStore | undefined,
-): ContextComposerRuntime {
-  return {
-    events: runtime.events,
-    delegation: delegationStore
-      ? {
-          listRuns: (sessionId, query) => delegationStore.listRuns(sessionId, query),
-          listPendingOutcomes: (sessionId, query) =>
-            delegationStore.listPendingOutcomes(sessionId, query),
-        }
-      : undefined,
-  };
-}
-
-function markSurfacedDelegationOutcomes(
-  delegationStore: HostedDelegationStore | undefined,
-  input: {
-    sessionId: string;
-    turn: number;
-    runIds: readonly string[];
-  },
-): void {
-  delegationStore?.markSurfaced(input);
-}
-
-function normalizeRuntimeError(error: unknown): string {
-  if (error instanceof Error && error.message.trim().length > 0) return error.message.trim();
-  if (typeof error === "string" && error.trim().length > 0) return error.trim();
-  return "unknown_error";
-}
-
-async function resolveContextInjection(
-  runtime: BrewvaRuntime,
-  input: {
-    sessionId: string;
-    prompt: string;
-    usage: ReturnType<typeof coerceContextBudgetUsage>;
-    injectionScopeId?: string;
-  },
-): Promise<{
-  text: string;
-  entries: ContextInjectionEntry[];
-  accepted: boolean;
-  originalTokens: number;
-  finalTokens: number;
-  truncated: boolean;
-}> {
-  return runtime.context.buildInjection(
-    input.sessionId,
-    input.prompt,
-    input.usage,
-    input.injectionScopeId,
+function resolveUsage(ctx: RuntimePluginLifecycleContext) {
+  return coerceContextBudgetUsage(
+    typeof ctx.getContextUsage === "function" ? ctx.getContextUsage() : undefined,
   );
 }
 
@@ -170,455 +75,71 @@ export function createContextTransformLifecycle(
   runtime: BrewvaRuntime,
   options: ContextTransformOptions = {},
 ): ContextTransformLifecycle {
-  const gateStateBySession = new Map<string, CompactionGateState>();
-  const autoCompactionWatchdogMs = Math.max(
-    1,
-    Math.trunc(options.autoCompactionWatchdogMs ?? DEFAULT_AUTO_COMPACTION_WATCHDOG_MS),
+  const turnClock = options.turnClock ?? createRuntimeTurnClockStore();
+  const telemetry = createHostedContextTelemetry(runtime);
+  const compactionController = createHostedCompactionController(runtime, telemetry, turnClock, {
+    autoCompactionWatchdogMs: options.autoCompactionWatchdogMs,
+  });
+  const injectionPipeline = createHostedContextInjectionPipeline(
+    extensionApi,
+    runtime,
+    telemetry,
+    compactionController,
+    {
+      delegationStore: options.delegationStore,
+    },
   );
-  const contextComposerRuntime = createContextComposerRuntime(runtime, options.delegationStore);
 
   return {
     turnStart(event, ctx) {
-      const rawEvent = event as { turnIndex?: unknown; timestamp?: unknown };
-      const sessionId = (
-        ctx as { sessionManager: { getSessionId: () => string } }
-      ).sessionManager.getSessionId();
-      const state = getOrCreateGateState(gateStateBySession, sessionId);
-      const runtimeTurn = observeRuntimeTurnStart(
-        sessionId,
-        Number(rawEvent.turnIndex ?? 0),
-        Number(rawEvent.timestamp ?? Date.now()),
-      );
-      state.turnIndex = runtimeTurn;
-      runtime.context.onTurnStart(sessionId, runtimeTurn);
+      const lifecycleContext = asLifecycleContext(ctx);
+      const turnEvent = event as TurnStartEvent;
+      compactionController.turnStart({
+        sessionId: lifecycleContext.sessionManager.getSessionId(),
+        turnIndex: Number(turnEvent.turnIndex ?? 0),
+        timestamp: Number(turnEvent.timestamp ?? Date.now()),
+      });
       return undefined;
     },
     context(_event, ctx) {
-      const sessionId = (
-        ctx as {
-          sessionManager: { getSessionId: () => string };
-          hasUI?: boolean;
-          isIdle?: () => boolean;
-          getContextUsage?: () => unknown;
-          compact?: (options: Record<string, unknown>) => void;
-        }
-      ).sessionManager.getSessionId();
-      const state = getOrCreateGateState(gateStateBySession, sessionId);
-      const usage = coerceContextBudgetUsage(
-        typeof (ctx as { getContextUsage?: () => unknown }).getContextUsage === "function"
-          ? (ctx as { getContextUsage: () => unknown }).getContextUsage()
-          : undefined,
-      );
-      runtime.context.observeUsage(sessionId, usage);
-
-      if (!runtime.context.checkAndRequestCompaction(sessionId, usage)) {
-        return undefined;
-      }
-
-      if ((ctx as { hasUI?: boolean }).hasUI) {
-        const idle =
-          typeof (ctx as { isIdle?: () => boolean }).isIdle === "function"
-            ? (ctx as { isIdle: () => boolean }).isIdle()
-            : false;
-        if (!idle) {
-          const pendingReason =
-            runtime.context.getPendingCompactionReason(sessionId) ?? "usage_threshold";
-          if (state.deferredAutoCompactionReason === pendingReason) {
-            return undefined;
-          }
-          state.deferredAutoCompactionReason = pendingReason;
-          emitRuntimeEvent(runtime, {
-            sessionId,
-            turn: state.turnIndex,
-            type: "context_compaction_skipped",
-            payload: {
-              reason: "agent_active_manual_compaction_unsafe",
-            },
-          });
-          return undefined;
-        }
-        state.deferredAutoCompactionReason = null;
-
-        if (state.autoCompactionInFlight) {
-          emitRuntimeEvent(runtime, {
-            sessionId,
-            turn: state.turnIndex,
-            type: "context_compaction_skipped",
-            payload: {
-              reason: "auto_compaction_in_flight",
-            },
-          });
-          return undefined;
-        }
-
-        const pendingReason = runtime.context.getPendingCompactionReason(sessionId);
-        const compactionReason = pendingReason ?? "usage_threshold";
-        state.autoCompactionInFlight = true;
-        if (state.autoCompactionWatchdog) {
-          clearTimeout(state.autoCompactionWatchdog);
-        }
-        state.autoCompactionWatchdog = setTimeout(() => {
-          if (!state.autoCompactionInFlight) return;
-          clearAutoCompactionState(state);
-          emitRuntimeEvent(runtime, {
-            sessionId,
-            turn: state.turnIndex,
-            type: "context_compaction_auto_failed",
-            payload: {
-              reason: compactionReason,
-              error: AUTO_COMPACTION_WATCHDOG_ERROR,
-              watchdogMs: autoCompactionWatchdogMs,
-            },
-          });
-        }, autoCompactionWatchdogMs);
-
-        emitRuntimeEvent(runtime, {
-          sessionId,
-          turn: state.turnIndex,
-          type: "context_compaction_auto_requested",
-          payload: {
-            reason: compactionReason,
-            usagePercent: runtime.context.getUsageRatio(usage),
-            tokens: usage?.tokens ?? null,
-          },
-        });
-
-        const clearInFlight = () => {
-          clearAutoCompactionState(state);
-        };
-        const recordAutoFailure = (error: unknown) => {
-          emitRuntimeEvent(runtime, {
-            sessionId,
-            turn: state.turnIndex,
-            type: "context_compaction_auto_failed",
-            payload: {
-              reason: compactionReason,
-              error: normalizeRuntimeError(error),
-            },
-          });
-        };
-
-        try {
-          (ctx as { compact: (options: Record<string, unknown>) => void }).compact({
-            customInstructions: runtime.context.getCompactionInstructions(),
-            onComplete: () => {
-              clearInFlight();
-              emitRuntimeEvent(runtime, {
-                sessionId,
-                turn: state.turnIndex,
-                type: "context_compaction_auto_completed",
-                payload: {
-                  reason: compactionReason,
-                },
-              });
-            },
-            onError: (error: unknown) => {
-              clearInFlight();
-              recordAutoFailure(error);
-            },
-          });
-        } catch (error) {
-          clearInFlight();
-          recordAutoFailure(error);
-        }
-
-        return undefined;
-      }
-
-      emitRuntimeEvent(runtime, {
-        sessionId,
-        turn: state.turnIndex,
-        type: "context_compaction_skipped",
-        payload: {
-          reason: "non_interactive_mode",
-        },
+      const lifecycleContext = asLifecycleContext(ctx);
+      compactionController.context({
+        sessionId: lifecycleContext.sessionManager.getSessionId(),
+        usage: resolveUsage(lifecycleContext),
+        hasUI: lifecycleContext.hasUI === true,
+        idle: typeof lifecycleContext.isIdle === "function" ? lifecycleContext.isIdle() : false,
+        compact: lifecycleContext.compact,
       });
-
       return undefined;
     },
     sessionCompact(event, ctx) {
-      const sessionId = (
-        ctx as { sessionManager: { getSessionId: () => string }; getContextUsage?: () => unknown }
-      ).sessionManager.getSessionId();
-      const state = getOrCreateGateState(gateStateBySession, sessionId);
-      const usage = coerceContextBudgetUsage(
-        typeof (ctx as { getContextUsage?: () => unknown }).getContextUsage === "function"
-          ? (ctx as { getContextUsage: () => unknown }).getContextUsage()
-          : undefined,
-      );
-      const wasGated = state.lastRuntimeGateRequired;
-      state.lastRuntimeGateRequired = false;
-      clearAutoCompactionState(state);
-
-      runtime.context.markCompacted(sessionId, {
-        fromTokens: null,
-        toTokens: usage?.tokens ?? null,
-        summary: extractCompactionSummary(event as { compactionEntry?: unknown }),
-        entryId: extractCompactionEntryId(event as { compactionEntry?: unknown }),
+      const lifecycleContext = asLifecycleContext(ctx);
+      const compactEvent = event as SessionCompactEvent;
+      compactionController.sessionCompact({
+        sessionId: lifecycleContext.sessionManager.getSessionId(),
+        usage: resolveUsage(lifecycleContext),
+        compactionEntry: compactEvent.compactionEntry,
+        fromExtension: compactEvent.fromExtension,
       });
-      const compactionEntry = (event as { compactionEntry?: { id?: unknown } }).compactionEntry;
-      emitRuntimeEvent(runtime, {
-        sessionId,
-        turn: state.turnIndex,
-        type: "session_compact",
-        payload: {
-          entryId: typeof compactionEntry?.id === "string" ? compactionEntry.id : null,
-          fromExtension:
-            (event as { fromExtension?: unknown }).fromExtension === true ? true : undefined,
-        },
-      });
-
-      if (wasGated) {
-        emitRuntimeEvent(runtime, {
-          sessionId,
-          turn: state.turnIndex,
-          type: "context_compaction_gate_cleared",
-          payload: {
-            reason: "session_compact_performed",
-          },
-        });
-      }
       return undefined;
     },
     sessionShutdown(_event, ctx) {
-      const sessionId = (
-        ctx as { sessionManager: { getSessionId: () => string } }
-      ).sessionManager.getSessionId();
-      const state = gateStateBySession.get(sessionId);
-      if (state) {
-        clearAutoCompactionState(state);
-      }
-      gateStateBySession.delete(sessionId);
-      clearRuntimeTurnClock(sessionId);
+      const lifecycleContext = asLifecycleContext(ctx);
+      compactionController.sessionShutdown({
+        sessionId: lifecycleContext.sessionManager.getSessionId(),
+      });
       return undefined;
     },
     async beforeAgentStart(event, ctx) {
-      const rawEvent = event as { prompt?: unknown; systemPrompt?: unknown };
-      const sessionId = (
-        ctx as { sessionManager: { getSessionId: () => string }; getContextUsage?: () => unknown }
-      ).sessionManager.getSessionId();
-      const state = getOrCreateGateState(gateStateBySession, sessionId);
-      const sessionManager = (ctx as { sessionManager: { getSessionId: () => string } })
-        .sessionManager as Parameters<typeof resolveInjectionScopeId>[0];
-      const injectionScopeId = resolveInjectionScopeId(sessionManager);
-      const usage = coerceContextBudgetUsage(
-        typeof (ctx as { getContextUsage?: () => unknown }).getContextUsage === "function"
-          ? (ctx as { getContextUsage: () => unknown }).getContextUsage()
-          : undefined,
-      );
-      runtime.context.observeUsage(sessionId, usage);
-      const emitGateEvents = (
-        gateStatus: ContextCompactionGateStatus,
-        reason: "hard_limit",
-      ): void => {
-        emitRuntimeEvent(runtime, {
-          sessionId,
-          turn: state.turnIndex,
-          type: "context_compaction_gate_armed",
-          payload: {
-            reason,
-            usagePercent: gateStatus.pressure.usageRatio,
-            hardLimitPercent: gateStatus.pressure.hardLimitRatio,
-          },
-        });
-        emitRuntimeEvent(runtime, {
-          sessionId,
-          turn: state.turnIndex,
-          type: "critical_without_compact",
-          payload: {
-            reason,
-            usagePercent: gateStatus.pressure.usageRatio,
-            hardLimitPercent: gateStatus.pressure.hardLimitRatio,
-            contextPressure: gateStatus.pressure.level,
-            requiredTool: "session_compact",
-          },
-        });
-      };
-
-      const prompt = typeof rawEvent.prompt === "string" ? rawEvent.prompt : "";
-      let { gateStatus, pendingCompactionReason, capabilityView } = prepareContextComposerSupport({
-        runtime,
-        extensionApi,
-        sessionId,
-        prompt,
-        usage,
+      const lifecycleContext = asLifecycleContext(ctx);
+      const startEvent = event as BeforeAgentStartEvent;
+      return injectionPipeline.beforeAgentStart({
+        sessionId: lifecycleContext.sessionManager.getSessionId(),
+        sessionManager: lifecycleContext.sessionManager,
+        prompt: typeof startEvent.prompt === "string" ? startEvent.prompt : "",
+        systemPrompt: startEvent.systemPrompt,
+        usage: resolveUsage(lifecycleContext),
       });
-      if (gateStatus.required) {
-        emitGateEvents(gateStatus, "hard_limit");
-      }
-      const initialSupplementalBlocks = appendSupplementalContextBlocks(runtime, {
-        sessionId,
-        usage,
-        injectionScopeId,
-        blocks: [
-          ...resolveSupplementalContextBlocks({
-            runtime: contextComposerRuntime,
-            sessionId,
-            gateStatus,
-            pendingCompactionReason,
-            capabilityView,
-          }),
-        ],
-      });
-      const systemPromptWithContract = applyContextContract(
-        rawEvent.systemPrompt,
-        runtime,
-        sessionId,
-        usage,
-      );
-      const originalPrompt = prompt;
-
-      if (gateStatus.required) {
-        state.lastRuntimeGateRequired = true;
-        const composed = composeContextBlocks({
-          runtime: contextComposerRuntime,
-          sessionId,
-          gateStatus,
-          pendingCompactionReason,
-          capabilityView,
-          admittedEntries: [],
-          injectionAccepted: false,
-          supplementalBlocks: initialSupplementalBlocks,
-          includeDefaultSupplementalBlocks: false,
-        });
-        emitContextComposedEvent(runtime, {
-          sessionId,
-          turn: state.turnIndex,
-          composed,
-          injectionAccepted: false,
-        });
-        markSurfacedDelegationOutcomes(options.delegationStore, {
-          sessionId,
-          turn: state.turnIndex,
-          runIds: composed.surfacedDelegationRunIds,
-        });
-
-        return {
-          systemPrompt: systemPromptWithContract,
-          message: {
-            customType: CONTEXT_INJECTION_MESSAGE_TYPE,
-            content: composed.content,
-            display: false,
-            details: {
-              originalTokens: 0,
-              finalTokens: 0,
-              truncated: false,
-              gateRequired: true,
-              contextComposition: {
-                narrativeRatio: composed.metrics.narrativeRatio,
-                narrativeTokens: composed.metrics.narrativeTokens,
-                constraintTokens: composed.metrics.constraintTokens,
-                diagnosticTokens: composed.metrics.diagnosticTokens,
-              },
-              capabilityView: {
-                requested: capabilityView.requested,
-                detailNames: capabilityView.details.map((detail) => detail.name),
-                missing: capabilityView.missing,
-              },
-            },
-          },
-        };
-      }
-
-      const injection = await resolveContextInjection(runtime, {
-        sessionId,
-        prompt: originalPrompt,
-        usage,
-        injectionScopeId,
-      });
-      const supportAfterInjection = prepareContextComposerSupport({
-        runtime,
-        extensionApi,
-        sessionId,
-        prompt: originalPrompt,
-        usage,
-      });
-      const gateStatusAfterInjection = supportAfterInjection.gateStatus;
-      if (!gateStatus.required && gateStatusAfterInjection.required) {
-        emitGateEvents(gateStatusAfterInjection, "hard_limit");
-      }
-      gateStatus = gateStatusAfterInjection;
-      pendingCompactionReason = supportAfterInjection.pendingCompactionReason;
-      capabilityView = supportAfterInjection.capabilityView;
-      state.lastRuntimeGateRequired = gateStatus.required;
-      const supplementalBlocks = appendSupplementalContextBlocks(runtime, {
-        sessionId,
-        usage,
-        injectionScopeId,
-        blocks: [
-          ...resolveSupplementalContextBlocks({
-            runtime: contextComposerRuntime,
-            sessionId,
-            gateStatus,
-            pendingCompactionReason,
-            capabilityView,
-          }),
-        ],
-      });
-
-      if (pendingCompactionReason && !gateStatus.required) {
-        emitRuntimeEvent(runtime, {
-          sessionId,
-          turn: state.turnIndex,
-          type: "context_compaction_advisory",
-          payload: {
-            reason: pendingCompactionReason,
-            usagePercent: gateStatus.pressure.usageRatio,
-            compactionThresholdPercent: gateStatus.pressure.compactionThresholdRatio,
-            hardLimitPercent: gateStatus.pressure.hardLimitRatio,
-            contextPressure: gateStatus.pressure.level,
-            requiredTool: "session_compact",
-          },
-        });
-      }
-      const composed = composeContextBlocks({
-        runtime: contextComposerRuntime,
-        sessionId,
-        gateStatus,
-        pendingCompactionReason,
-        capabilityView,
-        admittedEntries: injection.entries,
-        injectionAccepted: injection.accepted,
-        supplementalBlocks,
-        includeDefaultSupplementalBlocks: false,
-      });
-      emitContextComposedEvent(runtime, {
-        sessionId,
-        turn: state.turnIndex,
-        composed,
-        injectionAccepted: injection.accepted,
-      });
-      markSurfacedDelegationOutcomes(options.delegationStore, {
-        sessionId,
-        turn: state.turnIndex,
-        runIds: composed.surfacedDelegationRunIds,
-      });
-
-      return {
-        systemPrompt: systemPromptWithContract,
-        message: {
-          customType: CONTEXT_INJECTION_MESSAGE_TYPE,
-          content: composed.content,
-          display: false,
-          details: {
-            originalTokens: injection.originalTokens,
-            finalTokens: injection.finalTokens,
-            truncated: injection.truncated,
-            gateRequired: gateStatus.required,
-            contextComposition: {
-              narrativeRatio: composed.metrics.narrativeRatio,
-              narrativeTokens: composed.metrics.narrativeTokens,
-              constraintTokens: composed.metrics.constraintTokens,
-              diagnosticTokens: composed.metrics.diagnosticTokens,
-            },
-            capabilityView: {
-              requested: capabilityView.requested,
-              detailNames: capabilityView.details.map((detail) => detail.name),
-              missing: capabilityView.missing,
-            },
-          },
-        },
-      };
     },
   };
 }

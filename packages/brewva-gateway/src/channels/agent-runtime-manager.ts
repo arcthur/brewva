@@ -123,6 +123,16 @@ export class AgentRuntimeManager {
       .toSorted((a, b) => b.lastUsedAt - a.lastUsedAt || a.agentId.localeCompare(b.agentId));
   }
 
+  async createInspectionRuntime(requestedAgentId: string): Promise<BrewvaRuntime> {
+    const agentId = normalizeAgentId(requestedAgentId);
+    const existing = this.handles.get(agentId);
+    if (existing) {
+      existing.lastUsedAt = Date.now();
+      return existing.runtime;
+    }
+    return this.buildRuntime(agentId);
+  }
+
   async getOrCreateRuntime(requestedAgentId: string): Promise<BrewvaRuntime> {
     const agentId = normalizeAgentId(requestedAgentId);
     const existing = this.handles.get(agentId);
@@ -200,17 +210,7 @@ export class AgentRuntimeManager {
   private async createRuntime(agentId: string): Promise<AgentRuntimeHandle> {
     this.evictIdleRuntimes(Date.now());
     this.enforceCapacity();
-
-    const baseConfig = structuredClone(this.controllerRuntime.config);
-    const overlay = await loadAgentConfigOverlay(this.workspaceRoot, agentId);
-    const merged = deepMerge(baseConfig, overlay) as BrewvaConfig;
-    const config = forceNamespaceConfig(merged, agentId);
-    const runtime = new BrewvaRuntime({
-      cwd: this.controllerRuntime.cwd,
-      agentId,
-      config,
-      governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
-    });
+    const runtime = await this.buildRuntime(agentId);
     const now = Date.now();
     return {
       agentId,
@@ -219,6 +219,19 @@ export class AgentRuntimeManager {
       lastUsedAt: now,
       sessionRefs: 0,
     };
+  }
+
+  private async buildRuntime(agentId: string): Promise<BrewvaRuntime> {
+    const baseConfig = structuredClone(this.controllerRuntime.config);
+    const overlay = await loadAgentConfigOverlay(this.workspaceRoot, agentId);
+    const merged = deepMerge(baseConfig, overlay) as BrewvaConfig;
+    const config = forceNamespaceConfig(merged, agentId);
+    return new BrewvaRuntime({
+      cwd: this.controllerRuntime.cwd,
+      agentId,
+      config,
+      governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
+    });
   }
 
   private enforceCapacity(): void {

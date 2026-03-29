@@ -91,7 +91,22 @@ Flow:
 
 ## Code Pointers
 
-- Gateway channel host: `packages/brewva-gateway/src/channels/host.ts`
+- Channel composition shell: `packages/brewva-gateway/src/channels/host.ts`
+- Channel bootstrap / transport wiring: `packages/brewva-gateway/src/channels/channel-bootstrap.ts`
+- Session ownership / runtime reuse / conversation binding:
+  `packages/brewva-gateway/src/channels/channel-session-coordinator.ts`
+- Session query surfaces:
+  `packages/brewva-gateway/src/channels/channel-session-queries.ts`
+- Command execution layer:
+  `packages/brewva-gateway/src/channels/channel-control-router.ts`
+- Queueing / WAL / ingress dispatch:
+  `packages/brewva-gateway/src/channels/channel-turn-dispatcher.ts`
+- Prompt assembly + agent execution:
+  `packages/brewva-gateway/src/channels/channel-agent-dispatch.ts`
+- Controller replies + outbound delivery:
+  `packages/brewva-gateway/src/channels/channel-reply-writer.ts`
+- Host lifecycle / maintenance runner:
+  `packages/brewva-gateway/src/channels/channel-host-lifecycle.ts`
 - Runtime channel bridge contracts: `packages/brewva-runtime/src/channels/turn-bridge.ts`
 - Public import path for channel contracts: `@brewva/brewva-runtime/channels`
 - Runtime plugin bridge telemetry wrapper: `packages/brewva-gateway/src/runtime-plugins/channel-turn-bridge.ts`
