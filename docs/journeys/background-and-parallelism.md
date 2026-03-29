@@ -105,7 +105,7 @@ Note: use `runtime.tools.acquireParallelSlot(...)` to apply per-skill
   `packages/brewva-runtime/src/services/parallel.ts`
 - Parent-turn handoff surfacing:
   `packages/brewva-gateway/src/runtime-plugins/context-composer.ts`,
-  `packages/brewva-gateway/src/runtime-plugins/context-transform.ts`
+  `packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.ts`
 - Workflow status inspection:
   `packages/brewva-tools/src/workflow-status.ts`
 - Delegation read model:

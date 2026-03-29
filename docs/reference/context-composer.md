@@ -1,10 +1,11 @@
 # Reference: Context Composer
 
-Implementation entrypoints:
+Implementation anchors:
 
 - `packages/brewva-gateway/src/runtime-plugins/context-composer.ts`
-- `packages/brewva-gateway/src/runtime-plugins/context-transform.ts`
+- `packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.ts`
 - `packages/brewva-gateway/src/runtime-plugins/context-contract.ts`
+- `packages/brewva-gateway/src/runtime-plugins/context-transform.ts` (lifecycle shell only)
 
 ## Role
 

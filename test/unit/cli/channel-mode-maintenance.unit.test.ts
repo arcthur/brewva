@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createSerializedAsyncTaskRunner } from "../../../packages/brewva-gateway/src/channels/host.js";
+import { createSerializedAsyncTaskRunner } from "../../../packages/brewva-gateway/src/utils/serialized-async-task-runner.js";
 
 describe("channel mode maintenance runner", () => {
   test("skips overlapping ticks and allows the next tick after completion", async () => {

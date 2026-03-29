@@ -14,11 +14,12 @@ import {
 import type { ExtensionFactory as UpstreamExtensionFactory } from "@mariozechner/pi-coding-agent";
 import type { HostedDelegationStore } from "../subagents/delegation-store.js";
 import { createCompletionGuardLifecycle, registerCompletionGuard } from "./completion-guard.js";
-import { createContextTransformLifecycle, registerContextTransform } from "./context-transform.js";
+import { createContextTransformLifecycle } from "./context-transform.js";
 import { createDeliberationMaintenanceLifecycle } from "./deliberation-maintenance.js";
 import { registerEventStream } from "./event-stream.js";
 import { registerLedgerWriter } from "./ledger-writer.js";
 import { createQualityGateLifecycle, registerQualityGate } from "./quality-gate.js";
+import { createRuntimeTurnClockStore } from "./runtime-turn-clock.js";
 import { registerToolResultDistiller } from "./tool-result-distiller.js";
 import {
   createToolSurfaceLifecycle,
@@ -91,8 +92,10 @@ function registerHostedPipeline(
   userPorts: readonly TurnLifecyclePort[],
 ): void {
   const toolDefinitionsByName = new Map(tools.map((tool) => [tool.name, tool] as const));
+  const turnClock = createRuntimeTurnClockStore();
   const contextTransform = createContextTransformLifecycle(runtimePluginApi, runtime, {
     delegationStore,
+    turnClock,
   });
   const deliberationMaintenance = createDeliberationMaintenanceLifecycle(runtime);
   const qualityGate = createQualityGateLifecycle(runtime, {
@@ -105,7 +108,7 @@ function registerHostedPipeline(
 
   runtimePluginApi.on("tool_call", qualityGate.toolCall);
   runtimePluginApi.on("context", contextTransform.context);
-  registerEventStream(runtimePluginApi, runtime);
+  registerEventStream(runtimePluginApi, runtime, turnClock);
   registerLedgerWriter(runtimePluginApi, runtime);
   registerToolResultDistiller(runtimePluginApi, runtime);
   registerTurnLifecyclePorts(runtimePluginApi, [
@@ -168,6 +171,7 @@ export function createHostedTurnPipeline(
 }
 
 export { registerContextTransform } from "./context-transform.js";
+export { createRuntimeTurnClockStore, type RuntimeTurnClockStore } from "./runtime-turn-clock.js";
 export {
   composeContextBlocks,
   type ComposedContextBlock,

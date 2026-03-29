@@ -73,6 +73,7 @@ This repository uses a layered documentation system:
 - Durability taxonomy RFC: `docs/research/rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md`
 - Default-path re-hardening RFC: `docs/research/rfc-default-path-re-hardening-and-advisory-surface-narrowing.md`
 - Repository fitness plane and runtime boundary RFC: `docs/research/rfc-repository-fitness-plane-and-runtime-boundary.md`
+- Gateway experience-ring decomposition status pointer: `docs/research/rfc-gateway-experience-ring-decomposition.md`
 - Roadmap notes: `docs/research/roadmap-notes.md`
 - Effect governance RFC: `docs/research/rfc-effect-governance-and-contract-vnext.md`
 - Capability compression RFC: `docs/research/rfc-capability-compression-and-output-distillation.md`

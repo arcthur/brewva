@@ -5,7 +5,8 @@ Skill parsing, merge, and runtime-facing lifecycle logic:
 - `packages/brewva-runtime/src/skills/contract.ts`
 - `packages/brewva-runtime/src/skills/registry.ts`
 - `packages/brewva-runtime/src/services/skill-lifecycle.ts`
-- `packages/brewva-gateway/src/runtime-plugins/context-transform.ts`
+- `packages/brewva-gateway/src/runtime-plugins/tool-surface.ts`
+- `packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.ts`
 
 ## Current Model
 

@@ -1,4 +1,4 @@
-import { observeRuntimeTurnStart } from "../runtime-plugins/runtime-turn-clock.js";
+import { createRuntimeTurnClockStore } from "../runtime-plugins/runtime-turn-clock.js";
 import { collectSessionPromptOutput } from "./collect-output.js";
 import { createGatewaySession, type GatewaySessionResult } from "./create-session.js";
 import { applySchedulePromptTrigger } from "./schedule-trigger.js";
@@ -19,6 +19,7 @@ let heartbeatTicker: ReturnType<typeof setInterval> | null = null;
 let taskProgressWatchdog: TaskProgressWatchdog | null = null;
 let shuttingDown = false;
 let activeTurnId: string | null = null;
+const workerTurnClock = createRuntimeTurnClockStore();
 let workerTestHarness: ResolvedWorkerTestHarness = {
   enabled: false,
   watchdog: {},
@@ -87,7 +88,7 @@ function recordFakeTurnLifecycle(
   const localTurn = runtime.events.query(agentSessionId, {
     type: "turn_start",
   }).length;
-  const runtimeTurn = observeRuntimeTurnStart(agentSessionId, localTurn, timestamp);
+  const runtimeTurn = workerTurnClock.observeTurnStart(agentSessionId, localTurn, timestamp);
   const message = summarizeFakeAssistantMessage(assistantText, timestamp);
 
   runtime.context.onTurnStart(agentSessionId, runtimeTurn);
@@ -161,6 +162,7 @@ async function shutdown(exitCode = 0, reason = "shutdown"): Promise<void> {
   }
 
   if (sessionResult) {
+    const agentSessionId = sessionResult.session.sessionManager.getSessionId();
     taskProgressWatchdog?.stop();
     taskProgressWatchdog = null;
     try {
@@ -173,6 +175,7 @@ async function shutdown(exitCode = 0, reason = "shutdown"): Promise<void> {
     } catch {
       // best effort
     }
+    workerTurnClock.clearSession(agentSessionId);
     sessionResult = null;
   }
 

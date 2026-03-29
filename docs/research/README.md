@@ -36,7 +36,7 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 
 ## Proposed notes
 
-There are no `proposed` research notes right now.
+None right now.
 
 ## Active notes
 
@@ -52,6 +52,7 @@ There are no `proposed` research notes right now.
 - `docs/research/rfc-deliberation-home-and-compounding-intelligence.md`
 - `docs/research/rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md`
 - `docs/research/rfc-effect-governance-and-contract-vnext.md`
+- `docs/research/rfc-gateway-experience-ring-decomposition.md`
 - `docs/research/rfc-inspectable-operator-experience-overlays.md`
 - `docs/research/rfc-iteration-facts-and-model-native-optimization-protocols.md`
 - `docs/research/rfc-model-native-product-reconstruction-and-closure-vnext.md`

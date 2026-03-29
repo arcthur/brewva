@@ -1,10 +1,6 @@
 import { recordAssistantUsageFromMessage, type BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import {
-  clearRuntimeTurnClock,
-  getCurrentRuntimeTurn,
-  observeRuntimeTurnStart,
-} from "./runtime-turn-clock.js";
+import { createRuntimeTurnClockStore, type RuntimeTurnClockStore } from "./runtime-turn-clock.js";
 
 type MessageHealth = {
   score: number;
@@ -208,7 +204,11 @@ type PendingToolResult = {
   isError: boolean;
 };
 
-export function registerEventStream(extensionApi: ExtensionAPI, runtime: BrewvaRuntime): void {
+export function registerEventStream(
+  extensionApi: ExtensionAPI,
+  runtime: BrewvaRuntime,
+  turnClock: RuntimeTurnClockStore = createRuntimeTurnClockStore(),
+): void {
   const lastAssistantTextBySession = new Map<string, string>();
   const assistantWindowBySession = new Map<string, string>();
   const observedToolCallsBySession = new Map<string, Set<string>>();
@@ -297,7 +297,7 @@ export function registerEventStream(extensionApi: ExtensionAPI, runtime: BrewvaR
     assistantWindowBySession.delete(sessionId);
     observedToolCallsBySession.delete(sessionId);
     pendingToolResultsBySession.delete(sessionId);
-    clearRuntimeTurnClock(sessionId);
+    turnClock.clearSession(sessionId);
     runtime.session.clearState(sessionId);
     return undefined;
   });
@@ -326,7 +326,7 @@ export function registerEventStream(extensionApi: ExtensionAPI, runtime: BrewvaR
 
   extensionApi.on("turn_start", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
-    const runtimeTurn = observeRuntimeTurnStart(sessionId, event.turnIndex, event.timestamp);
+    const runtimeTurn = turnClock.observeTurnStart(sessionId, event.turnIndex, event.timestamp);
     runtime.events.record({
       sessionId,
       type: "turn_start",
@@ -341,7 +341,7 @@ export function registerEventStream(extensionApi: ExtensionAPI, runtime: BrewvaR
 
   extensionApi.on("turn_end", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
-    const runtimeTurn = getCurrentRuntimeTurn(sessionId);
+    const runtimeTurn = turnClock.getCurrentTurn(sessionId);
     flushPendingToolResults(sessionId);
     runtime.context.onTurnEnd(sessionId);
     runtime.events.record({

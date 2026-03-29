@@ -10,6 +10,7 @@ import {
   readHostedWorkspaceSubagentConfigFiles,
   type HostedWorkspaceSubagentConfigFile,
 } from "./subagents/config-files.js";
+import { toErrorMessage } from "./utils/errors.js";
 
 export interface AuthoredOverlaySummary {
   fileName: string;
@@ -36,10 +37,6 @@ export interface HostedDelegationCatalogInspection {
   authoredFiles: AuthoredOverlaySummary[];
   workspaceEnvelopes: HostedExecutionEnvelope[];
   workspaceAgentSpecs: HostedAgentSpec[];
-}
-
-function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function summarizeAuthoredOverlay(

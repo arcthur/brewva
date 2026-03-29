@@ -78,7 +78,7 @@ There are no longer public runtime plugin profiles such as `core`, `memory`, or
 - `registerLedgerWriter`
 - `registerToolResultDistiller`
 - internal bridge adapter for `tool_call` (`quality-gate`)
-- internal bridge adapter for `context` (`context-transform`)
+- internal bridge adapter for `context` (`context-transform` lifecycle shell)
 - typed lifecycle ports for `input`, `turnStart`, `beforeAgentStart`, `toolResult`,
   `agentEnd`, `sessionCompact`, and `sessionShutdown`
 
@@ -91,6 +91,9 @@ Implementation anchors:
 - `packages/brewva-gateway/src/runtime-plugins/tool-result-distiller.ts`
 - `packages/brewva-gateway/src/runtime-plugins/tool-surface.ts`
 - `packages/brewva-gateway/src/runtime-plugins/context-transform.ts`
+- `packages/brewva-gateway/src/runtime-plugins/hosted-compaction-controller.ts`
+- `packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.ts`
+- `packages/brewva-gateway/src/runtime-plugins/hosted-context-telemetry.ts`
 - `packages/brewva-gateway/src/runtime-plugins/context-composer.ts`
 - `packages/brewva-gateway/src/runtime-plugins/context-contract.ts`
 - `packages/brewva-gateway/src/runtime-plugins/quality-gate.ts`
@@ -161,12 +164,29 @@ Telemetry:
 
 ## Context And Recovery
 
-`registerContextTransform` owns model-facing context shaping:
+`registerContextTransform` is now a thin lifecycle shell inside a hosted
+pipeline that also wires one shared `RuntimeTurnClockStore` into the hosted
+adapter stack.
 
-- apply the Brewva context contract
-- compose admitted kernel context plus supplemental blocks
-- render capability disclosure
-- surface compaction guidance
+The hosted context path is split across these explicit adapters:
+
+- `hosted-compaction-controller`
+  - consumes the shared turn clock for compaction-facing turn state
+  - auto-compaction watchdog and idle-vs-active policy
+  - `context`, `sessionCompact`, and `sessionShutdown` reactions
+- `hosted-context-injection-pipeline`
+  - `beforeAgentStart` orchestration
+  - context contract application
+  - admitted context + supplemental block composition
+  - delegation-outcome surfacing
+- `hosted-context-telemetry`
+  - `context_compaction_*` and `context_composed` payload emission
+
+`registerEventStream(...)` also consumes the shared turn clock to stamp durable
+runtime turn numbers and clear per-session turn state on shutdown.
+
+This keeps the public hosted lifecycle contract stable while making the
+experience-ring ownership model explicit.
 
 `registerQualityGate`, `registerLedgerWriter`, and
 `registerToolResultDistiller` keep the failure-and-recovery path durable:

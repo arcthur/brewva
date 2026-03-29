@@ -53,6 +53,14 @@ flowchart TD
   F --> G["tool_result: ledger + event stream + distillation"]
 ```
 
+Hosted context ownership is intentionally split:
+
+- lifecycle shell: `packages/brewva-gateway/src/runtime-plugins/context-transform.ts`
+- compaction policy: `packages/brewva-gateway/src/runtime-plugins/hosted-compaction-controller.ts`
+- before-start injection assembly:
+  `packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.ts`
+- telemetry emission: `packages/brewva-gateway/src/runtime-plugins/hosted-context-telemetry.ts`
+
 ## Persistence Flow
 
 ```mermaid
