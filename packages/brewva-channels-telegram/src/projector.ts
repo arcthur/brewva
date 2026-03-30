@@ -348,8 +348,8 @@ function normalizeApprovalStateSnapshot(value: unknown): TelegramApprovalStateSn
   const record = asRecord(value);
   if (!record) return undefined;
 
-  const screenId = normalizeOptionalText(record.screenId ?? record.screen_id);
-  const stateKey = normalizeOptionalText(record.stateKey ?? record.state_key);
+  const screenId = normalizeOptionalText(record.screenId);
+  const stateKey = normalizeOptionalText(record.stateKey);
   const state = hasOwnProperty(record, "state") ? record.state : undefined;
   if (!screenId && !stateKey && state === undefined) {
     return undefined;
@@ -379,15 +379,13 @@ function extractApprovalStateSnapshotFromTurnMeta(
   const meta = asRecord(turn.meta);
   if (!meta) return undefined;
 
-  const nested =
-    normalizeApprovalStateSnapshot(meta.approvalState) ??
-    normalizeApprovalStateSnapshot(meta.approval_state);
+  const nested = normalizeApprovalStateSnapshot(meta.approvalState);
   if (nested) {
     return nested;
   }
 
-  const screenId = normalizeOptionalText(meta.approvalScreenId ?? meta.approval_screen_id);
-  const stateKey = normalizeOptionalText(meta.approvalStateKey ?? meta.approval_state_key);
+  const screenId = normalizeOptionalText(meta.approvalScreenId);
+  const stateKey = normalizeOptionalText(meta.approvalStateKey);
   const state = hasOwnProperty(meta, "approvalState") ? meta.approvalState : undefined;
   if (!screenId && !stateKey && state === undefined) {
     return undefined;

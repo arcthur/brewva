@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, readFileSync, rmSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ensureDir, writeFileAtomic } from "../utils/fs.js";
 import { sha256 } from "../utils/hash.js";
@@ -71,7 +71,6 @@ export class ProjectionStore {
   private readonly unitsPath: string;
   private readonly statePath: string;
   private readonly workingFile: string;
-  private readonly workingLegacyPath: string;
   private readonly workingSessionsRoot: string;
 
   private unitsLoaded = false;
@@ -87,14 +86,12 @@ export class ProjectionStore {
     this.unitsPath = join(this.rootDir, "units.jsonl");
     this.statePath = join(this.rootDir, "state.json");
     this.workingFile = options.workingFile;
-    this.workingLegacyPath = join(this.rootDir, options.workingFile);
     this.workingSessionsRoot = join(this.rootDir, WORKING_SNAPSHOTS_DIR);
     this.ensureStateLoaded();
     if (this.incompatibleOnDisk) {
       this.resetOnDisk();
       return;
     }
-    this.removeLegacyWorkingSnapshotFile();
   }
 
   hasUnits(sessionId: string): boolean {
@@ -370,18 +367,6 @@ export class ProjectionStore {
   private clearWorkingSnapshotsOnDisk(): void {
     try {
       rmSync(this.workingSessionsRoot, { recursive: true, force: true });
-    } catch {
-      // ignore
-    }
-    this.removeLegacyWorkingSnapshotFile();
-  }
-
-  private removeLegacyWorkingSnapshotFile(): void {
-    if (!existsSync(this.workingLegacyPath)) return;
-    try {
-      const stat = statSync(this.workingLegacyPath);
-      if (!stat.isFile()) return;
-      rmSync(this.workingLegacyPath, { force: true });
     } catch {
       // ignore
     }

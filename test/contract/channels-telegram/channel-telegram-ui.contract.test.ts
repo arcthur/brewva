@@ -328,6 +328,115 @@ describe("channel telegram telegram-ui rendering", () => {
     expect(callbackTurn.meta?.approvalState).toBeUndefined();
   });
 
+  test("approval turns cache canonical approval state metadata", () => {
+    const cached: Array<{
+      conversationId: string;
+      requestId: string;
+      snapshot: unknown;
+    }> = [];
+    const turn: TurnEnvelope = {
+      schema: "brewva.turn.v1",
+      kind: "approval",
+      sessionId: "channel:session",
+      turnId: "approval-state-canonical-1",
+      channel: "telegram",
+      conversationId: "12345",
+      timestamp: 1_700_000_000_000,
+      parts: [{ type: "text", text: "Approve deploy" }],
+      approval: {
+        requestId: "req-canonical-1",
+        title: "Approve deploy",
+        actions: [{ id: "confirm", label: "Confirm" }],
+      },
+      meta: {
+        approvalScreenId: "deploy-confirm",
+        approvalStateKey: "deploy-flow",
+        approvalState: {
+          flow: "deploy",
+          step: "confirm",
+        },
+      },
+    };
+
+    const requests = renderTurnToTelegramRequests(turn, {
+      inlineApproval: true,
+      callbackSecret: "callback-secret",
+      cacheApprovalState: (entry: {
+        conversationId: string;
+        requestId: string;
+        snapshot: unknown;
+      }) => {
+        cached.push(entry);
+      },
+    } as never);
+
+    expect(requests[0]?.params.reply_markup).toBeDefined();
+    expect(cached).toEqual([
+      {
+        conversationId: "12345",
+        requestId: "req-canonical-1",
+        snapshot: {
+          screenId: "deploy-confirm",
+          stateKey: "deploy-flow",
+          state: {
+            flow: "deploy",
+            step: "confirm",
+          },
+        },
+      },
+    ]);
+  });
+
+  test("approval turns ignore legacy snake_case approval state metadata", () => {
+    const cached: Array<{
+      conversationId: string;
+      requestId: string;
+      snapshot: unknown;
+    }> = [];
+    const turn: TurnEnvelope = {
+      schema: "brewva.turn.v1",
+      kind: "approval",
+      sessionId: "channel:session",
+      turnId: "approval-state-legacy-1",
+      channel: "telegram",
+      conversationId: "12345",
+      timestamp: 1_700_000_000_000,
+      parts: [{ type: "text", text: "Approve deploy" }],
+      approval: {
+        requestId: "req-legacy-1",
+        title: "Approve deploy",
+        actions: [{ id: "confirm", label: "Confirm" }],
+      },
+      meta: {
+        approval_screen_id: "legacy-screen",
+        approval_state_key: "legacy-flow",
+        approval_state: {
+          screen_id: "legacy-screen",
+          state_key: "legacy-flow",
+          state: {
+            flow: "deploy",
+            step: "confirm",
+          },
+        },
+      },
+    };
+
+    const requests = renderTurnToTelegramRequests(turn, {
+      inlineApproval: true,
+      callbackSecret: "callback-secret",
+      cacheApprovalState: (entry: {
+        conversationId: string;
+        requestId: string;
+        snapshot: unknown;
+      }) => {
+        cached.push(entry);
+      },
+    } as never);
+
+    expect(requests[0]?.params.reply_markup).toBeDefined();
+    expect(cached).toEqual([]);
+  });
+
   test("renders multiple telegram-ui blocks from one assistant message", () => {
     const turn: TurnEnvelope = {
       schema: "brewva.turn.v1",

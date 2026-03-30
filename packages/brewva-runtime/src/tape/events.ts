@@ -77,7 +77,7 @@ export interface TapeCheckpointEvidenceState {
   failureRecords: number;
   anchorEpoch: number;
   recentFailures: TapeCheckpointToolFailureEntry[];
-  failureClassCounts?: TapeCheckpointFailureClassCounts;
+  failureClassCounts: TapeCheckpointFailureClassCounts;
 }
 
 export interface TapeCheckpointProjectionState {
@@ -564,13 +564,26 @@ function coerceCheckpointEvidenceState(value: unknown): TapeCheckpointEvidenceSt
   const failureClassCountsInput = isRecord(value.failureClassCounts)
     ? value.failureClassCounts
     : null;
+  if (!failureClassCountsInput) return null;
+  const execution = normalizeNonNegativeInteger(failureClassCountsInput.execution);
+  const invocationValidation = normalizeNonNegativeInteger(
+    failureClassCountsInput.invocation_validation,
+  );
+  const shellSyntax = normalizeNonNegativeInteger(failureClassCountsInput.shell_syntax);
+  const scriptComposition = normalizeNonNegativeInteger(failureClassCountsInput.script_composition);
+  if (
+    execution === null ||
+    invocationValidation === null ||
+    shellSyntax === null ||
+    scriptComposition === null
+  ) {
+    return null;
+  }
   const failureClassCounts = {
-    execution: normalizeNonNegativeInteger(failureClassCountsInput?.execution) ?? failureRecords,
-    invocation_validation:
-      normalizeNonNegativeInteger(failureClassCountsInput?.invocation_validation) ?? 0,
-    shell_syntax: normalizeNonNegativeInteger(failureClassCountsInput?.shell_syntax) ?? 0,
-    script_composition:
-      normalizeNonNegativeInteger(failureClassCountsInput?.script_composition) ?? 0,
+    execution,
+    invocation_validation: invocationValidation,
+    shell_syntax: shellSyntax,
+    script_composition: scriptComposition,
   };
 
   return {

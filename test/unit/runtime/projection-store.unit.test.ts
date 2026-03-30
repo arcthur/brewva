@@ -200,6 +200,37 @@ describe("projection store", () => {
     expect(existsSync(sessionAPath)).toBe(true);
   });
 
+  test("ignores obsolete root-level working snapshot files", () => {
+    const rootDir = mkdtempSync(join(tmpdir(), "brewva-projection-store-obsolete-working-"));
+    writeFileSync(join(rootDir, "working.md"), "obsolete root snapshot\n", "utf8");
+
+    const store = new ProjectionStore({
+      rootDir,
+      workingFile: "working.md",
+    });
+    store.setWorkingSnapshot({
+      sessionId: "projection-store-session",
+      generatedAt: Date.now(),
+      sourceUnitIds: ["u1"],
+      entries: [
+        {
+          unitId: "u1",
+          label: "task.goal",
+          statement: "current state",
+          updatedAt: Date.now(),
+          sourceRefs: [],
+        },
+      ],
+      content: "[WorkingProjection]\n- task.goal: current state",
+    });
+
+    const currentPath = workingSnapshotPath(rootDir, "projection-store-session");
+    expect(store.getWorkingSnapshot("projection-store-session")).toBeDefined();
+    expect(existsSync(currentPath)).toBe(true);
+    expect(readFileSync(currentPath, "utf8")).toContain("current state");
+    expect(readFileSync(join(rootDir, "working.md"), "utf8")).toBe("obsolete root snapshot\n");
+  });
+
   test("appends projection unit rows without rereading the existing log", () => {
     if (process.platform === "win32") {
       return;

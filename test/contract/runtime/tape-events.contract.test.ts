@@ -59,6 +59,12 @@ function buildValidCheckpointPayload() {
       failureRecords: 0,
       anchorEpoch: 0,
       recentFailures: [],
+      failureClassCounts: {
+        execution: 0,
+        invocation_validation: 0,
+        shell_syntax: 0,
+        script_composition: 0,
+      },
     },
     projectionState: {
       updatedAt: 3,
@@ -75,22 +81,14 @@ describe("tape checkpoint payload coercion", () => {
     expect(coerceTapeCheckpointPayload(payload)).not.toBeNull();
   });
 
-  test("given legacy checkpoint payload without failure class counts, when coercing payload, then defaults are populated", () => {
+  test("given checkpoint payload without failure class counts, when coercing payload, then payload is rejected", () => {
     const payload = buildValidCheckpointPayload();
     if (!payload.state.evidence) {
       throw new Error("expected evidence state");
     }
     delete (payload.state.evidence as { failureClassCounts?: unknown }).failureClassCounts;
-    payload.state.evidence.failureRecords = 3;
 
-    const coerced = coerceTapeCheckpointPayload(payload);
-    expect(coerced).not.toBeNull();
-    expect(coerced?.state.evidence.failureClassCounts).toEqual({
-      execution: 3,
-      invocation_validation: 0,
-      shell_syntax: 0,
-      script_composition: 0,
-    });
+    expect(coerceTapeCheckpointPayload(payload)).toBeNull();
   });
 
   test("given checkpoint payload with invalid task.items, when coercing payload, then payload is rejected", () => {

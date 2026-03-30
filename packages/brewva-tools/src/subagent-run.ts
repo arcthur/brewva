@@ -22,6 +22,7 @@ const SUBAGENT_MODE_VALUES = ["single", "parallel"] as const;
 const SUBAGENT_BOUNDARY_VALUES = ["safe", "effectful"] as const;
 const SUBAGENT_RETURN_MODE_VALUES = ["text_only", "supplemental"] as const;
 const SUBAGENT_WAIT_MODE_VALUES = ["completion", "start"] as const;
+const LEGACY_DELEGATION_FIELDS = new Set(["profile", "entrySkill", "requiredOutputs"] as const);
 
 const ModeSchema = buildStringEnumSchema(SUBAGENT_MODE_VALUES, {
   guidance: "Use single for one delegated run and parallel for fan-out execution.",
@@ -230,6 +231,41 @@ function decodeToolParams<TSchemaValue extends TSchema>(
     throw new Error("validated subagent params failed schema decode");
   }
   return Value.Clone(cleaned);
+}
+
+function collectLegacyDelegationFieldPaths(value: unknown): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return [];
+  }
+
+  const record = value as Record<string, unknown>;
+  const paths: string[] = [];
+
+  for (const field of LEGACY_DELEGATION_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(record, field)) {
+      paths.push(field);
+    }
+  }
+
+  if (Array.isArray(record.tasks)) {
+    for (const [index, task] of record.tasks.entries()) {
+      if (!task || typeof task !== "object" || Array.isArray(task)) {
+        continue;
+      }
+      for (const field of LEGACY_DELEGATION_FIELDS) {
+        if (Object.prototype.hasOwnProperty.call(task, field)) {
+          paths.push(`tasks[${index}].${field}`);
+        }
+      }
+    }
+  }
+
+  return paths;
+}
+
+function legacyDelegationFieldMessage(paths: readonly string[]): string {
+  const rendered = paths.join(", ");
+  return `Error: removed legacy delegation fields are not supported (${rendered}). Use agentSpec, envelope, skillName, fallbackResultMode, and canonical packet fields.`;
 }
 
 function hasSinglePacketInput(params: SharedPacketInput): boolean {
@@ -747,6 +783,10 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
         });
       }
 
+      const legacyFieldPaths = collectLegacyDelegationFieldPaths(params);
+      if (legacyFieldPaths.length > 0) {
+        return failTextResult(legacyDelegationFieldMessage(legacyFieldPaths), { ok: false });
+      }
       const decodedParams = decodeToolParams(SubagentRunParamsSchema, params);
       const mode = resolveMode(decodedParams.mode, decodedParams.tasks);
       const waitMode = resolveWaitMode(decodedParams.waitMode);
@@ -805,6 +845,10 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
         });
       }
 
+      const legacyFieldPaths = collectLegacyDelegationFieldPaths(params);
+      if (legacyFieldPaths.length > 0) {
+        return failTextResult(legacyDelegationFieldMessage(legacyFieldPaths), { ok: false });
+      }
       const decodedParams = decodeToolParams(SubagentFanoutParamsSchema, params);
       const waitMode = resolveWaitMode(decodedParams.waitMode);
       const returnMode = resolveReturnMode(decodedParams.returnMode);
