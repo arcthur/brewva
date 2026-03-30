@@ -1,5 +1,5 @@
-import type { PatchSet, ToolGovernanceDescriptor } from "../contracts/index.js";
-import { toolGovernanceCreatesRollbackAnchor } from "../governance/tool-governance.js";
+import type { PatchSet } from "../contracts/index.js";
+import type { ResolvedToolAuthority } from "../governance/tool-governance.js";
 import type { FileChangeService } from "./file-change.js";
 import type { LedgerService } from "./ledger.js";
 import type { ReversibleMutationService } from "./reversible-mutation.js";
@@ -82,7 +82,7 @@ export interface ToolInvocationSpineOptions {
 }
 
 type CompletionContext = {
-  descriptor?: ToolGovernanceDescriptor;
+  authority: ResolvedToolAuthority;
   verdict: "pass" | "fail" | "inconclusive";
   effectCommitmentRequestId?: string;
 };
@@ -126,7 +126,7 @@ export class ToolInvocationSpine {
         toolName: input.toolName,
         args: input.args,
       });
-      const mutationReceipt = toolGovernanceCreatesRollbackAnchor(decision.descriptor)
+      const mutationReceipt = decision.authority.rollbackable
         ? this.prepareMutation({
             sessionId: input.sessionId,
             toolCallId: input.toolCallId,
@@ -201,7 +201,7 @@ export class ToolInvocationSpine {
     completion: CompletionContext,
     patchSet: PatchSet | undefined,
   ): void {
-    if (!toolGovernanceCreatesRollbackAnchor(completion.descriptor)) {
+    if (!completion.authority.rollbackable) {
       return;
     }
     this.recordMutation({

@@ -202,6 +202,53 @@ describe("reversible mutation receipts", () => {
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
   });
 
+  test("workspace mutation receipts rehydrate from tape and remain rollbackable after restart", () => {
+    const workspace = createWorkspace();
+    mkdirSync(join(workspace, "src"), { recursive: true });
+    const filePath = join(workspace, "src", "restart-rollback.ts");
+    writeFileSync(filePath, "export const value = 1;\n", "utf8");
+
+    const sessionId = `reversible-workspace-restart-${crypto.randomUUID()}`;
+    const firstRuntime = new BrewvaRuntime({ cwd: workspace });
+    firstRuntime.context.onTurnStart(sessionId, 1);
+
+    const started = firstRuntime.tools.start({
+      sessionId,
+      toolCallId: "tc-edit-restart-rollback",
+      toolName: "edit",
+      args: {
+        file_path: "src/restart-rollback.ts",
+        old_string: "value = 1",
+        new_string: "value = 2",
+      },
+    });
+    expect(started.allowed).toBe(true);
+    expect(started.mutationReceipt?.strategy).toBe("workspace_patchset");
+
+    writeFileSync(filePath, "export const value = 2;\n", "utf8");
+    firstRuntime.tools.finish({
+      sessionId,
+      toolCallId: "tc-edit-restart-rollback",
+      toolName: "edit",
+      args: {
+        file_path: "src/restart-rollback.ts",
+        old_string: "value = 1",
+        new_string: "value = 2",
+      },
+      outputText: "Applied edit before restart.",
+      channelSuccess: true,
+      verdict: "pass",
+    });
+
+    const restartedRuntime = new BrewvaRuntime({ cwd: workspace });
+    restartedRuntime.context.onTurnStart(sessionId, 2);
+
+    const rollback = restartedRuntime.tools.rollbackLastMutation(sessionId);
+    expect(rollback.ok).toBe(true);
+    expect(rollback.strategy).toBe("workspace_patchset");
+    expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
+  });
+
   test("acceptance closure writes do not create rollback receipts", () => {
     const workspace = createWorkspace();
     const runtime = new BrewvaRuntime({ cwd: workspace });

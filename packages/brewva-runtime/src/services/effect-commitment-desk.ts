@@ -99,6 +99,18 @@ export class EffectCommitmentDeskService {
     this.recordEvent = (input) => options.recordEvent(input);
   }
 
+  private recordDurableApprovalEvent(input: {
+    sessionId: string;
+    type: string;
+    turn?: number;
+    payload?: Record<string, unknown>;
+  }): void {
+    const row = this.recordEvent(input);
+    if (!row) {
+      throw new Error(`effect_commitment_desk_requires_durable_event:${input.type}`);
+    }
+  }
+
   authorize(input: AuthorizeEffectCommitmentInput): EffectCommitmentAuthorizationDecision {
     const state = this.getState(input.sessionId);
     const record = this.getRecordByProposalId(state, input.proposal.id);
@@ -147,9 +159,7 @@ export class EffectCommitmentDeskService {
     }
 
     const created = this.createRequestRecord(input.proposal, input.turn);
-    state.recordsByRequestId.set(created.request.requestId, created);
-    state.requestIdByProposalId.set(created.request.proposalId, created.request.requestId);
-    this.recordEvent({
+    this.recordDurableApprovalEvent({
       sessionId: input.sessionId,
       type: EFFECT_COMMITMENT_APPROVAL_REQUESTED_EVENT_TYPE,
       turn: input.turn,
@@ -166,6 +176,8 @@ export class EffectCommitmentDeskService {
         proposal: cloneProposal(created.proposal),
       },
     });
+    state.recordsByRequestId.set(created.request.requestId, created);
+    state.requestIdByProposalId.set(created.request.proposalId, created.request.requestId);
     return {
       decision: "defer",
       requestId: created.request.requestId,
@@ -200,10 +212,10 @@ export class EffectCommitmentDeskService {
       return { ok: false, error: "request_not_found" };
     }
 
-    record.state = input.decision === "accept" ? "accepted" : "rejected";
-    record.actor = input.actor?.trim() || undefined;
-    record.reason = input.reason?.trim() || undefined;
-    this.recordEvent({
+    const nextState = input.decision === "accept" ? "accepted" : "rejected";
+    const actor = input.actor?.trim() || undefined;
+    const reason = input.reason?.trim() || undefined;
+    this.recordDurableApprovalEvent({
       sessionId,
       type: EFFECT_COMMITMENT_APPROVAL_DECIDED_EVENT_TYPE,
       turn: this.getCurrentTurn(sessionId),
@@ -213,10 +225,13 @@ export class EffectCommitmentDeskService {
         toolName: record.request.toolName,
         toolCallId: record.request.toolCallId,
         decision: input.decision,
-        actor: record.actor ?? null,
-        reason: record.reason ?? null,
+        actor: actor ?? null,
+        reason: reason ?? null,
       },
     });
+    record.state = nextState;
+    record.actor = actor;
+    record.reason = reason;
     return {
       ok: true,
       request: clonePendingRequest(record.request),
@@ -321,8 +336,7 @@ export class EffectCommitmentDeskService {
       return;
     }
 
-    record.state = "consumed";
-    this.recordEvent({
+    this.recordDurableApprovalEvent({
       sessionId: input.sessionId,
       type: EFFECT_COMMITMENT_APPROVAL_CONSUMED_EVENT_TYPE,
       turn: this.getCurrentTurn(input.sessionId),
@@ -339,6 +353,7 @@ export class EffectCommitmentDeskService {
         channelSuccess: typeof input.channelSuccess === "boolean" ? input.channelSuccess : null,
       },
     });
+    record.state = "consumed";
   }
 
   getRequestIdForProposal(sessionId: string, proposalId: string): string | undefined {

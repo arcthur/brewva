@@ -12,6 +12,7 @@ import {
 import { resolve } from "node:path";
 import type {
   BrewvaConfig,
+  IntegrityIssue,
   TurnWALRecord,
   TurnWALSource,
   TurnWALStatus,
@@ -175,6 +176,7 @@ export class TurnWALStore {
     | ((input: { sessionId: string; type: string; payload?: Record<string, unknown> }) => void)
     | undefined;
   private readonly cacheByFilePath = new Map<string, TurnWALFileCache>();
+  private integrityIssues: IntegrityIssue[] = [];
   private fileHasContent: boolean | null = null;
 
   constructor(options: TurnWALStoreOptions) {
@@ -192,6 +194,21 @@ export class TurnWALStore {
     if (this.enabled) {
       ensureDir(walDir);
     }
+  }
+
+  private buildIntegrityError(reason: string): Error {
+    return new Error(`turn_wal_integrity_error:${this.scope}:${reason}`);
+  }
+
+  getIntegrityIssues(): IntegrityIssue[] {
+    if (this.enabled) {
+      try {
+        this.syncCache();
+      } catch {
+        // Integrity access should surface persisted issues without throwing to callers.
+      }
+    }
+    return this.integrityIssues.map((issue) => ({ ...issue }));
   }
 
   get isEnabled(): boolean {
@@ -438,6 +455,7 @@ export class TurnWALStore {
 
   private syncCache(): TurnWALFileCache {
     if (!existsSync(this.filePath)) {
+      this.clearIntegrityIssues();
       const empty: TurnWALFileCache = {
         rowsByWalId: new Map(),
         byteOffset: 0,
@@ -452,14 +470,10 @@ export class TurnWALStore {
     try {
       size = statSync(this.filePath).size;
     } catch {
-      const empty: TurnWALFileCache = {
-        rowsByWalId: new Map(),
-        byteOffset: 0,
-        trailingFragment: "",
-      };
-      this.cacheByFilePath.set(this.filePath, empty);
-      this.fileHasContent = false;
-      return empty;
+      this.setIntegrityIssue({
+        reason: "turn_wal_stat_failed",
+      });
+      throw this.buildIntegrityError("stat_failed");
     }
 
     this.fileHasContent = size > 0;
@@ -484,9 +498,18 @@ export class TurnWALStore {
       trailingFragment: "",
     };
     if (size > 0) {
-      const text = readFileSync(this.filePath, "utf8");
+      let text = "";
+      try {
+        text = readFileSync(this.filePath, "utf8");
+      } catch {
+        this.setIntegrityIssue({
+          reason: "turn_wal_read_failed",
+        });
+        throw this.buildIntegrityError("read_failed");
+      }
       this.consumeChunk(cache, text);
     }
+    this.clearIntegrityIssues();
     this.cacheByFilePath.set(this.filePath, cache);
     return cache;
   }
@@ -534,7 +557,13 @@ export class TurnWALStore {
 
       if (index === lines.length - 1) {
         cache.trailingFragment = raw;
+        continue;
       }
+      this.setIntegrityIssue({
+        reason: "turn_wal_malformed_row",
+        index,
+      });
+      throw this.buildIntegrityError(`malformed_row:${index}`);
     }
   }
 
@@ -598,5 +627,20 @@ export class TurnWALStore {
 
   private getSystemSessionId(): string {
     return `turn_wal:${this.scope}`;
+  }
+
+  private setIntegrityIssue(input: { reason: string; index?: number }): void {
+    this.integrityIssues = [
+      {
+        domain: "turn_wal",
+        severity: "unavailable",
+        reason: input.reason,
+        index: input.index,
+      },
+    ];
+  }
+
+  private clearIntegrityIssues(): void {
+    this.integrityIssues = [];
   }
 }

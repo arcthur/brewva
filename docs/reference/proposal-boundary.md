@@ -114,7 +114,8 @@ Current admission is conservative:
 - `payload.toolCallId` is required
 - `payload.argsDigest` is required
 - `payload.boundary` must be `effectful`
-- the tool must have an exact governance descriptor
+- the tool must have an exact or registry-backed governance descriptor; regex
+  hints are not sufficient for admission
 - the tool must actually require approval under that descriptor
 - the declared `effects` must match the governance descriptor
 
@@ -122,7 +123,8 @@ Decision meanings:
 
 - `accept`: pending approval-bearing commitment created
 - `reject`: invalid or disallowed
-- `defer`: recorded, but not yet committed
+- `defer`: durable pending approval-bearing commitment created, but not yet
+  approved or resumed
 
 ## Direct Commit Boundary
 

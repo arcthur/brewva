@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
+  BrewvaEventRecord,
   PatchSet,
-  ToolGovernanceDescriptor,
   ToolMutationReceipt,
   ToolMutationRollbackKind,
   ToolMutationStrategy,
@@ -9,8 +9,9 @@ import type {
 import {
   REVERSIBLE_MUTATION_PREPARED_EVENT_TYPE,
   REVERSIBLE_MUTATION_RECORDED_EVENT_TYPE,
+  REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE,
 } from "../events/event-types.js";
-import { toolGovernanceCreatesRollbackAnchor } from "../governance/tool-governance.js";
+import type { ResolvedToolAuthority } from "../governance/tool-governance.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 
@@ -44,17 +45,17 @@ export interface RecordReversibleMutationInput {
 export interface ReversibleMutationServiceOptions {
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
   recordEvent: RuntimeKernelContext["recordEvent"];
-  resolveToolGovernanceDescriptor: (toolName: string) => ToolGovernanceDescriptor | undefined;
+  resolveToolAuthority: (toolName: string) => ResolvedToolAuthority;
 }
 
-function resolveMutationStrategy(descriptor: ToolGovernanceDescriptor | undefined): {
+function resolveMutationStrategy(authority: ResolvedToolAuthority): {
   strategy: ToolMutationStrategy;
   rollbackKind: ToolMutationRollbackKind;
 } | null {
-  if (!descriptor || !toolGovernanceCreatesRollbackAnchor(descriptor)) {
+  if (!authority.rollbackable) {
     return null;
   }
-  if (descriptor.effects.includes("workspace_write")) {
+  if (authority.descriptor?.effects.includes("workspace_write")) {
     return {
       strategy: "workspace_patchset",
       rollbackKind: "patchset",
@@ -66,7 +67,7 @@ function resolveMutationStrategy(descriptor: ToolGovernanceDescriptor | undefine
 function buildReceipt(input: {
   toolCallId: string;
   toolName: string;
-  descriptor: ToolGovernanceDescriptor | undefined;
+  authority: ResolvedToolAuthority;
   strategy: ToolMutationStrategy;
   rollbackKind: ToolMutationRollbackKind;
   turn: number;
@@ -84,18 +85,73 @@ function buildReceipt(input: {
     boundary: "effectful",
     strategy: input.strategy,
     rollbackKind: input.rollbackKind,
-    effects: [...(input.descriptor?.effects ?? [])],
+    effects: [...(input.authority.descriptor?.effects ?? [])],
     turn: input.turn,
     timestamp: input.timestamp,
+  };
+}
+
+function readObjectRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function readMutationReceipt(value: unknown): ToolMutationReceipt | null {
+  const receipt = readObjectRecord(value);
+  if (!receipt) {
+    return null;
+  }
+  if (typeof receipt.id !== "string" || !receipt.id.trim()) {
+    return null;
+  }
+  if (typeof receipt.toolCallId !== "string") {
+    return null;
+  }
+  const toolName = typeof receipt.toolName === "string" ? normalizeToolName(receipt.toolName) : "";
+  if (!toolName) {
+    return null;
+  }
+  if (receipt.boundary !== "effectful") {
+    return null;
+  }
+  if (receipt.strategy !== "workspace_patchset") {
+    return null;
+  }
+  if (receipt.rollbackKind !== "patchset") {
+    return null;
+  }
+  if (
+    typeof receipt.turn !== "number" ||
+    !Number.isFinite(receipt.turn) ||
+    typeof receipt.timestamp !== "number" ||
+    !Number.isFinite(receipt.timestamp)
+  ) {
+    return null;
+  }
+  const effects = Array.isArray(receipt.effects)
+    ? receipt.effects.filter(
+        (effect): effect is ToolMutationReceipt["effects"][number] => typeof effect === "string",
+      )
+    : [];
+  return {
+    id: receipt.id.trim(),
+    toolCallId: receipt.toolCallId.trim(),
+    toolName,
+    boundary: "effectful",
+    strategy: "workspace_patchset",
+    rollbackKind: "patchset",
+    effects,
+    turn: Math.floor(receipt.turn),
+    timestamp: Math.max(0, Math.floor(receipt.timestamp)),
   };
 }
 
 export class ReversibleMutationService {
   private readonly getCurrentTurn: (sessionId: string) => number;
   private readonly recordEvent: RuntimeKernelContext["recordEvent"];
-  private readonly resolveToolGovernanceDescriptor: (
-    toolName: string,
-  ) => ToolGovernanceDescriptor | undefined;
+  private readonly resolveToolAuthority: (toolName: string) => ResolvedToolAuthority;
   private readonly pendingBySession = new Map<string, Map<string, PendingReversibleMutation>>();
   private readonly recordedBySession = new Map<string, RecordedReversibleMutation[]>();
   private readonly rolledBackReceiptIdsBySession = new Map<string, Set<string>>();
@@ -103,13 +159,12 @@ export class ReversibleMutationService {
   constructor(options: ReversibleMutationServiceOptions) {
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
     this.recordEvent = (input) => options.recordEvent(input);
-    this.resolveToolGovernanceDescriptor = (toolName) =>
-      options.resolveToolGovernanceDescriptor(toolName);
+    this.resolveToolAuthority = (toolName) => options.resolveToolAuthority(toolName);
   }
 
   prepare(input: PrepareReversibleMutationInput): ToolMutationReceipt | undefined {
-    const descriptor = this.resolveToolGovernanceDescriptor(input.toolName);
-    const resolved = resolveMutationStrategy(descriptor);
+    const authority = this.resolveToolAuthority(input.toolName);
+    const resolved = resolveMutationStrategy(authority);
     if (!resolved) {
       return undefined;
     }
@@ -118,7 +173,7 @@ export class ReversibleMutationService {
     const receipt = buildReceipt({
       toolCallId: input.toolCallId,
       toolName: input.toolName,
-      descriptor,
+      authority,
       strategy: resolved.strategy,
       rollbackKind: resolved.rollbackKind,
       turn,
@@ -189,6 +244,59 @@ export class ReversibleMutationService {
       turn: this.getCurrentTurn(input.sessionId),
       payload: basePayload,
     });
+  }
+
+  restoreFromEvents(sessionId: string, events: BrewvaEventRecord[]): void {
+    this.pendingBySession.delete(sessionId);
+    this.recordedBySession.delete(sessionId);
+    this.rolledBackReceiptIdsBySession.delete(sessionId);
+
+    const recorded: RecordedReversibleMutation[] = [];
+    const rolledBack = new Set<string>();
+    for (const event of events) {
+      const payload = readObjectRecord(event.payload);
+      if (event.type === REVERSIBLE_MUTATION_RECORDED_EVENT_TYPE) {
+        const receipt = readMutationReceipt(payload?.receipt);
+        if (!receipt) {
+          continue;
+        }
+        const patchSetId =
+          typeof payload?.patchSetId === "string" && payload.patchSetId.trim()
+            ? payload.patchSetId.trim()
+            : null;
+        const rollbackRef =
+          typeof payload?.rollbackRef === "string" && payload.rollbackRef.trim()
+            ? payload.rollbackRef.trim()
+            : null;
+        recorded.push({
+          receipt,
+          changed: payload?.changed === true,
+          patchSetId,
+          rollbackRef,
+        });
+        continue;
+      }
+
+      if (event.type === REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE) {
+        const receiptId =
+          typeof payload?.receiptId === "string" && payload.receiptId.trim()
+            ? payload.receiptId.trim()
+            : null;
+        if (receiptId) {
+          rolledBack.add(receiptId);
+        }
+      }
+    }
+
+    if (recorded.length > 0) {
+      this.recordedBySession.set(
+        sessionId,
+        recorded.map((entry) => structuredClone(entry)),
+      );
+    }
+    if (rolledBack.size > 0) {
+      this.rolledBackReceiptIdsBySession.set(sessionId, new Set(rolledBack));
+    }
   }
 
   clear(sessionId: string): void {

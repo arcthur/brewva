@@ -187,10 +187,16 @@ Tool-governance note:
 
 - managed Brewva tools resolve exact governance descriptors first
 - custom or third-party tools may register runtime-scoped exact descriptors
-- regex hint fallback remains available as a migration path
+- regex hint fallback is advisory only; it can emit metadata warnings, but it
+  does not authorize effectful execution or proposal admission
+- effectful execution requires durable tape receipts; with
+  `infrastructure.events.enabled=false`, effectful tools fail closed instead of
+  running in a no-audit path
 - `rollbackLastMutation(...)` is the receipt-aware rollback surface
   - only receipt-backed rollbackable mutations participate; audit-only
     `memory_write` flows do not imply a rollback anchor
+  - durable `reversible_mutation_*` receipts are replay-hydrated, so restart
+    does not remove the latest rollback candidate
 
 ### `runtime.task.*`
 
@@ -335,6 +341,7 @@ Read-only verification semantics:
 - `clearState(sessionId)`
 - `onClearState(listener)`
 - `getHydration(sessionId)`
+- `getIntegrity(sessionId)`
 - `resolveCredentialBindings(sessionId, toolName)`
 - `resolveSandboxApiKey(sessionId)`
 
@@ -352,6 +359,16 @@ Worker-result adoption semantics:
 - `mergeWorkerResults(...)` is read-only and reports `empty | conflicts | merged`
 - `applyMergedWorkerResults(...)` mutates the parent workspace only after the
   parent explicitly adopts the merged result
+
+Session durability semantics:
+
+- `getHydration(...)` reports replay hydration status for session-local state
+  rebuild
+- `getIntegrity(...)` reports the unified durability health surface across
+  session tape issues, runtime WAL integrity failures, and artifact persistence
+  gaps
+- integrity issues carry explicit `domain` / `severity` metadata instead of
+  overloading hydration-only issue shapes
 
 Execution-secret semantics:
 

@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { appendFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   BrewvaRuntime,
   DEFAULT_BREWVA_CONFIG,
@@ -208,8 +210,81 @@ describe("session state cleanup", () => {
     const hydration = readerRuntime.session.getHydration(sessionId);
     expect(hydration.status).toBe("degraded");
     expect(hydration.issues).toHaveLength(1);
+    expect(hydration.issues[0]?.domain).toBe("event_tape");
+    expect(hydration.issues[0]?.severity).toBe("degraded");
     expect(hydration.issues[0]?.eventType).toBe("cost_update");
     expect(hydration.issues[0]?.reason).toContain("hydration exploded");
     expect(hydration.latestEventId).toBeDefined();
+
+    const integrity = readerRuntime.session.getIntegrity(sessionId);
+    expect(integrity.status).toBe("degraded");
+    expect(integrity.issues).toHaveLength(1);
+  });
+
+  test("marks session hydration degraded when the persisted event tape contains malformed rows", () => {
+    const workspace = createTestWorkspace("hydration-corrupt-tape");
+    const sessionId = "hydration-corrupt-tape-1";
+
+    const writerRuntime = new BrewvaRuntime({ cwd: workspace });
+    writerRuntime.events.record({
+      sessionId,
+      type: "session_start",
+      payload: { cwd: workspace },
+    });
+    const encoded = Buffer.from(sessionId, "utf8").toString("base64url");
+    const eventFilePath = resolve(
+      workspace,
+      DEFAULT_BREWVA_CONFIG.infrastructure.events.dir,
+      `sess_${encoded}.jsonl`,
+    );
+    appendFileSync(eventFilePath, '\n{"broken":\n', "utf8");
+
+    const readerRuntime = new BrewvaRuntime({ cwd: workspace });
+    const hydration = readerRuntime.session.getHydration(sessionId);
+    expect(hydration.status).toBe("degraded");
+    expect(hydration.issues.some((issue) => issue.reason === "event_store_malformed_row")).toBe(
+      true,
+    );
+
+    const integrity = readerRuntime.session.getIntegrity(sessionId);
+    expect(integrity.status).toBe("degraded");
+    expect(integrity.issues.some((issue) => issue.domain === "event_tape")).toBe(true);
+  });
+
+  test("refreshes hydration and integrity when tape corruption appears after initial hydration", () => {
+    const workspace = createTestWorkspace("hydration-corrupt-after-ready");
+    const sessionId = "hydration-corrupt-after-ready-1";
+
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    runtime.events.record({
+      sessionId,
+      type: "session_start",
+      payload: { cwd: workspace },
+    });
+
+    const initialHydration = runtime.session.getHydration(sessionId);
+    expect(initialHydration.status).toBe("ready");
+
+    const encoded = Buffer.from(sessionId, "utf8").toString("base64url");
+    const eventFilePath = resolve(
+      workspace,
+      DEFAULT_BREWVA_CONFIG.infrastructure.events.dir,
+      `sess_${encoded}.jsonl`,
+    );
+    appendFileSync(eventFilePath, '\n{"broken":\n', "utf8");
+
+    const hydration = runtime.session.getHydration(sessionId);
+    expect(hydration.status).toBe("degraded");
+    expect(hydration.issues.some((issue) => issue.reason === "event_store_malformed_row")).toBe(
+      true,
+    );
+
+    const integrity = runtime.session.getIntegrity(sessionId);
+    expect(integrity.status).toBe("degraded");
+    expect(
+      integrity.issues.some(
+        (issue) => issue.domain === "event_tape" && issue.reason === "event_store_malformed_row",
+      ),
+    ).toBe(true);
   });
 });

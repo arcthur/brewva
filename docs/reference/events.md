@@ -98,6 +98,7 @@ maintenance. They do not promote projection files into source-of-truth inputs.
 - `tool_output_observed`
 - `tool_output_distilled`
 - `tool_output_artifact_persisted`
+- `tool_output_artifact_persist_failed`
 - `tool_output_search`
 - `observability_query_executed`
 - `observability_assertion_recorded`
@@ -117,6 +118,7 @@ maintenance. They do not promote projection files into source-of-truth inputs.
 - `reversible_mutation_recorded`
 - `reversible_mutation_rolled_back`
 - `rollback`
+- `patch_recorded`
 - `file_snapshot_captured`
 - `ledger_compacted`
 - `context_compaction_gate_blocked_tool`
@@ -261,6 +263,11 @@ The audit-retained core includes:
 - `effect_commitment_approval_requested`
 - `effect_commitment_approval_decided`
 - `effect_commitment_approval_consumed`
+- `governance_cost_anomaly_detected`
+- `governance_cost_anomaly_error`
+- `governance_compaction_integrity_checked`
+- `governance_compaction_integrity_failed`
+- `governance_compaction_integrity_error`
 - `subagent_spawned`
 - `subagent_completed`
 - `subagent_failed`
@@ -275,9 +282,11 @@ The audit-retained core includes:
 - `skill_promotion_reviewed`
 - `skill_promotion_promoted`
 - `skill_promotion_materialized`
+- `tool_output_artifact_persist_failed`
 - `cost_update`
 - `budget_alert`
 - `rollback`
+- `patch_recorded`
 - schedule lifecycle events
 
 This audit-retained set is the effective `durable source of truth` subset of

@@ -540,12 +540,33 @@ describe("runtime proposals API", () => {
     expect(started.boundary).toBe("effectful");
     expect(started.commitmentReceipt?.decision).toBe("defer");
     expect(started.reason).toContain("operator review required");
+    expect(typeof started.effectCommitmentRequestId).toBe("string");
 
     const listed = runtime.proposals.list(sessionId, {
       limit: 1,
     })[0] as EffectCommitmentRecord | undefined;
     expect(listed?.receipt.decision).toBe("defer");
     expect(listed?.receipt.policyBasis).toContain("test_governance_port");
+    const pending = runtime.proposals.listPendingEffectCommitments(sessionId);
+    expect(pending).toHaveLength(1);
+    expect(pending[0]?.requestId).toBe(started.effectCommitmentRequestId);
+  });
+
+  test("hint-derived approval candidates are blocked before proposal admission", () => {
+    const runtime = createCleanRuntime();
+    const sessionId = `runtime-proposals-hint-blocked-${crypto.randomUUID()}`;
+
+    const started = runtime.tools.start({
+      sessionId,
+      toolCallId: "tc-custom-command-runner",
+      toolName: "custom_command_runner",
+      args: { command: "echo hi" },
+    });
+
+    expect(started.allowed).toBe(false);
+    expect(started.reason).toContain("exact governance descriptor");
+    expect(runtime.proposals.list(sessionId)).toHaveLength(0);
+    expect(runtime.proposals.listPendingEffectCommitments(sessionId)).toHaveLength(0);
   });
 
   test("safe-boundary tool starts do not emit effect_commitment proposals", () => {

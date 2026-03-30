@@ -1,4 +1,8 @@
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { relative, resolve } from "node:path";
 import {
+  TOOL_OUTPUT_ARTIFACT_PERSIST_FAILED_EVENT_TYPE,
   TOOL_OUTPUT_ARTIFACT_PERSISTED_EVENT_TYPE,
   TOOL_OUTPUT_DISTILLED_EVENT_TYPE,
   TOOL_OUTPUT_OBSERVED_EVENT_TYPE,
@@ -21,6 +25,11 @@ interface ArtifactOverride {
   rawChars: number;
   rawBytes: number;
   sha256: string;
+}
+
+interface ArtifactResolutionResult {
+  artifact?: ArtifactOverride;
+  failureReason?: string;
 }
 
 function normalizeArgs(input: unknown): Record<string, unknown> | undefined {
@@ -75,6 +84,44 @@ function normalizeArtifactOverride(
     rawBytes: Math.max(0, Math.floor(candidate.rawBytes)),
     sha256: candidate.sha256.trim(),
   };
+}
+
+function hasArtifactOverride(details: Record<string, unknown> | undefined): boolean {
+  return Boolean(details && Object.prototype.hasOwnProperty.call(details, "artifactOverride"));
+}
+
+function validateArtifactOverride(
+  override: ArtifactOverride,
+  workspaceRoot: string,
+): ArtifactResolutionResult {
+  const absolutePath = resolve(workspaceRoot, override.artifactRef);
+  const relativePath = relative(workspaceRoot, absolutePath);
+  if (
+    !relativePath ||
+    relativePath.startsWith("..") ||
+    resolve(workspaceRoot, relativePath) !== absolutePath
+  ) {
+    return { failureReason: "artifact_override_outside_workspace" };
+  }
+  if (!existsSync(absolutePath)) {
+    return { failureReason: "artifact_override_missing_file" };
+  }
+  try {
+    const rawText = readFileSync(absolutePath, "utf8");
+    const rawBytes = Buffer.byteLength(rawText, "utf8");
+    const rawChars = rawText.length;
+    const sha256 = createHash("sha256").update(rawText).digest("hex");
+    if (
+      rawBytes !== override.rawBytes ||
+      rawChars !== override.rawChars ||
+      sha256 !== override.sha256
+    ) {
+      return { failureReason: "artifact_override_hash_mismatch" };
+    }
+    return { artifact: override };
+  } catch {
+    return { failureReason: "artifact_override_read_failed" };
+  }
 }
 
 function resolveToolOutcome(input: {
@@ -234,6 +281,30 @@ function resolveWorkspaceRoot(runtime: BrewvaRuntime, context: unknown): string 
   return typeof cwd === "string" && cwd.trim().length > 0 ? cwd : runtime.cwd;
 }
 
+function recordArtifactFailure(
+  runtime: BrewvaRuntime,
+  input: {
+    sessionId: string;
+    toolCallId: string;
+    toolName: string;
+    isError: boolean;
+    reason: string;
+    artifactRef?: string | null;
+  },
+): void {
+  runtime.events.record({
+    sessionId: input.sessionId,
+    type: TOOL_OUTPUT_ARTIFACT_PERSIST_FAILED_EVENT_TYPE,
+    payload: {
+      toolCallId: input.toolCallId,
+      toolName: input.toolName,
+      isError: input.isError,
+      reason: input.reason,
+      artifactRef: input.artifactRef ?? null,
+    },
+  });
+}
+
 function recordToolOutcome(
   runtime: BrewvaRuntime,
   input: {
@@ -249,17 +320,30 @@ function recordToolOutcome(
     lifecycleFallbackReason?: string;
   },
 ): void {
-  const artifactOverride = normalizeArtifactOverride(input.details);
+  const workspaceRoot = resolveWorkspaceRoot(runtime, input.context);
+  const normalizedArtifactOverride = normalizeArtifactOverride(input.details);
+  const artifactOverrideResolution = normalizedArtifactOverride
+    ? validateArtifactOverride(normalizedArtifactOverride, workspaceRoot)
+    : undefined;
+  let artifactFailureReason: string | undefined;
+  if (hasArtifactOverride(input.details) && !normalizedArtifactOverride) {
+    artifactFailureReason = "artifact_override_invalid_shape";
+  } else if (artifactOverrideResolution?.failureReason) {
+    artifactFailureReason = artifactOverrideResolution.failureReason;
+  }
   const outputArtifact =
-    artifactOverride ??
+    artifactOverrideResolution?.artifact ??
     persistToolOutputArtifact({
-      workspaceRoot: resolveWorkspaceRoot(runtime, input.context),
+      workspaceRoot,
       sessionId: input.sessionId,
       toolCallId: input.toolCallId,
       toolName: input.toolName,
       outputText: input.outputText,
       timestamp: Date.now(),
     });
+  if (!outputArtifact && input.outputText.length > 0 && !artifactFailureReason) {
+    artifactFailureReason = "artifact_persist_failed";
+  }
   const outputObservation = buildOutputObservation(runtime, input.sessionId, input.outputText);
   const outputDistillation = distillToolOutput({
     toolName: input.toolName,
@@ -280,6 +364,16 @@ function recordToolOutcome(
       artifactRef: outputArtifact?.artifactRef ?? null,
     },
   });
+  if (artifactFailureReason) {
+    recordArtifactFailure(runtime, {
+      sessionId: input.sessionId,
+      toolCallId: input.toolCallId,
+      toolName: input.toolName,
+      isError: input.isError,
+      reason: artifactFailureReason,
+      artifactRef: normalizedArtifactOverride?.artifactRef ?? null,
+    });
+  }
   if (outputArtifact) {
     runtime.events.record({
       sessionId: input.sessionId,

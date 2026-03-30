@@ -7,6 +7,8 @@ export const TOOL_RESULT_RECORDED_EVENT_TYPE = "tool_result_recorded" as const;
 export const TOOL_OUTPUT_OBSERVED_EVENT_TYPE = "tool_output_observed" as const;
 export const TOOL_OUTPUT_DISTILLED_EVENT_TYPE = "tool_output_distilled" as const;
 export const TOOL_OUTPUT_ARTIFACT_PERSISTED_EVENT_TYPE = "tool_output_artifact_persisted" as const;
+export const TOOL_OUTPUT_ARTIFACT_PERSIST_FAILED_EVENT_TYPE =
+  "tool_output_artifact_persist_failed" as const;
 export const OBSERVABILITY_QUERY_EXECUTED_EVENT_TYPE = "observability_query_executed" as const;
 export const OBSERVABILITY_ASSERTION_RECORDED_EVENT_TYPE =
   "observability_assertion_recorded" as const;
@@ -62,6 +64,7 @@ export const TOOL_CONTRACT_WARNING_EVENT_TYPE = "tool_contract_warning" as const
 export const TOOL_EXECUTION_END_EVENT_TYPE = "tool_execution_end" as const;
 export const TOOL_EXECUTION_START_EVENT_TYPE = "tool_execution_start" as const;
 export const TOOL_OUTPUT_SEARCH_EVENT_TYPE = "tool_output_search" as const;
+export const PATCH_RECORDED_EVENT_TYPE = "patch_recorded" as const;
 export const TURN_END_EVENT_TYPE = "turn_end" as const;
 export const TURN_START_EVENT_TYPE = "turn_start" as const;
 
@@ -135,6 +138,7 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   TOOL_OUTPUT_OBSERVED_EVENT_TYPE,
   TOOL_OUTPUT_DISTILLED_EVENT_TYPE,
   TOOL_OUTPUT_ARTIFACT_PERSISTED_EVENT_TYPE,
+  TOOL_OUTPUT_ARTIFACT_PERSIST_FAILED_EVENT_TYPE,
   OBSERVABILITY_QUERY_EXECUTED_EVENT_TYPE,
   OBSERVABILITY_ASSERTION_RECORDED_EVENT_TYPE,
   ITERATION_METRIC_OBSERVED_EVENT_TYPE,
@@ -185,6 +189,7 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   TOOL_EXECUTION_END_EVENT_TYPE,
   TOOL_EXECUTION_START_EVENT_TYPE,
   TOOL_OUTPUT_SEARCH_EVENT_TYPE,
+  PATCH_RECORDED_EVENT_TYPE,
   TURN_END_EVENT_TYPE,
   TURN_START_EVENT_TYPE,
   EXEC_ROUTED_EVENT_TYPE,

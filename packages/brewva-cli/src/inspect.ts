@@ -67,6 +67,19 @@ interface InspectReport {
       reason: string;
     }>;
   };
+  integrity: {
+    status: "healthy" | "degraded" | "unavailable";
+    issueCount: number;
+    issues: Array<{
+      domain: string;
+      severity: string;
+      sessionId: string | null;
+      eventId: string | null;
+      eventType: string | null;
+      index: number | null;
+      reason: string;
+    }>;
+  };
   replay: {
     eventCount: number;
     firstEventAt: string | null;
@@ -320,6 +333,7 @@ function buildInspectReport(
   const truthState = foldTruthLedgerEvents(truthEvents);
   const tapeStatus = runtime.events.getTapeStatus(sessionId);
   const hydration = runtime.session.getHydration(sessionId);
+  const integrity = runtime.session.getIntegrity(sessionId);
   const bootstrap = readLatestEventPayload<InspectBootstrapPayload>(
     runtime,
     sessionId,
@@ -359,9 +373,22 @@ function buildInspectReport(
       latestEventId: hydration.latestEventId ?? null,
       issueCount: hydration.issues.length,
       issues: hydration.issues.map((issue) => ({
-        eventId: issue.eventId,
-        eventType: issue.eventType,
-        index: issue.index,
+        eventId: issue.eventId ?? "n/a",
+        eventType: issue.eventType ?? "n/a",
+        index: issue.index ?? -1,
+        reason: issue.reason,
+      })),
+    },
+    integrity: {
+      status: integrity.status,
+      issueCount: integrity.issues.length,
+      issues: integrity.issues.map((issue) => ({
+        domain: issue.domain,
+        severity: issue.severity,
+        sessionId: issue.sessionId ?? null,
+        eventId: issue.eventId ?? null,
+        eventType: issue.eventType ?? null,
+        index: typeof issue.index === "number" ? issue.index : null,
         reason: issue.reason,
       })),
     },
@@ -480,6 +507,7 @@ function formatInspectText(report: InspectReport): string {
     `Workspace: ${report.workspaceRoot}`,
     "",
     `Hydration: status=${report.hydration.status} issues=${report.hydration.issueCount} hydratedAt=${report.hydration.hydratedAt ?? "n/a"}`,
+    `Integrity: status=${report.integrity.status} issues=${report.integrity.issueCount}`,
     `Replay: events=${report.replay.eventCount} first=${report.replay.firstEventAt ?? "n/a"} last=${report.replay.lastEventAt ?? "n/a"}`,
     `Replay: anchors=${report.replay.anchorCount} checkpoints=${report.replay.checkpointCount} tapePressure=${report.replay.tapePressure} entriesSinceAnchor=${report.replay.entriesSinceAnchor}`,
     `Bootstrap: routingEnabled=${renderNullableBoolean(report.bootstrap.routingEnabled)} scopes=${renderList(report.bootstrap.routingScopes)}`,
@@ -505,6 +533,13 @@ function formatInspectText(report: InspectReport): string {
     for (const issue of report.hydration.issues.slice(0, 5)) {
       lines.push(
         `Hydration issue: index=${issue.index} type=${issue.eventType} event=${issue.eventId} reason=${issue.reason}`,
+      );
+    }
+  }
+  if (report.integrity.issues.length > 0) {
+    for (const issue of report.integrity.issues.slice(0, 5)) {
+      lines.push(
+        `Integrity issue: domain=${issue.domain} severity=${issue.severity} event=${issue.eventId ?? "n/a"} reason=${issue.reason}`,
       );
     }
   }

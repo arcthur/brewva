@@ -234,6 +234,11 @@ Telegram channel skill policy is now built-in and no longer configurable via
 - `infrastructure.toolFailureInjection.enabled`: `true`
 - `infrastructure.toolFailureInjection.maxEntries`: `3`
 - `infrastructure.toolFailureInjection.maxOutputChars`: `300`
+
+Event tape is the authoritative receipt surface for effectful execution.
+Disabling `infrastructure.events.enabled` also disables effectful tool execution
+and approval-bearing flows; runtime does not enter a silent no-audit write path.
+
 - `infrastructure.toolOutputDistillationInjection.enabled`: `false`
 - `infrastructure.toolOutputDistillationInjection.maxEntries`: `3`
 - `infrastructure.toolOutputDistillationInjection.maxOutputChars`: `300`
@@ -478,6 +483,8 @@ to append-only JSONL WAL files under `infrastructure.turnWal.dir`.
 - `scheduleTurnTtlMs` applies a longer default TTL for scheduled turns.
 - `maxRetries` limits startup recovery replay attempts for pending/inflight rows.
 - `compactAfterMs` controls retention window before terminal rows are compacted.
+- malformed non-tail WAL rows surface an integrity failure and stop recovery
+  instead of being silently skipped
 
 ## Why-Based Public Surface
 

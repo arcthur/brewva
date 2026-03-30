@@ -51,6 +51,9 @@ Deletion consequences:
   including task/truth/cost/evidence/projection fold slices.
 - First `onTurnStart()` hydrates session-local runtime state from tape events
   (skill/budget/cost counters, warning dedupe, ledger compaction cooldown).
+- malformed or unreadable event-tape rows degrade hydration status and surface
+  explicit `event_tape` integrity issues instead of being treated as an empty
+  healthy tape.
 - Note: upstream `turnIndex` can reset to `0` on `agent_start` boundaries. Brewva normalizes turns to be monotonic per session (for example `effectiveTurn = max(current, turnIndex)`) and uses the normalized value for gating/reconciliation.
 - If projection artifacts are missing, runtime can rebuild projection files from
   source tape events using deterministic projection extraction rules.
@@ -59,3 +62,9 @@ Deletion consequences:
 - Channel approval helper state is not part of recovery correctness.
   Approval truth and request resolution remain replay-derived from durable
   runtime events, with optional process-local UI cache only.
+- turn WAL remains bounded recovery state rather than historical truth, but WAL
+  integrity failures now fail closed for recovery until the corrupted rows are
+  repaired or compacted away.
+- `runtime.session.getIntegrity(sessionId)` is the canonical operator-facing
+  health read model. It aggregates `event_tape`, `turn_wal`, and `artifact`
+  durability issues into one status surface.

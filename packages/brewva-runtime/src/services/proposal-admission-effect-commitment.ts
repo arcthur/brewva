@@ -5,7 +5,7 @@ import type {
   ToolEffectClass,
   ToolGovernanceDescriptor,
 } from "../contracts/index.js";
-import { toolGovernanceRequiresEffectCommitment } from "../governance/tool-governance.js";
+import type { ResolvedToolAuthority } from "../governance/tool-governance.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import type { BuildDecisionReceipt } from "./proposal-admission-shared.js";
 
@@ -29,7 +29,7 @@ interface EffectCommitmentProposalCommitInput {
   proposal: EffectCommitmentProposal;
   turn: number;
   buildDecisionReceipt: BuildDecisionReceipt;
-  resolveToolGovernanceDescriptor: (toolName: string) => ToolGovernanceDescriptor | undefined;
+  resolveToolAuthority: (toolName: string) => ResolvedToolAuthority;
   authorize: (input: AuthorizeEffectCommitmentInput) => EffectCommitmentAuthorizationDecision;
 }
 
@@ -47,7 +47,7 @@ export function commitEffectCommitmentProposal({
   proposal,
   turn,
   buildDecisionReceipt,
-  resolveToolGovernanceDescriptor,
+  resolveToolAuthority,
   authorize,
 }: EffectCommitmentProposalCommitInput): DecisionReceipt {
   const payload = proposal.payload;
@@ -92,7 +92,8 @@ export function commitEffectCommitmentProposal({
     );
   }
 
-  const descriptor = resolveToolGovernanceDescriptor(toolName);
+  const authority = resolveToolAuthority(toolName);
+  const descriptor = authority.descriptor;
   if (!descriptor) {
     return buildDecisionReceipt(
       proposal,
@@ -102,8 +103,17 @@ export function commitEffectCommitmentProposal({
       turn,
     );
   }
+  if (authority.source !== "exact" && authority.source !== "registry") {
+    return buildDecisionReceipt(
+      proposal,
+      "reject",
+      ["tool_governance_metadata"],
+      [`effect_commitment_requires_exact_governance_descriptor:${toolName}`],
+      turn,
+    );
+  }
 
-  if (descriptor.boundary !== "effectful" || !toolGovernanceRequiresEffectCommitment(descriptor)) {
+  if (authority.boundary !== "effectful" || !authority.requiresApproval) {
     return buildDecisionReceipt(
       proposal,
       "reject",

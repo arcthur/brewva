@@ -100,6 +100,13 @@ interface InspectBaseReportForAnalysis {
       eventId: string;
     }>;
   };
+  integrity: {
+    status: "healthy" | "degraded" | "unavailable";
+    issueCount: number;
+    issues: Array<{
+      eventId: string | null;
+    }>;
+  };
   task: {
     goal: string | null;
   };
@@ -372,9 +379,13 @@ function buildDurabilityFinding(base: InspectBaseReportForAnalysis): InspectFind
   const issues: string[] = [];
   const eventIds: string[] = [];
 
-  if (base.hydration.status === "degraded") {
-    issues.push(`hydration degraded (${base.hydration.issueCount} issue(s))`);
-    eventIds.push(...base.hydration.issues.map((issue) => issue.eventId));
+  if (base.integrity.status !== "healthy") {
+    issues.push(`integrity ${base.integrity.status} (${base.integrity.issueCount} issue(s))`);
+    eventIds.push(
+      ...base.integrity.issues
+        .map((issue) => issue.eventId)
+        .filter((issue): issue is string => typeof issue === "string" && issue.length > 0),
+    );
   }
   if (base.consistency.ledgerIntegrity === "invalid") {
     issues.push(

@@ -10,7 +10,6 @@ import type {
   BrewvaConfig,
   BrewvaEventRecord,
   SessionCostSummary,
-  ToolExecutionBoundary,
   ToolGovernanceDescriptor,
   VerificationLevel,
   VerificationReport,
@@ -19,7 +18,7 @@ import { SessionCostTracker } from "./cost/tracker.js";
 import { DECISION_RECEIPT_RECORDED_EVENT_TYPE } from "./events/event-types.js";
 import { BrewvaEventStore } from "./events/store.js";
 import type { GovernancePort } from "./governance/port.js";
-import type { ToolGovernanceDescriptorSource } from "./governance/tool-governance.js";
+import type { ResolvedToolAuthority } from "./governance/tool-governance.js";
 import { EvidenceLedger } from "./ledger/evidence-ledger.js";
 import { ParallelBudgetManager } from "./parallel/budget.js";
 import { ParallelResultStore } from "./parallel/results.js";
@@ -144,9 +143,7 @@ interface RuntimeServiceAssemblyOptions {
   kernel: RuntimeKernelContext;
   coreDependencies: RuntimeCoreDependencies;
   sessionState: RuntimeSessionStateStore;
-  resolveToolGovernanceDescriptor: (toolName: string) => ToolGovernanceDescriptor | undefined;
-  resolveToolGovernanceSource: (toolName: string) => ToolGovernanceDescriptorSource;
-  resolveToolExecutionBoundary: (toolName: string) => ToolExecutionBoundary;
+  resolveToolAuthority: (toolName: string) => ResolvedToolAuthority;
   resolveCheckpointCostSummary(sessionId: string): SessionCostSummary;
   resolveCheckpointCostSkillLastTurnByName(sessionId: string): Record<string, number>;
   evaluateCompletion(sessionId: string, level?: VerificationLevel): VerificationReport;
@@ -393,8 +390,7 @@ export function createRuntimeServiceDependencies(
       }),
     recordEvent: (input) => options.kernel.recordEvent(input),
     getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
-    resolveToolGovernanceDescriptor: (toolName) =>
-      options.resolveToolGovernanceDescriptor(toolName),
+    resolveToolAuthority: (toolName) => options.resolveToolAuthority(toolName),
     effectCommitmentAuthorizer: ({ sessionId, proposal, descriptor, turn }) => {
       const toolName = proposal.payload.toolName.trim() || proposal.subject.trim();
       const governanceDecision = options.governancePort?.authorizeEffectCommitment?.({
@@ -409,6 +405,29 @@ export function createRuntimeServiceDependencies(
           governanceDecision.decision === "defer"
             ? governanceDecision.decision
             : "reject";
+        if (decision === "defer") {
+          const deskDecision = effectCommitmentDeskService.authorize({
+            sessionId,
+            proposal,
+            descriptor,
+            turn,
+          });
+          return {
+            decision: "defer",
+            requestId: deskDecision.requestId,
+            policyBasis: normalizePolicyBasis(
+              [...(governanceDecision.policyBasis ?? []), ...(deskDecision.policyBasis ?? [])],
+              "effect_commitment_governance_port",
+            ),
+            reasons: normalizePolicyBasis(
+              [
+                ...normalizeReasonList(governanceDecision, `effect_commitment_defer:${toolName}`),
+                ...(deskDecision.reasons ?? []),
+              ],
+              `effect_commitment_defer:${toolName}`,
+            ),
+          };
+        }
         return {
           decision,
           policyBasis: normalizePolicyBasis(
@@ -467,8 +486,7 @@ export function createRuntimeServiceDependencies(
   const reversibleMutationService = new ReversibleMutationService({
     getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
     recordEvent: (input) => options.kernel.recordEvent(input),
-    resolveToolGovernanceDescriptor: (toolName) =>
-      options.resolveToolGovernanceDescriptor(toolName),
+    resolveToolAuthority: (toolName) => options.resolveToolAuthority(toolName),
   });
   const tapeService = new TapeService({
     tapeConfig: options.config.tape,
@@ -578,7 +596,9 @@ export function createRuntimeServiceDependencies(
     projectionEngine: options.coreDependencies.projectionEngine,
     turnReplay: options.coreDependencies.turnReplay,
     eventStore: options.coreDependencies.eventStore,
+    turnWalStore: options.coreDependencies.turnWalStore,
     evidenceLedger: options.coreDependencies.evidenceLedger,
+    reversibleMutationService,
     recordEvent: (input) => options.kernel.recordEvent(input),
     contextService,
   });
@@ -590,10 +610,7 @@ export function createRuntimeServiceDependencies(
     getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
     recordEvent: (input) => options.kernel.recordEvent(input),
     alwaysAllowedTools: CONTROL_PLANE_TOOLS,
-    resolveToolGovernanceDescriptor: (toolName) =>
-      options.resolveToolGovernanceDescriptor(toolName),
-    resolveToolGovernanceSource: (toolName) => options.resolveToolGovernanceSource(toolName),
-    resolveToolExecutionBoundary: (toolName) => options.resolveToolExecutionBoundary(toolName),
+    resolveToolAuthority: (toolName) => options.resolveToolAuthority(toolName),
     resourceLeaseService,
     skillLifecycleService,
     contextService,

@@ -10,7 +10,12 @@ import {
   writeFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
-import type { BrewvaConfig, BrewvaEventQuery, BrewvaEventRecord } from "../contracts/index.js";
+import type {
+  BrewvaConfig,
+  BrewvaEventQuery,
+  BrewvaEventRecord,
+  IntegrityIssue,
+} from "../contracts/index.js";
 import { redactUnknown } from "../security/redact.js";
 import {
   TAPE_ANCHOR_EVENT_TYPE,
@@ -107,6 +112,7 @@ export class BrewvaEventStore {
   private readonly dir: string;
   private readonly fileHasContent = new Map<string, boolean>();
   private readonly eventCacheByFilePath = new Map<string, EventFileCache>();
+  private readonly integrityIssuesByFilePath = new Map<string, IntegrityIssue[]>();
 
   constructor(config: BrewvaConfig["infrastructure"]["events"], cwd: string) {
     this.enabled = config.enabled;
@@ -226,6 +232,17 @@ export class BrewvaEventStore {
     const filePath = this.filePathForSession(sessionId);
     this.fileHasContent.delete(filePath);
     this.eventCacheByFilePath.delete(filePath);
+    this.integrityIssuesByFilePath.delete(filePath);
+  }
+
+  getIntegrityIssues(sessionId: string): IntegrityIssue[] {
+    const filePath = this.filePathForSession(sessionId);
+    if (this.enabled) {
+      this.syncCacheForFile(filePath);
+    }
+    return (this.integrityIssuesByFilePath.get(filePath) ?? []).map((issue) =>
+      Object.assign({}, issue),
+    );
   }
 
   listSessionIds(): string[] {
@@ -278,6 +295,7 @@ export class BrewvaEventStore {
 
   private syncCacheForFile(filePath: string): EventFileCache {
     if (!existsSync(filePath)) {
+      this.integrityIssuesByFilePath.delete(filePath);
       const empty: EventFileCache = {
         rows: [],
         byteOffset: 0,
@@ -293,6 +311,17 @@ export class BrewvaEventStore {
     try {
       size = statSync(filePath).size;
     } catch {
+      this.integrityIssuesByFilePath.set(filePath, [
+        {
+          domain: "event_tape",
+          severity: "degraded",
+          sessionId: this.sessionIdForFilePath(filePath),
+          eventId: `integrity:${filePath}`,
+          eventType: "event_store_integrity",
+          index: -1,
+          reason: "event_store_stat_failed",
+        },
+      ]);
       const empty: EventFileCache = {
         rows: [],
         byteOffset: 0,
@@ -314,7 +343,7 @@ export class BrewvaEventStore {
     }
 
     const appended = this.readTextRange(filePath, cached.byteOffset, size);
-    this.consumeChunk(cached, appended);
+    this.consumeChunk(filePath, cached, appended);
     cached.byteOffset = size;
     return cached;
   }
@@ -329,8 +358,25 @@ export class BrewvaEventStore {
     };
 
     if (size > 0) {
-      const text = readFileSync(filePath, "utf8");
-      this.consumeChunk(cache, text);
+      try {
+        const text = readFileSync(filePath, "utf8");
+        this.integrityIssuesByFilePath.delete(filePath);
+        this.consumeChunk(filePath, cache, text);
+      } catch {
+        this.integrityIssuesByFilePath.set(filePath, [
+          {
+            domain: "event_tape",
+            severity: "degraded",
+            sessionId: this.sessionIdForFilePath(filePath),
+            eventId: `integrity:${filePath}`,
+            eventType: "event_store_integrity",
+            index: -1,
+            reason: "event_store_read_failed",
+          },
+        ]);
+      }
+    } else {
+      this.integrityIssuesByFilePath.delete(filePath);
     }
 
     this.eventCacheByFilePath.set(filePath, cache);
@@ -356,7 +402,7 @@ export class BrewvaEventStore {
     }
   }
 
-  private consumeChunk(cache: EventFileCache, text: string): void {
+  private consumeChunk(filePath: string, cache: EventFileCache, text: string): void {
     if (!text && !cache.trailingFragment) {
       return;
     }
@@ -382,7 +428,19 @@ export class BrewvaEventStore {
       // Keep only a potentially incomplete tail fragment for the next incremental read.
       if (index === lines.length - 1) {
         cache.trailingFragment = raw;
+        continue;
       }
+      const issues = this.integrityIssuesByFilePath.get(filePath) ?? [];
+      issues.push({
+        domain: "event_tape",
+        severity: "degraded",
+        sessionId: this.sessionIdForFilePath(filePath),
+        eventId: `integrity:${cache.rows.length}`,
+        eventType: "event_store_integrity",
+        index: cache.rows.length,
+        reason: "event_store_malformed_row",
+      });
+      this.integrityIssuesByFilePath.set(filePath, issues);
     }
   }
 
@@ -480,5 +538,14 @@ export class BrewvaEventStore {
     }
     this.fileHasContent.set(filePath, hasData);
     return hasData;
+  }
+
+  private sessionIdForFilePath(filePath: string): string | undefined {
+    const name = filePath.split("/").pop() ?? "";
+    const stem = name.endsWith(".jsonl") ? name.slice(0, -".jsonl".length) : name;
+    if (!stem.startsWith(ENCODED_SESSION_PREFIX)) {
+      return undefined;
+    }
+    return decodeSessionIdFromFileName(stem.slice(ENCODED_SESSION_PREFIX.length)) ?? undefined;
   }
 }

@@ -24,6 +24,7 @@ export function inferEventCategory(type: string): BrewvaEventCategory {
   if (type.startsWith("verification_")) return "verification";
   if (type.startsWith("proposal_") || type.startsWith("decision_receipt_")) return "governance";
   if (type.startsWith("governance_")) return "governance";
+  if (type.startsWith("effect_commitment_") || type.startsWith("operator_")) return "governance";
   if (type.includes("snapshot") || type.includes("resumed") || type.includes("interrupted"))
     return "state";
   return "other";

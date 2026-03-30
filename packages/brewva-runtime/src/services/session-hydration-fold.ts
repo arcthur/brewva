@@ -1,7 +1,7 @@
 import type {
   BrewvaEventRecord,
+  IntegrityIssue,
   ResourceLeaseRecord,
-  SessionHydrationIssue,
   SkillOutputRecord,
   VerificationCheckRun,
   VerificationEvidence,
@@ -27,7 +27,7 @@ export interface SessionHydrationFoldContext {
   replayCostTail: boolean;
   replayCheckpointTurnTransient: boolean;
   callbacks: SessionHydrationFoldCallbacks;
-  issues: SessionHydrationIssue[];
+  issues: IntegrityIssue[];
 }
 
 export interface SessionHydrationApplyContext {
@@ -52,6 +52,9 @@ export function applySessionHydrationFold<State>(
     fold.fold(state, event, context);
   } catch (error) {
     context.issues.push({
+      domain: "event_tape",
+      severity: "degraded",
+      sessionId: context.sessionId,
       eventId: event.id,
       eventType: event.type,
       index: context.index,

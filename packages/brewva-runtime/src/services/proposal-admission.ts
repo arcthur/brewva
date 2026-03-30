@@ -6,13 +6,13 @@ import type {
   EffectCommitmentRecord,
   EvidenceRef,
   ProposalDecision,
-  ToolGovernanceDescriptor,
 } from "../contracts/index.js";
 import {
   DECISION_RECEIPT_RECORDED_EVENT_TYPE,
   PROPOSAL_DECIDED_EVENT_TYPE,
   PROPOSAL_RECEIVED_EVENT_TYPE,
 } from "../events/event-types.js";
+import type { ResolvedToolAuthority } from "../governance/tool-governance.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import {
   commitEffectCommitmentProposal,
@@ -24,7 +24,7 @@ export interface ProposalAdmissionServiceOptions {
   listDecisionReceiptEvents: (sessionId: string) => BrewvaEventRecord[];
   recordEvent: RuntimeKernelContext["recordEvent"];
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
-  resolveToolGovernanceDescriptor: (toolName: string) => ToolGovernanceDescriptor | undefined;
+  resolveToolAuthority: (toolName: string) => ResolvedToolAuthority;
   effectCommitmentAuthorizer: (
     input: AuthorizeEffectCommitmentInput,
   ) => EffectCommitmentAuthorizationDecision;
@@ -34,9 +34,7 @@ export class ProposalAdmissionService {
   private readonly listDecisionReceiptEvents: (sessionId: string) => BrewvaEventRecord[];
   private readonly recordEvent: RuntimeKernelContext["recordEvent"];
   private readonly getCurrentTurn: (sessionId: string) => number;
-  private readonly resolveToolGovernanceDescriptor: (
-    toolName: string,
-  ) => ToolGovernanceDescriptor | undefined;
+  private readonly resolveToolAuthority: (toolName: string) => ResolvedToolAuthority;
   private readonly authorizeEffectCommitment: (
     input: AuthorizeEffectCommitmentInput,
   ) => EffectCommitmentAuthorizationDecision;
@@ -45,8 +43,7 @@ export class ProposalAdmissionService {
     this.listDecisionReceiptEvents = (sessionId) => options.listDecisionReceiptEvents(sessionId);
     this.recordEvent = (input) => options.recordEvent(input);
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
-    this.resolveToolGovernanceDescriptor = (toolName) =>
-      options.resolveToolGovernanceDescriptor(toolName);
+    this.resolveToolAuthority = (toolName) => options.resolveToolAuthority(toolName);
     this.authorizeEffectCommitment = (input) => options.effectCommitmentAuthorizer(input);
   }
 
@@ -224,7 +221,7 @@ export class ProposalAdmissionService {
       sessionId,
       proposal,
       turn,
-      resolveToolGovernanceDescriptor: (toolName) => this.resolveToolGovernanceDescriptor(toolName),
+      resolveToolAuthority: (toolName) => this.resolveToolAuthority(toolName),
       buildDecisionReceipt: (
         nextProposal,
         decision,

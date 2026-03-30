@@ -101,6 +101,41 @@ describe("runtime facade coverage", () => {
     expect(runtime.session.listWorkerResults(sessionId)).toHaveLength(0);
   });
 
+  test("session.getIntegrity aggregates session and WAL durability issues", () => {
+    const workspace = createTestWorkspace("runtime-facade-session-integrity");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "runtime-facade-session-integrity-1";
+    const walDir = join(workspace, DEFAULT_BREWVA_CONFIG.infrastructure.turnWal.dir);
+    mkdirSync(walDir, { recursive: true });
+    writeFileSync(join(walDir, "runtime.jsonl"), '{"broken":\n', "utf8");
+
+    runtime.events.record({
+      sessionId,
+      type: "tool_output_artifact_persist_failed",
+      payload: {
+        reason: "artifact_store_unavailable",
+      },
+    });
+
+    const integrity = runtime.session.getIntegrity(sessionId);
+    expect(integrity.status).toBe("unavailable");
+    expect(integrity.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          domain: "turn_wal",
+          severity: "unavailable",
+          reason: "turn_wal_malformed_row",
+        }),
+        expect.objectContaining({
+          domain: "artifact",
+          severity: "degraded",
+          reason: "artifact_store_unavailable",
+          sessionId,
+        }),
+      ]),
+    );
+  });
+
   test("events.toStructured mirrors structured queries through the public events facade", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.events.level = "debug";

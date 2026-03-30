@@ -109,14 +109,14 @@ describe("turn wal store", () => {
     expect(store.listCurrent().map((row) => row.status)).toEqual(["done"]);
   });
 
-  test("given malformed wal lines, when store reloads, then latest valid records are recovered", () => {
+  test("given malformed wal lines, when store reloads, then integrity failure is surfaced", () => {
     const workspace = createTestWorkspace("turn-wal-corrupt-lines");
     const store = new TurnWALStore({
       workspaceRoot: workspace,
       config: DEFAULT_BREWVA_CONFIG.infrastructure.turnWal,
       scope: "channel-telegram",
     });
-    const pending = store.appendPending(createEnvelope("turn-corrupt"), "channel");
+    store.appendPending(createEnvelope("turn-corrupt"), "channel");
     appendFileSync(store.filePath, '\n{"schema":"bad"}\nnot-json\n', "utf8");
 
     const reloaded = new TurnWALStore({
@@ -124,9 +124,7 @@ describe("turn wal store", () => {
       config: DEFAULT_BREWVA_CONFIG.infrastructure.turnWal,
       scope: "channel-telegram",
     });
-    const rows = reloaded.listPending();
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.walId).toBe(pending.walId);
+    expect(() => reloaded.listPending()).toThrow("turn_wal_integrity_error");
   });
 
   test("given terminal records beyond retention window, when compact runs, then stale records are dropped", () => {

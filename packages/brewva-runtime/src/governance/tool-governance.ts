@@ -51,6 +51,22 @@ export function toolEffectsCreateRollbackAnchor(effects: readonly ToolEffectClas
   return !toolEffectsRequireEffectCommitment(effects) && effects.includes("workspace_write");
 }
 
+export type ToolGovernanceDescriptorSource = "registry" | "exact" | "hint" | "missing";
+
+export interface ToolGovernanceResolution {
+  descriptor?: ToolGovernanceDescriptor;
+  source: ToolGovernanceDescriptorSource;
+}
+
+export interface ResolvedToolAuthority {
+  normalizedToolName: string;
+  descriptor?: ToolGovernanceDescriptor;
+  source: ToolGovernanceDescriptorSource;
+  boundary: ToolExecutionBoundary;
+  requiresApproval: boolean;
+  rollbackable: boolean;
+}
+
 function sameEffects(
   left: readonly ToolEffectClass[] | undefined,
   right: readonly ToolEffectClass[] | undefined,
@@ -373,7 +389,9 @@ function validateToolGovernanceDescriptor(
   if (!Array.isArray(input.effects) || input.effects.length === 0) {
     throw new Error(`tool governance descriptor '${normalized}' requires at least one effect`);
   }
-  return normalizeDescriptor(input);
+  const normalizedDescriptor = normalizeDescriptor(input);
+  assertToolGovernanceInvariants(normalized, normalizedDescriptor);
+  return normalizedDescriptor;
 }
 
 export class ToolGovernanceRegistry {
@@ -441,13 +459,6 @@ export function sameToolGovernanceDescriptor(
   );
 }
 
-export type ToolGovernanceDescriptorSource = "registry" | "exact" | "hint" | "missing";
-
-export interface ToolGovernanceResolution {
-  descriptor?: ToolGovernanceDescriptor;
-  source: ToolGovernanceDescriptorSource;
-}
-
 function resolveDescriptorWithoutCustom(toolName: string): ToolGovernanceResolution {
   const normalized = normalizeToolName(toolName);
   if (!normalized) {
@@ -488,11 +499,61 @@ export function getToolGovernanceResolution(
   return registry ? registry.resolve(toolName) : resolveDescriptorWithoutCustom(toolName);
 }
 
+function assertToolGovernanceInvariants(
+  toolName: string,
+  toolDescriptor: ToolGovernanceDescriptor | undefined,
+): void {
+  if (!toolDescriptor) {
+    return;
+  }
+  const requiresApproval = toolGovernanceRequiresEffectCommitment(toolDescriptor);
+  if (toolDescriptor.rollbackable === true && !toolDescriptor.effects.includes("workspace_write")) {
+    throw new Error(
+      `tool_governance_invariant_violated:${normalizeToolName(toolName)} rollbackable tools require workspace_write`,
+    );
+  }
+  if (toolDescriptor.rollbackable === true && requiresApproval) {
+    throw new Error(
+      `tool_governance_invariant_violated:${normalizeToolName(toolName)} cannot explicitly opt into rollback while requiring approval`,
+    );
+  }
+  const rollbackable = toolGovernanceCreatesRollbackAnchor(toolDescriptor);
+  if (requiresApproval && rollbackable) {
+    throw new Error(
+      `tool_governance_invariant_violated:${normalizeToolName(toolName)} cannot be both approval_bound and rollbackable`,
+    );
+  }
+}
+
+function resolveAuthorityFromResolution(
+  toolName: string,
+  resolution: ToolGovernanceResolution,
+): ResolvedToolAuthority {
+  const normalizedToolName = normalizeToolName(toolName);
+  const resolvedDescriptor = resolution.descriptor;
+  assertToolGovernanceInvariants(normalizedToolName, resolvedDescriptor);
+  return {
+    normalizedToolName,
+    descriptor: resolvedDescriptor,
+    source: resolution.source,
+    boundary: resolvedDescriptor?.boundary ?? "effectful",
+    requiresApproval: toolGovernanceRequiresEffectCommitment(resolvedDescriptor),
+    rollbackable: toolGovernanceCreatesRollbackAnchor(resolvedDescriptor),
+  };
+}
+
+export function resolveToolAuthority(
+  toolName: string,
+  registry?: Pick<ToolGovernanceRegistry, "resolve">,
+): ResolvedToolAuthority {
+  return resolveAuthorityFromResolution(toolName, getToolGovernanceResolution(toolName, registry));
+}
+
 export function resolveToolExecutionBoundary(
   toolName: string,
-  registry?: Pick<ToolGovernanceRegistry, "get">,
+  registry?: Pick<ToolGovernanceRegistry, "resolve">,
 ): ToolExecutionBoundary {
-  return getToolGovernanceDescriptor(toolName, registry)?.boundary ?? "safe";
+  return resolveToolAuthority(toolName, registry).boundary;
 }
 
 export function toolGovernanceRequiresEffectCommitment(

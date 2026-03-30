@@ -6,6 +6,7 @@ import type {
 } from "../contracts/index.js";
 import { SessionCostTracker } from "../cost/tracker.js";
 import {
+  PATCH_RECORDED_EVENT_TYPE,
   VERIFICATION_STATE_RESET_EVENT_TYPE,
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
 } from "../events/event-types.js";
@@ -153,7 +154,7 @@ export class FileChangeService {
     if (!patchSet) return undefined;
     this.recordEvent({
       sessionId: input.sessionId,
-      type: "patch_recorded",
+      type: PATCH_RECORDED_EVENT_TYPE,
       turn: this.getCurrentTurn(input.sessionId),
       payload: {
         toolCallId: input.toolCallId,
@@ -175,7 +176,7 @@ export class FileChangeService {
     });
     this.recordEvent({
       sessionId: input.sessionId,
-      type: "patch_recorded",
+      type: PATCH_RECORDED_EVENT_TYPE,
       turn: this.getCurrentTurn(input.sessionId),
       payload: {
         toolCallId: input.toolCallId ?? null,

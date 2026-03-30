@@ -6,7 +6,6 @@ import type {
   EffectCommitmentProposal,
   SkillDocument,
   ToolExecutionBoundary,
-  ToolGovernanceDescriptor,
   ToolMutationReceipt,
 } from "../contracts/index.js";
 import type { SessionCostTracker } from "../cost/tracker.js";
@@ -15,11 +14,7 @@ import {
   ITERATION_GUARD_RECORDED_EVENT_TYPE,
   TOOL_EFFECT_GATE_SELECTED_EVENT_TYPE,
 } from "../events/event-types.js";
-import {
-  toolGovernanceCreatesRollbackAnchor,
-  toolGovernanceRequiresEffectCommitment,
-  type ToolGovernanceDescriptorSource,
-} from "../governance/tool-governance.js";
+import { type ResolvedToolAuthority } from "../governance/tool-governance.js";
 import { buildGuardResultPayload, coerceGuardResultPayload } from "../iteration/facts.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import {
@@ -78,11 +73,11 @@ export interface FinishToolCallInput {
 }
 
 export interface ToolStartAuthorization extends ToolAccessDecision {
-  descriptor?: ToolGovernanceDescriptor;
+  authority: ResolvedToolAuthority;
 }
 
 export interface ToolCompletionContext {
-  descriptor?: ToolGovernanceDescriptor;
+  authority: ResolvedToolAuthority;
   verdict: "pass" | "fail" | "inconclusive";
   effectCommitmentRequestId?: string;
 }
@@ -95,9 +90,7 @@ export interface ToolGateServiceOptions {
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
   recordEvent: RuntimeKernelContext["recordEvent"];
   alwaysAllowedTools: string[];
-  resolveToolGovernanceDescriptor: (toolName: string) => ToolGovernanceDescriptor | undefined;
-  resolveToolGovernanceSource: (toolName: string) => ToolGovernanceDescriptorSource;
-  resolveToolExecutionBoundary: (toolName: string) => ToolExecutionBoundary;
+  resolveToolAuthority: (toolName: string) => ResolvedToolAuthority;
   resourceLeaseService: Pick<ResourceLeaseService, "getEffectiveBudget">;
   skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
   contextService: Pick<ContextService, "checkContextCompactionGate" | "observeContextUsage">;
@@ -116,13 +109,7 @@ export class ToolGateService {
   private readonly sessionState: RuntimeSessionStateStore;
   private readonly alwaysAllowedTools: string[];
   private readonly alwaysAllowedToolSet: Set<string>;
-  private readonly resolveToolGovernanceDescriptor: (
-    toolName: string,
-  ) => ToolGovernanceDescriptor | undefined;
-  private readonly resolveToolGovernanceSource: (
-    toolName: string,
-  ) => ToolGovernanceDescriptorSource;
-  private readonly resolveToolExecutionBoundary: (toolName: string) => ToolExecutionBoundary;
+  private readonly resolveToolAuthority: (toolName: string) => ResolvedToolAuthority;
   private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
   private readonly getCurrentTurn: (sessionId: string) => number;
   private readonly getEffectiveBudget: ResourceLeaseService["getEffectiveBudget"];
@@ -165,11 +152,7 @@ export class ToolGateService {
         .map((toolName) => normalizeToolName(toolName))
         .filter((toolName) => toolName.length > 0),
     );
-    this.resolveToolGovernanceDescriptor = (toolName) =>
-      options.resolveToolGovernanceDescriptor(toolName);
-    this.resolveToolGovernanceSource = (toolName) => options.resolveToolGovernanceSource(toolName);
-    this.resolveToolExecutionBoundary = (toolName) =>
-      options.resolveToolExecutionBoundary(toolName);
+    this.resolveToolAuthority = (toolName) => options.resolveToolAuthority(toolName);
     this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
     this.getEffectiveBudget = (sessionId, contract, skillName) =>
@@ -187,10 +170,43 @@ export class ToolGateService {
       options.effectCommitmentDeskService.getRequestIdForProposal(sessionId, proposalId);
   }
 
-  checkToolAccess(sessionId: string, toolName: string): ToolAccessDecision {
+  private buildAccessContext(
+    sessionId: string,
+    toolName: string,
+  ): {
+    state: ReturnType<RuntimeSessionStateStore["getCell"]>;
+    skill: SkillDocument | undefined;
+    normalizedToolName: string;
+    authority: ResolvedToolAuthority;
+    access: ReturnType<typeof evaluateSkillToolAccess>;
+  } {
     const state = this.sessionState.getCell(sessionId);
     const skill = this.getActiveSkill(sessionId);
     const normalizedToolName = normalizeToolName(toolName);
+    const authority = this.resolveToolAuthority(normalizedToolName);
+    const access = evaluateSkillToolAccess(skill?.contract, toolName, {
+      enforceDeniedEffects: this.securityPolicy.enforceDeniedEffects,
+      effectAuthorizationMode: this.securityPolicy.effectAuthorizationMode,
+      alwaysAllowedTools: this.alwaysAllowedTools,
+      resolveToolGovernanceDescriptor: (nextToolName) =>
+        this.resolveToolAuthority(nextToolName).descriptor,
+    });
+    return {
+      state,
+      skill,
+      normalizedToolName,
+      authority,
+      access,
+    };
+  }
+
+  checkToolAccess(sessionId: string, toolName: string): ToolAccessDecision {
+    const { state, skill, normalizedToolName, authority, access } = this.buildAccessContext(
+      sessionId,
+      toolName,
+    );
+    const governanceSource = authority.source;
+    const boundary = authority.boundary;
     if (normalizedToolName === "bash" || normalizedToolName === "shell") {
       const reason = `Tool '${normalizedToolName}' has been removed. Use 'exec' with 'process' for command execution.`;
       this.recordEvent({
@@ -205,14 +221,6 @@ export class ToolGateService {
       });
       return { allowed: false, reason };
     }
-
-    const access = evaluateSkillToolAccess(skill?.contract, toolName, {
-      enforceDeniedEffects: this.securityPolicy.enforceDeniedEffects,
-      effectAuthorizationMode: this.securityPolicy.effectAuthorizationMode,
-      alwaysAllowedTools: this.alwaysAllowedTools,
-      resolveToolGovernanceDescriptor: (nextToolName) =>
-        this.resolveToolGovernanceDescriptor(nextToolName),
-    });
 
     if (access.warning && skill) {
       const key = `${skill.name}:${normalizedToolName}`;
@@ -233,7 +241,7 @@ export class ToolGateService {
       }
     }
 
-    if (skill && this.resolveToolGovernanceSource(normalizedToolName) === "hint") {
+    if (skill && authority.source === "hint") {
       const key = `${skill.name}:${normalizedToolName}`;
       if (!state.governanceMetadataWarnings.has(key)) {
         state.governanceMetadataWarnings.add(key);
@@ -250,6 +258,26 @@ export class ToolGateService {
           },
         });
       }
+    }
+
+    if (
+      boundary === "effectful" &&
+      governanceSource !== "exact" &&
+      governanceSource !== "registry"
+    ) {
+      const reason = `Effectful tool '${normalizedToolName}' requires an exact governance descriptor.`;
+      this.recordEvent({
+        sessionId,
+        type: "tool_call_blocked",
+        turn: this.getCurrentTurn(sessionId),
+        payload: {
+          toolName: normalizedToolName,
+          skill: skill?.name ?? null,
+          reason,
+          resolution: governanceSource,
+        },
+      });
+      return { allowed: false, reason };
     }
 
     if (!access.allowed) {
@@ -391,9 +419,10 @@ export class ToolGateService {
     args?: Record<string, unknown>,
     cwd?: string,
   ): ToolAccessExplanation {
-    const state = this.sessionState.getCell(sessionId);
-    const skill = this.getActiveSkill(sessionId);
-    const normalizedToolName = normalizeToolName(toolName);
+    const { state, skill, normalizedToolName, authority, access } = this.buildAccessContext(
+      sessionId,
+      toolName,
+    );
     if (normalizedToolName === "bash" || normalizedToolName === "shell") {
       return {
         allowed: false,
@@ -401,16 +430,19 @@ export class ToolGateService {
       };
     }
 
-    const access = evaluateSkillToolAccess(skill?.contract, toolName, {
-      enforceDeniedEffects: this.securityPolicy.enforceDeniedEffects,
-      effectAuthorizationMode: this.securityPolicy.effectAuthorizationMode,
-      alwaysAllowedTools: this.alwaysAllowedTools,
-      resolveToolGovernanceDescriptor: (nextToolName) =>
-        this.resolveToolGovernanceDescriptor(nextToolName),
-    });
-
     if (!access.allowed) {
       return { allowed: false, reason: access.reason };
+    }
+
+    if (
+      authority.boundary === "effectful" &&
+      authority.source !== "exact" &&
+      authority.source !== "registry"
+    ) {
+      return {
+        allowed: false,
+        reason: `Effectful tool '${normalizedToolName}' requires an exact governance descriptor.`,
+      };
     }
 
     const boundary = this.evaluateBoundaryPolicy(sessionId, toolName, args, cwd);
@@ -626,11 +658,12 @@ export class ToolGateService {
 
   private buildCommitmentProposal(
     input: StartToolCallInput,
+    authority: ResolvedToolAuthority,
     evidenceEvent: BrewvaEventRecord,
     argsIdentity: { digest: string; summary?: string },
   ): EffectCommitmentProposal | undefined {
     const normalizedToolName = normalizeToolName(input.toolName);
-    const descriptor = this.resolveToolGovernanceDescriptor(normalizedToolName);
+    const descriptor = authority.descriptor;
     if (!descriptor) {
       return undefined;
     }
@@ -669,6 +702,7 @@ export class ToolGateService {
 
   private authorizeEffectCommitment(
     input: StartToolCallInput,
+    authority: ResolvedToolAuthority,
     evidenceEvent: BrewvaEventRecord | undefined,
   ): ToolAccessDecision {
     const argsIdentity = this.resolveArgsIdentity(input.args);
@@ -769,7 +803,7 @@ export class ToolGateService {
       };
     }
 
-    const proposal = this.buildCommitmentProposal(input, evidenceEvent, argsIdentity);
+    const proposal = this.buildCommitmentProposal(input, authority, evidenceEvent, argsIdentity);
     if (!proposal) {
       const reason = `Commitment tool '${normalizeToolName(input.toolName)}' is missing governance metadata.`;
       this.recordEvent({
@@ -827,9 +861,9 @@ export class ToolGateService {
   }
 
   authorizeToolCall(input: StartToolCallInput): ToolStartAuthorization {
-    const boundary = this.resolveToolExecutionBoundary(input.toolName);
-    const normalizedToolName = normalizeToolName(input.toolName);
-    const descriptor = this.resolveToolGovernanceDescriptor(input.toolName);
+    const authority = this.resolveToolAuthority(input.toolName);
+    const boundary = authority.boundary;
+    const normalizedToolName = authority.normalizedToolName;
     const state = this.sessionState.getCell(input.sessionId);
     const requestedEffectCommitmentRequestId = input.effectCommitmentRequestId?.trim();
 
@@ -847,10 +881,10 @@ export class ToolGateService {
               toolCallId: input.toolCallId,
               toolName: normalizedToolName,
               boundary,
-              effects: descriptor?.effects ?? [],
-              defaultRisk: descriptor?.defaultRisk ?? null,
-              requiresApproval: toolGovernanceRequiresEffectCommitment(descriptor),
-              rollbackable: toolGovernanceCreatesRollbackAnchor(descriptor),
+              effects: authority.descriptor?.effects ?? [],
+              defaultRisk: authority.descriptor?.defaultRisk ?? null,
+              requiresApproval: authority.requiresApproval,
+              rollbackable: authority.rollbackable,
             },
           })
         : undefined;
@@ -888,15 +922,15 @@ export class ToolGateService {
         boundary,
         reason,
         effectCommitmentRequestId: requestedEffectCommitmentRequestId,
-        descriptor,
+        authority,
       };
     }
 
-    const gateDecision = this.evaluateEffectGate(input, boundary, descriptor, effectGateEvent);
+    const gateDecision = this.evaluateEffectGate(input, authority, effectGateEvent);
     if (!gateDecision.allowed) {
       return {
         ...gateDecision,
-        descriptor,
+        authority,
       };
     }
 
@@ -921,7 +955,7 @@ export class ToolGateService {
         boundary,
         reason,
         effectCommitmentRequestId,
-        descriptor,
+        authority,
       };
     }
 
@@ -936,16 +970,16 @@ export class ToolGateService {
       boundary,
       commitmentReceipt: gateDecision.commitmentReceipt,
       effectCommitmentRequestId: gateDecision.effectCommitmentRequestId,
-      descriptor,
+      authority,
     };
   }
 
   private evaluateEffectGate(
     input: StartToolCallInput,
-    boundary: ToolExecutionBoundary,
-    descriptor: ToolGovernanceDescriptor | undefined,
+    authority: ResolvedToolAuthority,
     effectGateEvent: BrewvaEventRecord | undefined,
   ): ToolAccessDecision {
+    const boundary = authority.boundary;
     const access = this.checkToolAccess(input.sessionId, input.toolName);
     if (!access.allowed) {
       return {
@@ -999,8 +1033,8 @@ export class ToolGateService {
       };
     }
 
-    if (boundary === "effectful" && toolGovernanceRequiresEffectCommitment(descriptor)) {
-      const commitment = this.authorizeEffectCommitment(input, effectGateEvent);
+    if (boundary === "effectful" && authority.requiresApproval) {
+      const commitment = this.authorizeEffectCommitment(input, authority, effectGateEvent);
       if (!commitment.allowed) {
         return commitment;
       }
@@ -1028,7 +1062,7 @@ export class ToolGateService {
     verdict?: "pass" | "fail" | "inconclusive";
     effectCommitmentRequestId?: string;
   }): ToolCompletionContext {
-    const descriptor = this.resolveToolGovernanceDescriptor(input.toolName);
+    const authority = this.resolveToolAuthority(input.toolName);
     const state = this.sessionState.getCell(input.sessionId);
     const verdict = resolveToolResultVerdict({
       verdict: input.verdict,
@@ -1040,7 +1074,7 @@ export class ToolGateService {
         ? state.effectCommitmentRequestIdsByToolCallId.get(input.toolCallId)
         : undefined);
     return {
-      descriptor,
+      authority,
       verdict,
       effectCommitmentRequestId,
     };

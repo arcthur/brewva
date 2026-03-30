@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type {
   BrewvaEventRecord,
-  SessionHydrationIssue,
+  IntegrityIssue,
   VerificationSessionState,
 } from "../../../packages/brewva-runtime/src/contracts/index.js";
 import {
@@ -55,7 +55,7 @@ function runFold<State>(
   } = {},
 ): {
   cell: RuntimeSessionStateCell;
-  issues: SessionHydrationIssue[];
+  issues: IntegrityIssue[];
   costReplayCalls: Array<{
     eventId: string;
     checkpointTurnTransient: boolean;
@@ -63,7 +63,7 @@ function runFold<State>(
   verificationSnapshots: Array<VerificationSessionState | undefined>;
 } {
   const cell = new RuntimeSessionStateCell();
-  const issues: SessionHydrationIssue[] = [];
+  const issues: IntegrityIssue[] = [];
   const costReplayCalls: Array<{
     eventId: string;
     checkpointTurnTransient: boolean;
@@ -279,7 +279,7 @@ describe("session hydration folds", () => {
     const fold = createCostHydrationFold();
     const cell = new RuntimeSessionStateCell();
     const state = fold.initial(cell);
-    const issues: SessionHydrationIssue[] = [];
+    const issues: IntegrityIssue[] = [];
     const costReplayCalls: Array<{
       eventId: string;
       checkpointTurnTransient: boolean;

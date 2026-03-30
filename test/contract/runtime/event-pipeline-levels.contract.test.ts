@@ -244,7 +244,7 @@ describe("event pipeline level classification", () => {
     expect(listenerErrors[0]?.payload?.errorMessage).toBe("listener exploded");
   });
 
-  test("drops non-authoritative governance telemetry at audit level", () => {
+  test("keeps governance anomaly and integrity telemetry at audit level", () => {
     const runtime = new BrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-governance-telemetry-")),
       config: createAuditConfig(),
@@ -261,7 +261,7 @@ describe("event pipeline level classification", () => {
 
     expect(
       runtime.events.query(sessionId, { type: "governance_cost_anomaly_detected" }),
-    ).toHaveLength(0);
+    ).toHaveLength(1);
   });
 
   test("keeps approval and delegation lifecycle events at audit level because replay depends on them", () => {
@@ -295,6 +295,33 @@ describe("event pipeline level classification", () => {
     for (const type of replayCriticalTypes) {
       expect(runtime.events.query(sessionId, { type })).toHaveLength(1);
     }
+    expect(
+      runtime.events.queryStructured(sessionId, { type: "effect_commitment_approval_requested" })[0]
+        ?.category,
+    ).toBe("governance");
+  });
+
+  test("classifies operator questionnaire receipts as governance at audit level", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-operator-question-")),
+      config: createAuditConfig(),
+    });
+    const sessionId = "audit-level-operator-question-session";
+
+    runtime.events.record({
+      sessionId,
+      type: "operator_question_answered",
+      payload: {
+        questionId: "q-1",
+        answer: "approved",
+      },
+    });
+
+    expect(runtime.events.query(sessionId, { type: "operator_question_answered" })).toHaveLength(1);
+    expect(
+      runtime.events.queryStructured(sessionId, { type: "operator_question_answered" })[0]
+        ?.category,
+    ).toBe("governance");
   });
 
   test("keeps custom domain events at audit level while reserved runtime prefixes stay fail-closed", () => {

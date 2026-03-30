@@ -50,6 +50,7 @@ import type {
   EffectCommitmentListQuery,
   EffectCommitmentProposal,
   EffectCommitmentRecord,
+  IntegrityStatus,
   PendingEffectCommitmentRequest,
   ToolExecutionBoundary,
   ToolGovernanceDescriptor,
@@ -97,7 +98,7 @@ import { BrewvaEventStore } from "./events/store.js";
 import type { GovernancePort } from "./governance/port.js";
 import {
   createToolGovernanceRegistry,
-  getToolGovernanceResolution,
+  resolveToolAuthority,
 } from "./governance/tool-governance.js";
 import {
   applyFactWindow,
@@ -540,6 +541,7 @@ export class BrewvaRuntime {
     clearState(sessionId: string): void;
     onClearState(listener: (sessionId: string) => void): () => void;
     getHydration(sessionId: string): SessionHydrationState;
+    getIntegrity(sessionId: string): IntegrityStatus;
     resolveCredentialBindings(sessionId: string, toolName: string): Record<string, string>;
     resolveSandboxApiKey(sessionId: string): string | undefined;
   };
@@ -695,11 +697,8 @@ export class BrewvaRuntime {
         projectionEngine: this.projectionEngine,
       },
       sessionState: this.sessionState,
-      resolveToolGovernanceDescriptor: (toolName) => this.toolGovernanceRegistry.get(toolName),
-      resolveToolGovernanceSource: (toolName) =>
-        getToolGovernanceResolution(toolName, this.toolGovernanceRegistry).source,
-      resolveToolExecutionBoundary: (toolName) =>
-        this.toolGovernanceRegistry.get(toolName)?.boundary ?? "safe",
+      resolveToolAuthority: (toolName) =>
+        resolveToolAuthority(toolName, this.toolGovernanceRegistry),
       resolveCheckpointCostSummary: (sessionId) => this.resolveCheckpointCostSummary(sessionId),
       resolveCheckpointCostSkillLastTurnByName: (sessionId) =>
         this.resolveCheckpointCostSkillLastTurnByName(sessionId),
@@ -985,6 +984,10 @@ export class BrewvaRuntime {
         getHydration: (sessionId) => {
           this.sessionLifecycleService.ensureHydrated(sessionId);
           return this.sessionLifecycleService.getHydrationState(sessionId);
+        },
+        getIntegrity: (sessionId) => {
+          this.sessionLifecycleService.ensureHydrated(sessionId);
+          return this.sessionLifecycleService.getIntegrityStatus(sessionId);
         },
         resolveCredentialBindings: (sessionId, toolName) => {
           this.sessionLifecycleService.ensureHydrated(sessionId);

@@ -1,11 +1,14 @@
+import type { TurnWALStore } from "../channels/turn-wal.js";
 import type { ContextBudgetManager } from "../context/budget.js";
 import type { ContextInjectionCollector } from "../context/injection.js";
 import type {
   BrewvaEventRecord,
-  SessionHydrationIssue,
+  IntegrityIssue,
+  IntegrityStatus,
   SessionHydrationState,
 } from "../contracts/index.js";
 import type { SessionCostTracker } from "../cost/tracker.js";
+import { TOOL_OUTPUT_ARTIFACT_PERSIST_FAILED_EVENT_TYPE } from "../events/event-types.js";
 import type { BrewvaEventStore } from "../events/store.js";
 import type { EvidenceLedger } from "../ledger/evidence-ledger.js";
 import type { ParallelBudgetManager } from "../parallel/budget.js";
@@ -17,6 +20,7 @@ import { TAPE_CHECKPOINT_EVENT_TYPE, coerceTapeCheckpointPayload } from "../tape
 import type { TurnReplayEngine } from "../tape/replay-engine.js";
 import type { VerificationGate } from "../verification/gate.js";
 import type { ContextService } from "./context.js";
+import type { ReversibleMutationService } from "./reversible-mutation.js";
 import { createCostHydrationFold } from "./session-hydration-fold-cost.js";
 import { createLedgerHydrationFold } from "./session-hydration-fold-ledger.js";
 import { createResourceLeaseHydrationFold } from "./session-hydration-fold-resource-lease.js";
@@ -43,7 +47,9 @@ export interface SessionLifecycleServiceOptions {
   projectionEngine: RuntimeKernelContext["projectionEngine"];
   turnReplay: RuntimeKernelContext["turnReplay"];
   eventStore: RuntimeKernelContext["eventStore"];
+  turnWalStore: TurnWALStore;
   evidenceLedger: RuntimeKernelContext["evidenceLedger"];
+  reversibleMutationService: ReversibleMutationService;
   recordEvent: RuntimeKernelContext["recordEvent"];
   contextService: Pick<ContextService, "clearReservedInjectionTokensForSession">;
 }
@@ -59,7 +65,7 @@ interface SessionHydrationFoldEntry {
 }
 
 interface SessionHydrationRun {
-  issues: SessionHydrationIssue[];
+  issues: IntegrityIssue[];
   callbacks: SessionHydrationFoldCallbacks;
   applyContext: SessionHydrationApplyContext;
   foldEntries: SessionHydrationFoldEntry[];
@@ -78,7 +84,9 @@ export class SessionLifecycleService {
   private readonly projectionEngine: ProjectionEngine;
   private readonly turnReplay: TurnReplayEngine;
   private readonly events: BrewvaEventStore;
+  private readonly turnWal: TurnWALStore;
   private readonly ledger: EvidenceLedger;
+  private readonly reversibleMutations: ReversibleMutationService;
   private readonly recordEvent: (input: {
     sessionId: string;
     type: string;
@@ -103,7 +111,9 @@ export class SessionLifecycleService {
     this.projectionEngine = options.projectionEngine;
     this.turnReplay = options.turnReplay;
     this.events = options.eventStore;
+    this.turnWal = options.turnWalStore;
     this.ledger = options.evidenceLedger;
+    this.reversibleMutations = options.reversibleMutationService;
     this.recordEvent = (input) => options.recordEvent(input);
   }
 
@@ -131,6 +141,7 @@ export class SessionLifecycleService {
   }
 
   getHydrationState(sessionId: string): SessionHydrationState {
+    this.refreshHydrationIntegrity(sessionId);
     const hydration = this.sessionState.getExistingCell(sessionId)?.hydration;
     if (!hydration) {
       return {
@@ -142,12 +153,20 @@ export class SessionLifecycleService {
       status: hydration.status,
       latestEventId: hydration.latestEventId,
       hydratedAt: hydration.hydratedAt,
-      issues: hydration.issues.map((issue) => ({
-        eventId: issue.eventId,
-        eventType: issue.eventType,
-        index: issue.index,
-        reason: issue.reason,
-      })),
+      issues: structuredClone(hydration.issues),
+    };
+  }
+
+  getIntegrityStatus(sessionId: string): IntegrityStatus {
+    const hydration = this.getHydrationState(sessionId);
+    const issues = structuredClone(hydration.issues);
+    issues.push(
+      ...this.turnWal.getIntegrityIssues(),
+      ...this.getArtifactIntegrityIssues(sessionId),
+    );
+    return {
+      status: this.resolveIntegrityStatus(issues),
+      issues,
     };
   }
 
@@ -184,23 +203,56 @@ export class SessionLifecycleService {
     this.events.clearSessionCache(sessionId);
   }
 
+  private refreshHydrationIntegrity(sessionId: string): void {
+    const state = this.sessionState.getExistingCell(sessionId);
+    if (!state || state.hydration.status === "cold") {
+      return;
+    }
+    const tapeIssues = this.events.getIntegrityIssues(sessionId);
+    if (tapeIssues.length === 0) {
+      return;
+    }
+    const seen = new Set(state.hydration.issues.map((issue) => this.integrityIssueKey(issue)));
+    const nextIssues = state.hydration.issues.map((issue) => ({ ...issue }));
+    let changed = false;
+    for (const issue of tapeIssues) {
+      const key = this.integrityIssueKey(issue);
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      nextIssues.push({ ...issue });
+      changed = true;
+    }
+    if (!changed) {
+      return;
+    }
+    state.hydration = {
+      ...state.hydration,
+      status: "degraded",
+      issues: nextIssues,
+    };
+  }
+
   private hydrateSessionStateFromEvents(sessionId: string): void {
     const state = this.sessionState.getCell(sessionId);
     if (state.hydration.status !== "cold") return;
 
     const events = this.events.list(sessionId);
+    const integrityIssues = this.events.getIntegrityIssues(sessionId);
     this.resetHydrationSupportStores(sessionId);
     if (events.length === 0) {
       state.hydration = {
-        status: "ready",
+        status: integrityIssues.length > 0 ? "degraded" : "ready",
         hydratedAt: Date.now(),
-        issues: [],
+        issues: integrityIssues,
       };
       return;
     }
 
+    this.reversibleMutations.restoreFromEvents(sessionId, events);
     const replayState = this.prepareHydrationReplayState(sessionId, events);
-    const hydrationRun = this.createHydrationRun(sessionId, state);
+    const hydrationRun = this.createHydrationRun(sessionId, state, integrityIssues);
     this.replayHydrationEvents(sessionId, events, hydrationRun, replayState);
     this.applyHydrationRun(state, events, hydrationRun);
   }
@@ -208,6 +260,7 @@ export class SessionLifecycleService {
   private resetHydrationSupportStores(sessionId: string): void {
     this.costTracker.clear(sessionId);
     this.verification.stateStore.clear(sessionId);
+    this.reversibleMutations.clear(sessionId);
   }
 
   private prepareHydrationReplayState(
@@ -232,8 +285,9 @@ export class SessionLifecycleService {
   private createHydrationRun(
     sessionId: string,
     state: RuntimeSessionStateCell,
+    initialIssues: IntegrityIssue[],
   ): SessionHydrationRun {
-    const issues: SessionHydrationIssue[] = [];
+    const issues: IntegrityIssue[] = initialIssues.map((issue) => ({ ...issue }));
     const callbacks = this.buildHydrationCallbacks();
     return {
       issues,
@@ -315,6 +369,42 @@ export class SessionLifecycleService {
         this.verification.stateStore.restore(sessionId, snapshot);
       },
     };
+  }
+
+  private getArtifactIntegrityIssues(sessionId: string): IntegrityIssue[] {
+    return this.events
+      .list(sessionId, { type: TOOL_OUTPUT_ARTIFACT_PERSIST_FAILED_EVENT_TYPE })
+      .map((event, index) => ({
+        domain: "artifact" as const,
+        severity: "degraded" as const,
+        sessionId,
+        eventId: event.id,
+        eventType: event.type,
+        index,
+        reason:
+          typeof event.payload?.reason === "string" && event.payload.reason.trim().length > 0
+            ? event.payload.reason
+            : "artifact_persist_failed",
+      }));
+  }
+
+  private resolveIntegrityStatus(issues: readonly IntegrityIssue[]): IntegrityStatus["status"] {
+    if (issues.some((issue) => issue.severity === "unavailable")) {
+      return "unavailable";
+    }
+    return issues.length > 0 ? "degraded" : "healthy";
+  }
+
+  private integrityIssueKey(issue: IntegrityIssue): string {
+    return [
+      issue.domain,
+      issue.severity,
+      issue.sessionId ?? "",
+      issue.eventId ?? "",
+      issue.eventType ?? "",
+      issue.index ?? -1,
+      issue.reason,
+    ].join(":");
   }
 
   private findLatestCheckpoint(events: BrewvaEventRecord[]): {

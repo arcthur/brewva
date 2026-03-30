@@ -138,7 +138,7 @@ describe("effect governance policy modes", () => {
     expect(blocked.reason).toContain("unauthorized effects");
   });
 
-  test("strict mode warns but does not block unknown tools that lack governance metadata", () => {
+  test("strict mode blocks effectful-unknown tools until an exact governance descriptor exists", () => {
     const workspace = createPolicyWorkspace("effect-governance-unknown-tool");
     const runtime = createRuntime(workspace, { security: { mode: "strict" } });
     const sessionId = "effect-governance-unknown-tool-1";
@@ -146,9 +146,10 @@ describe("effect governance policy modes", () => {
     expect(runtime.skills.activate(sessionId, "design").ok).toBe(true);
 
     const access = runtime.tools.checkAccess(sessionId, "custom_tool");
-    expect(access.allowed).toBe(true);
+    expect(access.allowed).toBe(false);
+    expect(access.reason).toContain("exact governance descriptor");
     expect(runtime.events.query(sessionId, { type: "tool_contract_warning" })).toHaveLength(1);
-    expect(runtime.events.query(sessionId, { type: "tool_call_blocked" })).toHaveLength(0);
+    expect(runtime.events.query(sessionId, { type: "tool_call_blocked" })).toHaveLength(1);
   });
 
   test("custom governance descriptors let strict mode enforce third-party tools", () => {
@@ -168,6 +169,19 @@ describe("effect governance policy modes", () => {
     } finally {
       runtime.tools.unregisterGovernanceDescriptor("custom_exec_tool");
     }
+  });
+
+  test("invalid governance descriptors fail closed at registration time", () => {
+    const workspace = createPolicyWorkspace("effect-governance-invalid-descriptor");
+    const runtime = createRuntime(workspace, { security: { mode: "strict" } });
+
+    expect(() =>
+      runtime.tools.registerGovernanceDescriptor("custom_invalid_tool", {
+        effects: ["local_exec", "workspace_write"],
+        defaultRisk: "high",
+        rollbackable: true,
+      }),
+    ).toThrow("tool_governance_invariant_violated");
   });
 
   test("explainAccess uses runtime-scoped governance descriptors", () => {
@@ -209,6 +223,26 @@ describe("effect governance policy modes", () => {
     expect(events[0]?.payload).toMatchObject({
       skill: "design",
       toolName: "custom_query_tool",
+      resolution: "hint",
+    });
+  });
+
+  test("effectful hint matches are blocked until exact governance metadata is registered", () => {
+    const workspace = createPolicyWorkspace("effect-governance-hint-effectful");
+    const runtime = createRuntime(workspace, { security: { mode: "strict" } });
+    const sessionId = "effect-governance-hint-effectful-1";
+
+    expect(runtime.skills.activate(sessionId, "design").ok).toBe(true);
+
+    const access = runtime.tools.checkAccess(sessionId, "custom_command_runner");
+
+    expect(access.allowed).toBe(false);
+    expect(access.reason).toContain("exact governance descriptor");
+    const metadataEvents = runtime.events.query(sessionId, { type: "governance_metadata_missing" });
+    expect(metadataEvents).toHaveLength(1);
+    expect(metadataEvents[0]?.payload).toMatchObject({
+      skill: "design",
+      toolName: "custom_command_runner",
       resolution: "hint",
     });
   });
@@ -255,7 +289,8 @@ describe("effect governance policy modes", () => {
 
       expect(blocked.allowed).toBe(false);
       expect(blocked.reason).toContain("local_exec");
-      expect(warned.allowed).toBe(true);
+      expect(warned.allowed).toBe(false);
+      expect(warned.reason).toContain("exact governance descriptor");
       expect(runtimeA.events.query("runtime-a", { type: "tool_contract_warning" })).toHaveLength(0);
       expect(runtimeB.events.query("runtime-b", { type: "tool_contract_warning" })).toHaveLength(1);
     } finally {
