@@ -171,6 +171,12 @@ describe("TurnReplayEngine checkpoint replay", () => {
             failureRecords: 0,
             anchorEpoch: 0,
             recentFailures: [],
+            failureClassCounts: {
+              execution: 0,
+              invocation_validation: 0,
+              shell_syntax: 0,
+              script_composition: 0,
+            },
           },
           projectionState: {
             updatedAt: null,
@@ -258,5 +264,68 @@ describe("TurnReplayEngine checkpoint replay", () => {
     engine.invalidate(sessionId);
     const second = engine.replay(sessionId);
     expect(second.costState.summary.alerts[0]?.timestamp).toBe(42);
+  });
+
+  test("ignores checkpoints that still use removed evidence-state fields", () => {
+    const sessionId = "replay-engine-invalid-checkpoint";
+    const invalidCheckpoint = checkpointEvent({
+      sessionId,
+      id: "evt-checkpoint-invalid",
+      timestamp: 2,
+      taskState: {
+        items: [
+          {
+            id: "item-checkpoint",
+            text: "checkpoint-state",
+            status: "todo",
+            createdAt: 2,
+            updatedAt: 2,
+          },
+        ],
+        blockers: [],
+        updatedAt: 2,
+      },
+      truthState: {
+        facts: [],
+        updatedAt: 2,
+      },
+    });
+    const checkpointPayload = invalidCheckpoint.payload as {
+      state?: {
+        evidence?: {
+          failureClassCounts?: unknown;
+        };
+      };
+    };
+    if (!checkpointPayload.state?.evidence) {
+      throw new Error("expected checkpoint evidence state");
+    }
+    delete checkpointPayload.state.evidence.failureClassCounts;
+
+    const events: BrewvaEventRecord[] = [
+      taskEvent({
+        sessionId,
+        id: "evt-task-before-invalid-checkpoint",
+        timestamp: 1,
+        text: "before",
+      }),
+      invalidCheckpoint,
+      taskEvent({
+        sessionId,
+        id: "evt-task-after-invalid-checkpoint",
+        timestamp: 3,
+        text: "after",
+      }),
+    ];
+
+    const engine = new TurnReplayEngine({
+      listEvents: () => events,
+      getTurn: () => 1,
+    });
+
+    const view = engine.replay(sessionId);
+    expect(view.checkpointEventId).toBeNull();
+    expect(view.latestEventId).toBe("evt-task-after-invalid-checkpoint");
+    expect(view.taskState.items.map((item) => item.text)).toEqual(["before", "after"]);
   });
 });

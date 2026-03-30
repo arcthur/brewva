@@ -59,6 +59,12 @@ describe("BrewvaEventStore tape helpers", () => {
           failureRecords: 0,
           anchorEpoch: 0,
           recentFailures: [],
+          failureClassCounts: {
+            execution: 0,
+            invocation_validation: 0,
+            shell_syntax: 0,
+            script_composition: 0,
+          },
         },
         projectionState: {
           updatedAt: null,

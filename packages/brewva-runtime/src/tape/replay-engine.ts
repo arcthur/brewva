@@ -356,12 +356,6 @@ function reduceProjectionState(
 }
 
 function checkpointEvidenceToReplay(state: TapeCheckpointEvidenceState): ReplayEvidenceState {
-  const failureClassCounts = state.failureClassCounts ?? {
-    execution: state.failureRecords,
-    invocation_validation: 0,
-    shell_syntax: 0,
-    script_composition: 0,
-  };
   const base: ReplayEvidenceState = {
     totalRecords: state.totalRecords,
     failureRecords: state.failureRecords,
@@ -376,10 +370,10 @@ function checkpointEvidenceToReplay(state: TapeCheckpointEvidenceState): ReplayE
       timestamp: entry.timestamp,
     })),
     failureClassCounts: {
-      execution: failureClassCounts.execution,
-      invocation_validation: failureClassCounts.invocation_validation,
-      shell_syntax: failureClassCounts.shell_syntax,
-      script_composition: failureClassCounts.script_composition,
+      execution: state.failureClassCounts.execution,
+      invocation_validation: state.failureClassCounts.invocation_validation,
+      shell_syntax: state.failureClassCounts.shell_syntax,
+      script_composition: state.failureClassCounts.script_composition,
     },
   };
   base.recentFailures = pruneToolFailures(base.recentFailures, base.anchorEpoch);

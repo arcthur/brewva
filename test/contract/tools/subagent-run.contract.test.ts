@@ -102,7 +102,7 @@ describe("subagent_run tool", () => {
     expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("fail");
   });
 
-  test("ignores unknown legacy delegation fields", async () => {
+  test("rejects removed legacy delegation fields", async () => {
     let adapterCalled = false;
     const tool = createSubagentRunTool({
       runtime: {
@@ -134,9 +134,10 @@ describe("subagent_run tool", () => {
       fakeContext("session-legacy"),
     );
 
-    expect(adapterCalled).toBe(true);
-    expect(extractText(result)).toContain("subagent_run completed for delegate=review");
-    expect((result.details as { ok?: boolean } | undefined)?.ok).toBe(true);
+    expect(adapterCalled).toBe(false);
+    expect(extractText(result)).toContain("removed legacy delegation fields are not supported");
+    expect(extractText(result)).toContain("requiredOutputs");
+    expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("fail");
   });
 
   test("marks mixed parallel results as failed", async () => {
@@ -539,5 +540,48 @@ describe("subagent_run tool", () => {
     expect(capturedRequest?.tasks).toHaveLength(2);
     expect(extractText(result)).toContain("subagent_fanout completed for delegate=explore");
     expect((result.details as { ok?: boolean } | undefined)?.ok).toBe(true);
+  });
+
+  test("subagent_fanout rejects legacy delegation fields nested in tasks", async () => {
+    let adapterCalled = false;
+    const tool = createSubagentFanoutTool({
+      runtime: {
+        orchestration: {
+          subagents: {
+            run: async () => {
+              adapterCalled = true;
+              return {
+                ok: true,
+                mode: "parallel",
+                delegate: "explore",
+                outcomes: [],
+              };
+            },
+          },
+        },
+      } as any,
+    });
+
+    const result = await tool.execute(
+      "tc-subagent-fanout-legacy-fields",
+      {
+        agentSpec: "explore",
+        tasks: [
+          {
+            label: "runtime",
+            objective: "inspect runtime entrypoints",
+            requiredOutputs: ["findings"],
+          },
+        ],
+      },
+      undefined,
+      undefined,
+      fakeContext("session-fanout-legacy"),
+    );
+
+    expect(adapterCalled).toBe(false);
+    expect(extractText(result)).toContain("removed legacy delegation fields are not supported");
+    expect(extractText(result)).toContain("tasks[0].requiredOutputs");
+    expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("fail");
   });
 });
