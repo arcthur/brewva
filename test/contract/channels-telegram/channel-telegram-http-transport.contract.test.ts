@@ -116,6 +116,48 @@ function createTransport(
 }
 
 describe("channel telegram http transport", () => {
+  test("uses the provided initial offset on the first getUpdates request", async () => {
+    const secondPollGate = createDeferred<Response>();
+    const { fetchImpl, calls } = createFetchStub([
+      async () =>
+        createJsonResponse({
+          ok: true,
+          result: [],
+        }),
+      async (_url, init) => {
+        if (!init.signal) {
+          throw new Error("expected abort signal on polling request");
+        }
+        if (init.signal.aborted) {
+          throw createAbortError();
+        }
+        init.signal.addEventListener(
+          "abort",
+          () => {
+            secondPollGate.reject(createAbortError());
+          },
+          { once: true },
+        );
+        return secondPollGate.promise;
+      },
+    ]);
+
+    const transport = createTransport({
+      fetchImpl,
+      initialOffset: 41,
+      poll: { timeoutSeconds: 0, retryDelayMs: 0 },
+    });
+
+    await transport.start({
+      onUpdate: async () => undefined,
+    });
+
+    await waitFor(() => calls.length >= 2);
+    await transport.stop();
+
+    expect(calls[0]?.bodyJson.offset).toBe(41);
+  });
+
   test("polls getUpdates and advances offset only after onUpdate success", async () => {
     const secondPollGate = createDeferred<Response>();
     const { fetchImpl, calls } = createFetchStub([
@@ -258,6 +300,106 @@ describe("channel telegram http transport", () => {
       () => transport.send(request),
       "telegram api sendMessage failed: code=403 bot was blocked by the user",
     );
+  });
+
+  test("retries send requests on retryable http responses before succeeding", async () => {
+    const request: TelegramOutboundRequest = {
+      method: "sendMessage",
+      params: { chat_id: "123", text: "hello" },
+    };
+    const delays: number[] = [];
+    const { fetchImpl, calls } = createFetchStub([
+      async () =>
+        new Response("rate limited", {
+          status: 429,
+          headers: {
+            "retry-after": "2",
+          },
+        }),
+      async () =>
+        createJsonResponse({
+          ok: true,
+          result: { message_id: 778 },
+        }),
+    ]);
+
+    const transport = createTransport({
+      fetchImpl,
+      sleepImpl: async (delayMs) => {
+        delays.push(delayMs);
+      },
+    });
+
+    const result = await transport.send(request);
+
+    expect(result).toEqual({ providerMessageId: 778 });
+    expect(delays).toEqual([2_000]);
+    expect(calls).toHaveLength(2);
+  });
+
+  test("retries send requests on retryable telegram api errors before succeeding", async () => {
+    const request: TelegramOutboundRequest = {
+      method: "sendMessage",
+      params: { chat_id: "123", text: "hello" },
+    };
+    const delays: number[] = [];
+    const { fetchImpl, calls } = createFetchStub([
+      async () =>
+        createJsonResponse({
+          ok: false,
+          error_code: 429,
+          description: "Too Many Requests: retry later",
+          parameters: {
+            retry_after: 3,
+          },
+        }),
+      async () =>
+        createJsonResponse({
+          ok: true,
+          result: { message_id: 779 },
+        }),
+    ]);
+
+    const transport = createTransport({
+      fetchImpl,
+      sleepImpl: async (delayMs) => {
+        delays.push(delayMs);
+      },
+    });
+
+    const result = await transport.send(request);
+
+    expect(result).toEqual({ providerMessageId: 779 });
+    expect(delays).toEqual([3_000]);
+    expect(calls).toHaveLength(2);
+  });
+
+  test("does not retry send requests on non-retryable http responses", async () => {
+    const request: TelegramOutboundRequest = {
+      method: "sendMessage",
+      params: { chat_id: "123", text: "hello" },
+    };
+    const delays: number[] = [];
+    const { fetchImpl, calls } = createFetchStub([
+      async () =>
+        new Response("bad request", {
+          status: 400,
+        }),
+    ]);
+
+    const transport = createTransport({
+      fetchImpl,
+      sleepImpl: async (delayMs) => {
+        delays.push(delayMs);
+      },
+    });
+
+    await assertRejectsWithMessage(
+      () => transport.send(request),
+      "telegram http sendMessage failed: status=400 body=bad request",
+    );
+    expect(delays).toEqual([]);
+    expect(calls).toHaveLength(1);
   });
 
   test("start and stop are idempotent", async () => {

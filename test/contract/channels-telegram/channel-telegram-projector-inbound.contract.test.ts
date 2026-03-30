@@ -43,7 +43,7 @@ describe("channel telegram projector inbound", () => {
       timestamp: 1_700_000_001_000,
       parts: [{ type: "text", text: "hello world" }],
       meta: {
-        updateId: 42,
+        ingressSequence: 42,
         chatType: "private",
         senderId: "99",
         senderName: "Ada",

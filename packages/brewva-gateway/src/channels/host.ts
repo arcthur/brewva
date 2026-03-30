@@ -23,6 +23,7 @@ import {
   type ChannelModeConfig,
   type ChannelModeLaunchBundle,
   type ChannelModeLauncher,
+  type ChannelModeLauncherInput,
   resolveSupportedChannel,
   type SupportedChannel,
 } from "./channel-bootstrap.js";
@@ -316,9 +317,26 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
   });
 
   try {
-    bundle = channelLaunchers[channel]({
+    const recovery =
+      channel === "telegram"
+        ? {
+            initialPollingOffset: (() => {
+              const ingressHighWatermark = turnWalStore.getIngressHighWatermark({
+                source: "channel",
+                channel: "telegram",
+              });
+              return ingressHighWatermark === undefined ? undefined : ingressHighWatermark + 1;
+            })(),
+          }
+        : undefined;
+    const launcherInput: ChannelModeLauncherInput & {
+      recovery?: {
+        initialPollingOffset?: number;
+      };
+    } = {
       runtime,
       channelConfig: options.channelConfig,
+      recovery,
       resolveIngestedSessionId: (turn) => dispatcher.resolveIngestedSessionId(turn),
       onInboundTurn: async (turn) => {
         await dispatcher.enqueueInboundTurn(turn);
@@ -329,7 +347,8 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
           console.error(`[channel:${channel}:error] ${message}`);
         }
       },
-    });
+    };
+    bundle = channelLaunchers[channel](launcherInput);
   } catch (error) {
     console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;

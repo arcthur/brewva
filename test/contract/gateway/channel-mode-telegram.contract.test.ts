@@ -14,7 +14,12 @@ import {
   type RunChannelModeDependencies,
 } from "@brewva/brewva-gateway";
 import { createHostedSession } from "@brewva/brewva-gateway/host";
-import type { ChannelTurnBridge, TurnEnvelope } from "@brewva/brewva-runtime/channels";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import {
+  TurnWALStore,
+  type ChannelTurnBridge,
+  type TurnEnvelope,
+} from "@brewva/brewva-runtime/channels";
 import { waitUntil } from "../../helpers/process.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -70,6 +75,223 @@ function readTurnText(turn: TurnEnvelope | undefined): string {
 }
 
 describe("gateway contract: telegram channel dispatch", () => {
+  test("recovers telegram polling offset from the existing channel wal before launcher startup", async () => {
+    const workspace = createTestWorkspace("channel-telegram-polling-offset");
+    const configPath = writeChannelConfig(workspace);
+    const store = new TurnWALStore({
+      workspaceRoot: workspace,
+      config: DEFAULT_BREWVA_CONFIG.infrastructure.turnWal,
+      scope: "channel-telegram",
+    });
+    const row = store.appendPending(
+      {
+        schema: "brewva.turn.v1",
+        kind: "user",
+        sessionId: "telegram-session",
+        turnId: "turn-offset-1",
+        channel: "telegram",
+        conversationId: "12345",
+        timestamp: Date.now(),
+        parts: [{ type: "text", text: "hello" }],
+        meta: {
+          ingressSequence: 10,
+        },
+      },
+      "channel",
+    );
+    store.markDone(row.walId);
+
+    const channelConfig = {
+      telegram: {
+        token: "bot-token",
+      },
+    };
+    const abortController = new AbortController();
+    let recoveredOffset: number | undefined;
+
+    const launcher: ChannelModeLauncher = (input) => {
+      recoveredOffset = (
+        input as {
+          recovery?: { initialPollingOffset?: number };
+        }
+      ).recovery?.initialPollingOffset;
+      const bridge = {
+        async start(): Promise<void> {
+          abortController.abort();
+        },
+        async stop(): Promise<void> {
+          return;
+        },
+        async sendTurn(): Promise<Record<string, never>> {
+          return {};
+        },
+      };
+      return {
+        bridge: bridge as unknown as ChannelTurnBridge,
+      };
+    };
+
+    try {
+      await runChannelMode({
+        cwd: workspace,
+        configPath,
+        managedToolMode: "direct",
+        verbose: false,
+        channel: "telegram",
+        channelConfig,
+        shutdownSignal: abortController.signal,
+        dependencies: {
+          launchers: {
+            telegram: launcher,
+          },
+        },
+      });
+    } finally {
+      cleanupTestWorkspace(workspace);
+    }
+
+    expect(recoveredOffset).toBe(11);
+  });
+
+  test("recovers telegram polling offset after wal compaction retains the ingress watermark", async () => {
+    const workspace = createTestWorkspace("channel-telegram-polling-offset-compacted");
+    const configPath = writeChannelConfig(workspace);
+    let nowMs = 10_000;
+    const store = new TurnWALStore({
+      workspaceRoot: workspace,
+      config: {
+        ...DEFAULT_BREWVA_CONFIG.infrastructure.turnWal,
+        compactAfterMs: 100,
+      },
+      scope: "channel-telegram",
+      now: () => nowMs,
+    });
+    const row = store.appendPending(
+      {
+        schema: "brewva.turn.v1",
+        kind: "user",
+        sessionId: "telegram-session",
+        turnId: "turn-offset-compacted-1",
+        channel: "telegram",
+        conversationId: "12345",
+        timestamp: Date.now(),
+        parts: [{ type: "text", text: "hello" }],
+        meta: {
+          ingressSequence: 10,
+        },
+      },
+      "channel",
+    );
+    store.markDone(row.walId);
+    nowMs += 500;
+    store.compact();
+
+    const channelConfig = {
+      telegram: {
+        token: "bot-token",
+      },
+    };
+    const abortController = new AbortController();
+    let recoveredOffset: number | undefined;
+
+    const launcher: ChannelModeLauncher = (input) => {
+      recoveredOffset = (
+        input as {
+          recovery?: { initialPollingOffset?: number };
+        }
+      ).recovery?.initialPollingOffset;
+      const bridge = {
+        async start(): Promise<void> {
+          abortController.abort();
+        },
+        async stop(): Promise<void> {
+          return;
+        },
+        async sendTurn(): Promise<Record<string, never>> {
+          return {};
+        },
+      };
+      return {
+        bridge: bridge as unknown as ChannelTurnBridge,
+      };
+    };
+
+    try {
+      await runChannelMode({
+        cwd: workspace,
+        configPath,
+        managedToolMode: "direct",
+        verbose: false,
+        channel: "telegram",
+        channelConfig,
+        shutdownSignal: abortController.signal,
+        dependencies: {
+          launchers: {
+            telegram: launcher,
+          },
+        },
+      });
+    } finally {
+      cleanupTestWorkspace(workspace);
+    }
+
+    expect(recoveredOffset).toBe(11);
+  });
+
+  test("fails closed before launcher startup when the telegram wal is malformed", async () => {
+    const workspace = createTestWorkspace("channel-telegram-malformed-wal");
+    const configPath = writeChannelConfig(workspace);
+    const walDir = join(workspace, DEFAULT_BREWVA_CONFIG.infrastructure.turnWal.dir);
+    mkdirSync(walDir, { recursive: true });
+    writeFileSync(join(walDir, "channel-telegram.jsonl"), '{"bad":true}\n', "utf8");
+
+    const channelConfig = {
+      telegram: {
+        token: "bot-token",
+      },
+    };
+    let launcherCalled = false;
+    const previousExitCode = process.exitCode ?? 0;
+    process.exitCode = 0;
+
+    try {
+      await runChannelMode({
+        cwd: workspace,
+        configPath,
+        managedToolMode: "direct",
+        verbose: false,
+        channel: "telegram",
+        channelConfig,
+        dependencies: {
+          launchers: {
+            telegram: () => {
+              launcherCalled = true;
+              return {
+                bridge: {
+                  async start(): Promise<void> {
+                    return;
+                  },
+                  async stop(): Promise<void> {
+                    return;
+                  },
+                  async sendTurn(): Promise<Record<string, never>> {
+                    return {};
+                  },
+                } as unknown as ChannelTurnBridge,
+              };
+            },
+          },
+        },
+      });
+
+      expect(launcherCalled).toBe(false);
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = previousExitCode;
+      cleanupTestWorkspace(workspace);
+    }
+  });
+
   test("telegram inbound turns include the unified telegram skill policy", async () => {
     const workspace = createTestWorkspace("channel-telegram-dispatch");
     const configPath = writeChannelConfig(workspace);

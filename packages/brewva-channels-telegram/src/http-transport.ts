@@ -9,6 +9,9 @@ const TELEGRAM_POLL_LIMIT_MIN = 1;
 const TELEGRAM_POLL_LIMIT_MAX = 100;
 const TELEGRAM_POLL_TIMEOUT_MIN = 0;
 const TELEGRAM_POLL_TIMEOUT_MAX = 600;
+const TELEGRAM_SEND_MAX_ATTEMPTS = 3;
+const TELEGRAM_SEND_RETRY_DELAY_MS_DEFAULT = 1_000;
+const TELEGRAM_SEND_RETRY_DELAY_MS_MAX = 10_000;
 
 interface TelegramApiOkResponse<T> {
   ok: true;
@@ -50,6 +53,31 @@ export interface TelegramHttpTransportOptions {
 
 interface TelegramSendResultPayload {
   message_id?: string | number;
+}
+
+class TelegramTransportError extends Error {
+  constructor(
+    readonly method: string,
+    readonly category: "network" | "http" | "api" | "response",
+    message: string,
+    readonly options: {
+      retryable?: boolean;
+      retryAfterMs?: number;
+      status?: number;
+      errorCode?: number;
+    } = {},
+  ) {
+    super(message);
+    this.name = "TelegramTransportError";
+  }
+
+  get retryable(): boolean {
+    return this.options.retryable === true;
+  }
+
+  get retryAfterMs(): number | undefined {
+    return this.options.retryAfterMs;
+  }
 }
 
 function normalizeToken(token: string): string {
@@ -103,14 +131,120 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
 }
 
-function buildApiError(method: string, message: string): Error {
-  return new Error(`telegram api ${method} failed: ${message}`);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function buildHttpError(method: string, status: number, text: string): Error {
+function normalizeRetryAfterMs(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return Math.max(0, Math.floor(value * 1_000));
+  }
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const numeric = Number(trimmed);
+  if (Number.isFinite(numeric) && numeric >= 0) {
+    return Math.max(0, Math.floor(numeric * 1_000));
+  }
+  const parsedDateMs = Date.parse(trimmed);
+  if (!Number.isFinite(parsedDateMs)) {
+    return undefined;
+  }
+  return Math.max(0, parsedDateMs - Date.now());
+}
+
+function resolveSendRetryDelayMs(error: TelegramTransportError, attempt: number): number {
+  if (error.retryAfterMs !== undefined) {
+    return error.retryAfterMs;
+  }
+  const exponentialDelay = TELEGRAM_SEND_RETRY_DELAY_MS_DEFAULT * 2 ** attempt;
+  return Math.min(TELEGRAM_SEND_RETRY_DELAY_MS_MAX, exponentialDelay);
+}
+
+function extractApiErrorDetails(body: string): {
+  description?: string;
+  errorCode?: number;
+  retryAfterMs?: number;
+} {
+  if (!body.trim()) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (!isRecord(parsed)) {
+      return {};
+    }
+    const description =
+      typeof parsed.description === "string" && parsed.description.trim()
+        ? parsed.description.trim()
+        : undefined;
+    const errorCode =
+      typeof parsed.error_code === "number" && Number.isFinite(parsed.error_code)
+        ? parsed.error_code
+        : undefined;
+    const retryAfterMs = isRecord(parsed.parameters)
+      ? normalizeRetryAfterMs(parsed.parameters.retry_after)
+      : undefined;
+    return {
+      ...(description ? { description } : {}),
+      ...(errorCode !== undefined ? { errorCode } : {}),
+      ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
+function buildApiError(
+  method: string,
+  message: string,
+  options: {
+    retryable?: boolean;
+    retryAfterMs?: number;
+    errorCode?: number;
+  } = {},
+): TelegramTransportError {
+  return new TelegramTransportError(method, "api", `telegram api ${method} failed: ${message}`, {
+    retryable: options.retryable,
+    retryAfterMs: options.retryAfterMs,
+    errorCode: options.errorCode,
+  });
+}
+
+function buildHttpError(
+  method: string,
+  status: number,
+  text: string,
+  options: {
+    retryable?: boolean;
+    retryAfterMs?: number;
+    errorCode?: number;
+  } = {},
+): TelegramTransportError {
   const summary = text.trim();
-  return new Error(
+  return new TelegramTransportError(
+    method,
+    "http",
     `telegram http ${method} failed: status=${status}${summary ? ` body=${summary}` : ""}`,
+    {
+      status,
+      retryable: options.retryable,
+      retryAfterMs: options.retryAfterMs,
+      errorCode: options.errorCode,
+    },
+  );
+}
+
+function buildNetworkError(method: string, cause: unknown): TelegramTransportError {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  return new TelegramTransportError(
+    method,
+    "network",
+    `telegram network ${method} failed: ${message}`,
   );
 }
 
@@ -175,12 +309,36 @@ export class TelegramHttpTransport implements TelegramChannelTransport {
   }
 
   async send(request: TelegramOutboundRequest): Promise<TelegramChannelTransportSendResult> {
-    const payload = await this.callApi<TelegramSendResultPayload>(request.method, request.params);
+    const payload = await this.callSendApiWithRetries<TelegramSendResultPayload>(
+      request.method,
+      request.params,
+    );
     const messageId = payload && typeof payload === "object" ? payload.message_id : undefined;
     if (messageId === undefined || messageId === null) {
       return {};
     }
     return { providerMessageId: messageId };
+  }
+
+  private async callSendApiWithRetries<T>(
+    method: string,
+    params: Record<string, unknown>,
+  ): Promise<T> {
+    for (let attempt = 0; attempt < TELEGRAM_SEND_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        return await this.callApi<T>(method, params);
+      } catch (error) {
+        if (!(error instanceof TelegramTransportError) || !error.retryable) {
+          throw error;
+        }
+        if (attempt + 1 >= TELEGRAM_SEND_MAX_ATTEMPTS) {
+          throw error;
+        }
+        await this.sleepImpl(resolveSendRetryDelayMs(error, attempt));
+      }
+    }
+
+    throw new Error(`telegram send ${method} exhausted retry loop`);
   }
 
   private async runPollLoop(): Promise<void> {
@@ -244,14 +402,22 @@ export class TelegramHttpTransport implements TelegramChannelTransport {
     params: Record<string, unknown>,
     signal?: AbortSignal,
   ): Promise<T> {
-    const response = await this.fetchImpl(this.buildMethodUrl(method), {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(params),
-      signal,
-    });
+    let response: Response;
+    try {
+      response = await this.fetchImpl(this.buildMethodUrl(method), {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(params),
+        signal,
+      });
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+      throw buildNetworkError(method, error);
+    }
 
     if (!response.ok) {
       let body = "";
@@ -260,7 +426,13 @@ export class TelegramHttpTransport implements TelegramChannelTransport {
       } catch {
         body = "";
       }
-      throw buildHttpError(method, response.status, body);
+      const details = extractApiErrorDetails(body);
+      throw buildHttpError(method, response.status, details.description ?? body, {
+        retryable: response.status === 429 || response.status >= 500,
+        retryAfterMs:
+          normalizeRetryAfterMs(response.headers.get("retry-after")) ?? details.retryAfterMs,
+        errorCode: details.errorCode,
+      });
     }
 
     let parsed: TelegramApiResponse<T>;
@@ -272,7 +444,11 @@ export class TelegramHttpTransport implements TelegramChannelTransport {
     }
 
     if (!parsed || typeof parsed !== "object" || !("ok" in parsed)) {
-      throw buildApiError(method, "unexpected response shape");
+      throw new TelegramTransportError(
+        method,
+        "response",
+        `telegram api ${method} failed: unexpected response shape`,
+      );
     }
 
     if (!parsed.ok) {
@@ -284,9 +460,17 @@ export class TelegramHttpTransport implements TelegramChannelTransport {
         typeof parsed.description === "string" && parsed.description.trim()
           ? parsed.description.trim()
           : "unknown";
+      const retryAfterMs = isRecord(parsed.parameters)
+        ? normalizeRetryAfterMs(parsed.parameters.retry_after)
+        : undefined;
       throw buildApiError(
         method,
         `${errorCode !== null ? `code=${errorCode} ` : ""}${description}`.trim(),
+        {
+          retryable: errorCode === 429,
+          retryAfterMs,
+          ...(errorCode !== null ? { errorCode } : {}),
+        },
       );
     }
 

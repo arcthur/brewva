@@ -62,9 +62,21 @@ Deletion consequences:
 - Channel approval helper state is not part of recovery correctness.
   Approval truth and request resolution remain replay-derived from durable
   runtime events, with optional process-local UI cache only.
+- Telegram polling restart offset is derived from durably accepted channel
+  TurnWAL ingress watermark state (`meta.ingressSequence`, projected from
+  Telegram `update_id`), not from process-local transport memory.
+- “durably accepted” here means ingress acceptance, not successful execution:
+  `pending`, `inflight`, `done`, `failed`, and `expired` rows can all advance
+  the Telegram polling watermark, because retry responsibility stays local to
+  TurnWAL recovery instead of upstream redelivery.
+- Channel outbound delivery is not replay-critical durable state. Telegram send
+  requests perform bounded per-request retry only on explicit retryable provider
+  rejections, then surface `channel_turn_outbound_error` once retry budget is
+  exhausted.
 - turn WAL remains bounded recovery state rather than historical truth, but WAL
   integrity failures now fail closed for recovery until the corrupted rows are
-  repaired or compacted away.
+  repaired; TurnWAL compaction preserves the latest ingress watermark through a
+  metadata-only marker needed for polling recovery.
 - `runtime.session.getIntegrity(sessionId)` is the canonical operator-facing
   health read model. It aggregates `event_tape`, `turn_wal`, and `artifact`
   durability issues into one status surface.

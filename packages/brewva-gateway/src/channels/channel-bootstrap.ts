@@ -45,6 +45,10 @@ export interface ChannelModeLaunchBundle {
   onStop?: () => Promise<void>;
 }
 
+interface ChannelModeRecoveryHints {
+  initialPollingOffset?: number;
+}
+
 export interface ChannelModeLauncherInput {
   runtime: BrewvaRuntime;
   channelConfig?: ChannelModeConfig;
@@ -287,6 +291,11 @@ export function formatSupportedChannels(): string {
 
 export const DEFAULT_CHANNEL_LAUNCHERS: Record<SupportedChannel, ChannelModeLauncher> = {
   telegram: (input) => {
+    const recovery = (
+      input as ChannelModeLauncherInput & {
+        recovery?: ChannelModeRecoveryHints;
+      }
+    ).recovery;
     const telegram = input.channelConfig?.telegram;
     const telegramToken = normalizeText(telegram?.token);
     if (!telegramToken) {
@@ -311,6 +320,9 @@ export const DEFAULT_CHANNEL_LAUNCHERS: Record<SupportedChannel, ChannelModeLaun
         },
         transport: {
           ...(apiBaseUrl ? { apiBaseUrl } : {}),
+          ...(recovery?.initialPollingOffset !== undefined
+            ? { initialOffset: recovery.initialPollingOffset }
+            : {}),
           poll: {
             timeoutSeconds: telegram?.pollTimeoutSeconds,
             limit: telegram?.pollLimit,

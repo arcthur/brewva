@@ -29,6 +29,14 @@ flowchart TD
 1. Adapter ingress:
    - polling path: transport calls `getUpdates`;
    - webhook path: Worker validates and forwards update to Fly ingress;
+   - polling startup seeds `getUpdates.offset` from the highest Telegram `update_id`
+     already durably accepted into the channel TurnWAL;
+   - this checkpoint is ingress-level rather than execution-level: once an update
+     is durably accepted into TurnWAL, unfinished local work is replayed from WAL
+     and Telegram is not relied on to redeliver the same update;
+   - TurnWAL compaction persists the latest accepted ingress watermark as a
+     metadata-only marker, so polling restart offset does not fall back after
+     terminal rows age out;
    - both paths end at projector + adapter dedupe and produce normalized turn.
 2. Bridge ingest: `channel_turn_ingested` is recorded, then the turn is handed to the CLI channel loop.
 3. Router/ACL phase: channel text is matched against orchestration commands and owner ACL policy (when enabled).
@@ -37,6 +45,11 @@ flowchart TD
 6. Turn canonicalization: inbound `turn.sessionId` is rewritten to the agent session id, while the original channel session id is preserved in `meta.channelSessionId`.
 7. Runtime dispatch: the inbound turn is transformed into a prompt, one agent execution cycle is run, and assistant/tool outputs are collected.
 8. Delivery and negotiation: outbound turns are capability-adjusted, then rendered by the adapter into channel-specific outbound requests.
+   - Telegram transport retries a single outbound request a bounded number of times
+     only when Telegram explicitly rejects it as retryable (for example `429` or
+     `5xx`, respecting provider retry hints when present);
+   - outbound delivery still is not durably replayed state; once retry budget is
+     exhausted, the system records `channel_turn_outbound_error` and continues.
 9. Approval loop: callback queries are signature-validated, projected into approval turns, and acknowledged via `answerCallbackQuery`.
 
 ## Telegram Skill Policy Path

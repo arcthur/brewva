@@ -12,6 +12,8 @@ import type {
 import type { ChannelReplyWriter } from "./channel-reply-writer.js";
 import type { ChannelCommandMatch, CommandRouter } from "./command-router.js";
 
+const LAST_TURN_CACHE_MAX_ENTRIES_DEFAULT = 2_048;
+
 function extractInboundText(turn: TurnEnvelope): string {
   const texts = turn.parts
     .filter((part): part is Extract<TurnPart, { type: "text" }> => part.type === "text")
@@ -25,6 +27,13 @@ function rewriteTurnText(turn: TurnEnvelope, text: string): TurnEnvelope {
     ...turn,
     parts: [{ type: "text", text }],
   };
+}
+
+function normalizeLastTurnCacheMaxEntries(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return LAST_TURN_CACHE_MAX_ENTRIES_DEFAULT;
+  }
+  return Math.max(1, Math.floor(value));
 }
 
 export interface ChannelTurnDispatcher {
@@ -70,9 +79,35 @@ export function createChannelTurnDispatcher(input: {
     scopeKey: string,
   ): Promise<ChannelPreparedCommand>;
   isShuttingDown(): boolean;
+  lastTurnCacheMaxEntries?: number;
 }): ChannelTurnDispatcher {
   const scopeQueues = new Map<string, Promise<void>>();
   const lastTurnByScope = new Map<string, TurnEnvelope>();
+  const lastTurnCacheMaxEntries = normalizeLastTurnCacheMaxEntries(input.lastTurnCacheMaxEntries);
+
+  const rememberLastTurn = (scopeKey: string, turn: TurnEnvelope): void => {
+    if (lastTurnByScope.has(scopeKey)) {
+      lastTurnByScope.delete(scopeKey);
+    }
+    lastTurnByScope.set(scopeKey, turn);
+    while (lastTurnByScope.size > lastTurnCacheMaxEntries) {
+      const oldestScopeKey = lastTurnByScope.keys().next().value;
+      if (!oldestScopeKey) {
+        break;
+      }
+      lastTurnByScope.delete(oldestScopeKey);
+    }
+  };
+
+  const readLastTurn = (scopeKey: string): TurnEnvelope | undefined => {
+    const turn = lastTurnByScope.get(scopeKey);
+    if (!turn) {
+      return undefined;
+    }
+    lastTurnByScope.delete(scopeKey);
+    lastTurnByScope.set(scopeKey, turn);
+    return turn;
+  };
 
   const resolveApprovalTargetAgentIdForTurn = (
     turn: TurnEnvelope,
@@ -119,7 +154,7 @@ export function createChannelTurnDispatcher(input: {
     preparedCommand?: ChannelPreparedCommand,
   ): Promise<void> => {
     input.turnWalStore.markInflight(walId);
-    lastTurnByScope.set(scopeKey, turn);
+    rememberLastTurn(scopeKey, turn);
 
     try {
       const text = extractInboundText(turn);
@@ -280,7 +315,7 @@ export function createChannelTurnDispatcher(input: {
     },
 
     getLastTurn(scopeKey: string): TurnEnvelope | undefined {
-      return lastTurnByScope.get(scopeKey);
+      return readLastTurn(scopeKey);
     },
 
     listQueueTails(): Promise<void>[] {

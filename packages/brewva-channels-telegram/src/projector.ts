@@ -688,7 +688,7 @@ function projectCallbackQueryToApprovalTurn(
       actions: [{ id: decision.actionId, label: decision.actionId }],
     },
     meta: {
-      updateId: update.update_id,
+      ingressSequence: update.update_id,
       callbackQueryId: callback.id,
       decisionActionId: decision.actionId,
       senderId: callback.from.id.toString(),
@@ -730,7 +730,7 @@ function projectMessageToUserTurn(
     timestamp: coerceMessageTimestampMs(message, options),
     parts,
     meta: {
-      updateId: update.update_id,
+      ingressSequence: update.update_id,
       chatType: message.chat.type,
       senderId: message.from?.id?.toString() ?? null,
       senderName: resolveSenderName(message) ?? null,

@@ -84,6 +84,14 @@ export interface TurnWALRecord {
   dedupeKey?: string;
 }
 
+export interface TurnWALIngressWatermarkRecord {
+  schema: "brewva.turn-wal.ingress-watermark.v1";
+  source: TurnWALSource;
+  channel: string;
+  ingressSequence: number;
+  updatedAt: number;
+}
+
 export interface TurnWALRecoverySummaryBySource {
   scanned: number;
   retried: number;

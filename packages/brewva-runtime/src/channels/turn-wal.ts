@@ -13,6 +13,7 @@ import { resolve } from "node:path";
 import type {
   BrewvaConfig,
   IntegrityIssue,
+  TurnWALIngressWatermarkRecord,
   TurnWALRecord,
   TurnWALSource,
   TurnWALStatus,
@@ -43,6 +44,7 @@ export interface TurnWALCompactResult {
 
 interface TurnWALFileCache {
   readonly rowsByWalId: Map<string, TurnWALRecord>;
+  readonly ingressWatermarksByKey: Map<string, TurnWALIngressWatermarkRecord>;
   byteOffset: number;
   trailingFragment: string;
 }
@@ -137,6 +139,41 @@ function parseTurnWALRecord(line: string): TurnWALRecord | null {
   return row;
 }
 
+function parseTurnWALIngressWatermarkRecord(line: string): TurnWALIngressWatermarkRecord | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  if (!isRecord(value)) return null;
+  if (value.schema !== "brewva.turn-wal.ingress-watermark.v1") return null;
+  if (!isTurnWALSource(value.source)) return null;
+  if (typeof value.channel !== "string" || !value.channel.trim()) return null;
+  if (
+    typeof value.ingressSequence !== "number" ||
+    !Number.isFinite(value.ingressSequence) ||
+    !Number.isInteger(value.ingressSequence) ||
+    value.ingressSequence < 0
+  ) {
+    return null;
+  }
+  if (
+    typeof value.updatedAt !== "number" ||
+    !Number.isFinite(value.updatedAt) ||
+    value.updatedAt <= 0
+  ) {
+    return null;
+  }
+  return {
+    schema: "brewva.turn-wal.ingress-watermark.v1",
+    source: value.source,
+    channel: value.channel.trim().toLowerCase(),
+    ingressSequence: value.ingressSequence,
+    updatedAt: value.updatedAt,
+  };
+}
+
 function sanitizeScopeId(scope: string): string {
   const normalized = scope.trim().replaceAll(/[^\w.-]+/g, "_");
   return normalized || "default";
@@ -150,6 +187,90 @@ function normalizeOptionalString(value: string | undefined): string | undefined 
 
 function cloneTurnWALRecord(row: TurnWALRecord): TurnWALRecord {
   return structuredClone(row);
+}
+
+function readIngressSequence(row: TurnWALRecord): number | undefined {
+  const meta = isRecord(row.envelope.meta) ? row.envelope.meta : null;
+  const ingressSequence = meta?.ingressSequence;
+  if (
+    typeof ingressSequence === "number" &&
+    Number.isFinite(ingressSequence) &&
+    Number.isInteger(ingressSequence) &&
+    ingressSequence >= 0
+  ) {
+    return ingressSequence;
+  }
+  return undefined;
+}
+
+function normalizeIngressChannel(channel: string): string | undefined {
+  const normalized = normalizeOptionalString(channel)?.toLowerCase();
+  return normalized;
+}
+
+function buildIngressWatermarkKey(input: { source: TurnWALSource; channel: string }): string {
+  return `${input.source}:${input.channel}`;
+}
+
+function createIngressWatermarkFromRecord(
+  row: TurnWALRecord,
+): TurnWALIngressWatermarkRecord | undefined {
+  const ingressSequence = readIngressSequence(row);
+  if (ingressSequence === undefined) {
+    return undefined;
+  }
+  const channel = normalizeIngressChannel(row.channel);
+  if (!channel) {
+    return undefined;
+  }
+  return {
+    schema: "brewva.turn-wal.ingress-watermark.v1",
+    source: row.source,
+    channel,
+    ingressSequence,
+    updatedAt: Math.max(row.createdAt, row.updatedAt),
+  };
+}
+
+function compareIngressWatermarks(
+  left: TurnWALIngressWatermarkRecord,
+  right: TurnWALIngressWatermarkRecord,
+): number {
+  if (left.source !== right.source) {
+    return left.source.localeCompare(right.source);
+  }
+  if (left.channel !== right.channel) {
+    return left.channel.localeCompare(right.channel);
+  }
+  if (left.ingressSequence !== right.ingressSequence) {
+    return left.ingressSequence - right.ingressSequence;
+  }
+  return left.updatedAt - right.updatedAt;
+}
+
+function mergeIngressWatermarkCandidate(
+  target: Map<string, TurnWALIngressWatermarkRecord>,
+  candidate: TurnWALIngressWatermarkRecord,
+): void {
+  const key = buildIngressWatermarkKey({
+    source: candidate.source,
+    channel: candidate.channel,
+  });
+  const existing = target.get(key);
+  if (!existing) {
+    target.set(key, candidate);
+    return;
+  }
+  if (candidate.ingressSequence > existing.ingressSequence) {
+    target.set(key, candidate);
+    return;
+  }
+  if (
+    candidate.ingressSequence === existing.ingressSequence &&
+    candidate.updatedAt > existing.updatedAt
+  ) {
+    target.set(key, candidate);
+  }
 }
 
 function compareByCreatedAt(left: TurnWALRecord, right: TurnWALRecord): number {
@@ -294,6 +415,28 @@ export class TurnWALStore {
       .map((row) => cloneTurnWALRecord(row));
   }
 
+  getIngressHighWatermark(input: { source: TurnWALSource; channel: string }): number | undefined {
+    if (!this.enabled) return undefined;
+    const channel = normalizeIngressChannel(input.channel);
+    if (!channel) return undefined;
+
+    const cache = this.syncCache();
+    const key = buildIngressWatermarkKey({
+      source: input.source,
+      channel,
+    });
+
+    let watermark = cache.ingressWatermarksByKey.get(key)?.ingressSequence;
+    for (const row of cache.rowsByWalId.values()) {
+      if (row.source !== input.source) continue;
+      if (normalizeIngressChannel(row.channel) !== channel) continue;
+      const ingressSequence = readIngressSequence(row);
+      if (ingressSequence === undefined) continue;
+      watermark = watermark === undefined ? ingressSequence : Math.max(watermark, ingressSequence);
+    }
+    return watermark;
+  }
+
   compact(): TurnWALCompactResult {
     if (!this.enabled) {
       return {
@@ -306,29 +449,64 @@ export class TurnWALStore {
     }
 
     const now = this.now();
-    const current = [...this.syncCache().rowsByWalId.values()].toSorted(compareByCreatedAt);
-    const retained = current.filter((row) => {
+    const cache = this.syncCache();
+    const current = [...cache.rowsByWalId.values()].toSorted(compareByCreatedAt);
+    const retainedRows = current.filter((row) => {
       if (!TERMINAL_STATUSES.has(row.status)) return true;
       return row.updatedAt + this.compactAfterMs > now;
     });
-    const dropped = current.length - retained.length;
+    const watermarkCandidates = new Map<string, TurnWALIngressWatermarkRecord>();
+    for (const watermark of cache.ingressWatermarksByKey.values()) {
+      mergeIngressWatermarkCandidate(watermarkCandidates, watermark);
+    }
+    for (const row of current) {
+      const watermark = createIngressWatermarkFromRecord(row);
+      if (!watermark) continue;
+      mergeIngressWatermarkCandidate(watermarkCandidates, watermark);
+    }
+
+    const persistedWatermarks = [...watermarkCandidates.values()]
+      .filter((watermark) => {
+        for (const row of retainedRows) {
+          if (row.source !== watermark.source) continue;
+          if (normalizeIngressChannel(row.channel) !== watermark.channel) continue;
+          if (readIngressSequence(row) === watermark.ingressSequence) {
+            return false;
+          }
+        }
+        return true;
+      })
+      .toSorted(compareIngressWatermarks);
+    const dropped = current.length - retainedRows.length;
+    const persistedEntries = [...persistedWatermarks, ...retainedRows];
     const content =
-      retained.length > 0 ? `${retained.map((row) => JSON.stringify(row)).join("\n")}\n` : "";
+      persistedEntries.length > 0
+        ? `${persistedEntries.map((entry) => JSON.stringify(entry)).join("\n")}\n`
+        : "";
     writeFileAtomic(this.filePath, content);
 
-    const cache: TurnWALFileCache = {
-      rowsByWalId: new Map(retained.map((row) => [row.walId, row])),
+    const nextCache: TurnWALFileCache = {
+      rowsByWalId: new Map(retainedRows.map((row) => [row.walId, row])),
+      ingressWatermarksByKey: new Map(
+        persistedWatermarks.map((watermark) => [
+          buildIngressWatermarkKey({
+            source: watermark.source,
+            channel: watermark.channel,
+          }),
+          watermark,
+        ]),
+      ),
       byteOffset: Buffer.byteLength(content, "utf8"),
       trailingFragment: "",
     };
-    this.cacheByFilePath.set(this.filePath, cache);
-    this.fileHasContent = retained.length > 0;
+    this.cacheByFilePath.set(this.filePath, nextCache);
+    this.fileHasContent = persistedEntries.length > 0;
 
     const result: TurnWALCompactResult = {
       scope: this.scope,
       filePath: this.filePath,
       scanned: current.length,
-      retained: retained.length,
+      retained: persistedEntries.length,
       dropped,
     };
     this.emitCompacted(result);
@@ -454,6 +632,7 @@ export class TurnWALStore {
       this.clearIntegrityIssues();
       const empty: TurnWALFileCache = {
         rowsByWalId: new Map(),
+        ingressWatermarksByKey: new Map(),
         byteOffset: 0,
         trailingFragment: "",
       };
@@ -490,6 +669,7 @@ export class TurnWALStore {
   private rebuildCache(size: number): TurnWALFileCache {
     const cache: TurnWALFileCache = {
       rowsByWalId: new Map(),
+      ingressWatermarksByKey: new Map(),
       byteOffset: size,
       trailingFragment: "",
     };
@@ -548,6 +728,17 @@ export class TurnWALStore {
       const parsed = parseTurnWALRecord(trimmed);
       if (parsed) {
         cache.rowsByWalId.set(parsed.walId, parsed);
+        continue;
+      }
+      const watermark = parseTurnWALIngressWatermarkRecord(trimmed);
+      if (watermark) {
+        cache.ingressWatermarksByKey.set(
+          buildIngressWatermarkKey({
+            source: watermark.source,
+            channel: watermark.channel,
+          }),
+          watermark,
+        );
         continue;
       }
 

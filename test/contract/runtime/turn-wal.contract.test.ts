@@ -4,7 +4,10 @@ import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { TurnWALStore, type TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
-function createEnvelope(id: string): TurnEnvelope {
+function createEnvelope(
+  id: string,
+  options: { meta?: Record<string, unknown> } = {},
+): TurnEnvelope {
   return {
     schema: "brewva.turn.v1",
     kind: "user",
@@ -14,6 +17,7 @@ function createEnvelope(id: string): TurnEnvelope {
     conversationId: "conversation-1",
     timestamp: 1_700_000_000_000,
     parts: [{ type: "text", text: `prompt ${id}` }],
+    ...(options.meta ? { meta: options.meta } : {}),
   };
 }
 
@@ -149,6 +153,61 @@ describe("turn wal store", () => {
     expect(compacted.scanned).toBe(1);
     expect(compacted.dropped).toBe(1);
     expect(store.listCurrent()).toHaveLength(0);
+    expect(
+      store.getIngressHighWatermark({
+        source: "gateway",
+        channel: "telegram",
+      }),
+    ).toBeUndefined();
+  });
+
+  test("given stale terminal ingress rows, when compact runs, then the latest ingress watermark is preserved without retaining turn rows", () => {
+    const workspace = createTestWorkspace("turn-wal-compact-ingress-watermark");
+    let nowMs = 10_000;
+    const store = new TurnWALStore({
+      workspaceRoot: workspace,
+      config: {
+        ...DEFAULT_BREWVA_CONFIG.infrastructure.turnWal,
+        compactAfterMs: 100,
+      },
+      scope: "channel-telegram",
+      now: () => nowMs,
+    });
+
+    const first = store.appendPending(
+      createEnvelope("turn-watermark-1", {
+        meta: {
+          ingressSequence: 10,
+        },
+      }),
+      "channel",
+    );
+    store.markDone(first.walId);
+
+    nowMs += 10;
+    const second = store.appendPending(
+      createEnvelope("turn-watermark-2", {
+        meta: {
+          ingressSequence: 20,
+        },
+      }),
+      "channel",
+    );
+    store.markDone(second.walId);
+
+    nowMs += 500;
+    const compacted = store.compact();
+    const current = store.listCurrent();
+
+    expect(compacted.scanned).toBe(2);
+    expect(compacted.dropped).toBe(2);
+    expect(current).toHaveLength(0);
+    expect(
+      store.getIngressHighWatermark({
+        source: "channel",
+        channel: "telegram",
+      }),
+    ).toBe(20);
   });
 
   test("given burst appends, when appendPending is called concurrently, then wal ids stay unique and rows remain ordered", async () => {
