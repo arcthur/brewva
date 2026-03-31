@@ -11,7 +11,7 @@
   - `docs/reference/runtime.md`
   - `docs/reference/tools.md`
   - `docs/reference/events.md`
-  - `docs/journeys/background-and-parallelism.md`
+  - `docs/journeys/operator/background-and-parallelism.md`
 
 ## Direct Conclusion
 
@@ -852,7 +852,7 @@ This RFC is ready for promotion when:
 - `docs/reference/proposal-boundary.md`
 - `docs/reference/runtime.md`
 - `docs/reference/tools.md`
-- `docs/journeys/background-and-parallelism.md`
+- `docs/journeys/operator/background-and-parallelism.md`
 - `packages/brewva-tools/src/types.ts`
 - `packages/brewva-tools/src/subagent-run.ts`
 - `packages/brewva-tools/src/workflow-status.ts`

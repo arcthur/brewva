@@ -12,8 +12,8 @@
   - `docs/reference/events.md`
   - `docs/reference/skills.md`
   - `docs/reference/tools.md`
-  - `docs/journeys/planning-to-execution.md`
-  - `docs/journeys/background-and-parallelism.md`
+  - `docs/journeys/operator/interactive-session.md`
+  - `docs/journeys/operator/background-and-parallelism.md`
 
 ## Promotion Summary
 
@@ -44,8 +44,8 @@ Stable references:
 - `docs/reference/events.md`
 - `docs/reference/skills.md`
 - `docs/reference/tools.md`
-- `docs/journeys/planning-to-execution.md`
-- `docs/journeys/background-and-parallelism.md`
+- `docs/journeys/operator/interactive-session.md`
+- `docs/journeys/operator/background-and-parallelism.md`
 
 ## Stable Contract Summary
 

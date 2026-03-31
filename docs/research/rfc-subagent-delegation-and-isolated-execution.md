@@ -12,7 +12,7 @@
   - `docs/reference/tools.md`
   - `docs/reference/events.md`
   - `docs/reference/skills.md`
-  - `docs/journeys/background-and-parallelism.md`
+  - `docs/journeys/operator/background-and-parallelism.md`
 
 ## Direct Conclusion
 
@@ -914,7 +914,7 @@ This note is ready for promotion when all of the following are true:
 - `docs/reference/proposal-boundary.md`
 - `docs/reference/skills.md`
 - `docs/reference/runtime.md`
-- `docs/journeys/background-and-parallelism.md`
+- `docs/journeys/operator/background-and-parallelism.md`
 - `packages/brewva-runtime/src/services/parallel.ts`
 - `packages/brewva-runtime/src/parallel/results.ts`
 - `packages/brewva-runtime/src/services/tool-gate.ts`

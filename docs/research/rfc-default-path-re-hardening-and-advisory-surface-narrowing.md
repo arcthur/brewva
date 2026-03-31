@@ -72,7 +72,7 @@ The promoted contract is:
 
 Promotion is backed by:
 
-- removal of default workflow advisory injection from the hosted-session path
+- removal of default workflow advisory injection from the hosted session path
 - deletion of dead residual routing and scan-convergence surfaces
 - tightened `iteration_fact` tool and runtime event contracts
 - explicit event retention classification and registry/doc alignment

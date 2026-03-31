@@ -31,7 +31,8 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 3. Promote accepted decisions into stable docs:
    - `docs/architecture/` for design/invariant decisions
    - `docs/reference/` for public contracts
-   - `docs/journeys/` for operator workflows
+   - `docs/journeys/operator/` for operator workflows
+   - `docs/journeys/internal/` for cross-package review flows
 4. Keep research pages as concise status pointers or archive them.
 
 ## Proposed notes

@@ -1,18 +1,18 @@
-# Guide: Gateway Control Plane Daemon
+# Guide: Gateway Control-Plane Daemon
 
 ## Purpose and Scope
 
-`brewva gateway` is the local control plane daemon. It exposes a typed WebSocket API that can be consumed by CLI, macOS app, Web UI, and automation components.
+`brewva gateway` is the local control-plane daemon. It exposes a typed WebSocket API that can be consumed by CLI, macOS app, Web UI, and automation components.
 
 This is a different path from `--channel` (for example, Telegram ingress/egress):
 
 - `--channel` handles external channel message transport.
-- `brewva gateway` handles local control plane session orchestration and process isolation.
+- `brewva gateway` handles local control-plane session orchestration and process isolation.
 
 ## Security Boundaries
 
 - Bind only to loopback (`127.0.0.1`, `::1`, or `localhost`).
-- Never expose the control plane port directly to the public internet.
+- Never expose the control-plane port directly to the public internet.
 - For remote access, use VPN or Tailscale and keep gateway bound to loopback.
 - Authentication is challenge-response: receive `connect.challenge`, then call `connect` with token and nonce.
 
@@ -81,7 +81,7 @@ Key files:
 
 - `gateway.pid.json`: daemon PID and listening metadata.
 - `gateway.log`: structured logs (with rotation).
-- `gateway.token`: control plane auth token.
+- `gateway.token`: control-plane auth token.
 - `HEARTBEAT.md`: externalized heartbeat policy file.
   - JSON heartbeat rules define one explicit prompt per wake-up rule.
 - `children.json`: child-process registry used for orphan cleanup during restart.

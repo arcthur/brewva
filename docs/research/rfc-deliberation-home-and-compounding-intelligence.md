@@ -13,7 +13,7 @@
   - `docs/reference/skills.md`
   - `docs/reference/context-composer.md`
   - `docs/reference/tools.md`
-  - `docs/journeys/intent-driven-scheduling.md`
+  - `docs/journeys/operator/intent-driven-scheduling.md`
 
 ## Direct Conclusion
 
@@ -139,7 +139,7 @@ Stable contract landing points:
 
 - `docs/reference/tools.md`
 - `docs/reference/skills.md`
-- `docs/journeys/intent-driven-scheduling.md`
+- `docs/journeys/operator/intent-driven-scheduling.md`
 - `docs/architecture/cognitive-product-architecture.md`
 
 ## Boundary Decisions That Remain In Force
@@ -184,7 +184,7 @@ The design is validated by:
   continuity
 - contract coverage for governance and recovery boundaries
 - docs coverage and dist smoke checks
-- hosted-session lifecycle sync without hidden provider writes
+- hosted session lifecycle sync without hidden provider writes
 
 Representative checks:
 
@@ -229,4 +229,4 @@ kernel authority.
 - `docs/reference/skills.md`
 - `docs/reference/context-composer.md`
 - `docs/reference/tools.md`
-- `docs/journeys/intent-driven-scheduling.md`
+- `docs/journeys/operator/intent-driven-scheduling.md`

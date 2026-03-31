@@ -26,7 +26,7 @@
 - `guide`: operational usage
 - `architecture`: implemented design and reliability boundaries
 - `reference`: contract-level definitions
-- `journeys`: cross-module execution flows
+- `journeys`: operator entrypoints and cross-package review flows
 - `troubleshooting`: incident-oriented remediation
 - `research`: incubating notes and roadmap hypotheses before promotion to stable docs
 

@@ -15,7 +15,7 @@
 
 This note is now a status pointer.
 
-The hosted-session compatibility and event-surface contracts described here
+The hosted session compatibility and event-surface contracts described here
 have been implemented and promoted into stable documentation.
 
 Implemented direction:

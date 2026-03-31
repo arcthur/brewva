@@ -267,7 +267,7 @@ Model-facing composition is separate:
 
 - runtime admission decides which sources are allowed
 - `ContextComposer` decides how admitted blocks are shown to the model
-- default hosted-session behavior is narrative-first
+- default hosted session behavior is narrative-first
 - the model may choose any valid path unless an independent governance boundary
   blocks it
 

@@ -14,7 +14,7 @@
   - `docs/reference/events.md`
   - `docs/guide/orchestration.md`
   - `docs/guide/cli.md`
-  - `docs/journeys/background-and-parallelism.md`
+  - `docs/journeys/operator/background-and-parallelism.md`
 
 ## Promotion Summary
 
@@ -49,7 +49,7 @@ Stable references:
 - `docs/reference/events.md`
 - `docs/guide/orchestration.md`
 - `docs/guide/cli.md`
-- `docs/journeys/background-and-parallelism.md`
+- `docs/journeys/operator/background-and-parallelism.md`
 
 ## Stable Contract Summary
 

@@ -28,7 +28,7 @@ Related docs:
 
 - `docs/architecture/invariants-and-reliability.md`
 - `docs/reference/events.md`
-- `docs/journeys/session-handoff-and-reference.md`
+- `docs/journeys/operator/inspect-replay-and-recovery.md`
 
 Validation signals:
 
@@ -53,7 +53,7 @@ Source anchors:
 
 Related docs:
 
-- `docs/journeys/context-and-compaction.md`
+- `docs/journeys/internal/context-and-compaction.md`
 - `docs/reference/configuration.md`
 - `docs/reference/limitations.md`
 
@@ -81,7 +81,7 @@ Source anchors:
 Related docs:
 
 - `docs/architecture/invariants-and-reliability.md`
-- `docs/journeys/operations-and-debugging.md`
+- `docs/journeys/operator/inspect-replay-and-recovery.md`
 - `docs/reference/session-lifecycle.md`
 
 Validation signals:
@@ -109,7 +109,7 @@ Related docs:
 
 - `docs/reference/runtime.md`
 - `docs/reference/configuration.md`
-- `docs/journeys/operations-and-debugging.md`
+- `docs/journeys/operator/inspect-replay-and-recovery.md`
 
 Validation signals:
 
@@ -135,7 +135,7 @@ Source anchors:
 Related docs:
 
 - `docs/architecture/invariants-and-reliability.md`
-- `docs/journeys/operations-and-debugging.md`
+- `docs/journeys/operator/approval-and-rollback.md`
 - `docs/reference/tools.md`
 
 Validation signals:

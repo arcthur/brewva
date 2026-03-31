@@ -142,7 +142,7 @@ flowchart TD
 flowchart TD
   A["rollbackLastMutation(sessionId)"] --> B["resolve latest rollback candidate"]
   B --> C{"strategy?"}
-  C -->|workspace_patchset| D["rollback tracked patch set"]
+  C -->|workspace_patchset| D["rollback tracked PatchSet"]
   C -->|none available| E["return no_mutation_receipt"]
   D --> F["emit rollback event trail"]
 ```
