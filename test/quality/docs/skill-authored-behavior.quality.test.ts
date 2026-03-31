@@ -14,6 +14,7 @@ describe("skill authored behavior coverage", () => {
   for (const relativePath of [
     "skills/core/repository-analysis/SKILL.md",
     "skills/core/discovery/SKILL.md",
+    "skills/core/learning-research/SKILL.md",
     "skills/core/strategy-review/SKILL.md",
     "skills/core/design/SKILL.md",
     "skills/core/debugging/SKILL.md",
@@ -22,6 +23,7 @@ describe("skill authored behavior coverage", () => {
     "skills/core/qa/SKILL.md",
     "skills/core/ship/SKILL.md",
     "skills/core/retro/SKILL.md",
+    "skills/core/knowledge-capture/SKILL.md",
     "skills/operator/runtime-forensics/SKILL.md",
     "skills/domain/agent-browser/SKILL.md",
     "skills/domain/ci-iteration/SKILL.md",
@@ -79,5 +81,26 @@ describe("skill authored behavior coverage", () => {
     expect(markdown).toContain("metrics-first");
     expect(markdown).toContain("hotspots");
     expect(markdown).toContain("systemic");
+  });
+
+  test("predict-review maps perspectives to canonical built-in agent specs", () => {
+    const skillMarkdown = readRepoFile("skills/domain/predict-review/SKILL.md");
+    const referenceMarkdown = readRepoFile(
+      "skills/domain/predict-review/references/perspectives.md",
+    );
+
+    expect(skillMarkdown).toContain("review-boundaries");
+    expect(skillMarkdown).toContain("review-security");
+    expect(skillMarkdown).toContain("verification");
+    expect(skillMarkdown).not.toContain("`reviewer`");
+    expect(skillMarkdown).not.toContain("`researcher`");
+    expect(skillMarkdown).not.toContain("`verifier`");
+
+    expect(referenceMarkdown).toContain("review-operability");
+    expect(referenceMarkdown).toContain("review-concurrency");
+    expect(referenceMarkdown).toContain("review-compatibility");
+    expect(referenceMarkdown).not.toContain("`reviewer`");
+    expect(referenceMarkdown).not.toContain("`researcher`");
+    expect(referenceMarkdown).not.toContain("`verifier`");
   });
 });

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   BrewvaRuntime,
+  REVIEW_REPORT_OUTPUT_CONTRACT,
   getSkillOutputContracts,
   listSkillOutputs,
   parseSkillDocument,
@@ -36,9 +37,11 @@ describe("repository catalog contracts", () => {
       expect.arrayContaining([
         "repository-analysis",
         "discovery",
+        "learning-research",
         "strategy-review",
         "design",
         "implementation",
+        "knowledge-capture",
         "qa",
         "ship",
         "retro",
@@ -62,6 +65,9 @@ describe("repository catalog contracts", () => {
       "review_findings",
       "review_report",
     ]);
+    expect(getSkillOutputContracts(review.contract).review_report).toMatchObject(
+      REVIEW_REPORT_OUTPUT_CONTRACT,
+    );
   });
 
   test("built-in base skills declare explicit output contracts for every declared output", () => {
@@ -83,19 +89,34 @@ describe("repository catalog contracts", () => {
 
   test("core workflow skills declare the documented handoff graph", () => {
     const discovery = parseSkillDocument(`${repoRoot()}/skills/core/discovery/SKILL.md`, "core");
+    const repositoryAnalysis = parseSkillDocument(
+      `${repoRoot()}/skills/core/repository-analysis/SKILL.md`,
+      "core",
+    );
     const strategyReview = parseSkillDocument(
       `${repoRoot()}/skills/core/strategy-review/SKILL.md`,
+      "core",
+    );
+    const learningResearch = parseSkillDocument(
+      `${repoRoot()}/skills/core/learning-research/SKILL.md`,
       "core",
     );
     const design = parseSkillDocument(`${repoRoot()}/skills/core/design/SKILL.md`, "core");
     const qa = parseSkillDocument(`${repoRoot()}/skills/core/qa/SKILL.md`, "core");
     const ship = parseSkillDocument(`${repoRoot()}/skills/core/ship/SKILL.md`, "core");
     const retro = parseSkillDocument(`${repoRoot()}/skills/core/retro/SKILL.md`, "core");
+    const knowledgeCapture = parseSkillDocument(
+      `${repoRoot()}/skills/core/knowledge-capture/SKILL.md`,
+      "core",
+    );
     const selfImprove = parseSkillDocument(
       `${repoRoot()}/skills/meta/self-improve/SKILL.md`,
       "meta",
     );
 
+    expect(listSkillOutputs(repositoryAnalysis.contract)).toEqual(
+      expect.arrayContaining(["repository_snapshot", "impact_map", "planning_posture"]),
+    );
     expect(listSkillOutputs(discovery.contract)).toEqual(
       expect.arrayContaining(["problem_frame", "scope_recommendation", "design_seed"]),
     );
@@ -109,7 +130,20 @@ describe("repository catalog contracts", () => {
       ]),
     );
     expect(design.contract.consumes).toEqual(
-      expect.arrayContaining(["strategy_review", "scope_decision", "strategic_risks"]),
+      expect.arrayContaining([
+        "planning_posture",
+        "strategy_review",
+        "scope_decision",
+        "strategic_risks",
+        "knowledge_brief",
+        "precedent_refs",
+        "preventive_checks",
+        "precedent_query_summary",
+        "precedent_consult_status",
+      ]),
+    );
+    expect(learningResearch.contract.consumes).toEqual(
+      expect.arrayContaining(["repository_snapshot", "impact_map", "planning_posture"]),
     );
     expect(qa.contract.consumes).toEqual(
       expect.arrayContaining(["risk_register", "review_report", "review_findings"]),
@@ -120,11 +154,19 @@ describe("repository catalog contracts", () => {
     expect(retro.contract.consumes).toEqual(
       expect.arrayContaining(["ship_report", "ship_decision", "qa_report"]),
     );
+    expect(knowledgeCapture.contract.consumes).toEqual(
+      expect.arrayContaining(["review_findings", "retro_findings", "verification_evidence"]),
+    );
     expect(selfImprove.contract.consumes).toEqual(
       expect.arrayContaining(["retro_findings", "ship_report"]),
     );
     expect(listSkillOutputs(strategyReview.contract)).toEqual(
-      expect.arrayContaining(["strategy_review", "scope_decision", "strategic_risks"]),
+      expect.arrayContaining([
+        "strategy_review",
+        "scope_decision",
+        "planning_posture",
+        "strategic_risks",
+      ]),
     );
   });
 });

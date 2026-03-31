@@ -8,6 +8,8 @@ intent:
     - root_cause
     - fix_strategy
     - failure_evidence
+    - investigation_record
+    - planning_posture
   output_contracts:
     root_cause:
       kind: text
@@ -21,6 +23,16 @@ intent:
       kind: text
       min_words: 2
       min_length: 12
+    investigation_record:
+      kind: json
+      min_keys: 5
+    planning_posture:
+      kind: enum
+      values:
+        - trivial
+        - moderate
+        - complex
+        - high_risk
 effects:
   allowed_effects:
     - workspace_read
@@ -40,6 +52,7 @@ execution_hints:
     - read
     - exec
     - grep
+    - knowledge_search
   fallback_tools:
     - lsp_diagnostics
     - ast_grep_search
@@ -83,6 +96,8 @@ Keep at most three active hypotheses and falsify the most likely first.
 If the failure looks like a regression or ownership drift, check recent history
 before settling on a hypothesis. Use `git-ops` history-search patterns for
 introducer lookup, blame, and similar-fix archaeology.
+If the failure resembles a prior repository-specific pattern, query the
+precedent layer before opening another speculative branch.
 
 ### Step 3: Separate symptom from cause
 
@@ -96,6 +111,9 @@ Do not patch. Produce:
 - `root_cause`: single dominant cause
 - `fix_strategy`: minimum valid repair approach
 - `failure_evidence`: before-state evidence and commands
+- `investigation_record`: hypotheses, failed attempts, disconfirming evidence,
+  final root cause, and verification linkage
+- `planning_posture`: the minimum safe planning depth for the repair path
 
 ## Interaction Protocol
 
@@ -105,6 +123,8 @@ Do not patch. Produce:
   presenting hypotheses.
 - If the issue is not yet reproducible, say that explicitly instead of acting as
   if a plausible narrative were proof.
+- Preserve negative knowledge. A rejected hypothesis is part of the debugging
+  asset, not just discarded scratch work.
 
 ## Root Cause Questions
 
@@ -136,6 +156,12 @@ Use questions to force causal discipline:
 - `failure_evidence` should preserve commands, traces, diagnostics, and observed
   conditions so implementation or runtime-forensics can continue from the actual
   failing state.
+- `investigation_record` should keep the debugging path replayable: which
+  hypotheses were tested, what failed, what evidence disproved them, and how
+  the final cause won.
+- `planning_posture` should tell downstream planning whether the repair is a
+  local patch, a bounded non-trivial change, or a higher-risk fix that needs
+  widened precedent and review posture.
 
 ## Stop Conditions
 
@@ -154,4 +180,4 @@ Use questions to force causal discipline:
 
 Input: "Typecheck passes, but cascade events stop reconciling after session replay."
 
-Output: `root_cause`, `fix_strategy`, `failure_evidence`.
+Output: `root_cause`, `fix_strategy`, `failure_evidence`, `investigation_record`, `planning_posture`.

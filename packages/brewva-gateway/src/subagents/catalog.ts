@@ -45,6 +45,20 @@ export interface HostedDelegationCatalog {
   workspaceAgentSpecNames: Set<string>;
 }
 
+function buildReviewLaneAgentSpec(input: {
+  name: string;
+  description: string;
+  executorPreamble: string;
+}): HostedAgentSpec {
+  return {
+    name: input.name,
+    description: input.description,
+    envelope: "readonly-reviewer",
+    fallbackResultMode: "review",
+    executorPreamble: input.executorPreamble,
+  };
+}
+
 const MAX_EXECUTOR_PREAMBLE_LENGTH = 600;
 const MAX_AGENT_INSTRUCTIONS_MARKDOWN_LENGTH = 4_000;
 
@@ -341,6 +355,48 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
     executorPreamble:
       "Operate as a strict read-only reviewer. Keep findings concrete, high-signal, and evidence-backed.",
   },
+  "review-correctness": buildReviewLaneAgentSpec({
+    name: "review-correctness",
+    description: "Review lane for behavioral correctness, invariants, and regression risk.",
+    executorPreamble:
+      "Operate as the correctness and invariants lane. Focus on behavior drift, unsafe assumptions, broken invariants, and concrete regression risk.",
+  }),
+  "review-boundaries": buildReviewLaneAgentSpec({
+    name: "review-boundaries",
+    description: "Review lane for contracts, ownership boundaries, and public-surface drift.",
+    executorPreamble:
+      "Operate as the contracts and boundaries lane. Focus on ownership, interface drift, package boundaries, and contract mismatches that can break callers or downstream systems.",
+  }),
+  "review-operability": buildReviewLaneAgentSpec({
+    name: "review-operability",
+    description: "Review lane for verification posture, rollbackability, and operator burden.",
+    executorPreamble:
+      "Operate as the verification and operability lane. Focus on missing evidence, weak rollback posture, deploy-time risk, and operator-visible failure burden.",
+  }),
+  "review-security": buildReviewLaneAgentSpec({
+    name: "review-security",
+    description: "Review lane for trust boundaries, credentials, permissions, and misuse risk.",
+    executorPreamble:
+      "Operate as the security lane. Focus on trust boundaries, credentials, permissions, untrusted input, misuse paths, and externally exposed attack surface.",
+  }),
+  "review-concurrency": buildReviewLaneAgentSpec({
+    name: "review-concurrency",
+    description: "Review lane for replay ordering, async coordination, and state-transition races.",
+    executorPreamble:
+      "Operate as the concurrency lane. Focus on replay ordering, async coordination, rollback interactions, scheduling, and multi-session state transition races.",
+  }),
+  "review-compatibility": buildReviewLaneAgentSpec({
+    name: "review-compatibility",
+    description: "Review lane for CLI, config, API, export, and persisted-format compatibility.",
+    executorPreamble:
+      "Operate as the compatibility lane. Focus on CLI behavior, config semantics, exports, persisted formats, public APIs, and wire-protocol drift.",
+  }),
+  "review-performance": buildReviewLaneAgentSpec({
+    name: "review-performance",
+    description: "Review lane for hot-path cost, scaling limits, and artifact-volume regressions.",
+    executorPreamble:
+      "Operate as the performance lane. Focus on hot paths, wide scans, indexing, queue growth, fan-out cost, and artifact-volume regressions.",
+  }),
   general: {
     name: "general",
     description: "General-purpose read-only delegate for bounded ad hoc work.",

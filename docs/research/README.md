@@ -58,6 +58,7 @@ None right now.
 - `docs/research/rfc-iteration-facts-and-model-native-optimization-protocols.md`
 - `docs/research/rfc-model-native-product-reconstruction-and-closure-vnext.md`
 - `docs/research/rfc-preparse-normalization-model-capability-and-live-audit-split.md`
+- `docs/research/rfc-repository-native-compound-knowledge-and-review-ensemble.md`
 - `docs/research/rfc-repository-fitness-plane-and-runtime-boundary.md`
 - `docs/research/rfc-skill-first-delegation-and-execution-envelopes.md`
 - `docs/research/rfc-workflow-artifacts-and-posture-control-plane.md`

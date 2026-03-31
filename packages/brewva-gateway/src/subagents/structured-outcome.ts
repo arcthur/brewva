@@ -8,6 +8,7 @@ import type {
   SubagentResultMode,
   VerificationSubagentOutcomeData,
 } from "@brewva/brewva-tools";
+import { normalizeReviewLaneName } from "@brewva/brewva-tools";
 import { STRUCTURED_OUTCOME_CLOSE, STRUCTURED_OUTCOME_OPEN } from "./protocol.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -99,6 +100,25 @@ function readFindings(value: unknown): DelegationOutcomeFinding[] | undefined {
   return findings.length > 0 ? findings : undefined;
 }
 
+function readReviewDisposition(
+  value: unknown,
+): ReviewSubagentOutcomeData["disposition"] | undefined {
+  const disposition = readString(value);
+  return disposition === "clear" ||
+    disposition === "concern" ||
+    disposition === "blocked" ||
+    disposition === "inconclusive"
+    ? disposition
+    : undefined;
+}
+
+function readReviewConfidence(value: unknown): ReviewSubagentOutcomeData["confidence"] | undefined {
+  const confidence = readString(value);
+  return confidence === "low" || confidence === "medium" || confidence === "high"
+    ? confidence
+    : undefined;
+}
+
 function normalizeJsonBlock(text: string): { rawJson?: string; narrativeText: string } {
   const start = text.indexOf(STRUCTURED_OUTCOME_OPEN);
   if (start < 0) {
@@ -139,12 +159,33 @@ function parseOutcomeData(
 
   if (resultMode === "review") {
     const findings = readFindings(payload.findings);
-    if (!findings || findings.length === 0) {
+    const primaryClaim = readString(payload.primaryClaim);
+    const strongestCounterpoint = readString(payload.strongestCounterpoint);
+    const openQuestions = readStringArray(payload.openQuestions);
+    const missingEvidence = readStringArray(payload.missingEvidence);
+    const disposition = readReviewDisposition(payload.disposition);
+    const confidence = readReviewConfidence(payload.confidence);
+    const lane = normalizeReviewLaneName(payload.lane);
+    if (
+      !findings &&
+      !primaryClaim &&
+      !strongestCounterpoint &&
+      !openQuestions &&
+      !missingEvidence &&
+      !disposition
+    ) {
       return undefined;
     }
     return {
       kind: "review",
-      findings,
+      ...(lane ? { lane } : {}),
+      ...(disposition ? { disposition } : {}),
+      ...(primaryClaim ? { primaryClaim } : {}),
+      ...(findings ? { findings } : {}),
+      ...(strongestCounterpoint ? { strongestCounterpoint } : {}),
+      ...(openQuestions ? { openQuestions } : {}),
+      ...(missingEvidence ? { missingEvidence } : {}),
+      ...(confidence ? { confidence } : {}),
     } satisfies ReviewSubagentOutcomeData;
   }
 
@@ -184,7 +225,7 @@ export function summarizeStructuredOutcomeData(data: SubagentOutcomeData): strin
     return data.findings?.[0]?.summary ?? data.openQuestions?.[0] ?? data.nextSteps?.[0];
   }
   if (data.kind === "review") {
-    return data.findings[0]?.summary;
+    return data.primaryClaim ?? data.findings?.[0]?.summary ?? data.strongestCounterpoint;
   }
   if (data.kind === "verification") {
     return data.checks[0]?.summary ?? data.checks[0]?.name;

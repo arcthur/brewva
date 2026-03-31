@@ -56,11 +56,42 @@ describe("workflow derivation", () => {
           timestamp: 110,
           payload: {
             skillName: "strategy-review",
-            outputKeys: ["strategy_review", "scope_decision", "strategic_risks"],
+            outputKeys: [
+              "strategy_review",
+              "scope_decision",
+              "strategic_risks",
+              "planning_posture",
+            ],
             outputs: {
               strategy_review: "Hold scope around advisory workflow visibility first.",
               scope_decision: "Do not build a kernel-owned planner.",
               strategic_risks: ["Too much duplicated workflow state"],
+              planning_posture: "complex",
+            },
+          },
+        }),
+        event({
+          id: "evt-learning-research",
+          type: "skill_completed",
+          sessionId: "workflow-expanded-stages",
+          timestamp: 115,
+          payload: {
+            skillName: "learning-research",
+            outputKeys: [
+              "knowledge_brief",
+              "precedent_refs",
+              "preventive_checks",
+              "precedent_query_summary",
+              "precedent_consult_status",
+            ],
+            outputs: {
+              knowledge_brief:
+                "Consulted replay precedents before design to preserve explicit workflow posture.",
+              precedent_refs: ["docs/solutions/workflow/review-disclosure-shape.md"],
+              preventive_checks: ["Keep lane disclosure stable in review outputs."],
+              precedent_query_summary:
+                "query=workflow review precedent | source_types=auto | search_mode=solution_only",
+              precedent_consult_status: "matched",
             },
           },
         }),
@@ -147,10 +178,38 @@ describe("workflow derivation", () => {
     expect(status.posture.verification).toBe("ready");
     expect(status.posture.ship).toBe("ready");
     expect(status.posture.retro).toBe("ready");
+    const strategyArtifact = status.artifacts.find(
+      (artifact) => artifact.kind === "strategy_review",
+    );
+    expect(strategyArtifact?.summary).toContain("planning_posture=complex");
+    expect(strategyArtifact?.outputKeys).toEqual(
+      expect.arrayContaining([
+        "strategy_review",
+        "scope_decision",
+        "strategic_risks",
+        "planning_posture",
+      ]),
+    );
+    expect(strategyArtifact?.metadata?.planningPosture).toBe("complex");
+    const learningArtifact = status.artifacts.find(
+      (artifact) => artifact.kind === "learning_research",
+    );
+    expect(learningArtifact?.summary).toContain("consult_status=matched");
+    expect(learningArtifact?.outputKeys).toEqual(
+      expect.arrayContaining([
+        "knowledge_brief",
+        "precedent_refs",
+        "preventive_checks",
+        "precedent_query_summary",
+        "precedent_consult_status",
+      ]),
+    );
+    expect(learningArtifact?.metadata?.precedentConsultStatus).toBe("matched");
     expect(status.artifacts.map((artifact) => artifact.kind)).toEqual(
       expect.arrayContaining([
         "discovery",
         "strategy_review",
+        "learning_research",
         "qa",
         "ship",
         "retro",
@@ -351,6 +410,70 @@ describe("workflow derivation", () => {
     expect(
       status.artifacts.find((artifact) => artifact.kind === "worker_patch")?.sourceSkillNames,
     ).toEqual(["review"]);
+  });
+
+  test("captures structured review disclosure in workflow artifact metadata", () => {
+    const artifacts = deriveWorkflowArtifacts([
+      event({
+        id: "evt-review-structured",
+        type: "skill_completed",
+        timestamp: 100,
+        payload: {
+          skillName: "review",
+          outputKeys: ["review_report", "review_findings", "merge_decision"],
+          outputs: {
+            review_report: {
+              summary:
+                "Review cleared the merge after lane analysis and precedent consult matched the current change.",
+              activated_lanes: ["review-correctness", "review-boundaries", "review-operability"],
+              activation_basis: [
+                "The diff changes workflow-facing package boundaries.",
+                "Verification evidence is fresh.",
+              ],
+              missing_evidence: [],
+              residual_blind_spots: [
+                "Security lane was not activated because no new external surface is exposed.",
+              ],
+              precedent_query_summary:
+                "query_intent=precedent_lookup | query=workflow review disclosure | source_types=auto | search_mode=solution_only",
+              precedent_consult_status: {
+                status: "consulted",
+                precedent_refs: ["docs/solutions/workflow/review-disclosure-shape.md"],
+              },
+              lane_disagreements: [
+                "Performance lane was not activated because no hot path changed.",
+              ],
+            },
+            review_findings: [],
+            merge_decision: "ready",
+          },
+        },
+      }),
+    ]);
+
+    const reviewArtifact = artifacts.find((artifact) => artifact.kind === "review");
+    expect(reviewArtifact?.summary).toContain("Review cleared the merge");
+    expect(reviewArtifact?.metadata).toEqual(
+      expect.objectContaining({
+        mergeDecision: "ready",
+        activatedLanes: ["review-correctness", "review-boundaries", "review-operability"],
+        activationBasis: [
+          "The diff changes workflow-facing package boundaries.",
+          "Verification evidence is fresh.",
+        ],
+        missingEvidence: [],
+        residualBlindSpots: [
+          "Security lane was not activated because no new external surface is exposed.",
+        ],
+        precedentQuerySummary:
+          "query_intent=precedent_lookup | query=workflow review disclosure | source_types=auto | search_mode=solution_only",
+        precedentConsultStatus: {
+          status: "consulted",
+          precedent_refs: ["docs/solutions/workflow/review-disclosure-shape.md"],
+        },
+        laneDisagreements: ["Performance lane was not activated because no hot path changed."],
+      }),
+    );
   });
 
   test("marks ship artifacts stale when later QA or verification evidence changes ship posture", () => {

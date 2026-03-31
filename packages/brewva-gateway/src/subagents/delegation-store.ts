@@ -20,6 +20,8 @@ import {
 } from "@brewva/brewva-runtime";
 import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime";
 
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
 type DelegationEvent = Pick<BrewvaStructuredEvent, "sessionId" | "type" | "timestamp" | "payload">;
 
 function readString(value: unknown): string | undefined {
@@ -72,6 +74,41 @@ function cloneArtifactRef(ref: DelegationArtifactRef): DelegationArtifactRef {
   };
 }
 
+function isJsonValue(value: unknown): value is JsonValue {
+  if (value === null) {
+    return true;
+  }
+  if (typeof value === "string" || typeof value === "boolean") {
+    return true;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+  if (Array.isArray(value)) {
+    return value.every((entry) => isJsonValue(entry));
+  }
+  if (typeof value !== "object") {
+    return false;
+  }
+  return Object.values(value as Record<string, unknown>).every((entry) => isJsonValue(entry));
+}
+
+function readJsonRecord(value: unknown): Record<string, JsonValue> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  if (!isJsonValue(value)) {
+    return undefined;
+  }
+  return structuredClone(value) as Record<string, JsonValue>;
+}
+
+function cloneJsonRecord(
+  value: Record<string, JsonValue> | undefined,
+): Record<string, JsonValue> | undefined {
+  return value ? structuredClone(value) : undefined;
+}
+
 function cloneModelRoute(route: DelegationModelRouteRecord): DelegationModelRouteRecord {
   return {
     selectedModel: route.selectedModel,
@@ -87,6 +124,7 @@ export function cloneDelegationRunRecord(record: DelegationRunRecord): Delegatio
   return {
     ...record,
     modelRoute: record.modelRoute ? cloneModelRoute(record.modelRoute) : undefined,
+    resultData: cloneJsonRecord(record.resultData),
     artifactRefs: record.artifactRefs?.map((ref) => cloneArtifactRef(ref)),
     delivery: record.delivery
       ? {
@@ -223,6 +261,7 @@ export function buildDelegationLifecyclePayload(
     status: record.status,
     summary: record.summary ?? null,
     error: record.error ?? null,
+    resultData: record.resultData ?? null,
     artifactRefs: record.artifactRefs ?? [],
     totalTokens: record.totalTokens ?? null,
     costUsd: record.costUsd ?? null,
@@ -274,6 +313,7 @@ function applyDelegationEvent(
       modelRoute: readModelRoute(payload, existing),
       summary: existing?.summary,
       error: existing?.error,
+      resultData: existing?.resultData,
       artifactRefs: existing?.artifactRefs,
       delivery: mergeDeliveryRecord(payload, existing?.delivery, event.timestamp),
       totalTokens: existing?.totalTokens,
@@ -310,6 +350,7 @@ function applyDelegationEvent(
       modelRoute: readModelRoute(payload, existing),
       summary: readString(payload?.summary) ?? existing?.summary,
       error: undefined,
+      resultData: readJsonRecord(payload?.resultData) ?? existing?.resultData,
       artifactRefs: readArtifactRefs(payload) ?? existing?.artifactRefs,
       delivery: mergeDeliveryRecord(payload, existing?.delivery, event.timestamp),
       totalTokens: readNonNegativeNumber(payload?.totalTokens) ?? existing?.totalTokens,
@@ -334,6 +375,7 @@ function applyDelegationEvent(
       ...existing,
       updatedAt: event.timestamp,
       modelRoute: readModelRoute(payload, existing),
+      resultData: readJsonRecord(payload?.resultData) ?? existing.resultData,
       delivery: mergeDeliveryRecord(payload, existing.delivery, event.timestamp),
     });
     return;
@@ -352,6 +394,7 @@ function applyDelegationEvent(
       ...existing,
       updatedAt: event.timestamp,
       modelRoute: readModelRoute(payload, existing),
+      resultData: readJsonRecord(payload?.resultData) ?? existing.resultData,
       delivery: mergeDeliveryRecord(payload, existing.delivery, event.timestamp),
     });
     return;
@@ -398,6 +441,7 @@ function applyDelegationEvent(
         readString(payload?.reason) ??
         existing?.error ??
         fallbackError,
+      resultData: readJsonRecord(payload?.resultData) ?? existing?.resultData,
       artifactRefs: readArtifactRefs(payload) ?? existing?.artifactRefs,
       delivery: mergeDeliveryRecord(payload, existing?.delivery, event.timestamp),
       totalTokens: readNonNegativeNumber(payload?.totalTokens) ?? existing?.totalTokens,

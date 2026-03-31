@@ -6,6 +6,8 @@ import { createDeliberationMemoryTool } from "./deliberation-memory.js";
 import { createExecTool } from "./exec.js";
 import { createGrepTool } from "./grep.js";
 import { createIterationFactTool } from "./iteration-fact.js";
+import { createKnowledgeCaptureTool } from "./knowledge-capture.js";
+import { createKnowledgeSearchTool } from "./knowledge-search.js";
 import { createLedgerQueryTool } from "./ledger-query.js";
 import { createLookAtTool } from "./look-at.js";
 import { createLspTools } from "./lsp.js";
@@ -14,6 +16,8 @@ import { createObsSloAssertTool } from "./observability/obs-slo-assert.js";
 import { createObsSnapshotTool } from "./observability/obs-snapshot.js";
 import { createOptimizationContinuityTool } from "./optimization-continuity.js";
 import { createOutputSearchTool } from "./output-search.js";
+import { createPrecedentAuditTool } from "./precedent-audit.js";
+import { createPrecedentSweepTool } from "./precedent-sweep.js";
 import { createProcessTool } from "./process.js";
 import { createReadSpansTool } from "./read-spans.js";
 import { createResourceLeaseTool } from "./resource-lease.js";
@@ -63,6 +67,10 @@ export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefiniti
     createProcessTool(),
     createCostViewTool({ runtime }),
     createDeliberationMemoryTool({ runtime }),
+    createKnowledgeCaptureTool({ runtime }),
+    createKnowledgeSearchTool({ runtime }),
+    createPrecedentAuditTool({ runtime }),
+    createPrecedentSweepTool({ runtime }),
     createObsQueryTool({ runtime }),
     createObsSloAssertTool({ runtime }),
     createObsSnapshotTool({ runtime }),
@@ -100,7 +108,39 @@ export { createLspTools } from "./lsp.js";
 export { createAstGrepTools } from "./ast-grep.js";
 export { createBrowserTools } from "./browser.js";
 export { createDeliberationMemoryTool } from "./deliberation-memory.js";
+export { createKnowledgeCaptureTool } from "./knowledge-capture.js";
+export { createKnowledgeSearchTool } from "./knowledge-search.js";
+export { createPrecedentAuditTool } from "./precedent-audit.js";
+export { createPrecedentSweepTool } from "./precedent-sweep.js";
 export { createResourceLeaseTool } from "./resource-lease.js";
+export {
+  ALL_REVIEW_LANES,
+  ALWAYS_ON_REVIEW_LANES,
+  CONDITIONAL_REVIEW_LANES,
+  buildReviewLaneDelegationTasks,
+  deriveReviewLaneActivationPlan,
+  isReviewLaneName,
+  materializeReviewLaneOutcomes,
+  normalizeReviewLaneName,
+  synthesizeReviewEnsemble,
+  type ReviewEnsembleSynthesis,
+  type ReviewEnsembleSynthesisInput,
+  type ReviewEvidenceKey,
+  type ReviewEvidenceState,
+  type ReviewLaneActivationInput,
+  type ReviewLaneActivationPlan,
+  type ReviewLaneDelegationPacketInput,
+  type ReviewLaneOutcomeSummary,
+  type ReviewMergeDecision,
+  type ReviewPlanningPosture,
+} from "./review-ensemble.js";
+export {
+  REVIEW_CHANGE_CATEGORIES,
+  REVIEW_CHANGED_FILE_CLASSES,
+  classifyReviewChangedFiles,
+  type ReviewChangeCategory,
+  type ReviewChangedFileClass,
+} from "./review-classification.js";
 export { defineBrewvaTool, getBrewvaAgentParameters, getBrewvaToolMetadata } from "./utils/tool.js";
 export {
   BREWVA_STRING_ENUM_CONTRACT,
@@ -176,6 +216,9 @@ export type {
   ExplorationSubagentOutcomeData,
   PatchSubagentOutcomeData,
   ReviewSubagentOutcomeData,
+  ReviewLaneConfidence,
+  ReviewLaneDisposition,
+  ReviewLaneName,
   SubagentExecutionShape,
   SubagentContextBudget,
   SubagentContextRef,

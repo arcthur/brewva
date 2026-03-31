@@ -177,9 +177,18 @@ new kernel authority object.
 Current product surfaces:
 
 - `workflow_status` as an explicit inspection tool
+- `knowledge_search` as an explicit repository-native precedent retrieval tool
+- `precedent_audit` as an explicit repository-precedent maintenance tool
+- `precedent_sweep` as an explicit repository-wide precedent maintenance tool
 - working projection entries such as `workflow.discovery`, `workflow.strategy_review`,
-  `workflow.design`, `workflow.review`, `workflow.qa`, `workflow.ship`,
-  `workflow.iteration_metric`, and `workflow.iteration_guard`
+  `workflow.learning_research`, `workflow.design`, `workflow.review`,
+  `workflow.qa`, `workflow.ship`, `workflow.iteration_metric`, and
+  `workflow.iteration_guard`
+
+Related productized repository-precedent surfaces also include:
+
+- `knowledge-capture` as terminal materialization into `docs/solutions/**`
+- internal review-lane fan-out behind the single public `review` boundary
 
 These surfaces are derived from durable events and session state such as:
 

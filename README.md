@@ -81,7 +81,7 @@ Implementation detail and system boundaries:
 
 ## Skill Surface
 
-- Core skills: `repository-analysis`, `discovery`, `strategy-review`, `design`, `implementation`, `debugging`, `review`, `qa`, `ship`, `retro`
+- Core skills: `repository-analysis`, `discovery`, `learning-research`, `strategy-review`, `design`, `implementation`, `debugging`, `review`, `qa`, `ship`, `retro`, `knowledge-capture`
 - Domain skills: `agent-browser`, `ci-iteration`, `frontend-design`, `github`, `goal-loop`, `predict-review`, `structured-extraction`, `telegram`
 - Operator skills: `git-ops`, `runtime-forensics`
 - Meta skills: `self-improve`, `skill-authoring`
@@ -92,6 +92,14 @@ Protocol-oriented skills:
   verification, and handoff posture
 - `goal-loop` coordinates bounded continuity, explicit cadence, and objective
   iteration facts across repeated runs
+- `learning-research` performs explicit precedent retrieval before non-trivial
+  planning or review
+- `precedent_audit` performs explicit repository-precedent maintenance checks
+  before a record is displaced or refreshed
+- `precedent_sweep` performs explicit repository-wide precedent maintenance
+  sweeps without turning stale-document cleanup into a default path
+- `knowledge-capture` materializes canonical repository precedents under
+  `docs/solutions/**`
 - `predict-review` provides read-only multi-perspective debate and ranked
   hypotheses through public delegation tools
 - `self-improve` distills repeated evidence, including loop-history facts, into
@@ -101,11 +109,14 @@ For taxonomy details and project overlays, see `docs/guide/features.md` and `doc
 
 One common delivery chain is:
 
-`discovery -> strategy-review -> design -> implementation -> review -> qa -> ship -> retro`
+`repository-analysis -> discovery -> strategy-review -> learning-research -> design -> implementation -> review -> qa -> ship -> retro -> knowledge-capture`
 
 This remains advisory and model-native. Runtime still owns verification,
 derived workflow inspection surfaces, replay, and effect governance rather
 than a kernel-managed stage planner.
+
+`planning_posture` is an upstream handoff output for non-trivial work, not a
+standalone skill or a hidden runtime planner.
 
 ## Quick Start
 
@@ -161,6 +172,7 @@ bun run test:live
 | Architecture    | `docs/architecture/`    | Implemented design, invariants, and control/data boundaries                  |
 | Journeys        | `docs/journeys/`        | Operator entrypoints and cross-package review flows                          |
 | Reference       | `docs/reference/`       | Stable contracts for config, runtime API, tools, events, and runtime plugins |
+| Solutions       | `docs/solutions/`       | Canonical repository-native engineering precedents and compound knowledge    |
 | Troubleshooting | `docs/troubleshooting/` | Failure patterns and remediation                                             |
 | Research        | `docs/research/`        | Incubating design notes and roadmap material                                 |
 

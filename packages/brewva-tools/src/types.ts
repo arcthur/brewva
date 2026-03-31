@@ -159,9 +159,29 @@ export interface ExplorationSubagentOutcomeData {
   nextSteps?: string[];
 }
 
+export type ReviewLaneName =
+  | "review-correctness"
+  | "review-boundaries"
+  | "review-operability"
+  | "review-security"
+  | "review-concurrency"
+  | "review-compatibility"
+  | "review-performance";
+
+export type ReviewLaneDisposition = "clear" | "concern" | "blocked" | "inconclusive";
+
+export type ReviewLaneConfidence = "low" | "medium" | "high";
+
 export interface ReviewSubagentOutcomeData {
   kind: "review";
-  findings: DelegationOutcomeFinding[];
+  lane?: ReviewLaneName;
+  disposition?: ReviewLaneDisposition;
+  primaryClaim?: string;
+  findings?: DelegationOutcomeFinding[];
+  strongestCounterpoint?: string;
+  openQuestions?: string[];
+  missingEvidence?: string[];
+  confidence?: ReviewLaneConfidence;
 }
 
 export interface VerificationSubagentOutcomeData {

@@ -369,6 +369,131 @@ describe("hosted subagent orchestrator", () => {
     await rm(workspaceRoot, { recursive: true, force: true });
   });
 
+  test("captures structured review outcomes without requiring findings", async () => {
+    const workspaceRoot = createTempWorkspace("brewva-subagent-review-structured-");
+    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const parentSessionId = "parent-session-review-structured";
+
+    const adapter = createHostedSubagentAdapter({
+      runtime,
+      async createChildSession(input: HostedSubagentSessionOptions) {
+        const childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
+        const childSessionId = "child-review-structured";
+        const listeners = new Set<(event: AgentSessionEvent) => void>();
+
+        return {
+          runtime: childRuntime,
+          session: {
+            dispose() {},
+            async prompt() {
+              for (const listener of listeners) {
+                listener({
+                  type: "message_end",
+                  message: {
+                    role: "assistant",
+                    content: [
+                      {
+                        type: "text",
+                        text: [
+                          "Boundary review completed without a blocking issue.",
+                          "<delegation_outcome_json>",
+                          JSON.stringify({
+                            kind: "review",
+                            lane: "review-boundaries",
+                            disposition: "clear",
+                            primaryClaim:
+                              "The public ownership boundary remains stable across this change.",
+                            strongestCounterpoint:
+                              "A later export map change could still widen the surface unexpectedly.",
+                            openQuestions: ["No release artifact diff was attached for this lane."],
+                            missingEvidence: ["No dist smoke result was attached."],
+                            confidence: "medium",
+                          }),
+                          "</delegation_outcome_json>",
+                        ].join("\n"),
+                      },
+                    ],
+                  },
+                } as AgentSessionEvent);
+              }
+            },
+            agent: {
+              async waitForIdle() {},
+            },
+            sessionManager: {
+              getSessionId() {
+                return childSessionId;
+              },
+            },
+            subscribe(listener) {
+              listeners.add(listener);
+              return () => {
+                listeners.delete(listener);
+              };
+            },
+          },
+        };
+      },
+    });
+
+    const result = await adapter.run({
+      fromSessionId: parentSessionId,
+      request: {
+        agentSpec: "review-boundaries",
+        mode: "single",
+        packet: {
+          objective: "Review the runtime export boundary.",
+        },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    const outcome = result.outcomes[0];
+    expect(outcome?.ok).toBe(true);
+    if (!outcome || !outcome.ok) {
+      throw new Error("expected a successful review outcome");
+    }
+
+    expect(outcome.kind).toBe("review");
+    expect(outcome.data).toEqual({
+      kind: "review",
+      lane: "review-boundaries",
+      disposition: "clear",
+      primaryClaim: "The public ownership boundary remains stable across this change.",
+      strongestCounterpoint:
+        "A later export map change could still widen the surface unexpectedly.",
+      openQuestions: ["No release artifact diff was attached for this lane."],
+      missingEvidence: ["No dist smoke result was attached."],
+      confidence: "medium",
+    });
+    expect(outcome.summary).toBe("Boundary review completed without a blocking issue.");
+    expect(
+      runtime.events.list(parentSessionId, { type: "subagent_outcome_parse_failed" }),
+    ).toHaveLength(0);
+    expect(
+      runtime.events.list(parentSessionId, { type: "subagent_completed" })[0]?.payload,
+    ).toMatchObject({
+      resultData: {
+        kind: "review",
+        lane: "review-boundaries",
+        disposition: "clear",
+      },
+    });
+
+    const delegationStore = new HostedDelegationStore(runtime);
+    expect(delegationStore.listRuns(parentSessionId, { includeTerminal: true })[0]).toMatchObject({
+      kind: "review",
+      status: "completed",
+      resultData: {
+        kind: "review",
+        lane: "review-boundaries",
+        disposition: "clear",
+      },
+    });
+
+    await rm(workspaceRoot, { recursive: true, force: true });
+  });
+
   test("keeps the run successful when the structured outcome block is missing", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-structured-fallback-");
     const runtime = new BrewvaRuntime({ cwd: workspaceRoot });

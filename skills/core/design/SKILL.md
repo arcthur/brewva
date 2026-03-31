@@ -61,11 +61,17 @@ consumes:
   - scope_recommendation
   - design_seed
   - open_questions
+  - planning_posture
   - strategy_review
   - scope_decision
   - strategic_risks
   - repository_snapshot
   - impact_map
+  - knowledge_brief
+  - precedent_refs
+  - preventive_checks
+  - precedent_query_summary
+  - precedent_consult_status
   - root_cause
   - runtime_trace
 requires: []
@@ -87,20 +93,27 @@ Use this skill when:
 
 ## Workflow
 
-### Step 1: Challenge scope
+### Step 1: Validate planning posture
 
-Determine whether the request is a trivial local change or a real design problem.
+Start from upstream `planning_posture` if it exists. If posture is missing,
+default conservatively instead of silently assuming triviality.
 
 ### Step 2: Compare approaches
 
 Offer 1-3 materially different approaches with trade-offs, then choose one.
 
-### Step 3: Force the key decisions into the open
+### Step 3: Reuse or intentionally reject precedent
 
-Make boundary ownership, migration posture, verification posture, and rollback
-assumptions explicit before emitting the final plan.
+Use retrieved repository precedents when they fit. If you deliberately diverge
+from a consulted precedent, explain why the current case is materially
+different.
 
-### Step 4: Emit bounded artifacts
+### Step 4: Force the key decisions into the open
+
+Make boundary ownership, migration posture, verification posture, rollback
+assumptions, and preventive checks explicit before emitting the final plan.
+
+### Step 5: Emit bounded artifacts
 
 Produce:
 
@@ -117,6 +130,8 @@ Produce:
   reality before recommending a path.
 - When user input is needed, recommend one primary path and one bounded
   alternative instead of presenting an open menu of possibilities.
+- Treat `planning_posture` and precedent consultation as upstream inputs to
+  planning, not as optional afterthoughts once design is already decided.
 
 ## Design Questions
 
@@ -149,6 +164,8 @@ Use these questions to keep planning first-principles-driven:
 
 - `design_spec` should tell implementation what is changing, what is not
   changing, which modules own the work, and which constraints are non-negotiable.
+- `design_spec` should also state which precedents were reused and where the
+  plan intentionally deviates from prior repository guidance.
 - `execution_plan` should be ordered, concrete, and verification-aware so the
   implementation skill can execute without redesigning the task.
 - `execution_mode_hint` should be evidence-based. Use `direct_patch` only for

@@ -1,4 +1,4 @@
-import type { SubagentResultMode } from "@brewva/brewva-tools";
+import { ALWAYS_ON_REVIEW_LANES, type SubagentResultMode } from "@brewva/brewva-tools";
 
 export const STRUCTURED_OUTCOME_OPEN = "<delegation_outcome_json>";
 export const STRUCTURED_OUTCOME_CLOSE = "</delegation_outcome_json>";
@@ -59,6 +59,9 @@ function buildJsonShapeExample(input: {
         } as Record<string, unknown>)
       : input.resultMode === "review"
         ? ({
+            lane: ALWAYS_ON_REVIEW_LANES[0],
+            disposition: "concern",
+            primaryClaim: "The replay handoff relies on an unproven invariant.",
             findings: [
               {
                 summary: "Potential replay gap for background delegation outcomes.",
@@ -66,6 +69,11 @@ function buildJsonShapeExample(input: {
                 evidenceRefs: ["session:child:agent_end"],
               },
             ],
+            strongestCounterpoint:
+              "If lifecycle replay is strictly single-writer, the observed gap may stay latent.",
+            openQuestions: ["Is lifecycle replay serialized across detached resumption paths?"],
+            missingEvidence: ["No recovery regression evidence was provided for this lane."],
+            confidence: "medium",
           } as Record<string, unknown>)
         : input.resultMode === "verification"
           ? ({
@@ -109,12 +117,21 @@ export function buildStructuredOutcomeContract(input: {
         `Set skillName to ${input.skillName}.`,
       ]
     : [];
+  const modeLines =
+    input.resultMode === "review"
+      ? [
+          "For review mode, include lane and disposition in the JSON payload.",
+          "If the lane clears, record disposition=clear instead of inventing findings.",
+          "Use missingEvidence and openQuestions for evidence gaps or residual blind spots.",
+        ]
+      : [];
   return [
     "After the human-readable summary, emit exactly one structured JSON block using these markers:",
     `- opening marker: ${STRUCTURED_OUTCOME_OPEN}`,
     `- closing marker: ${STRUCTURED_OUTCOME_CLOSE}`,
     "The JSON must describe only the delegated result for this run.",
     ...skillLines,
+    ...modeLines,
     "Use this shape:",
     "```json",
     buildJsonShapeExample(input),

@@ -479,6 +479,9 @@ async function main(): Promise<void> {
       boundary: executionPlan.boundary,
       modelRoute: executionPlan.modelRoute,
       summary,
+      resultData: outcome.data
+        ? (structuredClone(outcome.data) as unknown as DelegationRunRecord["resultData"])
+        : undefined,
       artifactRefs: outcome.artifactRefs?.map((ref) => ({ ...ref })),
       totalTokens: childCostSummary.totalTokens,
       costUsd: childCostSummary.totalCostUsd,

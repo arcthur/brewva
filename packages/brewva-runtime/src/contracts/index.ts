@@ -15,3 +15,4 @@ export * from "./patching.js";
 export * from "./events.js";
 export * from "./cost.js";
 export * from "./integrity.js";
+export * from "./review.js";

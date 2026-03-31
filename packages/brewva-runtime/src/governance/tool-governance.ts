@@ -192,6 +192,22 @@ export const TOOL_GOVERNANCE_BY_NAME: Record<string, ToolGovernanceDescriptor> =
     effects: ["runtime_observe"],
     defaultRisk: "low",
   }),
+  knowledge_capture: descriptor({
+    effects: ["workspace_write"],
+    defaultRisk: "high",
+  }),
+  knowledge_search: descriptor({
+    effects: ["workspace_read"],
+    defaultRisk: "low",
+  }),
+  precedent_audit: descriptor({
+    effects: ["workspace_read"],
+    defaultRisk: "low",
+  }),
+  precedent_sweep: descriptor({
+    effects: ["workspace_read"],
+    defaultRisk: "low",
+  }),
   obs_query: descriptor({
     effects: ["runtime_observe"],
     defaultRisk: "low",

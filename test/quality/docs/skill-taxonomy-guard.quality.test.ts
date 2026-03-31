@@ -22,12 +22,12 @@ const LEGACY_PATTERNS: PatternRule[] = [
   {
     label: "removed v1 skill token",
     regex:
-      /`(?:brainstorming|cartography|compose|execution|exploration|finishing|gh-issues|patching|planning|recovery|tdd|verification|telegram-channel-behavior|telegram-interactive-components|zca-structured-output|brewva-project|brewva-self-improve|brewva-session-logs)`/g,
+      /`(?:brainstorming|cartography|compose|execution|exploration|finishing|gh-issues|patching|planning|recovery|tdd|telegram-channel-behavior|telegram-interactive-components|zca-structured-output|brewva-project|brewva-self-improve|brewva-session-logs)`/g,
   },
   {
     label: "removed v1 cascade owner",
     regex:
-      /->\s*(?:brainstorming|cartography|compose|execution|exploration|finishing|gh-issues|patching|planning|recovery|tdd|verification|telegram-channel-behavior|telegram-interactive-components|zca-structured-output|brewva-project|brewva-self-improve|brewva-session-logs)\b/g,
+      /->\s*(?:brainstorming|cartography|compose|execution|exploration|finishing|gh-issues|patching|planning|recovery|tdd|telegram-channel-behavior|telegram-interactive-components|zca-structured-output|brewva-project|brewva-self-improve|brewva-session-logs)\b/g,
   },
 ];
 

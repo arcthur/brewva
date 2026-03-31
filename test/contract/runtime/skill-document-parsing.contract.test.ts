@@ -357,8 +357,30 @@ describe("skill document parsing", () => {
         outputContracts: {
           review_report: {
             kind: "json",
-            minKeys: 1,
-            minItems: 1,
+            minKeys: 3,
+            requiredFields: ["summary", "precedent_query_summary", "precedent_consult_status"],
+            fieldContracts: {
+              summary: {
+                kind: "text",
+                minWords: 3,
+                minLength: 18,
+              },
+              precedent_query_summary: {
+                kind: "text",
+                minWords: 3,
+                minLength: 18,
+              },
+              precedent_consult_status: {
+                kind: "json",
+                requiredFields: ["status"],
+                fieldContracts: {
+                  status: {
+                    kind: "enum",
+                    values: ["consulted", "no_match", "not_required"],
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -370,14 +392,115 @@ describe("skill document parsing", () => {
           outputs: ["review_report"],
           outputContracts: {
             review_report: {
-              minItems: 1,
               kind: "json",
-              minKeys: 1,
+              fieldContracts: {
+                precedent_query_summary: {
+                  minLength: 18,
+                  kind: "text",
+                  minWords: 3,
+                },
+                precedent_consult_status: {
+                  fieldContracts: {
+                    status: {
+                      values: ["consulted", "no_match", "not_required"],
+                      kind: "enum",
+                    },
+                  },
+                  requiredFields: ["status"],
+                  kind: "json",
+                },
+                summary: {
+                  minLength: 18,
+                  kind: "text",
+                  minWords: 3,
+                },
+              },
+              requiredFields: ["summary", "precedent_query_summary", "precedent_consult_status"],
+              minKeys: 3,
             },
           },
         },
       }),
     ).not.toThrow();
+  });
+
+  test("parses nested json output contracts with required fields and field contracts", () => {
+    const filePath = createTempSkillDocument(
+      "brewva-skill-json-output-contracts-",
+      "skills/core/review/SKILL.md",
+      [
+        "---",
+        "name: review",
+        "description: review skill",
+        "intent:",
+        "  outputs: [review_report]",
+        "  output_contracts:",
+        "    review_report:",
+        "      kind: json",
+        "      min_keys: 3",
+        "      required_fields: [summary, precedent_query_summary, precedent_consult_status]",
+        "      field_contracts:",
+        "        summary:",
+        "          kind: text",
+        "          min_words: 3",
+        "          min_length: 18",
+        "        precedent_query_summary:",
+        "          kind: text",
+        "          min_words: 3",
+        "          min_length: 18",
+        "        precedent_consult_status:",
+        "          kind: json",
+        "          required_fields: [status]",
+        "          field_contracts:",
+        "            status:",
+        "              kind: enum",
+        "              values: [consulted, no_match, not_required]",
+        "effects:",
+        "  allowed_effects: [workspace_read]",
+        "resources:",
+        "  default_lease:",
+        "    max_tool_calls: 10",
+        "    max_tokens: 10000",
+        "  hard_ceiling:",
+        "    max_tool_calls: 20",
+        "    max_tokens: 20000",
+        "execution_hints:",
+        "  preferred_tools: [read]",
+        "  fallback_tools: []",
+        "consumes: []",
+        "---",
+        "# review",
+      ],
+    );
+
+    const parsed = parseSkillDocument(filePath, "core");
+    expect(getSkillOutputContracts(parsed.contract).review_report).toEqual({
+      kind: "json",
+      minKeys: 3,
+      requiredFields: ["summary", "precedent_query_summary", "precedent_consult_status"],
+      fieldContracts: {
+        summary: {
+          kind: "text",
+          minWords: 3,
+          minLength: 18,
+        },
+        precedent_query_summary: {
+          kind: "text",
+          minWords: 3,
+          minLength: 18,
+        },
+        precedent_consult_status: {
+          kind: "json",
+          requiredFields: ["status"],
+          fieldContracts: {
+            status: {
+              kind: "enum",
+              values: ["consulted", "no_match", "not_required"],
+            },
+          },
+        },
+      },
+    });
   });
 
   test("parses skill-local resources with relative paths", () => {

@@ -100,14 +100,14 @@ Use `subagent_fanout` when the perspectives can run independently.
 
 Perspective-to-profile mapping:
 
-| Perspective                  | Built-in profile | Use                                                               |
-| ---------------------------- | ---------------- | ----------------------------------------------------------------- |
-| Architecture Reviewer        | `reviewer`       | boundary integrity, coupling, and contract drift                  |
-| Security Analyst             | `reviewer`       | exposure, trust, and misuse paths                                 |
-| Reliability Engineer         | `reviewer`       | failure handling, retries, and edge conditions                    |
-| Performance Engineer         | `reviewer`       | hot spots, scaling, and measurable regressions                    |
-| Devil's Advocate             | `researcher`     | alternative explanations, missing context, and anti-herd pressure |
-| Optional empirical follow-up | `verifier`       | read-only validation against existing evidence                    |
+| Perspective                  | Built-in agent spec  | Use                                                               |
+| ---------------------------- | -------------------- | ----------------------------------------------------------------- |
+| Architecture Reviewer        | `review-boundaries`  | boundary integrity, coupling, and contract drift                  |
+| Security Analyst             | `review-security`    | exposure, trust, and misuse paths                                 |
+| Reliability Engineer         | `review-operability` | failure handling, retries, edge conditions, and operator burden   |
+| Performance Engineer         | `review-performance` | hot spots, scaling, and measurable regressions                    |
+| Devil's Advocate             | `general`            | alternative explanations, missing context, and anti-herd pressure |
+| Optional empirical follow-up | `verification`       | read-only validation against existing evidence                    |
 
 The perspective lives in the delegation packet:
 
@@ -115,7 +115,9 @@ The perspective lives in the delegation packet:
 - `sharedNotes`
 - required output shape
 
-Do not invent new built-in profile names.
+When ordering, replay, or state-transition risk dominates, prefer
+`review-concurrency` over `review-operability`. When public-surface or format
+drift dominates, prefer `review-compatibility`.
 
 ### Step 3: Force structured challenge
 
@@ -128,7 +130,7 @@ Require all of the following:
 3. The Devil's Advocate challenges majority positions explicitly.
 4. Majority agreement is not enough on its own; unresolved objections must stay
    visible.
-5. Use `subagent_run` for an optional verifier pass only when read-only
+5. Use `subagent_run` for an optional verification pass only when read-only
    evidence already exists and the debate needs empirical confirmation.
 
 ### Step 4: Emit advisory artifacts
@@ -170,7 +172,7 @@ Use these questions to keep the multi-perspective pass honest:
 ## Delegation Protocol
 
 - `subagent_fanout` is the default when the perspectives are independent.
-- `subagent_run` is for a follow-up challenge or verifier pass, not a
+- `subagent_run` is for a follow-up challenge or verification pass, not a
   replacement for the initial independent sweep.
 - Keep all delegated runs read-only.
 - Require each perspective packet to return concrete claims, evidence anchors,
@@ -212,7 +214,7 @@ Use these questions to keep the multi-perspective pass honest:
 
 - treating delegated consensus as runtime authority
 - writing code or issuing effectful actions inside the debate
-- using imaginary persona profiles instead of real public delegation surfaces
+- using removed legacy profile aliases instead of real built-in agent specs
 - smoothing away disagreements to make the output look cleaner than the
   evidence supports
 

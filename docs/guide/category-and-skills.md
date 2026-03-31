@@ -38,7 +38,7 @@ replacement.
 
 ## Current Inventory
 
-- Core: `repository-analysis`, `discovery`, `strategy-review`, `design`, `implementation`, `debugging`, `review`, `qa`, `ship`, `retro`
+- Core: `repository-analysis`, `discovery`, `learning-research`, `strategy-review`, `design`, `implementation`, `debugging`, `review`, `qa`, `ship`, `retro`, `knowledge-capture`
 - Domain: `agent-browser`, `ci-iteration`, `frontend-design`, `github`, `telegram`, `structured-extraction`, `goal-loop`, `predict-review`
 - Operator: `runtime-forensics`, `git-ops`
 - Meta: `skill-authoring`, `self-improve`
@@ -51,6 +51,10 @@ Special protocol posture:
   iteration-fact discipline
 - `ci-iteration` owns bounded PR / CI repair loops, explicit retry contracts,
   and verification-backed stop conditions
+- `learning-research` owns explicit planning-time proof of consult against the
+  repository-native precedent layer
+- `knowledge-capture` owns terminal materialization of canonical repository
+  precedents under `docs/solutions/**`
 - `predict-review` owns advisory multi-perspective debate and hypothesis
   ranking, not runtime authority
 - `self-improve` mines repeated evidence into learning backlog items rather
@@ -58,7 +62,7 @@ Special protocol posture:
 
 One common software-delivery chain is:
 
-`discovery -> strategy-review -> design -> implementation -> review -> qa -> ship -> retro`
+`repository-analysis -> discovery -> strategy-review -> learning-research -> design -> implementation -> review -> qa -> ship -> retro -> knowledge-capture`
 
 This is a catalog convention, not a kernel-owned stage machine.
 

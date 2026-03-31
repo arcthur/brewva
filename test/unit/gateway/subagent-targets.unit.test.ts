@@ -99,6 +99,15 @@ describe("delegation prompt and catalog composition", () => {
     expect(prompt).toContain("Review Skill");
     expect(prompt).toContain("skillOutputs");
     expect(prompt).toContain("Set skillName to review.");
+    expect(prompt).toContain(
+      "If the lane clears, record disposition=clear instead of inventing findings.",
+    );
+    expect(prompt).toContain('"lane": "review-correctness"');
+    expect(prompt).toContain('"disposition": "concern"');
+    expect(prompt).toContain(
+      '"primaryClaim": "The replay handoff relies on an unproven invariant."',
+    );
+    expect(prompt).toContain('"missingEvidence": [');
   });
 
   test("materializes the built-in patch worker through the catalog", async () => {

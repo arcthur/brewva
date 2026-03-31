@@ -18,6 +18,8 @@
   model-native optimization loops
 - Deliberation memory retention, pruning, and explicit inspection surfaces for
   durable evidence-backed artifacts
+- Repository-native compound knowledge under `docs/solutions/**` with explicit
+  precedent retrieval rather than hidden recall
 
 ## Tool Surface
 
@@ -50,6 +52,10 @@
 - `process`
 - `cost_view`
 - `deliberation_memory`
+- `knowledge_capture`
+- `knowledge_search`
+- `precedent_audit`
+- `precedent_sweep`
 - `obs_query`
 - `obs_slo_assert`
 - `obs_snapshot`
@@ -92,7 +98,7 @@ Tool registry source: `packages/brewva-tools/src/index.ts`
 
 ## Skill Surface
 
-- Core capability skills: `repository-analysis`, `discovery`, `strategy-review`, `design`, `implementation`, `debugging`, `review`, `qa`, `ship`, `retro`
+- Core capability skills: `repository-analysis`, `discovery`, `learning-research`, `strategy-review`, `design`, `implementation`, `debugging`, `review`, `qa`, `ship`, `retro`, `knowledge-capture`
 - Domain capability skills: `agent-browser`, `ci-iteration`, `frontend-design`, `github`, `telegram`, `structured-extraction`, `goal-loop`, `predict-review`
 - Operator skills: `runtime-forensics`, `git-ops`
 - Meta skills: `skill-authoring`, `self-improve`
@@ -102,9 +108,36 @@ Tool registry source: `packages/brewva-tools/src/index.ts`
   verification, and handoff posture
 - `deliberation_memory` is the explicit surface for inspecting retained
   repository, user, agent, and loop memory artifacts
-- built-in read-only agent specs are `explore`, `plan`, `review`, and
-  `general`; removed legacy aliases such as `researcher`, `reviewer`, and
-  `verifier` now fail fast
+- `knowledge_search` is the explicit precedent retrieval surface for
+  `docs/solutions/**` plus bootstrap repository knowledge sources, with
+  query-intent-aware ordering over a single canonical authority model
+- `precedent_audit` is the explicit maintenance surface for authority overlap,
+  stale routing, and contradiction review across repository precedents and
+  stable docs
+- `precedent_sweep` is the explicit repository-wide stale-document maintenance
+  surface; it is available for deliberate cleanup passes but is not a default
+  hosted behavior
+- `skill_complete` can synthesize canonical `review_report`,
+  `review_findings`, and `merge_decision` from durable delegated review lanes
+  via `reviewEnsemble`, instead of requiring the parent reviewer to hand-copy
+  child lane output
+- `skill_complete` can also synthesize canonical `learning-research` outputs
+  via `learningResearch`, turning repository precedent consult into a
+  deterministic proof-of-consult packet instead of relying on handwritten
+  summaries
+- `knowledge_capture` is the deterministic write-back surface that materializes
+  canonical solution records under `docs/solutions/**`
+- `learning-research` turns planning-time precedent retrieval into explicit
+  handoff artifacts before non-trivial design or review
+- `knowledge-capture` orchestrates terminal repository precedent capture and
+  should prefer `knowledge_capture` for the actual canonical write-back path
+- built-in read-only agent specs are `explore`, `plan`, `review`, `general`,
+  and `verification`
+- built-in review-lane delegates for internal fan-out are
+  `review-correctness`, `review-boundaries`, `review-operability`,
+  `review-security`, `review-concurrency`, `review-compatibility`, and
+  `review-performance`; removed legacy aliases such as `researcher`,
+  `reviewer`, and `verifier` now fail fast
 - `optimization_continuity` is the inspection surface for deliberation-owned
   loop continuity, not a runtime-owned optimizer; its `attention` view surfaces
   overdue or long-running lineages for explicit review
@@ -126,11 +159,14 @@ Runtime-owned workflow semantics, not public skills:
 
 One common public delivery chain is:
 
-`discovery -> strategy-review -> design -> implementation -> review -> qa -> ship -> retro`
+`repository-analysis -> discovery -> strategy-review -> learning-research -> design -> implementation -> review -> qa -> ship -> retro -> knowledge-capture`
 
 The chain is a skill-layer convention, not a runtime-owned DAG. Verification,
 derived workflow status, and ship advisories remain explicit runtime inspection
 surfaces rather than default injected planning hints.
+
+`planning_posture` is part of the upstream handoff into non-trivial planning. It
+is produced before `design`, not retroactively inferred by `design` itself.
 
 Skill roots:
 

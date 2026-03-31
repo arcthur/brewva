@@ -159,10 +159,14 @@ skill-sequencing API in the runtime.
 
 One common delivery chain now present in the catalog is:
 
-`discovery -> strategy-review -> design -> implementation -> review -> qa -> ship -> retro`
+`repository-analysis -> discovery -> strategy-review -> learning-research -> design -> implementation -> review -> qa -> ship -> retro -> knowledge-capture`
 
 This remains a prompt-side and control-plane convention. Runtime still owns
 verification, replay, derived workflow status, and effect governance.
+
+`planning_posture` is an upstream handoff output, not a standalone skill. It is
+expected to exist before non-trivial `design`, typically from
+`repository-analysis`, `strategy-review`, or `debugging`.
 
 ## Workflow Artifacts And Posture
 
@@ -173,7 +177,8 @@ adjacent evidence signals.
 Current derived workflow artifact sources include:
 
 - `problem_frame` / `user_pains` / `scope_recommendation` -> `workflow.discovery`
-- `strategy_review` / `scope_decision` / `strategic_risks` -> `workflow.strategy_review`
+- `strategy_review` / `scope_decision` / `strategic_risks` / `planning_posture` -> `workflow.strategy_review`
+- `knowledge_brief` / `precedent_refs` / `preventive_checks` / `precedent_query_summary` / `precedent_consult_status` -> `workflow.learning_research`
 - `design_spec` -> `workflow.design`
 - `execution_plan` -> `workflow.execution_plan`
 - `change_set` / `files_changed` and write markers -> `workflow.implementation`
@@ -202,12 +207,18 @@ Important boundary rules:
 Control-plane and operator surfaces may inspect this state through
 `workflow_status` and working projection surfaces.
 
+`planning_posture` may also be produced by `repository-analysis` or
+`debugging`, but today it remains a carried handoff output and metadata field
+rather than a dedicated workflow artifact kind.
+
 Protocol skills may sit beside the common delivery chain without becoming
 runtime-owned planners:
 
 - `goal-loop` for bounded continuity plus objective iteration evidence
 - `predict-review` for multi-perspective advisory debate before the next owner
   takes over
+- `learning-research` for explicit planning-time proof of consult against the
+  repository-native precedent layer
 
 Related control-plane products now sit beside those skills instead of hiding in
 prompt-only behavior:
@@ -224,6 +235,7 @@ prompt-only behavior:
 
 - `repository-analysis`
 - `discovery`
+- `learning-research`
 - `strategy-review`
 - `design`
 - `implementation`
@@ -232,6 +244,7 @@ prompt-only behavior:
 - `qa`
 - `ship`
 - `retro`
+- `knowledge-capture`
 
 ### Domain
 

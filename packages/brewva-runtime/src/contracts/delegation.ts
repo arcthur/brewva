@@ -1,3 +1,4 @@
+import type { JsonValue } from "../utils/json.js";
 import type { ToolExecutionBoundary } from "./governance.js";
 
 export type DelegationRunStatus =
@@ -59,6 +60,7 @@ export interface DelegationRunRecord {
   modelRoute?: DelegationModelRouteRecord;
   summary?: string;
   error?: string;
+  resultData?: Record<string, JsonValue>;
   artifactRefs?: DelegationArtifactRef[];
   delivery?: DelegationDeliveryRecord;
   totalTokens?: number;

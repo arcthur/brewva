@@ -10,12 +10,58 @@ intent:
     - merge_decision
   output_contracts:
     review_report:
-      kind: text
-      min_words: 3
-      min_length: 18
+      kind: json
+      min_keys: 7
+      required_fields:
+        - summary
+        - activated_lanes
+        - activation_basis
+        - missing_evidence
+        - residual_blind_spots
+        - precedent_query_summary
+        - precedent_consult_status
+      field_contracts:
+        summary:
+          kind: text
+          min_words: 3
+          min_length: 18
+        activated_lanes:
+          kind: json
+          min_items: 1
+        activation_basis:
+          kind: json
+          min_items: 1
+        missing_evidence:
+          kind: json
+          min_items: 0
+        residual_blind_spots:
+          kind: json
+          min_items: 0
+        precedent_query_summary:
+          kind: text
+          min_words: 3
+          min_length: 18
+        precedent_consult_status:
+          kind: json
+          min_keys: 1
+          required_fields:
+            - status
+          field_contracts:
+            status:
+              kind: enum
+              values:
+                - consulted
+                - no_match
+                - not_required
+            precedent_refs:
+              kind: json
+              min_items: 1
+        lane_disagreements:
+          kind: json
+          min_items: 1
     review_findings:
       kind: json
-      min_items: 1
+      min_items: 0
     merge_decision:
       kind: enum
       values:
@@ -40,7 +86,10 @@ execution_hints:
   preferred_tools:
     - read
     - grep
+    - knowledge_search
+    - subagent_fanout
   fallback_tools:
+    - subagent_run
     - lsp_diagnostics
     - lsp_symbols
     - lsp_find_references
@@ -51,12 +100,16 @@ references:
   - skills/meta/skill-authoring/references/authored-behavior.md
   - references/boundary-failure.md
   - references/contract-drift.md
+  - references/review-lanes.md
   - references/security-concurrency.md
 consumes:
   - change_set
+  - files_changed
   - design_spec
   - verification_evidence
   - impact_map
+  - risk_register
+  - planning_posture
 requires: []
 ---
 
@@ -78,11 +131,41 @@ Use this skill when:
 
 ### Step 1: Build review context
 
-Summarize scope, intent, critical paths, and available evidence.
+Summarize scope, intent, critical paths, consulted precedents, and available
+evidence.
 
 ### Step 2: Evaluate risk lanes
 
-Inspect correctness, compatibility, data mutation, external exposure, and operational failure modes.
+Always inspect correctness / invariants, contracts / boundaries, and
+verification / operability. Activate conditional lanes from canonical
+`impact_map.change_categories` when available, otherwise from canonical
+`changedFileClasses` derived from `impact_map.changed_file_classes` or the
+current `files_changed` artifact. Widen when the available evidence is stale or
+missing.
+
+For non-trivial review work, prefer explicit internal lane fan-out through
+`subagent_fanout` using the built-in review delegates:
+
+- always-on: `review-correctness`, `review-boundaries`, `review-operability`
+- conditional: `review-security`, `review-concurrency`,
+  `review-compatibility`, `review-performance`
+
+If `impact_map`, `design_spec`, or `verification_evidence` is weak, stale, or
+missing, widen the lane set rather than narrowing it. If canonical
+classification is unavailable for non-trivial review, widen to the full
+conditional lane set instead of guessing.
+
+Each delegated review lane should emit a structured `review` outcome that keeps
+the lane visible to the parent reviewer. The canonical child fields are:
+
+- `lane`
+- `disposition`: `clear`, `concern`, `blocked`, or `inconclusive`
+- `primaryClaim`
+- `findings` when material issues exist
+- `missingEvidence` when the lane cannot clear on evidence alone
+- `openQuestions` for residual blind spots
+- `strongestCounterpoint` when the lane has a meaningful internal caveat
+- `confidence`
 
 ### Step 3: Decide the actual next action
 
@@ -94,7 +177,9 @@ blocked on missing evidence or a deeper design problem.
 Produce:
 
 - `review_findings`: ordered issues with evidence
-- `review_report`: scope, assumptions, gaps, residual risk
+- `review_report`: structured disclosure with `summary`, lane activation,
+  missing evidence, blind spots, `precedent_query_summary`, and precedent
+  consult status
 - `merge_decision`: `ready`, `needs_changes`, or `blocked`
 
 ## Interaction Protocol
@@ -105,6 +190,11 @@ Produce:
   diff in isolation.
 - If a user-facing decision is needed, recommend the merge path you actually
   believe is safest instead of presenting symmetric options.
+- If critical metadata is missing, widen the review lens rather than narrowing
+  it. Missing evidence is itself review evidence.
+- Preserve proof of consult for repository precedents. Non-trivial review
+  should record consulted precedents or an explicit no-match result, plus the
+  query context used to reach that conclusion.
 
 ## Review Questions
 
@@ -128,6 +218,13 @@ Use these questions to keep the review anchored in behavior instead of style:
   violations as first-class findings, not footnotes.
 - If the real problem is an unconfirmed bug rather than a review issue, say so
   and direct the next step toward debugging.
+- Preserve review-lane disclosure in `review_report`: activated lanes,
+  activation basis, missing evidence, residual blind spots,
+  `precedent_query_summary`, and precedent consult status.
+- If internal lane delegates disagree materially, keep the disagreement visible
+  in `review_report` instead of smoothing it away.
+- If a delegated lane clears, say so with `disposition = clear` rather than
+  fabricating a finding just to satisfy output shape.
 
 ## Merge Readiness Gate
 
@@ -150,12 +247,19 @@ Before setting `merge_decision` to `ready`, mentally clear this gate:
 
 ## Handoff Expectations
 
+- `review_findings` may be empty when every activated lane clears without a
+  material issue; do not invent a finding just to pad output shape.
 - `review_findings` should be ordered from highest to lowest value and should be
   actionable by implementation without reinterpreting the review.
-- `review_report` should record assumptions, blind spots, and residual risk so
-  downstream ship decisions know what was and was not covered.
+- `review_report` should record assumptions, activated lanes, blind spots,
+  precedent consult status, and residual risk so downstream ship decisions know
+  what was and was not covered.
 - `merge_decision` should match the findings and evidence; it should never be a
   detached summary label.
+- When review work fans out into internal lane delegates, prefer completing the
+  parent skill through `skill_complete` with `reviewEnsemble` so the canonical
+  review outputs are synthesized from durable lane outcomes instead of copied by
+  hand.
 
 ## Stop Conditions
 

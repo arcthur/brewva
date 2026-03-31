@@ -912,6 +912,9 @@ export function createHostedSubagentAdapter(
           modelRoute: executionPlan.modelRoute,
           summary,
           error: undefined,
+          resultData: outcome.data
+            ? (structuredClone(outcome.data) as unknown as DelegationRunRecord["resultData"])
+            : undefined,
           artifactRefs: outcome.artifactRefs?.map((ref) => ({ ...ref })),
           delivery: mergeDeliveryRecord(
             delegationStore.getRun(input.parentSessionId, runId)?.delivery ??
@@ -939,6 +942,7 @@ export function createHostedSubagentAdapter(
             parentSkill: parentSkill ?? null,
             status: "completed",
             summary,
+            resultData: completedRecord.resultData ?? null,
             totalTokens: childCostSummary.totalTokens,
             costUsd: childCostSummary.totalCostUsd,
             workerStatus: workerResult?.status ?? null,

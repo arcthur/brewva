@@ -8,6 +8,26 @@ import {
 } from "../../../packages/brewva-gateway/src/subagents/catalog.js";
 
 describe("subagent delegation catalog", () => {
+  test("exposes built-in review lane delegates on the canonical reviewer envelope", async () => {
+    const catalog = await loadHostedDelegationCatalog(process.cwd());
+
+    for (const agentSpecName of [
+      "review-correctness",
+      "review-boundaries",
+      "review-operability",
+      "review-security",
+      "review-concurrency",
+      "review-compatibility",
+      "review-performance",
+    ]) {
+      expect(catalog.agentSpecs.get(agentSpecName)).toMatchObject({
+        name: agentSpecName,
+        envelope: "readonly-reviewer",
+        fallbackResultMode: "review",
+      });
+    }
+  });
+
   test("loads workspace execution envelopes and agent specs", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-catalog-"));
     const subagentDir = join(workspace, ".brewva", "subagents");

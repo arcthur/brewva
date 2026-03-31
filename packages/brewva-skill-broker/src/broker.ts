@@ -15,6 +15,7 @@ import {
   SKILL_PROMOTION_MATERIALIZED_EVENT_TYPE,
   SKILL_PROMOTION_PROMOTED_EVENT_TYPE,
   SKILL_PROMOTION_REVIEWED_EVENT_TYPE,
+  coerceReviewReportArtifact,
   type BrewvaEventRecord,
   type BrewvaRuntime,
   type ContextSourceProvider,
@@ -261,7 +262,8 @@ function extractPromotionCandidates(
     const hypothesis = readString(outputs.improvement_hypothesis);
     const plan = readString(outputs.improvement_plan);
     const followup = readString(outputs.followup_recommendation);
-    const reviewReport = readString(outputs.review_report);
+    const structuredReviewReport = coerceReviewReportArtifact(outputs.review_report);
+    const reviewReport = structuredReviewReport?.summary ?? readString(outputs.review_report);
     const retroSummary = readString(outputs.retro_summary);
     const reviewFindings = extractArrayPreview(outputs.review_findings);
     const retroFindings = extractArrayPreview(outputs.retro_findings);
@@ -284,6 +286,11 @@ function extractPromotionCandidates(
     }
     if (reviewReport) {
       outputSnippets.push(`Review: ${compactText(reviewReport, 180)}`);
+    }
+    if ((structuredReviewReport?.activated_lanes.length ?? 0) > 0) {
+      outputSnippets.push(
+        `Review lanes: ${structuredReviewReport!.activated_lanes.slice(0, 4).join(", ")}`,
+      );
     }
     outputSnippets.push(...reviewFindings.map((entry) => `Review finding: ${entry}`));
     outputSnippets.push(...retroFindings.map((entry) => `Retro finding: ${entry}`));

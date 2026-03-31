@@ -6,6 +6,7 @@ This repository uses a layered documentation system:
 - `architecture`: implemented design, boundaries, and invariants
 - `reference`: stable contracts and technical surfaces
 - `journeys`: operator entrypoints and cross-package review flows
+- `solutions`: repository-native engineering precedents and compound knowledge
 - `troubleshooting`: failure patterns and remediation
 - `research`: incubating design notes with explicit promotion targets
 
@@ -69,6 +70,10 @@ This repository uses a layered documentation system:
 
 - Troubleshooting: `docs/troubleshooting/common-failures.md`
 
+## Solutions
+
+- Solutions overview: `docs/solutions/README.md`
+
 ## Research (Incubation Layer)
 
 - Research playbook: `docs/research/README.md`
@@ -85,6 +90,7 @@ This repository uses a layered documentation system:
 - Subagent delegation RFC: `docs/research/rfc-subagent-delegation-and-isolated-execution.md`
 - Pre-parse normalization RFC: `docs/research/rfc-preparse-normalization-model-capability-and-live-audit-split.md`
 - Workflow artifacts RFC: `docs/research/rfc-workflow-artifacts-and-posture-control-plane.md`
+- Compound Knowledge Plane and Review Ensemble status pointer: `docs/research/rfc-repository-native-compound-knowledge-and-review-ensemble.md`
 - Iteration facts RFC: `docs/research/rfc-iteration-facts-and-model-native-optimization-protocols.md`
 - Archived / superseded examples: `docs/research/rfc-invocation-spine-and-posture-runtime-vnext.md`, `docs/research/rfc-runtime-decomposition-and-deliberation-thickening.md`
 

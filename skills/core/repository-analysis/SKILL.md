@@ -1,12 +1,13 @@
 ---
 name: repository-analysis
-description: Build a reliable repository snapshot, module boundary map, and impact
-  analysis before design, debugging, or review.
+description: Build a reliable repository snapshot, impact map, and planning posture
+  before design, debugging, or review.
 stability: stable
 intent:
   outputs:
     - repository_snapshot
     - impact_map
+    - planning_posture
     - unknowns
   output_contracts:
     repository_snapshot:
@@ -14,9 +15,42 @@ intent:
       min_words: 3
       min_length: 18
     impact_map:
-      kind: text
-      min_words: 3
-      min_length: 18
+      kind: json
+      min_keys: 6
+      required_fields:
+        - summary
+        - affected_paths
+        - boundaries
+        - high_risk_touchpoints
+        - change_categories
+        - changed_file_classes
+      field_contracts:
+        summary:
+          kind: text
+          min_words: 3
+          min_length: 18
+        affected_paths:
+          kind: json
+          min_items: 1
+        boundaries:
+          kind: json
+          min_items: 0
+        high_risk_touchpoints:
+          kind: json
+          min_items: 0
+        change_categories:
+          kind: json
+          min_items: 0
+        changed_file_classes:
+          kind: json
+          min_items: 1
+    planning_posture:
+      kind: enum
+      values:
+        - trivial
+        - moderate
+        - complex
+        - high_risk
     unknowns:
       kind: json
       min_items: 1
@@ -80,7 +114,14 @@ expanding only while uncertainty is still material.
 Produce:
 
 - `repository_snapshot`: main zones, responsibilities, and key paths
-- `impact_map`: likely affected files, boundaries, and high-risk touchpoints
+- `impact_map`: structured scope and classifier output with:
+  - `summary`
+  - `affected_paths`
+  - `boundaries`
+  - `high_risk_touchpoints`
+  - `change_categories`
+  - `changed_file_classes`
+- `planning_posture`: `trivial`, `moderate`, `complex`, or `high_risk`
 - `unknowns`: gaps that still block confident action
 
 ### Step 4: Stop broad scanning
@@ -104,6 +145,8 @@ Use these questions to avoid aimless scanning:
 - What file or module would have to change if the user's complaint is real?
 - Which adjacent boundary is most likely to create hidden blast radius?
 - What unknown still blocks downstream design, review, or debugging work?
+- What planning posture best matches the actual blast radius and evidence depth
+  required here?
 
 ## Search Protocol
 
@@ -121,6 +164,14 @@ Use these questions to avoid aimless scanning:
   and the specific path relevant to the request.
 - `impact_map` should identify likely touchpoints, ownership boundaries, and
   blast-radius concerns so downstream skills know where to look first.
+- `impact_map.change_categories` should use the canonical review taxonomy when
+  the relevant risk class is clear.
+- `impact_map.changed_file_classes` should always be populated with at least one
+  canonical file class so review can classify the change deterministically even
+  when `change_categories` stays broad.
+- `planning_posture` should classify the next planning step conservatively.
+  Use `trivial` only for demonstrably local, low-risk work. Use `high_risk`
+  for public, persisted, security-sensitive, or consistency-sensitive changes.
 - `unknowns` should be concrete and decision-relevant. Record what is still
   unclear and why it blocks confident action.
 
@@ -141,4 +192,4 @@ Use these questions to avoid aimless scanning:
 
 Input: "Map the runtime-to-gateway-to-cli path and identify high-risk coupling points."
 
-Output: `repository_snapshot`, `impact_map`, `unknowns`.
+Output: `repository_snapshot`, `impact_map`, `planning_posture`, `unknowns`.

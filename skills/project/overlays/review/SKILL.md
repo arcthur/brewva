@@ -30,9 +30,12 @@ scripts:
   - skills/project/scripts/check-skill-dod.sh
 consumes:
   - change_set
+  - files_changed
   - design_spec
   - verification_evidence
   - impact_map
+  - risk_register
+  - planning_posture
 requires: []
 ---
 

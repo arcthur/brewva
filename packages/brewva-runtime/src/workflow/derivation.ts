@@ -1,6 +1,10 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { BrewvaEventRecord, TaskState } from "../contracts/index.js";
+import {
+  coerceReviewReportArtifact,
+  type BrewvaEventRecord,
+  type TaskState,
+} from "../contracts/index.js";
 import {
   ITERATION_GUARD_RECORDED_EVENT_TYPE,
   ITERATION_METRIC_OBSERVED_EVENT_TYPE,
@@ -17,6 +21,7 @@ import type { JsonValue } from "../utils/json.js";
 export const WORKFLOW_ARTIFACT_KINDS = [
   "discovery",
   "strategy_review",
+  "learning_research",
   "design",
   "execution_plan",
   "implementation",
@@ -168,6 +173,14 @@ function compactJsonValue(value: unknown, maxChars = 220): string | undefined {
   return undefined;
 }
 
+function summarizeReviewReport(value: unknown, maxChars = 220): string | undefined {
+  const structured = coerceReviewReportArtifact(value);
+  if (structured) {
+    return compactText(structured.summary, maxChars);
+  }
+  return compactJsonValue(value, maxChars);
+}
+
 function uniqueStrings(values: readonly string[]): string[] {
   return [...new Set(values.filter((value) => value.trim().length > 0))];
 }
@@ -270,7 +283,13 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
   const strategyReview = outputs.strategy_review;
   const scopeDecision = outputs.scope_decision;
   const strategicRisks = outputs.strategic_risks;
-  if (strategyReview !== undefined || scopeDecision !== undefined || strategicRisks !== undefined) {
+  const planningPosture = readString(outputs.planning_posture);
+  if (
+    strategyReview !== undefined ||
+    scopeDecision !== undefined ||
+    strategicRisks !== undefined ||
+    planningPosture
+  ) {
     const riskCount = readStringArray(strategicRisks).length;
     const strategySummaryParts = [
       compactJsonValue(strategyReview) ??
@@ -280,20 +299,81 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
     if (riskCount > 0) {
       strategySummaryParts.push(`strategic_risks=${riskCount}`);
     }
+    if (planningPosture) {
+      strategySummaryParts.push(`planning_posture=${planningPosture}`);
+    }
     drafts.push(
       createDraftArtifact({
         event,
         kind: "strategy_review",
         summary: strategySummaryParts.join("; "),
         sourceSkillNames: skillName ? [skillName] : [],
-        outputKeys: ["strategy_review", "scope_decision", "strategic_risks"].filter(
-          (key) => outputs[key] !== undefined,
-        ),
+        outputKeys: [
+          "strategy_review",
+          "scope_decision",
+          "strategic_risks",
+          "planning_posture",
+        ].filter((key) => outputs[key] !== undefined),
         metadata: {
           source: "skill_completed",
           sourceSkillName: skillName ?? null,
           outputKeys,
           strategicRiskCount: riskCount,
+          planningPosture: planningPosture ?? null,
+        },
+      }),
+    );
+  }
+
+  const knowledgeBrief = outputs.knowledge_brief;
+  const precedentRefs = readStringArray(outputs.precedent_refs);
+  const preventiveChecks = readStringArray(outputs.preventive_checks);
+  const precedentQuerySummary = readString(outputs.precedent_query_summary);
+  const precedentConsultStatus = readString(outputs.precedent_consult_status);
+  if (
+    knowledgeBrief !== undefined ||
+    precedentRefs.length > 0 ||
+    preventiveChecks.length > 0 ||
+    precedentQuerySummary ||
+    precedentConsultStatus
+  ) {
+    const learningSummaryParts = [
+      compactJsonValue(knowledgeBrief) ??
+        (precedentConsultStatus === "no_relevant_precedent_found"
+          ? "No relevant repository precedent matched the consult query."
+          : "Learning research artifact recorded."),
+    ];
+    if (precedentConsultStatus) {
+      learningSummaryParts.push(`consult_status=${precedentConsultStatus}`);
+    }
+    if (precedentRefs.length > 0) {
+      learningSummaryParts.push(`precedent_refs=${precedentRefs.length}`);
+    }
+    if (preventiveChecks.length > 0) {
+      learningSummaryParts.push(`preventive_checks=${preventiveChecks.length}`);
+    }
+    drafts.push(
+      createDraftArtifact({
+        event,
+        kind: "learning_research",
+        summary: learningSummaryParts.join("; "),
+        sourceSkillNames: skillName ? [skillName] : [],
+        outputKeys: [
+          "knowledge_brief",
+          "precedent_refs",
+          "preventive_checks",
+          "precedent_query_summary",
+          "precedent_consult_status",
+        ].filter((key) => outputs[key] !== undefined),
+        metadata: {
+          source: "skill_completed",
+          sourceSkillName: skillName ?? null,
+          outputKeys,
+          precedentRefCount: precedentRefs.length,
+          preventiveCheckCount: preventiveChecks.length,
+          precedentConsultStatus: precedentConsultStatus ?? null,
+          precedentQuerySummary: precedentQuerySummary ?? null,
+          ...(precedentRefs.length > 0 ? { precedentRefs } : {}),
         },
       }),
     );
@@ -371,12 +451,13 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
   const reviewFindings = outputs.review_findings;
   const mergeDecision = readString(outputs.merge_decision);
   if (reviewReport !== undefined || reviewFindings !== undefined || mergeDecision) {
+    const structuredReviewReport = coerceReviewReportArtifact(reviewReport);
     const reviewSummaryParts = [];
     if (mergeDecision) {
       reviewSummaryParts.push(`decision=${mergeDecision}`);
     }
     const reviewText =
-      compactJsonValue(reviewReport) ??
+      summarizeReviewReport(reviewReport) ??
       compactJsonValue(reviewFindings) ??
       "Review artifact recorded.";
     reviewSummaryParts.push(reviewText);
@@ -396,6 +477,29 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
           sourceSkillName: skillName ?? null,
           outputKeys,
           mergeDecision: mergeDecision ?? null,
+          ...(structuredReviewReport
+            ? {
+                activatedLanes: structuredReviewReport.activated_lanes,
+                activationBasis: structuredReviewReport.activation_basis,
+                missingEvidence: structuredReviewReport.missing_evidence,
+                residualBlindSpots: structuredReviewReport.residual_blind_spots,
+                precedentQuerySummary: structuredReviewReport.precedent_query_summary,
+                precedentConsultStatus: {
+                  status: structuredReviewReport.precedent_consult_status.status,
+                  ...(structuredReviewReport.precedent_consult_status.precedent_refs
+                    ? {
+                        precedent_refs:
+                          structuredReviewReport.precedent_consult_status.precedent_refs,
+                      }
+                    : {}),
+                },
+                ...(structuredReviewReport.lane_disagreements
+                  ? {
+                      laneDisagreements: structuredReviewReport.lane_disagreements,
+                    }
+                  : {}),
+              }
+            : {}),
         },
       }),
     );
@@ -837,6 +941,7 @@ export function deriveWorkflowArtifacts(events: readonly BrewvaEventRecord[]): W
       if (
         artifact.kind === "discovery" ||
         artifact.kind === "strategy_review" ||
+        artifact.kind === "learning_research" ||
         artifact.kind === "design" ||
         artifact.kind === "execution_plan" ||
         artifact.kind === "retro" ||
@@ -998,6 +1103,7 @@ function createShipPostureArtifact(input: {
   const latestCoreArtifacts = [
     input.latestArtifacts.discovery,
     input.latestArtifacts.strategy_review,
+    input.latestArtifacts.learning_research,
     input.latestArtifacts.design,
     input.latestArtifacts.execution_plan,
     input.latestArtifacts.implementation,
@@ -1246,6 +1352,7 @@ export function deriveWorkflowStatus(input: DeriveWorkflowStatusInput): Workflow
       [
         latestArtifacts.discovery?.artifactId,
         latestArtifacts.strategy_review?.artifactId,
+        latestArtifacts.learning_research?.artifactId,
         latestArtifacts.design?.artifactId,
         latestArtifacts.execution_plan?.artifactId,
         latestArtifacts.implementation?.artifactId,

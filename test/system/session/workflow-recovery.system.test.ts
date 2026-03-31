@@ -53,7 +53,25 @@ describe("system: workflow recovery", () => {
           skillName: "review",
           outputKeys: ["review_report", "review_findings", "merge_decision"],
           outputs: {
-            review_report: "Recovered workflow chain is ready.",
+            review_report: {
+              summary:
+                "Recovered workflow chain is ready after lane disclosure and precedent consult were rebuilt from tape.",
+              activated_lanes: ["review-correctness", "review-boundaries", "review-operability"],
+              activation_basis: [
+                "Projection recovery changes workflow-facing artifacts.",
+                "Verification evidence is fresh after replay.",
+              ],
+              missing_evidence: [],
+              residual_blind_spots: [
+                "No security lane was needed because replay recovery stays local to the repository.",
+              ],
+              precedent_query_summary:
+                "query_intent=precedent_lookup | query=workflow recovery projection rebuild | source_types=auto | search_mode=solution_only",
+              precedent_consult_status: {
+                status: "consulted",
+                precedent_refs: ["docs/solutions/workflow/review-disclosure-shape.md"],
+              },
+            },
             review_findings: [],
             merge_decision: "ready",
           },
@@ -89,7 +107,7 @@ describe("system: workflow recovery", () => {
         "workflow.design: state=ready; freshness=unknown; Recover workflow artifacts from tape.",
       );
       expect(injected.text).toContain(
-        "workflow.review: state=ready; freshness=fresh; decision=ready; Recovered workflow chain is ready.",
+        "workflow.review: state=ready; freshness=fresh; decision=ready; Recovered workflow chain is ready after lane disclosure and precedent consult were rebuilt from tape.",
       );
       expect(injected.text).toContain(
         "workflow.verification: state=ready; freshness=fresh; Verification pass (standard).",

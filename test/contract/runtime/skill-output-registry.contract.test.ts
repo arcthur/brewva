@@ -21,6 +21,17 @@ function createCleanRuntime(): BrewvaRuntime {
   });
 }
 
+function buildImpactMap(summary: string) {
+  return {
+    summary,
+    affected_paths: ["packages/brewva-runtime/src/runtime.ts"],
+    boundaries: ["runtime.skills"],
+    high_risk_touchpoints: ["runtime output registry handoff"],
+    change_categories: ["public_api"],
+    changed_file_classes: ["public_api"],
+  };
+}
+
 describe("skill output registry", () => {
   test("completed skill outputs are queryable by subsequent skills", async () => {
     const runtime = createCleanRuntime();
@@ -29,7 +40,8 @@ describe("skill output registry", () => {
     runtime.skills.activate(sessionId, "repository-analysis");
     const outputs = {
       repository_snapshot: "monorepo with runtime, tools, cli, gateway",
-      impact_map: "routing, registry, docs",
+      impact_map: buildImpactMap("routing, registry, docs"),
+      planning_posture: "moderate",
       unknowns: ["No blocking unknowns remain after the repository inventory pass."],
     };
     runtime.skills.complete(sessionId, outputs);
@@ -48,19 +60,36 @@ describe("skill output registry", () => {
     runtime.skills.activate(sessionId, "repository-analysis");
     runtime.skills.complete(sessionId, {
       repository_snapshot: "module map here",
-      impact_map: "routing and cascade",
+      impact_map: buildImpactMap("routing and cascade"),
+      planning_posture: "complex",
       unknowns: ["No blocking unknowns remain after validating the main code path."],
     });
 
     const debuggingAvailable = runtime.skills.getConsumedOutputs(sessionId, "debugging");
     expect(debuggingAvailable.repository_snapshot).toBe("module map here");
-    expect(debuggingAvailable.impact_map).toBe("routing and cascade");
+    expect(debuggingAvailable.impact_map).toMatchObject({
+      summary: "routing and cascade",
+      changed_file_classes: ["public_api"],
+    });
 
     runtime.skills.activate(sessionId, "debugging");
     const completion = runtime.skills.complete(sessionId, {
       root_cause: "continuity gate was missing",
       fix_strategy: "add continuity-aware filtering",
       failure_evidence: "repro + failing route selection",
+      investigation_record: {
+        hypotheses_tried: [
+          "routing regression in delegation resolution",
+          "continuity gate omission in the repair path",
+        ],
+        failed_attempts: ["Patched route selection first; symptom persisted."],
+        disconfirming_evidence: [
+          "Route selection matched the expected owner after trace inspection.",
+        ],
+        final_root_cause: "continuity gate was missing",
+        verification_linkage: "repro + failing route selection",
+      },
+      planning_posture: "complex",
     });
     expect(completion).toEqual({ ok: true, missing: [], invalid: [] });
 
@@ -81,7 +110,8 @@ describe("skill output registry", () => {
     runtimeA.skills.activate(sessionId, "repository-analysis");
     runtimeA.skills.complete(sessionId, {
       repository_snapshot: "replayed module map",
-      impact_map: "registry and router",
+      impact_map: buildImpactMap("registry and router"),
+      planning_posture: "moderate",
       unknowns: ["No unresolved repository gaps remained at replay capture time."],
     });
 
@@ -97,7 +127,8 @@ describe("skill output registry", () => {
     runtime.skills.activate(sessionId, "repository-analysis");
     const outputs = {
       repository_snapshot: "repository layout for runtime, tools, and gateway modules",
-      impact_map: "routing flow and registry boundaries touched by the change",
+      impact_map: buildImpactMap("routing flow and registry boundaries touched by the change"),
+      planning_posture: "moderate",
       unknowns: ["No blocking repository blind spots remained after the analysis pass."],
     };
     runtime.skills.complete(sessionId, outputs);
@@ -112,7 +143,12 @@ describe("skill output registry", () => {
       outputs?: Record<string, unknown>;
     };
     expect(payload.skillName).toBe("repository-analysis");
-    expect(payload.outputKeys).toEqual(["impact_map", "repository_snapshot", "unknowns"]);
+    expect(payload.outputKeys).toEqual([
+      "impact_map",
+      "planning_posture",
+      "repository_snapshot",
+      "unknowns",
+    ]);
     expect(payload.outputs).toEqual(outputs);
   });
 
@@ -138,7 +174,8 @@ describe("skill output registry", () => {
     runtime.skills.activate(sessionId, "repository-analysis");
     const completion = runtime.skills.complete(sessionId, {
       repository_snapshot: "runtime, tools, projection",
-      impact_map: "verification, skill lifecycle",
+      impact_map: buildImpactMap("verification, skill lifecycle"),
+      planning_posture: "moderate",
       unknowns: ["No blocking unknowns remain after mapping runtime and projection ownership."],
       task_spec: {
         schema: "brewva.task.v1",

@@ -31,6 +31,17 @@ function runSubcommand(
   });
 }
 
+function buildImpactMap(summary: string) {
+  return {
+    summary,
+    affected_paths: ["packages/brewva-runtime/src/runtime.ts"],
+    boundaries: ["runtime.skills"],
+    high_risk_touchpoints: ["runtime inspection surface"],
+    change_categories: ["public_api"],
+    changed_file_classes: ["public_api"],
+  };
+}
+
 describe("inspect subcommand", () => {
   test(
     "rebuilds a replay-first session report from persisted artifacts",
@@ -189,7 +200,8 @@ describe("inspect subcommand", () => {
         runtime.skills.activate(syntheticSessionId, "repository-analysis");
         runtime.skills.complete(syntheticSessionId, {
           repository_snapshot: `synthetic registry session ${index}`,
-          impact_map: `synthetic impact map ${index}`,
+          impact_map: buildImpactMap(`synthetic impact map ${index}`),
+          planning_posture: "moderate",
           unknowns: ["synthetic only"],
         });
       }

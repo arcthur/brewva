@@ -7,6 +7,7 @@ intent:
   outputs:
     - strategy_review
     - scope_decision
+    - planning_posture
     - strategic_risks
   output_contracts:
     strategy_review:
@@ -17,6 +18,13 @@ intent:
       kind: text
       min_words: 3
       min_length: 18
+    planning_posture:
+      kind: enum
+      values:
+        - trivial
+        - moderate
+        - complex
+        - high_risk
     strategic_risks:
       kind: json
       min_items: 1
@@ -103,6 +111,8 @@ Produce:
 
 - `strategy_review`: the strategic judgment and why it is the best path now
 - `scope_decision`: the recommended wedge, explicit non-goals, and sequencing
+- `planning_posture`: the expected planning depth and precedent-retrieval
+  posture for downstream work
 - `strategic_risks`: concrete scope, adoption, and sequencing risks
 
 ## Interaction Protocol
@@ -115,6 +125,18 @@ Produce:
   inflation.
 - Recommend one primary posture and one bounded alternative when ambiguity
   remains. Do not leave scope unresolved by presenting a neutral menu.
+
+## Planning Posture Protocol
+
+- `trivial`: only for demonstrably local follow-through with low blast radius
+  and no meaningful precedent or rollout risk
+- `moderate`: bounded but non-trivial work that still benefits from precedent
+  lookup and explicit planning
+- `complex`: multi-step or cross-boundary work where design depth and precedent
+  retrieval are both expected
+- `high_risk`: public surface, persisted format, security-sensitive,
+  concurrency-sensitive, or operator-sensitive work where planning and review
+  must widen rather than compress
 
 ## Strategy Questions
 
@@ -153,6 +175,9 @@ Use these questions to pressure-test the wedge:
 - `scope_decision` should make the in-scope wedge, deferred surface, and
   sequencing assumptions explicit enough that downstream planning does not need
   to re-litigate them.
+- `planning_posture` should be conservative and explicit because
+  `learning-research` and `design` use it to decide how much precedent
+  retrieval and planning rigor are required.
 - `strategic_risks` should rank the ways this bet can fail, including timing,
   complexity, adoption, and hidden scope drag.
 - The handoff should include "why not larger" and "why not smaller" reasoning
@@ -175,4 +200,4 @@ Use these questions to pressure-test the wedge:
 
 Input: "We should add an AI inbox assistant to the product."
 
-Output: `strategy_review`, `scope_decision`, `strategic_risks`.
+Output: `strategy_review`, `scope_decision`, `planning_posture`, `strategic_risks`.

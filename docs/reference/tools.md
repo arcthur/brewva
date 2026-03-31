@@ -35,6 +35,10 @@ Default tools registered by `buildBrewvaTools()`:
 - `process`
 - `cost_view`
 - `deliberation_memory`
+- `knowledge_capture`
+- `knowledge_search`
+- `precedent_audit`
+- `precedent_sweep`
 - `obs_query`
 - `obs_slo_assert`
 - `obs_snapshot`
@@ -121,6 +125,10 @@ Notes:
 - `process`
 - `cost_view`
 - `deliberation_memory`
+- `knowledge_capture`
+- `knowledge_search`
+- `precedent_audit`
+- `precedent_sweep`
 - `obs_query`
 - `obs_slo_assert`
 - `obs_snapshot`
@@ -154,6 +162,27 @@ It lists retained artifacts, shows retention metadata, and runs query-scored
 retrieval without creating new memory or mutating runtime truth.
 Repository-scoped retrieval filters repository artifacts to the current task
 target roots instead of mixing unrelated repositories that share a workspace.
+
+`knowledge_search` is the explicit repository-native precedent retrieval
+surface. It searches `docs/solutions/**` first, then adjacent bootstrap
+knowledge roots such as architecture, reference, research, troubleshooting, and
+incident docs when needed. Results carry `source_type`, `authority_rank`, and
+`freshness` so planning and review can inspect repository precedent without
+pretending that hidden memory is authoritative. Retrieval is query-intent-aware:
+`precedent_lookup` prefers solution and incident precedents, while
+`normative_lookup` prefers stable docs; the returned `authority_rank` still
+follows the canonical authority table rather than inventing a second ranking
+scheme.
+
+`precedent_audit` is the explicit repository-maintenance inspection surface for
+authority overlap and stale routing. It compares a candidate or existing
+solution record against stable docs and sibling precedents so contradiction
+handling remains explicit instead of being flattened into silent write-back.
+
+`precedent_sweep` is the explicit repository-wide maintenance surface. It
+scans `docs/solutions/**` on demand and aggregates actionable stale-routing,
+overlap, and invalid-record findings without turning broad maintenance sweeps
+into a default hosted path.
 
 ### Browser Automation
 
@@ -406,6 +435,10 @@ Semantics:
 
 - built-in agent specs remain stable presets: `explore`, `plan`, `review`,
   `general`, `verification`, and `patch-worker`
+- built-in review-lane delegates are also available for internal review fan-out:
+  `review-correctness`, `review-boundaries`, `review-operability`,
+  `review-security`, `review-concurrency`, `review-compatibility`, and
+  `review-performance`
 - built-in execution envelopes are:
   `readonly-scout`, `readonly-planner`, `readonly-reviewer`,
   `readonly-general`, `verification-runner`, and `patch-worker`
@@ -477,6 +510,9 @@ Skill sequencing is model-native.
 
 - `skill_load` activates the next skill explicitly
 - `skill_complete` records output and runs completion/verification policy
+  including parent-side `reviewEnsemble` synthesis for canonical review outputs
+  and `learningResearch` synthesis for canonical planning-time proof-of-consult
+  artifacts
 - `skill_promotion` inspects or advances post-execution promotion drafts
 
 There is no public skill-cascade or chain-control tool.
@@ -509,6 +545,62 @@ Explicit inspection surface for deliberation memory artifacts.
   memory artifact would be injected, instead of relying on hidden recall
 - remains read-only and non-authoritative; it does not write new memory or
   widen kernel truth
+
+## `knowledge_search`
+
+Explicit repository-native precedent retrieval surface.
+
+- searches `docs/solutions/**` first and may bootstrap from adjacent
+  repository-native documentation when the solution corpus is sparse
+- returns typed source metadata including `source_type`, `authority_rank`, and
+  `freshness`
+- supports `query_intent` so precedent reuse and normative lookup can share the
+  same authority model without sharing one universal presentation order
+- supports free-text query plus module, boundary, tag, problem-kind, status,
+  and source-type filters
+- remains read-only and task-target-root scoped
+- is the preferred proof-of-consult surface before non-trivial planning,
+  debugging, or review
+
+## `knowledge_capture`
+
+Deterministic repository-native precedent materialization surface.
+
+- writes canonical solution records under `docs/solutions/**`
+- validates investigation-grade capture requirements for `bugfix` and
+  `incident` records before writing
+- upserts by explicit or derived canonical path and skips pure timestamp churn
+- surfaces a lightweight discoverability signal so the precedent layer does not
+  become write-only
+- preserves runtime authority boundaries by writing repository docs instead of
+  creating a new runtime knowledge domain
+
+## `precedent_audit`
+
+Read-only repository-native precedent maintenance surface.
+
+- audits a candidate or existing `docs/solutions/**` record against higher
+  authority stable docs and sibling solution precedents
+- returns an explicit maintenance recommendation instead of silently deciding
+  whether a record should stay active, become stale, or be superseded
+- validates displacement routing so stale or superseded records point to a
+  stable doc or successor precedent rather than only to a promotion candidate
+- validates promotion-candidate derivative links so warm-memory follow-up stays
+  inside `.brewva/skill-broker/**`
+- keeps contradiction handling explicit and repository-scoped without widening
+  runtime authority
+
+## `precedent_sweep`
+
+Explicit repository-wide precedent maintenance sweep.
+
+- scans `docs/solutions/**` under the primary target root and runs the same
+  authority and stale-routing checks used by `precedent_audit`
+- reports only actionable entries by default so broad maintenance remains
+  explicit rather than noisy
+- surfaces invalid solution docs, higher-authority overlap, and missing
+  displacement routing as sweep findings
+- remains read-only; it does not mutate records or schedule hidden cleanup
 
 ## `workflow_status`
 

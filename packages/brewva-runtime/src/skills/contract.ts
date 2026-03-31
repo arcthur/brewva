@@ -214,6 +214,22 @@ function readOptionalPositiveIntegerField(
   return Math.floor(value);
 }
 
+function readOptionalNonNegativeIntegerField(
+  data: Record<string, unknown>,
+  key: string,
+  filePath: string,
+  fieldPath: string,
+): number | undefined {
+  if (!Object.prototype.hasOwnProperty.call(data, key)) {
+    return undefined;
+  }
+  const value = data[key];
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    failSkillContract(filePath, `${fieldPath}.${key} must be a number >= 0.`);
+  }
+  return Math.floor(value);
+}
+
 function parseOutputContractMap(
   value: unknown,
   filePath: string,
@@ -266,11 +282,22 @@ function parseOutputContract(
       };
     }
     case "json": {
-      assertAllowedKeys(data, ["kind", "min_keys", "min_items"], filePath, fieldPath);
+      assertAllowedKeys(
+        data,
+        ["kind", "min_keys", "min_items", "required_fields", "field_contracts"],
+        filePath,
+        fieldPath,
+      );
       return {
         kind,
-        minKeys: readOptionalPositiveIntegerField(data, "min_keys", filePath, fieldPath),
-        minItems: readOptionalPositiveIntegerField(data, "min_items", filePath, fieldPath),
+        minKeys: readOptionalNonNegativeIntegerField(data, "min_keys", filePath, fieldPath),
+        minItems: readOptionalNonNegativeIntegerField(data, "min_items", filePath, fieldPath),
+        requiredFields: readOptionalStringArrayField(data, "required_fields", filePath)?.map(
+          (field) => field.trim(),
+        ),
+        fieldContracts: Object.prototype.hasOwnProperty.call(data, "field_contracts")
+          ? parseOutputContractMap(data.field_contracts, filePath, `${fieldPath}.field_contracts`)
+          : undefined,
       };
     }
     default:

@@ -138,6 +138,24 @@ Allowed interaction pattern:
   rather than silently turning session-local runtime surfaces into merge
   authority
 
+## Repository-Native Precedent Layer
+
+Brewva now treats repository-native engineering precedent as an adjacent
+control-plane product, not as kernel authority.
+
+Stable decisions:
+
+- `docs/solutions/**` is the canonical repository-native precedent store
+- precedent retrieval and maintenance happen through explicit surfaces such as
+  `knowledge_search`, `precedent_audit`, `precedent_sweep`, and
+  `knowledge-capture`
+- these surfaces may inform planning, debugging, review, and repository-fitness
+  judgment, but they do not create a `runtime.knowledge.*` domain and they do
+  not widen effect authority
+- `review` may use an internal multi-lane ensemble, but the public review
+  boundary remains one advisory surface and does not become repository merge
+  authority
+
 ## State Taxonomy
 
 | Category                 | Role                                                      | Authority                    | Typical carriers                                                                         |

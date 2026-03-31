@@ -57,6 +57,12 @@ Implementation note:
 - runtime may persist objective iteration facts such as metric observations,
   guard results, and any future evidence-bound protocol facts, but those facts
   remain durable evidence rather than a runtime-owned optimizer
+- repository-native compound knowledge belongs in `docs/solutions/**` plus
+  explicit retrieval and maintenance surfaces, not in a widened
+  `runtime.knowledge.*` authority surface
+- reviewer ensembles may exist behind stable public review contracts, but they
+  remain advisory control-plane behavior rather than kernel-owned merge
+  authority
 - visible tool surface and execution hints still shape exploration, but they do
   not define authority on their own
 - explicit control-plane exemptions may exist, but they must stay narrow and

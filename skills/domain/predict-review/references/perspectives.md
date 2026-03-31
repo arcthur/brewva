@@ -3,18 +3,24 @@
 Load this reference when `predict-review` needs a stable mapping between review
 perspectives and the real built-in subagent profiles available in Brewva.
 
-## Profile Mapping
+## Agent Spec Mapping
 
-| Perspective                  | Profile      | Why                                                              |
-| ---------------------------- | ------------ | ---------------------------------------------------------------- |
-| Architecture Reviewer        | `reviewer`   | best fit for boundaries, contracts, and coupling                 |
-| Security Analyst             | `reviewer`   | still review-shaped, but focused on trust and misuse             |
-| Reliability Engineer         | `reviewer`   | failure handling and resilience analysis are review-first        |
-| Performance Engineer         | `reviewer`   | measurable regression and hot-spot analysis remain review-first  |
-| Devil's Advocate             | `researcher` | useful for alternative explanations and missing-context pressure |
-| Optional empirical follow-up | `verifier`   | best fit for evidence-backed confirmation without new writes     |
+| Perspective                  | Agent spec           | Why                                                                |
+| ---------------------------- | -------------------- | ------------------------------------------------------------------ |
+| Architecture Reviewer        | `review-boundaries`  | best fit for boundaries, contracts, ownership, and coupling        |
+| Security Analyst             | `review-security`    | focused on trust, permissions, credentials, and misuse             |
+| Reliability Engineer         | `review-operability` | best fit for rollbackability, verification gaps, and operator load |
+| Performance Engineer         | `review-performance` | measurable regression and hot-spot analysis remain review-first    |
+| Devil's Advocate             | `general`            | useful for alternative explanations and missing-context pressure   |
+| Optional empirical follow-up | `verification`       | best fit for evidence-backed confirmation without new writes       |
 
-The profile is the execution preset. The perspective is encoded in the
+Use `review-concurrency` when replay ordering, async coordination, or
+cross-session state transitions dominate the question. Use
+`review-compatibility` when config, CLI, exports, APIs, or persisted formats
+are the dominant risk surface. Use `review-correctness` when the target needs a
+pure behavior-and-invariants pass before specialized lanes.
+
+The agent spec is the execution preset. The perspective is encoded in the
 delegation packet.
 
 ## Delegation Packet Shape

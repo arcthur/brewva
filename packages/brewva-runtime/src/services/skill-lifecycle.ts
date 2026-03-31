@@ -92,6 +92,23 @@ function isSatisfied(value: unknown): boolean {
   return true;
 }
 
+function isOutputPresent(value: unknown, contract: SkillOutputContract | undefined): boolean {
+  if (!contract) {
+    return isSatisfied(value);
+  }
+  if (contract.kind !== "json") {
+    return isSatisfied(value);
+  }
+  if (Array.isArray(value)) {
+    return value.length > 0 || contract.minItems === 0;
+  }
+  if (isRecord(value)) {
+    const keyCount = Object.keys(value).length;
+    return keyCount > 0 || contract.minKeys === 0 || (contract.requiredFields?.length ?? 0) > 0;
+  }
+  return value !== undefined && value !== null;
+}
+
 function validateOutputContract(
   value: unknown,
   contract: SkillOutputContract,
@@ -117,6 +134,9 @@ function validateOutputContract(
     }
     case "json": {
       if (Array.isArray(value)) {
+        if ((contract.requiredFields?.length ?? 0) > 0 || contract.fieldContracts) {
+          return `${label} must be an object containing the declared fields`;
+        }
         const minItems = contract.minItems ?? 1;
         return value.length >= minItems
           ? null
@@ -124,9 +144,29 @@ function validateOutputContract(
       }
       if (isRecord(value)) {
         const minKeys = contract.minKeys ?? 1;
-        return Object.keys(value).length >= minKeys
-          ? null
-          : `${label} must contain at least ${minKeys} field${minKeys === 1 ? "" : "s"}`;
+        if (Object.keys(value).length < minKeys) {
+          return `${label} must contain at least ${minKeys} field${minKeys === 1 ? "" : "s"}`;
+        }
+        const missingFields = (contract.requiredFields ?? []).filter(
+          (fieldName) => !Object.prototype.hasOwnProperty.call(value, fieldName),
+        );
+        if (missingFields.length > 0) {
+          return `${label} must include field(s): ${missingFields.join(", ")}`;
+        }
+        for (const [fieldName, fieldContract] of Object.entries(contract.fieldContracts ?? {})) {
+          if (!Object.prototype.hasOwnProperty.call(value, fieldName)) {
+            continue;
+          }
+          const reason = validateOutputContract(
+            value[fieldName],
+            fieldContract,
+            `${label}.${fieldName}`,
+          );
+          if (reason) {
+            return reason;
+          }
+        }
+        return null;
       }
       return `${label} must be a non-empty object or array`;
     }
@@ -230,7 +270,9 @@ export class SkillLifecycleService {
 
     const expected = listSkillOutputs(skill.contract);
     const outputContracts = getSkillOutputContracts(skill.contract);
-    const missing = expected.filter((name) => !isSatisfied(outputs[name]));
+    const missing = expected.filter(
+      (name) => !isOutputPresent(outputs[name], outputContracts[name]),
+    );
     const invalid = expected.flatMap((name) => {
       if (missing.includes(name)) {
         return [];

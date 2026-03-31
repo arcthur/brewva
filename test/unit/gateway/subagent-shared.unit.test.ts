@@ -154,6 +154,22 @@ describe("subagent shared execution resolution", () => {
     expect(resolved.target.resultMode).toBe("review");
   });
 
+  test("resolveDelegationTarget supports built-in review lane delegates", async () => {
+    const catalog = await loadHostedDelegationCatalog(process.cwd());
+    const resolved = resolveDelegationTarget({
+      catalog,
+      request: {
+        agentSpec: "review-security",
+      },
+    });
+
+    expect(resolved.delegate).toBe("review-security");
+    expect(resolved.target.agentSpecName).toBe("review-security");
+    expect(resolved.target.envelopeName).toBe("readonly-reviewer");
+    expect(resolved.target.skillName).toBeUndefined();
+    expect(resolved.target.resultMode).toBe("review");
+  });
+
   test("resolveDelegationTarget supports explicit envelope-only ad hoc runs", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
     const resolved = resolveDelegationTarget({
