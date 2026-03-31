@@ -636,17 +636,6 @@ describe("Tool invocation characterization", () => {
         },
       },
       {
-        type: "tool_result_recorded",
-        payload: {
-          toolName: "edit",
-          toolCallId: "tc-edit",
-          verdict: "pass",
-          channelSuccess: true,
-          effectCommitmentRequestId: null,
-          failureClass: null,
-        },
-      },
-      {
         type: "patch_recorded",
         payload: {
           toolName: "edit",
@@ -661,6 +650,17 @@ describe("Tool invocation characterization", () => {
           changed: true,
           verdict: "pass",
           rollbackRefPresent: true,
+        },
+      },
+      {
+        type: "tool_result_recorded",
+        payload: {
+          toolName: "edit",
+          toolCallId: "tc-edit",
+          verdict: "pass",
+          channelSuccess: true,
+          effectCommitmentRequestId: null,
+          failureClass: null,
         },
       },
       {

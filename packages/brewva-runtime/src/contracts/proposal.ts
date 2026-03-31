@@ -69,6 +69,8 @@ export interface EffectCommitmentListQuery {
   limit?: number;
 }
 
+export type EffectCommitmentRequestState = "pending" | "accepted" | "rejected" | "consumed";
+
 export interface PendingEffectCommitmentRequest {
   requestId: string;
   proposalId: string;
@@ -83,6 +85,18 @@ export interface PendingEffectCommitmentRequest {
   evidenceRefs: EvidenceRef[];
   turn: number;
   createdAt: number;
+}
+
+export interface EffectCommitmentRequestRecord extends PendingEffectCommitmentRequest {
+  state: EffectCommitmentRequestState;
+  actor?: string;
+  reason?: string;
+  updatedAt: number;
+}
+
+export interface EffectCommitmentRequestListQuery {
+  state?: EffectCommitmentRequestState;
+  limit?: number;
 }
 
 export interface DecideEffectCommitmentInput {

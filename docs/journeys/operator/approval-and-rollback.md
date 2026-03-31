@@ -11,6 +11,7 @@
 - blocked or deferred tool calls
 - approval turns in channel mode
 - `runtime.tools.explainAccess(...)`
+- `runtime.proposals.listEffectCommitmentRequests(...)`
 - `runtime.proposals.listPendingEffectCommitments(...)`
 - `rollback_last_patch`
 
@@ -67,7 +68,8 @@ flowchart TD
 4. The operator decides the request through the operator desk or a channel
    approval surface.
 5. After approval, the caller must resume the exact request using the same
-   `effectCommitmentRequestId`.
+   `effectCommitmentRequestId`, original `toolCallId`, and canonical argument
+   identity.
 6. Approval is consumed only after a durable linked tool result is recorded.
 7. For rollbackable mutations, the runtime preserves a rollback anchor and the
    operator can later use `PatchSet` rollback or receipt-aware mutation
@@ -79,7 +81,7 @@ flowchart TD
 - rollbackable and approval-bound are different effectful realities; governance
   does not permit a tool to be both
 - approval never auto-applies to a later similar-looking call; only the exact
-  request may be resumed
+  request may be resumed, including the original `toolCallId` and `argsDigest`
 - `resource_lease` expands budget only; it does not widen effect authority
 - with `infrastructure.events.enabled=false`, effectful execution fails closed;
   the runtime does not permit a no-audit write path
@@ -102,6 +104,7 @@ flowchart TD
 
 - primary inspection and operator surfaces:
   - `runtime.tools.explainAccess(...)`
+  - `runtime.proposals.listEffectCommitmentRequests(...)`
   - `runtime.proposals.listPendingEffectCommitments(...)`
   - `runtime.proposals.list(...)`
   - `brewva inspect`

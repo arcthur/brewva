@@ -17,6 +17,7 @@ import {
 
 const DEFAULT_CLEANUP_GRACEFUL_TIMEOUT_MS = 2_000;
 const SESSION_CREATION_INVALIDATED_ERROR = "session_creation_invalidated";
+const REPLAYABLE_EFFECT_COMMITMENT_REQUEST_STATES = ["pending", "accepted"] as const;
 
 export type ChannelSessionCostSummary = ReturnType<BrewvaRuntime["cost"]["getSummary"]>;
 
@@ -88,6 +89,7 @@ export interface ChannelSessionCoordinator {
   listLiveSessions(): ChannelLiveSessionView[];
   getSessionCostSummary(sessionId: string): ChannelSessionCostSummary;
   hasPendingEffectCommitment(sessionId: string, requestId: string): boolean;
+  hasReplayableEffectCommitmentRequest(sessionId: string, requestId: string): boolean;
   listQueueTails(): Promise<void>[];
   enqueueSessionTask<T>(handle: ChannelSessionHandle, task: () => Promise<T>): Promise<T>;
   touchSession(handle: ChannelSessionHandle): void;
@@ -521,6 +523,20 @@ export function createChannelSessionCoordinator(input: {
       return state.runtime.proposals
         .listPendingEffectCommitments(sessionId)
         .some((pending) => pending.requestId === requestId);
+    },
+
+    hasReplayableEffectCommitmentRequest(sessionId: string, requestId: string): boolean {
+      const state = sessionByAgentSessionId.get(sessionId);
+      if (!state) {
+        return false;
+      }
+      return REPLAYABLE_EFFECT_COMMITMENT_REQUEST_STATES.some((requestState) =>
+        state.runtime.proposals
+          .listEffectCommitmentRequests(sessionId, {
+            state: requestState,
+          })
+          .some((request) => request.requestId === requestId),
+      );
     },
 
     listQueueTails(): Promise<void>[] {

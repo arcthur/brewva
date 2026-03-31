@@ -59,6 +59,7 @@ exposes read-only identity and environment state:
 
 - `submit(sessionId, proposal)`
 - `list(sessionId, query?)`
+- `listEffectCommitmentRequests(sessionId, query?)`
 - `listPendingEffectCommitments(sessionId)`
 - `decideEffectCommitment(sessionId, requestId, input)`
 
@@ -68,8 +69,11 @@ Proposal boundary semantics:
 - `list(sessionId, query?)` returns `EffectCommitmentRecord[]` newest first by receipt
   timestamp
 - approval-bearing requests are replay-hydrated from tape after restart
+- `listEffectCommitmentRequests(sessionId, query?)` returns request-scoped approval
+  state, including `accepted` requests that are not yet consumed
 - accepted approval does not auto-apply to later matching calls; the caller
-  must resume the exact pending request through `runtime.tools.start(...)`
+  must resume the exact approved request through `runtime.tools.start(...)` with
+  the original `toolCallId` and canonical argument identity
 
 Reference: `docs/reference/proposal-boundary.md`.
 

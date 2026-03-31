@@ -217,8 +217,8 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
     openLiveSession: (scopeKey, agentId) => sessionCoordinator.openLiveSession(scopeKey, agentId),
     loadInspectionRuntime: (agentId) => sessionCoordinator.loadInspectionRuntime(agentId),
     getSessionCostSummary: (sessionId) => sessionCoordinator.getSessionCostSummary(sessionId),
-    hasPendingEffectCommitment: (sessionId, requestId) =>
-      sessionCoordinator.hasPendingEffectCommitment(sessionId, requestId),
+    hasReplayableEffectCommitmentRequest: (sessionId, requestId) =>
+      sessionCoordinator.hasReplayableEffectCommitmentRequest(sessionId, requestId),
   });
 
   const updateLock = createChannelUpdateLockManager({

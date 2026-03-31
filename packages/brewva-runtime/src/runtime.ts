@@ -49,6 +49,8 @@ import type {
   DecisionReceipt,
   EffectCommitmentListQuery,
   EffectCommitmentProposal,
+  EffectCommitmentRequestListQuery,
+  EffectCommitmentRequestRecord,
   EffectCommitmentRecord,
   IntegrityStatus,
   PendingEffectCommitmentRequest,
@@ -234,6 +236,10 @@ export class BrewvaRuntime {
   declare readonly proposals: {
     submit(sessionId: string, proposal: EffectCommitmentProposal): DecisionReceipt;
     list(sessionId: string, query?: EffectCommitmentListQuery): EffectCommitmentRecord[];
+    listEffectCommitmentRequests(
+      sessionId: string,
+      query?: EffectCommitmentRequestListQuery,
+    ): EffectCommitmentRequestRecord[];
     listPendingEffectCommitments(sessionId: string): PendingEffectCommitmentRequest[];
     decideEffectCommitment(
       sessionId: string,
@@ -750,6 +756,8 @@ export class BrewvaRuntime {
           this.proposalAdmissionService.submitProposal(sessionId, proposal),
         list: (sessionId, query) =>
           this.proposalAdmissionService.listProposalRecords(sessionId, query),
+        listEffectCommitmentRequests: (sessionId, query) =>
+          this.effectCommitmentDeskService.listRequests(sessionId, query),
         listPendingEffectCommitments: (sessionId) =>
           this.effectCommitmentDeskService.listPending(sessionId),
         decideEffectCommitment: (sessionId, requestId, input) =>

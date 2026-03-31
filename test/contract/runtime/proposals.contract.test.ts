@@ -134,6 +134,19 @@ describe("runtime proposals API", () => {
     expect(approved.commitmentReceipt?.decision).toBe("accept");
     expect(approved.effectCommitmentRequestId).toBe(pending[0]!.requestId);
     expect(runtime.proposals.listPendingEffectCommitments(sessionId)).toHaveLength(0);
+    expect(
+      runtime.proposals.listEffectCommitmentRequests(sessionId, {
+        state: "accepted",
+      }),
+    ).toMatchObject([
+      {
+        requestId: pending[0]!.requestId,
+        toolCallId: "tc-exec-approval-pending",
+        state: "accepted",
+        actor: "operator:test",
+        reason: "safe local command",
+      },
+    ]);
   });
 
   test("operator approval requests rehydrate across runtime restart before and after approval", () => {
@@ -170,6 +183,19 @@ describe("runtime proposals API", () => {
 
     const restartedAgain = new BrewvaRuntime({ cwd: rehydrateWorkspace });
     expect(restartedAgain.proposals.listPendingEffectCommitments(sessionId)).toHaveLength(0);
+    expect(
+      restartedAgain.proposals.listEffectCommitmentRequests(sessionId, {
+        state: "accepted",
+      }),
+    ).toMatchObject([
+      {
+        requestId: pendingAfterRestart[0]!.requestId,
+        toolCallId: "tc-exec-rehydrate",
+        state: "accepted",
+        actor: "operator:test",
+        reason: "rehydrated approval",
+      },
+    ]);
 
     const resumed = restartedAgain.tools.start({
       sessionId,
@@ -272,8 +298,30 @@ describe("runtime proposals API", () => {
       last: 1,
     })[0] as { payload?: { requestId?: string } } | undefined;
     expect(consumed?.payload?.requestId).toBe(pending[0]!.requestId);
+    expect(
+      runtime.proposals.listEffectCommitmentRequests(sessionId, {
+        state: "consumed",
+      }),
+    ).toMatchObject([
+      {
+        requestId: pending[0]!.requestId,
+        toolCallId: "tc-exec-consume",
+        state: "consumed",
+      },
+    ]);
 
     const restarted = new BrewvaRuntime({ cwd: durableWorkspace });
+    expect(
+      restarted.proposals.listEffectCommitmentRequests(sessionId, {
+        state: "consumed",
+      }),
+    ).toMatchObject([
+      {
+        requestId: pending[0]!.requestId,
+        toolCallId: "tc-exec-consume",
+        state: "consumed",
+      },
+    ]);
     const replayed = restarted.tools.start({
       sessionId,
       toolCallId: "tc-exec-consume",
@@ -550,6 +598,57 @@ describe("runtime proposals API", () => {
     const pending = runtime.proposals.listPendingEffectCommitments(sessionId);
     expect(pending).toHaveLength(1);
     expect(pending[0]?.requestId).toBe(started.effectCommitmentRequestId);
+  });
+
+  test("governancePort-deferred requests become executable after operator approval", () => {
+    const runtime = createCleanRuntime({
+      governancePort: {
+        authorizeEffectCommitment: () => ({
+          decision: "defer",
+          reason: "operator review required",
+          policyBasis: ["test_governance_port"],
+        }),
+      },
+    });
+    const sessionId = `runtime-proposals-commitment-defer-resume-${crypto.randomUUID()}`;
+
+    const deferred = runtime.tools.start({
+      sessionId,
+      toolCallId: "tc-exec-governance-defer",
+      toolName: "exec",
+      args: { command: "echo hi" },
+    });
+
+    expect(deferred.allowed).toBe(false);
+    const pending = runtime.proposals.listPendingEffectCommitments(sessionId);
+    expect(pending).toHaveLength(1);
+
+    const accepted = runtime.proposals.decideEffectCommitment(sessionId, pending[0]!.requestId, {
+      decision: "accept",
+      actor: "operator:test",
+      reason: "approved after governance defer",
+    });
+    expect(accepted.ok).toBe(true);
+
+    const resumed = runtime.tools.start({
+      sessionId,
+      toolCallId: "tc-exec-governance-defer",
+      toolName: "exec",
+      args: { command: "echo hi" },
+      effectCommitmentRequestId: pending[0]!.requestId,
+    });
+
+    expect(resumed.allowed).toBe(true);
+    expect(resumed.commitmentReceipt?.decision).toBe("accept");
+    expect(resumed.commitmentReceipt?.policyBasis).toEqual(
+      expect.arrayContaining(["test_governance_port", "effect_commitment_operator_accept"]),
+    );
+    expect(resumed.commitmentReceipt?.reasons).toEqual(
+      expect.arrayContaining([
+        "operator review required",
+        `effect_commitment_operator_approved:${pending[0]!.requestId}`,
+      ]),
+    );
   });
 
   test("hint-derived approval candidates are blocked before proposal admission", () => {

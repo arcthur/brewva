@@ -5,6 +5,9 @@ import type {
   DecideEffectCommitmentResult,
   EvidenceRef,
   EffectCommitmentProposal,
+  EffectCommitmentRequestListQuery,
+  EffectCommitmentRequestRecord as PublicEffectCommitmentRequestRecord,
+  EffectCommitmentRequestState,
   PendingEffectCommitmentRequest,
 } from "../contracts/index.js";
 import {
@@ -21,18 +24,17 @@ import type {
   EffectCommitmentAuthorizationDecision,
 } from "./proposal-admission-effect-commitment.js";
 
-type EffectCommitmentRequestState = "pending" | "accepted" | "rejected" | "consumed";
-
-interface EffectCommitmentRequestRecord {
+interface StoredEffectCommitmentRequestRecord {
   request: PendingEffectCommitmentRequest;
   proposal: EffectCommitmentProposal;
   state: EffectCommitmentRequestState;
   actor?: string;
   reason?: string;
+  updatedAt: number;
 }
 
 interface SessionDeskState {
-  recordsByRequestId: Map<string, EffectCommitmentRequestRecord>;
+  recordsByRequestId: Map<string, StoredEffectCommitmentRequestRecord>;
   requestIdByProposalId: Map<string, string>;
 }
 
@@ -47,6 +49,18 @@ function clonePendingRequest(
     ...request,
     effects: [...request.effects],
     evidenceRefs: request.evidenceRefs.map((ref) => ({ ...ref })),
+  };
+}
+
+function cloneRequestRecord(
+  record: StoredEffectCommitmentRequestRecord,
+): PublicEffectCommitmentRequestRecord {
+  return {
+    ...clonePendingRequest(record.request),
+    state: record.state,
+    actor: record.actor,
+    reason: record.reason,
+    updatedAt: record.updatedAt,
   };
 }
 
@@ -104,11 +118,12 @@ export class EffectCommitmentDeskService {
     type: string;
     turn?: number;
     payload?: object;
-  }): void {
+  }): BrewvaEventRecord {
     const row = this.recordEvent(input);
     if (!row) {
       throw new Error(`effect_commitment_desk_requires_durable_event:${input.type}`);
     }
+    return row;
   }
 
   authorize(input: AuthorizeEffectCommitmentInput): EffectCommitmentAuthorizationDecision {
@@ -159,7 +174,7 @@ export class EffectCommitmentDeskService {
     }
 
     const created = this.createRequestRecord(input.proposal, input.turn);
-    this.recordDurableApprovalEvent({
+    const event = this.recordDurableApprovalEvent({
       sessionId: input.sessionId,
       type: EFFECT_COMMITMENT_APPROVAL_REQUESTED_EVENT_TYPE,
       turn: input.turn,
@@ -176,6 +191,8 @@ export class EffectCommitmentDeskService {
         proposal: cloneProposal(created.proposal),
       },
     });
+    created.request.createdAt = event.timestamp;
+    created.updatedAt = event.timestamp;
     state.recordsByRequestId.set(created.request.requestId, created);
     state.requestIdByProposalId.set(created.request.proposalId, created.request.requestId);
     return {
@@ -193,6 +210,28 @@ export class EffectCommitmentDeskService {
       .map((record) => record.request)
       .toSorted((left, right) => right.createdAt - left.createdAt)
       .map((request) => clonePendingRequest(request));
+  }
+
+  listRequests(
+    sessionId: string,
+    query: EffectCommitmentRequestListQuery = {},
+  ): PublicEffectCommitmentRequestRecord[] {
+    const records = [...this.getState(sessionId).recordsByRequestId.values()]
+      .filter((record) => (query.state ? record.state === query.state : true))
+      .toSorted((left, right) => {
+        if (right.updatedAt !== left.updatedAt) {
+          return right.updatedAt - left.updatedAt;
+        }
+        if (right.request.createdAt !== left.request.createdAt) {
+          return right.request.createdAt - left.request.createdAt;
+        }
+        return right.request.requestId.localeCompare(left.request.requestId);
+      });
+
+    if (typeof query.limit === "number" && Number.isFinite(query.limit) && query.limit > 0) {
+      return records.slice(0, Math.floor(query.limit)).map((record) => cloneRequestRecord(record));
+    }
+    return records.map((record) => cloneRequestRecord(record));
   }
 
   decide(
@@ -215,7 +254,7 @@ export class EffectCommitmentDeskService {
     const nextState = input.decision === "accept" ? "accepted" : "rejected";
     const actor = input.actor?.trim() || undefined;
     const reason = input.reason?.trim() || undefined;
-    this.recordDurableApprovalEvent({
+    const event = this.recordDurableApprovalEvent({
       sessionId,
       type: EFFECT_COMMITMENT_APPROVAL_DECIDED_EVENT_TYPE,
       turn: this.getCurrentTurn(sessionId),
@@ -232,6 +271,7 @@ export class EffectCommitmentDeskService {
     record.state = nextState;
     record.actor = actor;
     record.reason = reason;
+    record.updatedAt = event.timestamp;
     return {
       ok: true,
       request: clonePendingRequest(record.request),
@@ -336,7 +376,7 @@ export class EffectCommitmentDeskService {
       return;
     }
 
-    this.recordDurableApprovalEvent({
+    const event = this.recordDurableApprovalEvent({
       sessionId: input.sessionId,
       type: EFFECT_COMMITMENT_APPROVAL_CONSUMED_EVENT_TYPE,
       turn: this.getCurrentTurn(input.sessionId),
@@ -354,6 +394,7 @@ export class EffectCommitmentDeskService {
       },
     });
     record.state = "consumed";
+    record.updatedAt = event.timestamp;
   }
 
   getRequestIdForProposal(sessionId: string, proposalId: string): string | undefined {
@@ -367,7 +408,7 @@ export class EffectCommitmentDeskService {
   private createRequestRecord(
     proposal: EffectCommitmentProposal,
     turn: number,
-  ): EffectCommitmentRequestRecord {
+  ): StoredEffectCommitmentRequestRecord {
     return this.createHydratedRecord({
       requestId: `approval:${proposal.payload.toolName}:${randomUUID()}`,
       proposal,
@@ -382,7 +423,7 @@ export class EffectCommitmentDeskService {
       return existing;
     }
     const created: SessionDeskState = {
-      recordsByRequestId: new Map<string, EffectCommitmentRequestRecord>(),
+      recordsByRequestId: new Map<string, StoredEffectCommitmentRequestRecord>(),
       requestIdByProposalId: new Map<string, string>(),
     };
     this.hydrateStateFromEvents(sessionId, created);
@@ -393,7 +434,7 @@ export class EffectCommitmentDeskService {
   private getRecordByProposalId(
     state: SessionDeskState,
     proposalId: string,
-  ): EffectCommitmentRequestRecord | undefined {
+  ): StoredEffectCommitmentRequestRecord | undefined {
     const requestId = state.requestIdByProposalId.get(proposalId.trim());
     if (!requestId) {
       return undefined;
@@ -437,6 +478,7 @@ export class EffectCommitmentDeskService {
         record.state = payload.decision === "accept" ? "accepted" : "rejected";
         record.actor = payload.actor;
         record.reason = payload.reason;
+        record.updatedAt = event.timestamp;
         continue;
       }
       if (event.type === TOOL_RESULT_RECORDED_EVENT_TYPE) {
@@ -452,6 +494,7 @@ export class EffectCommitmentDeskService {
           record.request.toolCallId === payload.toolCallId
         ) {
           record.state = "consumed";
+          record.updatedAt = event.timestamp;
         }
         continue;
       }
@@ -467,6 +510,7 @@ export class EffectCommitmentDeskService {
         record.state = "consumed";
         record.actor = payload.actor;
         record.reason = payload.reason;
+        record.updatedAt = event.timestamp;
       }
     }
   }
@@ -484,7 +528,7 @@ export class EffectCommitmentDeskService {
     },
     event: BrewvaEventRecord,
     proposalsById: ReadonlyMap<string, EffectCommitmentProposal>,
-  ): EffectCommitmentRequestRecord | undefined {
+  ): StoredEffectCommitmentRequestRecord | undefined {
     const existing = state.recordsByRequestId.get(payload.requestId);
     if (existing) {
       return existing;
@@ -608,7 +652,7 @@ export class EffectCommitmentDeskService {
   private readApprovalRequestedEvent(
     event: BrewvaEventRecord,
     proposalsById: ReadonlyMap<string, EffectCommitmentProposal>,
-  ): EffectCommitmentRequestRecord | undefined {
+  ): StoredEffectCommitmentRequestRecord | undefined {
     const payload =
       event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
         ? (event.payload as Record<string, unknown>)
@@ -715,7 +759,7 @@ export class EffectCommitmentDeskService {
     proposal: EffectCommitmentProposal;
     turn?: number;
     createdAt: number;
-  }): EffectCommitmentRequestRecord {
+  }): StoredEffectCommitmentRequestRecord {
     const request: PendingEffectCommitmentRequest = {
       requestId: input.requestId,
       proposalId: input.proposal.id,
@@ -736,6 +780,7 @@ export class EffectCommitmentDeskService {
       request,
       proposal: cloneProposal(input.proposal),
       state: "pending",
+      updatedAt: input.createdAt,
     };
   }
 }

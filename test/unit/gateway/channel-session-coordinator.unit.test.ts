@@ -99,6 +99,65 @@ async function createCoordinatorFixture(options: {
 }
 
 describe("channel session coordinator ownership", () => {
+  test("given an accepted effect commitment request, when replayable request lookup runs, then accepted requests remain discoverable after leaving the pending queue", async () => {
+    let fixture: Awaited<ReturnType<typeof createCoordinatorFixture>> | undefined;
+
+    fixture = await createCoordinatorFixture({
+      cleanupGracefulTimeoutMs: 25,
+      createSession: async () =>
+        createHostedSessionResult(
+          await fixture!.runtimeManager.getOrCreateRuntime("worker"),
+          "agent-session:approval",
+        ),
+    });
+
+    try {
+      const handle = await fixture.coordinator.getOrCreateSession(
+        "scope-approval",
+        "worker",
+        createUserTurn("scope-approval"),
+      );
+
+      const requestId = "req-accepted-1";
+      Object.assign(handle.runtime.proposals, {
+        listPendingEffectCommitments: () => [],
+        listEffectCommitmentRequests: (sessionId: string, query?: { state?: string }) =>
+          sessionId === handle.agentSessionId && query?.state === "accepted"
+            ? [
+                {
+                  requestId,
+                  proposalId: "proposal-1",
+                  toolName: "exec",
+                  toolCallId: "tc-exec-coordinator-approval",
+                  subject: "tool:exec",
+                  boundary: "effectful",
+                  effects: ["workspace_write"],
+                  argsDigest: "digest-1",
+                  evidenceRefs: [],
+                  turn: 1,
+                  createdAt: 1,
+                  state: "accepted",
+                  actor: "operator:test",
+                  reason: "safe local command",
+                  updatedAt: 2,
+                },
+              ]
+            : [],
+      });
+
+      expect(fixture.coordinator.hasPendingEffectCommitment(handle.agentSessionId, requestId)).toBe(
+        false,
+      );
+      expect(
+        fixture.coordinator.hasReplayableEffectCommitmentRequest(handle.agentSessionId, requestId),
+      ).toBe(true);
+    } finally {
+      await fixture.coordinator.disposeAllSessions();
+      fixture.coordinator.disposeRuntime("worker");
+      cleanupTestWorkspace(fixture.workspace);
+    }
+  });
+
   test("given pending create exceeds cleanup grace timeout, when cleanupAgentSessions runs, then it returns without waiting forever and stale create cannot publish", async () => {
     const createStarted = createDeferred<void>();
     const createDeferredResult = createDeferred<HostedSessionResult>();

@@ -153,6 +153,10 @@ export class ToolInvocationSpine {
 
   complete(input: FinishToolCallInput): string {
     const completion = this.resolveToolCompletion(input);
+    const patchSet = this.finalizePatchTracking(input);
+    if (completion.authority.rollbackable) {
+      this.recordRollbackableMutation(input, completion, patchSet);
+    }
     const ledgerId = this.recordToolResult({
       sessionId: input.sessionId,
       toolCallId: input.toolCallId,
@@ -169,15 +173,6 @@ export class ToolInvocationSpine {
       toolCallId: input.toolCallId,
       effectCommitmentRequestId: completion.effectCommitmentRequestId,
     });
-    const patchSet =
-      readPatchSetOverride(input.metadata) ??
-      this.trackToolCallEnd({
-        sessionId: input.sessionId,
-        toolCallId: input.toolCallId,
-        toolName: input.toolName,
-        channelSuccess: input.channelSuccess,
-      });
-    this.recordRollbackableMutation(input, completion, patchSet);
     return ledgerId;
   }
 
@@ -213,5 +208,17 @@ export class ToolInvocationSpine {
       patchSet,
       metadata: input.metadata,
     });
+  }
+
+  private finalizePatchTracking(input: FinishToolCallInput): PatchSet | undefined {
+    return (
+      readPatchSetOverride(input.metadata) ??
+      this.trackToolCallEnd({
+        sessionId: input.sessionId,
+        toolCallId: input.toolCallId,
+        toolName: input.toolName,
+        channelSuccess: input.channelSuccess,
+      })
+    );
   }
 }

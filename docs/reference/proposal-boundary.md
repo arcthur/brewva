@@ -97,6 +97,8 @@ Accepted effect:
 - operator approval is recorded through the effect-commitment desk
 - the caller must resume the exact request with
   `runtime.tools.start({ ..., effectCommitmentRequestId })`
+- exact resume binds to the approved `requestId`, original `toolCallId`, and
+  canonical `argsDigest`
 - approval is consumed only after a durable linked tool result is recorded
 
 This means the commitment path is explicitly at-least-once across crashes after
@@ -157,6 +159,7 @@ Approval state is layered on top through:
 
 The operator desk surface lives in the same domain:
 
+- `runtime.proposals.listEffectCommitmentRequests(sessionId, query?)`
 - `runtime.proposals.listPendingEffectCommitments(sessionId)`
 - `runtime.proposals.decideEffectCommitment(sessionId, requestId, input)`
 - `runtime.tools.start({ ..., effectCommitmentRequestId })`

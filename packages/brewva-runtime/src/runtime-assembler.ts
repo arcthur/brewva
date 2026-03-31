@@ -411,8 +411,12 @@ export function createRuntimeServiceDependencies(
             descriptor,
             turn,
           });
+          const combinedDecision =
+            deskDecision.decision === "accept" || deskDecision.decision === "reject"
+              ? deskDecision.decision
+              : "defer";
           return {
-            decision: "defer",
+            decision: combinedDecision,
             requestId: deskDecision.requestId,
             policyBasis: normalizePolicyBasis(
               [...(governanceDecision.policyBasis ?? []), ...(deskDecision.policyBasis ?? [])],
@@ -423,8 +427,9 @@ export function createRuntimeServiceDependencies(
                 ...normalizeReasonList(governanceDecision, `effect_commitment_defer:${toolName}`),
                 ...(deskDecision.reasons ?? []),
               ],
-              `effect_commitment_defer:${toolName}`,
+              `effect_commitment_${combinedDecision}:${toolName}`,
             ),
+            committedEffects: deskDecision.committedEffects,
           };
         }
         return {

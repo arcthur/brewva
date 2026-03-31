@@ -40,7 +40,7 @@ export function createChannelSessionQueries(input: {
   openLiveSession(scopeKey: string, agentId: string): ChannelRuntimeSessionPort | undefined;
   loadInspectionRuntime(agentId: string): Promise<BrewvaRuntime>;
   getSessionCostSummary(sessionId: string): ChannelSessionCostSummary;
-  hasPendingEffectCommitment(sessionId: string, requestId: string): boolean;
+  hasReplayableEffectCommitmentRequest(sessionId: string, requestId: string): boolean;
 }): ChannelSessionQueries {
   const listChannelBoundSessionIds = (options: {
     runtime: BrewvaRuntime;
@@ -173,18 +173,18 @@ export function createChannelSessionQueries(input: {
     },
 
     resolveApprovalTargetAgentId(scopeKey: string, requestId: string): string | undefined {
-      const matchesPendingRequest = (state: ChannelLiveSessionView): boolean => {
+      const matchesReplayableRequest = (state: ChannelLiveSessionView): boolean => {
         if (!input.registry.isActive(state.agentId)) {
           return false;
         }
-        return input.hasPendingEffectCommitment(state.agentSessionId, requestId);
+        return input.hasReplayableEffectCommitmentRequest(state.agentSessionId, requestId);
       };
 
       for (const state of input.listLiveSessions()) {
         if (state.scopeKey !== scopeKey) {
           continue;
         }
-        if (matchesPendingRequest(state)) {
+        if (matchesReplayableRequest(state)) {
           return state.agentId;
         }
       }
@@ -193,7 +193,7 @@ export function createChannelSessionQueries(input: {
         if (state.scopeKey === scopeKey) {
           continue;
         }
-        if (matchesPendingRequest(state)) {
+        if (matchesReplayableRequest(state)) {
           return state.agentId;
         }
       }

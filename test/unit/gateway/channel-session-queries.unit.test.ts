@@ -28,7 +28,7 @@ describe("channel session queries", () => {
       openLiveSession: () => undefined,
       loadInspectionRuntime: async () => runtime,
       getSessionCostSummary: () => runtime.cost.getSummary("agent-session:archived"),
-      hasPendingEffectCommitment: () => false,
+      hasReplayableEffectCommitmentRequest: () => false,
     });
 
     try {
@@ -81,7 +81,7 @@ describe("channel session queries", () => {
       openLiveSession: () => undefined,
       loadInspectionRuntime: async () => runtime,
       getSessionCostSummary: () => runtime.cost.getSummary("agent-session:archived"),
-      hasPendingEffectCommitment: () => false,
+      hasReplayableEffectCommitmentRequest: () => false,
     });
 
     try {
@@ -97,6 +97,46 @@ describe("channel session queries", () => {
       const surface = await queries.resolveQuestionSurface("scope-a", "worker");
       expect(surface).toBeDefined();
       expect(surface?.sessionIds).toEqual(["agent-session:archived"]);
+    } finally {
+      runtimeManager.disposeAll();
+      cleanupTestWorkspace(workspace);
+    }
+  });
+
+  test("given a replayable effect commitment request on a live session, when resolveApprovalTargetAgentId runs, then it routes the approval turn to that agent", async () => {
+    const workspace = createTestWorkspace("channel-session-queries-approval");
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
+    });
+    const registry = await AgentRegistry.create({ workspaceRoot: workspace });
+    await registry.createAgent({ requestedAgentId: "worker" });
+    const runtimeManager = new AgentRuntimeManager({
+      controllerRuntime: runtime,
+      maxLiveRuntimes: 4,
+      idleRuntimeTtlMs: 60_000,
+    });
+    const queries = createChannelSessionQueries({
+      runtime,
+      registry,
+      runtimeManager,
+      turnWalScope: "channel:test",
+      listLiveSessions: () => [
+        {
+          scopeKey: "scope-a",
+          agentId: "worker",
+          agentSessionId: "agent-session:worker",
+        },
+      ],
+      openLiveSession: () => undefined,
+      loadInspectionRuntime: async () => runtime,
+      getSessionCostSummary: () => runtime.cost.getSummary("agent-session:worker"),
+      hasReplayableEffectCommitmentRequest: (sessionId, requestId) =>
+        sessionId === "agent-session:worker" && requestId === "req-accepted-1",
+    });
+
+    try {
+      expect(queries.resolveApprovalTargetAgentId("scope-a", "req-accepted-1")).toBe("worker");
     } finally {
       runtimeManager.disposeAll();
       cleanupTestWorkspace(workspace);
