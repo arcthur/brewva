@@ -180,7 +180,7 @@ Tool semantics:
 - `finish(input)` and `recordResult(input)` use `channelSuccess` for transport
   success and `verdict` for semantic outcome
 - durable linked tool results consume accepted approvals
-- `rollbackLastPatchSet(sessionId)` is the runtime patch-set rollback entrypoint
+- `rollbackLastPatchSet(sessionId)` is the runtime `PatchSet` rollback entrypoint
   behind the stable tool id `rollback_last_patch` and the CLI `--undo` flow
 
 Tool-governance note:

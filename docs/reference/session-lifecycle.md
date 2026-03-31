@@ -15,7 +15,7 @@
 ## Mode-Specific Paths
 
 - Replay (`--replay`): query structured events and print text/JSON timeline
-- Undo (`--undo`): resolve target session and rollback latest tracked patch set
+- Undo (`--undo`): resolve target session and rollback the latest tracked `PatchSet`
 - JSON one-shot (`--mode json`/`--json`): emits normal stream plus final `brewva_event_bundle`
 - `--managed-tools direct`: keeps the same hosted lifecycle shape, but managed
   Brewva tools are provided directly by the host instead of being registered by
@@ -51,7 +51,7 @@ Deletion consequences:
   including task/truth/cost/evidence/projection fold slices.
 - First `onTurnStart()` hydrates session-local runtime state from tape events
   (skill/budget/cost counters, warning dedupe, ledger compaction cooldown).
-- malformed or unreadable event-tape rows degrade hydration status and surface
+- malformed or unreadable event tape rows degrade hydration status and surface
   explicit `event_tape` integrity issues instead of being treated as an empty
   healthy tape.
 - Note: upstream `turnIndex` can reset to `0` on `agent_start` boundaries. Brewva normalizes turns to be monotonic per session (for example `effectiveTurn = max(current, turnIndex)`) and uses the normalized value for gating/reconciliation.

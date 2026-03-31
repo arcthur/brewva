@@ -325,5 +325,5 @@ BREWVA_TELEGRAM_WEBHOOK_ENABLED=1 BREWVA_TELEGRAM_INGRESS_HMAC_SECRET=<secret> b
 
 ## Related Journey
 
-- `docs/journeys/channel-gateway-and-turn-flow.md`
+- `docs/journeys/operator/channel-gateway-and-turn-flow.md`
 - `docs/guide/gateway-control-plane-daemon.md`

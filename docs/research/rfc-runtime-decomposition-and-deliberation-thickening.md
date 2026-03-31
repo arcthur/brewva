@@ -887,7 +887,7 @@ Already satisfied in current mainline:
 
 - event query tests cover time-range, offset, and compound filters
 - long-session diagnosis workflows documented in
-  `docs/journeys/operations-and-debugging.md`
+  `docs/journeys/operator/inspect-replay-and-recovery.md`
 - docs clearly distinguish commitment/audit events from ops/experience telemetry
   even if they still share storage
 

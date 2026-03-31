@@ -13,7 +13,7 @@
   - `docs/reference/events.md`
   - `docs/reference/skills.md`
   - `docs/reference/tools.md`
-  - `docs/journeys/intent-driven-scheduling.md`
+  - `docs/journeys/operator/intent-driven-scheduling.md`
 
 ## Promotion Summary
 
@@ -45,7 +45,7 @@ Stable references:
 - `docs/reference/events.md`
 - `docs/reference/skills.md`
 - `docs/reference/tools.md`
-- `docs/journeys/intent-driven-scheduling.md`
+- `docs/journeys/operator/intent-driven-scheduling.md`
 
 ## Stable Contract Summary
 

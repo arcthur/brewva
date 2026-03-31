@@ -5,7 +5,7 @@
 - Ledger: append-only evidence stream for tool outcomes
 - Verification Gate: completion policy that checks required evidence
 - Checkpoint: machine-generated tape baseline event used to accelerate replay
-- Snapshot (rollback): per-file pre-mutation copy used by `rollback_last_patch`, the stable tool id for patch-set rollback; not a runtime session-state source of truth
+- Snapshot (rollback): per-file pre-mutation copy used by `rollback_last_patch`, the stable tool id for `PatchSet` rollback; not a runtime session-state `durable source of truth`
 - Replay: reconstruction of session history from structured events
 - PatchSet: tracked file change set used for rollback and worker-result adoption
 - Invocation Spine: the shared runtime-owned tool invocation path for admission, usage tracking, ledger linkage, and rollback/approval wiring
@@ -15,7 +15,7 @@
 - Channel Gateway: external channel ingress/egress gateway used by `--channel` mode
 - Channel Host: hosted runtime loop behind `brewva --channel ...`; binds channel scopes to agent sessions and runs tool-governed turns
 - Gateway (Control Plane): local daemon exposed via `brewva gateway ...`, providing a typed WebSocket API to control-plane clients
-- Runtime Plugin: the canonical Brewva hosted-session integration unit registered through `@brewva/brewva-gateway/runtime-plugins`; implemented on top of the upstream `ExtensionFactory` contract
+- Runtime Plugin: the canonical Brewva hosted session integration unit registered through `@brewva/brewva-gateway/runtime-plugins`; implemented on top of the upstream `ExtensionFactory` contract
 - Proposal: an envelope submitted to the kernel for authorization; contains issuer, subject, payload, evidence references, and optional confidence/expiry metadata
 - DecisionReceipt: the kernel decision record for a Proposal; captures the decision, policy basis, reasons, committed effects, evidence references, turn, and timestamp
 - Context Arena: the context injection workspace that manages source reservations and token budgets per turn
@@ -24,7 +24,7 @@
 - Working State: non-authoritative session-local working surfaces such as projection, context arena, active tool surface, and derived workflow posture
 - Working Projection: a tape-derived working snapshot maintained across turns; rebuilt from source events rather than agent reasoning memory
 - Iteration Fact: a durable objective observation or guard result recorded as evidence for optimization and convergence flows
-- Supplemental Context: same-turn non-authoritative context appended through the hosted-session path rather than persisted as a kernel proposal
+- Supplemental Context: same-turn non-authoritative context appended through the hosted session path rather than persisted as a kernel proposal
 - Effect Commitment: an approval-bearing proposal for an `effectful` tool invocation
 - Governance Port: the external authorization interface that the runtime calls for tool-gate and effect-commitment decisions
 - Subagent: the model/operator-facing tool surface (`subagent_*`) for starting, inspecting, and cancelling delegated child runs

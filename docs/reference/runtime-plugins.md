@@ -6,7 +6,7 @@ Runtime plugin package: `@brewva/brewva-gateway/runtime-plugins`
 ## Terminology
 
 - Hosted pipeline: the canonical gateway lifecycle integration layer registered into a hosted session
-- Runtime plugin: the canonical Brewva hosted-session integration unit; implemented on top of the upstream `ExtensionFactory` contract
+- Runtime plugin: the canonical Brewva hosted session integration unit; implemented on top of the upstream `ExtensionFactory` contract
 - Runtime plugin implementation: one implementation file under `packages/brewva-gateway/src/runtime-plugins`
 
 `registerTools: false` keeps the hosted pipeline but disables managed-tool

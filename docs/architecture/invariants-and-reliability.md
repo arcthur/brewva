@@ -116,7 +116,7 @@ Relevant implementation:
 
 - Working projection must remain tape-derived and auditable:
   units and working snapshot are derived from event tape semantics, not an
-  independent mutable source of truth.
+  independent mutable `durable source of truth`.
 - Projection events (`projection_*`) are operational/observational telemetry.
   They do not replace semantic projection rebuild inputs.
 - Working-projection injection must be reproducible from persisted projection

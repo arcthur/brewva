@@ -31,7 +31,7 @@ It only decides how admitted context is shown to the model.
 - pending compaction reason, if any
 - capability-view state for the current turn
 - admitted context entries from `runtime.context.buildInjection(...)`
-- optional supplemental blocks from the hosted-session path
+- optional supplemental blocks from the hosted session path
 - acceptance status for the injection pass
 
 Admitted entries come from the kernel path. There is no raw-text runtime-plugin

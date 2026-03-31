@@ -7,12 +7,12 @@
 - Last reviewed: `2026-03-29`
 - Promotion target:
   - `docs/reference/runtime-plugins.md`
-  - `docs/journeys/channel-gateway-and-turn-flow.md`
+  - `docs/journeys/operator/channel-gateway-and-turn-flow.md`
   - `docs/architecture/control-and-data-flow.md`
 
 ## Direct Conclusion
 
-Brewva should keep the current hosted-session and channel-mode contracts, but it
+Brewva should keep the current hosted session and channel-mode contracts, but it
 should decompose two oversized experience-ring implementations:
 
 1. `packages/brewva-gateway/src/channels/host.ts`
@@ -646,7 +646,7 @@ Mitigation:
 - `packages/brewva-gateway/src/runtime-plugins/index.ts`
 - `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`
 - `docs/reference/runtime-plugins.md`
-- `docs/journeys/channel-gateway-and-turn-flow.md`
+- `docs/journeys/operator/channel-gateway-and-turn-flow.md`
 - `docs/architecture/design-axioms.md`
 - `docs/architecture/system-architecture.md`
 
@@ -677,7 +677,7 @@ Promote this RFC when all of the following are true:
    ownership modules are the real behavior homes.
 2. `runtime-plugins/context-transform.ts` is reduced to a lifecycle adapter
    shell with separate compaction, injection, and telemetry modules.
-3. Public hosted-session, runtime-plugin, and channel command contracts remain
+3. Public hosted session, runtime-plugin, and channel command contracts remain
    behaviorally stable.
 4. The stable docs describe the narrower ownership model instead of pointing at
    monolithic implementation files as the primary behavior map.

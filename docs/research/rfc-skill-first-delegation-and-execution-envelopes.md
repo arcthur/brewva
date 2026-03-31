@@ -10,7 +10,7 @@
   - `docs/reference/skills.md`
   - `docs/reference/tools.md`
   - `docs/reference/runtime.md`
-  - `docs/journeys/background-and-parallelism.md`
+  - `docs/journeys/operator/background-and-parallelism.md`
 
 ## Direct Conclusion
 
@@ -711,7 +711,7 @@ This phase is intentionally separable from the core semantic-envelope split and 
 - `docs/reference/skills.md`
 - `docs/reference/tools.md`
 - `docs/reference/runtime.md`
-- `docs/journeys/background-and-parallelism.md`
+- `docs/journeys/operator/background-and-parallelism.md`
 
 ## Validation Signals
 

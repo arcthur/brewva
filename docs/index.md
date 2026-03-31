@@ -5,7 +5,7 @@ This repository uses a layered documentation system:
 - `guide`: how to use and operate the system
 - `architecture`: implemented design, boundaries, and invariants
 - `reference`: stable contracts and technical surfaces
-- `journeys`: end-to-end workflows across subsystems
+- `journeys`: operator entrypoints and cross-package review flows
 - `troubleshooting`: failure patterns and remediation
 - `research`: incubating design notes with explicit promotion targets
 
@@ -24,14 +24,17 @@ This repository uses a layered documentation system:
 
 ## Journeys
 
-- Planning to execution: `docs/journeys/planning-to-execution.md`
-- Channel gateway flow: `docs/journeys/channel-gateway-and-turn-flow.md`
-- Context and compaction: `docs/journeys/context-and-compaction.md`
-- Background and parallelism: `docs/journeys/background-and-parallelism.md`
-- Intent-driven scheduling: `docs/journeys/intent-driven-scheduling.md`
-- Session handoff and replay: `docs/journeys/session-handoff-and-reference.md`
-- Operations and debugging: `docs/journeys/operations-and-debugging.md`
-- Working projection: `docs/journeys/working-projection.md`
+- Journeys overview: `docs/journeys/README.md`
+- Operator journeys:
+  - Interactive session: `docs/journeys/operator/interactive-session.md`
+  - Inspect, replay, and recovery: `docs/journeys/operator/inspect-replay-and-recovery.md`
+  - Approval and rollback: `docs/journeys/operator/approval-and-rollback.md`
+  - Gateway control-plane lifecycle: `docs/journeys/operator/gateway-control-plane-lifecycle.md`
+  - Channel gateway and turn flow: `docs/journeys/operator/channel-gateway-and-turn-flow.md`
+  - Background and parallelism: `docs/journeys/operator/background-and-parallelism.md`
+  - Intent-driven scheduling: `docs/journeys/operator/intent-driven-scheduling.md`
+- Internal journeys:
+  - Context and compaction: `docs/journeys/internal/context-and-compaction.md`
 
 ## Architecture
 
@@ -58,6 +61,7 @@ This repository uses a layered documentation system:
 - Session lifecycle: `docs/reference/session-lifecycle.md`
 - Budget matrix: `docs/reference/budget-matrix.md`
 - Artifacts and paths: `docs/reference/artifacts-and-paths.md`
+- Working projection: `docs/reference/working-projection.md`
 - Glossary: `docs/reference/glossary.md`
 - Known limitations: `docs/reference/limitations.md`
 

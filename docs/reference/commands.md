@@ -1,8 +1,9 @@
 # Reference: Commands (CLI Surface)
 
-Brewva 的主命令面仍然是 CLI flag / subcommand，但 interactive session 和 channel host
-也暴露一组很薄的 slash-command veneers。它们不是新的 kernel authority；只是
-inspectable control-plane / runtime-plugin entrypoints。
+Brewva's primary command surface remains CLI flags and subcommands, but
+interactive sessions and channel hosts also expose a thin set of
+slash-command veneers. They do not create new kernel authority; they are
+inspectable control-plane / runtime-plugin entrypoints.
 
 Implementation source: `packages/brewva-cli/src/index.ts`.
 
@@ -390,7 +391,7 @@ On startup recovery, catch-up execution is bounded by
 events. Daemon recovery also emits per-session `schedule_recovery_summary`
 events.
 With `--verbose`, daemon prints a rolling 60-second scheduler window summary
-(`fired/errored/deferred/circuit_opened` plus child-session lifecycle counts).
+(`fired/errored/deferred/circuit_opened` plus child session lifecycle counts).
 
 ## Flags
 

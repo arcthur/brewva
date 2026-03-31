@@ -65,7 +65,7 @@ Implementation detail and system boundaries:
 - `docs/reference/proposal-boundary.md`
 - `docs/reference/runtime.md`
 - `docs/reference/events.md`
-- `docs/journeys/working-projection.md`
+- `docs/reference/working-projection.md`
 
 ## Package Surfaces
 
@@ -159,7 +159,7 @@ bun run test:live
 | --------------- | ----------------------- | ---------------------------------------------------------------------------- |
 | Guides          | `docs/guide/`           | Installation, operation, feature walkthroughs, and usage flows               |
 | Architecture    | `docs/architecture/`    | Implemented design, invariants, and control/data boundaries                  |
-| Journeys        | `docs/journeys/`        | End-to-end flows across runtime, gateway, channels, and orchestration        |
+| Journeys        | `docs/journeys/`        | Operator entrypoints and cross-package review flows                          |
 | Reference       | `docs/reference/`       | Stable contracts for config, runtime API, tools, events, and runtime plugins |
 | Troubleshooting | `docs/troubleshooting/` | Failure patterns and remediation                                             |
 | Research        | `docs/research/`        | Incubating design notes and roadmap material                                 |
