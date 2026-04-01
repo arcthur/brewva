@@ -25,6 +25,16 @@ export function inferEventCategory(type: string): BrewvaEventCategory {
   if (type.startsWith("proposal_") || type.startsWith("decision_receipt_")) return "governance";
   if (type.startsWith("governance_")) return "governance";
   if (type.startsWith("effect_commitment_") || type.startsWith("operator_")) return "governance";
+  if (
+    type.startsWith("skill_") ||
+    type.startsWith("resource_lease_") ||
+    type.startsWith("schedule_") ||
+    type.startsWith("subagent_") ||
+    type.startsWith("narrative_memory_") ||
+    type.startsWith("semantic_")
+  ) {
+    return "control";
+  }
   if (type.includes("snapshot") || type.includes("resumed") || type.includes("interrupted"))
     return "state";
   return "other";

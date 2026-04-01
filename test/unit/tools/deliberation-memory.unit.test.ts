@@ -9,6 +9,14 @@ function extractText(result: { content: Array<{ type: string; text?: string }> }
   );
 }
 
+function createToolContext(sessionId: string) {
+  return {
+    sessionManager: {
+      getSessionId: () => sessionId,
+    },
+  } as never;
+}
+
 describe("deliberation memory tool", () => {
   test("lists, retrieves, shows, and summarizes deliberation memory artifacts", async () => {
     const workspace = createTestWorkspace("deliberation-memory-tool");
@@ -46,13 +54,14 @@ describe("deliberation memory tool", () => {
     });
 
     const tool = createDeliberationMemoryTool({ runtime });
+    const ctx = createToolContext("memory-session-1");
 
     const statsResult = await tool.execute(
       "tc-deliberation-memory-stats",
       { action: "stats" } as never,
       undefined,
       undefined,
-      {} as never,
+      ctx,
     );
     expect(
       extractText(statsResult as { content: Array<{ type: string; text?: string }> }),
@@ -63,7 +72,7 @@ describe("deliberation memory tool", () => {
       { action: "list", kind: "repository_strategy_memory" } as never,
       undefined,
       undefined,
-      {} as never,
+      ctx,
     );
     const listText = extractText(listResult as { content: Array<{ type: string; text?: string }> });
     const listDetails = listResult.details as
@@ -78,7 +87,7 @@ describe("deliberation memory tool", () => {
       { action: "retrieve", query: "loop metric failed checks" } as never,
       undefined,
       undefined,
-      {} as never,
+      ctx,
     );
     const retrieveText = extractText(
       retrieveResult as { content: Array<{ type: string; text?: string }> },
@@ -94,7 +103,7 @@ describe("deliberation memory tool", () => {
       { action: "show", artifact_id: artifactId! } as never,
       undefined,
       undefined,
-      {} as never,
+      ctx,
     );
     const showText = extractText(showResult as { content: Array<{ type: string; text?: string }> });
     expect(showText).toContain("# Deliberation Memory");

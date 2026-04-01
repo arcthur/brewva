@@ -166,17 +166,21 @@ Stable decisions:
 
 ## State Taxonomy
 
-| Category                 | Role                                                      | Authority                    | Typical carriers                                                                         |
-| ------------------------ | --------------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------- |
-| `Kernel Commitments`     | authoritative system commitments                          | authoritative                | tape, receipts, task, truth, ledger                                                      |
-| `Working State`          | session-local working view and budgeted context admission | non-authoritative            | projection, context arena, active tool surface                                           |
-| `Deliberation Artifacts` | non-kernel evidence, memory, and optimization sediment    | non-authoritative            | operator notes, deliberation memory, promotion drafts, optimization continuity artifacts |
-| `Tool Surface`           | turn-visible action surface                               | policy-governed              | base tools, skill-scoped tools, operator tools                                           |
-| `Control Plane`          | scheduling, delegation, and operator-facing orchestration | non-authoritative by default | schedulers, wake prompts, child-run controllers                                          |
+| Category                 | Role                                                           | Authority                    | Typical carriers                                                         |
+| ------------------------ | -------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------ |
+| `Kernel Commitments`     | authoritative system commitments                               | authoritative                | tape, receipts, task, truth, ledger                                      |
+| `Working State`          | session-local working view and budgeted context admission      | non-authoritative            | projection, context arena, active tool surface                           |
+| `Narrative Memory`       | typed collaboration semantics and selective recall             | non-authoritative            | self bundle, narrative memory records, explicit promotions               |
+| `Deliberation Artifacts` | non-kernel evidence, derived memory, and optimization sediment | non-authoritative            | deliberation memory, promotion drafts, optimization continuity artifacts |
+| `Tool Surface`           | turn-visible action surface                                    | policy-governed              | base tools, skill-scoped tools, operator tools                           |
+| `Control Plane`          | scheduling, delegation, and operator-facing orchestration      | non-authoritative by default | schedulers, wake prompts, child-run controllers                          |
 
 Important distinctions:
 
 - projection is working state, not long-term memory
+- narrative memory is a non-authoritative cognitive product, not kernel truth
+- repository precedent remains explicit under `docs/solutions/**`, not hidden
+  inside memory products
 - workflow artifacts/posture are derived working-state views, not new
   commitment-memory event families
 - session-scoped workflow posture is not repository merge or release

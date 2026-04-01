@@ -43,6 +43,7 @@ The composer returns ordered blocks in three categories:
 
 - `narrative`
   - identity
+  - hosted narrative memory
   - runtime status
   - task state
   - working projection
@@ -107,12 +108,19 @@ Those stay in runtime services and lifecycle plumbing.
 Hosted deliberation reminder:
 
 - hosted sessions may register internal sources such as
-  `brewva.deliberation-memory`, `brewva.optimization-continuity`, and
-  `brewva.skill-promotion-drafts`
+  `brewva.narrative-memory`, `brewva.deliberation-memory`,
+  `brewva.optimization-continuity`, and `brewva.skill-promotion-drafts`
 - these blocks are already-admitted narrative context, not new kernel
   authority
 - `ContextComposer` presents them, but it does not fold, refresh, or interpret
   them into a hidden planner
+
+Narrative-memory reminder:
+
+- `brewva.narrative-memory` is distinct from `brewva.agent-memory`
+- injected narrative recall includes provenance and freshness cues so the model
+  sees it as advisory context rather than timeless truth
+- repository precedent remains explicit and separate under `docs/solutions/**`
 
 ## Frozen Snapshot Invariant
 

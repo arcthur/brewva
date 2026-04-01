@@ -4,6 +4,7 @@ export const CONTROL_PLANE_TOOLS = [
   "skill_complete",
   "skill_load",
   "skill_promotion",
+  "narrative_memory",
   "optimization_continuity",
   "resource_lease",
   "ledger_query",

@@ -17,6 +17,7 @@ export type BrewvaEventCategory =
   | "cost"
   | "verification"
   | "governance"
+  | "control"
   | "state"
   | "other";
 

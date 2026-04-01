@@ -577,6 +577,26 @@ Explicit inspection surface for deliberation memory artifacts.
 - remains read-only and non-authoritative; it does not write new memory or
   widen kernel truth
 
+## `narrative_memory`
+
+Explicit inspection and management surface for typed narrative memory records.
+
+- stores and retrieves typed collaboration semantics such as
+  `operator_preference`, `working_convention`, `project_context_note`, and
+  `external_reference_note`
+- remains non-authoritative; it does not widen kernel truth, approval state,
+  task state, or repository precedent
+- applies the same narrative validation boundary to explicit `remember` writes
+  and passive extraction candidates, rejecting code-derived facts,
+  kernel-authoritative content, precedent-like material, and silent
+  contradictions against stronger operator-authored memory
+- supports bounded semantic rerank for ambiguous retrieval while keeping the
+  default retrieval path deterministic and inspectable
+- includes provenance and freshness cues in hosted recall so the model sees
+  narrative memory as advisory context that may need verification
+- promotes only into the agent self-bundle `memory.md`; it does not materialize
+  directly into `docs/solutions/**`
+
 ## `knowledge_search`
 
 Explicit repository-native precedent retrieval surface.

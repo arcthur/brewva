@@ -4,7 +4,18 @@ import {
   composeContextBlocks,
   type ContextComposerInput,
 } from "@brewva/brewva-gateway/runtime-plugins";
-import { CONTEXT_SOURCES, type ContextInjectionEntry } from "@brewva/brewva-runtime";
+import {
+  CONTEXT_SOURCES,
+  CONTEXT_SOURCE_BUDGET_CLASSES,
+  type ContextInjectionBudgetClass,
+  type ContextInjectionEntry,
+} from "@brewva/brewva-runtime";
+
+function resolveBudgetClass(source: string): ContextInjectionBudgetClass {
+  return (
+    (CONTEXT_SOURCE_BUDGET_CLASSES as Record<string, ContextInjectionBudgetClass>)[source] ?? "core"
+  );
+}
 
 function makeEntry(
   source: string,
@@ -15,6 +26,7 @@ function makeEntry(
 ): ContextInjectionEntry {
   return {
     category,
+    budgetClass: resolveBudgetClass(source),
     source,
     id,
     content,

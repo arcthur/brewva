@@ -37,14 +37,13 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 
 ## Proposed notes
 
-- None currently.
-
 ## Active notes
 
 - `docs/research/roadmap-notes.md`
 
 ## Promoted notes (status pointers)
 
+- `docs/research/rfc-narrative-memory-product-and-bounded-semantic-recall.md`
 - `docs/research/rfc-specialist-subagents-and-adversarial-verification.md`
 - `docs/research/rfc-architecture-doc-precision-review.md`
 - `docs/research/rfc-boundary-first-subtraction-and-model-native-recovery.md`

@@ -9,9 +9,11 @@ import {
 } from "@brewva/brewva-deliberation";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { shouldInvokeSemanticRerank } from "./semantic-oracle.js";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
+import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
 const ACTION_VALUES = ["list", "show", "retrieve", "stats"] as const;
@@ -165,13 +167,15 @@ export function createDeliberationMemoryTool(options: BrewvaToolOptions): ToolDe
       scope: Type.Optional(ScopeSchema),
       limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
     }),
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const plane = getOrCreateDeliberationMemoryPlane(options.runtime);
       const kind = readKind(params.kind);
       const scope = readScope(params.scope);
       const artifactId = readTrimmedString(params.artifact_id);
       const query = readTrimmedString(params.query);
       const limit = Math.max(1, Math.min(20, params.limit ?? 10));
+      const sessionId = getSessionId(ctx);
+      const targetRoots = options.runtime.task.getTargetDescriptor(sessionId).roots;
 
       if (params.action === "stats") {
         const state = plane.getState();
@@ -221,11 +225,40 @@ export function createDeliberationMemoryTool(options: BrewvaToolOptions): ToolDe
             error: "missing_query",
           });
         }
-        const retrievals = plane
-          .retrieve(query, Math.max(limit * 3, limit))
+        let retrievals = plane
+          .retrieve(query, Math.max(limit * 3, limit), targetRoots)
           .filter((entry) => !kind || entry.artifact.kind === kind)
-          .filter((entry) => !scope || entry.artifact.applicabilityScope === scope)
-          .slice(0, limit);
+          .filter((entry) => !scope || entry.artifact.applicabilityScope === scope);
+        const oracle = options.runtime.semanticOracle;
+        if (
+          retrievals.length >= 3 &&
+          oracle?.rerankDeliberationMemory &&
+          shouldInvokeSemanticRerank(retrievals.map((entry) => entry.score))
+        ) {
+          const reranked = await oracle.rerankDeliberationMemory({
+            sessionId,
+            surface: "deliberation_memory",
+            query,
+            targetRoots,
+            stateRevision: String(plane.getState().updatedAt),
+            artifacts: retrievals.map((entry) => entry.artifact),
+            candidates: retrievals.map((entry) => ({
+              id: entry.artifact.id,
+              title: entry.artifact.title,
+              summary: entry.artifact.summary,
+              content: entry.artifact.content,
+              kind: entry.artifact.kind,
+              scope: entry.artifact.applicabilityScope,
+            })),
+          });
+          if (reranked) {
+            const byId = new Map(retrievals.map((entry) => [entry.artifact.id, entry] as const));
+            retrievals = reranked.orderedIds
+              .map((id) => byId.get(id))
+              .filter((entry): entry is (typeof retrievals)[number] => Boolean(entry));
+          }
+        }
+        retrievals = retrievals.slice(0, limit);
         if (retrievals.length === 0) {
           return inconclusiveTextResult(
             "No deliberation memory artifacts matched the retrieval query.",

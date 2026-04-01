@@ -136,6 +136,21 @@ maintenance. They do not promote projection files into source-of-truth inputs.
 - `skill_promotion_promoted`
 - `skill_promotion_materialized`
 
+### Narrative Memory And Semantic Recall
+
+- `narrative_memory_recorded`
+- `narrative_memory_reviewed`
+- `narrative_memory_promoted`
+- `narrative_memory_archived`
+- `narrative_memory_forgotten`
+- `semantic_extraction_invoked`
+- `semantic_rerank_invoked`
+
+These are control-plane audit receipts for the narrative memory product and
+bounded semantic recall. In structured queries they classify as `category=control`,
+remain non-authoritative, and do not become replay inputs for task truth,
+approval truth, or WAL recovery.
+
 ### Iteration Facts
 
 - `iteration_metric_observed`

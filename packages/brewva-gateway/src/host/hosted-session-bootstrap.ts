@@ -1,5 +1,6 @@
 import { join, resolve } from "node:path";
 import {
+  createNarrativeMemoryContextProvider,
   createDeliberationMemoryContextProvider,
   createOptimizationContinuityContextProvider,
 } from "@brewva/brewva-deliberation";
@@ -15,6 +16,7 @@ import { createSkillPromotionContextProvider } from "@brewva/brewva-skill-broker
 import {
   buildBrewvaTools,
   resolveBrewvaModelSelection,
+  type BrewvaSemanticOracle,
   type BrewvaToolOrchestration,
 } from "@brewva/brewva-tools";
 import {
@@ -37,6 +39,7 @@ import {
   createHostedSubagentAdapter,
   type HostedDelegationBuiltinToolName,
 } from "../subagents/index.js";
+import { createHostedSemanticOracle } from "./semantic-oracle.js";
 
 export interface HostedSessionResult extends CreateAgentSessionResult {
   runtime: BrewvaRuntime;
@@ -130,6 +133,17 @@ function createKernelRuntime(options: CreateHostedSessionOptions, cwd: string): 
 }
 
 function installContextProviders(runtime: BrewvaRuntime): void {
+  if (
+    !runtime.context
+      .listProviders()
+      .some((provider) => provider.source === CONTEXT_SOURCES.narrativeMemory)
+  ) {
+    runtime.context.registerProvider(
+      createNarrativeMemoryContextProvider({
+        runtime,
+      }),
+    );
+  }
   if (
     !runtime.context
       .listProviders()
@@ -263,6 +277,7 @@ function createRuntimePlugins(input: {
   runtime: BrewvaRuntime;
   orchestration: BrewvaToolOrchestration | undefined;
   delegationStore: HostedDelegationStore | undefined;
+  semanticOracle?: BrewvaSemanticOracle;
 }): RuntimePlugin[] {
   const managedToolMode = resolveManagedToolMode(input.options.managedToolMode);
   const registerManagedTools = managedToolMode === "runtime_plugin";
@@ -274,6 +289,7 @@ function createRuntimePlugins(input: {
       delegationStore: input.delegationStore,
       managedToolNames: input.options.managedToolNames,
       contextProfile: input.options.contextProfile,
+      semanticOracle: input.semanticOracle,
     }),
   ];
   if (input.options.runtimePlugins && input.options.runtimePlugins.length > 0) {
@@ -288,12 +304,17 @@ function createDirectManagedTools(input: {
   orchestration: BrewvaToolOrchestration | undefined;
   delegationStore: HostedDelegationStore | undefined;
   managedToolMode: ManagedToolMode;
+  semanticOracle?: BrewvaSemanticOracle;
 }) {
   if (input.managedToolMode !== "direct") {
     return undefined;
   }
   return buildBrewvaTools({
-    runtime: input.runtime,
+    runtime: Object.assign(
+      {},
+      input.runtime,
+      input.semanticOracle ? { semanticOracle: input.semanticOracle } : {},
+    ),
     orchestration: input.orchestration,
     delegation: createDelegationQuery(input.delegationStore),
     toolNames: input.options.managedToolNames,
@@ -347,11 +368,17 @@ export async function createHostedSession(
   applyRuntimeUiSettings(settingsManager, runtime.config.ui);
 
   const managedToolMode = resolveManagedToolMode(options.managedToolMode);
+  const semanticOracle = createHostedSemanticOracle({
+    model: environment.selectedModel.model,
+    modelRegistry: environment.modelRegistry,
+    runtime,
+  });
   const runtimePlugins = createRuntimePlugins({
     options,
     runtime,
     orchestration,
     delegationStore,
+    semanticOracle,
   });
 
   const resourceLoader = new DefaultResourceLoader({
@@ -368,6 +395,7 @@ export async function createHostedSession(
     orchestration,
     delegationStore,
     managedToolMode,
+    semanticOracle,
   });
   const builtinTools = resolveBuiltinTools(options.builtinToolNames);
 

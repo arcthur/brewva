@@ -1,10 +1,10 @@
 import type { ContextBudgetUsage } from "../contracts/index.js";
 import type { RegisterContextInjectionInput } from "./injection.js";
-import type { ContextInjectionCategory } from "./sources.js";
+import type { ContextInjectionBudgetClass, ContextInjectionCategory } from "./sources.js";
 
 export interface ContextSourceProviderRegistration extends Omit<
   RegisterContextInjectionInput,
-  "source" | "category"
+  "source" | "category" | "budgetClass"
 > {}
 
 export interface ContextSourceProviderInput {
@@ -18,6 +18,7 @@ export interface ContextSourceProviderInput {
 export interface ContextSourceProvider {
   readonly source: string;
   readonly category: ContextInjectionCategory;
+  readonly budgetClass: ContextInjectionBudgetClass;
   readonly order?: number;
   collect(input: ContextSourceProviderInput): void;
 }
@@ -25,6 +26,7 @@ export interface ContextSourceProvider {
 export interface ContextSourceProviderDescriptor {
   source: string;
   category: ContextInjectionCategory;
+  budgetClass: ContextInjectionBudgetClass;
   order: number;
 }
 
@@ -65,6 +67,7 @@ export class ContextSourceProviderRegistry {
             ...registration,
             source: provider.source,
             category: provider.category,
+            budgetClass: provider.budgetClass,
           }),
       });
     }
@@ -74,6 +77,7 @@ export class ContextSourceProviderRegistry {
     return this.getProviders().map((provider) => ({
       source: provider.source,
       category: provider.category,
+      budgetClass: provider.budgetClass,
       order: this.getProviderOrder(provider),
     }));
   }

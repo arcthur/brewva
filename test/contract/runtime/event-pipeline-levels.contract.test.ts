@@ -205,7 +205,42 @@ describe("event pipeline level classification", () => {
 
     for (const type of promotionTypes) {
       expect(runtime.events.query(sessionId, { type })).toHaveLength(1);
-      expect(runtime.events.queryStructured(sessionId, { type })[0]?.type).toBe(type);
+      const structured = runtime.events.queryStructured(sessionId, { type })[0];
+      expect(structured?.type).toBe(type);
+      expect(structured?.category).toBe("control");
+    }
+  });
+
+  test("classifies narrative memory and semantic recall receipts as control events", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-narrative-control-")),
+      config: createAuditConfig(),
+    });
+    const sessionId = "audit-level-narrative-control-session";
+
+    const receiptTypes = [
+      "narrative_memory_recorded",
+      "narrative_memory_reviewed",
+      "narrative_memory_promoted",
+      "narrative_memory_archived",
+      "narrative_memory_forgotten",
+      "semantic_extraction_invoked",
+      "semantic_rerank_invoked",
+    ] as const;
+
+    for (const type of receiptTypes) {
+      runtime.events.record({
+        sessionId,
+        type,
+        payload: {
+          source: "unit-test",
+        },
+      });
+    }
+
+    for (const type of receiptTypes) {
+      expect(runtime.events.query(sessionId, { type })).toHaveLength(1);
+      expect(runtime.events.queryStructured(sessionId, { type })[0]?.category).toBe("control");
     }
   });
 

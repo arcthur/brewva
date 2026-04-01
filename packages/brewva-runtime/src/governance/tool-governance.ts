@@ -2,6 +2,8 @@ import type {
   ToolEffectClass,
   ToolExecutionBoundary,
   ToolGovernanceDescriptor,
+  ToolGovernanceResolver,
+  ToolGovernanceResolverInput,
   ToolGovernanceRisk,
 } from "../contracts/index.js";
 import { normalizeToolName } from "../utils/tool-name.js";
@@ -78,6 +80,69 @@ function sameEffects(
   }
   return leftValues.every((value, index) => value === rightValues[index]);
 }
+
+const NARRATIVE_MEMORY_READ_ACTIONS = new Set(["list", "show", "retrieve", "stats"]);
+const NARRATIVE_MEMORY_MEMORY_WRITE_ACTIONS = new Set(["remember", "review", "archive", "forget"]);
+
+const NARRATIVE_MEMORY_DEFAULT_DESCRIPTOR = descriptor({
+  effects: ["runtime_observe", "memory_write", "workspace_write"],
+  defaultRisk: "medium",
+  rollbackable: false,
+});
+
+const NARRATIVE_MEMORY_READ_DESCRIPTOR = descriptor({
+  effects: ["runtime_observe"],
+  defaultRisk: "low",
+});
+
+const NARRATIVE_MEMORY_MEMORY_WRITE_DESCRIPTOR = descriptor({
+  effects: ["memory_write"],
+  defaultRisk: "medium",
+});
+
+const NARRATIVE_MEMORY_PROMOTE_DESCRIPTOR = descriptor({
+  effects: ["memory_write", "workspace_write"],
+  defaultRisk: "medium",
+  rollbackable: false,
+});
+
+function readActionArgument(args: Record<string, unknown> | undefined): string | undefined {
+  if (!args) {
+    return undefined;
+  }
+  const value = args.action;
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function resolveNarrativeMemoryDescriptor(
+  input: ToolGovernanceResolverInput,
+): ToolGovernanceDescriptor | undefined {
+  if (normalizeToolName(input.toolName) !== "narrative_memory") {
+    return undefined;
+  }
+  const action = readActionArgument(input.args);
+  if (!action) {
+    return NARRATIVE_MEMORY_DEFAULT_DESCRIPTOR;
+  }
+  if (NARRATIVE_MEMORY_READ_ACTIONS.has(action)) {
+    return NARRATIVE_MEMORY_READ_DESCRIPTOR;
+  }
+  if (NARRATIVE_MEMORY_MEMORY_WRITE_ACTIONS.has(action)) {
+    return NARRATIVE_MEMORY_MEMORY_WRITE_DESCRIPTOR;
+  }
+  if (action === "promote") {
+    return NARRATIVE_MEMORY_PROMOTE_DESCRIPTOR;
+  }
+  return NARRATIVE_MEMORY_DEFAULT_DESCRIPTOR;
+}
+
+const EXACT_TOOL_GOVERNANCE_RESOLVERS_BY_NAME: Record<string, ToolGovernanceResolver> = {
+  narrative_memory: resolveNarrativeMemoryDescriptor,
+};
 
 export const TOOL_GOVERNANCE_BY_NAME: Record<string, ToolGovernanceDescriptor> = {
   read: descriptor({
@@ -210,6 +275,7 @@ export const TOOL_GOVERNANCE_BY_NAME: Record<string, ToolGovernanceDescriptor> =
     effects: ["runtime_observe"],
     defaultRisk: "low",
   }),
+  narrative_memory: NARRATIVE_MEMORY_DEFAULT_DESCRIPTOR,
   knowledge_capture: descriptor({
     effects: ["workspace_write"],
     defaultRisk: "high",
@@ -430,6 +496,7 @@ function validateToolGovernanceDescriptor(
 
 export class ToolGovernanceRegistry {
   private readonly customByName = new Map<string, ToolGovernanceDescriptor>();
+  private readonly customResolversByName = new Map<string, ToolGovernanceResolver>();
 
   register(toolName: string, input: ToolGovernanceDescriptor): void {
     const normalized = normalizeToolName(toolName);
@@ -439,22 +506,41 @@ export class ToolGovernanceRegistry {
     this.customByName.set(normalized, validateToolGovernanceDescriptor(normalized, input));
   }
 
+  registerResolver(toolName: string, resolver: ToolGovernanceResolver): void {
+    const normalized = normalizeToolName(toolName);
+    if (!normalized) {
+      throw new Error("tool governance resolver requires a non-empty tool name");
+    }
+    this.customResolversByName.set(normalized, resolver);
+  }
+
   unregister(toolName: string): void {
     const normalized = normalizeToolName(toolName);
     if (!normalized) return;
     this.customByName.delete(normalized);
+    this.customResolversByName.delete(normalized);
   }
 
-  get(toolName: string): ToolGovernanceDescriptor | undefined {
-    return this.resolve(toolName).descriptor;
+  get(toolName: string, args?: Record<string, unknown>): ToolGovernanceDescriptor | undefined {
+    return this.resolve(toolName, args).descriptor;
   }
 
-  resolve(toolName: string): ToolGovernanceResolution {
+  resolve(toolName: string, args?: Record<string, unknown>): ToolGovernanceResolution {
     const normalized = normalizeToolName(toolName);
     if (!normalized) {
       return {
         source: "missing",
       };
+    }
+    const customResolver = this.customResolversByName.get(normalized);
+    if (customResolver) {
+      const resolved = customResolver({ toolName: normalized, args });
+      if (resolved) {
+        return {
+          descriptor: validateToolGovernanceDescriptor(normalized, resolved),
+          source: "registry",
+        };
+      }
     }
     const custom = this.customByName.get(normalized);
     if (custom) {
@@ -463,7 +549,7 @@ export class ToolGovernanceRegistry {
         source: "registry",
       };
     }
-    return resolveDescriptorWithoutCustom(normalized);
+    return resolveDescriptorWithoutCustom(normalized, args);
   }
 }
 
@@ -489,16 +575,30 @@ export function sameToolGovernanceDescriptor(
   return (
     left.defaultRisk === right.defaultRisk &&
     left.boundary === right.boundary &&
+    left.rollbackable === right.rollbackable &&
     sameEffects(left.effects, right.effects)
   );
 }
 
-function resolveDescriptorWithoutCustom(toolName: string): ToolGovernanceResolution {
+function resolveDescriptorWithoutCustom(
+  toolName: string,
+  args?: Record<string, unknown>,
+): ToolGovernanceResolution {
   const normalized = normalizeToolName(toolName);
   if (!normalized) {
     return {
       source: "missing",
     };
+  }
+  const exactResolver = EXACT_TOOL_GOVERNANCE_RESOLVERS_BY_NAME[normalized];
+  if (exactResolver) {
+    const resolved = exactResolver({ toolName: normalized, args });
+    if (resolved) {
+      return {
+        descriptor: validateToolGovernanceDescriptor(normalized, resolved),
+        source: "exact",
+      };
+    }
   }
   const exact = getExactToolGovernanceDescriptor(normalized);
   if (exact) {
@@ -522,15 +622,21 @@ function resolveDescriptorWithoutCustom(toolName: string): ToolGovernanceResolut
 export function getToolGovernanceDescriptor(
   toolName: string,
   registry?: Pick<ToolGovernanceRegistry, "get">,
+  args?: Record<string, unknown>,
 ): ToolGovernanceDescriptor | undefined {
-  return registry ? registry.get(toolName) : resolveDescriptorWithoutCustom(toolName).descriptor;
+  return registry
+    ? registry.get(toolName, args)
+    : resolveDescriptorWithoutCustom(toolName, args).descriptor;
 }
 
 export function getToolGovernanceResolution(
   toolName: string,
   registry?: Pick<ToolGovernanceRegistry, "resolve">,
+  args?: Record<string, unknown>,
 ): ToolGovernanceResolution {
-  return registry ? registry.resolve(toolName) : resolveDescriptorWithoutCustom(toolName);
+  return registry
+    ? registry.resolve(toolName, args)
+    : resolveDescriptorWithoutCustom(toolName, args);
 }
 
 function assertToolGovernanceInvariants(
@@ -579,15 +685,20 @@ function resolveAuthorityFromResolution(
 export function resolveToolAuthority(
   toolName: string,
   registry?: Pick<ToolGovernanceRegistry, "resolve">,
+  args?: Record<string, unknown>,
 ): ResolvedToolAuthority {
-  return resolveAuthorityFromResolution(toolName, getToolGovernanceResolution(toolName, registry));
+  return resolveAuthorityFromResolution(
+    toolName,
+    getToolGovernanceResolution(toolName, registry, args),
+  );
 }
 
 export function resolveToolExecutionBoundary(
   toolName: string,
   registry?: Pick<ToolGovernanceRegistry, "resolve">,
+  args?: Record<string, unknown>,
 ): ToolExecutionBoundary {
-  return resolveToolAuthority(toolName, registry).boundary;
+  return resolveToolAuthority(toolName, registry, args).boundary;
 }
 
 export function toolGovernanceRequiresEffectCommitment(

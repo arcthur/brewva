@@ -1261,6 +1261,7 @@ export function createDeliberationMemoryContextProvider(input: {
   return {
     source: CONTEXT_SOURCES.deliberationMemory,
     category: "narrative",
+    budgetClass: "recall",
     order: 15,
     collect: (providerInput) => {
       const retrievals = plane.retrieve(

@@ -90,7 +90,7 @@ export interface ToolGateServiceOptions {
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
   recordEvent: RuntimeKernelContext["recordEvent"];
   alwaysAllowedTools: string[];
-  resolveToolAuthority: (toolName: string) => ResolvedToolAuthority;
+  resolveToolAuthority: (toolName: string, args?: Record<string, unknown>) => ResolvedToolAuthority;
   resourceLeaseService: Pick<ResourceLeaseService, "getEffectiveBudget">;
   skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
   contextService: Pick<ContextService, "checkContextCompactionGate" | "observeContextUsage">;
@@ -109,7 +109,10 @@ export class ToolGateService {
   private readonly sessionState: RuntimeSessionStateStore;
   private readonly alwaysAllowedTools: string[];
   private readonly alwaysAllowedToolSet: Set<string>;
-  private readonly resolveToolAuthority: (toolName: string) => ResolvedToolAuthority;
+  private readonly resolveToolAuthority: (
+    toolName: string,
+    args?: Record<string, unknown>,
+  ) => ResolvedToolAuthority;
   private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
   private readonly getCurrentTurn: (sessionId: string) => number;
   private readonly getEffectiveBudget: ResourceLeaseService["getEffectiveBudget"];
@@ -152,7 +155,7 @@ export class ToolGateService {
         .map((toolName) => normalizeToolName(toolName))
         .filter((toolName) => toolName.length > 0),
     );
-    this.resolveToolAuthority = (toolName) => options.resolveToolAuthority(toolName);
+    this.resolveToolAuthority = (toolName, args) => options.resolveToolAuthority(toolName, args);
     this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
     this.getEffectiveBudget = (sessionId, contract, skillName) =>
@@ -173,6 +176,7 @@ export class ToolGateService {
   private buildAccessContext(
     sessionId: string,
     toolName: string,
+    args?: Record<string, unknown>,
   ): {
     state: ReturnType<RuntimeSessionStateStore["getCell"]>;
     skill: SkillDocument | undefined;
@@ -183,14 +187,19 @@ export class ToolGateService {
     const state = this.sessionState.getCell(sessionId);
     const skill = this.getActiveSkill(sessionId);
     const normalizedToolName = normalizeToolName(toolName);
-    const authority = this.resolveToolAuthority(normalizedToolName);
-    const access = evaluateSkillToolAccess(skill?.contract, toolName, {
-      enforceDeniedEffects: this.securityPolicy.enforceDeniedEffects,
-      effectAuthorizationMode: this.securityPolicy.effectAuthorizationMode,
-      alwaysAllowedTools: this.alwaysAllowedTools,
-      resolveToolGovernanceDescriptor: (nextToolName) =>
-        this.resolveToolAuthority(nextToolName).descriptor,
-    });
+    const authority = this.resolveToolAuthority(normalizedToolName, args);
+    const access = evaluateSkillToolAccess(
+      skill?.contract,
+      toolName,
+      {
+        enforceDeniedEffects: this.securityPolicy.enforceDeniedEffects,
+        effectAuthorizationMode: this.securityPolicy.effectAuthorizationMode,
+        alwaysAllowedTools: this.alwaysAllowedTools,
+        resolveToolGovernanceDescriptor: (nextToolName, nextArgs) =>
+          this.resolveToolAuthority(nextToolName, nextArgs).descriptor,
+      },
+      args,
+    );
     return {
       state,
       skill,
@@ -200,10 +209,15 @@ export class ToolGateService {
     };
   }
 
-  checkToolAccess(sessionId: string, toolName: string): ToolAccessDecision {
+  checkToolAccess(
+    sessionId: string,
+    toolName: string,
+    args?: Record<string, unknown>,
+  ): ToolAccessDecision {
     const { state, skill, normalizedToolName, authority, access } = this.buildAccessContext(
       sessionId,
       toolName,
+      args,
     );
     const governanceSource = authority.source;
     const boundary = authority.boundary;
@@ -422,6 +436,7 @@ export class ToolGateService {
     const { state, skill, normalizedToolName, authority, access } = this.buildAccessContext(
       sessionId,
       toolName,
+      args,
     );
     if (normalizedToolName === "bash" || normalizedToolName === "shell") {
       return {
@@ -861,7 +876,7 @@ export class ToolGateService {
   }
 
   authorizeToolCall(input: StartToolCallInput): ToolStartAuthorization {
-    const authority = this.resolveToolAuthority(input.toolName);
+    const authority = this.resolveToolAuthority(input.toolName, input.args);
     const boundary = authority.boundary;
     const normalizedToolName = authority.normalizedToolName;
     const state = this.sessionState.getCell(input.sessionId);
@@ -980,7 +995,7 @@ export class ToolGateService {
     effectGateEvent: BrewvaEventRecord | undefined,
   ): ToolAccessDecision {
     const boundary = authority.boundary;
-    const access = this.checkToolAccess(input.sessionId, input.toolName);
+    const access = this.checkToolAccess(input.sessionId, input.toolName, input.args);
     if (!access.allowed) {
       return {
         ...access,
@@ -1058,11 +1073,12 @@ export class ToolGateService {
     sessionId: string;
     toolCallId?: string;
     toolName: string;
+    args?: Record<string, unknown>;
     channelSuccess: boolean;
     verdict?: "pass" | "fail" | "inconclusive";
     effectCommitmentRequestId?: string;
   }): ToolCompletionContext {
-    const authority = this.resolveToolAuthority(input.toolName);
+    const authority = this.resolveToolAuthority(input.toolName, input.args);
     const state = this.sessionState.getCell(input.sessionId);
     const verdict = resolveToolResultVerdict({
       verdict: input.verdict,

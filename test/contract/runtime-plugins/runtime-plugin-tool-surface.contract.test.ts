@@ -3,6 +3,7 @@ import {
   registerToolSurface,
   type ToolSurfaceRuntime,
 } from "@brewva/brewva-gateway/runtime-plugins";
+import type { SkillRoutingScope } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import type { ToolInfo } from "@mariozechner/pi-coding-agent";
 import { createMockRuntimePluginApi, invokeHandlerAsync } from "../../helpers/runtime-plugin.js";
@@ -71,13 +72,14 @@ interface ToolSurfaceRuntimeOptions {
   getSkill?: ToolSurfaceRuntime["skills"]["get"];
   taskState?: ReturnType<ToolSurfaceRuntime["task"]["getState"]>;
   recordEvent?: ToolSurfaceRuntime["events"]["record"];
+  routingScopes?: SkillRoutingScope[];
 }
 
 function createToolSurfaceRuntime(options: ToolSurfaceRuntimeOptions = {}): ToolSurfaceRuntime {
   const runtime = createBaseRuntimeFixture({
     config: createRuntimeConfig((config) => {
       config.skills.routing.enabled = true;
-      config.skills.routing.scopes = ["core", "domain"];
+      config.skills.routing.scopes = options.routingScopes ?? ["core", "domain"];
     }),
   });
   Object.assign(runtime.skills, {
@@ -205,6 +207,78 @@ describe("tool surface runtime plugin", () => {
 
     expect(extensionApi.activeTools).toContain("task_view_state");
     expect(extensionApi.activeTools).toContain("obs_query");
+  });
+
+  test("explicit operator capability requests surface operator tools without an active skill", async () => {
+    const extensionApi = createMockRuntimePluginApi();
+    registerTools(extensionApi.api, [
+      "read",
+      "edit",
+      "write",
+      "session_compact",
+      "skill_load",
+      "workflow_status",
+      "obs_query",
+      "narrative_memory",
+    ]);
+
+    const runtime = createToolSurfaceRuntime();
+
+    registerToolSurface(extensionApi.api, runtime);
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "Use $obs_query and $narrative_memory if they would help.",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-operator-request-no-skill",
+        },
+      },
+    );
+
+    expect(extensionApi.activeTools).toContain("obs_query");
+    expect(extensionApi.activeTools).toContain("narrative_memory");
+  });
+
+  test("operator profile exposes operator tools even before any skill is active", async () => {
+    const extensionApi = createMockRuntimePluginApi();
+    registerTools(extensionApi.api, [
+      "read",
+      "edit",
+      "write",
+      "session_compact",
+      "skill_load",
+      "workflow_status",
+      "cost_view",
+      "obs_query",
+      "narrative_memory",
+    ]);
+
+    const runtime = createToolSurfaceRuntime({
+      routingScopes: ["core", "operator"],
+    });
+
+    registerToolSurface(extensionApi.api, runtime);
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "inspect the workspace state",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-operator-profile-no-skill",
+        },
+      },
+    );
+
+    expect(extensionApi.activeTools).toContain("cost_view");
+    expect(extensionApi.activeTools).toContain("obs_query");
+    expect(extensionApi.activeTools).toContain("narrative_memory");
   });
 
   test("tool surface records which requested managed tools were activated after admission", async () => {

@@ -19,6 +19,15 @@ export interface ToolGovernanceDescriptor {
   rollbackable?: boolean;
 }
 
+export interface ToolGovernanceResolverInput {
+  toolName: string;
+  args?: Record<string, unknown>;
+}
+
+export type ToolGovernanceResolver = (
+  input: ToolGovernanceResolverInput,
+) => ToolGovernanceDescriptor | undefined;
+
 export type ToolMutationStrategy = "workspace_patchset";
 
 export type ToolMutationRollbackKind = "patchset";

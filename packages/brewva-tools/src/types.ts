@@ -12,6 +12,7 @@ import type {
 } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import type { TSchema } from "@sinclair/typebox";
+import type { BrewvaSemanticOracle } from "./semantic-oracle.js";
 
 export type BrewvaToolSurface = "base" | "skill" | "operator";
 
@@ -355,6 +356,7 @@ export type BrewvaToolRuntime = Pick<
   BrewvaRuntime,
   | "cwd"
   | "workspaceRoot"
+  | "agentId"
   | "config"
   | "skills"
   | "verification"
@@ -370,6 +372,7 @@ export type BrewvaToolRuntime = Pick<
 > & {
   orchestration?: BrewvaToolOrchestration;
   delegation?: BrewvaToolDelegationQuery;
+  semanticOracle?: BrewvaSemanticOracle;
 };
 
 export interface BrewvaToolOptions {

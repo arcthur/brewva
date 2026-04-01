@@ -1022,6 +1022,7 @@ export function createSkillPromotionContextProvider(input: {
   return {
     source: CONTEXT_SOURCES.skillPromotionDrafts,
     category: "narrative",
+    budgetClass: "recall",
     order: 16,
     collect: (providerInput) => {
       const activeDrafts = broker

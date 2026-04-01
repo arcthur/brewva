@@ -307,6 +307,61 @@ describe("effect governance policy modes", () => {
     expect(getToolGovernanceDescriptor("process_image")).toBeUndefined();
     expect(getToolGovernanceDescriptor("data_process")).toBeUndefined();
   });
+
+  test("narrative_memory resolves action-level governance for inspect and promote actions", () => {
+    const workspace = createPolicyWorkspace("effect-governance-narrative-memory-actions");
+    const runtime = createRuntime(workspace, { security: { mode: "strict" } });
+    const sessionId = "effect-governance-narrative-memory-actions-1";
+
+    runtime.context.onTurnStart(sessionId, 1);
+
+    expect(runtime.tools.getGovernanceDescriptor("narrative_memory")).toEqual({
+      effects: ["runtime_observe", "memory_write", "workspace_write"],
+      defaultRisk: "medium",
+      boundary: "effectful",
+      rollbackable: false,
+    });
+    expect(
+      runtime.tools.getGovernanceDescriptor("narrative_memory", {
+        action: "list",
+      }),
+    ).toEqual({
+      effects: ["runtime_observe"],
+      defaultRisk: "low",
+      boundary: "safe",
+      rollbackable: undefined,
+    });
+    expect(
+      runtime.tools.getGovernanceDescriptor("narrative_memory", {
+        action: "promote",
+      }),
+    ).toEqual({
+      effects: ["memory_write", "workspace_write"],
+      defaultRisk: "medium",
+      boundary: "effectful",
+      rollbackable: false,
+    });
+
+    const inspectStart = runtime.tools.start({
+      sessionId,
+      toolCallId: "tc-narrative-inspect",
+      toolName: "narrative_memory",
+      args: { action: "list" },
+    });
+    expect(inspectStart.allowed).toBe(true);
+    expect(inspectStart.boundary).toBe("safe");
+    expect(inspectStart.mutationReceipt).toBeUndefined();
+
+    const promoteStart = runtime.tools.start({
+      sessionId,
+      toolCallId: "tc-narrative-promote",
+      toolName: "narrative_memory",
+      args: { action: "promote", record_id: "narrative-1" },
+    });
+    expect(promoteStart.allowed).toBe(true);
+    expect(promoteStart.boundary).toBe("effectful");
+    expect(promoteStart.mutationReceipt).toBeUndefined();
+  });
 });
 
 describe("skill resource budgets", () => {

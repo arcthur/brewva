@@ -142,7 +142,7 @@ interface RuntimeServiceAssemblyOptions {
   kernel: RuntimeKernelContext;
   coreDependencies: RuntimeCoreDependencies;
   sessionState: RuntimeSessionStateStore;
-  resolveToolAuthority: (toolName: string) => ResolvedToolAuthority;
+  resolveToolAuthority: (toolName: string, args?: Record<string, unknown>) => ResolvedToolAuthority;
   resolveCheckpointCostSummary(sessionId: string): SessionCostSummary;
   resolveCheckpointCostSkillLastTurnByName(sessionId: string): Record<string, number>;
   evaluateCompletion(sessionId: string, level?: VerificationLevel): VerificationReport;
@@ -615,7 +615,7 @@ export function createRuntimeServiceDependencies(
     getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
     recordEvent: (input) => options.kernel.recordEvent(input),
     alwaysAllowedTools: CONTROL_PLANE_TOOLS,
-    resolveToolAuthority: (toolName) => options.resolveToolAuthority(toolName),
+    resolveToolAuthority: (toolName, args) => options.resolveToolAuthority(toolName, args),
     resourceLeaseService,
     skillLifecycleService,
     contextService,

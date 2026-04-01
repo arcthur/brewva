@@ -9,6 +9,7 @@ import {
   buildBrewvaTools,
   getBrewvaToolMetadata,
   getBrewvaToolSurface,
+  type BrewvaSemanticOracle,
   type BrewvaToolOrchestration,
 } from "@brewva/brewva-tools";
 import type { ExtensionFactory as UpstreamExtensionFactory } from "@mariozechner/pi-coding-agent";
@@ -18,6 +19,7 @@ import { createContextTransformLifecycle } from "./context-transform.js";
 import { createDeliberationMaintenanceLifecycle } from "./deliberation-maintenance.js";
 import { registerEventStream } from "./event-stream.js";
 import { registerLedgerWriter } from "./ledger-writer.js";
+import { createNarrativeMemoryLifecycle } from "./narrative-memory-lifecycle.js";
 import { createQualityGateLifecycle, registerQualityGate } from "./quality-gate.js";
 import { createRuntimeTurnClockStore } from "./runtime-turn-clock.js";
 import { registerToolResultDistiller } from "./tool-result-distiller.js";
@@ -38,6 +40,7 @@ export interface CreateHostedTurnPipelineOptions extends BrewvaRuntimeOptions {
   delegationStore?: HostedDelegationStore;
   managedToolNames?: readonly string[];
   contextProfile?: "minimal" | "standard" | "full";
+  semanticOracle?: BrewvaSemanticOracle;
   ports?: readonly TurnLifecyclePort[];
 }
 
@@ -45,7 +48,7 @@ function buildManagedTools(
   runtime: BrewvaRuntime,
   options: Pick<
     CreateHostedTurnPipelineOptions,
-    "managedToolNames" | "orchestration" | "delegationStore"
+    "managedToolNames" | "orchestration" | "delegationStore" | "semanticOracle"
   >,
 ): ReturnType<typeof buildBrewvaTools> {
   const delegationStore = options.delegationStore;
@@ -60,7 +63,11 @@ function buildManagedTools(
       }
     : undefined;
   return buildBrewvaTools({
-    runtime,
+    runtime: Object.assign(
+      {},
+      runtime,
+      options.semanticOracle ? { semanticOracle: options.semanticOracle } : {},
+    ),
     orchestration: options.orchestration,
     delegation,
     toolNames: options.managedToolNames,
@@ -91,6 +98,7 @@ function registerHostedPipeline(
   registerTools: boolean,
   delegationStore: HostedDelegationStore | undefined,
   contextProfile: "minimal" | "standard" | "full" | undefined,
+  semanticOracle: BrewvaSemanticOracle | undefined,
   userPorts: readonly TurnLifecyclePort[],
 ): void {
   const toolDefinitionsByName = new Map(tools.map((tool) => [tool.name, tool] as const));
@@ -101,6 +109,7 @@ function registerHostedPipeline(
     contextProfile,
   });
   const deliberationMaintenance = createDeliberationMaintenanceLifecycle(runtime);
+  const narrativeMemory = createNarrativeMemoryLifecycle(runtime, semanticOracle);
   const qualityGate = createQualityGateLifecycle(runtime, {
     toolDefinitionsByName,
   });
@@ -130,6 +139,7 @@ function registerHostedPipeline(
       beforeAgentStart: contextTransform.beforeAgentStart,
       toolResult: qualityGate.toolResult,
     },
+    narrativeMemory,
     {
       agentEnd: completionGuard.agentEnd,
       sessionShutdown: completionGuard.sessionShutdown,
@@ -169,6 +179,7 @@ export function createHostedTurnPipeline(
       registerTools,
       options.delegationStore,
       options.contextProfile,
+      options.semanticOracle,
       options.ports ?? [],
     );
   };

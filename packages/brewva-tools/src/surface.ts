@@ -19,6 +19,7 @@ export const BREWVA_TOOL_SURFACE_BY_NAME = {
   lsp_diagnostics: "base",
   process: "base",
   deliberation_memory: "skill",
+  narrative_memory: "operator",
   knowledge_capture: "skill",
   knowledge_search: "skill",
   precedent_audit: "skill",

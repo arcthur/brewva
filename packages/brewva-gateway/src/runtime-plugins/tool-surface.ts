@@ -56,7 +56,10 @@ export interface ToolSurfaceRuntime {
     };
   };
   tools?: {
-    getGovernanceDescriptor?(toolName: string): ReturnType<typeof getToolGovernanceDescriptor>;
+    getGovernanceDescriptor?(
+      toolName: string,
+      args?: Record<string, unknown>,
+    ): ReturnType<typeof getToolGovernanceDescriptor>;
   };
   skills: {
     getActive(sessionId: string): ToolSurfaceSkill | null | undefined;
@@ -212,8 +215,7 @@ function resolveTurnSurfacePlan(input: {
   }
 
   const operatorProfile = isOperatorProfile(input.runtime);
-  const operatorManagedToolNames =
-    hasActiveSkill && operatorProfile ? OPERATOR_BREWVA_TOOL_NAMES : [];
+  const operatorManagedToolNames = operatorProfile ? OPERATOR_BREWVA_TOOL_NAMES : [];
 
   return {
     requestedToolNames,
@@ -270,7 +272,7 @@ function resolveActiveToolNames(input: {
   const bootstrapManagedToolNames = new Set<string>(BOOTSTRAP_MANAGED_TOOL_NAMES);
   const allowedRequestedManagedToolNames = turnPlan.hasActiveSkill
     ? new Set<string>(MANAGED_BREWVA_TOOL_NAMES)
-    : bootstrapManagedToolNames;
+    : new Set<string>([...bootstrapManagedToolNames, ...OPERATOR_BREWVA_TOOL_NAMES]);
   const requestedActivatedToolNames = resolveRequestedManagedToolNames(
     turnPlan.requestedToolNames,
     knownToolNames,
@@ -314,7 +316,7 @@ function resolveActiveToolNames(input: {
     active.add("workflow_status");
   }
 
-  if (turnPlan.operatorProfile && turnPlan.hasActiveSkill) {
+  if (turnPlan.operatorProfile) {
     for (const toolName of OPERATOR_BREWVA_TOOL_NAMES) {
       if (knownToolNames.has(toolName)) {
         active.add(toolName);

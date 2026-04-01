@@ -40,6 +40,7 @@ interface CapabilityEntry {
   effects: ToolEffectClass[];
   requiresApproval: boolean;
   rollbackable: boolean;
+  actionGovernance: CapabilityActionGovernance[];
 }
 
 interface CapabilityManifestEntry {
@@ -67,6 +68,14 @@ export interface CapabilityAccessDecision {
   warning?: string;
 }
 
+export interface CapabilityActionGovernance {
+  action: string;
+  boundary: ToolExecutionBoundary;
+  effects: ToolEffectClass[];
+  requiresApproval: boolean;
+  rollbackable: boolean;
+}
+
 export interface BuildCapabilityViewInput {
   prompt: string;
   allTools: ToolLike[];
@@ -74,6 +83,7 @@ export interface BuildCapabilityViewInput {
   resolveAccess?: (toolName: string) => CapabilityAccessDecision;
   resolveGovernanceDescriptor?: (
     toolName: string,
+    args?: Record<string, unknown>,
   ) => ReturnType<typeof getToolGovernanceDescriptor>;
   maxRequestedDetails?: number;
 }
@@ -101,6 +111,7 @@ export interface CapabilityDetail {
   effects: ToolEffectClass[];
   requiresApproval: boolean;
   rollbackable: boolean;
+  actionGovernance: CapabilityActionGovernance[];
   visibleNow: boolean;
   governance: boolean;
   access?: CapabilityAccessDecision;
@@ -217,19 +228,80 @@ function resolveCapabilitySurface(name: string): CapabilitySurface {
 function resolveCapabilityBoundary(
   input: Pick<BuildCapabilityViewInput, "resolveGovernanceDescriptor">,
   name: string,
+  args?: Record<string, unknown>,
 ): {
   boundary: ToolExecutionBoundary;
   effects: ToolEffectClass[];
   requiresApproval: boolean;
   rollbackable: boolean;
 } {
-  const descriptor = input.resolveGovernanceDescriptor?.(name) ?? getToolGovernanceDescriptor(name);
+  const descriptor =
+    input.resolveGovernanceDescriptor?.(name, args) ??
+    getToolGovernanceDescriptor(name, undefined, args);
   return {
     boundary: descriptor?.boundary ?? "safe",
     effects: [...(descriptor?.effects ?? [])],
     requiresApproval: toolGovernanceRequiresEffectCommitment(descriptor),
     rollbackable: toolGovernanceCreatesRollbackAnchor(descriptor),
   };
+}
+
+function readActionParameterValues(parameterDetails: CapabilityParameterDetail[]): string[] {
+  return parameterDetails
+    .filter((detail) => detail.pathText === "action")
+    .flatMap((detail) => detail.acceptedValues)
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .toSorted();
+}
+
+function sameCapabilityGovernance(
+  left: Pick<
+    CapabilityActionGovernance,
+    "boundary" | "effects" | "requiresApproval" | "rollbackable"
+  >,
+  right: Pick<
+    CapabilityActionGovernance,
+    "boundary" | "effects" | "requiresApproval" | "rollbackable"
+  >,
+): boolean {
+  return (
+    left.boundary === right.boundary &&
+    left.requiresApproval === right.requiresApproval &&
+    left.rollbackable === right.rollbackable &&
+    left.effects.length === right.effects.length &&
+    left.effects.every((effect, index) => effect === right.effects[index])
+  );
+}
+
+function resolveActionGovernance(
+  input: BuildCapabilityViewInput,
+  name: string,
+  parameterDetails: CapabilityParameterDetail[],
+  baseline: {
+    boundary: ToolExecutionBoundary;
+    effects: ToolEffectClass[];
+    requiresApproval: boolean;
+    rollbackable: boolean;
+  },
+): CapabilityActionGovernance[] {
+  const actionValues = readActionParameterValues(parameterDetails);
+  if (actionValues.length === 0) {
+    return [];
+  }
+
+  const variants = actionValues.map((action) => {
+    const resolved = resolveCapabilityBoundary(input, name, { action });
+    return {
+      action,
+      boundary: resolved.boundary,
+      effects: resolved.effects,
+      requiresApproval: resolved.requiresApproval,
+      rollbackable: resolved.rollbackable,
+    };
+  });
+  return variants.some((variant) => !sameCapabilityGovernance(variant, baseline)) ? variants : [];
 }
 
 function createEmptyInventory(): CapabilityVisibilityInventory {
@@ -259,15 +331,18 @@ function toCapabilityEntries(input: BuildCapabilityViewInput): CapabilityEntry[]
   for (const tool of input.allTools) {
     const name = normalizeToolName(tool.name);
     if (!name) continue;
+    const parameterDetails = extractParameterDetails(tool.parameters);
+    const baseline = resolveCapabilityBoundary(input, name);
     entries.push({
       name,
       description: tool.description.trim(),
       parameterKeys: extractParameterKeys(tool.parameters),
-      parameterDetails: extractParameterDetails(tool.parameters),
+      parameterDetails,
       visible: activeToolNames.has(name),
       governance: GOVERNANCE_TOOL_NAMES.has(name),
       surface: resolveCapabilitySurface(name),
-      ...resolveCapabilityBoundary(input, name),
+      ...baseline,
+      actionGovernance: resolveActionGovernance(input, name, parameterDetails, baseline),
     });
   }
   entries.sort((left, right) => {
@@ -354,6 +429,16 @@ function formatFullDetailBlock(detail: CapabilityDetail): string {
     lines.push(`param.${parameterDetail.pathText}: ${detailParts.join(" ; ")}`);
   }
 
+  for (const actionDetail of detail.actionGovernance) {
+    lines.push(
+      `action.${actionDetail.action}: boundary=${actionDetail.boundary} ; effects=${
+        actionDetail.effects.length > 0 ? actionDetail.effects.join("|") : "(none)"
+      } ; approval=${actionDetail.requiresApproval ? "true" : "false"} ; rollback=${
+        actionDetail.rollbackable ? "true" : "false"
+      }`,
+    );
+  }
+
   if (detail.access) {
     lines.push(`allowed_now: ${detail.access.allowed ? "true" : "false"}`);
     if (detail.access.warning) {
@@ -384,6 +469,14 @@ function formatCompactDetailBlock(detail: CapabilityDetail): string {
       parameterDetail.defaultValue ? `default=${parameterDetail.defaultValue}` : undefined,
     ].filter((part): part is string => Boolean(part));
     lines.push(`param.${parameterDetail.pathText}: ${detailParts.join(" ; ")}`);
+  }
+
+  for (const actionDetail of detail.actionGovernance.slice(0, 3)) {
+    lines.push(
+      `action.${actionDetail.action}: ${actionDetail.boundary} ${
+        actionDetail.effects.length > 0 ? actionDetail.effects.join("|") : "(none)"
+      }`,
+    );
   }
 
   if (detail.access) {
@@ -533,6 +626,7 @@ export function buildCapabilityView(input: BuildCapabilityViewInput): BuildCapab
       effects: entry.effects,
       requiresApproval: entry.requiresApproval,
       rollbackable: entry.rollbackable,
+      actionGovernance: entry.actionGovernance,
       visibleNow: entry.visible,
       governance: entry.governance,
       access: input.resolveAccess?.(entry.name),

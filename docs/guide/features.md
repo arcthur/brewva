@@ -16,6 +16,9 @@
   hidden recovery planner
 - Objective iteration fact persistence and lineage-aware query for
   model-native optimization loops
+- Typed narrative memory with explicit inspection, selective recall, and
+  provenance-bearing storage for collaboration semantics that are not
+  derivable from code or git
 - Deliberation memory retention, pruning, and explicit inspection surfaces for
   durable evidence-backed artifacts
 - Repository-native compound knowledge under `docs/solutions/**` with explicit
@@ -51,6 +54,7 @@
 - `browser_close`
 - `process`
 - `cost_view`
+- `narrative_memory`
 - `deliberation_memory`
 - `knowledge_capture`
 - `knowledge_search`
@@ -108,6 +112,10 @@ Tool registry source: `packages/brewva-tools/src/index.ts`
   verification, and handoff posture
 - `deliberation_memory` is the explicit surface for inspecting retained
   repository, user, agent, and loop memory artifacts
+- `narrative_memory` is the explicit surface for typed collaboration semantics
+  such as operator preferences, working conventions, project context notes, and
+  external reference notes; it remains non-authoritative and distinct from
+  repository precedent
 - `knowledge_search` is the explicit precedent retrieval surface for
   `docs/solutions/**` plus bootstrap repository knowledge sources, with
   query-intent-aware ordering over a single canonical authority model

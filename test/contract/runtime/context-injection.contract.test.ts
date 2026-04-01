@@ -1,6 +1,28 @@
 import { describe, expect, test } from "bun:test";
 import { ContextInjectionCollector } from "@brewva/brewva-runtime";
 
+function makeRegistration(
+  source: string,
+  id: string,
+  content: string,
+  options: {
+    estimatedTokens?: number;
+    oncePerSession?: boolean;
+    budgetClass?: "core" | "working" | "recall";
+  } = {},
+) {
+  return {
+    category: "narrative" as const,
+    budgetClass:
+      options.budgetClass ?? (source === "brewva.projection-working" ? "working" : "core"),
+    source,
+    id,
+    content,
+    estimatedTokens: options.estimatedTokens,
+    oncePerSession: options.oncePerSession,
+  };
+}
+
 describe("Context injection collector", () => {
   const estimateTokens = (text: string): number => Math.max(0, Math.ceil(text.length / 3.5));
 
@@ -8,20 +30,14 @@ describe("Context injection collector", () => {
     const collector = new ContextInjectionCollector();
     const sessionId = "collector-oversized-estimate";
 
-    collector.register(sessionId, {
-      category: "narrative",
-      source: "source-a",
-      id: "a",
-      content: "first",
-      estimatedTokens: 1000,
-    });
-    collector.register(sessionId, {
-      category: "narrative",
-      source: "source-b",
-      id: "b",
-      content: "second",
-      estimatedTokens: 2,
-    });
+    collector.register(
+      sessionId,
+      makeRegistration("source-a", "a", "first", { estimatedTokens: 1000 }),
+    );
+    collector.register(
+      sessionId,
+      makeRegistration("source-b", "b", "second", { estimatedTokens: 2 }),
+    );
 
     const merged = collector.consume(sessionId, 16);
 
@@ -34,25 +50,19 @@ describe("Context injection collector", () => {
     const collector = new ContextInjectionCollector();
     const sessionId = "collector-once-before-commit";
 
-    collector.register(sessionId, {
-      category: "narrative",
-      source: "source-once",
-      id: "once-id",
-      content: "first pass",
-      oncePerSession: true,
-    });
+    collector.register(
+      sessionId,
+      makeRegistration("source-once", "once-id", "first pass", { oncePerSession: true }),
+    );
 
     const planned = collector.plan(sessionId, 128);
     expect(planned.entries).toHaveLength(1);
     collector.clearPending(sessionId);
 
-    collector.register(sessionId, {
-      category: "narrative",
-      source: "source-once",
-      id: "once-id",
-      content: "second pass",
-      oncePerSession: true,
-    });
+    collector.register(
+      sessionId,
+      makeRegistration("source-once", "once-id", "second pass", { oncePerSession: true }),
+    );
     const consumed = collector.consume(sessionId, 128);
 
     expect(consumed.entries).toHaveLength(1);
@@ -63,23 +73,17 @@ describe("Context injection collector", () => {
     const collector = new ContextInjectionCollector();
     const sessionId = "collector-once-after-commit";
 
-    collector.register(sessionId, {
-      category: "narrative",
-      source: "source-once",
-      id: "once-id",
-      content: "only once",
-      oncePerSession: true,
-    });
+    collector.register(
+      sessionId,
+      makeRegistration("source-once", "once-id", "only once", { oncePerSession: true }),
+    );
     const first = collector.consume(sessionId, 128);
     expect(first.entries).toHaveLength(1);
 
-    collector.register(sessionId, {
-      category: "narrative",
-      source: "source-once",
-      id: "once-id",
-      content: "should be skipped",
-      oncePerSession: true,
-    });
+    collector.register(
+      sessionId,
+      makeRegistration("source-once", "once-id", "should be skipped", { oncePerSession: true }),
+    );
     const second = collector.consume(sessionId, 128);
     expect(second.entries).toHaveLength(0);
   });
@@ -89,12 +93,7 @@ describe("Context injection collector", () => {
     const sessionId = "collector-conservative-estimate";
     const dense = "x".repeat(15);
 
-    collector.register(sessionId, {
-      category: "narrative",
-      source: "source-dense",
-      id: "dense",
-      content: dense,
-    });
+    collector.register(sessionId, makeRegistration("source-dense", "dense", dense));
 
     const consumed = collector.consume(sessionId, 128);
     expect(consumed.entries).toHaveLength(1);
@@ -110,12 +109,7 @@ describe("Context injection collector", () => {
       notes: "x".repeat(200),
     });
 
-    collector.register(sessionId, {
-      category: "narrative",
-      source: "source-structured",
-      id: "structured",
-      content: structured,
-    });
+    collector.register(sessionId, makeRegistration("source-structured", "structured", structured));
 
     const consumed = collector.consume(sessionId, 10);
     expect(consumed.entries).toHaveLength(1);
@@ -127,18 +121,8 @@ describe("Context injection collector", () => {
     const collector = new ContextInjectionCollector();
     const sessionId = "collector-deterministic-tail-stop";
 
-    collector.register(sessionId, {
-      category: "narrative",
-      source: "source-large",
-      id: "large",
-      content: "x".repeat(200),
-    });
-    collector.register(sessionId, {
-      category: "narrative",
-      source: "source-small",
-      id: "small",
-      content: "small-context",
-    });
+    collector.register(sessionId, makeRegistration("source-large", "large", "x".repeat(200)));
+    collector.register(sessionId, makeRegistration("source-small", "small", "small-context"));
 
     const plan = collector.plan(sessionId, 8);
     expect(plan.entries).toHaveLength(1);
@@ -152,18 +136,8 @@ describe("Context injection collector", () => {
     const sessionId = "collector-separator-budget";
     const block = "x".repeat(35);
 
-    collector.register(sessionId, {
-      category: "narrative",
-      source: "source-a",
-      id: "a",
-      content: block,
-    });
-    collector.register(sessionId, {
-      category: "narrative",
-      source: "source-b",
-      id: "b",
-      content: block,
-    });
+    collector.register(sessionId, makeRegistration("source-a", "a", block));
+    collector.register(sessionId, makeRegistration("source-b", "b", block));
 
     const planned = collector.plan(sessionId, 20);
     expect(planned.entries.length).toBeGreaterThan(0);
@@ -174,18 +148,14 @@ describe("Context injection collector", () => {
     const collector = new ContextInjectionCollector();
     const sessionId = "ctx-char-priority";
 
-    collector.register(sessionId, {
-      category: "narrative",
-      source: "brewva.projection-working",
-      id: "projection-working",
-      content: "projection content",
-    });
-    collector.register(sessionId, {
-      category: "narrative",
-      source: "brewva.runtime-status",
-      id: "runtime-status",
-      content: "runtime status content",
-    });
+    collector.register(
+      sessionId,
+      makeRegistration("brewva.projection-working", "projection-working", "projection content"),
+    );
+    collector.register(
+      sessionId,
+      makeRegistration("brewva.runtime-status", "runtime-status", "runtime status content"),
+    );
 
     const planned = collector.plan(sessionId, 10_000);
     expect(planned.entries).toHaveLength(2);
@@ -197,12 +167,10 @@ describe("Context injection collector", () => {
     const collector = new ContextInjectionCollector();
     const sessionId = "ctx-char-commit";
 
-    collector.register(sessionId, {
-      category: "narrative",
-      source: "brewva.runtime-status",
-      id: "runtime-status",
-      content: "fact A",
-    });
+    collector.register(
+      sessionId,
+      makeRegistration("brewva.runtime-status", "runtime-status", "fact A"),
+    );
     const planned = collector.plan(sessionId, 10_000);
     collector.commit(sessionId, planned.consumedKeys);
 
@@ -219,12 +187,10 @@ describe("Context injection collector", () => {
     });
     const sessionId = "ctx-char-source-limit";
 
-    collector.register(sessionId, {
-      category: "narrative",
-      source: "brewva.projection-working",
-      id: "projection-working",
-      content: "x".repeat(5_000),
-    });
+    collector.register(
+      sessionId,
+      makeRegistration("brewva.projection-working", "projection-working", "x".repeat(5_000)),
+    );
     const plan = collector.plan(sessionId, 10_000);
     expect(plan.entries).toHaveLength(1);
     expect(plan.entries[0]?.truncated).toBe(true);

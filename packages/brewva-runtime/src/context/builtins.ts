@@ -59,6 +59,7 @@ function createAgentConstitutionProvider(
   return {
     source: CONTEXT_SOURCES.agentConstitution,
     category: "narrative",
+    budgetClass: "core",
     order: 12,
     collect: (input) => {
       let profile: ReturnType<typeof readAgentConstitutionProfile>;
@@ -95,6 +96,7 @@ function createAgentMemoryProvider(deps: BuiltInContextSourceProviderDeps): Cont
   return {
     source: CONTEXT_SOURCES.agentMemory,
     category: "narrative",
+    budgetClass: "core",
     order: 13,
     collect: (input) => {
       let profile: ReturnType<typeof readAgentMemoryProfile>;
@@ -131,6 +133,7 @@ function createIdentityProvider(deps: BuiltInContextSourceProviderDeps): Context
   return {
     source: CONTEXT_SOURCES.identity,
     category: "narrative",
+    budgetClass: "core",
     order: 10,
     collect: (input) => {
       let profile: ReturnType<typeof readPersonaProfile>;
@@ -168,6 +171,7 @@ function createRuntimeStatusProvider(
   return {
     source: CONTEXT_SOURCES.runtimeStatus,
     category: "narrative",
+    budgetClass: "core",
     order: 20,
     collect: (input) => {
       const toolFailureConfig = deps.kernel.config.infrastructure.toolFailureInjection;
@@ -197,6 +201,7 @@ function createToolOutputDistilledProvider(
   return {
     source: CONTEXT_SOURCES.toolOutputsDistilled,
     category: "narrative",
+    budgetClass: "working",
     order: 30,
     collect: (input) => {
       const distillationConfig = deps.kernel.config.infrastructure.toolOutputDistillationInjection;
@@ -220,6 +225,7 @@ function createTaskStateProvider(deps: BuiltInContextSourceProviderDeps): Contex
   return {
     source: CONTEXT_SOURCES.taskState,
     category: "narrative",
+    budgetClass: "core",
     order: 40,
     collect: (input) => {
       const taskState = deps.kernel.getTaskState(input.sessionId);
@@ -247,6 +253,7 @@ function createProjectionWorkingProvider(
   return {
     source: CONTEXT_SOURCES.projectionWorking,
     category: "narrative",
+    budgetClass: "working",
     order: 50,
     collect: (input) => {
       deps.kernel.projectionEngine.refreshIfNeeded({ sessionId: input.sessionId });

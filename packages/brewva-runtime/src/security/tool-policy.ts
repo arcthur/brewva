@@ -12,7 +12,10 @@ export interface ToolPolicyOptions {
   enforceDeniedEffects: boolean;
   effectAuthorizationMode: "off" | "warn" | "enforce";
   alwaysAllowedTools?: string[];
-  resolveToolGovernanceDescriptor?: (toolName: string) => ToolGovernanceDescriptor | undefined;
+  resolveToolGovernanceDescriptor?: (
+    toolName: string,
+    args?: Record<string, unknown>,
+  ) => ToolGovernanceDescriptor | undefined;
 }
 
 function normalizeToolList(tools: string[]): string[] {
@@ -37,6 +40,7 @@ export function checkToolAccess(
   contract: SkillContract | undefined,
   toolName: string,
   options: ToolPolicyOptions,
+  args?: Record<string, unknown>,
 ): ToolAccessResult {
   if (!contract) return { allowed: true };
 
@@ -49,8 +53,8 @@ export function checkToolAccess(
   }
 
   const descriptor =
-    options.resolveToolGovernanceDescriptor?.(normalized) ??
-    getToolGovernanceDescriptor(normalized);
+    options.resolveToolGovernanceDescriptor?.(normalized, args) ??
+    getToolGovernanceDescriptor(normalized, undefined, args);
   if (!descriptor) {
     const warning = `Tool '${normalized}' is missing effect governance metadata; effect authorization cannot be enforced for it yet.`;
     return { allowed: true, warning };

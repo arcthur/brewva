@@ -127,6 +127,7 @@ Default runtime-owned injected sources:
 
 Hosted sessions additionally register these internal deliberation sources:
 
+- `brewva.narrative-memory`
 - `brewva.deliberation-memory`
 - `brewva.optimization-continuity`
 - `brewva.skill-promotion-drafts`
@@ -142,6 +143,16 @@ Naming note:
 These hosted sources fold existing evidence into reusable context, but they do
 not become kernel authority. Runtime truth, task state, schedule events,
 receipts, and turn durability remain the authoritative replay surfaces.
+
+`brewva.narrative-memory` is distinct from both `brewva.agent-memory` and
+repository precedent under `docs/solutions/**`:
+
+- `brewva.agent-memory` is the operator-authored self bundle
+- `brewva.narrative-memory` is typed, provenance-bearing, non-authoritative
+  collaboration memory
+- repository precedent remains explicit and repository-native through
+  `knowledge_search`, `knowledge_capture`, `precedent_audit`, and
+  `precedent_sweep`
 
 There is no default proposal-backed context source anymore. There is no default
 injected workflow advisory or `workflow_status` context source.
@@ -305,6 +316,8 @@ Hosted-session event boundary notes:
 - hosted sessions do not expose a separate provider-normalization event family;
   durable replay surfaces start at admitted runtime events such as `tool_call`,
   `tool_result_recorded`, and related governance receipts
+- structured events classify operator/control-plane receipts such as
+  `narrative_memory_*` and `semantic_*` under `category=control`
 
 ### `runtime.verification.*`
 

@@ -1356,6 +1356,7 @@ export function createOptimizationContinuityContextProvider(input: {
   return {
     source: CONTEXT_SOURCES.optimizationContinuity,
     category: "narrative",
+    budgetClass: "recall",
     order: 17,
     collect: (providerInput) => {
       const lineages = plane.list({

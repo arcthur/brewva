@@ -66,6 +66,11 @@ helper material, not session-state durability surfaces in the taxonomy above.
   - `memory.md` headings: `Stable Memory`, `Operator Preferences`, `Continuity Notes`
   - runtime renders these into structured narrative context blocks with source provenance
   - these files are operator-editable narrative inputs, not kernel authority
+- Narrative memory store:
+  - `.brewva/deliberation/narrative-memory-state.json`
+  - stores typed, provenance-bearing, non-authoritative narrative memory records
+  - distinct from the operator-authored self bundle and distinct from
+    repository-native precedent under `docs/solutions/**`
 - Heartbeat policy remains separate control-plane material:
   - gateway heartbeat policy: `HEARTBEAT.md`
   - heartbeat is not part of the agent self bundle

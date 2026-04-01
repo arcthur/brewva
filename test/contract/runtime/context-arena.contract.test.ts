@@ -1,23 +1,43 @@
 import { describe, expect, test } from "bun:test";
 import { ContextArena } from "@brewva/brewva-runtime";
 
+function budgetClassForSource(source: string): "core" | "working" | "recall" {
+  switch (source) {
+    case "brewva.projection-working":
+    case "source-b":
+      return "working";
+    case "vendor.reference":
+      return "recall";
+    default:
+      return "core";
+  }
+}
+
+function makeEntry(
+  source: string,
+  id: string,
+  content: string,
+  options: {
+    oncePerSession?: boolean;
+  } = {},
+) {
+  return {
+    category: "narrative" as const,
+    budgetClass: budgetClassForSource(source),
+    source,
+    id,
+    content,
+    oncePerSession: options.oncePerSession,
+  };
+}
+
 describe("ContextArena", () => {
   const sessionId = "context-arena-session";
 
   test("append keeps historical entries (append-only)", () => {
     const arena = new ContextArena();
-    arena.append(sessionId, {
-      category: "narrative",
-      source: "brewva.runtime-status",
-      id: "runtime-status",
-      content: "status v1",
-    });
-    arena.append(sessionId, {
-      category: "narrative",
-      source: "brewva.runtime-status",
-      id: "runtime-status",
-      content: "status v2",
-    });
+    arena.append(sessionId, makeEntry("brewva.runtime-status", "runtime-status", "status v1"));
+    arena.append(sessionId, makeEntry("brewva.runtime-status", "runtime-status", "status v2"));
 
     const snapshot = arena.snapshot(sessionId);
     expect(snapshot.totalAppended).toBe(2);
@@ -26,18 +46,8 @@ describe("ContextArena", () => {
 
   test("plan uses latest value per key (last-write-wins)", () => {
     const arena = new ContextArena();
-    arena.append(sessionId, {
-      category: "narrative",
-      source: "brewva.runtime-status",
-      id: "runtime-status",
-      content: "old status",
-    });
-    arena.append(sessionId, {
-      category: "narrative",
-      source: "brewva.runtime-status",
-      id: "runtime-status",
-      content: "new status",
-    });
+    arena.append(sessionId, makeEntry("brewva.runtime-status", "runtime-status", "old status"));
+    arena.append(sessionId, makeEntry("brewva.runtime-status", "runtime-status", "new status"));
 
     const plan = arena.plan(sessionId, 10_000);
     expect(plan.entries).toHaveLength(1);
@@ -46,24 +56,9 @@ describe("ContextArena", () => {
 
   test("re-registering existing key keeps deterministic key order while updating content", () => {
     const arena = new ContextArena();
-    arena.append(sessionId, {
-      category: "narrative",
-      source: "source-a",
-      id: "same",
-      content: "a-old",
-    });
-    arena.append(sessionId, {
-      category: "narrative",
-      source: "source-b",
-      id: "b",
-      content: "b",
-    });
-    arena.append(sessionId, {
-      category: "narrative",
-      source: "source-a",
-      id: "same",
-      content: "a-new",
-    });
+    arena.append(sessionId, makeEntry("source-a", "same", "a-old"));
+    arena.append(sessionId, makeEntry("source-b", "b", "b"));
+    arena.append(sessionId, makeEntry("source-a", "same", "a-new"));
 
     const plan = arena.plan(sessionId, 10_000);
     expect(plan.entries).toHaveLength(2);
@@ -74,12 +69,7 @@ describe("ContextArena", () => {
 
   test("markPresented keeps stored entries and suppresses next plan", () => {
     const arena = new ContextArena();
-    arena.append(sessionId, {
-      category: "narrative",
-      source: "brewva.runtime-status",
-      id: "runtime-status",
-      content: "fact",
-    });
+    arena.append(sessionId, makeEntry("brewva.runtime-status", "runtime-status", "fact"));
 
     const first = arena.plan(sessionId, 10_000);
     expect(first.entries).toHaveLength(1);
@@ -93,47 +83,29 @@ describe("ContextArena", () => {
 
   test("oncePerSession prevents re-append after presentation", () => {
     const arena = new ContextArena();
-    arena.append(sessionId, {
-      category: "narrative",
-      source: "brewva.identity",
-      id: "identity-1",
-      content: "identity",
-      oncePerSession: true,
-    });
+    arena.append(
+      sessionId,
+      makeEntry("brewva.identity", "identity-1", "identity", { oncePerSession: true }),
+    );
     const first = arena.plan(sessionId, 10_000);
     arena.markPresented(sessionId, first.consumedKeys);
 
-    arena.append(sessionId, {
-      category: "narrative",
-      source: "brewva.identity",
-      id: "identity-1",
-      content: "identity-v2",
-      oncePerSession: true,
-    });
+    arena.append(
+      sessionId,
+      makeEntry("brewva.identity", "identity-1", "identity-v2", { oncePerSession: true }),
+    );
     const second = arena.plan(sessionId, 10_000);
     expect(second.entries).toHaveLength(0);
   });
 
   test("plan preserves deterministic append order", () => {
     const arena = new ContextArena();
-    arena.append(sessionId, {
-      category: "narrative",
-      source: "brewva.projection-working",
-      id: "projection-working",
-      content: "projection",
-    });
-    arena.append(sessionId, {
-      category: "narrative",
-      source: "brewva.runtime-status",
-      id: "runtime-status",
-      content: "status",
-    });
-    arena.append(sessionId, {
-      category: "narrative",
-      source: "brewva.task-state",
-      id: "task-1",
-      content: "task",
-    });
+    arena.append(
+      sessionId,
+      makeEntry("brewva.projection-working", "projection-working", "projection"),
+    );
+    arena.append(sessionId, makeEntry("brewva.runtime-status", "runtime-status", "status"));
+    arena.append(sessionId, makeEntry("brewva.task-state", "task-1", "task"));
 
     const planned = arena.plan(sessionId, 10_000);
     const sources = planned.entries.map((entry) => entry.source);
@@ -146,12 +118,7 @@ describe("ContextArena", () => {
 
   test("clearSession clears the whole session arena", () => {
     const arena = new ContextArena();
-    arena.append(sessionId, {
-      category: "narrative",
-      source: "brewva.runtime-status",
-      id: "runtime-status",
-      content: "fact",
-    });
+    arena.append(sessionId, makeEntry("brewva.runtime-status", "runtime-status", "fact"));
 
     arena.clearSession(sessionId);
     const plan = arena.plan(sessionId, 10_000);
@@ -164,18 +131,11 @@ describe("ContextArena", () => {
     const arena = new ContextArena({
       maxEntriesPerSession: 1,
     });
-    arena.append(sessionId, {
-      category: "narrative",
-      source: "brewva.runtime-status",
-      id: "runtime-status",
-      content: "status",
-    });
-    const dropped = arena.append(sessionId, {
-      category: "narrative",
-      source: "brewva.task-state",
-      id: "task-state",
-      content: "task summary",
-    });
+    arena.append(sessionId, makeEntry("brewva.runtime-status", "runtime-status", "status"));
+    const dropped = arena.append(
+      sessionId,
+      makeEntry("brewva.task-state", "task-state", "task summary"),
+    );
     expect(dropped.accepted).toBe(false);
     expect(dropped.sloEnforced?.dropped).toBe(true);
   });
@@ -186,25 +146,13 @@ describe("ContextArena", () => {
     });
     const fullSessionId = "context-arena-refresh-at-capacity";
 
-    arena.append(fullSessionId, {
-      category: "narrative",
-      source: "brewva.runtime-status",
-      id: "runtime-status",
-      content: "status-v1",
-    });
-    arena.append(fullSessionId, {
-      category: "narrative",
-      source: "brewva.task-state",
-      id: "task-state",
-      content: "task-v1",
-    });
+    arena.append(fullSessionId, makeEntry("brewva.runtime-status", "runtime-status", "status-v1"));
+    arena.append(fullSessionId, makeEntry("brewva.task-state", "task-state", "task-v1"));
 
-    const refreshed = arena.append(fullSessionId, {
-      category: "narrative",
-      source: "brewva.runtime-status",
-      id: "runtime-status",
-      content: "status-v2",
-    });
+    const refreshed = arena.append(
+      fullSessionId,
+      makeEntry("brewva.runtime-status", "runtime-status", "status-v2"),
+    );
     const planned = arena.plan(fullSessionId, 10_000);
 
     expect(refreshed.accepted).toBe(true);
@@ -218,18 +166,14 @@ describe("ContextArena", () => {
     const arena = new ContextArena({
       maxEntriesPerSession: 64,
     });
-    arena.append(snapshotSessionId, {
-      category: "narrative",
-      source: "brewva.runtime-status",
-      id: "runtime-status",
-      content: "t".repeat(2_000),
-    });
-    arena.append(snapshotSessionId, {
-      category: "narrative",
-      source: "vendor.reference",
-      id: "reference-block",
-      content: "r".repeat(800),
-    });
+    arena.append(
+      snapshotSessionId,
+      makeEntry("brewva.runtime-status", "runtime-status", "t".repeat(2_000)),
+    );
+    arena.append(
+      snapshotSessionId,
+      makeEntry("vendor.reference", "reference-block", "r".repeat(800)),
+    );
 
     arena.plan(snapshotSessionId, 421);
     const snapshot = arena.snapshot(snapshotSessionId);
@@ -237,5 +181,48 @@ describe("ContextArena", () => {
     expect(snapshot.totalAppended).toBe(2);
     expect(snapshot.activeKeys).toBe(2);
     expect(snapshot.onceKeys).toBe(0);
+  });
+
+  test("retains core entries before recall entries under budget pressure", () => {
+    const arena = new ContextArena();
+    const budgetSessionId = "context-arena-budget-classes";
+
+    arena.append(
+      budgetSessionId,
+      makeEntry("brewva.runtime-status", "runtime-status", "core status block remains visible"),
+    );
+    arena.append(
+      budgetSessionId,
+      makeEntry(
+        "vendor.reference",
+        "reference",
+        "recall recall recall recall recall recall recall",
+      ),
+    );
+
+    const planned = arena.plan(budgetSessionId, 8);
+    expect(planned.entries.map((entry) => entry.source)).toContain("brewva.runtime-status");
+    expect(planned.entries.map((entry) => entry.source)).not.toContain("vendor.reference");
+  });
+
+  test("preserves later core floors even when recall entries were appended first", () => {
+    const arena = new ContextArena();
+    const budgetSessionId = "context-arena-late-core-floor";
+
+    arena.append(
+      budgetSessionId,
+      makeEntry(
+        "vendor.reference",
+        "reference-early",
+        "reference reference reference reference reference reference reference reference",
+      ),
+    );
+    arena.append(
+      budgetSessionId,
+      makeEntry("brewva.task-state", "task-state", "task state remains visible"),
+    );
+
+    const planned = arena.plan(budgetSessionId, 10);
+    expect(planned.entries.map((entry) => entry.source)).toContain("brewva.task-state");
   });
 });

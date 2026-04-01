@@ -57,6 +57,13 @@ export const SKILL_PROMOTION_DRAFT_DERIVED_EVENT_TYPE = "skill_promotion_draft_d
 export const SKILL_PROMOTION_REVIEWED_EVENT_TYPE = "skill_promotion_reviewed" as const;
 export const SKILL_PROMOTION_PROMOTED_EVENT_TYPE = "skill_promotion_promoted" as const;
 export const SKILL_PROMOTION_MATERIALIZED_EVENT_TYPE = "skill_promotion_materialized" as const;
+export const NARRATIVE_MEMORY_RECORDED_EVENT_TYPE = "narrative_memory_recorded" as const;
+export const NARRATIVE_MEMORY_REVIEWED_EVENT_TYPE = "narrative_memory_reviewed" as const;
+export const NARRATIVE_MEMORY_PROMOTED_EVENT_TYPE = "narrative_memory_promoted" as const;
+export const NARRATIVE_MEMORY_ARCHIVED_EVENT_TYPE = "narrative_memory_archived" as const;
+export const NARRATIVE_MEMORY_FORGOTTEN_EVENT_TYPE = "narrative_memory_forgotten" as const;
+export const SEMANTIC_EXTRACTION_INVOKED_EVENT_TYPE = "semantic_extraction_invoked" as const;
+export const SEMANTIC_RERANK_INVOKED_EVENT_TYPE = "semantic_rerank_invoked" as const;
 export const TOOL_CALL_EVENT_TYPE = "tool_call" as const;
 export const TOOL_CALL_BLOCKED_EVENT_TYPE = "tool_call_blocked" as const;
 export const TOOL_CALL_MARKED_EVENT_TYPE = "tool_call_marked" as const;
@@ -183,6 +190,13 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   SKILL_PROMOTION_REVIEWED_EVENT_TYPE,
   SKILL_PROMOTION_PROMOTED_EVENT_TYPE,
   SKILL_PROMOTION_MATERIALIZED_EVENT_TYPE,
+  NARRATIVE_MEMORY_RECORDED_EVENT_TYPE,
+  NARRATIVE_MEMORY_REVIEWED_EVENT_TYPE,
+  NARRATIVE_MEMORY_PROMOTED_EVENT_TYPE,
+  NARRATIVE_MEMORY_ARCHIVED_EVENT_TYPE,
+  NARRATIVE_MEMORY_FORGOTTEN_EVENT_TYPE,
+  SEMANTIC_EXTRACTION_INVOKED_EVENT_TYPE,
+  SEMANTIC_RERANK_INVOKED_EVENT_TYPE,
   TOOL_CALL_EVENT_TYPE,
   TOOL_CALL_BLOCKED_EVENT_TYPE,
   TOOL_CALL_MARKED_EVENT_TYPE,

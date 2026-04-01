@@ -12,6 +12,7 @@ import { createKnowledgeSearchTool } from "./knowledge-search.js";
 import { createLedgerQueryTool } from "./ledger-query.js";
 import { createLookAtTool } from "./look-at.js";
 import { createLspTools } from "./lsp.js";
+import { createNarrativeMemoryTool } from "./narrative-memory.js";
 import { createObsQueryTool } from "./observability/obs-query.js";
 import { createObsSloAssertTool } from "./observability/obs-slo-assert.js";
 import { createObsSnapshotTool } from "./observability/obs-snapshot.js";
@@ -71,6 +72,7 @@ export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefiniti
     createProcessTool(),
     createCostViewTool({ runtime }),
     createDeliberationMemoryTool({ runtime }),
+    createNarrativeMemoryTool({ runtime }),
     createKnowledgeCaptureTool({ runtime }),
     createKnowledgeSearchTool({ runtime }),
     createPrecedentAuditTool({ runtime }),
@@ -112,6 +114,7 @@ export { createLspTools } from "./lsp.js";
 export { createAstGrepTools } from "./ast-grep.js";
 export { createBrowserTools } from "./browser.js";
 export { createDeliberationMemoryTool } from "./deliberation-memory.js";
+export { createNarrativeMemoryTool } from "./narrative-memory.js";
 export { createKnowledgeCaptureTool } from "./knowledge-capture.js";
 export { createKnowledgeSearchTool } from "./knowledge-search.js";
 export { createPrecedentAuditTool } from "./precedent-audit.js";
@@ -197,6 +200,15 @@ export {
   type BrewvaModelSelection,
   type BrewvaThinkingLevel,
 } from "./model-selection.js";
+export {
+  shouldInvokeSemanticRerank,
+  type BrewvaSemanticOracle,
+  type SemanticOracleCandidate,
+  type SemanticOracleNarrativeExtractionInput,
+  type SemanticOracleNarrativeExtractionResult,
+  type SemanticOracleRerankInput,
+  type SemanticOracleRerankResult,
+} from "./semantic-oracle.js";
 export {
   BASE_BREWVA_TOOL_NAMES,
   BREWVA_TOOL_SURFACE_BY_NAME,

@@ -166,10 +166,19 @@ Current responsibilities:
 - optimization protocol presentation
   - exposes objective iteration facts such as metric observations, guard
     results
-  - may present hosted deliberation artifacts such as memory, optimization
-    continuity, and promotion drafts after kernel admission
+  - may present hosted narrative memory and evidence-backed deliberation
+    artifacts such as optimization continuity and promotion drafts after kernel
+    admission
   - keeps loop strategy and any optional sequencing decisions in the
     model-native layer rather than moving them into kernel authority
+- narrative memory presentation
+  - exposes `narrative_memory` as the explicit inspection and management surface
+    for typed collaboration semantics
+  - keeps `brewva.narrative-memory` distinct from `brewva.agent-memory`
+    self-bundle input and distinct from repository precedent under
+    `docs/solutions/**`
+  - presents provenance-bearing, freshness-aware recall as advisory context
+    instead of as hidden long-term truth
 
 This plane may read kernel state, but it does not mutate kernel state directly.
 

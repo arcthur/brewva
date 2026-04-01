@@ -59,6 +59,7 @@ function registerCustomContextProvider(runtime: BrewvaRuntime): void {
   const provider: ContextSourceProvider = {
     source: "brewva.custom-operator-note",
     category: "constraint",
+    budgetClass: "core",
     order: 55,
     collect: (input) => {
       input.register({
@@ -116,12 +117,37 @@ describe("context source order integration", () => {
       summary: "deterministic truth fact",
     });
     expect(runtime.context.listProviders()).toEqual([
-      { source: CONTEXT_SOURCES.identity, category: "narrative", order: 10 },
-      { source: CONTEXT_SOURCES.agentConstitution, category: "narrative", order: 12 },
-      { source: CONTEXT_SOURCES.agentMemory, category: "narrative", order: 13 },
-      { source: CONTEXT_SOURCES.runtimeStatus, category: "narrative", order: 20 },
-      { source: CONTEXT_SOURCES.taskState, category: "narrative", order: 40 },
-      { source: CONTEXT_SOURCES.projectionWorking, category: "narrative", order: 50 },
+      { source: CONTEXT_SOURCES.identity, category: "narrative", budgetClass: "core", order: 10 },
+      {
+        source: CONTEXT_SOURCES.agentConstitution,
+        category: "narrative",
+        budgetClass: "core",
+        order: 12,
+      },
+      {
+        source: CONTEXT_SOURCES.agentMemory,
+        category: "narrative",
+        budgetClass: "core",
+        order: 13,
+      },
+      {
+        source: CONTEXT_SOURCES.runtimeStatus,
+        category: "narrative",
+        budgetClass: "core",
+        order: 20,
+      },
+      {
+        source: CONTEXT_SOURCES.taskState,
+        category: "narrative",
+        budgetClass: "core",
+        order: 40,
+      },
+      {
+        source: CONTEXT_SOURCES.projectionWorking,
+        category: "narrative",
+        budgetClass: "working",
+        order: 50,
+      },
     ]);
 
     const injected = await runtime.context.buildInjection(
@@ -188,6 +214,7 @@ describe("context source order integration", () => {
       {
         source: "brewva.custom-operator-note",
         category: "constraint",
+        budgetClass: "core",
         order: 55,
       },
     );
@@ -264,13 +291,43 @@ describe("context source order integration", () => {
     });
 
     expect(runtime.context.listProviders()).toEqual([
-      { source: CONTEXT_SOURCES.identity, category: "narrative", order: 10 },
-      { source: CONTEXT_SOURCES.agentConstitution, category: "narrative", order: 12 },
-      { source: CONTEXT_SOURCES.agentMemory, category: "narrative", order: 13 },
-      { source: CONTEXT_SOURCES.runtimeStatus, category: "narrative", order: 20 },
-      { source: CONTEXT_SOURCES.toolOutputsDistilled, category: "narrative", order: 30 },
-      { source: CONTEXT_SOURCES.taskState, category: "narrative", order: 40 },
-      { source: CONTEXT_SOURCES.projectionWorking, category: "narrative", order: 50 },
+      { source: CONTEXT_SOURCES.identity, category: "narrative", budgetClass: "core", order: 10 },
+      {
+        source: CONTEXT_SOURCES.agentConstitution,
+        category: "narrative",
+        budgetClass: "core",
+        order: 12,
+      },
+      {
+        source: CONTEXT_SOURCES.agentMemory,
+        category: "narrative",
+        budgetClass: "core",
+        order: 13,
+      },
+      {
+        source: CONTEXT_SOURCES.runtimeStatus,
+        category: "narrative",
+        budgetClass: "core",
+        order: 20,
+      },
+      {
+        source: CONTEXT_SOURCES.toolOutputsDistilled,
+        category: "narrative",
+        budgetClass: "working",
+        order: 30,
+      },
+      {
+        source: CONTEXT_SOURCES.taskState,
+        category: "narrative",
+        budgetClass: "core",
+        order: 40,
+      },
+      {
+        source: CONTEXT_SOURCES.projectionWorking,
+        category: "narrative",
+        budgetClass: "working",
+        order: 50,
+      },
     ]);
   });
 });

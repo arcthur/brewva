@@ -1,9 +1,10 @@
 import { ContextArena } from "./arena.js";
-import type { ContextInjectionCategory } from "./sources.js";
+import type { ContextInjectionBudgetClass, ContextInjectionCategory } from "./sources.js";
 
 export interface RegisterContextInjectionInput {
   source: string;
   category: ContextInjectionCategory;
+  budgetClass: ContextInjectionBudgetClass;
   id: string;
   content: string;
   estimatedTokens?: number;
@@ -13,6 +14,7 @@ export interface RegisterContextInjectionInput {
 export interface ContextInjectionEntry {
   source: string;
   category: ContextInjectionCategory;
+  budgetClass: ContextInjectionBudgetClass;
   id: string;
   content: string;
   estimatedTokens: number;

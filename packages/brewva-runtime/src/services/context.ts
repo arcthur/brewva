@@ -346,6 +346,7 @@ export class ContextService {
     input: {
       source: string;
       category: ContextInjectionEntry["category"];
+      budgetClass: ContextInjectionEntry["budgetClass"];
       id: string;
       content: string;
       estimatedTokens?: number;

@@ -56,6 +56,7 @@ import type {
   PendingEffectCommitmentRequest,
   ToolExecutionBoundary,
   ToolGovernanceDescriptor,
+  ToolGovernanceResolver,
   ToolMutationReceipt,
   ToolMutationRollbackResult,
   SkillDocument,
@@ -314,7 +315,11 @@ export class BrewvaRuntime {
     ): void;
   };
   declare readonly tools: {
-    checkAccess(sessionId: string, toolName: string): { allowed: boolean; reason?: string };
+    checkAccess(
+      sessionId: string,
+      toolName: string,
+      args?: Record<string, unknown>,
+    ): { allowed: boolean; reason?: string };
     explainAccess(input: {
       sessionId: string;
       toolName: string;
@@ -326,8 +331,12 @@ export class BrewvaRuntime {
       reason?: string;
       warning?: string;
     };
-    getGovernanceDescriptor(toolName: string): ToolGovernanceDescriptor | undefined;
+    getGovernanceDescriptor(
+      toolName: string,
+      args?: Record<string, unknown>,
+    ): ToolGovernanceDescriptor | undefined;
     registerGovernanceDescriptor(toolName: string, input: ToolGovernanceDescriptor): void;
+    registerGovernanceResolver(toolName: string, resolver: ToolGovernanceResolver): void;
     unregisterGovernanceDescriptor(toolName: string): void;
     start(input: {
       sessionId: string;
@@ -708,8 +717,8 @@ export class BrewvaRuntime {
         projectionEngine: this.projectionEngine,
       },
       sessionState: this.sessionState,
-      resolveToolAuthority: (toolName) =>
-        resolveToolAuthority(toolName, this.toolGovernanceRegistry),
+      resolveToolAuthority: (toolName, args) =>
+        resolveToolAuthority(toolName, this.toolGovernanceRegistry, args),
       resolveCheckpointCostSummary: (sessionId) => this.resolveCheckpointCostSummary(sessionId),
       resolveCheckpointCostSkillLastTurnByName: (sessionId) =>
         this.resolveCheckpointCostSkillLastTurnByName(sessionId),
@@ -824,8 +833,8 @@ export class BrewvaRuntime {
           this.contextService.markContextCompacted(sessionId, input),
       },
       tools: {
-        checkAccess: (sessionId, toolName) =>
-          this.toolGateService.checkToolAccess(sessionId, toolName),
+        checkAccess: (sessionId, toolName, args) =>
+          this.toolGateService.checkToolAccess(sessionId, toolName, args),
         explainAccess: (input) => {
           const access = this.toolGateService.explainToolAccessWithArgs(
             input.sessionId,
@@ -858,9 +867,12 @@ export class BrewvaRuntime {
             ? { allowed: true, warning: warnings.join("; ") }
             : { allowed: true };
         },
-        getGovernanceDescriptor: (toolName) => this.toolGovernanceRegistry.get(toolName),
+        getGovernanceDescriptor: (toolName, args) =>
+          this.toolGovernanceRegistry.get(toolName, args),
         registerGovernanceDescriptor: (toolName, input) =>
           this.toolGovernanceRegistry.register(toolName, input),
+        registerGovernanceResolver: (toolName, resolver) =>
+          this.toolGovernanceRegistry.registerResolver(toolName, resolver),
         unregisterGovernanceDescriptor: (toolName) =>
           this.toolGovernanceRegistry.unregister(toolName),
         start: (input) => this.toolInvocationSpine.begin(input),

@@ -2,7 +2,12 @@ import {
   createHostedTurnPipeline,
   registerContextTransform,
 } from "@brewva/brewva-gateway/runtime-plugins";
-import { CONTEXT_SOURCES, type ContextInjectionEntry } from "@brewva/brewva-runtime";
+import {
+  CONTEXT_SOURCES,
+  CONTEXT_SOURCE_BUDGET_CLASSES,
+  type ContextInjectionBudgetClass,
+  type ContextInjectionEntry,
+} from "@brewva/brewva-runtime";
 import {
   createMockRuntimePluginApi,
   invokeHandler,
@@ -28,9 +33,15 @@ export function makeInjectedEntry(
   id: string,
   content: string,
   estimatedTokens = 8,
+  budgetClass?: ContextInjectionBudgetClass,
 ): ContextInjectionEntry {
+  const resolvedBudgetClass =
+    budgetClass ??
+    (CONTEXT_SOURCE_BUDGET_CLASSES as Record<string, ContextInjectionBudgetClass>)[source] ??
+    "core";
   return {
     category: "narrative",
+    budgetClass: resolvedBudgetClass,
     source,
     id,
     content,
