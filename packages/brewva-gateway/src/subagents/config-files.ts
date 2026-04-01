@@ -12,6 +12,7 @@ import { parse as parseYaml } from "yaml";
 export type HostedDelegationBuiltinToolName = "read" | "edit" | "write";
 export type HostedWorkspaceSubagentConfigKind = "envelope" | "agentSpec";
 export type HostedWorkspaceSubagentConfigSource = "json" | "markdown";
+export type HostedContextProfile = "minimal" | "standard" | "full";
 
 interface ParsedFrontmatter {
   body: string;
@@ -67,12 +68,17 @@ export function asManagedToolMode(value: unknown): ManagedToolMode | undefined {
 }
 
 export function asResultMode(value: unknown): SubagentResultMode | undefined {
-  return value === "exploration" ||
-    value === "review" ||
-    value === "verification" ||
-    value === "patch"
+  return value === "exploration" || value === "review" || value === "qa" || value === "patch"
     ? value
     : undefined;
+}
+
+export function asBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+export function asContextProfile(value: unknown): HostedContextProfile | undefined {
+  return value === "minimal" || value === "standard" || value === "full" ? value : undefined;
 }
 
 export function asContextBudget(value: unknown): SubagentContextBudget | undefined {

@@ -131,8 +131,14 @@ Tool registry source: `packages/brewva-tools/src/index.ts`
   handoff artifacts before non-trivial design or review
 - `knowledge-capture` orchestrates terminal repository precedent capture and
   should prefer `knowledge_capture` for the actual canonical write-back path
-- built-in read-only agent specs are `explore`, `plan`, `review`, `general`,
-  and `verification`
+- built-in public agent specs are `explore`, `plan`, `review`, `qa`, and
+  `patch-worker`
+- `explore`, `plan`, and `review` stay read-only; `qa` is executable but
+  parent-source-non-mutating, and `patch-worker` remains the isolated patch
+  executor
+- `qa` is adversarial by contract: a stable `pass` requires evidence-backed
+  executed checks, at least one adversarial probe, and no unresolved evidence
+  gaps
 - built-in review-lane delegates for internal fan-out are
   `review-correctness`, `review-boundaries`, `review-operability`,
   `review-security`, `review-concurrency`, `review-compatibility`, and

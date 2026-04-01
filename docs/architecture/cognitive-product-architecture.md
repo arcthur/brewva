@@ -147,6 +147,9 @@ Current responsibilities:
     `boundary`, optional model and managed-tool hints)
   - keeps named profiles as stable presets rather than the primary
     orchestration contract
+  - presents the stable public specialist surface (`explore`, `plan`, `review`,
+    `qa`, `patch-worker`) while keeping internal review lanes behind the single
+    public `review` boundary
   - nudges model-native delegation for cross-file exploration and independent
     review without introducing a planner
 - workflow inspection presentation
@@ -157,6 +160,7 @@ Current responsibilities:
   - stays explicit and advisory-only instead of turning product UX into a hidden planner
 - closure presentation
   - keeps verification and acceptance separate
+  - keeps delegated executable QA separate from `runtime.verification.*`
   - exposes acceptance as an operator-visible closure posture rather than a
     model self-approval path
 - optimization protocol presentation

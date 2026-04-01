@@ -37,7 +37,7 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 
 ## Proposed notes
 
-None right now.
+- None currently.
 
 ## Active notes
 
@@ -45,6 +45,7 @@ None right now.
 
 ## Promoted notes (status pointers)
 
+- `docs/research/rfc-specialist-subagents-and-adversarial-verification.md`
 - `docs/research/rfc-architecture-doc-precision-review.md`
 - `docs/research/rfc-boundary-first-subtraction-and-model-native-recovery.md`
 - `docs/research/rfc-boundary-policy-credential-vault-and-loop-guard.md`

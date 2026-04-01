@@ -32,8 +32,8 @@ separate.
   - boundary, model/tool surface narrowing, and runtime budgets
 - `agent spec`
   - named delegated worker configuration
-  - composes a default `skillName` with an envelope and an optional thin
-    executor preamble
+  - composes a default `skillName` with an envelope and authored specialist
+    instructions
 
 Current rules:
 
@@ -47,8 +47,14 @@ Current rules:
   contract after the child returns
 - the parent session remains the authority that owns active skill state,
   completion, and patch adoption
+- the stable built-in public specialist surface is `explore`, `plan`, `review`,
+  `qa`, and `patch-worker`; internal review lanes remain internal fan-out
+  helpers rather than public taxonomy
 - patch-producing child runs return `WorkerResult` / patch artifacts for the
   parent-controlled `worker_results_merge` -> `worker_results_apply` flow
+- delegated QA runs do not produce `WorkerResult`; they persist canonical
+  `QaSubagentOutcomeData` in delegated outcome data, while mirrored
+  `skillOutputs.qa_*` remain lifecycle-facing projections
 
 ## Contract Metadata
 
@@ -183,7 +189,8 @@ Current derived workflow artifact sources include:
 - `execution_plan` -> `workflow.execution_plan`
 - `change_set` / `files_changed` and write markers -> `workflow.implementation`
 - `review_report` / `review_findings` / `merge_decision` -> `workflow.review`
-- `qa_report` / `qa_findings` / `qa_verdict` -> `workflow.qa`
+- delegated `QaSubagentOutcomeData` plus mirrored `qa_report` /
+  `qa_findings` / `qa_verdict` / `qa_checks` -> `workflow.qa`
 - verification outcomes -> `workflow.verification`
 - `ship_report` / `release_checklist` / `ship_decision` -> `workflow.ship`
 - `retro_summary` / `retro_findings` / `followup_recommendation` -> `workflow.retro`
@@ -278,6 +285,34 @@ plans, verification evidence, and concrete stop or handoff conditions.
 delegation tools and existing built-in agent specs / envelopes to generate
 competing hypotheses, but it does not create runtime authority or bypass
 verification.
+
+Default delegated routing is intentionally narrower than the public skill list:
+
+- `repository-analysis -> explore`
+- `discovery -> explore`
+- `design -> plan`
+- `review -> review`
+- `qa -> qa`
+- `implementation -> patch-worker`
+- other delegated skills stay explicit-only unless a stable public mapping is
+  documented
+
+Two stable contract reminders matter for downstream delegation and workflow
+posture:
+
+- `design` is expected to emit `implementation_targets` as concrete execution
+  anchors, not only abstract planning prose
+- `qa_verdict = "pass"` requires executable evidence, at least one adversarial
+  probe, and no unresolved missing evidence, confidence gaps, or environment
+  limits; canonical QA outcome data preserves `pass`, `fail`, and
+  `inconclusive` rather than flattening them into prose
+- every `qa_check` must preserve how the check was executed and what was
+  actually observed; command-based checks carry `command`, `exitCode`, and
+  `observedOutput`, while tool-driven checks carry `tool` and
+  `observedOutput`; `artifactRefs` are supplemental replay evidence
+- `review-operability` is the internal evidence-audit lane for rollback posture,
+  missing probes, stale evidence, and operator burden; it is not a second QA
+  executor
 
 ## Hidden-By-Default Skills
 

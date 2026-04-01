@@ -69,6 +69,7 @@ export interface HostedSubagentSessionOptions {
   builtinToolNames?: readonly HostedDelegationBuiltinToolName[];
   managedToolNames?: readonly string[];
   managedToolMode?: ManagedToolMode;
+  contextProfile?: "minimal" | "standard" | "full";
   enableSubagents?: boolean;
   orchestration?: BrewvaToolOrchestration;
 }
@@ -710,6 +711,7 @@ export function createHostedSubagentAdapter(
           builtinToolNames: executionPlan.builtinToolNames,
           managedToolNames: executionPlan.managedToolNames,
           managedToolMode: executionPlan.managedToolMode,
+          contextProfile: executionPlan.contextProfile,
           enableSubagents: false,
         });
 
@@ -828,20 +830,21 @@ export function createHostedSubagentAdapter(
           structuredOutcome.narrativeText || output.assistantText,
           fallbackSummary,
         );
-        const patches = await captureIsolatedPatchSet(
-          options.runtime.workspaceRoot,
-          isolatedWorkspace,
-          summary,
-          childSessionId,
-        );
-        const workerResult =
-          executionPlan.boundary === "effectful"
-            ? buildWorkerResult({
-                workerId: runId,
-                summary,
-                patches,
-              })
-            : undefined;
+        const patches = executionPlan.producesPatches
+          ? await captureIsolatedPatchSet(
+              options.runtime.workspaceRoot,
+              isolatedWorkspace,
+              summary,
+              childSessionId,
+            )
+          : undefined;
+        const workerResult = executionPlan.producesPatches
+          ? buildWorkerResult({
+              workerId: runId,
+              summary,
+              patches,
+            })
+          : undefined;
         if (workerResult) {
           options.runtime.session.recordWorkerResult(input.parentSessionId, workerResult);
           parallelSlotReleased = true;
@@ -970,7 +973,7 @@ export function createHostedSubagentAdapter(
           childCostAggregated = true;
         }
         let workerResult: WorkerResult | undefined;
-        if (executionPlan.boundary === "effectful") {
+        if (executionPlan.producesPatches) {
           const patches = await captureIsolatedPatchSet(
             options.runtime.workspaceRoot,
             isolatedWorkspace,

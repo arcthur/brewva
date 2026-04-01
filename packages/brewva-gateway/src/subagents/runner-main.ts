@@ -252,6 +252,7 @@ async function main(): Promise<void> {
       enableSubagents: false,
       managedToolNames: executionPlan.managedToolNames,
       builtinToolNames: executionPlan.builtinToolNames,
+      contextProfile: executionPlan.contextProfile,
       routingScopes: normalizeRoutingScopes(spec.routingScopes),
     });
     childSessionId = childSession.session.sessionManager.getSessionId();
@@ -388,20 +389,22 @@ async function main(): Promise<void> {
       structuredSummary ??
         `Delegated ${targetRecord.resultMode} run completed without a final assistant summary.`,
     );
-    const patches = await capturePatchSetFromIsolatedWorkspace({
-      sourceRoot: spec.workspaceRoot,
-      isolatedRoot: isolatedWorkspace?.root ?? spec.workspaceRoot,
-      summary,
-      candidatePaths:
-        isolatedWorkspace && childSessionId
-          ? collectChangedPathsFromIsolatedWorkspace({
-              isolatedRoot: isolatedWorkspace.root,
-              childSessionId,
-            })
-          : undefined,
-    });
+    const patches = executionPlan.producesPatches
+      ? await capturePatchSetFromIsolatedWorkspace({
+          sourceRoot: spec.workspaceRoot,
+          isolatedRoot: isolatedWorkspace?.root ?? spec.workspaceRoot,
+          summary,
+          candidatePaths:
+            isolatedWorkspace && childSessionId
+              ? collectChangedPathsFromIsolatedWorkspace({
+                  isolatedRoot: isolatedWorkspace.root,
+                  childSessionId,
+                })
+              : undefined,
+        })
+      : undefined;
 
-    if (executionPlan.boundary === "effectful") {
+    if (executionPlan.producesPatches) {
       parentRuntime.session.recordWorkerResult(
         spec.parentSessionId,
         buildWorkerResult({
@@ -495,18 +498,20 @@ async function main(): Promise<void> {
     writeDetachedSubagentOutcome(spec.workspaceRoot, spec.runId, outcome);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const patches = await capturePatchSetFromIsolatedWorkspace({
-      sourceRoot: spec.workspaceRoot,
-      isolatedRoot: isolatedWorkspace?.root ?? spec.workspaceRoot,
-      summary: message,
-      candidatePaths:
-        isolatedWorkspace && childSessionId
-          ? collectChangedPathsFromIsolatedWorkspace({
-              isolatedRoot: isolatedWorkspace.root,
-              childSessionId,
-            })
-          : undefined,
-    }).catch(() => undefined);
+    const patches = executionPlan.producesPatches
+      ? await capturePatchSetFromIsolatedWorkspace({
+          sourceRoot: spec.workspaceRoot,
+          isolatedRoot: isolatedWorkspace?.root ?? spec.workspaceRoot,
+          summary: message,
+          candidatePaths:
+            isolatedWorkspace && childSessionId
+              ? collectChangedPathsFromIsolatedWorkspace({
+                  isolatedRoot: isolatedWorkspace.root,
+                  childSessionId,
+                })
+              : undefined,
+        }).catch(() => undefined)
+      : undefined;
     const artifactRefs = [
       ...(buildPatchArtifactRefs(patches) ?? []),
       buildOutcomeArtifactRef(spec.workspaceRoot, spec.runId),
@@ -516,7 +521,7 @@ async function main(): Promise<void> {
       : cancellationReason
         ? "cancelled"
         : "failed";
-    if (executionPlan.boundary === "effectful") {
+    if (executionPlan.producesPatches) {
       parentRuntime.session.recordWorkerResult(
         spec.parentSessionId,
         buildWorkerResult({

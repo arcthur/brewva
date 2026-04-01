@@ -63,6 +63,9 @@ flowchart TD
    than from the live hosted stream.
 5. `--undo` resolves the target session, restores the latest tracked `PatchSet`,
    and resets verification state.
+6. Delegated inspect surfaces now reflect the canonical specialist cutover:
+   public delegated outcomes are `exploration`, `review`, `qa`, or `patch`,
+   while kernel `runtime.verification.*` remains a separate replayed authority.
 
 ## Execution Semantics
 
@@ -75,6 +78,9 @@ flowchart TD
 - `inspect` layers deterministic directory-scoped analysis on top of replayed
   state, so it serves both as a recovery entrypoint and as a code-review
   entrypoint
+- replay preserves historical delegated outcome vocabulary where necessary for
+  correctness; new-request contract cleanup does not retroactively rewrite old
+  child-run evidence
 - hydration and integrity are distinct views:
   - hydration reports whether replay successfully rebuilt session-local state
   - integrity reports unified durability health across tape, WAL, and artifacts

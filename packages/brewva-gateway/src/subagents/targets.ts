@@ -5,7 +5,7 @@ import type {
   SubagentExecutionBoundary,
   SubagentResultMode,
 } from "@brewva/brewva-tools";
-import type { HostedDelegationBuiltinToolName } from "./config-files.js";
+import type { HostedContextProfile, HostedDelegationBuiltinToolName } from "./config-files.js";
 
 export type { HostedDelegationBuiltinToolName } from "./config-files.js";
 
@@ -25,6 +25,8 @@ export interface HostedDelegationTarget {
   managedToolNames?: string[];
   defaultContextBudget?: SubagentContextBudget;
   managedToolMode?: ManagedToolMode;
+  producesPatches: boolean;
+  contextProfile: HostedContextProfile;
 }
 
 export function mergeDelegationPacketWithTargetDefaults(

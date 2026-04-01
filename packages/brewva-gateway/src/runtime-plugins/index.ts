@@ -37,6 +37,7 @@ export interface CreateHostedTurnPipelineOptions extends BrewvaRuntimeOptions {
   orchestration?: BrewvaToolOrchestration;
   delegationStore?: HostedDelegationStore;
   managedToolNames?: readonly string[];
+  contextProfile?: "minimal" | "standard" | "full";
   ports?: readonly TurnLifecyclePort[];
 }
 
@@ -89,6 +90,7 @@ function registerHostedPipeline(
   tools: ReturnType<typeof buildBrewvaTools>,
   registerTools: boolean,
   delegationStore: HostedDelegationStore | undefined,
+  contextProfile: "minimal" | "standard" | "full" | undefined,
   userPorts: readonly TurnLifecyclePort[],
 ): void {
   const toolDefinitionsByName = new Map(tools.map((tool) => [tool.name, tool] as const));
@@ -96,6 +98,7 @@ function registerHostedPipeline(
   const contextTransform = createContextTransformLifecycle(runtimePluginApi, runtime, {
     delegationStore,
     turnClock,
+    contextProfile,
   });
   const deliberationMaintenance = createDeliberationMaintenanceLifecycle(runtime);
   const qualityGate = createQualityGateLifecycle(runtime, {
@@ -165,6 +168,7 @@ export function createHostedTurnPipeline(
       allTools,
       registerTools,
       options.delegationStore,
+      options.contextProfile,
       options.ports ?? [],
     );
   };

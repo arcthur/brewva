@@ -174,11 +174,11 @@ const ROUTING_POLICIES: readonly DelegationRoutingPolicy[] = [
   },
   {
     id: "review-and-verification",
-    reason: "Review and verification work should bias toward higher-fidelity reasoning.",
+    reason: "Review and QA work should bias toward higher-fidelity reasoning.",
     candidateModels: ["openai/gpt-5.4:medium", "openai/gpt-5.4-mini:medium"],
     score({ target, effectiveSkillName }) {
       return target.resultMode === "review" ||
-        target.resultMode === "verification" ||
+        target.resultMode === "qa" ||
         effectiveSkillName === "review" ||
         effectiveSkillName === "qa"
         ? 8

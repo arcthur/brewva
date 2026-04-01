@@ -54,10 +54,12 @@ const AVAILABLE_MODELS: RegisteredModel[] = [
 
 function makeTarget(overrides: Partial<HostedDelegationTarget> = {}): HostedDelegationTarget {
   return {
-    name: "general",
-    description: "General delegate",
+    name: "explore",
+    description: "Repository scout",
     resultMode: "exploration",
     boundary: "safe",
+    producesPatches: false,
+    contextProfile: "minimal",
     ...overrides,
   };
 }

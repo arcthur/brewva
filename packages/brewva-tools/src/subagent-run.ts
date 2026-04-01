@@ -41,12 +41,9 @@ const WaitModeSchema = buildStringEnumSchema(SUBAGENT_WAIT_MODE_VALUES, {
     "Use completion to wait for delegated results in the current turn, or start to launch background delegation and inspect it later with subagent_status/subagent_cancel.",
 });
 
-const ResultModeSchema = buildStringEnumSchema(
-  ["exploration", "review", "verification", "patch"] as const,
-  {
-    guidance: "Choose the delegated result contract the child must satisfy.",
-  },
-);
+const ResultModeSchema = buildStringEnumSchema(["exploration", "review", "qa", "patch"] as const, {
+  guidance: "Choose the delegated result contract the child must satisfy.",
+});
 
 const ManagedToolModeSchema = buildStringEnumSchema(["direct", "runtime_plugin"] as const, {
   guidance: "Direct is default. Runtime plugin mode may only narrow within the chosen preset.",
@@ -366,7 +363,7 @@ function buildExecutionShape(
   const resultMode =
     value.resultMode === "exploration" ||
     value.resultMode === "review" ||
-    value.resultMode === "verification" ||
+    value.resultMode === "qa" ||
     value.resultMode === "patch"
       ? value.resultMode
       : undefined;
@@ -591,7 +588,7 @@ function resolveDelegationLabel(
     request.skillName ??
     request.executionShape?.resultMode ??
     request.fallbackResultMode ??
-    "general"
+    "ad-hoc"
   );
 }
 
@@ -607,7 +604,7 @@ function buildRunRequestFromParams(input: {
   const fallbackResultMode =
     params.fallbackResultMode === "exploration" ||
     params.fallbackResultMode === "review" ||
-    params.fallbackResultMode === "verification" ||
+    params.fallbackResultMode === "qa" ||
     params.fallbackResultMode === "patch"
       ? params.fallbackResultMode
       : undefined;
@@ -764,9 +761,9 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
     description:
       "Delegate a bounded task to an isolated worker configuration and return structured results.",
     promptSnippet:
-      "Use isolated delegated runs for focused exploration, review, or verification without polluting the main context window.",
+      "Use isolated delegated runs for focused exploration, review, QA, or patch work without polluting the main context window.",
     promptGuidelines: [
-      "Prefer canonical agent specs explore, plan, review, and general for the default delegated posture.",
+      "Prefer canonical agent specs explore, plan, review, qa, and patch-worker for the default delegated posture.",
       "Delegate when the task needs cross-3+-file investigation, an independent review pass, or parallel slice exploration.",
       "Use single for one delegated run and parallel to fan out multiple independent slices.",
       "Use agentSpec for named reusable workers, envelope for runtime posture, and skillName for explicit semantic contracts.",
@@ -827,9 +824,9 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
     description:
       "Launch multiple isolated delegated runs under one worker configuration for independent slices of work.",
     promptSnippet:
-      "Use this for explicit fan-out when several repository slices or verification lanes can run independently under the same delegated setup.",
+      "Use this for explicit fan-out when several repository slices or QA/review lanes can run independently under the same delegated setup.",
     promptGuidelines: [
-      "Prefer canonical agent specs explore, plan, review, and general unless a narrower internal worker is explicitly required.",
+      "Prefer canonical agent specs explore, plan, review, qa, and patch-worker unless a narrower internal worker is explicitly required.",
       "Use this when tasks are independent and a shared packet plus per-task objectives is clearer than one large delegated run.",
       "Keep each task label and objective specific so the parent can inspect outcomes separately.",
       "Prefer read-only envelopes unless the workflow is explicitly ready to inspect and merge isolated patch results.",

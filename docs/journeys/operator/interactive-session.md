@@ -75,6 +75,11 @@ flowchart TD
 - `skill_complete` closes only when required outputs are valid, verification
   passes or the session is read-only, and the completion guard has not surfaced
   a new hard blocker
+- delegated `qa` remains separate from `runtime.verification.*`: QA provides
+  executable break-it evidence, while the runtime verification gate decides
+  whether the session has sufficient fresh evidence to complete
+- canonical QA outcome data preserves `pass`, `fail`, and `inconclusive`
+  instead of flattening inconclusive validation into failure
 - verification freshness is evaluated against the latest
   `verification_write_marked` boundary, not against any historical passing run
 

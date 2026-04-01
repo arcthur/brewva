@@ -17,6 +17,7 @@ export interface ContextTransformOptions {
   autoCompactionWatchdogMs?: number;
   delegationStore?: HostedDelegationStore;
   turnClock?: RuntimeTurnClockStore;
+  contextProfile?: "minimal" | "standard" | "full";
 }
 
 export interface ContextTransformLifecycle {
@@ -87,6 +88,7 @@ export function createContextTransformLifecycle(
     compactionController,
     {
       delegationStore: options.delegationStore,
+      contextProfile: options.contextProfile,
     },
   );
 

@@ -13,6 +13,7 @@ export interface BuildContextInjectionInput {
   prompt: string;
   usage?: ContextBudgetUsage;
   injectionScopeId?: string;
+  sourceAllowlist?: ReadonlySet<string>;
 }
 
 export interface BuildContextInjectionResult {
@@ -76,6 +77,7 @@ export function buildContextInjection(
     promptText,
     usage: input.usage,
     injectionScopeId: input.injectionScopeId,
+    sourceAllowlist: input.sourceAllowlist,
     register: (registration) => deps.registerContextInjection(input.sessionId, registration),
   });
 

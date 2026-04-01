@@ -173,6 +173,167 @@ function validateOutputContract(
   }
 }
 
+function readStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const items = value
+    .map((entry) => normalizeText(entry))
+    .filter((entry): entry is string => entry !== null);
+  return items;
+}
+
+function isQaCheckRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    isRecord(value) && normalizeText(value.name) !== null && normalizeText(value.result) !== null
+  );
+}
+
+function hasExecutableQaEvidence(check: Record<string, unknown>): boolean {
+  return normalizeText(check.command) !== null || normalizeText(check.tool) !== null;
+}
+
+function hasQaExecutionDescriptor(check: Record<string, unknown>): boolean {
+  return normalizeText(check.command) !== null || normalizeText(check.tool) !== null;
+}
+
+function hasQaObservedEvidence(check: Record<string, unknown>): boolean {
+  return normalizeText(check.observedOutput) !== null;
+}
+
+function hasQaExitCodeWhenCommanded(check: Record<string, unknown>): boolean {
+  if (normalizeText(check.command) === null) {
+    return true;
+  }
+  return typeof check.exitCode === "number" && Number.isFinite(check.exitCode);
+}
+
+function isAdversarialQaProbeType(value: unknown): boolean {
+  const probeType = normalizeText(value)?.toLowerCase();
+  if (!probeType) {
+    return false;
+  }
+  return (
+    probeType === "adversarial" ||
+    probeType === "boundary" ||
+    probeType === "edge" ||
+    probeType === "negative" ||
+    probeType === "concurrency" ||
+    probeType === "idempotency" ||
+    probeType === "orphan" ||
+    probeType === "race" ||
+    probeType === "stress" ||
+    probeType === "fuzz"
+  );
+}
+
+function validateQaSemanticOutputs(
+  outputs: Record<string, unknown>,
+): Array<{ name: string; reason: string }> {
+  const verdict = normalizeText(outputs.qa_verdict)?.toLowerCase();
+  if (verdict !== "pass" && verdict !== "fail" && verdict !== "inconclusive") {
+    return [];
+  }
+
+  if (!Array.isArray(outputs.qa_checks)) {
+    return [];
+  }
+  const checks = outputs.qa_checks.filter(isQaCheckRecord);
+  if (checks.length === 0) {
+    return [];
+  }
+
+  const failedChecks = checks.filter(
+    (check) => normalizeText(check.result)?.toLowerCase() === "fail",
+  );
+  const inconclusiveChecks = checks.filter(
+    (check) => normalizeText(check.result)?.toLowerCase() === "inconclusive",
+  );
+  const hasExecutableEvidence = checks.some(hasExecutableQaEvidence);
+  const hasAdversarialProbe = checks.some((check) => isAdversarialQaProbeType(check.probeType));
+  const invalidChecks = checks.flatMap((check, index) => {
+    const issues: Array<{ name: string; reason: string }> = [];
+    if (!hasQaExecutionDescriptor(check)) {
+      issues.push({
+        name: `qa_checks[${index}]`,
+        reason: "qa_check requires a command or tool descriptor",
+      });
+    }
+    if (!hasQaObservedEvidence(check)) {
+      issues.push({
+        name: `qa_checks[${index}]`,
+        reason: "qa_check requires observedOutput",
+      });
+    }
+    if (!hasQaExitCodeWhenCommanded(check)) {
+      issues.push({
+        name: `qa_checks[${index}]`,
+        reason: "qa_check with a command requires exitCode",
+      });
+    }
+    return issues;
+  });
+  const missingEvidence = readStringArray(outputs.qa_missing_evidence);
+  const confidenceGaps = readStringArray(outputs.qa_confidence_gaps);
+  const environmentLimits = readStringArray(outputs.qa_environment_limits);
+  const evidenceBackedFailedChecks = failedChecks.filter(
+    (check) =>
+      hasQaExecutionDescriptor(check) &&
+      hasQaObservedEvidence(check) &&
+      hasQaExitCodeWhenCommanded(check),
+  );
+
+  if (invalidChecks.length > 0) {
+    return invalidChecks;
+  }
+
+  if (verdict === "pass") {
+    const blockers: string[] = [];
+    if (!hasExecutableEvidence) {
+      blockers.push("pass verdict requires at least one executable QA check");
+    }
+    if (!hasAdversarialProbe) {
+      blockers.push("pass verdict requires at least one adversarial QA probe");
+    }
+    if (failedChecks.length > 0) {
+      blockers.push("pass verdict cannot coexist with failed qa_checks");
+    }
+    if (inconclusiveChecks.length > 0) {
+      blockers.push("pass verdict cannot coexist with inconclusive qa_checks");
+    }
+    if ((missingEvidence?.length ?? 0) > 0) {
+      blockers.push("pass verdict cannot carry qa_missing_evidence");
+    }
+    if ((confidenceGaps?.length ?? 0) > 0) {
+      blockers.push("pass verdict cannot carry qa_confidence_gaps");
+    }
+    if ((environmentLimits?.length ?? 0) > 0) {
+      blockers.push("pass verdict cannot carry qa_environment_limits");
+    }
+    return blockers.map((reason) => ({ name: "qa_verdict", reason }));
+  }
+
+  if (verdict === "fail" && failedChecks.length === 0) {
+    return [
+      {
+        name: "qa_verdict",
+        reason: "fail verdict requires at least one failed qa_check",
+      },
+    ];
+  }
+
+  if (verdict === "fail" && evidenceBackedFailedChecks.length === 0) {
+    return [
+      {
+        name: "qa_verdict",
+        reason: "fail verdict requires at least one evidence-backed failed qa_check",
+      },
+    ];
+  }
+
+  return [];
+}
+
 function deriveTaskSpecFromOutputs(outputs: Record<string, unknown>): TaskSpec | null {
   if (Object.prototype.hasOwnProperty.call(outputs, "task_spec")) {
     const parsed = parseTaskSpec(outputs.task_spec);
@@ -284,6 +445,10 @@ export class SkillLifecycleService {
       const reason = validateOutputContract(outputs[name], contract, name);
       return reason ? [{ name, reason }] : [];
     });
+
+    if (skill.name === "qa") {
+      invalid.push(...validateQaSemanticOutputs(outputs));
+    }
 
     if (missing.length === 0 && invalid.length === 0) {
       return { ok: true, missing: [], invalid: [] };

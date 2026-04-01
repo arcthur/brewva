@@ -22,6 +22,16 @@ function extractText(result: { content?: Array<{ type: string; text?: string }> 
   );
 }
 
+function resolveDelegateName(request: SubagentRunRequest): string {
+  return (
+    request.agentSpec ??
+    request.envelope ??
+    request.skillName ??
+    request.executionShape?.resultMode ??
+    "explicit-required"
+  );
+}
+
 describe("subagent_run tool", () => {
   test("delegates single runs through the subagent adapter", async () => {
     const tool = createSubagentRunTool({
@@ -31,12 +41,12 @@ describe("subagent_run tool", () => {
             run: async (input: { fromSessionId: string; request: SubagentRunRequest }) => ({
               ok: true,
               mode: input.request.mode,
-              delegate: input.request.agentSpec ?? input.request.envelope ?? "general",
+              delegate: resolveDelegateName(input.request),
               outcomes: [
                 {
                   ok: true,
                   runId: "run-1",
-                  delegate: input.request.agentSpec ?? input.request.envelope ?? "general",
+                  delegate: resolveDelegateName(input.request),
                   kind: "exploration" as const,
                   summary: `summary:${input.request.packet?.objective}`,
                   assistantText: "done",
@@ -113,7 +123,7 @@ describe("subagent_run tool", () => {
               return {
                 ok: true,
                 mode: "single",
-                delegate: "general",
+                delegate: "review",
                 outcomes: [],
               };
             },
@@ -277,7 +287,7 @@ describe("subagent_run tool", () => {
               return {
                 ok: true,
                 mode: input.request.mode,
-                delegate: input.request.agentSpec ?? input.request.envelope ?? "general",
+                delegate: resolveDelegateName(input.request),
                 outcomes: [],
               };
             },
@@ -328,7 +338,7 @@ describe("subagent_run tool", () => {
                   input.request.agentSpec ??
                   input.request.envelope ??
                   input.request.executionShape?.resultMode ??
-                  "general",
+                  "ad-hoc",
                 outcomes: [
                   {
                     ok: true,
@@ -337,10 +347,10 @@ describe("subagent_run tool", () => {
                       input.request.agentSpec ??
                       input.request.envelope ??
                       input.request.executionShape?.resultMode ??
-                      "verification",
-                    kind: "verification" as const,
+                      "qa",
+                    kind: "qa" as const,
                     status: "ok" as const,
-                    summary: "verification summary",
+                    summary: "qa summary",
                     metrics: { durationMs: 8 },
                     evidenceRefs: [],
                   },
@@ -356,12 +366,12 @@ describe("subagent_run tool", () => {
       "tc-subagent-derived-shape",
       {
         executionShape: {
-          resultMode: "verification",
+          resultMode: "qa",
           boundary: "safe",
           model: "openai/gpt-5.4-mini",
           managedToolMode: "direct",
         },
-        objective: "verify the delegated runtime checks",
+        objective: "QA the delegated runtime checks",
         completionPredicate: {
           source: "events",
           type: "worker_results_applied",
@@ -378,7 +388,7 @@ describe("subagent_run tool", () => {
 
     expect(capturedRequest?.agentSpec).toBeUndefined();
     expect(capturedRequest?.executionShape).toEqual({
-      resultMode: "verification",
+      resultMode: "qa",
       boundary: "safe",
       model: "openai/gpt-5.4-mini",
       managedToolMode: "direct",
@@ -391,7 +401,7 @@ describe("subagent_run tool", () => {
       },
       policy: "cancel_when_true",
     });
-    expect(extractText(result)).toContain("delegate=verification");
+    expect(extractText(result)).toContain("delegate=qa");
     expect((result.details as { ok?: boolean } | undefined)?.ok).toBe(true);
   });
 
@@ -406,7 +416,7 @@ describe("subagent_run tool", () => {
               return {
                 ok: true,
                 mode: input.request.mode,
-                delegate: input.request.agentSpec ?? input.request.envelope ?? "general",
+                delegate: resolveDelegateName(input.request),
                 outcomes: [],
               };
             },
@@ -454,11 +464,11 @@ describe("subagent_run tool", () => {
             start: async (input: { fromSessionId: string; request: SubagentRunRequest }) => ({
               ok: true,
               mode: input.request.mode,
-              delegate: input.request.agentSpec ?? input.request.envelope ?? "general",
+              delegate: resolveDelegateName(input.request),
               runs: [
                 {
                   runId: "run-background-1",
-                  delegate: input.request.agentSpec ?? input.request.envelope ?? "general",
+                  delegate: resolveDelegateName(input.request),
                   parentSessionId: input.fromSessionId,
                   status: "pending",
                   createdAt: 1,
@@ -500,13 +510,13 @@ describe("subagent_run tool", () => {
               return {
                 ok: true,
                 mode: input.request.mode,
-                delegate: input.request.agentSpec ?? input.request.envelope ?? "general",
+                delegate: resolveDelegateName(input.request),
                 outcomes: [
                   {
                     ok: true,
                     runId: "fanout-1",
                     label: "gateway",
-                    delegate: input.request.agentSpec ?? input.request.envelope ?? "general",
+                    delegate: resolveDelegateName(input.request),
                     kind: "exploration" as const,
                     status: "ok" as const,
                     summary: "gateway slice complete",

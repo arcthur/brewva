@@ -276,6 +276,7 @@ export class BrewvaRuntime {
       prompt: string,
       usage?: ContextBudgetUsage,
       injectionScopeId?: string,
+      sourceAllowlist?: ReadonlySet<string>,
     ): Promise<{
       text: string;
       entries: ContextInjectionEntry[];
@@ -796,8 +797,14 @@ export class BrewvaRuntime {
         registerProvider: (provider) => this.contextService.registerContextSourceProvider(provider),
         unregisterProvider: (source) => this.contextService.unregisterContextSourceProvider(source),
         listProviders: () => this.contextService.listContextSourceProviders(),
-        buildInjection: (sessionId, prompt, usage, injectionScopeId) =>
-          this.contextService.buildContextInjection(sessionId, prompt, usage, injectionScopeId),
+        buildInjection: (sessionId, prompt, usage, injectionScopeId, sourceAllowlist) =>
+          this.contextService.buildContextInjection(
+            sessionId,
+            prompt,
+            usage,
+            injectionScopeId,
+            sourceAllowlist,
+          ),
         appendSupplementalInjection: (sessionId, inputText, usage, injectionScopeId) =>
           this.contextService.appendSupplementalContextInjection(
             sessionId,

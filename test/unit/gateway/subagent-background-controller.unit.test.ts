@@ -23,6 +23,8 @@ const EXPLORE_TARGET: HostedDelegationTarget = {
   skillName: "repository-analysis",
   boundary: "safe",
   builtinToolNames: ["read"],
+  producesPatches: false,
+  contextProfile: "minimal",
 };
 
 describe("detached subagent background controller", () => {

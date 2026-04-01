@@ -48,9 +48,13 @@ export class ContextSourceProviderRegistry {
     promptText: string;
     usage?: ContextBudgetUsage;
     injectionScopeId?: string;
+    sourceAllowlist?: ReadonlySet<string>;
     register(input: RegisterContextInjectionInput): void;
   }): void {
     for (const provider of this.getProviders()) {
+      if (input.sourceAllowlist && !input.sourceAllowlist.has(provider.source)) {
+        continue;
+      }
       provider.collect({
         sessionId: input.sessionId,
         promptText: input.promptText,

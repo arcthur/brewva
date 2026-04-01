@@ -138,6 +138,14 @@ Allowed interaction pattern:
   rather than silently turning session-local runtime surfaces into merge
   authority
 
+Boundary reminder:
+
+- delegated `qa` may execute adversarial checks and produce release-confidence
+  evidence
+- `runtime.verification.*` remains the kernel authority over whether evidence is
+  sufficient and fresh for session completion
+- neither surface becomes repository merge or release authority on its own
+
 ## Repository-Native Precedent Layer
 
 Brewva now treats repository-native engineering precedent as an adjacent

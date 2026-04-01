@@ -558,7 +558,9 @@ export function createSkillCompleteTool(options: BrewvaToolOptions): ToolDefinit
             ? `Missing required outputs: ${completion.missing.join(", ")}`
             : null,
           completion.invalid.length > 0
-            ? `Invalid required outputs: ${completion.invalid.map((entry) => entry.name).join(", ")}`
+            ? `Invalid required outputs: ${completion.invalid
+                .map((entry) => `${entry.name} (${entry.reason})`)
+                .join(", ")}`
             : null,
         ]
           .filter((entry): entry is string => Boolean(entry))
