@@ -9,6 +9,7 @@ intent:
     - execution_plan
     - execution_mode_hint
     - risk_register
+    - implementation_targets
   output_contracts:
     design_spec:
       kind: text
@@ -24,6 +25,9 @@ intent:
         - test_first
         - coordinated_rollout
     risk_register:
+      kind: json
+      min_items: 1
+    implementation_targets:
       kind: json
       min_items: 1
 effects:
@@ -121,6 +125,7 @@ Produce:
 - `execution_plan`: ordered steps and verification intent
 - `execution_mode_hint`: `direct_patch`, `test_first`, or `coordinated_rollout`
 - `risk_register`: concrete risks and mitigations
+- `implementation_targets`: concrete files, modules, or entrypoints the executor must touch
 
 ## Interaction Protocol
 
@@ -173,6 +178,8 @@ Use these questions to keep planning first-principles-driven:
   `coordinated_rollout` when change spans multiple boundaries.
 - `risk_register` should be ranked by likely impact and should name the signals
   that review or verification must watch later.
+- `implementation_targets` should name the highest-value files or modules, not
+  vague areas of the codebase.
 
 ## Stop Conditions
 
@@ -191,4 +198,4 @@ Use these questions to keep planning first-principles-driven:
 
 Input: "Refactor skill routing to add profile-aware filtering without weakening runtime governance."
 
-Output: `design_spec`, `execution_plan`, `execution_mode_hint`, `risk_register`.
+Output: `design_spec`, `execution_plan`, `execution_mode_hint`, `risk_register`, `implementation_targets`.

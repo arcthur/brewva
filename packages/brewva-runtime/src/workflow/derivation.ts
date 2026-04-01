@@ -508,12 +508,18 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
   const qaReport = outputs.qa_report;
   const qaFindings = outputs.qa_findings;
   const qaVerdict = readString(outputs.qa_verdict);
-  const qaArtifacts = outputs.qa_artifacts;
+  const qaChecks = outputs.qa_checks;
+  const qaMissingEvidence = outputs.qa_missing_evidence;
+  const qaConfidenceGaps = outputs.qa_confidence_gaps;
+  const qaEnvironmentLimits = outputs.qa_environment_limits;
   if (
     qaReport !== undefined ||
     qaFindings !== undefined ||
     qaVerdict ||
-    qaArtifacts !== undefined
+    qaChecks !== undefined ||
+    qaMissingEvidence !== undefined ||
+    qaConfidenceGaps !== undefined ||
+    qaEnvironmentLimits !== undefined
   ) {
     const qaSummaryParts = [];
     if (qaVerdict) {
@@ -522,7 +528,8 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
     const qaText =
       compactJsonValue(qaReport) ??
       compactJsonValue(qaFindings) ??
-      compactJsonValue(qaArtifacts) ??
+      compactJsonValue(qaChecks) ??
+      compactJsonValue(qaMissingEvidence) ??
       "QA artifact recorded.";
     qaSummaryParts.push(qaText);
     drafts.push(
@@ -531,11 +538,17 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
         kind: "qa",
         summary: qaSummaryParts.join("; "),
         sourceSkillNames: skillName ? [skillName] : [],
-        outputKeys: ["qa_report", "qa_findings", "qa_verdict", "qa_artifacts"].filter(
-          (key) => outputs[key] !== undefined,
-        ),
+        outputKeys: [
+          "qa_report",
+          "qa_findings",
+          "qa_verdict",
+          "qa_checks",
+          "qa_missing_evidence",
+          "qa_confidence_gaps",
+          "qa_environment_limits",
+        ].filter((key) => outputs[key] !== undefined),
         freshness: "fresh",
-        state: qaVerdict === "pass" || !qaVerdict ? "ready" : "blocked",
+        state: qaVerdict === "pass" ? "ready" : qaVerdict === "fail" ? "blocked" : "pending",
         metadata: {
           source: "skill_completed",
           sourceSkillName: skillName ?? null,
@@ -755,6 +768,59 @@ function extractSubagentPatchArtifact(event: BrewvaEventRecord): WorkflowDraftAr
   ];
 }
 
+function extractSubagentQaArtifact(event: BrewvaEventRecord): WorkflowDraftArtifact[] {
+  const payload = event.payload;
+  if (!isRecord(payload)) return [];
+  if (readString(payload.kind) !== "qa") return [];
+
+  const delegate = readString(payload.delegate);
+  const skillName = readString(payload.skillName);
+  const resultData = isRecord(payload.resultData) ? payload.resultData : undefined;
+  const verdict = readString(resultData?.verdict);
+  const summary =
+    compactJsonValue(payload.summary, 200) ??
+    compactJsonValue(resultData?.checks, 200) ??
+    (event.type === SUBAGENT_COMPLETED_EVENT_TYPE
+      ? "Delegated QA completed."
+      : "Delegated QA failed.");
+
+  return [
+    createDraftArtifact({
+      event,
+      kind: "qa",
+      summary,
+      sourceSkillNames: skillName ? [skillName] : [],
+      outputKeys: [
+        "qa_report",
+        "qa_findings",
+        "qa_verdict",
+        "qa_checks",
+        "qa_missing_evidence",
+        "qa_confidence_gaps",
+        "qa_environment_limits",
+      ],
+      freshness: "fresh",
+      state:
+        event.type === SUBAGENT_FAILED_EVENT_TYPE
+          ? "blocked"
+          : verdict === "pass"
+            ? "ready"
+            : verdict === "fail"
+              ? "blocked"
+              : "pending",
+      metadata: {
+        source: event.type,
+        delegate: delegate ?? null,
+        runId: readString(payload.runId) ?? null,
+        qaVerdict: verdict ?? null,
+        missingEvidence: readStringArray(resultData?.missingEvidence),
+        confidenceGaps: readStringArray(resultData?.confidenceGaps),
+        environmentLimits: readStringArray(resultData?.environmentLimits),
+      },
+    }),
+  ];
+}
+
 function extractIterationMetricArtifact(event: BrewvaEventRecord): WorkflowDraftArtifact[] {
   const payload = coerceMetricObservationPayload(event.payload);
   if (!payload) return [];
@@ -851,7 +917,7 @@ export function deriveWorkflowArtifactsFromEvent(event: BrewvaEventRecord): Work
       return extractWorkerApplyFailedArtifact(event);
     }
     if (event.type === SUBAGENT_COMPLETED_EVENT_TYPE || event.type === SUBAGENT_FAILED_EVENT_TYPE) {
-      return extractSubagentPatchArtifact(event);
+      return [...extractSubagentPatchArtifact(event), ...extractSubagentQaArtifact(event)];
     }
     return [];
   })();
@@ -1057,6 +1123,7 @@ function determineShipStatus(input: {
     input.review === "blocked" ||
     input.review === "stale" ||
     input.qa === "blocked" ||
+    input.qa === "pending" ||
     input.qa === "stale" ||
     input.verification === "blocked" ||
     input.verification === "stale" ||
@@ -1273,10 +1340,10 @@ export function deriveWorkflowStatus(input: DeriveWorkflowStatusInput): Workflow
   if (latestArtifacts.qa?.state === "blocked") {
     const qaVerdict = readString(latestArtifacts.qa.metadata?.qaVerdict);
     blockers.push(
-      qaVerdict === "needs_fixes"
-        ? "QA verdict requires fixes before shipping."
-        : "QA lane is blocked.",
+      qaVerdict === "fail" ? "QA reported failing checks before shipping." : "QA lane is blocked.",
     );
+  } else if (latestArtifacts.qa?.state === "pending") {
+    blockers.push("QA remains inconclusive and needs more executable evidence.");
   } else if (qa === "stale") {
     blockers.push("QA artifact is stale after later workspace mutations.");
   }

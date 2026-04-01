@@ -1,7 +1,8 @@
-import type {
-  BrewvaRuntime,
-  ContextBudgetUsage,
-  ContextInjectionEntry,
+import {
+  CONTEXT_SOURCES,
+  type BrewvaRuntime,
+  type ContextBudgetUsage,
+  type ContextInjectionEntry,
 } from "@brewva/brewva-runtime";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import type { HostedDelegationStore } from "../subagents/delegation-store.js";
@@ -67,6 +68,27 @@ export interface HostedContextInjectionPipeline {
 
 export interface HostedContextInjectionPipelineOptions {
   delegationStore?: HostedDelegationStore;
+  contextProfile?: "minimal" | "standard" | "full";
+}
+
+const CONTEXT_PROFILES = {
+  minimal: [] as const,
+  standard: [
+    CONTEXT_SOURCES.runtimeStatus,
+    CONTEXT_SOURCES.taskState,
+    CONTEXT_SOURCES.toolOutputsDistilled,
+    CONTEXT_SOURCES.projectionWorking,
+  ] as const,
+  full: null,
+} as const;
+
+function resolveContextSourceAllowlist(
+  profile: HostedContextInjectionPipelineOptions["contextProfile"],
+): ReadonlySet<string> | undefined {
+  if (!profile || profile === "full") {
+    return undefined;
+  }
+  return new Set(CONTEXT_PROFILES[profile]);
 }
 
 function createContextComposerRuntime(
@@ -103,6 +125,7 @@ async function resolveContextInjection(
     prompt: string;
     usage?: ContextBudgetUsage;
     injectionScopeId?: string;
+    sourceAllowlist?: ReadonlySet<string>;
   },
 ): Promise<{
   text: string;
@@ -117,6 +140,7 @@ async function resolveContextInjection(
     input.prompt,
     input.usage,
     input.injectionScopeId,
+    input.sourceAllowlist,
   );
 }
 
@@ -171,6 +195,7 @@ export function createHostedContextInjectionPipeline(
   options: HostedContextInjectionPipelineOptions = {},
 ): HostedContextInjectionPipeline {
   const contextComposerRuntime = createContextComposerRuntime(runtime, options.delegationStore);
+  const sourceAllowlist = resolveContextSourceAllowlist(options.contextProfile);
 
   return {
     async beforeAgentStart(input) {
@@ -259,6 +284,7 @@ export function createHostedContextInjectionPipeline(
         prompt: input.prompt,
         usage: input.usage,
         injectionScopeId,
+        sourceAllowlist,
       });
 
       const supportAfterInjection = prepareContextComposerSupport({

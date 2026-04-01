@@ -78,6 +78,8 @@ export interface ResolvedDelegationExecutionPlan {
   managedToolMode: ManagedToolMode;
   builtinToolNames: HostedDelegationBuiltinToolName[];
   managedToolNames: string[];
+  producesPatches: boolean;
+  contextProfile: HostedDelegationTarget["contextProfile"];
   prompt: string;
 }
 
@@ -159,7 +161,14 @@ function mergeBuiltinToolNames(
   const hinted = uniqueStrings([...skillToolNames, ...hintedToolNames(packet)]).filter(
     (toolName): toolName is HostedDelegationBuiltinToolName => isBuiltinSubagentToolName(toolName),
   );
-  return [...new Set([...defaults, ...hinted])];
+  if (hinted.length === 0) {
+    return [...defaults];
+  }
+  const allowed = new Set(defaults);
+  return [
+    ...hinted.filter((toolName) => allowed.has(toolName)),
+    ...defaults.filter((toolName) => !hinted.includes(toolName)),
+  ];
 }
 
 function mergeManagedToolNames(
@@ -170,7 +179,15 @@ function mergeManagedToolNames(
   const hinted = uniqueStrings([...skillToolNames, ...hintedToolNames(packet)]).filter(
     (toolName) => !isBuiltinSubagentToolName(toolName),
   );
-  return uniqueStrings([...(target.managedToolNames ?? []), ...hinted]);
+  const defaults = target.managedToolNames ?? [];
+  if (hinted.length === 0) {
+    return [...defaults];
+  }
+  const allowed = new Set(defaults);
+  return [
+    ...hinted.filter((toolName) => allowed.has(toolName)),
+    ...defaults.filter((toolName) => !hinted.includes(toolName)),
+  ];
 }
 
 export function assertDelegationShapeNarrowing(
@@ -273,16 +290,23 @@ export function resolveDelegationTarget(input: {
   catalog: HostedDelegationCatalog;
 }): ResolvedDelegationTarget {
   const requestedAgentSpec = input.request.agentSpec?.trim();
-  const resolvedAgentSpecName =
-    requestedAgentSpec ??
-    (!input.request.envelope
-      ? (deriveDefaultAgentSpecNameForSkillName(input.request.skillName) ??
-        (input.request.executionShape?.resultMode
-          ? deriveDefaultAgentSpecNameForResultMode(input.request.executionShape.resultMode)
-          : input.request.fallbackResultMode
-            ? deriveDefaultAgentSpecNameForResultMode(input.request.fallbackResultMode)
-            : "general"))
-      : undefined);
+  const requestedResultMode =
+    input.request.executionShape?.resultMode ?? input.request.fallbackResultMode;
+  let resolvedAgentSpecName = requestedAgentSpec;
+  const derivedFromSkillName = !requestedAgentSpec && Boolean(input.request.skillName);
+  if (!resolvedAgentSpecName && !input.request.envelope) {
+    if (input.request.skillName) {
+      resolvedAgentSpecName = deriveDefaultAgentSpecNameForSkillName(input.request.skillName);
+      if (!resolvedAgentSpecName) {
+        throw new Error(`missing_default_agent_spec_for_skill:${input.request.skillName}`);
+      }
+    } else if (requestedResultMode) {
+      resolvedAgentSpecName = deriveDefaultAgentSpecNameForResultMode(requestedResultMode);
+      if (!resolvedAgentSpecName) {
+        throw new Error(`missing_default_agent_spec_for_result_mode:${requestedResultMode}`);
+      }
+    }
+  }
 
   const resolvedAgentSpec = resolvedAgentSpecName
     ? input.catalog.agentSpecs.get(resolvedAgentSpecName)
@@ -296,7 +320,8 @@ export function resolveDelegationTarget(input: {
     if (
       input.request.skillName &&
       resolvedAgentSpec.skillName &&
-      input.request.skillName !== resolvedAgentSpec.skillName
+      input.request.skillName !== resolvedAgentSpec.skillName &&
+      !derivedFromSkillName
     ) {
       throw new Error("conflicting_agent_spec_and_skill_name");
     }
@@ -415,6 +440,8 @@ export function resolveDelegationExecutionPlan(input: {
       boundary,
       input.packet,
     ),
+    producesPatches: input.target.producesPatches,
+    contextProfile: input.target.contextProfile,
     prompt,
   };
 }

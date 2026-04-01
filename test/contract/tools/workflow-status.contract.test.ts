@@ -355,12 +355,22 @@ describe("workflow_status contract", () => {
       timestamp: 130,
       payload: {
         skillName: "qa",
-        outputKeys: ["qa_report", "qa_findings", "qa_verdict", "qa_artifacts"],
+        outputKeys: ["qa_report", "qa_findings", "qa_verdict", "qa_checks"],
         outputs: {
           qa_report: "Smoke-tested the operator path.",
           qa_findings: [],
           qa_verdict: "pass",
-          qa_artifacts: ["snapshots/operator-flow.json"],
+          qa_checks: [
+            {
+              name: "operator-smoke",
+              result: "pass",
+              command: "bun test",
+              exitCode: 0,
+              observedOutput: "operator smoke passed",
+              probeType: "adversarial",
+              artifactRefs: ["snapshots/operator-flow.json"],
+            },
+          ],
         },
       } as Record<string, unknown>,
     });

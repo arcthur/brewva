@@ -58,7 +58,10 @@ consumes:
   - qa_report
   - qa_findings
   - qa_verdict
-  - qa_artifacts
+  - qa_checks
+  - qa_missing_evidence
+  - qa_confidence_gaps
+  - qa_environment_limits
   - github_context
   - ci_findings
 requires: []

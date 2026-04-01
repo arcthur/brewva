@@ -4,6 +4,8 @@ import type {
   DelegationRunRecord,
   ManagedToolMode,
   PatchSet,
+  QaCheck as RuntimeQaCheck,
+  QaSubagentOutcomeData as RuntimeQaSubagentOutcomeData,
   SkillOutputValidationResult,
   ToolGovernanceDescriptor,
   ToolExecutionBoundary,
@@ -23,7 +25,7 @@ export type BrewvaManagedToolDefinition = ToolDefinition & {
   brewvaAgentParameters?: TSchema;
 };
 
-export type SubagentResultMode = "exploration" | "review" | "verification" | "patch";
+export type SubagentResultMode = "exploration" | "review" | "qa" | "patch";
 export type SubagentDelegationMode = "single" | "parallel";
 export type SubagentReturnMode = "text_only" | "supplemental";
 export type DelegationRefKind =
@@ -184,11 +186,8 @@ export interface ReviewSubagentOutcomeData {
   confidence?: ReviewLaneConfidence;
 }
 
-export interface VerificationSubagentOutcomeData {
-  kind: "verification";
-  checks: DelegationOutcomeCheck[];
-  verdict?: "pass" | "fail" | "inconclusive";
-}
+export type QaCheck = RuntimeQaCheck;
+export type QaSubagentOutcomeData = RuntimeQaSubagentOutcomeData;
 
 export interface PatchSubagentOutcomeData {
   kind: "patch";
@@ -199,7 +198,7 @@ export interface PatchSubagentOutcomeData {
 export type SubagentOutcomeData =
   | ExplorationSubagentOutcomeData
   | ReviewSubagentOutcomeData
-  | VerificationSubagentOutcomeData
+  | QaSubagentOutcomeData
   | PatchSubagentOutcomeData;
 
 export interface SubagentOutcomeBase {

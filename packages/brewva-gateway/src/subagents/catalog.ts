@@ -6,14 +6,25 @@ import type {
 } from "@brewva/brewva-tools";
 import {
   asBoundary,
+  asBoolean,
   asBuiltinToolArray,
+  asContextProfile,
   asContextBudget,
   asManagedToolMode,
   asResultMode,
   asString,
   asStringArray,
+  type HostedContextProfile,
   readHostedWorkspaceSubagentConfigFiles,
 } from "./config-files.js";
+import {
+  EXPLORE_SPECIALIST_CONSTITUTION,
+  PATCH_WORKER_SPECIALIST_CONSTITUTION,
+  PLAN_SPECIALIST_CONSTITUTION,
+  QA_SPECIALIST_CONSTITUTION,
+  REVIEW_OPERABILITY_SPECIALIST_CONSTITUTION,
+  REVIEW_SPECIALIST_CONSTITUTION,
+} from "./constitutions.js";
 import { getDefaultAgentSpecNameForResultMode } from "./protocol.js";
 import type { HostedDelegationBuiltinToolName, HostedDelegationTarget } from "./targets.js";
 
@@ -26,6 +37,8 @@ export interface HostedExecutionEnvelope {
   managedToolNames?: string[];
   defaultContextBudget?: SubagentContextBudget;
   managedToolMode?: ManagedToolMode;
+  producesPatches: boolean;
+  contextProfile: HostedContextProfile;
 }
 
 export interface HostedAgentSpec {
@@ -49,6 +62,7 @@ function buildReviewLaneAgentSpec(input: {
   name: string;
   description: string;
   executorPreamble: string;
+  instructionsMarkdown?: string;
 }): HostedAgentSpec {
   return {
     name: input.name,
@@ -56,6 +70,7 @@ function buildReviewLaneAgentSpec(input: {
     envelope: "readonly-reviewer",
     fallbackResultMode: "review",
     executorPreamble: input.executorPreamble,
+    instructionsMarkdown: input.instructionsMarkdown,
   };
 }
 
@@ -65,6 +80,12 @@ const MAX_AGENT_INSTRUCTIONS_MARKDOWN_LENGTH = 4_000;
 const BOUNDARY_RANK: Record<SubagentExecutionBoundary, number> = {
   safe: 0,
   effectful: 1,
+};
+
+const CONTEXT_PROFILE_RANK: Record<HostedContextProfile, number> = {
+  minimal: 0,
+  standard: 1,
+  full: 2,
 };
 
 function assertSubset(
@@ -123,6 +144,12 @@ export function assertHostedExecutionEnvelopeTightening(
   );
   if (base.managedToolMode === "direct" && candidate.managedToolMode === "runtime_plugin") {
     throw new Error(`${context}:managedToolMode cannot widen beyond direct`);
+  }
+  if (candidate.producesPatches && !base.producesPatches) {
+    throw new Error(`${context}:producesPatches cannot widen beyond the base envelope`);
+  }
+  if (CONTEXT_PROFILE_RANK[candidate.contextProfile] > CONTEXT_PROFILE_RANK[base.contextProfile]) {
+    throw new Error(`${context}:contextProfile cannot widen beyond the base envelope`);
   }
 }
 
@@ -190,6 +217,21 @@ function toExecutionEnvelope(
     defaultContextBudget:
       asContextBudget(source.defaultContextBudget) ?? defaults?.defaultContextBudget,
     managedToolMode: asManagedToolMode(source.managedToolMode) ?? defaults?.managedToolMode,
+    producesPatches: (() => {
+      const resolvedBoundary = asBoundary(source.boundary) ?? defaults?.boundary ?? "safe";
+      const producesPatches = asBoolean(source.producesPatches) ?? defaults?.producesPatches;
+      if (producesPatches !== undefined) {
+        return producesPatches;
+      }
+      if (resolvedBoundary === "safe") {
+        return false;
+      }
+      throw new Error(
+        `invalid_execution_envelope:${name}:effectful envelopes must declare producesPatches`,
+      );
+    })(),
+    contextProfile:
+      asContextProfile(source.contextProfile) ?? defaults?.contextProfile ?? "standard",
   };
 }
 
@@ -232,6 +274,9 @@ function toAgentSpec(
 
 const READONLY_MANAGED_TOOLS = [
   "grep",
+  "git_status",
+  "git_diff",
+  "git_log",
   "read_spans",
   "look_at",
   "toc_search",
@@ -249,6 +294,18 @@ const READONLY_MANAGED_TOOLS = [
 ] as const;
 
 const PATCH_WORKER_TOOLS = READONLY_MANAGED_TOOLS.filter((tool) => tool !== "workflow_status");
+const QA_MANAGED_TOOLS = [
+  ...READONLY_MANAGED_TOOLS,
+  "exec",
+  "browser_open",
+  "browser_wait",
+  "browser_snapshot",
+  "browser_click",
+  "browser_fill",
+  "browser_get",
+  "browser_screenshot",
+  "browser_diff_snapshot",
+] as const;
 
 export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutionEnvelope>> = {
   "readonly-scout": {
@@ -262,6 +319,8 @@ export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutio
       maxTurnTokens: 6000,
     },
     managedToolMode: "direct",
+    producesPatches: false,
+    contextProfile: "minimal",
   },
   "readonly-planner": {
     name: "readonly-planner",
@@ -274,6 +333,8 @@ export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutio
       maxTurnTokens: 6500,
     },
     managedToolMode: "direct",
+    producesPatches: false,
+    contextProfile: "minimal",
   },
   "readonly-reviewer": {
     name: "readonly-reviewer",
@@ -286,30 +347,23 @@ export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutio
       maxTurnTokens: 7000,
     },
     managedToolMode: "direct",
+    producesPatches: false,
+    contextProfile: "minimal",
   },
-  "readonly-general": {
-    name: "readonly-general",
-    description: "General read-only envelope for bounded ad hoc delegation.",
-    boundary: "safe",
+  "qa-runner": {
+    name: "qa-runner",
+    description:
+      "Effectful but non-patch-producing QA envelope for executable checks and adversarial probes.",
+    boundary: "effectful",
     builtinToolNames: ["read"],
-    managedToolNames: [...READONLY_MANAGED_TOOLS],
-    defaultContextBudget: {
-      maxInjectionTokens: 1600,
-      maxTurnTokens: 5500,
-    },
-    managedToolMode: "direct",
-  },
-  "verification-runner": {
-    name: "verification-runner",
-    description: "Read-only verifier envelope for checks, evidence, and confidence gaps.",
-    boundary: "safe",
-    builtinToolNames: ["read"],
-    managedToolNames: [...READONLY_MANAGED_TOOLS],
+    managedToolNames: [...QA_MANAGED_TOOLS],
     defaultContextBudget: {
       maxInjectionTokens: 2000,
-      maxTurnTokens: 7000,
+      maxTurnTokens: 8500,
     },
     managedToolMode: "direct",
+    producesPatches: false,
+    contextProfile: "minimal",
   },
   "patch-worker": {
     name: "patch-worker",
@@ -322,6 +376,8 @@ export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutio
       maxTurnTokens: 8000,
     },
     managedToolMode: "direct",
+    producesPatches: true,
+    contextProfile: "standard",
   },
 } as const;
 
@@ -335,6 +391,7 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
     fallbackResultMode: "exploration",
     executorPreamble:
       "Operate as a read-only repository scout. Gather only the evidence needed for the delegated objective and keep the result merge-friendly.",
+    instructionsMarkdown: EXPLORE_SPECIALIST_CONSTITUTION,
   },
   plan: {
     name: "plan",
@@ -345,6 +402,7 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
     fallbackResultMode: "exploration",
     executorPreamble:
       "Operate as a read-only planner. Focus on execution slices, risks, verification intent, and concrete next steps.",
+    instructionsMarkdown: PLAN_SPECIALIST_CONSTITUTION,
   },
   review: {
     name: "review",
@@ -354,6 +412,7 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
     fallbackResultMode: "review",
     executorPreamble:
       "Operate as a strict read-only reviewer. Keep findings concrete, high-signal, and evidence-backed.",
+    instructionsMarkdown: REVIEW_SPECIALIST_CONSTITUTION,
   },
   "review-correctness": buildReviewLaneAgentSpec({
     name: "review-correctness",
@@ -372,6 +431,7 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
     description: "Review lane for verification posture, rollbackability, and operator burden.",
     executorPreamble:
       "Operate as the verification and operability lane. Focus on missing evidence, weak rollback posture, deploy-time risk, and operator-visible failure burden.",
+    instructionsMarkdown: REVIEW_OPERABILITY_SPECIALIST_CONSTITUTION,
   }),
   "review-security": buildReviewLaneAgentSpec({
     name: "review-security",
@@ -397,21 +457,16 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
     executorPreamble:
       "Operate as the performance lane. Focus on hot paths, wide scans, indexing, queue growth, fan-out cost, and artifact-volume regressions.",
   }),
-  general: {
-    name: "general",
-    description: "General-purpose read-only delegate for bounded ad hoc work.",
-    envelope: "readonly-general",
-    fallbackResultMode: "exploration",
+  qa: {
+    name: "qa",
+    description:
+      "Executable QA delegate for adversarial verification without parent-source mutation.",
+    envelope: "qa-runner",
+    skillName: "qa",
+    fallbackResultMode: "qa",
     executorPreamble:
-      "Operate as a bounded read-only delegate. Gather only the context you need and keep the result concise.",
-  },
-  verification: {
-    name: "verification",
-    description: "Verification delegate for read-only checks, evidence, and confidence gaps.",
-    envelope: "verification-runner",
-    fallbackResultMode: "verification",
-    executorPreamble:
-      "Operate as a read-only verifier. Focus on checks performed, failed or skipped paths, and remaining confidence gaps.",
+      "Operate as an adversarial QA verifier. Execute real checks, look for breakage, and keep verdicts evidence-backed.",
+    instructionsMarkdown: QA_SPECIALIST_CONSTITUTION,
   },
   "patch-worker": {
     name: "patch-worker",
@@ -420,13 +475,17 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
     fallbackResultMode: "patch",
     executorPreamble:
       "Operate as an isolated patch worker. Keep edits minimal, preserve surrounding behavior, and summarize the patch concisely.",
+    instructionsMarkdown: PATCH_WORKER_SPECIALIST_CONSTITUTION,
   },
 } as const;
 
 const DEFAULT_AGENT_SPEC_BY_SKILL_NAME: Readonly<Record<string, string>> = {
   "repository-analysis": "explore",
+  discovery: "explore",
   design: "plan",
   review: "review",
+  qa: "qa",
+  implementation: "patch-worker",
 } as const;
 
 const DEFAULT_FALLBACK_RESULT_MODE_BY_SKILL_NAME: Readonly<Record<string, SubagentResultMode>> = {
@@ -434,10 +493,10 @@ const DEFAULT_FALLBACK_RESULT_MODE_BY_SKILL_NAME: Readonly<Record<string, Subage
   discovery: "exploration",
   design: "exploration",
   "strategy-review": "exploration",
+  "learning-research": "exploration",
   debugging: "exploration",
   review: "review",
-  qa: "verification",
-  ship: "verification",
+  qa: "qa",
   implementation: "patch",
 } as const;
 
@@ -601,6 +660,8 @@ export function buildHostedDelegationTargetFromAgentSpec(input: {
     managedToolNames: input.envelope.managedToolNames,
     defaultContextBudget: input.envelope.defaultContextBudget,
     managedToolMode: input.envelope.managedToolMode,
+    producesPatches: input.envelope.producesPatches,
+    contextProfile: input.envelope.contextProfile,
   };
 }
 
@@ -632,6 +693,8 @@ export function buildSyntheticHostedDelegationTarget(input: {
     managedToolNames: input.envelope.managedToolNames,
     defaultContextBudget: input.envelope.defaultContextBudget,
     managedToolMode: input.envelope.managedToolMode,
+    producesPatches: input.envelope.producesPatches,
+    contextProfile: input.envelope.contextProfile,
   };
 }
 

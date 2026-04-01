@@ -22,6 +22,8 @@ function makeTarget(overrides: Partial<HostedDelegationTarget> = {}): HostedDele
     builtinToolNames: ["read"],
     managedToolNames: ["grep"],
     managedToolMode: "direct",
+    producesPatches: false,
+    contextProfile: "minimal",
     ...overrides,
   };
 }
@@ -117,7 +119,7 @@ describe("subagent shared execution resolution", () => {
     });
     expect(plan.managedToolMode).toBe("direct");
     expect(plan.builtinToolNames).toEqual(["read"]);
-    expect(plan.managedToolNames).toContain("grep");
+    expect(plan.managedToolNames).toEqual([]);
     expect(plan.managedToolNames).not.toContain("subagent_run");
     expect(plan.prompt).toBe("Review and summarize.");
   });
@@ -128,14 +130,29 @@ describe("subagent shared execution resolution", () => {
       catalog,
       request: {
         executionShape: {
-          resultMode: "verification",
+          resultMode: "qa",
           boundary: "safe",
         },
       },
     });
 
-    expect(resolved.delegate).toBe("verification");
-    expect(resolved.target.resultMode).toBe("verification");
+    expect(resolved.delegate).toBe("qa");
+    expect(resolved.target.resultMode).toBe("qa");
+  });
+
+  test("resolveDelegationTarget routes discovery through explore without dropping the delegated skill", async () => {
+    const catalog = await loadHostedDelegationCatalog(process.cwd());
+    const resolved = resolveDelegationTarget({
+      catalog,
+      request: {
+        skillName: "discovery",
+      },
+    });
+
+    expect(resolved.delegate).toBe("explore");
+    expect(resolved.target.agentSpecName).toBe("explore");
+    expect(resolved.target.skillName).toBe("discovery");
+    expect(resolved.target.resultMode).toBe("exploration");
   });
 
   test("resolveDelegationTarget materializes a skill-first agent spec through the catalog", async () => {

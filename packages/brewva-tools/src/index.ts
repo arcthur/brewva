@@ -4,6 +4,7 @@ import { createBrowserTools } from "./browser.js";
 import { createCostViewTool } from "./cost-view.js";
 import { createDeliberationMemoryTool } from "./deliberation-memory.js";
 import { createExecTool } from "./exec.js";
+import { createGitDiffTool, createGitLogTool, createGitStatusTool } from "./git-observe.js";
 import { createGrepTool } from "./grep.js";
 import { createIterationFactTool } from "./iteration-fact.js";
 import { createKnowledgeCaptureTool } from "./knowledge-capture.js";
@@ -62,6 +63,9 @@ export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefiniti
     createReadSpansTool({ runtime }),
     createLookAtTool({ runtime }),
     createGrepTool({ runtime }),
+    createGitStatusTool({ runtime }),
+    createGitDiffTool({ runtime }),
+    createGitLogTool({ runtime }),
     createExecTool({ runtime }),
     ...createBrowserTools({ runtime }),
     createProcessTool(),
@@ -163,6 +167,7 @@ export {
 export { createA2ATools } from "./a2a.js";
 export { createLookAtTool } from "./look-at.js";
 export { createGrepTool } from "./grep.js";
+export { createGitStatusTool, createGitDiffTool, createGitLogTool } from "./git-observe.js";
 export { createExecTool } from "./exec.js";
 export { createProcessTool } from "./process.js";
 export { createReadSpansTool } from "./read-spans.js";
@@ -215,6 +220,8 @@ export type {
   DelegationTaskPacket,
   ExplorationSubagentOutcomeData,
   PatchSubagentOutcomeData,
+  QaCheck,
+  QaSubagentOutcomeData,
   ReviewSubagentOutcomeData,
   ReviewLaneConfidence,
   ReviewLaneDisposition,
@@ -234,7 +241,6 @@ export type {
   SubagentOutcomeFailure,
   SubagentOutcomeMetricSummary,
   SubagentOutcomeSuccess,
-  VerificationSubagentOutcomeData,
   SubagentReturnMode,
   SubagentResultMode,
   SubagentRunRequest,

@@ -305,7 +305,7 @@ function applyDelegationEvent(
       kind:
         readString(payload?.kind) === "exploration" ||
         readString(payload?.kind) === "review" ||
-        readString(payload?.kind) === "verification" ||
+        readString(payload?.kind) === "qa" ||
         readString(payload?.kind) === "patch"
           ? (readString(payload?.kind) as DelegationRunRecord["kind"])
           : existing?.kind,
@@ -342,7 +342,7 @@ function applyDelegationEvent(
       kind:
         readString(payload?.kind) === "exploration" ||
         readString(payload?.kind) === "review" ||
-        readString(payload?.kind) === "verification" ||
+        readString(payload?.kind) === "qa" ||
         readString(payload?.kind) === "patch"
           ? (readString(payload?.kind) as DelegationRunRecord["kind"])
           : existing?.kind,
@@ -429,7 +429,7 @@ function applyDelegationEvent(
       kind:
         readString(payload?.kind) === "exploration" ||
         readString(payload?.kind) === "review" ||
-        readString(payload?.kind) === "verification" ||
+        readString(payload?.kind) === "qa" ||
         readString(payload?.kind) === "patch"
           ? (readString(payload?.kind) as DelegationRunRecord["kind"])
           : existing?.kind,

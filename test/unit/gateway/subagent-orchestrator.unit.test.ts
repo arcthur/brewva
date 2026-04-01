@@ -245,7 +245,7 @@ describe("hosted subagent orchestrator", () => {
     await rm(workspaceRoot, { recursive: true, force: true });
   });
 
-  test("captures structured verification outcomes from the child assistant response", async () => {
+  test("captures structured QA outcomes from the child assistant response", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-structured-success-");
     const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
     const parentSessionId = "parent-session-structured-success";
@@ -271,24 +271,71 @@ describe("hosted subagent orchestrator", () => {
                       {
                         type: "text",
                         text: [
-                          "Verification completed with one skipped check.",
+                          "QA completed with one inconclusive probe.",
                           "<delegation_outcome_json>",
                           JSON.stringify({
-                            kind: "verification",
+                            kind: "qa",
                             verdict: "inconclusive",
                             checks: [
                               {
                                 name: "unit",
-                                status: "pass",
+                                result: "pass",
+                                command: "bun test",
+                                exitCode: 0,
+                                cwd: ".",
+                                observedOutput: "12 tests passed",
+                                probeType: "baseline",
                                 summary: "Unit coverage is green.",
-                                evidenceRefs: ["session:child-structured-success:agent_end"],
+                                artifactRefs: ["session:child-structured-success:agent_end"],
                               },
                               {
                                 name: "e2e",
-                                status: "skip",
+                                result: "inconclusive",
+                                tool: "browser_open",
+                                observedOutput:
+                                  "No browser target is configured in the isolated harness.",
+                                probeType: "environment_limit",
                                 summary: "E2E lane was intentionally skipped.",
                               },
                             ],
+                            skillOutputs: {
+                              qa_report:
+                                "Executed one baseline command and one constrained probe in the isolated harness.",
+                              qa_findings: [
+                                "The end-to-end probe stayed inconclusive because the test harness exposes no browser target.",
+                              ],
+                              qa_verdict: "inconclusive",
+                              qa_checks: [
+                                {
+                                  name: "unit",
+                                  result: "pass",
+                                  command: "bun test",
+                                  exitCode: 0,
+                                  cwd: ".",
+                                  observedOutput: "12 tests passed",
+                                  probeType: "baseline",
+                                  artifactRefs: ["session:child-structured-success:agent_end"],
+                                },
+                                {
+                                  name: "e2e",
+                                  result: "inconclusive",
+                                  tool: "browser_open",
+                                  observedOutput:
+                                    "No browser target is configured in the isolated harness.",
+                                  probeType: "environment_limit",
+                                  summary: "E2E lane was intentionally skipped.",
+                                },
+                              ],
+                              qa_missing_evidence: [
+                                "No browser-level flow or service-level end-to-end probe was attached.",
+                              ],
+                              qa_confidence_gaps: [
+                                "The isolated harness cannot confirm the full user-visible path.",
+                              ],
+                              qa_environment_limits: [
+                                "The test harness does not expose a browser or remote target.",
+                              ],
+                            },
                           }),
                           "</delegation_outcome_json>",
                         ].join("\n"),
@@ -320,10 +367,10 @@ describe("hosted subagent orchestrator", () => {
     const result = await adapter.run({
       fromSessionId: parentSessionId,
       request: {
-        agentSpec: "verification",
+        agentSpec: "qa",
         mode: "single",
         packet: {
-          objective: "Verify the runtime checks.",
+          objective: "QA the runtime checks.",
         },
       },
     });
@@ -332,28 +379,40 @@ describe("hosted subagent orchestrator", () => {
     const outcome = result.outcomes[0];
     expect(outcome?.ok).toBe(true);
     if (!outcome || !outcome.ok) {
-      throw new Error("expected a successful verification outcome");
+      throw new Error("expected a successful QA outcome");
     }
 
-    expect(outcome.kind).toBe("verification");
+    expect(outcome.kind).toBe("qa");
     expect(outcome.data).toEqual({
-      kind: "verification",
+      kind: "qa",
       verdict: "inconclusive",
       checks: [
         {
           name: "unit",
-          status: "pass",
+          result: "pass",
+          command: "bun test",
+          exitCode: 0,
+          cwd: ".",
+          observedOutput: "12 tests passed",
+          probeType: "baseline",
           summary: "Unit coverage is green.",
-          evidenceRefs: ["session:child-structured-success:agent_end"],
+          artifactRefs: ["session:child-structured-success:agent_end"],
         },
         {
           name: "e2e",
-          status: "skip",
+          result: "inconclusive",
+          tool: "browser_open",
+          observedOutput: "No browser target is configured in the isolated harness.",
+          probeType: "environment_limit",
           summary: "E2E lane was intentionally skipped.",
         },
       ],
     });
-    expect(outcome.summary).toBe("Verification completed with one skipped check.");
+    expect(outcome.skillOutputs).toMatchObject({
+      qa_verdict: "inconclusive",
+      qa_checks: expect.any(Array),
+    });
+    expect(outcome.summary).toBe("QA completed with one inconclusive probe.");
     expect(outcome.evidenceRefs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -519,7 +578,7 @@ describe("hosted subagent orchestrator", () => {
                     content: [
                       {
                         type: "text",
-                        text: "Verification completed, but only a prose summary is available.",
+                        text: "QA completed, but only a prose summary is available.",
                       },
                     ],
                   },
@@ -548,10 +607,13 @@ describe("hosted subagent orchestrator", () => {
     const result = await adapter.run({
       fromSessionId: parentSessionId,
       request: {
-        agentSpec: "verification",
+        envelope: "qa-runner",
+        executionShape: {
+          resultMode: "qa",
+        },
         mode: "single",
         packet: {
-          objective: "Verify the runtime checks.",
+          objective: "QA the runtime checks.",
         },
       },
     });
@@ -560,12 +622,12 @@ describe("hosted subagent orchestrator", () => {
     const outcome = result.outcomes[0];
     expect(outcome?.ok).toBe(true);
     if (!outcome || !outcome.ok) {
-      throw new Error("expected a successful verification outcome");
+      throw new Error("expected a successful QA outcome");
     }
 
-    expect(outcome.kind).toBe("verification");
+    expect(outcome.kind).toBe("qa");
     expect(outcome.data).toBeUndefined();
-    expect(outcome.summary).toBe("Verification completed, but only a prose summary is available.");
+    expect(outcome.summary).toBe("QA completed, but only a prose summary is available.");
     expect(
       runtime.events.list(parentSessionId, { type: "subagent_outcome_parse_failed" }),
     ).toHaveLength(1);
@@ -774,7 +836,7 @@ describe("hosted subagent orchestrator", () => {
     const started = await adapter.start({
       fromSessionId: parentSessionId,
       request: {
-        agentSpec: "general",
+        envelope: "readonly-scout",
         mode: "single",
         packet: {
           objective: "Inspect the runtime boundary changes.",

@@ -48,6 +48,7 @@ export interface CreateHostedSessionOptions extends RuntimeCreateBrewvaSessionOp
   orchestration?: BrewvaToolOrchestration;
   managedToolNames?: readonly string[];
   builtinToolNames?: readonly HostedDelegationBuiltinToolName[];
+  contextProfile?: "minimal" | "standard" | "full";
   enableSubagents?: boolean;
   scopeId?: string;
 }
@@ -246,6 +247,7 @@ function createHostedOrchestration(input: {
         orchestration: childOptions.orchestration,
         managedToolNames: childOptions.managedToolNames,
         builtinToolNames: childOptions.builtinToolNames,
+        contextProfile: childOptions.contextProfile,
         routingScopes: options.routingScopes,
         scopeId: options.scopeId,
       }),
@@ -271,6 +273,7 @@ function createRuntimePlugins(input: {
       orchestration: input.orchestration,
       delegationStore: input.delegationStore,
       managedToolNames: input.options.managedToolNames,
+      contextProfile: input.options.contextProfile,
     }),
   ];
   if (input.options.runtimePlugins && input.options.runtimePlugins.length > 0) {

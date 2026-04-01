@@ -10,7 +10,7 @@ export type DelegationRunStatus =
   | "cancelled"
   | "merged";
 
-export type DelegationOutcomeKind = "exploration" | "review" | "verification" | "patch";
+export type DelegationOutcomeKind = "exploration" | "review" | "qa" | "patch";
 export type DelegationDeliveryMode = "text_only" | "supplemental";
 export type DelegationDeliveryHandoffState = "none" | "pending_parent_turn" | "surfaced";
 export type DelegationModelRouteSource = "execution_shape" | "target" | "policy";
@@ -20,6 +20,40 @@ export interface DelegationArtifactRef {
   kind: string;
   path: string;
   summary?: string;
+}
+
+interface QaCheckBase {
+  name: string;
+  result: "pass" | "fail" | "inconclusive";
+  cwd?: string;
+  expected?: string;
+  observedOutput: string;
+  probeType?: string;
+  summary?: string;
+  artifactRefs?: string[];
+}
+
+export interface QaCommandCheck extends QaCheckBase {
+  command: string;
+  exitCode: number;
+  tool?: string;
+}
+
+export interface QaToolCheck extends QaCheckBase {
+  tool: string;
+  command?: never;
+  exitCode?: never;
+}
+
+export type QaCheck = QaCommandCheck | QaToolCheck;
+
+export interface QaSubagentOutcomeData {
+  kind: "qa";
+  verdict: "pass" | "fail" | "inconclusive";
+  checks: QaCheck[];
+  missingEvidence?: string[];
+  confidenceGaps?: string[];
+  environmentLimits?: string[];
 }
 
 export interface DelegationModelRouteRecord {

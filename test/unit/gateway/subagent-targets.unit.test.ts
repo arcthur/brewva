@@ -19,6 +19,8 @@ describe("delegation prompt and catalog composition", () => {
         executorPreamble: "Investigate and summarize.",
         agentSpecName: "explore",
         envelopeName: "readonly-scout",
+        producesPatches: false,
+        contextProfile: "minimal",
       },
       packet: {
         objective: "Inspect the current architecture",
@@ -54,6 +56,8 @@ describe("delegation prompt and catalog composition", () => {
         skillName: "review",
         agentSpecName: "review",
         envelopeName: "readonly-reviewer",
+        producesPatches: false,
+        contextProfile: "minimal",
       },
       packet: {
         objective: "Review the runtime merge path",
@@ -87,6 +91,8 @@ describe("delegation prompt and catalog composition", () => {
         skillName: "review",
         agentSpecName: "review",
         envelopeName: "readonly-reviewer",
+        producesPatches: false,
+        contextProfile: "minimal",
       },
       packet: {
         objective: "Review the runtime merge path",
@@ -108,6 +114,35 @@ describe("delegation prompt and catalog composition", () => {
       '"primaryClaim": "The replay handoff relies on an unproven invariant."',
     );
     expect(prompt).toContain('"missingEvidence": [');
+  });
+
+  test("injects QA anti-rationalization guidance into delegated prompts", () => {
+    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const skill = runtime.skills.get("qa");
+    expect(skill).toBeDefined();
+
+    const prompt = buildDelegationPrompt({
+      target: {
+        name: "qa",
+        description: "Adversarial QA verifier",
+        resultMode: "qa",
+        executorPreamble: "Operate as an adversarial QA verifier.",
+        skillName: "qa",
+        agentSpecName: "qa",
+        envelopeName: "qa-runner",
+        producesPatches: false,
+        contextProfile: "minimal",
+      },
+      packet: {
+        objective: "Try to break the delegated change and preserve the evidence.",
+      },
+      skill: skill!,
+    });
+
+    expect(prompt).toContain("Recognize your own rationalizations");
+    expect(prompt).toContain("The code looks correct based on my reading.");
+    expect(prompt).toContain("Do not invent QA checks from code reading or expectation alone.");
+    expect(prompt).toContain("exitCode");
   });
 
   test("materializes the built-in patch worker through the catalog", async () => {

@@ -26,6 +26,10 @@ describe("subagent delegation catalog", () => {
         fallbackResultMode: "review",
       });
     }
+
+    expect(catalog.agentSpecs.get("review-operability")).toMatchObject({
+      instructionsMarkdown: expect.stringContaining("Recognize your own rationalizations"),
+    });
   });
 
   test("loads workspace execution envelopes and agent specs", async () => {

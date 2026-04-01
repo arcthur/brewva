@@ -19,6 +19,9 @@ Default tools registered by `buildBrewvaTools()`:
 - `look_at`
 - `read_spans`
 - `grep`
+- `git_status`
+- `git_diff`
+- `git_log`
 - `exec`
 - `browser_open`
 - `browser_wait`
@@ -94,17 +97,23 @@ Optional channel tools:
 - `look_at`
 - `read_spans`
 - `grep`
+- `git_status`
+- `git_diff`
+- `git_log`
 
 Notes:
 
-- `lsp_*`, `toc_*`, `look_at`, `read_spans`, `grep`, and `ast_grep_*` resolve
-  file access against the current task target roots; when a task target
+- `lsp_*`, `toc_*`, `look_at`, `read_spans`, `grep`, `git_*`, and `ast_grep_*`
+  resolve file access against the current task target roots; when a task target
   descriptor is present they cannot escape the allowed roots
 - `lsp_diagnostics.severity` canonical values are
   `error | warning | information | hint | all`
 - `toc_document` is the preferred structural overview tool
 - `read_spans` is the preferred bounded follow-up after `toc_document` or
   `toc_search`
+- `git_status`, `git_diff`, and `git_log` are the repository-native
+  observation tools for delegated specialists; they do not imply generic shell
+  authority
 - `ast_grep_search` / `ast_grep_replace` require the `sg` binary
 
 ### Execution And Observability
@@ -407,7 +416,7 @@ Current delegation selector contract:
   - explicit delegated semantic contract
 - `fallbackResultMode?`
   - transport-level fallback schema for ad hoc runs without `skillName`
-- `executionShape.resultMode?` (`exploration` | `review` | `verification` | `patch`)
+- `executionShape.resultMode?` (`exploration` | `review` | `qa` | `patch`)
 - `executionShape.boundary?` (`safe` | `effectful`)
   - optional preset narrowing only
 - `executionShape.model?`
@@ -433,15 +442,25 @@ Current mode contract:
 
 Semantics:
 
-- built-in agent specs remain stable presets: `explore`, `plan`, `review`,
-  `general`, `verification`, and `patch-worker`
+- built-in public agent specs remain stable presets: `explore`, `plan`,
+  `review`, `qa`, and `patch-worker`
 - built-in review-lane delegates are also available for internal review fan-out:
   `review-correctness`, `review-boundaries`, `review-operability`,
   `review-security`, `review-concurrency`, `review-compatibility`, and
-  `review-performance`
+  `review-performance`; they are internal ensemble lanes, not part of the
+  stable public taxonomy
 - built-in execution envelopes are:
-  `readonly-scout`, `readonly-planner`, `readonly-reviewer`,
-  `readonly-general`, `verification-runner`, and `patch-worker`
+  `readonly-scout`, `readonly-planner`, `readonly-reviewer`, `qa-runner`, and
+  `patch-worker`
+- `explore`, `plan`, and `review` resolve to minimal-context read-only
+  specialists; `qa` resolves to an effectful but non-patch-producing verifier;
+  `patch-worker` remains the only patch-producing built-in worker
+- `review-operability` is the internal review lane that audits evidence quality,
+  rollback posture, missing probes, and operator burden; it complements `qa`
+  instead of duplicating executable verification
+- built-in envelopes also carry internal context narrowing posture:
+  read-only specialists and `qa` default to a minimal profile, while
+  `patch-worker` keeps a broader standard profile for isolated execution
 - `agentSpec` supplies default `skillName`, envelope, and executor posture
 - `envelope` may be used alone for ad hoc objective-only delegation, but such
   runs should also supply `fallbackResultMode` unless a named `agentSpec`
@@ -450,6 +469,8 @@ Semantics:
   only narrow the agent spec envelope; widening is rejected
 - when no explicit worker is supplied, the gateway resolves a default agent
   spec from `skillName`, `fallbackResultMode`, or `executionShape.resultMode`
+- unmatched `skillName` or `resultMode` now fail fast instead of falling
+  through to a generic helper
 - `safe` is the default execution boundary
 - `effectful` is reserved for isolated write-capable child runners
 - delegated child model selection is inspectable: explicit
@@ -462,6 +483,13 @@ Semantics:
   `skillOutputs` plus runner-produced `skillValidation`
 - successful child outcomes may include typed `data` alongside `summary`,
   `assistantText`, `evidenceRefs`, and `artifactRefs`
+- delegated `qa` outcomes persist canonical `data.kind = "qa"` evidence; the
+  mirrored `skillOutputs.qa_*` fields are secondary projections, not the
+  primary durable record
+- canonical QA checks are evidence-bearing records rather than narrative claims:
+  command-based checks preserve `command`, `exitCode`, and `observedOutput`;
+  tool-driven checks preserve `tool` and `observedOutput`; `artifactRefs` are
+  supplemental replay evidence rather than a substitute for observed output
 - typed outcome extraction currently uses one sentinel-wrapped JSON block; if
   extraction fails, the outcome degrades gracefully to text-only fields
 - `supplemental` appends same-turn return context to the parent session
@@ -499,6 +527,9 @@ history.
 ## `worker_results_merge` And `worker_results_apply`
 
 Patch-producing delegated runs return `WorkerResult` artifacts for the parent.
+
+`qa-runner` does not participate in this path. It is effectful for execution
+and evidence capture, but it is intentionally non-patch-producing.
 
 - `worker_results_merge` is read-only and reports `empty | conflicts | merged`
 - `worker_results_apply` mutates the parent workspace only after the parent

@@ -77,6 +77,7 @@ This repository uses a layered documentation system:
 ## Research (Incubation Layer)
 
 - Research playbook: `docs/research/README.md`
+- Specialist subagents and adversarial verification RFC: `docs/research/rfc-specialist-subagents-and-adversarial-verification.md`
 - Architecture doc precision review RFC: `docs/research/rfc-architecture-doc-precision-review.md`
 - Boundary-first subtraction and model-native recovery RFC: `docs/research/rfc-boundary-first-subtraction-and-model-native-recovery.md`
 - Durability taxonomy RFC: `docs/research/rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md`

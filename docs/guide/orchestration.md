@@ -43,8 +43,10 @@ Markdown worker files compile into the existing hosted `agentSpec` surface. The
 frontmatter controls the structural fields (`name`, `extends`, `envelope`,
 `skillName`, `fallbackResultMode`, `executorPreamble`), while the Markdown body
 becomes additive authored instructions rendered in the delegated prompt.
-Authority still comes from the normalized hosted catalog, not from ad hoc prompt
-text outside the narrowing rules.
+Built-in specialists now follow the same authored-behavior model through
+catalog-backed constitutions instead of relying only on thin preambles.
+Authority still comes from the normalized hosted catalog, not from ad hoc
+prompt text outside the narrowing rules.
 
 Overlay frontmatter is canonical-only. Worker kind values, envelope names, and
 goal-loop style protocol fields do not keep compatibility aliases in this
@@ -65,6 +67,33 @@ runtime kernel.
 
 This keeps delegated routing visible and reviewable instead of turning it into a
 hidden planner.
+
+## Specialist Cutover Snapshot
+
+The current stable built-in specialist surface is:
+
+- public specialists: `explore`, `plan`, `review`, `qa`, `patch-worker`
+- internal review fan-out lanes:
+  `review-correctness`, `review-boundaries`, `review-operability`,
+  `review-security`, `review-concurrency`, `review-compatibility`, and
+  `review-performance`
+
+Execution posture is intentionally split:
+
+- `explore`, `plan`, and `review` are read-only and run under minimal-context
+  envelopes
+- `qa` is effectful for commands, browser flows, and evidence capture, but it
+  is non-patch-producing and does not enter `WorkerResult` adoption semantics
+- `qa` is intentionally adversarial: a `pass` posture depends on evidence-backed
+  executed checks, not static code reading or inherited implementer confidence
+- `patch-worker` is the isolated patch-producing specialist
+- hosted envelopes also pin `contextProfile`; read-only specialists and `qa`
+  default to `minimal`, while `patch-worker` uses `standard`
+- `review-operability` remains the internal audit lane for stale evidence,
+  missing probes, rollback posture, and operator-visible recovery burden
+
+`runtime.verification.*` remains kernel authority over evidence sufficiency and
+freshness. It is not a delegated specialist.
 
 ## Inspectable Stall Adjudication
 

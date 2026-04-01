@@ -1,12 +1,12 @@
 import type {
   DelegationOutcomeChange,
-  DelegationOutcomeCheck,
   DelegationOutcomeFinding,
   PatchSubagentOutcomeData,
+  QaCheck,
+  QaSubagentOutcomeData,
   ReviewSubagentOutcomeData,
   SubagentOutcomeData,
   SubagentResultMode,
-  VerificationSubagentOutcomeData,
 } from "@brewva/brewva-tools";
 import { normalizeReviewLaneName } from "@brewva/brewva-tools";
 import { STRUCTURED_OUTCOME_CLOSE, STRUCTURED_OUTCOME_OPEN } from "./protocol.js";
@@ -56,20 +56,167 @@ function readFinding(value: unknown): DelegationOutcomeFinding | undefined {
   };
 }
 
-function readCheck(value: unknown): DelegationOutcomeCheck | undefined {
+function readQaCheck(value: unknown): QaCheck | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
   const name = readString(value.name);
-  const status = readString(value.status);
-  if (!name || (status !== "pass" && status !== "fail" && status !== "skip")) {
+  const result = readString(value.result);
+  const command = readString(value.command);
+  const tool = readString(value.tool);
+  const observedOutput = readString(value.observedOutput);
+  if (!name || (result !== "pass" && result !== "fail" && result !== "inconclusive")) {
+    return undefined;
+  }
+  if (!observedOutput) {
+    return undefined;
+  }
+  const normalizedResult: QaCheck["result"] = result;
+  const base = {
+    name,
+    result: normalizedResult,
+    cwd: readString(value.cwd),
+    expected: readString(value.expected),
+    observedOutput,
+    probeType: readString(value.probeType),
+    summary: readString(value.summary),
+    artifactRefs: readStringArray(value.artifactRefs),
+  };
+  if (command) {
+    const exitCode =
+      typeof value.exitCode === "number" && Number.isFinite(value.exitCode)
+        ? value.exitCode
+        : undefined;
+    if (exitCode === undefined) {
+      return undefined;
+    }
+    return {
+      ...base,
+      command,
+      exitCode,
+      ...(tool ? { tool } : {}),
+    };
+  }
+  if (!tool) {
     return undefined;
   }
   return {
-    name,
-    status,
-    summary: readString(value.summary),
-    evidenceRefs: readStringArray(value.evidenceRefs),
+    ...base,
+    tool,
+  };
+}
+
+function appendUnique(values: string[] | undefined, message: string): string[] {
+  const next = values ? [...values] : [];
+  if (!next.includes(message)) {
+    next.push(message);
+  }
+  return next;
+}
+
+function isAdversarialQaCheck(check: QaCheck): boolean {
+  const probeType = readString(check.probeType)?.toLowerCase();
+  if (!probeType) {
+    return false;
+  }
+  return (
+    probeType === "adversarial" ||
+    probeType === "boundary" ||
+    probeType === "edge" ||
+    probeType === "negative" ||
+    probeType === "concurrency" ||
+    probeType === "idempotency" ||
+    probeType === "orphan" ||
+    probeType === "race" ||
+    probeType === "stress" ||
+    probeType === "fuzz"
+  );
+}
+
+function normalizeQaOutcomeData(data: QaSubagentOutcomeData): QaSubagentOutcomeData {
+  const failedChecks = data.checks.filter((check) => check.result === "fail");
+  const inconclusiveChecks = data.checks.filter((check) => check.result === "inconclusive");
+  const hasExecutableEvidence = data.checks.length > 0;
+  const hasAdversarialProbe = data.checks.some(isAdversarialQaCheck);
+  let verdict = data.verdict;
+  let missingEvidence = data.missingEvidence;
+  let confidenceGaps = data.confidenceGaps;
+  const environmentLimits = data.environmentLimits;
+
+  if (verdict === "pass" && failedChecks.length > 0) {
+    verdict = "fail";
+  }
+
+  if (verdict === "pass") {
+    if (!hasExecutableEvidence) {
+      confidenceGaps = appendUnique(
+        confidenceGaps,
+        "No executable QA check was captured for a pass verdict.",
+      );
+    }
+    if (!hasAdversarialProbe) {
+      confidenceGaps = appendUnique(
+        confidenceGaps,
+        "No adversarial QA probe was captured for a pass verdict.",
+      );
+    }
+    if (inconclusiveChecks.length > 0) {
+      confidenceGaps = appendUnique(
+        confidenceGaps,
+        "At least one QA check remained inconclusive, so the verdict cannot stay pass.",
+      );
+    }
+    if (
+      (missingEvidence?.length ?? 0) > 0 ||
+      (confidenceGaps?.length ?? 0) > 0 ||
+      (environmentLimits?.length ?? 0) > 0
+    ) {
+      verdict = "inconclusive";
+    }
+  }
+
+  if (verdict === "fail" && failedChecks.length === 0) {
+    verdict = "inconclusive";
+    confidenceGaps = appendUnique(
+      confidenceGaps,
+      "The QA verdict was fail, but no failed qa_check was captured.",
+    );
+  }
+
+  return {
+    kind: "qa",
+    verdict,
+    checks: data.checks,
+    ...(missingEvidence && missingEvidence.length > 0 ? { missingEvidence } : {}),
+    ...(confidenceGaps && confidenceGaps.length > 0 ? { confidenceGaps } : {}),
+    ...(environmentLimits && environmentLimits.length > 0 ? { environmentLimits } : {}),
+  };
+}
+
+function buildQaSkillOutputs(
+  data: QaSubagentOutcomeData,
+  narrativeText: string,
+  existing: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const report =
+    readString(existing?.qa_report) ??
+    readString(narrativeText) ??
+    summarizeStructuredOutcomeData(data) ??
+    `QA finished with verdict ${data.verdict}.`;
+  return {
+    ...existing,
+    qa_report: report,
+    qa_findings:
+      Array.isArray(existing?.qa_findings) && existing.qa_findings.length > 0
+        ? existing.qa_findings
+        : data.checks
+            .filter((check) => check.result !== "pass")
+            .map((check) => check.summary ?? check.name),
+    qa_verdict: data.verdict,
+    qa_checks: data.checks,
+    qa_missing_evidence: data.missingEvidence ?? [],
+    qa_confidence_gaps: data.confidenceGaps ?? [],
+    qa_environment_limits: data.environmentLimits ?? [],
   };
 }
 
@@ -189,24 +336,34 @@ function parseOutcomeData(
     } satisfies ReviewSubagentOutcomeData;
   }
 
-  if (resultMode === "verification") {
-    const checks = Array.isArray(payload.checks)
-      ? payload.checks
-          .map((entry) => readCheck(entry))
-          .filter((entry): entry is DelegationOutcomeCheck => Boolean(entry))
-      : [];
+  if (resultMode === "qa") {
+    const rawChecks = Array.isArray(payload.checks) ? payload.checks : [];
+    const checks = rawChecks
+      .map((entry) => readQaCheck(entry))
+      .filter((entry): entry is QaCheck => Boolean(entry));
     if (checks.length === 0) {
       return undefined;
     }
     const verdict = readString(payload.verdict);
-    return {
-      kind: "verification",
+    const invalidCheckCount = rawChecks.length - checks.length;
+    const confidenceGaps = readStringArray(payload.confidenceGaps);
+    return normalizeQaOutcomeData({
+      kind: "qa",
       checks,
       verdict:
         verdict === "pass" || verdict === "fail" || verdict === "inconclusive"
           ? verdict
-          : undefined,
-    } satisfies VerificationSubagentOutcomeData;
+          : "inconclusive",
+      missingEvidence: readStringArray(payload.missingEvidence),
+      confidenceGaps:
+        invalidCheckCount > 0
+          ? appendUnique(
+              confidenceGaps,
+              `${invalidCheckCount} qa_check entr${invalidCheckCount === 1 ? "y was" : "ies were"} discarded because the canonical execution evidence contract was not satisfied.`,
+            )
+          : confidenceGaps,
+      environmentLimits: readStringArray(payload.environmentLimits),
+    } satisfies QaSubagentOutcomeData);
   }
 
   return {
@@ -227,7 +384,7 @@ export function summarizeStructuredOutcomeData(data: SubagentOutcomeData): strin
   if (data.kind === "review") {
     return data.primaryClaim ?? data.findings?.[0]?.summary ?? data.strongestCounterpoint;
   }
-  if (data.kind === "verification") {
+  if (data.kind === "qa") {
     return data.checks[0]?.summary ?? data.checks[0]?.name;
   }
   return data.patchSummary ?? data.changes?.[0]?.summary ?? data.changes?.[0]?.path;
@@ -268,14 +425,18 @@ export function extractStructuredOutcomeData(input: {
     };
   }
   const data = parseOutcomeData(input.resultMode, parsed);
-  const skillOutputs = isRecord(parsed) ? readObject(parsed.skillOutputs) : undefined;
+  const rawSkillOutputs = isRecord(parsed) ? readObject(parsed.skillOutputs) : undefined;
   if (!data) {
     return {
       narrativeText: normalized.narrativeText,
       parseError: "invalid_structured_outcome_payload",
-      skillOutputs,
+      skillOutputs: rawSkillOutputs,
     };
   }
+  const skillOutputs =
+    input.skillName === "qa" && data.kind === "qa"
+      ? buildQaSkillOutputs(data, normalized.narrativeText, rawSkillOutputs)
+      : rawSkillOutputs;
   return {
     data,
     narrativeText: normalized.narrativeText,

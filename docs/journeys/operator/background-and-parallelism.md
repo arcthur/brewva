@@ -23,7 +23,7 @@ parallel-budget limits, isolated workspaces, and parent-controlled adoption.
 
 - parallel slot gate
 - detached child runs
-- read-only delegation and `PatchSet`-producing delegation
+- read-only delegation, executable QA delegation, and `PatchSet`-producing delegation
 - worker-result merge / apply
 
 ## Out Of Scope
@@ -38,21 +38,24 @@ parallel-budget limits, isolated workspaces, and parent-controlled adoption.
 flowchart TD
   A["Acquire parallel slot"] --> B{"Accepted?"}
   B -->|No| C["Return budget rejection"]
-  B -->|Yes| D{"Delegation mode"}
-  D -->|Observe| E["Run child session"]
-  D -->|Patch| F["Create isolated snapshot workspace"]
-  E --> G["Return summary / evidence / optional artifact refs"]
-  F --> H["Persist WorkerResult and patch artifacts"]
-  H --> I["Parent reviews results"]
-  I --> J["worker_results_merge"]
-  J --> K{"Conflicts?"}
-  K -->|Yes| L["Return conflict report"]
-  K -->|No| M["worker_results_apply"]
-  M --> N["Record reversible mutation receipt"]
-  G --> O["Release slot"]
-  H --> O
-  L --> O
-  N --> O
+  B -->|Yes| D{"Delegation posture"}
+  D -->|Read-only| E["Run child session"]
+  D -->|QA| F["Run isolated executable verifier"]
+  D -->|Patch| G["Create isolated snapshot workspace"]
+  E --> H["Return summary / evidence / optional artifact refs"]
+  F --> I["Persist QA outcome / artifact refs"]
+  G --> J["Persist WorkerResult and patch artifacts"]
+  J --> K["Parent reviews results"]
+  K --> L["worker_results_merge"]
+  L --> M{"Conflicts?"}
+  M -->|Yes| N["Return conflict report"]
+  M -->|No| O["worker_results_apply"]
+  O --> P["Record reversible mutation receipt"]
+  H --> Q["Release slot"]
+  I --> Q
+  J --> Q
+  N --> Q
+  P --> Q
 ```
 
 ## Key Steps
@@ -63,22 +66,27 @@ flowchart TD
 3. Read-only delegation returns structured results that can be used through
    same-turn supplemental injection or preserved as replay-visible handoff
    state.
-4. `PatchSet`-producing delegation runs inside an isolated snapshot workspace
+4. Executable `qa` runs may use isolated execution and artifact capture, but
+   they do not produce `WorkerResult` and never enter merge/apply posture.
+5. `PatchSet`-producing delegation runs inside an isolated snapshot workspace
    and emits `WorkerResult` plus `PatchSet` artifacts instead of mutating the
    parent
    workspace directly.
-5. The parent session must explicitly call `worker_results_merge` and
+6. The parent session must explicitly call `worker_results_merge` and
    `worker_results_apply` before any child patch is adopted.
-6. Pending worker outcomes flow into `workflow_status` until the parent
-   resolves the adoption step.
+7. Pending patch worker outcomes flow into `workflow_status` until the parent
+   resolves the adoption step; QA outcomes surface as delegation outcomes and
+   `workflow.qa`, not as pending patch adoption work.
 
 ## Execution Semantics
 
 - delegated workers resolve through `agentSpec` and `ExecutionEnvelope`, not
   through arbitrary prompt text
-- when `skillName` is present, the child prompt is assembled from executor
-  preamble, delegated skill body, task packet, context references, and output
-  contracts
+- when `skillName` is present, the child prompt is assembled from authored
+  specialist instructions, delegated skill body, task packet, context
+  references, and output contracts
+- read-only specialists default to minimal-context execution with dedicated
+  repository observation tools such as `git_status`, `git_diff`, and `git_log`
 - detached runs are durable control-plane work, not best-effort background
   helpers
 - late detached outcomes remain explicit parent-attention blockers; the runtime
@@ -107,6 +115,7 @@ flowchart TD
   - `.orchestrator/subagent-runs/<runId>/`
   - `WorkerResult`
   - patch manifests
+  - QA artifact refs and canonical QA outcome data
   - `delegation-context-manifest.json`
 
 ## Code Pointers

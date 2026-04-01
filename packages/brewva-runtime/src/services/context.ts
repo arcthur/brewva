@@ -220,6 +220,7 @@ export class ContextService {
     prompt: string,
     usage?: ContextBudgetUsage,
     injectionScopeId?: string,
+    sourceAllowlist?: ReadonlySet<string>,
   ): Promise<{
     text: string;
     entries: ContextInjectionEntry[];
@@ -228,7 +229,13 @@ export class ContextService {
     finalTokens: number;
     truncated: boolean;
   }> {
-    return this.finalizeContextInjection(sessionId, prompt, usage, injectionScopeId);
+    return this.finalizeContextInjection(
+      sessionId,
+      prompt,
+      usage,
+      injectionScopeId,
+      sourceAllowlist,
+    );
   }
 
   appendSupplementalContextInjection(
@@ -316,6 +323,7 @@ export class ContextService {
     prompt: string,
     usage?: ContextBudgetUsage,
     injectionScopeId?: string,
+    sourceAllowlist?: ReadonlySet<string>,
   ): {
     text: string;
     entries: ContextInjectionEntry[];
@@ -329,6 +337,7 @@ export class ContextService {
       prompt,
       usage,
       injectionScopeId,
+      sourceAllowlist,
     });
   }
 

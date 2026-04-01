@@ -106,8 +106,8 @@ Perspective-to-profile mapping:
 | Security Analyst             | `review-security`    | exposure, trust, and misuse paths                                 |
 | Reliability Engineer         | `review-operability` | failure handling, retries, edge conditions, and operator burden   |
 | Performance Engineer         | `review-performance` | hot spots, scaling, and measurable regressions                    |
-| Devil's Advocate             | `general`            | alternative explanations, missing context, and anti-herd pressure |
-| Optional empirical follow-up | `verification`       | read-only validation against existing evidence                    |
+| Devil's Advocate             | `explore`            | alternative explanations, missing context, and anti-herd pressure |
+| Optional empirical follow-up | `qa`                 | executable follow-up against the live risk surface                |
 
 The perspective lives in the delegation packet:
 
@@ -130,8 +130,8 @@ Require all of the following:
 3. The Devil's Advocate challenges majority positions explicitly.
 4. Majority agreement is not enough on its own; unresolved objections must stay
    visible.
-5. Use `subagent_run` for an optional verification pass only when read-only
-   evidence already exists and the debate needs empirical confirmation.
+5. Use `subagent_run` for an optional QA pass when the debate needs executable
+   confirmation or a targeted attempt to break the leading hypothesis.
 
 ### Step 4: Emit advisory artifacts
 
@@ -172,7 +172,7 @@ Use these questions to keep the multi-perspective pass honest:
 ## Delegation Protocol
 
 - `subagent_fanout` is the default when the perspectives are independent.
-- `subagent_run` is for a follow-up challenge or verification pass, not a
+- `subagent_run` is for a follow-up challenge or QA pass, not a
   replacement for the initial independent sweep.
 - Keep all delegated runs read-only.
 - Require each perspective packet to return concrete claims, evidence anchors,

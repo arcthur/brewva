@@ -117,12 +117,22 @@ describe("workflow derivation", () => {
           timestamp: 130,
           payload: {
             skillName: "qa",
-            outputKeys: ["qa_report", "qa_findings", "qa_verdict", "qa_artifacts"],
+            outputKeys: ["qa_report", "qa_findings", "qa_verdict", "qa_checks"],
             outputs: {
               qa_report: "Exercised the main path and confirmed the UI state.",
               qa_findings: [],
               qa_verdict: "pass",
-              qa_artifacts: ["snapshots/main-flow.json"],
+              qa_checks: [
+                {
+                  name: "ui-smoke",
+                  result: "pass",
+                  command: "bun test",
+                  exitCode: 0,
+                  observedOutput: "ui smoke passed",
+                  probeType: "adversarial",
+                  artifactRefs: ["snapshots/main-flow.json"],
+                },
+              ],
             },
           },
         }),

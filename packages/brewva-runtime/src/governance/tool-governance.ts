@@ -96,6 +96,24 @@ export const TOOL_GOVERNANCE_BY_NAME: Record<string, ToolGovernanceDescriptor> =
     effects: ["workspace_read"],
     defaultRisk: "low",
   }),
+  git_status: descriptor({
+    effects: ["workspace_read"],
+    defaultRisk: "low",
+    boundary: "safe",
+    rollbackable: false,
+  }),
+  git_diff: descriptor({
+    effects: ["workspace_read"],
+    defaultRisk: "low",
+    boundary: "safe",
+    rollbackable: false,
+  }),
+  git_log: descriptor({
+    effects: ["workspace_read"],
+    defaultRisk: "low",
+    boundary: "safe",
+    rollbackable: false,
+  }),
   glob: descriptor({
     effects: ["workspace_read"],
     defaultRisk: "low",

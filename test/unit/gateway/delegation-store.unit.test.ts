@@ -104,4 +104,29 @@ describe("HostedDelegationStore", () => {
       workerSessionId: "child-1",
     });
   });
+
+  test("does not preserve removed delegated verification kinds in read models", () => {
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const store = new HostedDelegationStore(runtime);
+    const sessionId = "delegation-store-no-legacy-verification";
+
+    runtime.events.record({
+      sessionId,
+      type: "subagent_completed",
+      timestamp: 100,
+      payload: {
+        runId: "run-legacy-kind",
+        delegate: "qa",
+        status: "completed",
+        kind: "verification",
+        summary: "legacy verification run",
+      },
+    });
+
+    expect(store.getRun(sessionId, "run-legacy-kind")).toMatchObject({
+      runId: "run-legacy-kind",
+      status: "completed",
+      kind: undefined,
+    });
+  });
 });

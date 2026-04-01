@@ -172,7 +172,9 @@ describe("skill_complete tool", () => {
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toContain("Skill completion rejected.");
     expect(text).toContain("Missing required outputs: risk_register");
-    expect(text).toContain("Invalid required outputs: design_spec, execution_plan");
+    expect(text).toContain("Invalid required outputs:");
+    expect(text).toContain("design_spec");
+    expect(text).toContain("execution_plan");
     expect(runtime.skills.getActive(sessionId)?.name).toBe("design-contract");
   });
 
@@ -522,7 +524,9 @@ The WAL boundary must keep replay ordering deterministic.
 
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toContain("Skill completion rejected.");
-    expect(text).toContain("Invalid required outputs: review_report, review_findings");
+    expect(text).toContain("Invalid required outputs:");
+    expect(text).toContain("review_report");
+    expect(text).toContain("review_findings");
     expect(runtime.skills.getActive(sessionId)?.name).toBe("review-contract");
   });
 
@@ -800,6 +804,305 @@ The WAL boundary must keep replay ordering deterministic.
         },
       },
     });
+  });
+
+  test("rejects QA pass verdicts that lack an adversarial probe", async () => {
+    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const sessionId = "skill-complete-qa-pass-without-adversarial";
+    const loadTool = createSkillLoadTool({ runtime });
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
+
+    await loadTool.execute(
+      "tc-load-qa-no-adversarial",
+      { name: "qa" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const result = await completeTool.execute(
+      "tc-complete-qa-no-adversarial",
+      {
+        outputs: {
+          qa_report: "Executed one executable smoke check, but only on the happy path.",
+          qa_findings: [],
+          qa_verdict: "pass",
+          qa_checks: [
+            {
+              name: "smoke",
+              result: "pass",
+              command: "bun test -- smoke",
+              exitCode: 0,
+              observedOutput: "smoke path passed",
+              probeType: "baseline",
+            },
+          ],
+          qa_missing_evidence: [],
+          qa_confidence_gaps: [],
+          qa_environment_limits: [],
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("Skill completion rejected.");
+    expect(text).toContain("qa_verdict");
+    expect(runtime.skills.getActive(sessionId)?.name).toBe("qa");
+  });
+
+  test("accepts QA pass verdicts backed by executable adversarial evidence", async () => {
+    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const sessionId = "skill-complete-qa-pass-valid";
+    const loadTool = createSkillLoadTool({ runtime });
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
+
+    await loadTool.execute(
+      "tc-load-qa-valid",
+      { name: "qa" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const result = await completeTool.execute(
+      "tc-complete-qa-valid",
+      {
+        outputs: {
+          qa_report:
+            "Executed an adversarial boundary probe and preserved the replayable evidence.",
+          qa_findings: [],
+          qa_verdict: "pass",
+          qa_checks: [
+            {
+              name: "boundary-input",
+              result: "pass",
+              command: "bun test -- boundary-input",
+              exitCode: 0,
+              observedOutput: "boundary-input passed",
+              probeType: "boundary",
+              artifactRefs: ["artifacts/qa-boundary.txt"],
+            },
+          ],
+          qa_missing_evidence: [],
+          qa_confidence_gaps: [],
+          qa_environment_limits: [],
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("Skill completed");
+    expect(runtime.skills.getActive(sessionId)).toBeUndefined();
+  });
+
+  test("rejects QA checks that omit command exitCode evidence", async () => {
+    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const sessionId = "skill-complete-qa-missing-exit-code";
+    const loadTool = createSkillLoadTool({ runtime });
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
+
+    await loadTool.execute(
+      "tc-load-qa-missing-exit-code",
+      { name: "qa" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const result = await completeTool.execute(
+      "tc-complete-qa-missing-exit-code",
+      {
+        outputs: {
+          qa_report: "Ran the boundary check but failed to preserve complete command evidence.",
+          qa_findings: [],
+          qa_verdict: "pass",
+          qa_checks: [
+            {
+              name: "boundary-input",
+              result: "pass",
+              command: "bun test -- boundary-input",
+              observedOutput: "boundary-input passed",
+              probeType: "boundary",
+            },
+          ],
+          qa_missing_evidence: [],
+          qa_confidence_gaps: [],
+          qa_environment_limits: [],
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("Skill completion rejected.");
+    expect(text).toContain("qa_checks[0]");
+    expect(text).toContain("exitCode");
+    expect(runtime.skills.getActive(sessionId)?.name).toBe("qa");
+  });
+
+  test("rejects QA checks that omit both command and tool descriptors", async () => {
+    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const sessionId = "skill-complete-qa-missing-descriptor";
+    const loadTool = createSkillLoadTool({ runtime });
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
+
+    await loadTool.execute(
+      "tc-load-qa-missing-descriptor",
+      { name: "qa" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const result = await completeTool.execute(
+      "tc-complete-qa-missing-descriptor",
+      {
+        outputs: {
+          qa_report: "Recorded a boundary probe, but failed to preserve how it was executed.",
+          qa_findings: [],
+          qa_verdict: "inconclusive",
+          qa_checks: [
+            {
+              name: "boundary-input",
+              result: "inconclusive",
+              observedOutput: "Boundary harness state was inspected manually.",
+              probeType: "boundary",
+            },
+          ],
+          qa_missing_evidence: ["No executable or tool-backed descriptor was preserved."],
+          qa_confidence_gaps: [],
+          qa_environment_limits: [],
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("Skill completion rejected.");
+    expect(text).toContain("qa_checks[0]");
+    expect(text).toContain("command or tool descriptor");
+    expect(runtime.skills.getActive(sessionId)?.name).toBe("qa");
+  });
+
+  test("rejects QA checks that omit observed evidence", async () => {
+    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const sessionId = "skill-complete-qa-missing-observed-evidence";
+    const loadTool = createSkillLoadTool({ runtime });
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
+
+    await loadTool.execute(
+      "tc-load-qa-missing-observed-evidence",
+      { name: "qa" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const result = await completeTool.execute(
+      "tc-complete-qa-missing-observed-evidence",
+      {
+        outputs: {
+          qa_report:
+            "Executed the boundary probe, but did not preserve the actual observed evidence.",
+          qa_findings: [],
+          qa_verdict: "inconclusive",
+          qa_checks: [
+            {
+              name: "boundary-input",
+              result: "inconclusive",
+              command: "bun test -- boundary-input",
+              exitCode: 0,
+              probeType: "boundary",
+            },
+          ],
+          qa_missing_evidence: ["No observed output excerpt was preserved."],
+          qa_confidence_gaps: [],
+          qa_environment_limits: [],
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("Skill completion rejected.");
+    expect(text).toContain("qa_checks[0]");
+    expect(text).toContain("observedOutput");
+    expect(runtime.skills.getActive(sessionId)?.name).toBe("qa");
+  });
+
+  test("rejects QA fail verdicts without an evidence-backed failed check", async () => {
+    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const sessionId = "skill-complete-qa-fail-without-evidence";
+    const loadTool = createSkillLoadTool({ runtime });
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
+
+    await loadTool.execute(
+      "tc-load-qa-fail-without-evidence",
+      { name: "qa" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const result = await completeTool.execute(
+      "tc-complete-qa-fail-without-evidence",
+      {
+        outputs: {
+          qa_report: "Recorded a failed check, but the actual evidence trail is incomplete.",
+          qa_findings: ["The flow still appears broken, but the evidence packet is incomplete."],
+          qa_verdict: "fail",
+          qa_checks: [
+            {
+              name: "broken-flow",
+              result: "fail",
+              command: "bun test -- broken-flow",
+              probeType: "adversarial",
+            },
+          ],
+          qa_missing_evidence: [],
+          qa_confidence_gaps: [],
+          qa_environment_limits: [],
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("Skill completion rejected.");
+    expect(text).toContain("qa_checks[0]");
+    expect(runtime.skills.getActive(sessionId)?.name).toBe("qa");
   });
 
   test("rejects manual review outputs when reviewEnsemble synthesis is enabled", async () => {
@@ -1115,7 +1418,9 @@ The WAL boundary must keep replay ordering deterministic.
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toContain("Skill completion rejected.");
     expect(text).toContain("Missing required outputs: files_changed");
-    expect(text).toContain("Invalid required outputs: change_set, verification_evidence");
+    expect(text).toContain("Invalid required outputs:");
+    expect(text).toContain("change_set");
+    expect(text).toContain("verification_evidence");
     expect(runtime.skills.getActive(sessionId)?.name).toBe("implementation-contract");
   });
 
