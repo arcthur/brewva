@@ -68,6 +68,7 @@ describe("scheduler service execution contract", () => {
         reason: "no executor",
         continuityMode: "inherit",
         runAt: now - 1_000,
+        nextRunAt: now - 1_000,
         maxRuns: 1,
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
@@ -135,6 +136,7 @@ describe("scheduler service execution contract", () => {
         reason: "wait for ci_green",
         continuityMode: "inherit",
         runAt: now - 1_000,
+        nextRunAt: now - 1_000,
         maxRuns: 5,
         convergenceCondition: {
           kind: "truth_resolved",
@@ -179,5 +181,109 @@ describe("scheduler service execution contract", () => {
     expect(state?.status).toBe("converged");
     expect(state?.runCount).toBe(1);
     expect(state?.lastEvaluationSessionId).toBe(`${sessionId}-child`);
+  });
+
+  test("skips catch-up while execution is paused and resumes via syncExecutionState", async () => {
+    const workspace = createWorkspace("pause-resume-sync");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "scheduler-pause-resume-session";
+    let nowMs = Date.UTC(2026, 0, 1, 0, 0, 0, 0);
+
+    runtime.events.record({
+      sessionId,
+      type: SCHEDULE_EVENT_TYPE,
+      payload: buildScheduleIntentCreatedEvent({
+        intentId: "intent-pause-resume-1",
+        parentSessionId: sessionId,
+        reason: "paused recover",
+        continuityMode: "inherit",
+        runAt: nowMs - 1_000,
+        nextRunAt: nowMs - 1_000,
+        maxRuns: 1,
+      }) as unknown as Record<string, unknown>,
+      skipTapeCheckpoint: true,
+    });
+
+    const fired: string[] = [];
+    const scheduledCallbacks: Array<() => void> = [];
+    let resolveExecution: (() => void) | undefined;
+    const executed = new Promise<void>((resolve) => {
+      resolveExecution = resolve;
+    });
+    let paused = true;
+    const scheduler = new SchedulerService({
+      runtime: schedulerRuntimePort(runtime),
+      now: () => nowMs,
+      shouldExecute: () => !paused,
+      setTimer: (callback) => {
+        scheduledCallbacks.push(callback);
+        return callback;
+      },
+      clearTimer: () => undefined,
+      executeIntent: async (intent) => {
+        fired.push(intent.intentId);
+        resolveExecution?.();
+      },
+    });
+
+    const pausedRecover = await scheduler.recover();
+    expect(pausedRecover.catchUp.dueIntents).toBe(0);
+    expect(pausedRecover.catchUp.firedIntents).toBe(0);
+    expect(fired).toEqual([]);
+    expect(scheduledCallbacks).toHaveLength(0);
+
+    paused = false;
+    scheduler.syncExecutionState();
+    expect(scheduledCallbacks).toHaveLength(1);
+    nowMs += 1_000;
+    scheduledCallbacks[0]?.();
+    await executed;
+    scheduler.stop();
+
+    expect(fired).toEqual(["intent-pause-resume-1"]);
+  });
+
+  test("syncExecutionState clears armed timers when paused", async () => {
+    const workspace = createWorkspace("sync-execution-state");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const nowMs = Date.UTC(2026, 0, 1, 0, 0, 0, 0);
+    let paused = false;
+    const scheduledCallbacks: Array<() => void> = [];
+    let clearCount = 0;
+
+    const scheduler = new SchedulerService({
+      runtime: schedulerRuntimePort(runtime),
+      now: () => nowMs,
+      enableExecution: true,
+      shouldExecute: () => !paused,
+      setTimer: (callback) => {
+        scheduledCallbacks.push(callback);
+        return callback;
+      },
+      clearTimer: () => {
+        clearCount += 1;
+      },
+      executeIntent: async () => undefined,
+    });
+    await scheduler.recover();
+
+    const created = scheduler.createIntent({
+      intentId: "intent-sync-execution-state-1",
+      parentSessionId: "session-sync-execution-state",
+      reason: "future timer",
+      continuityMode: "inherit",
+      runAt: nowMs + 120_000,
+      maxRuns: 1,
+    });
+    expect(created.ok).toBe(true);
+    expect(scheduler.getStats().timersArmed).toBe(1);
+
+    paused = true;
+    scheduler.syncExecutionState();
+    scheduler.stop();
+
+    expect(clearCount).toBeGreaterThan(0);
+    expect(scheduler.getStats().timersArmed).toBe(0);
+    expect(scheduledCallbacks.length).toBeGreaterThan(0);
   });
 });

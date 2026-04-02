@@ -19,6 +19,8 @@ export const GatewayMethods = [
   "connect",
   "health",
   "status.deep",
+  "scheduler.pause",
+  "scheduler.resume",
   "sessions.open",
   "sessions.subscribe",
   "sessions.unsubscribe",
@@ -177,6 +179,17 @@ export type HealthParams = Static<typeof HealthParamsSchema>;
 export const StatusDeepParamsSchema = Type.Object({}, { additionalProperties: false });
 export type StatusDeepParams = Static<typeof StatusDeepParamsSchema>;
 
+export const SchedulerPauseParamsSchema = Type.Object(
+  {
+    reason: Type.Optional(NonEmptyString),
+  },
+  { additionalProperties: false },
+);
+export type SchedulerPauseParams = Static<typeof SchedulerPauseParamsSchema>;
+
+export const SchedulerResumeParamsSchema = Type.Object({}, { additionalProperties: false });
+export type SchedulerResumeParams = Static<typeof SchedulerResumeParamsSchema>;
+
 export const SessionsOpenParamsSchema = Type.Object(
   {
     sessionId: Type.Optional(NonEmptyString),
@@ -252,6 +265,8 @@ export type GatewayParamsByMethod = {
   connect: ConnectParams;
   health: HealthParams;
   "status.deep": StatusDeepParams;
+  "scheduler.pause": SchedulerPauseParams;
+  "scheduler.resume": SchedulerResumeParams;
   "sessions.open": SessionsOpenParams;
   "sessions.subscribe": SessionsSubscribeParams;
   "sessions.unsubscribe": SessionsUnsubscribeParams;

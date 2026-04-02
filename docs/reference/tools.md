@@ -50,6 +50,7 @@ Default tools registered by `buildBrewvaTools()`:
 - `iteration_fact`
 - `output_search`
 - `workflow_status`
+- `follow_up`
 - `schedule_intent`
 - `tape_handoff`
 - `tape_info`
@@ -231,6 +232,7 @@ Current posture:
 - `deliberation_memory`
 - `rollback_last_patch`
 - `optimization_continuity`
+- `follow_up`
 - `schedule_intent`
 - `task_set_spec`
 - `task_add_item`
@@ -271,6 +273,23 @@ is inspection-only: use it to inspect continuation, convergence, and escalation
 helpers without turning runtime execution into a hidden optimizer. The
 `attention` action is the operator-oriented view for overdue, escalated, or
 long-running lineages.
+
+## `follow_up` And `schedule_intent`
+
+Scheduling has two public authoring layers:
+
+- `follow_up`
+  - ergonomic bounded wrapper for delayed or recurring follow-ups
+  - accepts `after` or `every` duration strings
+  - supports `create`, `cancel`, and `list`
+  - defaults recurring follow-ups to `continuityMode=inherit` and `maxRuns=12`
+- `schedule_intent`
+  - precise lower-level control surface
+  - supports `runAt`, `delayMs`, `cron`, `timeZone`, and `update`
+  - remains the canonical runtime-facing contract and replay surface
+
+`follow_up` compiles into the same runtime scheduling model as `schedule_intent`;
+it does not create a second scheduler or bypass scheduling governance.
 
 ## Governance Metadata
 

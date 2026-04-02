@@ -106,6 +106,7 @@ export interface BrewvaConfig {
     minIntervalMs: number;
     maxConsecutiveErrors: number;
     maxRecoveryCatchUps: number;
+    staleOneShotRecoveryThresholdMs: number;
   };
   parallel: {
     enabled: boolean;

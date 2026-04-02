@@ -45,6 +45,9 @@ import { ScheduleProjectionStore } from "./projection.js";
 
 type TimerHandle = unknown;
 
+const RECURRING_JITTER_INTERVAL_RATIO = 0.1;
+const MAX_RECURRING_JITTER_MS = 15 * 60 * 1000;
+
 function sortEventsByTime(left: BrewvaEventRecord, right: BrewvaEventRecord): number {
   // Keep comparator timestamp-only so stable sort preserves append order when timestamps collide.
   return left.timestamp - right.timestamp;
@@ -192,6 +195,7 @@ export interface SchedulerServiceOptions {
   now?: () => number;
   setTimer?: (callback: () => void, delayMs: number) => TimerHandle;
   clearTimer?: (handle: TimerHandle) => void;
+  shouldExecute?: () => boolean;
   executeIntent?: (
     intent: ScheduleIntentProjectionRecord,
   ) => Promise<ScheduleIntentExecutionResult | void> | ScheduleIntentExecutionResult | void;
@@ -217,6 +221,7 @@ export class SchedulerService {
   private readonly now: () => number;
   private readonly setTimer: (callback: () => void, delayMs: number) => TimerHandle;
   private readonly clearTimer: (handle: TimerHandle) => void;
+  private readonly shouldExecute: () => boolean;
   private readonly executeIntent: (
     intent: ScheduleIntentProjectionRecord,
   ) => Promise<ScheduleIntentExecutionResult | void>;
@@ -238,6 +243,7 @@ export class SchedulerService {
     this.now = options.now ?? (() => Date.now());
     this.setTimer = options.setTimer ?? ((callback, delayMs) => setTimeout(callback, delayMs));
     this.clearTimer = options.clearTimer ?? ((handle) => clearTimeout(handle as NodeJS.Timeout));
+    this.shouldExecute = options.shouldExecute ?? (() => true);
     this.executeIntent = async (intent) => {
       if (options.executeIntent) {
         return await options.executeIntent(intent);
@@ -283,6 +289,11 @@ export class SchedulerService {
       this.clearTimer(timer);
     }
     this.timersByIntentId.clear();
+  }
+
+  syncExecutionState(): void {
+    if (!this.enableExecution) return;
+    this.armAllTimers();
   }
 
   async recover(): Promise<SchedulerRecoverResult> {
@@ -366,6 +377,11 @@ export class SchedulerService {
     let normalizedRunAt: number | undefined;
     let normalizedNextRunAt: number | undefined;
     let normalizedTimeZone: string | undefined;
+    const intentId = normalizeOptionalString(input.intentId) ?? generateIntentId(now);
+
+    if (this.intentsById.has(intentId)) {
+      return { ok: false, error: "intent_id_already_exists" };
+    }
 
     if (hasCron) {
       const cron = normalizedCron;
@@ -387,7 +403,12 @@ export class SchedulerService {
         addMilliseconds(now, this.runtimePort.scheduleConfig.minIntervalMs),
         1,
       ).getTime();
-      normalizedNextRunAt = this.computeCronNextRunAt(cron, minBase, normalizedTimeZone);
+      normalizedNextRunAt = this.computeRecurringCronNextRunAt(
+        intentId,
+        cron,
+        minBase,
+        normalizedTimeZone,
+      );
       if (normalizedNextRunAt === undefined) {
         return { ok: false, error: "cron_has_no_future_match" };
       }
@@ -418,10 +439,6 @@ export class SchedulerService {
 
     const maxRuns = normalizeMaxRuns(input.maxRuns, hasCron ? 10_000 : 1);
     const continuityMode = input.continuityMode ?? "inherit";
-    const intentId = normalizeOptionalString(input.intentId) ?? generateIntentId(now);
-    if (this.intentsById.has(intentId)) {
-      return { ok: false, error: "intent_id_already_exists" };
-    }
 
     const payload = buildScheduleIntentCreatedEvent({
       intentId,
@@ -562,7 +579,12 @@ export class SchedulerService {
         addMilliseconds(now, this.runtimePort.scheduleConfig.minIntervalMs),
         1,
       ).getTime();
-      const nextRunAtForCron = this.computeCronNextRunAt(nextCron, minBase, nextTimeZone);
+      const nextRunAtForCron = this.computeRecurringCronNextRunAt(
+        intent.intentId,
+        nextCron,
+        minBase,
+        nextTimeZone,
+      );
       if (nextRunAtForCron === undefined) {
         return { ok: false, error: "cron_has_no_future_match" };
       }
@@ -583,7 +605,12 @@ export class SchedulerService {
         addMilliseconds(now, this.runtimePort.scheduleConfig.minIntervalMs),
         1,
       ).getTime();
-      const nextRunAtForCron = this.computeCronNextRunAt(cron, minBase, nextTimeZone);
+      const nextRunAtForCron = this.computeRecurringCronNextRunAt(
+        intent.intentId,
+        cron,
+        minBase,
+        nextTimeZone,
+      );
       if (nextRunAtForCron === undefined) {
         return { ok: false, error: "cron_has_no_future_match" };
       }
@@ -608,7 +635,7 @@ export class SchedulerService {
           addMilliseconds(now, this.runtimePort.scheduleConfig.minIntervalMs),
           1,
         ).getTime();
-        nextRunAt = this.computeCronNextRunAt(cron, minBase, timeZone);
+        nextRunAt = this.computeRecurringCronNextRunAt(intent.intentId, cron, minBase, timeZone);
         if (nextRunAt === undefined) {
           return { ok: false, error: "cron_has_no_future_match" };
         }
@@ -690,19 +717,7 @@ export class SchedulerService {
     const normalizedTimeZone = normalizedCron
       ? (normalizeTimeZone(payload.timeZone ?? "") ?? this.defaultCronTimeZone)
       : undefined;
-    const nextRunAtFromCreate =
-      payload.nextRunAt ??
-      payload.runAt ??
-      (normalizedCron
-        ? this.computeCronNextRunAt(
-            normalizedCron,
-            subMilliseconds(
-              addMilliseconds(timestamp, this.runtimePort.scheduleConfig.minIntervalMs),
-              1,
-            ).getTime(),
-            normalizedTimeZone,
-          )
-        : undefined);
+    const nextRunAtFromCreate = payload.nextRunAt;
     const existing = this.intentsById.get(payload.intentId);
     const record =
       existing ??
@@ -853,6 +868,7 @@ export class SchedulerService {
 
   private armTimer(intent: ScheduleIntentProjectionRecord): void {
     this.clearTimerForIntent(intent.intentId);
+    if (!this.canExecuteScheduledWork()) return;
     if (intent.status !== "active") return;
     if (typeof intent.nextRunAt !== "number" || !Number.isFinite(intent.nextRunAt)) return;
 
@@ -899,7 +915,7 @@ export class SchedulerService {
     now: number;
     sequence: number;
     backlogSize: number;
-    reason?: "max_recovery_catchups_exceeded" | "turn_wal_inflight";
+    reason?: "max_recovery_catchups_exceeded" | "turn_wal_inflight" | "stale_one_shot_recovery";
   }): boolean {
     const deferredFrom = input.intent.nextRunAt;
     const deferredTo = addMilliseconds(
@@ -962,6 +978,14 @@ export class SchedulerService {
   }
 
   private async catchUpMissedRuns(): Promise<SchedulerCatchUpSummary> {
+    if (!this.canExecuteScheduledWork()) {
+      return {
+        dueIntents: 0,
+        firedIntents: 0,
+        deferredIntents: 0,
+        sessions: [],
+      };
+    }
     const now = this.now();
     const limit = this.runtimePort.scheduleConfig.maxRecoveryCatchUps;
     const pendingScheduleWalByIntent = this.buildPendingScheduleWalIndex(now);
@@ -977,10 +1001,19 @@ export class SchedulerService {
       const wal = pendingScheduleWalByIntent.get(intent.intentId);
       return wal?.status === "inflight";
     });
-    const due = allDue.filter((intent) => {
+    const walClearDue = allDue.filter((intent) => {
       const wal = pendingScheduleWalByIntent.get(intent.intentId);
       return wal?.status !== "inflight";
     });
+    const staleOneShots = walClearDue.filter(
+      (intent) =>
+        intent.runAt !== undefined &&
+        intent.cron === undefined &&
+        typeof intent.nextRunAt === "number" &&
+        now - intent.nextRunAt > this.runtimePort.scheduleConfig.staleOneShotRecoveryThresholdMs,
+    );
+    const staleOneShotIds = new Set(staleOneShots.map((intent) => intent.intentId));
+    const due = walClearDue.filter((intent) => !staleOneShotIds.has(intent.intentId));
 
     const sessions = new Map<string, SchedulerCatchUpSessionSummary>();
     for (const intent of allDue) {
@@ -1035,43 +1068,34 @@ export class SchedulerService {
       }
     }
     let deferredIntents = 0;
-    for (let index = 0; index < deferredByWal.length; index += 1) {
-      const intent = deferredByWal[index];
-      if (!intent) continue;
-      if (
-        this.deferIntentAfterRecovery({
-          intent,
-          now,
-          sequence: index + 1,
-          backlogSize: deferredByWal.length,
-          reason: "turn_wal_inflight",
-        })
-      ) {
-        deferredIntents += 1;
-        const summary = sessions.get(intent.parentSessionId);
-        if (summary) {
-          summary.deferredIntents += 1;
+    const totalDeferredBacklog = deferredByWal.length + staleOneShots.length + overflow.length;
+    let deferredSequence = 0;
+    const deferRecoveryBucket = (
+      intents: ScheduleIntentProjectionRecord[],
+      reason: "max_recovery_catchups_exceeded" | "turn_wal_inflight" | "stale_one_shot_recovery",
+    ): void => {
+      for (const intent of intents) {
+        deferredSequence += 1;
+        if (
+          this.deferIntentAfterRecovery({
+            intent,
+            now,
+            sequence: deferredSequence,
+            backlogSize: totalDeferredBacklog,
+            reason,
+          })
+        ) {
+          deferredIntents += 1;
+          const summary = sessions.get(intent.parentSessionId);
+          if (summary) {
+            summary.deferredIntents += 1;
+          }
         }
       }
-    }
-    for (let index = 0; index < overflow.length; index += 1) {
-      const intent = overflow[index];
-      if (!intent) continue;
-      if (
-        this.deferIntentAfterRecovery({
-          intent,
-          now,
-          sequence: index + 1,
-          backlogSize: overflow.length,
-        })
-      ) {
-        deferredIntents += 1;
-        const summary = sessions.get(intent.parentSessionId);
-        if (summary) {
-          summary.deferredIntents += 1;
-        }
-      }
-    }
+    };
+    deferRecoveryBucket(deferredByWal, "turn_wal_inflight");
+    deferRecoveryBucket(staleOneShots, "stale_one_shot_recovery");
+    deferRecoveryBucket(overflow, "max_recovery_catchups_exceeded");
 
     return {
       dueIntents: allDue.length,
@@ -1094,6 +1118,10 @@ export class SchedulerService {
     if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return undefined;
     const minimum = addMilliseconds(now, this.runtimePort.scheduleConfig.minIntervalMs).getTime();
     return Math.max(Math.floor(value), minimum);
+  }
+
+  private canExecuteScheduledWork(): boolean {
+    return this.enableExecution && this.shouldExecute();
   }
 
   private resolveParsedCron(cronExpression: string): ParsedCronExpression | undefined {
@@ -1126,6 +1154,43 @@ export class SchedulerService {
     return getNextCronRunAt(parsed, afterMs, { timeZone: normalizedTimeZone });
   }
 
+  private hashStringToFraction(source: string): number {
+    let hash = 0x811c9dc5;
+    for (let index = 0; index < source.length; index += 1) {
+      hash ^= source.charCodeAt(index);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return hash / 0x1_0000_0000;
+  }
+
+  private computeRecurringCronNextRunAt(
+    intentId: string,
+    cronExpression: string,
+    afterMs: number,
+    timeZone?: string,
+  ): number | undefined {
+    const exactNextRunAt = this.computeCronNextRunAt(cronExpression, afterMs, timeZone);
+    if (exactNextRunAt === undefined) return undefined;
+
+    const followingRunAt = this.computeCronNextRunAt(cronExpression, exactNextRunAt, timeZone);
+    if (
+      followingRunAt === undefined ||
+      !Number.isFinite(followingRunAt) ||
+      followingRunAt <= exactNextRunAt
+    ) {
+      return exactNextRunAt;
+    }
+
+    const intervalMs = followingRunAt - exactNextRunAt;
+    const jitterMs = Math.floor(
+      Math.min(
+        MAX_RECURRING_JITTER_MS,
+        intervalMs * RECURRING_JITTER_INTERVAL_RATIO * this.hashStringToFraction(intentId),
+      ),
+    );
+    return exactNextRunAt + jitterMs;
+  }
+
   private evaluateConvergencePredicate(
     predicate: ConvergencePredicate | undefined,
     input: { sessionId: string; runIndex: number },
@@ -1156,6 +1221,7 @@ export class SchedulerService {
 
   private async fireIntent(intentId: string): Promise<void> {
     if (!this.enableExecution) return;
+    if (!this.canExecuteScheduledWork()) return;
     if (this.fireInProgress.has(intentId)) return;
     const intent = this.intentsById.get(intentId);
     if (!intent || intent.status !== "active") return;
@@ -1231,7 +1297,8 @@ export class SchedulerService {
       } else if (convergedByPredicate || convergedByMaxRuns) {
         nextRunAt = undefined;
       } else if (intent.cron) {
-        nextRunAt = this.computeCronNextRunAt(
+        nextRunAt = this.computeRecurringCronNextRunAt(
+          intent.intentId,
           intent.cron,
           subMilliseconds(
             addMilliseconds(now, this.runtimePort.scheduleConfig.minIntervalMs),

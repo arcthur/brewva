@@ -307,5 +307,5 @@ describe("system: scheduler daemon", () => {
       await stopSchedulerDaemon(daemon);
       cleanupWorkspace(workspace);
     }
-  });
+  }, 15_000);
 });

@@ -188,6 +188,16 @@ Verification plan semantics:
 - `schedule.minIntervalMs`: `60000`
 - `schedule.maxConsecutiveErrors`: `3`
 - `schedule.maxRecoveryCatchUps`: `5`
+- `schedule.staleOneShotRecoveryThresholdMs`: `3600000`
+
+Schedule semantics notes:
+
+- recurring cron-backed intents persist a deterministic forward-jittered
+  `nextRunAt` as the authoritative schedule state
+- one-shot `runAt` intents remain exact; jitter is not applied to absolute
+  one-shot schedules
+- `staleOneShotRecoveryThresholdMs` controls when a missed one-shot is deferred
+  during recovery instead of firing immediately
 
 ### `parallel`
 

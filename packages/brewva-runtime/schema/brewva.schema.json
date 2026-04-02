@@ -322,6 +322,9 @@
             "minIntervalMs": {
               "type": "number"
             },
+            "staleOneShotRecoveryThresholdMs": {
+              "type": "number"
+            },
             "projectionPath": {
               "type": "string"
             }

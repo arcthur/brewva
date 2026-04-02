@@ -126,6 +126,29 @@ const HEARTBEAT_PARSE_OPTIONS = {
   "timeout-ms": { type: "string" },
 } as const;
 
+const SCHEDULER_PAUSE_PARSE_OPTIONS = {
+  help: { type: "boolean", short: "h" },
+  json: { type: "boolean" },
+  reason: { type: "string" },
+  host: { type: "string" },
+  port: { type: "string" },
+  "state-dir": { type: "string" },
+  "pid-file": { type: "string" },
+  "token-file": { type: "string" },
+  "timeout-ms": { type: "string" },
+} as const;
+
+const SCHEDULER_RESUME_PARSE_OPTIONS = {
+  help: { type: "boolean", short: "h" },
+  json: { type: "boolean" },
+  host: { type: "string" },
+  port: { type: "string" },
+  "state-dir": { type: "string" },
+  "pid-file": { type: "string" },
+  "token-file": { type: "string" },
+  "timeout-ms": { type: "string" },
+} as const;
+
 const ROTATE_TOKEN_PARSE_OPTIONS = {
   help: { type: "boolean", short: "h" },
   json: { type: "boolean" },
@@ -400,6 +423,8 @@ Commands:
   uninstall           Uninstall OS supervisor service
   status              Probe daemon health or deep status
   stop                Ask daemon to stop and wait for process exit (--force enables SIGTERM fallback)
+  scheduler-pause     Pause schedule execution in the live daemon
+  scheduler-resume    Resume schedule execution and trigger catch-up/rearm
   heartbeat-reload    Reload HEARTBEAT.md policy without restart
   rotate-token        Rotate control-plane token and revoke old authenticated clients
   logs                Print gateway daemon logs (tail)
@@ -414,6 +439,8 @@ Examples:
   brewva gateway uninstall
   brewva gateway status --deep --json
   brewva gateway logs --tail 200
+  brewva gateway scheduler-pause --reason incident_mitigation
+  brewva gateway scheduler-resume
   brewva gateway heartbeat-reload
   brewva gateway rotate-token
   brewva gateway stop`);
@@ -1168,6 +1195,210 @@ async function handleHeartbeatReload(argv: string[]): Promise<number> {
   }
 }
 
+async function handleSchedulerPause(argv: string[]): Promise<number> {
+  let parsed: ReturnType<typeof parseNodeArgs>;
+  try {
+    parsed = parseNodeArgs({
+      args: argv,
+      options: SCHEDULER_PAUSE_PARSE_OPTIONS,
+      allowPositionals: true,
+      strict: true,
+    });
+  } catch (error) {
+    console.error(`Error: ${toErrorMessage(error)}`);
+    return 1;
+  }
+
+  if (parsed.values.help === true) {
+    printGatewayHelp();
+    return 0;
+  }
+  if (parsed.positionals.length > 0) {
+    console.error(
+      `Error: unexpected positional args for gateway scheduler-pause: ${parsed.positionals.join(" ")}`,
+    );
+    return 1;
+  }
+
+  const timeoutParsed = parseOptionalIntegerFlag("timeout-ms", parsed.values["timeout-ms"], {
+    minimum: 100,
+  });
+  if (timeoutParsed.error) {
+    console.error(timeoutParsed.error);
+    return 1;
+  }
+  const portParsed = parseOptionalIntegerFlag("port", parsed.values.port, {
+    minimum: 1,
+    maximum: 65535,
+  });
+  if (portParsed.error) {
+    console.error(portParsed.error);
+    return 1;
+  }
+
+  const paths = resolveGatewayPaths({
+    stateDir:
+      typeof parsed.values["state-dir"] === "string" ? parsed.values["state-dir"] : undefined,
+    pidFilePath:
+      typeof parsed.values["pid-file"] === "string" ? parsed.values["pid-file"] : undefined,
+    tokenFilePath:
+      typeof parsed.values["token-file"] === "string" ? parsed.values["token-file"] : undefined,
+  });
+  const pidRecord = readPidRecord(paths.pidFilePath);
+  if (!pidRecord || !isProcessAlive(pidRecord.pid)) {
+    console.error("gateway: not running");
+    return 1;
+  }
+
+  const host = normalizeGatewayHost(
+    typeof parsed.values.host === "string" ? parsed.values.host : pidRecord.host,
+  );
+  try {
+    assertLoopbackHost(host);
+  } catch (error) {
+    console.error(`Error: ${toErrorMessage(error)}`);
+    return 1;
+  }
+  const port = portParsed.value ?? pidRecord.port;
+  const timeoutMs = timeoutParsed.value ?? 3_000;
+  const token = readGatewayToken(paths.tokenFilePath);
+  if (!token) {
+    console.error(`gateway: token file missing or empty (${paths.tokenFilePath})`);
+    return 1;
+  }
+
+  try {
+    const client = await connectGatewayClient({
+      host,
+      port,
+      token,
+      connectTimeoutMs: timeoutMs,
+      requestTimeoutMs: timeoutMs,
+    });
+    const payload = await client.request("scheduler.pause", {
+      reason: typeof parsed.values.reason === "string" ? parsed.values.reason : undefined,
+    });
+    await client.close();
+
+    if (parsed.values.json === true) {
+      console.log(
+        JSON.stringify({
+          schema: "brewva.gateway.scheduler-pause.v1",
+          ok: true,
+          payload,
+        }),
+      );
+    } else {
+      console.log("gateway: scheduler paused");
+    }
+    return 0;
+  } catch (error) {
+    console.error(`gateway: scheduler pause failed (${toErrorMessage(error)})`);
+    return 1;
+  }
+}
+
+async function handleSchedulerResume(argv: string[]): Promise<number> {
+  let parsed: ReturnType<typeof parseNodeArgs>;
+  try {
+    parsed = parseNodeArgs({
+      args: argv,
+      options: SCHEDULER_RESUME_PARSE_OPTIONS,
+      allowPositionals: true,
+      strict: true,
+    });
+  } catch (error) {
+    console.error(`Error: ${toErrorMessage(error)}`);
+    return 1;
+  }
+
+  if (parsed.values.help === true) {
+    printGatewayHelp();
+    return 0;
+  }
+  if (parsed.positionals.length > 0) {
+    console.error(
+      `Error: unexpected positional args for gateway scheduler-resume: ${parsed.positionals.join(" ")}`,
+    );
+    return 1;
+  }
+
+  const timeoutParsed = parseOptionalIntegerFlag("timeout-ms", parsed.values["timeout-ms"], {
+    minimum: 100,
+  });
+  if (timeoutParsed.error) {
+    console.error(timeoutParsed.error);
+    return 1;
+  }
+  const portParsed = parseOptionalIntegerFlag("port", parsed.values.port, {
+    minimum: 1,
+    maximum: 65535,
+  });
+  if (portParsed.error) {
+    console.error(portParsed.error);
+    return 1;
+  }
+
+  const paths = resolveGatewayPaths({
+    stateDir:
+      typeof parsed.values["state-dir"] === "string" ? parsed.values["state-dir"] : undefined,
+    pidFilePath:
+      typeof parsed.values["pid-file"] === "string" ? parsed.values["pid-file"] : undefined,
+    tokenFilePath:
+      typeof parsed.values["token-file"] === "string" ? parsed.values["token-file"] : undefined,
+  });
+  const pidRecord = readPidRecord(paths.pidFilePath);
+  if (!pidRecord || !isProcessAlive(pidRecord.pid)) {
+    console.error("gateway: not running");
+    return 1;
+  }
+
+  const host = normalizeGatewayHost(
+    typeof parsed.values.host === "string" ? parsed.values.host : pidRecord.host,
+  );
+  try {
+    assertLoopbackHost(host);
+  } catch (error) {
+    console.error(`Error: ${toErrorMessage(error)}`);
+    return 1;
+  }
+  const port = portParsed.value ?? pidRecord.port;
+  const timeoutMs = timeoutParsed.value ?? 3_000;
+  const token = readGatewayToken(paths.tokenFilePath);
+  if (!token) {
+    console.error(`gateway: token file missing or empty (${paths.tokenFilePath})`);
+    return 1;
+  }
+
+  try {
+    const client = await connectGatewayClient({
+      host,
+      port,
+      token,
+      connectTimeoutMs: timeoutMs,
+      requestTimeoutMs: timeoutMs,
+    });
+    const payload = await client.request("scheduler.resume", {});
+    await client.close();
+
+    if (parsed.values.json === true) {
+      console.log(
+        JSON.stringify({
+          schema: "brewva.gateway.scheduler-resume.v1",
+          ok: true,
+          payload,
+        }),
+      );
+    } else {
+      console.log("gateway: scheduler resumed");
+    }
+    return 0;
+  } catch (error) {
+    console.error(`gateway: scheduler resume failed (${toErrorMessage(error)})`);
+    return 1;
+  }
+}
+
 async function handleRotateToken(argv: string[]): Promise<number> {
   let parsed: ReturnType<typeof parseNodeArgs>;
   try {
@@ -1749,6 +1980,20 @@ export async function runGatewayCli(
     return {
       handled: true,
       exitCode: await handleStop(rest),
+    };
+  }
+
+  if (command === "scheduler-pause") {
+    return {
+      handled: true,
+      exitCode: await handleSchedulerPause(rest),
+    };
+  }
+
+  if (command === "scheduler-resume") {
+    return {
+      handled: true,
+      exitCode: await handleSchedulerResume(rest),
     };
   }
 

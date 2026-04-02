@@ -10,6 +10,8 @@ import {
   RequestFrameSchema,
   ResponseFrameSchema,
   EventFrameSchema,
+  SchedulerPauseParamsSchema,
+  SchedulerResumeParamsSchema,
   SessionsAbortParamsSchema,
   SessionsCloseParamsSchema,
   SessionsOpenParamsSchema,
@@ -34,6 +36,8 @@ export const validateGatewayFrame = ajv.compile(GatewayFrameSchema);
 export const validateConnectParams = ajv.compile(ConnectParamsSchema);
 export const validateHealthParams = ajv.compile(HealthParamsSchema);
 export const validateStatusDeepParams = ajv.compile(StatusDeepParamsSchema);
+export const validateSchedulerPauseParams = ajv.compile(SchedulerPauseParamsSchema);
+export const validateSchedulerResumeParams = ajv.compile(SchedulerResumeParamsSchema);
 export const validateSessionsOpenParams = ajv.compile(SessionsOpenParamsSchema);
 export const validateSessionsSubscribeParams = ajv.compile(SessionsSubscribeParamsSchema);
 export const validateSessionsUnsubscribeParams = ajv.compile(SessionsUnsubscribeParamsSchema);
@@ -61,6 +65,14 @@ const methodValidators: {
   "status.deep": {
     validate: validateStatusDeepParams,
     errors: () => validateStatusDeepParams.errors,
+  },
+  "scheduler.pause": {
+    validate: validateSchedulerPauseParams,
+    errors: () => validateSchedulerPauseParams.errors,
+  },
+  "scheduler.resume": {
+    validate: validateSchedulerResumeParams,
+    errors: () => validateSchedulerResumeParams.errors,
   },
   "sessions.open": {
     validate: validateSessionsOpenParams,

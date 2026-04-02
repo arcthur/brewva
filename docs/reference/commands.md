@@ -74,6 +74,8 @@ The primary CLI also exposes control-plane subcommands via `brewva gateway ...`.
 - `uninstall`
 - `status`
 - `stop`
+- `scheduler-pause`
+- `scheduler-resume`
 - `heartbeat-reload`
 - `rotate-token`
 - `logs`
@@ -176,6 +178,27 @@ Loopback-only host policy applies to gateway start/probe/control (`--host` must 
 - `--token-file`
 - `--timeout-ms`
 
+`brewva gateway scheduler-pause`:
+
+- `--json`
+- `--reason`
+- `--host`
+- `--port`
+- `--state-dir`
+- `--pid-file`
+- `--token-file`
+- `--timeout-ms`
+
+`brewva gateway scheduler-resume`:
+
+- `--json`
+- `--host`
+- `--port`
+- `--state-dir`
+- `--pid-file`
+- `--token-file`
+- `--timeout-ms`
+
 `brewva gateway heartbeat-reload`:
 
 - `--json`
@@ -213,7 +236,7 @@ Loopback-only host policy applies to gateway start/probe/control (`--host` must 
 - `--max-workers` (start): integer `>= 1`.
 - `--max-open-queue` (start): integer `>= 0`.
 - `--health-http-port` (start/install): integer in `[1, 65535]`.
-- `--timeout-ms` (status/stop/heartbeat-reload/rotate-token): integer `>= 100`.
+- `--timeout-ms` (status/stop/scheduler-pause/scheduler-resume/heartbeat-reload/rotate-token): integer `>= 100`.
 - `--tail` (logs): integer `>= 1`.
 
 Platform notes for supervisor install:
@@ -227,6 +250,8 @@ Platform notes for supervisor install:
 
 - `brewva gateway status`: `0` reachable, `1` not running/invalid input, `2` process alive but probe failed.
 - `brewva gateway stop`: `0` stopped (or already not running), `2` process still alive after timeout/fallback.
+- `brewva gateway scheduler-pause`: `0` success, `1` invalid input or request failure.
+- `brewva gateway scheduler-resume`: `0` success, `1` invalid input or request failure.
 - `brewva gateway install`: `0` success, `1` invalid input or supervisor operation failure.
 - `brewva gateway uninstall`: `0` success, `1` invalid input.
 
@@ -388,8 +413,10 @@ Daemon startup also requires:
 On startup recovery, catch-up execution is bounded by
 `schedule.maxRecoveryCatchUps`; overflow missed intents are deferred with
 `intent_updated` projection writes plus `schedule_recovery_deferred` telemetry
-events. Daemon recovery also emits per-session `schedule_recovery_summary`
-events.
+events. One-shot `runAt` intents that are older than
+`schedule.staleOneShotRecoveryThresholdMs` are also deferred instead of firing
+immediately. Daemon recovery also emits per-session
+`schedule_recovery_summary` events.
 With `--verbose`, daemon prints a rolling 60-second scheduler window summary
 (`fired/errored/deferred/circuit_opened` plus child session lifecycle counts).
 

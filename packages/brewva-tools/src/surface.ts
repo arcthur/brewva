@@ -52,6 +52,7 @@ export const BREWVA_TOOL_SURFACE_BY_NAME = {
   lsp_symbols: "skill",
   output_search: "skill",
   workflow_status: "skill",
+  follow_up: "skill",
   worker_results_merge: "skill",
   worker_results_apply: "skill",
   schedule_intent: "skill",

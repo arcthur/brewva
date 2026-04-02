@@ -209,6 +209,14 @@ Current guard notes:
 - `worker_results_applied`
 - `worker_results_apply_failed`
 
+Current schedule-recovery notes:
+
+- `schedule_recovery_deferred.reason` may be
+  `max_recovery_catchups_exceeded`, `turn_wal_inflight`, or
+  `stale_one_shot_recovery`
+- `schedule_recovery_summary` remains per-parent-session telemetry for the
+  same recovery pass
+
 ## Workflow-Derived Surfaces
 
 Brewva does not define a dedicated `workflow_*` durable event family for

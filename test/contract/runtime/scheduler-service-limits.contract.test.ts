@@ -4,9 +4,12 @@ import {
   SCHEDULE_EVENT_TYPE,
   SchedulerService,
   buildScheduleIntentCreatedEvent,
+  getNextCronRunAt,
+  parseCronExpression,
 } from "@brewva/brewva-runtime";
 import {
   createSchedulerConfig,
+  computeExpectedRecurringJitteredNextRunAt,
   createWorkspace,
   schedulerRuntimePort,
 } from "./scheduler-service.helpers.js";
@@ -85,6 +88,7 @@ describe("scheduler service limit contract", () => {
     await scheduler.recover();
 
     const created = scheduler.createIntent({
+      intentId: "intent-cron-create",
       parentSessionId: "session-cron-create",
       reason: "cron create",
       continuityMode: "inherit",
@@ -100,10 +104,16 @@ describe("scheduler service limit contract", () => {
     expect(typeof created.intent.timeZone).toBe("string");
     expect(typeof created.intent.nextRunAt).toBe("number");
     if (typeof created.intent.nextRunAt === "number") {
-      expect(created.intent.nextRunAt).toBeGreaterThan(
-        nowMs + runtime.config.schedule.minIntervalMs - 1,
-      );
-      expect(new Date(created.intent.nextRunAt).getMinutes() % 5).toBe(0);
+      const minBase = nowMs + runtime.config.schedule.minIntervalMs - 1;
+      const expectedNextRunAt = computeExpectedRecurringJitteredNextRunAt({
+        intentId: "intent-cron-create",
+        cronExpression: "*/5 * * * *",
+        afterMs: minBase,
+        timeZone: created.intent.timeZone,
+      });
+      expect(typeof expectedNextRunAt).toBe("number");
+      if (typeof expectedNextRunAt !== "number") return;
+      expect(created.intent.nextRunAt).toBe(expectedNextRunAt);
     }
   });
 
@@ -125,6 +135,7 @@ describe("scheduler service limit contract", () => {
     await scheduler.recover();
 
     const created = scheduler.createIntent({
+      intentId: "intent-cron-timezone",
       parentSessionId: "session-cron-timezone",
       reason: "cron with timezone",
       continuityMode: "inherit",
@@ -138,7 +149,86 @@ describe("scheduler service limit contract", () => {
     if (!created.ok) return;
 
     expect(created.intent.timeZone).toBe("Asia/Shanghai");
-    expect(created.intent.nextRunAt).toBe(Date.UTC(2026, 0, 1, 1, 0, 0, 0));
+    const expectedNextRunAt = computeExpectedRecurringJitteredNextRunAt({
+      intentId: "intent-cron-timezone",
+      cronExpression: "0 9 * * *",
+      afterMs: nowMs + runtime.config.schedule.minIntervalMs - 1,
+      timeZone: "Asia/Shanghai",
+    });
+    expect(typeof expectedNextRunAt).toBe("number");
+    if (typeof expectedNextRunAt !== "number") return;
+    expect(created.intent.nextRunAt).toBe(expectedNextRunAt);
+  });
+
+  test("jitter distributes same-cron intents away from the shared exact boundary", async () => {
+    const workspace = createWorkspace("cron-anti-herd");
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: createSchedulerConfig((config) => {
+        config.schedule.minIntervalMs = 60_000;
+      }),
+    });
+
+    const nowMs = Date.UTC(2026, 0, 1, 0, 1, 30, 0);
+    const scheduler = new SchedulerService({
+      runtime: schedulerRuntimePort(runtime),
+      now: () => nowMs,
+      enableExecution: false,
+    });
+    await scheduler.recover();
+
+    const createdA = scheduler.createIntent({
+      intentId: "intent-cron-anti-herd-a",
+      parentSessionId: "session-cron-anti-herd",
+      reason: "cron anti-herd A",
+      continuityMode: "inherit",
+      cron: "*/5 * * * *",
+      maxRuns: 5,
+    });
+    const createdB = scheduler.createIntent({
+      intentId: "intent-cron-anti-herd-b",
+      parentSessionId: "session-cron-anti-herd",
+      reason: "cron anti-herd B",
+      continuityMode: "inherit",
+      cron: "*/5 * * * *",
+      maxRuns: 5,
+    });
+    scheduler.stop();
+
+    expect(createdA.ok).toBe(true);
+    expect(createdB.ok).toBe(true);
+    if (!createdA.ok || !createdB.ok) return;
+
+    const minBase = nowMs + runtime.config.schedule.minIntervalMs - 1;
+    const parsed = parseCronExpression("*/5 * * * *");
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+
+    const exactNextRunAt = getNextCronRunAt(parsed.expression, minBase);
+    expect(typeof exactNextRunAt).toBe("number");
+    if (exactNextRunAt === undefined) return;
+
+    const expectedNextRunAtA = computeExpectedRecurringJitteredNextRunAt({
+      intentId: "intent-cron-anti-herd-a",
+      cronExpression: "*/5 * * * *",
+      afterMs: minBase,
+      timeZone: createdA.intent.timeZone,
+    });
+    const expectedNextRunAtB = computeExpectedRecurringJitteredNextRunAt({
+      intentId: "intent-cron-anti-herd-b",
+      cronExpression: "*/5 * * * *",
+      afterMs: minBase,
+      timeZone: createdB.intent.timeZone,
+    });
+    expect(typeof expectedNextRunAtA).toBe("number");
+    expect(typeof expectedNextRunAtB).toBe("number");
+    if (expectedNextRunAtA === undefined || expectedNextRunAtB === undefined) return;
+
+    expect(createdA.intent.nextRunAt).toBe(expectedNextRunAtA);
+    expect(createdB.intent.nextRunAt).toBe(expectedNextRunAtB);
+    expect(createdA.intent.nextRunAt).toBeGreaterThan(exactNextRunAt);
+    expect(createdB.intent.nextRunAt).toBeGreaterThan(exactNextRunAt);
+    expect(createdA.intent.nextRunAt).not.toBe(createdB.intent.nextRunAt);
   });
 
   test("rejects invalid cron expressions on create", async () => {
@@ -256,6 +346,7 @@ describe("scheduler service limit contract", () => {
         reason: "revive test",
         continuityMode: "inherit",
         runAt: dueRunAt,
+        nextRunAt: dueRunAt,
         maxRuns: 1,
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,

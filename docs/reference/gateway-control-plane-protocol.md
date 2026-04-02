@@ -41,6 +41,8 @@ Server implementation: `packages/brewva-gateway/src/daemon/gateway-daemon.ts`.
 - `connect`
 - `health`
 - `status.deep`
+- `scheduler.pause`
+- `scheduler.resume`
 - `sessions.open`
 - `sessions.subscribe`
 - `sessions.unsubscribe`
@@ -56,6 +58,8 @@ Parameter summary (current semantics):
 - `connect`: `{ protocol, client, auth: { token }, challengeNonce }`
 - `health`: `{}`
 - `status.deep`: `{}`
+- `scheduler.pause`: `{ reason? }`
+- `scheduler.resume`: `{}`
 - `sessions.open`: `{ sessionId?, cwd?, configPath?, model?, agentId?, managedToolMode? }`
 - `sessions.subscribe`: `{ sessionId }`
 - `sessions.unsubscribe`: `{ sessionId }`
@@ -87,6 +91,9 @@ Rule semantics:
 
 - `connect`: `hello-ok` payload with `protocol`, `server`, `features`, and `policy`.
 - `sessions.send`: immediate ack payload `{ sessionId, agentSessionId?, turnId, accepted: true }`; final output arrives via `session.turn.*` events.
+- `status.deep`: includes `heartbeat` plus live `scheduler` execution state. The `scheduler` block exposes whether scheduling is available, whether execution is paused, and current projection/timer counters.
+- `scheduler.pause`: `{ paused: true, changed, available, pausedAt, reason }`.
+- `scheduler.resume`: `{ paused: false, changed, available, previousPausedAt, previousReason }`.
 - `gateway.rotate-token`: `{ rotated: true, rotatedAt, revokedConnections }`.
 - `gateway.stop`: `{ stopping: true, reason }`.
 
@@ -118,6 +125,8 @@ The current protocol intentionally does not keep legacy compatibility branches:
 - `brewva.gateway.lifecycle.v1`
 - `brewva.gateway.status.v1`
 - `brewva.gateway.stop.v1`
+- `brewva.gateway.scheduler-pause.v1`
+- `brewva.gateway.scheduler-resume.v1`
 - `brewva.gateway.heartbeat-reload.v1`
 - `brewva.gateway.rotate-token.v1`
 - `brewva.gateway.logs.v1`

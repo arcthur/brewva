@@ -100,6 +100,7 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     minIntervalMs: 60_000,
     maxConsecutiveErrors: 3,
     maxRecoveryCatchUps: 5,
+    staleOneShotRecoveryThresholdMs: 3_600_000,
   },
   parallel: {
     enabled: true,

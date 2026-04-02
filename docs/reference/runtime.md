@@ -271,6 +271,10 @@ Schedule note:
 - schedule intent events remain the authoritative replay surface
 - `getProjectionSnapshot()` is a rebuildable derived view rather than a
   correctness prerequisite
+- recurring cron-backed intents persist deterministic forward-jittered
+  `nextRunAt` values through create, update, and fire paths
+- stale one-shot recovery defer policy is config-driven through
+  `schedule.staleOneShotRecoveryThresholdMs`
 
 ### `runtime.turnWal.*`
 

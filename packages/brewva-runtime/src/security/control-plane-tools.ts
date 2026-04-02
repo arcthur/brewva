@@ -14,6 +14,7 @@ export const CONTROL_PLANE_TOOLS = [
   "tape_search",
   "session_compact",
   "rollback_last_patch",
+  "follow_up",
   "schedule_intent",
 ];
 

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -55,6 +55,7 @@ export function createDaemonHarness(
     sessionIdleTtlMs?: number;
     sessionIdleSweepIntervalMs?: number;
     sessionBackend?: SessionBackend;
+    scheduleEnabled?: boolean;
   } = {},
 ): {
   root: string;
@@ -65,6 +66,22 @@ export function createDaemonHarness(
   const root = mkdtempSync(join(tmpdir(), "brewva-gateway-daemon-"));
   const stateDir = join(root, "state");
   const policyPath = join(root, "HEARTBEAT.md");
+  mkdirSync(join(root, ".brewva"), { recursive: true });
+  if (options.scheduleEnabled === true) {
+    writeFileSync(
+      join(root, ".brewva", "brewva.json"),
+      JSON.stringify(
+        {
+          schedule: {
+            enabled: true,
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+  }
   writeHeartbeatPolicy(policyPath, initialRules);
 
   const daemon = new GatewayDaemon({

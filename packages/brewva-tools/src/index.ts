@@ -4,6 +4,7 @@ import { createBrowserTools } from "./browser.js";
 import { createCostViewTool } from "./cost-view.js";
 import { createDeliberationMemoryTool } from "./deliberation-memory.js";
 import { createExecTool } from "./exec.js";
+import { createFollowUpTool } from "./follow-up.js";
 import { createGitDiffTool, createGitLogTool, createGitStatusTool } from "./git-observe.js";
 import { createGrepTool } from "./grep.js";
 import { createIterationFactTool } from "./iteration-fact.js";
@@ -85,6 +86,7 @@ export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefiniti
     createIterationFactTool({ runtime }),
     createOutputSearchTool({ runtime }),
     createWorkflowStatusTool({ runtime }),
+    createFollowUpTool({ runtime }),
     createScheduleIntentTool({ runtime }),
     ...createTapeTools({ runtime }),
     createSessionCompactTool({ runtime }),
@@ -188,6 +190,7 @@ export { createTapeTools } from "./tape.js";
 export { createSessionCompactTool } from "./session-compact.js";
 export { createRollbackLastPatchTool } from "./rollback-last-patch.js";
 export { createWorkerResultsMergeTool, createWorkerResultsApplyTool } from "./worker-results.js";
+export { createFollowUpTool } from "./follow-up.js";
 export { createScheduleIntentTool } from "./schedule-intent.js";
 export { createSkillLoadTool } from "./skill-load.js";
 export { createSkillCompleteTool } from "./skill-complete.js";

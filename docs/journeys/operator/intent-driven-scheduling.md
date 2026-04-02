@@ -3,12 +3,14 @@
 ## Audience
 
 - operators using `schedule_intent` and `--daemon`
+- operators using `follow_up`, `schedule_intent`, and scheduler control-plane pause/resume
 - developers reviewing scheduler behavior, child session continuity, and
   convergence semantics
 
 ## Entry Points
 
 - `schedule_intent`
+- `follow_up`
 - `brewva --daemon`
 - `optimization_continuity`
 
@@ -20,6 +22,7 @@ met.
 
 ## In Scope
 
+- follow-up wrapper create / cancel / list
 - schedule intent create / update / cancel / list
 - daemon recovery and catch-up
 - child session continuity
@@ -49,7 +52,7 @@ flowchart TD
 
 ## Key Steps
 
-1. The agent declares one-shot or recurring intent through `schedule_intent`.
+1. The agent declares one-shot or recurring intent through `follow_up` or `schedule_intent`.
 2. The runtime records schedule-intent events and updates the rebuildable
    schedule projection.
 3. On startup, the daemon runs recovery to rebuild projection state, clear
@@ -63,6 +66,10 @@ flowchart TD
 
 - the target can be expressed as `runAt` / `delayMs` or as `cron` plus
   `timeZone`
+- recurring cron-backed intents persist a deterministic forward-jittered
+  `nextRunAt`; replay treats the event-carried `nextRunAt` as authoritative
+- `follow_up` is the bounded ergonomic layer; `schedule_intent` remains the
+  precise control surface
 - `continuityMode=inherit` carries the parent `TaskSpec`, truth facts, and
   anchor context
 - `continuityMode=fresh` intentionally does not inherit parent state
@@ -80,11 +87,16 @@ flowchart TD
 
 - startup catch-up is bounded by `maxRecoveryCatchUps`; overflow intents are
   deferred
+- stale one-shot `runAt` intents older than
+  `staleOneShotRecoveryThresholdMs` are deferred instead of firing immediately
 - `leaseDurationMs` prevents duplicate concurrent firing of the same intent
 - `maxConsecutiveErrors` opens the circuit and moves the intent to `error`
 - retry backoff grows exponentially from `minIntervalMs` and caps at one hour
 - child session iteration facts remain in the child session; they are not
   mirrored back into the parent session
+- gateway `scheduler.pause` / `scheduler.resume` is an incident-control latch
+  for live execution only; it is not a durable config replacement for
+  `schedule.enabled`
 
 ## Observability
 
@@ -102,7 +114,8 @@ flowchart TD
 
 ## Code Pointers
 
-- Tool contract: `packages/brewva-tools/src/schedule-intent.ts`
+- Tool contracts: `packages/brewva-tools/src/follow-up.ts`,
+  `packages/brewva-tools/src/schedule-intent.ts`
 - Scheduler service: `packages/brewva-runtime/src/schedule/service.ts`
 - Schedule events: `packages/brewva-runtime/src/schedule/events.ts`
 - Schedule projection: `packages/brewva-runtime/src/schedule/projection.ts`

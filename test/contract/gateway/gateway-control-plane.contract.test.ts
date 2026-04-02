@@ -1,12 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { SessionBackendCapacityError, SessionBackendStateError } from "@brewva/brewva-gateway";
 import {
+  BrewvaRuntime,
+  SCHEDULE_EVENT_TYPE,
+  buildScheduleIntentCreatedEvent,
+} from "@brewva/brewva-runtime";
+import {
   ReloadPayload,
   SessionsClosePayload,
   createConnectionState,
   createDaemonHarness,
   createSessionBackendStub,
   getHandleMethod,
+  sleep,
   writeHeartbeatPolicy,
 } from "./gateway-control-plane.helpers.js";
 
@@ -440,6 +446,205 @@ describe("gateway daemon control-plane methods", () => {
       expect(payload.closedSessionIds).toEqual([]);
       expect(stopCalls).toEqual([]);
     } finally {
+      harness.dispose();
+    }
+  });
+
+  test("scheduler.pause and scheduler.resume are idempotent and update deep status", async () => {
+    const harness = createDaemonHarness([], {
+      sessionBackend: createSessionBackendStub(),
+      scheduleEnabled: true,
+    });
+
+    try {
+      const handleMethod = getHandleMethod(harness.daemon);
+
+      const firstPause = (await handleMethod("scheduler.pause", {
+        reason: "incident_mitigation",
+      })) as {
+        paused: boolean;
+        changed: boolean;
+        available: boolean;
+        pausedAt: number | null;
+        reason: string | null;
+      };
+      expect(firstPause.available).toBe(true);
+      expect(firstPause.paused).toBe(true);
+      expect(firstPause.changed).toBe(true);
+      expect(firstPause.reason).toBe("incident_mitigation");
+      expect(typeof firstPause.pausedAt).toBe("number");
+
+      const secondPause = (await handleMethod("scheduler.pause", {
+        reason: "ignored_on_idempotent_pause",
+      })) as {
+        available: boolean;
+        paused: boolean;
+        changed: boolean;
+        pausedAt: number | null;
+        reason: string | null;
+      };
+      expect(secondPause).toMatchObject({
+        available: true,
+        paused: true,
+        changed: false,
+        reason: "incident_mitigation",
+      });
+      expect(typeof secondPause.pausedAt).toBe("number");
+
+      const deepWhilePaused = (await handleMethod("status.deep", {})) as {
+        scheduler: {
+          available: boolean;
+          paused: boolean;
+          reason?: string;
+        };
+      };
+      expect(deepWhilePaused.scheduler).toMatchObject({
+        available: true,
+        paused: true,
+        reason: "incident_mitigation",
+      });
+
+      const resumed = (await handleMethod("scheduler.resume", {})) as {
+        paused: boolean;
+        changed: boolean;
+        available: boolean;
+        previousPausedAt: number | null;
+        previousReason: string | null;
+      };
+      expect(resumed.available).toBe(true);
+      expect(resumed.paused).toBe(false);
+      expect(resumed.changed).toBe(true);
+      expect(typeof resumed.previousPausedAt).toBe("number");
+      expect(resumed.previousReason).toBe("incident_mitigation");
+
+      const deepAfterResume = (await handleMethod("status.deep", {})) as {
+        scheduler: {
+          available: boolean;
+          paused: boolean;
+          reason?: string;
+        };
+      };
+      expect(deepAfterResume.scheduler).toMatchObject({
+        available: true,
+        paused: false,
+      });
+      expect(deepAfterResume.scheduler.reason).toBeUndefined();
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  test("scheduler.resume re-arms timers without calling recover", async () => {
+    const harness = createDaemonHarness([], {
+      sessionBackend: createSessionBackendStub(),
+      scheduleEnabled: true,
+    });
+
+    try {
+      const handleMethod = getHandleMethod(harness.daemon);
+      await handleMethod("scheduler.pause", {
+        reason: "resume_sync_test",
+      });
+
+      const daemonWithScheduler = harness.daemon as unknown as {
+        scheduler: { recover(): Promise<unknown>; syncExecutionState(): void } | null;
+      };
+      const scheduler = daemonWithScheduler.scheduler;
+      expect(scheduler).not.toBeNull();
+      if (!scheduler) return;
+
+      let recoverCalls = 0;
+      const recover = scheduler.recover.bind(scheduler);
+      scheduler.recover = async () => {
+        recoverCalls += 1;
+        return await recover();
+      };
+
+      let syncCalls = 0;
+      const sync = scheduler.syncExecutionState.bind(scheduler);
+      scheduler.syncExecutionState = () => {
+        syncCalls += 1;
+        return sync();
+      };
+
+      const resumed = (await handleMethod("scheduler.resume", {})) as {
+        paused: boolean;
+        changed: boolean;
+      };
+      expect(resumed.paused).toBe(false);
+      expect(resumed.changed).toBe(true);
+      expect(recoverCalls).toBe(0);
+      expect(syncCalls).toBe(1);
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  test("gateway daemon recovers and executes due schedule intents on start", async () => {
+    const prompts: Array<{
+      sessionId: string;
+      source?: "gateway" | "heartbeat" | "schedule";
+      waitForCompletion?: boolean;
+    }> = [];
+    const backend = createSessionBackendStub({
+      openSession: async (input) => ({
+        sessionId: input.sessionId,
+        created: true,
+        workerPid: 4321,
+        agentSessionId: `${input.sessionId}-agent`,
+      }),
+      sendPrompt: async (sessionId, _prompt, options) => {
+        prompts.push({
+          sessionId,
+          source: options?.source,
+          waitForCompletion: options?.waitForCompletion,
+        });
+        return {
+          sessionId,
+          agentSessionId: `${sessionId}-agent`,
+          turnId: "turn-schedule-start",
+          accepted: true,
+        };
+      },
+    });
+    const harness = createDaemonHarness([], {
+      sessionBackend: backend,
+      scheduleEnabled: true,
+    });
+
+    try {
+      const runtime = new BrewvaRuntime({ cwd: harness.root });
+      const nowMs = Date.now();
+      runtime.events.record({
+        sessionId: "parent-session",
+        type: SCHEDULE_EVENT_TYPE,
+        payload: buildScheduleIntentCreatedEvent({
+          intentId: "intent-gateway-start-recover-1",
+          parentSessionId: "parent-session",
+          reason: "recover on gateway start",
+          continuityMode: "inherit",
+          runAt: nowMs - 1_000,
+          nextRunAt: nowMs - 1_000,
+          maxRuns: 1,
+        }) as unknown as Record<string, unknown>,
+        skipTapeCheckpoint: true,
+      });
+
+      await harness.daemon.start();
+
+      for (let attempt = 0; attempt < 20 && prompts.length === 0; attempt += 1) {
+        await sleep(50);
+      }
+
+      expect(prompts).toHaveLength(1);
+      expect(prompts[0]).toMatchObject({
+        source: "schedule",
+        waitForCompletion: true,
+      });
+      expect(prompts[0]?.sessionId).toContain("schedule:intent-gateway-start-recover-1:1");
+    } finally {
+      await harness.daemon.stop("test_cleanup").catch(() => undefined);
+      await harness.daemon.waitForStop().catch(() => undefined);
       harness.dispose();
     }
   });

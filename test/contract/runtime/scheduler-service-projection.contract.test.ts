@@ -10,6 +10,7 @@ import {
   parseScheduleIntentEvent,
 } from "@brewva/brewva-runtime";
 import {
+  computeExpectedRecurringJitteredNextRunAt,
   createSchedulerConfig,
   createWorkspace,
   schedulerRuntimePort,
@@ -35,6 +36,7 @@ describe("scheduler service projection contract", () => {
         reason: "created-first",
         continuityMode: "inherit",
         runAt,
+        nextRunAt: runAt,
         maxRuns: 1,
       }),
     };
@@ -88,6 +90,7 @@ describe("scheduler service projection contract", () => {
     await scheduler.recover();
 
     const created = scheduler.createIntent({
+      intentId: "intent-update-cron",
       parentSessionId: "session-update",
       reason: "initial",
       continuityMode: "inherit",
@@ -102,7 +105,7 @@ describe("scheduler service projection contract", () => {
 
     const updated = scheduler.updateIntent({
       parentSessionId: "session-update",
-      intentId: created.intent.intentId,
+      intentId: "intent-update-cron",
       reason: "updated",
       cron: "*/20 * * * *",
       timeZone: "Asia/Shanghai",
@@ -117,7 +120,15 @@ describe("scheduler service projection contract", () => {
     expect(updated.intent.timeZone).toBe("Asia/Shanghai");
     expect(updated.intent.maxRuns).toBe(8);
     expect(updated.intent.runAt).toBeUndefined();
-    expect(typeof updated.intent.nextRunAt).toBe("number");
+    const expectedNextRunAt = computeExpectedRecurringJitteredNextRunAt({
+      intentId: "intent-update-cron",
+      cronExpression: "*/20 * * * *",
+      afterMs: Date.now() + runtime.config.schedule.minIntervalMs - 1,
+      timeZone: "Asia/Shanghai",
+    });
+    expect(typeof expectedNextRunAt).toBe("number");
+    if (typeof expectedNextRunAt !== "number") return;
+    expect(updated.intent.nextRunAt).toBe(expectedNextRunAt);
 
     const events = runtime.events.query("session-update", { type: SCHEDULE_EVENT_TYPE });
     const kinds = events
@@ -144,6 +155,7 @@ describe("scheduler service projection contract", () => {
     await scheduler.recover();
 
     const created = scheduler.createIntent({
+      intentId: "intent-update-timezone-only",
       parentSessionId: "session-update-timezone-only",
       reason: "timezone only",
       continuityMode: "inherit",
@@ -159,7 +171,7 @@ describe("scheduler service projection contract", () => {
 
     const updated = scheduler.updateIntent({
       parentSessionId: "session-update-timezone-only",
-      intentId: created.intent.intentId,
+      intentId: "intent-update-timezone-only",
       timeZone: "America/New_York",
     });
     scheduler.stop();
@@ -168,7 +180,92 @@ describe("scheduler service projection contract", () => {
     if (!updated.ok) return;
     expect(updated.intent.cron).toBe("0 9 * * *");
     expect(updated.intent.timeZone).toBe("America/New_York");
-    expect(updated.intent.nextRunAt).toBe(Date.UTC(2026, 0, 1, 14, 0, 0, 0));
+    const expectedNextRunAt = computeExpectedRecurringJitteredNextRunAt({
+      intentId: "intent-update-timezone-only",
+      cronExpression: "0 9 * * *",
+      afterMs: nowMs + runtime.config.schedule.minIntervalMs - 1,
+      timeZone: "America/New_York",
+    });
+    expect(typeof expectedNextRunAt).toBe("number");
+    if (typeof expectedNextRunAt !== "number") return;
+    expect(updated.intent.nextRunAt).toBe(expectedNextRunAt);
+  });
+
+  test("replay prefers event-carried nextRunAt for cron intents", async () => {
+    const workspace = createWorkspace("replay-authoritative-next-run");
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: createSchedulerConfig((config) => {
+        config.schedule.minIntervalMs = 60_000;
+      }),
+    });
+    const sessionId = "session-replay-authoritative-next-run";
+    const forcedNextRunAt = Date.UTC(2026, 0, 1, 12, 34, 56, 789);
+
+    runtime.events.record({
+      sessionId,
+      type: SCHEDULE_EVENT_TYPE,
+      payload: buildScheduleIntentCreatedEvent({
+        intentId: "intent-replay-authoritative-next-run",
+        parentSessionId: sessionId,
+        reason: "respect persisted nextRunAt",
+        continuityMode: "inherit",
+        cron: "*/5 * * * *",
+        timeZone: "UTC",
+        nextRunAt: forcedNextRunAt,
+        maxRuns: 4,
+      }) as unknown as Record<string, unknown>,
+      skipTapeCheckpoint: true,
+    });
+
+    const scheduler = new SchedulerService({
+      runtime: schedulerRuntimePort(runtime),
+      enableExecution: false,
+    });
+    await scheduler.recover();
+
+    const state = scheduler
+      .snapshot()
+      .intents.find((intent) => intent.intentId === "intent-replay-authoritative-next-run");
+    scheduler.stop();
+
+    expect(state?.nextRunAt).toBe(forcedNextRunAt);
+  });
+
+  test("rejects created replay payloads that omit nextRunAt", async () => {
+    const workspace = createWorkspace("replay-missing-next-run");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "session-replay-missing-next-run";
+    const runAt = Date.UTC(2026, 0, 1, 0, 5, 0, 0);
+
+    runtime.events.record({
+      sessionId,
+      type: SCHEDULE_EVENT_TYPE,
+      payload: {
+        schema: "brewva.schedule.v1",
+        kind: "intent_created",
+        intentId: "intent-replay-missing-next-run",
+        parentSessionId: sessionId,
+        reason: "missing nextRunAt should be rejected",
+        continuityMode: "inherit",
+        runAt,
+        maxRuns: 1,
+      } as unknown as Record<string, unknown>,
+      skipTapeCheckpoint: true,
+    });
+
+    const scheduler = new SchedulerService({
+      runtime: schedulerRuntimePort(runtime),
+      enableExecution: false,
+    });
+    await scheduler.recover();
+
+    const state = scheduler
+      .snapshot()
+      .intents.find((intent) => intent.intentId === "intent-replay-missing-next-run");
+    scheduler.stop();
+
+    expect(state).toBeUndefined();
   });
 
   test("rejects updates when the target intent is not active", async () => {

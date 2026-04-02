@@ -84,13 +84,23 @@ export function isScheduleIntentEventPayload(value: unknown): value is ScheduleI
     return false;
   }
 
-  return (
-    value.kind === "intent_created" ||
-    value.kind === "intent_updated" ||
-    value.kind === "intent_cancelled" ||
-    value.kind === "intent_fired" ||
-    value.kind === "intent_converged"
-  );
+  switch (value.kind) {
+    case "intent_created": {
+      const hasRunAt = value.runAt !== undefined;
+      const hasCron = value.cron !== undefined;
+      if (hasRunAt === hasCron) return false;
+      if (value.timeZone !== undefined && !hasCron) return false;
+      return value.nextRunAt !== undefined;
+    }
+    case "intent_updated":
+    case "intent_cancelled":
+    case "intent_converged":
+      return true;
+    case "intent_fired":
+      return value.runIndex !== undefined && value.firedAt !== undefined;
+    default:
+      return false;
+  }
 }
 
 export function parseScheduleIntentEvent(
@@ -107,10 +117,10 @@ export interface BuildScheduleIntentCreatedEventInput {
   reason: string;
   continuityMode: "inherit" | "fresh";
   maxRuns: number;
+  nextRunAt: number;
   runAt?: number;
   cron?: string;
   timeZone?: string;
-  nextRunAt?: number;
   goalRef?: string;
   convergenceCondition?: ScheduleIntentEventPayload["convergenceCondition"];
 }

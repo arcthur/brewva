@@ -4,6 +4,9 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { resolve } from "node:path";
 import process from "node:process";
 import {
+  BrewvaRuntime,
+  SchedulerService,
+  createTrustedLocalGovernancePort,
   loadBrewvaConfig,
   resolveWorkspaceRootDir,
   type ManagedToolMode,
@@ -33,6 +36,7 @@ import { rawToText } from "../utils/ws.js";
 import { HeartbeatScheduler, type HeartbeatRule } from "./heartbeat-policy.js";
 import { StructuredLogger } from "./logger.js";
 import { readPidRecord, removePidRecord, writePidRecord, type GatewayPidRecord } from "./pid.js";
+import { executeScheduleIntentRun } from "./schedule-runner.js";
 import {
   isSessionBackendCapacityError,
   isSessionBackendStateError,
@@ -172,6 +176,20 @@ export interface GatewayStatusDeepPayload extends GatewayHealthPayload {
   healthHttpPort?: number;
   healthHttpPath?: string;
   heartbeat: ReturnType<HeartbeatScheduler["getStatus"]>;
+  scheduler: {
+    available: boolean;
+    configEnabled: boolean;
+    executionEnabled: boolean;
+    paused: boolean;
+    pausedAt?: number;
+    reason?: string;
+    unavailableReason?: "schedule_disabled" | "events_disabled";
+    intentsTotal?: number;
+    intentsActive?: number;
+    timersArmed?: number;
+    watermarkOffset?: number;
+    projectionPath?: string;
+  };
   workersDetail: SessionWorkerInfo[];
   connectionsDetail: Array<{
     connId: string;
@@ -254,6 +272,11 @@ export class GatewayDaemon {
   private readonly stateStore: GatewayStateStore;
   private readonly logger: StructuredLogger;
   private readonly supervisor: SessionBackend;
+  private readonly schedulerConfigEnabled: boolean;
+  private readonly schedulerEventsEnabled: boolean;
+  private readonly schedulerRuntime: BrewvaRuntime | null;
+  private readonly scheduler: SchedulerService | null;
+  private readonly schedulerUnavailableReason?: "schedule_disabled" | "events_disabled";
   private readonly turnWalStore?: TurnWALStore;
   private readonly heartbeatScheduler: HeartbeatScheduler;
   private readonly heartbeatSessionByRule = new Map<string, string>();
@@ -274,6 +297,13 @@ export class GatewayDaemon {
   private ownsPidRecord = false;
   private onSigInt: (() => void) | null = null;
   private onSigTerm: (() => void) | null = null;
+  private schedulerExecutionState: {
+    paused: boolean;
+    pausedAt?: number;
+    reason?: string;
+  } = {
+    paused: false,
+  };
 
   readonly testHooks: GatewayDaemonTestHooks = {
     invokeMethod: async (method, params, state) => {
@@ -318,7 +348,7 @@ export class GatewayDaemon {
     assertLoopbackHost(this.host);
 
     this.configuredPort = Number.isInteger(options.port)
-      ? Math.max(1, Number(options.port))
+      ? Math.max(0, Number(options.port))
       : DEFAULT_PORT;
     this.currentPort = this.configuredPort;
     this.stateDir = resolve(options.stateDir);
@@ -394,6 +424,59 @@ export class GatewayDaemon {
         },
       });
 
+    this.schedulerConfigEnabled = runtimeConfig.schedule.enabled;
+    this.schedulerEventsEnabled = runtimeConfig.infrastructure.events.enabled;
+    this.schedulerUnavailableReason = !this.schedulerConfigEnabled
+      ? "schedule_disabled"
+      : !this.schedulerEventsEnabled
+        ? "events_disabled"
+        : undefined;
+    this.schedulerRuntime = !this.schedulerUnavailableReason
+      ? new BrewvaRuntime({
+          cwd: resolvedCwd,
+          config: runtimeConfig,
+          governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
+        })
+      : null;
+    if (this.schedulerRuntime && !this.schedulerUnavailableReason) {
+      const schedulerRuntime = this.schedulerRuntime;
+      this.scheduler = new SchedulerService({
+        runtime: {
+          workspaceRoot: schedulerRuntime.workspaceRoot,
+          scheduleConfig: schedulerRuntime.config.schedule,
+          listSessionIds: () => schedulerRuntime.events.listSessionIds(),
+          listEvents: (sessionId, query) => schedulerRuntime.events.list(sessionId, query),
+          recordEvent: (input) => schedulerRuntime.events.record(input),
+          subscribeEvents: (listener) => schedulerRuntime.events.subscribe(listener),
+          getTruthState: (sessionId) => schedulerRuntime.truth.getState(sessionId),
+          getTaskState: (sessionId) => schedulerRuntime.task.getState(sessionId),
+          turnWal: {
+            appendPending: (envelope, source, walOptions) =>
+              schedulerRuntime.turnWal.appendPending(envelope, source, walOptions),
+            markInflight: (walId) => schedulerRuntime.turnWal.markInflight(walId),
+            markDone: (walId) => schedulerRuntime.turnWal.markDone(walId),
+            markFailed: (walId, error) => schedulerRuntime.turnWal.markFailed(walId, error),
+            markExpired: (walId) => schedulerRuntime.turnWal.markExpired(walId),
+            listPending: () => schedulerRuntime.turnWal.listPending(),
+          },
+        },
+        shouldExecute: () => !this.schedulerExecutionState.paused,
+        executeIntent: async (intent) => {
+          return await executeScheduleIntentRun({
+            runtime: schedulerRuntime,
+            backend: this.supervisor,
+            intent,
+            cwd: resolvedCwd,
+            configPath: options.configPath,
+            model: options.model,
+            managedToolMode: options.managedToolMode,
+          });
+        },
+      });
+    } else {
+      this.scheduler = null;
+    }
+
     this.heartbeatScheduler = new HeartbeatScheduler({
       sourcePath: this.heartbeatPolicyPath,
       logger: this.logger,
@@ -421,6 +504,9 @@ export class GatewayDaemon {
       this.ownsPidRecord = true;
 
       await this.supervisor.start();
+      if (this.scheduler) {
+        await this.scheduler.recover();
+      }
       this.heartbeatScheduler.start();
       this.startTickEmitter();
       this.installSignalHandlers();
@@ -545,6 +631,7 @@ export class GatewayDaemon {
       healthHttpPort: this.currentHealthHttpPort,
       healthHttpPath: this.currentHealthHttpPort ? this.healthHttpPath : undefined,
       heartbeat: this.heartbeatScheduler.getStatus(),
+      scheduler: this.getSchedulerStatus(),
       workersDetail: this.supervisor.listWorkers(),
       connectionsDetail: [...this.connections.values()].map((value) => ({
         connId: value.connId,
@@ -580,6 +667,7 @@ export class GatewayDaemon {
       this.tickTimer = null;
     }
 
+    this.scheduler?.stop();
     this.heartbeatScheduler.stop();
     try {
       await this.supervisor.stop();
@@ -1001,6 +1089,12 @@ export class GatewayDaemon {
         return this.getHealthStatus();
       case "status.deep":
         return this.getDeepStatus();
+      case "scheduler.pause": {
+        const input = params as { reason?: string };
+        return this.pauseScheduler(input.reason);
+      }
+      case "scheduler.resume":
+        return this.resumeScheduler();
       case "sessions.open": {
         const input = params as {
           sessionId?: string;
@@ -1209,6 +1303,119 @@ export class GatewayDaemon {
         maxPayloadBytes: this.maxPayloadBytes,
         tickIntervalMs: this.tickIntervalMs,
       },
+    };
+  }
+
+  private getSchedulerStatus(): GatewayStatusDeepPayload["scheduler"] {
+    const stats = this.scheduler?.getStats();
+    return {
+      available: this.scheduler !== null,
+      configEnabled: this.schedulerConfigEnabled,
+      executionEnabled: stats?.executionEnabled ?? false,
+      paused: this.schedulerExecutionState.paused,
+      pausedAt: this.schedulerExecutionState.pausedAt,
+      reason: this.schedulerExecutionState.reason,
+      unavailableReason: this.scheduler ? undefined : this.schedulerUnavailableReason,
+      intentsTotal: stats?.intentsTotal,
+      intentsActive: stats?.intentsActive,
+      timersArmed: stats?.timersArmed,
+      watermarkOffset: stats?.watermarkOffset,
+      projectionPath: stats?.projectionPath,
+    };
+  }
+
+  private pauseScheduler(reasonRaw?: string): {
+    paused: boolean;
+    changed: boolean;
+    available: boolean;
+    pausedAt: number | null;
+    reason: string | null;
+    unavailableReason?: "schedule_disabled" | "events_disabled";
+  } {
+    if (!this.scheduler) {
+      return {
+        paused: false,
+        changed: false,
+        available: false,
+        pausedAt: null,
+        reason: null,
+        unavailableReason: this.schedulerUnavailableReason,
+      };
+    }
+    if (!this.schedulerExecutionState.paused) {
+      this.schedulerExecutionState = {
+        paused: true,
+        pausedAt: Date.now(),
+        reason:
+          typeof reasonRaw === "string" && reasonRaw.trim().length > 0
+            ? reasonRaw.trim()
+            : undefined,
+      };
+      this.scheduler.syncExecutionState();
+      return {
+        paused: true,
+        changed: true,
+        available: true,
+        pausedAt: this.schedulerExecutionState.pausedAt ?? null,
+        reason: this.schedulerExecutionState.reason ?? null,
+      };
+    }
+    return {
+      paused: true,
+      changed: false,
+      available: true,
+      pausedAt: this.schedulerExecutionState.pausedAt ?? null,
+      reason: this.schedulerExecutionState.reason ?? null,
+    };
+  }
+
+  private resumeScheduler(): {
+    paused: boolean;
+    changed: boolean;
+    available: boolean;
+    pausedAt: null;
+    reason: null;
+    previousPausedAt: number | null;
+    previousReason: string | null;
+    unavailableReason?: "schedule_disabled" | "events_disabled";
+  } {
+    if (!this.scheduler) {
+      return {
+        paused: false,
+        changed: false,
+        available: false,
+        pausedAt: null,
+        reason: null,
+        previousPausedAt: null,
+        previousReason: null,
+        unavailableReason: this.schedulerUnavailableReason,
+      };
+    }
+    const previousPausedAt = this.schedulerExecutionState.pausedAt ?? null;
+    const previousReason = this.schedulerExecutionState.reason ?? null;
+    if (!this.schedulerExecutionState.paused) {
+      return {
+        paused: false,
+        changed: false,
+        available: true,
+        pausedAt: null,
+        reason: null,
+        previousPausedAt,
+        previousReason,
+      };
+    }
+    this.schedulerExecutionState = {
+      paused: false,
+    };
+    this.scheduler.syncExecutionState();
+    return {
+      paused: false,
+      changed: true,
+      available: true,
+      pausedAt: null,
+      reason: null,
+      previousPausedAt,
+      previousReason,
     };
   }
 

@@ -43,6 +43,7 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 
 ## Promoted notes (status pointers)
 
+- `docs/research/rfc-schedule-intent-hardening-and-control-plane-ergonomics.md`
 - `docs/research/rfc-narrative-memory-product-and-bounded-semantic-recall.md`
 - `docs/research/rfc-specialist-subagents-and-adversarial-verification.md`
 - `docs/research/rfc-architecture-doc-precision-review.md`

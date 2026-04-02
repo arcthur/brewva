@@ -499,6 +499,10 @@ function normalizeScheduleConfig(
       scheduleInput.maxRecoveryCatchUps,
       defaults.maxRecoveryCatchUps,
     ),
+    staleOneShotRecoveryThresholdMs: normalizePositiveInteger(
+      scheduleInput.staleOneShotRecoveryThresholdMs,
+      defaults.staleOneShotRecoveryThresholdMs,
+    ),
   };
 }
 

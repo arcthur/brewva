@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -294,6 +294,7 @@ export async function startDaemonHarness(
   options: {
     healthHttpPort?: number;
     healthHttpPath?: string;
+    scheduleEnabled?: boolean;
   } = {},
 ): Promise<DaemonHarness> {
   const root = mkdtempSync(join(tmpdir(), "brewva-gateway-integration-"));
@@ -301,6 +302,22 @@ export async function startDaemonHarness(
   const policyPath = join(root, "HEARTBEAT.md");
   const tokenFilePath = join(stateDir, "gateway.token");
 
+  mkdirSync(join(root, ".brewva"), { recursive: true });
+  if (options.scheduleEnabled === true) {
+    writeFileSync(
+      join(root, ".brewva", "brewva.json"),
+      JSON.stringify(
+        {
+          schedule: {
+            enabled: true,
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+  }
   writeHeartbeatPolicy(policyPath, initialRules);
   const port = await allocatePort();
 

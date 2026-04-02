@@ -368,6 +368,10 @@ export const TOOL_GOVERNANCE_BY_NAME: Record<string, ToolGovernanceDescriptor> =
     effects: ["schedule_mutation"],
     defaultRisk: "high",
   }),
+  follow_up: descriptor({
+    effects: ["schedule_mutation"],
+    defaultRisk: "high",
+  }),
   skill_load: descriptor({
     effects: ["runtime_observe"],
     defaultRisk: "low",

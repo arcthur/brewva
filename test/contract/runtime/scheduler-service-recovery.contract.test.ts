@@ -7,8 +7,10 @@ import {
   buildScheduleIntentCreatedEvent,
   parseScheduleIntentEvent,
 } from "@brewva/brewva-runtime";
+import { buildTurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { requireDefined } from "../../helpers/assertions.js";
 import {
+  computeExpectedRecurringJitteredNextRunAt,
   createSchedulerConfig,
   createWorkspace,
   schedulerRuntimePort,
@@ -30,6 +32,7 @@ describe("scheduler service recovery contract", () => {
         reason: "recover test",
         continuityMode: "inherit",
         runAt: now - 1_000,
+        nextRunAt: now - 1_000,
         maxRuns: 1,
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
@@ -89,6 +92,7 @@ describe("scheduler service recovery contract", () => {
         reason: "recover overflow 1",
         continuityMode: "inherit",
         runAt: dueRunAt,
+        nextRunAt: dueRunAt,
         maxRuns: 1,
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
@@ -102,6 +106,7 @@ describe("scheduler service recovery contract", () => {
         reason: "recover overflow 2",
         continuityMode: "inherit",
         runAt: dueRunAt + 1,
+        nextRunAt: dueRunAt + 1,
         maxRuns: 2,
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
@@ -160,6 +165,7 @@ describe("scheduler service recovery contract", () => {
         reason: "fairness a1",
         continuityMode: "inherit",
         runAt: dueRunAt,
+        nextRunAt: dueRunAt,
         maxRuns: 2,
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
@@ -173,6 +179,7 @@ describe("scheduler service recovery contract", () => {
         reason: "fairness a2",
         continuityMode: "inherit",
         runAt: dueRunAt + 1,
+        nextRunAt: dueRunAt + 1,
         maxRuns: 2,
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
@@ -186,6 +193,7 @@ describe("scheduler service recovery contract", () => {
         reason: "fairness b1",
         continuityMode: "inherit",
         runAt: dueRunAt + 2,
+        nextRunAt: dueRunAt + 2,
         maxRuns: 2,
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
@@ -265,6 +273,7 @@ describe("scheduler service recovery contract", () => {
         reason: "circuit test",
         continuityMode: "inherit",
         runAt: nowMs - 1_000,
+        nextRunAt: nowMs - 1_000,
         maxRuns: 5,
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
@@ -317,6 +326,7 @@ describe("scheduler service recovery contract", () => {
         reason: "retry before circuit",
         continuityMode: "inherit",
         runAt: nowMs - 1_000,
+        nextRunAt: nowMs - 1_000,
         maxRuns: 5,
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
@@ -352,6 +362,217 @@ describe("scheduler service recovery contract", () => {
     expect(state?.nextRunAt).toBe(nowMs + runtime.config.schedule.minIntervalMs);
   });
 
+  test("defers stale one-shot recovery instead of firing immediately", async () => {
+    const workspace = createWorkspace("stale-one-shot-recovery");
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: createSchedulerConfig((config) => {
+        config.schedule.minIntervalMs = 60_000;
+        config.schedule.staleOneShotRecoveryThresholdMs = 60 * 60 * 1000;
+      }),
+    });
+
+    const nowMs = Date.UTC(2026, 0, 1, 3, 0, 0, 0);
+    const sessionId = "scheduler-stale-one-shot-session";
+    const overdueRunAt = nowMs - 3 * 60 * 60 * 1000;
+
+    runtime.events.record({
+      sessionId,
+      type: SCHEDULE_EVENT_TYPE,
+      payload: buildScheduleIntentCreatedEvent({
+        intentId: "intent-stale-one-shot-1",
+        parentSessionId: sessionId,
+        reason: "stale one-shot",
+        continuityMode: "inherit",
+        runAt: overdueRunAt,
+        nextRunAt: overdueRunAt,
+        maxRuns: 1,
+      }) as unknown as Record<string, unknown>,
+      skipTapeCheckpoint: true,
+    });
+
+    const fired: string[] = [];
+    const scheduler = new SchedulerService({
+      runtime: schedulerRuntimePort(runtime),
+      now: () => nowMs,
+      executeIntent: async (intent) => {
+        fired.push(intent.intentId);
+      },
+    });
+
+    const recovered = await scheduler.recover();
+    scheduler.stop();
+
+    expect(fired).toEqual([]);
+    expect(recovered.catchUp.dueIntents).toBe(1);
+    expect(recovered.catchUp.firedIntents).toBe(0);
+    expect(recovered.catchUp.deferredIntents).toBe(1);
+
+    const state = scheduler
+      .snapshot()
+      .intents.find((intent) => intent.intentId === "intent-stale-one-shot-1");
+    expect(state?.status).toBe("active");
+    expect(state?.nextRunAt).toBe(nowMs + runtime.config.schedule.minIntervalMs);
+
+    const deferredEvents = runtime.events.query(sessionId, { type: "schedule_recovery_deferred" });
+    expect(deferredEvents).toHaveLength(1);
+    expect(deferredEvents[0]?.payload?.reason).toBe("stale_one_shot_recovery");
+  });
+
+  test("uses one monotonic defer queue across wal, stale, and overflow recovery buckets", async () => {
+    const workspace = createWorkspace("recovery-defer-order");
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: createSchedulerConfig((config) => {
+        config.schedule.minIntervalMs = 60_000;
+        config.schedule.maxRecoveryCatchUps = 1;
+        config.schedule.staleOneShotRecoveryThresholdMs = 60 * 60 * 1000;
+      }),
+    });
+
+    const nowMs = Date.UTC(2026, 0, 1, 4, 0, 0, 0);
+    const sessionId = "scheduler-recovery-defer-order-session";
+    runtime.events.record({
+      sessionId,
+      type: SCHEDULE_EVENT_TYPE,
+      payload: buildScheduleIntentCreatedEvent({
+        intentId: "intent-wal-inflight",
+        parentSessionId: sessionId,
+        reason: "wal inflight",
+        continuityMode: "inherit",
+        runAt: nowMs - 4_000,
+        nextRunAt: nowMs - 4_000,
+        maxRuns: 2,
+      }) as unknown as Record<string, unknown>,
+      skipTapeCheckpoint: true,
+    });
+    runtime.events.record({
+      sessionId,
+      type: SCHEDULE_EVENT_TYPE,
+      payload: buildScheduleIntentCreatedEvent({
+        intentId: "intent-stale-one-shot",
+        parentSessionId: sessionId,
+        reason: "stale one-shot",
+        continuityMode: "inherit",
+        runAt: nowMs - 3 * 60 * 60 * 1000,
+        nextRunAt: nowMs - 3 * 60 * 60 * 1000,
+        maxRuns: 1,
+      }) as unknown as Record<string, unknown>,
+      skipTapeCheckpoint: true,
+    });
+    runtime.events.record({
+      sessionId,
+      type: SCHEDULE_EVENT_TYPE,
+      payload: buildScheduleIntentCreatedEvent({
+        intentId: "intent-fire-now",
+        parentSessionId: sessionId,
+        reason: "fire now",
+        continuityMode: "inherit",
+        runAt: nowMs - 2_000,
+        nextRunAt: nowMs - 2_000,
+        maxRuns: 2,
+      }) as unknown as Record<string, unknown>,
+      skipTapeCheckpoint: true,
+    });
+    runtime.events.record({
+      sessionId,
+      type: SCHEDULE_EVENT_TYPE,
+      payload: buildScheduleIntentCreatedEvent({
+        intentId: "intent-overflow",
+        parentSessionId: sessionId,
+        reason: "overflow",
+        continuityMode: "inherit",
+        runAt: nowMs - 1_000,
+        nextRunAt: nowMs - 1_000,
+        maxRuns: 2,
+      }) as unknown as Record<string, unknown>,
+      skipTapeCheckpoint: true,
+    });
+
+    const walRecord = runtime.turnWal.appendPending(
+      buildTurnEnvelope({
+        kind: "user",
+        sessionId,
+        turnId: "schedule:intent-wal-inflight:1",
+        channel: "schedule",
+        conversationId: sessionId,
+        timestamp: nowMs - 2_000,
+        parts: [{ type: "text", text: "schedule wal inflight" }],
+        meta: {
+          source: "schedule",
+          intentId: "intent-wal-inflight",
+          runIndex: 1,
+          continuityMode: "inherit",
+        },
+      }),
+      "schedule",
+      { dedupeKey: "schedule:intent-wal-inflight:1" },
+    );
+    runtime.turnWal.markInflight(walRecord.walId);
+
+    const fired: string[] = [];
+    const scheduler = new SchedulerService({
+      runtime: {
+        ...schedulerRuntimePort(runtime),
+        turnWal: {
+          appendPending: (envelope, source, options) =>
+            runtime.turnWal.appendPending(envelope, source, options),
+          markInflight: (walId) => runtime.turnWal.markInflight(walId),
+          markDone: (walId) => runtime.turnWal.markDone(walId),
+          markFailed: (walId, error) => runtime.turnWal.markFailed(walId, error),
+          markExpired: (walId) => runtime.turnWal.markExpired(walId),
+          listPending: () => runtime.turnWal.listPending(),
+        },
+      },
+      now: () => nowMs,
+      executeIntent: async (intent) => {
+        fired.push(intent.intentId);
+      },
+    });
+
+    const recovered = await scheduler.recover();
+    scheduler.stop();
+
+    expect(fired).toEqual(["intent-fire-now"]);
+    expect(recovered.catchUp.dueIntents).toBe(4);
+    expect(recovered.catchUp.firedIntents).toBe(1);
+    expect(recovered.catchUp.deferredIntents).toBe(3);
+
+    const deferredEvents = runtime.events.query(sessionId, { type: "schedule_recovery_deferred" });
+    expect(deferredEvents).toHaveLength(3);
+    expect(
+      deferredEvents.map((event) => ({
+        intentId: event.payload?.intentId,
+        reason: event.payload?.reason,
+        queueSequence: event.payload?.queueSequence,
+        backlogSize: event.payload?.backlogSize,
+        deferredTo: event.payload?.deferredTo,
+      })),
+    ).toEqual([
+      {
+        intentId: "intent-wal-inflight",
+        reason: "turn_wal_inflight",
+        queueSequence: 1,
+        backlogSize: 3,
+        deferredTo: nowMs + 60_000,
+      },
+      {
+        intentId: "intent-stale-one-shot",
+        reason: "stale_one_shot_recovery",
+        queueSequence: 2,
+        backlogSize: 3,
+        deferredTo: nowMs + 120_000,
+      },
+      {
+        intentId: "intent-overflow",
+        reason: "max_recovery_catchups_exceeded",
+        queueSequence: 3,
+        backlogSize: 3,
+        deferredTo: nowMs + 180_000,
+      },
+    ]);
+  });
+
   test("catches up a missed cron run and schedules the next slot", async () => {
     const workspace = createWorkspace("cron-recover");
     const runtime = new BrewvaRuntime({
@@ -373,6 +594,7 @@ describe("scheduler service recovery contract", () => {
     await scheduler.recover();
 
     const created = scheduler.createIntent({
+      intentId: "intent-cron-recover-1",
       parentSessionId: "session-cron-recover",
       reason: "cron recover",
       continuityMode: "inherit",
@@ -400,11 +622,15 @@ describe("scheduler service recovery contract", () => {
       .intents.find((intent) => intent.intentId === created.intent.intentId);
     expect(state?.status).toBe("active");
     expect(state?.runCount).toBe(1);
-    expect(typeof state?.nextRunAt).toBe("number");
-    if (typeof state?.nextRunAt === "number" && typeof firstNextRunAt === "number") {
-      expect(state.nextRunAt).toBeGreaterThan(firstNextRunAt);
-      expect(new Date(state.nextRunAt).getMinutes() % 2).toBe(0);
-    }
+    const expectedNextRunAt = computeExpectedRecurringJitteredNextRunAt({
+      intentId: "intent-cron-recover-1",
+      cronExpression: "*/2 * * * *",
+      afterMs: nowMs + runtime.config.schedule.minIntervalMs - 1,
+      timeZone: created.intent.timeZone,
+    });
+    expect(typeof expectedNextRunAt).toBe("number");
+    if (typeof expectedNextRunAt !== "number") return;
+    expect(state?.nextRunAt).toBe(expectedNextRunAt);
 
     const events = runtime.events.query("session-cron-recover", { type: SCHEDULE_EVENT_TYPE });
     const firedCount = events
