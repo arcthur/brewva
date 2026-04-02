@@ -1,11 +1,16 @@
 import type {
   BrewvaRuntime,
+  DesignExecutionModeHint,
+  DesignExecutionStep as RuntimeDesignExecutionStep,
+  DesignImplementationTarget as RuntimeDesignImplementationTarget,
+  DesignRiskItem as RuntimeDesignRiskItem,
   DelegationRunQuery,
   DelegationRunRecord,
   ManagedToolMode,
   PatchSet,
   QaCheck as RuntimeQaCheck,
   QaSubagentOutcomeData as RuntimeQaSubagentOutcomeData,
+  ReviewLaneName as RuntimeReviewLaneName,
   SkillOutputValidationResult,
   ToolGovernanceDescriptor,
   ToolExecutionBoundary,
@@ -26,7 +31,7 @@ export type BrewvaManagedToolDefinition = ToolDefinition & {
   brewvaAgentParameters?: TSchema;
 };
 
-export type SubagentResultMode = "exploration" | "review" | "qa" | "patch";
+export type SubagentResultMode = "exploration" | "plan" | "review" | "qa" | "patch";
 export type SubagentDelegationMode = "single" | "parallel";
 export type SubagentReturnMode = "text_only" | "supplemental";
 export type DelegationRefKind =
@@ -162,14 +167,22 @@ export interface ExplorationSubagentOutcomeData {
   nextSteps?: string[];
 }
 
-export type ReviewLaneName =
-  | "review-correctness"
-  | "review-boundaries"
-  | "review-operability"
-  | "review-security"
-  | "review-concurrency"
-  | "review-compatibility"
-  | "review-performance";
+export type PlanExecutionStep = RuntimeDesignExecutionStep;
+
+export type PlanImplementationTarget = RuntimeDesignImplementationTarget;
+
+export type PlanRiskItem = RuntimeDesignRiskItem;
+
+export interface PlanSubagentOutcomeData {
+  kind: "plan";
+  designSpec: string;
+  executionPlan: PlanExecutionStep[];
+  executionModeHint: DesignExecutionModeHint;
+  riskRegister: PlanRiskItem[];
+  implementationTargets: PlanImplementationTarget[];
+}
+
+export type ReviewLaneName = RuntimeReviewLaneName;
 
 export type ReviewLaneDisposition = "clear" | "concern" | "blocked" | "inconclusive";
 
@@ -198,6 +211,7 @@ export interface PatchSubagentOutcomeData {
 
 export type SubagentOutcomeData =
   | ExplorationSubagentOutcomeData
+  | PlanSubagentOutcomeData
   | ReviewSubagentOutcomeData
   | QaSubagentOutcomeData
   | PatchSubagentOutcomeData;

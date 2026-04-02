@@ -264,6 +264,201 @@ describe("workflow derivation", () => {
     expect(designArtifacts[1]?.freshness).toBe("stale");
   });
 
+  test("derives planning assurance metadata from canonical design and QA artifacts", () => {
+    const status = deriveWorkflowStatus({
+      sessionId: "workflow-planning-assurance",
+      events: [
+        event({
+          id: "evt-strategy",
+          type: "skill_completed",
+          timestamp: 90,
+          payload: {
+            skillName: "strategy-review",
+            outputKeys: ["planning_posture"],
+            outputs: {
+              planning_posture: "high_risk",
+            },
+          },
+        }),
+        event({
+          id: "evt-design",
+          type: "skill_completed",
+          timestamp: 100,
+          payload: {
+            skillName: "design",
+            outputKeys: [
+              "design_spec",
+              "execution_plan",
+              "execution_mode_hint",
+              "risk_register",
+              "implementation_targets",
+            ],
+            outputs: {
+              design_spec: "Lock planning into a typed contract with explicit evidence.",
+              execution_plan: [
+                {
+                  step: "Promote plan to a first-class delegated result.",
+                  intent: "Stop routing planning through exploration.",
+                  owner: "gateway.subagents",
+                  exit_criteria: "Delegated plan outcomes parse into a dedicated shape.",
+                  verification_intent:
+                    "Plan parsing tests confirm canonical skill output synthesis.",
+                },
+              ],
+              execution_mode_hint: "coordinated_rollout",
+              risk_register: [
+                {
+                  risk: "Required evidence could be declared but never exercised.",
+                  category: "public_api",
+                  severity: "high",
+                  mitigation: "Make QA pass depend on required_evidence coverage.",
+                  required_evidence: ["plan_contract_tests"],
+                  owner_lane: "qa",
+                },
+              ],
+              implementation_targets: [
+                {
+                  target: "packages/brewva-gateway/src/subagents/structured-outcome.ts",
+                  kind: "module",
+                  owner_boundary: "gateway.subagents",
+                  reason: "Plan result parsing is implemented here.",
+                },
+              ],
+            },
+          },
+        }),
+        event({
+          id: "evt-implementation",
+          type: "skill_completed",
+          timestamp: 110,
+          payload: {
+            skillName: "implementation",
+            outputKeys: ["change_set", "files_changed"],
+            outputs: {
+              change_set:
+                "Promoted plan outcomes and rewired design synthesis to the canonical contract.",
+              files_changed: ["packages/brewva-gateway/src/subagents/structured-outcome.ts"],
+            },
+          },
+        }),
+        event({
+          id: "evt-qa",
+          type: "skill_completed",
+          timestamp: 120,
+          payload: {
+            skillName: "qa",
+            outputKeys: ["qa_report", "qa_findings", "qa_verdict", "qa_checks"],
+            outputs: {
+              qa_report: "Executed the canonical plan contract tests and preserved the evidence.",
+              qa_findings: [],
+              qa_verdict: "pass",
+              qa_checks: [
+                {
+                  name: "plan-contract-tests",
+                  result: "pass",
+                  command: "bun test plan_contract_tests",
+                  exitCode: 0,
+                  observedOutput: "plan_contract_tests passed",
+                  probeType: "adversarial",
+                  artifactRefs: ["artifacts/plan_contract_tests.txt"],
+                },
+              ],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(status.posture.plan_complete).toBe(true);
+    expect(status.posture.plan_fresh).toBe(false);
+    expect(status.posture.review_required).toBe(true);
+    expect(status.posture.qa_required).toBe(true);
+    expect(status.posture.unsatisfied_required_evidence).toEqual([]);
+  });
+
+  test("treats fresh runtime verification as valid required-evidence coverage even without QA artifacts", () => {
+    const status = deriveWorkflowStatus({
+      sessionId: "workflow-required-evidence-verification",
+      events: [
+        event({
+          id: "evt-design-verification",
+          type: "skill_completed",
+          timestamp: 100,
+          payload: {
+            skillName: "design",
+            outputKeys: [
+              "design_spec",
+              "execution_plan",
+              "execution_mode_hint",
+              "risk_register",
+              "implementation_targets",
+            ],
+            outputs: {
+              design_spec: "Allow fresh runtime verification to satisfy plan-declared evidence.",
+              execution_plan: [
+                {
+                  step: "Run the canonical verification contract checks.",
+                  intent: "Keep required evidence machine-checkable at the verification layer.",
+                  owner: "runtime.verification",
+                  exit_criteria:
+                    "Verification emits the required evidence token in fresh metadata.",
+                  verification_intent:
+                    "Workflow posture consumes fresh verification coverage texts.",
+                },
+              ],
+              execution_mode_hint: "test_first",
+              risk_register: [
+                {
+                  risk: "Required evidence could be considered unsatisfied when only verification proved it.",
+                  category: "public_api",
+                  severity: "high",
+                  mitigation: "Union fresh verification coverage with QA coverage.",
+                  required_evidence: ["plan_contract_tests"],
+                  owner_lane: "qa",
+                },
+              ],
+              implementation_targets: [
+                {
+                  target: "packages/brewva-runtime/src/workflow/derivation.ts",
+                  kind: "module",
+                  owner_boundary: "runtime.workflow",
+                  reason: "Required evidence closure is derived here.",
+                },
+              ],
+            },
+          },
+        }),
+        event({
+          id: "evt-verification-coverage",
+          type: "verification_outcome_recorded",
+          timestamp: 120,
+          payload: {
+            outcome: "pass",
+            level: "standard",
+            activeSkill: "implementation",
+            failedChecks: [],
+            evidenceFreshness: "fresh",
+            commandsExecuted: ["plan_contract_tests"],
+            checkResults: [
+              {
+                name: "plan_contract_tests",
+                status: "pass",
+                evidence: "plan_contract_tests passed",
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    expect(status.posture.unsatisfied_required_evidence).toEqual([]);
+    expect(
+      status.artifacts.find((artifact) => artifact.kind === "verification")?.metadata,
+    ).toMatchObject({
+      coverageTexts: expect.arrayContaining(["plan_contract_tests", "plan_contract_tests passed"]),
+    });
+  });
+
   test("marks review and verification stale after a later workspace mutation", () => {
     const status = deriveWorkflowStatus({
       sessionId: "workflow-stale-session",

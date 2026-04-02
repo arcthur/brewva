@@ -10,7 +10,7 @@ export type DelegationRunStatus =
   | "cancelled"
   | "merged";
 
-export type DelegationOutcomeKind = "exploration" | "review" | "qa" | "patch";
+export type DelegationOutcomeKind = "exploration" | "plan" | "review" | "qa" | "patch";
 export type DelegationDeliveryMode = "text_only" | "supplemental";
 export type DelegationDeliveryHandoffState = "none" | "pending_parent_turn" | "surfaced";
 export type DelegationModelRouteSource = "execution_shape" | "target" | "policy";

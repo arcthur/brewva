@@ -37,6 +37,7 @@ export interface SkillOutputJsonContract {
   minItems?: number;
   requiredFields?: string[];
   fieldContracts?: Record<string, SkillOutputContract>;
+  itemContract?: SkillOutputContract;
 }
 
 export type SkillOutputContract =

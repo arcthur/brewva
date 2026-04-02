@@ -1,14 +1,21 @@
+import {
+  DESIGN_EXECUTION_MODE_HINTS,
+  coerceDesignExecutionPlan,
+  coerceDesignImplementationTargets,
+  coerceDesignRiskRegister,
+  normalizeReviewLaneName,
+} from "@brewva/brewva-runtime";
 import type {
   DelegationOutcomeChange,
   DelegationOutcomeFinding,
   PatchSubagentOutcomeData,
+  PlanSubagentOutcomeData,
   QaCheck,
   QaSubagentOutcomeData,
   ReviewSubagentOutcomeData,
   SubagentOutcomeData,
   SubagentResultMode,
 } from "@brewva/brewva-tools";
-import { normalizeReviewLaneName } from "@brewva/brewva-tools";
 import { STRUCTURED_OUTCOME_CLOSE, STRUCTURED_OUTCOME_OPEN } from "./protocol.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -237,6 +244,20 @@ function readChange(value: unknown): DelegationOutcomeChange | undefined {
   };
 }
 
+function buildPlanSkillOutputs(
+  data: PlanSubagentOutcomeData,
+  existing: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  return {
+    ...existing,
+    design_spec: data.designSpec,
+    execution_plan: data.executionPlan,
+    execution_mode_hint: data.executionModeHint,
+    risk_register: data.riskRegister,
+    implementation_targets: data.implementationTargets,
+  };
+}
+
 function readFindings(value: unknown): DelegationOutcomeFinding[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
@@ -302,6 +323,39 @@ function parseOutcomeData(
       openQuestions: readStringArray(payload.openQuestions),
       nextSteps: readStringArray(payload.nextSteps),
     };
+  }
+
+  if (resultMode === "plan") {
+    const designSpec = readString(payload.designSpec);
+    const executionModeHint = readString(payload.executionModeHint);
+    const executionPlan = coerceDesignExecutionPlan(payload.executionPlan);
+    const riskRegister = coerceDesignRiskRegister(payload.riskRegister);
+    const implementationTargets = coerceDesignImplementationTargets(payload.implementationTargets);
+    if (
+      !designSpec ||
+      !executionModeHint ||
+      !DESIGN_EXECUTION_MODE_HINTS.includes(
+        executionModeHint as (typeof DESIGN_EXECUTION_MODE_HINTS)[number],
+      ) ||
+      !executionPlan ||
+      executionPlan.length === 0 ||
+      !riskRegister ||
+      riskRegister.length === 0 ||
+      !implementationTargets ||
+      implementationTargets.length === 0
+    ) {
+      return undefined;
+    }
+    const canonicalExecutionModeHint =
+      executionModeHint as PlanSubagentOutcomeData["executionModeHint"];
+    return {
+      kind: "plan",
+      designSpec,
+      executionPlan,
+      executionModeHint: canonicalExecutionModeHint,
+      riskRegister,
+      implementationTargets,
+    } satisfies PlanSubagentOutcomeData;
   }
 
   if (resultMode === "review") {
@@ -381,6 +435,9 @@ export function summarizeStructuredOutcomeData(data: SubagentOutcomeData): strin
   if (data.kind === "exploration") {
     return data.findings?.[0]?.summary ?? data.openQuestions?.[0] ?? data.nextSteps?.[0];
   }
+  if (data.kind === "plan") {
+    return data.designSpec ?? data.executionPlan[0]?.step ?? data.implementationTargets[0]?.target;
+  }
   if (data.kind === "review") {
     return data.primaryClaim ?? data.findings?.[0]?.summary ?? data.strongestCounterpoint;
   }
@@ -434,9 +491,11 @@ export function extractStructuredOutcomeData(input: {
     };
   }
   const skillOutputs =
-    input.skillName === "qa" && data.kind === "qa"
-      ? buildQaSkillOutputs(data, normalized.narrativeText, rawSkillOutputs)
-      : rawSkillOutputs;
+    input.skillName === "design" && data.kind === "plan"
+      ? buildPlanSkillOutputs(data, rawSkillOutputs)
+      : input.skillName === "qa" && data.kind === "qa"
+        ? buildQaSkillOutputs(data, normalized.narrativeText, rawSkillOutputs)
+        : rawSkillOutputs;
   return {
     data,
     narrativeText: normalized.narrativeText,

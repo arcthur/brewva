@@ -82,6 +82,10 @@ Execution posture is intentionally split:
 
 - `explore`, `plan`, and `review` are read-only and run under minimal-context
   envelopes
+- `plan` is a first-class delegated result posture; canonical plan outcomes
+  carry `designSpec`, `executionPlan`, `executionModeHint`, `riskRegister`, and
+  `implementationTargets`, and the gateway projects that payload into the
+  downstream `design` skill artifact set
 - `qa` is effectful for commands, browser flows, and evidence capture, but it
   is non-patch-producing and does not enter `WorkerResult` adoption semantics
 - `qa` is intentionally adversarial: a `pass` posture depends on evidence-backed
@@ -107,7 +111,10 @@ gateway worker now adds a second, inspectable adjudication step.
 - the adjudicator records a durable `task_stall_adjudicated` event with
   `continue`, `nudge`, `compact_recommended`, or `abort_recommended`
 - inspection surfaces such as `workflow_status` can expose that recommendation
-  without turning it into hidden autonomous session control
+  together with planning assurance posture such as `plan_complete`,
+  `plan_fresh`, `review_required`, `qa_required`, and
+  `unsatisfied_required_evidence`, without turning any of it into hidden
+  autonomous session control
 
 The current default policy is heuristic, but the durable packet and event shape
 are stable enough for future hook-backed or model-backed adjudicators without

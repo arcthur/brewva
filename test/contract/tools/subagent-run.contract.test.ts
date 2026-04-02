@@ -33,6 +33,46 @@ function resolveDelegateName(request: SubagentRunRequest): string {
 }
 
 describe("subagent_run tool", () => {
+  test("accepts plan as a canonical delegated result mode", async () => {
+    let capturedRequest: SubagentRunRequest | undefined;
+    const tool = createSubagentRunTool({
+      runtime: {
+        orchestration: {
+          subagents: {
+            run: async (input: { fromSessionId: string; request: SubagentRunRequest }) => {
+              capturedRequest = input.request;
+              return {
+                ok: true,
+                mode: input.request.mode,
+                delegate: resolveDelegateName(input.request),
+                outcomes: [],
+              };
+            },
+          },
+        },
+      } as any,
+    });
+
+    const result = await tool.execute(
+      "tc-subagent-plan",
+      {
+        agentSpec: "plan",
+        objective: "Design the contract-first rollout.",
+        fallbackResultMode: "plan",
+        executionShape: {
+          resultMode: "plan",
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext("session-plan"),
+    );
+
+    expect((result.details as { ok?: boolean } | undefined)?.ok).toBe(true);
+    expect(capturedRequest?.fallbackResultMode).toBe("plan");
+    expect(capturedRequest?.executionShape?.resultMode).toBe("plan");
+  });
+
   test("delegates single runs through the subagent adapter", async () => {
     const tool = createSubagentRunTool({
       runtime: {

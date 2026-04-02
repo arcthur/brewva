@@ -51,6 +51,7 @@ consumes:
   - design_spec
   - execution_plan
   - execution_mode_hint
+  - implementation_targets
   - root_cause
   - fix_strategy
 requires: []
@@ -111,12 +112,17 @@ continue from the failure snapshot instead of re-deriving context from scratch.
   genuinely ambiguous.
 - If the change expands materially beyond the active plan, stop and hand control
   back to design instead of silently widening scope.
+- Treat `implementation_targets` as a hard ownership fence. Targets should stay
+  concrete and path-scoped enough to map directly onto `files_changed`. If the actual
+  touched files or directories clearly exceed the planned targets, return to design
+  instead of silently expanding scope.
 
 ## Change Safety Gate
 
 Before applying edits, clear this gate:
 
 - [ ] The active plan still matches the actual touched surface.
+- [ ] The touched files or directories still fit within concrete `implementation_targets`.
 - [ ] The diff can stay local instead of widening into incidental cleanup.
 - [ ] A concrete verification path exists for the risky behavior.
 - [ ] Any unresolved ambiguity is about execution detail, not missing design.

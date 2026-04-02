@@ -1,34 +1,7 @@
-export const REVIEW_CHANGE_CATEGORIES = [
-  "authn",
-  "authz",
-  "credential_handling",
-  "secret_io",
-  "external_input",
-  "network_boundary",
-  "permission_policy",
-  "wal_replay",
-  "rollback",
-  "scheduler",
-  "queueing",
-  "async_ordering",
-  "cross_session_state",
-  "multi_writer_state",
-  "cli_surface",
-  "config_schema",
-  "public_api",
-  "export_map",
-  "persisted_format",
-  "wire_protocol",
-  "package_boundary",
-  "hot_path",
-  "indexing_scan",
-  "fanout_parallelism",
-  "queue_growth",
-  "artifact_volume",
-  "storage_churn",
-] as const;
+import { REVIEW_CHANGE_CATEGORIES, type ReviewChangeCategory } from "@brewva/brewva-runtime";
 
-export type ReviewChangeCategory = (typeof REVIEW_CHANGE_CATEGORIES)[number];
+export { REVIEW_CHANGE_CATEGORIES };
+export type { ReviewChangeCategory };
 
 export const REVIEW_CHANGED_FILE_CLASSES = [
   "auth_surface",

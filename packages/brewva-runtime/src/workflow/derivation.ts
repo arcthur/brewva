@@ -1,7 +1,13 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
+  coercePlanningArtifactSet,
+  collectExecutionVerificationIntents,
+  collectPlanningOwnerLanes,
+  collectPlanningRequiredEvidence,
+  collectPlanningRiskCategories,
   coerceReviewReportArtifact,
+  isPlanningArtifactSetComplete,
   type BrewvaEventRecord,
   type TaskState,
 } from "../contracts/index.js";
@@ -17,6 +23,11 @@ import {
 } from "../events/event-types.js";
 import { coerceGuardResultPayload, coerceMetricObservationPayload } from "../iteration/facts.js";
 import type { JsonValue } from "../utils/json.js";
+import {
+  collectCoveredRequiredEvidence,
+  collectQaCoverageTexts,
+  collectVerificationCoverageTexts,
+} from "./coverage-utils.js";
 
 export const WORKFLOW_ARTIFACT_KINDS = [
   "discovery",
@@ -66,9 +77,14 @@ export interface WorkflowPosture {
   discovery: WorkflowPresenceStatus;
   strategy: WorkflowPresenceStatus;
   planning: WorkflowPlanningStatus;
+  plan_complete: boolean;
+  plan_fresh: boolean;
   implementation: WorkflowImplementationStatus;
+  review_required: boolean;
   review: WorkflowLaneStatus;
+  qa_required: boolean;
   qa: WorkflowLaneStatus;
+  unsatisfied_required_evidence: string[];
   verification: WorkflowLaneStatus;
   acceptance: WorkflowAcceptanceStatus;
   ship: WorkflowLaneStatus;
@@ -230,6 +246,7 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
     ...readStringArray(payload.outputKeys),
     ...Object.keys(outputs).map((key) => key.trim()),
   ]);
+  const planningArtifacts = coercePlanningArtifactSet(outputs);
   const drafts: WorkflowDraftArtifact[] = [];
   const problemFrame = outputs.problem_frame;
   const userPains = outputs.user_pains;
@@ -379,31 +396,46 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
     );
   }
 
-  const designSpec = outputs.design_spec;
-  if (designSpec !== undefined) {
+  if (
+    planningArtifacts.designSpec !== undefined ||
+    planningArtifacts.executionModeHint !== undefined ||
+    planningArtifacts.riskRegister !== undefined ||
+    planningArtifacts.implementationTargets !== undefined
+  ) {
     drafts.push(
       createDraftArtifact({
         event,
         kind: "design",
-        summary: compactJsonValue(designSpec) ?? "Design artifact recorded.",
+        summary: planningArtifacts.designSpec ?? "Design artifact recorded.",
         sourceSkillNames: skillName ? [skillName] : [],
-        outputKeys: ["design_spec"],
+        outputKeys: [
+          "design_spec",
+          "execution_mode_hint",
+          "risk_register",
+          "implementation_targets",
+        ].filter((key) => outputs[key] !== undefined),
         metadata: {
           source: "skill_completed",
           sourceSkillName: skillName ?? null,
           outputKeys,
+          executionModeHint: planningArtifacts.executionModeHint ?? null,
+          riskRegisterCount: planningArtifacts.riskRegister?.length ?? 0,
+          implementationTargetCount: planningArtifacts.implementationTargets?.length ?? 0,
+          requiredEvidence: collectPlanningRequiredEvidence(planningArtifacts.riskRegister),
+          riskCategories: collectPlanningRiskCategories(planningArtifacts.riskRegister),
+          ownerLanes: collectPlanningOwnerLanes(planningArtifacts.riskRegister),
+          planComplete: isPlanningArtifactSetComplete(planningArtifacts),
         },
       }),
     );
   }
 
-  const executionPlan = outputs.execution_plan;
-  if (executionPlan !== undefined) {
-    const planSteps = readStringArray(executionPlan);
+  if (outputs.execution_plan !== undefined) {
+    const planSteps = planningArtifacts.executionPlan?.map((step) => step.step) ?? [];
     const summary =
       planSteps.length > 0
         ? `Execution plan with ${planSteps.length} step(s): ${formatPreviewList(planSteps)}.`
-        : (compactJsonValue(executionPlan) ?? "Execution plan recorded.");
+        : (compactJsonValue(outputs.execution_plan) ?? "Execution plan recorded.");
     drafts.push(
       createDraftArtifact({
         event,
@@ -416,6 +448,8 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
           sourceSkillName: skillName ?? null,
           outputKeys,
           stepCount: planSteps.length,
+          verificationIntents: collectExecutionVerificationIntents(planningArtifacts.executionPlan),
+          planComplete: isPlanningArtifactSetComplete(planningArtifacts),
         },
       }),
     );
@@ -554,6 +588,7 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
           sourceSkillName: skillName ?? null,
           outputKeys,
           qaVerdict: qaVerdict ?? null,
+          coverageTexts: collectQaCoverageTexts(outputs),
         },
       }),
     );
@@ -662,6 +697,7 @@ function extractVerificationArtifact(event: BrewvaEventRecord): WorkflowDraftArt
         level: level ?? null,
         evidenceFreshness: evidenceFreshness ?? null,
         failedChecks,
+        coverageTexts: collectVerificationCoverageTexts(payload),
       },
     }),
   ];
@@ -1005,6 +1041,14 @@ export function deriveWorkflowArtifacts(events: readonly BrewvaEventRecord[]): W
       }
 
       if (
+        (artifact.kind === "design" || artifact.kind === "execution_plan") &&
+        latestWriteAt > artifact.producedAt
+      ) {
+        artifact.freshness = "stale";
+        continue;
+      }
+
+      if (
         artifact.kind === "discovery" ||
         artifact.kind === "strategy_review" ||
         artifact.kind === "learning_research" ||
@@ -1050,6 +1094,24 @@ function determinePlanningStatus(
   );
   if (candidates.length === 0) return "missing";
   return "ready";
+}
+
+function determinePlanComplete(
+  latestArtifacts: Partial<Record<WorkflowArtifactKind, WorkflowArtifact>>,
+): boolean {
+  return latestArtifacts.design?.metadata?.planComplete === true;
+}
+
+function determinePlanFresh(
+  latestArtifacts: Partial<Record<WorkflowArtifactKind, WorkflowArtifact>>,
+): boolean {
+  const candidates = [latestArtifacts.design, latestArtifacts.execution_plan].filter(
+    (artifact): artifact is WorkflowArtifact => Boolean(artifact),
+  );
+  if (candidates.length === 0) {
+    return false;
+  }
+  return candidates.every((artifact) => artifact.freshness !== "stale");
 }
 
 function determinePresenceStatus(artifact: WorkflowArtifact | undefined): WorkflowPresenceStatus {
@@ -1104,6 +1166,80 @@ function determineAcceptanceStatus(
     return "pending";
   }
   return "missing";
+}
+
+function determineReviewRequired(input: {
+  latestArtifacts: Partial<Record<WorkflowArtifactKind, WorkflowArtifact>>;
+  planComplete: boolean;
+  implementation: WorkflowImplementationStatus;
+}): boolean {
+  const planningPosture = readString(
+    input.latestArtifacts.strategy_review?.metadata?.planningPosture,
+  );
+  const ownerLanes = readStringArray(input.latestArtifacts.design?.metadata?.ownerLanes);
+  return Boolean(
+    planningPosture === "high_risk" ||
+    planningPosture === "complex" ||
+    !input.planComplete ||
+    input.implementation !== "missing" ||
+    ownerLanes.some((lane) => lane.startsWith("review-")) ||
+    input.latestArtifacts.review,
+  );
+}
+
+function determineQaRequired(input: {
+  latestArtifacts: Partial<Record<WorkflowArtifactKind, WorkflowArtifact>>;
+  implementation: WorkflowImplementationStatus;
+}): boolean {
+  const planningPosture = readString(
+    input.latestArtifacts.strategy_review?.metadata?.planningPosture,
+  );
+  const ownerLanes = readStringArray(input.latestArtifacts.design?.metadata?.ownerLanes);
+  const requiredEvidence = readStringArray(
+    input.latestArtifacts.design?.metadata?.requiredEvidence,
+  );
+  return Boolean(
+    planningPosture === "high_risk" ||
+    ownerLanes.includes("qa") ||
+    requiredEvidence.length > 0 ||
+    input.implementation !== "missing" ||
+    input.latestArtifacts.qa,
+  );
+}
+
+function resolveLatestFreshVerificationCoverageTexts(
+  artifacts: readonly WorkflowArtifact[],
+): string[] {
+  const verificationArtifacts = artifacts
+    .filter((artifact) => artifact.kind === "verification")
+    .toSorted((left, right) => right.producedAt - left.producedAt);
+  for (const artifact of verificationArtifacts) {
+    if (artifact.freshness !== "fresh") {
+      continue;
+    }
+    const coverageTexts = readStringArray(artifact.metadata?.coverageTexts);
+    if (coverageTexts.length > 0) {
+      return coverageTexts;
+    }
+  }
+  return [];
+}
+
+function determineUnsatisfiedRequiredEvidence(
+  latestArtifacts: Partial<Record<WorkflowArtifactKind, WorkflowArtifact>>,
+  artifacts: readonly WorkflowArtifact[],
+): string[] {
+  const requiredEvidence = readStringArray(latestArtifacts.design?.metadata?.requiredEvidence);
+  if (requiredEvidence.length === 0) {
+    return [];
+  }
+  const qaCoverageTexts = readStringArray(latestArtifacts.qa?.metadata?.coverageTexts);
+  const verificationCoverageTexts = resolveLatestFreshVerificationCoverageTexts(artifacts);
+  const coveredRequiredEvidence = collectCoveredRequiredEvidence(
+    requiredEvidence,
+    uniqueStrings([...qaCoverageTexts, ...verificationCoverageTexts]),
+  );
+  return requiredEvidence.filter((evidenceName) => !coveredRequiredEvidence.includes(evidenceName));
 }
 
 function determineShipStatus(input: {
@@ -1303,6 +1439,8 @@ export function deriveWorkflowStatus(input: DeriveWorkflowStatusInput): Workflow
   );
 
   const planning = determinePlanningStatus(latestArtifacts);
+  const planComplete = determinePlanComplete(latestArtifacts);
+  const planFresh = determinePlanFresh(latestArtifacts);
   const discovery = determinePresenceStatus(latestArtifacts.discovery);
   const strategy = determinePresenceStatus(latestArtifacts.strategy_review);
   let implementation = determineImplementationStatus(latestArtifacts);
@@ -1313,6 +1451,39 @@ export function deriveWorkflowStatus(input: DeriveWorkflowStatusInput): Workflow
 
   if (pendingWorkerResults > 0 && implementation !== "blocked") {
     implementation = "pending";
+  }
+  const reviewRequired = determineReviewRequired({
+    latestArtifacts,
+    planComplete,
+    implementation,
+  });
+  const qaRequired = determineQaRequired({
+    latestArtifacts,
+    implementation,
+  });
+  const unsatisfiedRequiredEvidence = determineUnsatisfiedRequiredEvidence(
+    latestArtifacts,
+    artifacts,
+  );
+
+  if (planning === "ready" && !planComplete) {
+    blockers.push(
+      "Planning artifacts are present but incomplete for the canonical design contract.",
+    );
+  }
+  if (planning === "ready" && !planFresh) {
+    blockers.push("Planning artifacts are stale relative to the latest workspace state.");
+  }
+  if (reviewRequired && review === "missing") {
+    blockers.push("Review is required for the current scope and has not been completed.");
+  }
+  if (qaRequired && qa === "missing") {
+    blockers.push("QA is required for the current scope and has not been completed.");
+  }
+  if (unsatisfiedRequiredEvidence.length > 0) {
+    blockers.push(
+      `Plan-declared required evidence remains unsatisfied: ${formatPreviewList(unsatisfiedRequiredEvidence)}.`,
+    );
   }
 
   if (latestArtifacts.review?.state === "blocked") {
@@ -1407,9 +1578,14 @@ export function deriveWorkflowStatus(input: DeriveWorkflowStatusInput): Workflow
     discovery,
     strategy,
     planning,
+    plan_complete: planComplete,
+    plan_fresh: planFresh,
     implementation,
+    review_required: reviewRequired,
     review,
+    qa_required: qaRequired,
     qa,
+    unsatisfied_required_evidence: unsatisfiedRequiredEvidence,
     verification,
     acceptance,
     ship,

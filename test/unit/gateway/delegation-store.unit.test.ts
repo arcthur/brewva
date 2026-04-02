@@ -21,6 +21,8 @@ function recordCompletedRun(input: {
   runId: string;
   updatedAt: number;
   handoffState: "pending_parent_turn" | "surfaced";
+  kind?: "review" | "plan";
+  delegate?: string;
 }): void {
   input.runtime.events.record({
     sessionId: input.sessionId,
@@ -28,9 +30,9 @@ function recordCompletedRun(input: {
     timestamp: input.updatedAt,
     payload: {
       runId: input.runId,
-      delegate: "review",
+      delegate: input.delegate ?? input.kind ?? "review",
       status: "completed",
-      kind: "review",
+      kind: input.kind ?? "review",
       summary: `run:${input.runId}`,
       deliveryMode: "text_only",
       deliveryHandoffState: input.handoffState,
@@ -127,6 +129,28 @@ describe("HostedDelegationStore", () => {
       runId: "run-legacy-kind",
       status: "completed",
       kind: undefined,
+    });
+  });
+
+  test("preserves canonical plan kinds in read models", () => {
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const store = new HostedDelegationStore(runtime);
+    const sessionId = "delegation-store-plan-kind";
+
+    recordCompletedRun({
+      runtime,
+      sessionId,
+      runId: "run-plan-kind",
+      updatedAt: 100,
+      handoffState: "surfaced",
+      kind: "plan",
+      delegate: "plan",
+    });
+
+    expect(store.getRun(sessionId, "run-plan-kind")).toMatchObject({
+      runId: "run-plan-kind",
+      status: "completed",
+      kind: "plan",
     });
   });
 });

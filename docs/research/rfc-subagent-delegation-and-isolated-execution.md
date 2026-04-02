@@ -4,7 +4,7 @@
 
 - Status: `archived`
 - Owner: runtime maintainers
-- Last reviewed: `2026-03-26`
+- Last reviewed: `2026-04-02`
 - Promotion target:
   - `docs/architecture/system-architecture.md`
   - `docs/architecture/cognitive-product-architecture.md`
@@ -28,6 +28,16 @@ The current implementation has moved on to `ExecutionEnvelope`, `AgentSpec`,
 and `HostedDelegationTarget`.
 References to `profile` in this RFC are historical and should not be read as
 the current public delegation contract.
+
+Current-state clarification (2026-04-02):
+
+- delegated result kinds are now `exploration`, `plan`, `review`, `qa`, and
+  `patch`
+- delegated `plan` is a first-class planning contract rather than planning
+  prose attached to exploration
+- delegated `qa` replaced the older delegated `verification` result kind
+- `runtime.verification.*` remains separate kernel authority over evidence
+  sufficiency and freshness
 
 Brewva should adopt subagents, but not as a new kernel-owned authority object
 and not as a replacement for skills.

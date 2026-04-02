@@ -337,6 +337,7 @@ export function createRuntimeServiceDependencies(
     sessionState: options.sessionState,
     getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
     getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
+    listEvents: (sessionId) => options.coreDependencies.eventStore.list(sessionId),
     recordEvent: (input) => options.kernel.recordEvent(input),
     setTaskSpec: (sessionId, spec) => taskService.setTaskSpec(sessionId, spec),
   });

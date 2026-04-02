@@ -41,9 +41,12 @@ const WaitModeSchema = buildStringEnumSchema(SUBAGENT_WAIT_MODE_VALUES, {
     "Use completion to wait for delegated results in the current turn, or start to launch background delegation and inspect it later with subagent_status/subagent_cancel.",
 });
 
-const ResultModeSchema = buildStringEnumSchema(["exploration", "review", "qa", "patch"] as const, {
-  guidance: "Choose the delegated result contract the child must satisfy.",
-});
+const ResultModeSchema = buildStringEnumSchema(
+  ["exploration", "plan", "review", "qa", "patch"] as const,
+  {
+    guidance: "Choose the delegated result contract the child must satisfy.",
+  },
+);
 
 const ManagedToolModeSchema = buildStringEnumSchema(["direct", "runtime_plugin"] as const, {
   guidance: "Direct is default. Runtime plugin mode may only narrow within the chosen preset.",
@@ -362,6 +365,7 @@ function buildExecutionShape(
   }
   const resultMode =
     value.resultMode === "exploration" ||
+    value.resultMode === "plan" ||
     value.resultMode === "review" ||
     value.resultMode === "qa" ||
     value.resultMode === "patch"
@@ -603,6 +607,7 @@ function buildRunRequestFromParams(input: {
   const executionShape = buildExecutionShape(params.executionShape);
   const fallbackResultMode =
     params.fallbackResultMode === "exploration" ||
+    params.fallbackResultMode === "plan" ||
     params.fallbackResultMode === "review" ||
     params.fallbackResultMode === "qa" ||
     params.fallbackResultMode === "patch"

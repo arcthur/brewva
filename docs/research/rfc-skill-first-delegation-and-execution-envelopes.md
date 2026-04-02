@@ -4,7 +4,7 @@
 
 - Status: `promoted`
 - Owner: runtime maintainers
-- Last reviewed: `2026-03-26`
+- Last reviewed: `2026-04-02`
 - Promotion target:
   - `docs/architecture/system-architecture.md`
   - `docs/reference/skills.md`
@@ -36,6 +36,21 @@ keeping them as long-lived aliases.
 Historical sections below that compare the old `profile` model to the new
 design should be read as migration rationale, not as the current public
 contract.
+
+Current-state clarification (2026-04-02):
+
+- delegated result kinds are now `exploration`, `plan`, `review`, `qa`, and
+  `patch`
+- delegated `plan` is first-class and produces canonical planning payloads
+  that project into the `design` artifact lane
+- delegated `qa` replaced the older delegated `verification` result kind for
+  executable adversarial checking
+- `runtime.verification.*` remains a separate kernel authority over evidence
+  sufficiency and freshness
+
+Older sections below that still show `verification` in fallback-result enums or
+example snippets are preserved as transition history rather than current API
+truth.
 
 Brewva has moved to a skill-first delegation model.
 

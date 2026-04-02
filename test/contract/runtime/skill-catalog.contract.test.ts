@@ -146,7 +146,13 @@ describe("repository catalog contracts", () => {
       expect.arrayContaining(["repository_snapshot", "impact_map", "planning_posture"]),
     );
     expect(qa.contract.consumes).toEqual(
-      expect.arrayContaining(["risk_register", "review_report", "review_findings"]),
+      expect.arrayContaining([
+        "execution_plan",
+        "risk_register",
+        "implementation_targets",
+        "review_report",
+        "review_findings",
+      ]),
     );
     expect(ship.contract.consumes).toEqual(
       expect.arrayContaining(["qa_report", "qa_verdict", "review_report", "verification_evidence"]),

@@ -3,6 +3,8 @@ import type {
   ReviewPrecedentConsultStatus,
   ReviewReportArtifact,
 } from "@brewva/brewva-runtime";
+import { REVIEW_LANE_NAMES, normalizeReviewLaneName } from "@brewva/brewva-runtime";
+export { normalizeReviewLaneName } from "@brewva/brewva-runtime";
 import type { ReviewChangeCategory, ReviewChangedFileClass } from "./review-classification.js";
 import type {
   DelegationCompletionPredicate,
@@ -30,18 +32,17 @@ export const CONDITIONAL_REVIEW_LANES = [
   "review-performance",
 ] as const satisfies readonly ReviewLaneName[];
 
-export const ALL_REVIEW_LANES = [
-  ...ALWAYS_ON_REVIEW_LANES,
-  ...CONDITIONAL_REVIEW_LANES,
-] as const satisfies readonly ReviewLaneName[];
+export const ALL_REVIEW_LANES = [...REVIEW_LANE_NAMES] as const satisfies readonly ReviewLaneName[];
 
 export type ReviewPlanningPosture = "trivial" | "moderate" | "complex" | "high_risk";
 
 export type ReviewEvidenceKey =
   | "impact_map"
   | "design_spec"
+  | "execution_plan"
   | "verification_evidence"
-  | "risk_register";
+  | "risk_register"
+  | "implementation_targets";
 
 export type ReviewEvidenceState = "present" | "stale" | "missing";
 
@@ -50,6 +51,7 @@ export type ReviewMergeDecision = "ready" | "needs_changes" | "blocked";
 export interface ReviewLaneActivationInput {
   planningPosture?: ReviewPlanningPosture;
   changeCategories?: readonly ReviewChangeCategory[];
+  riskCategories?: readonly ReviewChangeCategory[];
   changedFileClasses?: readonly ReviewChangedFileClass[];
   evidenceState?: Partial<Record<ReviewEvidenceKey, ReviewEvidenceState>>;
 }
@@ -114,8 +116,10 @@ const REVIEW_LANE_DESCRIPTIONS: Record<ReviewLaneName, string> = {
 const EVIDENCE_KEYS_IN_ORDER: readonly ReviewEvidenceKey[] = [
   "impact_map",
   "design_spec",
+  "execution_plan",
   "verification_evidence",
   "risk_register",
+  "implementation_targets",
 ];
 
 const SEVERITY_RANK: Record<NonNullable<DelegationOutcomeFinding["severity"]>, number> = {
@@ -235,15 +239,7 @@ function formatLaneList(lanes: readonly ReviewLaneName[]): string {
 }
 
 export function isReviewLaneName(value: string): value is ReviewLaneName {
-  return ALL_REVIEW_LANES.includes(value as ReviewLaneName);
-}
-
-export function normalizeReviewLaneName(value: unknown): ReviewLaneName | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const normalized = value.trim().toLowerCase();
-  return isReviewLaneName(normalized) ? normalized : undefined;
+  return REVIEW_LANE_NAMES.includes(value as ReviewLaneName);
 }
 
 function readStoredFinding(value: unknown): DelegationOutcomeFinding | undefined {
@@ -364,6 +360,7 @@ export function deriveReviewLaneActivationPlan(
 ): ReviewLaneActivationPlan {
   const planningPosture = input.planningPosture ?? "moderate";
   const changeCategories = uniqueEnumValues(input.changeCategories ?? []);
+  const riskCategories = uniqueEnumValues(input.riskCategories ?? []);
   const changedFileClasses = uniqueEnumValues(input.changedFileClasses ?? []);
   const missingEvidence = collectEvidenceGaps(input.evidenceState);
   const activated = new Set<ReviewLaneName>(ALWAYS_ON_REVIEW_LANES);
@@ -383,16 +380,36 @@ export function deriveReviewLaneActivationPlan(
     activationBasis.push(
       `Missing or stale evidence widened the review ensemble: ${missingEvidence.join(", ")}.`,
     );
-  } else if (changeCategories.length > 0) {
-    const matched = pickConditionalLanesFromCategories(changeCategories);
-    for (const lane of matched) {
-      activated.add(lane);
+  } else if (changeCategories.length > 0 || riskCategories.length > 0) {
+    const matchedFromChangeCategories =
+      changeCategories.length > 0 ? pickConditionalLanesFromCategories(changeCategories) : [];
+    if (matchedFromChangeCategories.length > 0) {
+      for (const lane of matchedFromChangeCategories) {
+        activated.add(lane);
+      }
+      activationBasis.push(
+        `Conditional lanes activated from canonical change categories: ${formatLaneList(matchedFromChangeCategories)}.`,
+      );
+    } else if (changeCategories.length > 0) {
+      activationBasis.push(
+        "Canonical change categories did not trigger any conditional review lane.",
+      );
     }
-    activationBasis.push(
-      matched.length > 0
-        ? `Conditional lanes activated from canonical change categories: ${formatLaneList(matched)}.`
-        : "Canonical change categories did not trigger any conditional review lane.",
-    );
+
+    const matchedFromRiskCategories =
+      riskCategories.length > 0 ? pickConditionalLanesFromCategories(riskCategories) : [];
+    if (matchedFromRiskCategories.length > 0) {
+      for (const lane of matchedFromRiskCategories) {
+        activated.add(lane);
+      }
+      activationBasis.push(
+        `Conditional lanes activated from design risk categories: ${formatLaneList(matchedFromRiskCategories)}.`,
+      );
+    } else if (riskCategories.length > 0) {
+      activationBasis.push(
+        "Design risk categories did not trigger any additional conditional lane.",
+      );
+    }
   } else if (changedFileClasses.length > 0) {
     if (changedFileClasses.includes("mixed_unknown")) {
       for (const lane of CONDITIONAL_REVIEW_LANES) {

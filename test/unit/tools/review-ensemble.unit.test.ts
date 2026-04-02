@@ -309,4 +309,18 @@ describe("review ensemble protocol", () => {
     );
     expect(plan.activatedLanes).not.toContain("review-concurrency");
   });
+
+  test("falls back to design risk categories when impact categories are absent", () => {
+    const plan = deriveReviewLaneActivationPlan({
+      planningPosture: "moderate",
+      riskCategories: ["rollback", "public_api"],
+    });
+
+    expect(plan.activatedLanes).toEqual(
+      expect.arrayContaining(["review-concurrency", "review-compatibility"]),
+    );
+    expect(plan.activationBasis).toEqual(
+      expect.arrayContaining([expect.stringContaining("design risk categories")]),
+    );
+  });
 });

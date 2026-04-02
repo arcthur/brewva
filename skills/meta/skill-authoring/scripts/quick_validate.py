@@ -135,6 +135,53 @@ def validate_budget_object(
     return True, None
 
 
+def validate_output_contract_shape(
+    contract: dict[str, object], label: str
+) -> tuple[bool, str | None]:
+    kind = contract.get("kind")
+    if kind not in OUTPUT_CONTRACT_KINDS:
+        return (
+            False,
+            f"Field '{label}.kind' must be one of: text | enum | json",
+        )
+
+    if kind == "text":
+        for key in ("min_words", "min_length"):
+            if key in contract:
+                ok, message = validate_positive_number(contract[key], f"{label}.{key}", 1)
+                if not ok:
+                    return ok, message
+    elif kind == "enum":
+        values = contract.get("values")
+        ok, message = validate_string_array_value(values, f"{label}.values")
+        if not ok:
+            return ok, message
+        if "case_sensitive" in contract and not isinstance(contract["case_sensitive"], bool):
+            return (
+                False,
+                f"Field '{label}.case_sensitive' must be a boolean",
+            )
+    elif kind == "json":
+        for key in ("min_keys", "min_items"):
+            if key in contract:
+                ok, message = validate_positive_number(contract[key], f"{label}.{key}", 1)
+                if not ok:
+                    return ok, message
+        if "required_fields" in contract:
+            ok, message = validate_string_array_value(
+                contract["required_fields"], f"{label}.required_fields"
+            )
+            if not ok:
+                return ok, message
+        item_contract = contract.get("item_contract")
+        if item_contract is not None:
+            if not isinstance(item_contract, dict):
+                return False, f"Field '{label}.item_contract' must be an object"
+            return validate_output_contract_shape(item_contract, f"{label}.item_contract")
+
+    return True, None
+
+
 def validate_output_contracts(
     intent: dict[str, object], skill_dir: Path
 ) -> tuple[bool, str | None]:
@@ -184,42 +231,11 @@ def validate_output_contracts(
             return False, "Field 'intent.output_contracts' must use non-empty string keys"
         if not isinstance(contract, dict):
             return False, f"Field 'intent.output_contracts.{name}' must be an object"
-        kind = contract.get("kind")
-        if kind not in OUTPUT_CONTRACT_KINDS:
-            return (
-                False,
-                f"Field 'intent.output_contracts.{name}.kind' must be one of: text | enum | json",
-            )
-        if kind == "text":
-            for key in ("min_words", "min_length"):
-                if key in contract:
-                    ok, message = validate_positive_number(
-                        contract[key], f"intent.output_contracts.{name}.{key}", 1
-                    )
-                    if not ok:
-                        return ok, message
-        elif kind == "enum":
-            values = contract.get("values")
-            ok, message = validate_string_array_value(
-                values, f"intent.output_contracts.{name}.values"
-            )
-            if not ok:
-                return ok, message
-            if "case_sensitive" in contract and not isinstance(
-                contract["case_sensitive"], bool
-            ):
-                return (
-                    False,
-                    f"Field 'intent.output_contracts.{name}.case_sensitive' must be a boolean",
-                )
-        elif kind == "json":
-            for key in ("min_keys", "min_items"):
-                if key in contract:
-                    ok, message = validate_positive_number(
-                        contract[key], f"intent.output_contracts.{name}.{key}", 1
-                    )
-                    if not ok:
-                        return ok, message
+        ok, message = validate_output_contract_shape(
+            contract, f"intent.output_contracts.{name}"
+        )
+        if not ok:
+            return ok, message
 
     return True, None
 

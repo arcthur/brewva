@@ -8,6 +8,16 @@ import {
 } from "../../../packages/brewva-gateway/src/subagents/catalog.js";
 
 describe("subagent delegation catalog", () => {
+  test("promotes the built-in plan delegate to the canonical plan result mode", async () => {
+    const catalog = await loadHostedDelegationCatalog(process.cwd());
+
+    expect(catalog.agentSpecs.get("plan")).toMatchObject({
+      name: "plan",
+      skillName: "design",
+      fallbackResultMode: "plan",
+    });
+  });
+
   test("exposes built-in review lane delegates on the canonical reviewer envelope", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
 
@@ -88,6 +98,39 @@ describe("subagent delegation catalog", () => {
       executorPreamble: "Operate as a security-focused reviewer.",
     });
     expect(catalog.workspaceAgentSpecNames.has("security-review")).toBe(true);
+  });
+
+  test("accepts explicit plan result mode in workspace agent specs", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-catalog-plan-agent-"));
+    const subagentDir = join(workspace, ".brewva", "subagents");
+    mkdirSync(subagentDir, { recursive: true });
+    writeFileSync(
+      join(subagentDir, "bounded-plan.json"),
+      JSON.stringify(
+        {
+          kind: "agentSpec",
+          name: "bounded-plan",
+          description: "Workspace-specific planning delegate",
+          envelope: "readonly-planner",
+          fallbackResultMode: "plan",
+          executorPreamble: "Operate as a bounded planner.",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const catalog = await loadHostedDelegationCatalog(workspace);
+
+    expect(catalog.agentSpecs.get("bounded-plan")).toEqual({
+      name: "bounded-plan",
+      description: "Workspace-specific planning delegate",
+      envelope: "readonly-planner",
+      fallbackResultMode: "plan",
+      executorPreamble: "Operate as a bounded planner.",
+    });
+    expect(catalog.workspaceAgentSpecNames.has("bounded-plan")).toBe(true);
   });
 
   test("rejects workspace envelopes that widen a base envelope", async () => {

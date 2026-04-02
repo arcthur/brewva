@@ -209,6 +209,16 @@ function readRunMetadata(
   };
 }
 
+function readDelegationKind(value: unknown): DelegationRunRecord["kind"] | undefined {
+  return value === "exploration" ||
+    value === "plan" ||
+    value === "review" ||
+    value === "qa" ||
+    value === "patch"
+    ? value
+    : undefined;
+}
+
 function mergeDeliveryRecord(
   payload: Record<string, unknown> | null,
   existing: DelegationDeliveryRecord | undefined,
@@ -302,13 +312,7 @@ function applyDelegationEvent(
       label: readString(payload?.label) ?? existing?.label,
       workerSessionId: readString(payload?.childSessionId) ?? existing?.workerSessionId,
       parentSkill: readString(payload?.parentSkill) ?? existing?.parentSkill,
-      kind:
-        readString(payload?.kind) === "exploration" ||
-        readString(payload?.kind) === "review" ||
-        readString(payload?.kind) === "qa" ||
-        readString(payload?.kind) === "patch"
-          ? (readString(payload?.kind) as DelegationRunRecord["kind"])
-          : existing?.kind,
+      kind: readDelegationKind(payload?.kind) ?? existing?.kind,
       boundary: readBoundary(payload?.boundary) ?? existing?.boundary,
       modelRoute: readModelRoute(payload, existing),
       summary: existing?.summary,
@@ -339,13 +343,7 @@ function applyDelegationEvent(
       label: readString(payload?.label) ?? existing?.label,
       workerSessionId: readString(payload?.childSessionId) ?? existing?.workerSessionId,
       parentSkill: readString(payload?.parentSkill) ?? existing?.parentSkill,
-      kind:
-        readString(payload?.kind) === "exploration" ||
-        readString(payload?.kind) === "review" ||
-        readString(payload?.kind) === "qa" ||
-        readString(payload?.kind) === "patch"
-          ? (readString(payload?.kind) as DelegationRunRecord["kind"])
-          : existing?.kind,
+      kind: readDelegationKind(payload?.kind) ?? existing?.kind,
       boundary: readBoundary(payload?.boundary) ?? existing?.boundary,
       modelRoute: readModelRoute(payload, existing),
       summary: readString(payload?.summary) ?? existing?.summary,
@@ -426,13 +424,7 @@ function applyDelegationEvent(
       label: readString(payload?.label) ?? existing?.label,
       workerSessionId: readString(payload?.childSessionId) ?? existing?.workerSessionId,
       parentSkill: readString(payload?.parentSkill) ?? existing?.parentSkill,
-      kind:
-        readString(payload?.kind) === "exploration" ||
-        readString(payload?.kind) === "review" ||
-        readString(payload?.kind) === "qa" ||
-        readString(payload?.kind) === "patch"
-          ? (readString(payload?.kind) as DelegationRunRecord["kind"])
-          : existing?.kind,
+      kind: readDelegationKind(payload?.kind) ?? existing?.kind,
       boundary: readBoundary(payload?.boundary) ?? existing?.boundary,
       modelRoute: readModelRoute(payload, existing),
       summary: readString(payload?.summary) ?? existing?.summary,

@@ -6,6 +6,33 @@ Pair each declared output with an explicit `intent.output_contracts` entry in
 frontmatter. Keep the contract just strong enough to reject placeholder output
 without over-constraining normal use.
 
+## Structured Array Pattern
+
+When downstream tooling consumes arrays of typed objects, encode that shape in
+the contract instead of leaving it to prose.
+
+```yaml
+intent:
+  outputs:
+    - execution_plan
+  output_contracts:
+    execution_plan:
+      kind: json
+      min_items: 1
+      item_contract:
+        kind: json
+        required_fields:
+          - step
+          - intent
+          - owner
+          - exit_criteria
+          - verification_intent
+```
+
+Use this pattern for artifacts such as execution steps, risk registers,
+implementation targets, or checklists that must be machine-readable after the
+skill returns.
+
 ## Template Pattern
 
 Provide templates for output format. Match the level of strictness to your needs.

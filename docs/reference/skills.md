@@ -50,6 +50,8 @@ Current rules:
 - the stable built-in public specialist surface is `explore`, `plan`, `review`,
   `qa`, and `patch-worker`; internal review lanes remain internal fan-out
   helpers rather than public taxonomy
+- delegated `plan` is a first-class result posture with canonical typed
+  planning data; it is not an `exploration` payload with planning prose
 - patch-producing child runs return `WorkerResult` / patch artifacts for the
   parent-controlled `worker_results_merge` -> `worker_results_apply` flow
 - delegated QA runs do not produce `WorkerResult`; they persist canonical
@@ -101,7 +103,9 @@ base output contracts, but they cannot silently replace an existing base output
 contract.
 
 Current output contract kinds are intentionally limited to `text`, `enum`, and
-`json`.
+`json`. `json` contracts may also declare `required_fields` plus recursive
+`item_contract` schemas when downstream consumers need arrays of strongly
+typed objects instead of loose JSON blobs.
 
 ## Authored Behavior
 
@@ -185,8 +189,10 @@ Current derived workflow artifact sources include:
 - `problem_frame` / `user_pains` / `scope_recommendation` -> `workflow.discovery`
 - `strategy_review` / `scope_decision` / `strategic_risks` / `planning_posture` -> `workflow.strategy_review`
 - `knowledge_brief` / `precedent_refs` / `preventive_checks` / `precedent_query_summary` / `precedent_consult_status` -> `workflow.learning_research`
-- `design_spec` -> `workflow.design`
-- `execution_plan` -> `workflow.execution_plan`
+- `design_spec` plus planning metadata such as `execution_mode_hint`,
+  `risk_register`, and `implementation_targets` -> `workflow.design`
+- `execution_plan` plus verification-intent metadata ->
+  `workflow.execution_plan`
 - `change_set` / `files_changed` and write markers -> `workflow.implementation`
 - `review_report` / `review_findings` / `merge_decision` -> `workflow.review`
 - delegated `QaSubagentOutcomeData` plus mirrored `qa_report` /
@@ -213,6 +219,11 @@ Important boundary rules:
 
 Control-plane and operator surfaces may inspect this state through
 `workflow_status` and working projection surfaces.
+
+`workflow_status` also exposes advisory planning assurance posture such as
+`plan_complete`, `plan_fresh`, `review_required`, `qa_required`, and
+`unsatisfied_required_evidence`. Those fields stay inspectable rather than
+turning planning or verification into hidden runtime choreography.
 
 `planning_posture` may also be produced by `repository-analysis` or
 `debugging`, but today it remains a carried handoff output and metadata field
@@ -300,12 +311,21 @@ Default delegated routing is intentionally narrower than the public skill list:
 Two stable contract reminders matter for downstream delegation and workflow
 posture:
 
-- `design` is expected to emit `implementation_targets` as concrete execution
-  anchors, not only abstract planning prose
+- `design` is expected to emit the full planning handoff set:
+  `design_spec`, `execution_plan`, `execution_mode_hint`, `risk_register`, and
+  `implementation_targets`; delegated `plan` outcomes project directly into
+  that contract
+- `implementation` is expected to stay inside path-scoped
+  `implementation_targets`; work that materially exceeds the planned boundary
+  should hand control back to `design` instead of silently widening scope
+- `review` treats fresh planning evidence as a first-class input; high-risk
+  work cannot reach `merge_decision = "ready"` when that planning evidence is
+  missing or stale after later workspace writes
 - `qa_verdict = "pass"` requires executable evidence, at least one adversarial
-  probe, and no unresolved missing evidence, confidence gaps, or environment
-  limits; canonical QA outcome data preserves `pass`, `fail`, and
-  `inconclusive` rather than flattening them into prose
+  probe, coverage of plan-declared `required_evidence`, and no unresolved
+  missing evidence, confidence gaps, or environment limits; canonical QA
+  outcome data preserves `pass`, `fail`, and `inconclusive` rather than
+  flattening them into prose
 - every `qa_check` must preserve how the check was executed and what was
   actually observed; command-based checks carry `command`, `exitCode`, and
   `observedOutput`, while tool-driven checks carry `tool` and

@@ -30,10 +30,53 @@ describe("system: workflow recovery", () => {
         timestamp: 100,
         payload: {
           skillName: "design",
-          outputKeys: ["design_spec", "execution_plan"],
+          outputKeys: [
+            "design_spec",
+            "execution_plan",
+            "execution_mode_hint",
+            "risk_register",
+            "implementation_targets",
+          ],
           outputs: {
             design_spec: "Recover workflow artifacts from tape.",
-            execution_plan: ["Replay durable events", "Rebuild advisory context"],
+            execution_plan: [
+              {
+                step: "Replay durable events",
+                intent: "Recover workflow posture strictly from durable session history.",
+                owner: "runtime.workflow",
+                exit_criteria: "Replay rebuilds canonical workflow artifacts after recovery.",
+                verification_intent:
+                  "Workflow recovery tests compare replayed posture against the pre-crash state.",
+              },
+              {
+                step: "Rebuild advisory context",
+                intent: "Restore working projection without hidden workflow controllers.",
+                owner: "runtime.context",
+                exit_criteria:
+                  "Recovered session exposes workflow context through advisory surfaces.",
+                verification_intent:
+                  "Recovered sessions keep workflow context available through the working projection.",
+              },
+            ],
+            execution_mode_hint: "coordinated_rollout",
+            risk_register: [
+              {
+                risk: "Recovery may replay events but fail to reconstruct planning evidence.",
+                category: "wal_replay",
+                severity: "high",
+                mitigation: "Persist canonical planning artifacts and recover them from tape.",
+                required_evidence: ["workflow_recovery_system_test"],
+                owner_lane: "review-concurrency",
+              },
+            ],
+            implementation_targets: [
+              {
+                target: "packages/brewva-runtime/src/workflow/derivation.ts",
+                kind: "module",
+                owner_boundary: "runtime.workflow",
+                reason: "Recovery workflow artifacts are derived here.",
+              },
+            ],
           },
         },
       });
@@ -104,7 +147,7 @@ describe("system: workflow recovery", () => {
       expect(injected.accepted).toBe(true);
       expect(injected.text).toContain("[WorkingProjection]");
       expect(injected.text).toContain(
-        "workflow.design: state=ready; freshness=unknown; Recover workflow artifacts from tape.",
+        "workflow.design: state=ready; freshness=stale; Recover workflow artifacts from tape.",
       );
       expect(injected.text).toContain(
         "workflow.review: state=ready; freshness=fresh; decision=ready; Recovered workflow chain is ready after lane disclosure and precedent consult were rebuilt from tape.",

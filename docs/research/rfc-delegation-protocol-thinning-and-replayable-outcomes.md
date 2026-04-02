@@ -4,7 +4,7 @@
 
 - Status: `archived`
 - Owner: runtime maintainers
-- Last reviewed: `2026-03-26`
+- Last reviewed: `2026-04-02`
 - Promotion target:
   - `docs/architecture/system-architecture.md`
   - `docs/architecture/cognitive-product-architecture.md`
@@ -53,6 +53,16 @@ profile` model and the final skill-first delegation model.
 Some transition details discussed here, including legacy profile-based request
 shapes and packet-level `entrySkill`, were not kept in the final public
 contract.
+
+Current-state clarification (2026-04-02):
+
+- delegated result kinds are now `exploration`, `plan`, `review`, `qa`, and
+  `patch`
+- delegated `plan` is a first-class outcome contract for machine-readable
+  planning handoffs
+- delegated `qa` replaced the older delegated `verification` outcome kind
+- `runtime.verification.*` remains separate kernel authority and is not a
+  delegated result mode
 
 Read current delegation semantics from stable docs and the promoted
 skill-first delegation RFC.

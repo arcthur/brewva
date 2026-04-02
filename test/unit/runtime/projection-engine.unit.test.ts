@@ -160,10 +160,52 @@ describe("projection engine", () => {
         timestamp: 100,
         payload: {
           skillName: "design",
-          outputKeys: ["design_spec", "execution_plan"],
+          outputKeys: [
+            "design_spec",
+            "execution_plan",
+            "execution_mode_hint",
+            "risk_register",
+            "implementation_targets",
+          ],
           outputs: {
             design_spec: "Lock the workflow artifact contract.",
-            execution_plan: ["Derive posture", "Expose advisory context"],
+            execution_plan: [
+              {
+                step: "Derive posture",
+                intent: "Project canonical workflow state from durable events.",
+                owner: "runtime.workflow",
+                exit_criteria: "Workflow posture is derived without hidden control flow.",
+                verification_intent:
+                  "Unit coverage proves posture derivation remains advisory-only.",
+              },
+              {
+                step: "Expose advisory context",
+                intent: "Publish the workflow state through working projection surfaces.",
+                owner: "runtime.context",
+                exit_criteria: "Working projection contains stable workflow artifact statements.",
+                verification_intent:
+                  "Projection rebuild tests preserve workflow artifact statements after replay.",
+              },
+            ],
+            execution_mode_hint: "coordinated_rollout",
+            risk_register: [
+              {
+                risk: "Workflow projection could drift into hidden choreography.",
+                category: "public_api",
+                severity: "high",
+                mitigation: "Keep workflow status advisory-only and inspectable.",
+                required_evidence: ["workflow_projection_tests"],
+                owner_lane: "review-boundaries",
+              },
+            ],
+            implementation_targets: [
+              {
+                target: "packages/brewva-runtime/src/workflow/derivation.ts",
+                kind: "module",
+                owner_boundary: "runtime.workflow",
+                reason: "Workflow artifact derivation is implemented here.",
+              },
+            ],
           },
         },
       },
@@ -206,10 +248,10 @@ describe("projection engine", () => {
     expect(snapshot).toBeDefined();
     expect(snapshot?.content).toContain("[WorkingProjection]");
     expect(snapshot?.content).toContain(
-      "workflow.design: state=ready; freshness=unknown; Lock the workflow artifact contract.",
+      "workflow.design: state=ready; freshness=stale; Lock the workflow artifact contract.",
     );
     expect(snapshot?.content).toContain(
-      "workflow.execution_plan: state=ready; freshness=unknown; Execution plan with 2 step(s): Derive posture, Expose advisory context.",
+      "workflow.execution_plan: state=ready; freshness=stale; Execution plan with 2 step(s): Derive posture, Expose advisory context.",
     );
     expect(snapshot?.content).toContain(
       "workflow.implementation: state=ready; freshness=fresh; Workspace mutation observed via edit; downstream review and verification may need refresh.",

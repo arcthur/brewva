@@ -272,10 +272,52 @@ requires: []
       timestamp: 100,
       payload: {
         skillName: "design",
-        outputKeys: ["design_spec", "execution_plan"],
+        outputKeys: [
+          "design_spec",
+          "execution_plan",
+          "execution_mode_hint",
+          "risk_register",
+          "implementation_targets",
+        ],
         outputs: {
           design_spec: "Define the workflow artifact contract.",
-          execution_plan: ["Derive posture", "Publish advisory context"],
+          execution_plan: [
+            {
+              step: "Derive posture",
+              intent: "Rebuild workflow posture from durable events after restart.",
+              owner: "runtime.workflow",
+              exit_criteria: "Workflow posture matches the pre-restart advisory state.",
+              verification_intent:
+                "Restart contract tests compare workflow posture before and after replay.",
+            },
+            {
+              step: "Publish advisory context",
+              intent: "Expose the derived posture through context injection surfaces.",
+              owner: "runtime.context",
+              exit_criteria: "Working projection includes workflow artifacts after restart.",
+              verification_intent:
+                "Context injection tests confirm workflow advisory context survives restart.",
+            },
+          ],
+          execution_mode_hint: "coordinated_rollout",
+          risk_register: [
+            {
+              risk: "Workflow posture may not survive tape replay with the new design contract.",
+              category: "wal_replay",
+              severity: "high",
+              mitigation: "Persist canonical planning artifacts and rebuild them from tape.",
+              required_evidence: ["workflow_rehydrate_restart_test"],
+              owner_lane: "review-concurrency",
+            },
+          ],
+          implementation_targets: [
+            {
+              target: "packages/brewva-runtime/src/workflow/derivation.ts",
+              kind: "module",
+              owner_boundary: "runtime.workflow",
+              reason: "Workflow posture is rebuilt here during restart.",
+            },
+          ],
         },
       },
     });
@@ -332,7 +374,7 @@ requires: []
 
     expect(afterRestart.accepted).toBe(true);
     expect(afterRestart.text).toContain("[WorkingProjection]");
-    expect(afterRestart.text).toContain("workflow.design: state=ready; freshness=unknown;");
+    expect(afterRestart.text).toContain("workflow.design: state=ready; freshness=stale;");
     expect(afterRestart.text).toContain("workflow.review: state=ready; freshness=fresh;");
     expect(afterRestart.text).toContain("workflow.verification: state=ready; freshness=fresh;");
   });

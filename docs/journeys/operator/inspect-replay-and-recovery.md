@@ -64,7 +64,7 @@ flowchart TD
 5. `--undo` resolves the target session, restores the latest tracked `PatchSet`,
    and resets verification state.
 6. Delegated inspect surfaces now reflect the canonical specialist cutover:
-   public delegated outcomes are `exploration`, `review`, `qa`, or `patch`,
+   public delegated outcomes are `exploration`, `plan`, `review`, `qa`, or `patch`,
    while kernel `runtime.verification.*` remains a separate replayed authority.
 
 ## Execution Semantics

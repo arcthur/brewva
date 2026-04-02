@@ -519,4 +519,79 @@ describe("skill document parsing", () => {
       ]),
     );
   });
+
+  test("parses recursive item_contract definitions for json array outputs", () => {
+    const filePath = createTempSkillDocument(
+      "brewva-skill-item-contract-",
+      "skills/core/design/SKILL.md",
+      [
+        "---",
+        "name: design",
+        "description: design skill",
+        "intent:",
+        "  outputs: [execution_plan]",
+        "  output_contracts:",
+        "    execution_plan:",
+        "      kind: json",
+        "      min_items: 1",
+        "      item_contract:",
+        "        kind: json",
+        "        required_fields: [step, intent]",
+        "        field_contracts:",
+        "          step:",
+        "            kind: text",
+        "            min_words: 2",
+        "            min_length: 16",
+        "          intent:",
+        "            kind: text",
+        "            min_words: 2",
+        "            min_length: 16",
+        "effects:",
+        "  allowed_effects: [workspace_read]",
+        "resources:",
+        "  default_lease:",
+        "    max_tool_calls: 10",
+        "    max_tokens: 10000",
+        "  hard_ceiling:",
+        "    max_tool_calls: 20",
+        "    max_tokens: 20000",
+        "execution_hints:",
+        "  preferred_tools: [read]",
+        "  fallback_tools: []",
+        "consumes: []",
+        "---",
+        "# design",
+      ],
+    );
+
+    const parsed = parseSkillDocument(filePath, "core");
+    const contracts = getSkillOutputContracts(parsed.contract);
+
+    expect(contracts.execution_plan).toEqual({
+      kind: "json",
+      minItems: 1,
+      minKeys: undefined,
+      requiredFields: [],
+      fieldContracts: undefined,
+      itemContract: {
+        kind: "json",
+        minKeys: undefined,
+        minItems: undefined,
+        requiredFields: ["step", "intent"],
+        fieldContracts: {
+          step: {
+            kind: "text",
+            minWords: 2,
+            minLength: 16,
+          },
+          intent: {
+            kind: "text",
+            minWords: 2,
+            minLength: 16,
+          },
+        },
+        itemContract: undefined,
+      },
+    });
+  });
 });

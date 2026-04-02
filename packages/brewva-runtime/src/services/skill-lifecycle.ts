@@ -1,4 +1,19 @@
-import type {
+import {
+  DESIGN_EXECUTION_MODE_HINTS,
+  type BrewvaEventRecord,
+  coerceDesignExecutionPlan,
+  coerceDesignImplementationTargets,
+  coerceDesignRiskRegister,
+  collectLatestPlanningOutputTimestamps,
+  coercePlanningArtifactSet,
+  coerceReviewReportArtifact,
+  derivePlanningEvidenceState,
+  collectPlanningRequiredEvidence,
+  type DesignImplementationTarget,
+  type PlanningEvidenceKey,
+  type PlanningEvidenceState,
+  PLANNING_EVIDENCE_KEYS,
+  resolveLatestWorkspaceWriteTimestamp,
   SkillActivationResult,
   SkillDocument,
   SkillOutputContract,
@@ -6,9 +21,19 @@ import type {
   TaskSpec,
   TaskState,
 } from "../contracts/index.js";
+import {
+  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+  VERIFICATION_WRITE_MARKED_EVENT_TYPE,
+  WORKER_RESULTS_APPLIED_EVENT_TYPE,
+} from "../events/event-types.js";
 import { getSkillOutputContracts, listSkillOutputs } from "../skills/facets.js";
 import type { SkillRegistry } from "../skills/registry.js";
 import { parseTaskSpec } from "../task/spec.js";
+import {
+  collectQaCoverageTexts,
+  collectVerificationCoverageTexts,
+  isRequiredEvidenceCovered,
+} from "../workflow/coverage-utils.js";
 import type { RuntimeCallback } from "./callback.js";
 import { RuntimeSessionStateStore } from "./session-state.js";
 
@@ -16,6 +41,9 @@ type InformativeTextOptions = {
   minWords?: number;
   minLength?: number;
 };
+const REVIEW_SEMANTIC_OUTPUT_KEYS = ["review_report", "review_findings", "merge_decision"] as const;
+const QA_SEMANTIC_OUTPUT_KEYS = ["qa_report", "qa_findings", "qa_verdict", "qa_checks"] as const;
+const REVIEW_SEMANTIC_EVIDENCE_KEYS = [...PLANNING_EVIDENCE_KEYS, "verification_evidence"] as const;
 const PLACEHOLDER_OUTPUT_TEXT = new Set([
   "artifact",
   "artifacts",
@@ -138,9 +166,22 @@ function validateOutputContract(
           return `${label} must be an object containing the declared fields`;
         }
         const minItems = contract.minItems ?? 1;
-        return value.length >= minItems
-          ? null
-          : `${label} must contain at least ${minItems} item${minItems === 1 ? "" : "s"}`;
+        if (value.length < minItems) {
+          return `${label} must contain at least ${minItems} item${minItems === 1 ? "" : "s"}`;
+        }
+        if (contract.itemContract) {
+          for (const [index, item] of value.entries()) {
+            const reason = validateOutputContract(
+              item,
+              contract.itemContract,
+              `${label}[${index}]`,
+            );
+            if (reason) {
+              return reason;
+            }
+          }
+        }
+        return null;
       }
       if (isRecord(value)) {
         const minKeys = contract.minKeys ?? 1;
@@ -181,6 +222,230 @@ function readStringArray(value: unknown): string[] | null {
     .map((entry) => normalizeText(entry))
     .filter((entry): entry is string => entry !== null);
   return items;
+}
+
+function normalizePathLike(value: string): string {
+  return value
+    .trim()
+    .replace(/^\.\/+/u, "")
+    .replace(/\\/g, "/")
+    .toLowerCase();
+}
+
+function targetLooksPathScoped(target: DesignImplementationTarget): boolean {
+  return /[/.]/u.test(target.target);
+}
+
+function targetCoversChangedFile(target: DesignImplementationTarget, changedFile: string): boolean {
+  const normalizedTarget = normalizePathLike(target.target);
+  const normalizedChangedFile = normalizePathLike(changedFile);
+  if (!normalizedTarget || !normalizedChangedFile) {
+    return false;
+  }
+  return (
+    normalizedChangedFile === normalizedTarget ||
+    normalizedChangedFile.startsWith(`${normalizedTarget}/`) ||
+    normalizedTarget.startsWith(`${normalizedChangedFile}/`)
+  );
+}
+
+function uniqueStrings(values: readonly string[]): string[] {
+  return [...new Set(values.filter((value) => value.trim().length > 0))];
+}
+
+function evidenceListMentionsKey(values: readonly string[], key: string): boolean {
+  const normalizedKey = key.toLowerCase();
+  return values.some((value) => value.toLowerCase().includes(normalizedKey));
+}
+
+type VerificationEvidenceState = "present" | "stale" | "missing";
+
+function resolveVerificationEvidenceContext(events: readonly BrewvaEventRecord[]): {
+  state: VerificationEvidenceState;
+  coverageTexts: string[];
+} {
+  const latestWriteAt = events.reduce((max, event) => {
+    return event.type === VERIFICATION_WRITE_MARKED_EVENT_TYPE ||
+      event.type === WORKER_RESULTS_APPLIED_EVENT_TYPE
+      ? Math.max(max, event.timestamp)
+      : max;
+  }, 0);
+  const verificationEvents = events
+    .filter((event) => event.type === VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE)
+    .toSorted((left, right) => left.timestamp - right.timestamp || left.id.localeCompare(right.id));
+  if (verificationEvents.length === 0) {
+    return { state: "missing", coverageTexts: [] };
+  }
+  let sawVerificationAfterLatestWrite = latestWriteAt === 0;
+  let sawStaleVerification = false;
+  for (let index = verificationEvents.length - 1; index >= 0; index -= 1) {
+    const event = verificationEvents[index]!;
+    if (event.timestamp < latestWriteAt) {
+      break;
+    }
+    sawVerificationAfterLatestWrite = true;
+    if (!isRecord(event.payload)) {
+      continue;
+    }
+    const evidenceFreshness = normalizeText(event.payload.evidenceFreshness)?.toLowerCase();
+    if (evidenceFreshness === "fresh") {
+      return {
+        state: "present",
+        coverageTexts: collectVerificationCoverageTexts(event.payload),
+      };
+    }
+    if (evidenceFreshness === "stale" || evidenceFreshness === "mixed") {
+      sawStaleVerification = true;
+    }
+  }
+  if (!sawVerificationAfterLatestWrite || sawStaleVerification) {
+    return { state: "stale", coverageTexts: [] };
+  }
+  return { state: "missing", coverageTexts: [] };
+}
+
+function validateImplementationSemanticOutputs(
+  outputs: Record<string, unknown>,
+  consumedOutputs: Record<string, unknown>,
+): Array<{ name: string; reason: string }> {
+  const plan = coercePlanningArtifactSet(consumedOutputs);
+  const scopedTargets = (plan.implementationTargets ?? []).filter(targetLooksPathScoped);
+  const changedFiles = readStringArray(outputs.files_changed) ?? [];
+  if (changedFiles.length === 0) {
+    return [];
+  }
+  if ((plan.implementationTargets?.length ?? 0) > 0 && scopedTargets.length === 0) {
+    return [
+      {
+        name: "implementation_targets",
+        reason:
+          "implementation_targets must use concrete path-scoped targets so runtime can enforce files_changed ownership",
+      },
+    ];
+  }
+  if (scopedTargets.length === 0) {
+    return [];
+  }
+  const uncoveredFiles = changedFiles.filter(
+    (changedFile) => !scopedTargets.some((target) => targetCoversChangedFile(target, changedFile)),
+  );
+  if (uncoveredFiles.length === 0) {
+    return [];
+  }
+  return [
+    {
+      name: "files_changed",
+      reason: `files_changed exceeds implementation_targets and should return to design: ${uncoveredFiles.join(", ")}`,
+    },
+  ];
+}
+
+function validatePlanningSemanticOutputs(
+  outputs: Record<string, unknown>,
+): Array<{ name: string; reason: string }> {
+  const issues: Array<{ name: string; reason: string }> = [];
+  if (
+    Object.prototype.hasOwnProperty.call(outputs, "design_spec") &&
+    normalizeText(outputs.design_spec) === null
+  ) {
+    issues.push({
+      name: "design_spec",
+      reason: "design_spec must be a non-empty string",
+    });
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(outputs, "execution_plan") &&
+    !coerceDesignExecutionPlan(outputs.execution_plan)
+  ) {
+    issues.push({
+      name: "execution_plan",
+      reason:
+        "execution_plan must use the canonical plan-step shape with step, intent, owner, exit_criteria, and verification_intent",
+    });
+  }
+  const executionModeHint = normalizeText(outputs.execution_mode_hint);
+  if (
+    Object.prototype.hasOwnProperty.call(outputs, "execution_mode_hint") &&
+    (!executionModeHint ||
+      !DESIGN_EXECUTION_MODE_HINTS.includes(
+        executionModeHint as (typeof DESIGN_EXECUTION_MODE_HINTS)[number],
+      ))
+  ) {
+    issues.push({
+      name: "execution_mode_hint",
+      reason: "execution_mode_hint must be one of direct_patch, test_first, or coordinated_rollout",
+    });
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(outputs, "risk_register") &&
+    !coerceDesignRiskRegister(outputs.risk_register)
+  ) {
+    issues.push({
+      name: "risk_register",
+      reason:
+        "risk_register must use canonical planning risk items, including valid review categories and owner lanes",
+    });
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(outputs, "implementation_targets") &&
+    !coerceDesignImplementationTargets(outputs.implementation_targets)
+  ) {
+    issues.push({
+      name: "implementation_targets",
+      reason:
+        "implementation_targets must use canonical target items with target, kind, owner_boundary, and reason",
+    });
+  }
+  return issues;
+}
+
+function validateReviewSemanticOutputs(
+  outputs: Record<string, unknown>,
+  planningEvidenceState: Partial<Record<PlanningEvidenceKey, PlanningEvidenceState>>,
+  verificationEvidenceState: VerificationEvidenceState,
+  requiresVerificationEvidence: boolean,
+): Array<{ name: string; reason: string }> {
+  const blockingPlanningEvidence = PLANNING_EVIDENCE_KEYS.filter((key) => {
+    const state = planningEvidenceState[key];
+    return state === "missing" || state === "stale";
+  });
+  const issues: Array<{ name: string; reason: string }> = [];
+  const reviewReport = coerceReviewReportArtifact(outputs.review_report);
+  const reviewReportMissingEvidence = reviewReport?.missing_evidence ?? [];
+  const mergeDecision = normalizeText(outputs.merge_decision)?.toLowerCase();
+  for (const key of blockingPlanningEvidence) {
+    const state = planningEvidenceState[key];
+    if (!evidenceListMentionsKey(reviewReportMissingEvidence, key)) {
+      issues.push({
+        name: "review_report",
+        reason: `review_report.missing_evidence must disclose ${state ?? "missing"} planning evidence for ${key}`,
+      });
+    }
+  }
+
+  if (
+    requiresVerificationEvidence &&
+    verificationEvidenceState === "stale" &&
+    !evidenceListMentionsKey(reviewReportMissingEvidence, "verification_evidence")
+  ) {
+    issues.push({
+      name: "review_report",
+      reason: "review_report.missing_evidence must disclose stale verification_evidence",
+    });
+  }
+  if (
+    mergeDecision === "ready" &&
+    (reviewReportMissingEvidence.length > 0 ||
+      blockingPlanningEvidence.length > 0 ||
+      (requiresVerificationEvidence && verificationEvidenceState === "stale"))
+  ) {
+    issues.push({
+      name: "merge_decision",
+      reason:
+        "merge_decision cannot be ready when planning or verification evidence is missing, stale, or disclosed as missing_evidence",
+    });
+  }
+  return issues;
 }
 
 function isQaCheckRecord(value: unknown): value is Record<string, unknown> {
@@ -229,6 +494,8 @@ function isAdversarialQaProbeType(value: unknown): boolean {
 
 function validateQaSemanticOutputs(
   outputs: Record<string, unknown>,
+  consumedOutputs: Record<string, unknown>,
+  verificationCoverageTexts: readonly string[],
 ): Array<{ name: string; reason: string }> {
   const verdict = normalizeText(outputs.qa_verdict)?.toLowerCase();
   if (verdict !== "pass" && verdict !== "fail" && verdict !== "inconclusive") {
@@ -276,6 +543,16 @@ function validateQaSemanticOutputs(
   const missingEvidence = readStringArray(outputs.qa_missing_evidence);
   const confidenceGaps = readStringArray(outputs.qa_confidence_gaps);
   const environmentLimits = readStringArray(outputs.qa_environment_limits);
+  const requiredEvidence = collectPlanningRequiredEvidence(
+    coercePlanningArtifactSet(consumedOutputs).riskRegister,
+  );
+  const coverageTexts = uniqueStrings([
+    ...collectQaCoverageTexts(outputs),
+    ...verificationCoverageTexts,
+  ]);
+  const uncoveredRequiredEvidence = requiredEvidence.filter(
+    (evidenceName) => !isRequiredEvidenceCovered(evidenceName, coverageTexts),
+  );
   const evidenceBackedFailedChecks = failedChecks.filter(
     (check) =>
       hasQaExecutionDescriptor(check) &&
@@ -310,6 +587,11 @@ function validateQaSemanticOutputs(
     if ((environmentLimits?.length ?? 0) > 0) {
       blockers.push("pass verdict cannot carry qa_environment_limits");
     }
+    if (uncoveredRequiredEvidence.length > 0) {
+      blockers.push(
+        `pass verdict must cover plan required_evidence: ${uncoveredRequiredEvidence.join(", ")}`,
+      );
+    }
     return blockers.map((reason) => ({ name: "qa_verdict", reason }));
   }
 
@@ -331,7 +613,56 @@ function validateQaSemanticOutputs(
     ];
   }
 
+  if (verdict === "inconclusive" && uncoveredRequiredEvidence.length > 0) {
+    const qaMissingEvidence = missingEvidence ?? [];
+    const undisclosedRequirements = uncoveredRequiredEvidence.filter(
+      (evidenceName) => !evidenceListMentionsKey(qaMissingEvidence, evidenceName),
+    );
+    if (undisclosedRequirements.length > 0) {
+      return undisclosedRequirements.map((evidenceName) => ({
+        name: "qa_missing_evidence",
+        reason: `qa_missing_evidence must disclose uncovered plan required_evidence: ${evidenceName}`,
+      }));
+    }
+  }
+
   return [];
+}
+
+function skillDeclaresAllOutputs(
+  skill: SkillDocument | undefined,
+  outputKeys: readonly string[],
+): skill is SkillDocument {
+  if (!skill) {
+    return false;
+  }
+  const declaredOutputs = listSkillOutputs(skill.contract);
+  return outputKeys.every((key) => declaredOutputs.includes(key));
+}
+
+function skillRequestsAnyInputs(
+  skill: SkillDocument | undefined,
+  inputKeys: readonly string[],
+): boolean {
+  if (!skill) {
+    return false;
+  }
+  const requestedInputs = new Set([
+    ...(skill.contract.requires ?? []),
+    ...(skill.contract.consumes ?? []),
+  ]);
+  return inputKeys.some((key) => requestedInputs.has(key));
+}
+
+function resolvePlanningEvidenceState(
+  events: readonly BrewvaEventRecord[],
+  consumedOutputs: Record<string, unknown>,
+): Partial<Record<PlanningEvidenceKey, PlanningEvidenceState>> {
+  return derivePlanningEvidenceState({
+    consumedOutputs,
+    latestOutputTimestamps: collectLatestPlanningOutputTimestamps(events),
+    latestWriteAt: resolveLatestWorkspaceWriteTimestamp(events),
+  });
 }
 
 function deriveTaskSpecFromOutputs(outputs: Record<string, unknown>): TaskSpec | null {
@@ -347,6 +678,7 @@ export interface SkillLifecycleServiceOptions {
   sessionState: RuntimeSessionStateStore;
   getCurrentTurn: RuntimeCallback<[sessionId: string], number>;
   getTaskState?: RuntimeCallback<[sessionId: string], TaskState>;
+  listEvents?: RuntimeCallback<[sessionId: string], BrewvaEventRecord[]>;
   recordEvent: RuntimeCallback<
     [
       input: {
@@ -368,6 +700,7 @@ export class SkillLifecycleService {
   private readonly sessionState: RuntimeSessionStateStore;
   private readonly getCurrentTurn: (sessionId: string) => number;
   private readonly getTaskState?: (sessionId: string) => TaskState;
+  private readonly listEvents?: (sessionId: string) => BrewvaEventRecord[];
   private readonly recordEvent: SkillLifecycleServiceOptions["recordEvent"];
   private readonly setTaskSpec?: SkillLifecycleServiceOptions["setTaskSpec"];
 
@@ -376,6 +709,7 @@ export class SkillLifecycleService {
     this.sessionState = options.sessionState;
     this.getCurrentTurn = options.getCurrentTurn;
     this.getTaskState = options.getTaskState;
+    this.listEvents = options.listEvents;
     this.recordEvent = options.recordEvent;
     this.setTaskSpec = options.setTaskSpec;
   }
@@ -431,6 +765,10 @@ export class SkillLifecycleService {
 
     const expected = listSkillOutputs(skill.contract);
     const outputContracts = getSkillOutputContracts(skill.contract);
+    const consumedOutputs = this.getAvailableConsumedOutputs(sessionId, skill.name);
+    const events = this.listEvents?.(sessionId) ?? [];
+    const planningEvidenceState = resolvePlanningEvidenceState(events, consumedOutputs);
+    const verificationEvidenceContext = resolveVerificationEvidenceContext(events);
     const missing = expected.filter(
       (name) => !isOutputPresent(outputs[name], outputContracts[name]),
     );
@@ -446,8 +784,35 @@ export class SkillLifecycleService {
       return reason ? [{ name, reason }] : [];
     });
 
-    if (skill.name === "qa") {
-      invalid.push(...validateQaSemanticOutputs(outputs));
+    invalid.push(...validatePlanningSemanticOutputs(outputs));
+
+    if (skill.name === "implementation") {
+      invalid.push(...validateImplementationSemanticOutputs(outputs, consumedOutputs));
+    }
+    if (
+      skill.name === "review" ||
+      (skillDeclaresAllOutputs(skill, REVIEW_SEMANTIC_OUTPUT_KEYS) &&
+        skillRequestsAnyInputs(skill, REVIEW_SEMANTIC_EVIDENCE_KEYS))
+    ) {
+      const requiresVerificationEvidence =
+        skill.name === "review" || skillRequestsAnyInputs(skill, ["verification_evidence"]);
+      invalid.push(
+        ...validateReviewSemanticOutputs(
+          outputs,
+          planningEvidenceState,
+          verificationEvidenceContext.state,
+          requiresVerificationEvidence,
+        ),
+      );
+    }
+    if (skill.name === "qa" || skillDeclaresAllOutputs(skill, QA_SEMANTIC_OUTPUT_KEYS)) {
+      invalid.push(
+        ...validateQaSemanticOutputs(
+          outputs,
+          consumedOutputs,
+          verificationEvidenceContext.coverageTexts,
+        ),
+      );
     }
 
     if (missing.length === 0 && invalid.length === 0) {

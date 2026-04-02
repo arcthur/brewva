@@ -18,6 +18,36 @@ intent:
     execution_plan:
       kind: json
       min_items: 2
+      item_contract:
+        kind: json
+        min_keys: 5
+        required_fields:
+          - step
+          - intent
+          - owner
+          - exit_criteria
+          - verification_intent
+        field_contracts:
+          step:
+            kind: text
+            min_words: 2
+            min_length: 16
+          intent:
+            kind: text
+            min_words: 2
+            min_length: 16
+          owner:
+            kind: text
+            min_words: 1
+            min_length: 8
+          exit_criteria:
+            kind: text
+            min_words: 3
+            min_length: 20
+          verification_intent:
+            kind: text
+            min_words: 3
+            min_length: 20
     execution_mode_hint:
       kind: enum
       values:
@@ -27,9 +57,110 @@ intent:
     risk_register:
       kind: json
       min_items: 1
+      item_contract:
+        kind: json
+        min_keys: 6
+        required_fields:
+          - risk
+          - category
+          - severity
+          - mitigation
+          - required_evidence
+          - owner_lane
+        field_contracts:
+          risk:
+            kind: text
+            min_words: 3
+            min_length: 20
+          category:
+            kind: enum
+            values:
+              - authn
+              - authz
+              - credential_handling
+              - secret_io
+              - external_input
+              - network_boundary
+              - permission_policy
+              - wal_replay
+              - rollback
+              - scheduler
+              - queueing
+              - async_ordering
+              - cross_session_state
+              - multi_writer_state
+              - cli_surface
+              - config_schema
+              - public_api
+              - export_map
+              - persisted_format
+              - wire_protocol
+              - package_boundary
+              - hot_path
+              - indexing_scan
+              - fanout_parallelism
+              - queue_growth
+              - artifact_volume
+              - storage_churn
+          severity:
+            kind: enum
+            values:
+              - critical
+              - high
+              - medium
+              - low
+          mitigation:
+            kind: text
+            min_words: 3
+            min_length: 20
+          required_evidence:
+            kind: json
+            min_items: 1
+            item_contract:
+              kind: text
+              min_words: 1
+              min_length: 6
+          owner_lane:
+            kind: enum
+            values:
+              - review-correctness
+              - review-boundaries
+              - review-operability
+              - review-security
+              - review-concurrency
+              - review-compatibility
+              - review-performance
+              - qa
+              - implementation
+              - operator
     implementation_targets:
       kind: json
       min_items: 1
+      item_contract:
+        kind: json
+        min_keys: 4
+        required_fields:
+          - target
+          - kind
+          - owner_boundary
+          - reason
+        field_contracts:
+          target:
+            kind: text
+            min_words: 1
+            min_length: 8
+          kind:
+            kind: text
+            min_words: 1
+            min_length: 4
+          owner_boundary:
+            kind: text
+            min_words: 1
+            min_length: 8
+          reason:
+            kind: text
+            min_words: 3
+            min_length: 20
 effects:
   allowed_effects:
     - workspace_read
@@ -125,7 +256,7 @@ Produce:
 - `execution_plan`: ordered steps and verification intent
 - `execution_mode_hint`: `direct_patch`, `test_first`, or `coordinated_rollout`
 - `risk_register`: concrete risks and mitigations
-- `implementation_targets`: concrete files, modules, or entrypoints the executor must touch
+- `implementation_targets`: concrete path-scoped files or directories the executor must touch
 
 ## Interaction Protocol
 
@@ -173,13 +304,18 @@ Use these questions to keep planning first-principles-driven:
   plan intentionally deviates from prior repository guidance.
 - `execution_plan` should be ordered, concrete, and verification-aware so the
   implementation skill can execute without redesigning the task.
+- `execution_plan` entries must stay structured enough that review and QA can
+  consume step ownership, exit criteria, and verification intent without
+  re-parsing prose.
 - `execution_mode_hint` should be evidence-based. Use `direct_patch` only for
   truly local work, `test_first` when behavior needs pinning, and
   `coordinated_rollout` when change spans multiple boundaries.
 - `risk_register` should be ranked by likely impact and should name the signals
   that review or verification must watch later.
-- `implementation_targets` should name the highest-value files or modules, not
-  vague areas of the codebase.
+- `risk_register` must name canonical change categories, required evidence, and
+  the owner lane responsible for closing each risk.
+- `implementation_targets` should name the highest-value path-scoped files or
+  directories, not vague areas of the codebase.
 
 ## Stop Conditions
 
@@ -191,7 +327,7 @@ Use these questions to keep planning first-principles-driven:
 
 - forcing design on an obvious one-file fix
 - skipping trade-offs and presenting one option as inevitable
-- producing a plan that is not tied to real files or modules
+- producing a plan that is not tied to real path-scoped files or directories
 - emitting generic architecture prose that does not help the next skill act
 
 ## Example

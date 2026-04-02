@@ -73,6 +73,7 @@ consumes:
   - execution_plan
   - execution_mode_hint
   - risk_register
+  - implementation_targets
   - change_set
   - files_changed
   - verification_evidence
@@ -111,8 +112,8 @@ as a blocker. Do not bury setup failure inside a vague QA summary.
 ### Step 2: Reconstruct the risk surface from the actual diff
 
 Start from `change_set`, `files_changed`, `risk_register`, `review_findings`,
-and the intended user flow. Prefer a diff-aware test path over generic
-click-around.
+`implementation_targets`, and the intended user flow. Prefer a diff-aware test
+path over generic click-around.
 
 ### Step 3: Run the highest-value test path
 
@@ -172,7 +173,9 @@ Use these questions to pick the right test path:
 - Start from the narrowest realistic flow that can fail for the reasons this
   diff is dangerous.
 - Use `files_changed`, `risk_register`, and `review_findings` to pick the first
-  path. QA is not a generic tour of the app.
+  path. Use `risk_register.required_evidence` and
+  `execution_plan[*].verification_intent` to decide which probes matter first.
+  QA is not a generic tour of the app.
 - Treat saved snapshots, screenshots, command output, and after-fix reruns as
   first-class evidence. If evidence cannot be replayed by another operator, it
   is too weak.
@@ -182,6 +185,10 @@ Use these questions to pick the right test path:
   `inconclusive` instead of pretending the flow was validated.
 - At least one executed check should be adversarial, boundary-seeking, or
   otherwise aimed at breaking the claimed happy path.
+- `qa_verdict = pass` requires covering the plan-declared `required_evidence`.
+  Coverage may come from the current `qa_checks` or from fresh authoritative
+  `runtime.verification.*` evidence. If the required evidence was not covered,
+  stay `inconclusive`.
 
 ## QA Decision Protocol
 

@@ -165,9 +165,18 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         `discovery: ${posture.discovery}`,
         `strategy: ${posture.strategy}`,
         `planning: ${posture.planning}`,
+        `plan_complete: ${posture.plan_complete}`,
+        `plan_fresh: ${posture.plan_fresh}`,
         `implementation: ${posture.implementation}`,
+        `review_required: ${posture.review_required}`,
         `review: ${posture.review}`,
+        `qa_required: ${posture.qa_required}`,
         `qa: ${posture.qa}`,
+        `unsatisfied_required_evidence: ${
+          posture.unsatisfied_required_evidence.length > 0
+            ? posture.unsatisfied_required_evidence.join(", ")
+            : "none"
+        }`,
         `verification: ${posture.verification}`,
         `acceptance: ${posture.acceptance}`,
         `ship: ${posture.ship}`,

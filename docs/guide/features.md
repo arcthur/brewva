@@ -12,6 +12,8 @@
 - Event-first runtime persistence and replay
 - Cost observability and threshold-based budget alerts
 - Derived workflow artifacts and explicit advisory inspection surfaces
+- First-class delegated planning contract with typed design artifacts and
+  planning-assurance workflow posture
 - Durable stall adjudication surfaced through workflow inspection rather than a
   hidden recovery planner
 - Objective iteration fact persistence and lineage-aware query for
@@ -133,6 +135,10 @@ Tool registry source: `packages/brewva-tools/src/index.ts`
   via `learningResearch`, turning repository precedent consult into a
   deterministic proof-of-consult packet instead of relying on handwritten
   summaries
+- delegated `design -> plan` routing now uses a first-class planning payload
+  rather than reusing exploration semantics, while downstream
+  implementation/review/qa continue to consume the canonical `design` artifact
+  lane
 - `knowledge_capture` is the deterministic write-back surface that materializes
   canonical solution records under `docs/solutions/**`
 - `learning-research` turns planning-time precedent retrieval into explicit

@@ -399,7 +399,7 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
       "Design delegate that turns a bounded objective into an executable plan without editing code.",
     envelope: "readonly-planner",
     skillName: "design",
-    fallbackResultMode: "exploration",
+    fallbackResultMode: "plan",
     executorPreamble:
       "Operate as a read-only planner. Focus on execution slices, risks, verification intent, and concrete next steps.",
     instructionsMarkdown: PLAN_SPECIALIST_CONSTITUTION,
@@ -491,7 +491,7 @@ const DEFAULT_AGENT_SPEC_BY_SKILL_NAME: Readonly<Record<string, string>> = {
 const DEFAULT_FALLBACK_RESULT_MODE_BY_SKILL_NAME: Readonly<Record<string, SubagentResultMode>> = {
   "repository-analysis": "exploration",
   discovery: "exploration",
-  design: "exploration",
+  design: "plan",
   "strategy-review": "exploration",
   "learning-research": "exploration",
   debugging: "exploration",

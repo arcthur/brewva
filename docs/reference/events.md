@@ -226,8 +226,10 @@ Instead, workflow artifacts and posture are derived from existing durable
 events and session state:
 
 - `skill_completed`
-  - discovery, strategy-review, design, execution-plan, implementation,
-    review, QA, ship, and retro artifacts
+  - discovery, strategy-review, design plus planning handoff artifacts
+    (`design_spec`, `execution_plan`, `risk_register`,
+    `implementation_targets`), implementation, review, QA, ship, and retro
+    artifacts
 - `verification_outcome_recorded`
   - verification artifact freshness and block/ready outcome
 - `verification_write_marked`

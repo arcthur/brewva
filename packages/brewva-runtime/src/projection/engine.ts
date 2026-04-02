@@ -3,7 +3,7 @@ import {
   PROJECTION_INGESTED_EVENT_TYPE,
   PROJECTION_REFRESHED_EVENT_TYPE,
 } from "../events/event-types.js";
-import { extractProjectionFromEvent } from "./extractor.js";
+import { extractProjectionFromEvent, extractWorkflowProjectionFromEvents } from "./extractor.js";
 import { ProjectionStore } from "./store.js";
 import type { WorkingProjectionSnapshot } from "./types.js";
 import { buildWorkingProjectionSnapshot } from "./working-projection.js";
@@ -85,12 +85,16 @@ export class ProjectionEngine {
 
     const force = input.force === true;
     const store = this.getStore();
-    if (!store.hasUnits(input.sessionId) && this.listEvents) {
+    const sessionEvents = this.listEvents?.(input.sessionId);
+    if (!store.hasUnits(input.sessionId) && sessionEvents) {
       this.replaySessionEvents({
         sessionId: input.sessionId,
-        events: this.listEvents(input.sessionId),
+        events: sessionEvents,
         mode: "always",
       });
+    }
+    if (sessionEvents) {
+      this.refreshWorkflowProjectionUnits(input.sessionId, sessionEvents);
     }
     const cached = store.getWorkingSnapshot(input.sessionId);
     if (!force && !this.dirtySessions.has(input.sessionId)) {
@@ -224,10 +228,24 @@ export class ProjectionEngine {
       resolvedUnits += ingested.resolvedUnits;
     }
 
+    this.refreshWorkflowProjectionUnits(input.sessionId, input.events);
+
     return {
       replayedEvents,
       upsertedUnits,
       resolvedUnits,
     };
+  }
+
+  private refreshWorkflowProjectionUnits(
+    sessionId: string,
+    events: readonly BrewvaEventRecord[],
+  ): void {
+    const workflowExtraction = extractWorkflowProjectionFromEvents(sessionId, events);
+    if (workflowExtraction.upserts.length === 0 && workflowExtraction.resolves.length === 0) {
+      return;
+    }
+    const observedAt = Math.max(...events.map((event) => event.timestamp), Date.now());
+    this.getStore().ingestExtraction(workflowExtraction, observedAt);
   }
 }

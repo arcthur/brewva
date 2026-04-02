@@ -68,7 +68,11 @@ export function asManagedToolMode(value: unknown): ManagedToolMode | undefined {
 }
 
 export function asResultMode(value: unknown): SubagentResultMode | undefined {
-  return value === "exploration" || value === "review" || value === "qa" || value === "patch"
+  return value === "exploration" ||
+    value === "plan" ||
+    value === "review" ||
+    value === "qa" ||
+    value === "patch"
     ? value
     : undefined;
 }

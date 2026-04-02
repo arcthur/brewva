@@ -435,7 +435,7 @@ Current delegation selector contract:
   - explicit delegated semantic contract
 - `fallbackResultMode?`
   - transport-level fallback schema for ad hoc runs without `skillName`
-- `executionShape.resultMode?` (`exploration` | `review` | `qa` | `patch`)
+- `executionShape.resultMode?` (`exploration` | `plan` | `review` | `qa` | `patch`)
 - `executionShape.boundary?` (`safe` | `effectful`)
   - optional preset narrowing only
 - `executionShape.model?`
@@ -502,6 +502,10 @@ Semantics:
   `skillOutputs` plus runner-produced `skillValidation`
 - successful child outcomes may include typed `data` alongside `summary`,
   `assistantText`, `evidenceRefs`, and `artifactRefs`
+- delegated `plan` outcomes persist canonical `data.kind = "plan"` payloads
+  (`designSpec`, `executionPlan`, `executionModeHint`, `riskRegister`, and
+  `implementationTargets`); mirrored `skillOutputs.design_*` fields are
+  gateway-produced projections for the skill lifecycle and workflow surfaces
 - delegated `qa` outcomes persist canonical `data.kind = "qa"` evidence; the
   mirrored `skillOutputs.qa_*` fields are secondary projections, not the
   primary durable record
@@ -678,15 +682,20 @@ Derived workflow inspection surface.
 
 - summarizes discovery, strategy, planning, implementation, review, QA,
   verification, ship, and retro posture
+- exposes planning assurance posture such as `plan_complete`, `plan_fresh`,
+  `review_required`, `qa_required`, and
+  `unsatisfied_required_evidence`
 - implementation may be `pending` when delegated patch results still await
   parent merge/apply
 - surfaces the latest durable stall adjudication when the control plane has
   classified an idle session as `continue`, `nudge`,
   `compact_recommended`, or `abort_recommended`
 - reports blockers such as stale review/QA/verification/ship evidence, task
-  blockers, pending worker results, and pending delegation outcomes awaiting
-  a parent turn; pending worker results and pending delegation outcomes both
-  keep ship posture blocked until the parent explicitly resolves them
+  blockers, incomplete or stale planning evidence, unsatisfied plan-declared
+  evidence requirements, pending worker results, and pending delegation
+  outcomes awaiting a parent turn; pending worker results and pending
+  delegation outcomes both keep ship posture blocked until the parent
+  explicitly resolves them
 - optionally includes recent derived workflow artifacts
 
 This tool is advisory. It does not create a runtime-owned chain planner and it

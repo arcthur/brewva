@@ -162,7 +162,7 @@ const ROUTING_POLICIES: readonly DelegationRoutingPolicy[] = [
     reason: "Reasoning-heavy delegation should prefer a frontier reasoning model.",
     candidateModels: ["openai/gpt-5.4:high", "openai/gpt-5.4-mini:high"],
     score({ target, keywordText, effectiveSkillName }) {
-      if (effectiveSkillName === "design") {
+      if (effectiveSkillName === "design" || target.resultMode === "plan") {
         return 8;
       }
       if (target.resultMode !== "exploration") {

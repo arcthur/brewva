@@ -120,7 +120,13 @@ describe("skill_complete tool", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-complete-design-"));
     writeSkill(join(workspace, ".brewva/skills/core/design-contract/SKILL.md"), {
       name: "design-contract",
-      outputs: ["design_spec", "execution_plan", "execution_mode_hint", "risk_register"],
+      outputs: [
+        "design_spec",
+        "execution_plan",
+        "execution_mode_hint",
+        "risk_register",
+        "implementation_targets",
+      ],
       outputContracts: [
         "  design_spec:",
         "    kind: text",
@@ -129,12 +135,24 @@ describe("skill_complete tool", () => {
         "  execution_plan:",
         "    kind: json",
         "    min_items: 2",
+        "    item_contract:",
+        "      kind: json",
+        "      required_fields: [step, intent, owner, exit_criteria, verification_intent]",
         "  execution_mode_hint:",
         "    kind: enum",
         "    values: [direct_patch, test_first, coordinated_rollout]",
         "  risk_register:",
         "    kind: json",
         "    min_items: 1",
+        "    item_contract:",
+        "      kind: json",
+        "      required_fields: [risk, category, severity, mitigation, required_evidence, owner_lane]",
+        "  implementation_targets:",
+        "    kind: json",
+        "    min_items: 1",
+        "    item_contract:",
+        "      kind: json",
+        "      required_fields: [target, kind, owner_boundary, reason]",
       ],
     });
 
@@ -162,6 +180,7 @@ describe("skill_complete tool", () => {
           execution_plan: ["a"],
           execution_mode_hint: "direct_patch",
           risk_register: [],
+          implementation_targets: [],
         },
       },
       undefined,
@@ -171,7 +190,7 @@ describe("skill_complete tool", () => {
 
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toContain("Skill completion rejected.");
-    expect(text).toContain("Missing required outputs: risk_register");
+    expect(text).toContain("Missing required outputs: risk_register, implementation_targets");
     expect(text).toContain("Invalid required outputs:");
     expect(text).toContain("design_spec");
     expect(text).toContain("execution_plan");
@@ -182,7 +201,13 @@ describe("skill_complete tool", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-complete-design-valid-"));
     writeSkill(join(workspace, ".brewva/skills/core/design-contract/SKILL.md"), {
       name: "design-contract",
-      outputs: ["design_spec", "execution_plan", "execution_mode_hint", "risk_register"],
+      outputs: [
+        "design_spec",
+        "execution_plan",
+        "execution_mode_hint",
+        "risk_register",
+        "implementation_targets",
+      ],
       outputContracts: [
         "  design_spec:",
         "    kind: text",
@@ -191,12 +216,24 @@ describe("skill_complete tool", () => {
         "  execution_plan:",
         "    kind: json",
         "    min_items: 2",
+        "    item_contract:",
+        "      kind: json",
+        "      required_fields: [step, intent, owner, exit_criteria, verification_intent]",
         "  execution_mode_hint:",
         "    kind: enum",
         "    values: [direct_patch, test_first, coordinated_rollout]",
         "  risk_register:",
         "    kind: json",
         "    min_items: 1",
+        "    item_contract:",
+        "      kind: json",
+        "      required_fields: [risk, category, severity, mitigation, required_evidence, owner_lane]",
+        "  implementation_targets:",
+        "    kind: json",
+        "    min_items: 1",
+        "    item_contract:",
+        "      kind: json",
+        "      required_fields: [target, kind, owner_boundary, reason]",
       ],
     });
 
@@ -223,15 +260,41 @@ describe("skill_complete tool", () => {
           design_spec:
             "Keep runtime-owned guard semantics in the kernel and move repository discovery ahead of design work.",
           execution_plan: [
-            "Promote repository_snapshot and impact_map to required design inputs.",
-            "Tighten output validation so placeholder artifacts cannot complete the skill.",
+            {
+              step: "Promote repository_snapshot and impact_map to required design inputs.",
+              intent: "Ground design in current repository state before planning.",
+              owner: "skill.design",
+              exit_criteria:
+                "Design uses repository evidence before choosing the implementation path.",
+              verification_intent:
+                "Contract tests prove design consumes the planning inputs explicitly.",
+            },
+            {
+              step: "Tighten output validation so placeholder artifacts cannot complete the skill.",
+              intent: "Make design outputs machine-checkable instead of prose-only.",
+              owner: "runtime.skills",
+              exit_criteria: "Placeholder design artifacts fail completion validation.",
+              verification_intent: "Skill completion tests reject weak design outputs.",
+            },
           ],
           execution_mode_hint: "direct_patch",
           risk_register: [
             {
               risk: "Guard resets could still be triggered by non-epistemic control actions.",
+              category: "public_api",
+              severity: "medium",
               mitigation:
                 "Classify lifecycle inspection as neutral and only clear on real strategy shifts.",
+              required_evidence: ["design_contract_tests"],
+              owner_lane: "review-boundaries",
+            },
+          ],
+          implementation_targets: [
+            {
+              target: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+              kind: "module",
+              owner_boundary: "runtime.skills",
+              reason: "Skill output validation is enforced here.",
             },
           ],
         },
@@ -244,6 +307,110 @@ describe("skill_complete tool", () => {
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toContain("Skill completed");
     expect(runtime.skills.getActive(sessionId)).toBeUndefined();
+  });
+
+  test("rejects non-canonical planning taxonomy even when a custom skill contract is looser", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-complete-planning-taxonomy-"));
+    writeSkill(join(workspace, ".brewva/skills/core/planning-loose/SKILL.md"), {
+      name: "planning-loose",
+      outputs: [
+        "design_spec",
+        "execution_plan",
+        "execution_mode_hint",
+        "risk_register",
+        "implementation_targets",
+      ],
+      outputContracts: [
+        "  design_spec:",
+        "    kind: text",
+        "    min_words: 4",
+        "    min_length: 24",
+        "  execution_plan:",
+        "    kind: json",
+        "    min_items: 1",
+        "    item_contract:",
+        "      kind: json",
+        "      required_fields: [step, intent, owner, exit_criteria, verification_intent]",
+        "  execution_mode_hint:",
+        "    kind: text",
+        "    min_words: 1",
+        "    min_length: 8",
+        "  risk_register:",
+        "    kind: json",
+        "    min_items: 1",
+        "    item_contract:",
+        "      kind: json",
+        "      required_fields: [risk, category, severity, mitigation, required_evidence, owner_lane]",
+        "  implementation_targets:",
+        "    kind: json",
+        "    min_items: 1",
+        "    item_contract:",
+        "      kind: json",
+        "      required_fields: [target, kind, owner_boundary, reason]",
+      ],
+    });
+
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "skill-complete-planning-taxonomy";
+    const loadTool = createSkillLoadTool({ runtime });
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
+
+    await loadTool.execute(
+      "tc-load-planning-taxonomy",
+      { name: "planning-loose" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const result = await completeTool.execute(
+      "tc-complete-planning-taxonomy",
+      {
+        outputs: {
+          design_spec:
+            "Keep planning taxonomy canonical even when a custom skill contract is only structurally typed.",
+          execution_plan: [
+            {
+              step: "Complete a planning skill with loose local schema checks.",
+              intent: "Exercise runtime semantic validation instead of per-skill enum contracts.",
+              owner: "runtime.skills",
+              exit_criteria: "Non-canonical planning taxonomy is rejected at completion time.",
+              verification_intent: "Skill completion reports risk_register as invalid.",
+            },
+          ],
+          execution_mode_hint: "coordinated_rollout",
+          risk_register: [
+            {
+              risk: "A custom skill could otherwise invent review taxonomy that downstream lanes do not understand.",
+              category: "not_a_real_category",
+              severity: "high",
+              mitigation: "Reject invalid planning taxonomy in the shared runtime contract.",
+              required_evidence: ["planning_taxonomy_contract_tests"],
+              owner_lane: "review-ghost",
+            },
+          ],
+          implementation_targets: [
+            {
+              target: "packages/brewva-runtime/src/contracts/planning.ts",
+              kind: "module",
+              owner_boundary: "runtime.contracts",
+              reason: "Shared planning contract validation lives here.",
+            },
+          ],
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("Skill completion rejected.");
+    expect(text).toContain("risk_register");
+    expect(runtime.skills.getActive(sessionId)?.name).toBe("planning-loose");
   });
 
   test("synthesizes canonical learning-research outputs from repository precedent search", async () => {
@@ -1364,6 +1531,1111 @@ The WAL boundary must keep replay ordering deterministic.
         ]),
       },
     });
+  });
+
+  test("rejects ready review outputs when high-risk planning evidence is missing", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-complete-review-missing-plan-"));
+    writeSkill(join(workspace, ".brewva/skills/core/planning-context/SKILL.md"), {
+      name: "planning-context",
+      outputs: ["planning_posture"],
+      outputContracts: [
+        "  planning_posture:",
+        "    kind: enum",
+        "    values: [trivial, moderate, complex, high_risk]",
+      ],
+    });
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "skill-complete-review-missing-plan-1";
+    const loadTool = createSkillLoadTool({ runtime });
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
+
+    runtime.skills.activate(sessionId, "planning-context");
+    runtime.skills.complete(sessionId, {
+      planning_posture: "high_risk",
+    });
+
+    await loadTool.execute(
+      "tc-load-review-missing-plan",
+      { name: "review" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const result = await completeTool.execute(
+      "tc-complete-review-missing-plan",
+      {
+        outputs: {
+          review_report: {
+            summary: "Review claims the change is ready despite missing planning evidence.",
+            activated_lanes: ["review-correctness", "review-boundaries", "review-operability"],
+            activation_basis: ["High-risk planning posture widened the review surface."],
+            missing_evidence: [],
+            residual_blind_spots: [],
+            precedent_query_summary:
+              "query_intent=precedent_lookup | query=planning evidence | source_types=auto | search_mode=solution_only",
+            precedent_consult_status: {
+              status: "not_required",
+            },
+          },
+          review_findings: [],
+          merge_decision: "ready",
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("Skill completion rejected.");
+    expect(text).toContain("review_report");
+    expect(text).toContain("merge_decision");
+    expect(runtime.skills.getActive(sessionId)?.name).toBe("review");
+  });
+
+  test("synthesizes blocked review output when runtime verification evidence is stale", async () => {
+    const workspace = mkdtempSync(
+      join(tmpdir(), "brewva-skill-complete-review-stale-verification-"),
+    );
+    writeSkill(join(workspace, ".brewva/skills/core/planning-context/SKILL.md"), {
+      name: "planning-context",
+      outputs: ["impact_map", "planning_posture"],
+      outputContracts: [
+        "  impact_map:",
+        "    kind: json",
+        "    min_keys: 1",
+        "  planning_posture:",
+        "    kind: enum",
+        "    values: [trivial, moderate, complex, high_risk]",
+      ],
+    });
+    writeSkill(join(workspace, ".brewva/skills/core/plan-artifacts/SKILL.md"), {
+      name: "plan-artifacts",
+      outputs: [
+        "design_spec",
+        "execution_plan",
+        "execution_mode_hint",
+        "risk_register",
+        "implementation_targets",
+      ],
+      outputContracts: [
+        "  design_spec:",
+        "    kind: text",
+        "    min_words: 3",
+        "    min_length: 18",
+        "  execution_plan:",
+        "    kind: json",
+        "    min_items: 1",
+        "  execution_mode_hint:",
+        "    kind: enum",
+        "    values: [direct_patch, test_first, coordinated_rollout]",
+        "  risk_register:",
+        "    kind: json",
+        "    min_items: 1",
+        "  implementation_targets:",
+        "    kind: json",
+        "    min_items: 1",
+      ],
+    });
+    writeSkill(join(workspace, ".brewva/skills/core/implementation-producer/SKILL.md"), {
+      name: "implementation-producer",
+      outputs: ["change_set", "files_changed", "verification_evidence"],
+      outputContracts: [
+        "  change_set:",
+        "    kind: text",
+        "    min_words: 3",
+        "    min_length: 18",
+        "  files_changed:",
+        "    kind: json",
+        "    min_items: 1",
+        "  verification_evidence:",
+        "    kind: json",
+        "    min_items: 1",
+      ],
+    });
+    writeSkill(join(workspace, ".brewva/skills/core/review-contract/SKILL.md"), {
+      name: "review-contract",
+      outputs: ["review_report", "review_findings", "merge_decision"],
+      outputContracts: [
+        "  review_report:",
+        "    kind: json",
+        "    min_keys: 7",
+        "    required_fields: [summary, activated_lanes, activation_basis, missing_evidence, residual_blind_spots, precedent_query_summary, precedent_consult_status]",
+        "  review_findings:",
+        "    kind: json",
+        "    min_items: 0",
+        "  merge_decision:",
+        "    kind: enum",
+        "    values: [ready, needs_changes, blocked]",
+      ],
+      consumes: [
+        "impact_map",
+        "planning_posture",
+        "design_spec",
+        "execution_plan",
+        "risk_register",
+        "implementation_targets",
+        "change_set",
+        "files_changed",
+        "verification_evidence",
+      ],
+    });
+
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "skill-complete-review-stale-verification";
+    const loadTool = createSkillLoadTool({ runtime });
+
+    runtime.skills.activate(sessionId, "planning-context");
+    runtime.skills.complete(sessionId, {
+      impact_map: buildImpactMap({
+        summary: "Review should widen when verification evidence goes stale.",
+        changedFileClasses: ["runtime_coordination"],
+        changeCategories: ["public_api"],
+      }),
+      planning_posture: "moderate",
+    });
+
+    runtime.skills.activate(sessionId, "plan-artifacts");
+    runtime.skills.complete(sessionId, {
+      design_spec: "Keep review anchored to the current canonical design.",
+      execution_plan: [
+        {
+          step: "Preserve the design contract before review.",
+          intent: "Keep planning evidence complete for the review window.",
+          owner: "runtime.review",
+          exit_criteria: "Review can consume the bounded design inputs directly.",
+          verification_intent: "The review run sees canonical design outputs.",
+        },
+        {
+          step: "Expose stale verification evidence as a blocking review gap.",
+          intent: "Do not allow merge readiness on stale executable evidence.",
+          owner: "runtime.review",
+          exit_criteria:
+            "Review reports stale verification evidence instead of silently proceeding.",
+          verification_intent: "Review synthesis blocks when verification evidence is stale.",
+        },
+      ],
+      execution_mode_hint: "direct_patch",
+      risk_register: [
+        {
+          risk: "Review could claim readiness after the verification evidence became stale.",
+          category: "public_api",
+          severity: "high",
+          mitigation: "Block review readiness when verification evidence is stale.",
+          required_evidence: ["runtime_verification_freshness"],
+          owner_lane: "review-operability",
+        },
+      ],
+      implementation_targets: [
+        {
+          target: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+          kind: "module",
+          owner_boundary: "runtime.review",
+          reason: "The review scope is bounded to the runtime validation path.",
+        },
+      ],
+    });
+
+    runtime.skills.activate(sessionId, "implementation-producer");
+    runtime.skills.complete(sessionId, {
+      change_set:
+        "Updated the runtime validation path and preserved executable verification evidence.",
+      files_changed: ["packages/brewva-runtime/src/services/skill-lifecycle.ts"],
+      verification_evidence: ["runtime_verification_freshness passed before the next mutation"],
+    });
+
+    runtime.events.record({
+      sessionId,
+      type: "verification_outcome_recorded",
+      timestamp: 100,
+      payload: {
+        outcome: "pass",
+        level: "standard",
+        activeSkill: "implementation",
+        evidenceFreshness: "fresh",
+        commandsExecuted: ["runtime_verification_freshness"],
+        failedChecks: [],
+        checkResults: [
+          {
+            name: "runtime_verification_freshness",
+            status: "pass",
+            evidence: "runtime_verification_freshness passed",
+          },
+        ],
+      },
+    });
+    const laterWriteTimestamp = Date.now() + 1_000;
+    runtime.events.record({
+      sessionId,
+      type: "verification_write_marked",
+      timestamp: laterWriteTimestamp,
+      payload: {
+        toolName: "edit",
+      },
+    });
+
+    await loadTool.execute(
+      "tc-load-review-stale-verification",
+      { name: "review-contract" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const allReviewLanes = [
+      "review-correctness",
+      "review-boundaries",
+      "review-operability",
+      "review-security",
+      "review-concurrency",
+      "review-compatibility",
+      "review-performance",
+    ] as const;
+    const activationTimestamp = Date.now();
+    const reviewRuns: DelegationRunRecord[] = allReviewLanes.map((lane, index) => ({
+      runId: `${lane}-stale-verification`,
+      delegate: lane,
+      agentSpec: lane,
+      parentSessionId: sessionId,
+      status: "completed",
+      createdAt: activationTimestamp + index * 2,
+      updatedAt: activationTimestamp + index * 2 + 1,
+      label: lane,
+      parentSkill: "review-contract",
+      kind: "review",
+      summary: `${lane} cleared the change.`,
+      resultData: {
+        kind: "review",
+        lane,
+        disposition: "clear",
+        primaryClaim: `${lane} cleared the current scope.`,
+      },
+    }));
+    const completeTool = createSkillCompleteTool({
+      runtime: Object.assign(runtime, {
+        delegation: {
+          listRuns() {
+            return reviewRuns;
+          },
+        },
+      }),
+      verification: { executeCommands: false },
+    });
+
+    const result = await completeTool.execute(
+      "tc-complete-review-stale-verification",
+      {
+        reviewEnsemble: {
+          precedentQuerySummary:
+            "query_intent=precedent_lookup | query=stale verification evidence | source_types=auto | search_mode=solution_only",
+          precedentConsultStatus: {
+            status: "not_required",
+          },
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("Skill completed");
+    expect(runtime.skills.getOutputs(sessionId, "review-contract")).toMatchObject({
+      merge_decision: "blocked",
+      review_report: expect.objectContaining({
+        missing_evidence: expect.arrayContaining(["verification_evidence:stale"]),
+      }),
+    });
+  });
+
+  test("rejects manual review outputs when runtime verification evidence is stale even with complete planning evidence", async () => {
+    const workspace = mkdtempSync(
+      join(tmpdir(), "brewva-skill-complete-review-manual-stale-verification-"),
+    );
+    writeSkill(join(workspace, ".brewva/skills/core/planning-context/SKILL.md"), {
+      name: "planning-context",
+      outputs: ["impact_map", "planning_posture"],
+      outputContracts: [
+        "  impact_map:",
+        "    kind: json",
+        "    min_keys: 1",
+        "  planning_posture:",
+        "    kind: enum",
+        "    values: [trivial, moderate, complex, high_risk]",
+      ],
+    });
+    writeSkill(join(workspace, ".brewva/skills/core/plan-artifacts/SKILL.md"), {
+      name: "plan-artifacts",
+      outputs: [
+        "design_spec",
+        "execution_plan",
+        "execution_mode_hint",
+        "risk_register",
+        "implementation_targets",
+      ],
+      outputContracts: [
+        "  design_spec:",
+        "    kind: text",
+        "    min_words: 3",
+        "    min_length: 18",
+        "  execution_plan:",
+        "    kind: json",
+        "    min_items: 1",
+        "  execution_mode_hint:",
+        "    kind: enum",
+        "    values: [direct_patch, test_first, coordinated_rollout]",
+        "  risk_register:",
+        "    kind: json",
+        "    min_items: 1",
+        "  implementation_targets:",
+        "    kind: json",
+        "    min_items: 1",
+      ],
+    });
+    writeSkill(join(workspace, ".brewva/skills/core/implementation-producer/SKILL.md"), {
+      name: "implementation-producer",
+      outputs: ["change_set", "files_changed", "verification_evidence"],
+      outputContracts: [
+        "  change_set:",
+        "    kind: text",
+        "    min_words: 3",
+        "    min_length: 18",
+        "  files_changed:",
+        "    kind: json",
+        "    min_items: 1",
+        "  verification_evidence:",
+        "    kind: json",
+        "    min_items: 1",
+      ],
+    });
+    writeSkill(join(workspace, ".brewva/skills/core/review-contract/SKILL.md"), {
+      name: "review-contract",
+      outputs: ["review_report", "review_findings", "merge_decision"],
+      outputContracts: [
+        "  review_report:",
+        "    kind: json",
+        "    min_keys: 7",
+        "    required_fields: [summary, activated_lanes, activation_basis, missing_evidence, residual_blind_spots, precedent_query_summary, precedent_consult_status]",
+        "  review_findings:",
+        "    kind: json",
+        "    min_items: 0",
+        "  merge_decision:",
+        "    kind: enum",
+        "    values: [ready, needs_changes, blocked]",
+      ],
+      consumes: [
+        "impact_map",
+        "planning_posture",
+        "design_spec",
+        "execution_plan",
+        "risk_register",
+        "implementation_targets",
+        "change_set",
+        "files_changed",
+        "verification_evidence",
+      ],
+    });
+
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "skill-complete-review-manual-stale-verification";
+    const loadTool = createSkillLoadTool({ runtime });
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
+
+    runtime.skills.activate(sessionId, "planning-context");
+    runtime.skills.complete(sessionId, {
+      impact_map: buildImpactMap({
+        summary: "Manual review outputs must not ignore stale executable evidence.",
+        changedFileClasses: ["runtime_coordination"],
+        changeCategories: ["public_api"],
+      }),
+      planning_posture: "moderate",
+    });
+
+    runtime.skills.activate(sessionId, "plan-artifacts");
+    runtime.skills.complete(sessionId, {
+      design_spec: "Keep review readiness tied to current planning and executable evidence.",
+      execution_plan: [
+        {
+          step: "Preserve a complete planning handoff for review.",
+          intent: "Keep planning evidence available when the manual review output is validated.",
+          owner: "runtime.review",
+          exit_criteria: "Review can consume canonical planning artifacts without guessing.",
+          verification_intent: "The review validator sees the full planning handoff.",
+        },
+      ],
+      execution_mode_hint: "direct_patch",
+      risk_register: [
+        {
+          risk: "Manual review output could claim readiness after executable verification went stale.",
+          category: "public_api",
+          severity: "high",
+          mitigation: "Reject review readiness when runtime verification is stale.",
+          required_evidence: ["runtime_verification_freshness"],
+          owner_lane: "review-operability",
+        },
+      ],
+      implementation_targets: [
+        {
+          target: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+          kind: "module",
+          owner_boundary: "runtime.review",
+          reason: "Review validation stays scoped to the lifecycle contract.",
+        },
+      ],
+    });
+
+    runtime.skills.activate(sessionId, "implementation-producer");
+    runtime.skills.complete(sessionId, {
+      change_set: "Updated review validation and preserved runtime verification evidence.",
+      files_changed: ["packages/brewva-runtime/src/services/skill-lifecycle.ts"],
+      verification_evidence: ["runtime_verification_freshness passed before the next mutation"],
+    });
+
+    runtime.events.record({
+      sessionId,
+      type: "verification_outcome_recorded",
+      timestamp: 100,
+      payload: {
+        outcome: "pass",
+        level: "standard",
+        activeSkill: "implementation",
+        evidenceFreshness: "fresh",
+        commandsExecuted: ["runtime_verification_freshness"],
+        failedChecks: [],
+        checkResults: [
+          {
+            name: "runtime_verification_freshness",
+            status: "pass",
+            evidence: "runtime_verification_freshness passed",
+          },
+        ],
+      },
+    });
+    const laterWriteTimestamp = Date.now() + 1_000;
+    runtime.events.record({
+      sessionId,
+      type: "verification_write_marked",
+      timestamp: laterWriteTimestamp,
+      payload: {
+        toolName: "edit",
+      },
+    });
+
+    await loadTool.execute(
+      "tc-load-review-manual-stale-verification",
+      { name: "review-contract" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const result = await completeTool.execute(
+      "tc-complete-review-manual-stale-verification",
+      {
+        outputs: {
+          review_report: {
+            summary:
+              "The manual review incorrectly claims readiness after verification became stale.",
+            activated_lanes: ["review-correctness", "review-boundaries", "review-operability"],
+            activation_basis: ["Planning evidence stayed complete through the review window."],
+            missing_evidence: [],
+            residual_blind_spots: [],
+            precedent_query_summary:
+              "query_intent=precedent_lookup | query=manual stale verification review | source_types=auto | search_mode=solution_only",
+            precedent_consult_status: {
+              status: "not_required",
+            },
+          },
+          review_findings: [],
+          merge_decision: "ready",
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("Skill completion rejected.");
+    expect(text).toContain("review_report");
+    expect(text).toContain("merge_decision");
+    expect(runtime.skills.getActive(sessionId)?.name).toBe("review-contract");
+  });
+
+  test("synthesizes blocked review output when planning evidence is stale after a later write", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-complete-review-stale-plan-"));
+    writeSkill(join(workspace, ".brewva/skills/core/planning-context/SKILL.md"), {
+      name: "planning-context",
+      outputs: ["impact_map", "planning_posture"],
+      outputContracts: [
+        "  impact_map:",
+        "    kind: json",
+        "    min_keys: 1",
+        "  planning_posture:",
+        "    kind: enum",
+        "    values: [trivial, moderate, complex, high_risk]",
+      ],
+    });
+    writeSkill(join(workspace, ".brewva/skills/core/plan-artifacts/SKILL.md"), {
+      name: "plan-artifacts",
+      outputs: [
+        "design_spec",
+        "execution_plan",
+        "execution_mode_hint",
+        "risk_register",
+        "implementation_targets",
+      ],
+      outputContracts: [
+        "  design_spec:",
+        "    kind: text",
+        "    min_words: 3",
+        "    min_length: 18",
+        "  execution_plan:",
+        "    kind: json",
+        "    min_items: 1",
+        "  execution_mode_hint:",
+        "    kind: enum",
+        "    values: [direct_patch, test_first, coordinated_rollout]",
+        "  risk_register:",
+        "    kind: json",
+        "    min_items: 1",
+        "  implementation_targets:",
+        "    kind: json",
+        "    min_items: 1",
+      ],
+    });
+    writeSkill(join(workspace, ".brewva/skills/core/review-contract/SKILL.md"), {
+      name: "review-contract",
+      outputs: ["review_report", "review_findings", "merge_decision"],
+      outputContracts: [
+        "  review_report:",
+        "    kind: json",
+        "    min_keys: 7",
+        "    required_fields: [summary, activated_lanes, activation_basis, missing_evidence, residual_blind_spots, precedent_query_summary, precedent_consult_status]",
+        "  review_findings:",
+        "    kind: json",
+        "    min_items: 0",
+        "  merge_decision:",
+        "    kind: enum",
+        "    values: [ready, needs_changes, blocked]",
+      ],
+      consumes: [
+        "impact_map",
+        "planning_posture",
+        "design_spec",
+        "execution_plan",
+        "risk_register",
+        "implementation_targets",
+      ],
+    });
+
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "skill-complete-review-stale-plan";
+    const loadTool = createSkillLoadTool({ runtime });
+
+    runtime.skills.activate(sessionId, "planning-context");
+    runtime.skills.complete(sessionId, {
+      impact_map: buildImpactMap({
+        summary: "Review should disclose stale planning evidence after later writes.",
+        changedFileClasses: ["runtime_coordination"],
+        changeCategories: ["public_api"],
+      }),
+      planning_posture: "moderate",
+    });
+
+    runtime.skills.activate(sessionId, "plan-artifacts");
+    runtime.skills.complete(sessionId, {
+      design_spec: "Tie review synthesis to the latest canonical planning handoff.",
+      execution_plan: [
+        {
+          step: "Keep planning evidence current for downstream review.",
+          intent: "Expose stale plan artifacts instead of silently reusing them.",
+          owner: "runtime.review",
+          exit_criteria: "Review synthesis marks planning artifacts stale after later writes.",
+          verification_intent: "Review missing_evidence records stale planning keys explicitly.",
+        },
+      ],
+      execution_mode_hint: "direct_patch",
+      risk_register: [
+        {
+          risk: "Review synthesis could reuse planning artifacts after a later workspace write.",
+          category: "public_api",
+          severity: "high",
+          mitigation: "Treat planning evidence as stale once the workspace changes later.",
+          required_evidence: ["stale_planning_review"],
+          owner_lane: "review-boundaries",
+        },
+      ],
+      implementation_targets: [
+        {
+          target: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+          kind: "module",
+          owner_boundary: "runtime.review",
+          reason: "Review planning freshness is enforced in the runtime lifecycle path.",
+        },
+      ],
+    });
+
+    const laterWriteTimestamp = Date.now() + 1_000;
+    runtime.events.record({
+      sessionId,
+      type: "verification_write_marked",
+      timestamp: laterWriteTimestamp,
+      payload: {
+        toolName: "edit",
+      },
+    });
+
+    await loadTool.execute(
+      "tc-load-review-stale-plan",
+      { name: "review-contract" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const allReviewLanes = [
+      "review-correctness",
+      "review-boundaries",
+      "review-operability",
+      "review-security",
+      "review-concurrency",
+      "review-compatibility",
+      "review-performance",
+    ] as const;
+    const activationTimestamp = Date.now();
+    const reviewRuns: DelegationRunRecord[] = allReviewLanes.map((lane, index) => ({
+      runId: `${lane}-stale-plan`,
+      delegate: lane,
+      agentSpec: lane,
+      parentSessionId: sessionId,
+      status: "completed",
+      createdAt: activationTimestamp + index * 2,
+      updatedAt: activationTimestamp + index * 2 + 1,
+      label: lane,
+      parentSkill: "review-contract",
+      kind: "review",
+      summary: `${lane} cleared the current scope.`,
+      resultData: {
+        kind: "review",
+        lane,
+        disposition: "clear",
+        primaryClaim: `${lane} cleared the current scope.`,
+      },
+    }));
+    const completeTool = createSkillCompleteTool({
+      runtime: Object.assign(runtime, {
+        delegation: {
+          listRuns() {
+            return reviewRuns;
+          },
+        },
+      }),
+      verification: { executeCommands: false },
+    });
+
+    const result = await completeTool.execute(
+      "tc-complete-review-stale-plan",
+      {
+        reviewEnsemble: {
+          precedentQuerySummary:
+            "query_intent=precedent_lookup | query=stale planning evidence review | source_types=auto | search_mode=solution_only",
+          precedentConsultStatus: {
+            status: "not_required",
+          },
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("Skill completed");
+    expect(runtime.skills.getOutputs(sessionId, "review-contract")).toMatchObject({
+      merge_decision: "blocked",
+      review_report: expect.objectContaining({
+        missing_evidence: expect.arrayContaining([
+          "design_spec:stale",
+          "execution_plan:stale",
+          "risk_register:stale",
+          "implementation_targets:stale",
+        ]),
+      }),
+    });
+  });
+
+  test("rejects implementation outputs that exceed implementation_targets", async () => {
+    const workspace = mkdtempSync(
+      join(tmpdir(), "brewva-skill-complete-implementation-target-scope-"),
+    );
+
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "skill-complete-implementation-target-scope-1";
+    const loadTool = createSkillLoadTool({ runtime });
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
+
+    runtime.skills.activate(sessionId, "design");
+    runtime.skills.complete(sessionId, {
+      design_spec: "Keep implementation scoped to the planned module boundary.",
+      execution_plan: [
+        {
+          step: "Apply the bounded lifecycle validator change.",
+          intent: "Touch only the planned runtime skill lifecycle module.",
+          owner: "runtime.skills",
+          exit_criteria: "The implementation stays within the declared implementation targets.",
+          verification_intent: "Files changed remain scoped to the declared target.",
+        },
+        {
+          step: "Confirm the scope stays inside the declared target set.",
+          intent: "Make implementation scope drift explicit before completion.",
+          owner: "runtime.skills",
+          exit_criteria: "Completion rejects files_changed entries outside the target boundary.",
+          verification_intent: "Implementation scope guard rejects unrelated file paths.",
+        },
+      ],
+      execution_mode_hint: "direct_patch",
+      risk_register: [
+        {
+          risk: "Implementation may silently widen into unrelated gateway code.",
+          category: "package_boundary",
+          severity: "medium",
+          mitigation: "Reject completion when files_changed exceeds implementation_targets.",
+          required_evidence: ["implementation_scope_guard"],
+          owner_lane: "implementation",
+        },
+      ],
+      implementation_targets: [
+        {
+          target: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+          kind: "module",
+          owner_boundary: "runtime.skills",
+          reason: "Only skill lifecycle validation should change.",
+        },
+      ],
+    });
+
+    await loadTool.execute(
+      "tc-load-implementation-target-scope",
+      { name: "implementation" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const result = await completeTool.execute(
+      "tc-complete-implementation-target-scope",
+      {
+        outputs: {
+          change_set: "Updated the lifecycle validator and also touched an unrelated gateway path.",
+          files_changed: [
+            "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+            "packages/brewva-gateway/src/subagents/structured-outcome.ts",
+          ],
+          verification_evidence: ["typecheck passed"],
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("Skill completion rejected.");
+    expect(text).toContain("files_changed");
+    expect(text).toContain("implementation_targets");
+    expect(runtime.skills.getActive(sessionId)?.name).toBe("implementation");
+  });
+
+  test("rejects implementation outputs when implementation_targets are too abstract to enforce files_changed scope", async () => {
+    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const sessionId = "skill-complete-implementation-abstract-target";
+    const loadTool = createSkillLoadTool({ runtime });
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
+
+    runtime.skills.activate(sessionId, "design");
+    runtime.skills.complete(sessionId, {
+      design_spec: "Keep implementation targets concrete enough for runtime scope enforcement.",
+      execution_plan: [
+        {
+          step: "Declare the intended implementation scope.",
+          intent: "Make the implementation boundary explicit before coding starts.",
+          owner: "runtime.skills",
+          exit_criteria: "Implementation targets can be mapped to concrete changed files.",
+          verification_intent: "Scope enforcement can compare targets against files_changed.",
+        },
+        {
+          step: "Reject abstract targets at completion time.",
+          intent: "Do not accept targets that cannot prove concrete ownership.",
+          owner: "runtime.skills",
+          exit_criteria: "Completion rejects non-path implementation targets.",
+          verification_intent: "The runtime guard reports implementation_targets as too abstract.",
+        },
+      ],
+      execution_mode_hint: "direct_patch",
+      risk_register: [
+        {
+          risk: "Abstract implementation targets would disable the runtime scope fence silently.",
+          category: "package_boundary",
+          severity: "medium",
+          mitigation:
+            "Reject implementation_targets that are not concrete enough to enforce files_changed ownership.",
+          required_evidence: ["implementation_target_concreteness"],
+          owner_lane: "implementation",
+        },
+      ],
+      implementation_targets: [
+        {
+          target: "runtime.skills",
+          kind: "module",
+          owner_boundary: "runtime.skills",
+          reason: "This target is intentionally too abstract for the runtime scope guard.",
+        },
+      ],
+    });
+
+    await loadTool.execute(
+      "tc-load-implementation-abstract-target",
+      { name: "implementation" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const result = await completeTool.execute(
+      "tc-complete-implementation-abstract-target",
+      {
+        outputs: {
+          change_set: "Touched the runtime skill lifecycle path.",
+          files_changed: ["packages/brewva-runtime/src/services/skill-lifecycle.ts"],
+          verification_evidence: ["implementation_target_concreteness asserted"],
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("Skill completion rejected.");
+    expect(text).toContain("implementation_targets");
+    expect(runtime.skills.getActive(sessionId)?.name).toBe("implementation");
+  });
+
+  test("rejects QA pass verdicts that do not cover plan required_evidence", async () => {
+    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const sessionId = "skill-complete-qa-required-evidence";
+    const loadTool = createSkillLoadTool({ runtime });
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
+
+    runtime.skills.activate(sessionId, "design");
+    runtime.skills.complete(sessionId, {
+      design_spec: "Keep QA tied to explicit planning evidence.",
+      execution_plan: [
+        {
+          step: "Run the canonical QA contract test.",
+          intent: "Exercise the plan-required evidence directly.",
+          owner: "qa.runtime",
+          exit_criteria: "The QA pass verdict covers the declared required evidence.",
+          verification_intent: "QA checks mention the required evidence token explicitly.",
+        },
+        {
+          step: "Preserve the required evidence token in the executed QA artifacts.",
+          intent: "Make required evidence coverage machine-checkable.",
+          owner: "qa.runtime",
+          exit_criteria: "QA coverage text contains the required evidence identifier.",
+          verification_intent: "QA pass validation rejects uncovered required evidence.",
+        },
+      ],
+      execution_mode_hint: "test_first",
+      risk_register: [
+        {
+          risk: "QA could pass without exercising the required planning evidence.",
+          category: "public_api",
+          severity: "high",
+          mitigation: "Reject QA pass verdicts unless required evidence is covered.",
+          required_evidence: ["plan_contract_tests"],
+          owner_lane: "qa",
+        },
+      ],
+      implementation_targets: [
+        {
+          target: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+          kind: "module",
+          owner_boundary: "runtime.skills",
+          reason: "QA completion validation is enforced here.",
+        },
+      ],
+    });
+
+    await loadTool.execute(
+      "tc-load-qa-required-evidence",
+      { name: "qa" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const result = await completeTool.execute(
+      "tc-complete-qa-required-evidence",
+      {
+        outputs: {
+          qa_report: "Executed an adversarial probe, but not the required plan contract test.",
+          qa_findings: [],
+          qa_verdict: "pass",
+          qa_checks: [
+            {
+              name: "boundary-input",
+              result: "pass",
+              command: "bun test -- boundary-input",
+              exitCode: 0,
+              observedOutput: "boundary-input passed",
+              probeType: "boundary",
+            },
+          ],
+          qa_missing_evidence: [],
+          qa_confidence_gaps: [],
+          qa_environment_limits: [],
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("Skill completion rejected.");
+    expect(text).toContain("qa_verdict");
+    expect(text).toContain("plan_contract_tests");
+    expect(runtime.skills.getActive(sessionId)?.name).toBe("qa");
+  });
+
+  test("accepts QA pass verdicts when fresh runtime verification covers plan required_evidence", async () => {
+    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const sessionId = "skill-complete-qa-runtime-verification-coverage";
+    const loadTool = createSkillLoadTool({ runtime });
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
+
+    runtime.skills.activate(sessionId, "design");
+    runtime.skills.complete(sessionId, {
+      design_spec: "Allow QA to rely on fresh runtime verification for required evidence closure.",
+      execution_plan: [
+        {
+          step: "Run an adversarial QA probe for the risky path.",
+          intent: "Keep QA independently executable even when verification already exists.",
+          owner: "qa.runtime",
+          exit_criteria: "QA still preserves at least one executable adversarial check.",
+          verification_intent: "The QA flow records a bounded adversarial probe.",
+        },
+        {
+          step: "Reuse fresh runtime verification for required evidence coverage.",
+          intent: "Treat authoritative verification as acceptable evidence lineage.",
+          owner: "qa.runtime",
+          exit_criteria: "Required evidence is satisfied by fresh runtime verification coverage.",
+          verification_intent:
+            "Fresh verification output names the required evidence token explicitly.",
+        },
+      ],
+      execution_mode_hint: "test_first",
+      risk_register: [
+        {
+          risk: "QA could ignore required evidence even when runtime verification already proved it freshly.",
+          category: "public_api",
+          severity: "high",
+          mitigation: "Allow fresh runtime verification to close required evidence coverage.",
+          required_evidence: ["plan_contract_tests"],
+          owner_lane: "qa",
+        },
+      ],
+      implementation_targets: [
+        {
+          target: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+          kind: "module",
+          owner_boundary: "runtime.skills",
+          reason: "The required evidence closure logic lives here.",
+        },
+      ],
+    });
+
+    runtime.events.record({
+      sessionId,
+      type: "verification_outcome_recorded",
+      timestamp: 100,
+      payload: {
+        outcome: "pass",
+        level: "standard",
+        activeSkill: "implementation",
+        evidenceFreshness: "fresh",
+        commandsExecuted: ["plan_contract_tests"],
+        failedChecks: [],
+        checkResults: [
+          {
+            name: "plan_contract_tests",
+            status: "pass",
+            evidence: "plan_contract_tests passed",
+          },
+        ],
+      },
+    });
+
+    await loadTool.execute(
+      "tc-load-qa-runtime-verification-coverage",
+      { name: "qa" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const result = await completeTool.execute(
+      "tc-complete-qa-runtime-verification-coverage",
+      {
+        outputs: {
+          qa_report:
+            "Executed an adversarial QA probe and reused fresh runtime verification coverage.",
+          qa_findings: [],
+          qa_verdict: "pass",
+          qa_checks: [
+            {
+              name: "boundary-input",
+              result: "pass",
+              command: "bun test -- boundary-input",
+              exitCode: 0,
+              observedOutput: "boundary-input passed",
+              probeType: "boundary",
+            },
+          ],
+          qa_missing_evidence: [],
+          qa_confidence_gaps: [],
+          qa_environment_limits: [],
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("Skill completed");
+    expect(runtime.skills.getActive(sessionId)).toBeUndefined();
   });
 
   test("rejects placeholder outputs for built-in implementation artifacts", async () => {

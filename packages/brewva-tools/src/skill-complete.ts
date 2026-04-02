@@ -1,4 +1,14 @@
-import type { SkillDocument } from "@brewva/brewva-runtime";
+import {
+  PLANNING_EVIDENCE_KEYS,
+  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+  collectLatestPlanningOutputTimestamps,
+  collectPlanningRiskCategories,
+  coercePlanningArtifactSet,
+  derivePlanningEvidenceState,
+  REVIEW_CHANGE_CATEGORIES,
+  resolveLatestWorkspaceWriteTimestamp,
+  type SkillDocument,
+} from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import {
@@ -8,11 +18,11 @@ import {
 import { KNOWLEDGE_SOURCE_TYPES } from "./knowledge-search-core.js";
 import { buildLearningResearchOutputs } from "./learning-research.js";
 import {
-  REVIEW_CHANGE_CATEGORIES,
   REVIEW_CHANGED_FILE_CLASSES,
   classifyReviewChangedFiles,
   coerceReviewChangeCategories,
   coerceReviewChangedFileClasses,
+  type ReviewChangeCategory,
 } from "./review-classification.js";
 import {
   deriveReviewLaneActivationPlan,
@@ -81,6 +91,42 @@ function readStringArray(value: unknown): string[] | undefined {
   return items.length === value.length ? items : undefined;
 }
 
+function resolveVerificationEvidenceState(input: {
+  verificationOutcomes: ReturnType<BrewvaToolOptions["runtime"]["events"]["queryStructured"]>;
+  latestWriteAt: number;
+  hasConsumedVerificationEvidence: boolean;
+}): ReviewEvidenceState {
+  const verificationOutcomes = input.verificationOutcomes.toSorted(
+    (left, right) => left.timestamp - right.timestamp || left.id.localeCompare(right.id),
+  );
+  if (verificationOutcomes.length === 0) {
+    return input.hasConsumedVerificationEvidence ? "present" : "missing";
+  }
+  let sawVerificationAfterLatestWrite = input.latestWriteAt === 0;
+  let sawStaleVerification = false;
+  for (let index = verificationOutcomes.length - 1; index >= 0; index -= 1) {
+    const event = verificationOutcomes[index]!;
+    if (event.timestamp < input.latestWriteAt) {
+      break;
+    }
+    sawVerificationAfterLatestWrite = true;
+    if (!isRecord(event.payload)) {
+      continue;
+    }
+    const evidenceFreshness = readString(event.payload.evidenceFreshness)?.toLowerCase();
+    if (evidenceFreshness === "fresh") {
+      return "present";
+    }
+    if (evidenceFreshness === "stale" || evidenceFreshness === "mixed") {
+      sawStaleVerification = true;
+    }
+  }
+  if (!sawVerificationAfterLatestWrite || sawStaleVerification) {
+    return "stale";
+  }
+  return input.hasConsumedVerificationEvidence ? "present" : "missing";
+}
+
 function coercePlanningPosture(value: unknown): ReviewPlanningPosture | undefined {
   return value === "trivial" || value === "moderate" || value === "complex" || value === "high_risk"
     ? value
@@ -96,7 +142,7 @@ function coerceEvidenceStateRecord(
 ):
   | Partial<
       Record<
-        "impact_map" | "design_spec" | "verification_evidence" | "risk_register",
+        "impact_map" | "verification_evidence" | (typeof PLANNING_EVIDENCE_KEYS)[number],
         ReviewEvidenceState
       >
     >
@@ -110,16 +156,11 @@ function coerceEvidenceStateRecord(
   }
   const out: Partial<
     Record<
-      "impact_map" | "design_spec" | "verification_evidence" | "risk_register",
+      "impact_map" | "verification_evidence" | (typeof PLANNING_EVIDENCE_KEYS)[number],
       ReviewEvidenceState
     >
   > = {};
-  for (const key of [
-    "impact_map",
-    "design_spec",
-    "verification_evidence",
-    "risk_register",
-  ] as const) {
+  for (const key of ["impact_map", ...PLANNING_EVIDENCE_KEYS, "verification_evidence"] as const) {
     if (!hasOwn(value, key)) {
       continue;
     }
@@ -192,28 +233,58 @@ function isReviewTerminalStatus(
 
 type ReviewEvidenceStateRecord = Partial<
   Record<
-    "impact_map" | "design_spec" | "verification_evidence" | "risk_register",
+    "impact_map" | "verification_evidence" | (typeof PLANNING_EVIDENCE_KEYS)[number],
     ReviewEvidenceState
   >
 >;
 
-function deriveEvidenceStateFromConsumedOutputs(
-  consumedOutputs: Record<string, unknown>,
-  consumedKeys: readonly string[],
-): ReviewEvidenceStateRecord | undefined {
+function deriveEvidenceStateFromConsumedOutputs(input: {
+  runtime: BrewvaToolOptions["runtime"];
+  sessionId: string;
+  consumedOutputs: Record<string, unknown>;
+  consumedKeys: readonly string[];
+}): ReviewEvidenceStateRecord | undefined {
   const out: ReviewEvidenceStateRecord = {};
-  for (const key of [
-    "impact_map",
-    "design_spec",
-    "verification_evidence",
-    "risk_register",
-  ] as const) {
-    if (!consumedKeys.includes(key)) {
+  const sessionEvents = input.runtime.events.query(input.sessionId);
+  const latestWriteAt = resolveLatestWorkspaceWriteTimestamp(sessionEvents);
+  const planningEvidenceState = derivePlanningEvidenceState({
+    consumedOutputs: input.consumedOutputs,
+    latestOutputTimestamps: collectLatestPlanningOutputTimestamps(sessionEvents),
+    latestWriteAt,
+  });
+  const verificationOutcomes = input.runtime.events.queryStructured(input.sessionId, {
+    type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+  });
+  for (const key of ["impact_map", ...PLANNING_EVIDENCE_KEYS, "verification_evidence"] as const) {
+    if (!input.consumedKeys.includes(key)) {
       continue;
     }
-    out[key] = hasOwn(consumedOutputs, key) ? "present" : "missing";
+    if (key === "verification_evidence") {
+      out[key] = resolveVerificationEvidenceState({
+        verificationOutcomes,
+        latestWriteAt,
+        hasConsumedVerificationEvidence: hasOwn(input.consumedOutputs, key),
+      });
+      continue;
+    }
+    if (key === "impact_map") {
+      out[key] = hasOwn(input.consumedOutputs, key) ? "present" : "missing";
+      continue;
+    }
+    out[key] = planningEvidenceState[key];
   }
   return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function deriveRiskCategoriesFromConsumedOutputs(
+  consumedOutputs: Record<string, unknown>,
+): ReviewChangeCategory[] | undefined {
+  const planningArtifacts = coercePlanningArtifactSet(consumedOutputs);
+  if (!planningArtifacts.riskRegister || planningArtifacts.riskRegister.length === 0) {
+    return undefined;
+  }
+  const categories = collectPlanningRiskCategories(planningArtifacts.riskRegister);
+  return categories.length > 0 ? [...new Set(categories)] : undefined;
 }
 
 function buildReviewEnsembleOutputs(input: {
@@ -342,12 +413,19 @@ function buildReviewEnsembleOutputs(input: {
   const changedPaths = readStringArray(consumedOutputs.files_changed) ?? [];
   const derivedChangeCategories =
     changeCategories ?? deriveImpactMapChangeCategories(consumedOutputs.impact_map);
+  const derivedRiskCategories = deriveRiskCategoriesFromConsumedOutputs(consumedOutputs);
   const derivedChangedFileClasses =
     changedFileClasses ??
     deriveImpactMapChangedFileClasses(consumedOutputs.impact_map, changedPaths) ??
     classifyReviewChangedFiles(changedPaths);
   const derivedEvidenceState =
-    evidenceState ?? deriveEvidenceStateFromConsumedOutputs(consumedOutputs, consumedKeys);
+    evidenceState ??
+    deriveEvidenceStateFromConsumedOutputs({
+      runtime: input.runtime,
+      sessionId: input.sessionId,
+      consumedOutputs,
+      consumedKeys,
+    });
 
   const candidateRuns = delegation.listRuns(input.sessionId, {
     ...(requestedRunIds ? { runIds: requestedRunIds } : {}),
@@ -392,6 +470,7 @@ function buildReviewEnsembleOutputs(input: {
   const activationPlan = deriveReviewLaneActivationPlan({
     planningPosture,
     ...(derivedChangeCategories ? { changeCategories: derivedChangeCategories } : {}),
+    ...(derivedRiskCategories ? { riskCategories: derivedRiskCategories } : {}),
     ...(derivedChangedFileClasses ? { changedFileClasses: derivedChangedFileClasses } : {}),
     ...(derivedEvidenceState ? { evidenceState: derivedEvidenceState } : {}),
   });
@@ -463,8 +542,10 @@ export function createSkillCompleteTool(options: BrewvaToolOptions): ToolDefinit
                 {
                   impact_map: Type.Optional(REVIEW_EVIDENCE_STATE_SCHEMA),
                   design_spec: Type.Optional(REVIEW_EVIDENCE_STATE_SCHEMA),
+                  execution_plan: Type.Optional(REVIEW_EVIDENCE_STATE_SCHEMA),
                   verification_evidence: Type.Optional(REVIEW_EVIDENCE_STATE_SCHEMA),
                   risk_register: Type.Optional(REVIEW_EVIDENCE_STATE_SCHEMA),
+                  implementation_targets: Type.Optional(REVIEW_EVIDENCE_STATE_SCHEMA),
                 },
                 { additionalProperties: false },
               ),
@@ -591,7 +672,29 @@ export function createSkillCompleteTool(options: BrewvaToolOptions): ToolDefinit
         );
       }
 
-      options.runtime.skills.complete(sessionId, outputs);
+      const finalized = options.runtime.skills.complete(sessionId, outputs);
+      if (!finalized.ok) {
+        const details = [
+          finalized.missing.length > 0
+            ? `Missing required outputs: ${finalized.missing.join(", ")}`
+            : null,
+          finalized.invalid.length > 0
+            ? `Invalid required outputs: ${finalized.invalid
+                .map((entry) => `${entry.name} (${entry.reason})`)
+                .join(", ")}`
+            : null,
+        ]
+          .filter((entry): entry is string => Boolean(entry))
+          .join(". ");
+        return failTextResult(`Skill completion rejected after verification. ${details}`, {
+          ok: false,
+          missing: finalized.missing,
+          invalid: finalized.invalid,
+          verification,
+          ...(learningResearchSynthesis ? { learningResearchSynthesis } : {}),
+          ...(reviewSynthesis ? { reviewSynthesis } : {}),
+        });
+      }
       const message = verification.readOnly
         ? "Skill completed (read-only, no verification needed)."
         : "Skill completed and verification gate passed.";

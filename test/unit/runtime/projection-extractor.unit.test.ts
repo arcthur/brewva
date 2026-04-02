@@ -164,10 +164,51 @@ describe("projection extractor", () => {
         type: "skill_completed",
         payload: {
           skillName: "design",
-          outputKeys: ["design_spec", "execution_plan"],
+          outputKeys: [
+            "design_spec",
+            "execution_plan",
+            "execution_mode_hint",
+            "risk_register",
+            "implementation_targets",
+          ],
           outputs: {
             design_spec: "Document the runtime contract.",
-            execution_plan: ["Update runtime helper", "Add contract tests"],
+            execution_plan: [
+              {
+                step: "Update runtime helper",
+                intent: "Keep workflow derivation contract-first and explicit.",
+                owner: "runtime.workflow",
+                exit_criteria: "Workflow helper emits canonical design metadata.",
+                verification_intent: "Unit tests cover canonical artifact extraction.",
+              },
+              {
+                step: "Add contract tests",
+                intent: "Prove projections survive replay with the new plan schema.",
+                owner: "test.runtime",
+                exit_criteria: "Projection extraction covers canonical design outputs.",
+                verification_intent:
+                  "Projection extraction tests assert workflow artifact statements.",
+              },
+            ],
+            execution_mode_hint: "coordinated_rollout",
+            risk_register: [
+              {
+                risk: "Projection extraction could accept weak planning shapes and lose structure.",
+                category: "persisted_format",
+                severity: "medium",
+                mitigation: "Record canonical planning artifacts directly from skill outputs.",
+                required_evidence: ["projection_extractor_contract_tests"],
+                owner_lane: "review-boundaries",
+              },
+            ],
+            implementation_targets: [
+              {
+                target: "packages/brewva-runtime/src/workflow/derivation.ts",
+                kind: "module",
+                owner_boundary: "runtime.workflow",
+                reason: "Projection extraction depends on workflow derivation helpers.",
+              },
+            ],
           },
         },
       }),

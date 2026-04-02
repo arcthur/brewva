@@ -15,6 +15,116 @@ function buildAssistantText(payload: Record<string, unknown>): string {
 }
 
 describe("subagent structured outcome normalization", () => {
+  test("parses canonical plan outcomes and synthesizes design skill outputs", () => {
+    const outcome = extractStructuredOutcomeData({
+      resultMode: "plan",
+      skillName: "design",
+      assistantText: buildAssistantText({
+        kind: "plan",
+        skillName: "design",
+        designSpec: "Keep planning explicit and machine-readable.",
+        executionPlan: [
+          {
+            step: "Promote plan to a first-class delegated result.",
+            intent: "Stop encoding planning as exploration.",
+            owner: "gateway.subagents",
+            exit_criteria: "Structured outcomes parse into kind=plan.",
+            verification_intent: "Unit tests cover plan parsing and skill output synthesis.",
+          },
+        ],
+        executionModeHint: "coordinated_rollout",
+        riskRegister: [
+          {
+            risk: "Planning remains prose-only and cannot drive downstream review.",
+            category: "public_api",
+            severity: "high",
+            mitigation: "Require canonical planning artifacts on every plan outcome.",
+            required_evidence: ["plan_contract_tests"],
+            owner_lane: "review-boundaries",
+          },
+        ],
+        implementationTargets: [
+          {
+            target: "packages/brewva-gateway/src/subagents/structured-outcome.ts",
+            kind: "module",
+            owner_boundary: "gateway.subagents",
+            reason: "Structured plan outcomes are normalized here.",
+          },
+        ],
+      }),
+    });
+
+    expect(outcome.data).toMatchObject({
+      kind: "plan",
+      executionModeHint: "coordinated_rollout",
+    });
+    expect(outcome.skillOutputs).toMatchObject({
+      design_spec: "Keep planning explicit and machine-readable.",
+      execution_mode_hint: "coordinated_rollout",
+      execution_plan: [
+        expect.objectContaining({
+          owner: "gateway.subagents",
+          verification_intent: "Unit tests cover plan parsing and skill output synthesis.",
+        }),
+      ],
+      risk_register: [
+        expect.objectContaining({
+          category: "public_api",
+          owner_lane: "review-boundaries",
+        }),
+      ],
+      implementation_targets: [
+        expect.objectContaining({
+          target: "packages/brewva-gateway/src/subagents/structured-outcome.ts",
+        }),
+      ],
+    });
+  });
+
+  test("rejects plan outcomes when risk taxonomy drifts from the canonical contract", () => {
+    const outcome = extractStructuredOutcomeData({
+      resultMode: "plan",
+      skillName: "design",
+      assistantText: buildAssistantText({
+        kind: "plan",
+        skillName: "design",
+        designSpec: "Keep planning taxonomy aligned with canonical review and ownership lanes.",
+        executionPlan: [
+          {
+            step: "Emit a structured planning payload.",
+            intent: "Exercise canonical plan parsing.",
+            owner: "gateway.subagents",
+            exit_criteria: "Structured outcome parsing accepts only canonical taxonomy.",
+            verification_intent:
+              "Invalid categories are rejected before skill outputs are synthesized.",
+          },
+        ],
+        executionModeHint: "coordinated_rollout",
+        riskRegister: [
+          {
+            risk: "A drifted planning taxonomy could bypass downstream lane activation.",
+            category: "not_a_real_category",
+            severity: "high",
+            mitigation: "Reject non-canonical planning categories during parsing.",
+            required_evidence: ["plan_taxonomy_contract_tests"],
+            owner_lane: "review-boundaries",
+          },
+        ],
+        implementationTargets: [
+          {
+            target: "packages/brewva-gateway/src/subagents/structured-outcome.ts",
+            kind: "module",
+            owner_boundary: "gateway.subagents",
+            reason: "Plan parsing happens here.",
+          },
+        ],
+      }),
+    });
+
+    expect(outcome.data).toBeUndefined();
+    expect(outcome.parseError).toBe("invalid_structured_outcome_payload");
+  });
+
   test("rejects QA structured outcomes when the only command check omits exitCode", () => {
     const outcome = extractStructuredOutcomeData({
       resultMode: "qa",

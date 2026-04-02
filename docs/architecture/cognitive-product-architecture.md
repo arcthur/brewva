@@ -155,8 +155,8 @@ Current responsibilities:
 - workflow inspection presentation
   - exposes explicit pull-based workflow surfaces such as `workflow_status`
     and working projection entries
-  - summarizes derived workflow artifact signals and blockers without default
-    turn-time injection
+  - summarizes derived workflow artifact signals, planning assurance posture,
+    and blockers without default turn-time injection
   - stays explicit and advisory-only instead of turning product UX into a hidden planner
 - closure presentation
   - keeps verification and acceptance separate
@@ -194,9 +194,9 @@ Current product surfaces:
 - `precedent_audit` as an explicit repository-precedent maintenance tool
 - `precedent_sweep` as an explicit repository-wide precedent maintenance tool
 - working projection entries such as `workflow.discovery`, `workflow.strategy_review`,
-  `workflow.learning_research`, `workflow.design`, `workflow.review`,
-  `workflow.qa`, `workflow.ship`, `workflow.iteration_metric`, and
-  `workflow.iteration_guard`
+  `workflow.learning_research`, `workflow.design`, `workflow.execution_plan`,
+  `workflow.review`, `workflow.qa`, `workflow.ship`,
+  `workflow.iteration_metric`, and `workflow.iteration_guard`
 
 Related productized repository-precedent surfaces also include:
 

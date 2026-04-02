@@ -4,7 +4,7 @@
 
 - Status: `promoted`
 - Owner: runtime maintainers
-- Last reviewed: `2026-04-01`
+- Last reviewed: `2026-04-02`
 - Promotion target:
   - `docs/architecture/cognitive-product-architecture.md`
   - `docs/architecture/system-architecture.md`
@@ -44,11 +44,18 @@ Stable implementation now includes:
 - read-only specialists gained dedicated repository observation tools:
   `git_status`, `git_diff`, and `git_log`
 - `discovery` now resolves through `explore`
-- `design` emits `implementation_targets`
+- delegated `plan` is a first-class result posture rather than an
+  `exploration` variant
+- delegated `plan` persists canonical planning data and projects it into the
+  `design` artifact lane
+- `design` now emits the full planning handoff set:
+  `design_spec`, `execution_plan`, `execution_mode_hint`, `risk_register`, and
+  `implementation_targets`
 - canonical QA semantics preserve `pass`, `fail`, and `inconclusive`, and a
-  `pass` requires executable evidence plus at least one adversarial probe
-- delegated outcome contracts are canonical-only: `exploration`, `review`,
-  `qa`, and `patch`
+  `pass` requires executable evidence, at least one adversarial probe, and
+  coverage of plan-declared `required_evidence`
+- delegated outcome contracts are canonical-only: `exploration`, `plan`,
+  `review`, `qa`, and `patch`
 
 Stable references:
 
@@ -80,7 +87,9 @@ The promoted contract is:
    explicit through `contextProfile`.
 6. Internal review lanes remain internal fan-out behind the single public
    `review` boundary.
-7. Delegated outcome kinds are canonical-only; runtime verification remains a
+7. Delegated `plan` is a distinct contract that produces machine-readable
+   planning handoff artifacts rather than planning-flavored exploration prose.
+8. Delegated outcome kinds are canonical-only; runtime verification remains a
    separate kernel authority rather than a delegated specialist result kind.
 
 ## Validation Status
@@ -90,6 +99,7 @@ Promotion is backed by:
 - contract and routing coverage for the new delegated public surface
 - QA semantic validation and normalization coverage
 - workflow derivation coverage for canonical QA outcome data
+- contract and workflow coverage for canonical delegated `plan` outcomes
 - replay/inspect coverage for historical delegated `verification` records
 - docs coverage across architecture, reference, and operator journeys
 - repository verification:

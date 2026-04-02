@@ -1,7 +1,10 @@
 import type { BrewvaEventRecord } from "../contracts/index.js";
 import { TASK_EVENT_TYPE, coerceTaskLedgerPayload } from "../task/ledger.js";
 import { TRUTH_EVENT_TYPE, coerceTruthLedgerPayload } from "../truth/ledger.js";
-import { deriveWorkflowArtifactsFromEvent } from "../workflow/derivation.js";
+import {
+  deriveWorkflowArtifacts,
+  deriveWorkflowArtifactsFromEvent,
+} from "../workflow/derivation.js";
 import type {
   ProjectionExtractionResult,
   ProjectionSourceRef,
@@ -24,7 +27,10 @@ function normalizeLabelSegment(value: string): string {
     .replace(/^_+|_+$/g, "");
 }
 
-function createSourceRef(event: BrewvaEventRecord, evidenceId?: string): ProjectionSourceRef {
+export function createProjectionSourceRef(
+  event: BrewvaEventRecord,
+  evidenceId?: string,
+): ProjectionSourceRef {
   return {
     eventId: event.id,
     eventType: event.type,
@@ -59,7 +65,7 @@ function dedupeCandidates(candidates: ProjectionUnitCandidate[]): ProjectionUnit
   return [...merged.values()];
 }
 
-function formatWorkflowProjectionStatement(input: {
+export function formatWorkflowProjectionStatement(input: {
   state: string;
   freshness: string;
   summary: string;
@@ -86,8 +92,10 @@ function extractTruth(event: BrewvaEventRecord): ProjectionExtractionResult {
   }
 
   const fact = payload.fact;
-  const baseRef = createSourceRef(event);
-  const evidenceRefs = fact.evidenceIds.map((evidenceId) => createSourceRef(event, evidenceId));
+  const baseRef = createProjectionSourceRef(event);
+  const evidenceRefs = fact.evidenceIds.map((evidenceId) =>
+    createProjectionSourceRef(event, evidenceId),
+  );
   const candidate: ProjectionUnitCandidate = {
     sessionId: event.sessionId,
     status: fact.status === "resolved" ? "resolved" : "active",
@@ -127,7 +135,7 @@ function extractTask(event: BrewvaEventRecord): ProjectionExtractionResult {
     };
   }
 
-  const sourceRef = createSourceRef(event);
+  const sourceRef = createProjectionSourceRef(event);
   const upserts: ProjectionUnitCandidate[] = [];
   const resolves = [];
   switch (payload.kind) {
@@ -229,7 +237,7 @@ function extractTask(event: BrewvaEventRecord): ProjectionExtractionResult {
 }
 
 function extractWorkflow(event: BrewvaEventRecord): ProjectionExtractionResult {
-  const sourceRef = createSourceRef(event);
+  const sourceRef = createProjectionSourceRef(event);
   const upserts = deriveWorkflowArtifactsFromEvent(event).map(
     (artifact): ProjectionUnitCandidate => ({
       sessionId: event.sessionId,
@@ -257,6 +265,55 @@ function extractWorkflow(event: BrewvaEventRecord): ProjectionExtractionResult {
   return {
     upserts: dedupeCandidates(upserts),
     resolves: [],
+  };
+}
+
+export function extractWorkflowProjectionFromEvents(
+  sessionId: string,
+  events: readonly BrewvaEventRecord[],
+): ProjectionExtractionResult {
+  const workflowArtifacts = deriveWorkflowArtifacts(events);
+  if (workflowArtifacts.length === 0) {
+    return emptyResult();
+  }
+  const eventById = new Map(events.map((event) => [event.id, event] as const));
+  const upserts = workflowArtifacts.map(
+    (artifact): ProjectionUnitCandidate => ({
+      sessionId,
+      status: "active",
+      projectionKey: `workflow_artifact:${artifact.kind}`,
+      label: `workflow.${artifact.kind}`,
+      statement: formatWorkflowProjectionStatement({
+        state: artifact.state,
+        freshness: artifact.freshness,
+        summary: artifact.summary,
+      }),
+      sourceRefs: artifact.sourceEventIds.flatMap((eventId) => {
+        const sourceEvent = eventById.get(eventId);
+        return sourceEvent ? [createProjectionSourceRef(sourceEvent)] : [];
+      }),
+      metadata: {
+        source: "workflow_event",
+        projectionGroup: "workflow_artifact",
+        workflowKind: artifact.kind,
+        workflowState: artifact.state,
+        workflowFreshness: artifact.freshness,
+        sourceSkillNames: artifact.sourceSkillNames,
+        outputKeys: artifact.outputKeys,
+      },
+    }),
+  );
+  return {
+    upserts: dedupeCandidates(upserts),
+    resolves: [
+      {
+        sessionId,
+        sourceType: "projection_group",
+        groupKey: "workflow_artifact",
+        keepProjectionKeys: upserts.map((candidate) => candidate.projectionKey),
+        resolvedAt: Math.max(...events.map((event) => event.timestamp), Date.now()),
+      },
+    ],
   };
 }
 

@@ -284,7 +284,7 @@ function parseOutputContract(
     case "json": {
       assertAllowedKeys(
         data,
-        ["kind", "min_keys", "min_items", "required_fields", "field_contracts"],
+        ["kind", "min_keys", "min_items", "required_fields", "field_contracts", "item_contract"],
         filePath,
         fieldPath,
       );
@@ -297,6 +297,9 @@ function parseOutputContract(
         ),
         fieldContracts: Object.prototype.hasOwnProperty.call(data, "field_contracts")
           ? parseOutputContractMap(data.field_contracts, filePath, `${fieldPath}.field_contracts`)
+          : undefined,
+        itemContract: Object.prototype.hasOwnProperty.call(data, "item_contract")
+          ? parseOutputContract(data.item_contract, filePath, `${fieldPath}.item_contract`)
           : undefined,
       };
     }

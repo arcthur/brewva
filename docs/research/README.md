@@ -75,3 +75,10 @@ Archived and superseded notes may intentionally describe historical
 terminology, including the older delegation `profile` model. Current
 delegation contracts should be read from stable docs and the promoted
 skill-first delegation RFC.
+
+Promoted notes may also retain intermediate delegation terminology inside
+historical rationale sections. When a promoted note includes a current-state
+clarification, that clarification overrides older examples or transition code
+snippets. Current delegated result kinds should be read from stable docs:
+`exploration`, `plan`, `review`, `qa`, and `patch`, while
+`runtime.verification.*` remains a separate kernel authority.

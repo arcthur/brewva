@@ -106,9 +106,11 @@ consumes:
   - change_set
   - files_changed
   - design_spec
+  - execution_plan
   - verification_evidence
   - impact_map
   - risk_register
+  - implementation_targets
   - planning_posture
 requires: []
 ---
@@ -134,14 +136,19 @@ Use this skill when:
 Summarize scope, intent, critical paths, consulted precedents, and available
 evidence.
 
+Treat `design_spec`, `execution_plan`, `risk_register`, and
+`implementation_targets` as core planning evidence. Planning evidence becomes
+stale once later workspace writes land, and missing or stale planning evidence
+must stay visible in `review_report.missing_evidence`.
+
 ### Step 2: Evaluate risk lanes
 
 Always inspect correctness / invariants, contracts / boundaries, and
 verification / operability. Activate conditional lanes from canonical
 `impact_map.change_categories` when available, otherwise from canonical
-`changedFileClasses` derived from `impact_map.changed_file_classes` or the
-current `files_changed` artifact. Widen when the available evidence is stale or
-missing.
+`risk_register.category`, then from canonical `changedFileClasses` derived from
+`impact_map.changed_file_classes` or the current `files_changed` artifact.
+Widen when the available evidence is stale or missing.
 
 For non-trivial review work, prefer explicit internal lane fan-out through
 `subagent_fanout` using the built-in review delegates:
@@ -150,10 +157,11 @@ For non-trivial review work, prefer explicit internal lane fan-out through
 - conditional: `review-security`, `review-concurrency`,
   `review-compatibility`, `review-performance`
 
-If `impact_map`, `design_spec`, or `verification_evidence` is weak, stale, or
-missing, widen the lane set rather than narrowing it. If canonical
-classification is unavailable for non-trivial review, widen to the full
-conditional lane set instead of guessing.
+If `impact_map`, planning evidence, or `verification_evidence` is weak, stale,
+or missing, widen the lane set rather than narrowing it. `merge_decision`
+cannot be `ready` while planning evidence or verification evidence is stale or
+missing. If canonical classification is unavailable for non-trivial review,
+widen to the full conditional lane set instead of guessing.
 
 Each delegated review lane should emit a structured `review` outcome that keeps
 the lane visible to the parent reviewer. The canonical child fields are:
@@ -231,6 +239,7 @@ Use these questions to keep the review anchored in behavior instead of style:
 Before setting `merge_decision` to `ready`, mentally clear this gate:
 
 - [ ] The intended behavior still matches the current design and scope.
+- [ ] Planning evidence is present enough to judge plan conformance honestly.
 - [ ] Verification evidence is current relative to the latest risky change.
 - [ ] No unresolved finding remains that could corrupt state, break contracts,
       or cause operator-visible regressions.
