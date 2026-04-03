@@ -61,7 +61,7 @@ async function waitForExit(
 }
 
 describe("live: signal handling", () => {
-  runLive("SIGINT emits session_interrupted and exits with code 130", async () => {
+  runLive("SIGINT emits session_turn_transition and exits with code 130", async () => {
     const workspace = createWorkspace("signal");
     writeMinimalConfig(workspace);
 
@@ -110,7 +110,12 @@ describe("live: signal handling", () => {
 
       const eventFile = requireLatestEventFile(workspace, "signal live session");
       const events = parseEventFile(eventFile, { strict: true });
-      expect(events.map((event) => event.type)).toContain("session_interrupted");
+      const signalTransition = events.findLast(
+        (event) =>
+          event.type === "session_turn_transition" && event.payload?.reason === "signal_interrupt",
+      );
+      expect(signalTransition).toBeDefined();
+      expect(signalTransition?.payload?.status).toBe("completed");
     } catch (error) {
       if (skipLiveForProviderRateLimit("signal.live", stdout, stderr)) {
         return;
@@ -184,7 +189,12 @@ describe("live: signal handling", () => {
 
       const eventFile = requireLatestEventFile(workspace, "signal json session");
       const events = parseEventFile(eventFile, { strict: true });
-      expect(events.map((event) => event.type)).toContain("session_interrupted");
+      const signalTransition = events.findLast(
+        (event) =>
+          event.type === "session_turn_transition" && event.payload?.reason === "signal_interrupt",
+      );
+      expect(signalTransition).toBeDefined();
+      expect(signalTransition?.payload?.status).toBe("completed");
     } catch (error) {
       if (skipLiveForProviderRateLimit("signal-json.live", stdout, stderr)) {
         return;

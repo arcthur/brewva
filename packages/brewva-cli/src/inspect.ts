@@ -2,6 +2,10 @@ import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs as parseNodeArgs } from "node:util";
 import {
+  projectHostedTransitionSnapshot,
+  type HostedTransitionSnapshot,
+} from "@brewva/brewva-gateway";
+import {
   BrewvaRuntime,
   PATCH_HISTORY_FILE,
   TASK_EVENT_TYPE,
@@ -114,6 +118,7 @@ interface InspectReport {
     completedSkills: string[];
   };
   verification: InspectVerification;
+  hostedTransitions: HostedTransitionSnapshot;
   ledger: {
     path: string;
     rows: number;
@@ -327,6 +332,7 @@ function buildInspectReport(
   const replaySession =
     listAllReplaySessions(runtime).find((entry) => entry.sessionId === sessionId) ?? null;
   const events = runtime.events.query(sessionId);
+  const structuredEvents = runtime.events.queryStructured(sessionId);
   const taskEvents = runtime.events.query(sessionId, { type: TASK_EVENT_TYPE });
   const truthEvents = runtime.events.query(sessionId, { type: TRUTH_EVENT_TYPE });
   const taskState = foldTaskLedgerEvents(taskEvents);
@@ -441,6 +447,7 @@ function buildInspectReport(
     },
     skills: skillState,
     verification,
+    hostedTransitions: projectHostedTransitionSnapshot(structuredEvents),
     ledger: {
       path: runtime.ledger.getPath(),
       rows: ledgerRows.length,
@@ -516,6 +523,8 @@ function formatInspectText(report: InspectReport): string {
     `Truth: active=${report.truth.activeFacts}/${report.truth.totalFacts} updatedAt=${report.truth.updatedAt ?? "n/a"}`,
     `Skills: active=${report.skills.activeSkill ?? "none"} completed=${renderList(report.skills.completedSkills)}`,
     `Verification: outcome=${report.verification.outcome ?? "n/a"} level=${report.verification.level ?? "n/a"} failed=${renderList(report.verification.failedChecks)} missing=${renderList(report.verification.missingEvidence)}`,
+    `Hosted transitions: sequence=${report.hostedTransitions.sequence} latest=${renderHostedLatest(report.hostedTransitions.latest)} pending=${report.hostedTransitions.pendingFamily ?? "none"} operatorVisible=${report.hostedTransitions.operatorVisibleFactGeneration}`,
+    `Hosted breakers: compaction_retry=${renderHostedBreaker(report.hostedTransitions, "compaction_retry")} provider_fallback_retry=${renderHostedBreaker(report.hostedTransitions, "provider_fallback_retry")} max_output_recovery=${renderHostedBreaker(report.hostedTransitions, "max_output_recovery")}`,
     `Ledger: rows=${report.ledger.rows} integrity=${report.ledger.integrityValid ? "valid" : "invalid"} path=${report.ledger.path}`,
     `Projection: enabled=${report.projection.enabled ? "yes" : "no"} working=${report.projection.workingExists ? "present" : "missing"} path=${report.projection.workingPath}`,
     `Turn WAL: enabled=${report.turnWal.enabled ? "yes" : "no"} pending=${report.turnWal.pendingCount} sessionPending=${report.turnWal.pendingSessionCount} file=${report.turnWal.filePath}`,
@@ -570,6 +579,29 @@ function renderNullableBoolean(value: boolean | null): string {
 
 function renderList(values: string[]): string {
   return values.length > 0 ? values.join(",") : "none";
+}
+
+function renderHostedLatest(latest: HostedTransitionSnapshot["latest"]): string {
+  if (!latest) {
+    return "none";
+  }
+  const parts = [`${latest.reason}:${latest.status}`];
+  if (typeof latest.attempt === "number") {
+    parts.push(`attempt=${latest.attempt}`);
+  }
+  if (latest.breakerOpen) {
+    parts.push("breaker=open");
+  }
+  return parts.join(" ");
+}
+
+function renderHostedBreaker(
+  snapshot: HostedTransitionSnapshot,
+  reason: keyof HostedTransitionSnapshot["breakerOpenByReason"],
+): string {
+  const failures = snapshot.consecutiveFailuresByReason[reason] ?? 0;
+  const breaker = snapshot.breakerOpenByReason[reason] === true ? "open" : "closed";
+  return `${failures}/${breaker}`;
 }
 
 export async function runInspectCli(argv: string[]): Promise<number> {

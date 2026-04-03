@@ -21,13 +21,38 @@ import type { BrewvaSemanticOracle } from "./semantic-oracle.js";
 
 export type BrewvaToolSurface = "base" | "skill" | "operator";
 
+export type BrewvaToolInterruptBehavior = "cancel" | "block" | "allow_completion";
+
+export interface BrewvaToolExecutionTraits {
+  concurrencySafe: boolean;
+  interruptBehavior: BrewvaToolInterruptBehavior;
+  streamingEligible: boolean;
+  contextModifying: boolean;
+}
+
+export interface BrewvaToolExecutionTraitResolverInput {
+  toolName: string;
+  args: unknown;
+  cwd?: string | null;
+}
+
+export type BrewvaToolExecutionTraitsResolver = (
+  input: BrewvaToolExecutionTraitResolverInput,
+) => BrewvaToolExecutionTraits | Partial<BrewvaToolExecutionTraits> | undefined;
+
+export type BrewvaToolExecutionTraitsDefinition =
+  | BrewvaToolExecutionTraits
+  | BrewvaToolExecutionTraitsResolver;
+
 export interface BrewvaToolMetadata {
   surface: BrewvaToolSurface;
   governance: ToolGovernanceDescriptor;
+  executionTraits?: BrewvaToolExecutionTraitsDefinition;
 }
 
 export type BrewvaManagedToolDefinition = ToolDefinition & {
   brewva?: BrewvaToolMetadata;
+  brewvaExecutionTraits?: BrewvaToolExecutionTraitsDefinition;
   brewvaAgentParameters?: TSchema;
 };
 

@@ -75,6 +75,18 @@ describe("gateway protocol validator", () => {
     expect(result.params.sessionId).toBe("session-2");
   });
 
+  test("given sessions.abort with user_submit reason, when validating params, then validation succeeds", () => {
+    const result = validateParamsForMethod("sessions.abort", {
+      sessionId: "session-2",
+      reason: "user_submit",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.params.reason).toBe("user_submit");
+  });
+
   test("given sessions.send with turnId, when validating params, then validation succeeds", () => {
     const result = validateParamsForMethod("sessions.send", {
       sessionId: "session-3",

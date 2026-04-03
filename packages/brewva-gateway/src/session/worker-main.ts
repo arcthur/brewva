@@ -3,6 +3,7 @@ import { collectSessionPromptOutput } from "./collect-output.js";
 import { createGatewaySession, type GatewaySessionResult } from "./create-session.js";
 import { applySchedulePromptTrigger } from "./schedule-trigger.js";
 import { TaskProgressWatchdog } from "./task-progress-watchdog.js";
+import { recordSessionTurnTransition } from "./turn-transition.js";
 import type { ParentToWorkerMessage, WorkerToParentMessage } from "./worker-protocol.js";
 import { resolveWorkerTestHarness, type ResolvedWorkerTestHarness } from "./worker-test-harness.js";
 
@@ -162,13 +163,50 @@ async function shutdown(exitCode = 0, reason = "shutdown"): Promise<void> {
   }
 
   if (sessionResult) {
+    const runtime = sessionResult.runtime;
     const agentSessionId = sessionResult.session.sessionManager.getSessionId();
+    const interruptReason =
+      reason === "bridge_timeout"
+        ? ("timeout_interrupt" as const)
+        : reason === "sigterm" || reason === "sigint"
+          ? ("signal_interrupt" as const)
+          : null;
+    const finalizeInterruptTransition = (status: "completed" | "failed", error?: string): void => {
+      if (!interruptReason) {
+        return;
+      }
+      recordSessionTurnTransition(runtime, {
+        sessionId: agentSessionId,
+        reason: interruptReason,
+        status,
+        family: "interrupt",
+        error: error?.trim().length ? error : undefined,
+      });
+    };
+    if (interruptReason === "timeout_interrupt") {
+      recordSessionTurnTransition(runtime, {
+        sessionId: agentSessionId,
+        reason: interruptReason,
+        status: "entered",
+        family: "interrupt",
+        error: reason,
+      });
+    } else if (interruptReason === "signal_interrupt") {
+      recordSessionTurnTransition(runtime, {
+        sessionId: agentSessionId,
+        reason: interruptReason,
+        status: "entered",
+        family: "interrupt",
+        error: reason,
+      });
+    }
     taskProgressWatchdog?.stop();
     taskProgressWatchdog = null;
     try {
       await sessionResult.session.abort();
-    } catch {
-      // best effort
+      finalizeInterruptTransition("completed");
+    } catch (error) {
+      finalizeInterruptTransition("failed", error instanceof Error ? error.message : String(error));
     }
     try {
       sessionResult.session.dispose();
@@ -321,6 +359,7 @@ async function handleSend(
     turnId,
     prompt: message.payload.prompt,
     agentSessionId,
+    walReplayId: message.payload.walReplayId,
     trigger: message.payload.trigger,
   });
 }
@@ -329,6 +368,7 @@ async function runTurn(input: {
   turnId: string;
   prompt: string;
   agentSessionId: string;
+  walReplayId?: string;
   trigger?: Extract<ParentToWorkerMessage, { kind: "send" }>["payload"]["trigger"];
 }): Promise<void> {
   if (!sessionResult) {
@@ -351,9 +391,29 @@ async function runTurn(input: {
     if (input.trigger?.kind === "schedule") {
       applySchedulePromptTrigger(sessionResult.runtime, input.agentSessionId, input.trigger);
     }
+    if (typeof input.walReplayId === "string" && input.walReplayId.trim().length > 0) {
+      recordSessionTurnTransition(sessionResult.runtime, {
+        sessionId: input.agentSessionId,
+        reason: "wal_recovery_resume",
+        status: "entered",
+        family: "recovery",
+        sourceEventId: input.walReplayId,
+        sourceEventType: "turn_wal_recovery_completed",
+      });
+    }
     const fakeAssistantText = workerTestHarness.fakeAssistantText;
     if (fakeAssistantText) {
       recordFakeTurnLifecycle(input.agentSessionId, input.turnId, fakeAssistantText);
+      if (typeof input.walReplayId === "string" && input.walReplayId.trim().length > 0) {
+        recordSessionTurnTransition(sessionResult.runtime, {
+          sessionId: input.agentSessionId,
+          reason: "wal_recovery_resume",
+          status: "completed",
+          family: "recovery",
+          sourceEventId: input.walReplayId,
+          sourceEventType: "turn_wal_recovery_completed",
+        });
+      }
       send({
         kind: "event",
         event: "session.turn.end",
@@ -361,6 +421,7 @@ async function runTurn(input: {
           sessionId: requestedSessionId,
           agentSessionId: input.agentSessionId,
           turnId: input.turnId,
+          attemptId: "attempt-1",
           assistantText: fakeAssistantText,
           toolOutputs: [],
           ts: Date.now(),
@@ -385,6 +446,16 @@ async function runTurn(input: {
         });
       },
     });
+    if (typeof input.walReplayId === "string" && input.walReplayId.trim().length > 0) {
+      recordSessionTurnTransition(sessionResult.runtime, {
+        sessionId: input.agentSessionId,
+        reason: "wal_recovery_resume",
+        status: "completed",
+        family: "recovery",
+        sourceEventId: input.walReplayId,
+        sourceEventType: "turn_wal_recovery_completed",
+      });
+    }
 
     send({
       kind: "event",
@@ -393,12 +464,24 @@ async function runTurn(input: {
         sessionId: requestedSessionId,
         agentSessionId: input.agentSessionId,
         turnId: input.turnId,
+        attemptId: output.attemptId,
         assistantText: output.assistantText,
         toolOutputs: output.toolOutputs,
         ts: Date.now(),
       },
     });
   } catch (error) {
+    if (typeof input.walReplayId === "string" && input.walReplayId.trim().length > 0) {
+      recordSessionTurnTransition(sessionResult.runtime, {
+        sessionId: input.agentSessionId,
+        reason: "wal_recovery_resume",
+        status: "failed",
+        family: "recovery",
+        sourceEventId: input.walReplayId,
+        sourceEventType: "turn_wal_recovery_completed",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     send({
       kind: "event",
       event: "session.turn.error",
@@ -429,7 +512,26 @@ async function handleAbort(
   }
 
   try {
+    const agentSessionId = sessionResult.session.sessionManager.getSessionId();
+    const shouldRecordUserSubmitInterrupt =
+      message.payload?.reason === "user_submit" && activeTurnId !== null;
+    if (shouldRecordUserSubmitInterrupt) {
+      recordSessionTurnTransition(sessionResult.runtime, {
+        sessionId: agentSessionId,
+        reason: "user_submit_interrupt",
+        status: "entered",
+        family: "interrupt",
+      });
+    }
     await sessionResult.session.abort();
+    if (shouldRecordUserSubmitInterrupt) {
+      recordSessionTurnTransition(sessionResult.runtime, {
+        sessionId: agentSessionId,
+        reason: "user_submit_interrupt",
+        status: "completed",
+        family: "interrupt",
+      });
+    }
     send({
       kind: "result",
       requestId: message.requestId,
@@ -440,6 +542,15 @@ async function handleAbort(
       },
     });
   } catch (error) {
+    if (message.payload?.reason === "user_submit" && activeTurnId !== null) {
+      recordSessionTurnTransition(sessionResult.runtime, {
+        sessionId: sessionResult.session.sessionManager.getSessionId(),
+        reason: "user_submit_interrupt",
+        status: "failed",
+        family: "interrupt",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     send({
       kind: "result",
       requestId: message.requestId,

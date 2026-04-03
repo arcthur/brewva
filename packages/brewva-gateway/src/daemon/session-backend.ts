@@ -61,6 +61,7 @@ export interface SendPromptOptions {
 export interface SendPromptOutput {
   assistantText: string;
   toolOutputs: GatewayToolOutput[];
+  attemptId: string;
 }
 
 export interface SendPromptResult {
@@ -71,6 +72,8 @@ export interface SendPromptResult {
   output?: SendPromptOutput;
 }
 
+export type SessionAbortReason = "user_submit";
+
 export interface SessionBackend {
   start(): Promise<void>;
   stop(): Promise<void>;
@@ -80,7 +83,7 @@ export interface SessionBackend {
     prompt: string,
     options?: SendPromptOptions,
   ): Promise<SendPromptResult>;
-  abortSession(sessionId: string): Promise<boolean>;
+  abortSession(sessionId: string, reason?: SessionAbortReason): Promise<boolean>;
   stopSession(sessionId: string, reason?: string, timeoutMs?: number): Promise<boolean>;
   listWorkers(): SessionWorkerInfo[];
 }

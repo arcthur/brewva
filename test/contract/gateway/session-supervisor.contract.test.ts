@@ -40,6 +40,14 @@ interface SentPromptMessage {
   };
 }
 
+interface AbortMessage {
+  kind: "abort";
+  requestId: string;
+  payload?: {
+    reason?: "user_submit";
+  };
+}
+
 describe("session supervisor safeguards", () => {
   test("given worker limit reached and queue disabled, when openSession is called, then capacity error is raised", async () => {
     const root = mkdtempSync(join(tmpdir(), "brewva-session-supervisor-"));
@@ -317,6 +325,7 @@ describe("session supervisor safeguards", () => {
           sessionId: "queued-session",
           agentSessionId: "agent-queued",
           turnId: "turn-1",
+          attemptId: "attempt-1",
           assistantText: "done",
           toolOutputs: [],
           ts: Date.now(),
@@ -347,6 +356,75 @@ describe("session supervisor safeguards", () => {
         sessionId: "queued-session",
         turnId: "turn-2",
         accepted: true,
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("given waitForCompletion prompt, when worker finishes a recovered attempt, then output preserves the final attempt id", async () => {
+    const root = mkdtempSync(join(tmpdir(), "brewva-session-supervisor-"));
+    const stateDir = join(root, "state");
+    const supervisor = new SessionSupervisor({
+      stateDir,
+      logger: {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        log: () => {},
+      },
+      defaultCwd: root,
+    });
+    try {
+      supervisor.testHooks.seedWorker({
+        sessionId: "completion-session",
+        pid: 10041,
+      });
+
+      let sentMessage: SentPromptMessage | undefined;
+      supervisor.testHooks.replaceWorkerSend("completion-session", (message: unknown) => {
+        if ((message as { kind?: string }).kind === "send") {
+          sentMessage = message as SentPromptMessage;
+        }
+        return true;
+      });
+
+      const pending = supervisor.sendPrompt("completion-session", "prompt", {
+        turnId: "turn-complete",
+        waitForCompletion: true,
+      });
+      const sendMessage = requireDefined(sentMessage, "expected completion worker message");
+
+      supervisor.testHooks.dispatchWorkerMessage("completion-session", {
+        kind: "result",
+        requestId: sendMessage.requestId,
+        ok: true,
+        payload: {
+          sessionId: "completion-session",
+          turnId: "turn-complete",
+          accepted: true,
+        },
+      });
+      supervisor.testHooks.dispatchWorkerMessage("completion-session", {
+        kind: "event",
+        event: "session.turn.end",
+        payload: {
+          sessionId: "completion-session",
+          agentSessionId: "agent-completion",
+          turnId: "turn-complete",
+          attemptId: "attempt-2",
+          assistantText: "recovered answer",
+          toolOutputs: [],
+          ts: Date.now(),
+        },
+      });
+
+      const result = await pending;
+      expect(result.output).toMatchObject({
+        attemptId: "attempt-2",
+        assistantText: "recovered answer",
+        toolOutputs: [],
       });
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -499,6 +577,59 @@ describe("session supervisor safeguards", () => {
           id: "anchor-1",
           name: "release-checkpoint",
           summary: "Release prep is half done.",
+        },
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("given user-submit abort reason, when supervisor forwards abort, then worker payload preserves interrupt source", async () => {
+    const root = mkdtempSync(join(tmpdir(), "brewva-session-supervisor-"));
+    const stateDir = join(root, "state");
+    const supervisor = new SessionSupervisor({
+      stateDir,
+      logger: {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        log: () => {},
+      },
+      defaultCwd: root,
+    });
+    try {
+      supervisor.testHooks.seedWorker({
+        sessionId: "abort-session",
+        pid: 10061,
+      });
+
+      let sentMessage: AbortMessage | undefined;
+      supervisor.testHooks.replaceWorkerSend("abort-session", (message: unknown) => {
+        sentMessage = message as AbortMessage;
+        setTimeout(() => {
+          if (!sentMessage) {
+            return;
+          }
+          supervisor.testHooks.dispatchWorkerMessage("abort-session", {
+            kind: "result",
+            requestId: sentMessage.requestId,
+            ok: true,
+            payload: {
+              sessionId: "abort-session",
+              aborted: true,
+            },
+          });
+        }, 0).unref?.();
+        return true;
+      });
+
+      const aborted = await supervisor.abortSession("abort-session", "user_submit");
+      expect(aborted).toBe(true);
+      expect(sentMessage).toMatchObject({
+        kind: "abort",
+        payload: {
+          reason: "user_submit",
         },
       });
     } finally {

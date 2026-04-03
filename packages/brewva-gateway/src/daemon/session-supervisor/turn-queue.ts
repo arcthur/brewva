@@ -67,6 +67,7 @@ export class SessionTurnQueueCoordinator {
         payload: {
           prompt: queued.prompt,
           turnId: queued.requestedTurnId,
+          walReplayId: queued.walReplayId,
           trigger: queued.trigger,
         },
       });

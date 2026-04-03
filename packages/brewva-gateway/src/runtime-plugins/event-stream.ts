@@ -1,5 +1,6 @@
 import { recordAssistantUsageFromMessage, type BrewvaRuntime } from "@brewva/brewva-runtime";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { resolveBrewvaToolExecutionTraits } from "@brewva/brewva-tools";
+import type { ExtensionAPI, ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { createRuntimeTurnClockStore, type RuntimeTurnClockStore } from "./runtime-turn-clock.js";
 
 type MessageHealth = {
@@ -204,15 +205,58 @@ type PendingToolResult = {
   isError: boolean;
 };
 
+type ActiveToolExecution = {
+  toolName: string;
+};
+
+type ToolExecutionTerminalReason =
+  | "completed"
+  | "failed"
+  | "completed_after_tool_result"
+  | "failed_after_tool_result"
+  | "cancelled_by_interrupt"
+  | "cancelled_by_retry_supersession"
+  | "cancelled_by_shutdown";
+
+export interface EventStreamOptions {
+  toolDefinitionsByName?: ReadonlyMap<string, ToolDefinition>;
+}
+
+function resolveExecutionTraitsPayload(input: {
+  toolDefinitionsByName?: ReadonlyMap<string, ToolDefinition>;
+  toolName: string;
+  args: unknown;
+  cwd?: string | null;
+}): Record<string, unknown> | undefined {
+  const toolDefinition = input.toolDefinitionsByName?.get(input.toolName);
+  if (!toolDefinition) {
+    return undefined;
+  }
+  const traits = resolveBrewvaToolExecutionTraits(toolDefinition, {
+    toolName: input.toolName,
+    args: input.args,
+    cwd: input.cwd,
+  });
+  return {
+    concurrencySafe: traits.concurrencySafe,
+    interruptBehavior: traits.interruptBehavior,
+    streamingEligible: traits.streamingEligible,
+    contextModifying: traits.contextModifying,
+  };
+}
+
 export function registerEventStream(
   extensionApi: ExtensionAPI,
   runtime: BrewvaRuntime,
   turnClock: RuntimeTurnClockStore = createRuntimeTurnClockStore(),
+  options: EventStreamOptions = {},
 ): void {
   const lastAssistantTextBySession = new Map<string, string>();
   const assistantWindowBySession = new Map<string, string>();
   const observedToolCallsBySession = new Map<string, Set<string>>();
   const pendingToolResultsBySession = new Map<string, Map<string, PendingToolResult>>();
+  const activeToolExecutionsBySession = new Map<string, Map<string, ActiveToolExecution>>();
+  const pendingInterruptFlushTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   const getObservedToolCalls = (sessionId: string): Set<string> => {
     const existing = observedToolCallsBySession.get(sessionId);
@@ -230,9 +274,18 @@ export function registerEventStream(
     return created;
   };
 
+  const getActiveToolExecutions = (sessionId: string): Map<string, ActiveToolExecution> => {
+    const existing = activeToolExecutionsBySession.get(sessionId);
+    if (existing) return existing;
+    const created = new Map<string, ActiveToolExecution>();
+    activeToolExecutionsBySession.set(sessionId, created);
+    return created;
+  };
+
   const clearTrackedToolCall = (sessionId: string, toolCallId: string): void => {
     observedToolCallsBySession.get(sessionId)?.delete(toolCallId);
     pendingToolResultsBySession.get(sessionId)?.delete(toolCallId);
+    activeToolExecutionsBySession.get(sessionId)?.delete(toolCallId);
   };
 
   const ensureObservedToolCall = (
@@ -266,13 +319,89 @@ export function registerEventStream(
           toolCallId,
           toolName: pending.toolName,
           isError: pending.isError,
+          terminalReason: pending.isError
+            ? ("failed_after_tool_result" satisfies ToolExecutionTerminalReason)
+            : ("completed_after_tool_result" satisfies ToolExecutionTerminalReason),
+        },
+      });
+      observedToolCallsBySession.get(sessionId)?.delete(toolCallId);
+      activeToolExecutionsBySession.get(sessionId)?.delete(toolCallId);
+    }
+
+    pendingToolResults.clear();
+  };
+
+  const flushActiveToolExecutions = (
+    sessionId: string,
+    terminalReason: Extract<
+      ToolExecutionTerminalReason,
+      "cancelled_by_interrupt" | "cancelled_by_retry_supersession" | "cancelled_by_shutdown"
+    >,
+  ): void => {
+    const activeExecutions = activeToolExecutionsBySession.get(sessionId);
+    if (!activeExecutions || activeExecutions.size === 0) {
+      return;
+    }
+
+    for (const [toolCallId, activeExecution] of activeExecutions) {
+      ensureObservedToolCall(sessionId, toolCallId, activeExecution.toolName);
+      runtime.events.record({
+        sessionId,
+        type: "tool_execution_end",
+        payload: {
+          toolCallId,
+          toolName: activeExecution.toolName,
+          isError: true,
+          terminalReason,
         },
       });
       observedToolCallsBySession.get(sessionId)?.delete(toolCallId);
     }
 
-    pendingToolResults.clear();
+    activeExecutions.clear();
   };
+
+  const clearPendingInterruptFlush = (sessionId: string): void => {
+    const timer = pendingInterruptFlushTimers.get(sessionId);
+    if (!timer) {
+      return;
+    }
+    clearTimeout(timer);
+    pendingInterruptFlushTimers.delete(sessionId);
+  };
+
+  const scheduleInterruptFlush = (sessionId: string): void => {
+    clearPendingInterruptFlush(sessionId);
+    const timer = setTimeout(() => {
+      pendingInterruptFlushTimers.delete(sessionId);
+      flushPendingToolResults(sessionId);
+      flushActiveToolExecutions(sessionId, "cancelled_by_interrupt");
+    }, 50);
+    timer.unref?.();
+    pendingInterruptFlushTimers.set(sessionId, timer);
+  };
+
+  runtime.events.subscribe((event) => {
+    if (
+      event.type !== "session_turn_transition" ||
+      !event.payload ||
+      typeof event.payload !== "object"
+    ) {
+      return;
+    }
+    const payload = event.payload as {
+      reason?: unknown;
+      status?: unknown;
+    };
+    if (
+      payload.status === "completed" &&
+      (payload.reason === "user_submit_interrupt" ||
+        payload.reason === "signal_interrupt" ||
+        payload.reason === "timeout_interrupt")
+    ) {
+      scheduleInterruptFlush(event.sessionId);
+    }
+  });
 
   extensionApi.on("session_start", (_event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
@@ -289,6 +418,8 @@ export function registerEventStream(
   extensionApi.on("session_shutdown", (_event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
     flushPendingToolResults(sessionId);
+    flushActiveToolExecutions(sessionId, "cancelled_by_shutdown");
+    clearPendingInterruptFlush(sessionId);
     runtime.events.record({
       sessionId,
       type: "session_shutdown",
@@ -297,6 +428,7 @@ export function registerEventStream(
     assistantWindowBySession.delete(sessionId);
     observedToolCallsBySession.delete(sessionId);
     pendingToolResultsBySession.delete(sessionId);
+    activeToolExecutionsBySession.delete(sessionId);
     turnClock.clearSession(sessionId);
     runtime.session.clearState(sessionId);
     return undefined;
@@ -415,12 +547,23 @@ export function registerEventStream(
   });
 
   extensionApi.on("tool_execution_start", (event, ctx) => {
+    clearPendingInterruptFlush(ctx.sessionManager.getSessionId());
+    const executionTraits = resolveExecutionTraitsPayload({
+      toolDefinitionsByName: options.toolDefinitionsByName,
+      toolName: event.toolName,
+      args: event.args,
+      cwd: typeof ctx.cwd === "string" ? ctx.cwd : null,
+    });
+    getActiveToolExecutions(ctx.sessionManager.getSessionId()).set(event.toolCallId, {
+      toolName: event.toolName,
+    });
     runtime.events.record({
       sessionId: ctx.sessionManager.getSessionId(),
       type: "tool_execution_start",
       payload: {
         toolCallId: event.toolCallId,
         toolName: event.toolName,
+        executionTraits: executionTraits ?? null,
       },
     });
     return undefined;
@@ -434,6 +577,7 @@ export function registerEventStream(
 
   extensionApi.on("tool_result", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
+    clearPendingInterruptFlush(sessionId);
     if (typeof event.toolCallId !== "string" || typeof event.toolName !== "string") {
       return undefined;
     }
@@ -448,6 +592,7 @@ export function registerEventStream(
 
   extensionApi.on("tool_execution_end", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
+    clearPendingInterruptFlush(sessionId);
     const observedToolCalls = getObservedToolCalls(sessionId);
     if (!observedToolCalls.has(event.toolCallId)) {
       runtime.events.record({
@@ -469,6 +614,9 @@ export function registerEventStream(
         toolCallId: event.toolCallId,
         toolName: event.toolName,
         isError: event.isError,
+        terminalReason: event.isError
+          ? ("failed" satisfies ToolExecutionTerminalReason)
+          : ("completed" satisfies ToolExecutionTerminalReason),
       },
     });
     clearTrackedToolCall(sessionId, event.toolCallId);
@@ -476,6 +624,13 @@ export function registerEventStream(
   });
 
   extensionApi.on("tool_call", (event, ctx) => {
+    clearPendingInterruptFlush(ctx.sessionManager.getSessionId());
+    const executionTraits = resolveExecutionTraitsPayload({
+      toolDefinitionsByName: options.toolDefinitionsByName,
+      toolName: event.toolName,
+      args: event.input,
+      cwd: typeof ctx.cwd === "string" ? ctx.cwd : null,
+    });
     const sessionId = ctx.sessionManager.getSessionId();
     getObservedToolCalls(sessionId).add(event.toolCallId);
     runtime.events.record({
@@ -484,6 +639,7 @@ export function registerEventStream(
       payload: {
         toolCallId: event.toolCallId,
         toolName: event.toolName,
+        executionTraits: executionTraits ?? null,
       },
     });
     return undefined;
@@ -491,7 +647,9 @@ export function registerEventStream(
 
   extensionApi.on("session_before_compact", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
+    clearPendingInterruptFlush(sessionId);
     flushPendingToolResults(sessionId);
+    flushActiveToolExecutions(sessionId, "cancelled_by_retry_supersession");
     runtime.events.record({
       sessionId,
       type: "session_before_compact",

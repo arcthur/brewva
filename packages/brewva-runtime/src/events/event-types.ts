@@ -29,6 +29,14 @@ export const CHANNEL_UPDATE_LOCK_BLOCKED_EVENT_TYPE = "channel_update_lock_block
 export const CHANNEL_UPDATE_REQUESTED_EVENT_TYPE = "channel_update_requested" as const;
 export const CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE =
   "context_compaction_gate_blocked_tool" as const;
+export const CONTEXT_COMPACTION_GATE_CLEARED_EVENT_TYPE =
+  "context_compaction_gate_cleared" as const;
+export const CONTEXT_COMPACTION_AUTO_REQUESTED_EVENT_TYPE =
+  "context_compaction_auto_requested" as const;
+export const CONTEXT_COMPACTION_AUTO_COMPLETED_EVENT_TYPE =
+  "context_compaction_auto_completed" as const;
+export const CONTEXT_COMPACTION_AUTO_FAILED_EVENT_TYPE = "context_compaction_auto_failed" as const;
+export const CONTEXT_COMPACTION_SKIPPED_EVENT_TYPE = "context_compaction_skipped" as const;
 export const COST_UPDATE_EVENT_TYPE = "cost_update" as const;
 export const FILE_SNAPSHOT_CAPTURED_EVENT_TYPE = "file_snapshot_captured" as const;
 export const LEDGER_COMPACTED_EVENT_TYPE = "ledger_compacted" as const;
@@ -40,15 +48,9 @@ export const SESSION_COMPACT_EVENT_TYPE = "session_compact" as const;
 export const SESSION_COMPACT_FAILED_EVENT_TYPE = "session_compact_failed" as const;
 export const SESSION_COMPACT_REQUESTED_EVENT_TYPE = "session_compact_requested" as const;
 export const SESSION_COMPACT_REQUEST_FAILED_EVENT_TYPE = "session_compact_request_failed" as const;
-export const SESSION_INTERRUPTED_EVENT_TYPE = "session_interrupted" as const;
 export const SESSION_SHUTDOWN_EVENT_TYPE = "session_shutdown" as const;
 export const SESSION_START_EVENT_TYPE = "session_start" as const;
-export const SESSION_TURN_COMPACTION_RESUME_DISPATCHED_EVENT_TYPE =
-  "session_turn_compaction_resume_dispatched" as const;
-export const SESSION_TURN_COMPACTION_RESUME_FAILED_EVENT_TYPE =
-  "session_turn_compaction_resume_failed" as const;
-export const SESSION_TURN_COMPACTION_RESUME_REQUESTED_EVENT_TYPE =
-  "session_turn_compaction_resume_requested" as const;
+export const SESSION_TURN_TRANSITION_EVENT_TYPE = "session_turn_transition" as const;
 export const SKILL_ACTIVATED_EVENT_TYPE = "skill_activated" as const;
 export const SKILL_BUDGET_WARNING_EVENT_TYPE = "skill_budget_warning" as const;
 export const SKILL_COMPLETED_EVENT_TYPE = "skill_completed" as const;
@@ -165,6 +167,11 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   CHANNEL_UPDATE_LOCK_BLOCKED_EVENT_TYPE,
   CHANNEL_UPDATE_REQUESTED_EVENT_TYPE,
   CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE,
+  CONTEXT_COMPACTION_GATE_CLEARED_EVENT_TYPE,
+  CONTEXT_COMPACTION_AUTO_REQUESTED_EVENT_TYPE,
+  CONTEXT_COMPACTION_AUTO_COMPLETED_EVENT_TYPE,
+  CONTEXT_COMPACTION_AUTO_FAILED_EVENT_TYPE,
+  CONTEXT_COMPACTION_SKIPPED_EVENT_TYPE,
   COST_UPDATE_EVENT_TYPE,
   FILE_SNAPSHOT_CAPTURED_EVENT_TYPE,
   LEDGER_COMPACTED_EVENT_TYPE,
@@ -176,12 +183,9 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   SESSION_COMPACT_FAILED_EVENT_TYPE,
   SESSION_COMPACT_REQUESTED_EVENT_TYPE,
   SESSION_COMPACT_REQUEST_FAILED_EVENT_TYPE,
-  SESSION_INTERRUPTED_EVENT_TYPE,
   SESSION_SHUTDOWN_EVENT_TYPE,
   SESSION_START_EVENT_TYPE,
-  SESSION_TURN_COMPACTION_RESUME_DISPATCHED_EVENT_TYPE,
-  SESSION_TURN_COMPACTION_RESUME_FAILED_EVENT_TYPE,
-  SESSION_TURN_COMPACTION_RESUME_REQUESTED_EVENT_TYPE,
+  SESSION_TURN_TRANSITION_EVENT_TYPE,
   SKILL_ACTIVATED_EVENT_TYPE,
   SKILL_BUDGET_WARNING_EVENT_TYPE,
   SKILL_COMPLETED_EVENT_TYPE,

@@ -83,4 +83,81 @@ describe("hosted context injection pipeline", () => {
     expect(recordedTypes).toContain("critical_without_compact");
     expect(recordedTypes).toContain("context_composed");
   });
+
+  test("adds a recovery working-set block after hosted recovery transitions", async () => {
+    const runtime = createRuntimeFixture({
+      context: {
+        observeUsage: () => undefined,
+        getCompactionGateStatus: () => ({
+          required: false,
+          reason: null,
+          pressure: {
+            level: "low",
+            usageRatio: 0.2,
+            hardLimitRatio: 0.95,
+            compactionThresholdRatio: 0.8,
+          },
+          recentCompaction: false,
+          windowTurns: 0,
+          lastCompactionTurn: null,
+          turnsSinceCompaction: null,
+        }),
+        getPendingCompactionReason: () => null,
+        buildInjection: async () => ({
+          text: "",
+          entries: [],
+          accepted: false,
+          originalTokens: 0,
+          finalTokens: 0,
+          truncated: false,
+        }),
+      },
+    });
+    const sessionId = "s-recovery-working-set";
+    runtime.task.setSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Continue the interrupted task",
+    });
+    runtime.events.record({
+      sessionId,
+      type: "session_turn_transition",
+      payload: {
+        reason: "provider_fallback_retry",
+        status: "completed",
+        sequence: 1,
+        family: "recovery",
+        attempt: 1,
+        sourceEventId: null,
+        sourceEventType: null,
+        error: null,
+        breakerOpen: false,
+        model: "provider/model-b",
+      },
+    });
+
+    const telemetry = createHostedContextTelemetry(runtime);
+    const { api } = createMockRuntimePluginApi();
+    const pipeline = createHostedContextInjectionPipeline(api, runtime, telemetry, {
+      getTurnIndex: () => 3,
+      setLastRuntimeGateRequired: () => undefined,
+    });
+
+    const result = await pipeline.beforeAgentStart({
+      sessionId,
+      sessionManager: {
+        getLeafId: () => "leaf-recovery",
+      },
+      prompt: "resume",
+      systemPrompt: "base prompt",
+      usage: {
+        tokens: 100,
+        contextWindow: 4000,
+        percent: 0.025,
+      },
+    });
+
+    expect(result.message.content).toContain("[RecoveryWorkingSet]");
+    expect(result.message.content).toContain("latest_reason: provider_fallback_retry");
+    expect(result.message.content).toContain("task_goal: Continue the interrupted task");
+  });
 });

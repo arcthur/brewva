@@ -19,9 +19,49 @@ export interface GatewayToolOutput {
 export interface SessionPromptOutput {
   assistantText: string;
   toolOutputs: GatewayToolOutput[];
+  attemptId: string;
 }
 
+export type SessionTurnAttemptReason =
+  | "initial"
+  | "output_budget_escalation"
+  | "compaction_retry"
+  | "provider_fallback_retry"
+  | "max_output_recovery";
+
 export type SessionStreamChunk =
+  | {
+      kind: "attempt_start";
+      attemptId: string;
+      reason: SessionTurnAttemptReason;
+    }
+  | {
+      kind: "attempt_superseded";
+      attemptId: string;
+      supersededByAttemptId: string;
+      reason: Exclude<SessionTurnAttemptReason, "initial">;
+    }
+  | {
+      kind: "assistant_text_delta";
+      attemptId: string;
+      delta: string;
+    }
+  | {
+      kind: "assistant_thinking_delta";
+      attemptId: string;
+      delta: string;
+    }
+  | {
+      kind: "tool_update";
+      attemptId: string;
+      toolCallId: string;
+      toolName: string;
+      isError: boolean;
+      verdict: ToolDisplayVerdict;
+      text: string;
+    };
+
+type AssistantDeltaStreamChunk =
   | {
       kind: "assistant_text_delta";
       delta: string;
@@ -29,14 +69,6 @@ export type SessionStreamChunk =
   | {
       kind: "assistant_thinking_delta";
       delta: string;
-    }
-  | {
-      kind: "tool_update";
-      toolCallId: string;
-      toolName: string;
-      isError: boolean;
-      verdict: ToolDisplayVerdict;
-      text: string;
     };
 
 export interface CollectSessionPromptOutputOptions {
@@ -46,6 +78,13 @@ export interface CollectSessionPromptOutputOptions {
 }
 
 export interface CollectSessionPromptOutputSession extends SubscribablePromptSession {}
+
+const RECOVERY_ATTEMPT_REASONS = new Map<string, Exclude<SessionTurnAttemptReason, "initial">>([
+  ["output_budget_escalation", "output_budget_escalation"],
+  ["compaction_retry", "compaction_retry"],
+  ["provider_fallback_retry", "provider_fallback_retry"],
+  ["max_output_recovery", "max_output_recovery"],
+]);
 
 function normalizeText(value: string | undefined): string {
   return (value ?? "").trim();
@@ -128,7 +167,7 @@ function asToolExecutionUpdateEvent(event: AgentSessionEvent): {
   };
 }
 
-function asAssistantDeltaChunk(event: AgentSessionEvent): SessionStreamChunk | null {
+function asAssistantDeltaChunk(event: AgentSessionEvent): AssistantDeltaStreamChunk | null {
   if (event.type !== "message_update") {
     return null;
   }
@@ -182,14 +221,48 @@ export async function collectSessionPromptOutput(
   options?: CollectSessionPromptOutputOptions,
 ): Promise<SessionPromptOutput> {
   let latestAssistantText = "";
-  const toolOutputs: GatewayToolOutput[] = [];
-  const seenToolCallIds = new Set<string>();
-  const latestToolStreamTextByCall = new Map<string, string>();
+  let toolOutputs: GatewayToolOutput[] = [];
+  let seenToolCallIds = new Set<string>();
+  let latestToolStreamTextByCall = new Map<string, string>();
+  let attemptSequence = 0;
+  let currentAttemptId = "";
+
+  const beginAttempt = (reason: SessionTurnAttemptReason): string => {
+    attemptSequence += 1;
+    currentAttemptId = `attempt-${attemptSequence}`;
+    latestAssistantText = "";
+    toolOutputs = [];
+    seenToolCallIds = new Set<string>();
+    latestToolStreamTextByCall = new Map<string, string>();
+    emitChunk(options, {
+      kind: "attempt_start",
+      attemptId: currentAttemptId,
+      reason,
+    });
+    return currentAttemptId;
+  };
+
+  const supersedeAttempt = (reason: Exclude<SessionTurnAttemptReason, "initial">): void => {
+    const previousAttemptId = currentAttemptId || beginAttempt("initial");
+    const nextAttemptId = `attempt-${attemptSequence + 1}`;
+    emitChunk(options, {
+      kind: "attempt_superseded",
+      attemptId: previousAttemptId,
+      supersededByAttemptId: nextAttemptId,
+      reason,
+    });
+    beginAttempt(reason);
+  };
+
+  beginAttempt("initial");
 
   const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
     const assistantDelta = asAssistantDeltaChunk(event);
     if (assistantDelta) {
-      emitChunk(options, assistantDelta);
+      emitChunk(options, {
+        ...assistantDelta,
+        attemptId: currentAttemptId,
+      });
     }
 
     const toolUpdateEvent = asToolExecutionUpdateEvent(event);
@@ -208,6 +281,7 @@ export async function collectSessionPromptOutput(
         latestToolStreamTextByCall.set(toolUpdateEvent.toolCallId, streamedText);
         emitChunk(options, {
           kind: "tool_update",
+          attemptId: currentAttemptId,
           toolCallId: toolUpdateEvent.toolCallId,
           toolName: toolUpdateEvent.toolName,
           isError: false,
@@ -244,6 +318,7 @@ export async function collectSessionPromptOutput(
         latestToolStreamTextByCall.set(toolEvent.toolCallId, finalText);
         emitChunk(options, {
           kind: "tool_update",
+          attemptId: currentAttemptId,
           toolCallId: toolEvent.toolCallId,
           toolName: toolEvent.toolName,
           isError: toolEvent.isError,
@@ -264,6 +339,36 @@ export async function collectSessionPromptOutput(
     }
   });
 
+  const sessionId = options?.sessionId?.trim();
+  const unsubscribeTransitions =
+    options?.runtime && sessionId
+      ? options.runtime.events.subscribe((event) => {
+          if (
+            event.sessionId !== sessionId ||
+            event.type !== "session_turn_transition" ||
+            !event.payload ||
+            typeof event.payload !== "object"
+          ) {
+            return;
+          }
+          const payload = event.payload as {
+            reason?: unknown;
+            status?: unknown;
+          };
+          if (payload.status !== "entered") {
+            return;
+          }
+          const reason =
+            typeof payload.reason === "string"
+              ? RECOVERY_ATTEMPT_REASONS.get(payload.reason)
+              : undefined;
+          if (!reason) {
+            return;
+          }
+          supersedeAttempt(reason);
+        })
+      : undefined;
+
   try {
     await sendPromptWithCompactionRecovery(session, prompt, {
       runtime: options?.runtime,
@@ -272,8 +377,10 @@ export async function collectSessionPromptOutput(
     return {
       assistantText: latestAssistantText,
       toolOutputs,
+      attemptId: currentAttemptId,
     };
   } finally {
     unsubscribe();
+    unsubscribeTransitions?.();
   }
 }

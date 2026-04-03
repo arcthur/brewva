@@ -95,6 +95,7 @@ Boundary rule:
   - heartbeat triggers
   - scheduling triggers
   - subagent orchestration
+  - hosted turn transitions and bounded recovery posture
   - replayable delegation outcome handoff
   - future orchestration helpers
 
@@ -199,6 +200,15 @@ State visibility rule:
   inspection products
 - performance-only caches may remain local, but losing them must not widen
   authority or change replayable commitments
+
+Hosted recovery note:
+
+- `session_turn_transition` is a rebuildable control-plane surface for hosted
+  continuation, interruption, and bounded-recovery posture
+- it explains why hosted execution continued or retried; it does not authorize
+  effects, approvals, rollback, or replay truth
+- hosted tool execution traits may shape scheduler behavior, but they remain a
+  control-plane concern rather than a kernel authority descriptor
 
 ## Durability Taxonomy
 

@@ -150,7 +150,13 @@ export {
   type ReviewChangeCategory,
   type ReviewChangedFileClass,
 } from "./review-classification.js";
-export { defineBrewvaTool, getBrewvaAgentParameters, getBrewvaToolMetadata } from "./utils/tool.js";
+export {
+  attachBrewvaToolExecutionTraits,
+  defineBrewvaTool,
+  getBrewvaAgentParameters,
+  getBrewvaToolMetadata,
+  resolveBrewvaToolExecutionTraits,
+} from "./utils/tool.js";
 export {
   BREWVA_STRING_ENUM_CONTRACT,
   BREWVA_STRING_ENUM_CONTRACT_PATHS,
@@ -203,6 +209,7 @@ export {
   type BrewvaModelSelection,
   type BrewvaThinkingLevel,
 } from "./model-selection.js";
+export { selectBrewvaFallbackModel } from "./model-fallback.js";
 export {
   shouldInvokeSemanticRerank,
   type BrewvaSemanticOracle,
@@ -268,6 +275,10 @@ export type {
   SubagentStatusResult,
   SubagentCancelResult,
   BrewvaToolDelegationQuery,
+  BrewvaToolExecutionTraitResolverInput,
+  BrewvaToolExecutionTraits,
+  BrewvaToolExecutionTraitsResolver,
+  BrewvaToolInterruptBehavior,
   BrewvaToolMetadata,
   BrewvaToolRuntime,
 } from "./types.js";

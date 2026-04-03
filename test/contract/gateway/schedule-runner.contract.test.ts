@@ -87,6 +87,7 @@ describe("gateway contract: schedule runner", () => {
           turnId: "turn-1",
           accepted: true,
           output: {
+            attemptId: "attempt-1",
             assistantText: "done",
             toolOutputs: [],
           },
@@ -254,6 +255,7 @@ describe("gateway contract: schedule runner", () => {
           turnId: "turn-1",
           accepted: true,
           output: {
+            attemptId: "attempt-1",
             assistantText: "done",
             toolOutputs: [],
           },

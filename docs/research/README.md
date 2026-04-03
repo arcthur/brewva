@@ -63,6 +63,7 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 - `docs/research/rfc-repository-fitness-plane-and-runtime-boundary.md`
 - `docs/research/rfc-skill-first-delegation-and-execution-envelopes.md`
 - `docs/research/rfc-workflow-artifacts-and-posture-control-plane.md`
+- `docs/research/rfc-hosted-turn-transitions-and-bounded-recovery.md`
 
 ## Archived / superseded notes
 

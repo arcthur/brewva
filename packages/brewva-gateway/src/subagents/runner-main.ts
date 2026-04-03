@@ -328,7 +328,10 @@ async function main(): Promise<void> {
       promptOverride: executionPlan.prompt,
       skill: skillDocument,
     });
-    const output = await collectSessionPromptOutput(childSession.session, prompt);
+    const output = await collectSessionPromptOutput(childSession.session, prompt, {
+      runtime: childSession.runtime,
+      sessionId: childSessionId,
+    });
     const childCostSummary = childSession.runtime.cost.getSummary(childSessionId);
     aggregateChildCost(parentRuntime, spec.parentSessionId, childCostSummary);
     const structuredOutcome = extractStructuredOutcomeData({

@@ -462,6 +462,7 @@ export class SessionSupervisor implements SessionBackend {
         requestedTurnId,
         prompt,
         source,
+        walReplayId: replayWalId,
         trigger: options.trigger,
         waitForCompletion,
         walId,
@@ -473,7 +474,7 @@ export class SessionSupervisor implements SessionBackend {
     return queued;
   }
 
-  async abortSession(sessionId: string): Promise<boolean> {
+  async abortSession(sessionId: string, reason?: "user_submit"): Promise<boolean> {
     const handle = this.workers.get(sessionId);
     if (!handle) {
       return false;
@@ -483,6 +484,7 @@ export class SessionSupervisor implements SessionBackend {
     await this.workerRpc.request(handle, {
       kind: "abort",
       requestId: randomUUID(),
+      payload: reason ? { reason } : undefined,
     });
     return true;
   }

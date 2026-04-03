@@ -61,6 +61,7 @@ It summarizes:
 - tape/event volume and tape pressure
 - folded task/truth state
 - latest verification outcome
+- hosted transition snapshot, including pending family and breaker state
 - ledger chain status
 - projection/WAL/snapshot artifact paths
 - deterministic directory-scoped diagnostics and evidence gaps

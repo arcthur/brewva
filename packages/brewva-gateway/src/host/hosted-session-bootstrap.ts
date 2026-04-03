@@ -15,24 +15,25 @@ import {
 } from "@brewva/brewva-runtime";
 import { createSkillPromotionContextProvider } from "@brewva/brewva-skill-broker";
 import {
+  attachBrewvaToolExecutionTraits,
   buildBrewvaTools,
   resolveBrewvaModelSelection,
+  type BrewvaToolExecutionTraits,
   type BrewvaSemanticOracle,
   type BrewvaToolOrchestration,
 } from "@brewva/brewva-tools";
 import {
   AuthStorage,
   createReadTool,
+  createEditTool,
   createAgentSession,
   DefaultResourceLoader,
-  editTool,
   ModelRegistry,
-  readTool,
   type ReadToolDetails,
   type ReadToolOptions,
   SettingsManager,
   type ToolDefinition,
-  writeTool,
+  createWriteTool,
   type CreateAgentSessionResult,
 } from "@mariozechner/pi-coding-agent";
 import { createHostedTurnPipeline, type RuntimePlugin } from "../runtime-plugins/index.js";
@@ -44,6 +45,12 @@ import {
   createHostedSubagentAdapter,
   type HostedDelegationBuiltinToolName,
 } from "../subagents/index.js";
+import {
+  createHostedToolExecutionCoordinator,
+  wrapToolDefinitionWithHostedExecutionTraits,
+  wrapToolDefinitionsWithHostedExecutionTraits,
+  type HostedToolExecutionCoordinator,
+} from "../tool-execution-traits.js";
 import { createHostedSemanticOracle } from "./semantic-oracle.js";
 
 export interface HostedSessionResult extends CreateAgentSessionResult {
@@ -245,40 +252,62 @@ export function createCompactReadTool(
   };
 }
 
-function resolveBuiltinTools(
-  builtinToolNames: readonly HostedDelegationBuiltinToolName[] | undefined,
-): Array<typeof readTool | typeof editTool | typeof writeTool> {
-  const requested = new Set(builtinToolNames ?? ["read", "edit", "write"]);
-  const tools: Array<typeof readTool | typeof editTool | typeof writeTool> = [];
-  if (requested.has("read")) {
-    tools.push(readTool);
-  }
-  if (requested.has("edit")) {
-    tools.push(editTool);
-  }
-  if (requested.has("write")) {
-    tools.push(writeTool);
-  }
-  return tools;
-}
+const READ_EXECUTION_TRAITS: BrewvaToolExecutionTraits = {
+  concurrencySafe: true,
+  interruptBehavior: "cancel",
+  streamingEligible: false,
+  contextModifying: false,
+};
+
+const MUTATING_FILE_EXECUTION_TRAITS: BrewvaToolExecutionTraits = {
+  concurrencySafe: false,
+  interruptBehavior: "block",
+  streamingEligible: false,
+  contextModifying: true,
+};
 
 function createHostedCustomTools(input: {
   cwd: string;
   settingsManager: SettingsManager;
   builtinToolNames: readonly HostedDelegationBuiltinToolName[] | undefined;
   directManagedTools: ReturnType<typeof createDirectManagedTools>;
+  toolExecutionCoordinator: HostedToolExecutionCoordinator;
 }): ToolDefinition[] | undefined {
   const tools: ToolDefinition[] = [];
   const requestedBuiltinTools = new Set(input.builtinToolNames ?? ["read", "edit", "write"]);
 
   if (requestedBuiltinTools.has("read")) {
-    tools.push(
+    const compactReadTool = attachBrewvaToolExecutionTraits(
       createCompactReadTool({
         cwd: input.cwd,
         getReadToolOptions: () => ({
           autoResizeImages: input.settingsManager.getImageAutoResize(),
         }),
       }) as unknown as ToolDefinition,
+      READ_EXECUTION_TRAITS,
+    );
+    tools.push(
+      wrapToolDefinitionWithHostedExecutionTraits(compactReadTool, input.toolExecutionCoordinator),
+    );
+  }
+
+  if (requestedBuiltinTools.has("edit")) {
+    const editDefinition = attachBrewvaToolExecutionTraits(
+      createEditTool(input.cwd),
+      MUTATING_FILE_EXECUTION_TRAITS,
+    );
+    tools.push(
+      wrapToolDefinitionWithHostedExecutionTraits(editDefinition, input.toolExecutionCoordinator),
+    );
+  }
+
+  if (requestedBuiltinTools.has("write")) {
+    const writeDefinition = attachBrewvaToolExecutionTraits(
+      createWriteTool(input.cwd),
+      MUTATING_FILE_EXECUTION_TRAITS,
+    );
+    tools.push(
+      wrapToolDefinitionWithHostedExecutionTraits(writeDefinition, input.toolExecutionCoordinator),
     );
   }
 
@@ -486,6 +515,8 @@ function createRuntimePlugins(input: {
   orchestration: BrewvaToolOrchestration | undefined;
   delegationStore: HostedDelegationStore | undefined;
   semanticOracle?: BrewvaSemanticOracle;
+  toolExecutionCoordinator: HostedToolExecutionCoordinator;
+  hostedToolDefinitionsByName?: ReadonlyMap<string, ToolDefinition>;
 }): RuntimePlugin[] {
   const managedToolMode = resolveManagedToolMode(input.options.managedToolMode);
   const registerManagedTools = managedToolMode === "runtime_plugin";
@@ -498,6 +529,8 @@ function createRuntimePlugins(input: {
       managedToolNames: input.options.managedToolNames,
       contextProfile: input.options.contextProfile,
       semanticOracle: input.semanticOracle,
+      toolExecutionCoordinator: input.toolExecutionCoordinator,
+      hostedToolDefinitionsByName: input.hostedToolDefinitionsByName,
     }),
   ];
   if (input.options.runtimePlugins && input.options.runtimePlugins.length > 0) {
@@ -581,12 +614,37 @@ export async function createHostedSession(
     modelRegistry: environment.modelRegistry,
     runtime,
   });
+  const toolExecutionCoordinator = createHostedToolExecutionCoordinator();
+  const directManagedTools = wrapToolDefinitionsWithHostedExecutionTraits(
+    createDirectManagedTools({
+      options,
+      runtime,
+      orchestration,
+      delegationStore,
+      managedToolMode,
+      semanticOracle,
+    }),
+    toolExecutionCoordinator,
+  );
+  const customTools = createHostedCustomTools({
+    cwd: environment.cwd,
+    settingsManager,
+    builtinToolNames: options.builtinToolNames,
+    directManagedTools,
+    toolExecutionCoordinator,
+  });
+  const hostedToolDefinitionsByName = new Map<string, ToolDefinition>();
+  for (const tool of customTools ?? []) {
+    hostedToolDefinitionsByName.set(tool.name, tool);
+  }
   const runtimePlugins = createRuntimePlugins({
     options,
     runtime,
     orchestration,
     delegationStore,
     semanticOracle,
+    toolExecutionCoordinator,
+    hostedToolDefinitionsByName,
   });
 
   const resourceLoader = new DefaultResourceLoader({
@@ -597,22 +655,6 @@ export async function createHostedSession(
   });
   await resourceLoader.reload();
 
-  const directManagedTools = createDirectManagedTools({
-    options,
-    runtime,
-    orchestration,
-    delegationStore,
-    managedToolMode,
-    semanticOracle,
-  });
-  const customTools = createHostedCustomTools({
-    cwd: environment.cwd,
-    settingsManager,
-    builtinToolNames: options.builtinToolNames,
-    directManagedTools,
-  });
-  const builtinTools = resolveBuiltinTools(options.builtinToolNames);
-
   const sessionResult = await createAgentSession({
     cwd: environment.cwd,
     agentDir: environment.agentDir,
@@ -622,7 +664,7 @@ export async function createHostedSession(
     resourceLoader,
     model: environment.selectedModel.model,
     thinkingLevel: environment.selectedModel.thinkingLevel,
-    tools: builtinTools,
+    tools: [],
     customTools,
   });
 

@@ -66,6 +66,25 @@ function createRuntimeEventBridge() {
             listeners.delete(listener);
           };
         },
+        queryStructured(sessionId: string, query?: { type?: string }) {
+          return events
+            .filter(
+              (event) =>
+                event.sessionId === sessionId && (!query?.type || event.type === query.type),
+            )
+            .map((event) => {
+              return {
+                id: event.id,
+                sessionId: event.sessionId,
+                type: event.type,
+                timestamp: event.timestamp,
+                payload: event.payload,
+                schema: "brewva.event.v1" as const,
+                isoTime: new Date(event.timestamp).toISOString(),
+                category: event.type.startsWith("session_") ? "session" : "other",
+              };
+            });
+        },
         record(input: { sessionId: string; type: string; payload?: Record<string, unknown> }) {
           const event = {
             id: `evt-${events.length + 1}`,
@@ -84,6 +103,12 @@ function createRuntimeEventBridge() {
     },
     events,
   };
+}
+
+function readTransitionPayloads(eventBridge: ReturnType<typeof createRuntimeEventBridge>) {
+  return eventBridge.events
+    .filter((event) => event.type === "session_turn_transition")
+    .map((event) => event.payload ?? {});
 }
 
 describe("gateway collect output", () => {
@@ -145,10 +170,13 @@ describe("gateway collect output", () => {
     );
 
     const toolUpdateChunk = chunks.find((chunk) => chunk.kind === "tool_update");
+    const attemptStartChunk = chunks.find((chunk) => chunk.kind === "attempt_start");
+    expect(attemptStartChunk).toBeDefined();
     expect(toolUpdateChunk).toBeDefined();
     if (!toolUpdateChunk || toolUpdateChunk.kind !== "tool_update") {
       return;
     }
+    expect(toolUpdateChunk.attemptId).toBe("attempt-1");
     expect(toolUpdateChunk.text).toContain("[ExecDistilled]");
   });
 
@@ -228,12 +256,16 @@ describe("gateway collect output", () => {
       },
     };
 
+    const chunks: SessionStreamChunk[] = [];
     const output = await collectSessionPromptOutput(
       session as unknown as Parameters<typeof collectSessionPromptOutput>[0],
       "initial prompt",
       {
         runtime: eventBridge.runtime as any,
         sessionId: "agent-session-1",
+        onChunk: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 
@@ -241,13 +273,40 @@ describe("gateway collect output", () => {
     expect(sentMessages[0]).toBe("initial prompt");
     expect(sentMessages[1]).toContain("Resume the interrupted turn");
     expect(output.assistantText).toBe("resumed answer");
-    expect(
-      eventBridge.events.some((event) => event.type === "session_turn_compaction_resume_requested"),
-    ).toBe(true);
-    expect(
-      eventBridge.events.some(
-        (event) => event.type === "session_turn_compaction_resume_dispatched",
-      ),
-    ).toBe(true);
+    expect(output.attemptId).toBe("attempt-2");
+    expect(chunks).toEqual(
+      expect.arrayContaining([
+        {
+          kind: "attempt_start",
+          attemptId: "attempt-1",
+          reason: "initial",
+        },
+        {
+          kind: "attempt_superseded",
+          attemptId: "attempt-1",
+          supersededByAttemptId: "attempt-2",
+          reason: "compaction_retry",
+        },
+        {
+          kind: "attempt_start",
+          attemptId: "attempt-2",
+          reason: "compaction_retry",
+        },
+      ]),
+    );
+    expect(readTransitionPayloads(eventBridge)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          reason: "compaction_retry",
+          status: "entered",
+          family: "recovery",
+        }),
+        expect.objectContaining({
+          reason: "compaction_retry",
+          status: "completed",
+          family: "recovery",
+        }),
+      ]),
+    );
   });
 });

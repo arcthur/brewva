@@ -273,6 +273,7 @@ export class SessionWorkerRpcController {
       } else if (message.event === "session.turn.end") {
         this.markTurnWalDone(handle, message.payload.turnId);
         this.resolvePendingTurn(handle, message.payload.turnId, {
+          attemptId: message.payload.attemptId,
           assistantText: message.payload.assistantText,
           toolOutputs: message.payload.toolOutputs,
         });

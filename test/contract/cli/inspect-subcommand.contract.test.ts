@@ -108,6 +108,29 @@ describe("inspect subcommand", () => {
           outputText: "Error: test failure",
           channelSuccess: false,
         });
+        runtime.events.record({
+          sessionId,
+          type: "tool_call_blocked",
+          payload: {
+            toolName: "exec",
+          },
+        });
+        runtime.events.record({
+          sessionId,
+          type: "session_turn_transition",
+          payload: {
+            reason: "compaction_retry",
+            status: "failed",
+            sequence: 1,
+            family: "recovery",
+            attempt: 1,
+            sourceEventId: null,
+            sourceEventType: null,
+            error: "resume_failed",
+            breakerOpen: false,
+            model: null,
+          },
+        });
 
         const result = runInspect(
           ["--cwd", workspace, "--config", ".brewva/brewva.json", "--session", sessionId, "--json"],
@@ -123,6 +146,16 @@ describe("inspect subcommand", () => {
           task: { goal: string | null; blockers: number };
           truth: { activeFacts: number };
           verification: { outcome: string | null; failedChecks: string[] };
+          hostedTransitions: {
+            sequence: number;
+            pendingFamily: string | null;
+            operatorVisibleFactGeneration: number;
+            latest: {
+              reason: string;
+              status: string;
+              attempt: number | null;
+            } | null;
+          };
           ledger: { integrityValid: boolean; rows: number };
           consistency: { ledgerIntegrity: string };
           bootstrap: { routingEnabled: boolean | null };
@@ -139,6 +172,14 @@ describe("inspect subcommand", () => {
         expect(payload.truth.activeFacts).toBeGreaterThanOrEqual(1);
         expect(payload.verification.outcome).toBe("fail");
         expect(payload.verification.failedChecks).toEqual(["tests"]);
+        expect(payload.hostedTransitions.sequence).toBe(1);
+        expect(payload.hostedTransitions.pendingFamily).toBeNull();
+        expect(payload.hostedTransitions.operatorVisibleFactGeneration).toBe(1);
+        expect(payload.hostedTransitions.latest).toMatchObject({
+          reason: "compaction_retry",
+          status: "failed",
+          attempt: 1,
+        });
         expect(payload.ledger.rows).toBeGreaterThan(0);
         expect(payload.ledger.integrityValid).toBe(true);
         expect(payload.consistency.ledgerIntegrity).toBe("ok");

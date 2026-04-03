@@ -231,9 +231,13 @@ export const SessionsUnsubscribeParamsSchema = Type.Object(
 );
 export type SessionsUnsubscribeParams = Static<typeof SessionsUnsubscribeParamsSchema>;
 
+export const SessionsAbortReasonSchema = Type.Union([Type.Literal("user_submit")]);
+export type SessionsAbortReason = Static<typeof SessionsAbortReasonSchema>;
+
 export const SessionsAbortParamsSchema = Type.Object(
   {
     sessionId: NonEmptyString,
+    reason: Type.Optional(SessionsAbortReasonSchema),
   },
   { additionalProperties: false },
 );

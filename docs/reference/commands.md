@@ -295,6 +295,10 @@ The report now includes replay-derived session hydration status (`ready` or
 `degraded`) plus per-event hydrate issues when reconstruction of
 non-authoritative session state encountered malformed or failing events.
 
+It also includes the rebuildable hosted transition snapshot used by
+`session_turn_transition`, including the latest continuation reason, pending
+family state, and breaker posture for bounded recovery families.
+
 - `brewva inspect`: inspect the latest replayable session for the current workspace
 - `brewva inspect <dir>`: inspect a specific directory inside the current workspace
 - `brewva inspect --session <id>`: inspect a specific session

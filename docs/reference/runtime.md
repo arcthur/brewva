@@ -310,6 +310,8 @@ Hosted-session event boundary notes:
 
 - `runtime.events.query(...)` and `runtime.events.queryStructured(...)` expose
   the durable tape, not the ephemeral hosted live stream
+- `session_turn_transition` is the durable hosted-flow contract for explicit
+  continuation, interruption, and bounded-recovery posture
 - iteration fact helpers persist and query receipt-grade objective facts:
   metric observations and guard results
 - iteration fact list helpers accept optional `source` and `sessionScope`
@@ -320,6 +322,9 @@ Hosted-session event boundary notes:
 - hosted sessions do not expose a separate provider-normalization event family;
   durable replay surfaces start at admitted runtime events such as `tool_call`,
   `tool_result_recorded`, and related governance receipts
+- hosted tool execution traits remain scheduler metadata layered above runtime
+  governance; runtime events may expose their resolved values for observability,
+  but the runtime authority contract stays effect- and receipt-based
 - structured events classify operator/control-plane receipts such as
   `narrative_memory_*` and `semantic_*` under `category=control`
 

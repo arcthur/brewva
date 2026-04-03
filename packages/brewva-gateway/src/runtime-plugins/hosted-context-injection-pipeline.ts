@@ -19,6 +19,7 @@ import { resolveInjectionScopeId } from "./context-shared.js";
 import { appendSupplementalContextBlocks } from "./context-supplemental.js";
 import type { HostedContextGateStatePort } from "./hosted-compaction-controller.js";
 import type { HostedContextTelemetry } from "./hosted-context-telemetry.js";
+import { resolveRecoveryWorkingSetBlock } from "./recovery-working-set.js";
 
 export const HOSTED_CONTEXT_INJECTION_MESSAGE_TYPE = "brewva-context-injection";
 
@@ -225,6 +226,12 @@ export function createHostedContextInjectionPipeline(
         usage: input.usage,
         injectionScopeId,
         blocks: [
+          ...[
+            resolveRecoveryWorkingSetBlock(runtime, {
+              sessionId: input.sessionId,
+              delegationStore: options.delegationStore,
+            }),
+          ].filter((block): block is NonNullable<typeof block> => block !== null),
           ...resolveSupplementalContextBlocks({
             runtime: contextComposerRuntime,
             sessionId: input.sessionId,
@@ -314,6 +321,12 @@ export function createHostedContextInjectionPipeline(
         usage: input.usage,
         injectionScopeId,
         blocks: [
+          ...[
+            resolveRecoveryWorkingSetBlock(runtime, {
+              sessionId: input.sessionId,
+              delegationStore: options.delegationStore,
+            }),
+          ].filter((block): block is NonNullable<typeof block> => block !== null),
           ...resolveSupplementalContextBlocks({
             runtime: contextComposerRuntime,
             sessionId: input.sessionId,

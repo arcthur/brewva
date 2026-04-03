@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs as parseNodeArgs } from "node:util";
 import {
   ensureSessionShutdownRecorded,
+  recordSessionTurnTransition,
   runChannelMode,
   runGatewayCli,
   wrapSessionWithSettledPrompts,
@@ -1161,16 +1162,43 @@ async function run(): Promise<void> {
     terminatedBySignal = true;
 
     const sessionId = getSessionId();
-    runtime.events.record({
+    let signalTransitionFinalized = false;
+    const finalizeSignalTransition = (status: "completed" | "failed", error?: string): void => {
+      if (signalTransitionFinalized) {
+        return;
+      }
+      signalTransitionFinalized = true;
+      recordSessionTurnTransition(runtime, {
+        sessionId,
+        reason: "signal_interrupt",
+        status,
+        family: "interrupt",
+        error: error?.trim().length ? error : undefined,
+      });
+    };
+    recordSessionTurnTransition(runtime, {
       sessionId,
-      type: "session_interrupted",
-      payload: { signal },
+      reason: "signal_interrupt",
+      status: "entered",
+      family: "interrupt",
+      error: signal,
     });
 
     const timeout = setTimeout(() => {
-      void session.abort().finally(() => {
-        finalizeAndExit(130);
-      });
+      void session
+        .abort()
+        .then(() => {
+          finalizeSignalTransition("completed");
+        })
+        .catch((error) => {
+          finalizeSignalTransition(
+            "failed",
+            error instanceof Error ? error.message : String(error),
+          );
+        })
+        .finally(() => {
+          finalizeAndExit(130);
+        });
     }, gracefulTimeoutMs);
 
     void session.agent
@@ -1178,6 +1206,7 @@ async function run(): Promise<void> {
       .catch(() => undefined)
       .finally(() => {
         clearTimeout(timeout);
+        finalizeSignalTransition("completed");
         finalizeAndExit(130);
       });
   };

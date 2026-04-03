@@ -97,6 +97,9 @@ flowchart TD
   in-flight state
 - after compaction, the interrupted turn resumes from current task and evidence
   state instead of restarting as a blank session
+- the resumed turn also gets a recovery-aware typed working set block so the
+  model can re-anchor on hosted recovery posture, task state, and pending
+  delegation handoff without relying on freeform memory carry-over
 - projection remains a rebuildable helper; compaction and recovery correctness
   do not depend on projection-cache files being present
 
@@ -111,10 +114,27 @@ flowchart TD
   - `context_compaction_auto_completed`
   - `context_compaction_auto_failed`
   - `context_compaction_skipped`
-- resume events:
-  - `session_turn_compaction_resume_requested`
-  - `session_turn_compaction_resume_dispatched`
-  - `session_turn_compaction_resume_failed`
+- hosted transition events:
+  - `session_turn_transition`
+    - `reason=compaction_gate_blocked`
+    - `reason=compaction_retry`
+    - `reason=output_budget_escalation`
+    - `reason=provider_fallback_retry`
+    - `reason=max_output_recovery`
+- hosted auto-compaction trigger ladder:
+  - `no_request -> non_interactive_mode -> agent_active_manual_compaction_unsafe -> auto_compaction_breaker_open -> auto_compaction_in_flight -> execute_auto_compaction`
+- ladder note:
+  - this trigger ladder decides whether hosted auto-compaction runs at all
+  - deterministic-first ordering lives in the recovery/context strategy path,
+    not in the trigger ladder itself
+- prompt failure recovery:
+  - ordered hosted policy chain: deterministic context reduction, then
+    capability-gated output budget escalation on the same prompt, then bounded
+    provider-fallback retry, then bounded max-output recovery
+- post-recovery context:
+  - hidden injection may include `[RecoveryWorkingSet]` when hosted transition
+    posture indicates compaction retry, provider fallback retry, max-output
+    recovery, output-budget escalation, or WAL resume
 - governance events:
   - `governance_compaction_integrity_checked`
   - `governance_compaction_integrity_failed`

@@ -27,6 +27,7 @@ import type {
 } from "@brewva/brewva-tools";
 import { collectSessionPromptOutput } from "../session/collect-output.js";
 import type { SubscribablePromptSession } from "../session/contracts.js";
+import { recordSessionTurnTransition } from "../session/turn-transition.js";
 import type { HostedSubagentBackgroundController } from "./background-controller.js";
 import { writeDetachedSubagentContextManifest } from "./background-protocol.js";
 import { loadHostedDelegationCatalog } from "./catalog.js";
@@ -769,7 +770,10 @@ export function createHostedSubagentAdapter(
           promptOverride: executionPlan.prompt,
           skill: skillDocument,
         });
-        const output = await collectSessionPromptOutput(child.session, prompt);
+        const output = await collectSessionPromptOutput(child.session, prompt, {
+          runtime: child.runtime,
+          sessionId: childSessionId,
+        });
         const childCostSummary = child.runtime.cost.getSummary(childSessionId);
         aggregateChildCost(options.runtime, input.parentSessionId, childCostSummary);
         childCostAggregated = true;
@@ -900,7 +904,16 @@ export function createHostedSubagentAdapter(
                 outcome,
                 delivery: input.delivery,
               })
-            : preparePendingParentTurnDelivery()
+            : (() => {
+                const result = preparePendingParentTurnDelivery();
+                recordSessionTurnTransition(options.runtime, {
+                  sessionId: input.parentSessionId,
+                  reason: "subagent_delivery_pending",
+                  status: "entered",
+                  family: "delegation",
+                });
+                return result;
+              })()
           : undefined;
 
         const completedRecord: DelegationRunRecord = {

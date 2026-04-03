@@ -24,12 +24,16 @@ export type ParentToWorkerMessage =
       payload: {
         prompt: string;
         turnId: string;
+        walReplayId?: string;
         trigger?: SendPromptTrigger;
       };
     }
   | {
       kind: "abort";
       requestId: string;
+      payload?: {
+        reason?: "user_submit";
+      };
     }
   | {
       kind: "bridge.ping";
@@ -104,6 +108,7 @@ export type WorkerToParentMessage =
         sessionId: string;
         agentSessionId: string;
         turnId: string;
+        attemptId: string;
         assistantText: string;
         toolOutputs: GatewayToolOutput[];
         ts: number;

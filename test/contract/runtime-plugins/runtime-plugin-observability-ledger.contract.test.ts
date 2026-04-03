@@ -8,10 +8,108 @@ import {
   createObsQueryTool,
   createObsSloAssertTool,
   createOutputSearchTool,
+  defineBrewvaTool,
 } from "@brewva/brewva-tools";
 import { createMockRuntimePluginApi, invokeHandlers } from "../../helpers/runtime-plugin.js";
 
 describe("Runtime plugin integration: observability ledger", () => {
+  test("records invocation-resolved execution traits into hosted tool lifecycle events", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-execution-traits-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "ext-execution-traits-1";
+    const { api, handlers } = createMockRuntimePluginApi();
+    const baseTool = createOutputSearchTool({ runtime });
+
+    const customTool = defineBrewvaTool(baseTool, {
+      executionTraits: ({ args }) => {
+        const command =
+          args &&
+          typeof args === "object" &&
+          typeof (args as { query?: unknown }).query === "string"
+            ? (args as { query: string }).query
+            : "";
+        return {
+          concurrencySafe: !/\b(rm|mv|sed -i)\b/u.test(command),
+          interruptBehavior: "cancel",
+          streamingEligible: true,
+          contextModifying: /\b(rm|mv|sed -i)\b/u.test(command),
+        };
+      },
+    });
+
+    registerEventStream(api, runtime, undefined, {
+      toolDefinitionsByName: new Map([[customTool.name, customTool]]),
+    });
+
+    const ctx = {
+      cwd: workspace,
+      sessionManager: {
+        getSessionId: () => sessionId,
+      },
+    };
+
+    invokeHandlers(
+      handlers,
+      "tool_call",
+      {
+        toolCallId: "tc-custom-read",
+        toolName: customTool.name,
+        input: { query: "ls src" },
+      },
+      ctx,
+    );
+    invokeHandlers(
+      handlers,
+      "tool_execution_start",
+      {
+        toolCallId: "tc-custom-write",
+        toolName: customTool.name,
+        args: { query: "rm -rf tmp" },
+      },
+      ctx,
+    );
+
+    const toolCallPayload = runtime.events.query(sessionId, {
+      type: "tool_call",
+      last: 1,
+    })[0]?.payload as
+      | {
+          executionTraits?: {
+            concurrencySafe?: boolean;
+            interruptBehavior?: string;
+            streamingEligible?: boolean;
+            contextModifying?: boolean;
+          } | null;
+        }
+      | undefined;
+    expect(toolCallPayload?.executionTraits).toEqual({
+      concurrencySafe: true,
+      interruptBehavior: "cancel",
+      streamingEligible: true,
+      contextModifying: false,
+    });
+
+    const toolStartPayload = runtime.events.query(sessionId, {
+      type: "tool_execution_start",
+      last: 1,
+    })[0]?.payload as
+      | {
+          executionTraits?: {
+            concurrencySafe?: boolean;
+            interruptBehavior?: string;
+            streamingEligible?: boolean;
+            contextModifying?: boolean;
+          } | null;
+        }
+      | undefined;
+    expect(toolStartPayload?.executionTraits).toEqual({
+      concurrencySafe: false,
+      interruptBehavior: "cancel",
+      streamingEligible: true,
+      contextModifying: true,
+    });
+  });
+
   test("given high-volume exec tool output with explicit fail verdict, when ledger writer handles tool_result, then verdict propagates into observed and distilled telemetry", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-distill-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });
@@ -235,6 +333,136 @@ describe("Runtime plugin integration: observability ledger", () => {
     );
     expect(eventTypes.indexOf("tool_execution_end")).toBeLessThan(
       eventTypes.indexOf("session_before_compact"),
+    );
+  });
+
+  test("records terminal reasons for direct, fallback, and interrupt-driven hosted tool endings", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-terminal-reasons-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "ext-terminal-reasons-1";
+
+    const { api, handlers } = createMockRuntimePluginApi();
+    registerEventStream(api, runtime);
+
+    const ctx = {
+      cwd: workspace,
+      sessionManager: {
+        getSessionId: () => sessionId,
+      },
+    };
+
+    invokeHandlers(
+      handlers,
+      "tool_execution_start",
+      {
+        toolCallId: "tc-direct",
+        toolName: "exec",
+        args: { command: "pwd" },
+      },
+      ctx,
+    );
+    invokeHandlers(
+      handlers,
+      "tool_execution_end",
+      {
+        toolCallId: "tc-direct",
+        toolName: "exec",
+        result: { text: "done" },
+        isError: false,
+      },
+      ctx,
+    );
+
+    invokeHandlers(
+      handlers,
+      "tool_execution_start",
+      {
+        toolCallId: "tc-fallback",
+        toolName: "exec",
+        args: { command: "pwd" },
+      },
+      ctx,
+    );
+    invokeHandlers(
+      handlers,
+      "tool_result",
+      {
+        toolCallId: "tc-fallback",
+        toolName: "exec",
+        input: { command: "pwd" },
+        isError: false,
+        content: [{ type: "text", text: "done" }],
+      },
+      ctx,
+    );
+    invokeHandlers(
+      handlers,
+      "session_before_compact",
+      {
+        branchEntries: [],
+      },
+      ctx,
+    );
+
+    invokeHandlers(
+      handlers,
+      "tool_execution_start",
+      {
+        toolCallId: "tc-interrupt",
+        toolName: "exec",
+        args: { command: "sleep 10" },
+      },
+      ctx,
+    );
+    runtime.events.record({
+      sessionId,
+      type: "session_turn_transition",
+      payload: {
+        reason: "user_submit_interrupt",
+        status: "completed",
+        sequence: 1,
+        family: "interrupt",
+        attempt: null,
+        sourceEventId: null,
+        sourceEventType: null,
+        error: null,
+        breakerOpen: false,
+        model: null,
+      },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    const payloads = runtime.events
+      .query(sessionId, { type: "tool_execution_end" })
+      .map((event) => {
+        return event.payload as
+          | {
+              toolCallId?: string;
+              terminalReason?: string;
+              isError?: boolean;
+            }
+          | undefined;
+      });
+
+    expect(payloads).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          toolCallId: "tc-direct",
+          terminalReason: "completed",
+          isError: false,
+        }),
+        expect.objectContaining({
+          toolCallId: "tc-fallback",
+          terminalReason: "completed_after_tool_result",
+          isError: false,
+        }),
+        expect.objectContaining({
+          toolCallId: "tc-interrupt",
+          terminalReason: "cancelled_by_interrupt",
+          isError: true,
+        }),
+      ]),
     );
   });
 

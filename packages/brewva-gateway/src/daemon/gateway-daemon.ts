@@ -1189,8 +1189,8 @@ export class GatewayDaemon {
         };
       }
       case "sessions.abort": {
-        const input = params as { sessionId: string };
-        const aborted = await this.supervisor.abortSession(input.sessionId);
+        const input = params as { sessionId: string; reason?: "user_submit" };
+        const aborted = await this.supervisor.abortSession(input.sessionId, input.reason);
         return {
           sessionId: input.sessionId,
           aborted,

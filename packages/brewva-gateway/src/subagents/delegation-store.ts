@@ -19,6 +19,7 @@ import {
   type ToolExecutionBoundary,
 } from "@brewva/brewva-runtime";
 import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime";
+import { recordSessionTurnTransition } from "../session/turn-transition.js";
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
@@ -601,6 +602,13 @@ export class HostedDelegationStore {
         turn: input.turn,
         type: SUBAGENT_DELIVERY_SURFACED_EVENT_TYPE,
         payload: buildDelegationLifecyclePayload(updated),
+      });
+      recordSessionTurnTransition(this.runtime, {
+        sessionId: input.sessionId,
+        turn: input.turn,
+        reason: "subagent_delivery_pending",
+        status: "completed",
+        family: "delegation",
       });
     }
   }

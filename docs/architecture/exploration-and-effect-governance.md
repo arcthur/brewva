@@ -218,6 +218,29 @@ Authority should not be based primarily on static tool allowlists. It should be
 based on effect classes and explicit governance boundaries such as resource
 ceilings.
 
+## Hosted Recovery And Scheduler Traits
+
+Hosted recovery is now explicit and bounded rather than implicit and
+planner-shaped.
+
+Stable rules:
+
+- hosted continuation and retry posture must surface through
+  `session_turn_transition`
+- provider recovery remains bounded and descriptive; it must not silently widen
+  authority or hide operator-visible governance facts
+- scheduler-facing execution traits such as concurrency safety or interrupt
+  behavior are distinct from `ToolGovernanceDescriptor`
+- a tool may be safe from an authority perspective and still require exclusive
+  scheduling for a given invocation
+
+The design intent is narrow:
+
+- governance decides what the system may do to the world
+- hosted recovery decides how the user-facing turn may continue after bounded
+  failure or context pressure
+- scheduler traits decide how hosted execution overlaps or interrupts work
+
 ## Deployment Boundary Ownership
 
 Deployment boundary policy is now a stable part of the governance model.

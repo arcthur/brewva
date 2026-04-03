@@ -245,6 +245,124 @@ describe("hosted subagent orchestrator", () => {
     await rm(workspaceRoot, { recursive: true, force: true });
   });
 
+  test("resets child collected outputs when the child turn is superseded by recovery", async () => {
+    const workspaceRoot = createTempWorkspace("brewva-subagent-recovery-attempt-");
+    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const parentSessionId = "parent-session-recovery-attempt";
+
+    const adapter = createHostedSubagentAdapter({
+      runtime,
+      async createChildSession(input: HostedSubagentSessionOptions) {
+        const childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
+        const childSessionId = "child-recovery-attempt";
+        const listeners = new Set<(event: AgentSessionEvent) => void>();
+
+        return {
+          runtime: childRuntime,
+          session: {
+            dispose() {},
+            async prompt() {
+              for (const listener of listeners) {
+                listener({
+                  type: "tool_execution_end",
+                  toolCallId: "tc-first-attempt",
+                  toolName: "read",
+                  result: "first attempt tool output",
+                  isError: false,
+                } as AgentSessionEvent);
+              }
+
+              childRuntime.events.record({
+                sessionId: childSessionId,
+                type: "session_turn_transition",
+                payload: {
+                  reason: "provider_fallback_retry",
+                  status: "entered",
+                  sequence: 1,
+                  family: "recovery",
+                  attempt: 1,
+                  sourceEventId: null,
+                  sourceEventType: null,
+                  error: null,
+                  breakerOpen: false,
+                  model: "test/fallback",
+                },
+              });
+
+              for (const listener of listeners) {
+                listener({
+                  type: "tool_execution_end",
+                  toolCallId: "tc-second-attempt",
+                  toolName: "read",
+                  result: "second attempt tool output",
+                  isError: false,
+                } as AgentSessionEvent);
+                listener({
+                  type: "message_end",
+                  message: {
+                    role: "assistant",
+                    content: [{ type: "text", text: "Recovered child answer." }],
+                  },
+                } as AgentSessionEvent);
+              }
+            },
+            agent: {
+              async waitForIdle() {},
+            },
+            sessionManager: {
+              getSessionId() {
+                return childSessionId;
+              },
+            },
+            subscribe(listener) {
+              listeners.add(listener);
+              return () => {
+                listeners.delete(listener);
+              };
+            },
+          },
+        };
+      },
+    });
+
+    const result = await adapter.run({
+      fromSessionId: parentSessionId,
+      request: {
+        agentSpec: "patch-worker",
+        mode: "single",
+        packet: {
+          objective: "Inspect the module after a recoverable provider retry.",
+          effectCeiling: {
+            boundary: "safe",
+          },
+        },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    const outcome = result.outcomes[0];
+    expect(outcome?.ok).toBe(true);
+    if (!outcome || !outcome.ok) {
+      throw new Error("expected a successful recovery outcome");
+    }
+    const evidenceRefs = outcome.evidenceRefs ?? [];
+    expect(evidenceRefs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "tool_result",
+          locator: "session:child-recovery-attempt:tool:tc-second-attempt",
+        }),
+      ]),
+    );
+    expect(
+      evidenceRefs.some(
+        (ref) => ref.kind === "tool_result" && ref.locator.includes("tc-first-attempt"),
+      ),
+    ).toBe(false);
+
+    await rm(workspaceRoot, { recursive: true, force: true });
+  });
+
   test("captures structured QA outcomes from the child assistant response", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-structured-success-");
     const runtime = new BrewvaRuntime({ cwd: workspaceRoot });

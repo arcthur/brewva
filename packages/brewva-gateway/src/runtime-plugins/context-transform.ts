@@ -1,6 +1,7 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { coerceContextBudgetUsage } from "@brewva/brewva-runtime";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { getHostedTurnTransitionCoordinator } from "../session/turn-transition.js";
 import type { HostedDelegationStore } from "../subagents/delegation-store.js";
 import {
   createHostedCompactionController,
@@ -76,6 +77,7 @@ export function createContextTransformLifecycle(
   runtime: BrewvaRuntime,
   options: ContextTransformOptions = {},
 ): ContextTransformLifecycle {
+  getHostedTurnTransitionCoordinator(runtime);
   const turnClock = options.turnClock ?? createRuntimeTurnClockStore();
   const telemetry = createHostedContextTelemetry(runtime);
   const compactionController = createHostedCompactionController(runtime, telemetry, turnClock, {

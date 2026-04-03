@@ -18,6 +18,9 @@ Relevant implementation:
 
 - Major lifecycle events (session, turn, tool, context, verification, cost) must be queryable via event store.
 - Replay output must be derivable from persisted events only.
+- Hosted continuation posture must be queryable through durable
+  `session_turn_transition` events rather than inferred only from transient
+  logs or prompt text.
 
 Relevant implementation:
 
@@ -31,6 +34,9 @@ Relevant implementation:
   (`checkpoint + delta` replay for task/truth/cost/evidence/projection, plus
   event-fold hydration for runtime session counters/budgets/compaction state).
 - Process restart must not require opaque runtime snapshot blobs.
+- Hosted bounded-recovery posture and breaker state must remain rebuildable from
+  durable hosted transition events; process-local helpers may optimize the live
+  path, but they must not become hidden authority or required recovery truth.
 
 Relevant implementation:
 

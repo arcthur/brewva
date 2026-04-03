@@ -64,7 +64,7 @@ Parameter summary (current semantics):
 - `sessions.subscribe`: `{ sessionId }`
 - `sessions.unsubscribe`: `{ sessionId }`
 - `sessions.send`: `{ sessionId, prompt, turnId? }`
-- `sessions.abort`: `{ sessionId }`
+- `sessions.abort`: `{ sessionId, reason? }`
 - `sessions.close`: `{ sessionId }`
 - `heartbeat.reload`: `{}`
 - `gateway.rotate-token`: `{}`
@@ -91,6 +91,7 @@ Rule semantics:
 
 - `connect`: `hello-ok` payload with `protocol`, `server`, `features`, and `policy`.
 - `sessions.send`: immediate ack payload `{ sessionId, agentSessionId?, turnId, accepted: true }`; final output arrives via `session.turn.*` events.
+- `sessions.abort`: accepts optional `reason: "user_submit"` so hosted execution can emit `user_submit_interrupt` as a `session_turn_transition` without widening kernel authority.
 - `status.deep`: includes `heartbeat` plus live `scheduler` execution state. The `scheduler` block exposes whether scheduling is available, whether execution is paused, and current projection/timer counters.
 - `scheduler.pause`: `{ paused: true, changed, available, pausedAt, reason }`.
 - `scheduler.resume`: `{ paused: false, changed, available, previousPausedAt, previousReason }`.
@@ -109,6 +110,22 @@ Rule semantics:
 - `shutdown`
 
 Session-scoped events (`session.turn.*`) are routed by subscription scope, not broadcast to every authenticated connection.
+
+Current hosted turn-stream details:
+
+- `session.turn.chunk` is attempt-aware.
+- The stream may emit control chunks before ordinary deltas:
+  - `attempt_start`
+  - `attempt_superseded`
+- Ordinary streamed chunks (`assistant_text_delta`, `assistant_thinking_delta`,
+  `tool_update`) carry `attemptId`.
+- `session.turn.end` includes the final committed `attemptId`, so consumers can
+  correlate the terminal response with the last non-superseded attempt.
+
+This attempt grammar is hosted-only. It allows clients to discard provisional
+partial output after output-budget escalation retry, compaction retry, provider
+fallback retry, or max-output recovery without changing runtime receipts or
+kernel authority.
 
 ## Latest-Only Compatibility Policy
 

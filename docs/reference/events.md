@@ -1,6 +1,7 @@
 # Runtime Events
 
-This reference summarizes the current registered event families.
+This reference summarizes the current runtime event families used across
+replay, hosted execution, and operator inspection.
 
 ## Event Envelope
 
@@ -44,10 +45,17 @@ The central registry contains more than one durability class.
 That class is represented by turn WAL and rollback material outside the event
 registry.
 
-## Central Registry
+## Registry Surface
 
-The authoritative registry lives in
+The exported constant registry lives in
 `packages/brewva-runtime/src/events/event-types.ts`.
+
+The runtime also reserves a small set of accepted event families directly in
+`packages/brewva-runtime/src/services/event-pipeline.ts` for hosted/context
+flows that do not need public constant exports.
+
+Use this reference as the stable, operator-relevant runtime event surface
+across both files.
 
 ### Core Ledger And Projection
 
@@ -72,19 +80,65 @@ maintenance. They do not promote projection files into source-of-truth inputs.
 - `session_bootstrap`
 - `session_start`
 - `session_shutdown`
-- `session_interrupted`
+- `session_turn_transition`
 - `session_before_compact`
 - `session_compact`
 - `session_compact_requested`
 - `session_compact_failed`
 - `session_compact_request_failed`
-- `session_turn_compaction_resume_requested`
-- `session_turn_compaction_resume_dispatched`
-- `session_turn_compaction_resume_failed`
+- `context_compaction_requested`
+- `context_compaction_gate_armed`
+- `context_compaction_gate_cleared`
+- `context_compaction_auto_requested`
+- `context_compaction_auto_completed`
+- `context_compaction_auto_failed`
+- `context_compaction_skipped`
 - `turn_start`
 - `turn_end`
 - `message_end`
 - `agent_end`
+
+`session_turn_transition` is the rebuildable hosted-flow contract for bounded
+recovery, compaction retry, interrupt, approval-pending, delegation handoff,
+and WAL-resume continuations. The payload includes:
+
+- `reason`
+- `status`
+- `sequence`
+- `family`
+- `attempt`
+- `sourceEventId`
+- `sourceEventType`
+- `error`
+- `breakerOpen`
+- `model`
+
+Hosted compaction telemetry remains audit-visible because gateway continuity,
+breaker rehydration, and post-compaction state inspection depend on it. These
+events stay hosted/experience-ring signals; they do not widen kernel authority
+or replace receipt-bearing runtime facts.
+
+Typical hosted recovery reasons include:
+
+- `reason=compaction_gate_blocked`
+- `reason=compaction_retry`
+- `reason=output_budget_escalation`
+- `reason=provider_fallback_retry`
+- `reason=max_output_recovery`
+- `reason=effect_commitment_pending`
+- `reason=subagent_delivery_pending`
+- `reason=wal_recovery_resume`
+- `reason=user_submit_interrupt`
+- `reason=signal_interrupt`
+- `reason=timeout_interrupt`
+
+`brewva inspect` projects this history into a rebuildable hosted transition
+snapshot so operators can inspect pending family state, breaker posture, and
+latest continuation reason without relying on process-local gateway memory.
+
+`reason=output_budget_escalation` represents a capability-gated retry of the
+same semantic request with a larger provider output budget when the hosted
+provider-request recovery hook can patch the next outbound payload.
 
 ### Tool, Verification, Mutation, And Recovery
 
@@ -116,6 +170,21 @@ maintenance. They do not promote projection files into source-of-truth inputs.
 - `tool_effect_gate_selected`
 - `reversible_mutation_prepared`
 - `reversible_mutation_recorded`
+
+When a tool definition carries Brewva execution-traits metadata, `tool_call`
+and `tool_execution_start` may include `executionTraits` payload fields. Those
+fields are hosted scheduling metadata derived from the specific invocation
+input; they do not replace governance descriptors or receipt-bearing authority
+decisions.
+
+`tool_execution_end` may also include a hosted `terminalReason` field. This
+distinguishes direct SDK completion (`completed`, `failed`) from host-synthesized
+closure after a durable tool result (`completed_after_tool_result`,
+`failed_after_tool_result`) and interruption/supersession paths
+(`cancelled_by_interrupt`, `cancelled_by_retry_supersession`,
+`cancelled_by_shutdown`). This remains hosted audit telemetry rather than a new
+effect-authoritative source of truth.
+
 - `reversible_mutation_rolled_back`
 - `rollback`
 - `patch_recorded`
@@ -274,7 +343,7 @@ The audit-retained core includes:
 - session/turn lifecycle receipts such as `session_bootstrap`, `session_start`,
   `session_shutdown`, `turn_start`, `turn_end`, `message_end`, and `agent_end`
 - hosted compaction receipts such as `session_compact_requested`,
-  `session_compact`, and `session_turn_compaction_resume_requested`
+  `session_compact`, and `session_turn_transition`
 - tool execution receipts such as `tool_call`, `tool_execution_start`,
   `tool_execution_end`, and `tool_result_recorded`
 - `tool_output_search`

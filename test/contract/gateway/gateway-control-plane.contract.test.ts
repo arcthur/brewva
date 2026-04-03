@@ -111,6 +111,7 @@ describe("gateway daemon control-plane methods", () => {
           turnId: "turn-heartbeat",
           accepted: true,
           output: {
+            attemptId: "attempt-1",
             assistantText: "done",
             toolOutputs: [],
           },
@@ -182,6 +183,41 @@ describe("gateway daemon control-plane methods", () => {
           sessionId: "session-42",
           reason: "remote_close",
           timeoutMs: undefined,
+        },
+      ]);
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  test("sessions.abort forwards optional user_submit reason to the backend", async () => {
+    const calls: Array<{ sessionId: string; reason?: "user_submit" }> = [];
+    const backend = createSessionBackendStub({
+      abortSession: async (sessionId, reason) => {
+        calls.push({ sessionId, reason });
+        return true;
+      },
+    });
+    const harness = createDaemonHarness([], { sessionBackend: backend });
+
+    try {
+      const handleMethod = getHandleMethod(harness.daemon);
+      const payload = (await handleMethod("sessions.abort", {
+        sessionId: "session-abort",
+        reason: "user_submit",
+      })) as {
+        sessionId: string;
+        aborted: boolean;
+      };
+
+      expect(payload).toEqual({
+        sessionId: "session-abort",
+        aborted: true,
+      });
+      expect(calls).toEqual([
+        {
+          sessionId: "session-abort",
+          reason: "user_submit",
         },
       ]);
     } finally {

@@ -12,14 +12,23 @@ import {
   type BrewvaSemanticOracle,
   type BrewvaToolOrchestration,
 } from "@brewva/brewva-tools";
-import type { ExtensionFactory as UpstreamExtensionFactory } from "@mariozechner/pi-coding-agent";
+import type {
+  ExtensionFactory as UpstreamExtensionFactory,
+  ToolDefinition,
+} from "@mariozechner/pi-coding-agent";
 import type { HostedDelegationStore } from "../subagents/delegation-store.js";
+import {
+  createHostedToolExecutionCoordinator,
+  wrapToolDefinitionsWithHostedExecutionTraits,
+  type HostedToolExecutionCoordinator,
+} from "../tool-execution-traits.js";
 import { createCompletionGuardLifecycle, registerCompletionGuard } from "./completion-guard.js";
 import { createContextTransformLifecycle } from "./context-transform.js";
 import { createDeliberationMaintenanceLifecycle } from "./deliberation-maintenance.js";
 import { registerEventStream } from "./event-stream.js";
 import { registerLedgerWriter } from "./ledger-writer.js";
 import { createNarrativeMemoryLifecycle } from "./narrative-memory-lifecycle.js";
+import { registerProviderRequestRecovery } from "./provider-request-recovery.js";
 import { createQualityGateLifecycle, registerQualityGate } from "./quality-gate.js";
 import { createRuntimeTurnClockStore } from "./runtime-turn-clock.js";
 import { registerToolResultDistiller } from "./tool-result-distiller.js";
@@ -42,6 +51,8 @@ export interface CreateHostedTurnPipelineOptions extends BrewvaRuntimeOptions {
   contextProfile?: "minimal" | "standard" | "full";
   semanticOracle?: BrewvaSemanticOracle;
   ports?: readonly TurnLifecyclePort[];
+  toolExecutionCoordinator?: HostedToolExecutionCoordinator;
+  hostedToolDefinitionsByName?: ReadonlyMap<string, ToolDefinition>;
 }
 
 function buildManagedTools(
@@ -95,13 +106,17 @@ function registerHostedPipeline(
   runtime: BrewvaRuntime,
   runtimePluginApi: RuntimePluginApi,
   tools: ReturnType<typeof buildBrewvaTools>,
+  extraToolDefinitionsByName: ReadonlyMap<string, ToolDefinition>,
   registerTools: boolean,
   delegationStore: HostedDelegationStore | undefined,
   contextProfile: "minimal" | "standard" | "full" | undefined,
   semanticOracle: BrewvaSemanticOracle | undefined,
   userPorts: readonly TurnLifecyclePort[],
 ): void {
-  const toolDefinitionsByName = new Map(tools.map((tool) => [tool.name, tool] as const));
+  const toolDefinitionsByName = new Map<string, ToolDefinition>(extraToolDefinitionsByName);
+  for (const tool of tools) {
+    toolDefinitionsByName.set(tool.name, tool);
+  }
   const turnClock = createRuntimeTurnClockStore();
   const contextTransform = createContextTransformLifecycle(runtimePluginApi, runtime, {
     delegationStore,
@@ -120,7 +135,10 @@ function registerHostedPipeline(
 
   runtimePluginApi.on("tool_call", qualityGate.toolCall);
   runtimePluginApi.on("context", contextTransform.context);
-  registerEventStream(runtimePluginApi, runtime, turnClock);
+  registerProviderRequestRecovery(runtimePluginApi, runtime);
+  registerEventStream(runtimePluginApi, runtime, turnClock, {
+    toolDefinitionsByName,
+  });
   registerLedgerWriter(runtimePluginApi, runtime);
   registerToolResultDistiller(runtimePluginApi, runtime);
   registerTurnLifecyclePorts(runtimePluginApi, [
@@ -159,7 +177,13 @@ export function createHostedTurnPipeline(
         governancePort:
           options.governancePort ?? createTrustedLocalGovernancePort({ profile: "team" }),
       });
-    const allTools = buildManagedTools(runtime, options);
+    const executionCoordinator =
+      options.toolExecutionCoordinator ?? createHostedToolExecutionCoordinator();
+    const allTools =
+      wrapToolDefinitionsWithHostedExecutionTraits(
+        buildManagedTools(runtime, options),
+        executionCoordinator,
+      ) ?? [];
     const registerTools = options.registerTools !== false;
 
     registerGovernanceDescriptors(runtime, allTools);
@@ -176,6 +200,7 @@ export function createHostedTurnPipeline(
       runtime,
       runtimePluginApi,
       allTools,
+      options.hostedToolDefinitionsByName ?? new Map<string, ToolDefinition>(),
       registerTools,
       options.delegationStore,
       options.contextProfile,

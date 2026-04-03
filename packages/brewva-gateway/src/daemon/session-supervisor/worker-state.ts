@@ -32,6 +32,7 @@ export interface QueuedTurn {
   requestedTurnId: string;
   prompt: string;
   source: "gateway" | "heartbeat" | "schedule";
+  walReplayId?: string;
   trigger?: SendPromptTrigger;
   waitForCompletion: boolean;
   walId?: string;

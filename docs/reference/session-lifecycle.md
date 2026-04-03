@@ -46,7 +46,9 @@ Deletion consequences:
 
 ## Recovery Path
 
-- On `SIGINT`/`SIGTERM`, CLI records `session_interrupted`, waits for agent idle (bounded by graceful timeout), then exits.
+- On `SIGINT`/`SIGTERM`, CLI records `session_turn_transition` with
+  `reason=signal_interrupt`, waits for agent idle (bounded by graceful
+  timeout), then exits.
 - Next startup reconstructs foldable replay state from event tape (`checkpoint + delta` replay),
   including task/truth/cost/evidence/projection fold slices.
 - First `onTurnStart()` hydrates session-local runtime state from tape events
