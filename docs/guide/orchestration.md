@@ -35,7 +35,7 @@ Orchestration is driven by runtime state management plus runtime-plugin lifecycl
 
 Delegated worker authoring now has two layers:
 
-- runtime postures remain JSON-backed under `.brewva/subagents/*.json`
+- runtime postures remain JSONC-backed under `.brewva/subagents/*.json`
 - authored worker overlays live under `.brewva/agents/*.md` or
   `.config/brewva/agents/*.md`
 

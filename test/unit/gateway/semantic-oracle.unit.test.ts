@@ -38,7 +38,7 @@ describe("hosted semantic oracle", () => {
       runtime,
       model: { provider: "anthropic", id: "sonnet" } as never,
       modelRegistry: {
-        getApiKey: async () => "test-api-key",
+        getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-api-key" }),
       },
       completeFn: async () => createAssistantResponse('{"ordered_ids":["b","a"]}') as never,
     });
@@ -73,7 +73,7 @@ describe("hosted semantic oracle", () => {
       runtime,
       model: { provider: "anthropic", id: "sonnet" } as never,
       modelRegistry: {
-        getApiKey: async () => "test-api-key",
+        getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-api-key" }),
       },
       completeFn: async () => createAssistantResponse('{"accept":false}') as never,
     });
@@ -106,7 +106,7 @@ describe("hosted semantic oracle", () => {
       runtime,
       model: { provider: "anthropic", id: "sonnet" } as never,
       modelRegistry: {
-        getApiKey: async () => "test-api-key",
+        getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-api-key" }),
       },
       completeFn: async (_model, request) => {
         capturedSystemPrompt = request.systemPrompt ?? "";

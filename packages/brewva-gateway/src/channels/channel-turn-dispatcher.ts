@@ -4,6 +4,7 @@ import {
   type TurnPart,
   type TurnWALStore,
 } from "@brewva/brewva-runtime/channels";
+import { LRUCache } from "lru-cache";
 import { toErrorMessage } from "../utils/errors.js";
 import type {
   ChannelCommandDispatchResult,
@@ -82,32 +83,17 @@ export function createChannelTurnDispatcher(input: {
   lastTurnCacheMaxEntries?: number;
 }): ChannelTurnDispatcher {
   const scopeQueues = new Map<string, Promise<void>>();
-  const lastTurnByScope = new Map<string, TurnEnvelope>();
   const lastTurnCacheMaxEntries = normalizeLastTurnCacheMaxEntries(input.lastTurnCacheMaxEntries);
+  const lastTurnByScope = new LRUCache<string, TurnEnvelope>({
+    max: lastTurnCacheMaxEntries,
+  });
 
   const rememberLastTurn = (scopeKey: string, turn: TurnEnvelope): void => {
-    if (lastTurnByScope.has(scopeKey)) {
-      lastTurnByScope.delete(scopeKey);
-    }
     lastTurnByScope.set(scopeKey, turn);
-    while (lastTurnByScope.size > lastTurnCacheMaxEntries) {
-      const oldestScopeKey = lastTurnByScope.keys().next().value;
-      if (!oldestScopeKey) {
-        break;
-      }
-      lastTurnByScope.delete(oldestScopeKey);
-    }
   };
 
-  const readLastTurn = (scopeKey: string): TurnEnvelope | undefined => {
-    const turn = lastTurnByScope.get(scopeKey);
-    if (!turn) {
-      return undefined;
-    }
-    lastTurnByScope.delete(scopeKey);
-    lastTurnByScope.set(scopeKey, turn);
-    return turn;
-  };
+  const readLastTurn = (scopeKey: string): TurnEnvelope | undefined =>
+    lastTurnByScope.get(scopeKey);
 
   const resolveApprovalTargetAgentIdForTurn = (
     turn: TurnEnvelope,

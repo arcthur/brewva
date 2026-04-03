@@ -19,7 +19,7 @@ type RegisteredModel = NonNullable<ReturnType<ModelRegistry["getAll"]>[number]>;
 
 interface HostedSemanticOracleOptions {
   model?: RegisteredModel;
-  modelRegistry: Pick<ModelRegistry, "getApiKey">;
+  modelRegistry: Pick<ModelRegistry, "getApiKeyAndHeaders">;
   runtime: Pick<BrewvaRuntime, "cost" | "events">;
   completeFn?: typeof complete;
 }
@@ -406,8 +406,8 @@ class HostedSemanticOracle implements BrewvaSemanticOracle {
     }
 
     const modelRef = resolveModelRef(model);
-    const apiKey = await this.options.modelRegistry.getApiKey(model);
-    if (!apiKey) {
+    const auth = await this.options.modelRegistry.getApiKeyAndHeaders(model);
+    if (!auth.ok) {
       return {
         parsed: null,
         outcome: "unavailable",
@@ -428,7 +428,7 @@ class HostedSemanticOracle implements BrewvaSemanticOracle {
           systemPrompt: input.systemPrompt,
           messages: [userMessage],
         },
-        { apiKey },
+        { apiKey: auth.apiKey, headers: auth.headers },
       );
       recordAssistantUsageFromMessage(this.options.runtime, input.sessionId, response);
       return {

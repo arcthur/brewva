@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { parseJsonc } from "@brewva/brewva-runtime";
 import type { StructuredLogger } from "./logger.js";
 
 export interface HeartbeatRule {
@@ -15,7 +16,7 @@ export interface HeartbeatPolicy {
   rules: HeartbeatRule[];
 }
 
-const POLICY_BLOCK_REGEX = /```(?:json\s+)?heartbeat\s*\n([\s\S]*?)```/iu;
+const POLICY_BLOCK_REGEX = /```(?:jsonc?\s+)?heartbeat\s*\n([\s\S]*?)```/iu;
 
 function normalizeRule(
   input: Partial<HeartbeatRule>,
@@ -50,7 +51,7 @@ function parseJsonPolicy(markdown: string): HeartbeatRule[] {
   }
 
   try {
-    const parsed = JSON.parse(block) as unknown;
+    const parsed = parseJsonc(block);
     if (!parsed || typeof parsed !== "object") {
       return [];
     }

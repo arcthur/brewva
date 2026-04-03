@@ -133,6 +133,38 @@ describe("subagent delegation catalog", () => {
     expect(catalog.workspaceAgentSpecNames.has("bounded-plan")).toBe(true);
   });
 
+  test("loads workspace subagent JSONC overlays with comments and trailing commas", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-catalog-jsonc-"));
+    const subagentDir = join(workspace, ".brewva", "subagents");
+    mkdirSync(subagentDir, { recursive: true });
+    writeFileSync(
+      join(subagentDir, "jsonc-review.json"),
+      [
+        "{",
+        "  // jsonc-authored workspace review delegate",
+        '  "kind": "agentSpec",',
+        '  "name": "jsonc-review",',
+        '  "description": "Workspace JSONC review worker",',
+        '  "envelope": "readonly-reviewer",',
+        '  "fallbackResultMode": "review",',
+        '  "executorPreamble": "Operate from JSONC-authored config.",',
+        "}",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const catalog = await loadHostedDelegationCatalog(workspace);
+
+    expect(catalog.agentSpecs.get("jsonc-review")).toEqual({
+      name: "jsonc-review",
+      description: "Workspace JSONC review worker",
+      envelope: "readonly-reviewer",
+      fallbackResultMode: "review",
+      executorPreamble: "Operate from JSONC-authored config.",
+    });
+    expect(catalog.workspaceAgentSpecNames.has("jsonc-review")).toBe(true);
+  });
+
   test("rejects workspace envelopes that widen a base envelope", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-catalog-widen-envelope-"));
     const subagentDir = join(workspace, ".brewva", "subagents");

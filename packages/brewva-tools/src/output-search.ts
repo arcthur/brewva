@@ -3,6 +3,8 @@ import { isAbsolute, resolve, sep } from "node:path";
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import Fuse from "fuse.js";
+import { LRUCache } from "lru-cache";
 import { tokenizeSearchTerms } from "./shared/query.js";
 import type { BrewvaToolOptions } from "./types.js";
 import { inconclusiveTextResult, textResult } from "./utils/result.js";
@@ -24,8 +26,18 @@ const MAX_OUTPUT_CHARS = 36_000;
 const MAX_ARTIFACT_CACHE_ENTRIES = 256;
 const MAX_ARTIFACT_CACHE_BYTES = 32 * 1024 * 1024;
 const SEARCH_LAYERS: readonly SearchLayer[] = ["exact", "partial", "fuzzy"];
-const MIN_FUZZY_LAYER_SCORE = 0.9;
+const LINE_FUSE_THRESHOLD = 0.45;
+const TOKEN_FUSE_THRESHOLD = 0.3;
+const MAX_LINE_FUSE_RESULTS = 12;
+const EXACT_QUERY_BONUS = 160;
+const EXACT_TOKEN_BONUS = 90;
+const EXACT_LINE_HIT_BONUS = 14;
+const PARTIAL_TOKEN_BONUS = 26;
+const PARTIAL_PREFIX_BONUS = 12;
 const MIN_FUZZY_TOKEN_COVERAGE = 0.5;
+const MAX_CONFIDENT_FUZZY_TOKEN_SCORE = 0.12;
+const MAX_CONFIDENT_FUZZY_LINE_SCORE = 0.35;
+const FUSE_SCORE_SCALE = 100;
 
 type ArtifactCandidate = {
   artifactRef: string;
@@ -44,6 +56,8 @@ type QueryMatch = {
   matchedLineCount: number;
   layer: SearchLayer;
   fuzzyTokenCoverage: number | null;
+  bestFuseScore: number | null;
+  bestFuzzyTokenScore: number | null;
 };
 
 type SearchLayer = "exact" | "partial" | "fuzzy";
@@ -62,10 +76,39 @@ type SearchThrottleState = {
   recentSingleQueryCalls: number;
 };
 
+type SearchableLine = {
+  lineIndex: number;
+  lowerText: string;
+  tokens: string[];
+  tokenSet: ReadonlySet<string>;
+  tokenString: string;
+};
+
+type SearchableToken = {
+  lineIndex: number;
+  token: string;
+};
+
+type ArtifactSearchMatch = {
+  score: number;
+  snippet: string;
+  matchedLineCount: number;
+  fuzzyTokenCoverage: number | null;
+  bestFuseScore: number | null;
+  bestFuzzyTokenScore: number | null;
+};
+
 type PreparedArtifact = {
   lines: string[];
-  lowerLines: string[];
-  lineWords: string[][];
+  searchableLines: SearchableLine[];
+  lineFuse: Fuse<SearchableLine>;
+  tokenFuse: Fuse<SearchableToken>;
+};
+
+type ArtifactSearchResult = {
+  exact: ArtifactSearchMatch | null;
+  partial: ArtifactSearchMatch | null;
+  fuzzy: ArtifactSearchMatch | null;
 };
 
 type ArtifactCacheEntry = {
@@ -73,7 +116,6 @@ type ArtifactCacheEntry = {
   mtimeMs: number;
   estimatedBytes: number;
   prepared: PreparedArtifact;
-  lastAccessedAt: number;
 };
 
 type ArtifactLoadStats = {
@@ -83,8 +125,11 @@ type ArtifactLoadStats = {
   globalCacheHits: number;
 };
 
-const artifactCache = new Map<string, ArtifactCacheEntry>();
-let artifactCacheEstimatedBytes = 0;
+const artifactCache = new LRUCache<string, ArtifactCacheEntry>({
+  max: MAX_ARTIFACT_CACHE_ENTRIES,
+  maxSize: MAX_ARTIFACT_CACHE_BYTES,
+  sizeCalculation: (entry) => entry.estimatedBytes,
+});
 
 function normalizeText(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -209,115 +254,72 @@ function createQueryProfile(query: string): QueryProfile | null {
   };
 }
 
-function maxEditDistanceForTokenLength(length: number): number {
-  if (length >= 6) return 1;
-  return 0;
+function createSearchableLine(line: string, lineIndex: number): SearchableLine {
+  const lowerText = line.toLowerCase();
+  const tokens = tokenizeLineWords(lowerText);
+  return {
+    lineIndex,
+    lowerText,
+    tokens,
+    tokenSet: new Set(tokens),
+    tokenString: tokens.join(" "),
+  };
 }
 
-function boundedLevenshteinDistance(left: string, right: string, maxDistance: number): number {
-  if (left === right) return 0;
-  if (maxDistance < 0) return maxDistance + 1;
-
-  const leftLength = left.length;
-  const rightLength = right.length;
-  const lengthDiff = Math.abs(leftLength - rightLength);
-  if (lengthDiff > maxDistance) return maxDistance + 1;
-
-  if (leftLength === 0 || rightLength === 0) {
-    return Math.max(leftLength, rightLength);
-  }
-
-  let previous = Array.from({ length: rightLength + 1 }, (_value, index) => index);
-
-  for (let row = 1; row <= leftLength; row += 1) {
-    const current = Array.from({ length: rightLength + 1 }, () => maxDistance + 1);
-    current[0] = row;
-    let rowMin = current[0];
-
-    const lowerBound = Math.max(1, row - maxDistance);
-    const upperBound = Math.min(rightLength, row + maxDistance);
-
-    for (let col = 1; col < lowerBound; col += 1) {
-      current[col] = maxDistance + 1;
-    }
-
-    for (let col = lowerBound; col <= upperBound; col += 1) {
-      const substitutionCost = left[row - 1] === right[col - 1] ? 0 : 1;
-      const insertCost = (current[col - 1] ?? maxDistance + 1) + 1;
-      const deleteCost = (previous[col] ?? maxDistance + 1) + 1;
-      const replaceCost = (previous[col - 1] ?? maxDistance + 1) + substitutionCost;
-      const value = Math.min(insertCost, deleteCost, replaceCost);
-      current[col] = value;
-      rowMin = Math.min(rowMin, value);
-    }
-
-    for (let col = upperBound + 1; col <= rightLength; col += 1) {
-      current[col] = maxDistance + 1;
-    }
-
-    if (rowMin > maxDistance) return maxDistance + 1;
-    previous = current;
-  }
-
-  return previous[rightLength] ?? maxDistance + 1;
+function createLineFuse(searchableLines: readonly SearchableLine[]): Fuse<SearchableLine> {
+  return new Fuse(searchableLines, {
+    includeScore: true,
+    ignoreLocation: true,
+    threshold: LINE_FUSE_THRESHOLD,
+    minMatchCharLength: 2,
+    keys: [
+      { name: "lowerText", weight: 2.4 },
+      { name: "tokenString", weight: 1.8 },
+    ],
+  });
 }
 
-function hasFuzzyTokenMatch(token: string, lineWords: string[]): boolean {
-  const maxDistance = maxEditDistanceForTokenLength(token.length);
-  if (maxDistance <= 0) return false;
-
-  const prefix = token.length >= 8 ? token.slice(0, 3) : "";
-  for (const word of lineWords) {
-    if (prefix && word.length >= 8 && !word.startsWith(prefix)) continue;
-    if (word === token) return true;
-    if (Math.abs(word.length - token.length) > maxDistance) continue;
-    const distance = boundedLevenshteinDistance(token, word, maxDistance);
-    if (distance <= maxDistance) return true;
-  }
-  return false;
+function createTokenFuse(searchableLines: readonly SearchableLine[]): Fuse<SearchableToken> {
+  return new Fuse(
+    searchableLines.flatMap((line) =>
+      line.tokens.map((token) => ({ lineIndex: line.lineIndex, token })),
+    ),
+    {
+      includeScore: true,
+      ignoreLocation: true,
+      threshold: TOKEN_FUSE_THRESHOLD,
+      minMatchCharLength: 3,
+      keys: ["token"],
+    },
+  );
 }
 
-function scoreLineForLayer(
-  lowerLine: string,
-  lineWords: string[],
-  queryProfile: QueryProfile,
-  layer: SearchLayer,
-): number {
-  if (layer === "exact") {
-    const queryMatch =
-      queryProfile.normalizedQuery.length >= 3 && lowerLine.includes(queryProfile.normalizedQuery);
-    const allTokensMatch = queryProfile.tokens.every((token) => lowerLine.includes(token));
-    if (!queryMatch && !allTokensMatch) return 0;
-
-    let score = 0;
-    if (queryMatch) score += 3;
-    if (allTokensMatch) score += 2;
-    if (queryMatch && allTokensMatch) score += 1;
-    return score;
-  }
-
-  if (layer === "partial") {
-    let score = 0;
-    for (const token of queryProfile.tokens) {
-      if (lowerLine.includes(token)) score += 1;
+function countExactTokenHits(line: SearchableLine, tokens: readonly string[]): number {
+  let matches = 0;
+  for (const token of tokens) {
+    if (line.tokenSet.has(token)) {
+      matches += 1;
     }
-    if (score > 0) return score;
+  }
+  return matches;
+}
 
-    for (const token of queryProfile.partialTokens) {
-      if (lowerLine.includes(token)) score += 0.6;
+function countSubstringHits(lowerLine: string, tokens: readonly string[]): number {
+  let matches = 0;
+  for (const token of tokens) {
+    if (lowerLine.includes(token)) {
+      matches += 1;
     }
-    return score;
   }
+  return matches;
+}
 
-  if (queryProfile.fuzzyTokens.length === 0) return 0;
-  if (lineWords.length === 0) return 0;
-
-  let fuzzyHits = 0;
-  for (const token of queryProfile.fuzzyTokens) {
-    if (hasFuzzyTokenMatch(token, lineWords)) fuzzyHits += 1;
+function scoreFuseResult(score: number | undefined, scale = FUSE_SCORE_SCALE): number {
+  if (typeof score !== "number" || !Number.isFinite(score)) {
+    return 0;
   }
-
-  return fuzzyHits > 0 ? fuzzyHits * 0.75 : 0;
+  const bounded = Math.max(0, Math.min(1, score));
+  return (1 - bounded) * scale;
 }
 
 function computeSearchThrottle(input: {
@@ -377,48 +379,17 @@ function computeSearchThrottle(input: {
 
 function prepareArtifact(content: string): PreparedArtifact {
   const lines = content.split(/\r?\n/u);
-  const lowerLines = lines.map((line) => line.toLowerCase());
-  const lineWords = lowerLines.map((line) => tokenizeLineWords(line));
+  const searchableLines = lines.map((line, lineIndex) => createSearchableLine(line, lineIndex));
   return {
     lines,
-    lowerLines,
-    lineWords,
+    searchableLines,
+    lineFuse: createLineFuse(searchableLines),
+    tokenFuse: createTokenFuse(searchableLines),
   };
 }
 
 function estimateCacheEntryBytes(rawBytes: number): number {
   return Math.max(rawBytes, rawBytes * 4);
-}
-
-function deleteArtifactCacheEntry(cacheKey: string): void {
-  const existing = artifactCache.get(cacheKey);
-  if (!existing) return;
-  artifactCache.delete(cacheKey);
-  artifactCacheEstimatedBytes = Math.max(0, artifactCacheEstimatedBytes - existing.estimatedBytes);
-}
-
-function setArtifactCacheEntry(cacheKey: string, entry: ArtifactCacheEntry): void {
-  deleteArtifactCacheEntry(cacheKey);
-  artifactCache.set(cacheKey, entry);
-  artifactCacheEstimatedBytes += entry.estimatedBytes;
-}
-
-function pruneArtifactCache(): void {
-  while (
-    artifactCache.size > MAX_ARTIFACT_CACHE_ENTRIES ||
-    artifactCacheEstimatedBytes > MAX_ARTIFACT_CACHE_BYTES
-  ) {
-    let oldestKey: string | undefined;
-    let oldestAccessAt = Number.POSITIVE_INFINITY;
-    for (const [cacheKey, entry] of artifactCache.entries()) {
-      if (entry.lastAccessedAt < oldestAccessAt) {
-        oldestAccessAt = entry.lastAccessedAt;
-        oldestKey = cacheKey;
-      }
-    }
-    if (!oldestKey) break;
-    deleteArtifactCacheEntry(oldestKey);
-  }
 }
 
 function getPreparedArtifact(input: {
@@ -444,12 +415,9 @@ function getPreparedArtifact(input: {
       return undefined;
     }
 
-    const now = Date.now();
     const cacheKey = buildArtifactCacheKey(input.cacheScope, input.absolutePath);
     const cached = artifactCache.get(cacheKey);
     if (cached && cached.size === fileStat.size && cached.mtimeMs === fileStat.mtimeMs) {
-      cached.lastAccessedAt = now;
-      setArtifactCacheEntry(cacheKey, cached);
       input.localCache.set(input.absolutePath, cached.prepared);
       input.stats.cacheHits += 1;
       input.stats.globalCacheHits += 1;
@@ -458,14 +426,12 @@ function getPreparedArtifact(input: {
 
     const content = readFileSync(input.absolutePath, "utf8");
     const prepared = prepareArtifact(content);
-    setArtifactCacheEntry(cacheKey, {
+    artifactCache.set(cacheKey, {
       size: fileStat.size,
       mtimeMs: fileStat.mtimeMs,
       estimatedBytes: estimateCacheEntryBytes(Buffer.byteLength(content, "utf8")),
       prepared,
-      lastAccessedAt: now,
     });
-    pruneArtifactCache();
     input.localCache.set(input.absolutePath, prepared);
     input.stats.cacheMisses += 1;
     return prepared;
@@ -483,9 +449,9 @@ function buildSnippet(lines: string[], hitIndexes: number[], maxChars: number): 
     ranges.push({ start, end });
   }
 
-  ranges.sort((left, right) => left.start - right.start);
+  const sortedRanges = ranges.toSorted((left, right) => left.start - right.start);
   const merged: Array<{ start: number; end: number }> = [];
-  for (const range of ranges) {
+  for (const range of sortedRanges) {
     const last = merged[merged.length - 1];
     if (!last || range.start > last.end + 1) {
       merged.push({ ...range });
@@ -510,63 +476,159 @@ function buildSnippet(lines: string[], hitIndexes: number[], maxChars: number): 
   return `${combined.slice(0, keep)}...`;
 }
 
+function buildArtifactSearchMatch(input: {
+  lines: string[];
+  hits: Array<{ lineIndex: number; score: number }>;
+  snippetMaxChars: number;
+  fuzzyTokenCoverage?: number | null;
+  bestFuseScore?: number | null;
+  bestFuzzyTokenScore?: number | null;
+}): ArtifactSearchMatch | null {
+  if (input.hits.length === 0) {
+    return null;
+  }
+
+  const hits = [...input.hits].toSorted(
+    (left, right) => right.score - left.score || left.lineIndex - right.lineIndex,
+  );
+  const topLineIndexes = hits.slice(0, 3).map((hit) => hit.lineIndex);
+  return {
+    score: (hits[0]?.score ?? 0) + Math.min(hits.length, 6) * 3,
+    snippet: buildSnippet(input.lines, topLineIndexes, input.snippetMaxChars),
+    matchedLineCount: hits.length,
+    fuzzyTokenCoverage: input.fuzzyTokenCoverage ?? null,
+    bestFuseScore: input.bestFuseScore ?? null,
+    bestFuzzyTokenScore: input.bestFuzzyTokenScore ?? null,
+  };
+}
+
+function collectFuzzySignal(
+  prepared: PreparedArtifact,
+  queryProfile: QueryProfile,
+): { coverage: number; bestTokenScore: number | null } | null {
+  if (queryProfile.fuzzyTokens.length === 0) {
+    return null;
+  }
+
+  let matchedTokens = 0;
+  let bestTokenScore = Number.POSITIVE_INFINITY;
+  for (const token of queryProfile.fuzzyTokens) {
+    const bestMatch = prepared.tokenFuse.search(token, { limit: 1 })[0];
+    if (
+      bestMatch &&
+      typeof bestMatch.score === "number" &&
+      bestMatch.score <= MAX_CONFIDENT_FUZZY_TOKEN_SCORE
+    ) {
+      matchedTokens += 1;
+      bestTokenScore = Math.min(bestTokenScore, bestMatch.score);
+    }
+  }
+
+  return {
+    coverage: matchedTokens / queryProfile.fuzzyTokens.length,
+    bestTokenScore: Number.isFinite(bestTokenScore) ? bestTokenScore : null,
+  };
+}
+
 function searchArtifact(input: {
   prepared: PreparedArtifact;
   queryProfile: QueryProfile;
-  layer: SearchLayer;
   snippetMaxChars: number;
-}): {
-  score: number;
-  snippet: string;
-  matchedLineCount: number;
-  fuzzyTokenCoverage: number | null;
-} | null {
+}): ArtifactSearchResult {
   const lines = input.prepared.lines;
-  if (input.queryProfile.tokens.length === 0) return null;
-
-  const hits: Array<{ lineIndex: number; score: number }> = [];
-  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
-    const lowerLine = input.prepared.lowerLines[lineIndex] ?? "";
-    const lineWords = input.prepared.lineWords[lineIndex] ?? [];
-    const lineScore = scoreLineForLayer(lowerLine, lineWords, input.queryProfile, input.layer);
-    if (lineScore <= 0) continue;
-    hits.push({ lineIndex, score: lineScore });
+  if (input.queryProfile.tokens.length === 0) {
+    return {
+      exact: null,
+      partial: null,
+      fuzzy: null,
+    };
   }
 
-  if (hits.length === 0) return null;
-  hits.sort((left, right) => right.score - left.score || left.lineIndex - right.lineIndex);
+  const exactHits: Array<{ lineIndex: number; score: number }> = [];
+  for (const line of input.prepared.searchableLines) {
+    const exactQueryMatch =
+      input.queryProfile.normalizedQuery.length >= 3 &&
+      line.lowerText.includes(input.queryProfile.normalizedQuery);
+    const exactTokenHits = countExactTokenHits(line, input.queryProfile.tokens);
+    const allExactTokensMatch =
+      input.queryProfile.tokens.length > 0 && exactTokenHits === input.queryProfile.tokens.length;
+    if (!exactQueryMatch && !allExactTokensMatch) {
+      continue;
+    }
 
-  const topLineIndexes = hits.slice(0, 3).map((hit) => hit.lineIndex);
-  const snippet = buildSnippet(lines, topLineIndexes, input.snippetMaxChars);
-  const topScore = hits[0]?.score ?? 0;
-  const score = topScore + Math.min(hits.length, 6) * 0.2;
-  const fuzzyTokenCoverage =
-    input.layer === "fuzzy" && input.queryProfile.fuzzyTokens.length > 0
-      ? (() => {
-          let matchedTokens = 0;
-          for (const token of input.queryProfile.fuzzyTokens) {
-            if (
-              input.prepared.lineWords.some((lineWords) => hasFuzzyTokenMatch(token, lineWords))
-            ) {
-              matchedTokens += 1;
-            }
-          }
-          return matchedTokens / input.queryProfile.fuzzyTokens.length;
-        })()
-      : null;
+    let score = 0;
+    if (exactQueryMatch) score += EXACT_QUERY_BONUS;
+    if (allExactTokensMatch) score += EXACT_TOKEN_BONUS;
+    score += exactTokenHits * EXACT_LINE_HIT_BONUS;
+    exactHits.push({ lineIndex: line.lineIndex, score });
+  }
+
+  const lineResults = input.prepared.lineFuse.search(input.queryProfile.normalizedQuery, {
+    limit: MAX_LINE_FUSE_RESULTS,
+  });
+  const partialHits: Array<{ lineIndex: number; score: number }> = [];
+  const fuzzyHits: Array<{ lineIndex: number; score: number }> = [];
+  for (const result of lineResults) {
+    const line = result.item;
+    const exactTokenHits = countExactTokenHits(line, input.queryProfile.tokens);
+    const partialTokenHits = countSubstringHits(line.lowerText, input.queryProfile.partialTokens);
+    const baseScore = scoreFuseResult(result.score);
+
+    if (exactTokenHits > 0 || partialTokenHits > 0) {
+      partialHits.push({
+        lineIndex: line.lineIndex,
+        score:
+          baseScore +
+          exactTokenHits * PARTIAL_TOKEN_BONUS +
+          partialTokenHits * PARTIAL_PREFIX_BONUS,
+      });
+    }
+
+    fuzzyHits.push({
+      lineIndex: line.lineIndex,
+      score: baseScore,
+    });
+  }
 
   return {
-    score,
-    snippet,
-    matchedLineCount: hits.length,
-    fuzzyTokenCoverage,
+    exact: buildArtifactSearchMatch({
+      lines,
+      hits: exactHits,
+      snippetMaxChars: input.snippetMaxChars,
+    }),
+    partial: buildArtifactSearchMatch({
+      lines,
+      hits: partialHits,
+      snippetMaxChars: input.snippetMaxChars,
+      bestFuseScore: lineResults[0]?.score ?? null,
+    }),
+    fuzzy: (() => {
+      const fuzzySignal = collectFuzzySignal(input.prepared, input.queryProfile);
+      if (!fuzzySignal) {
+        return null;
+      }
+      return buildArtifactSearchMatch({
+        lines,
+        hits: fuzzyHits,
+        snippetMaxChars: input.snippetMaxChars,
+        fuzzyTokenCoverage: fuzzySignal.coverage,
+        bestFuseScore: lineResults[0]?.score ?? null,
+        bestFuzzyTokenScore: fuzzySignal.bestTokenScore,
+      });
+    })(),
   };
 }
 
 function isConfidentFuzzyMatch(match: QueryMatch): boolean {
   if (match.layer !== "fuzzy") return true;
   const coverage = match.fuzzyTokenCoverage ?? 0;
-  return match.score >= MIN_FUZZY_LAYER_SCORE && coverage >= MIN_FUZZY_TOKEN_COVERAGE;
+  const bestFuseScore = match.bestFuseScore ?? 1;
+  const bestFuzzyTokenScore = match.bestFuzzyTokenScore ?? 1;
+  return (
+    coverage >= MIN_FUZZY_TOKEN_COVERAGE &&
+    bestFuseScore <= MAX_CONFIDENT_FUZZY_LINE_SCORE &&
+    bestFuzzyTokenScore <= MAX_CONFIDENT_FUZZY_TOKEN_SCORE
+  );
 }
 
 function clampOutput(text: string, maxChars: number): string {
@@ -764,40 +826,50 @@ export function createOutputSearchTool(options: BrewvaToolOptions): ToolDefiniti
 
         let matches: QueryMatch[] = [];
         let matchedLayer: SearchLayer | "none" = "none";
+        const layeredMatchesByLayer: Record<SearchLayer, QueryMatch[]> = {
+          exact: [],
+          partial: [],
+          fuzzy: [],
+        };
 
-        for (const layer of SEARCH_LAYERS) {
-          const layeredMatches: QueryMatch[] = [];
-          for (const candidate of candidates) {
-            const prepared = getPreparedArtifact({
-              cacheScope,
-              absolutePath: candidate.absolutePath,
-              maxArtifactBytes,
-              localCache: contentCache,
-              skippedLargePaths,
-              readFailurePaths,
-              stats: loadStats,
-            });
-            if (!prepared) continue;
+        for (const candidate of candidates) {
+          const prepared = getPreparedArtifact({
+            cacheScope,
+            absolutePath: candidate.absolutePath,
+            maxArtifactBytes,
+            localCache: contentCache,
+            skippedLargePaths,
+            readFailurePaths,
+            stats: loadStats,
+          });
+          if (!prepared) continue;
 
-            const searched = searchArtifact({
-              prepared,
-              queryProfile,
-              layer,
-              snippetMaxChars: 1_500,
-            });
-            if (!searched) continue;
-            layeredMatches.push({
+          const searched = searchArtifact({
+            prepared,
+            queryProfile,
+            snippetMaxChars: 1_500,
+          });
+          for (const layer of SEARCH_LAYERS) {
+            const layerMatch = searched[layer];
+            if (!layerMatch) continue;
+
+            layeredMatchesByLayer[layer].push({
               artifactRef: candidate.artifactRef,
               toolName: candidate.toolName,
-              score: searched.score,
+              score: layerMatch.score,
               timestamp: candidate.timestamp,
-              snippet: searched.snippet,
-              matchedLineCount: searched.matchedLineCount,
+              snippet: layerMatch.snippet,
+              matchedLineCount: layerMatch.matchedLineCount,
               layer,
-              fuzzyTokenCoverage: searched.fuzzyTokenCoverage,
+              fuzzyTokenCoverage: layerMatch.fuzzyTokenCoverage,
+              bestFuseScore: layerMatch.bestFuseScore,
+              bestFuzzyTokenScore: layerMatch.bestFuzzyTokenScore,
             });
           }
+        }
 
+        for (const layer of SEARCH_LAYERS) {
+          const layeredMatches = layeredMatchesByLayer[layer];
           if (layer === "fuzzy") {
             const confidentFuzzyMatches = layeredMatches.filter((match) =>
               isConfidentFuzzyMatch(match),
@@ -817,8 +889,9 @@ export function createOutputSearchTool(options: BrewvaToolOptions): ToolDefiniti
           }
         }
 
-        matches.sort((left, right) => right.score - left.score || right.timestamp - left.timestamp);
-        const topMatches = matches.slice(0, effectiveLimit);
+        const topMatches = matches
+          .toSorted((left, right) => right.score - left.score || right.timestamp - left.timestamp)
+          .slice(0, effectiveLimit);
         matchCounts[query] = topMatches.length;
         matchLayers[query] = matchedLayer;
 

@@ -39,6 +39,7 @@ function createExtensionContext(sessionId: string): ExtensionContext {
       },
     } as unknown as ExtensionContext["modelRegistry"],
     model: undefined,
+    signal: new AbortController().signal,
     isIdle() {
       return true;
     },

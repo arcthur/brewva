@@ -519,6 +519,7 @@ Semantics:
 - late detached outcomes surface through replay-visible pending delegation
   outcome state instead of a proposal-backed return mode
 - workspace-defined delegated workers live under `.brewva/subagents/*.json`
+  and are parsed as JSONC, so comments and trailing commas are accepted
   and must declare `kind: "envelope"` or `kind: "agentSpec"` with `extends`
   support; markdown worker files under `.brewva/agents/*.md` and
   `.config/brewva/agents/*.md` default to `agentSpec`; their frontmatter
@@ -620,6 +621,25 @@ Explicit inspection and management surface for typed narrative memory records.
 - promotes only into the agent self-bundle `memory.md`; it does not materialize
   directly into `docs/solutions/**`
 
+## `output_search`
+
+Explicit persisted artifact reuse surface.
+
+- searches session-local persisted tool-output artifacts before rerunning
+  expensive commands or rebuilding already-captured evidence
+- exposes `exact`, `partial`, and `fuzzy` match layers plus throttle and cache
+  telemetry so callers can judge recall quality explicitly
+- remains session-scoped and read-only; it does not widen filesystem or
+  execution authority
+- current implementation keeps `Fuse.js` only as a local line/token candidate
+  matcher inside the layered search pipeline
+- stable behavior is the layered match contract, confidence gating, artifact
+  selection, snippet extraction, and telemetry shape; the library choice is not
+  the contract
+- replacing the current matcher is only justified when large-artifact recall or
+  measured index-cost pressure shows a different two-stage retrieval design
+  would materially improve the current contract
+
 ## `knowledge_search`
 
 Explicit repository-native precedent retrieval surface.
@@ -635,6 +655,14 @@ Explicit repository-native precedent retrieval surface.
 - remains read-only and task-target-root scoped
 - is the preferred proof-of-consult surface before non-trivial planning,
   debugging, or review
+- current implementation keeps `Fuse.js` as a document-level fuzzy candidate
+  scorer across title, module, boundary, tag, path, and body fields
+- source typing, authority ranking, query-intent ordering, filter boosts, and
+  freshness tie-breaks remain the governing semantics; fuzzy retrieval does not
+  become repository precedent authority
+- replacing the current matcher is not a goal by itself; future optimization
+  should prefer corpus/index caching or measured recall improvements over
+  reintroducing a hand-rolled scorer
 
 ## `knowledge_capture`
 

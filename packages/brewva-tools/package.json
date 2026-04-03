@@ -17,11 +17,13 @@
     "@brewva/brewva-deliberation": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
     "@brewva/brewva-skill-broker": "workspace:*",
-    "@mariozechner/pi-coding-agent": "^0.61.1",
+    "@mariozechner/pi-coding-agent": "^0.64.0",
     "@sinclair/typebox": "^0.34.48",
     "date-fns": "^4.1.0",
+    "fuse.js": "^7.1.0",
+    "lru-cache": "^11.2.7",
     "microsandbox": "^0.1.1",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.2"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

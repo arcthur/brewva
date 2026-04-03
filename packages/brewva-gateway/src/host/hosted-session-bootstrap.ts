@@ -343,7 +343,7 @@ function resolveHostedEnvironment(options: CreateHostedSessionOptions): HostedEn
   const agentDir = resolveBrewvaAgentDir();
 
   const authStorage = AuthStorage.create(join(agentDir, "auth.json"));
-  const modelRegistry = new ModelRegistry(authStorage, join(agentDir, "models.json"));
+  const modelRegistry = ModelRegistry.create(authStorage, join(agentDir, "models.json"));
   const selectedModel = resolveBrewvaModelSelection(options.model, modelRegistry);
 
   return {

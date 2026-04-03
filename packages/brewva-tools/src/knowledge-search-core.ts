@@ -1,5 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative } from "node:path";
+import Fuse from "fuse.js";
+import type { FuseResultMatch } from "fuse.js";
 import { parseFrontmatter, readFrontmatterString } from "./utils/frontmatter.js";
 
 export const KNOWLEDGE_SOURCE_TYPES = [
@@ -58,6 +60,9 @@ const MIN_BOOTSTRAP_SOLUTION_RESULTS = 2;
 const BOOTSTRAP_SOURCE_TYPES = KNOWLEDGE_SOURCE_TYPES.filter(
   (entry): entry is Exclude<KnowledgeSourceType, "solution"> => entry !== "solution",
 );
+const FUSE_THRESHOLD = 0.4;
+const FUSE_BASE_SCORE = 1_000;
+const FILTER_ONLY_BASE_SCORE = 100;
 
 export type KnowledgeSourceType = (typeof KNOWLEDGE_SOURCE_TYPES)[number];
 export type KnowledgeQueryIntent = (typeof KNOWLEDGE_QUERY_INTENTS)[number];
@@ -119,6 +124,11 @@ export interface ExecutedKnowledgeSearch {
   };
 }
 
+interface RankedKnowledgeDoc extends ScoredKnowledgeDoc {
+  queryScore: number;
+  filterBoost: number;
+}
+
 function readTrimmedString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim();
@@ -145,23 +155,6 @@ function truncate(value: string, maxChars: number): string {
   const compacted = compactWhitespace(value);
   if (compacted.length <= maxChars) return compacted;
   return `${compacted.slice(0, Math.max(1, maxChars - 3))}...`;
-}
-
-function tokenize(value: string): string[] {
-  const matches = value.toLowerCase().match(/[a-z0-9_./:-]+/g) ?? [];
-  return [...new Set(matches.filter((entry) => entry.length >= 2))];
-}
-
-function countTokenMatches(tokens: readonly string[], text: string): number {
-  if (tokens.length === 0 || text.length === 0) return 0;
-  const lower = text.toLowerCase();
-  let count = 0;
-  for (const token of tokens) {
-    if (lower.includes(token)) {
-      count += 1;
-    }
-  }
-  return count;
 }
 
 function readUpdatedAt(data: Record<string, unknown>): string | undefined {
@@ -370,101 +363,135 @@ function matchesFilters(
   return true;
 }
 
-function scoreDoc(
-  doc: KnowledgeDocRecord,
-  input: {
-    query?: string;
-    queryIntent: KnowledgeQueryIntent;
-    module?: string;
-    boundary?: string;
-    tags?: readonly string[];
-  },
-): ScoredKnowledgeDoc | null {
-  const tokens = tokenize(input.query ?? "");
-  const matchReasons = new Set<string>();
-  let relevanceScore = 0;
-
-  const titleMatches = countTokenMatches(tokens, doc.title);
-  if (titleMatches > 0) {
-    relevanceScore += titleMatches * 8;
-    matchReasons.add("title");
+function normalizeScore(score: number | undefined): number {
+  if (typeof score !== "number" || !Number.isFinite(score)) {
+    return 0;
   }
+  const bounded = Math.max(0, Math.min(1, score));
+  return Math.max(1, Math.round((1 - bounded) * FUSE_BASE_SCORE));
+}
 
-  const excerptMatches = countTokenMatches(tokens, doc.body);
-  if (excerptMatches > 0) {
-    relevanceScore += excerptMatches * 2;
-    matchReasons.add("content");
+function mapFuseKeyToReason(
+  key: string | number | readonly string[] | undefined,
+): string | undefined {
+  if (Array.isArray(key)) {
+    const joined = key.join(".");
+    return mapFuseKeyToReason(joined);
   }
-
-  const pathMatches = countTokenMatches(tokens, doc.relativePath);
-  if (pathMatches > 0) {
-    relevanceScore += pathMatches * 4;
-    matchReasons.add("path");
+  switch (key) {
+    case "title":
+      return "title";
+    case "relativePath":
+      return "path";
+    case "body":
+      return "content";
+    case "tags":
+      return "tags";
+    case "boundaries":
+      return "boundaries";
+    case "module":
+      return "module";
+    case "problemKind":
+      return "problem_kind";
+    case "status":
+      return "status";
+    default:
+      return undefined;
   }
+}
 
-  const tagMatches = countTokenMatches(tokens, doc.tags.join(" "));
-  if (tagMatches > 0) {
-    relevanceScore += tagMatches * 6;
-    matchReasons.add("tags");
+function collectFuseMatchReasons(matches: readonly FuseResultMatch[] | undefined): Set<string> {
+  const reasons = new Set<string>();
+  for (const match of matches ?? []) {
+    const reason = mapFuseKeyToReason(match.key);
+    if (reason) {
+      reasons.add(reason);
+    }
   }
+  return reasons;
+}
 
-  const boundaryMatches = countTokenMatches(tokens, doc.boundaries.join(" "));
-  if (boundaryMatches > 0) {
-    relevanceScore += boundaryMatches * 5;
-    matchReasons.add("boundaries");
-  }
+function collectFilterBoost(input: {
+  doc: KnowledgeDocRecord;
+  module?: string;
+  boundary?: string;
+  tags?: readonly string[];
+}): { boost: number; reasons: string[] } {
+  let boost = 0;
+  const reasons: string[] = [];
+  const normalizedModule = input.module?.toLowerCase();
+  const normalizedBoundary = input.boundary?.toLowerCase();
+  const normalizedTags = (input.tags ?? []).map((tag) => tag.toLowerCase());
 
-  const moduleMatches = countTokenMatches(tokens, doc.module ?? "");
-  if (moduleMatches > 0) {
-    relevanceScore += moduleMatches * 6;
-    matchReasons.add("module");
-  }
-
-  if (input.module && doc.module?.toLowerCase() === input.module.toLowerCase()) {
-    relevanceScore += 12;
-    matchReasons.add("module_filter");
+  if (normalizedModule && input.doc.module?.toLowerCase() === normalizedModule) {
+    boost += 120;
+    reasons.push("module_filter");
   }
   if (
-    input.boundary &&
-    doc.boundaries.some((boundary) => boundary.toLowerCase() === input.boundary?.toLowerCase())
+    normalizedBoundary &&
+    input.doc.boundaries.some((boundary) => boundary.toLowerCase() === normalizedBoundary)
   ) {
-    relevanceScore += 10;
-    matchReasons.add("boundary_filter");
+    boost += 100;
+    reasons.push("boundary_filter");
   }
   if (
-    input.tags &&
-    input.tags.length > 0 &&
-    input.tags.every((tag) => doc.tags.some((entry) => entry.toLowerCase() === tag.toLowerCase()))
+    normalizedTags.length > 0 &&
+    normalizedTags.every((tag) => input.doc.tags.some((entry) => entry.toLowerCase() === tag))
   ) {
-    relevanceScore += input.tags.length * 8;
-    matchReasons.add("tag_filter");
+    boost += normalizedTags.length * 80;
+    reasons.push("tag_filter");
   }
 
-  if (!input.query && relevanceScore === 0) {
-    relevanceScore = 1;
-    matchReasons.add("filter_only");
-  }
+  return { boost, reasons };
+}
 
-  if (relevanceScore === 0) {
-    return null;
+function buildRankedDoc(input: {
+  doc: KnowledgeDocRecord;
+  queryIntent: KnowledgeQueryIntent;
+  queryScore: number;
+  queryReasons?: Set<string>;
+  module?: string;
+  boundary?: string;
+  tags?: readonly string[];
+}): RankedKnowledgeDoc {
+  const filterBoost = collectFilterBoost({
+    doc: input.doc,
+    module: input.module,
+    boundary: input.boundary,
+    tags: input.tags,
+  });
+  const reasonSet = new Set(input.queryReasons ?? []);
+  for (const reason of filterBoost.reasons) {
+    reasonSet.add(reason);
+  }
+  if (input.queryScore <= 0 && reasonSet.size === 0) {
+    reasonSet.add("filter_only");
   }
 
   return {
-    doc,
-    authorityRank: authorityColumnForIntent(doc, input.queryIntent),
-    intentPriority: intentPriorityForSourceType(doc, input.queryIntent),
-    relevanceScore,
-    matchReasons: [...matchReasons].toSorted(),
+    doc: input.doc,
+    authorityRank: authorityColumnForIntent(input.doc, input.queryIntent),
+    intentPriority: intentPriorityForSourceType(input.doc, input.queryIntent),
+    queryScore: input.queryScore,
+    filterBoost: filterBoost.boost,
+    relevanceScore: input.queryScore + filterBoost.boost,
+    matchReasons: [...reasonSet].toSorted(),
   };
 }
 
-function dedupeScoredDocs(entries: readonly ScoredKnowledgeDoc[]): ScoredKnowledgeDoc[] {
+function dedupeScoredDocs(entries: readonly RankedKnowledgeDoc[]): RankedKnowledgeDoc[] {
   return [...new Map(entries.map((entry) => [entry.doc.absolutePath, entry])).values()];
 }
 
-function compareScoredDocs(left: ScoredKnowledgeDoc, right: ScoredKnowledgeDoc): number {
+function compareScoredDocs(left: RankedKnowledgeDoc, right: RankedKnowledgeDoc): number {
   if (right.relevanceScore !== left.relevanceScore) {
     return right.relevanceScore - left.relevanceScore;
+  }
+  if (right.queryScore !== left.queryScore) {
+    return right.queryScore - left.queryScore;
+  }
+  if (right.filterBoost !== left.filterBoost) {
+    return right.filterBoost - left.filterBoost;
   }
   if (left.intentPriority !== right.intentPriority) {
     return left.intentPriority - right.intentPriority;
@@ -476,6 +503,26 @@ function compareScoredDocs(left: ScoredKnowledgeDoc, right: ScoredKnowledgeDoc):
     return freshnessRank(right.doc.freshness) - freshnessRank(left.doc.freshness);
   }
   return left.doc.relativePath.localeCompare(right.doc.relativePath);
+}
+
+function createKnowledgeFuse(docs: readonly KnowledgeDocRecord[]): Fuse<KnowledgeDocRecord> {
+  return new Fuse(docs, {
+    includeMatches: true,
+    includeScore: true,
+    ignoreLocation: true,
+    threshold: FUSE_THRESHOLD,
+    minMatchCharLength: 2,
+    keys: [
+      { name: "title", weight: 4.5 },
+      { name: "module", weight: 3.6 },
+      { name: "boundaries", weight: 3.4 },
+      { name: "tags", weight: 3.2 },
+      { name: "relativePath", weight: 2.6 },
+      { name: "problemKind", weight: 1.8 },
+      { name: "status", weight: 1.2 },
+      { name: "body", weight: 1.6 },
+    ],
+  });
 }
 
 function searchDocs(
@@ -491,28 +538,51 @@ function searchDocs(
     status?: string;
     limit: number;
   },
-): ScoredKnowledgeDoc[] {
-  return docs
-    .filter((doc) =>
-      matchesFilters(doc, {
-        sourceTypes: input.sourceTypes,
-        module: input.module,
-        boundary: input.boundary,
-        tags: input.tags,
-        problemKind: input.problemKind,
-        status: input.status,
-      }),
-    )
-    .map((doc) =>
-      scoreDoc(doc, {
-        query: input.query,
+): RankedKnowledgeDoc[] {
+  const filteredDocs = docs.filter((doc) =>
+    matchesFilters(doc, {
+      sourceTypes: input.sourceTypes,
+      module: input.module,
+      boundary: input.boundary,
+      tags: input.tags,
+      problemKind: input.problemKind,
+      status: input.status,
+    }),
+  );
+  if (filteredDocs.length === 0) {
+    return [];
+  }
+
+  if (!input.query) {
+    return filteredDocs
+      .map((doc) =>
+        buildRankedDoc({
+          doc,
+          queryIntent: input.queryIntent,
+          queryScore: FILTER_ONLY_BASE_SCORE,
+          module: input.module,
+          boundary: input.boundary,
+          tags: input.tags,
+        }),
+      )
+      .toSorted(compareScoredDocs)
+      .slice(0, input.limit);
+  }
+
+  const fuse = createKnowledgeFuse(filteredDocs);
+  return fuse
+    .search(input.query)
+    .map((entry) =>
+      buildRankedDoc({
+        doc: entry.item,
         queryIntent: input.queryIntent,
+        queryScore: normalizeScore(entry.score),
+        queryReasons: collectFuseMatchReasons(entry.matches),
         module: input.module,
         boundary: input.boundary,
         tags: input.tags,
       }),
     )
-    .filter((entry): entry is ScoredKnowledgeDoc => Boolean(entry))
     .toSorted(compareScoredDocs)
     .slice(0, input.limit);
 }
@@ -596,7 +666,7 @@ export function executeKnowledgeSearch(
   ];
   const searchedRoots = [...new Set(corpora.flatMap((corpus) => corpus.searchedRoots))].toSorted();
 
-  let results: ScoredKnowledgeDoc[] = [];
+  let results: RankedKnowledgeDoc[] = [];
   let searchPlan: ExecutedKnowledgeSearch["searchPlan"];
   if (sourceTypes.length > 0) {
     results = searchDocs(uniqueDocs, {

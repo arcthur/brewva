@@ -83,7 +83,8 @@ Key files:
 - `gateway.log`: structured logs (with rotation).
 - `gateway.token`: control-plane auth token.
 - `HEARTBEAT.md`: externalized heartbeat policy file.
-  - JSON heartbeat rules define one explicit prompt per wake-up rule.
+  - JSONC heartbeat rules define one explicit prompt per wake-up rule.
+  - Comments and trailing commas are accepted inside the fenced heartbeat block.
 - `children.json`: child-process registry used for orphan cleanup during restart.
 
 Optional HTTP probe endpoint:

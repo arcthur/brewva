@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { BrewvaConfig } from "../contracts/index.js";
 import { DEFAULT_BREWVA_CONFIG } from "./defaults.js";
+import { parseJsonc } from "./jsonc.js";
 import { deepMerge } from "./merge.js";
 import { normalizeBrewvaConfig } from "./normalize.js";
 import { resolveGlobalBrewvaConfigPath, resolveProjectBrewvaConfigPath } from "./paths.js";
@@ -104,12 +105,12 @@ function readConfigFile(configPath: string): Partial<BrewvaConfig> | undefined {
   let parsed: unknown;
   try {
     const raw = readFileSync(configPath, "utf8");
-    parsed = JSON.parse(raw);
+    parsed = parseJsonc(raw);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new BrewvaConfigLoadError({
       code: "config_parse_error",
-      message: `Failed to parse config JSON: ${message}`,
+      message: `Failed to parse config JSONC: ${message}`,
       configPath,
     });
   }

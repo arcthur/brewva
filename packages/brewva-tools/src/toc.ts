@@ -2,6 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import { basename, extname, relative } from "node:path";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { LRUCache } from "lru-cache";
 import ts from "typescript";
 import { escapeRegexLiteral, tokenizeSearchTerms } from "./shared/query.js";
 import { DEFAULT_SKIPPED_WORKSPACE_DIRS, walkWorkspaceFiles } from "./shared/workspace-walk.js";
@@ -12,6 +13,7 @@ import {
   resolveTocSessionKey,
 } from "./toc-cache.js";
 import type { BrewvaToolRuntime } from "./types.js";
+import { getOrCreateLruValue } from "./utils/lru.js";
 import { getToolSessionId } from "./utils/parallel-read.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
 import { defineBrewvaTool } from "./utils/tool.js";
@@ -133,7 +135,8 @@ interface TocSearchSummary {
   indexedBytes: number;
 }
 
-type TocSessionCacheStore = Map<string, Map<string, TocCacheEntry>>;
+type TocFileCache = LRUCache<string, TocCacheEntry>;
+type TocSessionCacheStore = LRUCache<string, TocFileCache>;
 
 function trimToSingleLine(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -564,25 +567,12 @@ function parseTocDocument(filePath: string, sourceText: string): TocDocument {
   };
 }
 
-function getSessionCache(
-  cacheStore: TocSessionCacheStore,
-  sessionKey: string,
-): Map<string, TocCacheEntry> {
-  const existing = cacheStore.get(sessionKey);
-  if (existing) {
-    cacheStore.delete(sessionKey);
-    cacheStore.set(sessionKey, existing);
-    return existing;
-  }
-
-  const created = new Map<string, TocCacheEntry>();
-  cacheStore.set(sessionKey, created);
-  while (cacheStore.size > MAX_CACHE_SESSIONS) {
-    const oldest = cacheStore.keys().next().value;
-    if (!oldest) break;
-    cacheStore.delete(oldest);
-  }
-  return created;
+function getSessionCache(cacheStore: TocSessionCacheStore, sessionKey: string): TocFileCache {
+  return getOrCreateLruValue(cacheStore, sessionKey, () => {
+    return new LRUCache({
+      max: MAX_CACHE_ENTRIES_PER_SESSION,
+    });
+  });
 }
 
 function cacheLookup(input: {
@@ -595,8 +585,6 @@ function cacheLookup(input: {
   const cache = getSessionCache(input.cacheStore, input.sessionKey);
   const cached = cache.get(input.absolutePath);
   if (cached && cached.signature === input.signature) {
-    cache.delete(input.absolutePath);
-    cache.set(input.absolutePath, cached);
     return {
       toc: cached.toc,
       cacheHit: true,
@@ -608,11 +596,6 @@ function cacheLookup(input: {
     signature: input.signature,
     toc,
   });
-  while (cache.size > MAX_CACHE_ENTRIES_PER_SESSION) {
-    const oldest = cache.keys().next().value;
-    if (!oldest) break;
-    cache.delete(oldest);
-  }
   return {
     toc,
     cacheHit: false,
@@ -1038,7 +1021,9 @@ function resolveBroadQuery(input: {
 }
 
 export function createTocTools(options?: { runtime?: BrewvaToolRuntime }): ToolDefinition[] {
-  const sessionCache = new Map<string, Map<string, TocCacheEntry>>();
+  const sessionCache: TocSessionCacheStore = new LRUCache({
+    max: MAX_CACHE_SESSIONS,
+  });
   registerTocSourceCacheRuntime(options?.runtime);
   options?.runtime?.session?.onClearState?.((sessionId) => {
     sessionCache.delete(resolveTocSessionKey(sessionId));

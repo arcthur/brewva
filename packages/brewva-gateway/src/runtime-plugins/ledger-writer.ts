@@ -9,6 +9,7 @@ import {
   type BrewvaRuntime,
 } from "@brewva/brewva-runtime";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { LRUCache } from "lru-cache";
 import { persistToolOutputArtifact } from "./tool-output-artifact-store.js";
 import { distillToolOutput, estimateTokens } from "./tool-output-distiller.js";
 
@@ -207,31 +208,25 @@ function deleteToolLifecycleState(
 const FINALIZED_TOOL_CALLS_MAX = 512;
 
 function getFinalizedToolCalls(
-  finalizedBySession: Map<string, Set<string>>,
+  finalizedBySession: Map<string, LRUCache<string, true>>,
   sessionId: string,
-): Set<string> {
+): LRUCache<string, true> {
   const existing = finalizedBySession.get(sessionId);
   if (existing) return existing;
-  const created = new Set<string>();
+  const created = new LRUCache<string, true>({
+    max: FINALIZED_TOOL_CALLS_MAX,
+  });
   finalizedBySession.set(sessionId, created);
   return created;
 }
 
 function markToolCallFinalized(
-  finalizedBySession: Map<string, Set<string>>,
+  finalizedBySession: Map<string, LRUCache<string, true>>,
   sessionId: string,
   toolCallId: string,
 ): void {
   const finalized = getFinalizedToolCalls(finalizedBySession, sessionId);
-  if (finalized.has(toolCallId)) {
-    finalized.delete(toolCallId);
-  }
-  finalized.add(toolCallId);
-  if (finalized.size <= FINALIZED_TOOL_CALLS_MAX) return;
-  const oldest = finalized.values().next().value;
-  if (oldest) {
-    finalized.delete(oldest);
-  }
+  finalized.set(toolCallId, true);
 }
 
 function extractTextContent(content: unknown): string {
@@ -454,7 +449,7 @@ function recordToolOutcome(
 
 export function registerLedgerWriter(extensionApi: ExtensionAPI, runtime: BrewvaRuntime): void {
   const lifecycleStatesBySession = new Map<string, Map<string, ToolLifecycleState>>();
-  const finalizedToolCallsBySession = new Map<string, Set<string>>();
+  const finalizedToolCallsBySession = new Map<string, LRUCache<string, true>>();
 
   extensionApi.on("tool_execution_start", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();

@@ -12,15 +12,21 @@ import type { TelegramOutboundRequest, TelegramUpdate } from "@brewva/brewva-cha
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { assertRejectsWithMessage } from "../../helpers.js";
 
-function createMessageUpdate(): TelegramUpdate {
+function createMessageUpdate(
+  options: {
+    updateId?: number;
+    messageId?: number;
+    text?: string;
+  } = {},
+): TelegramUpdate {
   return {
-    update_id: 9001,
+    update_id: options.updateId ?? 9001,
     message: {
-      message_id: 77,
+      message_id: options.messageId ?? 77,
       date: 1_700_000_000,
       chat: { id: 12345, type: "private" },
       from: { id: 42, is_bot: false, first_name: "Ada", username: "ada" },
-      text: "hello adapter",
+      text: options.text ?? "hello adapter",
     },
   };
 }
@@ -282,6 +288,130 @@ describe("channel telegram adapter", () => {
     });
   });
 
+  test("approval state cache evicts least recently used callbacks", async () => {
+    const transport = createTransport();
+    const secret = "callback-secret";
+    const adapter = new TelegramChannelAdapter({
+      transport: transport.transport,
+      inbound: { callbackSecret: secret },
+      outbound: { callbackSecret: secret, inlineApproval: true },
+      approvalState: { maxEntries: 32 },
+    });
+    const inbound: TurnEnvelope[] = [];
+    const buildApprovalTurn = (
+      requestId: string,
+      conversationId: string,
+      screenId: string,
+      stateKey: string,
+      state: Record<string, unknown>,
+    ): TurnEnvelope => ({
+      schema: "brewva.turn.v1",
+      kind: "approval",
+      sessionId: `channel:${requestId}`,
+      turnId: `turn:${requestId}`,
+      channel: "telegram",
+      conversationId,
+      timestamp: 1_700_000_000_000,
+      parts: [{ type: "text", text: `Approve ${requestId}` }],
+      approval: {
+        requestId,
+        title: `Approve ${requestId}`,
+        actions: [{ id: "confirm", label: "Confirm" }],
+      },
+      meta: {
+        approvalScreenId: screenId,
+        approvalStateKey: stateKey,
+        approvalState: state,
+      },
+    });
+
+    await adapter.start({
+      onTurn: async (turn) => {
+        inbound.push(turn);
+      },
+    });
+
+    let callbackDataA = "";
+    let callbackDataB = "";
+    for (let index = 1; index <= 32; index += 1) {
+      const requestId = `req-${index}`;
+      await adapter.sendTurn(
+        buildApprovalTurn(requestId, "12345", `screen-${index}`, `flow-${index}`, {
+          flow: requestId,
+          step: index,
+        }),
+      );
+      const callbackData = (
+        (
+          transport.sent.at(-1)?.params.reply_markup as {
+            inline_keyboard?: Array<Array<{ callback_data?: string }>>;
+          }
+        )?.inline_keyboard?.[0]?.[0]?.callback_data ?? ""
+      ).toString();
+      if (index === 1) callbackDataA = callbackData;
+      if (index === 2) callbackDataB = callbackData;
+    }
+
+    await transport.emitUpdate({
+      update_id: 9010,
+      callback_query: {
+        id: "cbq-keep-a",
+        from: { id: 42, is_bot: false, first_name: "Ada", username: "ada" },
+        message: {
+          message_id: 121,
+          date: 1_700_000_010,
+          chat: { id: 12345, type: "private" },
+        },
+        data: callbackDataA,
+      },
+    });
+
+    await adapter.sendTurn(
+      buildApprovalTurn("req-33", "12345", "screen-33", "flow-33", { flow: "req-33", step: 33 }),
+    );
+
+    await transport.emitUpdate({
+      update_id: 9011,
+      callback_query: {
+        id: "cbq-evict-b",
+        from: { id: 42, is_bot: false, first_name: "Ada", username: "ada" },
+        message: {
+          message_id: 122,
+          date: 1_700_000_011,
+          chat: { id: 12345, type: "private" },
+        },
+        data: callbackDataB,
+      },
+    });
+
+    await transport.emitUpdate({
+      update_id: 9012,
+      callback_query: {
+        id: "cbq-still-a",
+        from: { id: 42, is_bot: false, first_name: "Ada", username: "ada" },
+        message: {
+          message_id: 123,
+          date: 1_700_000_012,
+          chat: { id: 12345, type: "private" },
+        },
+        data: callbackDataA,
+      },
+    });
+
+    await adapter.stop();
+
+    expect(inbound).toHaveLength(3);
+    expect(inbound[0]?.meta?.approvalScreenId).toBe("screen-1");
+    expect(inbound[0]?.meta?.approvalStateKey).toBe("flow-1");
+    expect(inbound[0]?.meta?.approvalState).toEqual({ flow: "req-1", step: 1 });
+    expect(inbound[1]?.meta?.approvalScreenId).toBeUndefined();
+    expect(inbound[1]?.meta?.approvalStateKey).toBeUndefined();
+    expect(inbound[1]?.meta?.approvalState).toBeUndefined();
+    expect(inbound[2]?.meta?.approvalScreenId).toBe("screen-1");
+    expect(inbound[2]?.meta?.approvalStateKey).toBe("flow-1");
+    expect(inbound[2]?.meta?.approvalState).toEqual({ flow: "req-1", step: 1 });
+  });
+
   test("can disable inbound dedupe", async () => {
     const transport = createTransport();
     const adapter = new TelegramChannelAdapter({
@@ -302,6 +432,58 @@ describe("channel telegram adapter", () => {
     await adapter.stop();
 
     expect(count).toBe(2);
+  });
+
+  test("dedupe cache evicts old updates once the bounded window is exceeded", async () => {
+    const transport = createTransport();
+    const adapter = new TelegramChannelAdapter({
+      transport: transport.transport,
+      dedupe: { maxEntries: 32 },
+    });
+    let count = 0;
+
+    await adapter.start({
+      onTurn: async () => {
+        count += 1;
+      },
+    });
+
+    for (let index = 0; index < 32; index += 1) {
+      await transport.emitUpdate(
+        createMessageUpdate({
+          updateId: 9_100 + index,
+          messageId: 100 + index,
+          text: `hello ${index}`,
+        }),
+      );
+    }
+
+    await transport.emitUpdate(
+      createMessageUpdate({
+        updateId: 9_100,
+        messageId: 100,
+        text: "hello 0",
+      }),
+    );
+    expect(count).toBe(32);
+
+    await transport.emitUpdate(
+      createMessageUpdate({
+        updateId: 9_132,
+        messageId: 132,
+        text: "hello 32",
+      }),
+    );
+    await transport.emitUpdate(
+      createMessageUpdate({
+        updateId: 9_100,
+        messageId: 100,
+        text: "hello 0",
+      }),
+    );
+    await adapter.stop();
+
+    expect(count).toBe(34);
   });
 
   test("renders outbound requests and returns last provider message id", async () => {

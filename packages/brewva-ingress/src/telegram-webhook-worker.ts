@@ -1,3 +1,5 @@
+import { LRUCache } from "lru-cache";
+
 const TELEGRAM_SECRET_HEADER = "x-telegram-bot-api-secret-token";
 const CONTENT_TYPE_JSON = "application/json; charset=utf-8";
 const FORWARDED_BY_HEADER = "x-brewva-forwarded-by";
@@ -402,20 +404,13 @@ function resolveRateLimitKey(update: ParsedTelegramUpdate, scope: RateLimitScope
 }
 
 const HMAC_KEY_CACHE_MAX = 8;
-const hmacKeyCache = new Map<string, Promise<CryptoKey>>();
+const hmacKeyCache = new LRUCache<string, Promise<CryptoKey>>({
+  max: HMAC_KEY_CACHE_MAX,
+});
 
 async function resolveHmacKey(secret: string): Promise<CryptoKey> {
   const existing = hmacKeyCache.get(secret);
   if (existing) return await existing;
-
-  // Evict the oldest entry when the cache is full so that secret rotation
-  // does not leave stale CryptoKey objects alive for the isolate's lifetime.
-  if (hmacKeyCache.size >= HMAC_KEY_CACHE_MAX) {
-    const firstKey = hmacKeyCache.keys().next().value;
-    if (firstKey !== undefined) {
-      hmacKeyCache.delete(firstKey);
-    }
-  }
 
   const pending = crypto.subtle.importKey(
     "raw",

@@ -1,6 +1,7 @@
 export * from "./contracts/index.js";
 export * from "./runtime.js";
 export * from "./config/defaults.js";
+export * from "./config/jsonc.js";
 export * from "./config/loader.js";
 export * from "./config/paths.js";
 export * from "./skills/contract.js";

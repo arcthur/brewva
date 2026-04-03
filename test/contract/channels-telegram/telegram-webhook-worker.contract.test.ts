@@ -62,6 +62,69 @@ describe("telegram webhook worker", () => {
     expect(workerSignature).toBe(ingressSignature);
   });
 
+  test("worker hmac key cache retains recently used secrets across bounded eviction", async () => {
+    const originalImportKey = crypto.subtle.importKey.bind(crypto.subtle) as (
+      format: "jwk" | "pkcs8" | "raw" | "spki",
+      keyData: JsonWebKey | BufferSource,
+      algorithm:
+        | AlgorithmIdentifier
+        | RsaHashedImportParams
+        | EcKeyImportParams
+        | HmacImportParams
+        | AesKeyAlgorithm,
+      extractable: boolean,
+      keyUsages: ReadonlyArray<KeyUsage> | Iterable<KeyUsage>,
+    ) => Promise<CryptoKey>;
+    const importCounts = new Map<string, number>();
+
+    crypto.subtle.importKey = (async (format, keyData, algorithm, extractable, keyUsages) => {
+      if (keyData instanceof ArrayBuffer || ArrayBuffer.isView(keyData)) {
+        const bytes =
+          keyData instanceof ArrayBuffer
+            ? new Uint8Array(keyData)
+            : new Uint8Array(keyData.buffer, keyData.byteOffset, keyData.byteLength);
+        const secret = new TextDecoder().decode(bytes);
+        importCounts.set(secret, (importCounts.get(secret) ?? 0) + 1);
+      }
+      return await originalImportKey(
+        format,
+        keyData,
+        algorithm,
+        extractable,
+        Array.from(keyUsages),
+      );
+    }) as typeof crypto.subtle.importKey;
+
+    try {
+      const base = `worker-hmac-lru-${Date.now()}`;
+      const body = JSON.stringify(createTelegramUpdate(7999));
+      const signWithSecret = async (secret: string): Promise<void> => {
+        await createWorkerIngressHmacSignature({
+          secret,
+          timestamp: "1700000100",
+          nonce: "nonce-lru",
+          body,
+        });
+      };
+
+      const secrets = Array.from({ length: 9 }, (_, index) => `${base}-${index}`);
+      for (const secret of secrets.slice(0, 8)) {
+        await signWithSecret(secret);
+      }
+
+      await signWithSecret(secrets[0]!);
+      await signWithSecret(secrets[8]!);
+      await signWithSecret(secrets[1]!);
+      await signWithSecret(secrets[0]!);
+
+      expect(importCounts.get(secrets[0]!)).toBe(1);
+      expect(importCounts.get(secrets[1]!)).toBe(2);
+      expect(importCounts.get(secrets[8]!)).toBe(1);
+    } finally {
+      crypto.subtle.importKey = originalImportKey;
+    }
+  });
+
   test("forwards accepted update with ingress auth headers", async () => {
     const nowMs = 1_700_000_000_000;
     const update = createTelegramUpdate(7002);

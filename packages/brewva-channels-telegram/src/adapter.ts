@@ -8,6 +8,7 @@ import {
   resolveChannelCapabilities,
   type ChannelCapabilities,
 } from "@brewva/brewva-runtime/channels";
+import { LRUCache } from "lru-cache";
 import {
   buildTelegramInboundDedupeKey,
   projectTelegramUpdateToTurn,
@@ -146,21 +147,23 @@ export class TelegramChannelAdapter implements ChannelAdapter {
   readonly id = "telegram";
 
   private startContext: AdapterStartContext | null = null;
-  private readonly inboundDedupeState = new Map<string, DedupeStatus>();
-  private readonly approvalStateCache = new Map<string, TelegramApprovalStateSnapshot>();
   private readonly dedupeEnabled: boolean;
   private readonly dedupeMaxEntries: number;
+  private readonly inboundDedupeState: LRUCache<string, DedupeStatus>;
   private readonly callbackAckEnabled: boolean;
   private readonly callbackAckText: string | undefined;
   private readonly callbackAckShowAlert: boolean | undefined;
   private readonly callbackAckCacheTimeSeconds: number | undefined;
   private readonly approvalStateEnabled: boolean;
-  private readonly approvalStateMaxEntries: number;
+  private readonly approvalStateCache: LRUCache<string, TelegramApprovalStateSnapshot>;
   private readonly interactionPolicy: TelegramChannelInteractionPolicy;
 
   constructor(private readonly options: TelegramChannelAdapterOptions) {
     this.dedupeEnabled = options.dedupe?.enabled ?? true;
     this.dedupeMaxEntries = resolveDedupeMaxEntries(options.dedupe?.maxEntries);
+    this.inboundDedupeState = new LRUCache({
+      max: this.dedupeMaxEntries,
+    });
     this.callbackAckEnabled = options.callbackAck?.enabled ?? true;
     this.callbackAckText = normalizeOptionalText(options.callbackAck?.text);
     this.callbackAckShowAlert =
@@ -171,9 +174,12 @@ export class TelegramChannelAdapter implements ChannelAdapter {
       options.callbackAck?.cacheTimeSeconds,
     );
     this.approvalStateEnabled = options.approvalState?.enabled ?? true;
-    this.approvalStateMaxEntries = resolveApprovalStateCacheMaxEntries(
+    const approvalStateMaxEntries = resolveApprovalStateCacheMaxEntries(
       options.approvalState?.maxEntries,
     );
+    this.approvalStateCache = new LRUCache({
+      max: approvalStateMaxEntries,
+    });
     this.interactionPolicy = {
       projectInboundTurn:
         options.interactionPolicy?.projectInboundTurn ??
@@ -274,11 +280,6 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     }
 
     this.inboundDedupeState.set(key, "done");
-    while (this.inboundDedupeState.size > this.dedupeMaxEntries) {
-      const oldest = this.inboundDedupeState.keys().next().value;
-      if (!oldest) break;
-      this.inboundDedupeState.delete(oldest);
-    }
   }
 
   private buildApprovalStateCacheKey(params: {
@@ -320,15 +321,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
       return;
     }
     const key = this.buildApprovalStateCacheKey(params);
-    if (this.approvalStateCache.has(key)) {
-      this.approvalStateCache.delete(key);
-    }
     this.approvalStateCache.set(key, snapshot);
-    while (this.approvalStateCache.size > this.approvalStateMaxEntries) {
-      const oldest = this.approvalStateCache.keys().next().value;
-      if (!oldest) break;
-      this.approvalStateCache.delete(oldest);
-    }
   }
 
   private restoreApprovalStateFromCache(params: {
@@ -340,13 +333,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
       return undefined;
     }
     const key = this.buildApprovalStateCacheKey(params);
-    const snapshot = this.approvalStateCache.get(key);
-    if (!snapshot) {
-      return undefined;
-    }
-    this.approvalStateCache.delete(key);
-    this.approvalStateCache.set(key, snapshot);
-    return snapshot;
+    return this.approvalStateCache.get(key);
   }
 
   private async handleUpdate(update: TelegramUpdate): Promise<void> {

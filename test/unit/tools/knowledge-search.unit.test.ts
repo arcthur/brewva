@@ -111,8 +111,12 @@ This note mentions replay experiments but is not the canonical precedent.
     expect(details?.results?.[0]?.sourceType).toBe("solution");
     expect(details?.results?.[0]?.authorityRank).toBe(4);
     expect(details?.results?.[0]?.module).toBe("brewva-runtime");
-    expect(details?.results?.[0]?.matchReasons).toEqual(
-      expect.arrayContaining(["boundary_filter", "module_filter", "tags", "title"]),
+    const primaryMatchReasons = details?.results?.[0]?.matchReasons ?? [];
+    expect(primaryMatchReasons).toContain("boundary_filter");
+    expect(primaryMatchReasons).toContain("module_filter");
+    expect(primaryMatchReasons).toContain("title");
+    expect(primaryMatchReasons.includes("tags") || primaryMatchReasons.includes("tag_filter")).toBe(
+      true,
     );
     expect(details?.searchPlan).toMatchObject({
       queryIntent: "precedent_lookup",
@@ -262,6 +266,83 @@ Architecture guidance for replay ordering.
       solutionResultCount: 2,
     });
     expect(details?.results?.every((entry) => entry.sourceType === "solution")).toBe(true);
+  });
+
+  test("supports fuzzy repository precedent lookup for typo-heavy queries", async () => {
+    const workspace = createTestWorkspace("knowledge-search-fuzzy");
+    writeKnowledgeDoc(
+      workspace,
+      "docs/solutions/runtime/replay-cursor-pinning.md",
+      `---
+title: Replay cursor pinning
+status: active
+problem_kind: bugfix
+module: brewva-runtime
+boundaries:
+  - runtime.turnWal
+tags:
+  - replay
+  - cursor
+  - wal
+updated_at: 2026-03-31
+---
+
+# Replay cursor pinning
+
+Pin the cursor before replay crosses an effectful boundary.
+`,
+    );
+    writeKnowledgeDoc(
+      workspace,
+      "docs/reference/runtime-contract.md",
+      `---
+title: Runtime contract
+module: brewva-runtime
+tags:
+  - runtime
+updated_at: 2026-03-31
+---
+
+# Runtime contract
+
+The runtime contract covers broader system behavior but not this specific replay fix.
+`,
+    );
+
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const tool = createKnowledgeSearchTool({ runtime });
+    const result = await tool.execute(
+      "tc-knowledge-search-fuzzy",
+      {
+        query: "replai curser pining",
+        module: "brewva-runtime",
+        boundary: "runtime.turnWal",
+        tags: ["cursor"],
+      } as never,
+      undefined,
+      undefined,
+      { cwd: workspace } as never,
+    );
+
+    const details = result.details as
+      | {
+          results?: Array<{ path: string; sourceType: string; matchReasons: string[] }>;
+          searchPlan?: { mode: string };
+        }
+      | undefined;
+
+    expect(details?.results?.[0]).toEqual(
+      expect.objectContaining({
+        path: "docs/solutions/runtime/replay-cursor-pinning.md",
+        sourceType: "solution",
+      }),
+    );
+    const fuzzyMatchReasons = details?.results?.[0]?.matchReasons ?? [];
+    expect(fuzzyMatchReasons).toContain("title");
+    expect(fuzzyMatchReasons).toContain("boundary_filter");
+    expect(fuzzyMatchReasons).toContain("module_filter");
+    expect(fuzzyMatchReasons).toContain("tag_filter");
+    expect(details?.searchPlan?.mode).toBe("solution_then_bootstrap");
   });
 
   test("uses query-intent-aware ranking when normative lookup is requested", async () => {

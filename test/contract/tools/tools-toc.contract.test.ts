@@ -542,6 +542,39 @@ describe("TOC tools", () => {
     expect(details?.sourceCacheHit).toBe(true);
   });
 
+  test("read_spans source cache is cleared when runtime session state is cleared", async () => {
+    const workspace = createTocWorkspace("brewva-read-spans-cache-clear-");
+    const runtime = createRuntime(workspace);
+    const filePath = sampleFile(workspace);
+    const sessionId = "read-spans-cache-clear-session";
+    const tocTool = requireTool(createTocTools({ runtime }), "toc_document");
+    const readTool = createReadSpansTool({ runtime });
+
+    await tocTool.execute(
+      "tc-toc-before-read-spans-cache-clear",
+      { file_path: filePath },
+      undefined,
+      undefined,
+      fakeContext(sessionId, workspace),
+    );
+    runtime.session.clearState(sessionId);
+
+    const result = await readTool.execute(
+      "tc-read-spans-cache-clear",
+      {
+        file_path: filePath,
+        spans: [{ start_line: 5, end_line: 8 }],
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId, workspace),
+    );
+
+    const details = (result as { details?: Record<string, unknown> }).details;
+    expect(details?.status).toBe("ok");
+    expect(details?.sourceCacheHit).toBe(false);
+  });
+
   test("read_spans reports where truncation happened for resume", async () => {
     const workspace = createTocWorkspace("brewva-read-spans-truncate-");
     const filePath = join(workspace, "src/long.ts");

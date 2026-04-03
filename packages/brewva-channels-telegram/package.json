@@ -14,7 +14,8 @@
     }
   },
   "dependencies": {
-    "@brewva/brewva-runtime": "workspace:*"
+    "@brewva/brewva-runtime": "workspace:*",
+    "lru-cache": "^11.2.7"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

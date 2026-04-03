@@ -32,12 +32,13 @@
     "@brewva/brewva-runtime": "workspace:*",
     "@brewva/brewva-skill-broker": "workspace:*",
     "@brewva/brewva-tools": "workspace:*",
-    "@mariozechner/pi-ai": "^0.61.1",
-    "@mariozechner/pi-coding-agent": "^0.61.1",
+    "@mariozechner/pi-ai": "^0.64.0",
+    "@mariozechner/pi-coding-agent": "^0.64.0",
     "@sinclair/typebox": "^0.34.48",
     "ajv": "^8.18.0",
-    "ws": "^8.19.0",
-    "yaml": "^2.8.2"
+    "lru-cache": "^11.2.7",
+    "ws": "^8.20.0",
+    "yaml": "^2.8.3"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

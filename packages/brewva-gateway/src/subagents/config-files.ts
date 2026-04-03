@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import type { ManagedToolMode } from "@brewva/brewva-runtime";
+import { parseJsonc, type ManagedToolMode } from "@brewva/brewva-runtime";
 import type {
   SubagentContextBudget,
   SubagentExecutionBoundary,
@@ -200,7 +200,7 @@ async function readHostedWorkspaceConfigDirectory(input: {
     try {
       parsed =
         input.extension === ".json"
-          ? JSON.parse(raw)
+          ? parseJsonc(raw)
           : parseHostedWorkspaceAgentMarkdownConfig({
               fileName: entry.name,
               raw,

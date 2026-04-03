@@ -7,10 +7,7 @@ import { AuthStorage, ModelRegistry } from "@mariozechner/pi-coding-agent";
 
 function createRegistry(): ModelRegistry {
   const tempDir = mkdtempSync(join(tmpdir(), "brewva-model-selection-"));
-  const registry = new ModelRegistry(
-    AuthStorage.create(join(tempDir, "auth.json")),
-    join(tempDir, "models.json"),
-  );
+  const registry = ModelRegistry.inMemory(AuthStorage.create(join(tempDir, "auth.json")));
 
   registry.registerProvider("demo", {
     baseUrl: "https://demo.example.com/v1",

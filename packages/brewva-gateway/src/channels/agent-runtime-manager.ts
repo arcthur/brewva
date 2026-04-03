@@ -5,6 +5,7 @@ import {
   BrewvaRuntime,
   createTrustedLocalGovernancePort,
   normalizeAgentId,
+  parseJsonc,
   type BrewvaConfig,
 } from "@brewva/brewva-runtime";
 
@@ -86,8 +87,11 @@ async function loadAgentConfigOverlay(workspaceRoot: string, agentId: string): P
   const raw = await readFile(path, "utf8");
   if (!raw.trim()) return {};
   try {
-    const parsed = JSON.parse(raw) as unknown;
-    return isRecord(parsed) ? parsed : {};
+    const parsed = parseJsonc(raw);
+    if (!isRecord(parsed)) {
+      throw new Error("root must be an object");
+    }
+    return parsed;
   } catch (error) {
     throw new Error(
       `invalid_agent_config:${agentId}:${error instanceof Error ? error.message : String(error)}`,

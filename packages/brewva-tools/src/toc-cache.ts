@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
+import { LRUCache } from "lru-cache";
 import type { BrewvaToolRuntime } from "./types.js";
+import { getOrCreateLruValue } from "./utils/lru.js";
 
 const MAX_CACHE_SESSIONS = 64;
 const MAX_CACHE_ENTRIES_PER_SESSION = 512;
@@ -10,30 +12,20 @@ interface SourceCacheEntry {
   lines: string[];
 }
 
-type SourceSessionCacheStore = Map<string, Map<string, SourceCacheEntry>>;
+type SourceFileCache = LRUCache<string, SourceCacheEntry>;
+type SourceSessionCacheStore = LRUCache<string, SourceFileCache>;
 
-const sourceCacheStore: SourceSessionCacheStore = new Map();
+const sourceCacheStore: SourceSessionCacheStore = new LRUCache({
+  max: MAX_CACHE_SESSIONS,
+});
 const attachedRuntimes = new WeakSet<object>();
 
-function getSessionCache(
-  cacheStore: SourceSessionCacheStore,
-  sessionKey: string,
-): Map<string, SourceCacheEntry> {
-  const existing = cacheStore.get(sessionKey);
-  if (existing) {
-    cacheStore.delete(sessionKey);
-    cacheStore.set(sessionKey, existing);
-    return existing;
-  }
-
-  const created = new Map<string, SourceCacheEntry>();
-  cacheStore.set(sessionKey, created);
-  while (cacheStore.size > MAX_CACHE_SESSIONS) {
-    const oldest = cacheStore.keys().next().value;
-    if (!oldest) break;
-    cacheStore.delete(oldest);
-  }
-  return created;
+function getSessionCache(cacheStore: SourceSessionCacheStore, sessionKey: string): SourceFileCache {
+  return getOrCreateLruValue(cacheStore, sessionKey, () => {
+    return new LRUCache({
+      max: MAX_CACHE_ENTRIES_PER_SESSION,
+    });
+  });
 }
 
 export function resolveTocSessionKey(sessionId: string | undefined): string {
@@ -61,8 +53,6 @@ export function readSourceTextWithCache(input: {
   const cache = getSessionCache(sourceCacheStore, resolveTocSessionKey(input.sessionId));
   const cached = cache.get(input.absolutePath);
   if (cached && cached.signature === input.signature) {
-    cache.delete(input.absolutePath);
-    cache.set(input.absolutePath, cached);
     return {
       sourceText: cached.sourceText,
       lines: cached.lines,
@@ -77,11 +67,6 @@ export function readSourceTextWithCache(input: {
     lines: sourceText.split("\n"),
   };
   cache.set(input.absolutePath, entry);
-  while (cache.size > MAX_CACHE_ENTRIES_PER_SESSION) {
-    const oldest = cache.keys().next().value;
-    if (!oldest) break;
-    cache.delete(oldest);
-  }
   return {
     sourceText: entry.sourceText,
     lines: entry.lines,

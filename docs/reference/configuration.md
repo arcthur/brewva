@@ -25,6 +25,8 @@ Configuration contract sources:
 - `ui`
 
 Configuration files are patch overlays: omitted fields inherit defaults/lower-precedence layers.
+Config files remain named `.json`, but the loader accepts JSONC syntax for
+human-authored files, including JavaScript-style comments and trailing commas.
 
 ## Construction-Time Overrides
 

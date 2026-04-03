@@ -47,6 +47,7 @@ describe("output_search contract", () => {
 
     const text = extractTextContent(result);
     expect(text).toContain("[OutputSearch]");
+    expect(text).toContain("Match layer: exact");
     expect(text.toLowerCase()).toContain("connection refused");
     expect(text).toContain("tool=exec");
     expect(text).toContain("ref=.orchestrator/tool-output-artifacts/session-a/100-exec-call.txt");
@@ -93,6 +94,49 @@ describe("output_search contract", () => {
     expect(text).toContain("[OutputSearch]");
     expect(text).toContain("Match layer: fuzzy");
     expect(text.toLowerCase()).toContain("authentication middleware");
+  });
+
+  test("uses partial layer for prefix-heavy queries", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-output-search-partial-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "s12-output-search-partial";
+
+    const artifactRef = ".orchestrator/tool-output-artifacts/session-p/101-exec-call.txt";
+    const artifactDir = join(workspace, ".orchestrator/tool-output-artifacts/session-p");
+    mkdirSync(artifactDir, { recursive: true });
+    const artifactText = [
+      "pipeline bootstrap complete",
+      "authentication middleware initialized",
+      "token exchange validated",
+    ].join("\n");
+    writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
+
+    runtime.events.record({
+      sessionId,
+      type: "tool_output_artifact_persisted",
+      payload: {
+        toolName: "exec",
+        artifactRef,
+        rawBytes: Buffer.byteLength(artifactText, "utf8"),
+      } as Record<string, unknown>,
+    });
+
+    const tool = createOutputSearchTool({ runtime });
+    const result = await tool.execute(
+      "tc-output-search-partial",
+      {
+        query: "middlware init",
+        limit: 2,
+      },
+      undefined,
+      undefined,
+      mergeContext(sessionId, { cwd: workspace }),
+    );
+
+    const text = extractTextContent(result);
+    expect(text).toContain("[OutputSearch]");
+    expect(text).toContain("Match layer: partial");
+    expect(text.toLowerCase()).toContain("authentication middleware initialized");
   });
 
   test("suppresses low-confidence fuzzy matches", async () => {

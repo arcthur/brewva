@@ -166,6 +166,27 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.skills.routing.scopes).toEqual(["domain", "operator"]);
   });
 
+  test("accepts JSONC comments and trailing commas in config files", () => {
+    const workspace = createTestWorkspace("config-jsonc");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      [
+        "{",
+        "  // workspace-local routing override",
+        '  "skills": {',
+        '    "routing": {',
+        '      "scopes": ["domain", "operator",],',
+        "    },",
+        "  },",
+        "}",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    expect(loaded.skills.routing.scopes).toEqual(["domain", "operator"]);
+  });
+
   test("rejects null session cost cap now that zero is the only unlimited sentinel", () => {
     const workspace = createTestWorkspace("cost-cap-null-sentinel");
     writeFileSync(

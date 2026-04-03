@@ -112,4 +112,32 @@ describe("heartbeat policy loader", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("given JSONC heartbeat block, when policy is loaded, then comments and trailing commas are accepted", () => {
+    const root = mkdtempSync(join(tmpdir(), "brewva-gateway-policy-jsonc-"));
+    const policyPath = join(root, "HEARTBEAT.md");
+    try {
+      writeFileSync(
+        policyPath,
+        [
+          "```jsonc heartbeat",
+          "{",
+          "  // keep the backlog under control",
+          '  "rules": [',
+          '    { "id": "nightly", "intervalMinutes": 15, "prompt": "Check backlog", },',
+          "  ],",
+          "}",
+          "```",
+        ].join("\n"),
+        "utf8",
+      );
+      const policy = loadHeartbeatPolicy(policyPath);
+      expect(policy.rules).toHaveLength(1);
+      expect(policy.rules[0]?.id).toBe("nightly");
+      expect(policy.rules[0]?.intervalMinutes).toBe(15);
+      expect(policy.rules[0]?.prompt).toBe("Check backlog");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

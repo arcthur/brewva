@@ -12,7 +12,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function deepMerge<T>(base: T, patch: DeepPartial<T> | undefined): T {
+function deepMerge<T>(base: T, patch: DeepPartial<NoInfer<T>> | undefined): T {
   if (patch === undefined) return base;
   if (!isPlainObject(base) || !isPlainObject(patch)) {
     return patch as T;
@@ -32,10 +32,8 @@ export function createTestConfig(
   overrides: DeepPartial<BrewvaConfig> = {},
   options: { eventsLevel?: BrewvaConfig["infrastructure"]["events"]["level"] } = {},
 ): BrewvaConfig {
-  const config: BrewvaConfig = deepMerge<BrewvaConfig>(
-    structuredClone(DEFAULT_BREWVA_CONFIG),
-    overrides,
-  );
+  const baseConfig: BrewvaConfig = structuredClone(DEFAULT_BREWVA_CONFIG);
+  const config = deepMerge(baseConfig, overrides);
   if (options.eventsLevel) {
     config.infrastructure.events.level = options.eventsLevel;
   }

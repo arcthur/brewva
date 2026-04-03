@@ -80,4 +80,54 @@ describe("channel runtime manager", () => {
       expect(message).toContain("invalid_agent_config:jack:");
     }
   });
+
+  test("loads agent config overlay from JSONC", async () => {
+    const workspace = createTestWorkspace("channel-runtime-jsonc-config");
+    const controller = new BrewvaRuntime({ cwd: workspace });
+    const manager = new AgentRuntimeManager({
+      controllerRuntime: controller,
+      maxLiveRuntimes: 4,
+      idleRuntimeTtlMs: 60_000,
+    });
+
+    const agentRoot = join(workspace, ".brewva", "agents", "jack");
+    mkdirSync(agentRoot, { recursive: true });
+    writeFileSync(
+      join(agentRoot, "config.json"),
+      [
+        "{",
+        "  // agent-local projection override",
+        '  "projection": {',
+        '    "workingFile": "agent-working.md",',
+        "  },",
+        "}",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const runtime = await manager.getOrCreateRuntime("jack");
+    expect(runtime.config.projection.workingFile).toBe("agent-working.md");
+  });
+
+  test("throws when agent config overlay root is not an object", async () => {
+    const workspace = createTestWorkspace("channel-runtime-non-object-config");
+    const controller = new BrewvaRuntime({ cwd: workspace });
+    const manager = new AgentRuntimeManager({
+      controllerRuntime: controller,
+      maxLiveRuntimes: 4,
+      idleRuntimeTtlMs: 60_000,
+    });
+
+    const agentRoot = join(workspace, ".brewva", "agents", "jack");
+    mkdirSync(agentRoot, { recursive: true });
+    writeFileSync(join(agentRoot, "config.json"), '["invalid"]', "utf8");
+
+    try {
+      await manager.getOrCreateRuntime("jack");
+      expect.unreachable("expected non-object agent config to throw");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      expect(message).toContain("invalid_agent_config:jack:root must be an object");
+    }
+  });
 });

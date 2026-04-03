@@ -64,9 +64,8 @@ describe("Runtime plugin integration: observability injection", () => {
     expect(loaded.errors).toHaveLength(0);
 
     const sessionManager = SessionManager.inMemory(workspace);
-    const modelRegistry = new ModelRegistry(
+    const modelRegistry = ModelRegistry.inMemory(
       AuthStorage.create(join(workspace, ".auth-test.json")),
-      join(workspace, ".models-test.json"),
     );
     const runner = new ExtensionRunner(
       loaded.extensions,
@@ -97,6 +96,7 @@ describe("Runtime plugin integration: observability injection", () => {
         getModel: () => undefined,
         isIdle: () => true,
         abort: () => undefined,
+        getSignal: () => new AbortController().signal,
         hasPendingMessages: () => false,
         shutdown: () => undefined,
         getContextUsage: () => ({ tokens: 700, contextWindow: 4000, percent: 0.175 }),
