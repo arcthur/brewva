@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -11,12 +11,24 @@ import { requireDefined } from "../../helpers/assertions.js";
 
 function writeSkill(filePath: string, input: { name: string }): void {
   mkdirSync(dirname(filePath), { recursive: true });
+  const normalizedPath = filePath.replace(/\\/g, "/");
+  const routedCategory = ["/core/", "/domain/", "/operator/", "/meta/"].find((segment) =>
+    normalizedPath.includes(segment),
+  );
   writeFileSync(
     filePath,
     [
       "---",
       `name: ${input.name}`,
       `description: ${input.name} skill`,
+      ...(routedCategory
+        ? [
+            "selection:",
+            "  when_to_use: Use when the task needs the routed test skill.",
+            "  examples: [test skill]",
+            "  phases: [align]",
+          ]
+        : []),
       "intent:",
       "  outputs: []",
       "effects:",
@@ -147,6 +159,29 @@ describe("skill discovery and loading", () => {
     const report = runtime.skills.getLoadReport();
     expect(report.hiddenSkills).toContain("ops-helper");
     expect(report.routableSkills).not.toContain("ops-helper");
+
+    const index = JSON.parse(
+      readFileSync(join(workspace, ".brewva", "skills_index.json"), "utf8"),
+    ) as {
+      summary?: {
+        loadedSkills?: number;
+        routableSkills?: number;
+        hiddenSkills?: number;
+        overlaySkills?: number;
+      };
+      skills?: Array<{
+        name?: string;
+        routable?: boolean;
+      }>;
+    };
+    expect(index.summary?.loadedSkills).toBeGreaterThanOrEqual(1);
+    expect(index.summary?.hiddenSkills).toBeGreaterThanOrEqual(1);
+    expect(index.summary?.overlaySkills).toBeGreaterThanOrEqual(0);
+    expect(index.skills?.some((entry) => entry.name === "ops-helper")).toBe(true);
+    expect(index.skills?.find((entry) => entry.name === "ops-helper")).toMatchObject({
+      name: "ops-helper",
+      routable: false,
+    });
   });
 
   test("routing scope override can expose operator skills", () => {

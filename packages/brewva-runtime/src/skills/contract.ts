@@ -20,6 +20,8 @@ import type {
   SkillResourcePolicy,
   SkillResourceSet,
   SkillRoutingPolicy,
+  SkillSelectionPolicy,
+  TaskPhase,
   ToolEffectClass,
 } from "../contracts/index.js";
 import { normalizeToolName } from "../utils/tool-name.js";
@@ -30,6 +32,15 @@ interface ParsedFrontmatter {
 }
 
 const FRONTMATTER_REGEX = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
+const TASK_PHASE_VALUES: TaskPhase[] = [
+  "align",
+  "investigate",
+  "execute",
+  "verify",
+  "ready_for_acceptance",
+  "blocked",
+  "done",
+];
 
 function parseFrontmatter(markdown: string): ParsedFrontmatter {
   const match = markdown.match(FRONTMATTER_REGEX);
@@ -107,6 +118,26 @@ function requireStringArrayField(
     out.push(normalized);
   }
   return out;
+}
+
+function requireStringField(
+  data: Record<string, unknown>,
+  key: string,
+  filePath: string,
+  fieldPath: string,
+): string {
+  if (!Object.prototype.hasOwnProperty.call(data, key)) {
+    failSkillContract(filePath, `missing required frontmatter field '${fieldPath}.${key}'.`);
+  }
+  const value = data[key];
+  if (typeof value !== "string") {
+    failSkillContract(filePath, `${fieldPath}.${key} must be a string.`);
+  }
+  const normalized = value.trim();
+  if (!normalized) {
+    failSkillContract(filePath, `${fieldPath}.${key} cannot be empty.`);
+  }
+  return normalized;
 }
 
 function readOptionalStringArrayField(
@@ -792,6 +823,89 @@ function resolveRoutingScope(category: SkillCategory): SkillRoutingPolicy["scope
   return undefined;
 }
 
+function normalizeSelectionPolicy(
+  category: "overlay",
+  data: Record<string, unknown>,
+  filePath: string,
+): SkillContractOverride["selection"] | undefined;
+function normalizeSelectionPolicy(
+  category: LoadableSkillCategory,
+  data: Record<string, unknown>,
+  filePath: string,
+): SkillSelectionPolicy | undefined;
+function normalizeSelectionPolicy(
+  category: SkillCategory,
+  data: Record<string, unknown>,
+  filePath: string,
+): SkillSelectionPolicy | SkillContractOverride["selection"] | undefined {
+  const supportsSelection =
+    category === "core" ||
+    category === "domain" ||
+    category === "operator" ||
+    category === "meta" ||
+    category === "overlay";
+  if (!supportsSelection) {
+    if (Object.prototype.hasOwnProperty.call(data, "selection")) {
+      failSkillContract(
+        filePath,
+        "frontmatter field 'selection' is only supported for core/domain/operator/meta skills and overlays.",
+      );
+    }
+    return undefined;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(data, "selection")) {
+    if (category === "overlay") {
+      return undefined;
+    }
+    failSkillContract(
+      filePath,
+      "frontmatter field 'selection' is required for core/domain/operator/meta skills.",
+    );
+  }
+
+  const selection = requireRecordField(data, "selection", filePath);
+  if (Object.prototype.hasOwnProperty.call(selection, "whenToUse")) {
+    failSkillContract(filePath, "selection.whenToUse is not supported. Use 'when_to_use'.");
+  }
+  assertAllowedKeys(
+    selection,
+    ["when_to_use", "examples", "paths", "phases"],
+    filePath,
+    "selection",
+  );
+
+  const whenToUse = Object.prototype.hasOwnProperty.call(selection, "when_to_use")
+    ? requireStringField(selection, "when_to_use", filePath, "selection")
+    : undefined;
+  const examples = readOptionalStringArrayField(selection, "examples", filePath);
+  const paths = readOptionalStringArrayField(selection, "paths", filePath);
+  const phases = readOptionalEnumStringArrayField(
+    selection,
+    "phases",
+    filePath,
+    TASK_PHASE_VALUES,
+    "selection",
+  );
+
+  if (category !== "overlay" && !whenToUse) {
+    failSkillContract(filePath, "selection.when_to_use is required for loadable routed skills.");
+  }
+  if (!whenToUse && examples.length === 0 && paths.length === 0 && (phases?.length ?? 0) === 0) {
+    failSkillContract(
+      filePath,
+      "selection must declare at least one of 'when_to_use', 'examples', 'paths', or 'phases'.",
+    );
+  }
+
+  return {
+    ...(whenToUse ? { whenToUse } : {}),
+    ...(examples.length > 0 ? { examples: [...new Set(examples)] } : {}),
+    ...(paths.length > 0 ? { paths: [...new Set(paths)] } : {}),
+    ...(phases && phases.length > 0 ? { phases: [...new Set(phases)] } : {}),
+  };
+}
+
 function normalizeRoutingPolicy(
   category: SkillCategory,
   data: Record<string, unknown>,
@@ -821,6 +935,18 @@ function normalizeRoutingPolicy(
   }
 
   const routing = requireRecordField(data, "routing", filePath);
+  if (Object.prototype.hasOwnProperty.call(routing, "matchHints")) {
+    failSkillContract(
+      filePath,
+      "routing.matchHints has been removed. Use selection.when_to_use/examples/paths/phases.",
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(routing, "match_hints")) {
+    failSkillContract(
+      filePath,
+      "routing.match_hints has been removed. Use selection.when_to_use/examples/paths/phases.",
+    );
+  }
   if (Object.prototype.hasOwnProperty.call(routing, "scope")) {
     if (routing.scope !== derivedScope) {
       failSkillContract(
@@ -835,6 +961,7 @@ function normalizeRoutingPolicy(
   if (Object.prototype.hasOwnProperty.call(routing, "continuity_required")) {
     failSkillContract(filePath, "routing.continuity_required has been removed.");
   }
+  assertAllowedKeys(routing, ["scope"], filePath, "routing");
 
   return {
     scope: derivedScope,
@@ -973,6 +1100,37 @@ function mergeRoutingPolicy(
   };
 }
 
+function mergeSelectionPolicy(
+  base: SkillSelectionPolicy | undefined,
+  patch: SkillContractOverride["selection"] | undefined,
+): SkillSelectionPolicy | undefined {
+  if (!base && !patch) {
+    return undefined;
+  }
+  const whenToUse = patch?.whenToUse ?? base?.whenToUse;
+  if (!whenToUse) {
+    return undefined;
+  }
+  const examples =
+    patch?.examples !== undefined
+      ? [...new Set([...(base?.examples ?? []), ...patch.examples])]
+      : base?.examples;
+  const paths =
+    patch?.paths !== undefined
+      ? [...new Set([...(base?.paths ?? []), ...patch.paths])]
+      : base?.paths;
+  const phases =
+    patch?.phases !== undefined
+      ? [...new Set([...(base?.phases ?? []), ...patch.phases])]
+      : base?.phases;
+  return {
+    whenToUse,
+    ...(examples && examples.length > 0 ? { examples } : {}),
+    ...(paths && paths.length > 0 ? { paths } : {}),
+    ...(phases && phases.length > 0 ? { phases } : {}),
+  };
+}
+
 function normalizeContract(
   name: string,
   category: "overlay",
@@ -1011,11 +1169,13 @@ function normalizeContract(
   const routing = normalizeRoutingPolicy(category, data, filePath);
 
   if (category === "overlay") {
+    const selection = normalizeSelectionPolicy(category, data, filePath);
     const contract = {
       name,
       category,
       description: typeof data.description === "string" ? data.description : undefined,
       routing,
+      selection,
       intent: normalizeIntentContract(data, category, filePath),
       effects: normalizeEffectsContract(data, category, filePath),
       resources: normalizeResourcePolicy(data, category, filePath),
@@ -1031,11 +1191,13 @@ function normalizeContract(
     return contract;
   }
 
+  const selection = normalizeSelectionPolicy(category, data, filePath);
   const contract = {
     name,
     category,
     description: typeof data.description === "string" ? data.description : undefined,
     routing,
+    selection,
     intent: normalizeIntentContract(data, category, filePath),
     effects: normalizeEffectsContract(data, category, filePath),
     resources: normalizeResourcePolicy(data, category, filePath),
@@ -1056,6 +1218,7 @@ export function tightenContract(
   override: SkillContractOverride,
 ): SkillContract {
   const routing = mergeRoutingPolicy(base.routing, override.routing);
+  const selection = mergeSelectionPolicy(base.selection, override.selection);
   const resources = ensureMergedResourcePolicyBounds(base.name, {
     defaultLease: mergeResourceBudgetCaps(
       base.resources?.defaultLease,
@@ -1070,6 +1233,7 @@ export function tightenContract(
   return {
     ...base,
     routing,
+    selection,
     intent: mergeIntentContract(base.intent, override.intent, base.name),
     effects: mergeEffectsContract(base.effects, override.effects),
     resources,
@@ -1085,6 +1249,7 @@ export function mergeOverlayContract(
   overlay: SkillContractOverride,
 ): SkillContract {
   const routing = mergeRoutingPolicy(base.routing, overlay.routing);
+  const selection = mergeSelectionPolicy(base.selection, overlay.selection);
   const mergedOutputs = [
     ...new Set([...(base.intent?.outputs ?? []), ...(overlay.intent?.outputs ?? [])]),
   ];
@@ -1108,6 +1273,7 @@ export function mergeOverlayContract(
   return {
     ...base,
     routing,
+    selection,
     intent: {
       outputs: mergedOutputs,
       outputContracts,

@@ -3,6 +3,18 @@ name: skill-authoring
 description: Design or revise a skill contract, instructions, and artifacts so the
   catalog stays coherent and composable.
 stability: stable
+selection:
+  when_to_use: Use when adding or revising a skill contract, instructions, or artifact schema so the skill is easier to load, execute, and complete correctly.
+  examples:
+    - Design a new skill for this workflow.
+    - Refactor this skill contract and instructions.
+    - Tighten the artifact schema for this skill.
+  paths:
+    - skills
+  phases:
+    - align
+    - investigate
+    - execute
 intent:
   outputs:
     - skill_spec

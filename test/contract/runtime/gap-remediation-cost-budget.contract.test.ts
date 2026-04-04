@@ -106,6 +106,10 @@ describe("Gap remediation: cost view and budget linkage", () => {
 name: implementation
 description: test implementation skill
 tags: [implementation]
+selection:
+  when_to_use: Use when the task needs the routed test skill.
+  examples: [test skill]
+  phases: [execute]
 intent:
   outputs: [change_set]
   output_contracts:

@@ -3,6 +3,14 @@ name: discovery
 description: Reframe a request into the real problem, user pain, scope wedge, and
   design-ready starting point before execution planning begins.
 stability: stable
+selection:
+  when_to_use: Use when the real problem, user pain, or scope wedge is still unclear and the next step should be reframing rather than execution.
+  examples:
+    - Clarify the real problem behind this request.
+    - Help me narrow the scope and non-goals first.
+    - Turn this rough idea into a crisp wedge.
+  phases:
+    - align
 intent:
   outputs:
     - problem_frame

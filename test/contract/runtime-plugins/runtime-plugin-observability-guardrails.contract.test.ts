@@ -25,6 +25,10 @@ describe("Runtime plugin integration: observability guardrails", () => {
 name: blocktool
 description: blocktool skill
 tags: [blocktool]
+selection:
+  when_to_use: Use when the task needs the routed test skill.
+  examples: [test skill]
+  phases: [align]
 intent:
   outputs: []
 effects:
@@ -89,6 +93,10 @@ blocktool`,
 name: maxcalls
 description: maxcalls skill
 tags: [maxcalls]
+selection:
+  when_to_use: Use when the task needs the routed test skill.
+  examples: [test skill]
+  phases: [align]
 intent:
   outputs: []
 effects:

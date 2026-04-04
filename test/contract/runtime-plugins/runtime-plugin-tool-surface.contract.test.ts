@@ -3,7 +3,7 @@ import {
   registerToolSurface,
   type ToolSurfaceRuntime,
 } from "@brewva/brewva-gateway/runtime-plugins";
-import type { SkillRoutingScope } from "@brewva/brewva-runtime";
+import type { SkillRoutingScope, TaskPhase } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import type { ToolInfo } from "@mariozechner/pi-coding-agent";
 import { createMockRuntimePluginApi, invokeHandlerAsync } from "../../helpers/runtime-plugin.js";
@@ -45,12 +45,30 @@ function createSkillDocument(
   name: string,
   allowedEffects: Array<"workspace_read" | "runtime_observe" | "local_exec">,
   preferredTools: string[],
+  options: {
+    markdown?: string;
+    selection?: {
+      whenToUse: string;
+      examples?: string[];
+      paths?: string[];
+      phases?: TaskPhase[];
+    };
+  } = {},
 ) {
   return {
     name,
+    description: `${name} skill`,
+    category: "domain" as const,
+    markdown: options.markdown ?? "",
     contract: {
       name,
       category: "domain" as const,
+      routing: options.selection
+        ? {
+            scope: "domain" as const,
+          }
+        : undefined,
+      selection: options.selection,
       effects: {
         allowedEffects,
         deniedEffects: [],
@@ -70,6 +88,7 @@ function createSkillDocument(
 interface ToolSurfaceRuntimeOptions {
   getActive?: ToolSurfaceRuntime["skills"]["getActive"];
   getSkill?: ToolSurfaceRuntime["skills"]["get"];
+  listSkills?: ToolSurfaceRuntime["skills"]["list"];
   taskState?: ReturnType<ToolSurfaceRuntime["task"]["getState"]>;
   recordEvent?: ToolSurfaceRuntime["events"]["record"];
   routingScopes?: SkillRoutingScope[];
@@ -83,6 +102,7 @@ function createToolSurfaceRuntime(options: ToolSurfaceRuntimeOptions = {}): Tool
     }),
   });
   Object.assign(runtime.skills, {
+    list: options.listSkills ?? (() => []),
     getActive: options.getActive ?? (() => undefined),
     get: options.getSkill ?? (() => undefined),
   });
@@ -337,6 +357,94 @@ describe("tool surface runtime plugin", () => {
       | undefined;
     expect(event?.payload?.requestedActivatedToolNames).toEqual(["task_view_state", "obs_query"]);
     expect(event?.payload?.ignoredRequestedToolNames).toEqual([]);
+  });
+
+  test("strong skill recommendations prune default repository tools until skill_load happens", async () => {
+    const extensionApi = createMockRuntimePluginApi();
+    registerTools(extensionApi.api, [
+      "read",
+      "edit",
+      "write",
+      "session_compact",
+      "skill_load",
+      "workflow_status",
+      "task_set_spec",
+      "task_view_state",
+      "knowledge_search",
+      "output_search",
+      "grep",
+    ]);
+
+    const events: Array<Record<string, unknown>> = [];
+    const runtime = createToolSurfaceRuntime({
+      listSkills: () => [
+        createSkillDocument(
+          "runtime-forensics",
+          ["workspace_read", "runtime_observe"],
+          ["ledger_query"],
+          {
+            selection: {
+              whenToUse:
+                "Use when the task asks what happened at runtime and the answer must come from traces, ledgers, projections, or artifacts.",
+              examples: [
+                "Analyze this session trace.",
+                "Explain the runtime events and ledger evidence.",
+              ],
+              paths: [".orchestrator", ".brewva"],
+              phases: ["investigate", "verify"],
+            },
+          },
+        ),
+        createSkillDocument(
+          "repository-analysis",
+          ["workspace_read", "runtime_observe"],
+          ["read"],
+          {
+            selection: {
+              whenToUse:
+                "Use when the task needs repository orientation, impact analysis, or boundary mapping before implementation.",
+              examples: [
+                "Analyze this repository before changing code.",
+                "Map the impacted modules and boundaries.",
+              ],
+              phases: ["align", "investigate"],
+            },
+          },
+        ),
+      ],
+      recordEvent: (input: Record<string, unknown>) => {
+        events.push(input);
+        return undefined;
+      },
+    });
+
+    registerToolSurface(extensionApi.api, runtime);
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "分析这个 session trace、runtime 事件、ledger 和 projection，看看是否合理。",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-skill-first",
+        },
+      },
+    );
+
+    expect(extensionApi.activeTools).not.toContain("read");
+    expect(extensionApi.activeTools).not.toContain("edit");
+    expect(extensionApi.activeTools).not.toContain("write");
+    expect(extensionApi.activeTools).toContain("skill_load");
+    expect(extensionApi.activeTools).toContain("workflow_status");
+    expect(extensionApi.activeTools).toContain("task_set_spec");
+
+    const event = events.find((input) => input.type === "tool_surface_resolved") as
+      | { payload?: Record<string, unknown> }
+      | undefined;
+    expect(event?.payload?.recommendedSkillRequired).toBe(true);
+    expect(event?.payload?.recommendedSkillNames).toEqual(["runtime-forensics"]);
   });
 
   test("investigation lifecycle tools stay visible while the session has no task spec", async () => {

@@ -3,6 +3,15 @@ name: agent-browser
 description: Use browser automation to inspect pages, gather evidence, and validate
   flows that cannot be trusted from static code alone.
 stability: stable
+selection:
+  when_to_use: Use when a page, workflow, or UI behavior must be inspected live instead of inferred from static code.
+  examples:
+    - Open the page and verify the flow.
+    - Check the UI in a live browser.
+    - Gather browser evidence for this form or navigation issue.
+  phases:
+    - investigate
+    - verify
 intent:
   outputs:
     - browser_observations

@@ -577,6 +577,7 @@ function recordHostedBootstrap(input: {
       agentId: input.runtime.agentId,
       managedToolMode: input.managedToolMode,
       skillLoad: {
+        loadedSkills: skillLoadReport.loadedSkills,
         routingEnabled: skillLoadReport.routingEnabled,
         routingScopes: skillLoadReport.routingScopes,
         routableSkills: skillLoadReport.routableSkills,

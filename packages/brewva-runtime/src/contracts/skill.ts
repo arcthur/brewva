@@ -1,5 +1,6 @@
 import type { ToolEffectClass } from "./governance.js";
 import type { RuntimeSuccess, VerificationLevel } from "./shared.js";
+import type { TaskPhase } from "./task.js";
 
 export type LoadableSkillCategory = "core" | "domain" | "operator" | "meta" | "internal";
 export type SkillOverlayCategory = "overlay";
@@ -10,6 +11,13 @@ export type SkillEffectLevel = "read_only" | "execute" | "mutation";
 
 export interface SkillRoutingPolicy {
   scope: SkillRoutingScope;
+}
+
+export interface SkillSelectionPolicy {
+  whenToUse: string;
+  examples?: string[];
+  paths?: string[];
+  phases?: TaskPhase[];
 }
 
 export interface SkillResourceSet {
@@ -92,6 +100,7 @@ export interface SkillContract {
   name: string;
   category: LoadableSkillCategory;
   routing?: SkillRoutingPolicy;
+  selection?: SkillSelectionPolicy;
   intent?: SkillIntentContract;
   effects?: SkillEffectsContract;
   resources?: SkillResourcePolicy;
@@ -105,7 +114,14 @@ export interface SkillContract {
 
 export interface SkillContractOverride extends Omit<
   Partial<SkillContract>,
-  "name" | "category" | "intent" | "effects" | "resources" | "executionHints" | "routing"
+  | "name"
+  | "category"
+  | "intent"
+  | "effects"
+  | "resources"
+  | "executionHints"
+  | "routing"
+  | "selection"
 > {
   intent?: Partial<SkillIntentContract>;
   effects?: SkillEffectsOverride;
@@ -115,6 +131,7 @@ export interface SkillContractOverride extends Omit<
   };
   executionHints?: Partial<SkillExecutionHints>;
   routing?: Partial<SkillRoutingPolicy>;
+  selection?: Partial<SkillSelectionPolicy>;
 }
 
 export interface SkillOverlayContract extends SkillContractOverride {
@@ -152,6 +169,8 @@ export interface SkillsIndexEntry {
   name: string;
   category: SkillCategory;
   description: string;
+  filePath: string;
+  baseDir: string;
   outputs: string[];
   preferredTools: string[];
   fallbackTools: string[];
@@ -162,7 +181,11 @@ export interface SkillsIndexEntry {
   consumes: string[];
   requires: string[];
   effectLevel: SkillEffectLevel;
+  routable: boolean;
+  overlay: boolean;
+  sharedContextFiles: string[];
   routingScope?: SkillRoutingScope;
+  selection?: SkillSelectionPolicy;
 }
 
 export type SkillActivationResult =

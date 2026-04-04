@@ -3,6 +3,15 @@ name: telegram
 description: Design Telegram channel behavior and interactive payloads as one channel-native
   response workflow.
 stability: stable
+selection:
+  when_to_use: Use when output is delivered in Telegram and message structure, interaction payloads, or CTA design must be channel-native.
+  examples:
+    - Design the Telegram message flow for this feature.
+    - Prepare a Telegram-ready response with interactive actions.
+    - Shape this content for Telegram delivery.
+  phases:
+    - align
+    - execute
 intent:
   outputs:
     - telegram_response_plan

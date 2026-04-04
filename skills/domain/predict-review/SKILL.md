@@ -3,6 +3,15 @@ name: predict-review
 description: Advisory multi-perspective review using structured delegation, explicit
   anti-herd checks, and ranked hypotheses.
 stability: experimental
+selection:
+  when_to_use: Use when a hard problem needs multi-perspective advisory review and explicit disagreement before choosing the next action.
+  examples:
+    - Give me multiple competing explanations for this issue.
+    - Run a multi-perspective review before we act.
+    - Surface disagreement across architecture, reliability, and performance views.
+  phases:
+    - investigate
+    - verify
 intent:
   outputs:
     - perspective_findings

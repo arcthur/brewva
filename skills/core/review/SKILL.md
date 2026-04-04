@@ -3,6 +3,15 @@ name: review
 description: Assess change risk, plan conformance, and merge safety with findings-first
   output and explicit residual risk.
 stability: stable
+selection:
+  when_to_use: Use when a diff or change plan needs findings-first risk review, merge readiness assessment, or conformance checking.
+  examples:
+    - Review this diff for risks and regressions.
+    - Assess whether this change is ready to merge.
+    - Find review findings in this patch.
+  phases:
+    - investigate
+    - verify
 intent:
   outputs:
     - review_report

@@ -1,11 +1,13 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { ExtensionAPI, ToolInfo } from "@mariozechner/pi-coding-agent";
 import { buildCapabilityView, type BuildCapabilityViewResult } from "./capability-view.js";
+import { deriveSkillRecommendations, type SkillRecommendationSet } from "./skill-first.js";
 
 export interface PreparedContextComposerSupport {
   gateStatus: ReturnType<BrewvaRuntime["context"]["getCompactionGateStatus"]>;
   pendingCompactionReason: string | null;
   capabilityView: BuildCapabilityViewResult;
+  skillRecommendations: SkillRecommendationSet;
 }
 
 export function prepareContextComposerSupport(input: {
@@ -41,9 +43,14 @@ export function prepareContextComposerSupport(input: {
     resolveGovernanceDescriptor: (toolName) =>
       input.runtime.tools.getGovernanceDescriptor(toolName),
   });
+  const skillRecommendations = deriveSkillRecommendations(input.runtime, {
+    sessionId: input.sessionId,
+    prompt: input.prompt,
+  });
   return {
     gateStatus,
     pendingCompactionReason,
     capabilityView,
+    skillRecommendations,
   };
 }

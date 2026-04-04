@@ -54,6 +54,7 @@ export const SESSION_TURN_TRANSITION_EVENT_TYPE = "session_turn_transition" as c
 export const SKILL_ACTIVATED_EVENT_TYPE = "skill_activated" as const;
 export const SKILL_BUDGET_WARNING_EVENT_TYPE = "skill_budget_warning" as const;
 export const SKILL_COMPLETED_EVENT_TYPE = "skill_completed" as const;
+export const SKILL_RECOMMENDATION_DERIVED_EVENT_TYPE = "skill_recommendation_derived" as const;
 export const SKILL_PARALLEL_WARNING_EVENT_TYPE = "skill_parallel_warning" as const;
 export const SKILL_PROMOTION_DRAFT_DERIVED_EVENT_TYPE = "skill_promotion_draft_derived" as const;
 export const SKILL_PROMOTION_REVIEWED_EVENT_TYPE = "skill_promotion_reviewed" as const;
@@ -189,6 +190,7 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   SKILL_ACTIVATED_EVENT_TYPE,
   SKILL_BUDGET_WARNING_EVENT_TYPE,
   SKILL_COMPLETED_EVENT_TYPE,
+  SKILL_RECOMMENDATION_DERIVED_EVENT_TYPE,
   SKILL_PARALLEL_WARNING_EVENT_TYPE,
   SKILL_PROMOTION_DRAFT_DERIVED_EVENT_TYPE,
   SKILL_PROMOTION_REVIEWED_EVENT_TYPE,

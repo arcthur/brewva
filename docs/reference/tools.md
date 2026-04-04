@@ -572,6 +572,11 @@ Skill sequencing is model-native.
 
 There is no public skill-cascade or chain-control tool.
 
+In the generic hosted path, when the current turn strongly matches a loaded
+skill and no skill is active yet, the hosted control plane may narrow the
+pre-skill tool surface to control-plane lifecycle tools so the next semantic
+decision is `skill_load` rather than ad hoc repository work.
+
 ## `optimization_continuity`
 
 Deliberation-owned bounded optimization inspection surface.

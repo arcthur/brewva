@@ -3,6 +3,17 @@ name: ci-iteration
 description: Drive PR and CI repair loops with explicit exit conditions, verification
   evidence, and durable iteration discipline.
 stability: experimental
+selection:
+  when_to_use: Use when failing checks, PR feedback, or repair loops need bounded iteration with current CI state and local verification evidence.
+  examples:
+    - Fix the failing CI and iterate until it is green.
+    - Address PR review feedback and rerun verification.
+    - Work the repair loop for this failing branch.
+  paths:
+    - .github/workflows
+  phases:
+    - execute
+    - verify
 intent:
   outputs:
     - ci_snapshot

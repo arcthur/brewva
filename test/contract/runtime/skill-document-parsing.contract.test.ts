@@ -7,6 +7,13 @@ import {
 } from "@brewva/brewva-runtime";
 import { createContract, createTempSkillDocument, repoRoot } from "./skill-contract.helpers.js";
 
+const MINIMAL_SELECTION_LINES = [
+  "selection:",
+  "  when_to_use: Use when the task needs the routed test skill.",
+  "  examples: [test skill]",
+  "  phases: [align]",
+] as const;
+
 describe("skill document parsing", () => {
   test("fails fast when forbidden tier frontmatter field is present", () => {
     const filePath = createTempSkillDocument(
@@ -17,6 +24,7 @@ describe("skill document parsing", () => {
         "name: review",
         "description: review skill",
         "tier: base",
+        ...MINIMAL_SELECTION_LINES,
         "intent:",
         "  outputs: []",
         "effects:",
@@ -49,6 +57,7 @@ describe("skill document parsing", () => {
         "name: review",
         "description: review skill",
         "category: core",
+        ...MINIMAL_SELECTION_LINES,
         "intent:",
         "  outputs: []",
         "effects:",
@@ -80,6 +89,7 @@ describe("skill document parsing", () => {
         "---",
         "name: review",
         "description: review skill",
+        ...MINIMAL_SELECTION_LINES,
         "intent:",
         "  outputs: []",
         "effects:",
@@ -108,6 +118,7 @@ describe("skill document parsing", () => {
         "---",
         "name: review",
         "description: review skill",
+        ...MINIMAL_SELECTION_LINES,
         "intent:",
         "  outputs: []",
         "effects:",
@@ -139,6 +150,7 @@ describe("skill document parsing", () => {
         "---",
         "name: goal-loop",
         "description: goal loop skill",
+        ...MINIMAL_SELECTION_LINES,
         "routing:",
         "  continuity_required: true",
         "intent:",
@@ -162,6 +174,155 @@ describe("skill document parsing", () => {
     );
 
     expect(() => parseSkillDocument(filePath, "domain")).toThrow("continuity_required");
+  });
+
+  test("parses selection metadata for loadable skills", () => {
+    const filePath = createTempSkillDocument(
+      "brewva-skill-selection-",
+      "skills/core/review/SKILL.md",
+      [
+        "---",
+        "name: review",
+        "description: review skill",
+        "selection:",
+        "  when_to_use: Use when reviewing a change plan or diff.",
+        "  examples: [review this change, assess merge readiness]",
+        "  paths: [packages/brewva-runtime]",
+        "  phases: [investigate, verify]",
+        "intent:",
+        "  outputs: []",
+        "effects:",
+        "  allowed_effects: [workspace_read]",
+        "resources:",
+        "  default_lease:",
+        "    max_tool_calls: 10",
+        "    max_tokens: 10000",
+        "  hard_ceiling:",
+        "    max_tool_calls: 20",
+        "    max_tokens: 20000",
+        "execution_hints:",
+        "  preferred_tools: [read]",
+        "  fallback_tools: []",
+        "consumes: []",
+        "---",
+        "# review",
+      ],
+    );
+
+    const parsed = parseSkillDocument(filePath, "core");
+    expect(parsed.contract.routing).toEqual({
+      scope: "core",
+    });
+    expect(parsed.contract.selection).toEqual({
+      whenToUse: "Use when reviewing a change plan or diff.",
+      examples: ["review this change", "assess merge readiness"],
+      paths: ["packages/brewva-runtime"],
+      phases: ["investigate", "verify"],
+    });
+  });
+
+  test("rejects camelCase selection.whenToUse metadata", () => {
+    const filePath = createTempSkillDocument(
+      "brewva-skill-selection-camel-",
+      "skills/core/review/SKILL.md",
+      [
+        "---",
+        "name: review",
+        "description: review skill",
+        "selection:",
+        "  whenToUse: Use when reviewing a change plan or diff.",
+        "  examples: [review this change]",
+        "intent:",
+        "  outputs: []",
+        "effects:",
+        "  allowed_effects: [workspace_read]",
+        "resources:",
+        "  default_lease:",
+        "    max_tool_calls: 10",
+        "    max_tokens: 10000",
+        "  hard_ceiling:",
+        "    max_tool_calls: 20",
+        "    max_tokens: 20000",
+        "execution_hints:",
+        "  preferred_tools: [read]",
+        "  fallback_tools: []",
+        "consumes: []",
+        "---",
+        "# review",
+      ],
+    );
+
+    expect(() => parseSkillDocument(filePath, "core")).toThrow("selection.whenToUse");
+  });
+
+  test("rejects removed routing.match_hints metadata", () => {
+    const filePath = createTempSkillDocument(
+      "brewva-skill-routing-match-hints-removed-",
+      "skills/core/review/SKILL.md",
+      [
+        "---",
+        "name: review",
+        "description: review skill",
+        "routing:",
+        "  match_hints:",
+        "    keywords: [review]",
+        ...MINIMAL_SELECTION_LINES,
+        "intent:",
+        "  outputs: []",
+        "effects:",
+        "  allowed_effects: [workspace_read]",
+        "resources:",
+        "  default_lease:",
+        "    max_tool_calls: 10",
+        "    max_tokens: 10000",
+        "  hard_ceiling:",
+        "    max_tool_calls: 20",
+        "    max_tokens: 20000",
+        "execution_hints:",
+        "  preferred_tools: [read]",
+        "  fallback_tools: []",
+        "consumes: []",
+        "---",
+        "# review",
+      ],
+    );
+
+    expect(() => parseSkillDocument(filePath, "core")).toThrow("routing.match_hints");
+  });
+
+  test("rejects removed camelCase routing.matchHints metadata", () => {
+    const filePath = createTempSkillDocument(
+      "brewva-skill-routing-match-hints-camel-",
+      "skills/core/review/SKILL.md",
+      [
+        "---",
+        "name: review",
+        "description: review skill",
+        "routing:",
+        "  matchHints:",
+        "    keywords: [review]",
+        ...MINIMAL_SELECTION_LINES,
+        "intent:",
+        "  outputs: []",
+        "effects:",
+        "  allowed_effects: [workspace_read]",
+        "resources:",
+        "  default_lease:",
+        "    max_tool_calls: 10",
+        "    max_tokens: 10000",
+        "  hard_ceiling:",
+        "    max_tool_calls: 20",
+        "    max_tokens: 20000",
+        "execution_hints:",
+        "  preferred_tools: [read]",
+        "  fallback_tools: []",
+        "consumes: []",
+        "---",
+        "# review",
+      ],
+    );
+
+    expect(() => parseSkillDocument(filePath, "core")).toThrow("routing.matchHints");
   });
 
   test("parses overlay resources without exposing routing scope", () => {
@@ -291,6 +452,7 @@ describe("skill document parsing", () => {
         "---",
         "name: review",
         "description: review skill",
+        ...MINIMAL_SELECTION_LINES,
         "intent:",
         "  outputs: [review_report]",
         "effects:",
@@ -432,6 +594,7 @@ describe("skill document parsing", () => {
         "---",
         "name: review",
         "description: review skill",
+        ...MINIMAL_SELECTION_LINES,
         "intent:",
         "  outputs: [review_report]",
         "  output_contracts:",
@@ -528,6 +691,7 @@ describe("skill document parsing", () => {
         "---",
         "name: design",
         "description: design skill",
+        ...MINIMAL_SELECTION_LINES,
         "intent:",
         "  outputs: [execution_plan]",
         "  output_contracts:",

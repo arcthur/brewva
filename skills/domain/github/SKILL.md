@@ -3,6 +3,16 @@ name: github
 description: Operate on GitHub issues, PRs, CI, and repository metadata through one
   coherent `gh`-driven workflow.
 stability: stable
+selection:
+  when_to_use: Use when a request targets GitHub issues, pull requests, checks, or repository metadata and should run through one coherent gh workflow.
+  examples:
+    - Summarize this PR on GitHub.
+    - Inspect the failing GitHub checks.
+    - Operate on this issue or workflow run with gh.
+  phases:
+    - investigate
+    - execute
+    - verify
 intent:
   outputs:
     - github_context

@@ -3,6 +3,17 @@ name: knowledge-capture
 description: Materialize canonical repository precedents under docs/solutions from
   terminal typed artifacts.
 stability: stable
+selection:
+  when_to_use: Use when a resolved feature, bug, incident, or review lesson should be turned into reusable repository precedent.
+  examples:
+    - Write a repository precedent for this fix.
+    - Capture the lesson from this incident.
+    - Turn this resolved delivery path into docs/solutions knowledge.
+  paths:
+    - docs/solutions
+  phases:
+    - ready_for_acceptance
+    - done
 intent:
   outputs:
     - solution_record

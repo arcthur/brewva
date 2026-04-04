@@ -3,6 +3,15 @@ name: design
 description: Turn a request into a bounded design and executable plan, choosing the
   right implementation mode without over-designing trivial work.
 stability: stable
+selection:
+  when_to_use: Use when a request needs a bounded design, explicit trade-offs, or an executable plan before code changes.
+  examples:
+    - Design the approach before implementing it.
+    - Compare the viable options for this change.
+    - Write an execution plan for this cross-package work.
+  phases:
+    - align
+    - investigate
 intent:
   outputs:
     - design_spec

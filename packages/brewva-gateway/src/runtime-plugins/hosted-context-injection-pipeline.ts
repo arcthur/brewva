@@ -1,5 +1,6 @@
 import {
   CONTEXT_SOURCES,
+  SKILL_RECOMMENDATION_DERIVED_EVENT_TYPE,
   type BrewvaRuntime,
   type ContextBudgetUsage,
   type ContextInjectionEntry,
@@ -9,6 +10,7 @@ import type { HostedDelegationStore } from "../subagents/delegation-store.js";
 import { type BuildCapabilityViewResult } from "./capability-view.js";
 import { prepareContextComposerSupport } from "./context-composer-support.js";
 import {
+  type ComposedContextBlock,
   type ContextComposerRuntime,
   type ContextComposerResult,
   composeContextBlocks,
@@ -20,6 +22,7 @@ import { appendSupplementalContextBlocks } from "./context-supplemental.js";
 import type { HostedContextGateStatePort } from "./hosted-compaction-controller.js";
 import type { HostedContextTelemetry } from "./hosted-context-telemetry.js";
 import { resolveRecoveryWorkingSetBlock } from "./recovery-working-set.js";
+import { buildSkillFirstPolicyBlock, type SkillRecommendationSet } from "./skill-first.js";
 
 export const HOSTED_CONTEXT_INJECTION_MESSAGE_TYPE = "brewva-context-injection";
 
@@ -50,6 +53,10 @@ export interface HostedContextInjectionMessageDetails {
     requested: string[];
     detailNames: string[];
     missing: string[];
+  };
+  skillRecommendation: {
+    required: boolean;
+    names: string[];
   };
 }
 
@@ -152,6 +159,7 @@ function buildMessageDetails(input: {
   gateRequired: boolean;
   composed: ContextComposerResult;
   capabilityView: BuildCapabilityViewResult;
+  skillRecommendations: SkillRecommendationSet;
 }): HostedContextInjectionMessageDetails {
   return {
     originalTokens: input.originalTokens,
@@ -168,6 +176,10 @@ function buildMessageDetails(input: {
       requested: input.capabilityView.requested,
       detailNames: input.capabilityView.details.map((detail) => detail.name),
       missing: input.capabilityView.missing,
+    },
+    skillRecommendation: {
+      required: input.skillRecommendations.required,
+      names: input.skillRecommendations.recommendations.map((entry) => entry.name),
     },
   };
 }
@@ -188,6 +200,48 @@ function buildHiddenInjectionResult(input: {
   };
 }
 
+function buildSkillRecommendationBlocks(
+  runtime: BrewvaRuntime,
+  input: {
+    sessionId: string;
+    recommendations: SkillRecommendationSet;
+    emitEvent?: boolean;
+  },
+): ComposedContextBlock[] {
+  const content = buildSkillFirstPolicyBlock(input.recommendations);
+  if (!content) {
+    return [];
+  }
+
+  if (input.emitEvent !== false) {
+    runtime.events.record({
+      sessionId: input.sessionId,
+      type: SKILL_RECOMMENDATION_DERIVED_EVENT_TYPE,
+      payload: {
+        schema: "brewva.skill_recommendation.v1",
+        required: input.recommendations.required,
+        activeSkill: input.recommendations.activeSkillName,
+        recommendations: input.recommendations.recommendations.map((entry) => ({
+          name: entry.name,
+          category: entry.category,
+          score: entry.score,
+          primary: entry.primary,
+          reasons: entry.reasons,
+        })),
+      },
+    });
+  }
+
+  return [
+    {
+      id: "skill-first-policy",
+      category: "constraint",
+      content,
+      estimatedTokens: 0,
+    },
+  ];
+}
+
 export function createHostedContextInjectionPipeline(
   extensionApi: ExtensionAPI,
   runtime: BrewvaRuntime,
@@ -204,13 +258,14 @@ export function createHostedContextInjectionPipeline(
       const injectionScopeId = resolveInjectionScopeId(input.sessionManager);
       runtime.context.observeUsage(input.sessionId, input.usage);
 
-      let { gateStatus, pendingCompactionReason, capabilityView } = prepareContextComposerSupport({
-        runtime,
-        extensionApi,
-        sessionId: input.sessionId,
-        prompt: input.prompt,
-        usage: input.usage,
-      });
+      let { gateStatus, pendingCompactionReason, capabilityView, skillRecommendations } =
+        prepareContextComposerSupport({
+          runtime,
+          extensionApi,
+          sessionId: input.sessionId,
+          prompt: input.prompt,
+          usage: input.usage,
+        });
 
       if (gateStatus.required) {
         telemetry.emitHardGateRequired({
@@ -238,6 +293,11 @@ export function createHostedContextInjectionPipeline(
             gateStatus,
             pendingCompactionReason,
             capabilityView,
+          }),
+          ...buildSkillRecommendationBlocks(runtime, {
+            sessionId: input.sessionId,
+            recommendations: skillRecommendations,
+            emitEvent: gateStatus.required,
           }),
         ],
       });
@@ -282,6 +342,7 @@ export function createHostedContextInjectionPipeline(
             gateRequired: true,
             composed,
             capabilityView,
+            skillRecommendations,
           }),
         });
       }
@@ -314,6 +375,7 @@ export function createHostedContextInjectionPipeline(
       gateStatus = gateStatusAfterInjection;
       pendingCompactionReason = supportAfterInjection.pendingCompactionReason;
       capabilityView = supportAfterInjection.capabilityView;
+      skillRecommendations = supportAfterInjection.skillRecommendations;
       statePort.setLastRuntimeGateRequired(input.sessionId, gateStatus.required);
 
       const supplementalBlocks = appendSupplementalContextBlocks(runtime, {
@@ -333,6 +395,10 @@ export function createHostedContextInjectionPipeline(
             gateStatus,
             pendingCompactionReason,
             capabilityView,
+          }),
+          ...buildSkillRecommendationBlocks(runtime, {
+            sessionId: input.sessionId,
+            recommendations: skillRecommendations,
           }),
         ],
       });
@@ -379,6 +445,7 @@ export function createHostedContextInjectionPipeline(
           gateRequired: gateStatus.required,
           composed,
           capabilityView,
+          skillRecommendations,
         }),
       });
     },

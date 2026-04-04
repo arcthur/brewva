@@ -3,6 +3,15 @@ name: learning-research
 description: Retrieve repository precedents and preventive guidance before non-trivial
   planning or review.
 stability: stable
+selection:
+  when_to_use: Use when a non-trivial task needs repository precedents, prior failure patterns, or preventive guidance before deeper execution.
+  examples:
+    - Find prior repository solutions for this problem.
+    - Look up precedent before we implement this.
+    - Gather repository-specific guidance for this debugging task.
+  phases:
+    - align
+    - investigate
 intent:
   outputs:
     - knowledge_brief

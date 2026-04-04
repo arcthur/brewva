@@ -3,6 +3,15 @@ name: repository-analysis
 description: Build a reliable repository snapshot, impact map, and planning posture
   before design, debugging, or review.
 stability: stable
+selection:
+  when_to_use: Use when the task needs repository orientation, impact analysis, or boundary mapping before design, debugging, review, or execution.
+  examples:
+    - Analyze this repository before changing code.
+    - Map the impacted modules and boundaries for this task.
+    - Explain which files are likely affected by this request.
+  phases:
+    - align
+    - investigate
 intent:
   outputs:
     - repository_snapshot

@@ -239,6 +239,13 @@ export {
   type RenderCapabilityViewInput,
   type BuildCapabilityViewResult,
 } from "./capability-view.js";
+export {
+  buildSkillFirstPolicyBlock,
+  deriveSkillRecommendations,
+  type SkillRecommendation,
+  type SkillRecommendationSet,
+  type SkillFirstRuntimeLike,
+} from "./skill-first.js";
 export { registerEventStream } from "./event-stream.js";
 export { registerQualityGate } from "./quality-gate.js";
 export { registerLedgerWriter } from "./ledger-writer.js";

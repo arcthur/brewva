@@ -3,6 +3,14 @@ name: ship
 description: Convert reviewed and tested work into a release-ready handoff with explicit
   blockers, final checks, and release-path clarity.
 stability: stable
+selection:
+  when_to_use: Use when implemented and reviewed work needs release readiness checks, merge-path clarity, or operator-facing handoff.
+  examples:
+    - Prepare this work for release.
+    - Check whether this change is ready to ship.
+    - Summarize the final ship blockers and merge path.
+  phases:
+    - ready_for_acceptance
 intent:
   outputs:
     - ship_report

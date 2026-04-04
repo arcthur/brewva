@@ -3,6 +3,15 @@ name: goal-loop
 description: Use bounded multi-run continuity when progress requires repeated execution,
   explicit cadence, and objective iteration facts.
 stability: experimental
+selection:
+  when_to_use: Use when progress requires repeated bounded runs with explicit cadence, continuation state, and objective convergence checks.
+  examples:
+    - Set up a recurring execution loop for this task.
+    - Continue this work over time with explicit cadence.
+    - Run bounded iterations until this objective converges.
+  phases:
+    - execute
+    - blocked
 intent:
   outputs:
     - loop_contract

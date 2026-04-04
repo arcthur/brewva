@@ -3,6 +3,15 @@ name: frontend-design
 description: Shape UI direction, interaction structure, and visual intent for frontend
   work that needs taste and product judgment.
 stability: stable
+selection:
+  when_to_use: Use when a frontend task needs visual direction, UI structure, or implementation-ready design guidance.
+  examples:
+    - Design the UI for this feature.
+    - Give this screen stronger hierarchy and interaction structure.
+    - Produce an implementation-ready frontend spec.
+  phases:
+    - align
+    - investigate
 intent:
   outputs:
     - ui_direction

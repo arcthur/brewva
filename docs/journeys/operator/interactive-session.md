@@ -40,17 +40,18 @@ flowchart TD
   A["User prompt or task input"] --> B["CLI resolves mode and session backend"]
   B --> C["Create hosted session + BrewvaRuntime"]
   C --> D["Install hosted pipeline (context/tool/ledger/completion)"]
-  D --> E["Model selects skill via skill_load"]
-  E --> F["Tool calls enter shared invocation spine"]
-  F --> G["Ledger and event tape record durable outcomes"]
-  G --> H{"skill_complete called?"}
-  H -->|No| F
-  H -->|Yes| I["Validate required outputs"]
-  I --> J["Run runtime.verification.verify(...)"]
-  J --> K{"Verification passed or read-only?"}
-  K -->|No| L["Block completion and keep session active"]
-  K -->|Yes| M["Complete skill and derive workflow posture"]
-  M --> N["Inspect via workflow_status / task_view_state / inspect"]
+  D --> E["Hosted control plane recommends a skill-first path"]
+  E --> F["Model selects skill via skill_load"]
+  F --> G["Tool calls enter shared invocation spine"]
+  G --> H["Ledger and event tape record durable outcomes"]
+  H --> I{"skill_complete called?"}
+  I -->|No| G
+  I -->|Yes| J["Validate required outputs"]
+  J --> K["Run runtime.verification.verify(...)"]
+  K --> L{"Verification passed or read-only?"}
+  L -->|No| M["Block completion and keep session active"]
+  L -->|Yes| N["Complete skill and derive workflow posture"]
+  N --> O["Inspect via workflow_status / task_view_state / inspect"]
 ```
 
 ## Key Steps
@@ -58,13 +59,18 @@ flowchart TD
 1. The CLI resolves the active mode and creates a hosted session.
 2. The hosted pipeline installs context transform, quality gate, ledger writer,
    and completion guard handlers.
-3. The model activates the current skill through `skill_load`; the runtime does
+3. Hosted control-plane logic first derives a skill-first recommendation from
+   the loaded catalog and current task context.
+4. The model activates the current skill through `skill_load`; the runtime does
    not inject a stage machine.
-4. Every tool call enters the shared invocation spine and is evaluated for
+5. Every tool call enters the shared invocation spine and is evaluated for
    access, budget, compaction, ledger writes, and event persistence.
-5. `skill_complete` validates required outputs before calling
+6. When the skill match is strong and no skill is active, the hosted path
+   narrows the default tool surface so the turn resolves to `skill_load` before
+   deeper repository work.
+7. `skill_complete` validates required outputs before calling
    `runtime.verification.verify(...)`.
-6. After verification passes, the runtime completes the skill and exposes the
+8. After verification passes, the runtime completes the skill and exposes the
    resulting workflow posture through explicit inspection surfaces.
 
 ## Execution Semantics

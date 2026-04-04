@@ -19,6 +19,10 @@ function writeSkill(
       "---",
       `name: ${input.name}`,
       `description: ${input.name} skill`,
+      "selection:",
+      "  when_to_use: Use when the task needs the routed test skill.",
+      "  examples: [test skill]",
+      "  phases: [align]",
       "intent:",
       `  outputs: [${input.outputs.join(", ")}]`,
       ...(input.outputContracts && input.outputContracts.length > 0

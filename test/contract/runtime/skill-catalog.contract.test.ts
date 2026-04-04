@@ -87,6 +87,24 @@ describe("repository catalog contracts", () => {
     expect(missing).toEqual([]);
   });
 
+  test("all loadable routed skills declare explicit selection policy", () => {
+    const runtime = createCleanRuntime();
+    const missing = runtime.skills.list().flatMap((skill) => {
+      if (!skill.contract.routing?.scope) {
+        return [];
+      }
+      if (!skill.contract.selection?.whenToUse) {
+        return [`${skill.name}:when_to_use`];
+      }
+      if ((skill.contract.selection.examples?.length ?? 0) === 0) {
+        return [`${skill.name}:examples`];
+      }
+      return [];
+    });
+
+    expect(missing).toEqual([]);
+  });
+
   test("core workflow skills declare the documented handoff graph", () => {
     const discovery = parseSkillDocument(`${repoRoot()}/skills/core/discovery/SKILL.md`, "core");
     const repositoryAnalysis = parseSkillDocument(

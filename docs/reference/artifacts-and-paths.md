@@ -54,7 +54,9 @@ The remaining `.brewva/**` entries below are operator-authored configuration or
 helper material, not session-state durability surfaces in the taxonomy above.
 
 - Generated skill index: `.brewva/skills_index.json`
-  - includes selected skill roots (`roots`) and the merged skill index (`skills`)
+  - includes selected skill roots (`roots`) and the complete loaded-skill catalog (`skills`)
+  - `summary` reports loaded, routable, non-routable (`hiddenSkills`), and overlay counts
+- each skill entry keeps normalized contract metadata plus `routable`, `overlay`, normalized `selection` metadata, source paths, and shared-context attachments
 - Agent self bundle (per-agent):
   - `.brewva/agents/<agent-id>/identity.md`
   - `.brewva/agents/<agent-id>/constitution.md`

@@ -56,6 +56,7 @@ export interface SkillRegistryRoot {
 
 export interface SkillRegistryLoadReport {
   roots: SkillRegistryRoot[];
+  loadedSkills: string[];
   routingEnabled: boolean;
   routingScopes: SkillRoutingScope[];
   routableSkills: string[];
@@ -286,6 +287,7 @@ function renderSharedContext(entries: SharedContextEntry[]): string {
 function cloneLoadReport(report: SkillRegistryLoadReport): SkillRegistryLoadReport {
   return {
     roots: report.roots.map(cloneSkillRegistryRoot),
+    loadedSkills: [...report.loadedSkills],
     routingEnabled: report.routingEnabled,
     routingScopes: [...report.routingScopes],
     routableSkills: [...report.routableSkills],
@@ -311,6 +313,7 @@ export class SkillRegistry {
   private loadedRoots: SkillRegistryRoot[] = [];
   private lastLoadReport: SkillRegistryLoadReport = {
     roots: [],
+    loadedSkills: [],
     routingEnabled: false,
     routingScopes: ["core", "domain"],
     routableSkills: [],
@@ -373,13 +376,15 @@ export class SkillRegistry {
     return cloneLoadReport(this.lastLoadReport);
   }
 
-  buildIndex(options: { includeHidden?: boolean } = {}): SkillsIndexEntry[] {
+  buildIndex(options: { routableOnly?: boolean } = {}): SkillsIndexEntry[] {
     return this.list()
-      .filter((skill) => options.includeHidden === true || this.isRoutable(skill))
+      .filter((skill) => !options.routableOnly || this.isRoutable(skill))
       .map((skill) => ({
         name: skill.name,
         category: skill.category,
         description: skill.description,
+        filePath: skill.filePath,
+        baseDir: skill.baseDir,
         outputs: listSkillOutputs(skill.contract),
         preferredTools: listSkillPreferredTools(skill.contract),
         fallbackTools: listSkillFallbackTools(skill.contract),
@@ -390,7 +395,24 @@ export class SkillRegistry {
         consumes: skill.contract.consumes ?? [],
         requires: skill.contract.requires ?? [],
         effectLevel: resolveSkillEffectLevel(skill.contract),
+        routable: this.isRoutable(skill),
+        overlay: skill.overlayFiles.length > 0,
+        sharedContextFiles: [...skill.sharedContextFiles],
         routingScope: skill.contract.routing?.scope,
+        selection: skill.contract.selection
+          ? {
+              whenToUse: skill.contract.selection.whenToUse,
+              ...(skill.contract.selection.examples
+                ? { examples: [...skill.contract.selection.examples] }
+                : {}),
+              ...(skill.contract.selection.paths
+                ? { paths: [...skill.contract.selection.paths] }
+                : {}),
+              ...(skill.contract.selection.phases
+                ? { phases: [...skill.contract.selection.phases] }
+                : {}),
+            }
+          : undefined,
       }));
   }
 
@@ -401,6 +423,7 @@ export class SkillRegistry {
     if (parent && !existsSync(parent)) {
       mkdirSync(parent, { recursive: true });
     }
+    const indexEntries = this.buildIndex();
     const payload = {
       generatedAt: formatISO(Date.now()),
       roots: this.getLoadedRoots(),
@@ -408,7 +431,13 @@ export class SkillRegistry {
         enabled: this.config.skills.routing.enabled,
         scopes: this.config.skills.routing.scopes,
       },
-      skills: this.buildIndex(),
+      summary: {
+        loadedSkills: indexEntries.length,
+        routableSkills: indexEntries.filter((skill) => skill.routable).length,
+        hiddenSkills: indexEntries.filter((skill) => !skill.routable).length,
+        overlaySkills: indexEntries.filter((skill) => skill.overlay).length,
+      },
+      skills: indexEntries,
     };
     writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf8");
     return filePath;
@@ -423,11 +452,13 @@ export class SkillRegistry {
 
   private buildLoadReport(): SkillRegistryLoadReport {
     const categories: SkillRegistryLoadReport["categories"] = {};
+    const loadedSkills: string[] = [];
     const routableSkills: string[] = [];
     const hiddenSkills: string[] = [];
     const overlaySkills: string[] = [];
 
     for (const skill of this.list()) {
+      loadedSkills.push(skill.name);
       const categoryBucket = categories[skill.category] ?? [];
       categoryBucket.push(skill.name);
       categories[skill.category] = categoryBucket;
@@ -449,6 +480,7 @@ export class SkillRegistry {
 
     return {
       roots: this.getLoadedRoots(),
+      loadedSkills: [...new Set(loadedSkills)].toSorted((a, b) => a.localeCompare(b)),
       routingEnabled: this.config.skills.routing.enabled,
       routingScopes: [...this.config.skills.routing.scopes],
       routableSkills: [...new Set(routableSkills)].toSorted((a, b) => a.localeCompare(b)),

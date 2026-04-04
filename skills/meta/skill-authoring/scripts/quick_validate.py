@@ -13,8 +13,8 @@ import yaml
 ALLOWED_PROPERTIES = {
     "name",
     "description",
-    "dispatch",
     "routing",
+    "selection",
     "intent",
     "effects",
     "resources",
@@ -59,11 +59,28 @@ EFFECT_CLASSES = {
 COST_HINTS = {"low", "medium", "high"}
 VERIFICATION_LEVELS = {"quick", "standard", "strict"}
 OUTPUT_CONTRACT_KINDS = {"text", "enum", "json"}
+TASK_PHASES = {
+    "align",
+    "investigate",
+    "execute",
+    "verify",
+    "ready_for_acceptance",
+    "blocked",
+    "done",
+}
 
 
 def is_overlay_skill(skill_dir: Path) -> bool:
     parts = skill_dir.resolve().parts
     return len(parts) >= 3 and parts[-3:-1] == ("project", "overlays")
+
+
+def derive_routing_scope(skill_dir: Path) -> str | None:
+    parts = skill_dir.resolve().parts
+    for scope in ("core", "domain", "operator", "meta"):
+        if scope in parts:
+            return scope
+    return None
 
 
 def validate_string_array_value(value: object, label: str) -> tuple[bool, str | None]:
@@ -401,6 +418,105 @@ def validate_execution_hints(
     return True, None
 
 
+def validate_selection(
+    frontmatter: dict[str, object], skill_dir: Path
+) -> tuple[bool, str | None]:
+    overlay = is_overlay_skill(skill_dir)
+    routed_scope = derive_routing_scope(skill_dir)
+    selection = frontmatter.get("selection")
+
+    if routed_scope is None and not overlay:
+        if selection is not None:
+            return False, "Field 'selection' is only supported for routed skills and overlays"
+        return True, None
+
+    if selection is None:
+        if overlay:
+            return True, None
+        return False, "Missing 'selection' in frontmatter"
+
+    if not isinstance(selection, dict):
+        return False, "Field 'selection' must be an object"
+
+    if "whenToUse" in selection:
+        return False, "Field 'selection.whenToUse' has been removed; use 'selection.when_to_use'"
+
+    allowed_keys = {"when_to_use", "examples", "paths", "phases"}
+    unexpected_keys = set(selection.keys()) - allowed_keys
+    if unexpected_keys:
+        return False, (
+            "Unexpected key(s) in 'selection': "
+            + ", ".join(sorted(unexpected_keys))
+        )
+
+    when_to_use = selection.get("when_to_use")
+    if when_to_use is not None:
+        if not isinstance(when_to_use, str) or not when_to_use.strip():
+            return False, "Field 'selection.when_to_use' must be a non-empty string"
+    elif not overlay:
+        return False, "Missing 'selection.when_to_use' in frontmatter"
+
+    for key in ("examples", "paths", "phases"):
+        if key not in selection:
+            continue
+        ok, message = validate_string_array_value(selection[key], f"selection.{key}")
+        if not ok:
+            return ok, message
+
+    for phase in selection.get("phases", []) if isinstance(selection.get("phases"), list) else []:
+        if phase not in TASK_PHASES:
+            return (
+                False,
+                "Field 'selection.phases' contains unsupported phase '"
+                + str(phase)
+                + "'",
+            )
+
+    if (
+        when_to_use is None
+        and not selection.get("examples")
+        and not selection.get("paths")
+        and not selection.get("phases")
+    ):
+        return False, (
+            "Field 'selection' must declare at least one of: when_to_use, examples, paths, phases"
+        )
+
+    return True, None
+
+
+def validate_routing(
+    frontmatter: dict[str, object], skill_dir: Path
+) -> tuple[bool, str | None]:
+    overlay = is_overlay_skill(skill_dir)
+    routed_scope = derive_routing_scope(skill_dir)
+    routing = frontmatter.get("routing")
+
+    if routing is None:
+        return True, None
+    if not isinstance(routing, dict):
+        return False, "Field 'routing' must be an object"
+    if overlay or routed_scope is None:
+        return False, "Field 'routing' is only supported for routed non-overlay skills"
+
+    if "matchHints" in routing:
+        return False, "Field 'routing.matchHints' has been removed"
+    if "match_hints" in routing:
+        return False, "Field 'routing.match_hints' has been removed"
+    if "continuityRequired" in routing or "continuity_required" in routing:
+        return False, "Continuity routing metadata has been removed"
+
+    unexpected_keys = set(routing.keys()) - {"scope"}
+    if unexpected_keys:
+        return False, (
+            "Unexpected key(s) in 'routing': " + ", ".join(sorted(unexpected_keys))
+        )
+    if "scope" in routing and routing["scope"] != routed_scope:
+        return False, f"Field 'routing.scope' must match directory-derived scope '{routed_scope}'"
+
+    return True, None
+
+
 def validate_skill(skill_path: str | Path) -> tuple[bool, str]:
     """Basic validation of a latest-generation skill directory."""
     skill_dir = Path(skill_path)
@@ -482,12 +598,16 @@ def validate_skill(skill_path: str | Path) -> tuple[bool, str]:
     if not ok:
         return False, message or "Invalid 'execution_hints' field"
 
-    dispatch = frontmatter.get("dispatch")
-    if dispatch is not None and not isinstance(dispatch, dict):
-        return False, "Field 'dispatch' must be an object"
-    routing = frontmatter.get("routing")
-    if routing is not None and not isinstance(routing, dict):
-        return False, "Field 'routing' must be an object"
+    if "dispatch" in frontmatter:
+        return False, "Field 'dispatch' has been removed"
+
+    ok, message = validate_selection(frontmatter, skill_dir)
+    if not ok:
+        return False, message or "Invalid 'selection' field"
+
+    ok, message = validate_routing(frontmatter, skill_dir)
+    if not ok:
+        return False, message or "Invalid 'routing' field"
 
     compatibility = frontmatter.get("compatibility", "")
     if compatibility and (not isinstance(compatibility, str) or len(compatibility) > 500):

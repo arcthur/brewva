@@ -15,7 +15,7 @@ Skill taxonomy is now split by role:
 - public routable skills: routable semantic territory
 - runtime/control-plane workflow semantics: not public skills
 - project overlays: project-specific tightening, execution guidance, and shared-context augmentation
-- operator/meta skills: loaded, but usually hidden from standard routing
+- operator/meta skills: loaded, but usually not exposed through the routable index
 
 This keeps lifecycle choreography out of the public catalog.
 
@@ -63,10 +63,32 @@ Current rules:
 Skill frontmatter supports intent, effect, resource, and execution metadata:
 
 - `intent.outputs/intent.output_contracts`
+- `selection.when_to_use/selection.examples/selection.paths/selection.phases`
 - `effects.allowed_effects/effects.denied_effects`
 - `resources.default_lease/resources.hard_ceiling`
 - `execution_hints.preferred_tools/execution_hints.fallback_tools/execution_hints.cost_hint`
 - resource lists: `references`, `scripts`, `heuristics`, `invariants`
+
+`selection` is the stable skill-authored control-plane signal for skill-first
+recommendation. It keeps selection ownership with the skill contract rather than
+hardcoding per-skill routing heuristics in the gateway. Current authored fields
+are:
+
+- `selection.when_to_use`
+  - required for loadable routable skills
+  - concise natural-language intent statement for when the skill should own the task
+- `selection.examples`
+  - optional task or user-utterance examples that make the selection intent concrete
+- `selection.paths`
+  - optional structured path hints used as path-aware boosts or penalties when explicit targets exist
+- `selection.phases`
+  - optional structured task-phase hints
+  - vocabulary is closed and aligned to runtime `TaskPhase`:
+    `align`, `investigate`, `execute`, `verify`, `ready_for_acceptance`, `blocked`, `done`
+
+Runtime compiles internal selection features from authored `selection`,
+`description`, and markdown trigger text at load time. Authors do not maintain a
+second keyword-only routing table.
 
 For non-overlay skills:
 
@@ -137,6 +159,18 @@ Skill discovery and deliberation are now separated from kernel commitment:
 Routing is disabled by default (`skills.routing.enabled=false`). When enabled,
 `skills.routing.scopes` is the single explicit routing allowlist.
 
+Interactive hosted turns still keep activation explicit, but the control plane
+now derives a skill-first recommendation before ordinary tool work:
+
+- candidate skills are derived from the loaded catalog rather than from ad hoc
+  tool exploration
+- strong matches inject a skill-first policy block into hosted context
+- when no skill is active yet, a strong match narrows the turn to the minimal
+  pre-skill control-plane tool surface so the next semantic decision is
+  `skill_load`
+- this path still does not create an automatic routing state machine; actual
+  activation remains explicit through `skill_load`
+
 ## Kernel vs Control Plane
 
 The runtime kernel and the optional control plane have different jobs:
@@ -145,9 +179,13 @@ The runtime kernel and the optional control plane have different jobs:
 - control plane: optional candidate generation, selection assistance,
   delegation, artifact presentation, and model-assisted judging
 
-`skills_index.json` carries normalized contract metadata for each routable skill
-entry, including `category`, `routingScope`, `outputs`, `requires`, `consumes`,
-derived `effectLevel` and `allowedEffects`.
+`skills_index.json` now carries the complete loaded-skill catalog instead of
+only the routable subset. Each entry retains normalized contract metadata,
+including `category`, `routingScope`, `outputs`, `requires`, `consumes`,
+derived `effectLevel`, `allowedEffects`, and the explicit flags and provenance
+fields `routable`, `overlay`, `filePath`, `baseDir`, `sharedContextFiles`, and
+authored `selection`. Whether a skill participates in routing is now expressed
+by the entry itself instead of by presence or absence in the file.
 
 ## Model-Native Sequencing
 

@@ -254,11 +254,18 @@ Current guard notes:
 
 - `context_composed`
 - `tool_surface_resolved`
+- `skill_recommendation_derived`
 - `identity_parse_warning`
 - `task_stuck_detected`
 - `task_stuck_cleared`
 - `task_stall_adjudicated`
 - `task_stall_adjudication_error`
+
+`skill_recommendation_derived` is the hosted control-plane receipt for
+skill-first recommendation on a turn before any explicit `skill_load`. The
+payload records whether the recommendation is strong enough to require a
+skill-first turn, the active skill if one already exists, and the ranked
+candidate set with categories, scores, and matched reasons.
 
 ### Schedule, Subagent, And Worker
 

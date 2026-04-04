@@ -3,6 +3,15 @@ name: debugging
 description: Reproduce failures, rank hypotheses, confirm root cause, and define the
   minimum valid fix strategy.
 stability: stable
+selection:
+  when_to_use: Use when tests or runtime behavior fail and the next step is to reproduce the problem, rank hypotheses, and confirm root cause before patching.
+  examples:
+    - Debug this regression before changing the code.
+    - Find the root cause of this failing behavior.
+    - Reproduce the bug and explain why it happens.
+  phases:
+    - investigate
+    - execute
 intent:
   outputs:
     - root_cause

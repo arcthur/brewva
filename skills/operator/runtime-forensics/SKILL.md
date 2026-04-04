@@ -3,6 +3,18 @@ name: runtime-forensics
 description: Inspect Brewva runtime artifacts, event streams, ledgers, and projection
   outputs to explain what happened during execution.
 stability: stable
+selection:
+  when_to_use: Use when the task asks what happened at runtime and the answer must come from artifacts, event streams, ledgers, projections, or WAL evidence.
+  examples:
+    - Analyze this session trace.
+    - Explain what happened from the runtime artifacts.
+    - Inspect the event stream and projection outputs for anomalies.
+  paths:
+    - .orchestrator
+    - .brewva
+  phases:
+    - investigate
+    - verify
 intent:
   outputs:
     - runtime_trace
