@@ -34,7 +34,15 @@ describe("S-004/S-005 verification gate", () => {
     runtime.authority.tools.markCall(sessionId, "edit");
     const blocked = runtime.authority.verification.evaluate(sessionId, "quick");
     expect(blocked.passed).toBe(false);
+    expect(blocked.failedChecks).toEqual([]);
+    expect(blocked.missingChecks).toEqual(["tests"]);
     expect(blocked.missingEvidence).toContain("tests");
+    expect(blocked.checks).toEqual([
+      expect.objectContaining({
+        name: "tests",
+        status: "missing",
+      }),
+    ]);
 
     const verified = await runtime.authority.verification.verify(sessionId, "quick", {
       executeCommands: true,
@@ -67,6 +75,8 @@ describe("S-004/S-005 verification gate", () => {
     runtime.authority.tools.markCall(sessionId, "multi_edit");
     const blocked = runtime.authority.verification.evaluate(sessionId, "quick");
     expect(blocked.passed).toBe(false);
+    expect(blocked.failedChecks).toEqual([]);
+    expect(blocked.missingChecks).toEqual(["tests"]);
     expect(blocked.missingEvidence).toContain("tests");
   });
 
@@ -99,6 +109,8 @@ describe("S-004/S-005 verification gate", () => {
 
     const inconclusive = runtime.authority.verification.evaluate(sessionId, "quick");
     expect(inconclusive.passed).toBe(false);
+    expect(inconclusive.failedChecks).toEqual([]);
+    expect(inconclusive.missingChecks).toEqual(["tests"]);
     expect(inconclusive.missingEvidence).toContain("tests");
 
     const verified = await runtime.authority.verification.verify(sessionId, "quick", {

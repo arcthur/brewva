@@ -29,6 +29,8 @@ import { normalizeTaskSpec } from "../task/spec.js";
 import { resolveContextUsageRatio } from "../utils/token.js";
 import {
   GOVERNANCE_BLOCKER_ID,
+  VERIFICATION_CHECK_FAILED_TRUTH_KIND,
+  VERIFICATION_CHECK_MISSING_TRUTH_KIND,
   VERIFIER_BLOCKER_PREFIX,
 } from "../verification/verifier-blockers.js";
 import type { RuntimeCallback } from "./callback.js";
@@ -117,6 +119,46 @@ export class TaskService {
     return true;
   }
 
+  private classifySoftVerifierHealth(
+    blockers: TaskState["blockers"],
+    truthState: TruthState,
+  ): TaskHealth {
+    const factsById = new Map(truthState.facts.map((fact) => [fact.id, fact]));
+    let sawMissing = false;
+    let sawFailure = false;
+
+    for (const blocker of blockers) {
+      if (blocker.id === GOVERNANCE_BLOCKER_ID) {
+        continue;
+      }
+      const truthFactId = blocker.truthFactId?.trim();
+      if (!truthFactId) {
+        throw new Error(`verifier_blocker_missing_truth_fact:${blocker.id}`);
+      }
+      const fact = factsById.get(truthFactId);
+      if (!fact || fact.status !== "active") {
+        throw new Error(`verifier_blocker_missing_active_truth_fact:${truthFactId}`);
+      }
+      if (fact?.kind === VERIFICATION_CHECK_FAILED_TRUTH_KIND) {
+        sawFailure = true;
+        continue;
+      }
+      if (fact?.kind === VERIFICATION_CHECK_MISSING_TRUTH_KIND) {
+        sawMissing = true;
+        continue;
+      }
+      throw new Error(`verifier_blocker_unknown_truth_kind:${fact.kind}`);
+    }
+
+    if (sawFailure) {
+      return "verification_failed";
+    }
+    if (sawMissing) {
+      return "verification_missing";
+    }
+    throw new Error("verifier_blockers_present_without_canonical_truth_facts");
+  }
+
   private computeTaskStatus(input: TaskStatusAlignmentInput): TaskStatus {
     const state = this.getTaskState(input.sessionId);
     const hasSpec = Boolean(state.spec);
@@ -176,8 +218,8 @@ export class TaskService {
       reason = `open_items=${openItems.length}`;
     } else if (hasSoftVerifierBlocker) {
       phase = "verify";
-      health = "verification_failed";
-      reason = "verification_blockers_present";
+      health = this.classifySoftVerifierHealth(verifierBlockers, input.truthState);
+      reason = health === "verification_missing" ? "verification_missing" : "verification_failed";
     } else if (items.length === 0) {
       phase = "investigate";
       health = "ok";
@@ -186,11 +228,8 @@ export class TaskService {
       const report = this.evaluateCompletion(input.sessionId);
       if (!report.passed) {
         phase = "verify";
-        health = "verification_failed";
-        reason =
-          report.missingEvidence.length > 0
-            ? `missing_evidence=${report.missingEvidence.join(",")}`
-            : "verification_missing";
+        health = report.failedChecks.length > 0 ? "verification_failed" : "verification_missing";
+        reason = health;
       } else if (!acceptanceRequired) {
         phase = "done";
         health = "ok";
@@ -324,8 +363,13 @@ export class TaskService {
       return { ok: false, error: "missing_message" };
     }
 
+    const blockerId = input.id?.trim();
+    if (blockerId?.startsWith(VERIFIER_BLOCKER_PREFIX) && !input.truthFactId?.trim()) {
+      return { ok: false, error: "verifier_blocker_requires_truth_fact" };
+    }
+
     const payload = buildBlockerRecordedEvent({
-      id: input.id?.trim() || undefined,
+      id: blockerId || undefined,
       message,
       source: input.source?.trim() || undefined,
       truthFactId: input.truthFactId?.trim() || undefined,

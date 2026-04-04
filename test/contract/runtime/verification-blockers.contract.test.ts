@@ -23,9 +23,10 @@ function latestOutcomePayload(runtime: BrewvaRuntime, sessionId: string) {
         commandsExecuted?: string[];
         commandsFresh?: string[];
         commandsMissing?: string[];
+        missingChecks?: string[];
         checkProvenance?: Array<{
           check?: string;
-          status?: "pass" | "fail" | "skip";
+          status?: "pass" | "fail" | "missing" | "skip";
           freshSinceWrite?: boolean;
         }>;
       }
@@ -311,6 +312,86 @@ describe("Verification blockers", () => {
     expect(outcomes[0]?.payload?.outcome).toBe("skipped");
   });
 
+  test("projects missing fresh verification evidence as a warn truth fact and resolves it after a fresh rerun", async () => {
+    const workspace = createTestWorkspace("verification-missing-blocker");
+    writeConfig(
+      workspace,
+      createTestConfig(
+        {
+          verification: {
+            defaultLevel: "standard",
+            checks: {
+              quick: ["tests"],
+              standard: ["tests"],
+              strict: ["tests"],
+            },
+            commands: {
+              tests: "true",
+            },
+          },
+        },
+        { eventsLevel: "debug" },
+      ),
+    );
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    const sessionId = "verification-missing-blocker-1";
+    runtime.authority.tools.markCall(sessionId, "edit");
+
+    const first = await runtime.authority.verification.verify(sessionId, "standard", {
+      executeCommands: false,
+    });
+    expect(first.passed).toBe(false);
+    expect(first.failedChecks).toEqual([]);
+    expect(first.missingChecks).toEqual(["tests"]);
+    expect(first.missingEvidence).toEqual(["tests"]);
+
+    const blocker = requireDefined(
+      runtime.inspect.task
+        .getState(sessionId)
+        .blockers.find((entry) => entry.id === "verifier:tests"),
+      "expected verifier:tests blocker after missing verification evidence",
+    );
+    expect(blocker.message).toContain("verification missing fresh evidence: tests");
+    expect(blocker.truthFactId).toBe("truth:verifier:tests");
+
+    const fact = requireDefined(
+      runtime.inspect.truth
+        .getState(sessionId)
+        .facts.find((entry) => entry.id === "truth:verifier:tests"),
+      "expected truth:verifier:tests fact after missing verification evidence",
+    );
+    expect(fact.kind).toBe("verification_check_missing");
+    expect(fact.severity).toBe("warn");
+    expect(fact.status).toBe("active");
+
+    const firstOutcome = latestOutcomePayload(runtime, sessionId);
+    expect(firstOutcome?.outcome).toBe("fail");
+    expect(firstOutcome?.missingChecks).toEqual(["tests"]);
+    expect(firstOutcome?.commandsMissing).toEqual(["tests"]);
+    expect(firstOutcome?.checkProvenance).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: "tests",
+          status: "missing",
+          freshSinceWrite: false,
+        }),
+      ]),
+    );
+
+    const second = await runtime.authority.verification.verify(sessionId, "standard", {
+      executeCommands: true,
+      timeoutMs: 5_000,
+    });
+    expect(second.passed).toBe(true);
+    expect(blockerIds(runtime, sessionId)).not.toContain("verifier:tests");
+    expect(
+      runtime.inspect.truth
+        .getState(sessionId)
+        .facts.find((entry) => entry.id === "truth:verifier:tests")?.status,
+    ).toBe("resolved");
+  });
+
   test("mixed command results keep pass provenance for successful checks and fail blockers for timed out checks", async () => {
     const workspace = createTestWorkspace("verification-timeout-folding");
     writeConfig(
@@ -344,7 +425,9 @@ describe("Verification blockers", () => {
     });
 
     expect(report.passed).toBe(false);
-    expect(report.missingEvidence).toContain("tests");
+    expect(report.failedChecks).toEqual(["tests"]);
+    expect(report.missingChecks).toEqual([]);
+    expect(report.missingEvidence).toEqual([]);
     expect(blockerIds(runtime, sessionId)).toContain("verifier:tests");
     expect(
       runtime.inspect.truth
@@ -413,7 +496,9 @@ describe("Verification blockers", () => {
     });
 
     expect(report.passed).toBe(false);
-    expect(report.missingEvidence).toContain("tests");
+    expect(report.failedChecks).toEqual(["tests"]);
+    expect(report.missingChecks).toEqual([]);
+    expect(report.missingEvidence).toEqual([]);
     expect(blockerIds(runtime, sessionId)).toContain("verifier:tests");
 
     const outcome = latestOutcomePayload(runtime, sessionId);
@@ -480,7 +565,9 @@ describe("Verification blockers", () => {
     });
     expect(second.passed).toBe(false);
     expect(second.skipped).toBe(false);
-    expect(second.missingEvidence).toContain("tests");
+    expect(second.failedChecks).toEqual(["tests"]);
+    expect(second.missingChecks).toEqual([]);
+    expect(second.missingEvidence).toEqual([]);
     const rowsAfterClear = runtime.inspect.ledger
       .listRows(sessionId)
       .filter((row) => row.tool === "brewva_verify").length;

@@ -105,25 +105,45 @@ export class VerificationGate {
       if (!check.command.trim()) {
         return {
           name: check.name,
-          status: "fail",
+          status: "missing",
           evidence: `verification command not configured: ${check.name}`,
+        } as const;
+      }
+
+      if (!checkRun) {
+        return {
+          name: check.name,
+          status: "missing",
+          evidence: requireCommands
+            ? `missing command run: ${check.command}`
+            : `verification command has not been run since the latest write: ${check.command}`,
+        } as const;
+      }
+
+      if (!freshRun) {
+        return {
+          name: check.name,
+          status: "missing",
+          evidence: `verification command result is stale since the latest write: ${check.command}`,
         } as const;
       }
 
       return {
         name: check.name,
-        status: freshRun?.ok ? "pass" : "fail",
-        evidence: freshRun
-          ? `${freshRun.ok ? "pass" : "fail"} (${freshRun.exitCode ?? "null"}) ${freshRun.command}`
-          : requireCommands
-            ? `missing command run: ${check.command}`
-            : `verification command has not been run since the latest write: ${check.command}`,
+        status: freshRun.ok ? "pass" : "fail",
+        evidence: `${freshRun.ok ? "pass" : "fail"} (${freshRun.exitCode ?? "null"}) ${freshRun.command}`,
       } as const;
     });
 
+    const failedChecks = hasWrite
+      ? checks.filter((check) => check.status === "fail").map((check) => check.name)
+      : [];
+    const missingChecks = hasWrite
+      ? checks.filter((check) => check.status === "missing").map((check) => check.name)
+      : [];
     const missingEvidence = hasWrite
       ? checks
-          .filter((check) => check.status === "fail")
+          .filter((check) => check.status === "missing")
           .map((check) => {
             if (requireCommands) {
               return check.name;
@@ -134,7 +154,7 @@ export class VerificationGate {
           })
       : [];
 
-    const passed = missingEvidence.length === 0;
+    const passed = failedChecks.length === 0 && missingChecks.length === 0;
     if (passed) {
       this.store.resetDenials(sessionId);
     } else {
@@ -147,6 +167,8 @@ export class VerificationGate {
       skipped: !hasWrite,
       reason: !hasWrite ? "read_only" : undefined,
       level,
+      failedChecks,
+      missingChecks,
       missingEvidence,
       checks,
     };

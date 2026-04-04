@@ -6,6 +6,7 @@ export interface VerificationOutcomeSnapshot {
   level?: string;
   outcome?: string;
   failedChecks?: string[];
+  missingChecks?: string[];
   missingEvidence?: string[];
   reason?: string | null;
   commandsFresh?: string[];
@@ -56,6 +57,9 @@ export function buildRuntimeStatusBlock(input: {
     ];
     if (verification.failedChecks && verification.failedChecks.length > 0) {
       summary.push(`failed=${joinList(verification.failedChecks, 4)}`);
+    }
+    if (verification.missingChecks && verification.missingChecks.length > 0) {
+      summary.push(`missing=${joinList(verification.missingChecks, 4)}`);
     }
     if (verification.commandsFresh && verification.commandsFresh.length > 0) {
       summary.push(`fresh=${joinList(verification.commandsFresh, 4)}`);

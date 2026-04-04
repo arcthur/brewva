@@ -53,6 +53,7 @@ interface InspectVerification {
   outcome: string | null;
   level: string | null;
   failedChecks: string[];
+  missingChecks: string[];
   missingEvidence: string[];
   reason: string | null;
 }
@@ -242,6 +243,7 @@ function buildVerificationInspection(
       outcome: null,
       level: null,
       failedChecks: [],
+      missingChecks: [],
       missingEvidence: [],
       reason: null,
     };
@@ -249,6 +251,9 @@ function buildVerificationInspection(
 
   const failedChecks = Array.isArray(latest.payload.failedChecks)
     ? latest.payload.failedChecks.filter((value): value is string => typeof value === "string")
+    : [];
+  const missingChecks = Array.isArray(latest.payload.missingChecks)
+    ? latest.payload.missingChecks.filter((value): value is string => typeof value === "string")
     : [];
   const missingEvidence = Array.isArray(latest.payload.missingEvidence)
     ? latest.payload.missingEvidence.filter((value): value is string => typeof value === "string")
@@ -259,6 +264,7 @@ function buildVerificationInspection(
     outcome: typeof latest.payload.outcome === "string" ? latest.payload.outcome : null,
     level: typeof latest.payload.level === "string" ? latest.payload.level : null,
     failedChecks,
+    missingChecks,
     missingEvidence,
     reason:
       typeof latest.payload.reason === "string" && latest.payload.reason.trim().length > 0
@@ -535,7 +541,7 @@ function formatInspectText(report: InspectReport): string {
     `Task: goal=${report.task.goal ?? "n/a"}`,
     `Truth: active=${report.truth.activeFacts}/${report.truth.totalFacts} updatedAt=${report.truth.updatedAt ?? "n/a"}`,
     `Skills: active=${report.skills.activeSkill ?? "none"} completed=${renderList(report.skills.completedSkills)}`,
-    `Verification: outcome=${report.verification.outcome ?? "n/a"} level=${report.verification.level ?? "n/a"} failed=${renderList(report.verification.failedChecks)} missing=${renderList(report.verification.missingEvidence)}`,
+    `Verification: outcome=${report.verification.outcome ?? "n/a"} level=${report.verification.level ?? "n/a"} failed=${renderList(report.verification.failedChecks)} missing_checks=${renderList(report.verification.missingChecks)} missing_evidence=${renderList(report.verification.missingEvidence)}`,
     `Hosted transitions: sequence=${report.hostedTransitions.sequence} latest=${renderHostedLatest(report.hostedTransitions.latest)} pending=${report.hostedTransitions.pendingFamily ?? "none"} operatorVisible=${report.hostedTransitions.operatorVisibleFactGeneration}`,
     `Hosted breakers: compaction_retry=${renderHostedBreaker(report.hostedTransitions, "compaction_retry")} provider_fallback_retry=${renderHostedBreaker(report.hostedTransitions, "provider_fallback_retry")} max_output_recovery=${renderHostedBreaker(report.hostedTransitions, "max_output_recovery")}`,
     `Ledger: rows=${report.ledger.rows} integrity=${report.ledger.integrityValid ? "valid" : "invalid"} path=${report.ledger.path}`,

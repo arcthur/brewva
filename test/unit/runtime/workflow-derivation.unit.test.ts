@@ -517,6 +517,84 @@ describe("workflow derivation", () => {
     expect(status.artifacts[0]?.kind).toBe("ship_posture");
   });
 
+  test("keeps missing verification checks as explicit blocked verification debt", () => {
+    const status = deriveWorkflowStatus({
+      sessionId: "workflow-verification-missing",
+      events: [
+        event({
+          id: "evt-review",
+          type: "skill_completed",
+          sessionId: "workflow-verification-missing",
+          timestamp: 100,
+          payload: {
+            skillName: "review",
+            outputKeys: ["review_report", "review_findings", "merge_decision"],
+            outputs: {
+              review_report: "Review is ready.",
+              review_findings: [],
+              merge_decision: "ready",
+            },
+          },
+        }),
+        event({
+          id: "evt-qa",
+          type: "skill_completed",
+          sessionId: "workflow-verification-missing",
+          timestamp: 110,
+          payload: {
+            skillName: "qa",
+            outputKeys: ["qa_report", "qa_findings", "qa_verdict", "qa_checks"],
+            outputs: {
+              qa_report: "QA passed.",
+              qa_findings: [],
+              qa_verdict: "pass",
+              qa_checks: [
+                {
+                  name: "ui-smoke",
+                  result: "pass",
+                  command: "bun test",
+                  exitCode: 0,
+                  observedOutput: "ui smoke passed",
+                  probeType: "adversarial",
+                  artifactRefs: ["artifacts/ui-smoke.txt"],
+                },
+              ],
+            },
+          },
+        }),
+        event({
+          id: "evt-verify",
+          type: "verification_outcome_recorded",
+          sessionId: "workflow-verification-missing",
+          timestamp: 120,
+          payload: {
+            outcome: "fail",
+            level: "standard",
+            failedChecks: [],
+            missingChecks: ["tests"],
+            missingEvidence: ["tests"],
+            evidenceFreshness: "none",
+          },
+        }),
+      ],
+    });
+
+    expect(status.posture.review).toBe("ready");
+    expect(status.posture.qa).toBe("ready");
+    expect(status.posture.verification).toBe("blocked");
+    expect(status.posture.ship).toBe("blocked");
+    expect(status.posture.blockers).toContain("Verification missing fresh evidence for tests.");
+    const verificationArtifact = status.artifacts.find(
+      (artifact) => artifact.kind === "verification",
+    );
+    expect(verificationArtifact?.state).toBe("blocked");
+    expect(verificationArtifact?.summary).toContain("Missing fresh evidence: tests.");
+    expect(verificationArtifact?.metadata).toMatchObject({
+      failedChecks: [],
+      missingChecks: ["tests"],
+    });
+  });
+
   test("blocks ship posture when worker results are still pending", () => {
     const status = deriveWorkflowStatus({
       sessionId: "workflow-pending-workers",

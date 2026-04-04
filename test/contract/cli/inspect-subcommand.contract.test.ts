@@ -146,7 +146,7 @@ describe("inspect subcommand", () => {
           sessionId: string;
           task: { goal: string | null; blockers: number };
           truth: { activeFacts: number };
-          verification: { outcome: string | null; failedChecks: string[] };
+          verification: { outcome: string | null; failedChecks: string[]; missingChecks: string[] };
           hostedTransitions: {
             sequence: number;
             pendingFamily: string | null;
@@ -173,6 +173,7 @@ describe("inspect subcommand", () => {
         expect(payload.truth.activeFacts).toBeGreaterThanOrEqual(1);
         expect(payload.verification.outcome).toBe("fail");
         expect(payload.verification.failedChecks).toEqual(["tests"]);
+        expect(payload.verification.missingChecks).toEqual([]);
         expect(payload.hostedTransitions.sequence).toBe(1);
         expect(payload.hostedTransitions.pendingFamily).toBeNull();
         expect(payload.hostedTransitions.operatorVisibleFactGeneration).toBe(1);

@@ -1,15 +1,19 @@
 import type { VerificationLevel } from "./shared.js";
 
+export type VerificationCheckStatus = "pass" | "fail" | "missing" | "skip";
+
 export interface VerificationReport {
   passed: boolean;
   readOnly: boolean;
   skipped: boolean;
   reason?: "read_only";
   level: VerificationLevel;
+  failedChecks: string[];
+  missingChecks: string[];
   missingEvidence: string[];
   checks: Array<{
     name: string;
-    status: "pass" | "fail" | "skip";
+    status: VerificationCheckStatus;
     evidence?: string;
   }>;
 }

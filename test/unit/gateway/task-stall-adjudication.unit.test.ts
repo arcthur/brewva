@@ -168,4 +168,100 @@ describe("task stall adjudication", () => {
       runtime.inspect.events.query(sessionId, { type: "task_stall_adjudicated" }),
     ).toHaveLength(1);
   });
+
+  test("summarizes missing verification evidence separately from failed checks", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createTestWorkspace("stall-missing-verification"),
+      config: createOpsRuntimeConfig((config) => {
+        config.verification.defaultLevel = "standard";
+        config.verification.checks.quick = ["tests"];
+        config.verification.checks.standard = ["tests"];
+        config.verification.checks.strict = ["tests"];
+        config.verification.commands.tests = "true";
+      }),
+    });
+    const sessionId = "stall-missing-verification-1";
+
+    runtime.authority.task.setSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Recover missing verification evidence",
+    });
+    runtime.authority.tools.markCall(sessionId, "edit");
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "verification_outcome_recorded",
+      timestamp: 160,
+      payload: {
+        outcome: "fail",
+        level: "standard",
+        failedChecks: [],
+        missingChecks: ["tests"],
+        missingEvidence: ["tests"],
+        evidenceFreshness: "none",
+      },
+    });
+
+    const packet = buildTaskStallInspectionPacket({
+      runtime,
+      sessionId,
+      detected: buildTaskStuckDetectedPayload({
+        thresholdMs: 300_000,
+        baselineProgressAt: 100,
+        detectedAt: 400_100,
+        idleMs: 400_000,
+        openItemCount: 0,
+      }),
+    });
+    const adjudication = adjudicateTaskStallPacket(packet);
+
+    expect(adjudication.signalSummary).toContain("verification_missing=tests");
+    expect(adjudication.signalSummary).not.toContain("verification_failed=tests");
+  });
+
+  test("prefers canonical missing checks from durable verification outcomes", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createTestWorkspace("stall-current-verification-debt"),
+      config: createOpsRuntimeConfig(),
+    });
+    const sessionId = "stall-current-verification-debt-1";
+
+    runtime.authority.task.setSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Prefer canonical missing checks over display-only missing evidence",
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "verification_outcome_recorded",
+      timestamp: 160,
+      payload: {
+        outcome: "fail",
+        level: "standard",
+        failedChecks: [],
+        missingChecks: ["tests"],
+        missingEvidence: ["tests", "lint"],
+        evidenceFreshness: "none",
+      },
+    });
+
+    const packet = buildTaskStallInspectionPacket({
+      runtime,
+      sessionId,
+      detected: buildTaskStuckDetectedPayload({
+        thresholdMs: 300_000,
+        baselineProgressAt: 100,
+        detectedAt: 400_100,
+        idleMs: 400_000,
+        openItemCount: 0,
+      }),
+    });
+    const adjudication = adjudicateTaskStallPacket(packet);
+
+    expect(packet.verification.lastOutcome).toBe("fail");
+    expect(packet.verification.lastOutcomeAt).toBe(160);
+    expect(packet.verification.failedChecks).toEqual([]);
+    expect(packet.verification.missingChecks).toEqual(["tests"]);
+    expect(packet.verification.missingEvidence).toEqual(["tests", "lint"]);
+    expect(adjudication.signalSummary).toContain("verification_missing=tests");
+    expect(adjudication.signalSummary).not.toContain("verification_missing=tests,lint");
+  });
 });

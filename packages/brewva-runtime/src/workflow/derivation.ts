@@ -674,12 +674,16 @@ function extractVerificationArtifact(event: BrewvaEventRecord): WorkflowDraftArt
   if (!outcome) return [];
   const level = readString(payload.level);
   const failedChecks = readStringArray(payload.failedChecks);
+  const missingChecks = readStringArray(payload.missingChecks);
+  const rootCause = readString(payload.rootCause);
   const evidenceFreshness = readString(payload.evidenceFreshness);
   const summaryParts = [`Verification ${outcome}${level ? ` (${level})` : ""}.`];
   if (failedChecks.length > 0) {
     summaryParts.push(`Failed: ${formatPreviewList(failedChecks)}.`);
-  } else if (readString(payload.rootCause)) {
-    summaryParts.push(compactText(readString(payload.rootCause) ?? "", 160));
+  } else if (missingChecks.length > 0) {
+    summaryParts.push(`Missing fresh evidence: ${formatPreviewList(missingChecks)}.`);
+  } else if (rootCause) {
+    summaryParts.push(compactText(rootCause, 160));
   }
 
   return [
@@ -695,8 +699,10 @@ function extractVerificationArtifact(event: BrewvaEventRecord): WorkflowDraftArt
         source: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
         outcome,
         level: level ?? null,
+        rootCause: rootCause ?? null,
         evidenceFreshness: evidenceFreshness ?? null,
         failedChecks,
+        missingChecks,
         coverageTexts: collectVerificationCoverageTexts(payload),
       },
     }),
@@ -1499,10 +1505,18 @@ export function deriveWorkflowStatus(input: DeriveWorkflowStatusInput): Workflow
 
   if (latestArtifacts.verification?.state === "blocked") {
     const failedChecks = readStringArray(latestArtifacts.verification.metadata?.failedChecks);
+    const missingChecks = readStringArray(latestArtifacts.verification.metadata?.missingChecks);
+    const rootCause = readString(latestArtifacts.verification.metadata?.rootCause);
     blockers.push(
-      failedChecks.length > 0
-        ? `Verification failed in ${formatPreviewList(failedChecks)}.`
-        : "Verification lane is blocked.",
+      failedChecks.length > 0 && missingChecks.length > 0
+        ? `Verification failed in ${formatPreviewList(failedChecks)} and is missing fresh evidence for ${formatPreviewList(missingChecks)}.`
+        : failedChecks.length > 0
+          ? `Verification failed in ${formatPreviewList(failedChecks)}.`
+          : missingChecks.length > 0
+            ? `Verification missing fresh evidence for ${formatPreviewList(missingChecks)}.`
+            : rootCause
+              ? compactText(rootCause, 200)
+              : "Verification artifact is blocked without canonical failed/missing check classification.",
     );
   } else if (verification === "stale") {
     blockers.push("Verification artifact is stale after later workspace mutations.");

@@ -26,6 +26,7 @@ interface TaskStallVerificationSummary {
   passed: boolean;
   skipped: boolean;
   level: string;
+  missingChecks: string[];
   missingEvidence: string[];
   lastOutcome: "pass" | "fail" | "skipped" | null;
   lastOutcomeAt: number | null;
@@ -105,7 +106,6 @@ function readVerificationSummary(
   runtime: BrewvaRuntime,
   sessionId: string,
 ): TaskStallVerificationSummary {
-  const report = runtime.authority.verification.evaluate(sessionId);
   const lastOutcomeEvent = lastEvent(
     runtime.inspect.events.query(sessionId, {
       type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
@@ -113,17 +113,18 @@ function readVerificationSummary(
     }),
   );
   const payload = isRecord(lastOutcomeEvent?.payload) ? lastOutcomeEvent.payload : undefined;
-  const lastOutcome =
+  const lastOutcome: TaskStallVerificationSummary["lastOutcome"] =
     payload?.outcome === "pass" || payload?.outcome === "fail" || payload?.outcome === "skipped"
       ? payload.outcome
       : null;
   const evidenceFreshness =
     typeof payload?.evidenceFreshness === "string" ? payload.evidenceFreshness : null;
   return {
-    passed: report.passed,
-    skipped: report.skipped,
-    level: report.level,
-    missingEvidence: [...report.missingEvidence],
+    passed: lastOutcome === "pass",
+    skipped: lastOutcome === null || lastOutcome === "skipped",
+    level: typeof payload?.level === "string" ? payload.level : "unknown",
+    missingChecks: readStringArray(payload?.missingChecks),
+    missingEvidence: readStringArray(payload?.missingEvidence),
     lastOutcome,
     lastOutcomeAt: lastOutcomeEvent?.timestamp ?? null,
     failedChecks: readStringArray(payload?.failedChecks),
@@ -192,12 +193,14 @@ function summarizeSignals(packet: TaskStallInspectionPacket): string[] {
   if (packet.signals.pendingWorkerResults > 0) {
     signals.push(`pending_worker_results=${packet.signals.pendingWorkerResults}`);
   }
-  if (packet.verification.lastOutcome === "fail") {
-    const checks =
-      packet.verification.failedChecks.length > 0
-        ? packet.verification.failedChecks.join(",")
-        : "unknown_checks";
-    signals.push(`verification_failed=${checks}`);
+  if (!packet.verification.passed && !packet.verification.skipped) {
+    if (packet.verification.failedChecks.length > 0) {
+      signals.push(`verification_failed=${packet.verification.failedChecks.join(",")}`);
+    } else if (packet.verification.missingChecks.length > 0) {
+      signals.push(`verification_missing=${packet.verification.missingChecks.join(",")}`);
+    } else {
+      signals.push("verification_state_inconsistent");
+    }
   }
   return signals.length > 0 ? signals : ["no_strong_secondary_signals"];
 }

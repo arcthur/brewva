@@ -1537,6 +1537,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
         level?: string;
         outcome?: string;
         failedChecks?: string[];
+        missingChecks?: string[];
         missingEvidence?: string[];
         reason?: string | null;
         commandsFresh?: string[];
@@ -1553,6 +1554,9 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
     const failedChecks = Array.isArray(payload.failedChecks)
       ? payload.failedChecks.filter((value): value is string => typeof value === "string")
       : [];
+    const missingChecks = Array.isArray(payload.missingChecks)
+      ? payload.missingChecks.filter((value): value is string => typeof value === "string")
+      : [];
     const missingEvidence = Array.isArray(payload.missingEvidence)
       ? payload.missingEvidence.filter((value): value is string => typeof value === "string")
       : [];
@@ -1568,6 +1572,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
       level: typeof payload.level === "string" ? payload.level : undefined,
       outcome: typeof payload.outcome === "string" ? payload.outcome : undefined,
       failedChecks,
+      missingChecks,
       missingEvidence,
       reason:
         typeof payload.reason === "string" && payload.reason.trim().length > 0

@@ -159,9 +159,8 @@ export class VerificationService {
       checkNames,
     });
     const pattern = `verification:${sanitizeKeyToken(level)}:${activeSkillName ? sanitizeKeyToken(activeSkillName) : "none"}`;
-    const failedChecks = report.checks
-      .filter((check) => check.status === "fail")
-      .map((check) => check.name);
+    const failedChecks = [...report.failedChecks];
+    const missingChecks = [...report.missingChecks];
     const referenceWriteAt = verificationState.lastWriteAt ?? 0;
     const checkProvenance = report.checks.map((check) => {
       const run = verificationState.checkRuns[check.name];
@@ -186,9 +185,9 @@ export class VerificationService {
     const commandsStale = checkProvenance
       .filter((entry) => entry.hasRun && !entry.freshSinceWrite)
       .map((entry) => entry.check);
-    const commandsMissing = report.checks
-      .filter((check) => check.status !== "skip" && !commandsExecuted.includes(check.name))
-      .map((check) => check.name);
+    const commandsMissing = missingChecks.filter(
+      (checkName) => !commandsExecuted.includes(checkName),
+    );
     const evidenceFreshness =
       commandsExecuted.length === 0
         ? "none"
@@ -228,24 +227,34 @@ export class VerificationService {
     }
 
     const evidence = compactText(
-      evidenceParts.length > 0 ? evidenceParts.join(" | ") : "no_failed_check_output_captured",
+      evidenceParts.length > 0
+        ? evidenceParts.join(" | ")
+        : report.missingEvidence.length > 0
+          ? report.missingEvidence.join(" | ")
+          : "no_failed_check_output_captured",
       1200,
     );
     const rootCause =
       outcome === "fail"
-        ? report.missingEvidence.length > 0
-          ? `missing evidence: ${report.missingEvidence.join(", ")}`
+        ? failedChecks.length > 0 && report.missingEvidence.length > 0
+          ? `failed checks: ${failedChecks.join(", ")}; missing evidence: ${report.missingEvidence.join(", ")}`
           : failedChecks.length > 0
             ? `failed checks: ${failedChecks.join(", ")}`
-            : "verification failed without explicit check attribution"
+            : report.missingEvidence.length > 0
+              ? `missing evidence: ${report.missingEvidence.join(", ")}`
+              : "verification failed without explicit check attribution"
         : outcome === "skipped"
           ? "read-only session, verification skipped"
           : "verification checks passed";
     const recommendation =
       outcome === "fail"
-        ? failedChecks.length > 0
-          ? `stabilize checks (${failedChecks.join(", ")}) and rerun ${level} verification`
-          : `re-run ${level} verification with focused diagnostics`
+        ? failedChecks.length > 0 && report.missingEvidence.length > 0
+          ? `stabilize checks (${failedChecks.join(", ")}), restore missing evidence (${report.missingEvidence.join(", ")}), and rerun ${level} verification`
+          : failedChecks.length > 0
+            ? `stabilize checks (${failedChecks.join(", ")}) and rerun ${level} verification`
+            : report.missingEvidence.length > 0
+              ? `restore missing evidence (${report.missingEvidence.join(", ")}) and rerun ${level} verification`
+              : `re-run ${level} verification with focused diagnostics`
         : outcome === "skipped"
           ? null
           : `reuse verification profile ${level} for similar tasks`;
@@ -271,6 +280,7 @@ export class VerificationService {
         taskGoal: taskGoal || null,
         strategy,
         failedChecks,
+        missingChecks,
         missingEvidence: report.missingEvidence,
         skipped: report.skipped,
         reason: report.reason ?? null,

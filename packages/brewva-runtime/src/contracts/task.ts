@@ -40,6 +40,7 @@ export type TaskHealth =
   | "ok"
   | "exploring"
   | "blocked"
+  | "verification_missing"
   | "verification_failed"
   | "acceptance_pending"
   | "acceptance_rejected"

@@ -38,7 +38,9 @@ describe("Gap remediation: verification gate", () => {
       timeoutMs: 5_000,
     });
     expect(report.passed).toBe(false);
-    expect(report.missingEvidence).toContain("tests");
+    expect(report.failedChecks).toEqual(["tests"]);
+    expect(report.missingChecks).toEqual([]);
+    expect(report.missingEvidence).toEqual([]);
 
     const ledgerText = runtime.inspect.ledger.query(sessionId, { tool: "brewva_verify" });
     expect(ledgerText).toContain("type-check");

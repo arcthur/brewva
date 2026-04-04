@@ -137,6 +137,7 @@ function createVerificationOutcome(input: {
   timestamp: number;
   outcome: "pass" | "fail" | "skipped";
   failedChecks?: string[];
+  missingChecks?: string[];
 }): VerificationOutcomeRecord {
   return {
     sessionId: input.sessionId,
@@ -145,6 +146,7 @@ function createVerificationOutcome(input: {
     outcome: input.outcome,
     level: "strict",
     failedChecks: input.failedChecks ?? [],
+    missingChecks: input.missingChecks ?? [],
     activeSkill: input.outcome === "pass" ? "self-improve" : "goal-loop",
     rootCause: input.outcome === "fail" ? "failed checks: bun-test" : "verification checks passed",
   };
@@ -507,5 +509,40 @@ describe("deliberation memory plane", () => {
 
     expect(retrievals[0]?.artifact.kind).toBe("loop_memory");
     expect(retrievals[0]?.artifact.id).toBe("loop:coverage-raise");
+  });
+
+  test("agent capability profile preserves missing verification checks as first-class memory", () => {
+    const state = buildDeliberationMemoryState({
+      updatedAt: 3_000,
+      sessionDigests: [{ sessionId: "s1", eventCount: 8, lastEventAt: 2_300 }],
+      sessions: [
+        createSessionInput({
+          sessionId: "s1",
+          skillCompletions: [
+            createSkillCompletion({
+              sessionId: "s1",
+              eventId: "skill:1",
+              timestamp: 2_000,
+              skillName: "goal-loop",
+            }),
+          ],
+          verificationOutcomes: [
+            createVerificationOutcome({
+              sessionId: "s1",
+              eventId: "verify:1",
+              timestamp: 2_300,
+              outcome: "fail",
+              missingChecks: ["bun-test"],
+            }),
+          ],
+        }),
+      ],
+    });
+
+    const agentProfile = state.artifacts.find(
+      (artifact) => artifact.kind === "agent_capability_profile",
+    );
+    expect(agentProfile?.summary).toContain("Common missing checks: bun-test (1).");
+    expect(agentProfile?.content).toContain("Common missing checks: bun-test (1).");
   });
 });

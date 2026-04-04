@@ -157,6 +157,99 @@ describe("workflow_status contract", () => {
     ).toBe("worker-1");
   });
 
+  test("surfaces missing verification checks as explicit ship blockers", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-missing-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "workflow-status-missing";
+
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "skill_completed",
+      timestamp: 100,
+      payload: {
+        skillName: "review",
+        outputKeys: ["review_report", "review_findings", "merge_decision"],
+        outputs: {
+          review_report: "Ready to merge.",
+          review_findings: [],
+          merge_decision: "ready",
+        },
+      } as Record<string, unknown>,
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "skill_completed",
+      timestamp: 110,
+      payload: {
+        skillName: "qa",
+        outputKeys: ["qa_report", "qa_findings", "qa_verdict", "qa_checks"],
+        outputs: {
+          qa_report: "QA passed.",
+          qa_findings: [],
+          qa_verdict: "pass",
+          qa_checks: [
+            {
+              name: "operator-smoke",
+              result: "pass",
+              command: "bun test",
+              exitCode: 0,
+              observedOutput: "operator smoke passed",
+              probeType: "adversarial",
+              artifactRefs: ["snapshots/operator-flow.json"],
+            },
+          ],
+        },
+      } as Record<string, unknown>,
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "verification_outcome_recorded",
+      timestamp: 120,
+      payload: {
+        outcome: "fail",
+        level: "standard",
+        failedChecks: [],
+        missingChecks: ["tests"],
+        missingEvidence: ["tests"],
+        evidenceFreshness: "none",
+      } as Record<string, unknown>,
+    });
+
+    const tool = createWorkflowStatusTool({ runtime });
+    const result = await tool.execute(
+      "tc-workflow-status-missing",
+      {
+        include_artifacts: true,
+        history_limit: 4,
+      },
+      undefined,
+      undefined,
+      mergeContext(sessionId, { cwd: workspace }),
+    );
+
+    const text = extractTextContent(result);
+    expect(text).toContain("verification: blocked");
+    expect(text).toContain("ship: blocked");
+    expect(text).toContain("Verification missing fresh evidence for tests.");
+    expect(text).toContain("- verification | state=blocked | freshness=fresh");
+    expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("fail");
+    expect(
+      (
+        result.details as
+          | {
+              posture?: { blockers?: string[]; verification?: string; ship?: string };
+            }
+          | undefined
+      )?.posture,
+    ).toEqual(
+      expect.objectContaining({
+        verification: "blocked",
+        ship: "blocked",
+        blockers: expect.arrayContaining(["Verification missing fresh evidence for tests."]),
+      }),
+    );
+  });
+
   test("reports pending delegation outcome handoffs alongside workflow posture", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-handoff-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });

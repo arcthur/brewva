@@ -154,6 +154,7 @@ Verification semantics to preserve:
 
 - default verification checks are expanded per target root
 - command-backed checks only become authoritative after `brewva_verify`
+- missing fresh verification evidence and actual check failures stay distinct; they are not collapsed into one debt state
 - ordinary verifier blockers are verification debt, not automatic hard blockers
 
 ### `authority.cost`

@@ -16,4 +16,22 @@ describe("runtime status surface formatting", () => {
     expect(block).toContain("level=standard");
     expect(block).not.toContain("level=targeted");
   });
+
+  test("renders missing checks separately from failed checks", () => {
+    const block = buildRuntimeStatusBlock({
+      verification: {
+        timestamp: Date.now(),
+        level: "standard",
+        outcome: "fail",
+        failedChecks: [],
+        missingChecks: ["tests"],
+        missingEvidence: ["tests"],
+      },
+      failures: [],
+    });
+
+    expect(block).toContain("missing=tests");
+    expect(block).toContain("missing_evidence: tests");
+    expect(block).not.toContain("failed=tests");
+  });
 });

@@ -53,6 +53,7 @@ function normalizeHealth(value: unknown): TaskHealth | undefined {
     value === "ok" ||
     value === "exploring" ||
     value === "blocked" ||
+    value === "verification_missing" ||
     value === "verification_failed" ||
     value === "acceptance_pending" ||
     value === "acceptance_rejected" ||

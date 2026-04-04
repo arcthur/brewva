@@ -26,6 +26,8 @@ import {
   GOVERNANCE_BLOCKER_ID,
   GOVERNANCE_TRUTH_FACT_ID,
   normalizeVerifierCheckForId,
+  VERIFICATION_CHECK_FAILED_TRUTH_KIND,
+  VERIFICATION_CHECK_MISSING_TRUTH_KIND,
   VERIFIER_BLOCKER_PREFIX,
 } from "../verification/verifier-blockers.js";
 import type { EventPipelineService } from "./event-pipeline.js";
@@ -38,7 +40,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 type VerificationOutcomeCheckProvenance = {
   check: string;
-  status: "pass" | "fail" | "skip";
+  status: "pass" | "fail" | "missing" | "skip";
   command: string | null;
   hasRun: boolean;
   freshSinceWrite: boolean;
@@ -48,13 +50,18 @@ type VerificationOutcomeCheckProvenance = {
 
 type VerificationOutcomeCheckResult = {
   name: string;
-  status: "pass" | "fail" | "skip";
+  status: "pass" | "fail" | "missing" | "skip";
   evidence: string | null;
 };
 
 function coerceCheckProvenanceEntry(value: unknown): VerificationOutcomeCheckProvenance | null {
   if (!isRecord(value)) return null;
-  if (value.status !== "pass" && value.status !== "fail" && value.status !== "skip") {
+  if (
+    value.status !== "pass" &&
+    value.status !== "fail" &&
+    value.status !== "missing" &&
+    value.status !== "skip"
+  ) {
     return null;
   }
   const check = typeof value.check === "string" ? value.check.trim() : "";
@@ -78,7 +85,12 @@ function coerceCheckProvenanceEntry(value: unknown): VerificationOutcomeCheckPro
 
 function coerceCheckResultEntry(value: unknown): VerificationOutcomeCheckResult | null {
   if (!isRecord(value)) return null;
-  if (value.status !== "pass" && value.status !== "fail" && value.status !== "skip") {
+  if (
+    value.status !== "pass" &&
+    value.status !== "fail" &&
+    value.status !== "missing" &&
+    value.status !== "skip"
+  ) {
     return null;
   }
   const name = typeof value.name === "string" ? value.name.trim() : "";
@@ -169,7 +181,7 @@ export class VerificationProjectorService {
       const payload = coerceVerificationWriteMarkedPayload(event.payload);
       if (!payload) return;
       this.stateStore.markWriteAt(event.sessionId, event.timestamp);
-      this.clearVerificationFailures(event.sessionId);
+      this.clearVerificationIssues(event.sessionId);
       return;
     }
 
@@ -209,7 +221,7 @@ export class VerificationProjectorService {
     }
   }
 
-  private clearVerificationFailures(sessionId: string): void {
+  private clearVerificationIssues(sessionId: string): void {
     const taskState = this.getTaskState(sessionId);
     for (const blocker of taskState.blockers) {
       if (!blocker.id.startsWith(VERIFIER_BLOCKER_PREFIX)) {
@@ -246,21 +258,23 @@ export class VerificationProjectorService {
 
     const taskState = this.getTaskState(sessionId);
     const existingById = new Map(taskState.blockers.map((blocker) => [blocker.id, blocker]));
-    const failingIds = new Set<string>();
+    const openIssueIds = new Set<string>();
 
     for (const result of checkResults) {
-      if (result.status !== "fail") continue;
+      if (result.status !== "fail" && result.status !== "missing") continue;
       const blockerId = `${VERIFIER_BLOCKER_PREFIX}${normalizeVerifierCheckForId(result.name)}`;
       const truthFactId = `truth:verifier:${normalizeVerifierCheckForId(result.name)}`;
       const provenance = provenanceByCheck.get(result.name);
       const freshRun = toFreshRun(provenance);
+      const issueKind = result.status;
       const message = buildVerifierBlockerMessage({
         checkName: result.name,
         truthFactId,
+        issueKind,
         run: freshRun,
       });
       const source = "verification_gate";
-      failingIds.add(blockerId);
+      openIssueIds.add(blockerId);
 
       const existing = existingById.get(blockerId);
       if (
@@ -275,15 +289,24 @@ export class VerificationProjectorService {
       const evidenceIds = freshRun?.ledgerId ? [freshRun.ledgerId] : [];
       this.upsertTruthFact(sessionId, {
         id: truthFactId,
-        kind: "verification_check_failed",
-        severity: "error",
-        summary: `verification failed: ${result.name}`,
+        kind:
+          issueKind === "fail"
+            ? VERIFICATION_CHECK_FAILED_TRUTH_KIND
+            : VERIFICATION_CHECK_MISSING_TRUTH_KIND,
+        severity: issueKind === "fail" ? "error" : "warn",
+        summary:
+          issueKind === "fail"
+            ? `verification failed: ${result.name}`
+            : `verification missing fresh evidence: ${result.name}`,
         evidenceIds,
         details: {
+          issueKind,
           check: result.name,
           command: freshRun?.command ?? provenance?.command ?? null,
           exitCode: freshRun?.exitCode ?? null,
           ledgerId: freshRun?.ledgerId ?? provenance?.ledgerId ?? null,
+          hasRun: provenance?.hasRun ?? false,
+          freshSinceWrite: provenance?.freshSinceWrite ?? false,
           evidence: result.evidence,
         },
       });
@@ -298,7 +321,7 @@ export class VerificationProjectorService {
     const truthState = this.getTruthState(sessionId);
     for (const blocker of taskState.blockers) {
       if (!blocker.id.startsWith(VERIFIER_BLOCKER_PREFIX)) continue;
-      if (failingIds.has(blocker.id)) continue;
+      if (openIssueIds.has(blocker.id)) continue;
       this.resolveTaskBlocker(sessionId, blocker.id);
       const truthFactId =
         blocker.truthFactId ?? `truth:verifier:${blocker.id.slice(VERIFIER_BLOCKER_PREFIX.length)}`;

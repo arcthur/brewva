@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createTestConfig } from "../../fixtures/config.js";
+import { writeTestConfig } from "../../helpers/workspace.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("Task status alignment", () => {
@@ -129,15 +131,132 @@ describe("Task status alignment", () => {
 
     runtime.authority.task.setSpec(sessionId, { schema: "brewva.task.v1", goal: "Do a thing" });
     runtime.authority.task.addItem(sessionId, { text: "Implement the fix" });
+    runtime.authority.truth.upsertFact(sessionId, {
+      id: "truth:governance:verify-spec",
+      kind: "governance_verify_spec_failed",
+      severity: "error",
+      summary: "Spec rejected by governance",
+    });
     runtime.authority.task.recordBlocker(sessionId, {
       id: "verifier:governance:verify-spec",
       message: "Spec rejected by governance",
       source: "governance",
+      truthFactId: "truth:governance:verify-spec",
     });
 
     const state = runtime.inspect.task.getState(sessionId);
     expect(state.status?.phase).toBe("blocked");
     expect(state.status?.health).toBe("blocked");
     expect(state.status?.reason).toBe("blockers_present");
+  });
+
+  test("rejects non-canonical verifier blockers that omit a truth fact", async () => {
+    const workspace = createTestWorkspace("task-status-verifier-blocker-contract");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "task-status-verifier-blocker-contract-1";
+
+    const result = runtime.authority.task.recordBlocker(sessionId, {
+      id: "verifier:tests",
+      message: "verification missing fresh evidence: tests",
+      source: "verification_gate",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "verifier_blocker_requires_truth_fact",
+    });
+  });
+
+  test("surfaces verification_missing when work is done but fresh verification evidence is absent", async () => {
+    const workspace = createTestWorkspace("task-status-verification-missing");
+    writeTestConfig(
+      workspace,
+      createTestConfig({
+        verification: {
+          defaultLevel: "standard",
+          checks: {
+            quick: ["tests"],
+            standard: ["tests"],
+            strict: ["tests"],
+          },
+          commands: {
+            tests: "true",
+          },
+        },
+      }),
+    );
+    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    const sessionId = "task-status-verification-missing-1";
+
+    runtime.authority.task.setSpec(sessionId, { schema: "brewva.task.v1", goal: "Do a thing" });
+    const added = runtime.authority.task.addItem(sessionId, { text: "Implement the fix" });
+    if (!added.ok) {
+      throw new Error("expected task item to be created");
+    }
+    runtime.authority.task.updateItem(sessionId, { id: added.itemId, status: "done" });
+    runtime.authority.tools.markCall(sessionId, "edit");
+
+    const report = await runtime.authority.verification.verify(sessionId, "standard", {
+      executeCommands: false,
+    });
+    expect(report.passed).toBe(false);
+    expect(report.failedChecks).toEqual([]);
+    expect(report.missingChecks).toEqual(["tests"]);
+
+    const state = runtime.inspect.task.getState(sessionId);
+    expect(state.status?.phase).toBe("verify");
+    expect(state.status?.health).toBe("verification_missing");
+    expect(state.status?.reason).toBe("verification_missing");
+
+    const injection = await runtime.maintain.context.buildInjection(sessionId, "next");
+    expect(injection.text).toContain("status.phase=verify");
+    expect(injection.text).toContain("status.health=verification_missing");
+  });
+
+  test("surfaces verification_failed when a fresh verification check actually fails", async () => {
+    const workspace = createTestWorkspace("task-status-verification-failed");
+    writeTestConfig(
+      workspace,
+      createTestConfig({
+        verification: {
+          defaultLevel: "standard",
+          checks: {
+            quick: ["tests"],
+            standard: ["tests"],
+            strict: ["tests"],
+          },
+          commands: {
+            tests: "false",
+          },
+        },
+      }),
+    );
+    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    const sessionId = "task-status-verification-failed-1";
+
+    runtime.authority.task.setSpec(sessionId, { schema: "brewva.task.v1", goal: "Do a thing" });
+    const added = runtime.authority.task.addItem(sessionId, { text: "Implement the fix" });
+    if (!added.ok) {
+      throw new Error("expected task item to be created");
+    }
+    runtime.authority.task.updateItem(sessionId, { id: added.itemId, status: "done" });
+    runtime.authority.tools.markCall(sessionId, "edit");
+
+    const report = await runtime.authority.verification.verify(sessionId, "standard", {
+      executeCommands: true,
+      timeoutMs: 5_000,
+    });
+    expect(report.passed).toBe(false);
+    expect(report.failedChecks).toEqual(["tests"]);
+    expect(report.missingChecks).toEqual([]);
+
+    const state = runtime.inspect.task.getState(sessionId);
+    expect(state.status?.phase).toBe("verify");
+    expect(state.status?.health).toBe("verification_failed");
+    expect(state.status?.reason).toBe("verification_failed");
+
+    const injection = await runtime.maintain.context.buildInjection(sessionId, "next");
+    expect(injection.text).toContain("status.phase=verify");
+    expect(injection.text).toContain("status.health=verification_failed");
   });
 });

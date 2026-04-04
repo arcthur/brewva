@@ -104,6 +104,7 @@ export interface VerificationOutcomeRecord {
   outcome: string;
   level?: string;
   failedChecks: string[];
+  missingChecks: string[];
   activeSkill?: string;
   rootCause?: string;
 }
@@ -450,6 +451,7 @@ function collectVerificationOutcomes(
       outcome,
       level: readString(event.payload.level),
       failedChecks: readStringArray(event.payload.failedChecks),
+      missingChecks: readStringArray(event.payload.missingChecks),
       activeSkill: readString(event.payload.activeSkill),
       rootCause: readString(event.payload.rootCause),
     });
@@ -726,6 +728,7 @@ function buildAgentCapabilityProfile(
     bumpFrequency(skills, completion.skillName);
   }
   const failedChecks = new Map<string, number>();
+  const missingChecks = new Map<string, number>();
   let verificationPasses = 0;
   let verificationFails = 0;
   for (const outcome of verificationOutcomes) {
@@ -737,10 +740,14 @@ function buildAgentCapabilityProfile(
     for (const check of outcome.failedChecks) {
       bumpFrequency(failedChecks, check);
     }
+    for (const check of outcome.missingChecks) {
+      bumpFrequency(missingChecks, check);
+    }
   }
 
   const skillPreview = renderFrequencyMap(skills, 4);
   const failurePreview = renderFrequencyMap(failedChecks, 4);
+  const missingPreview = renderFrequencyMap(missingChecks, 4);
   const summaryParts: string[] = [];
   if (skillPreview.length > 0) {
     summaryParts.push(`Recent completed skills: ${skillPreview.join(", ")}.`);
@@ -750,6 +757,9 @@ function buildAgentCapabilityProfile(
   );
   if (failurePreview.length > 0) {
     summaryParts.push(`Common failed checks: ${failurePreview.join(", ")}.`);
+  }
+  if (missingPreview.length > 0) {
+    summaryParts.push(`Common missing checks: ${missingPreview.join(", ")}.`);
   }
 
   const timestamps = [
@@ -762,7 +772,7 @@ function buildAgentCapabilityProfile(
     title: "Agent Capability Profile",
     summary: summaryParts.join(" "),
     content: summaryParts.join(" "),
-    tags: [...skillPreview, ...failurePreview],
+    tags: [...skillPreview, ...failurePreview, ...missingPreview],
     confidenceScore:
       0.5 +
       Math.min(
