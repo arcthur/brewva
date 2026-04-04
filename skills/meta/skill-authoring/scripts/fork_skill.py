@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import shutil
 import sys
@@ -22,17 +21,22 @@ try:
 except Exception:  # pragma: no cover
     validate_skill = None
 
+from skill_roots import (
+    resolve_bundled_skills_root,
+    resolve_global_brewva_root,
+    resolve_project_brewva_root,
+    resolve_system_brewva_root,
+)
+
 
 VALID_CATEGORIES = ("core", "domain", "operator", "meta", "internal")
 SOURCE_PRIORITIES = {
-    "module_ancestor": 1,
-    "exec_ancestor": 2,
-    "global_root": 3,
-    "project_root": 4,
-    "config_root": 5,
+    "system_root": 1,
+    "global_root": 2,
+    "project_root": 3,
+    "config_root": 4,
 }
 FRONTMATTER_RE = re.compile(r"^---\n([\s\S]*?)\n---\n?([\s\S]*)$")
-MAX_ANCESTOR_DEPTH = 10
 DEFAULT_TOOL_PATH = "skill-authoring/scripts/fork_skill.py"
 
 
@@ -52,48 +56,18 @@ class SkillEntry:
     root: SkillRoot
 
 
-def normalize_path_input(path_text: str) -> str:
-    trimmed = path_text.strip()
-    if not trimmed:
-        return trimmed
-    if trimmed == "~":
-        return str(Path.home())
-    if trimmed.startswith("~/"):
-        return str(Path.home() / trimmed[2:])
-    return trimmed
-
-
 def resolve_maybe_absolute(path_text: str, base_dir: Path) -> Path:
-    normalized = normalize_path_input(path_text)
+    normalized = path_text.strip()
+    if not normalized:
+        return base_dir.resolve()
+    if normalized == "~":
+        return Path.home().resolve()
+    if normalized.startswith("~/"):
+        return (Path.home() / normalized[2:]).resolve()
     candidate = Path(normalized)
     if candidate.is_absolute():
         return candidate.resolve()
     return (base_dir / candidate).resolve()
-
-
-def resolve_global_brewva_root(cwd: Path) -> Path:
-    agent_dir = os.environ.get("BREWVA_CODING_AGENT_DIR", "").strip()
-    if agent_dir:
-        return (resolve_maybe_absolute(agent_dir, cwd) / "..").resolve()
-    xdg = os.environ.get("XDG_CONFIG_HOME", "").strip()
-    if xdg:
-        return resolve_maybe_absolute(f"{xdg}/brewva", cwd)
-    return (Path.home() / ".config" / "brewva").resolve()
-
-
-def resolve_project_brewva_root(cwd: Path) -> Path:
-    return (cwd / ".brewva").resolve()
-
-
-def collect_bounded_ancestors(start_dir: Path) -> list[Path]:
-    out: list[Path] = []
-    current = start_dir.resolve()
-    for _ in range(MAX_ANCESTOR_DEPTH):
-        out.append(current)
-        if current.parent == current:
-            break
-        current = current.parent
-    return out
 
 
 def has_v2_skill_directories(path: Path) -> bool:
@@ -111,6 +85,18 @@ def resolve_skill_directory(root_dir: Path) -> Path | None:
         normalized / "project"
     ).is_dir():
         return normalized
+    return None
+
+
+def resolve_system_skill_root(cwd: Path) -> Path | None:
+    installed_root = resolve_system_brewva_root(cwd)
+    if resolve_skill_directory(installed_root) is not None:
+        return installed_root
+
+    bundled_root = resolve_bundled_skills_root(Path(__file__))
+    if resolve_skill_directory(bundled_root) is not None:
+        return bundled_root
+
     return None
 
 
@@ -139,10 +125,9 @@ def discover_skill_roots(cwd: Path, configured_roots: list[Path]) -> list[SkillR
     roots: list[SkillRoot] = []
     index_by_skill_dir: dict[str, int] = {}
 
-    for ancestor in reversed(collect_bounded_ancestors(Path(__file__).resolve().parent)):
-        append_discovered_root(roots, index_by_skill_dir, ancestor, "module_ancestor")
-    for ancestor in reversed(collect_bounded_ancestors(Path(sys.executable).resolve().parent)):
-        append_discovered_root(roots, index_by_skill_dir, ancestor, "exec_ancestor")
+    system_root = resolve_system_skill_root(cwd)
+    if system_root is not None:
+        append_discovered_root(roots, index_by_skill_dir, system_root, "system_root")
 
     append_discovered_root(roots, index_by_skill_dir, resolve_global_brewva_root(cwd), "global_root")
     append_discovered_root(roots, index_by_skill_dir, resolve_project_brewva_root(cwd), "project_root")
@@ -321,6 +306,17 @@ def resolve_destination_parent(base_root: Path) -> Path:
     return (normalized / "skills" / "project" / "overlays").resolve()
 
 
+def resolve_active_destination_root(base_root: Path) -> Path:
+    normalized = base_root.resolve()
+    if normalized.name == "overlays" and normalized.parent.name == "project":
+        project_root = normalized.parent.parent
+        if project_root.name == "skills":
+            return project_root.parent.resolve()
+    if normalized.name == "skills":
+        return normalized.parent.resolve()
+    return normalized
+
+
 def annotate_frontmatter(raw: str, entry: SkillEntry) -> str:
     frontmatter, body = parse_frontmatter(raw)
     frontmatter.pop("routing", None)
@@ -369,10 +365,11 @@ def destination_is_active(
     if skill_name in disabled:
         return False, "Remove the skill from skills.disabled to make the fork active."
 
+    active_destination_root = resolve_active_destination_root(destination_root)
     active_roots = {resolve_project_brewva_root(cwd), resolve_global_brewva_root(cwd), *configured_roots}
     for root in active_roots:
         normalized_root = root.resolve()
-        if destination_root.resolve() == normalized_root:
+        if active_destination_root == normalized_root:
             return True, "Forked skill is active at runtime."
     return False, "Forked skill exists on disk but is currently inactive at runtime."
 

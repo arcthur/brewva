@@ -116,7 +116,7 @@ This directory contains the packaged runtime assets that ship with \`${packageNa
 - \`brewva.schema.json\` runtime config schema
 - \`theme/\` interactive UI assets
 - \`export-html/\` HTML export assets
-- \`skills/\` bundled skills
+- \`skills/\` bundled skill payload for runtime-managed system installation
 
 ## Usage
 
@@ -131,6 +131,9 @@ User configuration and runtime state default under:
 \`\`\`text
 ${configDir}
 \`\`\`
+
+Bundled skills are installed into the Brewva system skill root on first runtime
+construction rather than being treated as mutable user-global skills.
 
 For repository documentation, use the workspace root \`README.md\` and \`docs/\` tree rather than this binary bundle.
 `;

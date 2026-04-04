@@ -187,6 +187,30 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.skills.routing.scopes).toEqual(["domain", "operator"]);
   });
 
+  test("loads the project config from workspace root when running from a nested cwd inside a repo", () => {
+    const workspace = createTestWorkspace("workspace-root-config");
+    const nestedCwd = join(workspace, "packages", "api");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          skills: {
+            routing: {
+              scopes: ["operator"],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    writeFileSync(join(workspace, ".git"), "", "utf8");
+
+    const loaded = loadBrewvaConfig({ cwd: nestedCwd });
+    expect(loaded.skills.routing.scopes).toEqual(["operator"]);
+  });
+
   test("rejects null session cost cap now that zero is the only unlimited sentinel", () => {
     const workspace = createTestWorkspace("cost-cap-null-sentinel");
     writeFileSync(

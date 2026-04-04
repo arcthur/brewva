@@ -192,8 +192,9 @@ function collectPromptSignals(prompt: string, taskState: TaskStateLike | undefin
   }
   for (const blocker of Array.isArray(taskState?.blockers) ? taskState.blockers : []) {
     if (blocker && typeof blocker === "object") {
-      push((blocker as { message?: unknown; reason?: unknown }).message);
-      push((blocker as { message?: unknown; reason?: unknown }).reason);
+      push((blocker as { message?: unknown; text?: unknown; reason?: unknown }).message);
+      push((blocker as { message?: unknown; text?: unknown; reason?: unknown }).text);
+      push((blocker as { message?: unknown; text?: unknown; reason?: unknown }).reason);
     }
   }
 

@@ -44,7 +44,7 @@ exposes read-only identity and environment state:
 
 ### `runtime.skills.*`
 
-- `refresh()`
+- `refresh(input?)`
 - `getLoadReport()`
 - `list()`
 - `get(name)`
@@ -54,6 +54,25 @@ exposes read-only identity and environment state:
 - `complete(sessionId, output)`
 - `getOutputs(sessionId, skillName)`
 - `getConsumedOutputs(sessionId, targetSkillName)`
+
+`runtime.skills.refresh(input?)` is the explicit rebuild path for session-scoped
+skill runtimes. It is a rebuildable control-plane operation, not kernel
+durability:
+
+- installs or validates bundled system skills under the Brewva system skill
+  root
+- reloads the skill registry
+- rewrites the workspace-root `.brewva/skills_index.json`
+- returns structured result data:
+  - `generatedAt`
+  - `systemInstall`
+  - `loadReport`
+  - `indexPath`
+
+When `input.sessionId` is present, runtime also records an ops-level
+`skill_refresh_recorded` event for inspection. No file watcher or automatic
+refresh path is implied by this API; hosts that want reactive behavior must
+call it explicitly.
 
 ### `runtime.proposals.*`
 

@@ -62,6 +62,9 @@ import type {
   SkillDocument,
   SkillActivationResult,
   SkillOutputValidationResult,
+  SkillRefreshInput,
+  SkillRefreshResult,
+  SkillRegistryLoadReport,
   SkillRoutingScope,
   SessionHydrationState,
   SessionCostSummary,
@@ -94,6 +97,7 @@ import { SessionCostTracker } from "./cost/tracker.js";
 import {
   ITERATION_GUARD_RECORDED_EVENT_TYPE,
   ITERATION_METRIC_OBSERVED_EVENT_TYPE,
+  SKILL_REFRESH_RECORDED_EVENT_TYPE,
   TOOL_OUTPUT_DISTILLED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
 } from "./events/event-types.js";
@@ -164,7 +168,8 @@ import { TruthProjectorService } from "./services/truth-projector.js";
 import { TruthService } from "./services/truth.js";
 import { VerificationProjectorService } from "./services/verification-projector.js";
 import { VerificationService } from "./services/verification.js";
-import { SkillRegistry, type SkillRegistryLoadReport } from "./skills/registry.js";
+import { SkillRegistry } from "./skills/registry.js";
+import { ensureBundledSystemSkills } from "./skills/system-install.js";
 import { FileChangeTracker } from "./state/file-change-tracker.js";
 import { TurnReplayEngine } from "./tape/replay-engine.js";
 import { resolvePrimaryTaskTargetRoot, resolveTaskTargetRoots } from "./task/targeting.js";
@@ -216,7 +221,7 @@ export class BrewvaRuntime {
   declare readonly agentId: string;
   declare readonly config: DeepReadonly<BrewvaConfig>;
   declare readonly skills: {
-    refresh(): void;
+    refresh(input?: SkillRefreshInput): SkillRefreshResult;
     getLoadReport(): SkillRegistryLoadReport;
     list(): SkillDocument[];
     get(name: string): SkillDocument | undefined;
@@ -626,6 +631,7 @@ export class BrewvaRuntime {
     Object.assign(this, this.createCoreDependencies(options));
     this.kernel = this.createKernelContext(options);
     Object.assign(this, this.createServiceDependencies(options));
+    this.refreshSkillsState();
     Object.assign(this, this.createDomainApis());
   }
 
@@ -743,10 +749,7 @@ export class BrewvaRuntime {
   } {
     return {
       skills: {
-        refresh: () => {
-          this.skillRegistry.load();
-          this.skillRegistry.writeIndex();
-        },
+        refresh: (input) => this.refreshSkillsState(input),
         getLoadReport: () => this.skillRegistry.getLoadReport(),
         list: () => this.skillRegistry.list(),
         get: (name) => this.skillRegistry.get(name),
@@ -1063,6 +1066,40 @@ export class BrewvaRuntime {
     input: RuntimeRecordEventInput<TPayload>,
   ): BrewvaEventRecord | undefined {
     return this.eventPipeline.recordEvent(input);
+  }
+
+  private refreshSkillsState(input: SkillRefreshInput = {}): SkillRefreshResult {
+    const systemInstall = ensureBundledSystemSkills();
+    this.skillRegistry.load();
+    const indexPath = this.skillRegistry.writeIndex();
+    const loadReport = this.skillRegistry.getLoadReport();
+    const generatedAt = new Date().toISOString();
+
+    if (input.sessionId) {
+      this.recordEvent({
+        sessionId: input.sessionId,
+        type: SKILL_REFRESH_RECORDED_EVENT_TYPE,
+        payload: {
+          reason: input.reason?.trim() || "runtime.skills.refresh",
+          generatedAt,
+          indexPath,
+          systemInstall,
+          summary: {
+            loadedSkills: loadReport.loadedSkills.length,
+            routableSkills: loadReport.routableSkills.length,
+            hiddenSkills: loadReport.hiddenSkills.length,
+            overlaySkills: loadReport.overlaySkills.length,
+          },
+        },
+      });
+    }
+
+    return {
+      generatedAt,
+      systemInstall,
+      loadReport,
+      indexPath,
+    };
   }
 
   private evaluateCompletion(sessionId: string, level?: VerificationLevel): VerificationReport {

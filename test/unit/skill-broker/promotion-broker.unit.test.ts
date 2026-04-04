@@ -10,6 +10,10 @@ import {
 } from "@brewva/brewva-skill-broker";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
+function normalizePath(value: string): string {
+  return value.replaceAll("\\", "/");
+}
+
 function createWorkspaceWithSkills(name: string): string {
   const workspace = createTestWorkspace(name);
   const repoRoot = resolve(import.meta.dirname, "../../..");
@@ -70,7 +74,9 @@ describe("skill promotion broker", () => {
     expect(drafts[0]?.sourceSkillName).toBe("self-improve");
     expect(drafts[0]?.repeatCount).toBe(2);
     expect(drafts[0]?.target.kind).toBe("skill_patch");
-    expect(drafts[0]?.target.pathHint).toContain("skills/meta/self-improve/SKILL.md");
+    expect(normalizePath(drafts[0]?.target.pathHint ?? "")).toContain(
+      "/skills/.system/meta/self-improve/SKILL.md",
+    );
     expect(drafts[0]?.evidence).toHaveLength(2);
 
     const reviewed = broker.reviewDraft({

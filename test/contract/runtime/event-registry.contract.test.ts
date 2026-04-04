@@ -4,8 +4,10 @@ import { BREWVA_REGISTERED_EVENT_TYPES, isBrewvaRegisteredEventType } from "@bre
 describe("runtime event registry", () => {
   test("registers session_turn_transition and drops legacy hosted lifecycle event names", () => {
     expect(BREWVA_REGISTERED_EVENT_TYPES).toContain("session_turn_transition");
+    expect(BREWVA_REGISTERED_EVENT_TYPES).toContain("skill_refresh_recorded");
     expect(BREWVA_REGISTERED_EVENT_TYPES).toContain("skill_recommendation_derived");
     expect(isBrewvaRegisteredEventType("session_turn_transition")).toBe(true);
+    expect(isBrewvaRegisteredEventType("skill_refresh_recorded")).toBe(true);
     expect(isBrewvaRegisteredEventType("skill_recommendation_derived")).toBe(true);
 
     expect(BREWVA_REGISTERED_EVENT_TYPES).not.toContain("session_interrupted");

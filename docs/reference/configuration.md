@@ -92,6 +92,12 @@ Skill discovery accepts either:
 - a root containing `skills/<category>/...`
 - a direct skill root containing `core/`, `domain/`, `operator/`, `meta/`, or `internal/`, plus optional `project/` for shared context and overlays
 
+Built-in bundled skills are installed by runtime into the Brewva system skill
+root (`<globalRoot>/skills/.system`) and then loaded as `source=system_root`.
+They are no longer discovered by walking module or executable ancestors.
+Mutable user-global additions remain under `<globalRoot>/skills`, while
+workspace-local skills remain under `<workspaceRoot>/.brewva/skills`.
+
 Project-specific shared context and overlays are discovered from:
 
 - `skills/project/shared/*.md`
@@ -519,13 +525,16 @@ If these keys are present in config files, schema validation fails startup and r
 Default merge order (low to high precedence):
 
 1. global: `$XDG_CONFIG_HOME/brewva/brewva.json` (or `~/.config/brewva/brewva.json`)
-2. project: `<workspace>/.brewva/brewva.json`
+2. project: `<workspaceRoot>/.brewva/brewva.json`
 
 If `--config` is provided, only that explicit file is loaded.
 
 Relative paths in `skills.roots` are resolved from the directory of the config file that defines them.
 
 Runtime artifact paths (for example `ledger.path`, `infrastructure.events.dir`) are resolved from runtime workspace root discovery (`nearest .brewva/brewva.json` or `.git` ancestor), not from nested package subdirectories.
+Project config discovery follows the same workspace-root rule, so nested cwd
+launches inside one repository still read the workspace-root `.brewva/brewva.json`
+and write the workspace-root `.brewva/skills_index.json`.
 
 ## JSON Schema
 

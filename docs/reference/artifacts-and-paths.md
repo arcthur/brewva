@@ -54,9 +54,10 @@ The remaining `.brewva/**` entries below are operator-authored configuration or
 helper material, not session-state durability surfaces in the taxonomy above.
 
 - Generated skill index: `.brewva/skills_index.json`
+  - workspace-root inspect artifact with `schemaVersion=1`
   - includes selected skill roots (`roots`) and the complete loaded-skill catalog (`skills`)
   - `summary` reports loaded, routable, non-routable (`hiddenSkills`), and overlay counts
-- each skill entry keeps normalized contract metadata plus `routable`, `overlay`, normalized `selection` metadata, source paths, and shared-context attachments
+- each skill entry keeps normalized contract metadata plus `routable`, `overlay`, normalized `selection` metadata, source paths, shared-context attachments, and lightweight provenance (`source`, `rootDir`, optional `overlayOrigins`)
 - Agent self bundle (per-agent):
   - `.brewva/agents/<agent-id>/identity.md`
   - `.brewva/agents/<agent-id>/constitution.md`
@@ -85,6 +86,11 @@ runtime path.
 
 - Global Brewva root: `$XDG_CONFIG_HOME/brewva` (or `~/.config/brewva`)
   - resolution can be overridden via `BREWVA_CODING_AGENT_DIR` (see `packages/brewva-runtime/src/config/paths.ts`)
+- Bundled system skill root: `<globalRoot>/skills/.system`
+  - Brewva-managed installed copy of bundled default skills
+  - deterministic runtime-owned install target, distinct from mutable user-global skills
+- Bundled system skill marker: `<globalRoot>/skills/.system.marker.json`
+  - stores bundled payload fingerprint and install metadata
 - Agent directory: `<globalRoot>/agent` (default: `~/.config/brewva/agent`)
   - authentication: `auth.json`
   - model registry: `models.json`

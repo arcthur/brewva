@@ -200,11 +200,9 @@ export function createRuntimeCoreDependencies(
   options: RuntimeCoreAssemblyOptions,
 ): RuntimeCoreDependencies {
   const skillRegistry = new SkillRegistry({
-    rootDir: options.cwd,
+    workspaceRoot: options.workspaceRoot,
     config: options.config,
   });
-  skillRegistry.load();
-  skillRegistry.writeIndex();
 
   const evidenceLedger = new EvidenceLedger(
     resolve(options.workspaceRoot, options.config.ledger.path),

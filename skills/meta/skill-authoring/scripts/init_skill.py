@@ -4,10 +4,11 @@
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import sys
 from pathlib import Path
+
+from skill_roots import resolve_global_brewva_root, resolve_project_brewva_root
 
 
 VALID_CATEGORIES = {"core", "domain", "operator", "meta", "internal", "overlay"}
@@ -107,16 +108,6 @@ def resolve_maybe_absolute(path_text: str, base_dir: Path) -> Path:
     return (base_dir / candidate).resolve()
 
 
-def resolve_global_brewva_root(cwd: Path) -> Path:
-    agent_dir = os.environ.get("BREWVA_CODING_AGENT_DIR", "").strip()
-    if agent_dir:
-        return (resolve_maybe_absolute(agent_dir, cwd) / "..").resolve()
-    xdg_config_home = os.environ.get("XDG_CONFIG_HOME", "").strip()
-    if xdg_config_home:
-        return resolve_maybe_absolute(f"{xdg_config_home}/brewva", cwd)
-    return (Path.home() / ".config" / "brewva").resolve()
-
-
 def category_relative_dir(category: str) -> Path:
     if category == "overlay":
         return Path("project") / "overlays"
@@ -124,7 +115,7 @@ def category_relative_dir(category: str) -> Path:
 
 
 def resolve_default_skill_parent(cwd: Path, category: str) -> tuple[Path, str]:
-    project_brewva_root = (cwd / ".brewva").resolve()
+    project_brewva_root = resolve_project_brewva_root(cwd)
     root = project_brewva_root if project_brewva_root.is_dir() else resolve_global_brewva_root(cwd)
     scope = "project" if project_brewva_root.is_dir() else "global"
     return (root / "skills" / category_relative_dir(category)).resolve(), scope

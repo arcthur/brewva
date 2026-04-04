@@ -243,6 +243,47 @@ describe("runtime facade coverage", () => {
     });
   });
 
+  test("skills.refresh returns structured rebuild details and records an ops receipt when session-bound", () => {
+    const workspace = createTestWorkspace("runtime-facade-skill-refresh");
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: createOpsRuntimeConfig(),
+    });
+    const sessionId = "runtime-facade-skill-refresh-1";
+
+    const refreshed = runtime.skills.refresh({
+      sessionId,
+      reason: "unit_test_refresh",
+    });
+
+    expect(refreshed.indexPath).toBe(join(workspace, ".brewva", "skills_index.json"));
+    expect(refreshed.systemInstall.systemRoot).toContain("/skills/.system");
+    expect(refreshed.loadReport.roots.some((entry) => entry.source === "system_root")).toBe(true);
+    expect(typeof refreshed.generatedAt).toBe("string");
+
+    const writtenIndex = JSON.parse(readFileSync(refreshed.indexPath, "utf8")) as {
+      schemaVersion?: number;
+    };
+    expect(writtenIndex.schemaVersion).toBe(1);
+
+    expect(
+      runtime.events.query(sessionId, { type: "skill_refresh_recorded" })[0]?.payload,
+    ).toMatchObject({
+      reason: "unit_test_refresh",
+      indexPath: refreshed.indexPath,
+      systemInstall: {
+        systemRoot: refreshed.systemInstall.systemRoot,
+        fingerprint: refreshed.systemInstall.fingerprint,
+      },
+      summary: {
+        loadedSkills: refreshed.loadReport.loadedSkills.length,
+        routableSkills: refreshed.loadReport.routableSkills.length,
+        hiddenSkills: refreshed.loadReport.hiddenSkills.length,
+        overlaySkills: refreshed.loadReport.overlaySkills.length,
+      },
+    });
+  });
+
   test("tools.start exact-call guard resets when tool name or args change", () => {
     const runtime = new BrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-exact-call-guard"),

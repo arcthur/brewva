@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -78,7 +78,31 @@ function writeSkill(filePath: string, input: { name: string }): void {
 }
 
 describe("skill discovery and loading", () => {
-  test("loads project skills from cwd .brewva root using the current category layout", () => {
+  test("installs bundled system skills and writes a versioned index for clean workspaces", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-system-root-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+
+    const report = runtime.skills.getLoadReport();
+    expect(report.roots.some((entry) => entry.source === "system_root")).toBe(true);
+
+    const index = JSON.parse(
+      readFileSync(join(workspace, ".brewva", "skills_index.json"), "utf8"),
+    ) as {
+      schemaVersion?: number;
+      roots?: Array<{ source?: string }>;
+      skills?: Array<{ source?: string; rootDir?: string }>;
+    };
+    expect(index.schemaVersion).toBe(1);
+    expect(index.roots?.some((entry) => entry.source === "system_root")).toBe(true);
+    expect(index.skills?.length).toBeGreaterThan(0);
+    expect(
+      index.skills?.every(
+        (entry) => typeof entry.source === "string" && typeof entry.rootDir === "string",
+      ),
+    ).toBe(true);
+  });
+
+  test("loads project skills from the workspace .brewva root using the current category layout", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-project-"));
     writeSkill(join(workspace, ".brewva/skills/core/commitcraft/SKILL.md"), {
       name: "commitcraft",
@@ -99,6 +123,10 @@ describe("skill discovery and loading", () => {
       ),
       "expected project skill root to be discovered",
     );
+    requireDefined(
+      roots.find((entry) => entry.source === "system_root"),
+      "expected system skill root to be discovered",
+    );
   });
 
   test("does not load ancestor .brewva skills when running from nested cwd", () => {
@@ -118,6 +146,34 @@ describe("skill discovery and loading", () => {
     });
     expect(roots.map((entry) => entry.skillDir)).not.toContain(
       resolve(workspace, ".brewva/skills"),
+    );
+  });
+
+  test("loads workspace-root project skills and writes workspace-root index when running from nested cwd inside a repo", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-workspace-root-"));
+    writeSkill(join(workspace, ".brewva/skills/core/commitcraft/SKILL.md"), {
+      name: "commitcraft",
+    });
+    mkdirSync(join(workspace, ".git"), { recursive: true });
+    const nested = join(workspace, "apps/api");
+    mkdirSync(nested, { recursive: true });
+
+    const runtime = new BrewvaRuntime({ cwd: nested });
+    requireDefined(runtime.skills.get("commitcraft"), "expected workspace-root project skill");
+    expect(existsSync(join(workspace, ".brewva", "skills_index.json"))).toBe(true);
+    expect(existsSync(join(nested, ".brewva", "skills_index.json"))).toBe(false);
+
+    const roots = discoverSkillRegistryRoots({
+      cwd: nested,
+      configuredRoots: runtime.config.skills.roots ?? [],
+    });
+    requireDefined(
+      roots.find(
+        (entry) =>
+          entry.source === "project_root" &&
+          entry.skillDir === resolve(workspace, ".brewva/skills"),
+      ),
+      "expected workspace-root project skill root to be discovered",
     );
   });
 
@@ -147,6 +203,15 @@ describe("skill discovery and loading", () => {
     expect(() => new BrewvaRuntime({ cwd: workspace })).toThrow("duplicate skill name 'git'");
   });
 
+  test("fails fast when a project base skill duplicates a bundled system skill name", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-system-duplicate-"));
+    writeSkill(join(workspace, ".brewva/skills/core/review/SKILL.md"), {
+      name: "review",
+    });
+
+    expect(() => new BrewvaRuntime({ cwd: workspace })).toThrow("duplicate skill name 'review'");
+  });
+
   test("standard routing hides operator skills from routable index but still loads them", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-operator-hidden-"));
     writeSkill(join(workspace, ".brewva/skills/operator/ops-helper/SKILL.md"), {
@@ -163,6 +228,7 @@ describe("skill discovery and loading", () => {
     const index = JSON.parse(
       readFileSync(join(workspace, ".brewva", "skills_index.json"), "utf8"),
     ) as {
+      schemaVersion?: number;
       summary?: {
         loadedSkills?: number;
         routableSkills?: number;
@@ -172,15 +238,18 @@ describe("skill discovery and loading", () => {
       skills?: Array<{
         name?: string;
         routable?: boolean;
+        source?: string;
       }>;
     };
     expect(index.summary?.loadedSkills).toBeGreaterThanOrEqual(1);
     expect(index.summary?.hiddenSkills).toBeGreaterThanOrEqual(1);
     expect(index.summary?.overlaySkills).toBeGreaterThanOrEqual(0);
+    expect(index.schemaVersion).toBe(1);
     expect(index.skills?.some((entry) => entry.name === "ops-helper")).toBe(true);
     expect(index.skills?.find((entry) => entry.name === "ops-helper")).toMatchObject({
       name: "ops-helper",
       routable: false,
+      source: "project_root",
     });
   });
 
@@ -260,6 +329,55 @@ describe("skill discovery and loading", () => {
     expect(skill.overlayFiles).toContain(resolve(overlayPath));
     expect(skill.sharedContextFiles).toContain(resolve(sharedContextPath));
     expect(skill.contract.resources?.defaultLease?.maxToolCalls).toBe(5);
+  });
+
+  test("project overlays can specialize a bundled system skill while preserving system provenance", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-system-overlay-"));
+    const overlayPath = join(workspace, ".brewva/skills/project/overlays/review/SKILL.md");
+    mkdirSync(dirname(overlayPath), { recursive: true });
+    writeFileSync(
+      overlayPath,
+      [
+        "---",
+        "resources:",
+        "  default_lease:",
+        "    max_tool_calls: 4",
+        "    max_tokens: 6000",
+        "execution_hints:",
+        "  preferred_tools: [read, tape_search]",
+        "  fallback_tools: []",
+        "---",
+        "# review overlay",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const skill = requireDefined(runtime.skills.get("review"), "expected bundled review skill");
+
+    expect(skill.overlayFiles).toContain(resolve(overlayPath));
+    expect(skill.contract.resources?.defaultLease?.maxToolCalls).toBe(4);
+    expect(skill.contract.executionHints?.preferredTools).toContain("tape_search");
+
+    const index = JSON.parse(
+      readFileSync(join(workspace, ".brewva", "skills_index.json"), "utf8"),
+    ) as {
+      skills?: Array<{
+        name?: string;
+        source?: string;
+        overlayOrigins?: Array<{ filePath?: string; source?: string }>;
+      }>;
+    };
+    expect(index.skills?.find((entry) => entry.name === "review")).toMatchObject({
+      name: "review",
+      source: "system_root",
+      overlayOrigins: expect.arrayContaining([
+        expect.objectContaining({
+          filePath: resolve(overlayPath),
+          source: "project_root",
+        }),
+      ]),
+    });
   });
 
   test("project overlays can specialize execution hints while tightening effect policy", () => {

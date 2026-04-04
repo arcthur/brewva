@@ -51,6 +51,29 @@ describe("skill-authoring init script default paths", () => {
     }
   });
 
+  test("uses the workspace-root project skill path when running from a nested cwd", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-init-nested-project-"));
+    try {
+      mkdirSync(join(workspace, ".brewva"), { recursive: true });
+      mkdirSync(join(workspace, ".git"), { recursive: true });
+      const nested = join(workspace, "apps/api");
+      mkdirSync(nested, { recursive: true });
+
+      const skillName = "my-nested-project-skill";
+      runInitSkill({
+        scriptPath,
+        cwd: nested,
+        args: [skillName],
+      });
+
+      const skillPath = join(workspace, ".brewva/skills/domain", skillName);
+      expect(existsSync(join(skillPath, "SKILL.md"))).toBe(true);
+      expect(existsSync(join(nested, ".brewva/skills/domain", skillName, "SKILL.md"))).toBe(false);
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
   test("falls back to global domain skills when project .brewva is missing", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-init-global-workspace-"));
     const xdgRoot = mkdtempSync(join(tmpdir(), "brewva-skill-init-global-xdg-"));

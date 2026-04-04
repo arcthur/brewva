@@ -26,6 +26,49 @@ const HARD_GATE_STATUS: ContextCompactionGateStatus = {
   turnsSinceCompaction: null,
 };
 
+function installRuntimeForensicsSkill(runtime: ReturnType<typeof createRuntimeFixture>): void {
+  Object.assign(runtime.skills, {
+    list: () => [
+      {
+        name: "runtime-forensics",
+        description: "Investigate runtime traces, sessions, events, ledgers, and projections.",
+        category: "domain" as const,
+        markdown: "## Trigger\n\n- investigating runtime traces, sessions, or ledgers\n",
+        contract: {
+          name: "runtime-forensics",
+          category: "domain" as const,
+          routing: {
+            scope: "domain" as const,
+          },
+          selection: {
+            whenToUse:
+              "Use when the task asks what happened at runtime and the answer must come from traces, ledgers, projections, or artifacts.",
+            examples: [
+              "Analyze this session trace.",
+              "Explain the runtime events and ledger evidence.",
+            ],
+            paths: [".orchestrator", ".brewva"],
+            phases: ["investigate", "verify"],
+          },
+          effects: {
+            allowedEffects: ["workspace_read", "runtime_observe"],
+            deniedEffects: [],
+          },
+          resources: {
+            defaultLease: { maxToolCalls: 10, maxTokens: 10000 },
+            hardCeiling: { maxToolCalls: 20, maxTokens: 20000 },
+          },
+          executionHints: {
+            preferredTools: ["ledger_query"],
+            fallbackTools: ["output_search"],
+          },
+        },
+      },
+    ],
+    getActive: () => undefined,
+  });
+}
+
 describe("hosted context injection pipeline", () => {
   test("fails closed on a hard gate without calling buildInjection", async () => {
     const recordedTypes: string[] = [];
@@ -197,46 +240,7 @@ describe("hosted context injection pipeline", () => {
         },
       },
     });
-    Object.assign(runtime.skills, {
-      list: () => [
-        {
-          name: "runtime-forensics",
-          description: "Investigate runtime traces, sessions, events, ledgers, and projections.",
-          category: "domain" as const,
-          markdown: "## Trigger\n\n- investigating runtime traces, sessions, or ledgers\n",
-          contract: {
-            name: "runtime-forensics",
-            category: "domain" as const,
-            routing: {
-              scope: "domain" as const,
-            },
-            selection: {
-              whenToUse:
-                "Use when the task asks what happened at runtime and the answer must come from traces, ledgers, projections, or artifacts.",
-              examples: [
-                "Analyze this session trace.",
-                "Explain the runtime events and ledger evidence.",
-              ],
-              paths: [".orchestrator", ".brewva"],
-              phases: ["investigate", "verify"],
-            },
-            effects: {
-              allowedEffects: ["workspace_read", "runtime_observe"],
-              deniedEffects: [],
-            },
-            resources: {
-              defaultLease: { maxToolCalls: 10, maxTokens: 10000 },
-              hardCeiling: { maxToolCalls: 20, maxTokens: 20000 },
-            },
-            executionHints: {
-              preferredTools: ["ledger_query"],
-              fallbackTools: ["output_search"],
-            },
-          },
-        },
-      ],
-      getActive: () => undefined,
-    });
+    installRuntimeForensicsSkill(runtime);
     Object.assign(runtime.task, {
       getState: () => ({
         status: { phase: "investigate" },
@@ -271,5 +275,123 @@ describe("hosted context injection pipeline", () => {
       names: ["runtime-forensics"],
     });
     expect(recordedTypes).toContain("skill_recommendation_derived");
+  });
+
+  test("uses legacy blocker text when deriving skill recommendations", async () => {
+    const runtime = createRuntimeFixture({
+      context: {
+        observeUsage: () => undefined,
+        getCompactionGateStatus: () => ({
+          required: false,
+          reason: null,
+          pressure: {
+            level: "low",
+            usageRatio: 0.2,
+            hardLimitRatio: 0.95,
+            compactionThresholdRatio: 0.8,
+          },
+          recentCompaction: false,
+          windowTurns: 0,
+          lastCompactionTurn: null,
+          turnsSinceCompaction: null,
+        }),
+        getPendingCompactionReason: () => null,
+        buildInjection: async () => ({
+          text: "",
+          entries: [],
+          accepted: false,
+          originalTokens: 0,
+          finalTokens: 0,
+          truncated: false,
+        }),
+      },
+    });
+    installRuntimeForensicsSkill(runtime);
+    Object.assign(runtime.task, {
+      getState: () => ({
+        status: { phase: "investigate" },
+        blockers: [
+          {
+            id: "legacy-blocker",
+            text: "Investigate this runtime session trace and ledger drift in .brewva artifacts.",
+          },
+        ],
+      }),
+    });
+
+    const telemetry = createHostedContextTelemetry(runtime);
+    const { api } = createMockRuntimePluginApi();
+    const pipeline = createHostedContextInjectionPipeline(api, runtime, telemetry, {
+      getTurnIndex: () => 5,
+      setLastRuntimeGateRequired: () => undefined,
+    });
+
+    const result = await pipeline.beforeAgentStart({
+      sessionId: "s-skill-first-legacy-blocker",
+      sessionManager: {
+        getLeafId: () => "leaf-skill-first-legacy-blocker",
+      },
+      prompt: "continue",
+      systemPrompt: "base prompt",
+      usage: {
+        tokens: 100,
+        contextWindow: 4000,
+        percent: 0.025,
+      },
+    });
+
+    expect(result.message.content).toContain("[Brewva Skill-First Policy]");
+    expect(result.message.content).toContain("primary_skill: runtime-forensics");
+  });
+
+  test("emits skill recommendation telemetry once when the hard gate path returns early", async () => {
+    const recordedTypes: string[] = [];
+    const runtime = createRuntimeFixture({
+      context: {
+        observeUsage: () => undefined,
+        getCompactionGateStatus: () => HARD_GATE_STATUS,
+        getPendingCompactionReason: () => "hard_limit",
+        buildInjection: async () => ({
+          text: "unexpected",
+          entries: [],
+          accepted: false,
+          originalTokens: 0,
+          finalTokens: 0,
+          truncated: false,
+        }),
+      },
+      events: {
+        record: (input: { type: string }) => {
+          recordedTypes.push(input.type);
+          return undefined;
+        },
+      },
+    });
+    installRuntimeForensicsSkill(runtime);
+    Object.assign(runtime.task, {
+      getState: () => ({
+        status: { phase: "investigate" },
+      }),
+    });
+
+    const telemetry = createHostedContextTelemetry(runtime);
+    const { api } = createMockRuntimePluginApi();
+    const pipeline = createHostedContextInjectionPipeline(api, runtime, telemetry, {
+      getTurnIndex: () => 6,
+      setLastRuntimeGateRequired: () => undefined,
+    });
+
+    const result = await pipeline.beforeAgentStart({
+      sessionId: "s-skill-first-gated",
+      sessionManager: {
+        getLeafId: () => "leaf-skill-first-gated",
+      },
+      prompt: "Analyze this session trace and runtime ledger before proceeding.",
+      systemPrompt: "base prompt",
+      usage: HIGH_USAGE,
+    });
+
+    expect(result.message.details.gateRequired).toBe(true);
+    expect(recordedTypes.filter((type) => type === "skill_recommendation_derived")).toHaveLength(1);
   });
 });

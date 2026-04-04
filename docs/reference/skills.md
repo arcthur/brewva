@@ -183,9 +183,14 @@ The runtime kernel and the optional control plane have different jobs:
 only the routable subset. Each entry retains normalized contract metadata,
 including `category`, `routingScope`, `outputs`, `requires`, `consumes`,
 derived `effectLevel`, `allowedEffects`, and the explicit flags and provenance
-fields `routable`, `overlay`, `filePath`, `baseDir`, `sharedContextFiles`, and
-authored `selection`. Whether a skill participates in routing is now expressed
-by the entry itself instead of by presence or absence in the file.
+fields `routable`, `overlay`, `filePath`, `baseDir`, `sharedContextFiles`,
+`source`, `rootDir`, optional `overlayOrigins`, and authored `selection`.
+Whether a skill participates in routing is now expressed by the entry itself
+instead of by presence or absence in the file.
+
+`skills_index.json` is a versioned inspect artifact (`schemaVersion=1`), not a
+durable source of truth. Runtime may rebuild it at startup or through explicit
+`runtime.skills.refresh(...)`.
 
 ## Model-Native Sequencing
 
@@ -440,3 +445,20 @@ prepended from:
 Runtime discovery also accepts roots provided via `skills.roots`. A discovered
 root may either contain a nested `skills/` directory or the category directories
 directly.
+
+Current root provenance values are:
+
+- `system_root`
+  - Brewva-managed bundled defaults installed under `<globalRoot>/skills/.system`
+- `global_root`
+  - user-managed global additions under `<globalRoot>/skills`
+- `project_root`
+  - workspace-root project skills under `<workspaceRoot>/.brewva/skills`
+- `config_root`
+  - explicit extra roots from `skills.roots`
+
+There is still no second authored catalog plane. `SKILL.md` remains the single
+runtime-authoritative file for behavior, selection, outputs, effect policy,
+resource ceilings, and execution hints. Display-only metadata such as icons,
+card labels, or suggested prompts does not have an authored catalog file in the
+current contract.

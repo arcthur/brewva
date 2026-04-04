@@ -9,6 +9,11 @@ import {
 } from "@brewva/brewva-gateway";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 
+function createIsolatedRuntime(name: string): BrewvaRuntime {
+  const workspace = mkdtempSync(join(tmpdir(), `brewva-subagent-runtime-${name}-`));
+  return new BrewvaRuntime({ cwd: workspace });
+}
+
 describe("delegation prompt and catalog composition", () => {
   test("truncates context references when prompt injection budget is small", () => {
     const prompt = buildDelegationPrompt({
@@ -78,7 +83,7 @@ describe("delegation prompt and catalog composition", () => {
   });
 
   test("injects delegated skill markdown and requires skillOutputs in the structured contract", () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createIsolatedRuntime("review");
     const skill = runtime.skills.get("review");
     expect(skill).toBeDefined();
 
@@ -117,7 +122,7 @@ describe("delegation prompt and catalog composition", () => {
   });
 
   test("injects QA anti-rationalization guidance into delegated prompts", () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createIsolatedRuntime("qa");
     const skill = runtime.skills.get("qa");
     expect(skill).toBeDefined();
 

@@ -8,14 +8,17 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { formatISO } from "date-fns";
 import { resolveGlobalBrewvaRootDir, resolveProjectBrewvaRootDir } from "../config/paths.js";
 import type {
   BrewvaConfig,
   LoadableSkillCategory,
   SkillDocument,
-  SkillRoutingScope,
+  SkillIndexOrigin,
+  SkillRegistryLoadReport,
+  SkillRegistryRoot,
+  SkillRootSource,
+  SkillsIndexFile,
   SkillsIndexEntry,
 } from "../contracts/index.js";
 import {
@@ -33,6 +36,8 @@ import {
   listSkillPreferredTools,
   resolveSkillEffectLevel,
 } from "./facets.js";
+import { resolveBundledSystemSkillsRoot } from "./system-install.js";
+
 const LOADABLE_SKILL_CATEGORIES: LoadableSkillCategory[] = [
   "core",
   "domain",
@@ -41,34 +46,14 @@ const LOADABLE_SKILL_CATEGORIES: LoadableSkillCategory[] = [
   "internal",
 ];
 
-export type SkillRootSource =
-  | "module_ancestor"
-  | "exec_ancestor"
-  | "global_root"
-  | "project_root"
-  | "config_root";
-
-export interface SkillRegistryRoot {
-  rootDir: string;
-  skillDir: string;
-  source: SkillRootSource;
-}
-
-export interface SkillRegistryLoadReport {
-  roots: SkillRegistryRoot[];
-  loadedSkills: string[];
-  routingEnabled: boolean;
-  routingScopes: SkillRoutingScope[];
-  routableSkills: string[];
-  hiddenSkills: string[];
-  overlaySkills: string[];
-  sharedContextFiles: string[];
-  categories: Partial<Record<LoadableSkillCategory, string[]>>;
-}
-
 interface SharedContextEntry {
   filePath: string;
   markdown: string;
+}
+
+interface LoadedSkillOrigin {
+  base: SkillIndexOrigin;
+  overlays: SkillIndexOrigin[];
 }
 
 function cloneSkillRegistryRoot(entry: SkillRegistryRoot): SkillRegistryRoot {
@@ -103,25 +88,10 @@ function resolveSkillDirectory(rootDir: string): string | undefined {
   return undefined;
 }
 
-const MAX_ANCESTOR_DEPTH = 10;
-
-function collectBoundedAncestors(startDir: string): string[] {
-  const out: string[] = [];
-  let current = resolve(startDir);
-  for (let depth = 0; depth < MAX_ANCESTOR_DEPTH; depth += 1) {
-    out.push(current);
-    const parent = dirname(current);
-    if (parent === current) break;
-    current = parent;
-  }
-  return out;
-}
-
 function sourcePriority(source: SkillRootSource): number {
-  if (source === "config_root") return 5;
-  if (source === "project_root") return 4;
-  if (source === "global_root") return 3;
-  if (source === "exec_ancestor") return 2;
+  if (source === "config_root") return 4;
+  if (source === "project_root") return 3;
+  if (source === "global_root") return 2;
   return 1;
 }
 
@@ -159,36 +129,18 @@ function appendDiscoveredRoot(
 export function discoverSkillRegistryRoots(input: {
   cwd: string;
   configuredRoots?: readonly string[];
-  moduleUrl?: string;
-  execPath?: string;
   globalRootDir?: string;
 }): SkillRegistryRoot[] {
   const roots: SkillRegistryRoot[] = [];
   const rootIndexBySkillDir = new Map<string, number>();
 
-  const moduleUrl = input.moduleUrl ?? import.meta.url;
-  let modulePath: string | undefined;
-  try {
-    modulePath = fileURLToPath(moduleUrl);
-  } catch {
-    modulePath = undefined;
-  }
-  if (modulePath) {
-    const moduleAncestors = collectBoundedAncestors(dirname(modulePath)).toReversed();
-    for (const ancestor of moduleAncestors) {
-      appendDiscoveredRoot(roots, rootIndexBySkillDir, ancestor, "module_ancestor");
-    }
-  }
-
-  const execPath = input.execPath ?? process.execPath;
-  if (typeof execPath === "string" && execPath.trim().length > 0) {
-    const execAncestors = collectBoundedAncestors(dirname(resolve(execPath))).toReversed();
-    for (const ancestor of execAncestors) {
-      appendDiscoveredRoot(roots, rootIndexBySkillDir, ancestor, "exec_ancestor");
-    }
-  }
-
   const globalRootDir = input.globalRootDir ?? resolveGlobalBrewvaRootDir();
+  appendDiscoveredRoot(
+    roots,
+    rootIndexBySkillDir,
+    resolveBundledSystemSkillsRoot(globalRootDir),
+    "system_root",
+  );
   appendDiscoveredRoot(roots, rootIndexBySkillDir, globalRootDir, "global_root");
 
   const projectRoot = resolveProjectBrewvaRootDir(input.cwd);
@@ -301,13 +253,13 @@ function cloneLoadReport(report: SkillRegistryLoadReport): SkillRegistryLoadRepo
 }
 
 export interface SkillRegistryOptions {
-  rootDir: string;
+  workspaceRoot: string;
   config: BrewvaConfig;
   roots?: SkillRegistryRoot[];
 }
 
 export class SkillRegistry {
-  private readonly rootDir: string;
+  private readonly workspaceRoot: string;
   private readonly config: BrewvaConfig;
   private readonly rootsOverride?: SkillRegistryRoot[];
   private loadedRoots: SkillRegistryRoot[] = [];
@@ -324,9 +276,10 @@ export class SkillRegistry {
   };
   private skills = new Map<string, SkillDocument>();
   private sharedContextEntries: SharedContextEntry[] = [];
+  private skillOrigins = new Map<string, LoadedSkillOrigin>();
 
   constructor(options: SkillRegistryOptions) {
-    this.rootDir = options.rootDir;
+    this.workspaceRoot = options.workspaceRoot;
     this.config = options.config;
     this.rootsOverride = options.roots;
   }
@@ -334,11 +287,12 @@ export class SkillRegistry {
   load(): void {
     this.skills.clear();
     this.sharedContextEntries = [];
+    this.skillOrigins.clear();
 
     const discoveredRoots =
       this.rootsOverride ??
       discoverSkillRegistryRoots({
-        cwd: this.rootDir,
+        cwd: this.workspaceRoot,
         configuredRoots: this.config.skills.roots ?? [],
       });
     this.loadedRoots = discoveredRoots.map(cloneSkillRegistryRoot);
@@ -379,52 +333,63 @@ export class SkillRegistry {
   buildIndex(options: { routableOnly?: boolean } = {}): SkillsIndexEntry[] {
     return this.list()
       .filter((skill) => !options.routableOnly || this.isRoutable(skill))
-      .map((skill) => ({
-        name: skill.name,
-        category: skill.category,
-        description: skill.description,
-        filePath: skill.filePath,
-        baseDir: skill.baseDir,
-        outputs: listSkillOutputs(skill.contract),
-        preferredTools: listSkillPreferredTools(skill.contract),
-        fallbackTools: listSkillFallbackTools(skill.contract),
-        allowedEffects: listSkillAllowedEffects(skill.contract),
-        costHint: getSkillCostHint(skill.contract),
-        stability: skill.contract.stability ?? "stable",
-        composableWith: skill.contract.composableWith ?? [],
-        consumes: skill.contract.consumes ?? [],
-        requires: skill.contract.requires ?? [],
-        effectLevel: resolveSkillEffectLevel(skill.contract),
-        routable: this.isRoutable(skill),
-        overlay: skill.overlayFiles.length > 0,
-        sharedContextFiles: [...skill.sharedContextFiles],
-        routingScope: skill.contract.routing?.scope,
-        selection: skill.contract.selection
-          ? {
-              whenToUse: skill.contract.selection.whenToUse,
-              ...(skill.contract.selection.examples
-                ? { examples: [...skill.contract.selection.examples] }
-                : {}),
-              ...(skill.contract.selection.paths
-                ? { paths: [...skill.contract.selection.paths] }
-                : {}),
-              ...(skill.contract.selection.phases
-                ? { phases: [...skill.contract.selection.phases] }
-                : {}),
-            }
-          : undefined,
-      }));
+      .map((skill) => {
+        const origin = this.skillOrigins.get(skill.name);
+        if (!origin) {
+          throw new Error(`[skill_registry] missing load origin for skill '${skill.name}'.`);
+        }
+
+        return {
+          name: skill.name,
+          category: skill.category,
+          description: skill.description,
+          filePath: skill.filePath,
+          baseDir: skill.baseDir,
+          outputs: listSkillOutputs(skill.contract),
+          preferredTools: listSkillPreferredTools(skill.contract),
+          fallbackTools: listSkillFallbackTools(skill.contract),
+          allowedEffects: listSkillAllowedEffects(skill.contract),
+          costHint: getSkillCostHint(skill.contract),
+          stability: skill.contract.stability ?? "stable",
+          composableWith: skill.contract.composableWith ?? [],
+          consumes: skill.contract.consumes ?? [],
+          requires: skill.contract.requires ?? [],
+          effectLevel: resolveSkillEffectLevel(skill.contract),
+          routable: this.isRoutable(skill),
+          overlay: skill.overlayFiles.length > 0,
+          sharedContextFiles: [...skill.sharedContextFiles],
+          routingScope: skill.contract.routing?.scope,
+          selection: skill.contract.selection
+            ? {
+                whenToUse: skill.contract.selection.whenToUse,
+                ...(skill.contract.selection.examples
+                  ? { examples: [...skill.contract.selection.examples] }
+                  : {}),
+                ...(skill.contract.selection.paths
+                  ? { paths: [...skill.contract.selection.paths] }
+                  : {}),
+                ...(skill.contract.selection.phases
+                  ? { phases: [...skill.contract.selection.phases] }
+                  : {}),
+              }
+            : undefined,
+          source: origin.base.source,
+          rootDir: origin.base.rootDir,
+          overlayOrigins: origin.overlays.length > 0 ? [...origin.overlays] : undefined,
+        };
+      });
   }
 
   writeIndex(
-    filePath = join(resolveProjectBrewvaRootDir(this.rootDir), "skills_index.json"),
+    filePath = join(resolveProjectBrewvaRootDir(this.workspaceRoot), "skills_index.json"),
   ): string {
     const parent = dirname(filePath);
     if (parent && !existsSync(parent)) {
       mkdirSync(parent, { recursive: true });
     }
     const indexEntries = this.buildIndex();
-    const payload = {
+    const payload: SkillsIndexFile = {
+      schemaVersion: 1,
       generatedAt: formatISO(Date.now()),
       roots: this.getLoadedRoots(),
       routing: {
@@ -496,17 +461,21 @@ export class SkillRegistry {
   private loadRoot(root: SkillRegistryRoot): void {
     const { skillDir } = root;
     for (const category of LOADABLE_SKILL_CATEGORIES) {
-      this.loadCategory(category, join(skillDir, category));
+      this.loadCategory(category, join(skillDir, category), root);
     }
 
     const sharedEntries = this.loadSharedContext(join(skillDir, "project", "shared"));
     if (sharedEntries.length > 0) {
       this.sharedContextEntries.push(...sharedEntries);
     }
-    this.loadOverlays(join(skillDir, "project", "overlays"));
+    this.loadOverlays(join(skillDir, "project", "overlays"), root);
   }
 
-  private loadCategory(category: LoadableSkillCategory, dir: string): void {
+  private loadCategory(
+    category: LoadableSkillCategory,
+    dir: string,
+    root: SkillRegistryRoot,
+  ): void {
     const files = listSkillFiles(dir);
     for (const filePath of files) {
       const parsed = parseSkillDocument(filePath, category);
@@ -517,6 +486,14 @@ export class SkillRegistry {
         );
       }
       this.skills.set(parsed.name, parsed);
+      this.skillOrigins.set(parsed.name, {
+        base: {
+          filePath: parsed.filePath,
+          source: root.source,
+          rootDir: root.rootDir,
+        },
+        overlays: [],
+      });
     }
   }
 
@@ -527,7 +504,7 @@ export class SkillRegistry {
     }));
   }
 
-  private loadOverlays(dir: string): void {
+  private loadOverlays(dir: string, root: SkillRegistryRoot): void {
     const overlayFiles = listSkillFiles(dir);
     for (const filePath of overlayFiles) {
       const overlay = parseSkillDocument(filePath, "overlay");
@@ -535,6 +512,12 @@ export class SkillRegistry {
       if (!baseSkill) {
         throw new Error(
           `[skill_overlay] ${filePath}: overlay target '${overlay.name}' was not loaded before overlay application.`,
+        );
+      }
+      const origin = this.skillOrigins.get(overlay.name);
+      if (!origin) {
+        throw new Error(
+          `[skill_registry] missing load origin for overlay target '${overlay.name}'.`,
         );
       }
 
@@ -564,6 +547,11 @@ export class SkillRegistry {
           ]),
         ],
         overlayFiles: [...new Set([...baseSkill.overlayFiles, filePath])],
+      });
+      origin.overlays.push({
+        filePath,
+        source: root.source,
+        rootDir: root.rootDir,
       });
     }
   }

@@ -76,6 +76,7 @@ import {
   SKILL_PROMOTION_MATERIALIZED_EVENT_TYPE,
   SKILL_PROMOTION_PROMOTED_EVENT_TYPE,
   SKILL_PROMOTION_REVIEWED_EVENT_TYPE,
+  SKILL_REFRESH_RECORDED_EVENT_TYPE,
   SUBAGENT_CANCELLED_EVENT_TYPE,
   SUBAGENT_COMPLETED_EVENT_TYPE,
   SUBAGENT_DELIVERY_SURFACED_EVENT_TYPE,
@@ -264,6 +265,7 @@ const OPS_EVENT_TYPES = new Set<string>([
   "parallel_slot_rejected",
   "projection_ingested",
   "projection_refreshed",
+  SKILL_REFRESH_RECORDED_EVENT_TYPE,
   "tool_parallel_read",
   "tool_surface_resolved",
 ]);

@@ -1,15 +1,7 @@
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getBinaryPath, getPlatformPackage } from "./bin/platform.js";
 
@@ -65,14 +57,8 @@ export function buildDefaultGlobalBrewvaConfig() {
       disabled: [],
       overrides: {},
       routing: {
-        profile: "standard",
+        enabled: false,
         scopes: ["core", "domain"],
-      },
-      cascade: {
-        mode: "auto",
-        enabledSources: ["explicit", "dispatch"],
-        sourcePriority: ["explicit", "dispatch"],
-        maxStepsPerRun: 8,
       },
     },
   };
@@ -169,85 +155,6 @@ function seedGlobalConfig(globalRoot, defaultConfig) {
   }
 }
 
-function copyDirectoryContents(sourceDir, targetDir) {
-  mkdirSync(targetDir, { recursive: true });
-  const entries = readdirSync(sourceDir, { withFileTypes: true });
-  for (const entry of entries) {
-    if (entry.name.startsWith(".")) continue;
-    const source = join(sourceDir, entry.name);
-    const target = join(targetDir, entry.name);
-    cpSync(source, target, { recursive: true, force: true });
-  }
-}
-
-function toPortableRelPath(pathText) {
-  return pathText.split(sep).join("/");
-}
-
-function listBundledSkillFiles(sourceSkillsDir) {
-  const out = [];
-  const walk = (dir) => {
-    const entries = readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.name.startsWith(".")) continue;
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-        continue;
-      }
-      if (!entry.isFile()) continue;
-      out.push(toPortableRelPath(relative(sourceSkillsDir, full)));
-    }
-  };
-  walk(sourceSkillsDir);
-  return out.toSorted((a, b) => a.localeCompare(b));
-}
-
-function readSkillsManifest(manifestPath) {
-  if (!existsSync(manifestPath)) return undefined;
-  try {
-    const parsed = JSON.parse(readFileSync(manifestPath, "utf8"));
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
-    const files = parsed.files;
-    if (!Array.isArray(files)) return undefined;
-    return files.filter((entry) => typeof entry === "string" && entry.length > 0);
-  } catch {
-    return undefined;
-  }
-}
-
-function writeSkillsManifest(manifestPath, files) {
-  const payload = {
-    version: 1,
-    generatedAt: new Date().toISOString(),
-    files,
-  };
-  writeFileSync(manifestPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-}
-
-function seedGlobalSkills(globalRoot, runtimeBinaryPath) {
-  const sourceSkillsDir = join(dirname(runtimeBinaryPath), "skills");
-  if (!existsSync(sourceSkillsDir)) {
-    console.warn(`brewva: bundled skills not found at ${sourceSkillsDir}`);
-    return;
-  }
-  const targetSkillsDir = join(globalRoot, "skills");
-  const manifestPath = join(targetSkillsDir, ".brewva-manifest.json");
-
-  const nextFiles = listBundledSkillFiles(sourceSkillsDir);
-  const previousFiles = readSkillsManifest(manifestPath) ?? [];
-  const nextFileSet = new Set(nextFiles);
-
-  for (const entry of previousFiles) {
-    if (nextFileSet.has(entry)) continue;
-    rmSync(join(targetSkillsDir, entry), { recursive: true, force: true });
-  }
-
-  copyDirectoryContents(sourceSkillsDir, targetSkillsDir);
-  writeSkillsManifest(manifestPath, nextFiles);
-  console.log(`brewva: renewed global skills at ${targetSkillsDir}`);
-}
-
 export function main() {
   const { platform, arch } = process;
   const libcFamily = getLibcFamily();
@@ -274,14 +181,7 @@ export function main() {
   if (!runtimeBinaryPath) {
     return;
   }
-
-  try {
-    seedGlobalSkills(globalRoot, runtimeBinaryPath);
-    console.log(`brewva: installed platform binary for ${platform}-${arch}`);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`brewva: failed to seed global skills: ${message}`);
-  }
+  console.log(`brewva: installed platform binary for ${platform}-${arch}`);
 }
 
 function shouldRunMain() {

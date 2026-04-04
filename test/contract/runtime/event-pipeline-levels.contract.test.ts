@@ -211,6 +211,44 @@ describe("event pipeline level classification", () => {
     }
   });
 
+  test("keeps skill refresh receipts at ops level while excluding them from audit retention", () => {
+    const auditRuntime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-skill-refresh-")),
+      config: createAuditConfig(),
+    });
+    const opsRuntime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-events-ops-skill-refresh-")),
+      config: createOpsConfig(),
+    });
+
+    auditRuntime.events.record({
+      sessionId: "audit-skill-refresh-session",
+      type: "skill_refresh_recorded",
+      payload: {
+        reason: "audit",
+      },
+    });
+    opsRuntime.events.record({
+      sessionId: "ops-skill-refresh-session",
+      type: "skill_refresh_recorded",
+      payload: {
+        reason: "ops",
+      },
+    });
+
+    expect(
+      auditRuntime.events.query("audit-skill-refresh-session", { type: "skill_refresh_recorded" }),
+    ).toHaveLength(0);
+    expect(
+      opsRuntime.events.query("ops-skill-refresh-session", { type: "skill_refresh_recorded" }),
+    ).toHaveLength(1);
+    expect(
+      opsRuntime.events.queryStructured("ops-skill-refresh-session", {
+        type: "skill_refresh_recorded",
+      })[0]?.category,
+    ).toBe("control");
+  });
+
   test("classifies narrative memory and semantic recall receipts as control events", () => {
     const runtime = new BrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-narrative-control-")),

@@ -5,6 +5,10 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 export const BREWVA_CONFIG_DIR_RELATIVE = ".brewva";
 export const BREWVA_CONFIG_FILE_NAME = "brewva.json";
 
+function joinProjectBrewvaRootDir(baseDir: string): string {
+  return resolve(baseDir, BREWVA_CONFIG_DIR_RELATIVE);
+}
+
 function normalizePathInput(input: string): string {
   const trimmed = input.trim();
   if (!trimmed) return trimmed;
@@ -45,7 +49,7 @@ export function resolveGlobalBrewvaRootDir(env: NodeJS.ProcessEnv = process.env)
 }
 
 export function resolveProjectBrewvaRootDir(cwd: string): string {
-  return resolve(cwd, BREWVA_CONFIG_DIR_RELATIVE);
+  return joinProjectBrewvaRootDir(resolveWorkspaceRootDir(cwd));
 }
 
 export function resolveBrewvaConfigPathForRoot(rootDir: string): string {
@@ -76,7 +80,7 @@ function findAncestor(startDir: string, predicate: (dir: string) => boolean): st
 }
 
 function hasBrewvaConfigRoot(dir: string): boolean {
-  return existsSync(resolveBrewvaConfigPathForRoot(resolveProjectBrewvaRootDir(dir)));
+  return existsSync(resolveBrewvaConfigPathForRoot(joinProjectBrewvaRootDir(dir)));
 }
 
 function hasGitRootMarker(dir: string): boolean {

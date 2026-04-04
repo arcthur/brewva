@@ -90,6 +90,9 @@ function main(): void {
 
   const resolveScript = String.raw`
     import { createRequire } from "node:module";
+    import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
+    import { tmpdir } from "node:os";
+    import { join } from "node:path";
     const require = createRequire(import.meta.url);
     const packages = [
       "@brewva/brewva-runtime",
@@ -136,6 +139,18 @@ function main(): void {
     }
     if ("createHostedSession" in gatewayModule || "createHostedTurnPipeline" in gatewayModule) {
       throw new Error("gateway root entry unexpectedly re-exported subpath-only APIs");
+    }
+    const isolatedHome = mkdtempSync(join(tmpdir(), "brewva-dist-home-"));
+    const isolatedWorkspace = mkdtempSync(join(tmpdir(), "brewva-dist-workspace-"));
+    mkdirSync(join(isolatedWorkspace, ".git"), { recursive: true });
+    process.env.BREWVA_CODING_AGENT_DIR = join(isolatedHome, "agent");
+    const { BrewvaRuntime } = await import("@brewva/brewva-runtime");
+    new BrewvaRuntime({ cwd: isolatedWorkspace });
+    if (!existsSync(join(isolatedHome, "skills", ".system"))) {
+      throw new Error("runtime construction smoke failed: system skill root was not installed");
+    }
+    if (!existsSync(join(isolatedHome, "skills", ".system.marker.json"))) {
+      throw new Error("runtime construction smoke failed: system skill marker was not written");
     }
     console.log(JSON.stringify(resolved));
   `;

@@ -8,6 +8,25 @@ export type SkillCategory = LoadableSkillCategory | SkillOverlayCategory;
 export type SkillRoutingScope = "core" | "domain" | "operator" | "meta";
 export type SkillCostHint = "low" | "medium" | "high";
 export type SkillEffectLevel = "read_only" | "execute" | "mutation";
+export type SkillRootSource = "system_root" | "global_root" | "project_root" | "config_root";
+
+export interface SkillRegistryRoot {
+  rootDir: string;
+  skillDir: string;
+  source: SkillRootSource;
+}
+
+export interface SkillRegistryLoadReport {
+  roots: SkillRegistryRoot[];
+  loadedSkills: string[];
+  routingEnabled: boolean;
+  routingScopes: SkillRoutingScope[];
+  routableSkills: string[];
+  hiddenSkills: string[];
+  overlaySkills: string[];
+  sharedContextFiles: string[];
+  categories: Partial<Record<LoadableSkillCategory, string[]>>;
+}
 
 export interface SkillRoutingPolicy {
   scope: SkillRoutingScope;
@@ -165,6 +184,12 @@ export interface OverlaySkillDocument extends BaseSkillDocument<
 
 export type ParsedSkillDocument = SkillDocument | OverlaySkillDocument;
 
+export interface SkillIndexOrigin {
+  filePath: string;
+  source: SkillRootSource;
+  rootDir: string;
+}
+
 export interface SkillsIndexEntry {
   name: string;
   category: SkillCategory;
@@ -186,6 +211,45 @@ export interface SkillsIndexEntry {
   sharedContextFiles: string[];
   routingScope?: SkillRoutingScope;
   selection?: SkillSelectionPolicy;
+  source: SkillRootSource;
+  rootDir: string;
+  overlayOrigins?: SkillIndexOrigin[];
+}
+
+export interface SkillsIndexFile {
+  schemaVersion: 1;
+  generatedAt: string;
+  roots: SkillRegistryRoot[];
+  routing: {
+    enabled: boolean;
+    scopes: SkillRoutingScope[];
+  };
+  summary: {
+    loadedSkills: number;
+    routableSkills: number;
+    hiddenSkills: number;
+    overlaySkills: number;
+  };
+  skills: SkillsIndexEntry[];
+}
+
+export interface SkillRefreshInput {
+  reason?: string;
+  sessionId?: string;
+}
+
+export interface SkillSystemInstallResult {
+  systemRoot: string;
+  fingerprint: string;
+  installed: boolean;
+  migratedLegacyGlobalSeed: boolean;
+}
+
+export interface SkillRefreshResult {
+  generatedAt: string;
+  systemInstall: SkillSystemInstallResult;
+  loadReport: SkillRegistryLoadReport;
+  indexPath: string;
 }
 
 export type SkillActivationResult =

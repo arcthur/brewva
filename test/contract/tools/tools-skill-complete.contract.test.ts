@@ -68,6 +68,11 @@ function fakeContext(sessionId: string): ToolExecutionContext {
   } as unknown as ToolExecutionContext;
 }
 
+function createIsolatedRuntime(name: string): BrewvaRuntime {
+  const workspace = mkdtempSync(join(tmpdir(), `brewva-skill-complete-runtime-${name}-`));
+  return new BrewvaRuntime({ cwd: workspace });
+}
+
 function buildImpactMap(input: {
   summary: string;
   changedFileClasses?: string[];
@@ -978,7 +983,7 @@ The WAL boundary must keep replay ordering deterministic.
   });
 
   test("rejects QA pass verdicts that lack an adversarial probe", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createIsolatedRuntime("qa-no-adversarial");
     const sessionId = "skill-complete-qa-pass-without-adversarial";
     const loadTool = createSkillLoadTool({ runtime });
     const completeTool = createSkillCompleteTool({
@@ -1028,7 +1033,7 @@ The WAL boundary must keep replay ordering deterministic.
   });
 
   test("accepts QA pass verdicts backed by executable adversarial evidence", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createIsolatedRuntime("qa-pass-valid");
     const sessionId = "skill-complete-qa-pass-valid";
     const loadTool = createSkillLoadTool({ runtime });
     const completeTool = createSkillCompleteTool({
@@ -1079,7 +1084,7 @@ The WAL boundary must keep replay ordering deterministic.
   });
 
   test("rejects QA checks that omit command exitCode evidence", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createIsolatedRuntime("qa-missing-exit-code");
     const sessionId = "skill-complete-qa-missing-exit-code";
     const loadTool = createSkillLoadTool({ runtime });
     const completeTool = createSkillCompleteTool({
@@ -1129,7 +1134,7 @@ The WAL boundary must keep replay ordering deterministic.
   });
 
   test("rejects QA checks that omit both command and tool descriptors", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createIsolatedRuntime("qa-missing-descriptor");
     const sessionId = "skill-complete-qa-missing-descriptor";
     const loadTool = createSkillLoadTool({ runtime });
     const completeTool = createSkillCompleteTool({
@@ -1178,7 +1183,7 @@ The WAL boundary must keep replay ordering deterministic.
   });
 
   test("rejects QA checks that omit observed evidence", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createIsolatedRuntime("qa-missing-observed");
     const sessionId = "skill-complete-qa-missing-observed-evidence";
     const loadTool = createSkillLoadTool({ runtime });
     const completeTool = createSkillCompleteTool({
@@ -1229,7 +1234,7 @@ The WAL boundary must keep replay ordering deterministic.
   });
 
   test("rejects QA fail verdicts without an evidence-backed failed check", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createIsolatedRuntime("qa-fail-without-evidence");
     const sessionId = "skill-complete-qa-fail-without-evidence";
     const loadTool = createSkillLoadTool({ runtime });
     const completeTool = createSkillCompleteTool({
@@ -2362,7 +2367,7 @@ The WAL boundary must keep replay ordering deterministic.
   });
 
   test("rejects implementation outputs when implementation_targets are too abstract to enforce files_changed scope", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createIsolatedRuntime("implementation-abstract-target");
     const sessionId = "skill-complete-implementation-abstract-target";
     const loadTool = createSkillLoadTool({ runtime });
     const completeTool = createSkillCompleteTool({
@@ -2440,7 +2445,7 @@ The WAL boundary must keep replay ordering deterministic.
   });
 
   test("rejects QA pass verdicts that do not cover plan required_evidence", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createIsolatedRuntime("qa-required-evidence");
     const sessionId = "skill-complete-qa-required-evidence";
     const loadTool = createSkillLoadTool({ runtime });
     const completeTool = createSkillCompleteTool({
@@ -2531,7 +2536,7 @@ The WAL boundary must keep replay ordering deterministic.
   });
 
   test("accepts QA pass verdicts when fresh runtime verification covers plan required_evidence", async () => {
-    const runtime = new BrewvaRuntime({ cwd: process.cwd() });
+    const runtime = createIsolatedRuntime("qa-runtime-verification-coverage");
     const sessionId = "skill-complete-qa-runtime-verification-coverage";
     const loadTool = createSkillLoadTool({ runtime });
     const completeTool = createSkillCompleteTool({

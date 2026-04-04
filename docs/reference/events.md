@@ -198,12 +198,19 @@ effect-authoritative source of truth.
 
 - `skill_activated`
 - `skill_completed`
+- `skill_refresh_recorded`
 - `skill_budget_warning`
 - `skill_parallel_warning`
 - `skill_promotion_draft_derived`
 - `skill_promotion_reviewed`
 - `skill_promotion_promoted`
 - `skill_promotion_materialized`
+
+`skill_refresh_recorded` is an ops-level control receipt emitted only when a
+host calls `runtime.skills.refresh({ sessionId, ... })`. It records explicit
+skill-registry rebuild activity for inspection, including the refresh reason,
+the rewritten index path, and bundled system-install summary. It is not replay
+truth.
 
 ### Narrative Memory And Semantic Recall
 

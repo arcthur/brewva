@@ -113,6 +113,80 @@ describe("skill-authoring fork script", () => {
     }
   });
 
+  test("uses the workspace-root project overlay path when running from a nested cwd", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-fork-nested-project-"));
+    const xdgRoot = mkdtempSync(join(tmpdir(), "brewva-skill-fork-nested-xdg-"));
+
+    try {
+      mkdirSync(join(workspace, ".brewva"), { recursive: true });
+      mkdirSync(join(workspace, ".git"), { recursive: true });
+      const nested = join(workspace, "apps/api");
+      mkdirSync(nested, { recursive: true });
+      writeSkill(join(xdgRoot, "brewva/skills/domain/nestedcraft/SKILL.md"), {
+        name: "nestedcraft",
+        description: "global nestedcraft",
+      });
+
+      const result = runForkSkill({
+        scriptPath,
+        cwd: nested,
+        args: ["nestedcraft"],
+        env: {
+          ...process.env,
+          XDG_CONFIG_HOME: xdgRoot,
+        },
+      });
+      assertSuccess(result);
+
+      const destination = join(workspace, ".brewva/skills/project/overlays/nestedcraft/SKILL.md");
+      expect(existsSync(destination)).toBe(true);
+      expect(result.stdout).toContain("Destination scope: project");
+      expect(result.stdout).toContain(destination);
+
+      writeSkill(join(workspace, ".brewva/skills/domain/nestedcraft/SKILL.md"), {
+        name: "nestedcraft",
+        description: "workspace nestedcraft",
+      });
+      const runtime = new BrewvaRuntime({ cwd: nested });
+      expect(runtime.skills.get("nestedcraft")?.overlayFiles).toContain(resolve(destination));
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+      rmSync(xdgRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("treats an explicit project overlay root under the workspace as active", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-fork-explicit-project-"));
+    const xdgRoot = mkdtempSync(join(tmpdir(), "brewva-skill-fork-explicit-project-xdg-"));
+
+    try {
+      mkdirSync(join(workspace, ".brewva/skills/project/overlays"), { recursive: true });
+      mkdirSync(join(workspace, ".git"), { recursive: true });
+      writeSkill(join(xdgRoot, "brewva/skills/domain/explicitcraft/SKILL.md"), {
+        name: "explicitcraft",
+        description: "global explicitcraft",
+      });
+
+      const result = runForkSkill({
+        scriptPath,
+        cwd: workspace,
+        args: ["explicitcraft", "--path", "./.brewva/skills/project/overlays"],
+        env: {
+          ...process.env,
+          XDG_CONFIG_HOME: xdgRoot,
+        },
+      });
+      assertSuccess(result);
+
+      const destination = join(workspace, ".brewva/skills/project/overlays/explicitcraft/SKILL.md");
+      expect(existsSync(destination)).toBe(true);
+      expect(result.stdout).toContain("Forked skill is active at runtime.");
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+      rmSync(xdgRoot, { recursive: true, force: true });
+    }
+  });
+
   test("requires --force when destination already exists", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-fork-force-"));
     const xdgRoot = mkdtempSync(join(tmpdir(), "brewva-skill-fork-force-xdg-"));
