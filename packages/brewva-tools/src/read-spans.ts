@@ -1,6 +1,9 @@
 import { existsSync, statSync } from "node:fs";
+import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { buildReadPathDiscoveryObservationPayload } from "./read-path-discovery.js";
+import { recordToolRuntimeEvent } from "./runtime-internal.js";
 import { resolveScopedPath, resolveToolTargetScope } from "./target-scope.js";
 import { readSourceTextWithCache, registerTocSourceCacheRuntime } from "./toc-cache.js";
 import type { BrewvaBundledToolRuntime } from "./types.js";
@@ -82,8 +85,23 @@ export function createReadSpansTool(options?: {
         return failTextResult(`Error: Path is not a file: ${absolutePath}`);
       }
 
+      const sessionId = getToolSessionId(ctx);
+      const discoveryPayload = buildReadPathDiscoveryObservationPayload({
+        baseCwd: scope.baseCwd,
+        toolName: "read_spans",
+        evidenceKind: "direct_file_access",
+        observedPaths: [absolutePath],
+      });
+      if (sessionId && discoveryPayload) {
+        recordToolRuntimeEvent(options?.runtime, {
+          sessionId,
+          type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
+          payload: discoveryPayload,
+        });
+      }
+
       const source = readSourceTextWithCache({
-        sessionId: getToolSessionId(ctx),
+        sessionId,
         absolutePath,
         signature: `${stats.mtimeMs}:${stats.size}`,
       });

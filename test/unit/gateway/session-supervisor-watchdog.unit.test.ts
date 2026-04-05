@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SessionSupervisor } from "@brewva/brewva-gateway";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { resolveBrewvaEventLogPath } from "@brewva/brewva-runtime/internal";
 import {
   buildWorkerTestHarnessEnv,
   WORKER_TEST_HARNESS_ENV_KEYS,
@@ -186,6 +187,224 @@ describe("session supervisor watchdog bridge", () => {
       }
     },
     { timeout: 10_000 },
+  );
+
+  test(
+    "supervisor synthesizes a terminal receipt after worker hard exit",
+    async () => {
+      const workspace = createTestWorkspace("supervisor-worker-hard-exit");
+      writeTestConfig(workspace, createOpsRuntimeConfig(), TEST_CONFIG_PATH);
+      const supervisor = new SessionSupervisor({
+        stateDir: join(workspace, "state"),
+        defaultCwd: workspace,
+        defaultConfigPath: TEST_CONFIG_PATH,
+        defaultManagedToolMode: "direct",
+        logger: {
+          debug: () => {},
+          info: () => {},
+          warn: () => {},
+          error: () => {},
+          log: () => {},
+        },
+      });
+
+      try {
+        const opened = await supervisor.openSession({
+          sessionId: "worker-hard-exit",
+        });
+        const agentSessionId = opened.agentSessionId;
+        expect(agentSessionId).toEqual(expect.any(String));
+        if (!agentSessionId) {
+          throw new Error("expected agent session id for hard exit test");
+        }
+
+        process.kill(opened.workerPid, "SIGKILL");
+
+        await waitForCondition(
+          () =>
+            supervisor.listWorkers().some((worker) => worker.sessionId === "worker-hard-exit")
+              ? null
+              : true,
+          {
+            timeoutMs: 5_000,
+            intervalMs: 50,
+            message: "expected supervisor to observe worker exit",
+          },
+        );
+
+        const shutdown = await waitForCondition(
+          () => {
+            const observer = new BrewvaRuntime({ cwd: workspace, configPath: TEST_CONFIG_PATH });
+            return observer.inspect.events.query(agentSessionId, {
+              type: "session_shutdown",
+              last: 1,
+            })[0];
+          },
+          {
+            timeoutMs: 8_000,
+            intervalMs: 100,
+            message: "expected synthesized session_shutdown after hard exit",
+          },
+        );
+
+        expect(shutdown.payload).toMatchObject({
+          reason: "abnormal_process_exit",
+          source: "session_supervisor_worker_exit",
+          signal: "SIGKILL",
+          workerSessionId: "worker-hard-exit",
+          recoveredFromRegistry: false,
+        });
+      } finally {
+        await supervisor.stop();
+        rmSync(workspace, { recursive: true, force: true });
+      }
+    },
+    { timeout: 12_000 },
+  );
+
+  test(
+    "startup orphan sweep synthesizes a terminal receipt from the persisted event log path",
+    async () => {
+      const workspace = createTestWorkspace("supervisor-registry-recovery");
+      const runtimeConfig = createOpsRuntimeConfig();
+      writeTestConfig(workspace, runtimeConfig, TEST_CONFIG_PATH);
+      const stateDir = join(workspace, "state");
+      const agentSessionId = "agent-registry-stale";
+      const agentEventLogPath = resolveBrewvaEventLogPath(
+        join(workspace, runtimeConfig.infrastructure.events.dir),
+        agentSessionId,
+      );
+      mkdirSync(stateDir, { recursive: true });
+      writeFileSync(
+        join(stateDir, "children.json"),
+        JSON.stringify(
+          [
+            {
+              sessionId: "worker-registry-stale",
+              pid: 999999,
+              startedAt: Date.now() - 10_000,
+              agentSessionId,
+              agentEventLogPath,
+              cwd: workspace,
+            },
+          ],
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      const supervisor = new SessionSupervisor({
+        stateDir,
+        defaultCwd: workspace,
+        defaultConfigPath: TEST_CONFIG_PATH,
+        defaultManagedToolMode: "direct",
+        logger: {
+          debug: () => {},
+          info: () => {},
+          warn: () => {},
+          error: () => {},
+          log: () => {},
+        },
+      });
+
+      try {
+        await supervisor.start();
+
+        const shutdown = await waitForCondition(
+          () => {
+            const observer = new BrewvaRuntime({ cwd: workspace, configPath: TEST_CONFIG_PATH });
+            return observer.inspect.events.query(agentSessionId, {
+              type: "session_shutdown",
+              last: 1,
+            })[0];
+          },
+          {
+            timeoutMs: 5_000,
+            intervalMs: 100,
+            message: "expected synthesized session_shutdown from registry recovery",
+          },
+        );
+
+        expect(shutdown.payload).toMatchObject({
+          reason: "abnormal_process_exit",
+          source: "session_supervisor_registry_recovery",
+          workerSessionId: "worker-registry-stale",
+          recoveredFromRegistry: true,
+        });
+      } finally {
+        await supervisor.stop();
+        rmSync(workspace, { recursive: true, force: true });
+      }
+    },
+    { timeout: 8_000 },
+  );
+
+  test(
+    "startup orphan sweep does not synthesize a terminal receipt without a persisted event log path",
+    async () => {
+      const workspace = createTestWorkspace("supervisor-registry-missing-event-log");
+      writeTestConfig(workspace, createOpsRuntimeConfig(), TEST_CONFIG_PATH);
+      const stateDir = join(workspace, "state");
+      const agentSessionId = "agent-registry-missing-event-log";
+      const warns: Array<{ message: string; meta: unknown }> = [];
+      mkdirSync(stateDir, { recursive: true });
+      writeFileSync(
+        join(stateDir, "children.json"),
+        JSON.stringify(
+          [
+            {
+              sessionId: "worker-registry-missing-event-log",
+              pid: 999999,
+              startedAt: Date.now() - 10_000,
+              agentSessionId,
+              cwd: workspace,
+            },
+          ],
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      const supervisor = new SessionSupervisor({
+        stateDir,
+        defaultCwd: workspace,
+        defaultConfigPath: TEST_CONFIG_PATH,
+        defaultManagedToolMode: "direct",
+        logger: {
+          debug: () => {},
+          info: () => {},
+          warn: (message, meta) => warns.push({ message, meta }),
+          error: () => {},
+          log: () => {},
+        },
+      });
+
+      try {
+        await supervisor.start();
+        await sleepMs(200);
+
+        const observer = new BrewvaRuntime({ cwd: workspace, configPath: TEST_CONFIG_PATH });
+        expect(
+          observer.inspect.events.query(agentSessionId, {
+            type: "session_shutdown",
+          }),
+        ).toHaveLength(0);
+        expect(warns).toContainEqual({
+          message: "cannot synthesize session terminal receipt without agent event log path",
+          meta: {
+            sessionId: "worker-registry-missing-event-log",
+            agentSessionId,
+            source: "session_supervisor_registry_recovery",
+          },
+        });
+      } finally {
+        await supervisor.stop();
+        rmSync(workspace, { recursive: true, force: true });
+      }
+    },
+    { timeout: 8_000 },
   );
 
   test(

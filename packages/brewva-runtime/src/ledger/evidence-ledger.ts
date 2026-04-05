@@ -89,8 +89,20 @@ export class EvidenceLedger {
       metadata,
     };
 
-    const prefix = this.fileHasContent ? "\n" : "";
-    writeFileSync(this.filePath, `${prefix}${JSON.stringify(row)}`, { flag: "a" });
+    this.prepareAppendTarget();
+    let serializedRow = `${this.fileHasContent ? "\n" : ""}${JSON.stringify(row)}`;
+    try {
+      writeFileSync(this.filePath, serializedRow, { flag: "a" });
+    } catch (error) {
+      if (!this.isMissingPathError(error)) {
+        throw error;
+      }
+      // Runtime-owned artifact directories can disappear during long-lived hosted sessions.
+      // Mirror the event store's append-time recovery instead of assuming constructor-time setup.
+      this.prepareAppendTarget();
+      serializedRow = `${this.fileHasContent ? "\n" : ""}${JSON.stringify(row)}`;
+      writeFileSync(this.filePath, serializedRow, { flag: "a" });
+    }
     this.fileHasContent = true;
 
     return row;
@@ -273,6 +285,17 @@ export class EvidenceLedger {
   private writeAllRows(rows: EvidenceLedgerRow[]): void {
     const content = rows.map((row) => JSON.stringify(row)).join("\n");
     writeFileAtomic(this.filePath, content);
+  }
+
+  private prepareAppendTarget(): void {
+    ensureDirForFile(this.filePath);
+    this.resetIndex();
+  }
+
+  private isMissingPathError(error: unknown): boolean {
+    return (
+      typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT"
+    );
   }
 
   private resetIndex(): void {

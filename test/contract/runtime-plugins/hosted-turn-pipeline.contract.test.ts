@@ -219,6 +219,18 @@ describe("hosted turn pipeline", () => {
     expect(handlers.has("session_shutdown")).toBe(true);
   });
 
+  test("rejects routingDefaultScopes when an existing runtime is supplied", () => {
+    const { api } = createMockRuntimePluginApi();
+    const { runtime } = createRuntimeFixture();
+
+    expect(() =>
+      createHostedTurnPipeline({
+        runtime,
+        routingDefaultScopes: ["core", "domain"],
+      })(api),
+    ).toThrow(/routingDefaultScopes must be applied when constructing BrewvaRuntime/);
+  });
+
   test("composes context through before_agent_start on the canonical hosted pipeline", async () => {
     const { api, handlers } = createMockRuntimePluginApi();
     const { runtime, calls } = createRuntimeFixture();

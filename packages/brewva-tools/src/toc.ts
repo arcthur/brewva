@@ -1,9 +1,11 @@
 import { existsSync, statSync } from "node:fs";
 import { basename, extname, relative } from "node:path";
+import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { LRUCache } from "lru-cache";
 import ts from "typescript";
+import { buildReadPathDiscoveryObservationPayload } from "./read-path-discovery.js";
 import {
   recordToolRuntimeEvent,
   registerToolRuntimeClearStateListener,
@@ -137,6 +139,30 @@ interface TocSearchSummary {
   skippedFiles: number;
   oversizedFiles: number;
   indexedBytes: number;
+}
+
+function recordTocReadPathObservation(input: {
+  runtime?: BrewvaBundledToolRuntime;
+  sessionId?: string;
+  baseCwd: string;
+  toolName: "toc_document" | "toc_search";
+  evidenceKind: string;
+  observedPaths: Iterable<string>;
+}): void {
+  const payload = buildReadPathDiscoveryObservationPayload({
+    baseCwd: input.baseCwd,
+    toolName: input.toolName,
+    evidenceKind: input.evidenceKind,
+    observedPaths: input.observedPaths,
+  });
+  if (!input.sessionId || !payload) {
+    return;
+  }
+  recordToolRuntimeEvent(input.runtime, {
+    sessionId: input.sessionId,
+    type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
+    payload,
+  });
 }
 
 type TocFileCache = LRUCache<string, TocCacheEntry>;
@@ -1061,6 +1087,15 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
       if (!stats.isFile()) {
         return failTextResult(`Error: Path is not a file: ${absolutePath}`);
       }
+      const sessionId = getToolSessionId(ctx);
+      recordTocReadPathObservation({
+        runtime: options?.runtime,
+        sessionId,
+        baseCwd: scope.baseCwd,
+        toolName: "toc_document",
+        evidenceKind: "direct_file_access",
+        observedPaths: [absolutePath],
+      });
       if (!supportsToc(absolutePath)) {
         return inconclusiveTextResult(
           [
@@ -1099,7 +1134,6 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
       }
 
       const signature = `${stats.mtimeMs}:${stats.size}`;
-      const sessionId = getToolSessionId(ctx);
       const source = readSourceTextWithCache({
         sessionId,
         absolutePath,
@@ -1337,6 +1371,14 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
 
       if (budgetExceeded) {
         const preview = allMatches.slice(0, Math.min(5, limit));
+        recordTocReadPathObservation({
+          runtime: options?.runtime,
+          sessionId,
+          baseCwd: scope.baseCwd,
+          toolName: "toc_search",
+          evidenceKind: "search_preview",
+          observedPaths: preview.map((match) => match.filePath),
+        });
         return inconclusiveTextResult(
           summarizeIndexBudgetExceeded({
             query: params.query.trim(),
@@ -1391,6 +1433,14 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
 
       if (broadQuery) {
         const preview = allMatches.slice(0, Math.min(5, limit));
+        recordTocReadPathObservation({
+          runtime: options?.runtime,
+          sessionId,
+          baseCwd: scope.baseCwd,
+          toolName: "toc_search",
+          evidenceKind: "search_preview",
+          observedPaths: preview.map((match) => match.filePath),
+        });
         return inconclusiveTextResult(
           summarizeBroadQuery({
             query: params.query.trim(),
@@ -1415,6 +1465,14 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
       }
 
       const matches = allMatches.slice(0, limit);
+      recordTocReadPathObservation({
+        runtime: options?.runtime,
+        sessionId,
+        baseCwd: scope.baseCwd,
+        toolName: "toc_search",
+        evidenceKind: "search_match",
+        observedPaths: matches.map((match) => match.filePath),
+      });
       return textResult(
         summarizeSearch(params.query.trim(), matches, searchSummary, scope.baseCwd),
         {

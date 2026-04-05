@@ -157,7 +157,10 @@ Skill discovery and deliberation are now separated from kernel commitment:
 5. Runtime does not run adaptive inference loops or online model reranking in the kernel path.
 
 Routing is disabled by default (`skills.routing.enabled=false`). When enabled,
-`skills.routing.scopes` is the single explicit routing allowlist.
+`skills.routing.scopes` is the single explicit routing allowlist. Interactive
+front doors may opt into `routingDefaultScopes=["core", "domain"]`; that only
+turns routing on when config omitted `skills.routing.enabled`, and it preserves
+explicit scope lists when they are present.
 
 Interactive hosted turns still keep activation explicit, but the control plane
 now derives a skill-first recommendation before ordinary tool work:

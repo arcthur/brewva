@@ -5,6 +5,7 @@ import {
   BrewvaRuntime,
   DEFAULT_BREWVA_CONFIG,
   loadBrewvaConfig,
+  loadBrewvaConfigResolution,
   resolveGlobalBrewvaConfigPath,
 } from "@brewva/brewva-runtime";
 import { createTestWorkspace } from "../../helpers/workspace.js";
@@ -206,6 +207,118 @@ describe("Brewva config loader normalization", () => {
 
     const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
     expect(loaded.skills.routing.scopes).toEqual(["domain", "operator"]);
+  });
+
+  test("tracks explicit routing intent separately from normalized routing defaults", () => {
+    const workspace = createTestWorkspace("routing-intent-metadata");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          skills: {
+            routing: {
+              scopes: ["operator"],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const loaded = loadBrewvaConfigResolution({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    });
+    expect(loaded.config.skills.routing.enabled).toBe(false);
+    expect(loaded.config.skills.routing.scopes).toEqual(["operator"]);
+    expect(loaded.metadata.skills.routing.enabledExplicit).toBe(false);
+    expect(loaded.metadata.skills.routing.scopesExplicit).toBe(true);
+  });
+
+  test("routingDefaultScopes enables routing when config leaves enabled unset", () => {
+    const workspace = createTestWorkspace("routing-default-scopes-enable-when-unset");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          skills: {
+            routing: {
+              scopes: ["operator"],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+      routingDefaultScopes: ["core", "domain"],
+    });
+    expect(runtime.config.skills.routing.enabled).toBe(true);
+    expect(runtime.config.skills.routing.scopes).toEqual(["operator"]);
+  });
+
+  test("routingDefaultScopes respects explicit routing disable", () => {
+    const workspace = createTestWorkspace("routing-default-scopes-explicit-disable");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          skills: {
+            routing: {
+              enabled: false,
+              scopes: ["operator"],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+      routingDefaultScopes: ["core", "domain"],
+    });
+    expect(runtime.config.skills.routing.enabled).toBe(false);
+    expect(runtime.config.skills.routing.scopes).toEqual(["operator"]);
+  });
+
+  test("routingScopes remains a hard override over explicit routing disable", () => {
+    const workspace = createTestWorkspace("routing-hard-override-explicit-disable");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          skills: {
+            routing: {
+              enabled: false,
+              scopes: ["operator"],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+      routingScopes: ["meta"],
+      routingDefaultScopes: ["core", "domain"],
+    });
+    expect(runtime.config.skills.routing.enabled).toBe(true);
+    expect(runtime.config.skills.routing.scopes).toEqual(["meta"]);
   });
 
   test("accepts JSONC comments and trailing commas in config files", () => {

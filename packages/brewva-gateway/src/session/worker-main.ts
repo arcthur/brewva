@@ -1,5 +1,6 @@
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { recordRuntimeEvent, resolveRuntimeEventLogPath } from "@brewva/brewva-runtime/internal";
 import { createRuntimeTurnClockStore } from "../runtime-plugins/runtime-turn-clock.js";
+import { recordAbnormalSessionShutdown } from "../utils/runtime.js";
 import { collectSessionPromptOutput } from "./collect-output.js";
 import { createGatewaySession, type GatewaySessionResult } from "./create-session.js";
 import { applySchedulePromptTrigger } from "./schedule-trigger.js";
@@ -150,7 +151,17 @@ function log(level: WorkerLogLevel, message: string, fields?: Record<string, unk
   });
 }
 
-async function shutdown(exitCode = 0, reason = "shutdown"): Promise<void> {
+function shouldRecordAbnormalShutdown(reason: string): boolean {
+  return (
+    reason === "init_failed" ||
+    reason === "parent_disconnected" ||
+    reason === "parent_pid_mismatch" ||
+    reason === "uncaught_exception" ||
+    reason === "unhandled_rejection"
+  );
+}
+
+async function shutdown(exitCode = 0, reason = "shutdown", shutdownError?: unknown): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
 
@@ -166,13 +177,23 @@ async function shutdown(exitCode = 0, reason = "shutdown"): Promise<void> {
   if (sessionResult) {
     const runtime = sessionResult.runtime;
     const agentSessionId = sessionResult.session.sessionManager.getSessionId();
+    if (shouldRecordAbnormalShutdown(reason)) {
+      recordAbnormalSessionShutdown(runtime, {
+        sessionId: agentSessionId,
+        source: reason,
+        error: shutdownError,
+      });
+    }
     const interruptReason =
       reason === "bridge_timeout"
         ? ("timeout_interrupt" as const)
         : reason === "sigterm" || reason === "sigint"
           ? ("signal_interrupt" as const)
           : null;
-    const finalizeInterruptTransition = (status: "completed" | "failed", error?: string): void => {
+    const finalizeInterruptTransition = (
+      status: "completed" | "failed",
+      transitionError?: string,
+    ): void => {
       if (!interruptReason) {
         return;
       }
@@ -181,7 +202,7 @@ async function shutdown(exitCode = 0, reason = "shutdown"): Promise<void> {
         reason: interruptReason,
         status,
         family: "interrupt",
-        error: error?.trim().length ? error : undefined,
+        error: transitionError?.trim().length ? transitionError : undefined,
       });
     };
     if (interruptReason === "timeout_interrupt") {
@@ -206,8 +227,11 @@ async function shutdown(exitCode = 0, reason = "shutdown"): Promise<void> {
     try {
       await sessionResult.session.abort();
       finalizeInterruptTransition("completed");
-    } catch (error) {
-      finalizeInterruptTransition("failed", error instanceof Error ? error.message : String(error));
+    } catch (abortError) {
+      finalizeInterruptTransition(
+        "failed",
+        abortError instanceof Error ? abortError.message : String(abortError),
+      );
     }
     try {
       sessionResult.session.dispose();
@@ -272,6 +296,7 @@ async function handleInit(
       managedToolMode: message.payload.managedToolMode,
     });
     const agentSessionId = sessionResult.session.sessionManager.getSessionId();
+    const agentEventLogPath = resolveRuntimeEventLogPath(sessionResult.runtime, agentSessionId);
     const watchdogOverrides = workerTestHarness.watchdog;
     if (watchdogOverrides.taskGoal) {
       sessionResult.runtime.authority.task.setSpec(agentSessionId, {
@@ -296,6 +321,7 @@ async function handleInit(
       payload: {
         requestedSessionId,
         agentSessionId,
+        agentEventLogPath,
       },
     });
 
@@ -311,7 +337,7 @@ async function handleInit(
       ok: false,
       error: error instanceof Error ? error.message : String(error),
     });
-    await shutdown(1, "init_failed");
+    await shutdown(1, "init_failed", error);
   }
 }
 
@@ -632,4 +658,20 @@ process.on("SIGTERM", () => {
 
 process.on("SIGINT", () => {
   void shutdown(0, "sigint");
+});
+
+process.on("uncaughtException", (error) => {
+  log("error", "worker uncaught exception", {
+    requestedSessionId,
+    error: error instanceof Error ? error.message : String(error),
+  });
+  void shutdown(1, "uncaught_exception", error);
+});
+
+process.on("unhandledRejection", (reason) => {
+  log("error", "worker unhandled rejection", {
+    requestedSessionId,
+    error: reason instanceof Error ? reason.message : String(reason),
+  });
+  void shutdown(1, "unhandled_rejection", reason);
 });

@@ -23,6 +23,20 @@ export interface NormalizeExplicitBrewvaConfigOptions {
   sourceLabel?: string;
 }
 
+export interface BrewvaConfigMetadata {
+  skills: {
+    routing: {
+      enabledExplicit: boolean;
+      scopesExplicit: boolean;
+    };
+  };
+}
+
+export interface BrewvaConfigResolution {
+  config: BrewvaConfig;
+  metadata: BrewvaConfigMetadata;
+}
+
 export class BrewvaConfigLoadError extends Error {
   readonly code: BrewvaConfigLoadErrorCode;
   readonly configPath: string;
@@ -37,6 +51,45 @@ export class BrewvaConfigLoadError extends Error {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function createDefaultBrewvaConfigMetadata(): BrewvaConfigMetadata {
+  return {
+    skills: {
+      routing: {
+        enabledExplicit: false,
+        scopesExplicit: false,
+      },
+    },
+  };
+}
+
+function collectBrewvaConfigMetadata(config: unknown): BrewvaConfigMetadata {
+  const metadata = createDefaultBrewvaConfigMetadata();
+  if (!isRecord(config)) {
+    return metadata;
+  }
+
+  const skills = isRecord(config.skills) ? config.skills : null;
+  const routing = skills && isRecord(skills.routing) ? skills.routing : null;
+  metadata.skills.routing.enabledExplicit = Boolean(routing && Object.hasOwn(routing, "enabled"));
+  metadata.skills.routing.scopesExplicit = Boolean(routing && Object.hasOwn(routing, "scopes"));
+  return metadata;
+}
+
+function mergeBrewvaConfigMetadata(
+  current: BrewvaConfigMetadata,
+  next: BrewvaConfigMetadata,
+): BrewvaConfigMetadata {
+  return {
+    skills: {
+      routing: {
+        enabledExplicit:
+          current.skills.routing.enabledExplicit || next.skills.routing.enabledExplicit,
+        scopesExplicit: current.skills.routing.scopesExplicit || next.skills.routing.scopesExplicit,
+      },
+    },
+  };
 }
 
 function resolveConfigRelativeSkillRoots(
@@ -148,12 +201,22 @@ export function normalizeExplicitBrewvaConfig(
   config: unknown,
   options: NormalizeExplicitBrewvaConfigOptions = {},
 ): BrewvaConfig {
+  return normalizeExplicitBrewvaConfigResolution(config, options).config;
+}
+
+export function normalizeExplicitBrewvaConfigResolution(
+  config: unknown,
+  options: NormalizeExplicitBrewvaConfigOptions = {},
+): BrewvaConfigResolution {
   const sourceLabel = options.sourceLabel ?? "<direct runtime config>";
   // Preserve explicit migration/prohibition diagnostics already encoded in the
   // normalizer before schema validation rejects unknown keys generically.
   normalizeBrewvaConfig(config, DEFAULT_BREWVA_CONFIG);
   const validated = validateConfigObject(config, sourceLabel);
-  return normalizeBrewvaConfig(validated as Partial<BrewvaConfig>, DEFAULT_BREWVA_CONFIG);
+  return {
+    config: normalizeBrewvaConfig(validated as Partial<BrewvaConfig>, DEFAULT_BREWVA_CONFIG),
+    metadata: collectBrewvaConfigMetadata(validated),
+  };
 }
 
 function readConfigFile(configPath: string): Partial<BrewvaConfig> | undefined {
@@ -176,6 +239,12 @@ function readConfigFile(configPath: string): Partial<BrewvaConfig> | undefined {
 }
 
 export function loadBrewvaConfig(options: LoadConfigOptions = {}): BrewvaConfig {
+  return loadBrewvaConfigResolution(options).config;
+}
+
+export function loadBrewvaConfigResolution(
+  options: LoadConfigOptions = {},
+): BrewvaConfigResolution {
   const cwd = resolve(options.cwd ?? process.cwd());
   const defaults = structuredClone(DEFAULT_BREWVA_CONFIG);
 
@@ -184,11 +253,16 @@ export function loadBrewvaConfig(options: LoadConfigOptions = {}): BrewvaConfig 
     : [resolveGlobalBrewvaConfigPath(), resolveProjectBrewvaConfigPath(cwd)];
 
   let merged = defaults;
+  let metadata = createDefaultBrewvaConfigMetadata();
   for (const configPath of configPaths) {
     const parsed = readConfigFile(configPath);
     if (!parsed) continue;
     merged = deepMerge(merged, parsed);
+    metadata = mergeBrewvaConfigMetadata(metadata, collectBrewvaConfigMetadata(parsed));
   }
 
-  return normalizeBrewvaConfig(merged, DEFAULT_BREWVA_CONFIG);
+  return {
+    config: normalizeBrewvaConfig(merged, DEFAULT_BREWVA_CONFIG),
+    metadata,
+  };
 }

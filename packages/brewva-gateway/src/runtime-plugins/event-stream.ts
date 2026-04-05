@@ -5,6 +5,7 @@ import {
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { resolveBrewvaToolExecutionTraits } from "@brewva/brewva-tools";
 import type { ExtensionAPI, ToolDefinition } from "@mariozechner/pi-coding-agent";
+import { ensureSessionShutdownRecorded } from "../utils/runtime.js";
 import { createRuntimeTurnClockStore, type RuntimeTurnClockStore } from "./runtime-turn-clock.js";
 
 type MessageHealth = {
@@ -424,10 +425,7 @@ export function registerEventStream(
     flushPendingToolResults(sessionId);
     flushActiveToolExecutions(sessionId, "cancelled_by_shutdown");
     clearPendingInterruptFlush(sessionId);
-    recordRuntimeEvent(runtime, {
-      sessionId,
-      type: "session_shutdown",
-    });
+    ensureSessionShutdownRecorded(runtime, sessionId);
     lastAssistantTextBySession.delete(sessionId);
     assistantWindowBySession.delete(sessionId);
     observedToolCallsBySession.delete(sessionId);

@@ -54,6 +54,7 @@ export type WorkerToParentMessage =
       payload: {
         requestedSessionId: string;
         agentSessionId: string;
+        agentEventLogPath: string;
       };
     }
   | {

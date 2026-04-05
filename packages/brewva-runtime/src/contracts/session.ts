@@ -11,6 +11,7 @@ export interface CreateBrewvaSessionOptions {
   model?: string;
   agentId?: string;
   routingScopes?: SkillRoutingScope[];
+  routingDefaultScopes?: SkillRoutingScope[];
   managedToolMode?: ManagedToolMode;
 }
 

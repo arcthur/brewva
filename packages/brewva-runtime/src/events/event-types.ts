@@ -72,6 +72,9 @@ export const TOOL_CALL_EVENT_TYPE = "tool_call" as const;
 export const TOOL_CALL_BLOCKED_EVENT_TYPE = "tool_call_blocked" as const;
 export const TOOL_CALL_MARKED_EVENT_TYPE = "tool_call_marked" as const;
 export const TOOL_CONTRACT_WARNING_EVENT_TYPE = "tool_contract_warning" as const;
+export const TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE = "tool_read_path_gate_armed" as const;
+export const TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE =
+  "tool_read_path_discovery_observed" as const;
 export const TOOL_EXECUTION_END_EVENT_TYPE = "tool_execution_end" as const;
 export const TOOL_EXECUTION_START_EVENT_TYPE = "tool_execution_start" as const;
 export const TOOL_OUTPUT_SEARCH_EVENT_TYPE = "tool_output_search" as const;
@@ -209,6 +212,8 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   TOOL_CALL_BLOCKED_EVENT_TYPE,
   TOOL_CALL_MARKED_EVENT_TYPE,
   TOOL_CONTRACT_WARNING_EVENT_TYPE,
+  TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
+  TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
   TOOL_EXECUTION_END_EVENT_TYPE,
   TOOL_EXECUTION_START_EVENT_TYPE,
   TOOL_OUTPUT_SEARCH_EVENT_TYPE,

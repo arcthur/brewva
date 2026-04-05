@@ -37,7 +37,7 @@ type RuntimeInternals = {
     };
   };
   eventStore: {
-    fileHasContent: Map<string, boolean>;
+    eventCacheByFilePath: Map<string, unknown>;
   };
   turnReplay: {
     hasSession: (session: string) => boolean;
@@ -103,7 +103,8 @@ describe("session state cleanup", () => {
     expect(internals.contextBudget.sessions.has(sessionId)).toBe(true);
     expect(internals.costTracker.sessions.has(sessionId)).toBe(true);
     expect(internals.verificationGate.stateStore.sessions.has(sessionId)).toBe(true);
-    expect(internals.eventStore.fileHasContent.size).toBe(1);
+    expect(runtime.inspect.events.list(sessionId, { last: 1 })).toHaveLength(1);
+    expect(internals.eventStore.eventCacheByFilePath.size).toBe(1);
 
     runtime.maintain.session.clearState(sessionId);
 
@@ -114,7 +115,7 @@ describe("session state cleanup", () => {
     expect(internals.verificationGate.stateStore.sessions.has(sessionId)).toBe(false);
     expect(internals.parallel.sessions.has(sessionId)).toBe(false);
     expect(internals.parallelResults.sessions.has(sessionId)).toBe(false);
-    expect(internals.eventStore.fileHasContent.size).toBe(0);
+    expect(internals.eventStore.eventCacheByFilePath.size).toBe(0);
   });
 
   test("keeps replay cache hot and incrementally updates task replay view", async () => {

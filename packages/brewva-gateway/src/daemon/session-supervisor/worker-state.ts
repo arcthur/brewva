@@ -46,11 +46,11 @@ export interface WorkerHandle {
   startedAt: number;
   lastActivityAt: number;
   cwd?: string;
-  configPath?: string;
   model?: string;
   agentId?: string;
   managedToolMode?: ManagedToolMode;
   requestedAgentSessionId?: string;
+  agentEventLogPath?: string;
   pending: Map<string, PendingRequest>;
   pendingTurns: Map<string, PendingTurn>;
   turnQueue: QueuedTurn[];
@@ -66,6 +66,12 @@ export interface WorkerHandle {
 export interface WorkerReadyPayload {
   requestedSessionId: string;
   agentSessionId: string;
+  agentEventLogPath: string;
+}
+
+export interface WorkerExitInfo {
+  code: number | null;
+  signal: NodeJS.Signals | null;
 }
 
 export type LoggerLike = Pick<StructuredLogger, "debug" | "info" | "warn" | "error" | "log">;
@@ -76,7 +82,7 @@ export interface WorkerRpcControllerDeps {
   onWorkerEvent?: (event: Extract<WorkerToParentMessage, { kind: "event" }>) => void;
   touchActivity(handle: WorkerHandle): void;
   onTurnQueueReady(handle: WorkerHandle): void;
-  onWorkerExited(handle: WorkerHandle): void;
+  onWorkerExited(handle: WorkerHandle, exit: WorkerExitInfo): void;
 }
 
 export interface TurnQueueControllerDeps {
@@ -133,6 +139,9 @@ export function toRegistryEntries(handles: Iterable<WorkerHandle>): ChildRegistr
       sessionId: handle.sessionId,
       pid: handle.child.pid ?? 0,
       startedAt: handle.startedAt,
+      agentSessionId: handle.requestedAgentSessionId,
+      agentEventLogPath: handle.agentEventLogPath,
+      cwd: handle.cwd,
     }))
     .filter((row) => row.pid > 0);
 }

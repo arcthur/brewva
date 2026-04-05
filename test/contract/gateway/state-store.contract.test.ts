@@ -66,6 +66,46 @@ describe("gateway file state store", () => {
     }
   });
 
+  test("given children registry rows, when reading registry, then agent event log path is preserved and removed config metadata is ignored", () => {
+    const root = mkdtempSync(join(tmpdir(), "brewva-state-store-"));
+    try {
+      const store = new FileGatewayStateStore();
+      const registryPath = join(root, "children.json");
+      writeFileSync(
+        registryPath,
+        JSON.stringify(
+          [
+            {
+              sessionId: "s1",
+              pid: 1001,
+              startedAt: 123,
+              agentSessionId: "agent-s1",
+              agentEventLogPath: "/tmp/agent-s1.jsonl",
+              cwd: "/tmp/workspace",
+              configPath: "/tmp/removed-config.json",
+            },
+          ],
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      expect(store.readChildrenRegistry(registryPath)).toEqual([
+        {
+          sessionId: "s1",
+          pid: 1001,
+          startedAt: 123,
+          agentSessionId: "agent-s1",
+          agentEventLogPath: "/tmp/agent-s1.jsonl",
+          cwd: "/tmp/workspace",
+        },
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("given vault-backed token storage, when writing token, then pointer file is persisted and token resolves through the vault", () => {
     const root = mkdtempSync(join(tmpdir(), "brewva-state-store-vault-"));
     const restoreEnv = patchProcessEnv({

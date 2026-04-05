@@ -95,8 +95,9 @@ Relevant implementation:
 ## 8) Config Immutability Invariant
 
 - `runtime.config` must be deep-readonly after construction.
-- constructor-time overrides such as `routingScopes` must be applied before the
-  runtime is assembled instead of by post-construction mutation.
+- constructor-time routing policies such as `routingScopes` and
+  `routingDefaultScopes` must be applied before the runtime is assembled instead
+  of by post-construction mutation.
 
 Relevant implementation:
 

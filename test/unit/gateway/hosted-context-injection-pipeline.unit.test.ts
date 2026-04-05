@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { type ContextBudgetUsage, type ContextCompactionGateStatus } from "@brewva/brewva-runtime";
+import {
+  TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
+  type ContextBudgetUsage,
+  type ContextCompactionGateStatus,
+} from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { createHostedContextInjectionPipeline } from "../../../packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.js";
 import { createHostedContextTelemetry } from "../../../packages/brewva-gateway/src/runtime-plugins/hosted-context-telemetry.js";
@@ -203,6 +207,165 @@ describe("hosted context injection pipeline", () => {
     expect(result.message.content).toContain("[RecoveryWorkingSet]");
     expect(result.message.content).toContain("latest_reason: provider_fallback_retry");
     expect(result.message.content).toContain("task_goal: Continue the interrupted task");
+  });
+
+  test("adds a read path recovery block after repeated missing-path read failures", async () => {
+    const runtime = createRuntimeFixture({
+      context: {
+        observeUsage: () => undefined,
+        getCompactionGateStatus: () => ({
+          required: false,
+          reason: null,
+          pressure: {
+            level: "low",
+            usageRatio: 0.2,
+            hardLimitRatio: 0.95,
+            compactionThresholdRatio: 0.8,
+          },
+          recentCompaction: false,
+          windowTurns: 0,
+          lastCompactionTurn: null,
+          turnsSinceCompaction: null,
+        }),
+        getPendingCompactionReason: () => null,
+        buildInjection: async () => ({
+          text: "",
+          entries: [],
+          accepted: false,
+          originalTokens: 0,
+          finalTokens: 0,
+          truncated: false,
+        }),
+      },
+    });
+    Object.assign(runtime.inspect.skills, {
+      getLoadReport: () => ({
+        loadedSkills: [],
+        routingEnabled: true,
+        routingScopes: ["core", "domain"],
+        routableSkills: [],
+        hiddenSkills: [],
+        overlaySkills: [],
+      }),
+    });
+    const sessionId = "s-read-path-recovery";
+    for (const path of ["src/ghost-a.ts", "src/ghost-b.ts"]) {
+      recordRuntimeEvent(runtime, {
+        sessionId,
+        type: "tool_result_recorded",
+        payload: {
+          toolName: "read",
+          verdict: "fail",
+          failureContext: {
+            args: { path },
+            outputText: `ENOENT: no such file or directory, open '${path}'`,
+            failureClass: "execution",
+            turn: 1,
+          },
+        },
+      });
+    }
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
+      payload: {
+        consecutiveMissingPathFailures: 2,
+        failedPaths: ["src/ghost-b.ts", "src/ghost-a.ts"],
+      },
+    });
+
+    const telemetry = createHostedContextTelemetry(runtime);
+    const { api } = createMockRuntimePluginApi();
+    const pipeline = createHostedContextInjectionPipeline(api, runtime, telemetry, {
+      getTurnIndex: () => 4,
+      setLastRuntimeGateRequired: () => undefined,
+    });
+
+    const result = await pipeline.beforeAgentStart({
+      sessionId,
+      sessionManager: {
+        getLeafId: () => "leaf-read-path-recovery",
+      },
+      prompt: "继续排查为什么 read 一直失败。",
+      systemPrompt: "base prompt",
+      usage: {
+        tokens: 100,
+        contextWindow: 4000,
+        percent: 0.025,
+      },
+    });
+
+    expect(result.message.content).toContain("[Brewva Read Path Recovery]");
+    expect(result.message.content).toContain("src/ghost-a.ts");
+    expect(result.message.content).toContain("src/ghost-b.ts");
+  });
+
+  test("surfaces skill routing availability when skills are loaded but none are auto-routable", async () => {
+    const runtime = createRuntimeFixture({
+      context: {
+        observeUsage: () => undefined,
+        getCompactionGateStatus: () => ({
+          required: false,
+          reason: null,
+          pressure: {
+            level: "low",
+            usageRatio: 0.2,
+            hardLimitRatio: 0.95,
+            compactionThresholdRatio: 0.8,
+          },
+          recentCompaction: false,
+          windowTurns: 0,
+          lastCompactionTurn: null,
+          turnsSinceCompaction: null,
+        }),
+        getPendingCompactionReason: () => null,
+        buildInjection: async () => ({
+          text: "",
+          entries: [],
+          accepted: false,
+          originalTokens: 0,
+          finalTokens: 0,
+          truncated: false,
+        }),
+      },
+    });
+    Object.assign(runtime.inspect.skills, {
+      getLoadReport: () => ({
+        loadedSkills: ["repository-analysis", "debugging"],
+        routingEnabled: false,
+        routingScopes: ["core", "domain"],
+        routableSkills: [],
+        hiddenSkills: ["repository-analysis", "debugging"],
+        overlaySkills: [],
+      }),
+      list: () => [],
+      getActive: () => undefined,
+    });
+
+    const telemetry = createHostedContextTelemetry(runtime);
+    const { api } = createMockRuntimePluginApi();
+    const pipeline = createHostedContextInjectionPipeline(api, runtime, telemetry, {
+      getTurnIndex: () => 5,
+      setLastRuntimeGateRequired: () => undefined,
+    });
+
+    const result = await pipeline.beforeAgentStart({
+      sessionId: "s-skill-routing-availability",
+      sessionManager: {
+        getLeafId: () => "leaf-skill-routing-availability",
+      },
+      prompt: "继续分析仓库。",
+      systemPrompt: "base prompt",
+      usage: {
+        tokens: 100,
+        contextWindow: 4000,
+        percent: 0.025,
+      },
+    });
+
+    expect(result.message.content).toContain("[Brewva Skill Routing Availability]");
+    expect(result.message.content).toContain("automatic skill routing is disabled");
+    expect(result.message.content).toContain("repository-analysis");
   });
 
   test("injects a skill-first policy block and recommendation details for strong matches", async () => {

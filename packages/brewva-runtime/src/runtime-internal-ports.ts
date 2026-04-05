@@ -32,6 +32,7 @@ type InternalRuntimeMethodGroups = {
   recoveryWal: InternalRecoveryWalPort;
   events: {
     record: RuntimeRecordEvent;
+    resolveLogPath(sessionId: string): string;
   };
 };
 
@@ -79,6 +80,7 @@ export interface BrewvaSchedulerIngressPort {
 
 export interface BrewvaRuntimeInternalEventAppendPort {
   record: RuntimeRecordEvent;
+  resolveLogPath(sessionId: string): string;
 }
 
 export interface BrewvaToolRuntimeInternalPort {
@@ -115,9 +117,14 @@ export function createRuntimeInternalEventAppendPort(
   runtime: BrewvaRuntime | BrewvaHostedRuntimePort,
 ): BrewvaRuntimeInternalEventAppendPort {
   const methodGroups = requireRuntimeMethodGroups(runtime as RuntimeMethodGroupsCarrier);
-  return {
-    record: methodGroups.events.record,
-  };
+  return bindMethods(methodGroups.events, ["record", "resolveLogPath"] as const);
+}
+
+export function resolveRuntimeEventLogPath(
+  runtime: BrewvaRuntime | BrewvaHostedRuntimePort,
+  sessionId: string,
+): string {
+  return createRuntimeInternalEventAppendPort(runtime).resolveLogPath(sessionId);
 }
 
 export function createToolRuntimeInternalPort(

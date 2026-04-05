@@ -188,6 +188,11 @@ export { createGitStatusTool, createGitDiffTool, createGitLogTool } from "./git-
 export { createExecTool } from "./exec.js";
 export { createProcessTool } from "./process.js";
 export { createReadSpansTool } from "./read-spans.js";
+export {
+  buildReadPathDiscoveryObservationPayload,
+  collectObservedPathsFromLocationLines,
+  type ReadPathDiscoveryObservationPayload,
+} from "./read-path-discovery.js";
 export { createCostViewTool, formatCostViewText } from "./cost-view.js";
 export { createObsQueryTool } from "./observability/obs-query.js";
 export { createObsSloAssertTool } from "./observability/obs-slo-assert.js";

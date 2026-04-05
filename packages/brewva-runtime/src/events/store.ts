@@ -86,6 +86,30 @@ function freezeEventRecord(row: BrewvaEventRecord): BrewvaEventRecord {
   });
 }
 
+function buildFrozenEventRecord<TPayload extends object>(
+  input: EventAppendInput<TPayload>,
+): BrewvaEventRecord {
+  const timestamp = input.timestamp ?? Date.now();
+  return freezeEventRecord({
+    id: `evt_${timestamp}_${randomUUID()}`,
+    sessionId: input.sessionId,
+    type: input.type,
+    timestamp,
+    turn: input.turn,
+    payload: normalizeJsonRecord(
+      input.payload ? (redactUnknown(input.payload) as Record<string, unknown>) : undefined,
+    ),
+  });
+}
+
+function appendFrozenEventRecordToFilePath(filePath: string, row: BrewvaEventRecord): string {
+  ensureDirForFile(filePath);
+  const prefix = existsSync(filePath) && statSync(filePath).size > 0 ? "\n" : "";
+  const appended = `${prefix}${JSON.stringify(row)}`;
+  writeFileSync(filePath, appended, { flag: "a" });
+  return appended;
+}
+
 function parseEventRecord(line: string): BrewvaEventRecord | null {
   try {
     const value = JSON.parse(line) as BrewvaEventRecord;
@@ -108,10 +132,70 @@ function parseEventRecord(line: string): BrewvaEventRecord | null {
   return null;
 }
 
+export function resolveBrewvaEventLogPath(eventsDir: string, sessionId: string): string {
+  const encoded = encodeSessionIdForFileName(sessionId);
+  return resolve(eventsDir, `${ENCODED_SESSION_PREFIX}${encoded}.jsonl`);
+}
+
+export function logContainsBrewvaEventType(
+  filePath: string,
+  input: {
+    sessionId: string;
+    type: string;
+  },
+): boolean {
+  if (!existsSync(filePath)) {
+    return false;
+  }
+
+  try {
+    const text = readFileSync(filePath, "utf8");
+    for (const line of text.split("\n")) {
+      if (!line.trim()) {
+        continue;
+      }
+      const event = parseEventRecord(line);
+      if (!event) {
+        continue;
+      }
+      if (event.sessionId === input.sessionId && event.type === input.type) {
+        return true;
+      }
+    }
+  } catch {
+    return false;
+  }
+
+  return false;
+}
+
+export function appendBrewvaEventRecordToLog<TPayload extends object>(
+  filePath: string,
+  input: EventAppendInput<TPayload>,
+): BrewvaEventRecord {
+  const row = buildFrozenEventRecord(input);
+  appendFrozenEventRecordToFilePath(filePath, row);
+  return row;
+}
+
+export function appendBrewvaEventRecordToLogIfMissing<TPayload extends object>(
+  filePath: string,
+  input: EventAppendInput<TPayload>,
+): BrewvaEventRecord | undefined {
+  if (
+    logContainsBrewvaEventType(filePath, {
+      sessionId: input.sessionId,
+      type: input.type,
+    })
+  ) {
+    return undefined;
+  }
+  return appendBrewvaEventRecordToLog(filePath, input);
+}
+
 export class BrewvaEventStore {
   private readonly enabled: boolean;
   private readonly dir: string;
-  private readonly fileHasContent = new Map<string, boolean>();
   private readonly eventCacheByFilePath = new Map<string, EventFileCache>();
   private readonly integrityIssuesByFilePath = new Map<string, IntegrityIssue[]>();
 
@@ -128,31 +212,12 @@ export class BrewvaEventStore {
   ): BrewvaEventRecord | undefined {
     if (!this.enabled) return undefined;
 
-    const timestamp = input.timestamp ?? Date.now();
-    const id = `evt_${timestamp}_${randomUUID()}`;
-    const row: BrewvaEventRecord = {
-      id,
-      sessionId: input.sessionId,
-      type: input.type,
-      timestamp,
-      turn: input.turn,
-      payload: normalizeJsonRecord(
-        input.payload ? (redactUnknown(input.payload) as Record<string, unknown>) : undefined,
-      ),
-    };
-    const frozenRow = freezeEventRecord(row);
-
+    const frozenRow = buildFrozenEventRecord(input);
     const filePath = this.filePathForSession(frozenRow.sessionId);
     if (!existsSync(filePath)) {
-      this.fileHasContent.set(filePath, false);
       this.eventCacheByFilePath.delete(filePath);
     }
-    ensureDirForFile(filePath);
-    const prefix = this.hasContent(filePath) ? "\n" : "";
-    const serialized = JSON.stringify(frozenRow);
-    const appended = `${prefix}${serialized}`;
-    writeFileSync(filePath, appended, { flag: "a" });
-    this.fileHasContent.set(filePath, true);
+    const appended = appendFrozenEventRecordToFilePath(filePath, frozenRow);
     this.trackAppendedRow(filePath, frozenRow, appended);
     return frozenRow;
   }
@@ -233,7 +298,6 @@ export class BrewvaEventStore {
 
   clearSessionCache(sessionId: string): void {
     const filePath = this.filePathForSession(sessionId);
-    this.fileHasContent.delete(filePath);
     this.eventCacheByFilePath.delete(filePath);
     this.integrityIssuesByFilePath.delete(filePath);
   }
@@ -277,6 +341,10 @@ export class BrewvaEventStore {
       .map(([sessionId]) => sessionId);
   }
 
+  getLogPath(sessionId: string): string {
+    return this.filePathForSession(sessionId);
+  }
+
   private getCache(sessionId: string): EventFileCache {
     if (!this.enabled) {
       return {
@@ -292,8 +360,7 @@ export class BrewvaEventStore {
   }
 
   private filePathForSession(sessionId: string): string {
-    const encoded = encodeSessionIdForFileName(sessionId);
-    return resolve(this.dir, `${ENCODED_SESSION_PREFIX}${encoded}.jsonl`);
+    return resolveBrewvaEventLogPath(this.dir, sessionId);
   }
 
   private syncCacheForFile(filePath: string): EventFileCache {
@@ -523,24 +590,6 @@ export class BrewvaEventStore {
       return null;
     }
     return Math.max(0, Math.floor(value));
-  }
-
-  private hasContent(filePath: string): boolean {
-    const cached = this.fileHasContent.get(filePath);
-    if (cached !== undefined) {
-      return cached;
-    }
-
-    let hasData = false;
-    if (existsSync(filePath)) {
-      try {
-        hasData = statSync(filePath).size > 0;
-      } catch {
-        hasData = false;
-      }
-    }
-    this.fileHasContent.set(filePath, hasData);
-    return hasData;
   }
 
   private sessionIdForFilePath(filePath: string): string | undefined {

@@ -33,9 +33,12 @@ human-authored files, including JavaScript-style comments and trailing commas.
 Some runtime choices are intentionally constructor inputs rather than persisted
 config-file keys:
 
-- `new BrewvaRuntime({ routingScopes })` overrides `skills.routing.scopes`
-  before normalization and deep-freeze. This is the supported host/session path
-  for routing-scope narrowing.
+- `new BrewvaRuntime({ routingScopes })` is a hard override. It enables skill
+  routing and replaces `skills.routing.scopes` before deep-freeze.
+- `new BrewvaRuntime({ routingDefaultScopes })` is a front-door default policy.
+  It enables routing only when config omitted `skills.routing.enabled`. If config
+  already supplied `skills.routing.scopes`, those explicit scopes are preserved;
+  otherwise the provided default scopes are applied.
 - `runtime.config` is deep-readonly after construction. Hosted paths must pass
   routing scope changes during construction instead of mutating
   `runtime.config` afterward.
@@ -48,6 +51,9 @@ Current front-door defaults:
 
 - CLI-owned runtimes use `personal`
 - gateway/hosted/channel runtimes use `team`
+- interactive hosted front doors use `routingDefaultScopes=["core", "domain"]`
+  so skill-first routing is available by default without overriding an explicit
+  `skills.routing.enabled` decision from config
 - raw runtimes without a governance port fail closed by opening the replayable
   operator desk for approval-bound effectful actions
 
@@ -80,8 +86,9 @@ Kernel admission now happens through proposal submission:
 - `DecisionReceipt.decision = accept | reject | defer`
 
 `skills.routing.enabled=false` keeps skills loadable but disables default
-routing-proposal surfaces. Explicit `routingScopes` overrides or
-direct `skill_load` usage can still activate skills.
+routing-proposal surfaces. `routingDefaultScopes` does not override that
+explicit disable. Hard `routingScopes` overrides or direct `skill_load` usage
+can still activate skills.
 
 When routing is enabled, `skills.routing.scopes` is the explicit scope allowlist
 used by skill discovery and external deliberation layers. Operator/meta skills

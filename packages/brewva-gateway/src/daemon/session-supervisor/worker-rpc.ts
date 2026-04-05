@@ -44,7 +44,10 @@ export class SessionWorkerRpcController {
         signal,
       });
       this.failAllPending(handle, new Error("worker exited"));
-      this.deps.onWorkerExited(handle);
+      this.deps.onWorkerExited(handle, {
+        code,
+        signal,
+      });
     });
 
     handle.child.on("error", (error) => {
