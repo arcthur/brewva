@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ManagedToolMode, RecoveryWalRecord } from "@brewva/brewva-runtime";
+import { type ManagedToolMode, type RecoveryWalRecord } from "@brewva/brewva-runtime";
 import { RecoveryWalRecovery, RecoveryWalStore } from "@brewva/brewva-runtime/internal";
 import type { WorkerToParentMessage } from "../session/worker-protocol.js";
 import {
@@ -13,6 +13,7 @@ import {
 } from "../state-store.js";
 import { sleep } from "../utils/async.js";
 import { toErrorMessage } from "../utils/errors.js";
+import { recordSessionShutdownReceiptToEventLogIfMissing } from "../utils/runtime.js";
 import type { StructuredLogger } from "./logger.js";
 import { isProcessAlive } from "./pid.js";
 import {
@@ -37,6 +38,7 @@ import {
   type PendingRequest,
   type PendingTurn,
   type WorkerHandle,
+  type WorkerExitInfo,
   type WorkerReadyPayload,
   isWorkerIdle,
   toRegistryEntries,
@@ -113,6 +115,7 @@ export interface SessionSupervisorTestWorkerInput {
   lastActivityAt?: number;
   cwd?: string;
   agentSessionId?: string;
+  agentEventLogPath?: string;
   pendingRequests?: SessionSupervisorTestPendingRequest[];
   pendingCount?: number;
   readyRequestId?: string;
@@ -224,8 +227,8 @@ export class SessionSupervisor implements SessionBackend {
       onTurnQueueReady: (handle) => {
         void this.turnQueue.pump(handle);
       },
-      onWorkerExited: (handle) => {
-        this.onWorkerExited(handle);
+      onWorkerExited: (handle, exit) => {
+        this.onWorkerExited(handle, exit);
       },
     });
     this.turnQueue = new SessionTurnQueueCoordinator({
@@ -293,6 +296,11 @@ export class SessionSupervisor implements SessionBackend {
         continue;
       }
       if (!isProcessAlive(entry.pid)) {
+        this.ensureTerminalReceiptForRegistryEntry(entry, {
+          source: "session_supervisor_registry_recovery",
+          reason: "abnormal_process_exit",
+          recoveredFromRegistry: true,
+        });
         continue;
       }
 
@@ -301,6 +309,11 @@ export class SessionSupervisor implements SessionBackend {
         pid: entry.pid,
       });
       await terminatePid(entry.pid);
+      this.ensureTerminalReceiptForRegistryEntry(entry, {
+        source: "session_supervisor_orphan_sweep",
+        reason: "abnormal_process_exit",
+        recoveredFromRegistry: true,
+      });
     }
 
     this.persistRegistry();
@@ -333,13 +346,14 @@ export class SessionSupervisor implements SessionBackend {
       }
 
       const child = this.spawnWorker();
+      const resolvedCwd = input.cwd ?? this.options.defaultCwd;
+      const resolvedConfigPath = input.configPath ?? this.options.defaultConfigPath;
       const handle: WorkerHandle = {
         sessionId: input.sessionId,
         child,
         startedAt: Date.now(),
         lastActivityAt: Date.now(),
-        cwd: input.cwd,
-        configPath: input.configPath,
+        cwd: resolvedCwd,
         model: input.model,
         agentId: input.agentId,
         managedToolMode: input.managedToolMode,
@@ -375,8 +389,8 @@ export class SessionSupervisor implements SessionBackend {
         requestId,
         payload: {
           sessionId: input.sessionId,
-          cwd: input.cwd ?? this.options.defaultCwd,
-          configPath: input.configPath ?? this.options.defaultConfigPath,
+          cwd: resolvedCwd,
+          configPath: resolvedConfigPath,
           model: input.model ?? this.options.defaultModel,
           agentId: input.agentId,
           managedToolMode: input.managedToolMode ?? this.options.defaultManagedToolMode,
@@ -387,6 +401,7 @@ export class SessionSupervisor implements SessionBackend {
       try {
         const readyPayload = await ready;
         handle.requestedAgentSessionId = readyPayload.agentSessionId;
+        handle.agentEventLogPath = readyPayload.agentEventLogPath;
         this.touchActivity(handle);
         this.persistRegistry();
         this.options.logger.info("worker session opened", {
@@ -559,6 +574,7 @@ export class SessionSupervisor implements SessionBackend {
       lastActivityAt: input.lastActivityAt ?? now,
       cwd: input.cwd,
       requestedAgentSessionId: input.agentSessionId,
+      agentEventLogPath: input.agentEventLogPath,
       pending,
       pendingTurns: new Map<string, PendingTurn>(),
       turnQueue: [],
@@ -618,10 +634,80 @@ export class SessionSupervisor implements SessionBackend {
     });
   }
 
-  private onWorkerExited(handle: WorkerHandle): void {
+  private onWorkerExited(handle: WorkerHandle, exit: WorkerExitInfo): void {
     this.workers.delete(handle.sessionId);
+    this.ensureTerminalReceiptForHandle(handle, exit);
     this.persistRegistry();
     this.openAdmission.notifyIfAvailable();
+  }
+
+  private ensureTerminalReceiptForRegistryEntry(
+    entry: ChildRegistryEntry,
+    input: {
+      source: string;
+      reason: string;
+      exitCode?: number | null;
+      signal?: string | null;
+      recoveredFromRegistry?: boolean;
+    },
+  ): void {
+    const agentSessionId = normalizeOptionalString(entry.agentSessionId);
+    if (!agentSessionId) {
+      return;
+    }
+    const eventLogPath = normalizeOptionalString(entry.agentEventLogPath);
+    if (!eventLogPath) {
+      this.options.logger.warn(
+        "cannot synthesize session terminal receipt without agent event log path",
+        {
+          sessionId: entry.sessionId,
+          agentSessionId,
+          source: input.source,
+        },
+      );
+      return;
+    }
+    try {
+      recordSessionShutdownReceiptToEventLogIfMissing({
+        eventLogPath,
+        sessionId: agentSessionId,
+        reason: input.reason,
+        source: input.source,
+        exitCode: input.exitCode ?? null,
+        signal: input.signal ?? null,
+        workerSessionId: entry.sessionId,
+        recoveredFromRegistry: input.recoveredFromRegistry,
+      });
+    } catch (error) {
+      this.options.logger.warn("failed to synthesize session terminal receipt", {
+        sessionId: entry.sessionId,
+        agentSessionId,
+        source: input.source,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private ensureTerminalReceiptForHandle(handle: WorkerHandle, exit: WorkerExitInfo): void {
+    this.ensureTerminalReceiptForRegistryEntry(
+      {
+        sessionId: handle.sessionId,
+        pid: handle.child.pid ?? 0,
+        startedAt: handle.startedAt,
+        agentSessionId: handle.requestedAgentSessionId,
+        agentEventLogPath: handle.agentEventLogPath,
+        cwd: handle.cwd,
+      },
+      {
+        source: "session_supervisor_worker_exit",
+        reason:
+          exit.signal || (typeof exit.code === "number" && exit.code !== 0)
+            ? "abnormal_process_exit"
+            : "process_exit_without_terminal_receipt",
+        exitCode: exit.code,
+        signal: exit.signal,
+      },
+    );
   }
 
   private touchActivity(handle: WorkerHandle): void {

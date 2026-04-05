@@ -15,6 +15,7 @@ const EXPECTED_SYMBOLS = [
   "governancePort?",
   "agentId?",
   "routingScopes?",
+  "routingDefaultScopes?",
   "registerContextTransform",
   "registerEventStream",
   "registerQualityGate",

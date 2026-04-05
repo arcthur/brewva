@@ -1,10 +1,19 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, extname, resolve } from "node:path";
-import { parseTscDiagnostics, type TscDiagnostic } from "@brewva/brewva-runtime";
+import {
+  TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
+  parseTscDiagnostics,
+  type TscDiagnostic,
+} from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { differenceInMilliseconds } from "date-fns";
+import {
+  buildReadPathDiscoveryObservationPayload,
+  collectObservedPathsFromLocationLines,
+} from "./read-path-discovery.js";
+import { recordToolRuntimeEvent } from "./runtime-internal.js";
 import { escapeRegexLiteral } from "./shared/query.js";
 import { walkWorkspaceFiles } from "./shared/workspace-walk.js";
 import { resolveScopedPath, resolveToolTargetScope } from "./target-scope.js";
@@ -48,6 +57,30 @@ interface LspParallelReadContext {
   sessionId?: string;
   toolName: string;
   config: ParallelReadConfig;
+}
+
+function recordLspDiscoveryObservation(input: {
+  runtime?: BrewvaBundledToolRuntime;
+  sessionId?: string;
+  baseCwd: string;
+  toolName: string;
+  evidenceKind: string;
+  observedPaths: Iterable<string>;
+}): void {
+  const payload = buildReadPathDiscoveryObservationPayload({
+    baseCwd: input.baseCwd,
+    toolName: input.toolName,
+    evidenceKind: input.evidenceKind,
+    observedPaths: input.observedPaths,
+  });
+  if (!input.sessionId || !payload) {
+    return;
+  }
+  recordToolRuntimeEvent(input.runtime, {
+    sessionId: input.sessionId,
+    type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
+    payload,
+  });
 }
 
 function isCodeFile(path: string): boolean {
@@ -443,13 +476,22 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
       if (!existsSync(targetFilePath)) {
         return failTextResult(`Error: File not found: ${targetFilePath}`);
       }
+      const sessionId = getToolSessionId(ctx);
+      recordLspDiscoveryObservation({
+        runtime: options?.runtime,
+        sessionId,
+        baseCwd: resolveLspCwd(ctx),
+        toolName: "lsp_goto_definition",
+        evidenceKind: "direct_file_access",
+        observedPaths: [targetFilePath],
+      });
 
       const symbol = wordAt(targetFilePath, params.line, params.character);
       if (!symbol) return inconclusiveTextResult("No symbol found at cursor.");
 
       const scan: LspParallelReadContext = {
         runtime: options?.runtime,
-        sessionId: getToolSessionId(ctx),
+        sessionId,
         toolName: "lsp_goto_definition",
         config: resolveParallelReadConfig(options?.runtime),
       };
@@ -457,6 +499,17 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
       if (matches.length === 0) {
         return inconclusiveTextResult(`No definition found for '${symbol}'.`);
       }
+      recordLspDiscoveryObservation({
+        runtime: options?.runtime,
+        sessionId,
+        baseCwd: resolveLspCwd(ctx),
+        toolName: "lsp_goto_definition",
+        evidenceKind: "symbol_match",
+        observedPaths: collectObservedPathsFromLocationLines({
+          baseCwd: resolveLspCwd(ctx),
+          lines: matches,
+        }),
+      });
 
       return textResult(matches.slice(0, 20).join("\n"), {
         symbol,
@@ -483,13 +536,22 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
       if (!existsSync(targetFilePath)) {
         return failTextResult(`Error: File not found: ${targetFilePath}`);
       }
+      const sessionId = getToolSessionId(ctx);
+      recordLspDiscoveryObservation({
+        runtime: options?.runtime,
+        sessionId,
+        baseCwd: resolveLspCwd(ctx),
+        toolName: "lsp_find_references",
+        evidenceKind: "direct_file_access",
+        observedPaths: [targetFilePath],
+      });
 
       const symbol = wordAt(targetFilePath, params.line, params.character);
       if (!symbol) return inconclusiveTextResult("No symbol found at cursor.");
 
       const scan: LspParallelReadContext = {
         runtime: options?.runtime,
-        sessionId: getToolSessionId(ctx),
+        sessionId,
         toolName: "lsp_find_references",
         config: resolveParallelReadConfig(options?.runtime),
       };
@@ -504,6 +566,17 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
       if (refs.length === 0) {
         return inconclusiveTextResult(`No references found for '${symbol}'.`);
       }
+      recordLspDiscoveryObservation({
+        runtime: options?.runtime,
+        sessionId,
+        baseCwd: resolveLspCwd(ctx),
+        toolName: "lsp_find_references",
+        evidenceKind: "symbol_match",
+        observedPaths: collectObservedPathsFromLocationLines({
+          baseCwd: resolveLspCwd(ctx),
+          lines: refs,
+        }),
+      });
 
       return textResult(refs.slice(0, 200).join("\n"), {
         symbol,
@@ -552,6 +625,14 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
         if (!targetStat.isFile()) {
           return failTextResult(`Error: Path is not a file: ${targetFilePath}`);
         }
+        recordLspDiscoveryObservation({
+          runtime: options?.runtime,
+          sessionId: getToolSessionId(ctx),
+          baseCwd: resolveLspCwd(ctx),
+          toolName: "lsp_symbols",
+          evidenceKind: "direct_file_access",
+          observedPaths: [targetFilePath],
+        });
 
         let symbols: string[];
         try {
@@ -575,6 +656,17 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
         config: resolveParallelReadConfig(options?.runtime),
       };
       const refs = await findReferences(resolveLspCwd(ctx), params.query, scan, limit);
+      recordLspDiscoveryObservation({
+        runtime: options?.runtime,
+        sessionId: scan.sessionId,
+        baseCwd: resolveLspCwd(ctx),
+        toolName: "lsp_symbols",
+        evidenceKind: "search_match",
+        observedPaths: collectObservedPathsFromLocationLines({
+          baseCwd: resolveLspCwd(ctx),
+          lines: refs,
+        }),
+      });
       return refs.length > 0
         ? textResult(refs.join("\n"))
         : inconclusiveTextResult("No symbols found");
@@ -600,6 +692,16 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
         const targetFilePath = resolveLspFilePath(ctx, params.filePath);
         if (!targetFilePath) {
           return failTextResult("Error: file path escapes current task target roots.");
+        }
+        if (existsSync(targetFilePath)) {
+          recordLspDiscoveryObservation({
+            runtime: options?.runtime,
+            sessionId: getToolSessionId(ctx),
+            baseCwd: resolveLspCwd(ctx),
+            toolName: "lsp_diagnostics",
+            evidenceKind: "direct_file_access",
+            observedPaths: [targetFilePath],
+          });
         }
         const severity =
           typeof params.severity === "string" &&

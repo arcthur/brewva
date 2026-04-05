@@ -19,6 +19,7 @@ import type {
   ExtensionFactory as UpstreamExtensionFactory,
   ToolDefinition,
 } from "@mariozechner/pi-coding-agent";
+import { DEFAULT_HOSTED_ROUTING_SCOPES } from "../host/routing-defaults.js";
 import type { HostedDelegationStore } from "../subagents/delegation-store.js";
 import {
   createHostedToolExecutionCoordinator,
@@ -33,6 +34,7 @@ import { registerLedgerWriter } from "./ledger-writer.js";
 import { createNarrativeMemoryLifecycle } from "./narrative-memory-lifecycle.js";
 import { registerProviderRequestRecovery } from "./provider-request-recovery.js";
 import { createQualityGateLifecycle, registerQualityGate } from "./quality-gate.js";
+import { createReadPathRecoveryLifecycle } from "./read-path-recovery.js";
 import { createRuntimeTurnClockStore } from "./runtime-turn-clock.js";
 import { registerToolResultDistiller } from "./tool-result-distiller.js";
 import {
@@ -56,6 +58,19 @@ export interface CreateHostedTurnPipelineOptions extends BrewvaRuntimeOptions {
   ports?: readonly TurnLifecyclePort[];
   toolExecutionCoordinator?: HostedToolExecutionCoordinator;
   hostedToolDefinitionsByName?: ReadonlyMap<string, ToolDefinition>;
+}
+
+function assertHostedPipelineRuntimeCompatibility(options: CreateHostedTurnPipelineOptions): void {
+  if (options.runtime && options.routingScopes && options.routingScopes.length > 0) {
+    throw new Error(
+      "routingScopes must be applied when constructing BrewvaRuntime; createHostedTurnPipeline does not mutate runtime.config",
+    );
+  }
+  if (options.runtime && options.routingDefaultScopes && options.routingDefaultScopes.length > 0) {
+    throw new Error(
+      "routingDefaultScopes must be applied when constructing BrewvaRuntime; createHostedTurnPipeline does not infer runtime config intent from an existing runtime",
+    );
+  }
 }
 
 function buildManagedTools(
@@ -142,6 +157,7 @@ function registerHostedPipeline(
     dynamicToolDefinitions: registerTools ? toolDefinitionsByName : undefined,
   });
   const completionGuard = createCompletionGuardLifecycle(runtimePluginApi, hostedRuntime);
+  const readPathRecovery = createReadPathRecoveryLifecycle(hostedRuntime);
 
   runtimePluginApi.on("tool_call", qualityGate.toolCall);
   runtimePluginApi.on("context", contextTransform.context);
@@ -167,6 +183,9 @@ function registerHostedPipeline(
       beforeAgentStart: contextTransform.beforeAgentStart,
       toolResult: qualityGate.toolResult,
     },
+    {
+      toolResult: readPathRecovery.toolResult,
+    },
     narrativeMemory,
     {
       agentEnd: completionGuard.agentEnd,
@@ -180,10 +199,15 @@ export function createHostedTurnPipeline(
   options: CreateHostedTurnPipelineOptions = {},
 ): RuntimePlugin {
   return (runtimePluginApi) => {
+    assertHostedPipelineRuntimeCompatibility(options);
     const runtime =
       options.runtime ??
       new BrewvaRuntime({
         ...options,
+        routingDefaultScopes:
+          options.routingScopes && options.routingScopes.length > 0
+            ? options.routingDefaultScopes
+            : (options.routingDefaultScopes ?? [...DEFAULT_HOSTED_ROUTING_SCOPES]),
         governancePort:
           options.governancePort ?? createTrustedLocalGovernancePort({ profile: "team" }),
       });

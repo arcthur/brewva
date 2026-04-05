@@ -80,6 +80,9 @@ flowchart TD
   artifacts and the OS supervisor
 - `children.json` supports orphan cleanup so child processes do not leak across
   restart boundaries
+- `children.json` also carries the hosted agent session id and persisted agent
+  event-log path, letting the supervisor write the missing `session_shutdown`
+  receipt directly instead of reconstructing runtime config
 - `status --deep` is the first diagnostic entrypoint for liveness, probe
   failures, and missing auth files
 - after token rotation, old connections fail immediately and clients must

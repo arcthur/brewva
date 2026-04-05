@@ -6,11 +6,13 @@ import { fileURLToPath } from "node:url";
 import { parseArgs as parseNodeArgs } from "node:util";
 import {
   ensureSessionShutdownRecorded,
+  recordAbnormalSessionShutdown,
   recordSessionTurnTransition,
   runChannelMode,
   runGatewayCli,
   wrapSessionWithSettledPrompts,
 } from "@brewva/brewva-gateway";
+import { DEFAULT_HOSTED_ROUTING_SCOPES } from "@brewva/brewva-gateway/host";
 import {
   BrewvaConfigLoadError,
   BrewvaRuntime,
@@ -1125,6 +1127,7 @@ async function run(): Promise<void> {
     configPath: parsed.configPath,
     agentId: parsed.agentId,
     governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
+    routingDefaultScopes: [...DEFAULT_HOSTED_ROUTING_SCOPES],
   });
   const operatorRuntime = createOperatorRuntimePort(runtime);
   const { session } = await createBrewvaSession({
@@ -1241,6 +1244,15 @@ async function run(): Promise<void> {
       });
       printCostSummary(getSessionId(), runtime);
     }
+  } catch (error) {
+    if (!terminatedBySignal) {
+      recordAbnormalSessionShutdown(runtime, {
+        sessionId: getSessionId(),
+        source: "cli_run_error",
+        error,
+      });
+    }
+    throw error;
   } finally {
     process.off("SIGINT", handleSignal);
     process.off("SIGTERM", handleSignal);

@@ -6,6 +6,9 @@ export interface ChildRegistryEntry {
   sessionId: string;
   pid: number;
   startedAt: number;
+  agentSessionId?: string;
+  agentEventLogPath?: string;
+  cwd?: string;
 }
 
 export interface GatewayStateStore {
@@ -115,6 +118,19 @@ function parseChildRegistryEntries(raw: unknown): ChildRegistryEntry[] {
       sessionId: candidate.sessionId,
       pid: candidate.pid,
       startedAt: candidate.startedAt,
+      agentSessionId:
+        typeof candidate.agentSessionId === "string" && candidate.agentSessionId.trim().length > 0
+          ? candidate.agentSessionId.trim()
+          : undefined,
+      agentEventLogPath:
+        typeof candidate.agentEventLogPath === "string" &&
+        candidate.agentEventLogPath.trim().length > 0
+          ? candidate.agentEventLogPath.trim()
+          : undefined,
+      cwd:
+        typeof candidate.cwd === "string" && candidate.cwd.trim().length > 0
+          ? candidate.cwd
+          : undefined,
     });
   }
   return entries;

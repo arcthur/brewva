@@ -1,10 +1,17 @@
 import { spawn } from "node:child_process";
 import { relative, resolve } from "node:path";
+import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import {
+  buildReadPathDiscoveryObservationPayload,
+  collectObservedPathsFromLocationLines,
+} from "./read-path-discovery.js";
+import { recordToolRuntimeEvent } from "./runtime-internal.js";
 import { resolveToolTargetScope, isPathInsideRoots, resolveScopedPath } from "./target-scope.js";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
+import { getToolSessionId } from "./utils/parallel-read.js";
 import { failTextResult, textResult } from "./utils/result.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
@@ -279,6 +286,26 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
           `- truncated: ${result.truncated}`,
           `- timed_out: ${result.timedOut}`,
         ].filter(Boolean);
+
+        if (result.exitCode === 0 && result.lines.length > 0) {
+          const sessionId = getToolSessionId(ctx);
+          const discoveryPayload = buildReadPathDiscoveryObservationPayload({
+            baseCwd: scope.baseCwd,
+            toolName: "grep",
+            evidenceKind: "search_match",
+            observedPaths: collectObservedPathsFromLocationLines({
+              baseCwd: scope.baseCwd,
+              lines: result.lines,
+            }),
+          });
+          if (sessionId && discoveryPayload) {
+            recordToolRuntimeEvent(options.runtime, {
+              sessionId,
+              type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
+              payload: discoveryPayload,
+            });
+          }
+        }
 
         if (result.exitCode === 0) {
           return textResult([...header, "", ...result.lines].join("\n"), {

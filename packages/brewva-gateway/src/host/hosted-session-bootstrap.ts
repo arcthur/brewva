@@ -8,6 +8,7 @@ import {
 import {
   BrewvaRuntime,
   CONTEXT_SOURCES,
+  TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
   createToolRuntimePort,
   createTrustedLocalGovernancePort,
   resolveBrewvaAgentDir,
@@ -18,6 +19,7 @@ import { createToolRuntimeInternalPort, recordRuntimeEvent } from "@brewva/brewv
 import { createSkillPromotionContextProvider } from "@brewva/brewva-skill-broker";
 import {
   attachBrewvaToolExecutionTraits,
+  buildReadPathDiscoveryObservationPayload,
   buildBrewvaTools,
   resolveBrewvaModelSelection,
   type BrewvaToolExecutionTraits,
@@ -39,6 +41,11 @@ import {
   type CreateAgentSessionResult,
 } from "@mariozechner/pi-coding-agent";
 import { createHostedTurnPipeline, type RuntimePlugin } from "../runtime-plugins/index.js";
+import {
+  analyzeReadPathRecoveryState,
+  isReadPathVerified,
+  recordReadPathGuardWarning,
+} from "../runtime-plugins/read-path-recovery.js";
 import { installSessionCompactionRecovery } from "../session/compaction-recovery.js";
 import {
   createDetachedSubagentBackgroundController,
@@ -53,6 +60,7 @@ import {
   wrapToolDefinitionsWithHostedExecutionTraits,
   type HostedToolExecutionCoordinator,
 } from "../tool-execution-traits.js";
+import { DEFAULT_HOSTED_ROUTING_SCOPES } from "./routing-defaults.js";
 import { createHostedSemanticOracle } from "./semantic-oracle.js";
 
 export interface HostedSessionResult extends CreateAgentSessionResult {
@@ -119,6 +127,7 @@ interface CompactReadTextOutput {
 
 interface CompactReadToolInput {
   cwd: string;
+  runtime?: BrewvaRuntime;
   getReadToolOptions?: () => ReadToolOptions | undefined;
   createReadDelegate?: typeof createReadTool;
 }
@@ -143,6 +152,69 @@ function formatLineCount(lineCount: number): string {
   return `${lineCount} line${lineCount === 1 ? "" : "s"}`;
 }
 
+function resolveRequestedReadPath(args: Record<string, unknown> | undefined): string | undefined {
+  const raw =
+    (typeof args?.path === "string" ? args.path : undefined) ??
+    (typeof args?.file_path === "string" ? args.file_path : undefined) ??
+    (typeof args?.filePath === "string" ? args.filePath : undefined);
+  const normalized = raw?.trim();
+  return normalized && normalized.length > 0 ? normalized : undefined;
+}
+
+function resolveReadSessionId(ctx: unknown): string | undefined {
+  const sessionId = (
+    ctx as { sessionManager?: { getSessionId?: () => unknown } } | undefined
+  )?.sessionManager?.getSessionId?.();
+  return typeof sessionId === "string" && sessionId.trim().length > 0
+    ? sessionId.trim()
+    : undefined;
+}
+
+function buildReadPathGuardResult(input: {
+  requestedPath: string;
+  state: ReturnType<typeof analyzeReadPathRecoveryState>;
+}) {
+  const lines = [
+    "[ReadPathGuard]",
+    `Blocked direct \`read\` after ${input.state.consecutiveMissingPathFailures} consecutive path-not-found failures.`,
+    "Read is now gated by discovery evidence.",
+    input.state.phase === "required"
+      ? "Run repository discovery or inspect a known existing file before retrying `read`."
+      : "Retry `read` only for paths that were observed directly or live under observed directories.",
+    `requested_path: ${input.requestedPath}`,
+  ];
+  if (input.state.observedDirectories.length > 0) {
+    lines.push(`observed_directories: ${input.state.observedDirectories.slice(0, 8).join(", ")}`);
+  }
+  if (input.state.observedPaths.length > 0) {
+    lines.push(`observed_paths: ${input.state.observedPaths.slice(0, 8).join(", ")}`);
+  }
+  if (input.state.failedPaths.length > 0) {
+    lines.push(`recent_failed_paths: ${input.state.failedPaths.slice(0, 4).join(", ")}`);
+  }
+  return {
+    content: [{ type: "text", text: lines.join("\n") }],
+    details: {
+      verdict: "fail" as const,
+      requestedPath: input.requestedPath,
+      recentFailedPaths: input.state.failedPaths,
+      observedPaths: input.state.observedPaths,
+      observedDirectories: input.state.observedDirectories,
+      consecutiveMissingPathFailures: input.state.consecutiveMissingPathFailures,
+      phase: input.state.phase,
+      recoveryHint: "path_discovery_required_after_missing_path_failures",
+    },
+  };
+}
+
+function didReadToolSucceed(result: { details?: unknown } | undefined): boolean {
+  const details = result?.details as { verdict?: unknown; ok?: unknown } | undefined;
+  if (details?.verdict === "fail" || details?.ok === false) {
+    return false;
+  }
+  return true;
+}
+
 export function createCompactReadTool(
   input: CompactReadToolInput,
 ): ToolDefinition<ReturnType<typeof createReadTool>["parameters"], ReadToolDetails> {
@@ -153,13 +225,46 @@ export function createCompactReadTool(
     label: originalRead.label,
     description: originalRead.description,
     parameters: originalRead.parameters,
-    execute(toolCallId, params, signal, onUpdate, _ctx) {
-      return createReadDelegate(input.cwd, input.getReadToolOptions?.()).execute(
+    async execute(toolCallId, params, signal, onUpdate, ctx) {
+      const requestedPath = resolveRequestedReadPath(params);
+      const sessionId = resolveReadSessionId(ctx);
+      if (input.runtime && requestedPath && sessionId) {
+        const recoveryState = analyzeReadPathRecoveryState(input.runtime, sessionId);
+        if (recoveryState.active && !isReadPathVerified(recoveryState, requestedPath, input.cwd)) {
+          recordReadPathGuardWarning(input.runtime, {
+            sessionId,
+            requestedPath,
+            state: recoveryState,
+          });
+          return buildReadPathGuardResult({
+            requestedPath,
+            state: recoveryState,
+          }) as unknown as Awaited<ReturnType<ReturnType<typeof createReadTool>["execute"]>>;
+        }
+      }
+
+      const result = await createReadDelegate(input.cwd, input.getReadToolOptions?.()).execute(
         toolCallId,
         params,
         signal,
         onUpdate,
       );
+      if (input.runtime && requestedPath && sessionId && didReadToolSucceed(result)) {
+        const discoveryPayload = buildReadPathDiscoveryObservationPayload({
+          baseCwd: input.cwd,
+          toolName: "read",
+          evidenceKind: "direct_file_access",
+          observedPaths: [requestedPath],
+        });
+        if (discoveryPayload) {
+          recordRuntimeEvent(input.runtime, {
+            sessionId,
+            type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
+            payload: discoveryPayload,
+          });
+        }
+      }
+      return result;
     },
     renderCall(args, theme) {
       const filePathCandidate = (args as { file_path?: unknown } | undefined)?.file_path;
@@ -270,6 +375,7 @@ const MUTATING_FILE_EXECUTION_TRAITS: BrewvaToolExecutionTraits = {
 
 function createHostedCustomTools(input: {
   cwd: string;
+  runtime: BrewvaRuntime;
   settingsManager: SettingsManager;
   builtinToolNames: readonly HostedDelegationBuiltinToolName[] | undefined;
   directManagedTools: ReturnType<typeof createDirectManagedTools>;
@@ -282,6 +388,7 @@ function createHostedCustomTools(input: {
     const compactReadTool = attachBrewvaToolExecutionTraits(
       createCompactReadTool({
         cwd: input.cwd,
+        runtime: input.runtime,
         getReadToolOptions: () => ({
           autoResizeImages: input.settingsManager.getImageAutoResize(),
         }),
@@ -367,6 +474,10 @@ function createKernelRuntime(options: CreateHostedSessionOptions, cwd: string): 
       agentId: options.agentId,
       governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
       routingScopes: options.routingScopes,
+      routingDefaultScopes:
+        options.routingScopes && options.routingScopes.length > 0
+          ? options.routingDefaultScopes
+          : (options.routingDefaultScopes ?? [...DEFAULT_HOSTED_ROUTING_SCOPES]),
     })
   );
 }
@@ -435,6 +546,11 @@ function assertRoutingScopeCompatibility(
         "routingScopes must be applied when constructing BrewvaRuntime; createHostedSession no longer mutates runtime.config",
       );
     }
+  }
+  if (options.runtime && options.routingDefaultScopes && options.routingDefaultScopes.length > 0) {
+    throw new Error(
+      "routingDefaultScopes must be applied when constructing BrewvaRuntime; createHostedSession does not infer runtime config intent from an existing runtime",
+    );
   }
 }
 
@@ -631,6 +747,7 @@ export async function createHostedSession(
   );
   const customTools = createHostedCustomTools({
     cwd: environment.cwd,
+    runtime,
     settingsManager,
     builtinToolNames: options.builtinToolNames,
     directManagedTools,

@@ -217,6 +217,38 @@ describe("event pipeline level classification", () => {
     }
   });
 
+  test("keeps read-path and skill recommendation protocol receipts at audit level", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-hosted-protocol-")),
+      config: createAuditConfig(),
+    });
+    const sessionId = "audit-level-hosted-protocol-session";
+
+    for (const type of [
+      "tool_read_path_gate_armed",
+      "tool_read_path_discovery_observed",
+      "skill_recommendation_derived",
+    ] as const) {
+      recordRuntimeEvent(runtime, {
+        sessionId,
+        type,
+        payload: {
+          reason: "unit-test",
+        },
+      });
+    }
+
+    expect(
+      runtime.inspect.events.query(sessionId, { type: "tool_read_path_gate_armed" }),
+    ).toHaveLength(1);
+    expect(
+      runtime.inspect.events.query(sessionId, { type: "tool_read_path_discovery_observed" }),
+    ).toHaveLength(1);
+    expect(
+      runtime.inspect.events.query(sessionId, { type: "skill_recommendation_derived" }),
+    ).toHaveLength(1);
+  });
+
   test("keeps skill refresh receipts at ops level while excluding them from audit retention", () => {
     const auditRuntime = new BrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-skill-refresh-")),

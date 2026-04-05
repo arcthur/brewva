@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createHostedSession as createBrewvaSession } from "@brewva/brewva-gateway/host";
+import { BrewvaRuntime, createTrustedLocalGovernancePort } from "@brewva/brewva-runtime";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function writeSkill(filePath: string, name: string): void {
@@ -160,10 +161,108 @@ describe("brewva session ui settings wiring", () => {
           }
         | undefined) ?? { skillLoad: {} };
 
-      expect(payload.skillLoad?.routingEnabled).toBe(false);
+      expect(payload.skillLoad?.routingEnabled).toBe(true);
       expect(payload.skillLoad?.routingScopes).toEqual(["core", "domain"]);
+      expect(payload.skillLoad?.routableSkills).toContain("repository-analysis");
+      expect(payload.skillLoad?.routableSkills).not.toContain("custom-ops");
+      expect(payload.skillLoad?.hiddenSkills).toContain("custom-ops");
+    } finally {
+      result.session.dispose();
+    }
+  });
+
+  test("explicit routing disable keeps loaded skills out of auto routing", async () => {
+    const workspace = createTestWorkspace("session-ui-skill-routing-explicit-disable");
+    writeSkill(join(workspace, ".brewva/skills/operator/custom-ops/SKILL.md"), "custom-ops");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          skills: {
+            routing: {
+              enabled: false,
+              scopes: ["operator"],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const result = await createBrewvaSession({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    });
+    try {
+      const sessionId = result.session.sessionManager.getSessionId();
+      const bootstrap = result.runtime.inspect.events.query(sessionId, {
+        type: "session_bootstrap",
+        last: 1,
+      })[0];
+      const payload = (bootstrap?.payload as
+        | {
+            skillLoad?: {
+              routingEnabled?: boolean;
+              routingScopes?: string[];
+              routableSkills?: string[];
+              hiddenSkills?: string[];
+            };
+          }
+        | undefined) ?? { skillLoad: {} };
+
+      expect(payload.skillLoad?.routingEnabled).toBe(false);
+      expect(payload.skillLoad?.routingScopes).toEqual(["operator"]);
       expect(payload.skillLoad?.routableSkills).toEqual([]);
       expect(payload.skillLoad?.hiddenSkills).toContain("custom-ops");
+    } finally {
+      result.session.dispose();
+    }
+  });
+
+  test("scopes-only routing config opts hosted sessions into auto routing", async () => {
+    const workspace = createTestWorkspace("session-ui-skill-routing-scopes-only");
+    writeSkill(join(workspace, ".brewva/skills/operator/custom-ops/SKILL.md"), "custom-ops");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          skills: {
+            routing: {
+              scopes: ["operator"],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const result = await createBrewvaSession({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    });
+    try {
+      const sessionId = result.session.sessionManager.getSessionId();
+      const bootstrap = result.runtime.inspect.events.query(sessionId, {
+        type: "session_bootstrap",
+        last: 1,
+      })[0];
+      const payload = (bootstrap?.payload as
+        | {
+            skillLoad?: {
+              routingEnabled?: boolean;
+              routingScopes?: string[];
+              routableSkills?: string[];
+            };
+          }
+        | undefined) ?? { skillLoad: {} };
+
+      expect(payload.skillLoad?.routingEnabled).toBe(true);
+      expect(payload.skillLoad?.routingScopes).toEqual(["operator"]);
+      expect(payload.skillLoad?.routableSkills).toContain("custom-ops");
     } finally {
       result.session.dispose();
     }
@@ -199,6 +298,22 @@ describe("brewva session ui settings wiring", () => {
     } finally {
       result.session.dispose();
     }
+  });
+
+  test("existing runtimes reject routingDefaultScopes inference", async () => {
+    const workspace = createTestWorkspace("session-ui-routing-default-scopes-existing-runtime");
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
+    });
+
+    return expect(
+      createBrewvaSession({
+        runtime,
+        cwd: workspace,
+        routingDefaultScopes: ["core", "domain"],
+      }),
+    ).rejects.toThrow(/routingDefaultScopes must be applied when constructing BrewvaRuntime/);
   });
 
   test("session bootstrap no longer exposes removed skill-broker metadata", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerEventStream, registerQualityGate } from "@brewva/brewva-gateway/runtime-plugins";
@@ -249,5 +249,58 @@ maxcalls`,
     };
     requireNumber(health.score, "Expected numeric health.score.");
     expect(health.windowChars).toBe(3);
+  });
+
+  test("given the ledger directory disappears before message_end, when assistant usage is recorded, then event stream recreates the ledger path", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-message-ledger-recovery-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+    const sessionId = "ext-message-ledger-recovery-1";
+
+    const { api, handlers } = createMockRuntimePluginApi();
+    registerEventStream(api, runtime);
+
+    const ctx = {
+      cwd: workspace,
+      sessionManager: {
+        getSessionId: () => sessionId,
+      },
+    };
+
+    rmSync(join(workspace, ".orchestrator", "ledger"), {
+      recursive: true,
+      force: true,
+    });
+
+    invokeHandlers(
+      handlers,
+      "message_end",
+      {
+        message: {
+          role: "assistant",
+          provider: "openai",
+          model: "gpt-5.4",
+          stopReason: "end_turn",
+          usage: {
+            input: 12,
+            output: 8,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 20,
+            cost: {
+              total: 0.00012,
+            },
+          },
+          content: [{ type: "text", text: "done" }],
+        },
+      },
+      ctx,
+    );
+
+    expect(existsSync(join(workspace, ".orchestrator", "ledger", "evidence.jsonl"))).toBe(true);
+    expect(runtime.inspect.events.query(sessionId, { type: "message_end" })).toHaveLength(1);
+    expect(runtime.inspect.events.query(sessionId, { type: "cost_update" })).toHaveLength(1);
+    const ledgerRows = runtime.inspect.ledger.listRows(sessionId);
+    expect(ledgerRows).toHaveLength(1);
+    expect(ledgerRows[0]?.tool).toBe("brewva_cost");
   });
 });

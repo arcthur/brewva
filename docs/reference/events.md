@@ -118,6 +118,11 @@ breaker rehydration, and post-compaction state inspection depend on it. These
 events stay hosted/experience-ring signals; they do not widen kernel authority
 or replace receipt-bearing runtime facts.
 
+`session_shutdown` remains the durable terminal receipt for a session. When the
+worker process cannot record it itself, gateway reconciliation writes the
+receipt directly to the persisted agent event log path. There is no config- or
+workspace-derived fallback synthesis path.
+
 Typical hosted recovery reasons include:
 
 - `reason=compaction_gate_blocked`
@@ -146,6 +151,8 @@ provider-request recovery hook can patch the next outbound payload.
 - `tool_call_blocked`
 - `tool_call_marked`
 - `tool_contract_warning`
+- `tool_read_path_gate_armed`
+- `tool_read_path_discovery_observed`
 - `tool_execution_start`
 - `tool_execution_end`
 - `tool_result_recorded`
@@ -184,6 +191,16 @@ closure after a durable tool result (`completed_after_tool_result`,
 (`cancelled_by_interrupt`, `cancelled_by_retry_supersession`,
 `cancelled_by_shutdown`). This remains hosted audit telemetry rather than a new
 effect-authoritative source of truth.
+
+`tool_read_path_gate_armed` and `tool_read_path_discovery_observed` are the
+hosted read-path recovery protocol for repeated missing-path `read` failures.
+The gate event is the single activation receipt; recovery no longer infers an
+active gate only from recent `ENOENT` history. Discovery evidence is emitted as
+structured runtime events by tools that directly surface workspace file or
+directory evidence to the model, such as direct file reads and path-bearing
+search/navigation tools. The hosted read wrapper uses this evidence to decide
+when later `read` calls are allowed again. There is no output-text parsing or
+filesystem-probe compatibility shim in the recovery path.
 
 - `reversible_mutation_rolled_back`
 - `rollback`

@@ -86,6 +86,9 @@ Key files:
   - JSONC heartbeat rules define one explicit prompt per wake-up rule.
   - Comments and trailing commas are accepted inside the fenced heartbeat block.
 - `children.json`: child-process registry used for orphan cleanup during restart.
+  - Each row also persists the hosted agent session id and agent event-log path so
+    supervisor recovery can synthesize a durable `session_shutdown` receipt
+    without reloading workspace config or inferring paths from the filesystem.
 
 Optional HTTP probe endpoint:
 

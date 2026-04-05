@@ -21,6 +21,7 @@ import { resolveInjectionScopeId } from "./context-shared.js";
 import { appendSupplementalContextBlocks } from "./context-supplemental.js";
 import type { HostedContextGateStatePort } from "./hosted-compaction-controller.js";
 import type { HostedContextTelemetry } from "./hosted-context-telemetry.js";
+import { buildReadPathRecoveryBlocks } from "./read-path-recovery.js";
 import { resolveRecoveryWorkingSetBlock } from "./recovery-working-set.js";
 import { buildSkillFirstPolicyBlock, type SkillRecommendationSet } from "./skill-first.js";
 
@@ -244,6 +245,82 @@ function buildSkillRecommendationBlocks(
   ];
 }
 
+function buildSkillRoutingAvailabilityBlocks(
+  runtime: BrewvaHostedRuntimePort,
+): ComposedContextBlock[] {
+  const loadReport = runtime.inspect.skills.getLoadReport();
+  if (loadReport.loadedSkills.length <= 0 || loadReport.routableSkills.length > 0) {
+    return [];
+  }
+
+  const lines = ["[Brewva Skill Routing Availability]"];
+  if (!loadReport.routingEnabled) {
+    lines.push("Skills are loaded, but automatic skill routing is disabled in this session.");
+  } else {
+    lines.push("Skills are loaded, but none are routable under the current routing scopes.");
+  }
+  lines.push("Use `skill_load` before specialized work instead of continuing without a skill.");
+  lines.push(`routing_scopes: ${loadReport.routingScopes.join(", ") || "none"}`);
+  if (loadReport.hiddenSkills.length > 0) {
+    lines.push(`hidden_skills: ${loadReport.hiddenSkills.slice(0, 6).join(", ")}`);
+  }
+
+  return [
+    {
+      id: "skill-routing-availability",
+      category: "diagnostic",
+      content: lines.join("\n"),
+      estimatedTokens: 0,
+    },
+  ];
+}
+
+function buildHostedSupplementalBlocks(
+  runtime: BrewvaHostedRuntimePort,
+  contextComposerRuntime: ContextComposerRuntime,
+  input: {
+    sessionId: string;
+    usage?: ContextBudgetUsage;
+    injectionScopeId?: string;
+    delegationStore?: HostedDelegationStore;
+    gateStatus: ReturnType<typeof prepareContextComposerSupport>["gateStatus"];
+    pendingCompactionReason: ReturnType<
+      typeof prepareContextComposerSupport
+    >["pendingCompactionReason"];
+    capabilityView: BuildCapabilityViewResult;
+    skillRecommendations: SkillRecommendationSet;
+    emitSkillRecommendationEvent?: boolean;
+  },
+): ComposedContextBlock[] {
+  return appendSupplementalContextBlocks(runtime, {
+    sessionId: input.sessionId,
+    usage: input.usage,
+    injectionScopeId: input.injectionScopeId,
+    blocks: [
+      ...[
+        resolveRecoveryWorkingSetBlock(runtime, {
+          sessionId: input.sessionId,
+          delegationStore: input.delegationStore,
+        }),
+      ].filter((block): block is NonNullable<typeof block> => block !== null),
+      ...buildSkillRoutingAvailabilityBlocks(runtime),
+      ...resolveSupplementalContextBlocks({
+        runtime: contextComposerRuntime,
+        sessionId: input.sessionId,
+        gateStatus: input.gateStatus,
+        pendingCompactionReason: input.pendingCompactionReason,
+        capabilityView: input.capabilityView,
+      }),
+      ...buildReadPathRecoveryBlocks(runtime, input.sessionId),
+      ...buildSkillRecommendationBlocks(runtime, {
+        sessionId: input.sessionId,
+        recommendations: input.skillRecommendations,
+        emitEvent: input.emitSkillRecommendationEvent,
+      }),
+    ],
+  });
+}
+
 export function createHostedContextInjectionPipeline(
   extensionApi: ExtensionAPI,
   runtime: BrewvaHostedRuntimePort,
@@ -277,32 +354,6 @@ export function createHostedContextInjectionPipeline(
           gateStatus,
         });
       }
-
-      const initialSupplementalBlocks = appendSupplementalContextBlocks(runtime, {
-        sessionId: input.sessionId,
-        usage: input.usage,
-        injectionScopeId,
-        blocks: [
-          ...[
-            resolveRecoveryWorkingSetBlock(runtime, {
-              sessionId: input.sessionId,
-              delegationStore: options.delegationStore,
-            }),
-          ].filter((block): block is NonNullable<typeof block> => block !== null),
-          ...resolveSupplementalContextBlocks({
-            runtime: contextComposerRuntime,
-            sessionId: input.sessionId,
-            gateStatus,
-            pendingCompactionReason,
-            capabilityView,
-          }),
-          ...buildSkillRecommendationBlocks(runtime, {
-            sessionId: input.sessionId,
-            recommendations: skillRecommendations,
-            emitEvent: gateStatus.required,
-          }),
-        ],
-      });
       const systemPromptWithContract = applyContextContract(
         input.systemPrompt,
         runtime,
@@ -311,6 +362,17 @@ export function createHostedContextInjectionPipeline(
       );
 
       if (gateStatus.required) {
+        const supplementalBlocks = buildHostedSupplementalBlocks(runtime, contextComposerRuntime, {
+          sessionId: input.sessionId,
+          usage: input.usage,
+          injectionScopeId,
+          delegationStore: options.delegationStore,
+          gateStatus,
+          pendingCompactionReason,
+          capabilityView,
+          skillRecommendations,
+          emitSkillRecommendationEvent: gateStatus.required,
+        });
         statePort.setLastRuntimeGateRequired(input.sessionId, true);
         const composed = composeContextBlocks({
           runtime: contextComposerRuntime,
@@ -320,7 +382,7 @@ export function createHostedContextInjectionPipeline(
           capabilityView,
           admittedEntries: [],
           injectionAccepted: false,
-          supplementalBlocks: initialSupplementalBlocks,
+          supplementalBlocks,
           includeDefaultSupplementalBlocks: false,
         });
         telemetry.emitContextComposed({
@@ -380,29 +442,16 @@ export function createHostedContextInjectionPipeline(
       skillRecommendations = supportAfterInjection.skillRecommendations;
       statePort.setLastRuntimeGateRequired(input.sessionId, gateStatus.required);
 
-      const supplementalBlocks = appendSupplementalContextBlocks(runtime, {
+      const supplementalBlocks = buildHostedSupplementalBlocks(runtime, contextComposerRuntime, {
         sessionId: input.sessionId,
         usage: input.usage,
         injectionScopeId,
-        blocks: [
-          ...[
-            resolveRecoveryWorkingSetBlock(runtime, {
-              sessionId: input.sessionId,
-              delegationStore: options.delegationStore,
-            }),
-          ].filter((block): block is NonNullable<typeof block> => block !== null),
-          ...resolveSupplementalContextBlocks({
-            runtime: contextComposerRuntime,
-            sessionId: input.sessionId,
-            gateStatus,
-            pendingCompactionReason,
-            capabilityView,
-          }),
-          ...buildSkillRecommendationBlocks(runtime, {
-            sessionId: input.sessionId,
-            recommendations: skillRecommendations,
-          }),
-        ],
+        delegationStore: options.delegationStore,
+        gateStatus,
+        pendingCompactionReason,
+        capabilityView,
+        skillRecommendations,
+        emitSkillRecommendationEvent: true,
       });
 
       if (pendingCompactionReason && !gateStatus.required) {

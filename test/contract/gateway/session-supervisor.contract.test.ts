@@ -103,6 +103,9 @@ describe("session supervisor safeguards", () => {
       supervisor.testHooks.seedWorker({
         sessionId: "s1",
         pid: 10011,
+        agentSessionId: "agent-s1",
+        agentEventLogPath: "/tmp/agent-s1.jsonl",
+        cwd: root,
       });
       supervisor.testHooks.persistRegistry();
 
@@ -114,10 +117,16 @@ describe("session supervisor safeguards", () => {
       const rows = JSON.parse(readFileSync(registryPath, "utf8")) as Array<{
         sessionId?: string;
         pid?: number;
+        agentSessionId?: string;
+        agentEventLogPath?: string;
+        cwd?: string;
       }>;
       expect(rows.length).toBe(1);
       expect(rows[0]?.sessionId).toBe("s1");
       expect(rows[0]?.pid).toBe(10011);
+      expect(rows[0]?.agentSessionId).toBe("agent-s1");
+      expect(rows[0]?.agentEventLogPath).toBe("/tmp/agent-s1.jsonl");
+      expect(rows[0]?.cwd).toBe(root);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -73,6 +73,13 @@ inherited `BrewvaRuntimeOptions` for runtime construction:
 - `governancePort?`
 - `agentId?`
 - `routingScopes?`
+- `routingDefaultScopes?`
+
+When `runtime` is omitted and neither `routingScopes` nor `routingDefaultScopes`
+is supplied, the hosted pipeline constructs its runtime with
+`routingDefaultScopes=["core", "domain"]`. That keeps skill-first routing
+available by default while still respecting an explicit
+`skills.routing.enabled=true|false` decision from config.
 
 There are no longer public runtime plugin profiles such as `core`, `memory`, or
 `full`.

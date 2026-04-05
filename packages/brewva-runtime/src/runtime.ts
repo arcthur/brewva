@@ -2,7 +2,11 @@ import { resolve } from "node:path";
 import { RecoveryWalRecovery } from "./channels/recovery-wal-recovery.js";
 import { RecoveryWalStore } from "./channels/recovery-wal.js";
 import type { TurnEnvelope } from "./channels/turn.js";
-import { loadBrewvaConfig, normalizeExplicitBrewvaConfig } from "./config/loader.js";
+import {
+  loadBrewvaConfigResolution,
+  normalizeExplicitBrewvaConfigResolution,
+  type BrewvaConfigMetadata,
+} from "./config/loader.js";
 import { resolveWorkspaceRootDir } from "./config/paths.js";
 import { ContextBudgetManager } from "./context/budget.js";
 import { normalizeAgentId } from "./context/identity.js";
@@ -182,6 +186,7 @@ export interface BrewvaRuntimeOptions {
   governancePort?: GovernancePort;
   agentId?: string;
   routingScopes?: SkillRoutingScope[];
+  routingDefaultScopes?: SkillRoutingScope[];
 }
 
 export interface VerifyCompletionOptions {
@@ -192,6 +197,7 @@ export interface VerifyCompletionOptions {
 type RuntimeConfigState = {
   config: BrewvaConfig;
   readonlyConfig: DeepReadonly<BrewvaConfig>;
+  metadata: DeepReadonly<BrewvaConfigMetadata>;
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -516,6 +522,7 @@ interface BrewvaRuntimeMethodGroups {
   };
   events: {
     record: RuntimeRecordEvent;
+    resolveLogPath(sessionId: string): string;
     query(sessionId: string, query?: BrewvaEventQuery): BrewvaEventRecord[];
     queryStructured(sessionId: string, query?: BrewvaEventQuery): BrewvaStructuredEvent[];
     recordMetricObservation(
@@ -829,21 +836,32 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
   }
 
   private resolveRuntimeConfig(options: BrewvaRuntimeOptions): RuntimeConfigState {
-    const config = options.config
-      ? normalizeExplicitBrewvaConfig(options.config)
-      : loadBrewvaConfig({
+    const resolution = options.config
+      ? normalizeExplicitBrewvaConfigResolution(options.config)
+      : loadBrewvaConfigResolution({
           cwd: this.cwd,
           configPath: options.configPath,
         });
+    const config = resolution.config;
 
     if (options.routingScopes && options.routingScopes.length > 0) {
       config.skills.routing.enabled = true;
       config.skills.routing.scopes = [...new Set(options.routingScopes)];
+    } else if (
+      options.routingDefaultScopes &&
+      options.routingDefaultScopes.length > 0 &&
+      !resolution.metadata.skills.routing.enabledExplicit
+    ) {
+      config.skills.routing.enabled = true;
+      if (!resolution.metadata.skills.routing.scopesExplicit) {
+        config.skills.routing.scopes = [...new Set(options.routingDefaultScopes)];
+      }
     }
 
     return {
       config,
       readonlyConfig: deepFreezeValue(config),
+      metadata: deepFreezeValue(resolution.metadata),
     };
   }
 
@@ -1144,6 +1162,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
       },
       events: {
         record: (input) => this.eventPipeline.recordEvent(input),
+        resolveLogPath: (sessionId) => this.eventStore.getLogPath(sessionId),
         query: (sessionId, query) => this.eventPipeline.queryEvents(sessionId, query),
         queryStructured: (sessionId, query) =>
           this.eventPipeline.queryStructuredEvents(sessionId, query),

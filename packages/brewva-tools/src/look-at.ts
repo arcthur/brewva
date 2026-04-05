@@ -1,9 +1,13 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname } from "node:path";
+import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { buildReadPathDiscoveryObservationPayload } from "./read-path-discovery.js";
+import { recordToolRuntimeEvent } from "./runtime-internal.js";
 import { resolveScopedPath, resolveToolTargetScope } from "./target-scope.js";
 import type { BrewvaToolRuntime } from "./types.js";
+import { getToolSessionId } from "./utils/parallel-read.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
@@ -135,6 +139,21 @@ export function createLookAtTool(options?: { runtime?: BrewvaToolRuntime }): Too
       const stats = statSync(absolute);
       if (stats.isDirectory()) {
         return failTextResult(`Error: Expected file path, got directory: ${absolute}`);
+      }
+
+      const sessionId = getToolSessionId(ctx);
+      const discoveryPayload = buildReadPathDiscoveryObservationPayload({
+        baseCwd: scope.baseCwd,
+        toolName: "look_at",
+        evidenceKind: "direct_file_access",
+        observedPaths: [absolute],
+      });
+      if (sessionId && discoveryPayload) {
+        recordToolRuntimeEvent(options?.runtime, {
+          sessionId,
+          type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
+          payload: discoveryPayload,
+        });
       }
 
       const raw = readFileSync(absolute);
