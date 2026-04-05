@@ -165,12 +165,16 @@ explicit scope lists when they are present.
 Interactive hosted turns still keep activation explicit, but the control plane
 now derives a skill-first recommendation before ordinary tool work:
 
-- candidate skills are derived from the loaded catalog rather than from ad hoc
-  tool exploration
-- strong matches inject a skill-first policy block into hosted context
-- when no skill is active yet, a strong match narrows the turn to the minimal
-  pre-skill control-plane tool surface so the next semantic decision is
-  `skill_load`
+- when no skill is active yet and no TaskSpec is recorded, the hosted path
+  first narrows the turn to the bootstrap control-plane surface so the model
+  must record `task_set_spec` before deeper repository work
+- candidate skills are then derived from TaskSpec-first intent signals plus
+  task context, not from raw prompt scoring alone
+- strong post-TaskSpec matches inject a skill-first policy block into hosted
+  context
+- when no skill is active yet, a strong post-TaskSpec match narrows the turn to
+  the minimal pre-skill control-plane tool surface so the next semantic
+  decision is `skill_load`
 - this path still does not create an automatic routing state machine; actual
   activation remains explicit through `skill_load`
 

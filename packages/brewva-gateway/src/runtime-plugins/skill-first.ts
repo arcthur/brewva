@@ -22,11 +22,22 @@ type TaskStateLike = {
   blockers?: unknown[];
 };
 
-interface PromptSignals {
+interface TextSignalIndex {
   normalizedText: string;
   englishTokens: Set<string>;
+  targetPaths: string[];
+  hasContent: boolean;
+}
+
+interface TaskIntentSignals {
+  prompt: TextSignalIndex;
+  spec: TextSignalIndex;
+  taskContext: TextSignalIndex;
+  combinedNormalizedText: string;
+  combinedEnglishTokens: Set<string>;
   phase: TaskPhase | null;
   targetPaths: string[];
+  taskSpecReady: boolean;
 }
 
 interface ScoredSignal {
@@ -34,11 +45,24 @@ interface ScoredSignal {
   reason?: string;
 }
 
+interface SignalWeights {
+  exact: number;
+  strong: number;
+  partial: number;
+}
+
 export interface SkillFirstRuntimeLike {
   inspect: {
     skills: {
       list(): SkillRecommendationCandidate[];
       getActive(sessionId: string): Pick<SkillRecommendationCandidate, "name"> | null | undefined;
+      getLoadReport(): {
+        loadedSkills: readonly string[];
+        routingEnabled: boolean;
+        routingScopes: readonly string[];
+        routableSkills: readonly string[];
+        hiddenSkills: readonly string[];
+      };
     };
     task: {
       getState(sessionId: string): TaskStateLike | undefined;
@@ -54,10 +78,26 @@ export interface SkillRecommendation {
   primary: boolean;
 }
 
+export type SkillRecommendationGateMode = "none" | "task_spec_required" | "skill_load_required";
+
 export interface SkillRecommendationSet {
   activeSkillName: string | null;
-  required: boolean;
+  gateMode: SkillRecommendationGateMode;
+  taskSpecReady: boolean;
   recommendations: SkillRecommendation[];
+}
+
+export interface SkillRecommendationReceiptPayload {
+  schema: "brewva.skill_recommendation.v2";
+  gateMode: SkillRecommendationGateMode;
+  taskSpecReady: boolean;
+  recommendations: Array<{
+    name: string;
+    category: SkillRecommendation["category"];
+    score: number;
+    primary: boolean;
+    reasons: string[];
+  }>;
 }
 
 const MAX_RECOMMENDATIONS = 3;
@@ -146,72 +186,6 @@ function extractPathLikeValues(value: string): string[] {
   return matches.map((entry) => normalizePath(entry)).filter(Boolean);
 }
 
-function collectPromptSignals(prompt: string, taskState: TaskStateLike | undefined): PromptSignals {
-  const parts: string[] = [];
-  const targetPaths = new Set<string>();
-  const spec =
-    taskState?.spec && typeof taskState.spec === "object"
-      ? (taskState.spec as {
-          goal?: unknown;
-          expectedBehavior?: unknown;
-          constraints?: unknown;
-          targets?: {
-            files?: unknown;
-            symbols?: unknown;
-          };
-        })
-      : undefined;
-
-  const push = (value: unknown) => {
-    const normalized = readString(value);
-    if (!normalized) {
-      return;
-    }
-    parts.push(normalized);
-    for (const path of extractPathLikeValues(normalized)) {
-      targetPaths.add(path);
-    }
-  };
-
-  push(prompt);
-  push(spec?.goal);
-  push(spec?.expectedBehavior);
-
-  for (const value of readStringArray(spec?.constraints)) {
-    push(value);
-  }
-  for (const value of readStringArray(spec?.targets?.files)) {
-    push(value);
-    targetPaths.add(normalizePath(value));
-  }
-  for (const value of readStringArray(spec?.targets?.symbols)) {
-    push(value);
-  }
-  for (const item of Array.isArray(taskState?.items) ? taskState.items : []) {
-    if (item && typeof item === "object") {
-      push((item as { text?: unknown }).text);
-    }
-  }
-  for (const blocker of Array.isArray(taskState?.blockers) ? taskState.blockers : []) {
-    if (blocker && typeof blocker === "object") {
-      push((blocker as { message?: unknown; text?: unknown; reason?: unknown }).message);
-      push((blocker as { message?: unknown; text?: unknown; reason?: unknown }).text);
-      push((blocker as { message?: unknown; text?: unknown; reason?: unknown }).reason);
-    }
-  }
-
-  const normalizedText = normalizeText(parts.join("\n"));
-  return {
-    normalizedText,
-    englishTokens: extractEnglishTokens(normalizedText),
-    phase:
-      taskState?.status && typeof taskState.status === "object"
-        ? readTaskPhase((taskState.status as { phase?: unknown }).phase)
-        : null,
-    targetPaths: [...targetPaths],
-  };
-}
-
 function extractEnglishTokens(text: string): Set<string> {
   const matches = text.match(ENGLISH_TOKEN_PATTERN) ?? [];
   return new Set(
@@ -284,16 +258,147 @@ function pushReason(reasons: string[], reason: string | undefined): void {
   reasons.push(reason);
 }
 
+function createTextSignalIndex(parts: readonly string[]): TextSignalIndex {
+  const normalizedParts = parts
+    .map((part) => readString(part))
+    .filter((part): part is string => !!part);
+  const targetPaths = new Set<string>();
+
+  for (const value of normalizedParts) {
+    for (const path of extractPathLikeValues(value)) {
+      targetPaths.add(path);
+    }
+  }
+
+  const normalizedText = normalizeText(normalizedParts.join("\n"));
+  return {
+    normalizedText,
+    englishTokens: extractEnglishTokens(normalizedText),
+    targetPaths: [...targetPaths],
+    hasContent: normalizedText.length > 0,
+  };
+}
+
+function combineEnglishTokens(indexes: readonly TextSignalIndex[]): Set<string> {
+  const combined = new Set<string>();
+  for (const index of indexes) {
+    for (const token of index.englishTokens) {
+      combined.add(token);
+    }
+  }
+  return combined;
+}
+
+function mergeNormalizedText(indexes: readonly TextSignalIndex[]): string {
+  return indexes
+    .map((index) => index.normalizedText)
+    .filter((value) => value.length > 0)
+    .join("\n");
+}
+
+function readTaskSpec(taskState: TaskStateLike | undefined):
+  | {
+      goal?: unknown;
+      expectedBehavior?: unknown;
+      constraints?: unknown;
+      targets?: {
+        files?: unknown;
+        symbols?: unknown;
+      };
+    }
+  | undefined {
+  return taskState?.spec && typeof taskState.spec === "object"
+    ? (taskState.spec as {
+        goal?: unknown;
+        expectedBehavior?: unknown;
+        constraints?: unknown;
+        targets?: {
+          files?: unknown;
+          symbols?: unknown;
+        };
+      })
+    : undefined;
+}
+
+function collectTaskIntentSignals(
+  prompt: string,
+  taskState: TaskStateLike | undefined,
+): TaskIntentSignals {
+  const spec = readTaskSpec(taskState);
+  const specGoal = readString(spec?.goal);
+  const promptIndex = createTextSignalIndex([prompt]);
+  const specParts: string[] = [];
+
+  if (specGoal) {
+    specParts.push(specGoal);
+  }
+  const expectedBehavior = readString(spec?.expectedBehavior);
+  if (expectedBehavior) {
+    specParts.push(expectedBehavior);
+  }
+  for (const value of readStringArray(spec?.constraints)) {
+    specParts.push(value);
+  }
+  for (const value of readStringArray(spec?.targets?.files)) {
+    specParts.push(value);
+  }
+  for (const value of readStringArray(spec?.targets?.symbols)) {
+    specParts.push(value);
+  }
+
+  const taskContextParts: string[] = [];
+  for (const item of Array.isArray(taskState?.items) ? taskState.items : []) {
+    if (item && typeof item === "object") {
+      const text = readString((item as { text?: unknown }).text);
+      if (text) {
+        taskContextParts.push(text);
+      }
+    }
+  }
+  for (const blocker of Array.isArray(taskState?.blockers) ? taskState.blockers : []) {
+    if (blocker && typeof blocker === "object") {
+      const fields = blocker as { message?: unknown; text?: unknown; reason?: unknown };
+      for (const candidate of [fields.message, fields.text, fields.reason]) {
+        const value = readString(candidate);
+        if (value) {
+          taskContextParts.push(value);
+        }
+      }
+    }
+  }
+
+  const specIndex = createTextSignalIndex(specParts);
+  const taskContextIndex = createTextSignalIndex(taskContextParts);
+  const targetPaths = new Set<string>([
+    ...promptIndex.targetPaths,
+    ...specIndex.targetPaths,
+    ...taskContextIndex.targetPaths,
+    ...readStringArray(spec?.targets?.files)
+      .map((value) => normalizePath(value))
+      .filter(Boolean),
+  ]);
+
+  return {
+    prompt: promptIndex,
+    spec: specIndex,
+    taskContext: taskContextIndex,
+    combinedNormalizedText: mergeNormalizedText([promptIndex, specIndex, taskContextIndex]),
+    combinedEnglishTokens: combineEnglishTokens([promptIndex, specIndex, taskContextIndex]),
+    phase:
+      taskState?.status && typeof taskState.status === "object"
+        ? readTaskPhase((taskState.status as { phase?: unknown }).phase)
+        : null,
+    targetPaths: [...targetPaths],
+    taskSpecReady: Boolean(specGoal),
+  };
+}
+
 function scoreNaturalLanguageSignal(
   signal: string | undefined,
-  input: PromptSignals,
-  weights: {
-    exact: number;
-    strong: number;
-    partial: number;
-  },
+  input: TextSignalIndex,
+  weights: SignalWeights,
 ): ScoredSignal {
-  if (!signal) {
+  if (!signal || !input.hasContent) {
     return { score: 0 };
   }
   const normalizedSignal = normalizeText(signal);
@@ -338,18 +443,42 @@ function scoreNaturalLanguageSignal(
   return { score: 0 };
 }
 
-function scoreSignalSet(
-  signals: readonly string[],
-  input: PromptSignals,
+function scoreSignalAcrossSources(
+  signal: string | undefined,
+  input: TaskIntentSignals,
   weights: {
-    exact: number;
-    strong: number;
-    partial: number;
+    spec: SignalWeights;
+    taskContext: SignalWeights;
+    prompt: SignalWeights;
+  },
+): ScoredSignal {
+  const candidates = [
+    scoreNaturalLanguageSignal(signal, input.spec, weights.spec),
+    scoreNaturalLanguageSignal(signal, input.taskContext, weights.taskContext),
+    scoreNaturalLanguageSignal(signal, input.prompt, weights.prompt),
+  ];
+
+  let best: ScoredSignal = { score: 0 };
+  for (const candidate of candidates) {
+    if (candidate.score > best.score) {
+      best = candidate;
+    }
+  }
+  return best;
+}
+
+function scoreSignalSetAcrossSources(
+  signals: readonly string[],
+  input: TaskIntentSignals,
+  weights: {
+    spec: SignalWeights;
+    taskContext: SignalWeights;
+    prompt: SignalWeights;
   },
 ): ScoredSignal {
   let best: ScoredSignal = { score: 0 };
   for (const signal of signals) {
-    const scored = scoreNaturalLanguageSignal(signal, input, weights);
+    const scored = scoreSignalAcrossSources(signal, input, weights);
     if (scored.score > best.score) {
       best = scored;
     }
@@ -373,7 +502,7 @@ function hasMatchingPath(pathPattern: string, targetPaths: readonly string[]): b
 
 function scoreSelectionPaths(
   selectionPaths: readonly string[] | undefined,
-  input: PromptSignals,
+  input: TaskIntentSignals,
 ): ScoredSignal {
   if (!selectionPaths || selectionPaths.length === 0 || input.targetPaths.length === 0) {
     return { score: 0 };
@@ -392,7 +521,7 @@ function scoreSelectionPaths(
 
 function scoreSelectionPhases(
   phases: readonly TaskPhase[] | undefined,
-  input: PromptSignals,
+  input: TaskIntentSignals,
 ): ScoredSignal {
   if (!phases || phases.length === 0 || !input.phase) {
     return { score: 0 };
@@ -408,7 +537,7 @@ function scoreSelectionPhases(
 
 function scoreSkill(
   skill: SkillRecommendationCandidate,
-  input: PromptSignals,
+  input: TaskIntentSignals,
 ): SkillRecommendation | null {
   if (!skill.contract.routing?.scope || !skill.contract.selection) {
     return null;
@@ -417,27 +546,35 @@ function scoreSkill(
   let score = 0;
   const reasons: string[] = [];
 
-  const whenToUse = scoreNaturalLanguageSignal(skill.contract.selection.whenToUse, input, {
-    exact: 2.7,
-    strong: 2.45,
-    partial: 1.9,
+  const whenToUse = scoreSignalAcrossSources(skill.contract.selection.whenToUse, input, {
+    spec: { exact: 2.95, strong: 2.6, partial: 2.1 },
+    taskContext: { exact: 1.9, strong: 1.55, partial: 1.25 },
+    prompt: { exact: 0.8, strong: 0.65, partial: 0.45 },
   });
   score += whenToUse.score;
   pushReason(reasons, whenToUse.reason);
 
-  const exampleSignal = scoreSignalSet(skill.contract.selection.examples ?? [], input, {
-    exact: 1.55,
-    strong: 1.35,
-    partial: 1.1,
-  });
+  const exampleSignal = scoreSignalSetAcrossSources(
+    skill.contract.selection.examples ?? [],
+    input,
+    {
+      spec: { exact: 1.75, strong: 1.5, partial: 1.2 },
+      taskContext: { exact: 1.1, strong: 0.9, partial: 0.7 },
+      prompt: { exact: 0.45, strong: 0.35, partial: 0.25 },
+    },
+  );
   score += exampleSignal.score;
   pushReason(reasons, exampleSignal.reason);
 
-  const triggerSignal = scoreSignalSet(extractMarkdownBullets(skill.markdown, "Trigger"), input, {
-    exact: 1.35,
-    strong: 1.15,
-    partial: 0.9,
-  });
+  const triggerSignal = scoreSignalSetAcrossSources(
+    extractMarkdownBullets(skill.markdown, "Trigger"),
+    input,
+    {
+      spec: { exact: 1.55, strong: 1.25, partial: 1.0 },
+      taskContext: { exact: 0.95, strong: 0.75, partial: 0.55 },
+      prompt: { exact: 0.35, strong: 0.25, partial: 0.18 },
+    },
+  );
   score += triggerSignal.score;
   pushReason(reasons, triggerSignal.reason);
 
@@ -450,28 +587,28 @@ function scoreSkill(
   pushReason(reasons, phaseSignal.reason);
 
   const normalizedName = normalizeText(skill.name);
-  if (normalizedName && input.normalizedText.includes(normalizedName)) {
-    score += 1.8;
+  if (normalizedName && input.combinedNormalizedText.includes(normalizedName)) {
+    score += 1.5;
     pushReason(reasons, skill.name);
   } else {
     for (const token of tokenizeName(skill.name)) {
-      if (input.englishTokens.has(token)) {
-        score += 0.9;
+      if (input.combinedEnglishTokens.has(token)) {
+        score += 0.5;
         pushReason(reasons, token);
       }
     }
   }
 
   for (const token of tokenizeSignalText(skill.description).slice(0, 8)) {
-    if (input.englishTokens.has(token)) {
-      score += 0.3;
+    if (input.combinedEnglishTokens.has(token)) {
+      score += 0.25;
       pushReason(reasons, token);
     }
   }
 
   for (const token of listSkillOutputs(skill.contract).flatMap((entry) => tokenizeName(entry))) {
-    if (input.englishTokens.has(token)) {
-      score += 0.28;
+    if (input.combinedEnglishTokens.has(token)) {
+      score += 0.24;
       pushReason(reasons, token);
     }
   }
@@ -481,8 +618,8 @@ function scoreSkill(
     ...listSkillFallbackTools(skill.contract),
   ]) {
     const normalizedTool = normalizeText(toolName);
-    if (normalizedTool && input.normalizedText.includes(normalizedTool)) {
-      score += 0.22;
+    if (normalizedTool && input.combinedNormalizedText.includes(normalizedTool)) {
+      score += 0.2;
       pushReason(reasons, normalizedTool);
     }
   }
@@ -500,6 +637,54 @@ function scoreSkill(
   };
 }
 
+function resolveRoutableSkills(runtime: SkillFirstRuntimeLike): SkillRecommendationCandidate[] {
+  const loadReport = runtime.inspect.skills.getLoadReport();
+  if (!loadReport.routingEnabled || loadReport.routableSkills.length === 0) {
+    return [];
+  }
+  const routableNames = new Set(loadReport.routableSkills);
+  return runtime.inspect.skills
+    .list()
+    .filter((skill) => routableNames.has(skill.name))
+    .toSorted((left, right) => left.name.localeCompare(right.name));
+}
+
+function formatReasons(reasons: readonly string[]): string {
+  return reasons.slice(0, MAX_REASON_COUNT).join(", ");
+}
+
+export function buildSkillRecommendationReceiptPayload(
+  input: SkillRecommendationSet,
+): SkillRecommendationReceiptPayload | null {
+  if (input.activeSkillName) {
+    return null;
+  }
+  if (input.gateMode === "none" && input.recommendations.length === 0) {
+    return null;
+  }
+  return {
+    schema: "brewva.skill_recommendation.v2",
+    gateMode: input.gateMode,
+    taskSpecReady: input.taskSpecReady,
+    recommendations: input.recommendations.map((entry) => ({
+      name: entry.name,
+      category: entry.category,
+      score: entry.score,
+      primary: entry.primary,
+      reasons: entry.reasons,
+    })),
+  };
+}
+
+export function computeSkillRecommendationReceiptKey(input: SkillRecommendationSet): string {
+  const payload = buildSkillRecommendationReceiptPayload(input);
+  return payload ? JSON.stringify(payload) : "";
+}
+
+function isTaskSpecReady(taskState: TaskStateLike | undefined): boolean {
+  return !!readString(readTaskSpec(taskState)?.goal);
+}
+
 export function deriveSkillRecommendations(
   runtime: SkillFirstRuntimeLike,
   input: {
@@ -507,27 +692,48 @@ export function deriveSkillRecommendations(
     prompt: string;
   },
 ): SkillRecommendationSet {
+  const taskState = runtime.inspect.task.getState(input.sessionId);
   const activeSkillName = runtime.inspect.skills.getActive(input.sessionId)?.name ?? null;
+  const taskSpecReady = isTaskSpecReady(taskState);
+
   if (activeSkillName) {
     return {
       activeSkillName,
-      required: false,
+      gateMode: "none",
+      taskSpecReady,
       recommendations: [],
     };
   }
 
-  const taskState = runtime.inspect.task.getState(input.sessionId);
-  const signals = collectPromptSignals(input.prompt, taskState);
-  if (!signals.normalizedText) {
+  const routableSkills = resolveRoutableSkills(runtime);
+  if (routableSkills.length === 0) {
     return {
       activeSkillName: null,
-      required: false,
+      gateMode: "none",
+      taskSpecReady,
       recommendations: [],
     };
   }
 
-  const scored = runtime.inspect.skills
-    .list()
+  const signals = collectTaskIntentSignals(input.prompt, taskState);
+  if (!signals.taskSpecReady) {
+    if (!signals.prompt.hasContent && !signals.taskContext.hasContent) {
+      return {
+        activeSkillName: null,
+        gateMode: "none",
+        taskSpecReady: false,
+        recommendations: [],
+      };
+    }
+    return {
+      activeSkillName: null,
+      gateMode: "task_spec_required",
+      taskSpecReady: false,
+      recommendations: [],
+    };
+  }
+
+  const scored = routableSkills
     .map((skill) => scoreSkill(skill, signals))
     .filter((entry): entry is SkillRecommendation => entry !== null)
     .toSorted((left, right) => right.score - left.score || left.name.localeCompare(right.name));
@@ -536,7 +742,8 @@ export function deriveSkillRecommendations(
   if (!top) {
     return {
       activeSkillName: null,
-      required: false,
+      gateMode: "none",
+      taskSpecReady: true,
       recommendations: [],
     };
   }
@@ -556,22 +763,17 @@ export function deriveSkillRecommendations(
 
   return {
     activeSkillName: null,
-    required: top.score >= REQUIRED_RECOMMENDATION_SCORE,
+    gateMode: top.score >= REQUIRED_RECOMMENDATION_SCORE ? "skill_load_required" : "none",
+    taskSpecReady: true,
     recommendations: retained,
   };
 }
 
-function formatReasons(reasons: readonly string[]): string {
-  return reasons.slice(0, MAX_REASON_COUNT).join(", ");
-}
-
 export function buildSkillFirstPolicyBlock(input: SkillRecommendationSet): string | null {
-  if (input.recommendations.length === 0) {
+  if (input.activeSkillName) {
     return null;
   }
-
-  const primary = input.recommendations[0];
-  if (!primary) {
+  if (input.gateMode === "none" && input.recommendations.length === 0) {
     return null;
   }
 
@@ -581,14 +783,26 @@ export function buildSkillFirstPolicyBlock(input: SkillRecommendationSet): strin
     "No active skill is currently loaded.",
   ];
 
-  if (input.required) {
+  if (input.gateMode === "task_spec_required") {
+    lines.push("No TaskSpec is currently recorded for this session.");
     lines.push(
-      "This task already matches loaded skills strongly. Before substantive repository reads, searches, execution, or edits, call `skill_load` with the best match.",
+      "Before deeper repository reads, searches, execution, or edits, call `task_set_spec` to record the task goal, constraints, targets, and verification intent.",
+    );
+    lines.push("After `task_set_spec`, Brewva will re-evaluate whether `skill_load` is required.");
+    return lines.join("\n");
+  }
+
+  const primary = input.recommendations[0];
+  if (!primary) {
+    return null;
+  }
+
+  if (input.gateMode === "skill_load_required") {
+    lines.push(
+      "This TaskSpec now matches loaded skills strongly. Before substantive repository reads, searches, execution, or edits, call `skill_load` with the best match.",
     );
   } else {
-    lines.push(
-      "This task likely matches loaded skills. Prefer `skill_load` before deeper tool work.",
-    );
+    lines.push("TaskSpec is present. Prefer `skill_load` before deeper tool work.");
   }
 
   lines.push(`primary_skill: ${primary.name}`);

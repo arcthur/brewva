@@ -3,7 +3,7 @@ import {
   registerToolSurface,
   type ToolSurfaceRuntime,
 } from "@brewva/brewva-gateway/runtime-plugins";
-import type { SkillRoutingScope, TaskPhase } from "@brewva/brewva-runtime";
+import type { SkillRegistryLoadReport, SkillRoutingScope, TaskPhase } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import type { ToolInfo } from "@mariozechner/pi-coding-agent";
@@ -102,10 +102,40 @@ function createToolSurfaceRuntime(options: ToolSurfaceRuntimeOptions = {}): Tool
       config.skills.routing.scopes = options.routingScopes ?? ["core", "domain"];
     }),
   });
+  const listSkills = options.listSkills ?? (() => []);
+  const routingScopes = options.routingScopes ?? ["core", "domain"];
+  const buildLoadReport = (): SkillRegistryLoadReport => {
+    const skills = listSkills();
+    const loadedSkills = skills.map((skill) => skill.name);
+    const routableSkills = skills
+      .filter((skill) => {
+        const scope = skill.contract.routing?.scope;
+        return typeof scope === "string" && routingScopes.includes(scope);
+      })
+      .map((skill) => skill.name);
+    return {
+      roots: [],
+      loadedSkills,
+      routingEnabled: true,
+      routingScopes,
+      routableSkills,
+      hiddenSkills: loadedSkills.filter((name) => !routableSkills.includes(name)),
+      overlaySkills: [],
+      sharedContextFiles: [],
+      categories: {
+        core: [],
+        domain: [],
+        operator: [],
+        meta: [],
+        internal: [],
+      },
+    };
+  };
   Object.assign(runtime.inspect.skills, {
-    list: options.listSkills ?? (() => []),
+    list: listSkills,
     getActive: options.getActive ?? (() => undefined),
     get: options.getSkill ?? (() => undefined),
+    getLoadReport: buildLoadReport,
   });
   if (options.taskState) {
     Object.assign(runtime.inspect.task, {
@@ -365,7 +395,7 @@ describe("tool surface runtime plugin", () => {
     expect(event?.payload?.ignoredRequestedToolNames).toEqual([]);
   });
 
-  test("strong skill recommendations prune default repository tools until skill_load happens", async () => {
+  test("missing task spec prunes default repository tools into the bootstrap surface", async () => {
     const extensionApi = createMockRuntimePluginApi();
     registerTools(extensionApi.api, [
       "read",
@@ -449,8 +479,389 @@ describe("tool surface runtime plugin", () => {
     const event = events.find((input) => input.type === "tool_surface_resolved") as
       | { payload?: Record<string, unknown> }
       | undefined;
-    expect(event?.payload?.recommendedSkillRequired).toBe(true);
-    expect(event?.payload?.recommendedSkillNames).toEqual(["runtime-forensics"]);
+    expect(event?.payload?.skillGateMode).toBe("task_spec_required");
+    expect(event?.payload?.taskSpecReady).toBe(false);
+    expect(event?.payload?.recommendedSkillNames).toEqual([]);
+  });
+
+  test("task spec updates can trigger same-turn skill-first recovery for multilingual prompts", async () => {
+    const extensionApi = createMockRuntimePluginApi();
+    registerTools(extensionApi.api, [
+      "read",
+      "edit",
+      "write",
+      "session_compact",
+      "skill_load",
+      "workflow_status",
+      "task_set_spec",
+      "task_view_state",
+      "task_add_item",
+      "task_update_item",
+      "task_record_blocker",
+      "task_resolve_blocker",
+      "knowledge_search",
+      "output_search",
+    ]);
+
+    let taskState:
+      | {
+          spec?: unknown;
+          status?: {
+            phase?: string;
+          };
+          items?: unknown[];
+          blockers?: unknown[];
+          updatedAt?: unknown;
+        }
+      | undefined;
+    const events: Array<Record<string, unknown>> = [];
+
+    const runtime = createToolSurfaceRuntime({
+      listSkills: () => [
+        createSkillDocument(
+          "learning-research",
+          ["workspace_read", "runtime_observe"],
+          ["knowledge_search"],
+          {
+            markdown: [
+              "# Learning Research",
+              "",
+              "## Trigger",
+              "",
+              "- planning posture is `moderate`, `complex`, or `high_risk`",
+              "- review needs repository precedent rather than only diff-local reasoning",
+            ].join("\n"),
+            selection: {
+              whenToUse:
+                "Use when a non-trivial task needs repository precedents, prior failure patterns, or preventive guidance before deeper execution.",
+              examples: [
+                "Find prior repository solutions for this problem.",
+                "Look up precedent before we implement this.",
+                "Gather repository-specific guidance for this debugging task.",
+              ],
+              phases: ["align", "investigate"],
+            },
+          },
+        ),
+      ],
+      taskState,
+      recordEvent: (input: Record<string, unknown>) => {
+        events.push(input);
+        return undefined;
+      },
+    });
+    Object.assign(runtime.inspect.task, {
+      getState: () => taskState,
+    });
+
+    registerToolSurface(extensionApi.api, runtime);
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt:
+          "对比下本项目和 /Users/bytedance/new_py/kimi-cli，这是一个高质量的 agent 架构实现，我想知道从你的角度，有什么可以从 kimi-cli 学习的，可以帮我大幅度增强能力，或减化实现达到更好的效果",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-multilingual-recovery",
+        },
+      },
+    );
+
+    expect(extensionApi.activeTools).not.toContain("read");
+    expect(extensionApi.activeTools).not.toContain("knowledge_search");
+    expect(extensionApi.activeTools).toContain("task_set_spec");
+    expect(extensionApi.activeTools).toContain("workflow_status");
+
+    taskState = {
+      spec: {
+        goal: "Compare the current Brewva project with the local kimi-cli repository and identify architecture patterns, capability enablers, and simplifications Brewva could adopt for stronger agent behavior or lower implementation complexity.",
+        targets: {
+          files: [
+            "AGENTS.md",
+            "docs/architecture/system-architecture.md",
+            "docs/reference/runtime.md",
+            "/Users/bytedance/new_py/kimi-cli",
+          ],
+          symbols: ["BrewvaRuntime"],
+        },
+        expectedBehavior:
+          "Produce an evidence-backed comparison of architecture, strengths, gaps, and concrete recommendations prioritized by leverage and implementation complexity.",
+        constraints: [
+          "Read-only investigation",
+          "Consult repository-native solution docs via knowledge_search for non-trivial review work",
+          "Prefer authoritative docs and key entrypoints over broad speculation",
+        ],
+      },
+      status: { phase: "investigate" },
+      items: [],
+      blockers: [],
+      updatedAt: null,
+    };
+
+    const result = await invokeHandlerAsync<{ content?: Array<{ text?: string }> }>(
+      extensionApi.handlers,
+      "tool_result",
+      {
+        type: "tool_result",
+        toolName: "task_set_spec",
+        toolCallId: "tc-task-set-spec",
+        isError: false,
+        content: [{ type: "text", text: "TaskSpec recorded." }],
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-multilingual-recovery",
+        },
+      },
+    );
+
+    expect(extensionApi.activeTools).not.toContain("read");
+    expect(extensionApi.activeTools).not.toContain("knowledge_search");
+    expect(extensionApi.activeTools).toContain("skill_load");
+    expect(extensionApi.activeTools).toContain("task_set_spec");
+    expect(result?.content?.[0]?.text).toContain("[Brewva Skill-First Refresh]");
+    expect(result?.content?.[0]?.text).toContain("learning-research");
+    const recommendationEvent = events.findLast(
+      (input) => input.type === "skill_recommendation_derived",
+    ) as { payload?: Record<string, unknown> } | undefined;
+    expect(recommendationEvent?.payload?.gateMode).toBe("skill_load_required");
+    expect(recommendationEvent?.payload?.taskSpecReady).toBe(true);
+    expect(recommendationEvent?.payload?.recommendations).toEqual([
+      expect.objectContaining({
+        name: "learning-research",
+        primary: true,
+      }),
+    ]);
+  });
+
+  test("task-state mutation re-evaluation reuses a single recommendation pass", async () => {
+    const extensionApi = createMockRuntimePluginApi();
+    registerTools(extensionApi.api, [
+      "read",
+      "edit",
+      "write",
+      "session_compact",
+      "skill_load",
+      "workflow_status",
+      "task_set_spec",
+      "task_view_state",
+      "task_add_item",
+      "task_update_item",
+      "task_record_blocker",
+      "task_resolve_blocker",
+      "knowledge_search",
+    ]);
+
+    let taskState = {
+      spec: {
+        goal: "Find repository precedents and architecture patterns that improve agent behavior.",
+        expectedBehavior:
+          "Route the investigation through the most relevant repository-analysis skill before deeper tool work.",
+        constraints: ["Read-only investigation"],
+      },
+      status: { phase: "investigate" },
+      items: [],
+      blockers: [],
+      updatedAt: null,
+    };
+    let getStateCalls = 0;
+
+    const runtime = createToolSurfaceRuntime({
+      listSkills: () => [
+        createSkillDocument(
+          "learning-research",
+          ["workspace_read", "runtime_observe"],
+          ["knowledge_search"],
+          {
+            markdown: [
+              "# Learning Research",
+              "",
+              "## Trigger",
+              "",
+              "- investigate repository precedent",
+            ].join("\n"),
+            selection: {
+              whenToUse:
+                "Use when a non-trivial task needs repository precedents, prior failure patterns, or preventive guidance before deeper execution.",
+              examples: ["Look up precedent before we implement this."],
+              phases: ["investigate"],
+            },
+          },
+        ),
+      ],
+    });
+    Object.assign(runtime.inspect.task, {
+      getState: () => {
+        getStateCalls += 1;
+        return taskState;
+      },
+    });
+
+    registerToolSurface(extensionApi.api, runtime);
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "请先看看仓库里有没有类似的先例，然后再决定怎么推进实现",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-single-pass",
+        },
+      },
+    );
+
+    getStateCalls = 0;
+    const result = await invokeHandlerAsync(
+      extensionApi.handlers,
+      "tool_result",
+      {
+        type: "tool_result",
+        toolName: "task_set_spec",
+        toolCallId: "tc-task-set-spec-single-pass",
+        isError: false,
+        content: [{ type: "text", text: "TaskSpec already recorded." }],
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-single-pass",
+        },
+      },
+    );
+
+    expect(result).toBeUndefined();
+    expect(getStateCalls).toBe(1);
+  });
+
+  test("session shutdown clears cached tool-surface session state", async () => {
+    const extensionApi = createMockRuntimePluginApi();
+    registerTools(extensionApi.api, [
+      "read",
+      "edit",
+      "write",
+      "session_compact",
+      "skill_load",
+      "workflow_status",
+      "task_set_spec",
+      "task_view_state",
+      "task_add_item",
+      "task_update_item",
+      "task_record_blocker",
+      "task_resolve_blocker",
+      "knowledge_search",
+      "output_search",
+    ]);
+
+    let taskState:
+      | {
+          spec?: unknown;
+          status?: {
+            phase?: string;
+          };
+          items?: unknown[];
+          blockers?: unknown[];
+          updatedAt?: unknown;
+        }
+      | undefined;
+    const events: Array<Record<string, unknown>> = [];
+
+    const runtime = createToolSurfaceRuntime({
+      listSkills: () => [
+        createSkillDocument(
+          "learning-research",
+          ["workspace_read", "runtime_observe"],
+          ["knowledge_search"],
+          {
+            markdown: [
+              "# Learning Research",
+              "",
+              "## Trigger",
+              "",
+              "- investigate repository precedent",
+            ].join("\n"),
+            selection: {
+              whenToUse:
+                "Use when a non-trivial task needs repository precedents, prior failure patterns, or preventive guidance before deeper execution.",
+              examples: ["Find prior repository solutions for this problem."],
+              phases: ["investigate"],
+            },
+          },
+        ),
+      ],
+      recordEvent: (input: Record<string, unknown>) => {
+        events.push(input);
+        return undefined;
+      },
+    });
+    Object.assign(runtime.inspect.task, {
+      getState: () => taskState,
+    });
+
+    registerToolSurface(extensionApi.api, runtime);
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "先帮我看下仓库里有没有类似问题的先例",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-session-shutdown",
+        },
+      },
+    );
+
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "session_shutdown",
+      {
+        type: "session_shutdown",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-session-shutdown",
+        },
+      },
+    );
+
+    taskState = {
+      spec: {
+        goal: "Find repository precedents and summarize the strongest architecture recommendations.",
+        expectedBehavior:
+          "Re-enter skill-first routing and require the relevant research skill before broader tool use.",
+        constraints: ["Read-only investigation"],
+      },
+      status: { phase: "investigate" },
+      items: [],
+      blockers: [],
+      updatedAt: null,
+    };
+
+    const result = await invokeHandlerAsync(
+      extensionApi.handlers,
+      "tool_result",
+      {
+        type: "tool_result",
+        toolName: "task_set_spec",
+        toolCallId: "tc-task-set-spec-after-shutdown",
+        isError: false,
+        content: [{ type: "text", text: "TaskSpec recorded after shutdown." }],
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-session-shutdown",
+        },
+      },
+    );
+
+    expect(result).toBeUndefined();
+    expect(events.filter((input) => input.type === "tool_surface_resolved")).toHaveLength(1);
+    expect(events.filter((input) => input.type === "skill_recommendation_derived")).toHaveLength(0);
   });
 
   test("investigation lifecycle tools stay visible while the session has no task spec", async () => {

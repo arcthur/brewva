@@ -29,8 +29,8 @@ sequenceDiagram
 
   U->>CLI: submit turn
   CLI->>EXT: before_agent_start
-  EXT->>RT: maintain.context.observeUsage + maintain.context.buildInjection
-  RT->>STORE: read/update working projection state (units + working)
+  EXT->>RT: inspect task/skills + maintain.context.observeUsage + maintain.context.buildInjection
+  RT->>STORE: read/update working projection state + record hosted routing posture receipts
   CLI->>HOST: provider request + assistant completion
   HOST-->>CLI: hosted completion event
   CLI->>EXT: tool_call
@@ -45,13 +45,21 @@ Hosted wiring narrows a root runtime into hosted, tool, and operator ports plus
 repo-owned internal hooks where required. It does not hand a raw implementation
 bag to every lifecycle adapter.
 
+Before the provider request, the hosted control plane resolves the current
+TaskSpec-first posture. If no skill is active and no TaskSpec exists, the turn
+stays on the bootstrap tool surface so the next semantic decision is
+`task_set_spec`. If TaskSpec is present and the routed match is strong, the
+visible surface may narrow again so the next semantic decision is explicit
+`skill_load`. These posture changes are experience-ring shaping plus durable
+control-plane receipts; they do not create automatic skill activation.
+
 ## Direct Managed Tools Flow (`--managed-tools direct`)
 
 ```mermaid
 flowchart TD
   A["create runtime"] --> B["create hosted turn pipeline"]
   B --> C["host provides managed tools directly"]
-  C --> D["before_agent_start: hosted context + tool surface"]
+  C --> D["before_agent_start: TaskSpec-first context + tool surface"]
   D --> E["provider request + assistant completion"]
   E --> F["tool_call: quality gate + invocation spine"]
   F --> G["tool_result: ledger + event stream + distillation"]

@@ -32,45 +32,61 @@ const HARD_GATE_STATUS: ContextCompactionGateStatus = {
 };
 
 function installRuntimeForensicsSkill(runtime: ReturnType<typeof createRuntimeFixture>): void {
-  Object.assign(runtime.inspect.skills, {
-    list: () => [
-      {
-        name: "runtime-forensics",
-        description: "Investigate runtime traces, sessions, events, ledgers, and projections.",
-        category: "domain" as const,
-        markdown: "## Trigger\n\n- investigating runtime traces, sessions, or ledgers\n",
-        contract: {
-          name: "runtime-forensics",
-          category: "domain" as const,
-          routing: {
-            scope: "domain" as const,
-          },
-          selection: {
-            whenToUse:
-              "Use when the task asks what happened at runtime and the answer must come from traces, ledgers, projections, or artifacts.",
-            examples: [
-              "Analyze this session trace.",
-              "Explain the runtime events and ledger evidence.",
-            ],
-            paths: [".orchestrator", ".brewva"],
-            phases: ["investigate", "verify"],
-          },
-          effects: {
-            allowedEffects: ["workspace_read", "runtime_observe"],
-            deniedEffects: [],
-          },
-          resources: {
-            defaultLease: { maxToolCalls: 10, maxTokens: 10000 },
-            hardCeiling: { maxToolCalls: 20, maxTokens: 20000 },
-          },
-          executionHints: {
-            preferredTools: ["ledger_query"],
-            fallbackTools: ["output_search"],
-          },
-        },
+  const skill = {
+    name: "runtime-forensics",
+    description: "Investigate runtime traces, sessions, events, ledgers, and projections.",
+    category: "domain" as const,
+    markdown: "## Trigger\n\n- investigating runtime traces, sessions, or ledgers\n",
+    contract: {
+      name: "runtime-forensics",
+      category: "domain" as const,
+      routing: {
+        scope: "domain" as const,
       },
-    ],
+      selection: {
+        whenToUse:
+          "Use when the task asks what happened at runtime and the answer must come from traces, ledgers, projections, or artifacts.",
+        examples: [
+          "Analyze this session trace.",
+          "Explain the runtime events and ledger evidence.",
+        ],
+        paths: [".orchestrator", ".brewva"],
+        phases: ["investigate", "verify"],
+      },
+      effects: {
+        allowedEffects: ["workspace_read", "runtime_observe"],
+        deniedEffects: [],
+      },
+      resources: {
+        defaultLease: { maxToolCalls: 10, maxTokens: 10000 },
+        hardCeiling: { maxToolCalls: 20, maxTokens: 20000 },
+      },
+      executionHints: {
+        preferredTools: ["ledger_query"],
+        fallbackTools: ["output_search"],
+      },
+    },
+  };
+  Object.assign(runtime.inspect.skills, {
+    list: () => [skill],
     getActive: () => undefined,
+    getLoadReport: () => ({
+      roots: [],
+      loadedSkills: [skill.name],
+      routingEnabled: true,
+      routingScopes: ["domain"],
+      routableSkills: [skill.name],
+      hiddenSkills: [],
+      overlaySkills: [],
+      sharedContextFiles: [],
+      categories: {
+        core: [],
+        domain: [skill.name],
+        operator: [],
+        meta: [],
+        internal: [],
+      },
+    }),
   });
 }
 
@@ -368,7 +384,7 @@ describe("hosted context injection pipeline", () => {
     expect(result.message.content).toContain("repository-analysis");
   });
 
-  test("injects a skill-first policy block and recommendation details for strong matches", async () => {
+  test("injects a bootstrap skill-first policy block when TaskSpec is missing", async () => {
     const recordedTypes: string[] = [];
     const runtime = createRuntimeFixture({
       context: {
@@ -433,15 +449,104 @@ describe("hosted context injection pipeline", () => {
     });
 
     expect(result.message.content).toContain("[Brewva Skill-First Policy]");
+    expect(result.message.content).toContain("No TaskSpec is currently recorded for this session.");
+    expect(result.message.content).toContain("call `task_set_spec`");
+    expect(result.message.details.skillRecommendation).toEqual({
+      gateMode: "task_spec_required",
+      taskSpecReady: false,
+      names: [],
+    });
+    expect(recordedTypes).toContain("skill_recommendation_derived");
+  });
+
+  test("injects a skill-load requirement once TaskSpec is present", async () => {
+    const recordedTypes: string[] = [];
+    const runtime = createRuntimeFixture({
+      context: {
+        observeUsage: () => undefined,
+        getCompactionGateStatus: () => ({
+          required: false,
+          reason: null,
+          pressure: {
+            level: "low",
+            usageRatio: 0.2,
+            hardLimitRatio: 0.95,
+            compactionThresholdRatio: 0.8,
+          },
+          recentCompaction: false,
+          windowTurns: 0,
+          lastCompactionTurn: null,
+          turnsSinceCompaction: null,
+        }),
+        getPendingCompactionReason: () => null,
+        buildInjection: async () => ({
+          text: "",
+          entries: [],
+          accepted: false,
+          originalTokens: 0,
+          finalTokens: 0,
+          truncated: false,
+        }),
+      },
+      events: {
+        record: (input: { type: string }) => {
+          recordedTypes.push(input.type);
+          return undefined;
+        },
+      },
+    });
+    installRuntimeForensicsSkill(runtime);
+    Object.assign(runtime.inspect.task, {
+      getState: () => ({
+        spec: {
+          schema: "brewva.task.v1",
+          goal: "Investigate what happened in this hosted runtime session by reading the trace, ledger, and projection artifacts.",
+          expectedBehavior:
+            "Explain the runtime events and identify whether the session behavior was valid.",
+          constraints: ["Read-only investigation"],
+          targets: {
+            files: [".orchestrator/events", ".brewva/agent/sessions"],
+          },
+        },
+        status: { phase: "investigate" },
+        items: [],
+        blockers: [],
+        updatedAt: null,
+      }),
+    });
+
+    const telemetry = createHostedContextTelemetry(runtime);
+    const { api } = createMockRuntimePluginApi();
+    const pipeline = createHostedContextInjectionPipeline(api, runtime, telemetry, {
+      getTurnIndex: () => 5,
+      setLastRuntimeGateRequired: () => undefined,
+    });
+
+    const result = await pipeline.beforeAgentStart({
+      sessionId: "s-skill-first-with-spec",
+      sessionManager: {
+        getLeafId: () => "leaf-skill-first-with-spec",
+      },
+      prompt: "继续分析这次 session 的 trace 和 ledger。",
+      systemPrompt: "base prompt",
+      usage: {
+        tokens: 100,
+        contextWindow: 4000,
+        percent: 0.025,
+      },
+    });
+
+    expect(result.message.content).toContain("[Brewva Skill-First Policy]");
     expect(result.message.content).toContain("primary_skill: runtime-forensics");
     expect(result.message.details.skillRecommendation).toEqual({
-      required: true,
+      gateMode: "skill_load_required",
+      taskSpecReady: true,
       names: ["runtime-forensics"],
     });
     expect(recordedTypes).toContain("skill_recommendation_derived");
   });
 
-  test("uses legacy blocker text when deriving skill recommendations", async () => {
+  test("legacy blocker text does not bypass the TaskSpec-first bootstrap gate", async () => {
     const runtime = createRuntimeFixture({
       context: {
         observeUsage: () => undefined,
@@ -505,7 +610,8 @@ describe("hosted context injection pipeline", () => {
     });
 
     expect(result.message.content).toContain("[Brewva Skill-First Policy]");
-    expect(result.message.content).toContain("primary_skill: runtime-forensics");
+    expect(result.message.content).toContain("No TaskSpec is currently recorded for this session.");
+    expect(result.message.content).toContain("call `task_set_spec`");
   });
 
   test("emits skill recommendation telemetry once when the hard gate path returns early", async () => {

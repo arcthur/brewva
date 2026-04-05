@@ -23,7 +23,12 @@ import type { HostedContextGateStatePort } from "./hosted-compaction-controller.
 import type { HostedContextTelemetry } from "./hosted-context-telemetry.js";
 import { buildReadPathRecoveryBlocks } from "./read-path-recovery.js";
 import { resolveRecoveryWorkingSetBlock } from "./recovery-working-set.js";
-import { buildSkillFirstPolicyBlock, type SkillRecommendationSet } from "./skill-first.js";
+import {
+  buildSkillRecommendationReceiptPayload,
+  buildSkillFirstPolicyBlock,
+  type SkillRecommendationGateMode,
+  type SkillRecommendationSet,
+} from "./skill-first.js";
 
 export const HOSTED_CONTEXT_INJECTION_MESSAGE_TYPE = "brewva-context-injection";
 
@@ -56,7 +61,8 @@ export interface HostedContextInjectionMessageDetails {
     missing: string[];
   };
   skillRecommendation: {
-    required: boolean;
+    gateMode: SkillRecommendationGateMode;
+    taskSpecReady: boolean;
     names: string[];
   };
 }
@@ -181,7 +187,8 @@ function buildMessageDetails(input: {
       missing: input.capabilityView.missing,
     },
     skillRecommendation: {
-      required: input.skillRecommendations.required,
+      gateMode: input.skillRecommendations.gateMode,
+      taskSpecReady: input.skillRecommendations.taskSpecReady,
       names: input.skillRecommendations.recommendations.map((entry) => entry.name),
     },
   };
@@ -216,22 +223,15 @@ function buildSkillRecommendationBlocks(
     return [];
   }
 
+  const payload = buildSkillRecommendationReceiptPayload(input.recommendations);
   if (input.emitEvent !== false) {
+    if (!payload) {
+      return [];
+    }
     recordRuntimeEvent(runtime, {
       sessionId: input.sessionId,
       type: SKILL_RECOMMENDATION_DERIVED_EVENT_TYPE,
-      payload: {
-        schema: "brewva.skill_recommendation.v1",
-        required: input.recommendations.required,
-        activeSkill: input.recommendations.activeSkillName,
-        recommendations: input.recommendations.recommendations.map((entry) => ({
-          name: entry.name,
-          category: entry.category,
-          score: entry.score,
-          primary: entry.primary,
-          reasons: entry.reasons,
-        })),
-      },
+      payload,
     });
   }
 

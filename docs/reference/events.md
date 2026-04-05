@@ -286,10 +286,12 @@ Current guard notes:
 - `task_stall_adjudication_error`
 
 `skill_recommendation_derived` is the hosted control-plane receipt for
-skill-first recommendation on a turn before any explicit `skill_load`. The
-payload records whether the recommendation is strong enough to require a
-skill-first turn, the active skill if one already exists, and the ranked
-candidate set with categories, scores, and matched reasons.
+skill-first routing posture while no skill is active yet. The payload records
+the control-plane `gateMode` (`none | task_spec_required | skill_load_required`),
+whether TaskSpec is already present, and the ranked candidate set with
+categories, scores, and matched reasons. The hosted path may emit another
+receipt in the same turn after `task_set_spec` or other task-state mutations if
+the routed posture changes.
 
 ### Schedule, Subagent, And Worker
 

@@ -186,6 +186,10 @@ function registerHostedPipeline(
     {
       toolResult: readPathRecovery.toolResult,
     },
+    {
+      toolResult: toolSurface.toolResult,
+      sessionShutdown: toolSurface.sessionShutdown,
+    },
     narrativeMemory,
     {
       agentEnd: completionGuard.agentEnd,

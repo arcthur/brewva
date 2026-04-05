@@ -95,6 +95,7 @@ Boundary rule:
   - heartbeat triggers
   - scheduling triggers
   - subagent orchestration
+  - hosted TaskSpec-first bootstrap and routing-posture guidance
   - hosted turn transitions and bounded recovery posture
   - replayable delegation outcome handoff
   - future orchestration helpers
@@ -371,6 +372,18 @@ The runtime/runtime-plugin stack treats tool surface as three layers:
 
 Visible surface helps the model understand available paths, but authority sits
 on effect classes, approval requirements, rollbackability, and resource ceilings.
+
+Hosted interactive turns now resolve the pre-skill surface through an explicit
+TaskSpec-first control-plane posture:
+
+- when no skill is active and no TaskSpec is recorded, the visible surface may
+  narrow to bootstrap control-plane tools so the next semantic decision is
+  `task_set_spec`
+- once TaskSpec exists, the hosted path may narrow again to a
+  `skill_load_required` posture when the routed match is strong
+- these posture changes are visible control-plane shaping plus replayable
+  receipts such as `skill_recommendation_derived`; they do not activate skills
+  automatically and they do not create a runtime-owned planning state machine
 
 ## Governance Port
 

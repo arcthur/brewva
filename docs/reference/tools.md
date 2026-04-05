@@ -603,10 +603,12 @@ Skill sequencing is model-native.
 
 There is no public skill-cascade or chain-control tool.
 
-In the generic hosted path, when the current turn strongly matches a loaded
-skill and no skill is active yet, the hosted control plane may narrow the
-pre-skill tool surface to control-plane lifecycle tools so the next semantic
-decision is `skill_load` rather than ad hoc repository work.
+In the generic hosted path, when no skill is active yet and no TaskSpec is
+recorded, the hosted control plane first narrows the turn to bootstrap
+control-plane tools so the next semantic decision is `task_set_spec`. After
+TaskSpec is recorded, a strong routed-skill match may narrow the pre-skill
+surface again so the next semantic decision is `skill_load` rather than ad hoc
+repository work.
 
 ## `optimization_continuity`
 

@@ -158,6 +158,13 @@ Current responsibilities:
   - summarizes derived workflow artifact signals, planning assurance posture,
     and blockers without default turn-time injection
   - stays explicit and advisory-only instead of turning product UX into a hidden planner
+- TaskSpec-first routing presentation
+  - exposes hosted routing posture through explicit constraint blocks and
+    durable receipts such as `skill_recommendation_derived`
+  - keeps pre-skill bootstrap and strong post-TaskSpec `skill_load` guidance
+    visible to the model instead of relying on hidden prompt-only heuristics
+  - narrows the visible tool surface without auto-activating skills or
+    introducing a second planning state machine
 - closure presentation
   - keeps verification and acceptance separate
   - keeps delegated executable QA separate from `runtime.authority.verification.*`

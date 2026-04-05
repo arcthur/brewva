@@ -187,11 +187,27 @@ Resolution inputs:
 - always-on base tools
 - managed Brewva tools plus exact governance metadata
 - current skill execution hints
+- current TaskSpec state
 - routing scopes
 - explicit `$tool_name` requests
 
 This updates only the visible surface. Runtime policy still decides whether a
 tool call is actually allowed.
+
+Current interactive protocol is TaskSpec-first:
+
+- when no skill is active, no TaskSpec is recorded yet, and routable skills are
+  available, the hosted path narrows the turn to the pre-skill bootstrap
+  surface (`task_set_spec`, `task_view_state`, `workflow_status`, and related
+  control-plane tools)
+- after `task_set_spec`, the hosted path re-evaluates the routed skill
+  candidates from TaskSpec-first intent signals rather than from raw prompt
+  scoring
+- when that re-evaluation changes the routed posture in the same turn, hosted
+  telemetry emits a fresh `skill_recommendation_derived` receipt for the new
+  posture
+- only a strong post-TaskSpec match narrows the turn again so the next
+  semantic decision is explicit `skill_load`
 
 Telemetry:
 

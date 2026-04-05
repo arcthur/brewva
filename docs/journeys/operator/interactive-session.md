@@ -40,18 +40,20 @@ flowchart TD
   A["User prompt or task input"] --> B["CLI resolves mode and session backend"]
   B --> C["Create hosted session + semantic runtime ports"]
   C --> D["Install hosted pipeline (context/tool/ledger/completion)"]
-  D --> E["Hosted control plane recommends a skill-first path"]
-  E --> F["Model selects skill via skill_load"]
-  F --> G["Tool calls enter shared invocation spine"]
-  G --> H["Ledger and event tape record durable outcomes"]
-  H --> I{"skill_complete called?"}
-  I -->|No| G
-  I -->|Yes| J["Validate required outputs"]
-  J --> K["Run runtime.authority.verification.verify(...)"]
-  K --> L{"Verification passed or read-only?"}
-  L -->|No| M["Block completion and keep session active"]
-  L -->|Yes| N["Complete skill and derive workflow posture"]
-  N --> O["Inspect via workflow_status / task_view_state / inspect"]
+  D --> E["Hosted control plane checks TaskSpec-first bootstrap"]
+  E --> F["Model records TaskSpec via task_set_spec"]
+  F --> G["Hosted control plane re-evaluates skill routing"]
+  G --> H["Model selects skill via skill_load"]
+  H --> I["Tool calls enter shared invocation spine"]
+  I --> J["Ledger and event tape record durable outcomes"]
+  J --> K{"skill_complete called?"}
+  K -->|No| I
+  K -->|Yes| L["Validate required outputs"]
+  L --> M["Run runtime.authority.verification.verify(...)"]
+  M --> N{"Verification passed or read-only?"}
+  N -->|No| O["Block completion and keep session active"]
+  N -->|Yes| P["Complete skill and derive workflow posture"]
+  P --> Q["Inspect via workflow_status / task_view_state / inspect"]
 ```
 
 ## Key Steps
@@ -60,18 +62,21 @@ flowchart TD
 2. The hosted pipeline narrows runtime access into hosted, tool, and operator
    views, then installs context transform, quality gate, ledger writer, and
    completion guard handlers.
-3. Hosted control-plane logic first derives a skill-first recommendation from
-   the loaded catalog and current task context.
-4. The model activates the current skill through `skill_load`; the runtime does
+3. Hosted control-plane logic first checks whether TaskSpec is present. If not,
+   the turn is held at the bootstrap control-plane surface and the next
+   semantic decision is `task_set_spec`.
+4. Once TaskSpec exists, hosted control-plane logic derives skill candidates
+   from TaskSpec-first intent signals and current task context.
+5. The model activates the current skill through `skill_load`; the runtime does
    not inject a stage machine.
-5. Every tool call enters the shared invocation spine and is evaluated for
+6. Every tool call enters the shared invocation spine and is evaluated for
    access, budget, compaction, ledger writes, and event persistence.
-6. When the skill match is strong and no skill is active, the hosted path
-   narrows the default tool surface so the turn resolves to `skill_load` before
-   deeper repository work.
-7. `skill_complete` validates required outputs before calling
+7. When the post-TaskSpec skill match is strong and no skill is active, the
+   hosted path narrows the default tool surface so the turn resolves to
+   `skill_load` before deeper repository work.
+8. `skill_complete` validates required outputs before calling
    `runtime.authority.verification.verify(...)`.
-8. After verification passes, the runtime completes the skill and exposes the
+9. After verification passes, the runtime completes the skill and exposes the
    resulting workflow posture through explicit inspection surfaces.
 
 ## Execution Semantics
