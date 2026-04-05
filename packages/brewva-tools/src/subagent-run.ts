@@ -6,6 +6,7 @@ import {
   canAppendToolRuntimeSupplementalInjection,
 } from "./runtime-internal.js";
 import type {
+  AdvisorConsultBrief,
   BrewvaToolOptions,
   DelegationPacket,
   DelegationTaskPacket,
@@ -45,10 +46,14 @@ const WaitModeSchema = buildStringEnumSchema(SUBAGENT_WAIT_MODE_VALUES, {
     "Use completion to wait for delegated results in the current turn, or start to launch background delegation and inspect it later with subagent_status/subagent_cancel.",
 });
 
-const ResultModeSchema = buildStringEnumSchema(
-  ["exploration", "plan", "review", "qa", "patch"] as const,
+const ResultModeSchema = buildStringEnumSchema(["consult", "qa", "patch"] as const, {
+  guidance: "Choose the delegated result contract the child must satisfy.",
+});
+
+const ConsultKindSchema = buildStringEnumSchema(
+  ["investigate", "diagnose", "design", "review"] as const,
   {
-    guidance: "Choose the delegated result contract the child must satisfy.",
+    guidance: "Required for consult runs. Choose the type of advisory reasoning to delegate.",
   },
 );
 
@@ -127,6 +132,25 @@ const CompletionPredicateSchema = Type.Union([
 const PacketFields = {
   objective: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
   deliverable: Type.Optional(Type.String({ minLength: 1, maxLength: 2000 })),
+  consultBrief: Type.Optional(
+    Type.Object(
+      {
+        decision: Type.String({ minLength: 1, maxLength: 2000 }),
+        successCriteria: Type.String({ minLength: 1, maxLength: 2000 }),
+        currentBestGuess: Type.Optional(Type.String({ minLength: 1, maxLength: 2000 })),
+        assumptions: Type.Optional(
+          Type.Array(Type.String({ minLength: 1, maxLength: 1000 }), { maxItems: 16 }),
+        ),
+        rejectedPaths: Type.Optional(
+          Type.Array(Type.String({ minLength: 1, maxLength: 1000 }), { maxItems: 16 }),
+        ),
+        focusAreas: Type.Optional(
+          Type.Array(Type.String({ minLength: 1, maxLength: 1000 }), { maxItems: 16 }),
+        ),
+      },
+      { additionalProperties: false },
+    ),
+  ),
   constraints: Type.Optional(
     Type.Array(Type.String({ minLength: 1, maxLength: 1000 }), {
       maxItems: 24,
@@ -174,11 +198,13 @@ const SubagentRunParamsSchema = Type.Object({
   agentSpec: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   envelope: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   skillName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  consultKind: Type.Optional(ConsultKindSchema),
   fallbackResultMode: Type.Optional(ResultModeSchema),
   executionShape: Type.Optional(ExecutionShapeSchema),
   mode: Type.Optional(ModeSchema),
   objective: PacketFields.objective,
   deliverable: PacketFields.deliverable,
+  consultBrief: PacketFields.consultBrief,
   constraints: PacketFields.constraints,
   sharedNotes: PacketFields.sharedNotes,
   activeSkillName: PacketFields.activeSkillName,
@@ -199,10 +225,12 @@ const SubagentFanoutParamsSchema = Type.Object({
   agentSpec: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   envelope: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   skillName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  consultKind: Type.Optional(ConsultKindSchema),
   fallbackResultMode: Type.Optional(ResultModeSchema),
   executionShape: Type.Optional(ExecutionShapeSchema),
   objective: PacketFields.objective,
   deliverable: PacketFields.deliverable,
+  consultBrief: PacketFields.consultBrief,
   constraints: PacketFields.constraints,
   sharedNotes: PacketFields.sharedNotes,
   activeSkillName: PacketFields.activeSkillName,
@@ -269,13 +297,14 @@ function collectLegacyDelegationFieldPaths(value: unknown): string[] {
 
 function legacyDelegationFieldMessage(paths: readonly string[]): string {
   const rendered = paths.join(", ");
-  return `Error: removed legacy delegation fields are not supported (${rendered}). Use agentSpec, envelope, skillName, fallbackResultMode, and canonical packet fields.`;
+  return `Error: removed legacy delegation fields are not supported (${rendered}). Use agentSpec, envelope, skillName, consultKind, fallbackResultMode, and canonical packet fields.`;
 }
 
 function hasSinglePacketInput(params: SharedPacketInput): boolean {
   return (
     params.objective !== undefined ||
     params.deliverable !== undefined ||
+    params.consultBrief !== undefined ||
     params.constraints !== undefined ||
     params.sharedNotes !== undefined ||
     params.activeSkillName !== undefined ||
@@ -303,6 +332,22 @@ function buildExecutionHints(
     preferredTools,
     fallbackTools,
     preferredSkills,
+  };
+}
+
+function buildConsultBrief(
+  value: SharedPacketInput["consultBrief"],
+): AdvisorConsultBrief | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return {
+    decision: value.decision,
+    successCriteria: value.successCriteria,
+    currentBestGuess: value.currentBestGuess,
+    ...(value.assumptions?.length ? { assumptions: [...value.assumptions] } : {}),
+    ...(value.rejectedPaths?.length ? { rejectedPaths: [...value.rejectedPaths] } : {}),
+    ...(value.focusAreas?.length ? { focusAreas: [...value.focusAreas] } : {}),
   };
 }
 
@@ -350,6 +395,7 @@ function buildPacket(packet: SharedPacketInput): DelegationPacket | undefined {
   return {
     objective,
     deliverable: packet.deliverable,
+    consultBrief: buildConsultBrief(packet.consultBrief),
     constraints: packet.constraints,
     sharedNotes: packet.sharedNotes,
     activeSkillName: packet.activeSkillName,
@@ -368,11 +414,7 @@ function buildExecutionShape(
     return undefined;
   }
   const resultMode =
-    value.resultMode === "exploration" ||
-    value.resultMode === "plan" ||
-    value.resultMode === "review" ||
-    value.resultMode === "qa" ||
-    value.resultMode === "patch"
+    value.resultMode === "consult" || value.resultMode === "qa" || value.resultMode === "patch"
       ? value.resultMode
       : undefined;
   const boundary = normalizeBoundary(value.boundary);
@@ -590,12 +632,13 @@ function buildDeliveryRequest(
 function resolveDelegationLabel(
   request: Pick<
     SubagentRunRequest,
-    "agentSpec" | "envelope" | "skillName" | "fallbackResultMode" | "executionShape"
+    "agentSpec" | "envelope" | "skillName" | "consultKind" | "fallbackResultMode" | "executionShape"
   >,
 ): string {
   return (
     request.agentSpec ??
     request.envelope ??
+    request.consultKind ??
     request.skillName ??
     request.executionShape?.resultMode ??
     request.fallbackResultMode ??
@@ -611,11 +654,16 @@ function buildRunRequestFromParams(input: {
   const agentSpec = params.agentSpec?.trim() ? params.agentSpec : undefined;
   const envelope = params.envelope?.trim() ? params.envelope : undefined;
   const explicitSkillName = params.skillName?.trim() ? params.skillName : undefined;
+  const consultKind =
+    params.consultKind === "investigate" ||
+    params.consultKind === "diagnose" ||
+    params.consultKind === "design" ||
+    params.consultKind === "review"
+      ? params.consultKind
+      : undefined;
   const executionShape = buildExecutionShape(params.executionShape);
   const fallbackResultMode =
-    params.fallbackResultMode === "exploration" ||
-    params.fallbackResultMode === "plan" ||
-    params.fallbackResultMode === "review" ||
+    params.fallbackResultMode === "consult" ||
     params.fallbackResultMode === "qa" ||
     params.fallbackResultMode === "patch"
       ? params.fallbackResultMode
@@ -624,11 +672,21 @@ function buildRunRequestFromParams(input: {
     agentSpec,
     envelope,
     skillName: explicitSkillName,
+    consultKind,
     fallbackResultMode,
     executionShape,
     mode: input.mode,
     timeoutMs: params.timeoutMs,
   };
+  if (
+    (request.executionShape?.resultMode ?? request.fallbackResultMode) === "consult" &&
+    !consultKind
+  ) {
+    return {
+      ok: false,
+      message: "Error: consultKind is required for consult delegation.",
+    };
+  }
 
   if (input.mode === "single") {
     const packet = buildPacket(params);
@@ -636,6 +694,15 @@ function buildRunRequestFromParams(input: {
       return {
         ok: false,
         message: "Error: objective is required for mode=single.",
+      };
+    }
+    if (
+      (request.executionShape?.resultMode ?? request.fallbackResultMode) === "consult" &&
+      !packet.consultBrief
+    ) {
+      return {
+        ok: false,
+        message: "Error: consultBrief is required for consult delegation.",
       };
     }
     request.packet = packet;
@@ -651,6 +718,15 @@ function buildRunRequestFromParams(input: {
   if (hasSinglePacketInput(params)) {
     const sharedPacket = buildPacket(params);
     if (sharedPacket) {
+      if (
+        (request.executionShape?.resultMode ?? request.fallbackResultMode) === "consult" &&
+        !sharedPacket.consultBrief
+      ) {
+        return {
+          ok: false,
+          message: "Error: consultBrief is required for consult delegation.",
+        };
+      }
       request.packet = sharedPacket;
     }
   }
@@ -773,10 +849,11 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
     description:
       "Delegate a bounded task to an isolated worker configuration and return structured results.",
     promptSnippet:
-      "Use isolated delegated runs for focused exploration, review, QA, or patch work without polluting the main context window.",
+      "Use isolated delegated runs for focused advisor consults, QA, or patch work without polluting the main context window.",
     promptGuidelines: [
-      "Prefer canonical agent specs explore, plan, review, qa, and patch-worker for the default delegated posture.",
-      "Delegate when the task needs cross-3+-file investigation, an independent review pass, or parallel slice exploration.",
+      "Prefer canonical public agent specs advisor, qa, and patch-worker for the default delegated posture.",
+      "For advisor runs, declare consultKind explicitly and provide a consultBrief with the decision and success criteria.",
+      "Delegate when the task needs cross-3+-file investigation, diagnosis, a second-opinion review pass, or parallel slice analysis.",
       "Use single for one delegated run and parallel to fan out multiple independent slices.",
       "Use agentSpec for named reusable workers, envelope for runtime posture, and skillName for explicit semantic contracts.",
       "Keep objectives specific, pass only the context references the child needs, and avoid broad parent-context dumps.",
@@ -836,9 +913,10 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
     description:
       "Launch multiple isolated delegated runs under one worker configuration for independent slices of work.",
     promptSnippet:
-      "Use this for explicit fan-out when several repository slices or QA/review lanes can run independently under the same delegated setup.",
+      "Use this for explicit fan-out when several repository slices or internal review lanes can run independently under the same delegated setup.",
     promptGuidelines: [
-      "Prefer canonical agent specs explore, plan, review, qa, and patch-worker unless a narrower internal worker is explicitly required.",
+      "Prefer canonical public agent specs advisor, qa, and patch-worker unless a narrower internal worker is explicitly required.",
+      "For advisor fan-out, keep consultKind explicit and share one consultBrief across the delegated slices unless a lane-specific brief is required.",
       "Use this when tasks are independent and a shared packet plus per-task objectives is clearer than one large delegated run.",
       "Keep each task label and objective specific so the parent can inspect outcomes separately.",
       "Prefer read-only envelopes unless the workflow is explicitly ready to inspect and merge isolated patch results.",

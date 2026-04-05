@@ -8,6 +8,7 @@ import {
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type {
+  AdvisorConsultKind,
   SubagentOutcome,
   SubagentOutcomeArtifactRef,
   SubagentRunRequest,
@@ -68,6 +69,7 @@ function buildFailureOutcome(input: {
   agentSpec?: string;
   envelope?: string;
   skillName?: string;
+  consultKind?: AdvisorConsultKind;
   label?: string;
   workerSessionId?: string;
   artifactRefs?: SubagentOutcomeArtifactRef[];
@@ -82,6 +84,7 @@ function buildFailureOutcome(input: {
     agentSpec: input.agentSpec,
     envelope: input.envelope,
     skillName: input.skillName,
+    ...(input.consultKind ? { consultKind: input.consultKind } : {}),
     label: input.label,
     status: input.status ?? "error",
     workerSessionId: input.workerSessionId,
@@ -117,12 +120,12 @@ async function loadSpec(path: string): Promise<DetachedSubagentRunSpec> {
   const raw = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
   const schema =
     typeof raw.schema === "string" ? raw.schema : "missing_detached_subagent_spec_schema";
-  if (schema !== "brewva.subagent-run-spec.v6") {
+  if (schema !== "brewva.subagent-run-spec.v7") {
     throw new Error(`unsupported_detached_subagent_spec_schema:${schema}`);
   }
   return {
     ...raw,
-    schema: "brewva.subagent-run-spec.v6",
+    schema: "brewva.subagent-run-spec.v7",
   } as unknown as DetachedSubagentRunSpec;
 }
 
@@ -270,6 +273,7 @@ async function main(): Promise<void> {
         label: spec.label,
         parentSkill: parentRuntime.inspect.skills.getActive(spec.parentSessionId)?.name,
         kind: targetRecord.resultMode,
+        consultKind: targetRecord.consultKind,
         boundary: executionPlan.boundary,
         modelRoute: executionPlan.modelRoute,
         delivery: existing?.delivery,
@@ -278,6 +282,7 @@ async function main(): Promise<void> {
       updatedAt: Date.now(),
       workerSessionId: childSessionId,
       kind: targetRecord.resultMode,
+      consultKind: targetRecord.consultKind,
       boundary: executionPlan.boundary,
       modelRoute: executionPlan.modelRoute,
     };
@@ -311,13 +316,14 @@ async function main(): Promise<void> {
     }
 
     const delegatedSkill = targetRecord.skillName;
+    const childOwnsSkill = delegatedSkill && targetRecord.resultMode !== "consult";
     const skillDocument = delegatedSkill
       ? parentRuntime.inspect.skills.get(delegatedSkill)
       : undefined;
     if (delegatedSkill && !skillDocument) {
       throw new Error(`unknown_skill:${delegatedSkill}`);
     }
-    if (delegatedSkill) {
+    if (childOwnsSkill) {
       const activation = childSession.runtime.authority.skills.activate(
         childSessionId,
         delegatedSkill,
@@ -342,8 +348,9 @@ async function main(): Promise<void> {
     aggregateChildCost(parentRuntime, spec.parentSessionId, childCostSummary);
     const structuredOutcome = extractStructuredOutcomeData({
       resultMode: targetRecord.resultMode,
+      consultKind: targetRecord.consultKind,
       assistantText: output.assistantText,
-      skillName: delegatedSkill,
+      skillName: childOwnsSkill ? delegatedSkill : undefined,
     });
     if (structuredOutcome.parseError) {
       recordRuntimeEvent(parentRuntime, {
@@ -354,19 +361,20 @@ async function main(): Promise<void> {
           delegate: spec.delegate,
           label: spec.label ?? null,
           kind: targetRecord.resultMode,
+          consultKind: targetRecord.consultKind ?? null,
           childSessionId,
           error: structuredOutcome.parseError,
         },
       });
     }
     const skillValidation =
-      delegatedSkill && childSessionId
+      childOwnsSkill && childSessionId
         ? childSession.runtime.inspect.skills.validateOutputs(
             childSessionId,
             structuredOutcome.skillOutputs ?? {},
           )
         : undefined;
-    if (delegatedSkill && skillValidation && !skillValidation.ok) {
+    if (childOwnsSkill && skillValidation && !skillValidation.ok) {
       recordRuntimeEvent(parentRuntime, {
         sessionId: spec.parentSessionId,
         type: "subagent_skill_output_validation_failed",
@@ -375,6 +383,7 @@ async function main(): Promise<void> {
           delegate: spec.delegate,
           label: spec.label ?? null,
           kind: targetRecord.resultMode,
+          consultKind: targetRecord.consultKind ?? null,
           childSessionId,
           skillName: delegatedSkill,
           missing: skillValidation.missing,
@@ -432,6 +441,7 @@ async function main(): Promise<void> {
       agentSpec: targetRecord.agentSpecName,
       envelope: targetRecord.envelopeName,
       skillName: delegatedSkill,
+      consultKind: targetRecord.consultKind,
       label: spec.label,
       kind: targetRecord.resultMode,
       status: "ok",
@@ -479,6 +489,7 @@ async function main(): Promise<void> {
         agentSpec: targetRecord.agentSpecName,
         envelope: targetRecord.envelopeName,
         skillName: delegatedSkill,
+        consultKind: targetRecord.consultKind,
         parentSessionId: spec.parentSessionId,
         createdAt: spec.createdAt,
       }),
@@ -488,6 +499,7 @@ async function main(): Promise<void> {
       label: spec.label,
       parentSkill: parentRuntime.inspect.skills.getActive(spec.parentSessionId)?.name,
       kind: targetRecord.resultMode,
+      consultKind: targetRecord.consultKind,
       boundary: executionPlan.boundary,
       modelRoute: executionPlan.modelRoute,
       summary,
@@ -547,6 +559,7 @@ async function main(): Promise<void> {
       agentSpec: targetRecord.agentSpecName,
       envelope: targetRecord.envelopeName,
       skillName: targetRecord.skillName,
+      consultKind: targetRecord.consultKind,
       label: spec.label,
       workerSessionId: childSessionId,
       artifactRefs,
@@ -569,6 +582,7 @@ async function main(): Promise<void> {
         agentSpec: targetRecord.agentSpecName,
         envelope: targetRecord.envelopeName,
         skillName: targetRecord.skillName,
+        consultKind: targetRecord.consultKind,
         parentSessionId: spec.parentSessionId,
         createdAt: spec.createdAt,
       }),
@@ -578,6 +592,7 @@ async function main(): Promise<void> {
       label: spec.label,
       parentSkill: parentRuntime.inspect.skills.getActive(spec.parentSessionId)?.name,
       kind: targetRecord.resultMode,
+      consultKind: targetRecord.consultKind,
       boundary: executionPlan.boundary,
       modelRoute: executionPlan.modelRoute,
       summary: message,

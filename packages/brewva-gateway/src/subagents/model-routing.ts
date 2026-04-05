@@ -162,10 +162,14 @@ const ROUTING_POLICIES: readonly DelegationRoutingPolicy[] = [
     reason: "Reasoning-heavy delegation should prefer a frontier reasoning model.",
     candidateModels: ["openai/gpt-5.4:high", "openai/gpt-5.4-mini:high"],
     score({ target, keywordText, effectiveSkillName }) {
-      if (effectiveSkillName === "design" || target.resultMode === "plan") {
+      if (
+        effectiveSkillName === "design" ||
+        target.consultKind === "design" ||
+        target.consultKind === "diagnose"
+      ) {
         return 8;
       }
-      if (target.resultMode !== "exploration") {
+      if (target.resultMode !== "consult") {
         return 0;
       }
       const keywordMatches = countKeywordMatches(keywordText, DEEP_REASONING_KEYWORDS);
@@ -177,7 +181,7 @@ const ROUTING_POLICIES: readonly DelegationRoutingPolicy[] = [
     reason: "Review and QA work should bias toward higher-fidelity reasoning.",
     candidateModels: ["openai/gpt-5.4:medium", "openai/gpt-5.4-mini:medium"],
     score({ target, effectiveSkillName }) {
-      return target.resultMode === "review" ||
+      return target.consultKind === "review" ||
         target.resultMode === "qa" ||
         effectiveSkillName === "review" ||
         effectiveSkillName === "qa"

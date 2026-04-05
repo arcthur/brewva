@@ -10,7 +10,8 @@ export type DelegationRunStatus =
   | "cancelled"
   | "merged";
 
-export type DelegationOutcomeKind = "exploration" | "plan" | "review" | "qa" | "patch";
+export type DelegationConsultKind = "investigate" | "diagnose" | "design" | "review";
+export type DelegationOutcomeKind = "consult" | "qa" | "patch";
 export type DelegationDeliveryMode = "text_only" | "supplemental";
 export type DelegationDeliveryHandoffState = "none" | "pending_parent_turn" | "surfaced";
 export type DelegationModelRouteSource = "execution_shape" | "target" | "policy";
@@ -90,6 +91,7 @@ export interface DelegationRunRecord {
   workerSessionId?: string;
   parentSkill?: string;
   kind?: DelegationOutcomeKind;
+  consultKind?: DelegationConsultKind;
   boundary?: ToolExecutionBoundary;
   modelRoute?: DelegationModelRouteRecord;
   summary?: string;

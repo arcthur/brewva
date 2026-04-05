@@ -235,9 +235,10 @@ describe("context transform injection contract", () => {
       type: "subagent_completed",
       payload: {
         runId: "run-completed-1",
-        delegate: "review",
+        delegate: "advisor",
         status: "completed",
-        kind: "review",
+        kind: "consult",
+        consultKind: "review",
         summary: "Review completed and awaits parent consumption.",
         deliveryMode: "text_only",
         deliveryHandoffState: "pending_parent_turn",

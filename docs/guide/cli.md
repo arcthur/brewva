@@ -277,7 +277,7 @@ In channel mode, `/update` targets the currently focused agent.
 of routing through a generic self-command path.
 
 `/questions [@agent]` inspects unresolved questions derived from `skill_completed`
-and delegated exploration outcomes for the targeted live session.
+and delegated consult outcomes for the targeted live session.
 `/answer [@agent] <question-id> <answer>` records a durable
 `operator_question_answered` event and then routes the answer back into the
 target session as explicit operator input. This keeps the questionnaire surface

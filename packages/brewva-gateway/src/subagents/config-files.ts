@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { parseJsonc, type ManagedToolMode } from "@brewva/brewva-runtime";
 import type {
+  AdvisorConsultKind,
   SubagentContextBudget,
   SubagentExecutionBoundary,
   SubagentResultMode,
@@ -68,11 +69,11 @@ export function asManagedToolMode(value: unknown): ManagedToolMode | undefined {
 }
 
 export function asResultMode(value: unknown): SubagentResultMode | undefined {
-  return value === "exploration" ||
-    value === "plan" ||
-    value === "review" ||
-    value === "qa" ||
-    value === "patch"
+  return value === "consult" || value === "qa" || value === "patch" ? value : undefined;
+}
+
+export function asConsultKind(value: unknown): AdvisorConsultKind | undefined {
+  return value === "investigate" || value === "diagnose" || value === "design" || value === "review"
     ? value
     : undefined;
 }

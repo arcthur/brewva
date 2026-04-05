@@ -36,7 +36,7 @@ describe("agent-overlays interactive command runtime plugin", () => {
       join(workspace, ".brewva", "agents", "reviewer.md"),
       `---
 name: reviewer
-extends: review
+extends: advisor
 description: Reviewer override
 ---
 Keep findings short and concrete.

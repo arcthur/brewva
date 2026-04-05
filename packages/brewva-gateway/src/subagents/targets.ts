@@ -1,6 +1,8 @@
 import type { ManagedToolMode } from "@brewva/brewva-runtime";
 import type {
+  AdvisorConsultKind,
   DelegationPacket,
+  ReviewLaneName,
   SubagentContextBudget,
   SubagentExecutionBoundary,
   SubagentResultMode,
@@ -18,6 +20,8 @@ export interface HostedDelegationTarget {
   boundary?: SubagentExecutionBoundary;
   model?: string;
   skillName?: string;
+  consultKind?: AdvisorConsultKind;
+  reviewLane?: ReviewLaneName;
   fallbackResultMode?: SubagentResultMode;
   agentSpecName?: string;
   envelopeName?: string;

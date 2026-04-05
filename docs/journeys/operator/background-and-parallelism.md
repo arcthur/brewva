@@ -23,7 +23,8 @@ parallel-budget limits, isolated workspaces, and parent-controlled adoption.
 
 - parallel slot gate
 - detached child runs
-- read-only delegation, executable QA delegation, and `PatchSet`-producing delegation
+- `advisor` consultation, executable QA delegation, and
+  `PatchSet`-producing delegation
 - worker-result merge / apply
 
 ## Out Of Scope
@@ -39,10 +40,10 @@ flowchart TD
   A["Acquire parallel slot"] --> B{"Accepted?"}
   B -->|No| C["Return budget rejection"]
   B -->|Yes| D{"Delegation posture"}
-  D -->|Read-only| E["Run child session"]
+  D -->|Consult| E["Run advisor child session"]
   D -->|QA| F["Run isolated executable verifier"]
   D -->|Patch| G["Create isolated snapshot workspace"]
-  E --> H["Return summary / evidence / optional artifact refs"]
+  E --> H["Return typed consult outcome / evidence / artifact refs"]
   F --> I["Persist QA outcome / artifact refs"]
   G --> J["Persist WorkerResult and patch artifacts"]
   J --> K["Parent reviews results"]
@@ -63,7 +64,8 @@ flowchart TD
 1. The parent session acquires parallel budget through the runtime slot gate.
 2. Child work can only start through explicit `subagent_*` tools; there is no
    hidden auto-spawn path.
-3. Read-only delegation returns structured results that can be used through
+3. `advisor` consultation returns typed `consult` results keyed by an explicit
+   `consultKind` and required `consultBrief`; those results may be used through
    same-turn supplemental injection or preserved as replay-visible handoff
    state.
 4. Executable `qa` runs may use isolated execution and artifact capture, but
@@ -82,11 +84,16 @@ flowchart TD
 
 - delegated workers resolve through `agentSpec` and `ExecutionEnvelope`, not
   through arbitrary prompt text
+- the stable public delegated surface is `advisor`, `qa`, and `patch-worker`
+- `advisor` is the only public read-only consultation identity and runs under
+  the minimal-context `readonly-advisor` envelope
+- `consultKind` selects `investigate`, `diagnose`, `design`, or `review`;
+  `skillName` does not implicitly select a consult posture
 - when `skillName` is present, the child prompt is assembled from authored
   specialist instructions, delegated skill body, task packet, context
   references, and output contracts
-- read-only specialists default to minimal-context execution with dedicated
-  repository observation tools such as `git_status`, `git_diff`, and `git_log`
+- internal review lanes remain explicit parent-orchestrated fan-out and run as
+  `consult/review` delegates under the advisor envelope family
 - detached runs are durable control-plane work, not best-effort background
   helpers
 - late detached outcomes remain explicit parent-attention blockers; the runtime

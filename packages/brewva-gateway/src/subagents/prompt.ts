@@ -89,6 +89,18 @@ function renderSkillContractSection(skill: SkillDocument): string[] {
   return lines;
 }
 
+function renderSkillContextSection(skill: SkillDocument): string[] {
+  return [
+    "",
+    "## Semantic Context",
+    `Skill: ${skill.name}`,
+    `Description: ${skill.description}`,
+    "",
+    "### Skill Body",
+    skill.markdown.trim(),
+  ];
+}
+
 export function buildDelegationPrompt(input: {
   target: HostedDelegationTarget;
   delegate?: string;
@@ -99,7 +111,7 @@ export function buildDelegationPrompt(input: {
   const prompt =
     input.promptOverride ??
     input.target.executorPreamble ??
-    getCanonicalSubagentPrompt(input.target.resultMode);
+    getCanonicalSubagentPrompt(input.target.resultMode, input.target.consultKind);
   const lines = [
     "# Delegated Subagent Run",
     "",
@@ -125,6 +137,9 @@ export function buildDelegationPrompt(input: {
   if (input.packet.deliverable) {
     lines.push(`Deliverable: ${input.packet.deliverable}`);
   }
+  if (input.target.consultKind) {
+    lines.push(`Consult kind: ${input.target.consultKind}`);
+  }
   if (input.packet.activeSkillName) {
     lines.push(`Parent skill: ${input.packet.activeSkillName}`);
   }
@@ -139,7 +154,34 @@ export function buildDelegationPrompt(input: {
   }
 
   if (input.skill) {
-    lines.push(...renderSkillContractSection(input.skill));
+    lines.push(
+      ...(input.target.resultMode === "consult"
+        ? renderSkillContextSection(input.skill)
+        : renderSkillContractSection(input.skill)),
+    );
+  }
+
+  if (input.packet.consultBrief) {
+    lines.push(
+      "",
+      "## Consult Brief",
+      `Decision: ${input.packet.consultBrief.decision}`,
+      `Success criteria: ${input.packet.consultBrief.successCriteria}`,
+    );
+    if (input.packet.consultBrief.currentBestGuess) {
+      lines.push(`Current best guess: ${input.packet.consultBrief.currentBestGuess}`);
+    }
+    if (input.packet.consultBrief.assumptions?.length) {
+      lines.push(...input.packet.consultBrief.assumptions.map((item) => `Assumption: ${item}`));
+    }
+    if (input.packet.consultBrief.rejectedPaths?.length) {
+      lines.push(
+        ...input.packet.consultBrief.rejectedPaths.map((item) => `Rejected path: ${item}`),
+      );
+    }
+    if (input.packet.consultBrief.focusAreas?.length) {
+      lines.push(`Focus areas: ${input.packet.consultBrief.focusAreas.join(", ")}`);
+    }
   }
 
   if (input.packet.constraints && input.packet.constraints.length > 0) {
@@ -185,8 +227,15 @@ export function buildDelegationPrompt(input: {
     "## Structured Outcome Contract",
     ...buildStructuredOutcomeContract({
       resultMode: input.target.resultMode,
-      skillName: input.skill?.name ?? input.target.skillName,
-      skillOutputNames: input.skill ? listSkillOutputs(input.skill.contract) : undefined,
+      consultKind: input.target.consultKind,
+      skillName:
+        input.target.resultMode === "consult"
+          ? undefined
+          : (input.skill?.name ?? input.target.skillName),
+      skillOutputNames:
+        input.target.resultMode === "consult" || !input.skill
+          ? undefined
+          : listSkillOutputs(input.skill.contract),
     }),
   );
 

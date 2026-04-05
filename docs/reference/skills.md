@@ -41,17 +41,18 @@ Current rules:
 - when `skillName` is present, the runner injects the skill body and output
   contract into the child prompt rather than relying on a follow-up `skill_load`
   call
-- child runtime skill activation is still used for inspection and validation
-  surfaces, but it does not create a second authoritative skill lifecycle
+- child runtime skill activation is reserved for executable child-owned roles
+  such as `qa`; consult runs stay advisory and do not create a second
+  authoritative skill lifecycle
 - the runner validates returned `skillOutputs` against the delegated skill
-  contract after the child returns
+  contract only for child-owned executable roles
 - the parent session remains the authority that owns active skill state,
   completion, and patch adoption
-- the stable built-in public specialist surface is `explore`, `plan`, `review`,
-  `qa`, and `patch-worker`; internal review lanes remain internal fan-out
+- the stable built-in public specialist surface is `advisor`, `qa`, and
+  `patch-worker`; internal review lanes remain internal fan-out
   helpers rather than public taxonomy
-- delegated `plan` is a first-class result posture with canonical typed
-  planning data; it is not an `exploration` payload with planning prose
+- delegated `consult` is the first-class read-only result posture with
+  canonical `consultKind`-specific typed data
 - patch-producing child runs return `WorkerResult` / patch artifacts for the
   parent-controlled `worker_results_merge` -> `worker_results_apply` flow
 - delegated QA runs do not produce `WorkerResult`; they persist canonical
@@ -349,10 +350,11 @@ verification.
 
 Default delegated routing is intentionally narrower than the public skill list:
 
-- `repository-analysis -> explore`
-- `discovery -> explore`
-- `design -> plan`
-- `review -> review`
+- `repository-analysis -> advisor (investigate)`
+- `discovery -> advisor (investigate)`
+- `debugging -> advisor (diagnose)`
+- `design -> advisor (design)`
+- `review -> advisor (review)`
 - `qa -> qa`
 - `implementation -> patch-worker`
 - other delegated skills stay explicit-only unless a stable public mapping is
@@ -363,8 +365,8 @@ posture:
 
 - `design` is expected to emit the full planning handoff set:
   `design_spec`, `execution_plan`, `execution_mode_hint`, `risk_register`, and
-  `implementation_targets`; delegated `plan` outcomes project directly into
-  that contract
+  `implementation_targets`; advisor `design` consults inform this contract but
+  do not replace parent-owned `design` completion
 - `implementation` is expected to stay inside path-scoped
   `implementation_targets`; work that materially exceeds the planned boundary
   should hand control back to `design` instead of silently widening scope

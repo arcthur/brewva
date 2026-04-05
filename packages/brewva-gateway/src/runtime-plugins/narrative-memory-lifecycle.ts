@@ -4,7 +4,7 @@ import {
 } from "@brewva/brewva-deliberation";
 import { NARRATIVE_MEMORY_RECORDED_EVENT_TYPE, type BrewvaRuntime } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import type { BrewvaSemanticOracle } from "@brewva/brewva-tools";
+import type { BrewvaSemanticReranker } from "@brewva/brewva-tools";
 import type { TurnLifecyclePort } from "./turn-lifecycle-port.js";
 
 interface ToolEvidenceEntry {
@@ -178,7 +178,7 @@ function shouldUseSemanticNarrativeExtraction(input: {
 
 export function createNarrativeMemoryLifecycle(
   runtime: BrewvaRuntime,
-  semanticOracle?: BrewvaSemanticOracle,
+  semanticReranker?: BrewvaSemanticReranker,
 ): TurnLifecyclePort {
   const scratchBySession = new Map<string, NarrativeTurnScratch>();
 
@@ -253,13 +253,13 @@ export function createNarrativeMemoryLifecycle(
       let provenanceActor: "assistant" | "system" = "system";
 
       if (
-        semanticOracle?.extractNarrativeMemoryCandidate &&
+        semanticReranker?.extractNarrativeMemoryCandidate &&
         shouldUseSemanticNarrativeExtraction({
           text: userText,
           candidateClass: deterministicCandidate?.class,
         })
       ) {
-        const extracted = await semanticOracle.extractNarrativeMemoryCandidate({
+        const extracted = await semanticReranker.extractNarrativeMemoryCandidate({
           sessionId,
           agentId: runtime.agentId,
           targetRoots,

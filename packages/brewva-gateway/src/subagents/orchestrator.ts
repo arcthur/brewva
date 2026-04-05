@@ -14,6 +14,7 @@ import {
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type {
+  AdvisorConsultKind,
   BrewvaToolOrchestration,
   DelegationPacket,
   DelegationTaskPacket,
@@ -137,6 +138,7 @@ function buildFailureOutcome(input: {
   agentSpec?: string;
   envelope?: string;
   skillName?: string;
+  consultKind?: AdvisorConsultKind;
   label?: string;
   workerSessionId?: string;
   artifactRefs?: SubagentOutcomeArtifactRef[];
@@ -150,6 +152,7 @@ function buildFailureOutcome(input: {
     agentSpec: input.agentSpec,
     envelope: input.envelope,
     skillName: input.skillName,
+    ...(input.consultKind ? { consultKind: input.consultKind } : {}),
     label: input.label,
     status: "error",
     workerSessionId: input.workerSessionId,
@@ -195,12 +198,13 @@ async function captureIsolatedPatchSet(
 function resolveDelegationRecordIdentity(input: {
   target: HostedDelegationTarget;
   delegatedSkillName?: string;
-}): Pick<DelegationRunRecord, "delegate" | "agentSpec" | "envelope" | "skillName"> {
+}): Pick<DelegationRunRecord, "delegate" | "agentSpec" | "envelope" | "skillName" | "consultKind"> {
   return {
     delegate: input.target.agentSpecName ?? input.target.envelopeName ?? input.target.name,
     agentSpec: input.target.agentSpecName,
     envelope: input.target.envelopeName,
     skillName: input.delegatedSkillName ?? input.target.skillName,
+    consultKind: input.target.consultKind,
   };
 }
 
@@ -415,6 +419,7 @@ export function createHostedSubagentAdapter(
           agentSpec: input.request.agentSpec,
           envelope: input.request.envelope,
           skillName: input.request.skillName,
+          consultKind: input.request.consultKind,
           fallbackResultMode: input.request.fallbackResultMode,
           executionShape: input.request.executionShape,
         },
@@ -529,6 +534,7 @@ export function createHostedSubagentAdapter(
         label: input.label,
         parentSkill,
         kind: input.target.resultMode,
+        consultKind: input.target.consultKind,
         summary: error,
         error,
         delivery: buildDeliveryRecordFromRequest(input.delivery, Date.now()),
@@ -544,6 +550,7 @@ export function createHostedSubagentAdapter(
           skillName: input.target.skillName ?? null,
           label: input.label ?? null,
           kind: input.target.resultMode,
+          consultKind: input.target.consultKind ?? null,
           parentSkill: parentSkill ?? null,
           error,
           status: "failed",
@@ -561,6 +568,7 @@ export function createHostedSubagentAdapter(
             agentSpec: input.target.agentSpecName,
             envelope: input.target.envelopeName,
             skillName: input.target.skillName,
+            consultKind: input.target.consultKind,
             label: input.label,
             error,
             startedAt,
@@ -610,6 +618,7 @@ export function createHostedSubagentAdapter(
       label: input.label,
       parentSkill,
       kind: input.target.resultMode,
+      consultKind: input.target.consultKind,
       boundary: executionPlan.boundary,
       modelRoute: executionPlan.modelRoute,
       delivery: buildDeliveryRecordFromRequest(input.delivery, startedAt),
@@ -626,6 +635,7 @@ export function createHostedSubagentAdapter(
         skillName: input.target.skillName ?? null,
         label: input.label ?? null,
         kind: input.target.resultMode,
+        consultKind: input.target.consultKind ?? null,
         boundary: executionPlan.boundary,
         modelRoute: executionPlan.modelRoute ?? null,
         parentSkill: parentSkill ?? null,
@@ -743,6 +753,7 @@ export function createHostedSubagentAdapter(
             skillName: input.target.skillName ?? null,
             label: input.label ?? null,
             kind: input.target.resultMode,
+            consultKind: input.target.consultKind ?? null,
             boundary: executionPlan.boundary,
             modelRoute: executionPlan.modelRoute ?? null,
             childSessionId,
@@ -755,13 +766,14 @@ export function createHostedSubagentAdapter(
         });
 
         const delegatedSkill = input.target.skillName;
+        const childOwnsSkill = delegatedSkill && input.target.resultMode !== "consult";
         const skillDocument = delegatedSkill
           ? options.runtime.inspect.skills.get(delegatedSkill)
           : undefined;
         if (delegatedSkill && !skillDocument) {
           throw new Error(`unknown_skill:${delegatedSkill}`);
         }
-        if (delegatedSkill) {
+        if (childOwnsSkill) {
           const activation = child.runtime.authority.skills.activate(
             childSessionId,
             delegatedSkill,
@@ -786,8 +798,9 @@ export function createHostedSubagentAdapter(
         childCostAggregated = true;
         const structuredOutcome = extractStructuredOutcomeData({
           resultMode: input.target.resultMode,
+          consultKind: input.target.consultKind,
           assistantText: output.assistantText,
-          skillName: delegatedSkill,
+          skillName: childOwnsSkill ? delegatedSkill : undefined,
         });
         if (structuredOutcome.parseError) {
           recordRuntimeEvent(options.runtime, {
@@ -798,19 +811,20 @@ export function createHostedSubagentAdapter(
               delegate,
               label: input.label ?? null,
               kind: input.target.resultMode,
+              consultKind: input.target.consultKind ?? null,
               childSessionId,
               error: structuredOutcome.parseError,
             },
           });
         }
         const skillValidation =
-          delegatedSkill && childSessionId
+          childOwnsSkill && childSessionId
             ? child.runtime.inspect.skills.validateOutputs(
                 childSessionId,
                 structuredOutcome.skillOutputs ?? {},
               )
             : undefined;
-        if (delegatedSkill && skillValidation && !skillValidation.ok) {
+        if (childOwnsSkill && skillValidation && !skillValidation.ok) {
           recordRuntimeEvent(options.runtime, {
             sessionId: input.parentSessionId,
             type: "subagent_skill_output_validation_failed",
@@ -819,6 +833,7 @@ export function createHostedSubagentAdapter(
               delegate,
               label: input.label ?? null,
               kind: input.target.resultMode,
+              consultKind: input.target.consultKind ?? null,
               childSessionId,
               skillName: delegatedSkill,
               missing: skillValidation.missing,
@@ -868,6 +883,7 @@ export function createHostedSubagentAdapter(
           agentSpec: input.target.agentSpecName,
           envelope: input.target.envelopeName,
           skillName: delegatedSkill,
+          consultKind: input.target.consultKind,
           label: input.label,
           kind: input.target.resultMode,
           status: "ok",
@@ -959,6 +975,7 @@ export function createHostedSubagentAdapter(
             skillName: delegatedSkill ?? null,
             label: input.label ?? null,
             kind: input.target.resultMode,
+            consultKind: input.target.consultKind ?? null,
             childSessionId,
             boundary: executionPlan.boundary,
             modelRoute: executionPlan.modelRoute ?? null,
@@ -1028,6 +1045,7 @@ export function createHostedSubagentAdapter(
                 agentSpec: input.target.agentSpecName,
                 envelope: input.target.envelopeName,
                 skillName: input.target.skillName,
+                consultKind: input.target.consultKind,
                 label: input.label,
                 status: terminalStatus,
                 workerSessionId: childSessionId,
@@ -1043,6 +1061,7 @@ export function createHostedSubagentAdapter(
                 agentSpec: input.target.agentSpecName,
                 envelope: input.target.envelopeName,
                 skillName: input.target.skillName,
+                consultKind: input.target.consultKind,
                 label: input.label,
                 workerSessionId: childSessionId,
                 artifactRefs,
@@ -1094,6 +1113,7 @@ export function createHostedSubagentAdapter(
             skillName: input.target.skillName ?? null,
             label: input.label ?? null,
             kind: input.target.resultMode,
+            consultKind: input.target.consultKind ?? null,
             childSessionId: childSessionId ?? null,
             boundary: executionPlan.boundary ?? null,
             modelRoute: executionPlan.modelRoute ?? null,

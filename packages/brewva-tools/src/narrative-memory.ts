@@ -20,7 +20,7 @@ import {
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { recordToolRuntimeEvent } from "./runtime-internal.js";
-import { shouldInvokeSemanticRerank } from "./semantic-oracle.js";
+import { shouldInvokeSemanticRerank } from "./semantic-reranker.js";
 import type { BrewvaBundledToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
@@ -465,7 +465,7 @@ export function createNarrativeMemoryTool(options: BrewvaBundledToolOptions): To
           .filter((entry) => !recordClass || entry.record.class === recordClass)
           .filter((entry) => !scope || entry.record.applicabilityScope === scope);
 
-        const oracle = options.runtime.semanticOracle;
+        const oracle = options.runtime.semanticReranker;
         if (
           retrievals.length >= 3 &&
           oracle?.rerankNarrativeMemory &&

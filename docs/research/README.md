@@ -37,8 +37,6 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 
 ## Proposed notes
 
-- None currently.
-
 ## Active notes
 
 - `docs/research/roadmap-notes.md`
@@ -52,6 +50,7 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 - `docs/research/rfc-boundary-first-subtraction-and-model-native-recovery.md`
 - `docs/research/rfc-boundary-policy-credential-vault-and-loop-guard.md`
 - `docs/research/rfc-capability-compression-and-output-distillation.md`
+- `docs/research/rfc-advisor-consultation-primitive-and-specialist-taxonomy-cutover.md`
 - `docs/research/rfc-default-path-re-hardening-and-advisory-surface-narrowing.md`
 - `docs/research/rfc-deliberation-home-and-compounding-intelligence.md`
 - `docs/research/rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md`
@@ -89,5 +88,5 @@ Promoted notes may also retain intermediate delegation terminology inside
 historical rationale sections. When a promoted note includes a current-state
 clarification, that clarification overrides older examples or transition code
 snippets. Current delegated result kinds should be read from stable docs:
-`exploration`, `plan`, `review`, `qa`, and `patch`, while
-`runtime.authority.verification.*` remains a separate kernel authority.
+`consult`, `qa`, and `patch`, while `runtime.authority.verification.*`
+remains a separate kernel authority.

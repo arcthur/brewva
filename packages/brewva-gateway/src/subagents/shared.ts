@@ -212,6 +212,21 @@ export function assertDelegationShapeNarrowing(
   }
 }
 
+function assertConsultPacketContract(
+  target: HostedDelegationTarget,
+  packet: DelegationPacket,
+): void {
+  if (target.resultMode !== "consult") {
+    return;
+  }
+  if (!target.consultKind) {
+    throw new Error("missing_consult_kind");
+  }
+  if (!packet.consultBrief) {
+    throw new Error("missing_consult_brief");
+  }
+}
+
 export function resolveRequestedBoundary(input: {
   target: HostedDelegationTarget;
   executionShape?: SubagentExecutionShape;
@@ -288,7 +303,7 @@ export function resolveManagedToolNamesForRun(
 export function resolveDelegationTarget(input: {
   request: Pick<
     SubagentRunRequest,
-    "agentSpec" | "envelope" | "skillName" | "fallbackResultMode" | "executionShape"
+    "agentSpec" | "envelope" | "skillName" | "consultKind" | "fallbackResultMode" | "executionShape"
   >;
   catalog: HostedDelegationCatalog;
 }): ResolvedDelegationTarget {
@@ -348,6 +363,7 @@ export function resolveDelegationTarget(input: {
       agentSpec: {
         ...resolvedAgentSpec,
         skillName: input.request.skillName ?? resolvedAgentSpec.skillName,
+        defaultConsultKind: input.request.consultKind ?? resolvedAgentSpec.defaultConsultKind,
         fallbackResultMode:
           input.request.fallbackResultMode ??
           input.request.executionShape?.resultMode ??
@@ -355,6 +371,12 @@ export function resolveDelegationTarget(input: {
       },
       envelope,
     });
+    if (target.resultMode === "consult" && !target.consultKind) {
+      throw new Error("missing_consult_kind");
+    }
+    if (target.reviewLane && target.consultKind !== "review") {
+      throw new Error("invalid_review_lane_consult_kind");
+    }
     assertDelegationShapeNarrowing(target, input.request.executionShape);
     return {
       target,
@@ -376,9 +398,13 @@ export function resolveDelegationTarget(input: {
         : `Ad hoc delegated worker on envelope=${envelope.name}.`,
       envelope,
       skillName: input.request.skillName,
+      consultKind: input.request.consultKind,
       fallbackResultMode:
         input.request.fallbackResultMode ?? input.request.executionShape?.resultMode,
     });
+    if (target.resultMode === "consult" && !target.consultKind) {
+      throw new Error("missing_consult_kind");
+    }
     assertDelegationShapeNarrowing(target, input.request.executionShape);
     return {
       target,
@@ -398,6 +424,7 @@ export function resolveDelegationExecutionPlan(input: {
   modelRouting?: DelegationModelRoutingContext;
   preselectedModelRoute?: DelegationModelRouteRecord;
 }): ResolvedDelegationExecutionPlan {
+  assertConsultPacketContract(input.target, input.packet);
   const delegatedSkillName = input.target.skillName;
   const skill = delegatedSkillName
     ? input.runtime.inspect.skills.get(delegatedSkillName)
@@ -413,7 +440,8 @@ export function resolveDelegationExecutionPlan(input: {
   const managedToolMode =
     input.executionShape?.managedToolMode ?? input.target.managedToolMode ?? "direct";
   const prompt =
-    input.target.executorPreamble ?? getCanonicalSubagentPrompt(input.target.resultMode);
+    input.target.executorPreamble ??
+    getCanonicalSubagentPrompt(input.target.resultMode, input.target.consultKind);
   const routedModel = resolveDelegationModelRoute({
     target: input.target,
     packet: input.packet,

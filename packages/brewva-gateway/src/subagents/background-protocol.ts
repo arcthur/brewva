@@ -18,6 +18,7 @@ import type {
   SkillRoutingScope,
 } from "@brewva/brewva-runtime";
 import type {
+  AdvisorConsultKind,
   DelegationPacket,
   SubagentResultMode,
   SubagentExecutionShape,
@@ -26,7 +27,7 @@ import type {
 import type { HostedDelegationTarget } from "./targets.js";
 
 export interface DetachedSubagentRunSpec {
-  schema: "brewva.subagent-run-spec.v6";
+  schema: "brewva.subagent-run-spec.v7";
   runId: string;
   parentSessionId: string;
   workspaceRoot: string;
@@ -36,6 +37,7 @@ export interface DetachedSubagentRunSpec {
   delegate: string;
   target?: HostedDelegationTarget;
   skillName?: string;
+  consultKind?: AdvisorConsultKind;
   envelopeName?: string;
   agentSpecName?: string;
   fallbackResultMode?: SubagentResultMode;

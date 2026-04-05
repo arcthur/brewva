@@ -7,12 +7,13 @@ import { REVIEW_LANE_NAMES, normalizeReviewLaneName } from "@brewva/brewva-runti
 export { normalizeReviewLaneName } from "@brewva/brewva-runtime";
 import type { ReviewChangeCategory, ReviewChangedFileClass } from "./review-classification.js";
 import type {
+  AdvisorConsultBrief,
+  AdvisorReviewSubagentOutcomeData,
   DelegationCompletionPredicate,
   DelegationOutcomeFinding,
   DelegationTaskPacket,
   ReviewLaneDisposition,
   ReviewLaneName,
-  ReviewSubagentOutcomeData,
   SubagentContextBudget,
   SubagentContextRef,
   SubagentExecutionHints,
@@ -66,6 +67,7 @@ export interface ReviewLaneActivationPlan {
 export interface ReviewLaneDelegationPacketInput {
   objective: string;
   deliverable?: string;
+  consultBrief: AdvisorConsultBrief;
   constraints?: readonly string[];
   sharedNotes?: readonly string[];
   activeSkillName?: string;
@@ -261,12 +263,14 @@ function readStoredFinding(value: unknown): DelegationOutcomeFinding | undefined
   };
 }
 
-function coerceStoredReviewOutcomeData(value: unknown): ReviewSubagentOutcomeData | undefined {
+function coerceStoredReviewOutcomeData(
+  value: unknown,
+): AdvisorReviewSubagentOutcomeData | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
   const kind = readString(value.kind);
-  if (kind !== "review") {
+  if (kind !== "consult" || readString(value.consultKind) !== "review") {
     return undefined;
   }
   const lane = normalizeReviewLaneName(value.lane);
@@ -296,7 +300,13 @@ function coerceStoredReviewOutcomeData(value: unknown): ReviewSubagentOutcomeDat
     return undefined;
   }
   return {
-    kind: "review",
+    kind: "consult",
+    consultKind: "review",
+    conclusion:
+      primaryClaim ??
+      findings?.[0]?.summary ??
+      strongestCounterpoint ??
+      "Review consult completed without a primary claim.",
     ...(lane ? { lane } : {}),
     ...(disposition === "clear" ||
     disposition === "concern" ||
@@ -495,6 +505,7 @@ export function buildReviewLaneDelegationTasks(input: {
     label: lane,
     objective: `${input.packet.objective}\n\nLane focus: ${REVIEW_LANE_DESCRIPTIONS[lane]}`,
     deliverable,
+    consultBrief: input.packet.consultBrief,
     constraints: input.packet.constraints ? [...input.packet.constraints] : undefined,
     sharedNotes: uniqueStrings([
       ...(input.packet.sharedNotes ?? []),
@@ -547,8 +558,12 @@ function dedupeFindings(findings: readonly DelegationOutcomeFinding[]): Delegati
   return [...bySummary.values()].toSorted(compareFindingSeverity);
 }
 
-function readReviewOutcomeData(outcome: SubagentOutcome): ReviewSubagentOutcomeData | undefined {
-  return outcome.ok && outcome.data?.kind === "review" ? outcome.data : undefined;
+function readReviewOutcomeData(
+  outcome: SubagentOutcome,
+): AdvisorReviewSubagentOutcomeData | undefined {
+  return outcome.ok && outcome.data?.kind === "consult" && outcome.data.consultKind === "review"
+    ? outcome.data
+    : undefined;
 }
 
 function inferLaneFromOutcome(outcome: SubagentOutcome): ReviewLaneName | undefined {
@@ -562,7 +577,7 @@ function inferLaneFromOutcome(outcome: SubagentOutcome): ReviewLaneName | undefi
 
 function coerceDisposition(
   outcome: SubagentOutcome,
-  data: ReviewSubagentOutcomeData | undefined,
+  data: AdvisorReviewSubagentOutcomeData | undefined,
 ): ReviewLaneDisposition {
   if (!outcome.ok) {
     return "blocked";
@@ -584,7 +599,7 @@ function coerceDisposition(
 
 function buildLaneSummary(
   outcome: SubagentOutcome,
-  data: ReviewSubagentOutcomeData | undefined,
+  data: AdvisorReviewSubagentOutcomeData | undefined,
 ): string | undefined {
   if (!outcome.ok) {
     return outcome.error;
@@ -612,7 +627,7 @@ export function materializeReviewLaneOutcomes(
   runs: readonly DelegationRunRecord[],
 ): SubagentOutcome[] {
   return runs
-    .filter((run) => run.kind === "review")
+    .filter((run) => run.kind === "consult" && run.consultKind === "review")
     .map((run) => {
       const artifactRefs = run.artifactRefs?.map((ref) => ({
         kind: ref.kind,
@@ -634,7 +649,8 @@ export function materializeReviewLaneOutcomes(
           envelope: run.envelope,
           skillName: run.skillName,
           label: run.label,
-          kind: "review",
+          kind: "consult",
+          consultKind: "review",
           status: "ok",
           workerSessionId: run.workerSessionId,
           summary: run.summary ?? "Delegated review lane completed.",
@@ -654,6 +670,7 @@ export function materializeReviewLaneOutcomes(
         envelope: run.envelope,
         skillName: run.skillName,
         label: run.label,
+        consultKind: run.consultKind,
         status,
         workerSessionId: run.workerSessionId,
         error: run.error ?? run.summary ?? `delegation run ended with status ${run.status}`,

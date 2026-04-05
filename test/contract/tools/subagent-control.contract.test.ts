@@ -51,12 +51,13 @@ describe("subagent control tools", () => {
       type: "subagent_spawned",
       payload: {
         runId: "run-status-1",
-        delegate: "review",
-        agentSpec: "review",
-        envelope: "readonly-reviewer",
+        delegate: "advisor",
+        agentSpec: "advisor",
+        envelope: "readonly-advisor",
         skillName: "review",
         status: "running",
-        kind: "review",
+        kind: "consult",
+        consultKind: "review",
         summary: "Inspecting runtime deltas.",
         modelRoute: {
           selectedModel: "openai/gpt-5.4:medium",
@@ -82,7 +83,7 @@ describe("subagent control tools", () => {
     expect(extractText(result)).toContain("run-status-1");
     expect(extractText(result)).toContain("status=running");
     expect(extractText(result)).toContain(
-      "delegate: agentSpec=review envelope=readonly-reviewer delegatedSkill=review",
+      "delegate: agentSpec=advisor envelope=readonly-advisor delegatedSkill=review",
     );
     expect(extractText(result)).toContain(
       "model: openai/gpt-5.4:medium source=policy mode=auto policy=review-and-verification requested=gpt-5.4:medium",
@@ -99,9 +100,10 @@ describe("subagent control tools", () => {
       type: "subagent_completed",
       payload: {
         runId: "run-status-handoff-1",
-        delegate: "review",
+        delegate: "advisor",
         status: "completed",
-        kind: "review",
+        kind: "consult",
+        consultKind: "review",
         summary: "Review completed and is pending parent surfacing.",
         deliveryMode: "text_only",
         deliveryHandoffState: "pending_parent_turn",

@@ -12,7 +12,7 @@ import {
   buildBrewvaTools,
   getBrewvaToolMetadata,
   getBrewvaToolSurface,
-  type BrewvaSemanticOracle,
+  type BrewvaSemanticReranker,
   type BrewvaToolOrchestration,
 } from "@brewva/brewva-tools";
 import type {
@@ -54,7 +54,7 @@ export interface CreateHostedTurnPipelineOptions extends BrewvaRuntimeOptions {
   delegationStore?: HostedDelegationStore;
   managedToolNames?: readonly string[];
   contextProfile?: "minimal" | "standard" | "full";
-  semanticOracle?: BrewvaSemanticOracle;
+  semanticReranker?: BrewvaSemanticReranker;
   ports?: readonly TurnLifecyclePort[];
   toolExecutionCoordinator?: HostedToolExecutionCoordinator;
   hostedToolDefinitionsByName?: ReadonlyMap<string, ToolDefinition>;
@@ -77,7 +77,7 @@ function buildManagedTools(
   runtime: BrewvaRuntime,
   options: Pick<
     CreateHostedTurnPipelineOptions,
-    "managedToolNames" | "orchestration" | "delegationStore" | "semanticOracle"
+    "managedToolNames" | "orchestration" | "delegationStore" | "semanticReranker"
   >,
 ): ReturnType<typeof buildBrewvaTools> {
   const delegationStore = options.delegationStore;
@@ -95,7 +95,7 @@ function buildManagedTools(
     runtime: {
       ...createToolRuntimePort(runtime),
       internal: createToolRuntimeInternalPort(runtime),
-      ...(options.semanticOracle ? { semanticOracle: options.semanticOracle } : {}),
+      ...(options.semanticReranker ? { semanticReranker: options.semanticReranker } : {}),
     },
     orchestration: options.orchestration,
     delegation,
@@ -128,7 +128,7 @@ function registerHostedPipeline(
   registerTools: boolean,
   delegationStore: HostedDelegationStore | undefined,
   contextProfile: "minimal" | "standard" | "full" | undefined,
-  semanticOracle: BrewvaSemanticOracle | undefined,
+  semanticReranker: BrewvaSemanticReranker | undefined,
   userPorts: readonly TurnLifecyclePort[],
 ): void {
   const toolDefinitionsByName = new Map<string, ToolDefinition>(extraToolDefinitionsByName);
@@ -149,7 +149,7 @@ function registerHostedPipeline(
     contextProfile,
   });
   const deliberationMaintenance = createDeliberationMaintenanceLifecycle(runtime);
-  const narrativeMemory = createNarrativeMemoryLifecycle(runtime, semanticOracle);
+  const narrativeMemory = createNarrativeMemoryLifecycle(runtime, semanticReranker);
   const qualityGate = createQualityGateLifecycle(hostedRuntime, {
     toolDefinitionsByName,
   });
@@ -242,7 +242,7 @@ export function createHostedTurnPipeline(
       registerTools,
       options.delegationStore,
       options.contextProfile,
-      options.semanticOracle,
+      options.semanticReranker,
       options.ports ?? [],
     );
   };

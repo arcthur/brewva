@@ -23,7 +23,7 @@ import {
   buildBrewvaTools,
   resolveBrewvaModelSelection,
   type BrewvaToolExecutionTraits,
-  type BrewvaSemanticOracle,
+  type BrewvaSemanticReranker,
   type BrewvaToolOrchestration,
 } from "@brewva/brewva-tools";
 import {
@@ -61,7 +61,7 @@ import {
   type HostedToolExecutionCoordinator,
 } from "../tool-execution-traits.js";
 import { DEFAULT_HOSTED_ROUTING_SCOPES } from "./routing-defaults.js";
-import { createHostedSemanticOracle } from "./semantic-oracle.js";
+import { createHostedSemanticReranker } from "./semantic-reranker.js";
 
 export interface HostedSessionResult extends CreateAgentSessionResult {
   runtime: BrewvaRuntime;
@@ -632,7 +632,7 @@ function createRuntimePlugins(input: {
   runtime: BrewvaRuntime;
   orchestration: BrewvaToolOrchestration | undefined;
   delegationStore: HostedDelegationStore | undefined;
-  semanticOracle?: BrewvaSemanticOracle;
+  semanticReranker?: BrewvaSemanticReranker;
   toolExecutionCoordinator: HostedToolExecutionCoordinator;
   hostedToolDefinitionsByName?: ReadonlyMap<string, ToolDefinition>;
 }): RuntimePlugin[] {
@@ -646,7 +646,7 @@ function createRuntimePlugins(input: {
       delegationStore: input.delegationStore,
       managedToolNames: input.options.managedToolNames,
       contextProfile: input.options.contextProfile,
-      semanticOracle: input.semanticOracle,
+      semanticReranker: input.semanticReranker,
       toolExecutionCoordinator: input.toolExecutionCoordinator,
       hostedToolDefinitionsByName: input.hostedToolDefinitionsByName,
     }),
@@ -663,7 +663,7 @@ function createDirectManagedTools(input: {
   orchestration: BrewvaToolOrchestration | undefined;
   delegationStore: HostedDelegationStore | undefined;
   managedToolMode: ManagedToolMode;
-  semanticOracle?: BrewvaSemanticOracle;
+  semanticReranker?: BrewvaSemanticReranker;
 }) {
   if (input.managedToolMode !== "direct") {
     return undefined;
@@ -672,7 +672,7 @@ function createDirectManagedTools(input: {
     runtime: {
       ...createToolRuntimePort(input.runtime),
       internal: createToolRuntimeInternalPort(input.runtime),
-      ...(input.semanticOracle ? { semanticOracle: input.semanticOracle } : {}),
+      ...(input.semanticReranker ? { semanticReranker: input.semanticReranker } : {}),
     },
     orchestration: input.orchestration,
     delegation: createDelegationQuery(input.delegationStore),
@@ -728,7 +728,7 @@ export async function createHostedSession(
   applyRuntimeUiSettings(settingsManager, runtime.config.ui);
 
   const managedToolMode = resolveManagedToolMode(options.managedToolMode);
-  const semanticOracle = createHostedSemanticOracle({
+  const semanticReranker = createHostedSemanticReranker({
     model: environment.selectedModel.model,
     modelRegistry: environment.modelRegistry,
     runtime,
@@ -741,7 +741,7 @@ export async function createHostedSession(
       orchestration,
       delegationStore,
       managedToolMode,
-      semanticOracle,
+      semanticReranker,
     }),
     toolExecutionCoordinator,
   );
@@ -762,7 +762,7 @@ export async function createHostedSession(
     runtime,
     orchestration,
     delegationStore,
-    semanticOracle,
+    semanticReranker,
     toolExecutionCoordinator,
     hostedToolDefinitionsByName,
   });

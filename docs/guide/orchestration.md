@@ -41,8 +41,9 @@ Delegated worker authoring now has two layers:
 
 Markdown worker files compile into the existing hosted `agentSpec` surface. The
 frontmatter controls the structural fields (`name`, `extends`, `envelope`,
-`skillName`, `fallbackResultMode`, `executorPreamble`), while the Markdown body
-becomes additive authored instructions rendered in the delegated prompt.
+`skillName`, `defaultConsultKind`, `reviewLane`, `fallbackResultMode`,
+`executorPreamble`), while the Markdown body becomes additive authored
+instructions rendered in the delegated prompt.
 Built-in specialists now follow the same authored-behavior model through
 catalog-backed constitutions instead of relying only on thin preambles.
 Authority still comes from the normalized hosted catalog, not from ad hoc
@@ -72,7 +73,7 @@ hidden planner.
 
 The current stable built-in specialist surface is:
 
-- public specialists: `explore`, `plan`, `review`, `qa`, `patch-worker`
+- public specialists: `advisor`, `qa`, `patch-worker`
 - internal review fan-out lanes:
   `review-correctness`, `review-boundaries`, `review-operability`,
   `review-security`, `review-concurrency`, `review-compatibility`, and
@@ -80,18 +81,19 @@ The current stable built-in specialist surface is:
 
 Execution posture is intentionally split:
 
-- `explore`, `plan`, and `review` are read-only and run under minimal-context
-  envelopes
-- `plan` is a first-class delegated result posture; canonical plan outcomes
-  carry `designSpec`, `executionPlan`, `executionModeHint`, `riskRegister`, and
-  `implementationTargets`, and the gateway projects that payload into the
-  downstream `design` skill artifact set
+- `advisor` is the single public read-only consultation identity and runs under
+  the minimal-context `readonly-advisor` envelope
+- `consult` is the canonical read-only result posture; `consultKind`
+  distinguishes `investigate`, `diagnose`, `design`, and `review`
+- consult runs do not make the child own semantic skill completion; parent
+  skills still emit semantic workflow artifacts such as `workflow.design` and
+  `workflow.review`
 - `qa` is effectful for commands, browser flows, and evidence capture, but it
   is non-patch-producing and does not enter `WorkerResult` adoption semantics
 - `qa` is intentionally adversarial: a `pass` posture depends on evidence-backed
   executed checks, not static code reading or inherited implementer confidence
 - `patch-worker` is the isolated patch-producing specialist
-- hosted envelopes also pin `contextProfile`; read-only specialists and `qa`
+- hosted envelopes also pin `contextProfile`; `advisor` and `qa`
   default to `minimal`, while `patch-worker` uses `standard`
 - `review-operability` remains the internal audit lane for stale evidence,
   missing probes, rollback posture, and operator-visible recovery burden
@@ -126,7 +128,7 @@ The overlay/operator RFC is now closed through thin command veneers rather than
 new kernel state:
 
 - `/questions` inspects unresolved session questions derived from durable
-  `skill_completed` outputs and delegated exploration outcome artifacts
+  `skill_completed` outputs and delegated consult outcome artifacts
 - `/answer` records `operator_question_answered` and routes the answer back into
   the active session as explicit operator input
 - `/agent-overlays` inspects and validates Markdown-authored delegated-worker

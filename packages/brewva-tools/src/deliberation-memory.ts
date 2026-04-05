@@ -9,7 +9,7 @@ import {
 } from "@brewva/brewva-deliberation";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { shouldInvokeSemanticRerank } from "./semantic-oracle.js";
+import { shouldInvokeSemanticRerank } from "./semantic-reranker.js";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
@@ -229,7 +229,7 @@ export function createDeliberationMemoryTool(options: BrewvaToolOptions): ToolDe
           .retrieve(query, Math.max(limit * 3, limit), targetRoots)
           .filter((entry) => !kind || entry.artifact.kind === kind)
           .filter((entry) => !scope || entry.artifact.applicabilityScope === scope);
-        const oracle = options.runtime.semanticOracle;
+        const oracle = options.runtime.semanticReranker;
         if (
           retrievals.length >= 3 &&
           oracle?.rerankDeliberationMemory &&

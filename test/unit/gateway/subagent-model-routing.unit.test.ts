@@ -54,9 +54,10 @@ const AVAILABLE_MODELS: RegisteredModel[] = [
 
 function makeTarget(overrides: Partial<HostedDelegationTarget> = {}): HostedDelegationTarget {
   return {
-    name: "explore",
-    description: "Repository scout",
-    resultMode: "exploration",
+    name: "advisor",
+    description: "Repository advisor",
+    resultMode: "consult",
+    consultKind: "investigate",
     boundary: "safe",
     producesPatches: false,
     contextProfile: "minimal",
@@ -68,7 +69,7 @@ describe("subagent model routing", () => {
   test("keeps explicit executionShape model selections inspectable", () => {
     const resolved = resolveDelegationModelRoute({
       target: makeTarget({
-        resultMode: "review",
+        consultKind: "review",
       }),
       packet: {
         objective: "Review the runtime change.",
@@ -138,7 +139,7 @@ describe("subagent model routing", () => {
   test("does not treat substring matches as execution keywords", () => {
     const resolved = resolveDelegationModelRoute({
       target: makeTarget({
-        resultMode: "exploration",
+        consultKind: "investigate",
       }),
       packet: {
         objective: "Inspect the prefix handling in the router before changing anything.",

@@ -358,6 +358,7 @@ export function createDetachedSubagentBackgroundController(
             label: input.label,
             parentSkill,
             kind: input.target.resultMode,
+            consultKind: input.target.consultKind,
             delivery: buildDeliveryRecord(input.delivery, createdAt),
           },
           "failed",
@@ -377,6 +378,7 @@ export function createDetachedSubagentBackgroundController(
         label: input.label,
         parentSkill,
         kind: input.target.resultMode,
+        consultKind: input.target.consultKind,
         boundary: executionPlan.boundary,
         modelRoute: executionPlan.modelRoute,
         delivery: buildDeliveryRecord(input.delivery, createdAt),
@@ -425,7 +427,7 @@ export function createDetachedSubagentBackgroundController(
       });
 
       const spec: DetachedSubagentRunSpec = {
-        schema: "brewva.subagent-run-spec.v6",
+        schema: "brewva.subagent-run-spec.v7",
         runId,
         parentSessionId: input.parentSessionId,
         workspaceRoot: options.runtime.workspaceRoot,
@@ -435,6 +437,7 @@ export function createDetachedSubagentBackgroundController(
         delegate,
         target: input.target,
         skillName: input.target.skillName,
+        consultKind: input.target.consultKind,
         envelopeName: input.target.envelopeName,
         agentSpecName: input.target.agentSpecName,
         fallbackResultMode: input.target.fallbackResultMode,

@@ -147,11 +147,10 @@ Current responsibilities:
     `boundary`, optional model and managed-tool hints)
   - keeps named profiles as stable presets rather than the primary
     orchestration contract
-  - presents the stable public specialist surface (`explore`, `plan`, `review`,
-    `qa`, `patch-worker`) while keeping internal review lanes behind the single
-    public `review` boundary
-  - nudges model-native delegation for cross-file exploration and independent
-    review without introducing a planner
+  - presents the stable public specialist surface (`advisor`, `qa`,
+    `patch-worker`) while keeping internal review lanes explicit and internal
+  - keeps execution identity singular for read-only consultation while leaving
+    semantic workflow lanes in parent-owned skills
 - workflow inspection presentation
   - exposes explicit pull-based workflow surfaces such as `workflow_status`
     and working projection entries
@@ -208,7 +207,8 @@ Current product surfaces:
 Related productized repository-precedent surfaces also include:
 
 - `knowledge-capture` as terminal materialization into `docs/solutions/**`
-- internal review-lane fan-out behind the single public `review` boundary
+- internal review-lane fan-out behind the single public `advisor`
+  consultation boundary, while `review` remains a parent-owned semantic skill
 
 These surfaces are derived from durable events and session state such as:
 

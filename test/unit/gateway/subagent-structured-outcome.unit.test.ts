@@ -15,109 +15,78 @@ function buildAssistantText(payload: Record<string, unknown>): string {
 }
 
 describe("subagent structured outcome normalization", () => {
-  test("parses canonical plan outcomes and synthesizes design skill outputs", () => {
+  test("parses canonical design consult outcomes", () => {
     const outcome = extractStructuredOutcomeData({
-      resultMode: "plan",
-      skillName: "design",
+      resultMode: "consult",
+      consultKind: "design",
       assistantText: buildAssistantText({
-        kind: "plan",
-        skillName: "design",
-        designSpec: "Keep planning explicit and machine-readable.",
-        executionPlan: [
+        kind: "consult",
+        consultKind: "design",
+        conclusion:
+          "Unify read-only public delegation under advisor and keep workflow semantics parent-owned.",
+        confidence: "high",
+        evidence: [
+          "The read-only public delegates share effectively identical execution envelopes.",
+        ],
+        counterevidence: ["The cutover touches routing, parsing, and overlay contracts at once."],
+        risks: ["A partial migration could leave review lanes on a split contract family."],
+        openQuestions: ["Whether any workspace overlays still rely on public review agent names."],
+        recommendedNextSteps: ["Cut the public taxonomy in one pass and rebase internal lanes."],
+        options: [
           {
-            step: "Promote plan to a first-class delegated result.",
-            intent: "Stop encoding planning as exploration.",
-            owner: "gateway.subagents",
-            exit_criteria: "Structured outcomes parse into kind=plan.",
-            verification_intent: "Unit tests cover plan parsing and skill output synthesis.",
+            option: "Keep separate read-only public agent specs.",
+            summary: "Preserves familiar names but leaves execution identity fragmented.",
+            tradeoffs: ["Semantic overlap and prompt drift remain."],
+          },
+          {
+            option: "Unify read-only public delegation under advisor.",
+            summary:
+              "Keeps execution identity singular while leaving semantic workflow lanes in parent skills.",
+            tradeoffs: ["Requires a broader contract and parser cutover."],
           },
         ],
-        executionModeHint: "coordinated_rollout",
-        riskRegister: [
-          {
-            risk: "Planning remains prose-only and cannot drive downstream review.",
-            category: "public_api",
-            severity: "high",
-            mitigation: "Require canonical planning artifacts on every plan outcome.",
-            required_evidence: ["plan_contract_tests"],
-            owner_lane: "review-boundaries",
-          },
+        recommendedOption: "Unify read-only public delegation under advisor.",
+        boundaryImplications: [
+          "Delegation transport changes, but workflow.design and workflow.review remain parent-owned.",
         ],
-        implementationTargets: [
-          {
-            target: "packages/brewva-gateway/src/subagents/structured-outcome.ts",
-            kind: "module",
-            owner_boundary: "gateway.subagents",
-            reason: "Structured plan outcomes are normalized here.",
-          },
+        verificationPlan: [
+          "Contract-test consult payload parsing.",
+          "Verify parent design skill still emits canonical planning artifacts.",
         ],
       }),
     });
 
     expect(outcome.data).toMatchObject({
-      kind: "plan",
-      executionModeHint: "coordinated_rollout",
+      kind: "consult",
+      consultKind: "design",
+      recommendedOption: "Unify read-only public delegation under advisor.",
     });
-    expect(outcome.skillOutputs).toMatchObject({
-      design_spec: "Keep planning explicit and machine-readable.",
-      execution_mode_hint: "coordinated_rollout",
-      execution_plan: [
-        expect.objectContaining({
-          owner: "gateway.subagents",
-          verification_intent: "Unit tests cover plan parsing and skill output synthesis.",
-        }),
-      ],
-      risk_register: [
-        expect.objectContaining({
-          category: "public_api",
-          owner_lane: "review-boundaries",
-        }),
-      ],
-      implementation_targets: [
-        expect.objectContaining({
-          target: "packages/brewva-gateway/src/subagents/structured-outcome.ts",
-        }),
-      ],
-    });
+    expect(outcome.skillOutputs).toBeUndefined();
   });
 
-  test("rejects plan outcomes when risk taxonomy drifts from the canonical contract", () => {
+  test("rejects design consult outcomes when required fields drift from the canonical contract", () => {
     const outcome = extractStructuredOutcomeData({
-      resultMode: "plan",
-      skillName: "design",
+      resultMode: "consult",
+      consultKind: "design",
       assistantText: buildAssistantText({
-        kind: "plan",
-        skillName: "design",
-        designSpec: "Keep planning taxonomy aligned with canonical review and ownership lanes.",
-        executionPlan: [
+        kind: "consult",
+        consultKind: "design",
+        conclusion: "Keep the design taxonomy aligned with the advisor contract.",
+        confidence: "medium",
+        evidence: ["Parser acceptance depends on the canonical design consult fields."],
+        counterevidence: ["Some historical outcomes used plan-specific field names."],
+        risks: ["Drifted contracts can silently bypass downstream consumers."],
+        openQuestions: ["Which workspace overlays still emit legacy plan payloads?"],
+        recommendedNextSteps: ["Reject non-canonical design consult payloads during parsing."],
+        options: [
           {
-            step: "Emit a structured planning payload.",
-            intent: "Exercise canonical plan parsing.",
-            owner: "gateway.subagents",
-            exit_criteria: "Structured outcome parsing accepts only canonical taxonomy.",
-            verification_intent:
-              "Invalid categories are rejected before skill outputs are synthesized.",
+            option: "Emit a structured design consult payload.",
+            summary: "Exercise canonical consult parsing.",
+            tradeoffs: ["Any field drift should fail fast."],
           },
         ],
-        executionModeHint: "coordinated_rollout",
-        riskRegister: [
-          {
-            risk: "A drifted planning taxonomy could bypass downstream lane activation.",
-            category: "not_a_real_category",
-            severity: "high",
-            mitigation: "Reject non-canonical planning categories during parsing.",
-            required_evidence: ["plan_taxonomy_contract_tests"],
-            owner_lane: "review-boundaries",
-          },
-        ],
-        implementationTargets: [
-          {
-            target: "packages/brewva-gateway/src/subagents/structured-outcome.ts",
-            kind: "module",
-            owner_boundary: "gateway.subagents",
-            reason: "Plan parsing happens here.",
-          },
-        ],
+        recommendedOption: "Emit a structured design consult payload.",
+        boundaryImplications: ["Delegation parsing now keys off consultKind instead of plan mode."],
       }),
     });
 

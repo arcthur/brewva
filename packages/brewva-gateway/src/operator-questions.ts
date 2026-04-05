@@ -156,7 +156,7 @@ async function extractDelegationQuestions(
       warning: `delegation outcome unreadable for ${runId} (${artifactPath})`,
     };
   }
-  if (!outcome.ok || outcome.data?.kind !== "exploration") {
+  if (!outcome.ok || outcome.data?.kind !== "consult") {
     return { questions: [] };
   }
   const openQuestions = outcome.data.openQuestions ?? [];
@@ -166,7 +166,7 @@ async function extractDelegationQuestions(
   const agentSpec = readString(payload?.agentSpec) ?? outcome.agentSpec;
   const envelope = readString(payload?.envelope) ?? outcome.envelope;
   return {
-    questions: openQuestions.map((questionText, index) => ({
+    questions: openQuestions.map((questionText: string, index: number) => ({
       questionId: buildDelegationQuestionId(runId, index),
       sessionId: event.sessionId,
       createdAt: event.timestamp,

@@ -135,21 +135,20 @@ Tool registry source: `packages/brewva-tools/src/index.ts`
   via `learningResearch`, turning repository precedent consult into a
   deterministic proof-of-consult packet instead of relying on handwritten
   summaries
-- delegated `design -> plan` routing now uses a first-class planning payload
-  rather than reusing exploration semantics, while downstream
-  implementation/review/qa continue to consume the canonical `design` artifact
-  lane
+- delegated `design -> advisor (design)` routing now uses a first-class
+  consult payload rather than reusing exploration semantics, while downstream
+  implementation/review/qa continue to consume the canonical `design`
+  artifact lane
 - `knowledge_capture` is the deterministic write-back surface that materializes
   canonical solution records under `docs/solutions/**`
 - `learning-research` turns planning-time precedent retrieval into explicit
   handoff artifacts before non-trivial design or review
 - `knowledge-capture` orchestrates terminal repository precedent capture and
   should prefer `knowledge_capture` for the actual canonical write-back path
-- built-in public agent specs are `explore`, `plan`, `review`, `qa`, and
-  `patch-worker`
-- `explore`, `plan`, and `review` stay read-only; `qa` is executable but
-  parent-source-non-mutating, and `patch-worker` remains the isolated patch
-  executor
+- built-in public agent specs are `advisor`, `qa`, and `patch-worker`
+- `advisor` is the single public read-only consultation role; `qa` is
+  executable but parent-source-non-mutating, and `patch-worker` remains the
+  isolated patch executor
 - `qa` is adversarial by contract: a stable `pass` requires evidence-backed
   executed checks, at least one adversarial probe, and no unresolved evidence
   gaps

@@ -1,6 +1,6 @@
 import type {
   BrewvaToolRuntimePort as RuntimeToolRuntimePort,
-  DesignExecutionModeHint,
+  DelegationConsultKind as RuntimeDelegationConsultKind,
   DesignExecutionStep as RuntimeDesignExecutionStep,
   DesignImplementationTarget as RuntimeDesignImplementationTarget,
   DesignRiskItem as RuntimeDesignRiskItem,
@@ -17,7 +17,7 @@ import type {
 } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import type { TSchema } from "@sinclair/typebox";
-import type { BrewvaSemanticOracle } from "./semantic-oracle.js";
+import type { BrewvaSemanticReranker } from "./semantic-reranker.js";
 
 export type BrewvaToolSurface = "base" | "skill" | "operator";
 
@@ -81,7 +81,8 @@ export type BrewvaManagedToolDefinition = ToolDefinition & {
   brewvaAgentParameters?: TSchema;
 };
 
-export type SubagentResultMode = "exploration" | "plan" | "review" | "qa" | "patch";
+export type AdvisorConsultKind = RuntimeDelegationConsultKind;
+export type SubagentResultMode = "consult" | "qa" | "patch";
 export type SubagentDelegationMode = "single" | "parallel";
 export type SubagentReturnMode = "text_only" | "supplemental";
 export type DelegationRefKind =
@@ -117,6 +118,15 @@ export interface SubagentExecutionHints {
   preferredSkills?: string[];
 }
 
+export interface AdvisorConsultBrief {
+  decision: string;
+  successCriteria: string;
+  currentBestGuess?: string;
+  assumptions?: string[];
+  rejectedPaths?: string[];
+  focusAreas?: string[];
+}
+
 export interface SubagentExecutionShape {
   resultMode?: SubagentResultMode;
   boundary?: SubagentExecutionBoundary;
@@ -141,6 +151,7 @@ export type DelegationCompletionPredicate =
 export interface DelegationPacket {
   objective: string;
   deliverable?: string;
+  consultBrief?: AdvisorConsultBrief;
   constraints?: string[];
   sharedNotes?: string[];
   activeSkillName?: string;
@@ -161,6 +172,7 @@ export interface SubagentRunRequest {
   agentSpec?: string;
   envelope?: string;
   skillName?: string;
+  consultKind?: AdvisorConsultKind;
   fallbackResultMode?: SubagentResultMode;
   executionShape?: SubagentExecutionShape;
   mode: SubagentDelegationMode;
@@ -210,11 +222,25 @@ export interface DelegationOutcomeChange {
   evidenceRefs?: string[];
 }
 
-export interface ExplorationSubagentOutcomeData {
-  kind: "exploration";
-  findings?: DelegationOutcomeFinding[];
+export type AdvisorConsultConfidence = "low" | "medium" | "high";
+
+export interface AdvisorConsultOutcomeBase {
+  kind: "consult";
+  consultKind: AdvisorConsultKind;
+  conclusion: string;
+  confidence?: AdvisorConsultConfidence;
+  evidence?: string[];
+  counterevidence?: string[];
+  risks?: string[];
   openQuestions?: string[];
-  nextSteps?: string[];
+  recommendedNextSteps?: string[];
+}
+
+export interface AdvisorInvestigateSubagentOutcomeData extends AdvisorConsultOutcomeBase {
+  consultKind: "investigate";
+  findings?: DelegationOutcomeFinding[];
+  ownershipHints?: string[];
+  recommendedReads?: string[];
 }
 
 export type PlanExecutionStep = RuntimeDesignExecutionStep;
@@ -223,13 +249,32 @@ export type PlanImplementationTarget = RuntimeDesignImplementationTarget;
 
 export type PlanRiskItem = RuntimeDesignRiskItem;
 
-export interface PlanSubagentOutcomeData {
-  kind: "plan";
-  designSpec: string;
-  executionPlan: PlanExecutionStep[];
-  executionModeHint: DesignExecutionModeHint;
-  riskRegister: PlanRiskItem[];
-  implementationTargets: PlanImplementationTarget[];
+export interface AdvisorDiagnoseHypothesis {
+  hypothesis: string;
+  likelihood?: AdvisorConsultConfidence;
+  evidence?: string[];
+  gaps?: string[];
+}
+
+export interface AdvisorDiagnoseSubagentOutcomeData extends AdvisorConsultOutcomeBase {
+  consultKind: "diagnose";
+  hypotheses: AdvisorDiagnoseHypothesis[];
+  likelyRootCause: string;
+  nextProbe: string;
+}
+
+export interface AdvisorDesignOption {
+  option: string;
+  summary: string;
+  tradeoffs?: string[];
+}
+
+export interface AdvisorDesignSubagentOutcomeData extends AdvisorConsultOutcomeBase {
+  consultKind: "design";
+  options: AdvisorDesignOption[];
+  recommendedOption: string;
+  boundaryImplications: string[];
+  verificationPlan: string[];
 }
 
 export type ReviewLaneName = RuntimeReviewLaneName;
@@ -238,14 +283,14 @@ export type ReviewLaneDisposition = "clear" | "concern" | "blocked" | "inconclus
 
 export type ReviewLaneConfidence = "low" | "medium" | "high";
 
-export interface ReviewSubagentOutcomeData {
-  kind: "review";
+export interface AdvisorReviewSubagentOutcomeData extends AdvisorConsultOutcomeBase {
+  consultKind: "review";
   lane?: ReviewLaneName;
   disposition?: ReviewLaneDisposition;
+  mergePosture?: "ready" | "needs_changes" | "blocked" | "inconclusive";
   primaryClaim?: string;
   findings?: DelegationOutcomeFinding[];
   strongestCounterpoint?: string;
-  openQuestions?: string[];
   missingEvidence?: string[];
   confidence?: ReviewLaneConfidence;
 }
@@ -259,10 +304,14 @@ export interface PatchSubagentOutcomeData {
   patchSummary?: string;
 }
 
+export type AdvisorSubagentOutcomeData =
+  | AdvisorInvestigateSubagentOutcomeData
+  | AdvisorDiagnoseSubagentOutcomeData
+  | AdvisorDesignSubagentOutcomeData
+  | AdvisorReviewSubagentOutcomeData;
+
 export type SubagentOutcomeData =
-  | ExplorationSubagentOutcomeData
-  | PlanSubagentOutcomeData
-  | ReviewSubagentOutcomeData
+  | AdvisorSubagentOutcomeData
   | QaSubagentOutcomeData
   | PatchSubagentOutcomeData;
 
@@ -274,6 +323,7 @@ export interface SubagentOutcomeBase {
   skillName?: string;
   label?: string;
   kind: SubagentResultMode;
+  consultKind?: AdvisorConsultKind;
   status: "ok" | "error" | "cancelled" | "timeout";
   workerSessionId?: string;
   summary: string;
@@ -300,6 +350,7 @@ export interface SubagentOutcomeFailure {
   envelope?: string;
   skillName?: string;
   label?: string;
+  consultKind?: AdvisorConsultKind;
   status: "error" | "cancelled" | "timeout";
   workerSessionId?: string;
   error: string;
@@ -420,14 +471,14 @@ export type BrewvaToolRuntime = RuntimeToolRuntimePort & {
   internal?: BrewvaToolInternalRuntime;
   orchestration?: BrewvaToolOrchestration;
   delegation?: BrewvaToolDelegationQuery;
-  semanticOracle?: BrewvaSemanticOracle;
+  semanticReranker?: BrewvaSemanticReranker;
 };
 
 export type BrewvaBundledToolRuntime = RuntimeToolRuntimePort & {
   internal: BrewvaToolInternalRuntime;
   orchestration?: BrewvaToolOrchestration;
   delegation?: BrewvaToolDelegationQuery;
-  semanticOracle?: BrewvaSemanticOracle;
+  semanticReranker?: BrewvaSemanticReranker;
 };
 
 export interface BrewvaBundledToolOptions {

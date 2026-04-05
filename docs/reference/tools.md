@@ -446,6 +446,8 @@ Current packet contract:
 
 - `objective`
 - `deliverable?`
+- `consultBrief?`
+  - required for all `consult` delegation, including `agentSpec=advisor`
 - `constraints?`
 - `sharedNotes?`
 - `activeSkillName?`
@@ -463,18 +465,22 @@ Current delegation selector contract:
 - `envelope?`
   - explicit runtime posture override or ad hoc runtime posture
 - `skillName?`
-  - explicit delegated semantic contract
+  - parent-owned semantic skill context
+  - does not implicitly select `consultKind`
+- `consultKind?` (`investigate` | `diagnose` | `design` | `review`)
+  - required for consult delegation
 - `fallbackResultMode?`
   - transport-level fallback schema for ad hoc runs without `skillName`
-- `executionShape.resultMode?` (`exploration` | `plan` | `review` | `qa` | `patch`)
+- `executionShape.resultMode?` (`consult` | `qa` | `patch`)
 - `executionShape.boundary?` (`safe` | `effectful`)
   - optional preset narrowing only
 - `executionShape.model?`
 - `executionShape.managedToolMode?` (`direct` | `runtime_plugin`)
 
-When `skillName` is present, the delegated output contract is owned by the
-skill document and validated through `skillOutputs`. There is no separate
-packet-level required-output list.
+When `skillName` is present, it supplies semantic context for the delegated
+prompt. QA runs may still validate `skillOutputs` against the delegated skill
+contract, but consult runs do not make the child own semantic completion.
+There is no separate packet-level required-output list.
 
 Current delivery contract:
 
@@ -492,33 +498,36 @@ Current mode contract:
 
 Semantics:
 
-- built-in public agent specs remain stable presets: `explore`, `plan`,
-  `review`, `qa`, and `patch-worker`
+- built-in public agent specs remain stable presets: `advisor`, `qa`, and
+  `patch-worker`
 - built-in review-lane delegates are also available for internal review fan-out:
   `review-correctness`, `review-boundaries`, `review-operability`,
   `review-security`, `review-concurrency`, `review-compatibility`, and
   `review-performance`; they are internal ensemble lanes, not part of the
   stable public taxonomy
 - built-in execution envelopes are:
-  `readonly-scout`, `readonly-planner`, `readonly-reviewer`, `qa-runner`, and
-  `patch-worker`
-- `explore`, `plan`, and `review` resolve to minimal-context read-only
-  specialists; `qa` resolves to an effectful but non-patch-producing verifier;
-  `patch-worker` remains the only patch-producing built-in worker
+  `readonly-advisor`, `qa-runner`, and `patch-worker`
+- `advisor` is the only public read-only consultation identity; `qa` resolves
+  to an effectful but non-patch-producing verifier; `patch-worker` remains the
+  only patch-producing built-in worker
 - `review-operability` is the internal review lane that audits evidence quality,
   rollback posture, missing probes, and operator burden; it complements `qa`
   instead of duplicating executable verification
 - built-in envelopes also carry internal context narrowing posture:
-  read-only specialists and `qa` default to a minimal profile, while
+  `advisor` and `qa` default to a minimal profile, while
   `patch-worker` keeps a broader standard profile for isolated execution
-- `agentSpec` supplies default `skillName`, envelope, and executor posture
+- `agentSpec` supplies execution identity, envelope, and executor posture
+- public `advisor` does not imply a `consultKind`; only specialized internal
+  review-lane delegates pin `consultKind=review`
 - `envelope` may be used alone for ad hoc objective-only delegation, but such
-  runs should also supply `fallbackResultMode` unless a named `agentSpec`
-  already implies it
+  runs should also supply `fallbackResultMode`, `consultKind`, and
+  `consultBrief` for consult delegation
 - when both `agentSpec` and `envelope` are supplied, the request envelope may
   only narrow the agent spec envelope; widening is rejected
 - when no explicit worker is supplied, the gateway resolves a default agent
   spec from `skillName`, `fallbackResultMode`, or `executionShape.resultMode`
+- resolving a default agent spec from `skillName` does not infer `consultKind`;
+  consult routing stays explicit
 - unmatched `skillName` or `resultMode` now fail fast instead of falling
   through to a generic helper
 - `safe` is the default execution boundary
@@ -528,15 +537,15 @@ Semantics:
   all persist route metadata on the run record
 - `contextRefs` are typed refs and may include `sourceSessionId` and advisory
   `hash`
-- when `skillName` is present, the child prompt includes the delegated skill
-  body and output contracts directly, and successful outcomes may include
-  `skillOutputs` plus runner-produced `skillValidation`
+- when `skillName` is present, the child prompt includes delegated semantic
+  context directly; QA runs may still return `skillOutputs` plus
+  runner-produced `skillValidation`, while consult runs do not
 - successful child outcomes may include typed `data` alongside `summary`,
   `assistantText`, `evidenceRefs`, and `artifactRefs`
-- delegated `plan` outcomes persist canonical `data.kind = "plan"` payloads
-  (`designSpec`, `executionPlan`, `executionModeHint`, `riskRegister`, and
-  `implementationTargets`); mirrored `skillOutputs.design_*` fields are
-  gateway-produced projections for the skill lifecycle and workflow surfaces
+- delegated `consult` outcomes persist canonical `data.kind = "consult"`
+  payloads keyed by `consultKind`; `design` consults preserve options,
+  recommendation, boundary implications, and verification plan, while `review`
+  consults preserve lane-specific second-opinion structure
 - delegated `qa` outcomes persist canonical `data.kind = "qa"` evidence; the
   mirrored `skillOutputs.qa_*` fields are secondary projections, not the
   primary durable record

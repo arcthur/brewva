@@ -18,12 +18,13 @@ describe("delegation prompt and catalog composition", () => {
   test("truncates context references when prompt injection budget is small", () => {
     const prompt = buildDelegationPrompt({
       target: {
-        name: "explore",
-        description: "Read-only scout",
-        resultMode: "exploration",
+        name: "advisor",
+        description: "Read-only advisor",
+        resultMode: "consult",
+        consultKind: "investigate",
         executorPreamble: "Investigate and summarize.",
-        agentSpecName: "explore",
-        envelopeName: "readonly-scout",
+        agentSpecName: "advisor",
+        envelopeName: "readonly-advisor",
         producesPatches: false,
         contextProfile: "minimal",
       },
@@ -54,13 +55,13 @@ describe("delegation prompt and catalog composition", () => {
   test("renders active skill and execution hints in the delegated prompt", () => {
     const prompt = buildDelegationPrompt({
       target: {
-        name: "review",
-        description: "Read-only reviewer",
-        resultMode: "review",
+        name: "advisor",
+        description: "Read-only advisor",
+        resultMode: "consult",
+        consultKind: "review",
         executorPreamble: "Review and summarize.",
-        skillName: "review",
-        agentSpecName: "review",
-        envelopeName: "readonly-reviewer",
+        agentSpecName: "advisor",
+        envelopeName: "readonly-advisor",
         producesPatches: false,
         contextProfile: "minimal",
       },
@@ -76,47 +77,52 @@ describe("delegation prompt and catalog composition", () => {
     });
 
     expect(prompt).toContain("Parent skill: review");
-    expect(prompt).toContain("Delegated skill: review");
+    expect(prompt).toContain("Consult kind: review");
     expect(prompt).toContain("## Execution Hints");
     expect(prompt).toContain("Preferred tools: lsp_diagnostics");
     expect(prompt).toContain("Preferred skills: review");
   });
 
-  test("injects delegated skill markdown and requires skillOutputs in the structured contract", () => {
+  test("injects semantic skill markdown for consult runs without requiring skillOutputs", () => {
     const runtime = createIsolatedRuntime("review");
     const skill = runtime.inspect.skills.get("review");
     expect(skill).toBeDefined();
 
     const prompt = buildDelegationPrompt({
       target: {
-        name: "review",
-        description: "Read-only reviewer",
-        resultMode: "review",
-        executorPreamble: "Operate as a strict read-only reviewer.",
-        skillName: "review",
-        agentSpecName: "review",
-        envelopeName: "readonly-reviewer",
+        name: "advisor",
+        description: "Read-only advisor",
+        resultMode: "consult",
+        consultKind: "review",
+        executorPreamble: "Operate as a strict read-only advisor.",
+        agentSpecName: "advisor",
+        envelopeName: "readonly-advisor",
         producesPatches: false,
         contextProfile: "minimal",
       },
       packet: {
         objective: "Review the runtime merge path",
+        consultBrief: {
+          decision: "Should the parent accept the runtime merge path?",
+          successCriteria: "Return a review judgment with evidence and next steps.",
+        },
       },
       skill: skill!,
     });
 
-    expect(prompt).toContain("## Delegated Skill");
+    expect(prompt).toContain("## Semantic Context");
     expect(prompt).toContain("### Skill Body");
     expect(prompt).toContain("Review Skill");
-    expect(prompt).toContain("skillOutputs");
-    expect(prompt).toContain("Set skillName to review.");
+    expect(prompt).not.toContain("skillOutputs");
+    expect(prompt).toContain('"kind": "consult"');
+    expect(prompt).toContain('"consultKind": "review"');
     expect(prompt).toContain(
       "If the lane clears, record disposition=clear instead of inventing findings.",
     );
     expect(prompt).toContain('"lane": "review-correctness"');
     expect(prompt).toContain('"disposition": "concern"');
     expect(prompt).toContain(
-      '"primaryClaim": "The replay handoff relies on an unproven invariant."',
+      '"primaryClaim": "The cutover still leaves one legacy replay branch reachable."',
     );
     expect(prompt).toContain('"missingEvidence": [');
   });
@@ -174,9 +180,9 @@ describe("delegation prompt and catalog composition", () => {
       join(subagentDir, "explore.json"),
       JSON.stringify(
         {
-          name: "explore",
+          name: "advisor",
           description: "Missing explicit kind",
-          envelope: "readonly-scout",
+          envelope: "readonly-advisor",
         },
         null,
         2,
@@ -204,12 +210,12 @@ describe("delegation prompt and catalog composition", () => {
       [
         "---",
         'name: "reviewer"',
-        'description: "Markdown-backed reviewer"',
-        'envelope: "readonly-reviewer"',
-        'skillName: "review"',
+        'description: "Markdown-backed advisor"',
+        'envelope: "readonly-advisor"',
+        'defaultConsultKind: "review"',
         "---",
         "",
-        "Operate as a strict reviewer and summarize the highest-risk findings.",
+        "Operate as a strict advisor and summarize the highest-risk findings.",
         "",
       ].join("\n"),
       "utf8",
@@ -219,11 +225,11 @@ describe("delegation prompt and catalog composition", () => {
     expect(catalog.agentSpecs.get("reviewer")).toEqual(
       expect.objectContaining({
         name: "reviewer",
-        description: "Markdown-backed reviewer",
-        envelope: "readonly-reviewer",
-        skillName: "review",
+        description: "Markdown-backed advisor",
+        envelope: "readonly-advisor",
+        defaultConsultKind: "review",
         instructionsMarkdown:
-          "Operate as a strict reviewer and summarize the highest-risk findings.",
+          "Operate as a strict advisor and summarize the highest-risk findings.",
       }),
     );
   });

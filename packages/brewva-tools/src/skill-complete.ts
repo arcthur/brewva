@@ -438,7 +438,8 @@ function buildReviewEnsembleOutputs(input: {
 
   const selectedRuns = candidateRuns.filter(
     (run) =>
-      run.kind === "review" &&
+      run.kind === "consult" &&
+      run.consultKind === "review" &&
       run.parentSkill === activeSkill.name &&
       run.createdAt >= activationTimestamp &&
       isReviewTerminalStatus(run.status),

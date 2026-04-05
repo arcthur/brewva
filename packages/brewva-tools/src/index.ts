@@ -223,13 +223,13 @@ export {
 export { selectBrewvaFallbackModel } from "./model-fallback.js";
 export {
   shouldInvokeSemanticRerank,
-  type BrewvaSemanticOracle,
-  type SemanticOracleCandidate,
-  type SemanticOracleNarrativeExtractionInput,
-  type SemanticOracleNarrativeExtractionResult,
-  type SemanticOracleRerankInput,
-  type SemanticOracleRerankResult,
-} from "./semantic-oracle.js";
+  type BrewvaSemanticReranker,
+  type SemanticRerankerCandidate,
+  type SemanticRerankerNarrativeExtractionInput,
+  type SemanticRerankerNarrativeExtractionResult,
+  type SemanticRerankerRerankInput,
+  type SemanticRerankerRerankResult,
+} from "./semantic-reranker.js";
 export {
   BASE_BREWVA_TOOL_NAMES,
   BREWVA_TOOL_SURFACE_BY_NAME,
@@ -241,6 +241,16 @@ export {
   type BrewvaToolSurface,
 } from "./surface.js";
 export type {
+  AdvisorConsultBrief,
+  AdvisorConsultConfidence,
+  AdvisorConsultKind,
+  AdvisorDesignOption,
+  AdvisorDesignSubagentOutcomeData,
+  AdvisorDiagnoseHypothesis,
+  AdvisorDiagnoseSubagentOutcomeData,
+  AdvisorInvestigateSubagentOutcomeData,
+  AdvisorReviewSubagentOutcomeData,
+  AdvisorSubagentOutcomeData,
   BrewvaToolOrchestration,
   BrewvaManagedToolDefinition,
   DelegationOutcomeChange,
@@ -251,15 +261,12 @@ export type {
   DelegationRef,
   DelegationRefKind,
   DelegationTaskPacket,
-  ExplorationSubagentOutcomeData,
   PlanExecutionStep,
   PlanImplementationTarget,
   PlanRiskItem,
-  PlanSubagentOutcomeData,
   PatchSubagentOutcomeData,
   QaCheck,
   QaSubagentOutcomeData,
-  ReviewSubagentOutcomeData,
   ReviewLaneConfidence,
   ReviewLaneDisposition,
   ReviewLaneName,

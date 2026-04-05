@@ -7,18 +7,18 @@ import {
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type {
-  BrewvaSemanticOracle,
-  SemanticOracleNarrativeExtractionInput,
-  SemanticOracleNarrativeExtractionResult,
-  SemanticOracleRerankInput,
-  SemanticOracleRerankResult,
+  BrewvaSemanticReranker,
+  SemanticRerankerNarrativeExtractionInput,
+  SemanticRerankerNarrativeExtractionResult,
+  SemanticRerankerRerankInput,
+  SemanticRerankerRerankResult,
 } from "@brewva/brewva-tools";
 import { complete, type Message } from "@mariozechner/pi-ai";
 import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
 
 type RegisteredModel = NonNullable<ReturnType<ModelRegistry["getAll"]>[number]>;
 
-interface HostedSemanticOracleOptions {
+interface HostedSemanticRerankerOptions {
   model?: RegisteredModel;
   modelRegistry: Pick<ModelRegistry, "getApiKeyAndHeaders">;
   runtime: BrewvaRuntime;
@@ -125,26 +125,26 @@ function readString(value: unknown): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
-class HostedSemanticOracle implements BrewvaSemanticOracle {
-  private readonly rerankCache = new Map<string, SemanticOracleRerankResult>();
+class HostedSemanticReranker implements BrewvaSemanticReranker {
+  private readonly rerankCache = new Map<string, SemanticRerankerRerankResult>();
 
-  constructor(private readonly options: HostedSemanticOracleOptions) {}
+  constructor(private readonly options: HostedSemanticRerankerOptions) {}
 
   async rerankNarrativeMemory(
-    input: SemanticOracleRerankInput,
-  ): Promise<SemanticOracleRerankResult | null> {
+    input: SemanticRerankerRerankInput,
+  ): Promise<SemanticRerankerRerankResult | null> {
     return this.rerank(input);
   }
 
   async rerankDeliberationMemory(
-    input: SemanticOracleRerankInput,
-  ): Promise<SemanticOracleRerankResult | null> {
+    input: SemanticRerankerRerankInput,
+  ): Promise<SemanticRerankerRerankResult | null> {
     return this.rerank(input);
   }
 
   async extractNarrativeMemoryCandidate(
-    input: SemanticOracleNarrativeExtractionInput,
-  ): Promise<SemanticOracleNarrativeExtractionResult | null> {
+    input: SemanticRerankerNarrativeExtractionInput,
+  ): Promise<SemanticRerankerNarrativeExtractionResult | null> {
     const todayLocalDate = resolveLocalDateStamp();
     const completion = await this.completeJson({
       systemPrompt: [
@@ -184,7 +184,7 @@ class HostedSemanticOracle implements BrewvaSemanticOracle {
     const response = completion.parsed;
     let outcome: SemanticInvocationOutcome =
       completion.outcome === "completed" ? "rejected" : completion.outcome;
-    let extracted: SemanticOracleNarrativeExtractionResult | null = null;
+    let extracted: SemanticRerankerNarrativeExtractionResult | null = null;
 
     if (isRecord(response) && response.accept === true && isRecord(response.record)) {
       const record = response.record;
@@ -233,8 +233,8 @@ class HostedSemanticOracle implements BrewvaSemanticOracle {
   }
 
   private async rerank(
-    input: SemanticOracleRerankInput,
-  ): Promise<SemanticOracleRerankResult | null> {
+    input: SemanticRerankerRerankInput,
+  ): Promise<SemanticRerankerRerankResult | null> {
     if (input.candidates.length < 2) {
       return null;
     }
@@ -326,7 +326,7 @@ class HostedSemanticOracle implements BrewvaSemanticOracle {
       return null;
     }
 
-    const result: SemanticOracleRerankResult = {
+    const result: SemanticRerankerRerankResult = {
       orderedIds,
       cacheKey,
       modelRef: completion.modelRef,
@@ -344,7 +344,7 @@ class HostedSemanticOracle implements BrewvaSemanticOracle {
   }
 
   private recordExtractionEvent(
-    input: SemanticOracleNarrativeExtractionInput,
+    input: SemanticRerankerNarrativeExtractionInput,
     audit: {
       outcome: SemanticInvocationOutcome;
       modelRef?: string;
@@ -366,7 +366,7 @@ class HostedSemanticOracle implements BrewvaSemanticOracle {
   }
 
   private recordRerankEvent(
-    input: SemanticOracleRerankInput,
+    input: SemanticRerankerRerankInput,
     audit: {
       outcome: SemanticInvocationOutcome;
       cacheKey: string;
@@ -448,8 +448,8 @@ class HostedSemanticOracle implements BrewvaSemanticOracle {
   }
 }
 
-export function createHostedSemanticOracle(
-  options: HostedSemanticOracleOptions,
-): BrewvaSemanticOracle {
-  return new HostedSemanticOracle(options);
+export function createHostedSemanticReranker(
+  options: HostedSemanticRerankerOptions,
+): BrewvaSemanticReranker {
+  return new HostedSemanticReranker(options);
 }

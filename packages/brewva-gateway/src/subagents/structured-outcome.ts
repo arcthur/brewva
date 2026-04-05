@@ -1,18 +1,18 @@
-import {
-  DESIGN_EXECUTION_MODE_HINTS,
-  coerceDesignExecutionPlan,
-  coerceDesignImplementationTargets,
-  coerceDesignRiskRegister,
-  normalizeReviewLaneName,
-} from "@brewva/brewva-runtime";
+import { normalizeReviewLaneName } from "@brewva/brewva-runtime";
 import type {
+  AdvisorConsultConfidence,
+  AdvisorConsultKind,
+  AdvisorDesignOption,
+  AdvisorDesignSubagentOutcomeData,
+  AdvisorDiagnoseHypothesis,
+  AdvisorDiagnoseSubagentOutcomeData,
+  AdvisorInvestigateSubagentOutcomeData,
+  AdvisorReviewSubagentOutcomeData,
   DelegationOutcomeChange,
   DelegationOutcomeFinding,
   PatchSubagentOutcomeData,
-  PlanSubagentOutcomeData,
   QaCheck,
   QaSubagentOutcomeData,
-  ReviewSubagentOutcomeData,
   SubagentOutcomeData,
   SubagentResultMode,
 } from "@brewva/brewva-tools";
@@ -63,6 +63,16 @@ function readFinding(value: unknown): DelegationOutcomeFinding | undefined {
   };
 }
 
+function readFindings(value: unknown): DelegationOutcomeFinding[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const findings = value
+    .map((entry) => readFinding(entry))
+    .filter((entry): entry is DelegationOutcomeFinding => Boolean(entry));
+  return findings.length > 0 ? findings : undefined;
+}
+
 function readQaCheck(value: unknown): QaCheck | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -78,17 +88,16 @@ function readQaCheck(value: unknown): QaCheck | undefined {
   if (!observedOutput) {
     return undefined;
   }
-  const normalizedResult: QaCheck["result"] = result;
   const base = {
     name,
-    result: normalizedResult,
+    result,
     cwd: readString(value.cwd),
     expected: readString(value.expected),
     observedOutput,
     probeType: readString(value.probeType),
     summary: readString(value.summary),
     artifactRefs: readStringArray(value.artifactRefs),
-  };
+  } satisfies Omit<QaCheck, "command" | "exitCode" | "tool">;
   if (command) {
     const exitCode =
       typeof value.exitCode === "number" && Number.isFinite(value.exitCode)
@@ -194,9 +203,9 @@ function normalizeQaOutcomeData(data: QaSubagentOutcomeData): QaSubagentOutcomeD
     kind: "qa",
     verdict,
     checks: data.checks,
-    ...(missingEvidence && missingEvidence.length > 0 ? { missingEvidence } : {}),
-    ...(confidenceGaps && confidenceGaps.length > 0 ? { confidenceGaps } : {}),
-    ...(environmentLimits && environmentLimits.length > 0 ? { environmentLimits } : {}),
+    ...(missingEvidence?.length ? { missingEvidence } : {}),
+    ...(confidenceGaps?.length ? { confidenceGaps } : {}),
+    ...(environmentLimits?.length ? { environmentLimits } : {}),
   };
 }
 
@@ -244,47 +253,66 @@ function readChange(value: unknown): DelegationOutcomeChange | undefined {
   };
 }
 
-function buildPlanSkillOutputs(
-  data: PlanSubagentOutcomeData,
-  existing: Record<string, unknown> | undefined,
-): Record<string, unknown> {
-  return {
-    ...existing,
-    design_spec: data.designSpec,
-    execution_plan: data.executionPlan,
-    execution_mode_hint: data.executionModeHint,
-    risk_register: data.riskRegister,
-    implementation_targets: data.implementationTargets,
-  };
-}
-
-function readFindings(value: unknown): DelegationOutcomeFinding[] | undefined {
-  if (!Array.isArray(value)) {
-    return undefined;
-  }
-  const findings = value
-    .map((entry) => readFinding(entry))
-    .filter((entry): entry is DelegationOutcomeFinding => Boolean(entry));
-  return findings.length > 0 ? findings : undefined;
-}
-
-function readReviewDisposition(
-  value: unknown,
-): ReviewSubagentOutcomeData["disposition"] | undefined {
-  const disposition = readString(value);
-  return disposition === "clear" ||
-    disposition === "concern" ||
-    disposition === "blocked" ||
-    disposition === "inconclusive"
-    ? disposition
-    : undefined;
-}
-
-function readReviewConfidence(value: unknown): ReviewSubagentOutcomeData["confidence"] | undefined {
+function readConsultConfidence(value: unknown): AdvisorConsultConfidence | undefined {
   const confidence = readString(value);
   return confidence === "low" || confidence === "medium" || confidence === "high"
     ? confidence
     : undefined;
+}
+
+function readConsultKind(value: unknown): AdvisorConsultKind | undefined {
+  return value === "investigate" || value === "diagnose" || value === "design" || value === "review"
+    ? value
+    : undefined;
+}
+
+function readBaseConsultPayload(payload: Record<string, unknown>) {
+  const conclusion = readString(payload.conclusion);
+  if (!conclusion) {
+    return undefined;
+  }
+  return {
+    kind: "consult" as const,
+    conclusion,
+    confidence: readConsultConfidence(payload.confidence),
+    evidence: readStringArray(payload.evidence),
+    counterevidence: readStringArray(payload.counterevidence),
+    risks: readStringArray(payload.risks),
+    openQuestions: readStringArray(payload.openQuestions),
+    recommendedNextSteps: readStringArray(payload.recommendedNextSteps),
+  };
+}
+
+function readDiagnoseHypothesis(value: unknown): AdvisorDiagnoseHypothesis | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const hypothesis = readString(value.hypothesis);
+  if (!hypothesis) {
+    return undefined;
+  }
+  return {
+    hypothesis,
+    likelihood: readConsultConfidence(value.likelihood),
+    evidence: readStringArray(value.evidence),
+    gaps: readStringArray(value.gaps),
+  };
+}
+
+function readDesignOption(value: unknown): AdvisorDesignOption | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const option = readString(value.option);
+  const summary = readString(value.summary);
+  if (!option || !summary) {
+    return undefined;
+  }
+  return {
+    option,
+    summary,
+    tradeoffs: readStringArray(value.tradeoffs),
+  };
 }
 
 function normalizeJsonBlock(text: string): { rawJson?: string; narrativeText: string } {
@@ -304,8 +332,116 @@ function normalizeJsonBlock(text: string): { rawJson?: string; narrativeText: st
   return { rawJson, narrativeText };
 }
 
+function parseConsultOutcomeData(
+  consultKind: AdvisorConsultKind | undefined,
+  payload: Record<string, unknown>,
+): SubagentOutcomeData | undefined {
+  const payloadConsultKind = readConsultKind(payload.consultKind);
+  const resolvedConsultKind = consultKind ?? payloadConsultKind;
+  if (!resolvedConsultKind || (payloadConsultKind && payloadConsultKind !== resolvedConsultKind)) {
+    return undefined;
+  }
+  const base = readBaseConsultPayload(payload);
+  if (!base) {
+    return undefined;
+  }
+
+  if (resolvedConsultKind === "investigate") {
+    return {
+      ...base,
+      consultKind: "investigate",
+      findings: readFindings(payload.findings),
+      ownershipHints: readStringArray(payload.ownershipHints),
+      recommendedReads: readStringArray(payload.recommendedReads),
+    } satisfies AdvisorInvestigateSubagentOutcomeData;
+  }
+
+  if (resolvedConsultKind === "diagnose") {
+    const rawHypotheses = Array.isArray(payload.hypotheses) ? payload.hypotheses : [];
+    const hypotheses = rawHypotheses
+      .map((entry) => readDiagnoseHypothesis(entry))
+      .filter((entry): entry is AdvisorDiagnoseHypothesis => Boolean(entry));
+    const likelyRootCause = readString(payload.likelyRootCause);
+    const nextProbe = readString(payload.nextProbe);
+    if (hypotheses.length === 0 || !likelyRootCause || !nextProbe) {
+      return undefined;
+    }
+    return {
+      ...base,
+      consultKind: "diagnose",
+      hypotheses,
+      likelyRootCause,
+      nextProbe,
+    } satisfies AdvisorDiagnoseSubagentOutcomeData;
+  }
+
+  if (resolvedConsultKind === "design") {
+    const rawOptions = Array.isArray(payload.options) ? payload.options : [];
+    const options = rawOptions
+      .map((entry) => readDesignOption(entry))
+      .filter((entry): entry is AdvisorDesignOption => Boolean(entry));
+    const recommendedOption = readString(payload.recommendedOption);
+    const boundaryImplications = readStringArray(payload.boundaryImplications);
+    const verificationPlan = readStringArray(payload.verificationPlan);
+    if (options.length === 0 || !recommendedOption || !boundaryImplications || !verificationPlan) {
+      return undefined;
+    }
+    return {
+      ...base,
+      consultKind: "design",
+      options,
+      recommendedOption,
+      boundaryImplications,
+      verificationPlan,
+    } satisfies AdvisorDesignSubagentOutcomeData;
+  }
+
+  const disposition = readString(payload.disposition);
+  const mergePosture = readString(payload.mergePosture);
+  const lane = normalizeReviewLaneName(payload.lane);
+  const primaryClaim = readString(payload.primaryClaim);
+  const strongestCounterpoint = readString(payload.strongestCounterpoint);
+  const missingEvidence = readStringArray(payload.missingEvidence);
+  const findings = readFindings(payload.findings);
+  if (
+    !lane &&
+    disposition !== "clear" &&
+    disposition !== "concern" &&
+    disposition !== "blocked" &&
+    disposition !== "inconclusive" &&
+    !primaryClaim &&
+    !strongestCounterpoint &&
+    !missingEvidence &&
+    !(findings && findings.length > 0)
+  ) {
+    return undefined;
+  }
+  return {
+    ...base,
+    consultKind: "review",
+    ...(lane ? { lane } : {}),
+    ...(disposition === "clear" ||
+    disposition === "concern" ||
+    disposition === "blocked" ||
+    disposition === "inconclusive"
+      ? { disposition }
+      : {}),
+    ...(mergePosture === "ready" ||
+    mergePosture === "needs_changes" ||
+    mergePosture === "blocked" ||
+    mergePosture === "inconclusive"
+      ? { mergePosture }
+      : {}),
+    ...(primaryClaim ? { primaryClaim } : {}),
+    ...(findings ? { findings } : {}),
+    ...(strongestCounterpoint ? { strongestCounterpoint } : {}),
+    ...(missingEvidence ? { missingEvidence } : {}),
+  } satisfies AdvisorReviewSubagentOutcomeData;
+}
+
 function parseOutcomeData(
   resultMode: SubagentResultMode,
+  consultKind: AdvisorConsultKind | undefined,
   payload: unknown,
 ): SubagentOutcomeData | undefined {
   if (!isRecord(payload)) {
@@ -316,78 +452,8 @@ function parseOutcomeData(
     return undefined;
   }
 
-  if (resultMode === "exploration") {
-    return {
-      kind: "exploration",
-      findings: readFindings(payload.findings),
-      openQuestions: readStringArray(payload.openQuestions),
-      nextSteps: readStringArray(payload.nextSteps),
-    };
-  }
-
-  if (resultMode === "plan") {
-    const designSpec = readString(payload.designSpec);
-    const executionModeHint = readString(payload.executionModeHint);
-    const executionPlan = coerceDesignExecutionPlan(payload.executionPlan);
-    const riskRegister = coerceDesignRiskRegister(payload.riskRegister);
-    const implementationTargets = coerceDesignImplementationTargets(payload.implementationTargets);
-    if (
-      !designSpec ||
-      !executionModeHint ||
-      !DESIGN_EXECUTION_MODE_HINTS.includes(
-        executionModeHint as (typeof DESIGN_EXECUTION_MODE_HINTS)[number],
-      ) ||
-      !executionPlan ||
-      executionPlan.length === 0 ||
-      !riskRegister ||
-      riskRegister.length === 0 ||
-      !implementationTargets ||
-      implementationTargets.length === 0
-    ) {
-      return undefined;
-    }
-    const canonicalExecutionModeHint =
-      executionModeHint as PlanSubagentOutcomeData["executionModeHint"];
-    return {
-      kind: "plan",
-      designSpec,
-      executionPlan,
-      executionModeHint: canonicalExecutionModeHint,
-      riskRegister,
-      implementationTargets,
-    } satisfies PlanSubagentOutcomeData;
-  }
-
-  if (resultMode === "review") {
-    const findings = readFindings(payload.findings);
-    const primaryClaim = readString(payload.primaryClaim);
-    const strongestCounterpoint = readString(payload.strongestCounterpoint);
-    const openQuestions = readStringArray(payload.openQuestions);
-    const missingEvidence = readStringArray(payload.missingEvidence);
-    const disposition = readReviewDisposition(payload.disposition);
-    const confidence = readReviewConfidence(payload.confidence);
-    const lane = normalizeReviewLaneName(payload.lane);
-    if (
-      !findings &&
-      !primaryClaim &&
-      !strongestCounterpoint &&
-      !openQuestions &&
-      !missingEvidence &&
-      !disposition
-    ) {
-      return undefined;
-    }
-    return {
-      kind: "review",
-      ...(lane ? { lane } : {}),
-      ...(disposition ? { disposition } : {}),
-      ...(primaryClaim ? { primaryClaim } : {}),
-      ...(findings ? { findings } : {}),
-      ...(strongestCounterpoint ? { strongestCounterpoint } : {}),
-      ...(openQuestions ? { openQuestions } : {}),
-      ...(missingEvidence ? { missingEvidence } : {}),
-      ...(confidence ? { confidence } : {}),
-    } satisfies ReviewSubagentOutcomeData;
+  if (resultMode === "consult") {
+    return parseConsultOutcomeData(consultKind, payload);
   }
 
   if (resultMode === "qa") {
@@ -432,14 +498,10 @@ function parseOutcomeData(
 }
 
 export function summarizeStructuredOutcomeData(data: SubagentOutcomeData): string | undefined {
-  if (data.kind === "exploration") {
-    return data.findings?.[0]?.summary ?? data.openQuestions?.[0] ?? data.nextSteps?.[0];
-  }
-  if (data.kind === "plan") {
-    return data.designSpec ?? data.executionPlan[0]?.step ?? data.implementationTargets[0]?.target;
-  }
-  if (data.kind === "review") {
-    return data.primaryClaim ?? data.findings?.[0]?.summary ?? data.strongestCounterpoint;
+  if (data.kind === "consult") {
+    return data.consultKind === "review"
+      ? (data.primaryClaim ?? data.conclusion ?? data.findings?.[0]?.summary)
+      : data.conclusion;
   }
   if (data.kind === "qa") {
     return data.checks[0]?.summary ?? data.checks[0]?.name;
@@ -449,6 +511,7 @@ export function summarizeStructuredOutcomeData(data: SubagentOutcomeData): strin
 
 export function extractStructuredOutcomeData(input: {
   resultMode: SubagentResultMode;
+  consultKind?: AdvisorConsultKind;
   assistantText: string;
   skillName?: string;
 }): {
@@ -481,7 +544,7 @@ export function extractStructuredOutcomeData(input: {
       skillOutputs: isRecord(parsed) ? readObject(parsed.skillOutputs) : undefined,
     };
   }
-  const data = parseOutcomeData(input.resultMode, parsed);
+  const data = parseOutcomeData(input.resultMode, input.consultKind, parsed);
   const rawSkillOutputs = isRecord(parsed) ? readObject(parsed.skillOutputs) : undefined;
   if (!data) {
     return {
@@ -491,11 +554,9 @@ export function extractStructuredOutcomeData(input: {
     };
   }
   const skillOutputs =
-    input.skillName === "design" && data.kind === "plan"
-      ? buildPlanSkillOutputs(data, rawSkillOutputs)
-      : input.skillName === "qa" && data.kind === "qa"
-        ? buildQaSkillOutputs(data, normalized.narrativeText, rawSkillOutputs)
-        : rawSkillOutputs;
+    input.skillName === "qa" && data.kind === "qa"
+      ? buildQaSkillOutputs(data, normalized.narrativeText, rawSkillOutputs)
+      : rawSkillOutputs;
   return {
     data,
     narrativeText: normalized.narrativeText,

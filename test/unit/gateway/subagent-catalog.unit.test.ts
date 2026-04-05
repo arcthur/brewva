@@ -8,17 +8,17 @@ import {
 } from "../../../packages/brewva-gateway/src/subagents/catalog.js";
 
 describe("subagent delegation catalog", () => {
-  test("promotes the built-in plan delegate to the canonical plan result mode", async () => {
+  test("promotes the built-in advisor delegate to the canonical consult result mode", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
 
-    expect(catalog.agentSpecs.get("plan")).toMatchObject({
-      name: "plan",
-      skillName: "design",
-      fallbackResultMode: "plan",
+    expect(catalog.agentSpecs.get("advisor")).toMatchObject({
+      name: "advisor",
+      envelope: "readonly-advisor",
+      fallbackResultMode: "consult",
     });
   });
 
-  test("exposes built-in review lane delegates on the canonical reviewer envelope", async () => {
+  test("exposes built-in review lane delegates on the canonical advisor envelope", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
 
     for (const agentSpecName of [
@@ -32,8 +32,9 @@ describe("subagent delegation catalog", () => {
     ]) {
       expect(catalog.agentSpecs.get(agentSpecName)).toMatchObject({
         name: agentSpecName,
-        envelope: "readonly-reviewer",
-        fallbackResultMode: "review",
+        envelope: "readonly-advisor",
+        fallbackResultMode: "consult",
+        defaultConsultKind: "review",
       });
     }
 
@@ -47,13 +48,13 @@ describe("subagent delegation catalog", () => {
     const subagentDir = join(workspace, ".brewva", "subagents");
     mkdirSync(subagentDir, { recursive: true });
     writeFileSync(
-      join(subagentDir, "tight-reviewer.json"),
+      join(subagentDir, "tight-advisor.json"),
       JSON.stringify(
         {
           kind: "envelope",
-          name: "tight-reviewer",
-          extends: "readonly-reviewer",
-          description: "Workspace-specific narrowed reviewer envelope",
+          name: "tight-advisor",
+          extends: "readonly-advisor",
+          description: "Workspace-specific narrowed advisor envelope",
           managedToolNames: ["grep", "read_spans"],
           defaultContextBudget: {
             maxTurnTokens: 2200,
@@ -70,11 +71,11 @@ describe("subagent delegation catalog", () => {
         {
           kind: "agentSpec",
           name: "security-review",
-          description: "Security review worker",
-          skillName: "review",
-          envelope: "tight-reviewer",
-          fallbackResultMode: "review",
-          executorPreamble: "Operate as a security-focused reviewer.",
+          description: "Security review advisor",
+          envelope: "tight-advisor",
+          fallbackResultMode: "consult",
+          defaultConsultKind: "review",
+          executorPreamble: "Operate as a security-focused advisor.",
         },
         null,
         2,
@@ -83,37 +84,38 @@ describe("subagent delegation catalog", () => {
     );
 
     const catalog = await loadHostedDelegationCatalog(workspace);
-    const envelope = resolveHostedExecutionEnvelope(catalog, "tight-reviewer");
+    const envelope = resolveHostedExecutionEnvelope(catalog, "tight-advisor");
     const agentSpec = catalog.agentSpecs.get("security-review");
 
     expect(envelope).toBeDefined();
     expect(envelope?.managedToolNames).toEqual(["grep", "read_spans"]);
-    expect(catalog.workspaceEnvelopeNames.has("tight-reviewer")).toBe(true);
+    expect(catalog.workspaceEnvelopeNames.has("tight-advisor")).toBe(true);
     expect(agentSpec).toEqual({
       name: "security-review",
-      description: "Security review worker",
-      skillName: "review",
-      envelope: "tight-reviewer",
-      fallbackResultMode: "review",
-      executorPreamble: "Operate as a security-focused reviewer.",
+      description: "Security review advisor",
+      envelope: "tight-advisor",
+      fallbackResultMode: "consult",
+      defaultConsultKind: "review",
+      executorPreamble: "Operate as a security-focused advisor.",
     });
     expect(catalog.workspaceAgentSpecNames.has("security-review")).toBe(true);
   });
 
-  test("accepts explicit plan result mode in workspace agent specs", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-catalog-plan-agent-"));
+  test("accepts explicit consult result mode in workspace agent specs", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-catalog-consult-agent-"));
     const subagentDir = join(workspace, ".brewva", "subagents");
     mkdirSync(subagentDir, { recursive: true });
     writeFileSync(
-      join(subagentDir, "bounded-plan.json"),
+      join(subagentDir, "bounded-advisor.json"),
       JSON.stringify(
         {
           kind: "agentSpec",
-          name: "bounded-plan",
-          description: "Workspace-specific planning delegate",
-          envelope: "readonly-planner",
-          fallbackResultMode: "plan",
-          executorPreamble: "Operate as a bounded planner.",
+          name: "bounded-advisor",
+          description: "Workspace-specific design advisor",
+          envelope: "readonly-advisor",
+          fallbackResultMode: "consult",
+          defaultConsultKind: "design",
+          executorPreamble: "Operate as a bounded advisor.",
         },
         null,
         2,
@@ -123,14 +125,15 @@ describe("subagent delegation catalog", () => {
 
     const catalog = await loadHostedDelegationCatalog(workspace);
 
-    expect(catalog.agentSpecs.get("bounded-plan")).toEqual({
-      name: "bounded-plan",
-      description: "Workspace-specific planning delegate",
-      envelope: "readonly-planner",
-      fallbackResultMode: "plan",
-      executorPreamble: "Operate as a bounded planner.",
+    expect(catalog.agentSpecs.get("bounded-advisor")).toEqual({
+      name: "bounded-advisor",
+      description: "Workspace-specific design advisor",
+      envelope: "readonly-advisor",
+      fallbackResultMode: "consult",
+      defaultConsultKind: "design",
+      executorPreamble: "Operate as a bounded advisor.",
     });
-    expect(catalog.workspaceAgentSpecNames.has("bounded-plan")).toBe(true);
+    expect(catalog.workspaceAgentSpecNames.has("bounded-advisor")).toBe(true);
   });
 
   test("loads workspace subagent JSONC overlays with comments and trailing commas", async () => {
@@ -138,15 +141,16 @@ describe("subagent delegation catalog", () => {
     const subagentDir = join(workspace, ".brewva", "subagents");
     mkdirSync(subagentDir, { recursive: true });
     writeFileSync(
-      join(subagentDir, "jsonc-review.json"),
+      join(subagentDir, "jsonc-advisor.json"),
       [
         "{",
-        "  // jsonc-authored workspace review delegate",
+        "  // jsonc-authored workspace advisor delegate",
         '  "kind": "agentSpec",',
-        '  "name": "jsonc-review",',
-        '  "description": "Workspace JSONC review worker",',
-        '  "envelope": "readonly-reviewer",',
-        '  "fallbackResultMode": "review",',
+        '  "name": "jsonc-advisor",',
+        '  "description": "Workspace JSONC advisor worker",',
+        '  "envelope": "readonly-advisor",',
+        '  "fallbackResultMode": "consult",',
+        '  "defaultConsultKind": "review",',
         '  "executorPreamble": "Operate from JSONC-authored config.",',
         "}",
       ].join("\n"),
@@ -155,14 +159,15 @@ describe("subagent delegation catalog", () => {
 
     const catalog = await loadHostedDelegationCatalog(workspace);
 
-    expect(catalog.agentSpecs.get("jsonc-review")).toEqual({
-      name: "jsonc-review",
-      description: "Workspace JSONC review worker",
-      envelope: "readonly-reviewer",
-      fallbackResultMode: "review",
+    expect(catalog.agentSpecs.get("jsonc-advisor")).toEqual({
+      name: "jsonc-advisor",
+      description: "Workspace JSONC advisor worker",
+      envelope: "readonly-advisor",
+      fallbackResultMode: "consult",
+      defaultConsultKind: "review",
       executorPreamble: "Operate from JSONC-authored config.",
     });
-    expect(catalog.workspaceAgentSpecNames.has("jsonc-review")).toBe(true);
+    expect(catalog.workspaceAgentSpecNames.has("jsonc-advisor")).toBe(true);
   });
 
   test("rejects workspace envelopes that widen a base envelope", async () => {
@@ -170,12 +175,12 @@ describe("subagent delegation catalog", () => {
     const subagentDir = join(workspace, ".brewva", "subagents");
     mkdirSync(subagentDir, { recursive: true });
     writeFileSync(
-      join(subagentDir, "readonly-reviewer.json"),
+      join(subagentDir, "readonly-advisor.json"),
       JSON.stringify(
         {
           kind: "envelope",
-          name: "readonly-reviewer",
-          description: "Invalid widened reviewer envelope",
+          name: "readonly-advisor",
+          description: "Invalid widened advisor envelope",
           boundary: "effectful",
         },
         null,
@@ -190,7 +195,7 @@ describe("subagent delegation catalog", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toContain(
-        "invalid_execution_envelope:readonly-reviewer:boundary cannot widen beyond the base envelope",
+        "invalid_execution_envelope:readonly-advisor:boundary cannot widen beyond the base envelope",
       );
     }
   });
@@ -206,7 +211,7 @@ describe("subagent delegation catalog", () => {
           kind: "agent-spec",
           name: "legacy-review",
           description: "Legacy alias should be rejected",
-          envelope: "readonly-reviewer",
+          envelope: "readonly-advisor",
         },
         null,
         2,
@@ -260,12 +265,12 @@ describe("subagent delegation catalog", () => {
     const subagentDir = join(workspace, ".brewva", "subagents");
     mkdirSync(subagentDir, { recursive: true });
     writeFileSync(
-      join(subagentDir, "review.json"),
+      join(subagentDir, "advisor.json"),
       JSON.stringify(
         {
           kind: "agentSpec",
-          name: "review",
-          description: "Invalid widened review worker",
+          name: "advisor",
+          description: "Invalid widened advisor worker",
           envelope: "patch-worker",
         },
         null,
@@ -280,7 +285,7 @@ describe("subagent delegation catalog", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toContain(
-        "invalid_agent_spec:review:envelope:boundary cannot widen beyond the base envelope",
+        "invalid_agent_spec:advisor:envelope:boundary cannot widen beyond the base envelope",
       );
     }
   });
@@ -290,12 +295,12 @@ describe("subagent delegation catalog", () => {
     const agentDir = join(workspace, ".brewva", "agents");
     mkdirSync(agentDir, { recursive: true });
     writeFileSync(
-      join(agentDir, "review.md"),
+      join(agentDir, "advisor.md"),
       [
         "---",
-        "extends: review",
-        "description: Workspace review delegate",
-        "envelope: readonly-reviewer",
+        "extends: advisor",
+        "description: Workspace advisor delegate",
+        "envelope: readonly-advisor",
         "---",
         "Focus on rollback posture, governance boundaries, and operator-facing regressions.",
       ].join("\n"),
@@ -303,20 +308,19 @@ describe("subagent delegation catalog", () => {
     );
 
     const catalog = await loadHostedDelegationCatalog(workspace);
-    const agentSpec = catalog.agentSpecs.get("review");
+    const agentSpec = catalog.agentSpecs.get("advisor");
 
     expect(agentSpec).toMatchObject({
-      name: "review",
-      description: "Workspace review delegate",
-      envelope: "readonly-reviewer",
-      skillName: "review",
-      fallbackResultMode: "review",
+      name: "advisor",
+      description: "Workspace advisor delegate",
+      envelope: "readonly-advisor",
+      fallbackResultMode: "consult",
       executorPreamble:
-        "Operate as a strict read-only reviewer. Keep findings concrete, high-signal, and evidence-backed.",
+        "Operate as a read-only advisor. Reduce uncertainty, keep evidence concrete, and optimize for the parent's next decision.",
       instructionsMarkdown:
         "Focus on rollback posture, governance boundaries, and operator-facing regressions.",
     });
-    expect(catalog.workspaceAgentSpecNames.has("review")).toBe(true);
+    expect(catalog.workspaceAgentSpecNames.has("advisor")).toBe(true);
   });
 
   test("loads Markdown-authored agent overlays from .config/brewva/agents", async () => {
@@ -327,9 +331,9 @@ describe("subagent delegation catalog", () => {
       join(configAgentDir, "ops-review.md"),
       [
         "---",
-        "extends: review",
-        "description: Config-root review delegate",
-        "envelope: readonly-reviewer",
+        "extends: advisor",
+        "description: Config-root advisor delegate",
+        "envelope: readonly-advisor",
         "---",
         "Focus on config-managed governance checks.",
       ].join("\n"),
@@ -339,10 +343,9 @@ describe("subagent delegation catalog", () => {
     const catalog = await loadHostedDelegationCatalog(workspace);
     expect(catalog.agentSpecs.get("ops-review")).toMatchObject({
       name: "ops-review",
-      description: "Config-root review delegate",
-      envelope: "readonly-reviewer",
-      skillName: "review",
-      fallbackResultMode: "review",
+      description: "Config-root advisor delegate",
+      envelope: "readonly-advisor",
+      fallbackResultMode: "consult",
       instructionsMarkdown: "Focus on config-managed governance checks.",
     });
     expect(catalog.workspaceAgentSpecNames.has("ops-review")).toBe(true);
@@ -356,9 +359,9 @@ describe("subagent delegation catalog", () => {
       join(agentDir, "reviewer.md"),
       [
         "---",
-        "extends: review",
-        "description: Windows-authored review delegate",
-        "envelope: readonly-reviewer",
+        "extends: advisor",
+        "description: Windows-authored advisor delegate",
+        "envelope: readonly-advisor",
         "---",
         "Focus on durable operator-facing regressions.",
       ].join("\r\n"),
@@ -368,8 +371,8 @@ describe("subagent delegation catalog", () => {
     const catalog = await loadHostedDelegationCatalog(workspace);
     expect(catalog.agentSpecs.get("reviewer")).toMatchObject({
       name: "reviewer",
-      description: "Windows-authored review delegate",
-      envelope: "readonly-reviewer",
+      description: "Windows-authored advisor delegate",
+      envelope: "readonly-advisor",
       instructionsMarkdown: "Focus on durable operator-facing regressions.",
     });
   });

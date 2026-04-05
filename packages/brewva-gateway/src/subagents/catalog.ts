@@ -1,10 +1,13 @@
-import type { ManagedToolMode } from "@brewva/brewva-runtime";
+import { normalizeReviewLaneName, type ManagedToolMode } from "@brewva/brewva-runtime";
 import type {
+  AdvisorConsultKind,
+  ReviewLaneName,
   SubagentContextBudget,
   SubagentExecutionBoundary,
   SubagentResultMode,
 } from "@brewva/brewva-tools";
 import {
+  asConsultKind,
   asBoundary,
   asBoolean,
   asBuiltinToolArray,
@@ -18,12 +21,10 @@ import {
   readHostedWorkspaceSubagentConfigFiles,
 } from "./config-files.js";
 import {
-  EXPLORE_SPECIALIST_CONSTITUTION,
+  ADVISOR_SPECIALIST_CONSTITUTION,
   PATCH_WORKER_SPECIALIST_CONSTITUTION,
-  PLAN_SPECIALIST_CONSTITUTION,
   QA_SPECIALIST_CONSTITUTION,
   REVIEW_OPERABILITY_SPECIALIST_CONSTITUTION,
-  REVIEW_SPECIALIST_CONSTITUTION,
 } from "./constitutions.js";
 import { getDefaultAgentSpecNameForResultMode } from "./protocol.js";
 import type { HostedDelegationBuiltinToolName, HostedDelegationTarget } from "./targets.js";
@@ -46,6 +47,8 @@ export interface HostedAgentSpec {
   description: string;
   envelope: string;
   skillName?: string;
+  defaultConsultKind?: AdvisorConsultKind;
+  reviewLane?: ReviewLaneName;
   fallbackResultMode?: SubagentResultMode;
   executorPreamble?: string;
   instructionsMarkdown?: string;
@@ -67,8 +70,10 @@ function buildReviewLaneAgentSpec(input: {
   return {
     name: input.name,
     description: input.description,
-    envelope: "readonly-reviewer",
-    fallbackResultMode: "review",
+    envelope: "readonly-advisor",
+    defaultConsultKind: "review",
+    reviewLane: normalizeReviewLaneName(input.name) ?? undefined,
+    fallbackResultMode: "consult",
     executorPreamble: input.executorPreamble,
     instructionsMarkdown: input.instructionsMarkdown,
   };
@@ -162,6 +167,16 @@ function assertHostedAgentSpecTightening(input: {
   const { base, candidate, catalog, context } = input;
   if (base.skillName && candidate.skillName && base.skillName !== candidate.skillName) {
     throw new Error(`${context}:skillName cannot change from the base agent spec`);
+  }
+  if (
+    base.defaultConsultKind &&
+    candidate.defaultConsultKind &&
+    base.defaultConsultKind !== candidate.defaultConsultKind
+  ) {
+    throw new Error(`${context}:defaultConsultKind cannot change from the base agent spec`);
+  }
+  if (base.reviewLane && candidate.reviewLane && base.reviewLane !== candidate.reviewLane) {
+    throw new Error(`${context}:reviewLane cannot change from the base agent spec`);
   }
   if (
     base.fallbackResultMode &&
@@ -266,6 +281,11 @@ function toAgentSpec(
     description,
     envelope,
     skillName: asString(source.skillName) ?? defaults?.skillName,
+    defaultConsultKind: asConsultKind(source.defaultConsultKind) ?? defaults?.defaultConsultKind,
+    reviewLane:
+      normalizeReviewLaneName(source.reviewLane) ??
+      normalizeReviewLaneName(defaults?.reviewLane) ??
+      undefined,
     fallbackResultMode: asResultMode(source.fallbackResultMode) ?? defaults?.fallbackResultMode,
     executorPreamble,
     instructionsMarkdown,
@@ -308,37 +328,10 @@ const QA_MANAGED_TOOLS = [
 ] as const;
 
 export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutionEnvelope>> = {
-  "readonly-scout": {
-    name: "readonly-scout",
-    description: "Read-only scout envelope for bounded repository investigation.",
-    boundary: "safe",
-    builtinToolNames: ["read"],
-    managedToolNames: [...READONLY_MANAGED_TOOLS],
-    defaultContextBudget: {
-      maxInjectionTokens: 1800,
-      maxTurnTokens: 6000,
-    },
-    managedToolMode: "direct",
-    producesPatches: false,
-    contextProfile: "minimal",
-  },
-  "readonly-planner": {
-    name: "readonly-planner",
-    description: "Read-only planning envelope for design and sequencing work.",
-    boundary: "safe",
-    builtinToolNames: ["read"],
-    managedToolNames: [...READONLY_MANAGED_TOOLS],
-    defaultContextBudget: {
-      maxInjectionTokens: 1800,
-      maxTurnTokens: 6500,
-    },
-    managedToolMode: "direct",
-    producesPatches: false,
-    contextProfile: "minimal",
-  },
-  "readonly-reviewer": {
-    name: "readonly-reviewer",
-    description: "Read-only reviewer envelope for correctness and merge-risk evaluation.",
+  "readonly-advisor": {
+    name: "readonly-advisor",
+    description:
+      "Read-only advisor envelope for bounded investigation, diagnosis, design, and review.",
     boundary: "safe",
     builtinToolNames: ["read"],
     managedToolNames: [...READONLY_MANAGED_TOOLS],
@@ -382,37 +375,15 @@ export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutio
 } as const;
 
 export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
-  explore: {
-    name: "explore",
+  advisor: {
+    name: "advisor",
     description:
-      "Repository-analysis delegate that maps the active surface and impact path with read-only tools.",
-    envelope: "readonly-scout",
-    skillName: "repository-analysis",
-    fallbackResultMode: "exploration",
+      "Read-only advisor for repository investigation, debugging diagnosis, design judgment, and second-opinion review.",
+    envelope: "readonly-advisor",
+    fallbackResultMode: "consult",
     executorPreamble:
-      "Operate as a read-only repository scout. Gather only the evidence needed for the delegated objective and keep the result merge-friendly.",
-    instructionsMarkdown: EXPLORE_SPECIALIST_CONSTITUTION,
-  },
-  plan: {
-    name: "plan",
-    description:
-      "Design delegate that turns a bounded objective into an executable plan without editing code.",
-    envelope: "readonly-planner",
-    skillName: "design",
-    fallbackResultMode: "plan",
-    executorPreamble:
-      "Operate as a read-only planner. Focus on execution slices, risks, verification intent, and concrete next steps.",
-    instructionsMarkdown: PLAN_SPECIALIST_CONSTITUTION,
-  },
-  review: {
-    name: "review",
-    description: "Review delegate for correctness, regressions, and merge-readiness.",
-    envelope: "readonly-reviewer",
-    skillName: "review",
-    fallbackResultMode: "review",
-    executorPreamble:
-      "Operate as a strict read-only reviewer. Keep findings concrete, high-signal, and evidence-backed.",
-    instructionsMarkdown: REVIEW_SPECIALIST_CONSTITUTION,
+      "Operate as a read-only advisor. Reduce uncertainty, keep evidence concrete, and optimize for the parent's next decision.",
+    instructionsMarkdown: ADVISOR_SPECIALIST_CONSTITUTION,
   },
   "review-correctness": buildReviewLaneAgentSpec({
     name: "review-correctness",
@@ -480,22 +451,27 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
 } as const;
 
 const DEFAULT_AGENT_SPEC_BY_SKILL_NAME: Readonly<Record<string, string>> = {
-  "repository-analysis": "explore",
-  discovery: "explore",
-  design: "plan",
-  review: "review",
+  "repository-analysis": "advisor",
+  discovery: "advisor",
+  "learning-research": "advisor",
+  debugging: "advisor",
+  "strategy-review": "advisor",
+  design: "advisor",
+  review: "advisor",
+  "predict-review": "advisor",
   qa: "qa",
   implementation: "patch-worker",
 } as const;
 
 const DEFAULT_FALLBACK_RESULT_MODE_BY_SKILL_NAME: Readonly<Record<string, SubagentResultMode>> = {
-  "repository-analysis": "exploration",
-  discovery: "exploration",
-  design: "plan",
-  "strategy-review": "exploration",
-  "learning-research": "exploration",
-  debugging: "exploration",
-  review: "review",
+  "repository-analysis": "consult",
+  discovery: "consult",
+  "learning-research": "consult",
+  debugging: "consult",
+  "strategy-review": "consult",
+  design: "consult",
+  review: "consult",
+  "predict-review": "consult",
   qa: "qa",
   implementation: "patch",
 } as const;
@@ -643,7 +619,8 @@ export function buildHostedDelegationTargetFromAgentSpec(input: {
   const resultMode =
     input.agentSpec.fallbackResultMode ??
     deriveFallbackResultModeForSkillName(input.agentSpec.skillName) ??
-    "exploration";
+    "consult";
+  const consultKind = resultMode === "consult" ? input.agentSpec.defaultConsultKind : undefined;
   return {
     name: input.agentSpec.name,
     description: input.agentSpec.description,
@@ -653,6 +630,8 @@ export function buildHostedDelegationTargetFromAgentSpec(input: {
     boundary: input.envelope.boundary ?? "safe",
     model: input.envelope.model,
     skillName: input.agentSpec.skillName,
+    consultKind,
+    reviewLane: input.agentSpec.reviewLane,
     fallbackResultMode: resultMode,
     agentSpecName: input.agentSpec.name,
     envelopeName: input.envelope.name,
@@ -670,14 +649,15 @@ export function buildSyntheticHostedDelegationTarget(input: {
   description: string;
   envelope: HostedExecutionEnvelope;
   skillName?: string;
+  consultKind?: AdvisorConsultKind;
+  reviewLane?: ReviewLaneName;
   fallbackResultMode?: SubagentResultMode;
   executorPreamble?: string;
   instructionsMarkdown?: string;
 }): HostedDelegationTarget {
   const resultMode =
-    input.fallbackResultMode ??
-    deriveFallbackResultModeForSkillName(input.skillName) ??
-    "exploration";
+    input.fallbackResultMode ?? deriveFallbackResultModeForSkillName(input.skillName) ?? "consult";
+  const consultKind = resultMode === "consult" ? input.consultKind : undefined;
   return {
     name: input.name,
     description: input.description,
@@ -687,6 +667,8 @@ export function buildSyntheticHostedDelegationTarget(input: {
     boundary: input.envelope.boundary ?? "safe",
     model: input.envelope.model,
     skillName: input.skillName,
+    consultKind,
+    reviewLane: input.reviewLane,
     fallbackResultMode: resultMode,
     envelopeName: input.envelope.name,
     builtinToolNames: input.envelope.builtinToolNames,

@@ -69,7 +69,7 @@ The promoted contract is:
    kinds, field names, or envelope names.
 4. Operator answers remain replay-visible.
    `/questions` derives unresolved questions from durable skill outputs and
-   delegated exploration outcomes. `/answer` records
+   delegated consult outcomes. `/answer` records
    `operator_question_answered` and routes the answer back as explicit operator
    input.
 5. Workflow acceleration stays bounded and policy-respecting.

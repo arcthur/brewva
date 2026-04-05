@@ -3,7 +3,7 @@ import type {
   NarrativeMemoryRecordClass,
 } from "@brewva/brewva-deliberation";
 
-export interface SemanticOracleCandidate {
+export interface SemanticRerankerCandidate {
   id: string;
   title: string;
   summary: string;
@@ -12,23 +12,23 @@ export interface SemanticOracleCandidate {
   scope?: string;
 }
 
-export interface SemanticOracleRerankInput {
+export interface SemanticRerankerRerankInput {
   sessionId: string;
   surface: "deliberation_memory" | "narrative_memory";
   query: string;
   targetRoots: readonly string[];
-  candidates: readonly SemanticOracleCandidate[];
+  candidates: readonly SemanticRerankerCandidate[];
   stateRevision: string;
 }
 
-export interface SemanticOracleRerankResult {
+export interface SemanticRerankerRerankResult {
   orderedIds: string[];
   cacheKey: string;
   modelRef?: string;
   cached: boolean;
 }
 
-export interface SemanticOracleNarrativeExtractionInput {
+export interface SemanticRerankerNarrativeExtractionInput {
   sessionId: string;
   agentId: string;
   targetRoots: readonly string[];
@@ -40,7 +40,7 @@ export interface SemanticOracleNarrativeExtractionInput {
   }>;
 }
 
-export interface SemanticOracleNarrativeExtractionResult {
+export interface SemanticRerankerNarrativeExtractionResult {
   class: NarrativeMemoryRecordClass;
   title: string;
   summary: string;
@@ -49,19 +49,19 @@ export interface SemanticOracleNarrativeExtractionResult {
   confidenceScore: number;
 }
 
-export interface BrewvaSemanticOracle {
+export interface BrewvaSemanticReranker {
   rerankDeliberationMemory?(
-    input: SemanticOracleRerankInput & {
-      candidates: readonly SemanticOracleCandidate[];
+    input: SemanticRerankerRerankInput & {
+      candidates: readonly SemanticRerankerCandidate[];
       artifacts: readonly DeliberationMemoryArtifact[];
     },
-  ): Promise<SemanticOracleRerankResult | null>;
+  ): Promise<SemanticRerankerRerankResult | null>;
   rerankNarrativeMemory?(
-    input: SemanticOracleRerankInput,
-  ): Promise<SemanticOracleRerankResult | null>;
+    input: SemanticRerankerRerankInput,
+  ): Promise<SemanticRerankerRerankResult | null>;
   extractNarrativeMemoryCandidate?(
-    input: SemanticOracleNarrativeExtractionInput,
-  ): Promise<SemanticOracleNarrativeExtractionResult | null>;
+    input: SemanticRerankerNarrativeExtractionInput,
+  ): Promise<SemanticRerankerNarrativeExtractionResult | null>;
 }
 
 export function shouldInvokeSemanticRerank(

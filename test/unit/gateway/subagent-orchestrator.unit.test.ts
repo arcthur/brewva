@@ -578,7 +578,10 @@ describe("hosted subagent orchestrator", () => {
                           "Boundary review completed without a blocking issue.",
                           "<delegation_outcome_json>",
                           JSON.stringify({
-                            kind: "review",
+                            kind: "consult",
+                            consultKind: "review",
+                            conclusion:
+                              "The public ownership boundary remains stable across this change.",
                             lane: "review-boundaries",
                             disposition: "clear",
                             primaryClaim:
@@ -620,9 +623,14 @@ describe("hosted subagent orchestrator", () => {
       fromSessionId: parentSessionId,
       request: {
         agentSpec: "review-boundaries",
+        consultKind: "review",
         mode: "single",
         packet: {
           objective: "Review the runtime export boundary.",
+          consultBrief: {
+            decision: "Does the runtime export boundary remain acceptable?",
+            successCriteria: "Return a review judgment for the boundaries lane.",
+          },
         },
       },
     });
@@ -634,9 +642,12 @@ describe("hosted subagent orchestrator", () => {
       throw new Error("expected a successful review outcome");
     }
 
-    expect(outcome.kind).toBe("review");
+    expect(outcome.kind).toBe("consult");
+    expect(outcome.consultKind).toBe("review");
     expect(outcome.data).toEqual({
-      kind: "review",
+      kind: "consult",
+      consultKind: "review",
+      conclusion: "The public ownership boundary remains stable across this change.",
       lane: "review-boundaries",
       disposition: "clear",
       primaryClaim: "The public ownership boundary remains stable across this change.",
@@ -653,8 +664,10 @@ describe("hosted subagent orchestrator", () => {
     expect(
       runtime.inspect.events.list(parentSessionId, { type: "subagent_completed" })[0]?.payload,
     ).toMatchObject({
+      consultKind: "review",
       resultData: {
-        kind: "review",
+        kind: "consult",
+        consultKind: "review",
         lane: "review-boundaries",
         disposition: "clear",
       },
@@ -662,10 +675,12 @@ describe("hosted subagent orchestrator", () => {
 
     const delegationStore = new HostedDelegationStore(runtime);
     expect(delegationStore.listRuns(parentSessionId, { includeTerminal: true })[0]).toMatchObject({
-      kind: "review",
+      kind: "consult",
+      consultKind: "review",
       status: "completed",
       resultData: {
-        kind: "review",
+        kind: "consult",
+        consultKind: "review",
         lane: "review-boundaries",
         disposition: "clear",
       },
@@ -806,10 +821,15 @@ describe("hosted subagent orchestrator", () => {
     const started = await adapter.start({
       fromSessionId: parentSessionId,
       request: {
-        agentSpec: "explore",
+        agentSpec: "advisor",
+        consultKind: "investigate",
         mode: "single",
         packet: {
           objective: "Inspect the repository in the background.",
+          consultBrief: {
+            decision: "Which repository areas should be inspected first?",
+            successCriteria: "Launch a background investigation with a clear question.",
+          },
         },
       },
     });
@@ -957,10 +977,18 @@ describe("hosted subagent orchestrator", () => {
     const started = await adapter.start({
       fromSessionId: parentSessionId,
       request: {
-        envelope: "readonly-scout",
+        envelope: "readonly-advisor",
+        consultKind: "investigate",
+        executionShape: {
+          resultMode: "consult",
+        },
         mode: "single",
         packet: {
           objective: "Inspect the runtime boundary changes.",
+          consultBrief: {
+            decision: "What should this ad hoc advisor inspect first?",
+            successCriteria: "Launch an ad hoc consult run without an agent spec.",
+          },
         },
         delivery: {
           returnMode: "text_only",

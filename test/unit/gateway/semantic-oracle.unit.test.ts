@@ -5,7 +5,7 @@ import {
   SEMANTIC_RERANK_INVOKED_EVENT_TYPE,
   BrewvaRuntime,
 } from "@brewva/brewva-runtime";
-import { createHostedSemanticOracle } from "../../../packages/brewva-gateway/src/host/semantic-oracle.js";
+import { createHostedSemanticReranker } from "../../../packages/brewva-gateway/src/host/semantic-reranker.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function createAssistantResponse(jsonText: string) {
@@ -29,12 +29,12 @@ function createAssistantResponse(jsonText: string) {
   } as const;
 }
 
-describe("hosted semantic oracle", () => {
+describe("hosted semantic reranker", () => {
   test("records rerank receipts and cost updates for successful model calls", async () => {
-    const workspace = createTestWorkspace("semantic-oracle-rerank");
+    const workspace = createTestWorkspace("semantic-reranker-rerank");
     const runtime = new BrewvaRuntime({ cwd: workspace, agentId: "default" });
-    const sessionId = "semantic-oracle-rerank-session";
-    const oracle = createHostedSemanticOracle({
+    const sessionId = "semantic-reranker-rerank-session";
+    const reranker = createHostedSemanticReranker({
       runtime,
       model: { provider: "anthropic", id: "sonnet" } as never,
       modelRegistry: {
@@ -43,7 +43,7 @@ describe("hosted semantic oracle", () => {
       completeFn: async () => createAssistantResponse('{"ordered_ids":["b","a"]}') as never,
     });
 
-    const result = await oracle.rerankNarrativeMemory?.({
+    const result = await reranker.rerankNarrativeMemory?.({
       sessionId,
       surface: "narrative_memory",
       query: "bun commands",
@@ -67,11 +67,11 @@ describe("hosted semantic oracle", () => {
     );
   });
 
-  test("records extraction receipts even when the oracle rejects the candidate", async () => {
-    const workspace = createTestWorkspace("semantic-oracle-extraction");
+  test("records extraction receipts even when the reranker rejects the candidate", async () => {
+    const workspace = createTestWorkspace("semantic-reranker-extraction");
     const runtime = new BrewvaRuntime({ cwd: workspace, agentId: "default" });
-    const sessionId = "semantic-oracle-extraction-session";
-    const oracle = createHostedSemanticOracle({
+    const sessionId = "semantic-reranker-extraction-session";
+    const reranker = createHostedSemanticReranker({
       runtime,
       model: { provider: "anthropic", id: "sonnet" } as never,
       modelRegistry: {
@@ -80,7 +80,7 @@ describe("hosted semantic oracle", () => {
       completeFn: async () => createAssistantResponse('{"accept":false}') as never,
     });
 
-    const result = await oracle.extractNarrativeMemoryCandidate?.({
+    const result = await reranker.extractNarrativeMemoryCandidate?.({
       sessionId,
       agentId: runtime.agentId,
       targetRoots: ["packages"],
@@ -101,18 +101,24 @@ describe("hosted semantic oracle", () => {
   });
 
   test("builds Claude-style extraction instructions for durable narrative quality", async () => {
-    const workspace = createTestWorkspace("semantic-oracle-prompt-quality");
+    const workspace = createTestWorkspace("semantic-reranker-prompt-quality");
     const runtime = new BrewvaRuntime({ cwd: workspace, agentId: "default" });
-    const sessionId = "semantic-oracle-prompt-quality-session";
+    const sessionId = "semantic-reranker-prompt-quality-session";
     let capturedSystemPrompt = "";
     let capturedUserText = "";
-    const oracle = createHostedSemanticOracle({
+    const reranker = createHostedSemanticReranker({
       runtime,
       model: { provider: "anthropic", id: "sonnet" } as never,
       modelRegistry: {
         getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-api-key" }),
       },
-      completeFn: async (_model, request) => {
+      completeFn: async (
+        _model: unknown,
+        request: {
+          systemPrompt?: string;
+          messages: Array<{ content?: unknown }>;
+        },
+      ) => {
         capturedSystemPrompt = request.systemPrompt ?? "";
         const content = request.messages[0]?.content;
         capturedUserText =
@@ -126,7 +132,7 @@ describe("hosted semantic oracle", () => {
       },
     });
 
-    await oracle.extractNarrativeMemoryCandidate?.({
+    await reranker.extractNarrativeMemoryCandidate?.({
       sessionId,
       agentId: runtime.agentId,
       targetRoots: ["packages"],

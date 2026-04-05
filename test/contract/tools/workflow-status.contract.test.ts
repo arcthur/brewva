@@ -261,9 +261,10 @@ describe("workflow_status contract", () => {
       type: "subagent_completed",
       payload: {
         runId: "delegation-handoff-1",
-        delegate: "review",
+        delegate: "advisor",
         status: "completed",
-        kind: "review",
+        kind: "consult",
+        consultKind: "review",
         summary: "Review completed and is waiting for parent surfacing.",
         deliveryMode: "text_only",
         deliveryHandoffState: "pending_parent_turn",
@@ -287,7 +288,7 @@ describe("workflow_status contract", () => {
     expect(text).toContain("pending_delegation_outcomes: 1");
     expect(text).toContain("Pending delegation outcomes require parent attention (1 outcome).");
     expect(text).toContain("pending_delegation_outcome_runs:");
-    expect(text).toContain("- review/delegation-handoff-1: completed");
+    expect(text).toContain("- advisor/delegation-handoff-1: completed");
     expect(
       (
         result.details as
@@ -306,7 +307,7 @@ describe("workflow_status contract", () => {
     ).toEqual([
       {
         runId: "delegation-handoff-1",
-        delegate: "review",
+        delegate: "advisor",
         label: undefined,
         status: "completed",
         summary: "Review completed and is waiting for parent surfacing.",

@@ -197,7 +197,7 @@ execution_hints:
 references:
   - skills/meta/skill-authoring/references/authored-behavior.md
   - references/executable-evidence-bridge.md
-  - references/oracle-consultation-protocol.md
+  - references/advisor-consultation-protocol.md
   - references/plan-output-template.md
 consumes:
   - problem_frame

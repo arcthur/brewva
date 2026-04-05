@@ -9,24 +9,39 @@ import {
 } from "@brewva/brewva-gateway";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import type { DelegationPacket } from "@brewva/brewva-tools";
 
 function createTempWorkspace(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 
-const EXPLORE_TARGET: HostedDelegationTarget = {
-  name: "explore",
-  description: "Repository exploration worker.",
-  resultMode: "exploration",
-  executorPreamble: "Inspect the repository and summarize findings.",
-  agentSpecName: "explore",
-  envelopeName: "readonly-scout",
-  skillName: "repository-analysis",
+const ADVISOR_TARGET: HostedDelegationTarget = {
+  name: "advisor",
+  description: "Repository investigation advisor.",
+  resultMode: "consult",
+  consultKind: "investigate",
+  executorPreamble: "Inspect the repository and summarize the strongest evidence-backed findings.",
+  agentSpecName: "advisor",
+  envelopeName: "readonly-advisor",
   boundary: "safe",
   builtinToolNames: ["read"],
   producesPatches: false,
   contextProfile: "minimal",
 };
+
+function buildAdvisorPacket(
+  objective: string,
+  overrides: Partial<DelegationPacket> = {},
+): DelegationPacket {
+  return {
+    objective,
+    consultBrief: {
+      decision: "What should the advisor determine for the parent next?",
+      successCriteria: "Return a bounded, evidence-backed consult result.",
+    },
+    ...overrides,
+  };
+}
 
 describe("detached subagent background controller", () => {
   test("startRun persists durable live state and reports a live run", async () => {
@@ -50,9 +65,13 @@ describe("detached subagent background controller", () => {
 
     const run = await controller.startRun({
       parentSessionId: "parent-bg-1",
-      target: EXPLORE_TARGET,
+      target: ADVISOR_TARGET,
       packet: {
         objective: "Inspect the runtime package.",
+        consultBrief: {
+          decision: "Which runtime files should the parent inspect first?",
+          successCriteria: "Return the highest-signal starting points with evidence.",
+        },
       },
     });
 
@@ -87,15 +106,16 @@ describe("detached subagent background controller", () => {
         };
       };
     };
-    expect(spec.schema).toBe("brewva.subagent-run-spec.v6");
-    expect(spec.agentSpecName).toBe("explore");
-    expect(spec.envelopeName).toBe("readonly-scout");
-    expect(spec.skillName).toBe("repository-analysis");
+    expect(spec.schema).toBe("brewva.subagent-run-spec.v7");
+    expect(spec.agentSpecName).toBe("advisor");
+    expect(spec.envelopeName).toBe("readonly-advisor");
+    expect(spec.skillName).toBeUndefined();
     expect(spec.config.infrastructure?.events?.level).toBe("audit");
     expect(delegationStore.getRun("parent-bg-1", run.runId)).toMatchObject({
-      agentSpec: "explore",
-      envelope: "readonly-scout",
-      skillName: "repository-analysis",
+      agentSpec: "advisor",
+      envelope: "readonly-advisor",
+      kind: "consult",
+      consultKind: "investigate",
     });
 
     pidAlive = false;
@@ -127,9 +147,13 @@ describe("detached subagent background controller", () => {
 
     const run = await controller.startRun({
       parentSessionId: "parent-bg-predicate-event",
-      target: EXPLORE_TARGET,
+      target: ADVISOR_TARGET,
       packet: {
         objective: "Inspect the runtime package until merge evidence exists.",
+        consultBrief: {
+          decision: "What investigation remains necessary before merge evidence exists?",
+          successCriteria: "Keep the run alive until merge evidence is observed.",
+        },
         completionPredicate: {
           source: "events",
           type: "worker_results_applied",
@@ -192,9 +216,13 @@ describe("detached subagent background controller", () => {
 
     const run = await controller.startRun({
       parentSessionId: "parent-bg-predicate-worker",
-      target: EXPLORE_TARGET,
+      target: ADVISOR_TARGET,
       packet: {
         objective: "Inspect the gateway package until worker application succeeds.",
+        consultBrief: {
+          decision: "What investigation remains necessary before worker application succeeds?",
+          successCriteria: "Stop once worker application is observed.",
+        },
         completionPredicate: {
           source: "worker_results",
           workerId: "worker-apply-1",
@@ -259,10 +287,8 @@ describe("detached subagent background controller", () => {
 
     const run = await controller.startRun({
       parentSessionId: "parent-bg-cancel",
-      target: EXPLORE_TARGET,
-      packet: {
-        objective: "Inspect the gateway package.",
-      },
+      target: ADVISOR_TARGET,
+      packet: buildAdvisorPacket("Inspect the gateway package."),
     });
 
     const cancelled = await controller.cancelRun({
@@ -305,24 +331,18 @@ describe("detached subagent background controller", () => {
 
     const first = await controller.startRun({
       parentSessionId: "parent-bg-session",
-      target: EXPLORE_TARGET,
-      packet: {
-        objective: "Inspect runtime package.",
-      },
+      target: ADVISOR_TARGET,
+      packet: buildAdvisorPacket("Inspect runtime package."),
     });
     await controller.startRun({
       parentSessionId: "parent-bg-session",
-      target: EXPLORE_TARGET,
-      packet: {
-        objective: "Inspect gateway package.",
-      },
+      target: ADVISOR_TARGET,
+      packet: buildAdvisorPacket("Inspect gateway package."),
     });
     await controller.startRun({
       parentSessionId: "other-parent",
-      target: EXPLORE_TARGET,
-      packet: {
-        objective: "Ignore this run.",
-      },
+      target: ADVISOR_TARGET,
+      packet: buildAdvisorPacket("Ignore this run."),
     });
 
     await controller.cancelSessionRuns?.("parent-bg-session", "session_teardown");
@@ -368,17 +388,13 @@ describe("detached subagent background controller", () => {
 
     const first = await controller.startRun({
       parentSessionId: "parent-bg-slot-budget",
-      target: EXPLORE_TARGET,
-      packet: {
-        objective: "Inspect runtime package.",
-      },
+      target: ADVISOR_TARGET,
+      packet: buildAdvisorPacket("Inspect runtime package."),
     });
     const second = await controller.startRun({
       parentSessionId: "parent-bg-slot-budget",
-      target: EXPLORE_TARGET,
-      packet: {
-        objective: "Inspect gateway package.",
-      },
+      target: ADVISOR_TARGET,
+      packet: buildAdvisorPacket("Inspect gateway package."),
     });
 
     expect(first.status).toBe("pending");
@@ -417,10 +433,8 @@ describe("detached subagent background controller", () => {
 
     const first = await controller.startRun({
       parentSessionId: "parent-bg-slot-restore",
-      target: EXPLORE_TARGET,
-      packet: {
-        objective: "Inspect runtime package.",
-      },
+      target: ADVISOR_TARGET,
+      packet: buildAdvisorPacket("Inspect runtime package."),
     });
 
     const restartedRuntime = new BrewvaRuntime({
@@ -444,10 +458,8 @@ describe("detached subagent background controller", () => {
 
     const second = await restartedController.startRun({
       parentSessionId: "parent-bg-slot-restore",
-      target: EXPLORE_TARGET,
-      packet: {
-        objective: "Inspect gateway package.",
-      },
+      target: ADVISOR_TARGET,
+      packet: buildAdvisorPacket("Inspect gateway package."),
     });
 
     expect(first.status).toBe("pending");
@@ -484,9 +496,8 @@ describe("detached subagent background controller", () => {
 
     const run = await controller.startRun({
       parentSessionId: "parent-bg-predicate-preflight",
-      target: EXPLORE_TARGET,
-      packet: {
-        objective: "Inspect runtime until an applied worker result exists.",
+      target: ADVISOR_TARGET,
+      packet: buildAdvisorPacket("Inspect runtime until an applied worker result exists.", {
         completionPredicate: {
           source: "events",
           type: "worker_results_applied",
@@ -495,7 +506,7 @@ describe("detached subagent background controller", () => {
           },
           policy: "cancel_when_true",
         },
-      },
+      }),
     });
 
     expect(run.status).toBe("cancelled");
@@ -524,9 +535,8 @@ describe("detached subagent background controller", () => {
 
     const run = await controller.startRun({
       parentSessionId: "parent-bg-predicate-restart",
-      target: EXPLORE_TARGET,
-      packet: {
-        objective: "Inspect runtime package until merge evidence exists.",
+      target: ADVISOR_TARGET,
+      packet: buildAdvisorPacket("Inspect runtime package until merge evidence exists.", {
         completionPredicate: {
           source: "events",
           type: "worker_results_applied",
@@ -535,7 +545,7 @@ describe("detached subagent background controller", () => {
           },
           policy: "cancel_when_true",
         },
-      },
+      }),
     });
 
     const restartedRuntime = new BrewvaRuntime({ cwd: workspaceRoot });

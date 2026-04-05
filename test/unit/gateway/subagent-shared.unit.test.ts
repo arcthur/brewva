@@ -14,9 +14,10 @@ import type { HostedDelegationTarget } from "../../../packages/brewva-gateway/sr
 
 function makeTarget(overrides: Partial<HostedDelegationTarget> = {}): HostedDelegationTarget {
   return {
-    name: "review",
-    description: "Read-only reviewer",
-    resultMode: "review",
+    name: "advisor",
+    description: "Read-only advisor",
+    resultMode: "consult",
+    consultKind: "review",
     executorPreamble: "Review and summarize.",
     boundary: "safe",
     builtinToolNames: ["read"],
@@ -88,6 +89,10 @@ describe("subagent shared execution resolution", () => {
       target,
       packet: {
         objective: "Review the gateway deltas.",
+        consultBrief: {
+          decision: "What is the strongest review judgment on the gateway deltas?",
+          successCriteria: "Return an evidence-backed second opinion for the parent.",
+        },
         executionHints: {
           preferredTools: ["edit", "grep"],
           fallbackTools: ["write", "subagent_run"],
@@ -124,6 +129,25 @@ describe("subagent shared execution resolution", () => {
     expect(plan.prompt).toBe("Review and summarize.");
   });
 
+  test("resolveDelegationExecutionPlan rejects consult runs without consultBrief", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-subagent-shared-missing-brief-")),
+    });
+
+    expect(() =>
+      resolveDelegationExecutionPlan({
+        runtime,
+        target: makeTarget({
+          agentSpecName: "advisor",
+          envelopeName: "readonly-advisor",
+        }),
+        packet: {
+          objective: "Review the gateway deltas.",
+        },
+      }),
+    ).toThrow("missing_consult_brief");
+  });
+
   test("resolveDelegationTarget derives a default agent spec from executionShape.resultMode", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
     const resolved = resolveDelegationTarget({
@@ -140,19 +164,34 @@ describe("subagent shared execution resolution", () => {
     expect(resolved.target.resultMode).toBe("qa");
   });
 
-  test("resolveDelegationTarget routes discovery through explore without dropping the delegated skill", async () => {
+  test("resolveDelegationTarget requires consultKind even when advisor is derived from skillName", async () => {
+    const catalog = await loadHostedDelegationCatalog(process.cwd());
+
+    expect(() =>
+      resolveDelegationTarget({
+        catalog,
+        request: {
+          skillName: "discovery",
+        },
+      }),
+    ).toThrow("missing_consult_kind");
+  });
+
+  test("resolveDelegationTarget routes discovery through advisor when consultKind is explicit", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
     const resolved = resolveDelegationTarget({
       catalog,
       request: {
         skillName: "discovery",
+        consultKind: "investigate",
       },
     });
 
-    expect(resolved.delegate).toBe("explore");
-    expect(resolved.target.agentSpecName).toBe("explore");
+    expect(resolved.delegate).toBe("advisor");
+    expect(resolved.target.agentSpecName).toBe("advisor");
     expect(resolved.target.skillName).toBe("discovery");
-    expect(resolved.target.resultMode).toBe("exploration");
+    expect(resolved.target.resultMode).toBe("consult");
+    expect(resolved.target.consultKind).toBe("investigate");
   });
 
   test("resolveDelegationTarget materializes a skill-first agent spec through the catalog", async () => {
@@ -160,15 +199,30 @@ describe("subagent shared execution resolution", () => {
     const resolved = resolveDelegationTarget({
       catalog,
       request: {
-        agentSpec: "review",
+        agentSpec: "advisor",
+        consultKind: "review",
       },
     });
 
-    expect(resolved.delegate).toBe("review");
-    expect(resolved.target.agentSpecName).toBe("review");
-    expect(resolved.target.envelopeName).toBe("readonly-reviewer");
-    expect(resolved.target.skillName).toBe("review");
-    expect(resolved.target.resultMode).toBe("review");
+    expect(resolved.delegate).toBe("advisor");
+    expect(resolved.target.agentSpecName).toBe("advisor");
+    expect(resolved.target.envelopeName).toBe("readonly-advisor");
+    expect(resolved.target.skillName).toBeUndefined();
+    expect(resolved.target.resultMode).toBe("consult");
+    expect(resolved.target.consultKind).toBe("review");
+  });
+
+  test("resolveDelegationTarget rejects advisor runs without an explicit consultKind", async () => {
+    const catalog = await loadHostedDelegationCatalog(process.cwd());
+
+    expect(() =>
+      resolveDelegationTarget({
+        catalog,
+        request: {
+          agentSpec: "advisor",
+        },
+      }),
+    ).toThrow("missing_consult_kind");
   });
 
   test("resolveDelegationTarget supports built-in review lane delegates", async () => {
@@ -182,9 +236,10 @@ describe("subagent shared execution resolution", () => {
 
     expect(resolved.delegate).toBe("review-security");
     expect(resolved.target.agentSpecName).toBe("review-security");
-    expect(resolved.target.envelopeName).toBe("readonly-reviewer");
+    expect(resolved.target.envelopeName).toBe("readonly-advisor");
     expect(resolved.target.skillName).toBeUndefined();
-    expect(resolved.target.resultMode).toBe("review");
+    expect(resolved.target.resultMode).toBe("consult");
+    expect(resolved.target.consultKind).toBe("review");
   });
 
   test("resolveDelegationTarget supports explicit envelope-only ad hoc runs", async () => {
@@ -192,14 +247,19 @@ describe("subagent shared execution resolution", () => {
     const resolved = resolveDelegationTarget({
       catalog,
       request: {
-        envelope: "readonly-scout",
+        envelope: "readonly-advisor",
+        consultKind: "investigate",
+        executionShape: {
+          resultMode: "consult",
+        },
       },
     });
 
-    expect(resolved.delegate).toBe("readonly-scout");
-    expect(resolved.target.envelopeName).toBe("readonly-scout");
+    expect(resolved.delegate).toBe("readonly-advisor");
+    expect(resolved.target.envelopeName).toBe("readonly-advisor");
     expect(resolved.target.skillName).toBeUndefined();
-    expect(resolved.target.resultMode).toBe("exploration");
+    expect(resolved.target.resultMode).toBe("consult");
+    expect(resolved.target.consultKind).toBe("investigate");
   });
 
   test("resolveDelegationTarget fails fast on unknown agent specs even when an envelope is supplied", async () => {
@@ -210,7 +270,7 @@ describe("subagent shared execution resolution", () => {
         catalog,
         request: {
           agentSpec: "does-not-exist",
-          envelope: "readonly-scout",
+          envelope: "readonly-advisor",
         },
       }),
     ).toThrow("unknown_agent_spec:does-not-exist");
@@ -221,13 +281,13 @@ describe("subagent shared execution resolution", () => {
     const subagentDir = join(workspace, ".brewva", "subagents");
     mkdirSync(subagentDir, { recursive: true });
     writeFileSync(
-      join(subagentDir, "tight-reviewer.json"),
+      join(subagentDir, "tight-advisor.json"),
       JSON.stringify(
         {
           kind: "envelope",
-          name: "tight-reviewer",
-          extends: "readonly-reviewer",
-          description: "Workspace-specific narrowed reviewer envelope",
+          name: "tight-advisor",
+          extends: "readonly-advisor",
+          description: "Workspace-specific narrowed advisor envelope",
           managedToolNames: ["grep", "read_spans"],
           defaultContextBudget: {
             maxTurnTokens: 2400,
@@ -239,15 +299,15 @@ describe("subagent shared execution resolution", () => {
       "utf8",
     );
     writeFileSync(
-      join(subagentDir, "review.json"),
+      join(subagentDir, "advisor.json"),
       JSON.stringify(
         {
           kind: "agentSpec",
-          name: "review",
-          extends: "review",
-          description: "Workspace review delegate",
-          envelope: "tight-reviewer",
-          executorPreamble: "Operate as a workspace-specific reviewer.",
+          name: "advisor",
+          extends: "advisor",
+          description: "Workspace advisor delegate",
+          envelope: "tight-advisor",
+          executorPreamble: "Operate as a workspace-specific advisor.",
         },
         null,
         2,
@@ -259,14 +319,15 @@ describe("subagent shared execution resolution", () => {
     const resolved = resolveDelegationTarget({
       catalog,
       request: {
-        agentSpec: "review",
+        agentSpec: "advisor",
+        consultKind: "review",
       },
     });
 
-    expect(resolved.delegate).toBe("review");
-    expect(resolved.target.agentSpecName).toBe("review");
-    expect(resolved.target.envelopeName).toBe("tight-reviewer");
-    expect(resolved.target.executorPreamble).toBe("Operate as a workspace-specific reviewer.");
+    expect(resolved.delegate).toBe("advisor");
+    expect(resolved.target.agentSpecName).toBe("advisor");
+    expect(resolved.target.envelopeName).toBe("tight-advisor");
+    expect(resolved.target.executorPreamble).toBe("Operate as a workspace-specific advisor.");
   });
 
   test("resolveDelegationTarget allows request envelopes that narrow an agent spec envelope", async () => {
@@ -274,13 +335,13 @@ describe("subagent shared execution resolution", () => {
     const subagentDir = join(workspace, ".brewva", "subagents");
     mkdirSync(subagentDir, { recursive: true });
     writeFileSync(
-      join(subagentDir, "tight-reviewer.json"),
+      join(subagentDir, "tight-advisor.json"),
       JSON.stringify(
         {
           kind: "envelope",
-          name: "tight-reviewer",
-          extends: "readonly-reviewer",
-          description: "Narrowed reviewer envelope",
+          name: "tight-advisor",
+          extends: "readonly-advisor",
+          description: "Narrowed advisor envelope",
           managedToolNames: ["grep", "read_spans", "look_at"],
           defaultContextBudget: {
             maxTurnTokens: 3200,
@@ -292,13 +353,13 @@ describe("subagent shared execution resolution", () => {
       "utf8",
     );
     writeFileSync(
-      join(subagentDir, "ultra-tight-reviewer.json"),
+      join(subagentDir, "ultra-tight-advisor.json"),
       JSON.stringify(
         {
           kind: "envelope",
-          name: "ultra-tight-reviewer",
-          extends: "tight-reviewer",
-          description: "Further narrowed reviewer envelope",
+          name: "ultra-tight-advisor",
+          extends: "tight-advisor",
+          description: "Further narrowed advisor envelope",
           managedToolNames: ["grep", "read_spans"],
           defaultContextBudget: {
             maxTurnTokens: 1600,
@@ -315,10 +376,10 @@ describe("subagent shared execution resolution", () => {
         {
           kind: "agentSpec",
           name: "security-review",
-          description: "Security-focused review worker",
-          skillName: "review",
-          envelope: "tight-reviewer",
-          fallbackResultMode: "review",
+          description: "Security-focused review advisor",
+          envelope: "tight-advisor",
+          fallbackResultMode: "consult",
+          defaultConsultKind: "review",
         },
         null,
         2,
@@ -331,12 +392,12 @@ describe("subagent shared execution resolution", () => {
       catalog,
       request: {
         agentSpec: "security-review",
-        envelope: "ultra-tight-reviewer",
+        envelope: "ultra-tight-advisor",
       },
     });
 
     expect(resolved.target.agentSpecName).toBe("security-review");
-    expect(resolved.target.envelopeName).toBe("ultra-tight-reviewer");
+    expect(resolved.target.envelopeName).toBe("ultra-tight-advisor");
   });
 
   test("resolveDelegationTarget rejects request envelopes that widen an agent spec envelope", async () => {
@@ -346,7 +407,8 @@ describe("subagent shared execution resolution", () => {
       resolveDelegationTarget({
         catalog,
         request: {
-          agentSpec: "review",
+          agentSpec: "advisor",
+          consultKind: "review",
           envelope: "patch-worker",
         },
       }),
