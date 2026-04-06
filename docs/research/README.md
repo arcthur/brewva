@@ -1,22 +1,51 @@
 # Research Docs (Incubation Layer)
 
-`docs/research/` is the incubation layer for cross-cutting ideas that are not
-yet stable enough for `docs/architecture/` or `docs/reference/`.
+`docs/research/` is the incubation layer for cross-cutting design work that is
+not yet stable enough for `docs/architecture/` or `docs/reference/`.
+
+The root stays intentionally small:
+
+- workflow guidance for research notes
+- lifecycle indexes for active, promoted, and archived notes
+
+## Layout
+
+- root
+  - workflow guidance and lifecycle indexes only
+- `docs/research/active/`
+  - open incubation notes and planning material
+  - split themes so they can be promoted or archived independently
+- `docs/research/promoted/`
+  - concise promoted status pointers
+  - current contracts live in stable docs and code; these notes keep rationale,
+    non-goals, and migration breadcrumbs
+- `docs/research/archive/`
+  - historical, superseded, or migration-focused notes
+  - terminology may differ from current stable docs
 
 ## When to add a research note
 
-- A decision spans multiple packages or runtime semantic surfaces / authority boundaries.
+- A decision spans multiple packages or runtime semantic surfaces / authority
+  boundaries.
 - The team needs to compare alternatives before locking a contract.
 - Validation criteria are known, but implementation is still evolving.
 
-## Required metadata for each research note
+Create new incubation notes under `docs/research/active/`.
+Once a note is accepted, either:
 
-- `Status`: `proposed` | `active` | `promoted` | `archived`
+1. promote it into stable docs and collapse it into a concise pointer under
+   `docs/research/promoted/`, or
+2. archive it under `docs/research/archive/` when it is mainly historical or
+   superseded.
+
+## Required metadata for active research notes
+
+- `Status`: `proposed` | `active`
 - `Owner`: responsible team or maintainer group
 - `Last reviewed`: date in `YYYY-MM-DD`
 - `Promotion target`: destination stable document(s)
 
-## Required sections for each research note
+## Required sections for active research notes
 
 - Problem statement and scope boundaries
 - Hypotheses or decision options
@@ -24,16 +53,21 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 - Validation signals (tests, metrics, or operational checks)
 - Promotion criteria and destination docs
 
+Promoted and archived notes retain the same metadata for traceability, but they
+may be much shorter once the stable contract is carried elsewhere.
+
 ## Promotion workflow
 
-1. Track open questions and hypotheses in `docs/research/*.md`.
+1. Track open questions and hypotheses in a focused active note under
+   `docs/research/active/`.
 2. Validate with code changes, tests, and operational evidence.
 3. Promote accepted decisions into stable docs:
    - `docs/architecture/` for design/invariant decisions
    - `docs/reference/` for public contracts
    - `docs/journeys/operator/` for operator workflows
    - `docs/journeys/internal/` for cross-package review flows
-4. Keep research pages as concise status pointers or archive them.
+4. Move the research note to `promoted/` as a concise pointer or to `archive/`
+   as a historical record.
 
 ## Proposed notes
 
@@ -41,57 +75,33 @@ None currently.
 
 ## Active notes
 
-- `docs/research/roadmap-notes.md`
+- `docs/research/active/event-stream-consistency-and-replay-fidelity.md`
+- `docs/research/active/context-budget-behavior-in-long-running-sessions.md`
+- `docs/research/active/recovery-robustness-under-interrupt-conditions.md`
+- `docs/research/active/cost-observability-and-budget-governance.md`
+- `docs/research/active/rollback-ergonomics-and-patch-lifecycle-safety.md`
 
 ## Promoted notes (status pointers)
 
-- `docs/research/rfc-schedule-intent-hardening-and-control-plane-ergonomics.md`
-- `docs/research/rfc-narrative-memory-product-and-bounded-semantic-recall.md`
-- `docs/research/rfc-specialist-subagents-and-adversarial-verification.md`
-- `docs/research/rfc-architecture-doc-precision-review.md`
-- `docs/research/rfc-boundary-first-subtraction-and-model-native-recovery.md`
-- `docs/research/rfc-boundary-policy-credential-vault-and-loop-guard.md`
-- `docs/research/rfc-capability-compression-and-output-distillation.md`
-- `docs/research/rfc-advisor-consultation-primitive-and-specialist-taxonomy-cutover.md`
-- `docs/research/rfc-default-path-re-hardening-and-advisory-surface-narrowing.md`
-- `docs/research/rfc-deliberation-home-and-compounding-intelligence.md`
-- `docs/research/rfc-derived-session-wire-schema-and-frontend-session-protocol.md`
-- `docs/research/rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md`
-- `docs/research/rfc-effect-governance-and-contract-vnext.md`
-- `docs/research/rfc-gateway-experience-ring-decomposition.md`
-- `docs/research/rfc-inspectable-operator-experience-overlays.md`
-- `docs/research/rfc-iteration-facts-and-model-native-optimization-protocols.md`
-- `docs/research/rfc-model-native-product-reconstruction-and-closure-vnext.md`
-- `docs/research/rfc-preparse-normalization-model-capability-and-live-audit-split.md`
-- `docs/research/rfc-repository-native-compound-knowledge-and-review-ensemble.md`
-- `docs/research/rfc-repository-fitness-plane-and-runtime-boundary.md`
-- `docs/research/rfc-skill-distribution-refresh-and-catalog-surface.md`
-- `docs/research/rfc-skill-first-delegation-and-execution-envelopes.md`
-- `docs/research/rfc-authority-surface-narrowing-and-runtime-facade-compression.md`
-- `docs/research/rfc-kernel-level-reasoning-revert-and-branch-continuity.md`
-- `docs/research/rfc-workflow-artifacts-and-posture-control-plane.md`
-- `docs/research/rfc-hosted-turn-transitions-and-bounded-recovery.md`
+See `docs/research/promoted/README.md` for the promoted-note index and the
+status-pointer catalog.
 
 ## Archived / superseded notes
 
-- `docs/research/rfc-delegation-protocol-thinning-and-replayable-outcomes.md`
-- `docs/research/rfc-invocation-spine-and-posture-runtime-vnext.md`
-- `docs/research/rfc-runtime-decomposition-and-deliberation-thickening.md`
-- `docs/research/rfc-subagent-delegation-and-isolated-execution.md`
-- `docs/research/rfc-session-wire-v2-attempt-scoped-live-tool-frames.md`
+See `docs/research/archive/README.md` for the archived-note index and
+historical rationale catalog.
 
-Archived and superseded notes may intentionally describe historical
-terminology, including the older delegation `profile` model. Current
-delegation contracts should be read from stable docs and the promoted
-skill-first delegation RFC.
+## Indexes
 
-They may also retain historical runtime-domain vocabulary. Current runtime
-surface terminology should be read from stable docs: `authority`, `inspect`,
-and `maintain`.
+- Active research notes: `docs/research/active/README.md`
+- Promoted research notes: `docs/research/promoted/README.md`
+- Archived research notes: `docs/research/archive/README.md`
 
-Promoted notes may also retain intermediate delegation terminology inside
-historical rationale sections. When a promoted note includes a current-state
-clarification, that clarification overrides older examples or transition code
-snippets. Current delegated result kinds should be read from stable docs:
-`consult`, `qa`, and `patch`, while `runtime.authority.verification.*`
-remains a separate kernel authority.
+## Authority Rules
+
+- Current code, tests, and runtime evidence outrank research notes.
+- Stable architecture and reference docs outrank promoted research notes.
+- Promoted notes may retain rationale and non-goals, but they are no longer the
+  primary contract surface.
+- Archived notes are historical only; read them for migration context and
+  regression archaeology, not for current API truth.

@@ -371,4 +371,4 @@ This architecture does not mean:
 - `docs/architecture/design-axioms.md`
 - `docs/architecture/cognitive-product-architecture.md`
 - `docs/reference/proposal-boundary.md`
-- `docs/research/rfc-effect-governance-and-contract-vnext.md`
+- `docs/research/archive/rfc-effect-governance-and-contract-vnext.md`

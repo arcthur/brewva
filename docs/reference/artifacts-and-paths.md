@@ -6,8 +6,7 @@ Runtime artifact paths are resolved from the workspace root (`nearest .brewva/br
 
 ## Durability Classes
 
-This document uses the durability taxonomy defined in
-`docs/research/rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md`.
+This document uses Brewva's stable four-class durability taxonomy:
 
 - `durable source of truth`: losing the surface changes authority, committed
   history, or replay outcomes

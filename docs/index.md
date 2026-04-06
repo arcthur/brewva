@@ -77,26 +77,9 @@ This repository uses a layered documentation system:
 ## Research (Incubation Layer)
 
 - Research playbook: `docs/research/README.md`
-- Advisor consultation primitive RFC: `docs/research/rfc-advisor-consultation-primitive-and-specialist-taxonomy-cutover.md`
-- Specialist subagents and adversarial verification RFC: `docs/research/rfc-specialist-subagents-and-adversarial-verification.md`
-- Architecture doc precision review RFC: `docs/research/rfc-architecture-doc-precision-review.md`
-- Boundary-first subtraction and model-native recovery RFC: `docs/research/rfc-boundary-first-subtraction-and-model-native-recovery.md`
-- Durability taxonomy RFC: `docs/research/rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md`
-- Default-path re-hardening RFC: `docs/research/rfc-default-path-re-hardening-and-advisory-surface-narrowing.md`
-- Repository fitness plane and runtime boundary RFC: `docs/research/rfc-repository-fitness-plane-and-runtime-boundary.md`
-- Gateway experience-ring decomposition status pointer: `docs/research/rfc-gateway-experience-ring-decomposition.md`
-- Roadmap notes: `docs/research/roadmap-notes.md`
-- Effect governance RFC: `docs/research/rfc-effect-governance-and-contract-vnext.md`
-- Authority-surface narrowing RFC: `docs/research/rfc-authority-surface-narrowing-and-runtime-facade-compression.md`
-- Capability compression RFC: `docs/research/rfc-capability-compression-and-output-distillation.md`
-- Delegation protocol thinning RFC: `docs/research/rfc-delegation-protocol-thinning-and-replayable-outcomes.md`
-- Hosted turn transitions status pointer: `docs/research/rfc-hosted-turn-transitions-and-bounded-recovery.md`
-- Subagent delegation RFC: `docs/research/rfc-subagent-delegation-and-isolated-execution.md`
-- Pre-parse normalization RFC: `docs/research/rfc-preparse-normalization-model-capability-and-live-audit-split.md`
-- Workflow artifacts RFC: `docs/research/rfc-workflow-artifacts-and-posture-control-plane.md`
-- Compound Knowledge Plane and Review Ensemble status pointer: `docs/research/rfc-repository-native-compound-knowledge-and-review-ensemble.md`
-- Iteration facts RFC: `docs/research/rfc-iteration-facts-and-model-native-optimization-protocols.md`
-- Archived / superseded examples: `docs/research/rfc-invocation-spine-and-posture-runtime-vnext.md`, `docs/research/rfc-runtime-decomposition-and-deliberation-thickening.md`
+- Active research notes: `docs/research/active/README.md`
+- Promoted research notes: `docs/research/promoted/README.md`
+- Archived / superseded research notes: `docs/research/archive/README.md`
 
 ## Source of Truth
 
