@@ -3,7 +3,7 @@ import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { RecoveryWalStore, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { patchProcessEnv } from "../../helpers/global-state.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -411,6 +411,246 @@ describe("inspect subcommand", () => {
     },
     { timeout: 20_000 },
   );
+
+  test("defaults to forensic config merge and preserves valid global overrides while stripping drift", () => {
+    const workspace = createTestWorkspace("inspect-forensic-default-config");
+    const xdgConfigHome = join(workspace, ".xdg");
+    mkdirSync(join(xdgConfigHome, "brewva"), { recursive: true });
+    writeFileSync(
+      join(xdgConfigHome, "brewva", "brewva.json"),
+      JSON.stringify(
+        {
+          projection: {
+            dir: ".custom-projection",
+          },
+          skills: {
+            selector: {
+              mode: "llm_auto",
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    const restoreEnv = patchProcessEnv({
+      XDG_CONFIG_HOME: xdgConfigHome,
+    });
+
+    try {
+      const runtime = new BrewvaRuntime({
+        cwd: workspace,
+        config: structuredClone(DEFAULT_BREWVA_CONFIG),
+      });
+      const sessionId = "inspect-forensic-default-config-1";
+      recordRuntimeEvent(runtime, {
+        sessionId,
+        type: "session_bootstrap",
+        payload: {
+          managedToolMode: "direct",
+        },
+      });
+      recordRuntimeEvent(runtime, {
+        sessionId,
+        type: "session_start",
+        payload: {
+          cwd: workspace,
+        },
+      });
+
+      const result = runInspect(["--cwd", workspace, "--session", sessionId, "--json"], {
+        ...process.env,
+        XDG_CONFIG_HOME: xdgConfigHome,
+      });
+      expect(result.status).toBe(0);
+
+      const payload = JSON.parse(result.stdout) as {
+        sessionId: string;
+        configLoad: {
+          mode: string;
+          paths: string[];
+          warningCount: number;
+        };
+        projection: {
+          rootDir: string;
+        };
+      };
+
+      expect(payload.sessionId).toBe(sessionId);
+      expect(payload.configLoad.mode).toBe("forensic_default");
+      expect(payload.configLoad.paths).toEqual(
+        expect.arrayContaining([
+          join(xdgConfigHome, "brewva", "brewva.json"),
+          join(workspace, ".brewva", "brewva.json"),
+        ]),
+      );
+      expect(payload.configLoad.warningCount).toBeGreaterThanOrEqual(1);
+      expect(payload.projection.rootDir).toBe(join(workspace, ".custom-projection"));
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  test("forensic inspect strips removed and unknown config fields for diagnostics only", () => {
+    const workspace = createTestWorkspace("inspect-forensic-config-strip");
+    const xdgConfigHome = join(workspace, ".xdg");
+    mkdirSync(join(xdgConfigHome, "brewva"), { recursive: true });
+    writeFileSync(
+      join(workspace, ".brewva", "brewva.json"),
+      JSON.stringify(
+        {
+          skills: {
+            roots: ["./skills"],
+            cascade: {
+              enabled: true,
+            },
+            selector: {
+              mode: "llm_auto",
+            },
+            routing: {
+              profile: "legacy",
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    const restoreEnv = patchProcessEnv({
+      XDG_CONFIG_HOME: xdgConfigHome,
+    });
+
+    try {
+      const runtime = new BrewvaRuntime({
+        cwd: workspace,
+        config: structuredClone(DEFAULT_BREWVA_CONFIG),
+      });
+      const sessionId = "inspect-forensic-config-strip-1";
+      recordRuntimeEvent(runtime, {
+        sessionId,
+        type: "session_bootstrap",
+        payload: {
+          managedToolMode: "direct",
+        },
+      });
+
+      const result = runInspect(["--cwd", workspace, "--session", sessionId, "--json"], {
+        ...process.env,
+        XDG_CONFIG_HOME: xdgConfigHome,
+      });
+      expect(result.status).toBe(0);
+
+      const payload = JSON.parse(result.stdout) as {
+        sessionId: string;
+        configLoad: {
+          warningCount: number;
+          warnings: Array<{
+            code: string;
+            fields: string[];
+          }>;
+        };
+      };
+
+      expect(payload.sessionId).toBe(sessionId);
+      expect(payload.configLoad.warningCount).toBeGreaterThanOrEqual(2);
+      const strippedFields = payload.configLoad.warnings.flatMap((warning) => warning.fields ?? []);
+      expect(strippedFields).toEqual(
+        expect.arrayContaining(["/skills/cascade", "/skills/selector", "/skills/routing/profile"]),
+      );
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  test("session bootstrap provenance drives inspect recovery-wal paths", () => {
+    const workspace = createTestWorkspace("inspect-bootstrap-recovery-wal");
+    const xdgConfigHome = join(workspace, ".xdg");
+    mkdirSync(join(xdgConfigHome, "brewva"), { recursive: true });
+    writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");
+    const restoreEnv = patchProcessEnv({
+      XDG_CONFIG_HOME: xdgConfigHome,
+    });
+
+    try {
+      const runtime = new BrewvaRuntime({
+        cwd: workspace,
+        config: structuredClone(DEFAULT_BREWVA_CONFIG),
+      });
+      const sessionId = "inspect-bootstrap-recovery-wal-1";
+      recordRuntimeEvent(runtime, {
+        sessionId,
+        type: "session_bootstrap",
+        payload: {
+          managedToolMode: "direct",
+          runtimeConfig: {
+            workspaceRoot: workspace,
+            artifactRoots: {
+              recoveryWalDir: ".bootstrap-recovery-wal",
+            },
+          },
+        },
+      });
+      recordRuntimeEvent(runtime, {
+        sessionId,
+        type: "session_start",
+        payload: {
+          cwd: workspace,
+        },
+      });
+
+      const recoveryWalStore = new RecoveryWalStore({
+        workspaceRoot: workspace,
+        config: {
+          ...structuredClone(DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal),
+          dir: ".bootstrap-recovery-wal",
+        },
+        scope: "runtime",
+      });
+      recoveryWalStore.appendPending(
+        {
+          schema: "brewva.turn.v1",
+          kind: "tool",
+          sessionId,
+          turnId: "tool:read-1",
+          channel: "tool_lifecycle",
+          conversationId: sessionId,
+          timestamp: 1_700_000_000_000,
+          parts: [{ type: "text", text: "read (read-1)" }],
+          meta: {
+            toolCallId: "read-1",
+            toolName: "read",
+          },
+        },
+        "tool",
+      );
+
+      const result = runInspect(["--cwd", workspace, "--session", sessionId, "--json"], {
+        ...process.env,
+        XDG_CONFIG_HOME: xdgConfigHome,
+      });
+      expect(result.status).toBe(0);
+
+      const payload = JSON.parse(result.stdout) as {
+        bootstrap: {
+          recoveryWalDir: string | null;
+        };
+        recoveryWal: {
+          filePath: string;
+          pendingSessionCount: number;
+        };
+      };
+
+      expect(payload.bootstrap.recoveryWalDir).toBe(".bootstrap-recovery-wal");
+      expect(payload.recoveryWal.filePath).toBe(
+        join(workspace, ".bootstrap-recovery-wal", "runtime.jsonl"),
+      );
+      expect(payload.recoveryWal.pendingSessionCount).toBe(1);
+    } finally {
+      restoreEnv();
+    }
+  });
 
   test("rejects the removed single-session alias before prompt execution", () => {
     const result = runSubcommand("insight", []);

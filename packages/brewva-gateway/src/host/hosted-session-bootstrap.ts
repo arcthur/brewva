@@ -684,6 +684,7 @@ function recordHostedBootstrap(input: {
   runtime: BrewvaRuntime;
   sessionId: string;
   cwd: string;
+  configPath?: string;
   managedToolMode: ManagedToolMode;
 }): void {
   const skillLoadReport = input.runtime.inspect.skills.getLoadReport();
@@ -694,6 +695,16 @@ function recordHostedBootstrap(input: {
       cwd: input.cwd,
       agentId: input.runtime.agentId,
       managedToolMode: input.managedToolMode,
+      runtimeConfig: {
+        workspaceRoot: input.runtime.workspaceRoot,
+        configPath: input.configPath ?? null,
+        artifactRoots: {
+          eventsDir: input.runtime.config.infrastructure.events.dir,
+          recoveryWalDir: input.runtime.config.infrastructure.recoveryWal.dir,
+          projectionDir: input.runtime.config.projection.dir,
+          ledgerPath: input.runtime.config.ledger.path,
+        },
+      },
       skillLoad: {
         loadedSkills: skillLoadReport.loadedSkills,
         routingEnabled: skillLoadReport.routingEnabled,
@@ -794,6 +805,7 @@ export async function createHostedSession(
     runtime,
     sessionId,
     cwd: environment.cwd,
+    configPath: options.configPath,
     managedToolMode,
   });
 

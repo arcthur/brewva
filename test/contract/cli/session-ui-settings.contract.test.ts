@@ -152,6 +152,12 @@ describe("brewva session ui settings wiring", () => {
       })[0];
       const payload = (bootstrap?.payload as
         | {
+            runtimeConfig?: {
+              artifactRoots?: {
+                eventsDir?: string;
+                recoveryWalDir?: string;
+              };
+            };
             skillLoad?: {
               routingEnabled?: boolean;
               routingScopes?: string[];
@@ -166,6 +172,10 @@ describe("brewva session ui settings wiring", () => {
       expect(payload.skillLoad?.routableSkills).toContain("repository-analysis");
       expect(payload.skillLoad?.routableSkills).not.toContain("custom-ops");
       expect(payload.skillLoad?.hiddenSkills).toContain("custom-ops");
+      expect(payload.runtimeConfig?.artifactRoots?.eventsDir).toBe(".orchestrator/events");
+      expect(payload.runtimeConfig?.artifactRoots?.recoveryWalDir).toBe(
+        ".orchestrator/recovery-wal",
+      );
     } finally {
       result.session.dispose();
     }

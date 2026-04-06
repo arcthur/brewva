@@ -64,7 +64,7 @@ export interface ScheduleIntentProjectionRecord {
 
 export type RecoveryWalStatus = "pending" | "inflight" | "done" | "failed" | "expired";
 
-export type RecoveryWalSource = "channel" | "schedule" | "gateway" | "heartbeat";
+export type RecoveryWalSource = "channel" | "schedule" | "gateway" | "heartbeat" | "tool";
 
 export interface RecoveryWalRecord {
   schema: "brewva.recovery-wal.v1";

@@ -247,6 +247,9 @@
                 },
                 "scheduleTurnTtlMs": {
                   "type": "number"
+                },
+                "toolTurnTtlMs": {
+                  "type": "number"
                 }
               }
             }

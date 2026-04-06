@@ -299,6 +299,12 @@ It also includes the rebuildable hosted transition snapshot used by
 `session_turn_transition`, including the latest continuation reason, pending
 family state, and breaker posture for bounded recovery families.
 
+When `--config` is omitted, `inspect` loads a forensic-safe merge of the global
+and workspace config files. Removed or unknown fields are stripped for the
+inspection runtime only and surfaced as config warnings in the report. If the
+session's `session_bootstrap` payload recorded runtime artifact dirs, inspect
+uses that persisted provenance when reporting recovery-WAL and projection paths.
+
 - `brewva inspect`: inspect the latest replayable session for the current workspace
 - `brewva inspect <dir>`: inspect a specific directory inside the current workspace
 - `brewva inspect --session <id>`: inspect a specific session

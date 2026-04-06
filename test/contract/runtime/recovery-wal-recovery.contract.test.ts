@@ -111,6 +111,57 @@ describe("Recovery WAL recovery", () => {
     expect(exhaustedStatus).toBe("failed");
   });
 
+  test("tool rows honor extended forensic retention before expiring", async () => {
+    const workspace = createTestWorkspace("recovery-wal-recovery-tool-retention");
+    let nowMs = 1_000;
+    const config = {
+      ...DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal,
+      defaultTtlMs: 50,
+      toolTurnTtlMs: 5_000,
+    };
+    const store = new RecoveryWalStore({
+      workspaceRoot: workspace,
+      config,
+      scope: "runtime",
+      now: () => nowMs,
+    });
+
+    const toolRow = store.appendPending(
+      envelopeFor({
+        turnId: "tool-turn-1",
+        sessionId: "tool-session-1",
+        channel: "tool_lifecycle",
+      }),
+      "tool",
+    );
+
+    nowMs += 200;
+    const beforeExpiry = await new RecoveryWalRecovery({
+      workspaceRoot: workspace,
+      config,
+      now: () => nowMs,
+    }).recover();
+    expect(beforeExpiry.expired).toBe(0);
+    expect(store.listCurrent().find((row) => row.walId === toolRow.walId)?.status).toBe("pending");
+
+    nowMs += 5_100;
+    const afterExpiry = await new RecoveryWalRecovery({
+      workspaceRoot: workspace,
+      config,
+      now: () => nowMs,
+    }).recover();
+    expect(afterExpiry.expired).toBe(1);
+    const reloaded = new RecoveryWalStore({
+      workspaceRoot: workspace,
+      config,
+      scope: "runtime",
+      now: () => nowMs,
+    });
+    expect(reloaded.listCurrent().find((row) => row.walId === toolRow.walId)?.status).toBe(
+      "expired",
+    );
+  });
+
   test("repeated recover is idempotent once a handler-owned retry has already completed", async () => {
     const workspace = createTestWorkspace("recovery-wal-recovery-idempotent");
     const store = new RecoveryWalStore({

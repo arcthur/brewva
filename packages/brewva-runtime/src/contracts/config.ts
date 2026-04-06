@@ -189,6 +189,7 @@ export interface BrewvaConfig {
       maxRetries: number;
       compactAfterMs: number;
       scheduleTurnTtlMs: number;
+      toolTurnTtlMs: number;
     };
   };
 }

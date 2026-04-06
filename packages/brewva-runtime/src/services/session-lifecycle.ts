@@ -188,7 +188,7 @@ export class SessionLifecycleService {
   getOpenToolCalls(sessionId: string): OpenToolCallRecord[] {
     this.ensureHydrated(sessionId);
     return [...(this.sessionState.getExistingCell(sessionId)?.openToolCalls.values() ?? [])].map(
-      (record) => ({ ...record }),
+      (record) => Object.assign({}, record),
     );
   }
 
@@ -524,7 +524,7 @@ export class SessionLifecycleService {
     }
 
     const openToolCalls = [...state.openToolCalls.values()]
-      .map((record) => ({ ...record }))
+      .map((record) => Object.assign({}, record))
       .toSorted(
         (left, right) =>
           left.openedAt - right.openedAt || left.toolCallId.localeCompare(right.toolCallId),

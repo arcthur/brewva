@@ -168,6 +168,15 @@ describe("runtime facade coverage", () => {
       now += 10_000;
       const reloaded = new BrewvaRuntime({ cwd: workspace, config });
 
+      expect(reloaded.inspect.recovery.listPending()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            sessionId,
+            source: "tool",
+            status: "inflight",
+          }),
+        ]),
+      );
       expect(reloaded.inspect.session.getOpenToolCalls(sessionId)).toEqual([
         expect.objectContaining({
           toolCallId: "read-1",
@@ -197,6 +206,48 @@ describe("runtime facade coverage", () => {
     } finally {
       restoreNow();
     }
+  });
+
+  test("tool execution terminal receipts clear tool recovery wal rows", () => {
+    const workspace = createTestWorkspace("runtime-facade-tool-recovery-wal");
+    const config = createOpsRuntimeConfig();
+    const sessionId = "runtime-facade-tool-recovery-wal-1";
+    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "tool_execution_start",
+      turn: 1,
+      payload: {
+        toolCallId: "grep-1",
+        toolName: "grep",
+      },
+    });
+
+    expect(runtime.inspect.recovery.listPending()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sessionId,
+          source: "tool",
+          status: "inflight",
+        }),
+      ]),
+    );
+
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "tool_execution_end",
+      turn: 1,
+      payload: {
+        toolCallId: "grep-1",
+        toolName: "grep",
+        isError: false,
+      },
+    });
+
+    expect(
+      runtime.inspect.recovery.listPending().filter((row) => row.sessionId === sessionId),
+    ).toEqual([]);
   });
 
   test("session inspection exposes unclean shutdown reconciliation for open turns without tool calls", () => {

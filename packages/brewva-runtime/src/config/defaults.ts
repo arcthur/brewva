@@ -184,6 +184,7 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
       maxRetries: 2,
       compactAfterMs: 3_600_000,
       scheduleTurnTtlMs: 600_000,
+      toolTurnTtlMs: 86_400_000,
     },
   },
 };

@@ -52,6 +52,7 @@ import { TaskWatchdogService } from "./services/task-watchdog.js";
 import { TaskService } from "./services/task.js";
 import { ToolGateService } from "./services/tool-gate.js";
 import { ToolInvocationSpine } from "./services/tool-invocation-spine.js";
+import { ToolLifecycleRecoveryWalService } from "./services/tool-lifecycle-recovery-wal.js";
 import { TruthProjectorService } from "./services/truth-projector.js";
 import { TruthService } from "./services/truth.js";
 import { VerificationProjectorService } from "./services/verification-projector.js";
@@ -93,6 +94,7 @@ export interface RuntimeServiceDependencies {
   taskWatchdogService: TaskWatchdogService;
   tapeService: TapeService;
   eventPipeline: EventPipelineService;
+  toolLifecycleRecoveryWalService: ToolLifecycleRecoveryWalService;
   truthProjectorService: TruthProjectorService;
   verificationProjectorService: VerificationProjectorService;
   scheduleIntentService: ScheduleIntentService;
@@ -558,6 +560,10 @@ export function createRuntimeServiceDependencies(
         enableExecution: false,
       }),
   });
+  const toolLifecycleRecoveryWalService = new ToolLifecycleRecoveryWalService({
+    recoveryWalStore: options.coreDependencies.recoveryWalStore,
+    eventPipeline,
+  });
   const fileChangeService = new FileChangeService({
     sessionState: options.sessionState,
     fileChanges: options.coreDependencies.fileChanges,
@@ -628,6 +634,7 @@ export function createRuntimeServiceDependencies(
     reversibleMutationService,
   });
   sessionLifecycleService.onClearState((sessionId) => {
+    toolLifecycleRecoveryWalService.clearSession(sessionId);
     reversibleMutationService.clear(sessionId);
     effectCommitmentDeskService.clear(sessionId);
   });
@@ -647,6 +654,7 @@ export function createRuntimeServiceDependencies(
     taskWatchdogService,
     tapeService,
     eventPipeline,
+    toolLifecycleRecoveryWalService,
     effectCommitmentDeskService,
     truthProjectorService,
     verificationProjectorService,

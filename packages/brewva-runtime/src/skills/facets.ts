@@ -33,7 +33,7 @@ export function getSkillOutputContracts(
 ): Record<string, SkillOutputContract> {
   const intent = resolveSkillIntent(contract);
   return {
-    ...(intent.outputContracts ?? {}),
+    ...intent.outputContracts,
     ...deriveSemanticBindingOutputContracts(intent.semanticBindings),
   };
 }
@@ -41,7 +41,7 @@ export function getSkillOutputContracts(
 export function getSkillSemanticBindings(
   contract: SkillContractLike | undefined,
 ): Record<string, SemanticArtifactSchemaId> {
-  return { ...(resolveSkillIntent(contract).semanticBindings ?? {}) };
+  return { ...resolveSkillIntent(contract).semanticBindings };
 }
 
 export function deriveSkillEffectLevel(
