@@ -201,6 +201,10 @@ State visibility rule:
   inspection products
 - performance-only caches may remain local, but losing them must not widen
   authority or change replayable commitments
+- frontend session replay is an experience-ring read model: `session-wire.v2`
+  compiles durable receipts and merges cache-class live previews, including
+  attempt-scoped live tool telemetry, but it does not become kernel authority
+  or a second wire log
 
 Hosted recovery note:
 

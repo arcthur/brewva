@@ -3,7 +3,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GatewayDaemon, PROTOCOL_VERSION, readGatewayToken } from "@brewva/brewva-gateway";
+import {
+  GatewayDaemon,
+  PROTOCOL_VERSION,
+  readGatewayToken,
+  type SessionBackend,
+} from "@brewva/brewva-gateway";
 import WebSocket, { type RawData } from "ws";
 
 export interface PolicyRule {
@@ -295,6 +300,7 @@ export async function startDaemonHarness(
     healthHttpPort?: number;
     healthHttpPath?: string;
     scheduleEnabled?: boolean;
+    sessionBackend?: SessionBackend;
   } = {},
 ): Promise<DaemonHarness> {
   const root = mkdtempSync(join(tmpdir(), "brewva-gateway-integration-"));
@@ -333,6 +339,7 @@ export async function startDaemonHarness(
     tickIntervalMs: 1_000,
     healthHttpPort: options.healthHttpPort,
     healthHttpPath: options.healthHttpPath,
+    sessionBackend: options.sessionBackend,
   });
   await daemon.start();
   const runtime = daemon.getRuntimeInfo();

@@ -2,8 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SessionSupervisor } from "@brewva/brewva-gateway";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { resolveBrewvaEventLogPath } from "@brewva/brewva-runtime/internal";
+import { BrewvaRuntime, GATEWAY_SESSION_BOUND_EVENT_TYPE } from "@brewva/brewva-runtime";
+import {
+  readBrewvaEventRecordsFromLogPath,
+  resolveBrewvaEventLogPath,
+} from "@brewva/brewva-runtime/internal";
+import {
+  GATEWAY_SESSION_BINDING_CONTROL_SESSION_ID,
+  resolveGatewaySessionBindingLogPath,
+} from "../../../packages/brewva-gateway/src/daemon/session-binding-tape.js";
 import {
   buildWorkerTestHarnessEnv,
   WORKER_TEST_HARNESS_ENV_KEYS,
@@ -187,6 +194,142 @@ describe("session supervisor watchdog bridge", () => {
       }
     },
     { timeout: 10_000 },
+  );
+
+  test(
+    "querySessionWire replays archived frames across multiple worker segments for the same public session id",
+    async () => {
+      const workspace = createTestWorkspace("supervisor-session-wire-archived-replay");
+      const stateDir = join(workspace, "state");
+      writeTestConfig(workspace, createOpsRuntimeConfig(), TEST_CONFIG_PATH);
+      let supervisor: SessionSupervisor | null = new SessionSupervisor({
+        stateDir,
+        defaultCwd: workspace,
+        defaultConfigPath: TEST_CONFIG_PATH,
+        defaultManagedToolMode: "direct",
+        workerEnv: buildWorkerTestHarnessEnv({
+          fakeAssistantText: "ARCHIVED_SESSION_WIRE_OK",
+        }),
+        logger: {
+          debug: () => {},
+          info: () => {},
+          warn: () => {},
+          error: () => {},
+          log: () => {},
+        },
+      });
+      let replaySupervisor: SessionSupervisor | null = null;
+
+      try {
+        const firstOpen = await supervisor.openSession({
+          sessionId: "archived-session",
+        });
+        expect(firstOpen.agentSessionId).toEqual(expect.any(String));
+
+        await supervisor.sendPrompt("archived-session", "first prompt", {
+          turnId: "turn-1",
+          waitForCompletion: true,
+        });
+        expect(await supervisor.stopSession("archived-session", "segment_one_closed")).toBe(true);
+
+        const secondOpen = await supervisor.openSession({
+          sessionId: "archived-session",
+        });
+        expect(secondOpen.agentSessionId).toEqual(expect.any(String));
+        expect(secondOpen.agentSessionId).not.toBe(firstOpen.agentSessionId);
+
+        await supervisor.sendPrompt("archived-session", "second prompt", {
+          turnId: "turn-2",
+          waitForCompletion: true,
+        });
+        expect(await supervisor.stopSession("archived-session", "segment_two_closed")).toBe(true);
+
+        writeFileSync(join(stateDir, "sessions.json"), "{ invalid_legacy_binding_state", "utf8");
+
+        await supervisor.stop();
+        replaySupervisor = new SessionSupervisor({
+          stateDir,
+          defaultCwd: workspace,
+          defaultConfigPath: TEST_CONFIG_PATH,
+          defaultManagedToolMode: "direct",
+          workerEnv: buildWorkerTestHarnessEnv({
+            fakeAssistantText: "ARCHIVED_SESSION_WIRE_OK",
+          }),
+          logger: {
+            debug: () => {},
+            info: () => {},
+            warn: () => {},
+            error: () => {},
+            log: () => {},
+          },
+        });
+        await replaySupervisor.start();
+        supervisor = null;
+
+        let frames = await replaySupervisor.querySessionWire("archived-session");
+        const deadline = Date.now() + 5_000;
+        while (
+          Date.now() < deadline &&
+          frames.filter((frame) => frame.type === "session.closed").length < 2
+        ) {
+          await sleepMs(50);
+          frames = await replaySupervisor.querySessionWire("archived-session");
+        }
+
+        expect(frames.filter((frame) => frame.type === "turn.input")).toMatchObject([
+          {
+            type: "turn.input",
+            turnId: "turn-1",
+            promptText: "first prompt",
+          },
+          {
+            type: "turn.input",
+            turnId: "turn-2",
+            promptText: "second prompt",
+          },
+        ]);
+        expect(frames.filter((frame) => frame.type === "turn.committed")).toMatchObject([
+          {
+            type: "turn.committed",
+            turnId: "turn-1",
+            assistantText: "ARCHIVED_SESSION_WIRE_OK",
+          },
+          {
+            type: "turn.committed",
+            turnId: "turn-2",
+            assistantText: "ARCHIVED_SESSION_WIRE_OK",
+          },
+        ]);
+        expect(
+          frames.filter((frame) => frame.type === "session.closed").length,
+        ).toBeGreaterThanOrEqual(2);
+
+        const bindingEvents = readBrewvaEventRecordsFromLogPath(
+          resolveGatewaySessionBindingLogPath(stateDir),
+          {
+            sessionId: GATEWAY_SESSION_BINDING_CONTROL_SESSION_ID,
+          },
+        ).filter((event) => event.type === GATEWAY_SESSION_BOUND_EVENT_TYPE);
+        expect(bindingEvents).toHaveLength(2);
+        expect(bindingEvents.map((event) => event.payload)).toMatchObject([
+          {
+            schema: "brewva.gateway-session-binding.v1",
+            gatewaySessionId: "archived-session",
+            agentSessionId: firstOpen.agentSessionId,
+          },
+          {
+            schema: "brewva.gateway-session-binding.v1",
+            gatewaySessionId: "archived-session",
+            agentSessionId: secondOpen.agentSessionId,
+          },
+        ]);
+      } finally {
+        await replaySupervisor?.stop();
+        await supervisor?.stop();
+        rmSync(workspace, { recursive: true, force: true });
+      }
+    },
+    { timeout: 15_000 },
   );
 
   test(

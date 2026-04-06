@@ -1,7 +1,15 @@
+import {
+  type ContextPressureView,
+  TURN_INPUT_RECORDED_EVENT_TYPE,
+  TURN_RENDER_COMMITTED_EVENT_TYPE,
+  type SessionWireFrame,
+  type TurnInputRecordedPayload,
+  type TurnRenderCommittedPayload,
+} from "@brewva/brewva-runtime";
 import { recordRuntimeEvent, resolveRuntimeEventLogPath } from "@brewva/brewva-runtime/internal";
 import { createRuntimeTurnClockStore } from "../runtime-plugins/runtime-turn-clock.js";
 import { recordAbnormalSessionShutdown } from "../utils/runtime.js";
-import { collectSessionPromptOutput } from "./collect-output.js";
+import { SessionPromptCollectionError, collectSessionPromptOutput } from "./collect-output.js";
 import { createGatewaySession, type GatewaySessionResult } from "./create-session.js";
 import { applySchedulePromptTrigger } from "./schedule-trigger.js";
 import { TaskProgressWatchdog } from "./task-progress-watchdog.js";
@@ -22,6 +30,8 @@ let heartbeatTicker: ReturnType<typeof setInterval> | null = null;
 let taskProgressWatchdog: TaskProgressWatchdog | null = null;
 let shuttingDown = false;
 let activeTurnId: string | null = null;
+let pendingUserCancellationTurnId: string | null = null;
+let unsubscribeSessionWire: (() => void) | null = null;
 const workerTurnClock = createRuntimeTurnClockStore();
 let workerTestHarness: ResolvedWorkerTestHarness = {
   enabled: false,
@@ -135,11 +145,135 @@ function recordFakeTurnLifecycle(
   });
 }
 
+function resolveNextRuntimeTurn(agentSessionId: string): number {
+  if (!sessionResult) {
+    return 0;
+  }
+  return sessionResult.runtime.inspect.events.query(agentSessionId, {
+    type: "turn_start",
+  }).length;
+}
+
+function resolveTurnTrigger(input: {
+  source?: "gateway" | "heartbeat" | "schedule";
+  walReplayId?: string;
+}): TurnInputRecordedPayload["trigger"] {
+  if (typeof input.walReplayId === "string" && input.walReplayId.trim().length > 0) {
+    return "recovery";
+  }
+  if (input.source === "heartbeat") {
+    return "heartbeat";
+  }
+  if (input.source === "schedule") {
+    return "schedule";
+  }
+  return "user";
+}
+
+function recordTurnInputReceipt(input: {
+  agentSessionId: string;
+  turnId: string;
+  prompt: string;
+  runtimeTurn: number;
+  source?: "gateway" | "heartbeat" | "schedule";
+  walReplayId?: string;
+}): void {
+  if (!sessionResult) {
+    return;
+  }
+  const payload: TurnInputRecordedPayload = {
+    turnId: input.turnId,
+    trigger: resolveTurnTrigger({
+      source: input.source,
+      walReplayId: input.walReplayId,
+    }),
+    promptText: input.prompt,
+  };
+  recordRuntimeEvent(sessionResult.runtime, {
+    sessionId: input.agentSessionId,
+    turn: input.runtimeTurn,
+    type: TURN_INPUT_RECORDED_EVENT_TYPE,
+    payload,
+  });
+}
+
+function recordTurnCommittedReceipt(input: {
+  agentSessionId: string;
+  turnId: string;
+  runtimeTurn: number;
+  attemptId: string;
+  status: TurnRenderCommittedPayload["status"];
+  assistantText: string;
+  toolOutputs: TurnRenderCommittedPayload["toolOutputs"];
+}): void {
+  if (!sessionResult) {
+    return;
+  }
+  const payload: TurnRenderCommittedPayload = {
+    turnId: input.turnId,
+    attemptId: input.attemptId,
+    status: input.status,
+    assistantText: input.assistantText,
+    toolOutputs: input.toolOutputs,
+  };
+  recordRuntimeEvent(sessionResult.runtime, {
+    sessionId: input.agentSessionId,
+    turn: input.runtimeTurn,
+    type: TURN_RENDER_COMMITTED_EVENT_TYPE,
+    payload,
+  });
+}
+
 function send(message: WorkerToParentMessage): void {
   if (typeof process.send !== "function") {
     return;
   }
   process.send(message);
+}
+
+function sendSessionWireFrame(sessionId: string, frame: SessionWireFrame): void {
+  send({
+    kind: "event",
+    event: "session.wire.frame",
+    payload: {
+      sessionId,
+      frame,
+    },
+  });
+}
+
+function projectSessionContextPressure(sessionId: string): ContextPressureView | undefined {
+  if (!sessionResult) {
+    return undefined;
+  }
+  const usage = sessionResult.runtime.inspect.context.getUsage(sessionId);
+  if (typeof usage?.tokens !== "number" || !Number.isFinite(usage.tokens)) {
+    return undefined;
+  }
+  if (typeof usage.contextWindow !== "number" || !Number.isFinite(usage.contextWindow)) {
+    return undefined;
+  }
+  const limit = Math.max(0, usage.contextWindow);
+  if (limit <= 0) {
+    return undefined;
+  }
+  const pressure = sessionResult.runtime.inspect.context.getPressureStatus(sessionId, usage);
+  const level =
+    pressure.level === "high"
+      ? "elevated"
+      : pressure.level === "critical"
+        ? "critical"
+        : pressure.level === "none" || pressure.level === "low" || pressure.level === "medium"
+          ? "normal"
+          : undefined;
+  if (!level) {
+    return undefined;
+  }
+  return {
+    tokens: Math.max(0, usage.tokens),
+    limit,
+    level,
+  };
 }
 
 function log(level: WorkerLogLevel, message: string, fields?: Record<string, unknown>): void {
@@ -177,6 +311,8 @@ async function shutdown(exitCode = 0, reason = "shutdown", shutdownError?: unkno
   if (sessionResult) {
     const runtime = sessionResult.runtime;
     const agentSessionId = sessionResult.session.sessionManager.getSessionId();
+    unsubscribeSessionWire?.();
+    unsubscribeSessionWire = null;
     if (shouldRecordAbnormalShutdown(reason)) {
       recordAbnormalSessionShutdown(runtime, {
         sessionId: agentSessionId,
@@ -314,6 +450,12 @@ async function handleInit(
       thresholdMs: watchdogOverrides.thresholdMs,
     });
     taskProgressWatchdog.start();
+    unsubscribeSessionWire = sessionResult.runtime.inspect.sessionWire.subscribe(
+      agentSessionId,
+      (frame) => {
+        sendSessionWireFrame(requestedSessionId, frame);
+      },
+    );
 
     send({
       kind: "ready",
@@ -388,6 +530,7 @@ async function handleSend(
     agentSessionId,
     walReplayId: message.payload.walReplayId,
     trigger: message.payload.trigger,
+    source: message.payload.source,
   });
 }
 
@@ -397,21 +540,20 @@ async function runTurn(input: {
   agentSessionId: string;
   walReplayId?: string;
   trigger?: Extract<ParentToWorkerMessage, { kind: "send" }>["payload"]["trigger"];
+  source?: "gateway" | "heartbeat" | "schedule";
 }): Promise<void> {
   if (!sessionResult) {
     activeTurnId = null;
     return;
   }
-
-  send({
-    kind: "event",
-    event: "session.turn.start",
-    payload: {
-      sessionId: requestedSessionId,
-      agentSessionId: input.agentSessionId,
-      turnId: input.turnId,
-      ts: Date.now(),
-    },
+  const runtimeTurn = resolveNextRuntimeTurn(input.agentSessionId);
+  recordTurnInputReceipt({
+    agentSessionId: input.agentSessionId,
+    turnId: input.turnId,
+    prompt: input.prompt,
+    runtimeTurn,
+    source: input.source,
+    walReplayId: input.walReplayId,
   });
 
   try {
@@ -421,6 +563,7 @@ async function runTurn(input: {
     if (typeof input.walReplayId === "string" && input.walReplayId.trim().length > 0) {
       recordSessionTurnTransition(sessionResult.runtime, {
         sessionId: input.agentSessionId,
+        turn: runtimeTurn,
         reason: "wal_recovery_resume",
         status: "entered",
         family: "recovery",
@@ -434,6 +577,7 @@ async function runTurn(input: {
       if (typeof input.walReplayId === "string" && input.walReplayId.trim().length > 0) {
         recordSessionTurnTransition(sessionResult.runtime, {
           sessionId: input.agentSessionId,
+          turn: runtimeTurn,
           reason: "wal_recovery_resume",
           status: "completed",
           family: "recovery",
@@ -441,41 +585,29 @@ async function runTurn(input: {
           sourceEventType: "recovery_wal_recovery_completed",
         });
       }
-      send({
-        kind: "event",
-        event: "session.turn.end",
-        payload: {
-          sessionId: requestedSessionId,
-          agentSessionId: input.agentSessionId,
-          turnId: input.turnId,
-          attemptId: "attempt-1",
-          assistantText: fakeAssistantText,
-          toolOutputs: [],
-          ts: Date.now(),
-        },
+      recordTurnCommittedReceipt({
+        agentSessionId: input.agentSessionId,
+        turnId: input.turnId,
+        runtimeTurn,
+        attemptId: "attempt-1",
+        status: "completed",
+        assistantText: fakeAssistantText,
+        toolOutputs: [],
       });
       return;
     }
     const output = await collectSessionPromptOutput(sessionResult.session, input.prompt, {
       runtime: sessionResult.runtime,
       sessionId: input.agentSessionId,
-      onChunk: (chunk) => {
-        send({
-          kind: "event",
-          event: "session.turn.chunk",
-          payload: {
-            sessionId: requestedSessionId,
-            agentSessionId: input.agentSessionId,
-            turnId: input.turnId,
-            chunk,
-            ts: Date.now(),
-          },
-        });
+      turnId: input.turnId,
+      onFrame: (frame) => {
+        sendSessionWireFrame(requestedSessionId, frame);
       },
     });
     if (typeof input.walReplayId === "string" && input.walReplayId.trim().length > 0) {
       recordSessionTurnTransition(sessionResult.runtime, {
         sessionId: input.agentSessionId,
+        turn: runtimeTurn,
         reason: "wal_recovery_resume",
         status: "completed",
         family: "recovery",
@@ -484,43 +616,50 @@ async function runTurn(input: {
       });
     }
 
-    send({
-      kind: "event",
-      event: "session.turn.end",
-      payload: {
-        sessionId: requestedSessionId,
-        agentSessionId: input.agentSessionId,
-        turnId: input.turnId,
-        attemptId: output.attemptId,
-        assistantText: output.assistantText,
-        toolOutputs: output.toolOutputs,
-        ts: Date.now(),
-      },
+    recordTurnCommittedReceipt({
+      agentSessionId: input.agentSessionId,
+      turnId: input.turnId,
+      runtimeTurn,
+      attemptId: output.attemptId,
+      status: "completed",
+      assistantText: output.assistantText,
+      toolOutputs: output.toolOutputs,
     });
   } catch (error) {
+    const isCancelled = pendingUserCancellationTurnId === input.turnId;
+    const collectionError =
+      error instanceof SessionPromptCollectionError
+        ? error
+        : new SessionPromptCollectionError(error instanceof Error ? error.message : String(error), {
+            attemptId: "attempt-1",
+            assistantText: "",
+            toolOutputs: [],
+          });
     if (typeof input.walReplayId === "string" && input.walReplayId.trim().length > 0) {
       recordSessionTurnTransition(sessionResult.runtime, {
         sessionId: input.agentSessionId,
+        turn: runtimeTurn,
         reason: "wal_recovery_resume",
         status: "failed",
         family: "recovery",
         sourceEventId: input.walReplayId,
         sourceEventType: "recovery_wal_recovery_completed",
-        error: error instanceof Error ? error.message : String(error),
+        error: collectionError.message,
       });
     }
-    send({
-      kind: "event",
-      event: "session.turn.error",
-      payload: {
-        sessionId: requestedSessionId,
-        agentSessionId: input.agentSessionId,
-        turnId: input.turnId,
-        message: error instanceof Error ? error.message : String(error),
-        ts: Date.now(),
-      },
+    recordTurnCommittedReceipt({
+      agentSessionId: input.agentSessionId,
+      turnId: input.turnId,
+      runtimeTurn,
+      attemptId: collectionError.attemptId,
+      status: isCancelled ? "cancelled" : "failed",
+      assistantText: collectionError.assistantText,
+      toolOutputs: collectionError.toolOutputs,
     });
   } finally {
+    if (pendingUserCancellationTurnId === input.turnId) {
+      pendingUserCancellationTurnId = null;
+    }
     activeTurnId = null;
   }
 }
@@ -542,6 +681,9 @@ async function handleAbort(
     const agentSessionId = sessionResult.session.sessionManager.getSessionId();
     const shouldRecordUserSubmitInterrupt =
       message.payload?.reason === "user_submit" && activeTurnId !== null;
+    if (shouldRecordUserSubmitInterrupt && activeTurnId) {
+      pendingUserCancellationTurnId = activeTurnId;
+    }
     if (shouldRecordUserSubmitInterrupt) {
       recordSessionTurnTransition(sessionResult.runtime, {
         sessionId: agentSessionId,
@@ -587,6 +729,32 @@ async function handleAbort(
   }
 }
 
+async function handleSessionContextPressureQuery(
+  message: Extract<ParentToWorkerMessage, { kind: "sessionContextPressure.query" }>,
+): Promise<void> {
+  if (!sessionResult) {
+    send({
+      kind: "result",
+      requestId: message.requestId,
+      ok: true,
+      payload: {
+        contextPressure: undefined,
+      },
+    });
+    return;
+  }
+
+  const agentSessionId = sessionResult.session.sessionManager.getSessionId();
+  send({
+    kind: "result",
+    requestId: message.requestId,
+    ok: true,
+    payload: {
+      contextPressure: projectSessionContextPressure(agentSessionId),
+    },
+  });
+}
+
 async function handleMessage(raw: unknown): Promise<void> {
   if (!raw || typeof raw !== "object") {
     return;
@@ -625,6 +793,13 @@ async function handleMessage(raw: unknown): Promise<void> {
 
   if (kind === "abort") {
     await handleAbort(raw as Extract<ParentToWorkerMessage, { kind: "abort" }>);
+    return;
+  }
+
+  if (kind === "sessionContextPressure.query") {
+    await handleSessionContextPressureQuery(
+      raw as Extract<ParentToWorkerMessage, { kind: "sessionContextPressure.query" }>,
+    );
     return;
   }
 

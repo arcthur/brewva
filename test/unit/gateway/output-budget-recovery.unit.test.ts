@@ -1,10 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import type { SessionWireFrame } from "@brewva/brewva-runtime";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import { registerProviderRequestRecovery } from "../../../packages/brewva-gateway/src/runtime-plugins/provider-request-recovery.js";
-import {
-  collectSessionPromptOutput,
-  type SessionStreamChunk,
-} from "../../../packages/brewva-gateway/src/session/collect-output.js";
+import { collectSessionPromptOutput } from "../../../packages/brewva-gateway/src/session/collect-output.js";
 import { COMPACTION_RECOVERY_TEST_ONLY } from "../../../packages/brewva-gateway/src/session/compaction-recovery.js";
 import { createMockRuntimePluginApi, invokeHandler } from "../../helpers/runtime-plugin.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
@@ -18,7 +16,7 @@ describe("output budget recovery chain", () => {
     const sessionId = "unit-output-budget-recovery";
     const promptedMessages: string[] = [];
     const streamedPayloads: Array<Record<string, unknown> | undefined> = [];
-    const chunks: SessionStreamChunk[] = [];
+    const frames: SessionWireFrame[] = [];
     let listener: ((event: AgentSessionEvent) => void) | undefined;
 
     const session = {
@@ -114,8 +112,9 @@ describe("output budget recovery chain", () => {
       {
         runtime,
         sessionId,
-        onChunk: (chunk) => {
-          chunks.push(chunk);
+        turnId: "turn-output-budget",
+        onFrame: (frame) => {
+          frames.push(frame);
         },
       },
     );
@@ -133,34 +132,69 @@ describe("output budget recovery chain", () => {
     ]);
     expect(output.assistantText).toBe("final concise answer");
     expect(output.attemptId).toBe("attempt-3");
-    expect(chunks).toEqual(
+    expect(frames).toEqual(
       expect.arrayContaining([
         {
-          kind: "attempt_start",
+          schema: "brewva.session-wire.v2",
+          sessionId,
+          type: "attempt.started",
+          turnId: "turn-output-budget",
           attemptId: "attempt-1",
           reason: "initial",
+          source: "live",
+          durability: "cache",
+          frameId: expect.any(String),
+          ts: expect.any(Number),
         },
         {
-          kind: "attempt_superseded",
+          schema: "brewva.session-wire.v2",
+          sessionId,
+          type: "attempt.superseded",
+          turnId: "turn-output-budget",
           attemptId: "attempt-1",
           supersededByAttemptId: "attempt-2",
           reason: "output_budget_escalation",
+          source: "live",
+          durability: "cache",
+          frameId: expect.any(String),
+          ts: expect.any(Number),
         },
         {
-          kind: "attempt_start",
+          schema: "brewva.session-wire.v2",
+          sessionId,
+          type: "attempt.started",
+          turnId: "turn-output-budget",
           attemptId: "attempt-2",
           reason: "output_budget_escalation",
+          source: "live",
+          durability: "cache",
+          frameId: expect.any(String),
+          ts: expect.any(Number),
         },
         {
-          kind: "attempt_superseded",
+          schema: "brewva.session-wire.v2",
+          sessionId,
+          type: "attempt.superseded",
+          turnId: "turn-output-budget",
           attemptId: "attempt-2",
           supersededByAttemptId: "attempt-3",
           reason: "max_output_recovery",
+          source: "live",
+          durability: "cache",
+          frameId: expect.any(String),
+          ts: expect.any(Number),
         },
         {
-          kind: "attempt_start",
+          schema: "brewva.session-wire.v2",
+          sessionId,
+          type: "attempt.started",
+          turnId: "turn-output-budget",
           attemptId: "attempt-3",
           reason: "max_output_recovery",
+          source: "live",
+          durability: "cache",
+          frameId: expect.any(String),
+          ts: expect.any(Number),
         },
       ]),
     );

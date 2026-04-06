@@ -1,6 +1,5 @@
-import type { ManagedToolMode } from "@brewva/brewva-runtime";
+import type { ManagedToolMode, SessionWireFrame } from "@brewva/brewva-runtime";
 import type { SendPromptTrigger } from "../daemon/session-backend.js";
-import type { GatewayToolOutput, SessionStreamChunk } from "./collect-output.js";
 
 export type WorkerResultErrorCode = "session_busy";
 
@@ -26,6 +25,7 @@ export type ParentToWorkerMessage =
         turnId: string;
         walReplayId?: string;
         trigger?: SendPromptTrigger;
+        source?: "gateway" | "heartbeat" | "schedule";
       };
     }
   | {
@@ -45,6 +45,10 @@ export type ParentToWorkerMessage =
       payload?: {
         reason?: string;
       };
+    }
+  | {
+      kind: "sessionContextPressure.query";
+      requestId: string;
     };
 
 export type WorkerToParentMessage =
@@ -72,47 +76,10 @@ export type WorkerToParentMessage =
     }
   | {
       kind: "event";
-      event: "session.turn.start";
+      event: "session.wire.frame";
       payload: {
         sessionId: string;
-        agentSessionId: string;
-        turnId: string;
-        ts: number;
-      };
-    }
-  | {
-      kind: "event";
-      event: "session.turn.chunk";
-      payload: {
-        sessionId: string;
-        agentSessionId: string;
-        turnId: string;
-        chunk: SessionStreamChunk;
-        ts: number;
-      };
-    }
-  | {
-      kind: "event";
-      event: "session.turn.error";
-      payload: {
-        sessionId: string;
-        agentSessionId: string;
-        turnId: string;
-        message: string;
-        ts: number;
-      };
-    }
-  | {
-      kind: "event";
-      event: "session.turn.end";
-      payload: {
-        sessionId: string;
-        agentSessionId: string;
-        turnId: string;
-        attemptId: string;
-        assistantText: string;
-        toolOutputs: GatewayToolOutput[];
-        ts: number;
+        frame: SessionWireFrame;
       };
     }
   | {

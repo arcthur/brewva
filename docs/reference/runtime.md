@@ -255,6 +255,9 @@ Mutation of WAL rows is not part of the public runtime contract.
 
 `inspect.events` does not expose raw event append.
 
+`inspect.events` is the raw tape inspection surface. It is intentionally wider
+than the frontend/session transport contract.
+
 ### `inspect.cost`
 
 - `getSummary(sessionId)`
@@ -265,6 +268,33 @@ Mutation of WAL rows is not part of the public runtime contract.
 - `mergeWorkerResults(sessionId, query?)`
 - `getHydration(sessionId)`
 - `getIntegrity(sessionId)`
+
+### `inspect.sessionWire`
+
+- `query(sessionId)`
+- `subscribe(sessionId, listener)`
+
+`inspect.sessionWire` is the stable derived session read model for frontend and
+gateway consumers. It compiles a narrow replay-first event protocol from
+durable tape receipts such as `turn_input_recorded`,
+`turn_render_committed`, `session_turn_transition`,
+approval receipts, subagent lifecycle receipts, and `session_shutdown`.
+
+This surface does not replace `inspect.events`. The tape remains the durable
+source of truth; `inspect.sessionWire` is the versioned projection that
+frontends and transports consume.
+
+This surface is keyed by runtime session ids. Gateway public-session replay is
+one layer higher: gateway first resolves public session ids through durable
+`gateway_session_bound` control-tape receipts, then applies the same
+runtime-owned compiler semantics to the underlying agent-session tapes.
+
+This is an experience-ring read model, not a new authority surface. Live cache
+augmentation such as `assistant.delta`, `tool.progress`, and `session.status`
+belongs at the gateway transport edge and remains outside the durable compiler.
+In the current wire, live `tool.started`, `tool.progress`, and `tool.finished`
+are explicitly attempt-scoped through repo-owned lifecycle binding; replay still
+converges only through committed `turn.committed.toolOutputs`.
 
 ## `maintain`
 

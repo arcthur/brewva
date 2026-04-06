@@ -9,6 +9,7 @@ export * from "./evidence.js";
 export * from "./truth.js";
 export * from "./verification.js";
 export * from "./session.js";
+export * from "./session-wire.js";
 export * from "./delegation.js";
 export * from "./context.js";
 export * from "./patching.js";

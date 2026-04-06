@@ -12,6 +12,7 @@ import {
   type SessionBackend,
   type SessionWorkerInfo,
 } from "@brewva/brewva-gateway";
+import type { ContextPressureView } from "@brewva/brewva-runtime";
 
 export interface PolicyRule {
   id: string;
@@ -172,6 +173,8 @@ export function createSessionBackendStub(overrides: Partial<SessionBackend> = {}
     abortSession: async () => false,
     stopSession: async () => false,
     listWorkers: (): SessionWorkerInfo[] => [],
+    querySessionWire: async () => [],
+    querySessionContextPressure: async (): Promise<ContextPressureView | undefined> => undefined,
     ...overrides,
   };
 }

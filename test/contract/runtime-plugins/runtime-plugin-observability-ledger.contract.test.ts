@@ -50,6 +50,17 @@ describe("Runtime plugin integration: observability ledger", () => {
       },
     };
 
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      turn: 1,
+      type: "turn_input_recorded",
+      payload: {
+        turnId: "turn-1",
+        trigger: "user",
+        promptText: "test prompt",
+      },
+    });
+
     invokeHandlers(
       handlers,
       "tool_call",
@@ -76,6 +87,7 @@ describe("Runtime plugin integration: observability ledger", () => {
       last: 1,
     })[0]?.payload as
       | {
+          attempt?: number | null;
           executionTraits?: {
             concurrencySafe?: boolean;
             interruptBehavior?: string;
@@ -84,6 +96,7 @@ describe("Runtime plugin integration: observability ledger", () => {
           } | null;
         }
       | undefined;
+    expect(toolCallPayload?.attempt).toBe(1);
     expect(toolCallPayload?.executionTraits).toEqual({
       concurrencySafe: true,
       interruptBehavior: "cancel",
@@ -96,6 +109,7 @@ describe("Runtime plugin integration: observability ledger", () => {
       last: 1,
     })[0]?.payload as
       | {
+          attempt?: number | null;
           executionTraits?: {
             concurrencySafe?: boolean;
             interruptBehavior?: string;
@@ -104,12 +118,105 @@ describe("Runtime plugin integration: observability ledger", () => {
           } | null;
         }
       | undefined;
+    expect(toolStartPayload?.attempt).toBe(1);
     expect(toolStartPayload?.executionTraits).toEqual({
       concurrencySafe: false,
       interruptBehavior: "cancel",
       streamingEligible: true,
       contextModifying: true,
     });
+  });
+
+  test("records authoritative attempt ids on tool lifecycle events after retry supersession", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-tool-attempts-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "ext-tool-attempts-1";
+    const { api, handlers } = createMockRuntimePluginApi();
+    registerEventStream(api, runtime);
+
+    const ctx = {
+      cwd: workspace,
+      sessionManager: {
+        getSessionId: () => sessionId,
+      },
+    };
+
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      turn: 1,
+      type: "turn_input_recorded",
+      payload: {
+        turnId: "turn-1",
+        trigger: "user",
+        promptText: "test prompt",
+      },
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      turn: 1,
+      type: "session_turn_transition",
+      payload: {
+        reason: "output_budget_escalation",
+        status: "entered",
+        sequence: 1,
+        family: "output_budget",
+        attempt: 1,
+        sourceEventId: null,
+        sourceEventType: null,
+        error: null,
+        breakerOpen: false,
+        model: null,
+      },
+    });
+
+    invokeHandlers(
+      handlers,
+      "tool_call",
+      {
+        toolCallId: "tc-attempt-2",
+        toolName: "exec",
+        input: { command: "pwd" },
+      },
+      ctx,
+    );
+    invokeHandlers(
+      handlers,
+      "tool_execution_start",
+      {
+        toolCallId: "tc-attempt-2",
+        toolName: "exec",
+        args: { command: "pwd" },
+      },
+      ctx,
+    );
+    invokeHandlers(
+      handlers,
+      "tool_execution_end",
+      {
+        toolCallId: "tc-attempt-2",
+        toolName: "exec",
+        result: { text: "done" },
+        isError: false,
+      },
+      ctx,
+    );
+
+    const toolCallPayload = runtime.inspect.events.query(sessionId, {
+      type: "tool_call",
+      last: 1,
+    })[0]?.payload as { attempt?: number | null } | undefined;
+    const toolStartPayload = runtime.inspect.events.query(sessionId, {
+      type: "tool_execution_start",
+      last: 1,
+    })[0]?.payload as { attempt?: number | null } | undefined;
+    const toolEndPayload = runtime.inspect.events.query(sessionId, {
+      type: "tool_execution_end",
+      last: 1,
+    })[0]?.payload as { attempt?: number | null } | undefined;
+
+    expect(toolCallPayload?.attempt).toBe(2);
+    expect(toolStartPayload?.attempt).toBe(2);
+    expect(toolEndPayload?.attempt).toBe(2);
   });
 
   test("given high-volume exec tool output with explicit fail verdict, when ledger writer handles tool_result, then verdict propagates into observed and distilled telemetry", () => {

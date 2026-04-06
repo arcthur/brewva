@@ -69,6 +69,7 @@ export class SessionTurnQueueCoordinator {
           turnId: queued.requestedTurnId,
           walReplayId: queued.walReplayId,
           trigger: queued.trigger,
+          source: queued.source,
         },
       });
 

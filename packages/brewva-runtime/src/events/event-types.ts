@@ -25,6 +25,7 @@ export const BUDGET_ALERT_EVENT_TYPE = "budget_alert" as const;
 export const CHANNEL_COMMAND_RECEIVED_EVENT_TYPE = "channel_command_received" as const;
 export const OPERATOR_QUESTION_ANSWERED_EVENT_TYPE = "operator_question_answered" as const;
 export const CHANNEL_SESSION_BOUND_EVENT_TYPE = "channel_session_bound" as const;
+export const GATEWAY_SESSION_BOUND_EVENT_TYPE = "gateway_session_bound" as const;
 export const CHANNEL_UPDATE_LOCK_BLOCKED_EVENT_TYPE = "channel_update_lock_blocked" as const;
 export const CHANNEL_UPDATE_REQUESTED_EVENT_TYPE = "channel_update_requested" as const;
 export const CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE =
@@ -51,6 +52,8 @@ export const SESSION_COMPACT_REQUEST_FAILED_EVENT_TYPE = "session_compact_reques
 export const SESSION_SHUTDOWN_EVENT_TYPE = "session_shutdown" as const;
 export const SESSION_START_EVENT_TYPE = "session_start" as const;
 export const SESSION_TURN_TRANSITION_EVENT_TYPE = "session_turn_transition" as const;
+export const TURN_INPUT_RECORDED_EVENT_TYPE = "turn_input_recorded" as const;
+export const TURN_RENDER_COMMITTED_EVENT_TYPE = "turn_render_committed" as const;
 export const SKILL_ACTIVATED_EVENT_TYPE = "skill_activated" as const;
 export const SKILL_BUDGET_WARNING_EVENT_TYPE = "skill_budget_warning" as const;
 export const SKILL_COMPLETED_EVENT_TYPE = "skill_completed" as const;
@@ -71,6 +74,7 @@ export const SEMANTIC_RERANK_INVOKED_EVENT_TYPE = "semantic_rerank_invoked" as c
 export const TOOL_CALL_EVENT_TYPE = "tool_call" as const;
 export const TOOL_CALL_BLOCKED_EVENT_TYPE = "tool_call_blocked" as const;
 export const TOOL_CALL_MARKED_EVENT_TYPE = "tool_call_marked" as const;
+export const TOOL_ATTEMPT_BINDING_MISSING_EVENT_TYPE = "tool_attempt_binding_missing" as const;
 export const TOOL_CONTRACT_WARNING_EVENT_TYPE = "tool_contract_warning" as const;
 export const TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE = "tool_read_path_gate_armed" as const;
 export const TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE =
@@ -169,6 +173,7 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   CHANNEL_COMMAND_RECEIVED_EVENT_TYPE,
   OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
   CHANNEL_SESSION_BOUND_EVENT_TYPE,
+  GATEWAY_SESSION_BOUND_EVENT_TYPE,
   CHANNEL_UPDATE_LOCK_BLOCKED_EVENT_TYPE,
   CHANNEL_UPDATE_REQUESTED_EVENT_TYPE,
   CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE,
@@ -191,6 +196,8 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   SESSION_SHUTDOWN_EVENT_TYPE,
   SESSION_START_EVENT_TYPE,
   SESSION_TURN_TRANSITION_EVENT_TYPE,
+  TURN_INPUT_RECORDED_EVENT_TYPE,
+  TURN_RENDER_COMMITTED_EVENT_TYPE,
   SKILL_ACTIVATED_EVENT_TYPE,
   SKILL_BUDGET_WARNING_EVENT_TYPE,
   SKILL_COMPLETED_EVENT_TYPE,
@@ -211,6 +218,7 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   TOOL_CALL_EVENT_TYPE,
   TOOL_CALL_BLOCKED_EVENT_TYPE,
   TOOL_CALL_MARKED_EVENT_TYPE,
+  TOOL_ATTEMPT_BINDING_MISSING_EVENT_TYPE,
   TOOL_CONTRACT_WARNING_EVENT_TYPE,
   TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,

@@ -71,13 +71,16 @@ flowchart TD
    not inject a stage machine.
 6. Every tool call enters the shared invocation spine and is evaluated for
    access, budget, compaction, ledger writes, and event persistence.
-7. When the post-TaskSpec skill match is strong and no skill is active, the
+7. Accepted turns also materialize durable presentation receipts:
+   `turn_input_recorded` when the turn is admitted and
+   `turn_render_committed` when the turn reaches a terminal outcome.
+8. When the post-TaskSpec skill match is strong and no skill is active, the
    hosted path narrows the default tool surface so the turn resolves to
    `skill_load` before deeper repository work.
-8. `skill_complete` validates required outputs before calling
+9. `skill_complete` validates required outputs before calling
    `runtime.authority.verification.verify(...)`.
-9. After verification passes, the runtime completes the skill and exposes the
-   resulting workflow posture through explicit inspection surfaces.
+10. After verification passes, the runtime completes the skill and exposes the
+    resulting workflow posture through explicit inspection surfaces.
 
 ## Execution Semantics
 
@@ -116,6 +119,8 @@ flowchart TD
   - `brewva inspect`
 - primary durable records:
   - event tape records for tool execution, verification, and completion
+  - session-wire receipts (`turn_input_recorded`, `turn_render_committed`) for
+    frontend/session replay
   - ledger rows containing tool outcomes and verification evidence
 
 ## Code Pointers

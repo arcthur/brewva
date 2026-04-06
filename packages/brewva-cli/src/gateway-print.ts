@@ -214,26 +214,27 @@ export async function tryGatewayPrint(input: TryGatewayPrintInput): Promise<Gate
     sessionOpened = true;
 
     disposeListener = client.onEvent((event) => {
-      if (event.event !== "session.turn.end" && event.event !== "session.turn.error") {
+      if (event.event !== "session.wire.frame") {
         return;
       }
       const payload = asRecord(event.payload);
       if (!payload) return;
       if (payload["sessionId"] !== sessionId) return;
+      if (payload["type"] !== "turn.committed") return;
       const eventTurnId = typeof payload["turnId"] === "string" ? payload["turnId"] : undefined;
       if (eventTurnId && eventTurnId !== expectedTurnId) return;
 
-      if (event.event === "session.turn.end") {
-        const assistantText =
-          typeof payload["assistantText"] === "string" ? payload["assistantText"] : "";
-        resolveCompletion(assistantText);
+      const assistantText =
+        typeof payload["assistantText"] === "string" ? payload["assistantText"] : "";
+      if (payload["status"] === "failed") {
+        rejectCompletion(new Error(assistantText || "gateway turn failed"));
         return;
       }
-      const message =
-        typeof payload["message"] === "string" && payload["message"].trim().length > 0
-          ? payload["message"]
-          : "gateway turn failed";
-      rejectCompletion(new Error(message));
+      if (payload["status"] === "cancelled") {
+        rejectCompletion(new Error("gateway turn cancelled"));
+        return;
+      }
+      resolveCompletion(assistantText);
     });
 
     await client.request("sessions.subscribe", { sessionId });

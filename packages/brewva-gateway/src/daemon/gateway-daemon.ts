@@ -5,6 +5,10 @@ import { resolve } from "node:path";
 import process from "node:process";
 import {
   BrewvaRuntime,
+  SESSION_WIRE_SCHEMA,
+  type ContextPressureView,
+  type SessionWireFrame,
+  type SessionWireStatusState,
   createTrustedLocalGovernancePort,
   loadBrewvaConfig,
   resolveWorkspaceRootDir,
@@ -31,7 +35,11 @@ import {
   PROTOCOL_VERSION,
   gatewayError,
 } from "../protocol/index.js";
-import { validateParamsForMethod, validateRequestFrame } from "../protocol/validate.js";
+import {
+  validateParamsForMethod,
+  validateRequestFrame,
+  validateSessionWireFramePayload,
+} from "../protocol/validate.js";
 import { FileGatewayStateStore, type GatewayStateStore } from "../state-store.js";
 import { createDeferred } from "../utils/deferred.js";
 import { toErrorMessage } from "../utils/errors.js";
@@ -48,6 +56,12 @@ import {
   type SessionWorkerInfo,
 } from "./session-backend.js";
 import { SessionSupervisor } from "./session-supervisor.js";
+import {
+  deriveSessionStatusSeedFromFrame,
+  deriveSessionStatusSeedFromHistory,
+  sameSessionStatusSeed,
+  type SessionStatusSeed,
+} from "./session-wire-status.js";
 
 const DEFAULT_PORT = 43111;
 const DEFAULT_TICK_INTERVAL_MS = 5_000;
@@ -55,12 +69,7 @@ const DEFAULT_MAX_PAYLOAD_BYTES = 256 * 1024;
 const DEFAULT_HEARTBEAT_TICK_INTERVAL_MS = 15_000;
 const WEBSOCKET_CLOSE_TIMEOUT_MS = 3_000;
 const HTTP_CLOSE_TIMEOUT_MS = 3_000;
-const SESSION_SCOPED_EVENTS = new Set<GatewayEvent>([
-  "session.turn.start",
-  "session.turn.chunk",
-  "session.turn.error",
-  "session.turn.end",
-]);
+const SESSION_SCOPED_EVENTS = new Set<GatewayEvent>(["session.wire.frame"]);
 
 export type ConnectionPhase = "connected" | "authenticating" | "authenticated" | "closing";
 
@@ -71,12 +80,185 @@ interface ConnectionState {
   phase: ConnectionPhase;
   authenticatedToken?: string;
   subscribedSessions: Set<string>;
+  replayStateBySession: Map<
+    string,
+    {
+      bufferedEvents: Array<{
+        event: GatewayEvent;
+        payload?: unknown;
+        seq: number;
+      }>;
+    }
+  >;
+  replayDeliveredDurableFrameIdsBySession: Map<string, Set<string>>;
   connectedAt: number;
   lastSeenAt: number;
   client?: {
     id: string;
     version: string;
     mode?: string;
+  };
+}
+
+interface SessionStatusSnapshot extends SessionStatusSeed {
+  contextPressure?: ContextPressureView;
+}
+
+interface ReplayBufferedEvent {
+  event: GatewayEvent;
+  payload?: unknown;
+  seq: number;
+}
+
+function isDurableSessionWireFrame(value: unknown): value is SessionWireFrame {
+  const validated = validateSessionWireFramePayload(value);
+  return validated.ok && validated.frame.durability === "durable";
+}
+
+function normalizeProjectedSessionWireFramePayload(
+  payload: unknown,
+): { ok: true; sessionId: string; frame: SessionWireFrame } | { ok: false; error: string } {
+  if (payload && typeof payload === "object") {
+    const outer = payload as { sessionId?: unknown; frame?: unknown };
+    if (outer.frame && typeof outer.frame === "object") {
+      const rawFrame = outer.frame as SessionWireFrame;
+      const projectedSessionId =
+        typeof outer.sessionId === "string" && outer.sessionId.trim().length > 0
+          ? outer.sessionId.trim()
+          : rawFrame.sessionId;
+      const projectedFrame = projectSessionWireFrame(projectedSessionId, rawFrame);
+      const validated = validateSessionWireFramePayload(projectedFrame);
+      if (!validated.ok) {
+        return validated;
+      }
+      return {
+        ok: true,
+        sessionId: projectedSessionId,
+        frame: validated.frame,
+      };
+    }
+  }
+  const validated = validateSessionWireFramePayload(payload);
+  if (!validated.ok) {
+    return validated;
+  }
+  return {
+    ok: true,
+    sessionId: validated.frame.sessionId,
+    frame: validated.frame,
+  };
+}
+
+function rememberDeliveredReplayDurableFrame(
+  replayDeliveredDurableFrameIdsBySession: ConnectionState["replayDeliveredDurableFrameIdsBySession"],
+  sessionId: string,
+  payload: unknown,
+): boolean {
+  if (!isDurableSessionWireFrame(payload)) {
+    return true;
+  }
+  const tracker = replayDeliveredDurableFrameIdsBySession.get(sessionId);
+  if (!tracker) {
+    return true;
+  }
+  // Replay/live overlap dedupe must stay exact for the active replay window.
+  // The tracker is scoped to replay only and cleared immediately after flush.
+  if (tracker.has(payload.frameId)) {
+    return false;
+  }
+  tracker.add(payload.frameId);
+  return true;
+}
+
+function getReplayBufferedEvents(
+  replayStateBySession: ConnectionState["replayStateBySession"],
+  sessionId: string,
+): ReplayBufferedEvent[] {
+  return replayStateBySession.get(sessionId)?.bufferedEvents ?? [];
+}
+
+function readBufferedSessionWireFrames(
+  bufferedEvents: readonly ReplayBufferedEvent[],
+  sessionId: string,
+): SessionWireFrame[] {
+  const frames: SessionWireFrame[] = [];
+  for (const entry of bufferedEvents) {
+    if (entry.event !== "session.wire.frame") {
+      continue;
+    }
+    const validated = validateSessionWireFramePayload(entry.payload);
+    if (!validated.ok || validated.frame.sessionId !== sessionId) {
+      continue;
+    }
+    frames.push(validated.frame);
+  }
+  return frames;
+}
+
+function findLastBufferedSessionStatusFrame(
+  bufferedEvents: readonly ReplayBufferedEvent[],
+  sessionId: string,
+): Extract<SessionWireFrame, { type: "session.status" }> | null {
+  for (let index = bufferedEvents.length - 1; index >= 0; index -= 1) {
+    const entry = bufferedEvents[index];
+    if (!entry || entry.event !== "session.wire.frame") {
+      continue;
+    }
+    const validated = validateSessionWireFramePayload(entry.payload);
+    if (!validated.ok || validated.frame.sessionId !== sessionId) {
+      continue;
+    }
+    if (validated.frame.type === "session.status") {
+      return validated.frame;
+    }
+  }
+  return null;
+}
+
+function buildSessionStatusFrame(input: {
+  sessionId: string;
+  state: SessionWireStatusState;
+  reason?: string;
+  detail?: string;
+  contextPressure?: ContextPressureView;
+}): Extract<SessionWireFrame, { type: "session.status" }> {
+  return {
+    schema: SESSION_WIRE_SCHEMA,
+    sessionId: input.sessionId,
+    frameId: `session.status:${input.sessionId}:${Date.now()}:${randomUUID()}`,
+    ts: Date.now(),
+    source: "live",
+    durability: "cache",
+    type: "session.status",
+    state: input.state,
+    reason: input.reason,
+    detail: input.detail,
+    contextPressure: input.contextPressure,
+  };
+}
+
+function projectSessionWireFrame(sessionId: string, frame: SessionWireFrame): SessionWireFrame {
+  if (frame.sessionId === sessionId) {
+    return frame;
+  }
+  return {
+    ...frame,
+    sessionId,
+  };
+}
+
+function buildReplayControlFrame(
+  sessionId: string,
+  type: Extract<SessionWireFrame["type"], "replay.begin" | "replay.complete">,
+): SessionWireFrame {
+  return {
+    schema: SESSION_WIRE_SCHEMA,
+    sessionId,
+    frameId: `${type}:${sessionId}:${Date.now()}:${randomUUID()}`,
+    ts: Date.now(),
+    source: "replay",
+    durability: "cache",
+    type,
   };
 }
 
@@ -242,6 +424,8 @@ export interface GatewayDaemonTestConnectionSnapshot {
   subscribedSessions: string[];
   connectedAt: number;
   lastSeenAt: number;
+  replaySessions: string[];
+  replayDedupFrameCountsBySession: Record<string, number>;
 }
 
 export interface GatewayDaemonTestHooks {
@@ -290,6 +474,9 @@ export class GatewayDaemon {
   private readonly connections = new Map<WebSocket, ConnectionState>();
   private readonly connectionsById = new Map<string, ConnectionState>();
   private readonly sessionSubscribers = new Map<string, Set<string>>();
+  private readonly sessionStatusBySession = new Map<string, SessionStatusSnapshot>();
+  private readonly pendingSessionStatusBySession = new Map<string, SessionStatusSeed>();
+  private readonly sessionStatusRevisionBySession = new Map<string, number>();
 
   private wss: WebSocketServer | null = null;
   private healthHttpServer: Server | null = null;
@@ -329,14 +516,7 @@ export class GatewayDaemon {
     getSessionBackend: () => this.supervisor,
     registerConnection: (input) => {
       const state = this.registerConnectionForTest(input);
-      return {
-        connId: state.connId,
-        phase: state.phase,
-        authenticatedToken: state.authenticatedToken,
-        subscribedSessions: [...state.subscribedSessions],
-        connectedAt: state.connectedAt,
-        lastSeenAt: state.lastSeenAt,
-      };
+      return this.toConnectionSnapshot(state)!;
     },
     getConnectionSnapshot: (connId) => {
       return this.toConnectionSnapshot(this.connectionsById.get(connId));
@@ -914,6 +1094,8 @@ export class GatewayDaemon {
       challengeNonce: randomUUID(),
       phase: "connected",
       subscribedSessions: new Set<string>(),
+      replayStateBySession: new Map(),
+      replayDeliveredDurableFrameIdsBySession: new Map(),
       connectedAt: Date.now(),
       lastSeenAt: Date.now(),
     };
@@ -1135,6 +1317,9 @@ export class GatewayDaemon {
           }
           throw error;
         }
+        if (result.created) {
+          this.noteSessionOpened(requestedSessionId);
+        }
         return {
           ...result,
           requestedSessionId,
@@ -1143,7 +1328,7 @@ export class GatewayDaemon {
       case "sessions.subscribe": {
         const input = params as { sessionId: string };
         const sessionId = input.sessionId.trim();
-        this.subscribeConnectionToSession(state, sessionId);
+        await this.subscribeAndReplaySession(state, sessionId);
         return {
           sessionId,
           subscribed: true,
@@ -1429,7 +1614,10 @@ export class GatewayDaemon {
       this.heartbeatSessionByRule.get(rule.id) ?? this.resolveHeartbeatSessionId(rule);
     this.heartbeatSessionByRule.set(rule.id, sessionId);
     const heartbeatPrompt = rule.prompt.trim();
-    await this.supervisor.openSession({ sessionId });
+    const opened = await this.supervisor.openSession({ sessionId });
+    if (opened.created) {
+      this.noteSessionOpened(sessionId);
+    }
     const result = await this.supervisor.sendPrompt(sessionId, heartbeatPrompt, {
       waitForCompletion: true,
       source: "heartbeat",
@@ -1524,6 +1712,18 @@ export class GatewayDaemon {
     if (!SESSION_SCOPED_EVENTS.has(event)) {
       return;
     }
+    if (event === "session.wire.frame") {
+      const normalizedFrame = normalizeProjectedSessionWireFramePayload(payload);
+      if (!normalizedFrame.ok) {
+        this.logger.warn("dropping invalid session wire frame from worker", {
+          error: normalizedFrame.error,
+        });
+        return;
+      }
+      this.broadcastSessionEvent(event, normalizedFrame.frame, normalizedFrame.sessionId);
+      this.transitionSessionStatusFromWirePayload(normalizedFrame.frame);
+      return;
+    }
     const sessionId = this.extractSessionIdFromPayload(payload);
     if (!sessionId) {
       this.logger.warn("dropping session-scoped event without sessionId", { event });
@@ -1537,10 +1737,229 @@ export class GatewayDaemon {
       return undefined;
     }
     const sessionId = (payload as { sessionId?: unknown }).sessionId;
-    if (typeof sessionId !== "string" || !sessionId.trim()) {
+    if (typeof sessionId === "string" && sessionId.trim()) {
+      return sessionId.trim();
+    }
+    const nestedFrame = (payload as { frame?: unknown }).frame;
+    if (nestedFrame && typeof nestedFrame === "object") {
+      const nestedSessionId = (nestedFrame as { sessionId?: unknown }).sessionId;
+      if (typeof nestedSessionId === "string" && nestedSessionId.trim()) {
+        return nestedSessionId.trim();
+      }
+    }
+    return undefined;
+  }
+
+  private resolveSessionStatusState(sessionId: string): SessionWireStatusState {
+    const worker = this.supervisor
+      .listWorkers()
+      .find((candidate) => candidate.sessionId === sessionId);
+    if (!worker) {
+      return "idle";
+    }
+    return worker.pendingRequests > 0 ? "running" : "idle";
+  }
+
+  private async querySessionContextPressure(
+    sessionId: string,
+  ): Promise<ContextPressureView | undefined> {
+    try {
+      return await this.supervisor.querySessionContextPressure(sessionId);
+    } catch (error) {
+      this.logger.warn("session context pressure query failed", {
+        sessionId,
+        error: toErrorMessage(error),
+      });
       return undefined;
     }
-    return sessionId.trim();
+  }
+
+  private async buildSessionStatusFrameForSession(input: {
+    sessionId: string;
+    state: SessionWireStatusState;
+    reason?: string;
+    detail?: string;
+  }): Promise<Extract<SessionWireFrame, { type: "session.status" }>> {
+    return buildSessionStatusFrame({
+      ...input,
+      contextPressure: await this.querySessionContextPressure(input.sessionId),
+    });
+  }
+
+  private clearSessionStatusTracking(sessionId: string): void {
+    this.sessionStatusBySession.delete(sessionId);
+    this.pendingSessionStatusBySession.delete(sessionId);
+    this.sessionStatusRevisionBySession.delete(sessionId);
+  }
+
+  private noteSessionOpened(sessionId: string): void {
+    const normalizedSessionId = sessionId.trim();
+    if (!normalizedSessionId) {
+      return;
+    }
+    this.clearSessionStatusTracking(normalizedSessionId);
+    if ((this.sessionSubscribers.get(normalizedSessionId)?.size ?? 0) === 0) {
+      return;
+    }
+    this.transitionSessionStatus(normalizedSessionId, {
+      state: "idle",
+    });
+  }
+
+  private transitionSessionStatus(sessionId: string, seed: SessionStatusSeed): void {
+    const current = this.sessionStatusBySession.get(sessionId);
+    const pending = this.pendingSessionStatusBySession.get(sessionId);
+    const matchesCurrent = sameSessionStatusSeed(current, seed);
+    const matchesPending = sameSessionStatusSeed(pending, seed);
+    if (matchesCurrent && (pending === undefined || matchesPending)) {
+      return;
+    }
+    const nextRevision = (this.sessionStatusRevisionBySession.get(sessionId) ?? 0) + 1;
+    this.sessionStatusRevisionBySession.set(sessionId, nextRevision);
+    if ((this.sessionSubscribers.get(sessionId)?.size ?? 0) === 0) {
+      this.clearSessionStatusTracking(sessionId);
+      return;
+    }
+    if (matchesCurrent) {
+      this.pendingSessionStatusBySession.delete(sessionId);
+      return;
+    }
+    this.pendingSessionStatusBySession.set(sessionId, seed);
+
+    // Context-pressure sampling is best-effort. Under rapid state churn we
+    // prefer dropping stale async snapshots over emitting out-of-order status
+    // frames, even if that means the surviving status carries slightly older
+    // pressure data for one transition window.
+    void this.buildSessionStatusFrameForSession({
+      sessionId,
+      ...seed,
+    })
+      .then((statusFrame) => {
+        if ((this.sessionStatusRevisionBySession.get(sessionId) ?? 0) !== nextRevision) {
+          return;
+        }
+        this.pendingSessionStatusBySession.delete(sessionId);
+        this.sessionStatusBySession.set(sessionId, {
+          ...seed,
+          contextPressure: statusFrame.contextPressure,
+        });
+        this.broadcastSessionEvent("session.wire.frame", statusFrame, sessionId);
+      })
+      .catch((error) => {
+        this.logger.warn("session status transition failed", {
+          sessionId,
+          error: toErrorMessage(error),
+        });
+      });
+  }
+
+  private transitionSessionStatusFromWirePayload(payload: unknown): void {
+    if (!payload || typeof payload !== "object") {
+      return;
+    }
+    const typedFrame = payload as SessionWireFrame;
+    const seed = deriveSessionStatusSeedFromFrame(typedFrame);
+    if (!seed) {
+      return;
+    }
+    this.transitionSessionStatus(typedFrame.sessionId, seed);
+  }
+
+  private startSessionReplay(state: ConnectionState, sessionId: string): void {
+    state.replayStateBySession.set(sessionId, {
+      bufferedEvents: [],
+    });
+    state.replayDeliveredDurableFrameIdsBySession.set(sessionId, new Set());
+  }
+
+  private flushSessionReplay(state: ConnectionState, sessionId: string): ReplayBufferedEvent[] {
+    const buffered = [...getReplayBufferedEvents(state.replayStateBySession, sessionId)];
+    state.replayStateBySession.delete(sessionId);
+    for (const entry of buffered) {
+      this.sendSessionEvent(state, sessionId, entry.event, entry.payload, entry.seq);
+    }
+    state.replayDeliveredDurableFrameIdsBySession.delete(sessionId);
+    return buffered;
+  }
+
+  private async subscribeAndReplaySession(
+    state: ConnectionState,
+    sessionId: string,
+  ): Promise<void> {
+    const normalizedSessionId = sessionId.trim();
+    if (!normalizedSessionId) {
+      return;
+    }
+    const added = this.subscribeConnectionToSession(state, normalizedSessionId);
+    if (!added) {
+      return;
+    }
+
+    this.startSessionReplay(state, normalizedSessionId);
+    try {
+      this.sendEvent(
+        state,
+        "session.wire.frame",
+        buildReplayControlFrame(normalizedSessionId, "replay.begin"),
+      );
+      let frames: SessionWireFrame[] = [];
+      try {
+        frames = await this.supervisor.querySessionWire(normalizedSessionId);
+      } catch (error) {
+        this.logger.warn("session wire replay query failed", {
+          sessionId: normalizedSessionId,
+          error: toErrorMessage(error),
+        });
+      }
+      const publicFrames = frames.map((frame) =>
+        projectSessionWireFrame(normalizedSessionId, frame),
+      );
+      for (const frame of publicFrames) {
+        this.sendSessionEvent(state, normalizedSessionId, "session.wire.frame", frame);
+      }
+      this.sendEvent(
+        state,
+        "session.wire.frame",
+        buildReplayControlFrame(normalizedSessionId, "replay.complete"),
+      );
+      const bufferedReplayWindowEvents = this.flushSessionReplay(state, normalizedSessionId);
+      if (
+        !findLastBufferedSessionStatusFrame(bufferedReplayWindowEvents, normalizedSessionId) &&
+        !this.pendingSessionStatusBySession.has(normalizedSessionId)
+      ) {
+        const statusRevision = this.sessionStatusRevisionBySession.get(normalizedSessionId) ?? 0;
+        const statusSeed =
+          this.sessionStatusBySession.get(normalizedSessionId) ??
+          deriveSessionStatusSeedFromHistory(
+            normalizedSessionId,
+            [
+              ...publicFrames,
+              ...readBufferedSessionWireFrames(bufferedReplayWindowEvents, normalizedSessionId),
+            ],
+            this.resolveSessionStatusState(normalizedSessionId),
+          );
+        const statusFrame = await this.buildSessionStatusFrameForSession({
+          sessionId: normalizedSessionId,
+          ...statusSeed,
+        });
+        if (
+          (this.sessionStatusRevisionBySession.get(normalizedSessionId) ?? 0) !== statusRevision
+        ) {
+          return;
+        }
+        this.sendEvent(state, "session.wire.frame", statusFrame);
+        if (!this.sessionStatusBySession.has(normalizedSessionId)) {
+          this.sessionStatusBySession.set(normalizedSessionId, {
+            ...statusSeed,
+            contextPressure: statusFrame.contextPressure,
+          });
+        }
+      }
+    } finally {
+      if (state.replayStateBySession.has(normalizedSessionId)) {
+        this.flushSessionReplay(state, normalizedSessionId);
+      }
+    }
   }
 
   private subscribeConnectionToSession(state: ConnectionState, sessionId: string): boolean {
@@ -1567,11 +1986,14 @@ export class GatewayDaemon {
       return false;
     }
     state.subscribedSessions.delete(normalizedSessionId);
+    state.replayStateBySession.delete(normalizedSessionId);
+    state.replayDeliveredDurableFrameIdsBySession.delete(normalizedSessionId);
     const subscribers = this.sessionSubscribers.get(normalizedSessionId);
     if (subscribers) {
       subscribers.delete(state.connId);
       if (subscribers.size === 0) {
         this.sessionSubscribers.delete(normalizedSessionId);
+        this.clearSessionStatusTracking(normalizedSessionId);
       }
     }
     return true;
@@ -1606,7 +2028,16 @@ export class GatewayDaemon {
         subscriberIds.delete(connId);
         continue;
       }
-      this.sendEvent(state, event, payload, seq);
+      const replayState = state.replayStateBySession.get(sessionId);
+      if (replayState) {
+        replayState.bufferedEvents.push({
+          event,
+          payload,
+          seq,
+        });
+        continue;
+      }
+      this.sendSessionEvent(state, sessionId, event, payload, seq);
     }
     if (subscriberIds.size === 0) {
       this.sessionSubscribers.delete(sessionId);
@@ -1685,6 +2116,26 @@ export class GatewayDaemon {
     state.socket.send(JSON.stringify(frame));
   }
 
+  private sendSessionEvent(
+    state: ConnectionState,
+    sessionId: string,
+    event: GatewayEvent,
+    payload?: unknown,
+    seq?: number,
+  ): void {
+    if (
+      event === "session.wire.frame" &&
+      !rememberDeliveredReplayDurableFrame(
+        state.replayDeliveredDurableFrameIdsBySession,
+        sessionId,
+        payload,
+      )
+    ) {
+      return;
+    }
+    this.sendEvent(state, event, payload, seq);
+  }
+
   private broadcastEvent(event: GatewayEvent, payload?: unknown): void {
     for (const observer of this.broadcastObservers) {
       try {
@@ -1737,6 +2188,8 @@ export class GatewayDaemon {
       phase: input.phase ?? "authenticated",
       authenticatedToken: input.authenticatedToken,
       subscribedSessions: new Set<string>(),
+      replayStateBySession: new Map(),
+      replayDeliveredDurableFrameIdsBySession: new Map(),
       connectedAt: input.connectedAt ?? now,
       lastSeenAt: input.lastSeenAt ?? now,
       client: input.client,
@@ -1776,6 +2229,13 @@ export class GatewayDaemon {
       subscribedSessions: [...state.subscribedSessions],
       connectedAt: state.connectedAt,
       lastSeenAt: state.lastSeenAt,
+      replaySessions: [...state.replayStateBySession.keys()],
+      replayDedupFrameCountsBySession: Object.fromEntries(
+        [...state.replayDeliveredDurableFrameIdsBySession.entries()].map(([sessionId, tracker]) => [
+          sessionId,
+          tracker.size,
+        ]),
+      ),
     };
   }
 }

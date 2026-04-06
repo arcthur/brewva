@@ -10,7 +10,9 @@
    - `managedToolMode=runtime_plugin`: register managed Brewva tools through the runtime plugin API
    - `managedToolMode=direct`: provide managed Brewva tools directly from the host
 4. Run turn loop with tool execution, ledger/event writes, and verification updates
-5. Emit replayable event timeline and dispose session resources
+5. Materialize durable turn receipts (`turn_input_recorded`,
+   `turn_render_committed`), expose derived session wire replay through the
+   runtime-owned session-wire compiler surface, and dispose session resources
 
 ## Mode-Specific Paths
 
@@ -36,7 +38,8 @@ Session lifecycle behavior is anchored to the repository durability taxonomy:
   - working projection files and workflow posture derived from replayable
     events
 - `cache`
-  - channel UI helper state or routing hints outside the replay contract
+  - channel UI helper state, gateway `session.status`, and other routing hints
+    outside the replay contract
 
 Deletion consequences:
 
@@ -53,6 +56,19 @@ Deletion consequences:
   including task/truth/cost/evidence/projection fold slices.
 - First `onTurnStart()` hydrates session-local runtime state from tape events
   (skill/budget/cost counters, warning dedupe, ledger compaction cooldown).
+- Gateway and frontend session replay do not consume raw `inspect.events`.
+  Runtime-scoped replay uses `runtime.inspect.sessionWire`; gateway public
+  replay uses the same runtime-owned compiler semantics against archived
+  agent-session event logs. In both cases replay is compiled from durable
+  receipts including `turn_input_recorded`, `turn_render_committed`, approval
+  events, delegation receipts, transition receipts, and `session_shutdown`.
+- Live gateway preview traffic remains cache-class and transport-owned. In the
+  current wire, live tool frames are explicitly attempt-scoped through
+  authoritative tool lifecycle binding, while replay remains committed-state
+  only.
+- Gateway public-session lookup is also durable: the gateway records
+  `gateway_session_bound` receipts on a control tape so archived replay does
+  not depend on process-local binding memory.
 - malformed or unreadable event tape rows degrade hydration status and surface
   explicit `event_tape` integrity issues instead of being treated as an empty
   healthy tape.

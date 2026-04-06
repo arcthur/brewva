@@ -136,6 +136,30 @@ function parseChildRegistryEntries(raw: unknown): ChildRegistryEntry[] {
   return entries;
 }
 
+function readJsonFile(filePath: string): unknown {
+  try {
+    return JSON.parse(readFileSync(filePath, "utf8")) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeJsonFileAtomically(filePath: string, value: unknown): void {
+  mkdirSync(dirname(filePath), { recursive: true });
+  const tmpPath = `${filePath}.tmp`;
+  try {
+    writeFileSync(tmpPath, JSON.stringify(value, null, 2), "utf8");
+    renameSync(tmpPath, filePath);
+  } catch (error) {
+    try {
+      rmSync(tmpPath, { force: true });
+    } catch {
+      // best effort
+    }
+    throw error;
+  }
+}
+
 export class FileGatewayStateStore implements GatewayStateStore {
   private readonly tokenVault?: GatewayTokenVaultOptions;
 
@@ -250,30 +274,12 @@ export class FileGatewayStateStore implements GatewayStateStore {
     if (!existsSync(filePath)) {
       return [];
     }
-    try {
-      const parsed = JSON.parse(readFileSync(filePath, "utf8")) as unknown;
-      return parseChildRegistryEntries(parsed);
-    } catch {
-      return [];
-    }
+    return parseChildRegistryEntries(readJsonFile(filePath));
   }
 
   writeChildrenRegistry(registryPath: string, entries: ReadonlyArray<ChildRegistryEntry>): void {
     const filePath = resolve(registryPath);
-    mkdirSync(dirname(filePath), { recursive: true });
-
-    const tmpPath = `${filePath}.tmp`;
-    try {
-      writeFileSync(tmpPath, JSON.stringify(entries, null, 2), "utf8");
-      renameSync(tmpPath, filePath);
-    } catch (error) {
-      try {
-        rmSync(tmpPath, { force: true });
-      } catch {
-        // best effort
-      }
-      throw error;
-    }
+    writeJsonFileAtomically(filePath, entries);
   }
 
   removeChildrenRegistry(registryPath: string): void {

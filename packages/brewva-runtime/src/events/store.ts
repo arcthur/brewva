@@ -132,6 +132,45 @@ function parseEventRecord(line: string): BrewvaEventRecord | null {
   return null;
 }
 
+export function readBrewvaEventRecordsFromLogPath(
+  filePath: string,
+  options?: {
+    sessionId?: string;
+  },
+): BrewvaEventRecord[] {
+  if (!existsSync(filePath)) {
+    return [];
+  }
+
+  const requestedSessionId =
+    typeof options?.sessionId === "string" && options.sessionId.trim().length > 0
+      ? options.sessionId.trim()
+      : undefined;
+  const records: BrewvaEventRecord[] = [];
+
+  try {
+    const text = readFileSync(filePath, "utf8");
+    for (const line of text.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+      const parsed = parseEventRecord(trimmed);
+      if (!parsed) {
+        continue;
+      }
+      if (requestedSessionId && parsed.sessionId !== requestedSessionId) {
+        continue;
+      }
+      records.push(parsed);
+    }
+  } catch {
+    return [];
+  }
+
+  return records;
+}
+
 export function resolveBrewvaEventLogPath(eventsDir: string, sessionId: string): string {
   const encoded = encodeSessionIdForFileName(sessionId);
   return resolve(eventsDir, `${ENCODED_SESSION_PREFIX}${encoded}.jsonl`);

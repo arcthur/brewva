@@ -37,10 +37,7 @@ export type GatewayMethod = (typeof GatewayMethods)[number];
 export const GatewayEvents = [
   "connect.challenge",
   "tick",
-  "session.turn.start",
-  "session.turn.chunk",
-  "session.turn.error",
-  "session.turn.end",
+  "session.wire.frame",
   "heartbeat.fired",
   "shutdown",
 ] as const;

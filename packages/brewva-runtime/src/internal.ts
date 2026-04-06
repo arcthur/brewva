@@ -14,6 +14,7 @@ export * from "./parallel/results.js";
 export * from "./schedule/projection.js";
 export * from "./schedule/service.js";
 export * from "./services/credential-vault.js";
+export * from "./services/session-wire.js";
 export * from "./skills/registry.js";
 export * from "./state/file-change-tracker.js";
 export * from "./state/patch-history.js";

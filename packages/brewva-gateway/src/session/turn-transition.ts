@@ -6,6 +6,8 @@ import {
   ROLLBACK_EVENT_TYPE,
   SESSION_SHUTDOWN_EVENT_TYPE,
   SESSION_TURN_TRANSITION_EVENT_TYPE,
+  TURN_INPUT_RECORDED_EVENT_TYPE,
+  TURN_RENDER_COMMITTED_EVENT_TYPE,
   type BrewvaStructuredEvent,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
@@ -49,6 +51,8 @@ interface HostedSessionTransitionState {
   sequence: number;
   latest: SessionTurnTransitionPayload | null;
   pendingFamily: HostedTransitionFamily | null;
+  activeTurnNumber: number | null;
+  activeAttemptSequence: number | null;
   activeReasons: Partial<Record<TurnTransitionReason, true>>;
   operatorVisibleFactGeneration: number;
   consecutiveFailuresByReason: Partial<Record<BreakerManagedReason, number>>;
@@ -65,6 +69,7 @@ export interface HostedTransitionSnapshot {
   sequence: number;
   latest: SessionTurnTransitionPayload | null;
   pendingFamily: HostedTransitionFamily | null;
+  activeAttemptSequence: number | null;
   operatorVisibleFactGeneration: number;
   consecutiveFailuresByReason: Partial<Record<BreakerManagedReason, number>>;
   breakerOpenByReason: Partial<Record<BreakerManagedReason, boolean>>;
@@ -111,15 +116,45 @@ const transitionReasonFamily: Record<TurnTransitionReason, HostedTransitionFamil
   timeout_interrupt: "interrupt",
 };
 
+const ATTEMPT_SUPERSESSION_REASONS = new Set<TurnTransitionReason>([
+  "output_budget_escalation",
+  "compaction_retry",
+  "provider_fallback_retry",
+  "max_output_recovery",
+]);
+
+function parseAttemptIdSequence(value: unknown): number | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const match = /^attempt-(\d+)$/.exec(value.trim());
+  if (!match) {
+    return null;
+  }
+  const parsed = Number.parseInt(match[1] ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 function cloneSnapshot(state: HostedSessionTransitionState): HostedTransitionSnapshot {
   return {
     sequence: state.sequence,
     latest: state.latest ? { ...state.latest } : null,
     pendingFamily: state.pendingFamily,
+    activeAttemptSequence: state.activeAttemptSequence,
     operatorVisibleFactGeneration: state.operatorVisibleFactGeneration,
     consecutiveFailuresByReason: { ...state.consecutiveFailuresByReason },
     breakerOpenByReason: { ...state.breakerOpenByReason },
   };
+}
+
+function resolveActiveHostedTurn(
+  state: HostedSessionTransitionState,
+  explicitTurn?: number,
+): number | undefined {
+  if (typeof explicitTurn === "number" && Number.isFinite(explicitTurn)) {
+    return explicitTurn;
+  }
+  return state.activeTurnNumber ?? undefined;
 }
 
 function createEmptyState(): HostedSessionTransitionState {
@@ -127,6 +162,8 @@ function createEmptyState(): HostedSessionTransitionState {
     sequence: 0,
     latest: null,
     pendingFamily: null,
+    activeTurnNumber: null,
+    activeAttemptSequence: null,
     activeReasons: {},
     operatorVisibleFactGeneration: 0,
     consecutiveFailuresByReason: {},
@@ -225,8 +262,22 @@ function readTransitionPayload(
 
 function foldObservedHostedTransitionEvent(
   state: HostedSessionTransitionState,
-  event: Pick<BrewvaStructuredEvent, "type" | "payload">,
+  event: Pick<BrewvaStructuredEvent, "type" | "payload" | "turn">,
 ): HostedSessionTransitionState {
+  if (event.type === TURN_INPUT_RECORDED_EVENT_TYPE) {
+    state.activeTurnNumber = typeof event.turn === "number" ? event.turn : state.activeTurnNumber;
+    state.activeAttemptSequence = 1;
+    return state;
+  }
+  if (event.type === TURN_RENDER_COMMITTED_EVENT_TYPE) {
+    state.activeTurnNumber = null;
+    const payload =
+      event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
+        ? (event.payload as { attemptId?: unknown })
+        : undefined;
+    state.activeAttemptSequence = parseAttemptIdSequence(payload?.attemptId);
+    return state;
+  }
   if (operatorVisibleEventTypes.has(event.type)) {
     state.operatorVisibleFactGeneration += 1;
   }
@@ -246,6 +297,9 @@ function foldTransition(
 ): HostedSessionTransitionState {
   state.sequence = Math.max(state.sequence, payload.sequence);
   state.latest = { ...payload };
+  if (payload.status === "entered" && ATTEMPT_SUPERSESSION_REASONS.has(payload.reason)) {
+    state.activeAttemptSequence = (state.activeAttemptSequence ?? 1) + 1;
+  }
   if (payload.status === "entered") {
     state.activeReasons[payload.reason] = true;
     state.pendingFamily = payload.family;
@@ -427,13 +481,17 @@ class HostedTurnTransitionCoordinator {
     return cloneSnapshot(this.getState(sessionId));
   }
 
+  getActiveAttemptSequence(sessionId: string): number | null {
+    return this.getState(sessionId).activeAttemptSequence;
+  }
+
   record(input: RecordSessionTurnTransitionInput): void {
     const state = this.getState(input.sessionId);
     const family = input.family ?? transitionReasonFamily[input.reason];
     const sequence = state.sequence + 1;
     recordRuntimeEvent(this.runtime, {
       sessionId: input.sessionId,
-      turn: input.turn,
+      turn: resolveActiveHostedTurn(state, input.turn),
       type: SESSION_TURN_TRANSITION_EVENT_TYPE,
       payload: {
         reason: input.reason,
@@ -477,7 +535,7 @@ export function recordSessionTurnTransition(
 }
 
 export function projectHostedTransitionSnapshot(
-  events: Iterable<Pick<BrewvaStructuredEvent, "type" | "payload">>,
+  events: Iterable<Pick<BrewvaStructuredEvent, "type" | "payload" | "turn">>,
 ): HostedTransitionSnapshot {
   const state = createEmptyState();
   state.hydrated = true;

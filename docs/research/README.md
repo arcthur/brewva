@@ -53,6 +53,7 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 - `docs/research/rfc-advisor-consultation-primitive-and-specialist-taxonomy-cutover.md`
 - `docs/research/rfc-default-path-re-hardening-and-advisory-surface-narrowing.md`
 - `docs/research/rfc-deliberation-home-and-compounding-intelligence.md`
+- `docs/research/rfc-derived-session-wire-schema-and-frontend-session-protocol.md`
 - `docs/research/rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md`
 - `docs/research/rfc-effect-governance-and-contract-vnext.md`
 - `docs/research/rfc-gateway-experience-ring-decomposition.md`
@@ -74,6 +75,7 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 - `docs/research/rfc-invocation-spine-and-posture-runtime-vnext.md`
 - `docs/research/rfc-runtime-decomposition-and-deliberation-thickening.md`
 - `docs/research/rfc-subagent-delegation-and-isolated-execution.md`
+- `docs/research/rfc-session-wire-v2-attempt-scoped-live-tool-frames.md`
 
 Archived and superseded notes may intentionally describe historical
 terminology, including the older delegation `profile` model. Current

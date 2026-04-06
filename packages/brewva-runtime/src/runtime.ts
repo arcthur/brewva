@@ -70,6 +70,7 @@ import type {
   SkillRoutingScope,
   SessionHydrationState,
   SessionCostSummary,
+  SessionWireFrame,
   TapeSearchResult,
   TapeSearchScope,
   TapeHandoffResult,
@@ -161,6 +162,7 @@ import { ResourceLeaseService } from "./services/resource-lease.js";
 import { ScheduleIntentService } from "./services/schedule-intent.js";
 import { SessionLifecycleService } from "./services/session-lifecycle.js";
 import { RuntimeSessionStateStore } from "./services/session-state.js";
+import { SessionWireService } from "./services/session-wire.js";
 import { SkillLifecycleService } from "./services/skill-lifecycle.js";
 import { TapeService } from "./services/tape.js";
 import { TaskWatchdogService } from "./services/task-watchdog.js";
@@ -596,6 +598,10 @@ interface BrewvaRuntimeMethodGroups {
     resolveCredentialBindings(sessionId: string, toolName: string): Record<string, string>;
     resolveSandboxApiKey(sessionId: string): string | undefined;
   };
+  sessionWire: {
+    query(sessionId: string): SessionWireFrame[];
+    subscribe(sessionId: string, listener: (frame: SessionWireFrame) => void): () => void;
+  };
 }
 
 export interface BrewvaAuthorityPort {
@@ -708,6 +714,7 @@ export interface BrewvaInspectionPort {
     BrewvaRuntimeMethodGroups["session"],
     "listWorkerResults" | "mergeWorkerResults" | "getHydration" | "getIntegrity"
   >;
+  readonly sessionWire: Pick<BrewvaRuntimeMethodGroups["sessionWire"], "query" | "subscribe">;
 }
 
 export interface BrewvaMaintenancePort {
@@ -799,6 +806,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
   declare private readonly taskWatchdogService: TaskWatchdogService;
   declare private readonly scheduleIntentService: ScheduleIntentService;
   declare private readonly sessionLifecycleService: SessionLifecycleService;
+  declare private readonly sessionWireService: SessionWireService;
   declare private readonly skillLifecycleService: SkillLifecycleService;
   declare private readonly taskService: TaskService;
   declare private readonly tapeService: TapeService;
@@ -829,6 +837,12 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
     Object.assign(this, this.createCoreDependencies(options));
     this.kernel = this.createKernelContext(options);
     Object.assign(this, this.createServiceDependencies(options));
+    Object.assign(this, {
+      sessionWireService: new SessionWireService({
+        queryStructuredEvents: (sessionId) => this.eventPipeline.queryStructuredEvents(sessionId),
+        subscribeEvents: (listener) => this.eventPipeline.subscribeEvents(listener),
+      }),
+    });
     this.refreshSkillsState();
     const methodGroups = this.createMethodGroups();
     attachRuntimeMethodGroupsCarrier(this, methodGroups);
@@ -1231,6 +1245,10 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           );
         },
       },
+      sessionWire: {
+        query: (sessionId) => this.sessionWireService.query(sessionId),
+        subscribe: (sessionId, listener) => this.sessionWireService.subscribe(sessionId, listener),
+      },
     };
   }
 
@@ -1350,6 +1368,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "getHydration",
           "getIntegrity",
         ] as const),
+        sessionWire: bindMethods(methodGroups.sessionWire, ["query", "subscribe"] as const),
       },
       maintain: {
         skills: bindMethods(methodGroups.skills, ["refresh"] as const),

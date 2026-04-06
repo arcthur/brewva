@@ -3,8 +3,17 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type ManagedToolMode, type RecoveryWalRecord } from "@brewva/brewva-runtime";
-import { RecoveryWalRecovery, RecoveryWalStore } from "@brewva/brewva-runtime/internal";
+import {
+  type ContextPressureView,
+  type ManagedToolMode,
+  type RecoveryWalRecord,
+  type SessionWireFrame,
+} from "@brewva/brewva-runtime";
+import {
+  RecoveryWalRecovery,
+  RecoveryWalStore,
+  querySessionWireFramesFromEventLog,
+} from "@brewva/brewva-runtime/internal";
 import type { WorkerToParentMessage } from "../session/worker-protocol.js";
 import {
   FileGatewayStateStore,
@@ -25,6 +34,11 @@ import {
   SessionBackendStateError,
   type SessionWorkerInfo,
 } from "./session-backend.js";
+import {
+  appendGatewaySessionBindingReceipt,
+  listGatewaySessionBindings,
+  resolveGatewaySessionBindingLogPath,
+} from "./session-binding-tape.js";
 import { SessionOpenAdmissionController } from "./session-supervisor/admission.js";
 import {
   buildSessionTurnEnvelope,
@@ -147,6 +161,7 @@ export class SessionSupervisor implements SessionBackend {
   private readonly workers = new Map<string, WorkerHandle>();
   private readonly stateDir: string;
   private readonly childrenRegistryPath: string;
+  private readonly sessionBindingLogPath: string;
   private readonly sessionIdleTtlMs: number;
   private readonly sessionIdleSweepIntervalMs: number;
   private readonly maxWorkers: number;
@@ -190,6 +205,7 @@ export class SessionSupervisor implements SessionBackend {
   constructor(private readonly options: SessionSupervisorOptions) {
     this.stateDir = resolve(options.stateDir);
     this.childrenRegistryPath = resolve(this.stateDir, "children.json");
+    this.sessionBindingLogPath = resolveGatewaySessionBindingLogPath(this.stateDir);
     this.stateStore = options.stateStore ?? new FileGatewayStateStore();
     this.recoveryWalStore = options.recoveryWalStore;
     this.recoveryWalCompactIntervalMs = Math.max(
@@ -402,6 +418,13 @@ export class SessionSupervisor implements SessionBackend {
         const readyPayload = await ready;
         handle.requestedAgentSessionId = readyPayload.agentSessionId;
         handle.agentEventLogPath = readyPayload.agentEventLogPath;
+        appendGatewaySessionBindingReceipt(this.sessionBindingLogPath, {
+          gatewaySessionId: input.sessionId,
+          agentSessionId: readyPayload.agentSessionId,
+          agentEventLogPath: readyPayload.agentEventLogPath,
+          cwd: handle.cwd,
+          timestamp: handle.startedAt,
+        });
         this.touchActivity(handle);
         this.persistRegistry();
         this.options.logger.info("worker session opened", {
@@ -533,6 +556,66 @@ export class SessionSupervisor implements SessionBackend {
 
   listWorkers(): SessionWorkerInfo[] {
     return [...this.workers.values()].map((handle) => toSessionWorkerInfo(handle));
+  }
+
+  async querySessionWire(sessionId: string): Promise<SessionWireFrame[]> {
+    const handle = this.workers.get(sessionId);
+    if (handle) {
+      this.touchActivity(handle);
+    }
+
+    const segments = this.listSessionBindingsForReplay(sessionId);
+    if (segments.length === 0) {
+      return [];
+    }
+
+    const frames: SessionWireFrame[] = [];
+    const durableFrameIds = new Set<string>();
+    for (const segment of segments) {
+      const segmentFrames = querySessionWireFramesFromEventLog({
+        eventLogPath: segment.agentEventLogPath,
+        sessionId: segment.agentSessionId,
+      });
+      for (const frame of segmentFrames) {
+        if (frame.durability === "durable") {
+          if (durableFrameIds.has(frame.frameId)) {
+            continue;
+          }
+          durableFrameIds.add(frame.frameId);
+        }
+        frames.push(frame);
+      }
+    }
+    return frames;
+  }
+
+  async querySessionContextPressure(sessionId: string): Promise<ContextPressureView | undefined> {
+    const handle = this.workers.get(sessionId);
+    if (!handle) {
+      return undefined;
+    }
+    this.touchActivity(handle);
+    const payload = await this.workerRpc.request(handle, {
+      kind: "sessionContextPressure.query",
+      requestId: randomUUID(),
+    });
+    const candidate = payload && typeof payload === "object" ? payload.contextPressure : undefined;
+    if (!candidate || typeof candidate !== "object") {
+      return undefined;
+    }
+    const typed = candidate as Partial<ContextPressureView>;
+    if (
+      typeof typed.tokens !== "number" ||
+      typeof typed.limit !== "number" ||
+      (typed.level !== "normal" && typed.level !== "elevated" && typed.level !== "critical")
+    ) {
+      return undefined;
+    }
+    return {
+      tokens: typed.tokens,
+      limit: typed.limit,
+      level: typed.level,
+    };
   }
 
   private seedWorkerForTest(input: SessionSupervisorTestWorkerInput): void {
@@ -881,6 +964,39 @@ export class SessionSupervisor implements SessionBackend {
 
   private readRegistry(): ChildRegistryEntry[] {
     return this.stateStore.readChildrenRegistry(this.childrenRegistryPath);
+  }
+
+  private listSessionBindingsForReplay(sessionId: string): Array<{
+    sessionId: string;
+    agentSessionId: string;
+    agentEventLogPath: string;
+    openedAt: number;
+    cwd?: string;
+  }> {
+    const normalizedSessionId = sessionId.trim();
+    if (!normalizedSessionId) {
+      return [];
+    }
+
+    const seen = new Set<string>();
+    return listGatewaySessionBindings(this.sessionBindingLogPath, normalizedSessionId).flatMap(
+      (entry) => {
+        const key = `${entry.gatewaySessionId}::${entry.agentSessionId}::${entry.agentEventLogPath}`;
+        if (seen.has(key)) {
+          return [];
+        }
+        seen.add(key);
+        return [
+          {
+            sessionId: entry.gatewaySessionId,
+            agentSessionId: entry.agentSessionId,
+            agentEventLogPath: entry.agentEventLogPath,
+            openedAt: entry.openedAt,
+            cwd: entry.cwd,
+          },
+        ];
+      },
+    );
   }
 
   private persistRegistry(): void {

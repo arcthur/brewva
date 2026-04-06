@@ -1,3 +1,4 @@
+import { validateSessionWireFramePayload } from "../../protocol/validate.js";
 import type {
   ParentToWorkerMessage,
   WorkerToParentMessage,
@@ -270,27 +271,37 @@ export class SessionWorkerRpcController {
     }
 
     if (message.kind === "event") {
-      if (message.event === "session.turn.start") {
-        handle.activeTurnId = message.payload.turnId;
+      if (message.event === "session.wire.frame") {
+        const validatedFrame = validateSessionWireFramePayload(message.payload.frame);
+        if (!validatedFrame.ok) {
+          this.deps.logger.warn("dropping invalid session wire frame from worker", {
+            sessionId: handle.sessionId,
+            workerPid: handle.child.pid ?? null,
+            error: validatedFrame.error,
+          });
+          return;
+        }
+        const frame = validatedFrame.frame;
         this.deps.touchActivity(handle);
-      } else if (message.event === "session.turn.end") {
-        this.markRecoveryWalDone(handle, message.payload.turnId);
-        this.resolvePendingTurn(handle, message.payload.turnId, {
-          attemptId: message.payload.attemptId,
-          assistantText: message.payload.assistantText,
-          toolOutputs: message.payload.toolOutputs,
-        });
-        if (handle.activeTurnId === message.payload.turnId) {
+        if (frame.type === "turn.committed") {
+          this.markRecoveryWalDone(handle, frame.turnId);
+          this.resolvePendingTurn(handle, frame.turnId, {
+            attemptId: frame.attemptId,
+            assistantText: frame.assistantText,
+            toolOutputs: frame.toolOutputs,
+          });
+          if (handle.activeTurnId === frame.turnId) {
+            handle.activeTurnId = null;
+          }
+          this.deps.onTurnQueueReady(handle);
+        } else if (frame.type === "session.closed" && handle.activeTurnId) {
+          this.markRecoveryWalFailed(handle, handle.activeTurnId, frame.reason);
+          this.rejectPendingTurn(handle, handle.activeTurnId, frame.reason ?? "session closed");
           handle.activeTurnId = null;
+          this.deps.onTurnQueueReady(handle);
+        } else if (frame.type === "attempt.started" && frame.reason === "initial") {
+          handle.activeTurnId = frame.turnId;
         }
-        this.deps.onTurnQueueReady(handle);
-      } else if (message.event === "session.turn.error") {
-        this.markRecoveryWalFailed(handle, message.payload.turnId, message.payload.message);
-        this.rejectPendingTurn(handle, message.payload.turnId, message.payload.message);
-        if (handle.activeTurnId === message.payload.turnId) {
-          handle.activeTurnId = null;
-        }
-        this.deps.onTurnQueueReady(handle);
       }
       this.deps.onWorkerEvent?.(message);
       return;

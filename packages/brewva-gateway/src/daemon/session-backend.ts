@@ -1,10 +1,12 @@
 import type {
+  ContextPressureView,
   ManagedToolMode,
+  SessionWireFrame,
   ScheduleContinuityMode,
   TaskSpec,
+  ToolOutputView,
   TruthFact,
 } from "@brewva/brewva-runtime";
-import type { GatewayToolOutput } from "../session/collect-output.js";
 
 export interface OpenSessionInput {
   sessionId: string;
@@ -60,7 +62,7 @@ export interface SendPromptOptions {
 
 export interface SendPromptOutput {
   assistantText: string;
-  toolOutputs: GatewayToolOutput[];
+  toolOutputs: ToolOutputView[];
   attemptId: string;
 }
 
@@ -86,6 +88,8 @@ export interface SessionBackend {
   abortSession(sessionId: string, reason?: SessionAbortReason): Promise<boolean>;
   stopSession(sessionId: string, reason?: string, timeoutMs?: number): Promise<boolean>;
   listWorkers(): SessionWorkerInfo[];
+  querySessionWire(sessionId: string): Promise<SessionWireFrame[]>;
+  querySessionContextPressure(sessionId: string): Promise<ContextPressureView | undefined>;
 }
 
 export type SessionBackendCapacityCode = "worker_limit" | "open_queue_full";

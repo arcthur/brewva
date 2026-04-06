@@ -253,4 +253,56 @@ describe("hosted turn transition coordinator", () => {
     });
     expect(snapshot.consecutiveFailuresByReason.compaction_retry).toBe(1);
   });
+
+  test("tracks the active hosted turn from durable turn receipts without rescanning the full session", () => {
+    const runtime = createRuntimeFixture();
+    const sessionId = "turn-transition-active-turn";
+
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      turn: 7,
+      type: "turn_input_recorded",
+      payload: {
+        turnId: "turn-7",
+        trigger: "user",
+        promptText: "hello",
+      },
+    });
+
+    recordSessionTurnTransition(runtime, {
+      sessionId,
+      reason: "compaction_retry",
+      status: "failed",
+      attempt: 1,
+      error: "resume failed",
+    });
+
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      turn: 7,
+      type: "turn_render_committed",
+      payload: {
+        turnId: "turn-7",
+        attemptId: "attempt-1",
+        status: "completed",
+        assistantText: "done",
+        toolOutputs: [],
+      },
+    });
+
+    recordSessionTurnTransition(runtime, {
+      sessionId,
+      reason: "provider_fallback_retry",
+      status: "failed",
+      attempt: 2,
+      error: "provider failed",
+    });
+
+    const transitions = runtime.inspect.events.queryStructured(sessionId, {
+      type: "session_turn_transition",
+    });
+    expect(transitions).toHaveLength(2);
+    expect(transitions[0]?.turn).toBe(7);
+    expect(transitions[1]?.turn).toBeUndefined();
+  });
 });

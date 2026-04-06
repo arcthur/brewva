@@ -75,12 +75,15 @@ maintenance. They do not promote projection files into source-of-truth inputs.
 - `channel_command_received`
 - `operator_question_answered`
 - `channel_session_bound`
+- `gateway_session_bound`
 - `channel_update_requested`
 - `channel_update_lock_blocked`
 - `session_bootstrap`
 - `session_start`
 - `session_shutdown`
 - `session_turn_transition`
+- `turn_input_recorded`
+- `turn_render_committed`
 - `session_before_compact`
 - `session_compact`
 - `session_compact_requested`
@@ -123,6 +126,13 @@ worker process cannot record it itself, gateway reconciliation writes the
 receipt directly to the persisted agent event log path. There is no config- or
 workspace-derived fallback synthesis path.
 
+`gateway_session_bound` is the gateway control-plane receipt that binds a
+public gateway session id to an agent session id and its durable event-log
+segment. Gateway session replay uses this control-tape binding instead of
+process-local registry state. The receipt is recorded under the gateway control
+session `gateway:session-bindings`; it is replay-critical for public
+session-history lookup, but it is not itself a frontend session-wire frame.
+
 Typical hosted recovery reasons include:
 
 - `reason=compaction_gate_blocked`
@@ -145,6 +155,28 @@ latest continuation reason without relying on process-local gateway memory.
 same semantic request with a larger provider output budget when the hosted
 provider-request recovery hook can patch the next outbound payload.
 
+`turn_input_recorded` is the durable accepted-turn receipt that binds the
+frontend-visible `turnId` to the tape turn index used by later hosted recovery,
+approval, and delegation receipts. Its payload includes:
+
+- `turnId`
+- `trigger`
+- `promptText`
+
+`turn_render_committed` is the durable terminal presentation receipt for an
+accepted turn. Its payload includes:
+
+- `turnId`
+- `attemptId`
+- `status`
+- `assistantText`
+- `toolOutputs`
+
+Together, `turn_input_recorded` and `turn_render_committed` are the durable
+receipts that feed `runtime.inspect.sessionWire`. Replay derives final
+frontend-visible turn text and tool summaries from these receipts, not from raw
+message deltas or standalone tool-result transport frames.
+
 ### Tool, Verification, Mutation, And Recovery
 
 - `tool_call`
@@ -155,6 +187,7 @@ provider-request recovery hook can patch the next outbound payload.
 - `tool_read_path_discovery_observed`
 - `tool_execution_start`
 - `tool_execution_end`
+- `tool_attempt_binding_missing`
 - `tool_result_recorded`
 - `tool_output_observed`
 - `tool_output_distilled`
@@ -183,6 +216,12 @@ and `tool_execution_start` may include `executionTraits` payload fields. Those
 fields are hosted scheduling metadata derived from the specific invocation
 input; they do not replace governance descriptors or receipt-bearing authority
 decisions.
+
+For hosted session-wire live transport, repo-owned tool lifecycle receipts also
+carry `attempt` when the hosted turn has an authoritative active attempt. Those
+attempt numbers are turn-local and feed attempt-scoped live `tool.*` frames; a
+missing authoritative binding is recorded as `tool_attempt_binding_missing`
+instead of being silently guessed from the current active attempt.
 
 `tool_execution_end` may also include a hosted `terminalReason` field. This
 distinguishes direct SDK completion (`completed`, `failed`) from host-synthesized
@@ -374,7 +413,9 @@ The audit-retained core includes:
 - `task_event`
 - `truth_event`
 - session/turn lifecycle receipts such as `session_bootstrap`, `session_start`,
-  `session_shutdown`, `turn_start`, `turn_end`, `message_end`, and `agent_end`
+  `session_shutdown`, `turn_input_recorded`, `turn_render_committed`,
+  `gateway_session_bound`,
+  `turn_start`, `turn_end`, `message_end`, and `agent_end`
 - hosted compaction receipts such as `session_compact_requested`,
   `session_compact`, and `session_turn_transition`
 - tool execution receipts such as `tool_call`, `tool_execution_start`,
@@ -425,6 +466,13 @@ receipt linkage depend on.
 `tool_result_recorded` is the durable outcome event. When present,
 `effectCommitmentRequestId` and `toolCallId` link the result back to the exact
 approval-bearing request that authorized it.
+
+`tool_result_recorded` remains operator truth, but `session-wire.v2` replay
+does not project it into standalone durable `tool.finished` frames. Final
+frontend-facing tool outputs are carried by `turn_render_committed.toolOutputs`.
+During live transport, gateway may still emit cache-class `tool.finished`
+preview frames; frontends should treat `turn.committed.toolOutputs` as the
+committed final state.
 
 `event_listener_error` is also audit-retained because it records fan-out
 degradation without dropping the source event.

@@ -329,15 +329,25 @@ describe("session supervisor safeguards", () => {
 
       supervisor.testHooks.dispatchWorkerMessage("queued-session", {
         kind: "event",
-        event: "session.turn.end",
+        event: "session.wire.frame",
         payload: {
           sessionId: "queued-session",
-          agentSessionId: "agent-queued",
-          turnId: "turn-1",
-          attemptId: "attempt-1",
-          assistantText: "done",
-          toolOutputs: [],
-          ts: Date.now(),
+          frame: {
+            schema: "brewva.session-wire.v2",
+            sessionId: "queued-session",
+            frameId: "live:turn-1",
+            ts: Date.now(),
+            source: "live",
+            durability: "durable",
+            sourceEventId: "evt-queued-turn-committed",
+            sourceEventType: "turn_render_committed",
+            type: "turn.committed",
+            turnId: "turn-1",
+            attemptId: "attempt-1",
+            status: "completed",
+            assistantText: "done",
+            toolOutputs: [],
+          },
         },
       });
 
@@ -417,15 +427,25 @@ describe("session supervisor safeguards", () => {
       });
       supervisor.testHooks.dispatchWorkerMessage("completion-session", {
         kind: "event",
-        event: "session.turn.end",
+        event: "session.wire.frame",
         payload: {
           sessionId: "completion-session",
-          agentSessionId: "agent-completion",
-          turnId: "turn-complete",
-          attemptId: "attempt-2",
-          assistantText: "recovered answer",
-          toolOutputs: [],
-          ts: Date.now(),
+          frame: {
+            schema: "brewva.session-wire.v2",
+            sessionId: "completion-session",
+            frameId: "live:turn-complete",
+            ts: Date.now(),
+            source: "live",
+            durability: "durable",
+            sourceEventId: "evt-completion-turn-committed",
+            sourceEventType: "turn_render_committed",
+            type: "turn.committed",
+            turnId: "turn-complete",
+            attemptId: "attempt-2",
+            status: "completed",
+            assistantText: "recovered answer",
+            toolOutputs: [],
+          },
         },
       });
 
