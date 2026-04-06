@@ -27,6 +27,7 @@ import type {
   ResourceLeaseRecord,
   ResourceLeaseRequest,
   ResourceLeaseResult,
+  ActiveReasoningBranchState,
   EvidenceLedgerRow,
   EvidenceQuery,
   ParallelAcquireResult,
@@ -75,6 +76,10 @@ import type {
   SessionCostSummary,
   SessionWireFrame,
   OpenToolCallRecord,
+  ReasoningCheckpointRecord,
+  ReasoningRevertInput,
+  ReasoningRevertRecord,
+  RecordReasoningCheckpointInput,
   TapeSearchResult,
   TapeSearchScope,
   TapeHandoffResult,
@@ -162,6 +167,7 @@ import { LedgerService } from "./services/ledger.js";
 import { MutationRollbackService } from "./services/mutation-rollback.js";
 import { ParallelService } from "./services/parallel.js";
 import { ProposalAdmissionService } from "./services/proposal-admission.js";
+import { ReasoningService } from "./services/reasoning.js";
 import { ResourceLeaseService } from "./services/resource-lease.js";
 import { ScheduleIntentService } from "./services/schedule-intent.js";
 import { SessionLifecycleService } from "./services/session-lifecycle.js";
@@ -181,6 +187,7 @@ import { VerificationService } from "./services/verification.js";
 import { SkillRegistry } from "./skills/registry.js";
 import { ensureBundledSystemSkills } from "./skills/system-install.js";
 import { FileChangeTracker } from "./state/file-change-tracker.js";
+import { ReasoningReplayEngine } from "./tape/reasoning-replay.js";
 import { TurnReplayEngine } from "./tape/replay-engine.js";
 import { resolvePrimaryTaskTargetRoot, resolveTaskTargetRoots } from "./task/targeting.js";
 import { normalizeToolResultVerdict } from "./utils/tool-result.js";
@@ -292,6 +299,18 @@ interface BrewvaRuntimeMethodGroups {
       requestId: string,
       input: DecideEffectCommitmentInput,
     ): DecideEffectCommitmentResult;
+  };
+  reasoning: {
+    recordCheckpoint(
+      sessionId: string,
+      input: RecordReasoningCheckpointInput,
+    ): ReasoningCheckpointRecord;
+    revert(sessionId: string, input: ReasoningRevertInput): ReasoningRevertRecord;
+    getActiveState(sessionId: string): ActiveReasoningBranchState;
+    listCheckpoints(sessionId: string): ReasoningCheckpointRecord[];
+    getCheckpoint(sessionId: string, checkpointId: string): ReasoningCheckpointRecord | undefined;
+    listReverts(sessionId: string): ReasoningRevertRecord[];
+    canRevertTo(sessionId: string, checkpointId: string): boolean;
   };
   context: {
     onTurnStart(sessionId: string, turnIndex: number): void;
@@ -628,6 +647,7 @@ export interface BrewvaAuthorityPort {
     BrewvaRuntimeMethodGroups["proposals"],
     "submit" | "decideEffectCommitment"
   >;
+  readonly reasoning: Pick<BrewvaRuntimeMethodGroups["reasoning"], "recordCheckpoint" | "revert">;
   readonly tools: Pick<
     BrewvaRuntimeMethodGroups["tools"],
     | "start"
@@ -678,6 +698,10 @@ export interface BrewvaInspectionPort {
   readonly proposals: Pick<
     BrewvaRuntimeMethodGroups["proposals"],
     "list" | "listEffectCommitmentRequests" | "listPendingEffectCommitments"
+  >;
+  readonly reasoning: Pick<
+    BrewvaRuntimeMethodGroups["reasoning"],
+    "getActiveState" | "listCheckpoints" | "getCheckpoint" | "listReverts" | "canRevertTo"
   >;
   readonly context: Pick<
     BrewvaRuntimeMethodGroups["context"],
@@ -842,9 +866,11 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
   declare private readonly toolLifecycleRecoveryWalService: ToolLifecycleRecoveryWalService;
   declare private readonly verificationProjectorService: VerificationProjectorService;
   declare private readonly verificationService: VerificationService;
+  declare private readonly reasoningService: ReasoningService;
   declare private readonly runtimeConfig: BrewvaConfig;
   private readonly toolGovernanceRegistry = createToolGovernanceRegistry();
   declare private turnReplay: TurnReplayEngine;
+  declare private reasoningReplay: ReasoningReplayEngine;
 
   constructor(options: BrewvaRuntimeOptions = {}) {
     const cwd = resolve(options.cwd ?? process.cwd());
@@ -933,6 +959,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
         contextBudget: this.contextBudget,
         contextInjection: this.contextInjection,
         turnReplay: this.turnReplay,
+        reasoningReplay: this.reasoningReplay,
         fileChanges: this.fileChanges,
         costTracker: this.costTracker,
         projectionEngine: this.projectionEngine,
@@ -969,6 +996,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
         contextBudget: this.contextBudget,
         contextInjection: this.contextInjection,
         turnReplay: this.turnReplay,
+        reasoningReplay: this.reasoningReplay,
         fileChanges: this.fileChanges,
         costTracker: this.costTracker,
         projectionEngine: this.projectionEngine,
@@ -1017,6 +1045,18 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           this.effectCommitmentDeskService.listPending(sessionId),
         decideEffectCommitment: (sessionId, requestId, input) =>
           this.effectCommitmentDeskService.decide(sessionId, requestId, input),
+      },
+      reasoning: {
+        recordCheckpoint: (sessionId, input) =>
+          this.reasoningService.recordCheckpoint(sessionId, input),
+        revert: (sessionId, input) => this.reasoningService.revert(sessionId, input),
+        getActiveState: (sessionId) => this.reasoningService.getActiveState(sessionId),
+        listCheckpoints: (sessionId) => this.reasoningService.listCheckpoints(sessionId),
+        getCheckpoint: (sessionId, checkpointId) =>
+          this.reasoningService.getCheckpoint(sessionId, checkpointId),
+        listReverts: (sessionId) => this.reasoningService.listReverts(sessionId),
+        canRevertTo: (sessionId, checkpointId) =>
+          this.reasoningService.canRevertTo(sessionId, checkpointId),
       },
       context: {
         onTurnStart: (sessionId, turnIndex) => {
@@ -1302,6 +1342,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "submit",
           "decideEffectCommitment",
         ] as const),
+        reasoning: bindMethods(methodGroups.reasoning, ["recordCheckpoint", "revert"] as const),
         tools: bindMethods(methodGroups.tools, [
           "start",
           "finish",
@@ -1356,6 +1397,13 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "list",
           "listEffectCommitmentRequests",
           "listPendingEffectCommitments",
+        ] as const),
+        reasoning: bindMethods(methodGroups.reasoning, [
+          "getActiveState",
+          "listCheckpoints",
+          "getCheckpoint",
+          "listReverts",
+          "canRevertTo",
         ] as const),
         context: bindMethods(methodGroups.context, [
           "sanitizeInput",

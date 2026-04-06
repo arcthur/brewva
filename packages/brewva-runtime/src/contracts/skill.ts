@@ -40,6 +40,8 @@ export const SKILL_REPAIR_ALLOWED_TOOL_NAMES = [
   "task_view_state",
   "ledger_query",
   "tape_info",
+  "reasoning_checkpoint",
+  "reasoning_revert",
   "session_compact",
 ] as const;
 export const SKILL_REPAIR_MAX_ATTEMPTS = 2;

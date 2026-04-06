@@ -7,6 +7,7 @@ import {
   TOOL_EXECUTION_START_EVENT_TYPE,
   TURN_INPUT_RECORDED_EVENT_TYPE,
   TURN_RENDER_COMMITTED_EVENT_TYPE,
+  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   type BrewvaHostedRuntimePort,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
@@ -87,6 +88,41 @@ function summarizeMessage(message: unknown): Record<string, unknown> {
     contentItems: content.items,
     contentTextChars: content.textChars,
   };
+}
+
+function resolveLeafEntryId(ctx: {
+  sessionManager?: { getLeafId?: () => unknown };
+}): string | null {
+  const leafEntryId = ctx.sessionManager?.getLeafId?.();
+  return typeof leafEntryId === "string" && leafEntryId.trim().length > 0
+    ? leafEntryId.trim()
+    : null;
+}
+
+// leafEntryId is best-effort for checkpoints triggered from runtime event
+// listeners (verification_boundary) because those listeners do not have access
+// to the extension context. The value comes from the latestLeafEntryIdBySession
+// cache populated by prior extension events in the same turn. If no extension
+// event fired before the verification outcome, leafEntryId will be null. This
+// is acceptable: revert targeting degrades to leaf=null (the session root
+// position) when no leaf is available, and the main revert semantic (branch
+// reset + continuity injection) is unaffected.
+function recordReasoningCheckpoint(
+  runtime: BrewvaHostedRuntimePort,
+  input: {
+    sessionId: string;
+    boundary: "turn_start" | "tool_boundary" | "verification_boundary" | "compaction_boundary";
+    leafEntryId: string | null;
+  },
+): void {
+  try {
+    runtime.authority.reasoning.recordCheckpoint(input.sessionId, {
+      boundary: input.boundary,
+      leafEntryId: input.leafEntryId,
+    });
+  } catch {
+    return;
+  }
 }
 
 function extractMessageText(message: unknown): string {
@@ -267,6 +303,7 @@ export function registerEventStream(
   turnClock: RuntimeTurnClockStore = createRuntimeTurnClockStore(),
   options: EventStreamOptions = {},
 ): void {
+  const latestLeafEntryIdBySession = new Map<string, string>();
   const lastAssistantTextBySession = new Map<string, string>();
   const assistantWindowBySession = new Map<string, string>();
   const observedToolCallsBySession = new Map<string, Set<string>>();
@@ -434,6 +471,20 @@ export function registerEventStream(
     pendingInterruptFlushTimers.set(sessionId, timer);
   };
 
+  const rememberLeafEntryId = (
+    sessionId: string,
+    ctx: {
+      sessionManager?: { getLeafId?: () => unknown };
+    },
+  ): string | null => {
+    const leafEntryId = resolveLeafEntryId(ctx);
+    if (leafEntryId) {
+      latestLeafEntryIdBySession.set(sessionId, leafEntryId);
+      return leafEntryId;
+    }
+    return latestLeafEntryIdBySession.get(sessionId) ?? null;
+  };
+
   runtime.inspect.events.subscribe((event) => {
     if (event.type === TURN_INPUT_RECORDED_EVENT_TYPE) {
       getToolAttemptBindings(event.sessionId).beginTurn(1);
@@ -444,6 +495,17 @@ export function registerEventStream(
       event.type === SESSION_SHUTDOWN_EVENT_TYPE
     ) {
       getToolAttemptBindings(event.sessionId).clearTurn();
+      if (event.type === SESSION_SHUTDOWN_EVENT_TYPE) {
+        latestLeafEntryIdBySession.delete(event.sessionId);
+      }
+      return;
+    }
+    if (event.type === VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE) {
+      recordReasoningCheckpoint(runtime, {
+        sessionId: event.sessionId,
+        boundary: "verification_boundary",
+        leafEntryId: latestLeafEntryIdBySession.get(event.sessionId) ?? null,
+      });
       return;
     }
     if (event.type === SESSION_TURN_TRANSITION_EVENT_TYPE) {
@@ -472,6 +534,7 @@ export function registerEventStream(
 
   extensionApi.on("session_start", (_event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
+    rememberLeafEntryId(sessionId, ctx);
     recordRuntimeEvent(runtime, {
       sessionId,
       type: "session_start",
@@ -494,6 +557,7 @@ export function registerEventStream(
     pendingToolResultsBySession.delete(sessionId);
     activeToolExecutionsBySession.delete(sessionId);
     toolAttemptBindingsBySession.delete(sessionId);
+    latestLeafEntryIdBySession.delete(sessionId);
     turnClock.clearSession(sessionId);
     runtime.maintain.session.clearState(sessionId);
     return undefined;
@@ -525,6 +589,12 @@ export function registerEventStream(
     const sessionId = ctx.sessionManager.getSessionId();
     const runtimeTurn = turnClock.observeTurnStart(sessionId, event.turnIndex, event.timestamp);
     getToolAttemptBindings(sessionId).beginTurn(syncCurrentAttemptSequence(sessionId) ?? 1);
+    const leafEntryId = rememberLeafEntryId(sessionId, ctx);
+    recordReasoningCheckpoint(runtime, {
+      sessionId,
+      boundary: "turn_start",
+      leafEntryId,
+    });
     recordRuntimeEvent(runtime, {
       sessionId,
       type: "turn_start",
@@ -614,6 +684,7 @@ export function registerEventStream(
 
   extensionApi.on("tool_execution_start", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
+    rememberLeafEntryId(sessionId, ctx);
     clearPendingInterruptFlush(sessionId);
     const executionTraits = resolveExecutionTraitsPayload({
       toolDefinitionsByName: options.toolDefinitionsByName,
@@ -653,6 +724,7 @@ export function registerEventStream(
 
   extensionApi.on("tool_result", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
+    rememberLeafEntryId(sessionId, ctx);
     clearPendingInterruptFlush(sessionId);
     if (typeof event.toolCallId !== "string" || typeof event.toolName !== "string") {
       return undefined;
@@ -669,6 +741,7 @@ export function registerEventStream(
 
   extensionApi.on("tool_execution_end", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
+    rememberLeafEntryId(sessionId, ctx);
     clearPendingInterruptFlush(sessionId);
     const observedToolCalls = getObservedToolCalls(sessionId);
     if (!observedToolCalls.has(event.toolCallId)) {
@@ -714,6 +787,7 @@ export function registerEventStream(
 
   extensionApi.on("tool_call", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
+    rememberLeafEntryId(sessionId, ctx);
     clearPendingInterruptFlush(sessionId);
     const executionTraits = resolveExecutionTraitsPayload({
       toolDefinitionsByName: options.toolDefinitionsByName,
@@ -743,6 +817,7 @@ export function registerEventStream(
 
   extensionApi.on("session_before_compact", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
+    rememberLeafEntryId(sessionId, ctx);
     clearPendingInterruptFlush(sessionId);
     flushPendingToolResults(sessionId);
     flushActiveToolExecutions(sessionId, "cancelled_by_retry_supersession");
@@ -752,6 +827,17 @@ export function registerEventStream(
       payload: {
         branchEntries: event.branchEntries.length,
       },
+    });
+    return undefined;
+  });
+
+  extensionApi.on("session_compact", (_event, ctx) => {
+    const sessionId = ctx.sessionManager.getSessionId();
+    const leafEntryId = rememberLeafEntryId(sessionId, ctx);
+    recordReasoningCheckpoint(runtime, {
+      sessionId,
+      boundary: "compaction_boundary",
+      leafEntryId,
     });
     return undefined;
   });

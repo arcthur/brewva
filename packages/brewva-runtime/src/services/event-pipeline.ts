@@ -118,6 +118,10 @@ import {
 import { BrewvaEventStore } from "../events/store.js";
 import { SCHEDULE_EVENT_TYPE } from "../schedule/events.js";
 import { TAPE_ANCHOR_EVENT_TYPE, TAPE_CHECKPOINT_EVENT_TYPE } from "../tape/events.js";
+import {
+  REASONING_CHECKPOINT_EVENT_TYPE,
+  REASONING_REVERT_EVENT_TYPE,
+} from "../tape/reasoning-events.js";
 import { TASK_EVENT_TYPE } from "../task/ledger.js";
 import { TRUTH_EVENT_TYPE } from "../truth/ledger.js";
 import type { JsonValue } from "../utils/json.js";
@@ -126,6 +130,8 @@ import type { RuntimeCallback } from "./callback.js";
 const AUDIT_EVENT_TYPES = new Set<string>([
   TAPE_ANCHOR_EVENT_TYPE,
   TAPE_CHECKPOINT_EVENT_TYPE,
+  REASONING_CHECKPOINT_EVENT_TYPE,
+  REASONING_REVERT_EVENT_TYPE,
   TASK_EVENT_TYPE,
   TRUTH_EVENT_TYPE,
   TOOL_EFFECT_GATE_SELECTED_EVENT_TYPE,

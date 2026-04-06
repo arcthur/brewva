@@ -13,6 +13,8 @@ export const BREWVA_TOOL_SURFACE_BY_NAME = {
   read_spans: "base",
   look_at: "base",
   toc_search: "base",
+  reasoning_checkpoint: "control_plane",
+  reasoning_revert: "control_plane",
   session_compact: "control_plane",
   resource_lease: "base",
   exec: "base",

@@ -37,6 +37,8 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 
 ## Proposed notes
 
+None currently.
+
 ## Active notes
 
 - `docs/research/roadmap-notes.md`
@@ -66,6 +68,7 @@ yet stable enough for `docs/architecture/` or `docs/reference/`.
 - `docs/research/rfc-skill-distribution-refresh-and-catalog-surface.md`
 - `docs/research/rfc-skill-first-delegation-and-execution-envelopes.md`
 - `docs/research/rfc-authority-surface-narrowing-and-runtime-facade-compression.md`
+- `docs/research/rfc-kernel-level-reasoning-revert-and-branch-continuity.md`
 - `docs/research/rfc-workflow-artifacts-and-posture-control-plane.md`
 - `docs/research/rfc-hosted-turn-transitions-and-bounded-recovery.md`
 

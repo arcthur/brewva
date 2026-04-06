@@ -10,7 +10,8 @@ export type SessionWireAttemptReason =
   | "output_budget_escalation"
   | "compaction_retry"
   | "provider_fallback_retry"
-  | "max_output_recovery";
+  | "max_output_recovery"
+  | "reasoning_revert_resume";
 export type SessionWireTransitionFamily =
   | "context"
   | "output_budget"

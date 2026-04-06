@@ -47,6 +47,7 @@ const DURABLE_ATTEMPT_REASONS = new Set<Exclude<SessionWireAttemptReason, "initi
   "compaction_retry",
   "provider_fallback_retry",
   "max_output_recovery",
+  "reasoning_revert_resume",
 ]);
 
 function createCompilerState(): SessionWireCompilerState {
@@ -98,7 +99,8 @@ function readSessionWireAttemptReason(value: unknown): SessionWireAttemptReason 
     value === "output_budget_escalation" ||
     value === "compaction_retry" ||
     value === "provider_fallback_retry" ||
-    value === "max_output_recovery"
+    value === "max_output_recovery" ||
+    value === "reasoning_revert_resume"
     ? value
     : undefined;
 }

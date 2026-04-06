@@ -27,6 +27,7 @@ export * from "./task/surface.js";
 export * from "./task/watchdog.js";
 export * from "./truth/ledger.js";
 export * from "./tape/events.js";
+export * from "./tape/reasoning-events.js";
 export * from "./truth/tool-result-projector.js";
 export * from "./utils/tool-name.js";
 export * from "./schedule/events.js";

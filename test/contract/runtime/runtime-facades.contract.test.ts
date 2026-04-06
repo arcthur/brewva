@@ -250,6 +250,64 @@ describe("runtime facade coverage", () => {
     ).toEqual([]);
   });
 
+  test("reasoning facade records durable branch state and rehydrates after clearState", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createTestWorkspace("runtime-facade-reasoning"),
+      config: createOpsRuntimeConfig(),
+    });
+    const sessionId = "runtime-facade-reasoning-1";
+    runtime.maintain.context.onTurnStart(sessionId, 1);
+
+    const checkpointA = runtime.authority.reasoning.recordCheckpoint(sessionId, {
+      boundary: "operator_marker",
+      leafEntryId: "leaf-a",
+    });
+    const checkpointB = runtime.authority.reasoning.recordCheckpoint(sessionId, {
+      boundary: "verification_boundary",
+      leafEntryId: "leaf-b",
+    });
+    const revert = runtime.authority.reasoning.revert(sessionId, {
+      toCheckpointId: checkpointA.checkpointId,
+      trigger: "operator_request",
+      continuity: "Resume from the earlier verified checkpoint only.",
+      linkedRollbackReceiptIds: ["rollback-1", "rollback-1", "rollback-2"],
+    });
+
+    const beforeClear = runtime.inspect.reasoning.getActiveState(sessionId);
+    expect(beforeClear.activeCheckpointId).toBe(checkpointA.checkpointId);
+    expect(beforeClear.activeLineageCheckpointIds).toEqual([checkpointA.checkpointId]);
+    expect(beforeClear.checkpoints.map((entry) => entry.checkpointId)).toEqual([
+      checkpointA.checkpointId,
+      checkpointB.checkpointId,
+    ]);
+    expect(beforeClear.reverts).toEqual([
+      expect.objectContaining({
+        revertId: revert.revertId,
+        toCheckpointId: checkpointA.checkpointId,
+        fromCheckpointId: checkpointB.checkpointId,
+        linkedRollbackReceiptIds: ["rollback-1", "rollback-2"],
+      }),
+    ]);
+    expect(runtime.inspect.reasoning.canRevertTo(sessionId, checkpointA.checkpointId)).toBe(true);
+    expect(runtime.inspect.reasoning.canRevertTo(sessionId, checkpointB.checkpointId)).toBe(false);
+
+    runtime.maintain.session.clearState(sessionId);
+
+    const afterClear = runtime.inspect.reasoning.getActiveState(sessionId);
+    expect(afterClear.activeBranchId).toBe(revert.newBranchId);
+    expect(afterClear.activeCheckpointId).toBe(checkpointA.checkpointId);
+    expect(afterClear.activeLineageCheckpointIds).toEqual([checkpointA.checkpointId]);
+    expect(afterClear.latestContinuityPacket?.text).toBe(
+      "Resume from the earlier verified checkpoint only.",
+    );
+    expect(afterClear.reverts).toEqual([
+      expect.objectContaining({
+        revertId: revert.revertId,
+        toCheckpointId: checkpointA.checkpointId,
+      }),
+    ]);
+  });
+
   test("session inspection exposes unclean shutdown reconciliation for open turns without tool calls", () => {
     let now = 1_740_000_100_000;
     const restoreNow = patchDateNow(() => now);

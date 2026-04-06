@@ -61,6 +61,8 @@ across both files.
 
 - `anchor`
 - `checkpoint`
+- `reasoning_checkpoint`
+- `reasoning_revert`
 - `task_event`
 - `truth_event`
 - `schedule_intent`
@@ -69,6 +71,43 @@ across both files.
 
 `projection_ingested` and `projection_refreshed` describe rebuildable-state
 maintenance. They do not promote projection files into source-of-truth inputs.
+
+`reasoning_checkpoint` and `reasoning_revert` are append-only reasoning-branch
+receipts. They are replay inputs for the active reasoning lineage, but they do
+not replace tape `checkpoint`, cost truth, evidence truth, or receipt-based
+mutation rollback.
+
+`reasoning_checkpoint` payloads carry:
+
+- `schema=brewva.reasoning.checkpoint.v1`
+- `checkpointId`
+- `checkpointSequence`
+- `branchId`
+- `branchSequence`
+- `parentCheckpointId?`
+- `boundary`
+- `leafEntryId?`
+- `createdAt`
+
+`reasoning_revert` payloads carry:
+
+- `schema=brewva.reasoning.revert.v1`
+- `revertId`
+- `revertSequence`
+- `toCheckpointId`
+- `fromCheckpointId?`
+- `fromBranchId`
+- `newBranchId`
+- `newBranchSequence`
+- `trigger`
+- `continuityPacket`
+- `linkedRollbackReceiptIds?`
+- `targetLeafEntryId?`
+- `createdAt`
+
+`continuityPacket` is itself schema-bound
+(`brewva.reasoning.continuity.v1`) and its UTF-8 text payload is hard-capped
+at `1200` bytes before the receipt is admitted.
 
 ### Session, Turn, And Hosted Lifecycle
 
@@ -148,6 +187,7 @@ Typical hosted recovery reasons include:
 - `reason=output_budget_escalation`
 - `reason=provider_fallback_retry`
 - `reason=max_output_recovery`
+- `reason=reasoning_revert_resume`
 - `reason=effect_commitment_pending`
 - `reason=subagent_delivery_pending`
 - `reason=wal_recovery_resume`
@@ -435,6 +475,8 @@ The audit-retained core includes:
 
 - `anchor`
 - `checkpoint`
+- `reasoning_checkpoint`
+- `reasoning_revert`
 - `task_event`
 - `truth_event`
 - session/turn lifecycle receipts such as `session_bootstrap`, `session_start`,

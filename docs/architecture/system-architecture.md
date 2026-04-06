@@ -189,6 +189,9 @@ Important distinctions:
   authority
 - iteration facts are durable event evidence for model-native optimization
   loops, not a runtime-owned optimizer state machine
+- reasoning branch continuity is a kernel commitment when it becomes a durable
+  `reasoning_checkpoint` or `reasoning_revert` receipt; the exploratory path
+  itself remains discardable until then
 - context arena is an injection planner, not a memory system
 - tool surface should reflect the current commitment boundary, not the whole
   static capability catalog
@@ -214,6 +217,9 @@ Hosted recovery note:
   effects, approvals, rollback, or replay truth
 - hosted tool execution traits may shape scheduler behavior, but they remain a
   control-plane concern rather than a kernel authority descriptor
+- hosted reasoning revert is also a control-plane continuation surface:
+  `reasoning_revert_resume` explains how the user-facing turn continued after a
+  durable branch reset, but the branch truth itself remains on tape
 
 ## Durability Taxonomy
 
@@ -235,7 +241,8 @@ The repository uses four durability classes:
 
 Default mappings in Brewva:
 
-- event tape, checkpoints, receipts, task/truth/schedule intent events
+- event tape, checkpoints, reasoning-branch receipts, task/truth/schedule
+  intent events
   - `durable source of truth`
 - Recovery WAL and rollback patch/snapshot history
   - `durable transient`

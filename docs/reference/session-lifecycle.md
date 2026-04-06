@@ -29,8 +29,8 @@
 Session lifecycle behavior is anchored to the repository durability taxonomy:
 
 - `durable source of truth`
-  - event tape, checkpoints, proposal receipts, approval events, task/truth
-    events, and schedule intent events
+  - event tape, checkpoints, reasoning-branch receipts, proposal receipts,
+    approval events, task/truth events, and schedule intent events
 - `durable transient`
   - Recovery WAL and rollback patch/snapshot history used for bounded recovery or
     undo
@@ -54,6 +54,9 @@ Deletion consequences:
   timeout), then exits.
 - Next startup reconstructs foldable replay state from event tape (`checkpoint + delta` replay),
   including task/truth/cost/evidence/projection fold slices.
+- Reasoning-branch truth is reconstructed from durable `reasoning_checkpoint`
+  and `reasoning_revert` receipts. Recovery WAL does not hold the active
+  branch; it only carries the in-flight turn envelope.
 - First `onTurnStart()` hydrates session-local runtime state from tape events
   (skill/budget/cost counters, warning dedupe, ledger compaction cooldown).
 - Gateway and frontend session replay do not consume raw `inspect.events`.
@@ -77,6 +80,21 @@ Deletion consequences:
   source tape events using deterministic projection extraction rules.
   `projection_ingested` and `projection_refreshed` remain projection telemetry,
   not semantic rebuild inputs.
+- Before a recovered prompt runs, hosted recovery checks whether the latest
+  durable reasoning revert has already completed `reasoning_revert_resume`.
+  If not, the worker rebuilds the active branch from the revert target,
+  replaces model-visible messages from that surviving branch, and resumes with
+  bounded hosted continuity instead of replaying superseded history.
+- `completed` is the only terminal hosted-resume status for replay purposes.
+  Any latest reasoning revert without a completed
+  `reasoning_revert_resume` receipt remains pending for the next serialized
+  recovery pass.
+- That reasoning resume remains owned by the serialized turn runner that was
+  already handling the prompt. Hosted recovery prepares the branch reset, but it
+  does not start a second out-of-band prompt behind the scheduler.
+- `reasoning_revert_resume` is therefore crash-safe over the existing gateway
+  prompt WAL: the WAL replays the pending turn envelope, while tape determines
+  whether branch reset must be re-applied first.
 - Channel approval helper state is not part of recovery correctness.
   Approval truth and request resolution remain replay-derived from durable
   runtime events, with optional process-local UI cache only.

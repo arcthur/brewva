@@ -23,6 +23,8 @@ import { createPrecedentAuditTool } from "./precedent-audit.js";
 import { createPrecedentSweepTool } from "./precedent-sweep.js";
 import { createProcessTool } from "./process.js";
 import { createReadSpansTool } from "./read-spans.js";
+import { createReasoningCheckpointTool } from "./reasoning-checkpoint.js";
+import { createReasoningRevertTool } from "./reasoning-revert.js";
 import { createResourceLeaseTool } from "./resource-lease.js";
 import { createRollbackLastPatchTool } from "./rollback-last-patch.js";
 import { createScheduleIntentTool } from "./schedule-intent.js";
@@ -95,6 +97,8 @@ export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefiniti
     createFollowUpTool({ runtime }),
     createScheduleIntentTool({ runtime }),
     ...createTapeTools({ runtime }),
+    createReasoningCheckpointTool({ runtime }),
+    createReasoningRevertTool({ runtime }),
     createSessionCompactTool({ runtime }),
     createResourceLeaseTool({ runtime }),
     createRollbackLastPatchTool({ runtime }),
@@ -127,6 +131,8 @@ export { createKnowledgeCaptureTool } from "./knowledge-capture.js";
 export { createKnowledgeSearchTool } from "./knowledge-search.js";
 export { createPrecedentAuditTool } from "./precedent-audit.js";
 export { createPrecedentSweepTool } from "./precedent-sweep.js";
+export { createReasoningCheckpointTool } from "./reasoning-checkpoint.js";
+export { createReasoningRevertTool } from "./reasoning-revert.js";
 export { createResourceLeaseTool } from "./resource-lease.js";
 export {
   ALL_REVIEW_LANES,

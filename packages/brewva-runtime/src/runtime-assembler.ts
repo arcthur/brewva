@@ -41,6 +41,7 @@ import { MutationRollbackService } from "./services/mutation-rollback.js";
 import { ParallelService } from "./services/parallel.js";
 import type { EffectCommitmentAuthorizationDecision } from "./services/proposal-admission-effect-commitment.js";
 import { ProposalAdmissionService } from "./services/proposal-admission.js";
+import { ReasoningService } from "./services/reasoning.js";
 import { ResourceLeaseService } from "./services/resource-lease.js";
 import { ReversibleMutationService } from "./services/reversible-mutation.js";
 import { ScheduleIntentService } from "./services/schedule-intent.js";
@@ -59,6 +60,7 @@ import { VerificationProjectorService } from "./services/verification-projector.
 import { VerificationService } from "./services/verification.js";
 import { SkillRegistry } from "./skills/registry.js";
 import { FileChangeTracker } from "./state/file-change-tracker.js";
+import { ReasoningReplayEngine } from "./tape/reasoning-replay.js";
 import { TurnReplayEngine } from "./tape/replay-engine.js";
 import { resolveTaskTargetRoots } from "./task/targeting.js";
 import { VerificationGate } from "./verification/gate.js";
@@ -74,6 +76,7 @@ export interface RuntimeCoreDependencies {
   contextBudget: ContextBudgetManager;
   contextInjection: ContextInjectionCollector;
   turnReplay: TurnReplayEngine;
+  reasoningReplay: ReasoningReplayEngine;
   fileChanges: FileChangeTracker;
   costTracker: SessionCostTracker;
   projectionEngine: ProjectionEngine;
@@ -98,6 +101,7 @@ export interface RuntimeServiceDependencies {
   truthProjectorService: TruthProjectorService;
   verificationProjectorService: VerificationProjectorService;
   scheduleIntentService: ScheduleIntentService;
+  reasoningService: ReasoningService;
   fileChangeService: FileChangeService;
   mutationRollbackService: MutationRollbackService;
   sessionLifecycleService: SessionLifecycleService;
@@ -238,6 +242,9 @@ export function createRuntimeCoreDependencies(
     listEvents: (sessionId) => eventStore.list(sessionId),
     getTurn: (sessionId) => options.getCurrentTurn(sessionId),
   });
+  const reasoningReplay = new ReasoningReplayEngine({
+    listEvents: (sessionId) => eventStore.list(sessionId),
+  });
   const fileChanges = new FileChangeTracker(options.cwd, {
     artifactsBaseDir: options.workspaceRoot,
   });
@@ -262,6 +269,7 @@ export function createRuntimeCoreDependencies(
     contextBudget,
     contextInjection,
     turnReplay,
+    reasoningReplay,
     fileChanges,
     costTracker,
     projectionEngine,
@@ -282,6 +290,7 @@ export function createRuntimeKernelContext(
     contextInjection: options.coreDependencies.contextInjection,
     projectionEngine: options.coreDependencies.projectionEngine,
     turnReplay: options.coreDependencies.turnReplay,
+    reasoningReplay: options.coreDependencies.reasoningReplay,
     eventStore: options.coreDependencies.eventStore,
     evidenceLedger: options.coreDependencies.evidenceLedger,
     verificationGate: options.coreDependencies.verificationGate,
@@ -513,9 +522,17 @@ export function createRuntimeServiceDependencies(
     events: options.coreDependencies.eventStore,
     level: options.config.infrastructure.events.level,
     inferEventCategory,
-    observeReplayEvent: (event) => options.coreDependencies.turnReplay.observeEvent(event),
+    observeReplayEvent: (event) => {
+      options.coreDependencies.turnReplay.observeEvent(event);
+      options.coreDependencies.reasoningReplay.observeEvent(event);
+    },
     ingestProjectionEvent: (event) => options.coreDependencies.projectionEngine.ingestEvent(event),
     maybeRecordTapeCheckpoint: (event) => tapeService.maybeRecordTapeCheckpoint(event),
+  });
+  const reasoningService = new ReasoningService({
+    replay: options.coreDependencies.reasoningReplay,
+    getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
+    recordEvent: (input) => options.kernel.recordEvent(input),
   });
   const truthProjectorService = new TruthProjectorService({
     cwd: options.cwd,
@@ -637,6 +654,7 @@ export function createRuntimeServiceDependencies(
     toolLifecycleRecoveryWalService.clearSession(sessionId);
     reversibleMutationService.clear(sessionId);
     effectCommitmentDeskService.clear(sessionId);
+    options.coreDependencies.reasoningReplay.clear(sessionId);
   });
 
   return {
@@ -659,6 +677,7 @@ export function createRuntimeServiceDependencies(
     truthProjectorService,
     verificationProjectorService,
     scheduleIntentService,
+    reasoningService,
     fileChangeService,
     mutationRollbackService,
     sessionLifecycleService,

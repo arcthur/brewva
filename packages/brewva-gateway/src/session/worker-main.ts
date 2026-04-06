@@ -11,6 +11,7 @@ import { createRuntimeTurnClockStore } from "../runtime-plugins/runtime-turn-clo
 import { recordAbnormalSessionShutdown } from "../utils/runtime.js";
 import { SessionPromptCollectionError, collectSessionPromptOutput } from "./collect-output.js";
 import { createGatewaySession, type GatewaySessionResult } from "./create-session.js";
+import { preparePendingSessionReasoningRevertResume } from "./reasoning-revert-recovery.js";
 import { applySchedulePromptTrigger } from "./schedule-trigger.js";
 import { TaskProgressWatchdog } from "./task-progress-watchdog.js";
 import { recordSessionTurnTransition } from "./turn-transition.js";
@@ -556,6 +557,9 @@ async function runTurn(input: {
     walReplayId: input.walReplayId,
   });
 
+  let preparedReasoningResume: Awaited<
+    ReturnType<typeof preparePendingSessionReasoningRevertResume>
+  > | null = null;
   try {
     if (input.trigger?.kind === "schedule") {
       applySchedulePromptTrigger(sessionResult.runtime, input.agentSessionId, input.trigger);
@@ -571,8 +575,18 @@ async function runTurn(input: {
         sourceEventType: "recovery_wal_recovery_completed",
       });
     }
+    preparedReasoningResume = await preparePendingSessionReasoningRevertResume(
+      sessionResult.session,
+      {
+        runtime: sessionResult.runtime,
+        sessionId: input.agentSessionId,
+        turn: runtimeTurn,
+      },
+    );
+    const effectivePrompt = preparedReasoningResume?.prompt ?? input.prompt;
     const fakeAssistantText = workerTestHarness.fakeAssistantText;
     if (fakeAssistantText) {
+      preparedReasoningResume?.complete();
       recordFakeTurnLifecycle(input.agentSessionId, input.turnId, fakeAssistantText);
       if (typeof input.walReplayId === "string" && input.walReplayId.trim().length > 0) {
         recordSessionTurnTransition(sessionResult.runtime, {
@@ -596,7 +610,7 @@ async function runTurn(input: {
       });
       return;
     }
-    const output = await collectSessionPromptOutput(sessionResult.session, input.prompt, {
+    const output = await collectSessionPromptOutput(sessionResult.session, effectivePrompt, {
       runtime: sessionResult.runtime,
       sessionId: input.agentSessionId,
       turnId: input.turnId,
@@ -604,6 +618,7 @@ async function runTurn(input: {
         sendSessionWireFrame(requestedSessionId, frame);
       },
     });
+    preparedReasoningResume?.complete();
     if (typeof input.walReplayId === "string" && input.walReplayId.trim().length > 0) {
       recordSessionTurnTransition(sessionResult.runtime, {
         sessionId: input.agentSessionId,
@@ -635,6 +650,7 @@ async function runTurn(input: {
             assistantText: "",
             toolOutputs: [],
           });
+    preparedReasoningResume?.fail(collectionError);
     if (typeof input.walReplayId === "string" && input.walReplayId.trim().length > 0) {
       recordSessionTurnTransition(sessionResult.runtime, {
         sessionId: input.agentSessionId,

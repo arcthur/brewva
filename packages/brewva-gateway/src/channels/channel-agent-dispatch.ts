@@ -9,6 +9,7 @@ import {
 } from "../runtime-plugins/index.js";
 import { sendPromptWithCompactionRecovery } from "../session/compaction-recovery.js";
 import type { SubscribablePromptSession } from "../session/contracts.js";
+import { preparePendingSessionReasoningRevertResume } from "../session/reasoning-revert-recovery.js";
 import { toErrorMessage } from "../utils/errors.js";
 import { clampText } from "../utils/runtime.js";
 import type { AgentRegistry } from "./agent-registry.js";
@@ -261,14 +262,41 @@ export async function collectPromptTurnOutputs(
   });
 
   try {
-    await sendPromptWithCompactionRecovery(session, prompt, {
-      runtime: options?.runtime,
-      sessionId: options?.sessionId,
-    });
-    return {
-      assistantText: latestAssistantText,
-      toolOutputs,
-    };
+    let activePrompt = prompt;
+    let preparedReasoningResume: Awaited<
+      ReturnType<typeof preparePendingSessionReasoningRevertResume>
+    > | null = null;
+    for (;;) {
+      try {
+        await sendPromptWithCompactionRecovery(session, activePrompt, {
+          runtime: options?.runtime,
+          sessionId: options?.sessionId,
+        });
+        preparedReasoningResume?.complete();
+        return {
+          assistantText: latestAssistantText,
+          toolOutputs,
+        };
+      } catch (error) {
+        preparedReasoningResume?.fail(error);
+        preparedReasoningResume = null;
+        const pendingReasoningResume =
+          options?.runtime && options.sessionId
+            ? await preparePendingSessionReasoningRevertResume(session, {
+                runtime: options.runtime,
+                sessionId: options.sessionId,
+              })
+            : null;
+        if (!pendingReasoningResume) {
+          throw error;
+        }
+        latestAssistantText = "";
+        toolOutputs.length = 0;
+        seenToolCallIds.clear();
+        preparedReasoningResume = pendingReasoningResume;
+        activePrompt = pendingReasoningResume.prompt;
+      }
+    }
   } finally {
     unsubscribe();
   }

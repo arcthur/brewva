@@ -254,6 +254,28 @@ describe("hosted turn transition coordinator", () => {
     expect(snapshot.consecutiveFailuresByReason.compaction_retry).toBe(1);
   });
 
+  test("recognizes reasoning revert resume as a recovery transition reason", () => {
+    const runtime = createRuntimeFixture();
+    const sessionId = "turn-transition-reasoning-revert";
+
+    recordSessionTurnTransition(runtime, {
+      sessionId,
+      reason: "reasoning_revert_resume",
+      status: "completed",
+      sourceEventType: "reasoning_revert",
+    });
+
+    const snapshot = projectHostedTransitionSnapshot(
+      runtime.inspect.events.queryStructured(sessionId),
+    );
+    expect(snapshot.latest).toMatchObject({
+      reason: "reasoning_revert_resume",
+      status: "completed",
+      family: "recovery",
+      sourceEventType: "reasoning_revert",
+    });
+  });
+
   test("tracks the active hosted turn from durable turn receipts without rescanning the full session", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "turn-transition-active-turn";

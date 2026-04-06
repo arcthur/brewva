@@ -26,6 +26,7 @@ through one explicit path.
 - context pressure and the compaction gate
 - hosted auto-compaction policy
 - compaction completion and interrupted-turn resume
+- reasoning-branch reset interaction with hosted context rebuild
 
 ## Out Of Scope
 
@@ -67,6 +68,9 @@ flowchart TD
    - trigger auto-compaction while the session is idle
 6. After `session_compact` completes, the runtime records the compaction
    summary, clears the gate, and resumes the interrupted turn when required.
+7. If a durable `reasoning_revert` arrives, hosted recovery rebuilds the active
+   branch from the target checkpoint and resumes from that surviving context
+   instead of keeping superseded branch history visible to the model.
 
 ## Execution Semantics
 
@@ -82,6 +86,13 @@ flowchart TD
   - when the agent is active, the host records advisory state rather than
     triggering implicit compaction
   - when the session is idle, the host may trigger the auto-compaction path
+- automatic reasoning checkpoints are narrow by default: turn start,
+  verification outcomes, and compaction boundaries are recorded automatically,
+  while `tool_boundary` remains an explicit boundary rather than a universal
+  checkpoint on every tool completion
+- verification-boundary checkpoints reuse the latest hosted leaf observed for
+  the session when one is available; otherwise they record `leaf=null` rather
+  than inventing a branch target
 - compaction summaries are checked and sanitized so prompt-injection residue or
   system-prompt material does not survive into compaction artifacts
 
@@ -97,6 +108,12 @@ flowchart TD
   in-flight state
 - after compaction, the interrupted turn resumes from current task and evidence
   state instead of restarting as a blank session
+- after a reasoning revert, hosted recovery uses `branchWithSummary(...)` plus
+  rebuilt session messages so compaction products from superseded branch tails
+  do not stay model-visible
+- crash recovery does not need a second reasoning-specific WAL: the gateway WAL
+  replays the interrupted turn envelope, while tape decides whether pending
+  branch reset must be re-applied before the next prompt runs
 - the resumed turn also gets a recovery-aware typed working set block so the
   model can re-anchor on hosted recovery posture, task state, and pending
   delegation handoff without relying on freeform memory carry-over
@@ -121,6 +138,8 @@ flowchart TD
     - `reason=output_budget_escalation`
     - `reason=provider_fallback_retry`
     - `reason=max_output_recovery`
+    - `reason=reasoning_revert_resume`
+    - `reason=wal_recovery_resume`
 - hosted auto-compaction trigger ladder:
   - `no_request -> non_interactive_mode -> agent_active_manual_compaction_unsafe -> auto_compaction_breaker_open -> auto_compaction_in_flight -> execute_auto_compaction`
 - ladder note:

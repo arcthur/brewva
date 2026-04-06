@@ -236,6 +236,17 @@ The hosted context path is split across these explicit adapters:
 `registerEventStream(...)` also consumes the shared turn clock to stamp durable
 runtime turn numbers and clear per-session turn state on shutdown.
 
+For reasoning continuity, `registerEventStream(...)` also owns the hosted-side
+automatic checkpoint policy:
+
+- it records automatic reasoning checkpoints at `turn_start`,
+  `verification_boundary`, and `compaction_boundary`
+- it does not auto-record `tool_boundary` on every tool completion; that
+  boundary remains explicit
+- verification-boundary checkpoints reuse the latest observed hosted leaf when
+  one is available; otherwise they record `leaf=null` (the session root
+  position) rather than inventing a branch target
+
 This keeps the public hosted lifecycle contract stable while making the
 experience-ring ownership model explicit.
 

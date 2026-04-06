@@ -17,6 +17,7 @@ import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import { sendPromptWithCompactionRecovery } from "./compaction-recovery.js";
 import type { SubscribablePromptSession } from "./contracts.js";
+import { preparePendingSessionReasoningRevertResume } from "./reasoning-revert-recovery.js";
 import { ToolAttemptBindingRegistry, formatAttemptId } from "./tool-attempt-binding.js";
 import { getHostedTurnTransitionCoordinator } from "./turn-transition.js";
 
@@ -68,6 +69,7 @@ const RECOVERY_ATTEMPT_REASONS = new Map<string, LiveRecoveryAttemptReason>([
   ["compaction_retry", "compaction_retry"],
   ["provider_fallback_retry", "provider_fallback_retry"],
   ["max_output_recovery", "max_output_recovery"],
+  ["reasoning_revert_resume", "reasoning_revert_resume"],
 ]);
 
 function normalizeText(value: string | undefined): string {
@@ -653,23 +655,46 @@ export async function collectSessionPromptOutput(
         })
       : undefined;
 
+  let activePrompt = prompt;
+  let preparedReasoningResume: Awaited<
+    ReturnType<typeof preparePendingSessionReasoningRevertResume>
+  > | null = null;
+
   try {
-    await sendPromptWithCompactionRecovery(session, prompt, {
-      runtime: options?.runtime,
-      sessionId: options?.sessionId,
-    });
-    return {
-      assistantText: latestAssistantText,
-      toolOutputs: currentCommittedToolOutputs(),
-      attemptId: currentAttemptId,
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new SessionPromptCollectionError(message, {
-      assistantText: latestAssistantText,
-      toolOutputs: currentCommittedToolOutputs(),
-      attemptId: currentAttemptId,
-    });
+    for (;;) {
+      try {
+        await sendPromptWithCompactionRecovery(session, activePrompt, {
+          runtime: options?.runtime,
+          sessionId: options?.sessionId,
+        });
+        preparedReasoningResume?.complete();
+        return {
+          assistantText: latestAssistantText,
+          toolOutputs: currentCommittedToolOutputs(),
+          attemptId: currentAttemptId,
+        };
+      } catch (error) {
+        preparedReasoningResume?.fail(error);
+        preparedReasoningResume = null;
+        const pendingReasoningResume =
+          options?.runtime && sessionId
+            ? await preparePendingSessionReasoningRevertResume(session, {
+                runtime: options.runtime,
+                sessionId,
+              })
+            : null;
+        if (!pendingReasoningResume) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new SessionPromptCollectionError(message, {
+            assistantText: latestAssistantText,
+            toolOutputs: currentCommittedToolOutputs(),
+            attemptId: currentAttemptId,
+          });
+        }
+        preparedReasoningResume = pendingReasoningResume;
+        activePrompt = pendingReasoningResume.prompt;
+      }
+    }
   } finally {
     toolAttemptBindings.clearTurn();
     unsubscribe();

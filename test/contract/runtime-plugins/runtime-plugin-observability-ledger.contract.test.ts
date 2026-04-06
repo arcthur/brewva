@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerEventStream, registerLedgerWriter } from "@brewva/brewva-gateway/runtime-plugins";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   createObsQueryTool,
@@ -217,6 +217,105 @@ describe("Runtime plugin integration: observability ledger", () => {
     expect(toolCallPayload?.attempt).toBe(2);
     expect(toolStartPayload?.attempt).toBe(2);
     expect(toolEndPayload?.attempt).toBe(2);
+  });
+
+  test("records a verification-boundary reasoning checkpoint from durable verification outcomes", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-reasoning-verification-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "ext-reasoning-verification-1";
+    const { api, handlers } = createMockRuntimePluginApi();
+    registerEventStream(api, runtime);
+
+    invokeHandlers(
+      handlers,
+      "turn_start",
+      {
+        turnIndex: 1,
+        timestamp: 1,
+      },
+      {
+        cwd: workspace,
+        sessionManager: {
+          getSessionId: () => sessionId,
+          getLeafId: () => "leaf-verification-1",
+        },
+      },
+    );
+
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      turn: 1,
+      type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+      payload: {
+        schema: "brewva.verification.outcome.v1",
+        level: "standard",
+        outcome: "pass",
+      },
+    });
+
+    const state = runtime.inspect.reasoning.getActiveState(sessionId);
+    expect(state.checkpoints).toEqual([
+      expect.objectContaining({
+        checkpointId: "reasoning-checkpoint-1",
+        boundary: "turn_start",
+        leafEntryId: "leaf-verification-1",
+      }),
+      expect.objectContaining({
+        checkpointId: "reasoning-checkpoint-2",
+        boundary: "verification_boundary",
+        leafEntryId: "leaf-verification-1",
+      }),
+    ]);
+    expect(state.activeCheckpointId).toBe("reasoning-checkpoint-2");
+    expect(state.activeLineageCheckpointIds).toEqual([
+      "reasoning-checkpoint-1",
+      "reasoning-checkpoint-2",
+    ]);
+  });
+
+  test("does not auto-record tool-boundary reasoning checkpoints on every tool completion", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-reasoning-tool-boundary-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "ext-reasoning-tool-boundary-1";
+    const { api, handlers } = createMockRuntimePluginApi();
+    registerEventStream(api, runtime);
+
+    const ctx = {
+      cwd: workspace,
+      sessionManager: {
+        getSessionId: () => sessionId,
+        getLeafId: () => "leaf-tool-1",
+      },
+    };
+
+    invokeHandlers(
+      handlers,
+      "turn_start",
+      {
+        turnIndex: 1,
+        timestamp: 1,
+      },
+      ctx,
+    );
+    invokeHandlers(
+      handlers,
+      "tool_execution_end",
+      {
+        toolCallId: "tool-call-1",
+        toolName: "read",
+        isError: false,
+      },
+      ctx,
+    );
+
+    const state = runtime.inspect.reasoning.getActiveState(sessionId);
+    expect(state.checkpoints).toEqual([
+      expect.objectContaining({
+        checkpointId: "reasoning-checkpoint-1",
+        boundary: "turn_start",
+      }),
+    ]);
+    expect(state.activeCheckpointId).toBe("reasoning-checkpoint-1");
   });
 
   test("given high-volume exec tool output with explicit fail verdict, when ledger writer handles tool_result, then verdict propagates into observed and distilled telemetry", () => {

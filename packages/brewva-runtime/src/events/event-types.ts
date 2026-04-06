@@ -1,5 +1,9 @@
 import { SCHEDULE_EVENT_TYPE } from "../schedule/events.js";
 import { TAPE_ANCHOR_EVENT_TYPE, TAPE_CHECKPOINT_EVENT_TYPE } from "../tape/events.js";
+import {
+  REASONING_CHECKPOINT_EVENT_TYPE,
+  REASONING_REVERT_EVENT_TYPE,
+} from "../tape/reasoning-events.js";
 import { TASK_EVENT_TYPE } from "../task/ledger.js";
 import { TRUTH_EVENT_TYPE } from "../truth/ledger.js";
 
@@ -155,6 +159,8 @@ export const EVENT_LISTENER_ERROR_EVENT_TYPE = "event_listener_error" as const;
 export const BREWVA_REGISTERED_EVENT_TYPES = [
   TAPE_ANCHOR_EVENT_TYPE,
   TAPE_CHECKPOINT_EVENT_TYPE,
+  REASONING_CHECKPOINT_EVENT_TYPE,
+  REASONING_REVERT_EVENT_TYPE,
   TASK_EVENT_TYPE,
   TRUTH_EVENT_TYPE,
   TOOL_RESULT_RECORDED_EVENT_TYPE,

@@ -1,4 +1,5 @@
 import type {
+  ActiveReasoningBranchState,
   ContextBudgetUsage,
   ContextPressureStatus,
   TapeSearchScope,
@@ -55,6 +56,7 @@ function resolveContextAction(
 function formatTapeInfoBlock(input: {
   tape: ReturnType<BrewvaToolOptions["runtime"]["inspect"]["events"]["getTapeStatus"]>;
   pressure: ContextPressureStatus;
+  reasoning: ActiveReasoningBranchState;
 }): string {
   const lines = [
     "[TapeInfo]",
@@ -72,7 +74,30 @@ function formatTapeInfoBlock(input: {
     `context_usage: ${formatPercent(input.pressure.usageRatio)}`,
     `context_hard_limit: ${formatPercent(input.pressure.hardLimitRatio)}`,
     `required_action: ${resolveContextAction(input.pressure.level)}`,
+    `reasoning_active_branch: ${input.reasoning.activeBranchId}`,
+    `reasoning_active_checkpoint: ${input.reasoning.activeCheckpointId ?? "none"}`,
+    `reasoning_active_lineage_depth: ${input.reasoning.activeLineageCheckpointIds.length}`,
   ];
+
+  const recentCheckpoints = input.reasoning.checkpoints.slice(-5);
+  if (recentCheckpoints.length > 0) {
+    lines.push("reasoning_recent_checkpoints:");
+    for (const checkpoint of recentCheckpoints) {
+      lines.push(
+        `- ${checkpoint.checkpointId} branch=${checkpoint.branchId} boundary=${checkpoint.boundary} leaf=${checkpoint.leafEntryId ?? "root"} revertable=${input.reasoning.activeLineageCheckpointIds.includes(checkpoint.checkpointId) ? "yes" : "no"}`,
+      );
+    }
+  }
+
+  const recentReverts = input.reasoning.reverts.slice(-3);
+  if (recentReverts.length > 0) {
+    lines.push("reasoning_recent_reverts:");
+    for (const revert of recentReverts) {
+      lines.push(
+        `- ${revert.revertId} to=${revert.toCheckpointId} from=${revert.fromCheckpointId ?? "none"} trigger=${revert.trigger} branch=${revert.newBranchId}`,
+      );
+    }
+  }
 
   const outputSearch = input.tape.outputSearch;
   if (outputSearch) {
@@ -169,15 +194,18 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
       const usage =
         resolveToolContextUsage(ctx) ?? options.runtime.inspect.context.getUsage(sessionId);
       const pressure = options.runtime.inspect.context.getPressureStatus(sessionId, usage);
+      const reasoning = options.runtime.inspect.reasoning.getActiveState(sessionId);
 
       return textResult(
         formatTapeInfoBlock({
           tape,
           pressure,
+          reasoning,
         }),
         {
           ok: true,
           tape,
+          reasoning,
           context: {
             pressure: pressure.level,
             usageTokens: usage?.tokens ?? null,

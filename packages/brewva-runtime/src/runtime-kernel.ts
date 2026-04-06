@@ -13,6 +13,7 @@ import type { ProjectionEngine } from "./projection/engine.js";
 import type { RuntimeRecordEvent } from "./services/event-pipeline.js";
 import type { RuntimeSessionStateStore } from "./services/session-state.js";
 import type { FileChangeTracker } from "./state/file-change-tracker.js";
+import type { ReasoningReplayEngine } from "./tape/reasoning-replay.js";
 import type { TurnReplayEngine } from "./tape/replay-engine.js";
 import type { VerificationGate } from "./verification/gate.js";
 
@@ -27,6 +28,7 @@ export interface RuntimeKernelContext {
   contextInjection: ContextInjectionCollector;
   projectionEngine: ProjectionEngine;
   turnReplay: TurnReplayEngine;
+  reasoningReplay: ReasoningReplayEngine;
   eventStore: BrewvaEventStore;
   evidenceLedger: EvidenceLedger;
   verificationGate: VerificationGate;

@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import { createSessionCompactTool, createTapeTools } from "@brewva/brewva-tools";
+import {
+  createReasoningCheckpointTool,
+  createReasoningRevertTool,
+  createSessionCompactTool,
+  createTapeTools,
+} from "@brewva/brewva-tools";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createBundledToolRuntime, createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
@@ -235,5 +240,231 @@ describe("session coordination tool contracts", () => {
     expect(text).toContain("[TapeSearch]");
     expect(text).toContain("matches:");
     expect(text.toLowerCase()).toContain("flaky");
+  });
+
+  test("reasoning_checkpoint records a durable checkpoint and tape_info reports the active branch", async () => {
+    const runtime = createCleanRuntime();
+    const sessionId = "s13-reasoning-checkpoint";
+    runtime.maintain.context.onTurnStart(sessionId, 1);
+
+    const checkpointTool = createReasoningCheckpointTool({
+      runtime: createBundledToolRuntime(runtime),
+    });
+    const checkpointResult = await checkpointTool.execute(
+      "tc-reasoning-checkpoint",
+      { boundary: "operator_marker" },
+      undefined,
+      undefined,
+      {
+        sessionManager: {
+          getSessionId: () => sessionId,
+          getLeafId: () => "leaf-checkpoint-1",
+        },
+      } as any,
+    );
+
+    const checkpointText = extractTextContent(checkpointResult);
+    expect(checkpointText).toContain("Recorded reasoning checkpoint reasoning-checkpoint-1");
+
+    const state = runtime.inspect.reasoning.getActiveState(sessionId);
+    expect(state.activeBranchId).toBe(`${sessionId}:reasoning-branch-0`);
+    expect(state.activeCheckpointId).toBe("reasoning-checkpoint-1");
+    expect(state.activeLineageCheckpointIds).toEqual(["reasoning-checkpoint-1"]);
+
+    const tapeInfo = requireTool(createTapeTools({ runtime }), "tape_info");
+    const infoResult = await tapeInfo.execute(
+      "tc-reasoning-info",
+      {},
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    const infoText = extractTextContent(infoResult);
+    expect(infoText).toContain(`reasoning_active_branch: ${sessionId}:reasoning-branch-0`);
+    expect(infoText).toContain("reasoning_active_checkpoint: reasoning-checkpoint-1");
+    expect(infoText).toContain("reasoning_recent_checkpoints:");
+    expect(infoText).toContain("revertable=yes");
+  });
+
+  test("reasoning_revert records a branch reset, aborts the active turn, and retires superseded checkpoints", async () => {
+    const runtime = createCleanRuntime();
+    const sessionId = "s14-reasoning-revert";
+    runtime.maintain.context.onTurnStart(sessionId, 1);
+
+    const checkpointTool = createReasoningCheckpointTool({
+      runtime: createBundledToolRuntime(runtime),
+    });
+    await checkpointTool.execute(
+      "tc-reasoning-checkpoint-1",
+      { boundary: "operator_marker" },
+      undefined,
+      undefined,
+      {
+        sessionManager: {
+          getSessionId: () => sessionId,
+          getLeafId: () => "leaf-before-1",
+        },
+      } as any,
+    );
+    await checkpointTool.execute(
+      "tc-reasoning-checkpoint-2",
+      { boundary: "tool_boundary" },
+      undefined,
+      undefined,
+      {
+        sessionManager: {
+          getSessionId: () => sessionId,
+          getLeafId: () => "leaf-before-2",
+        },
+      } as any,
+    );
+
+    let aborted = 0;
+    const revertTool = createReasoningRevertTool({
+      runtime: createBundledToolRuntime(runtime),
+    });
+    const revertResult = await revertTool.execute(
+      "tc-reasoning-revert",
+      {
+        checkpoint_id: "reasoning-checkpoint-1",
+        continuity: "Resume from the earlier validated checkpoint only.",
+        linked_rollback_receipt_ids: ["rollback-1", "rollback-1", "rollback-2"],
+      },
+      undefined,
+      undefined,
+      {
+        abort: () => {
+          aborted += 1;
+        },
+        sessionManager: {
+          getSessionId: () => sessionId,
+        },
+      } as any,
+    );
+
+    const revertText = extractTextContent(revertResult);
+    expect(revertText).toContain("Reasoning revert scheduled to reasoning-checkpoint-1");
+    expect(aborted).toBe(1);
+
+    const state = runtime.inspect.reasoning.getActiveState(sessionId);
+    expect(state.activeBranchId).toBe(`${sessionId}:reasoning-branch-1`);
+    expect(state.activeCheckpointId).toBe("reasoning-checkpoint-1");
+    expect(state.activeLineageCheckpointIds).toEqual(["reasoning-checkpoint-1"]);
+    expect(state.latestRevert).toMatchObject({
+      toCheckpointId: "reasoning-checkpoint-1",
+      fromCheckpointId: "reasoning-checkpoint-2",
+      newBranchId: `${sessionId}:reasoning-branch-1`,
+      linkedRollbackReceiptIds: ["rollback-1", "rollback-2"],
+    });
+    expect(state.latestContinuityPacket?.text).toBe(
+      "Resume from the earlier validated checkpoint only.",
+    );
+    expect(runtime.inspect.reasoning.canRevertTo(sessionId, "reasoning-checkpoint-1")).toBe(true);
+    expect(runtime.inspect.reasoning.canRevertTo(sessionId, "reasoning-checkpoint-2")).toBe(false);
+
+    const tapeInfo = requireTool(createTapeTools({ runtime }), "tape_info");
+    const infoResult = await tapeInfo.execute(
+      "tc-reasoning-revert-info",
+      {},
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    const infoText = extractTextContent(infoResult);
+    expect(infoText).toContain("reasoning_recent_reverts:");
+    expect(infoText).toContain(
+      `- reasoning-revert-1 to=reasoning-checkpoint-1 from=reasoning-checkpoint-2 trigger=operator_request branch=${sessionId}:reasoning-branch-1`,
+    );
+  });
+
+  test("reasoning_revert rejects continuity text that exceeds the byte cap without aborting the turn", async () => {
+    const runtime = createCleanRuntime();
+    const sessionId = "s15-reasoning-revert-cap";
+    runtime.maintain.context.onTurnStart(sessionId, 1);
+
+    const checkpointTool = createReasoningCheckpointTool({
+      runtime: createBundledToolRuntime(runtime),
+    });
+    await checkpointTool.execute(
+      "tc-reasoning-cap-checkpoint",
+      { boundary: "operator_marker" },
+      undefined,
+      undefined,
+      {
+        sessionManager: {
+          getSessionId: () => sessionId,
+          getLeafId: () => "leaf-cap-1",
+        },
+      } as any,
+    );
+
+    let aborted = 0;
+    const revertTool = createReasoningRevertTool({
+      runtime: createBundledToolRuntime(runtime),
+    });
+    const oversizedContinuity = `${"\u00e9".repeat(600)}a`;
+    const revertResult = await revertTool.execute(
+      "tc-reasoning-revert-cap",
+      {
+        checkpoint_id: "reasoning-checkpoint-1",
+        continuity: oversizedContinuity,
+      },
+      undefined,
+      undefined,
+      {
+        abort: () => {
+          aborted += 1;
+        },
+        sessionManager: {
+          getSessionId: () => sessionId,
+        },
+      } as any,
+    );
+
+    const revertText = extractTextContent(revertResult);
+    expect(revertText).toContain("Reasoning revert failed");
+    expect(revertText).toContain("reasoning continuity exceeds 1200 bytes");
+    expect((revertResult.details as { verdict?: unknown } | undefined)?.verdict).toBe("fail");
+    expect(aborted).toBe(0);
+    expect(runtime.inspect.reasoning.listReverts(sessionId)).toEqual([]);
+    expect(runtime.inspect.reasoning.getActiveState(sessionId).activeCheckpointId).toBe(
+      "reasoning-checkpoint-1",
+    );
+  });
+
+  test("reasoning_revert rejects unknown checkpoints when the session has no reasoning checkpoints", async () => {
+    const runtime = createCleanRuntime();
+    const sessionId = "s16-reasoning-revert-missing-checkpoint";
+    runtime.maintain.context.onTurnStart(sessionId, 1);
+
+    let aborted = 0;
+    const revertTool = createReasoningRevertTool({
+      runtime: createBundledToolRuntime(runtime),
+    });
+    const revertResult = await revertTool.execute(
+      "tc-reasoning-revert-missing",
+      {
+        checkpoint_id: "reasoning-checkpoint-1",
+        continuity: "Resume from a checkpoint that does not exist.",
+      },
+      undefined,
+      undefined,
+      {
+        abort: () => {
+          aborted += 1;
+        },
+        sessionManager: {
+          getSessionId: () => sessionId,
+        },
+      } as any,
+    );
+
+    const revertText = extractTextContent(revertResult);
+    expect(revertText).toContain("Reasoning revert failed");
+    expect(revertText).toContain("unknown reasoning checkpoint");
+    expect((revertResult.details as { verdict?: unknown } | undefined)?.verdict).toBe("fail");
+    expect(aborted).toBe(0);
+    expect(runtime.inspect.reasoning.listReverts(sessionId)).toEqual([]);
+    expect(runtime.inspect.reasoning.getActiveState(sessionId).activeCheckpointId).toBeNull();
   });
 });

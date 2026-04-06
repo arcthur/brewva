@@ -19,6 +19,7 @@ export type TurnTransitionReason =
   | "output_budget_escalation"
   | "provider_fallback_retry"
   | "max_output_recovery"
+  | "reasoning_revert_resume"
   | "subagent_delivery_pending"
   | "wal_recovery_resume"
   | "user_submit_interrupt"
@@ -109,6 +110,7 @@ const transitionReasonFamily: Record<TurnTransitionReason, HostedTransitionFamil
   output_budget_escalation: "output_budget",
   provider_fallback_retry: "recovery",
   max_output_recovery: "recovery",
+  reasoning_revert_resume: "recovery",
   subagent_delivery_pending: "delegation",
   wal_recovery_resume: "recovery",
   user_submit_interrupt: "interrupt",
@@ -121,6 +123,7 @@ const ATTEMPT_SUPERSESSION_REASONS = new Set<TurnTransitionReason>([
   "compaction_retry",
   "provider_fallback_retry",
   "max_output_recovery",
+  "reasoning_revert_resume",
 ]);
 
 function parseAttemptIdSequence(value: unknown): number | null {
@@ -192,6 +195,7 @@ function isTurnTransitionReason(value: unknown): value is TurnTransitionReason {
     value === "output_budget_escalation" ||
     value === "provider_fallback_retry" ||
     value === "max_output_recovery" ||
+    value === "reasoning_revert_resume" ||
     value === "subagent_delivery_pending" ||
     value === "wal_recovery_resume" ||
     value === "user_submit_interrupt" ||

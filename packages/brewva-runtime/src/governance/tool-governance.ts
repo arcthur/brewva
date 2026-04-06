@@ -263,6 +263,14 @@ export const TOOL_GOVERNANCE_BY_NAME: Record<string, ToolGovernanceDescriptor> =
     effects: ["runtime_observe"],
     defaultRisk: "medium",
   }),
+  reasoning_checkpoint: descriptor({
+    effects: ["runtime_observe"],
+    defaultRisk: "medium",
+  }),
+  reasoning_revert: descriptor({
+    effects: ["runtime_observe"],
+    defaultRisk: "medium",
+  }),
   session_compact: descriptor({
     effects: ["runtime_observe"],
     defaultRisk: "medium",

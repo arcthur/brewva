@@ -1,9 +1,18 @@
 import type { BrewvaEventCategory, TaskState } from "./contracts/index.js";
 import { TAPE_ANCHOR_EVENT_TYPE, TAPE_CHECKPOINT_EVENT_TYPE } from "./tape/events.js";
+import {
+  REASONING_CHECKPOINT_EVENT_TYPE,
+  REASONING_REVERT_EVENT_TYPE,
+} from "./tape/reasoning-events.js";
 import { formatTaskStateBlock } from "./task/ledger.js";
 
 export function inferEventCategory(type: string): BrewvaEventCategory {
-  if (type === TAPE_ANCHOR_EVENT_TYPE || type === TAPE_CHECKPOINT_EVENT_TYPE) {
+  if (
+    type === TAPE_ANCHOR_EVENT_TYPE ||
+    type === TAPE_CHECKPOINT_EVENT_TYPE ||
+    type === REASONING_CHECKPOINT_EVENT_TYPE ||
+    type === REASONING_REVERT_EVENT_TYPE
+  ) {
     return "state";
   }
   if (type.startsWith("projection_")) return "state";

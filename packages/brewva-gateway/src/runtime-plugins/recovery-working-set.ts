@@ -11,6 +11,7 @@ const RECOVERY_WORKING_SET_REASONS = new Set([
   "compaction_retry",
   "provider_fallback_retry",
   "max_output_recovery",
+  "reasoning_revert_resume",
   "output_budget_escalation",
   "wal_recovery_resume",
 ]);

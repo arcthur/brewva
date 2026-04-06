@@ -351,7 +351,8 @@ export function validateSessionWireFramePayload(
           value.reason !== "output_budget_escalation" &&
           value.reason !== "compaction_retry" &&
           value.reason !== "provider_fallback_retry" &&
-          value.reason !== "max_output_recovery")
+          value.reason !== "max_output_recovery" &&
+          value.reason !== "reasoning_revert_resume")
       ) {
         return { ok: false, error: "attempt.started payload is invalid" };
       }
@@ -375,7 +376,8 @@ export function validateSessionWireFramePayload(
         (value.reason !== "output_budget_escalation" &&
           value.reason !== "compaction_retry" &&
           value.reason !== "provider_fallback_retry" &&
-          value.reason !== "max_output_recovery")
+          value.reason !== "max_output_recovery" &&
+          value.reason !== "reasoning_revert_resume")
       ) {
         return { ok: false, error: "attempt.superseded payload is invalid" };
       }

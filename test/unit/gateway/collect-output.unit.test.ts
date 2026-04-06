@@ -351,6 +351,165 @@ describe("gateway collect output", () => {
     );
   });
 
+  test("given reasoning_revert during the turn, when collecting output, then the current turn owner resumes inline from the restored branch", async () => {
+    const eventBridge = createRuntimeEventBridge();
+    const sessionId = "agent-session-reasoning-resume";
+    recordTurnInput(eventBridge, sessionId, "turn-reasoning-resume");
+    eventBridge.runtime.maintain.context.onTurnStart(sessionId, 1);
+    const checkpointA = eventBridge.runtime.authority.reasoning.recordCheckpoint(sessionId, {
+      boundary: "operator_marker",
+      leafEntryId: "leaf-restore-a",
+    });
+    eventBridge.runtime.authority.reasoning.recordCheckpoint(sessionId, {
+      boundary: "verification_boundary",
+      leafEntryId: "leaf-restore-b",
+    });
+
+    const sentMessages: string[] = [];
+    const branchWithSummaryCalls: Array<{
+      targetLeafEntryId: string | null;
+      summaryText: string;
+      summaryDetails: Record<string, unknown>;
+      replaceCurrent: boolean;
+    }> = [];
+    const replacedMessages: unknown[] = [];
+    const rebuiltMessages = [
+      {
+        role: "user",
+        content: [{ type: "text", text: "restored branch summary" }],
+      },
+    ];
+    let listener: ((event: AgentSessionEvent) => void) | undefined;
+    const session = {
+      subscribe(next: (event: AgentSessionEvent) => void) {
+        listener = next;
+        return () => {
+          listener = undefined;
+        };
+      },
+      sessionManager: {
+        getSessionId: () => sessionId,
+        branchWithSummary: (
+          targetLeafEntryId: string | null,
+          summaryText: string,
+          summaryDetails: Record<string, unknown>,
+          replaceCurrent: boolean,
+        ) => {
+          branchWithSummaryCalls.push({
+            targetLeafEntryId,
+            summaryText,
+            summaryDetails,
+            replaceCurrent,
+          });
+        },
+        buildSessionContext: () => ({
+          messages: rebuiltMessages,
+        }),
+      },
+      async prompt(content: string): Promise<void> {
+        sentMessages.push(content);
+        if (sentMessages.length === 1) {
+          eventBridge.runtime.authority.reasoning.revert(sessionId, {
+            toCheckpointId: checkpointA.checkpointId,
+            trigger: "operator_request",
+            continuity: "Continue from the restored branch only.",
+          });
+          throw new Error("turn aborted for reasoning revert");
+        }
+        listener?.({
+          type: "message_end",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "restored answer" }],
+          },
+        } as AgentSessionEvent);
+      },
+      agent: {
+        async waitForIdle(): Promise<void> {
+          return;
+        },
+        replaceMessages(messages: unknown): void {
+          replacedMessages.push(messages);
+        },
+      },
+    };
+
+    const frames: SessionWireFrame[] = [];
+    const output = await collectSessionPromptOutput(
+      session as unknown as Parameters<typeof collectSessionPromptOutput>[0],
+      "initial prompt",
+      {
+        runtime: eventBridge.runtime as any,
+        sessionId,
+        turnId: "turn-reasoning-resume",
+        onFrame: (frame) => {
+          frames.push(frame);
+        },
+      },
+    );
+
+    expect(sentMessages).toHaveLength(2);
+    expect(sentMessages[0]).toBe("initial prompt");
+    expect(sentMessages[1]).toContain("Reasoning branch revert completed");
+    expect(output.assistantText).toBe("restored answer");
+    expect(output.attemptId).toBe("attempt-2");
+    expect(branchWithSummaryCalls).toEqual([
+      expect.objectContaining({
+        targetLeafEntryId: "leaf-restore-a",
+        summaryText: "Continue from the restored branch only.",
+        replaceCurrent: true,
+        summaryDetails: expect.objectContaining({
+          toCheckpointId: checkpointA.checkpointId,
+          trigger: "operator_request",
+        }),
+      }),
+    ]);
+    expect(replacedMessages).toEqual([rebuiltMessages]);
+    expect(frames).toEqual(
+      expect.arrayContaining([
+        {
+          schema: "brewva.session-wire.v2",
+          sessionId,
+          type: "attempt.superseded",
+          turnId: "turn-reasoning-resume",
+          attemptId: "attempt-1",
+          supersededByAttemptId: "attempt-2",
+          reason: "reasoning_revert_resume",
+          source: "live",
+          durability: "cache",
+          frameId: expect.any(String),
+          ts: expect.any(Number),
+        },
+        {
+          schema: "brewva.session-wire.v2",
+          sessionId,
+          type: "attempt.started",
+          turnId: "turn-reasoning-resume",
+          attemptId: "attempt-2",
+          reason: "reasoning_revert_resume",
+          source: "live",
+          durability: "cache",
+          frameId: expect.any(String),
+          ts: expect.any(Number),
+        },
+      ]),
+    );
+    expect(readTransitionPayloads(eventBridge)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          reason: "reasoning_revert_resume",
+          status: "entered",
+          family: "recovery",
+        }),
+        expect.objectContaining({
+          reason: "reasoning_revert_resume",
+          status: "completed",
+          family: "recovery",
+        }),
+      ]),
+    );
+  });
+
   test("given a late tool completion from a superseded attempt, when collecting output, then stale tool output stays live-scoped to its original attempt and stays out of committed state", async () => {
     const eventBridge = createRuntimeEventBridge();
     recordTurnInput(eventBridge, "agent-session-stale-tool", "turn-stale-tool");

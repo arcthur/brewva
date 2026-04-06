@@ -241,6 +241,29 @@ The design intent is narrow:
   failure or context pressure
 - scheduler traits decide how hosted execution overlaps or interrupts work
 
+## Reasoning Branch Revert
+
+Reasoning-path rollback is now explicit, but it still does not widen kernel
+authority over raw thought.
+
+Stable rules:
+
+- the runtime may admit durable `reasoning_checkpoint` and `reasoning_revert`
+  receipts as branch-continuity commitments
+- these receipts govern which reasoning lineage remains model-visible after a
+  reset, but they do not authorize effects on their own
+- reasoning revert does not imply filesystem rollback, approval reset, cost
+  reset, or evidence erasure
+- `reasoning_revert_resume` is a hosted recovery surface that explains the next
+  continuation attempt after branch reset; it does not replace tape truth
+
+Interpretation rule:
+
+- the model may explore freely until a reasoning receipt is durably admitted
+- once admitted, branch continuity becomes replay-visible and operator-auditable
+- this keeps "govern effects, not search" intact while still giving the system
+  a first-class way to discard a bad reasoning branch
+
 ## Deployment Boundary Ownership
 
 Deployment boundary policy is now a stable part of the governance model.

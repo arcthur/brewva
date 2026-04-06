@@ -141,6 +141,34 @@ These are typed authority-side evidence writes, not a general event append API:
 - `recordGuardResult(sessionId, input)`
 - `recordTapeHandoff(sessionId, input)`
 
+### `authority.reasoning`
+
+- `recordCheckpoint(sessionId, input)`
+- `revert(sessionId, input)`
+
+This is the kernel-owned reasoning-branch authority surface.
+
+Stable rules:
+
+- `reasoning_checkpoint` and `reasoning_revert` are append-only branch
+  receipts, not hosted-only prompt rewrites
+- checkpoint boundaries are explicit and finite:
+  `turn_start`, `tool_boundary`, `verification_boundary`,
+  `compaction_boundary`, and `operator_marker`
+- checkpoint ids are never reused within a session; branch ids are
+  kernel-assigned and monotonic per session, with a deterministic root branch
+- `revert(...)` may move the active reasoning lineage to an earlier checkpoint,
+  but it does not roll back files, reset cost truth, or erase evidence truth
+- continuity packets are normalized to
+  `brewva.reasoning.continuity.v1` and rejected when the UTF-8 payload exceeds
+  `1200` bytes
+- filesystem undo remains receipt-based under `authority.tools.rollback*`
+- `model_self_repair` remains a narrow control-plane path; it does not create a
+  hidden planner-owned history rewrite lane
+- public `reasoning_revert` calls that omit `trigger` are recorded as
+  `operator_request`; `model_self_repair` must be explicit in the durable
+  receipt
+
 ### `authority.verification`
 
 `verification` remains an authority surface.
@@ -237,6 +265,32 @@ Verification semantics to preserve:
 
 This is the public read model for pending WAL-backed recovery state.
 Mutation of WAL rows is not part of the public runtime contract.
+
+### `inspect.reasoning`
+
+- `getActiveState(sessionId)`
+- `listCheckpoints(sessionId)`
+- `getCheckpoint(sessionId, checkpointId)`
+- `listReverts(sessionId)`
+- `canRevertTo(sessionId, checkpointId)`
+
+This is the public read model for replay-derived reasoning branch state.
+
+Stable rules:
+
+- active branch truth is derived from durable `reasoning_checkpoint` and
+  `reasoning_revert` receipts
+- `getActiveState(...)` exposes the current branch/root ids, the active
+  checkpoint, the active lineage checkpoint ids, and the latest admitted
+  revert/continuity packet
+- off-lineage or malformed revert targets are ignored during replay; the replay
+  fold does not trust write-time validation alone
+- `canRevertTo(...)` is lineage-scoped rather than "present anywhere on tape"
+- replay-visible reasoning receipts may carry optional linkage to receipt-based
+  mutation rollback through `linkedRollbackReceiptIds`, but neither mechanism
+  implies the other
+- hosted recovery may rebuild model-visible history from this state, but the
+  durable branch truth itself remains a runtime inspection surface
 
 ### `inspect.events`
 
