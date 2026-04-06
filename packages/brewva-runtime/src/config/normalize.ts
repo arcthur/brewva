@@ -788,6 +788,10 @@ function normalizeInfrastructureConfig(
         recoveryWalInput.scheduleTurnTtlMs,
         defaults.recoveryWal.scheduleTurnTtlMs,
       ),
+      toolTurnTtlMs: normalizePositiveInteger(
+        recoveryWalInput.toolTurnTtlMs,
+        defaults.recoveryWal.toolTurnTtlMs,
+      ),
     },
   };
 }

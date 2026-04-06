@@ -280,6 +280,7 @@ and approval-bearing flows; runtime does not enter a silent no-audit write path.
 - `infrastructure.recoveryWal.maxRetries`: `2`
 - `infrastructure.recoveryWal.compactAfterMs`: `3600000`
 - `infrastructure.recoveryWal.scheduleTurnTtlMs`: `600000`
+- `infrastructure.recoveryWal.toolTurnTtlMs`: `86400000`
 
 ### `ui`
 

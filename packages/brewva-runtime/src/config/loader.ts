@@ -37,6 +37,26 @@ export interface BrewvaConfigResolution {
   metadata: BrewvaConfigMetadata;
 }
 
+export type BrewvaForensicConfigWarningCode =
+  | "config_parse_skipped"
+  | "config_not_object_skipped"
+  | "config_unknown_fields_stripped"
+  | "config_removed_fields_stripped"
+  | "config_schema_skipped"
+  | "config_normalize_skipped";
+
+export interface BrewvaForensicConfigWarning {
+  code: BrewvaForensicConfigWarningCode;
+  configPath: string;
+  message: string;
+  fields?: string[];
+}
+
+export interface BrewvaForensicConfigResolution extends BrewvaConfigResolution {
+  consultedPaths: string[];
+  warnings: BrewvaForensicConfigWarning[];
+}
+
 export class BrewvaConfigLoadError extends Error {
   readonly code: BrewvaConfigLoadErrorCode;
   readonly configPath: string;
@@ -157,6 +177,102 @@ function collectRemovedFieldErrors(parsed: Record<string, unknown>): string[] {
   return errors;
 }
 
+function decodeJsonPointerSegment(segment: string): string {
+  return segment.replaceAll("~1", "/").replaceAll("~0", "~");
+}
+
+function deletePropertyAtPointer(
+  root: Record<string, unknown>,
+  pointer: string,
+  property: string,
+): boolean {
+  const segments =
+    pointer === "/" || pointer.length === 0
+      ? []
+      : pointer
+          .split("/")
+          .slice(1)
+          .map((segment) => decodeJsonPointerSegment(segment));
+  let cursor: unknown = root;
+  for (const segment of segments) {
+    if (!isRecord(cursor)) {
+      return false;
+    }
+    cursor = cursor[segment];
+  }
+  if (!isRecord(cursor) || !Object.hasOwn(cursor, property)) {
+    return false;
+  }
+  delete cursor[property];
+  return true;
+}
+
+function collectUnknownPropertyErrors(
+  errors: ReadonlyArray<string>,
+): Array<{ pointer: string; property: string }> {
+  const output: Array<{ pointer: string; property: string }> = [];
+  for (const error of errors) {
+    const match = error.match(/^(.*): unknown property "([^"]+)"$/);
+    if (!match) {
+      continue;
+    }
+    const pointer = match[1]?.trim();
+    const property = match[2]?.trim();
+    if (!pointer || !property) {
+      continue;
+    }
+    output.push({ pointer, property });
+  }
+  return output;
+}
+
+function stripForensicRemovedFields(root: Record<string, unknown>): string[] {
+  const stripped: string[] = [];
+  const projection = isRecord(root["projection"]) ? root["projection"] : null;
+  if (projection) {
+    for (const key of Object.keys(projection)) {
+      if (!REMOVED_PROJECTION_FIELDS.has(key)) {
+        continue;
+      }
+      delete projection[key];
+      stripped.push(`/projection/${key}`);
+    }
+  }
+  const skills = isRecord(root["skills"]) ? root["skills"] : null;
+  if (skills && Object.hasOwn(skills, "cascade")) {
+    delete skills["cascade"];
+    stripped.push("/skills/cascade");
+  }
+  return stripped;
+}
+
+function stripUnknownPropertiesForForensics(root: Record<string, unknown>): string[] {
+  const stripped = new Set<string>();
+  for (let attempt = 0; attempt < 32; attempt += 1) {
+    const validation = validateBrewvaConfigFile(root);
+    if (validation.ok) {
+      break;
+    }
+    const unknownProperties = collectUnknownPropertyErrors(validation.errors);
+    if (unknownProperties.length === 0) {
+      break;
+    }
+    let changed = false;
+    for (const unknownProperty of unknownProperties) {
+      if (deletePropertyAtPointer(root, unknownProperty.pointer, unknownProperty.property)) {
+        stripped.add(
+          `${unknownProperty.pointer === "/" ? "" : unknownProperty.pointer}/${unknownProperty.property}`,
+        );
+        changed = true;
+      }
+    }
+    if (!changed) {
+      break;
+    }
+  }
+  return [...stripped].toSorted((left, right) => left.localeCompare(right));
+}
+
 function validateConfigObject(parsed: unknown, configPath: string): Record<string, unknown> {
   if (!isRecord(parsed)) {
     throw new BrewvaConfigLoadError({
@@ -238,6 +354,109 @@ function readConfigFile(configPath: string): Partial<BrewvaConfig> | undefined {
   return resolveConfigRelativeSkillRoots(cleaned as Partial<BrewvaConfig>, configPath);
 }
 
+function readConfigFileForInspect(configPath: string): {
+  parsed?: Partial<BrewvaConfig>;
+  metadata: BrewvaConfigMetadata;
+  warnings: BrewvaForensicConfigWarning[];
+} {
+  const metadata = createDefaultBrewvaConfigMetadata();
+  if (!existsSync(configPath)) {
+    return { metadata, warnings: [] };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = parseJsonc(readFileSync(configPath, "utf8"));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      metadata,
+      warnings: [
+        {
+          code: "config_parse_skipped",
+          configPath,
+          message: `Skipped inspect config after parse failure: ${message}`,
+        },
+      ],
+    };
+  }
+
+  if (!isRecord(parsed)) {
+    return {
+      metadata,
+      warnings: [
+        {
+          code: "config_not_object_skipped",
+          configPath,
+          message: "Skipped inspect config because the top-level value is not an object.",
+        },
+      ],
+    };
+  }
+
+  const sanitized = stripMetaFields(structuredClone(parsed));
+  const warnings: BrewvaForensicConfigWarning[] = [];
+  const removedFields = stripForensicRemovedFields(sanitized);
+  if (removedFields.length > 0) {
+    warnings.push({
+      code: "config_removed_fields_stripped",
+      configPath,
+      message:
+        "Stripped removed config fields while loading inspect runtime; old semantics remain disabled.",
+      fields: removedFields,
+    });
+  }
+
+  const unknownFields = stripUnknownPropertiesForForensics(sanitized);
+  if (unknownFields.length > 0) {
+    warnings.push({
+      code: "config_unknown_fields_stripped",
+      configPath,
+      message: "Stripped unknown config fields while loading inspect runtime.",
+      fields: unknownFields,
+    });
+  }
+
+  const validation = validateBrewvaConfigFile(sanitized);
+  if (!validation.ok) {
+    warnings.push({
+      code: "config_schema_skipped",
+      configPath,
+      message: `Skipped inspect config after forensic stripping because validation still failed: ${
+        validation.errors.length > 0
+          ? formatSchemaInvalidMessage(validation.errors)
+          : (validation.error ?? "schema validation unavailable")
+      }`,
+    });
+    return {
+      metadata,
+      warnings,
+    };
+  }
+
+  try {
+    normalizeBrewvaConfig(sanitized, DEFAULT_BREWVA_CONFIG);
+  } catch (error) {
+    warnings.push({
+      code: "config_normalize_skipped",
+      configPath,
+      message: `Skipped inspect config because normalization still failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    });
+    return {
+      metadata,
+      warnings,
+    };
+  }
+
+  return {
+    parsed: resolveConfigRelativeSkillRoots(sanitized as Partial<BrewvaConfig>, configPath),
+    metadata: collectBrewvaConfigMetadata(sanitized),
+    warnings,
+  };
+}
+
 export function loadBrewvaConfig(options: LoadConfigOptions = {}): BrewvaConfig {
   return loadBrewvaConfigResolution(options).config;
 }
@@ -264,5 +483,35 @@ export function loadBrewvaConfigResolution(
   return {
     config: normalizeBrewvaConfig(merged, DEFAULT_BREWVA_CONFIG),
     metadata,
+  };
+}
+
+export function loadBrewvaInspectConfigResolution(
+  options: LoadConfigOptions = {},
+): BrewvaForensicConfigResolution {
+  const cwd = resolve(options.cwd ?? process.cwd());
+  const defaults = structuredClone(DEFAULT_BREWVA_CONFIG);
+  const configPaths = options.configPath
+    ? [resolve(cwd, options.configPath)]
+    : [resolveGlobalBrewvaConfigPath(), resolveProjectBrewvaConfigPath(cwd)];
+
+  let merged = defaults;
+  let metadata = createDefaultBrewvaConfigMetadata();
+  const warnings: BrewvaForensicConfigWarning[] = [];
+  for (const configPath of configPaths) {
+    const forensicRead = readConfigFileForInspect(configPath);
+    warnings.push(...forensicRead.warnings);
+    if (!forensicRead.parsed) {
+      continue;
+    }
+    merged = deepMerge(merged, forensicRead.parsed);
+    metadata = mergeBrewvaConfigMetadata(metadata, forensicRead.metadata);
+  }
+
+  return {
+    config: normalizeBrewvaConfig(merged, DEFAULT_BREWVA_CONFIG),
+    metadata,
+    consultedPaths: [...configPaths],
+    warnings,
   };
 }

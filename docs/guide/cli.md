@@ -66,6 +66,12 @@ It summarizes:
 - projection/WAL/snapshot artifact paths
 - deterministic directory-scoped diagnostics and evidence gaps
 
+By default it loads a forensic-safe merge of global and workspace config, strips
+removed or unknown fields for inspection only, and reports any stripped fields
+back in the inspect output. When a session recorded bootstrap provenance,
+artifact-path reporting prefers those persisted runtime dirs over the current
+config view.
+
 Typical usage:
 
 - `brewva inspect`

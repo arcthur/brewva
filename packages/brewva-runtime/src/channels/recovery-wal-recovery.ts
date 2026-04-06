@@ -62,6 +62,13 @@ function buildEmptySummary(): RecoveryWalRecoveryResult {
         failed: 0,
         skipped: 0,
       },
+      tool: {
+        scanned: 0,
+        retried: 0,
+        expired: 0,
+        failed: 0,
+        skipped: 0,
+      },
     },
   };
 }
@@ -79,6 +86,7 @@ export class RecoveryWalRecovery {
   private readonly maxRetries: number;
   private readonly defaultTtlMs: number;
   private readonly scheduleTurnTtlMs: number;
+  private readonly toolTurnTtlMs: number;
   private readonly recordEvent?:
     | ((input: { sessionId: string; type: string; payload?: object }) => void)
     | undefined;
@@ -90,6 +98,7 @@ export class RecoveryWalRecovery {
     this.maxRetries = Math.max(0, Math.floor(options.config.maxRetries));
     this.defaultTtlMs = Math.max(1, Math.floor(options.config.defaultTtlMs));
     this.scheduleTurnTtlMs = Math.max(1, Math.floor(options.config.scheduleTurnTtlMs));
+    this.toolTurnTtlMs = Math.max(1, Math.floor(options.config.toolTurnTtlMs));
     this.recordEvent = options.recordEvent;
   }
 
@@ -165,7 +174,9 @@ export class RecoveryWalRecovery {
         ? Math.floor(record.ttlMs)
         : record.source === "schedule"
           ? this.scheduleTurnTtlMs
-          : this.defaultTtlMs;
+          : record.source === "tool"
+            ? this.toolTurnTtlMs
+            : this.defaultTtlMs;
     const lastActivity = Math.max(record.createdAt, record.updatedAt);
     return lastActivity + ttlMs < nowMs;
   }

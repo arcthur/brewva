@@ -68,7 +68,11 @@ function isRecoveryWalStatus(value: unknown): value is RecoveryWalStatus {
 
 function isRecoveryWalSource(value: unknown): value is RecoveryWalSource {
   return (
-    value === "channel" || value === "schedule" || value === "gateway" || value === "heartbeat"
+    value === "channel" ||
+    value === "schedule" ||
+    value === "gateway" ||
+    value === "heartbeat" ||
+    value === "tool"
   );
 }
 
@@ -290,6 +294,7 @@ export class RecoveryWalStore {
   private readonly now: () => number;
   private readonly defaultTtlMs: number;
   private readonly scheduleTurnTtlMs: number;
+  private readonly toolTurnTtlMs: number;
   private readonly compactAfterMs: number;
   private readonly recordEvent?:
     | ((input: { sessionId: string; type: string; payload?: object }) => void)
@@ -306,6 +311,7 @@ export class RecoveryWalStore {
     this.now = options.now ?? (() => Date.now());
     this.defaultTtlMs = Math.max(1, Math.floor(options.config.defaultTtlMs));
     this.scheduleTurnTtlMs = Math.max(1, Math.floor(options.config.scheduleTurnTtlMs));
+    this.toolTurnTtlMs = Math.max(1, Math.floor(options.config.toolTurnTtlMs));
     this.compactAfterMs = Math.max(1, Math.floor(options.config.compactAfterMs));
     this.recordEvent = options.recordEvent;
     const walDir = resolve(this.workspaceRoot, options.config.dir);
@@ -536,6 +542,7 @@ export class RecoveryWalStore {
       return Math.floor(overrideTtlMs);
     }
     if (source === "schedule") return this.scheduleTurnTtlMs;
+    if (source === "tool") return this.toolTurnTtlMs;
     return this.defaultTtlMs;
   }
 
@@ -545,7 +552,9 @@ export class RecoveryWalStore {
         ? Math.floor(record.ttlMs)
         : record.source === "schedule"
           ? this.scheduleTurnTtlMs
-          : this.defaultTtlMs;
+          : record.source === "tool"
+            ? this.toolTurnTtlMs
+            : this.defaultTtlMs;
     const lastActivity = Math.max(record.createdAt, record.updatedAt);
     return lastActivity + ttlMs < nowMs;
   }

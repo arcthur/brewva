@@ -86,6 +86,22 @@ describe("Recovery WAL store", () => {
     expect(lines.length).toBe(3);
   });
 
+  test("given a tool-source row, when appendPending is called without ttl override, then tool retention is used", () => {
+    const workspace = createTestWorkspace("recovery-wal-tool-ttl");
+    const store = new RecoveryWalStore({
+      workspaceRoot: workspace,
+      config: {
+        ...DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal,
+        defaultTtlMs: 50,
+        toolTurnTtlMs: 5_000,
+      },
+      scope: "runtime",
+    });
+
+    const pending = store.appendPending(createEnvelope("tool-turn-1"), "tool");
+    expect(pending.ttlMs).toBe(5_000);
+  });
+
   test("given unknown wal id, when markDone is called, then result is undefined", () => {
     const workspace = createTestWorkspace("recovery-wal-unknown-id");
     const store = new RecoveryWalStore({

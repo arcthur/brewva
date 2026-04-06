@@ -8,6 +8,7 @@ import {
 import {
   BrewvaRuntime,
   createOperatorRuntimePort,
+  loadBrewvaInspectConfigResolution,
   TASK_EVENT_TYPE,
   TAPE_ANCHOR_EVENT_TYPE,
   TAPE_CHECKPOINT_EVENT_TYPE,
@@ -16,10 +17,11 @@ import {
   createTrustedLocalGovernancePort,
   foldTaskLedgerEvents,
   foldTruthLedgerEvents,
+  type BrewvaForensicConfigWarning,
   type BrewvaEventRecord,
   type BrewvaOperatorRuntimePort,
 } from "@brewva/brewva-runtime";
-import { PATCH_HISTORY_FILE } from "@brewva/brewva-runtime/internal";
+import { PATCH_HISTORY_FILE, RecoveryWalStore } from "@brewva/brewva-runtime/internal";
 import { formatISO } from "date-fns";
 import {
   buildInspectAnalysis,
@@ -40,6 +42,16 @@ const INSPECT_PARSE_OPTIONS = {
 
 interface InspectBootstrapPayload {
   managedToolMode?: "runtime_plugin" | "direct";
+  runtimeConfig?: {
+    workspaceRoot?: string;
+    configPath?: string | null;
+    artifactRoots?: {
+      eventsDir?: string;
+      recoveryWalDir?: string;
+      projectionDir?: string;
+      ledgerPath?: string;
+    };
+  };
   skillLoad?: {
     routingEnabled?: boolean;
     routingScopes?: string[];
@@ -58,9 +70,22 @@ interface InspectVerification {
   reason: string | null;
 }
 
+interface InspectConfigLoadReport {
+  mode: "forensic_default" | "explicit";
+  paths: string[];
+  warningCount: number;
+  warnings: Array<{
+    code: BrewvaForensicConfigWarning["code"];
+    configPath: string;
+    message: string;
+    fields: string[];
+  }>;
+}
+
 interface InspectReport {
   sessionId: string;
   workspaceRoot: string;
+  configLoad: InspectConfigLoadReport;
   analysis?: InspectAnalysisReport;
   hydration: {
     status: "cold" | "ready" | "degraded";
@@ -98,6 +123,12 @@ interface InspectReport {
   };
   bootstrap: {
     managedToolMode: "runtime_plugin" | "direct" | null;
+    workspaceRoot: string | null;
+    configPath: string | null;
+    eventsDir: string | null;
+    recoveryWalDir: string | null;
+    projectionDir: string | null;
+    ledgerPath: string | null;
     routingEnabled: boolean | null;
     routingScopes: string[];
     routableSkills: string[];
@@ -139,6 +170,16 @@ interface InspectReport {
     filePath: string;
     pendingCount: number;
     pendingSessionCount: number;
+    pendingRows: Array<{
+      walId: string;
+      source: string;
+      status: string;
+      turnId: string;
+      channel: string;
+      updatedAt: string | null;
+      toolCallId: string | null;
+      toolName: string | null;
+    }>;
   };
   snapshots: {
     sessionDir: string;
@@ -165,7 +206,7 @@ Usage:
 
 Options:
   --cwd <path>       Working directory
-  --config <path>    Brewva config path (default: .brewva/brewva.json)
+  --config <path>    Brewva config path (default: forensic merge of global + workspace config)
   --session <id>     Inspect a specific replay session
   --dir <path>       Target directory for deterministic analysis (alternative to positional argument)
   --json             Emit JSON output
@@ -281,11 +322,58 @@ function pathExists(path: string): boolean {
   }
 }
 
-function countSessionPendingRecoveryWal(
+function listSessionPendingRecoveryWal(
   runtime: BrewvaOperatorRuntimePort,
   sessionId: string,
-): number {
-  return runtime.inspect.recovery.listPending().filter((row) => row.sessionId === sessionId).length;
+  recoveryWalDir?: string | null,
+): InspectReport["recoveryWal"]["pendingRows"] {
+  const pendingRows =
+    typeof recoveryWalDir === "string" &&
+    recoveryWalDir.trim().length > 0 &&
+    recoveryWalDir !== runtime.config.infrastructure.recoveryWal.dir
+      ? new RecoveryWalStore({
+          workspaceRoot: runtime.workspaceRoot,
+          config: {
+            ...runtime.config.infrastructure.recoveryWal,
+            dir: recoveryWalDir,
+          },
+          scope: "runtime",
+        }).listPending()
+      : runtime.inspect.recovery.listPending();
+  return pendingRows
+    .filter((row) => row.sessionId === sessionId)
+    .map((row) => {
+      const meta =
+        row.envelope.meta &&
+        typeof row.envelope.meta === "object" &&
+        !Array.isArray(row.envelope.meta)
+          ? row.envelope.meta
+          : null;
+      const toolCallId =
+        typeof meta?.toolCallId === "string" && meta.toolCallId.trim().length > 0
+          ? meta.toolCallId
+          : null;
+      const toolName =
+        typeof meta?.toolName === "string" && meta.toolName.trim().length > 0
+          ? meta.toolName
+          : null;
+      return {
+        walId: row.walId,
+        source: row.source,
+        status: row.status,
+        turnId: row.turnId,
+        channel: row.channel,
+        updatedAt: toIso(row.updatedAt),
+        toolCallId,
+        toolName,
+      };
+    })
+    .toSorted(
+      (left, right) =>
+        (right.updatedAt ? Date.parse(right.updatedAt) : 0) -
+          (left.updatedAt ? Date.parse(left.updatedAt) : 0) ||
+        left.walId.localeCompare(right.walId),
+    );
 }
 
 function hasReplayEvent(
@@ -345,6 +433,7 @@ function buildInspectReport(
   sessionId: string,
   options: {
     directory?: InspectDirectory;
+    configLoad?: InspectConfigLoadReport;
   } = {},
 ): InspectReport {
   const replaySession =
@@ -363,23 +452,35 @@ function buildInspectReport(
     sessionId,
     "session_bootstrap",
   )?.payload;
+  const bootstrapArtifactRoots =
+    bootstrap?.runtimeConfig?.artifactRoots &&
+    typeof bootstrap.runtimeConfig.artifactRoots === "object" &&
+    !Array.isArray(bootstrap.runtimeConfig.artifactRoots)
+      ? bootstrap.runtimeConfig.artifactRoots
+      : null;
+  const effectiveProjectionDir =
+    typeof bootstrapArtifactRoots?.projectionDir === "string" &&
+    bootstrapArtifactRoots.projectionDir.trim().length > 0
+      ? bootstrapArtifactRoots.projectionDir
+      : runtime.config.projection.dir;
+  const effectiveRecoveryWalDir =
+    typeof bootstrapArtifactRoots?.recoveryWalDir === "string" &&
+    bootstrapArtifactRoots.recoveryWalDir.trim().length > 0
+      ? bootstrapArtifactRoots.recoveryWalDir
+      : runtime.config.infrastructure.recoveryWal.dir;
   const skillState = buildSkillInspection(events);
   const verification = buildVerificationInspection(runtime, sessionId);
   const ledgerIntegrity = runtime.inspect.ledger.verifyIntegrity(sessionId);
   const ledgerRows = runtime.inspect.ledger.listRows(sessionId);
 
-  const projectionRoot = resolve(runtime.workspaceRoot, runtime.config.projection.dir);
+  const projectionRoot = resolve(runtime.workspaceRoot, effectiveProjectionDir);
   const projectionWorkingPath = join(
     projectionRoot,
     "sessions",
     `sess_${encodeSessionIdForPath(sessionId)}`,
     runtime.config.projection.workingFile,
   );
-  const walFilePath = resolve(
-    runtime.workspaceRoot,
-    runtime.config.infrastructure.recoveryWal.dir,
-    "runtime.jsonl",
-  );
+  const walFilePath = resolve(runtime.workspaceRoot, effectiveRecoveryWalDir, "runtime.jsonl");
 
   const snapshotSessionDir = resolve(
     runtime.workspaceRoot,
@@ -387,10 +488,33 @@ function buildInspectReport(
     sanitizeSessionIdForPath(sessionId),
   );
   const patchHistoryPath = join(snapshotSessionDir, PATCH_HISTORY_FILE);
+  const sessionPendingRecoveryWal = listSessionPendingRecoveryWal(
+    runtime,
+    sessionId,
+    effectiveRecoveryWalDir,
+  );
+  const recoveryWalPendingRows =
+    typeof effectiveRecoveryWalDir === "string" &&
+    effectiveRecoveryWalDir !== runtime.config.infrastructure.recoveryWal.dir
+      ? new RecoveryWalStore({
+          workspaceRoot: runtime.workspaceRoot,
+          config: {
+            ...runtime.config.infrastructure.recoveryWal,
+            dir: effectiveRecoveryWalDir,
+          },
+          scope: "runtime",
+        }).listPending()
+      : runtime.inspect.recovery.listPending();
 
   const report: InspectReport = {
     sessionId,
     workspaceRoot: runtime.workspaceRoot,
+    configLoad: options.configLoad ?? {
+      mode: "forensic_default",
+      paths: [],
+      warningCount: 0,
+      warnings: [],
+    },
     hydration: {
       status: hydration.status,
       hydratedAt: toIso(hydration.hydratedAt),
@@ -430,6 +554,36 @@ function buildInspectReport(
       managedToolMode:
         bootstrap?.managedToolMode === "runtime_plugin" || bootstrap?.managedToolMode === "direct"
           ? bootstrap.managedToolMode
+          : null,
+      workspaceRoot:
+        typeof bootstrap?.runtimeConfig?.workspaceRoot === "string" &&
+        bootstrap.runtimeConfig.workspaceRoot.trim().length > 0
+          ? bootstrap.runtimeConfig.workspaceRoot
+          : null,
+      configPath:
+        typeof bootstrap?.runtimeConfig?.configPath === "string" &&
+        bootstrap.runtimeConfig.configPath.trim().length > 0
+          ? bootstrap.runtimeConfig.configPath
+          : null,
+      eventsDir:
+        typeof bootstrapArtifactRoots?.eventsDir === "string" &&
+        bootstrapArtifactRoots.eventsDir.trim().length > 0
+          ? bootstrapArtifactRoots.eventsDir
+          : null,
+      recoveryWalDir:
+        typeof bootstrapArtifactRoots?.recoveryWalDir === "string" &&
+        bootstrapArtifactRoots.recoveryWalDir.trim().length > 0
+          ? bootstrapArtifactRoots.recoveryWalDir
+          : null,
+      projectionDir:
+        typeof bootstrapArtifactRoots?.projectionDir === "string" &&
+        bootstrapArtifactRoots.projectionDir.trim().length > 0
+          ? bootstrapArtifactRoots.projectionDir
+          : null,
+      ledgerPath:
+        typeof bootstrapArtifactRoots?.ledgerPath === "string" &&
+        bootstrapArtifactRoots.ledgerPath.trim().length > 0
+          ? bootstrapArtifactRoots.ledgerPath
           : null,
       routingEnabled:
         typeof bootstrap?.skillLoad?.routingEnabled === "boolean"
@@ -482,8 +636,9 @@ function buildInspectReport(
     recoveryWal: {
       enabled: runtime.config.infrastructure.recoveryWal.enabled,
       filePath: walFilePath,
-      pendingCount: runtime.inspect.recovery.listPending().length,
-      pendingSessionCount: countSessionPendingRecoveryWal(runtime, sessionId),
+      pendingCount: recoveryWalPendingRows.length,
+      pendingSessionCount: sessionPendingRecoveryWal.length,
+      pendingRows: sessionPendingRecoveryWal,
     },
     snapshots: {
       sessionDir: snapshotSessionDir,
@@ -493,7 +648,7 @@ function buildInspectReport(
     },
     consistency: {
       ledgerIntegrity: ledgerIntegrity.valid ? "ok" : "invalid",
-      pendingRecoveryWal: countSessionPendingRecoveryWal(runtime, sessionId),
+      pendingRecoveryWal: sessionPendingRecoveryWal.length,
     },
   };
 
@@ -531,6 +686,7 @@ function formatInspectText(report: InspectReport): string {
   const lines = [
     `Session: ${report.sessionId}`,
     `Workspace: ${report.workspaceRoot}`,
+    `Config: mode=${report.configLoad.mode} paths=${renderList(report.configLoad.paths)} warnings=${report.configLoad.warningCount}`,
     "",
     `Hydration: status=${report.hydration.status} issues=${report.hydration.issueCount} hydratedAt=${report.hydration.hydratedAt ?? "n/a"}`,
     `Integrity: status=${report.integrity.status} issues=${report.integrity.issueCount}`,
@@ -577,8 +733,33 @@ function formatInspectText(report: InspectReport): string {
   if (report.bootstrap.hiddenSkills.length > 0) {
     lines.push(`Hidden skills: ${report.bootstrap.hiddenSkills.join(", ")}`);
   }
+  if (
+    report.bootstrap.configPath ||
+    report.bootstrap.eventsDir ||
+    report.bootstrap.recoveryWalDir ||
+    report.bootstrap.projectionDir ||
+    report.bootstrap.ledgerPath
+  ) {
+    lines.push(
+      `Bootstrap config: path=${report.bootstrap.configPath ?? "n/a"} events=${report.bootstrap.eventsDir ?? "n/a"} recoveryWal=${report.bootstrap.recoveryWalDir ?? "n/a"} projection=${report.bootstrap.projectionDir ?? "n/a"} ledger=${report.bootstrap.ledgerPath ?? "n/a"}`,
+    );
+  }
   if (report.verification.reason) {
     lines.push(`Verification reason: ${report.verification.reason}`);
+  }
+  if (report.recoveryWal.pendingRows.length > 0) {
+    for (const row of report.recoveryWal.pendingRows.slice(0, 5)) {
+      lines.push(
+        `Recovery WAL row: source=${row.source} status=${row.status} turnId=${row.turnId} channel=${row.channel} tool=${row.toolName ?? "n/a"} toolCallId=${row.toolCallId ?? "n/a"} updatedAt=${row.updatedAt ?? "n/a"}`,
+      );
+    }
+  }
+  if (report.configLoad.warnings.length > 0) {
+    for (const warning of report.configLoad.warnings.slice(0, 5)) {
+      lines.push(
+        `Config warning: code=${warning.code} path=${warning.configPath} fields=${renderList(warning.fields)} message=${warning.message}`,
+      );
+    }
   }
   if (report.analysis) {
     lines.push("", formatInspectAnalysisText(report.analysis));
@@ -648,9 +829,14 @@ export async function runInspectCli(argv: string[]): Promise<number> {
     return 1;
   }
 
+  const configPath = typeof parsed.values.config === "string" ? parsed.values.config : undefined;
+  const configLoad = loadBrewvaInspectConfigResolution({
+    cwd: typeof parsed.values.cwd === "string" ? parsed.values.cwd : undefined,
+    configPath,
+  });
   const runtime = new BrewvaRuntime({
     cwd: typeof parsed.values.cwd === "string" ? parsed.values.cwd : undefined,
-    configPath: typeof parsed.values.config === "string" ? parsed.values.config : undefined,
+    config: configLoad.config,
     governancePort: createTrustedLocalGovernancePort({ profile: "personal" }),
   });
   const operatorRuntime = createOperatorRuntimePort(runtime);
@@ -677,6 +863,17 @@ export async function runInspectCli(argv: string[]): Promise<number> {
 
   const report = buildInspectReport(operatorRuntime, targetSessionId, {
     directory,
+    configLoad: {
+      mode: typeof parsed.values.config === "string" ? "explicit" : "forensic_default",
+      paths: [...configLoad.consultedPaths],
+      warningCount: configLoad.warnings.length,
+      warnings: configLoad.warnings.map((warning) => ({
+        code: warning.code,
+        configPath: warning.configPath,
+        message: warning.message,
+        fields: [...(warning.fields ?? [])],
+      })),
+    },
   });
   if (parsed.values.json === true) {
     console.log(JSON.stringify(report, null, 2));

@@ -173,6 +173,7 @@ import { TaskWatchdogService } from "./services/task-watchdog.js";
 import { TaskService } from "./services/task.js";
 import { ToolGateService } from "./services/tool-gate.js";
 import { ToolInvocationSpine } from "./services/tool-invocation-spine.js";
+import { ToolLifecycleRecoveryWalService } from "./services/tool-lifecycle-recovery-wal.js";
 import { TruthProjectorService } from "./services/truth-projector.js";
 import { TruthService } from "./services/truth.js";
 import { VerificationProjectorService } from "./services/verification-projector.js";
@@ -838,6 +839,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
   declare private readonly truthProjectorService: TruthProjectorService;
   declare private readonly toolGateService: ToolGateService;
   declare private readonly toolInvocationSpine: ToolInvocationSpine;
+  declare private readonly toolLifecycleRecoveryWalService: ToolLifecycleRecoveryWalService;
   declare private readonly verificationProjectorService: VerificationProjectorService;
   declare private readonly verificationService: VerificationService;
   declare private readonly runtimeConfig: BrewvaConfig;
