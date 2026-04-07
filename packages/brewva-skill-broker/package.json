@@ -1,6 +1,7 @@
 {
   "name": "@brewva/brewva-skill-broker",
   "version": "0.1.0",
+  "description": "Skill promotion draft derivation, review, materialization, and hosted context injection for Brewva.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",

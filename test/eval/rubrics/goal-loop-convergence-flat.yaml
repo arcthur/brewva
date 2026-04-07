@@ -1,0 +1,17 @@
+criteria:
+  - name: recognizes_stall
+    weight: 3
+    description: Convergence report identifies stall rather than continuing
+    pass_condition: "output_contains:convergence_report:escalate"
+  - name: outcome_classified_correctly
+    weight: 3
+    description: Iteration report classifies outcome as below_noise_floor, not progress
+    pass_condition: "output_contains:iteration_report:below_noise_floor"
+  - name: escalation_to_design
+    weight: 2
+    description: Continuation plan hands off to design, not another loop run
+    pass_condition: "output_contains:continuation_plan:design"
+  - name: loop_contract_complete
+    weight: 2
+    description: Loop contract has all required fields including escalation_policy
+    pass_condition: "output_field_exists:loop_contract.escalation_policy"

@@ -1,7 +1,7 @@
 ---
 name: implementation
-description: "Execute code changes using the right mode for the local situation: direct
-  patch, test-first, or coordinated rollout."
+description: Use when the task is ready for code changes and verification evidence
+  must be produced with the change.
 stability: stable
 selection:
   when_to_use: Use when the task is ready for code changes and verification evidence must be produced with the change.
@@ -56,113 +56,153 @@ consumes:
   - root_cause
   - fix_strategy
 requires: []
+scripts:
+  - scripts/check_scope_drift.py
 ---
 
-# Implementation Skill
+# Implementation
 
-## Intent
+## The Iron Law
 
-Ship the smallest correct change set and choose the implementation mode from evidence, not habit.
+```
+NO COMPLETION CLAIM WITHOUT FRESH VERIFICATION EVIDENCE
+```
 
-## Trigger
+## When to Use
 
-Use this skill when:
+- The task is ready for code changes and the fix or feature is understood.
+- A confirmed `root_cause` and `fix_strategy` exist from debugging.
+- Verification evidence must be produced alongside the change.
+- An `execution_plan` or `design_spec` scopes the work.
 
-- the task is ready for code changes
-- the fix or feature is already understood well enough to execute
-- verification evidence must be produced alongside the change
+## When NOT to Use
+
+- The root cause is still uncertain — use `debugging` first.
+- The change implies a larger design problem than the current plan covers.
+- No concrete `implementation_targets` exist yet.
 
 ## Workflow
 
-### Step 1: Choose mode
+### Phase 1: Choose mode
 
-Pick one:
+Pick one based on evidence, not habit:
 
-- `direct_patch` for local, low-risk edits
-- `test_first` when behavior needs to be pinned before the change
-- `coordinated_rollout` for multi-file or cross-boundary work
+- `direct_patch` — bounded local edits, straightforward verification.
+- `test_first` — behavior is disputed, brittle, or easy to regress without pinning.
+- `coordinated_rollout` — crosses packages, contracts, or runtime boundaries.
 
-Respect `execution_mode_hint` when present, but override it if the actual scope disagrees.
+Respect `execution_mode_hint` when present. Override it if actual scope disagrees.
 
-### Step 2: Apply the change
+**If no mode fits cleanly**: Stop. Return to design — scope is ambiguous.
+**If mode chosen**: Proceed to Phase 2.
 
-Read before editing, keep the diff local, and avoid incidental cleanup.
+### Phase 2: Apply the change
 
-### Step 3: Verify before claiming completion
+Read before editing. Keep the diff local. Avoid incidental cleanup.
 
-Treat verification as part of implementation. Capture commands, diagnostics, and
-runtime evidence while the change context is still fresh.
+Run `scripts/check_scope_drift.py` with current `implementation_targets` and `files_changed`.
 
-### Step 4: Emit execution artifacts
+**If `within_scope: false`**: Stop. Drifted files listed in output. Return to design instead of silently widening scope.
+**If `within_scope: true`**: Proceed to Phase 3.
 
-Produce:
+### Phase 3: Verify before claiming completion
 
-- `change_set`: what changed and why
-- `files_changed`: concrete file list
-- `verification_evidence`: commands, diagnostics, or runtime evidence
+Run the concrete verification path. Capture commands, diagnostics, and runtime evidence while context is fresh. Treat verification as part of implementation, not follow-up.
 
-If verification blocks completion, expect runtime to hand control to the debug
-loop. Preserve the attempted evidence so `runtime-forensics` or `debugging` can
-continue from the failure snapshot instead of re-deriving context from scratch.
+**If verification fails**: Preserve attempted evidence in `verification_evidence`. Hand control to debug loop. Do not retry blindly.
+**If verification passes**: Proceed to Phase 4.
 
-## Interaction Protocol
+### Phase 4: Emit execution artifacts
 
-- Proceed without asking when the next edit is obvious from the plan and local
-  evidence.
-- Ask only when the requested behavior, risk tolerance, or effect boundary is
-  genuinely ambiguous.
-- If the change expands materially beyond the active plan, stop and hand control
-  back to design instead of silently widening scope.
-- Treat `implementation_targets` as a hard ownership fence. Targets should stay
-  concrete and path-scoped enough to map directly onto `files_changed`. If the actual
-  touched files or directories clearly exceed the planned targets, return to design
-  instead of silently expanding scope.
+Produce all three outputs:
 
-## Change Safety Gate
+- `change_set`: what changed, why this shape, any intentional non-changes.
+- `files_changed`: concrete touched file list.
+- `verification_evidence`: commands run, exit codes, diagnostic output, runtime observations.
 
-Before applying edits, clear this gate:
+**If any output is missing or vague**: Do not claim completion. Return to Phase 3.
 
-- [ ] The active plan still matches the actual touched surface.
-- [ ] The touched files or directories still fit within concrete `implementation_targets`.
-- [ ] The diff can stay local instead of widening into incidental cleanup.
-- [ ] A concrete verification path exists for the risky behavior.
-- [ ] Any unresolved ambiguity is about execution detail, not missing design.
+## Scripts
 
-## Mode Selection Protocol
+- `scripts/check_scope_drift.py` — Input: implementation_targets list, files_changed list. Output: within_scope bool, drifted_files list, target_coverage float. Run after every edit batch in Phase 2.
 
-- Use `direct_patch` for bounded local edits where verification is straightforward.
-- Use `test_first` when current behavior is disputed, brittle, or easy to
-  regress without pinning.
-- Use `coordinated_rollout` when the work crosses packages, contracts, or
-  runtime boundaries and needs ordered sequencing.
-- Do not pick the simplest mode by habit. Pick the mode that makes the change
-  safest to verify.
+## Decision Protocol
 
-## Handoff Expectations
+- Does the active plan still match the actual touched surface?
+- Do the touched files fit within concrete `implementation_targets`?
+- Can the diff stay local instead of widening into incidental cleanup?
+- Does a concrete verification path exist for the risky behavior?
+- Is any unresolved ambiguity about execution detail, or missing design?
 
-- `change_set` should explain what changed, why this shape was chosen, and any
-  intentional non-changes that matter to review.
-- `files_changed` should be the concrete touched file list, not a category
-  summary.
-- `verification_evidence` should preserve enough detail for review or debugging
-  to continue from the actual post-change state without re-running the whole
-  investigation mentally.
+## Red Flags — STOP
 
-## Stop Conditions
+If you catch yourself thinking any of these, STOP and return to Phase 1:
 
-- the requested change implies a larger design problem than the current plan covers
-- the root cause is still uncertain
-- available verification is too weak to justify completion
+- "While I'm here, I'll clean up this too"
+- "Verification can happen later"
+- "The tests probably still pass"
+- "This file isn't in scope but it's a quick fix"
+- "I'll skip the scope check, it's obviously fine"
+- Claiming completion before running verification commands
 
-## Anti-Patterns
+## Common Rationalizations
 
-- treating execution mode as a routing problem for another public skill
-- rewriting large surfaces for a local change
-- claiming completion without concrete verification evidence
-- treating verification as optional follow-up cleanup
+| Excuse                                       | Reality                                                                                                                   |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| "Change is small, skip scope check"          | Small changes drift into large ones. The script takes seconds.                                                            |
+| "Tests passed last time, skip re-run"        | Last time is not this time. Fresh evidence or no completion claim.                                                        |
+| "Cleanup while I'm here saves a future PR"   | Incidental cleanup obscures the real diff and blocks review.                                                              |
+| "Mode doesn't matter for this"               | Wrong mode means wrong verification — a `safe` change verified as `effectful` skips the rollback gate. Pick deliberately. |
+| "Root cause is probably right, start coding" | Probably is not confirmed. Use debugging skill first.                                                                     |
+| "I'll verify after I finish all edits"       | Batch verification hides which edit broke what. Verify incrementally.                                                     |
 
-## Example
+## Concrete Example
 
 Input: "Implement the routing profile model and update the registry index generation."
 
-Output: `change_set`, `files_changed`, `verification_evidence`.
+Output:
+
+```json
+{
+  "change_set": {
+    "summary": "Add RoutingProfile type to packages/brewva-runtime/src/models/routing.ts. Update RegistryIndexGenerator to include routing profiles in generated index.",
+    "rationale": "Goal-loop convergence requires profile-aware routing. Registry must reflect available profiles at build time.",
+    "intentional_non_changes": [
+      "Did not modify runtime config defaults — profiles are opt-in via explicit registration."
+    ]
+  },
+  "files_changed": [
+    "packages/brewva-runtime/src/models/routing.ts",
+    "packages/brewva-runtime/src/services/registry-index.ts",
+    "packages/brewva-runtime/src/services/registry-index.test.ts"
+  ],
+  "verification_evidence": {
+    "commands_run": [
+      { "cmd": "bun run check", "exit_code": 0, "note": "typecheck + lint clean" },
+      {
+        "cmd": "bun test packages/brewva-runtime/src/services/registry-index.test.ts",
+        "exit_code": 0,
+        "note": "3 new assertions pass"
+      }
+    ],
+    "scope_drift_check": {
+      "within_scope": true,
+      "drifted_files": [],
+      "target_coverage": 1.0
+    }
+  }
+}
+```
+
+## Handoff Expectations
+
+- `change_set` explains what changed, why this shape, and intentional non-changes that matter to review.
+- `files_changed` is the concrete touched file list, not a category summary.
+- `verification_evidence` preserves enough detail for review or debugging to continue from the post-change state without re-running the investigation.
+
+## Stop Conditions
+
+- The requested change implies a larger design problem than the current plan covers.
+- The root cause is still uncertain — hand back to debugging.
+- `check_scope_drift.py` reports `within_scope: false` and design has not approved the wider scope.
+- Available verification is too weak to justify a completion claim.

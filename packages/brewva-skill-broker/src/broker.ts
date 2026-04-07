@@ -24,6 +24,7 @@ import {
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { FileSkillPromotionStore } from "./file-store.js";
+import { isRecord, readString } from "./parse.js";
 import {
   SKILL_PROMOTION_STATE_SCHEMA,
   type SkillPromotionDraft,
@@ -55,16 +56,6 @@ const PROMOTION_TRIGGER_TOKENS = new Set([
   "improvement",
   "workflow",
 ]);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readString(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : undefined;
-}
 
 function compactText(value: string, maxChars = 280): string {
   const normalized = value.replace(/\s+/g, " ").trim();

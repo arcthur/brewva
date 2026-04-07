@@ -13,6 +13,10 @@
     "build": "bun run typecheck && bun run build:binaries",
     "build:binaries": "bun run script/build-binaries.ts",
     "check": "bun run format:check && bun run lint && bun run typecheck && bun run typecheck:test && bun run test:import-boundaries",
+    "eval": "bun run test/eval/run-eval.ts --mode runtime",
+    "eval:fixtures": "bun run test/eval/run-eval.ts --mode fixture",
+    "eval:fixtures:summary": "bun run test/eval/run-eval.ts --mode fixture --runs 3",
+    "eval:summary": "bun run test/eval/run-eval.ts --mode runtime --runs 3",
     "format": "oxfmt --write",
     "format:check": "oxfmt --check",
     "format:docs": "git ls-files 'docs/**/*.md' 'docs/**/*.mdx' 'README.md' | xargs oxfmt --write",
@@ -58,7 +62,8 @@
     "oxlint": "^1.58.0",
     "oxlint-tsgolint": "^0.19.0",
     "ts-json-schema-generator": "^2.5.0",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "yaml": "^2.8.3"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

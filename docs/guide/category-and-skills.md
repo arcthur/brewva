@@ -76,7 +76,8 @@ Project overlays do not create new semantic territory. They:
 - can add project-specific execution hints and shared context
 - tighten allowed/denied effects, resource ceilings, and routing constraints
 - keep base outputs/consumes unless the overlay explicitly replaces them
-- prepend shared project context from `skills/project/shared`
+- prepend shared project context from `skills/project/shared` in root order,
+  with each shared document injected at most once per final loaded skill
 
 This keeps project knowledge centralized without turning every project into a new
 catalog of public super-skills.

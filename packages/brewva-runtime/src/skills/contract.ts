@@ -990,7 +990,10 @@ function normalizeSelectionPolicy(
   );
 
   if (category !== "overlay" && !whenToUse) {
-    failSkillContract(filePath, "selection.when_to_use is required for loadable routed skills.");
+    failSkillContract(
+      filePath,
+      "selection.when_to_use is required for core/domain/operator/meta skills.",
+    );
   }
   if (!whenToUse && examples.length === 0 && paths.length === 0 && (phases?.length ?? 0) === 0) {
     failSkillContract(

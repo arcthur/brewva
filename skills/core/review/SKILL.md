@@ -1,7 +1,7 @@
 ---
 name: review
-description: Assess change risk, plan conformance, and merge safety with findings-first
-  output and explicit residual risk.
+description: Use when a diff or change plan needs findings-first risk review, merge
+  readiness assessment, or conformance checking.
 stability: stable
 selection:
   when_to_use: Use when a diff or change plan needs findings-first risk review, merge readiness assessment, or conformance checking.
@@ -55,6 +55,11 @@ references:
   - references/contract-drift.md
   - references/review-lanes.md
   - references/security-concurrency.md
+scripts:
+  - scripts/activate_lanes.py
+  - scripts/validate_lane_outcome.py
+  - scripts/detect_secret_exposure.py
+  - scripts/synthesize_lane_dispositions.py
 consumes:
   - change_set
   - files_changed
@@ -70,174 +75,162 @@ requires: []
 
 # Review Skill
 
-## Intent
+## The Iron Law
 
-Judge risk, not style. Surface the highest-value findings first and make merge safety explicit.
+```
+NO MERGE DECISION WITHOUT EVIDENCE FROM EVERY ACTIVATED LANE
+```
 
-## Trigger
+Judge risk, not style. Surface the highest-value findings first and make
+merge safety explicit.
 
-Use this skill when:
+**Violating the letter of this rule is violating the spirit of this rule.**
 
-- reviewing a diff or change plan
-- checking merge readiness
-- assessing regression, compatibility, or operational risk
+## When to Use
+
+- Reviewing a diff or change plan
+- Checking merge readiness
+- Assessing regression, compatibility, or operational risk
+
+**Do NOT use when:**
+
+- There is no concrete review target
+- The real work is debugging or repository analysis
 
 ## Workflow
 
-### Step 1: Build review context
+### Phase 1: Build review context
 
-Summarize scope, intent, critical paths, consulted precedents, and available
-evidence.
+Summarize scope, intent, critical paths, and available evidence. Treat
+`design_spec`, `execution_plan`, and `risk_register` as core planning evidence.
 
-Treat `design_spec`, `execution_plan`, `risk_register`, and
-`implementation_targets` as core planning evidence. Planning evidence becomes
-stale once later workspace writes land, and missing or stale planning evidence
-must stay visible in `review_report.missing_evidence`.
+**If planning evidence is missing or stale**: Widen the review lens. Missing
+evidence is itself a finding.
 
-### Step 2: Evaluate risk lanes
+### Phase 2: Activate review lanes
 
-Always inspect correctness / invariants, contracts / boundaries, and
-verification / operability. Activate conditional lanes from canonical
-`impact_map.change_categories` when available, otherwise from canonical
-`risk_register.category`, then from canonical `changedFileClasses` derived from
-`impact_map.changed_file_classes` or the current `files_changed` artifact.
-Widen when the available evidence is stale or missing.
+Run `scripts/activate_lanes.py` with `change_categories`, `changed_file_classes`,
+and evidence availability flags. The script returns the exact lane set.
 
-For non-trivial review work, prefer explicit internal lane fan-out through
-`subagent_fanout` using the built-in review delegates:
+Always-on: `review-correctness`, `review-boundaries`, `review-operability`.
+Conditional: `review-security`, `review-concurrency`, `review-compatibility`,
+`review-performance` — activated deterministically by the script.
 
-- always-on: `review-correctness`, `review-boundaries`, `review-operability`
-- conditional: `review-security`, `review-concurrency`,
-  `review-compatibility`, `review-performance`
+For non-trivial review, fan out lanes via `subagent_fanout`.
 
-If `impact_map`, planning evidence, or `verification_evidence` is weak, stale,
-or missing, widen the lane set rather than narrowing it. `merge_decision`
-cannot be `ready` while planning evidence or verification evidence is stale or
-missing. If canonical classification is unavailable for non-trivial review,
-widen to the full conditional lane set instead of guessing.
+**If the script widens to full conditional set**: Review evidence is weak.
+Proceed with all lanes rather than guessing which to skip.
 
-Each delegated review lane should emit a structured `review` outcome that keeps
-the lane visible to the parent reviewer. The canonical child fields are:
+### Phase 3: Security gate
 
-- `lane`
-- `disposition`: `clear`, `concern`, `blocked`, or `inconclusive`
-- `primaryClaim`
-- `findings` when material issues exist
-- `missingEvidence` when the lane cannot clear on evidence alone
-- `openQuestions` for residual blind spots
-- `strongestCounterpoint` when the lane has a meaningful internal caveat
-- `confidence`
+Run `scripts/detect_secret_exposure.py` on changed files. This is a gate,
+not a score — any finding blocks the review regardless of other lane outcomes.
 
-### Step 3: Decide the actual next action
+**If `clean: false`**: Add a blocking finding. Do not proceed to merge readiness.
 
-Determine whether the change is ready, needs implementation follow-up, or is
-blocked on missing evidence or a deeper design problem.
+### Phase 4: Synthesize and decide
 
-### Step 4: Emit findings-first output
+Run `scripts/synthesize_lane_dispositions.py` with `activated_lanes` (from
+Phase 2) AND all `lane_outcomes`. The script blocks if any activated lane is
+unreported.
 
-Produce:
+**If lanes disagree materially**: Keep the disagreement visible in
+`review_report`. Do not smooth it away.
+**If missing_lanes is non-empty**: The review is incomplete. Do not override.
 
-- `review_findings`: ordered issues with evidence
-- `review_report`: structured disclosure with `summary`, lane activation,
-  missing evidence, blind spots, `precedent_query_summary`, and precedent
-  consult status
-- `merge_decision`: `ready`, `needs_changes`, or `blocked`
+### Phase 5: Emit findings-first output
 
-## Interaction Protocol
+Produce `review_findings`, `review_report`, `merge_decision`.
 
-- Do not spend review budget on compliments or stylistic trivia before checking
-  correctness and merge safety.
-- Re-ground on the intended design and available verification before judging the
-  diff in isolation.
-- If a user-facing decision is needed, recommend the merge path you actually
-  believe is safest instead of presenting symmetric options.
-- If critical metadata is missing, widen the review lens rather than narrowing
-  it. Missing evidence is itself review evidence.
-- Preserve proof of consult for repository precedents. Non-trivial review
-  should record consulted precedents or an explicit no-match result, plus the
-  query context used to reach that conclusion.
+## Scripts
 
-## Review Questions
+- `scripts/activate_lanes.py` — Input: change_categories, changed_file_classes,
+  evidence flags. Output: always_on lanes, conditional lanes, activation_basis.
+  Run before Phase 2 fan-out.
+- `scripts/validate_lane_outcome.py` — Input: lane outcome object or array.
+  Output: valid, errors. Enforces canonical child schema (lane, disposition,
+  primaryClaim, findings required when non-clear, optional missingEvidence /
+  openQuestions / strongestCounterpoint). Accepts snake_case compatibility
+  aliases on input, but child review lanes should emit camelCase fields. Run on
+  each lane result before synthesis.
+- `scripts/detect_secret_exposure.py` — Input: files array with path + content.
+  Output: clean (bool), findings. Security GATE — any finding = blocked.
+  Run before Phase 4 synthesis.
+- `scripts/synthesize_lane_dispositions.py` — Input: activated_lanes + lane_outcomes.
+  Output: merge_decision, rationale, blocking/concern/missing lanes.
+  Blocks if activated_lanes missing or if any lane unreported. Treats
+  unresolved `missingEvidence` as inconclusive even when a lane otherwise says
+  `clear`.
 
-Use these questions to keep the review anchored in behavior instead of style:
+## Decision Protocol
+
+Use these questions to keep the review anchored in behavior, not style:
 
 - What can fail now that could not fail before this change?
-- Which contract, invariant, or ownership boundary does the diff rely on
-  without proving?
-- Where could persisted state, external effects, or user-visible behavior drift
-  partially rather than fail cleanly?
+- Which contract does the diff rely on without proving?
+- Where could persisted state or user-visible behavior drift partially?
 - What evidence is still missing but required before `merge_decision = ready`?
-- If this merged today, what rollback, mitigation, or operator burden is most
-  likely?
+- If this merged today, what rollback burden is most likely?
 
-## Findings Protocol
+## Red Flags — STOP
 
-- Prioritize behavior risk over style.
-- Each finding should make four things clear: the condition, the impact, the
-  evidence, and the expected next action.
-- Treat missing verification, stale design conformance, and runtime-boundary
-  violations as first-class findings, not footnotes.
-- If the real problem is an unconfirmed bug rather than a review issue, say so
-  and direct the next step toward debugging.
-- Preserve review-lane disclosure in `review_report`: activated lanes,
-  activation basis, missing evidence, residual blind spots,
-  `precedent_query_summary`, and precedent consult status.
-- If internal lane delegates disagree materially, keep the disagreement visible
-  in `review_report` instead of smoothing it away.
-- If a delegated lane clears, say so with `disposition = clear` rather than
-  fabricating a finding just to satisfy output shape.
+If you catch yourself thinking any of these, STOP:
 
-## Merge Readiness Gate
+- "The code looks clean" — without checking behavior risk
+- "Style issues are the main problem" — while skipping correctness
+- "Merge is safe" — without evidence from every activated lane
+- "This lane has no findings" — when you didn't actually run the lane
+- "The disagreement isn't important" — if two lanes disagree, keep it visible
 
-Before setting `merge_decision` to `ready`, mentally clear this gate:
+## Common Rationalizations
 
-- [ ] The intended behavior still matches the current design and scope.
-- [ ] Planning evidence is present enough to judge plan conformance honestly.
-- [ ] Verification evidence is current relative to the latest risky change.
-- [ ] No unresolved finding remains that could corrupt state, break contracts,
-      or cause operator-visible regressions.
-- [ ] Any remaining residual risk is named explicitly and is truly acceptable,
-      not merely unverified.
+| Excuse                              | Reality                                                                                |
+| ----------------------------------- | -------------------------------------------------------------------------------------- |
+| "Style issues are important"        | Not before behavior risk. Correctness first, style second.                             |
+| "Planning evidence is optional"     | Missing evidence means wider review, not narrower.                                     |
+| "One lane cleared so it's fine"     | Every activated lane must clear. One clear lane doesn't compensate for a blocked one.  |
+| "I'll note the concern but approve" | If the concern is material, `needs_changes`. Don't hide risk behind approval language. |
 
-## Merge Decision Protocol
+## Concrete Example
 
-- `ready`: no material correctness, safety, or evidence gaps remain.
-- `needs_changes`: the change is salvageable, but concrete issues must be fixed
-  before merge.
-- `blocked`: merge safety cannot be established because the design is wrong, the
-  evidence is missing, or the risk is outside acceptable bounds.
+Input: "Review the routing refactor for regressions."
+
+```json
+{
+  "review_findings": [
+    {
+      "condition": "Internal routing types exported from public entrypoint",
+      "impact": "Widens public API surface, creating semver commitment",
+      "evidence": "Diff adds export in contracts/index.ts",
+      "next_action": "Move to @brewva/brewva-runtime/internal"
+    }
+  ],
+  "review_report": {
+    "summary": "Boundary lane flagged public export widening. Compatibility lane flagged semver risk.",
+    "activated_lanes": [
+      "review-correctness",
+      "review-boundaries",
+      "review-operability",
+      "review-compatibility"
+    ],
+    "activation_basis": "category:public_api->review-compatibility; category:package_boundary->review-compatibility",
+    "missing_evidence": [],
+    "precedent_consult_status": "no_relevant_precedent_found"
+  },
+  "merge_decision": "needs_changes"
+}
+```
 
 ## Handoff Expectations
 
-- `review_findings` may be empty when every activated lane clears without a
-  material issue; do not invent a finding just to pad output shape.
-- `review_findings` should be ordered from highest to lowest value and should be
-  actionable by implementation without reinterpreting the review.
-- `review_report` should record assumptions, activated lanes, blind spots,
-  precedent consult status, and residual risk so downstream ship decisions know
-  what was and was not covered.
-- `merge_decision` should match the findings and evidence; it should never be a
-  detached summary label.
-- When review work fans out into internal lane delegates, prefer completing the
-  parent skill through `skill_complete` with `reviewEnsemble` so the canonical
-  review outputs are synthesized from durable lane outcomes instead of copied by
-  hand.
+- `review_findings` ordered from highest to lowest value. May be empty when all
+  lanes clear — do not invent findings to pad output.
+- `review_report` records activated lanes, activation basis, blind spots, and
+  precedent consult status.
+- `merge_decision` matches the findings. Never a detached summary label.
 
 ## Stop Conditions
 
-- there is no concrete review target
-- verification evidence is too weak to support a merge decision
-- the real work is debugging or repository analysis, not review
-
-## Anti-Patterns
-
-- leading with summaries before findings
-- focusing on style while skipping behavior risk
-- claiming merge safety without evidence or assumptions
-- turning review into silent redesign without naming the design gap
-
-## Example
-
-Input: "Review the skills v2 runtime refactor for regressions and missing tests."
-
-Output: `review_findings`, `review_report`, `merge_decision`.
+- There is no concrete review target
+- Verification evidence is too weak to support a merge decision
+- The real work is debugging or repository analysis

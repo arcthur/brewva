@@ -1,0 +1,17 @@
+criteria:
+  - name: boundary_finding_present
+    weight: 3
+    description: At least one finding identifies the public export widening
+    pass_condition: "output_contains:review_findings:public"
+  - name: merge_decision_not_ready
+    weight: 3
+    description: Merge decision is not "ready" given the boundary violation
+    pass_condition: "output_contains:merge_decision:needs_changes"
+  - name: report_mentions_lanes
+    weight: 2
+    description: Review report mentions which lanes were activated
+    pass_condition: "output_contains:review_report:lane"
+  - name: actionable_next_step
+    weight: 2
+    description: Findings include a concrete next action, not just a complaint
+    pass_condition: "output_contains:review_findings:internal"

@@ -75,103 +75,136 @@ requires: []
 
 # Learning Research Skill
 
-## Intent
+## The Iron Law
 
-Query the repository-native precedent layer before non-trivial work turns into a
-fresh plan or a fresh review narrative.
+```
+NO PLANNING WITHOUT EXPLICIT PRECEDENT CONSULT
+```
 
-## Trigger
+Violating the letter of this rule is violating the spirit of this rule.
 
-Use this skill when:
+## When to Use / When NOT to Use
+
+Use when:
 
 - planning posture is `moderate`, `complex`, or `high_risk`
 - a debugging handoff needs prior repository-specific failure patterns
 - review needs repository precedent rather than only diff-local reasoning
 
-## Workflow
-
-### Step 1: Establish the retrieval target
-
-Define the problem class, module, boundary, and risk posture before searching.
-Do not query the precedent layer with a vague restatement of the user request.
-
-### Step 2: Query the precedent layer explicitly
-
-Use `knowledge_search` against `docs/solutions/**` first, then adjacent stable
-or bootstrap sources when the solution corpus is sparse.
-
-### Step 3: Separate precedent from adjacent guidance
-
-Distinguish canonical repository precedents from architecture docs, reference
-docs, research notes, and troubleshooting material. Source type matters.
-
-### Step 4: Emit proof-of-consult artifacts
-
-Produce:
-
-- `knowledge_brief`: what the precedent layer teaches the next owner
-- `precedent_refs`: matched precedent records; use an empty array when there is
-  no relevant precedent
-- `preventive_checks`: concrete checks or guardrails the next skill should
-  preserve
-- `precedent_query_summary`: search scope, filters, and why the query shape was
-  chosen
-- `precedent_consult_status`: `matched` or `no_relevant_precedent_found`
-
-## Interaction Protocol
-
-- Retrieval is explicit pull, not hidden recall. Show the consulted precedent
-  layer instead of implying that prior knowledge was magically available.
-- Ask questions only when the search target is ambiguous enough to change the
-  module, boundary, or problem kind being queried.
-- Prefer a compact precedent packet over a long literature survey. The goal is
-  to change the next decision, not to restate every matching document.
-
-## Retrieval Questions
-
-Use these questions to keep precedent lookup disciplined:
-
-- Which boundary or module most likely owns this work?
-- Is this a repository-specific precedent, a stable contract, or only adjacent
-  research?
-- Which prior failure or decision pattern would most reduce downstream churn?
-- What preventive checks should travel forward even if no exact precedent exists?
-
-## Proof-of-Consult Protocol
-
-- Non-trivial work must leave evidence that the precedent layer was consulted.
-- When there is no relevant precedent, say so explicitly through
-  `precedent_consult_status` and an empty `precedent_refs` list rather than
-  silently skipping retrieval.
-- Preserve query context in `precedent_query_summary` so later review can judge
-  whether the search posture was too narrow.
-
-## Handoff Expectations
-
-- `knowledge_brief` should teach `design` or `review` what matters from the
-  precedent layer without requiring a second round of document hunting.
-- `precedent_refs` should identify the exact records consulted, not just a vague
-  category name.
-- `preventive_checks` should be concrete enough to appear later in design,
-  review, QA, or verification reasoning.
-- `precedent_query_summary` should be auditably specific: search terms,
-  filters, source types, and scope.
-
-## Stop Conditions
+Do NOT use when:
 
 - the task is demonstrably trivial and precedent retrieval would only add noise
-- repository, boundary, or problem kind are too ambiguous to search credibly
-- the available corpus is missing and no adjacent bootstrap sources exist
+- the problem is still unframed (use `discovery` first)
+- repository mapping is needed, not precedent lookup (use `repository-analysis`)
 
-## Anti-Patterns
+## Workflow
 
-- treating hidden memory as a substitute for explicit precedent lookup
-- flattening stable docs and solution records into one undifferentiated summary
-- returning a generic research dump instead of a planning packet
-- claiming no precedent exists without preserving query context
+### Phase 1: Establish the retrieval target
 
-## Example
+Define the problem class, module, boundary, and risk posture before searching. Construct a specific query shape.
+
+**If the problem class is too vague to search credibly**: Stop. Ask for clarification or return to the upstream skill that should have framed the problem.
+**If query shape is specific**: Proceed to Phase 2.
+
+### Phase 2: Query the precedent layer explicitly
+
+Use `knowledge_search` against `docs/solutions/**` first, then adjacent stable or bootstrap sources when the solution corpus is sparse.
+
+**If `knowledge_search` is unavailable or returns no results**: Search `docs/solutions/` manually via `grep` and `read`. Do not skip the consult.
+**If results are returned**: Proceed to Phase 3.
+
+### Phase 3: Separate precedent from adjacent guidance
+
+Distinguish canonical repository precedents from architecture docs, reference docs, research notes, and troubleshooting material. Source type matters for downstream trust.
+
+**If all results are adjacent guidance with no direct precedent**: Set `precedent_consult_status` to `no_relevant_precedent_found` and still extract useful preventive checks.
+**If precedent is found**: Proceed to Phase 4.
+
+### Phase 4: Emit proof-of-consult artifacts
+
+Produce `knowledge_brief`, `precedent_refs`, `preventive_checks`, `precedent_query_summary`, and `precedent_consult_status`.
+
+**If `precedent_query_summary` does not include search terms, filters, and scope**: Return to Phase 2 and record them. The consult must be auditable.
+**If artifacts are complete**: Hand off to downstream skills.
+
+## Decision Protocol
+
+- Which boundary or module most likely owns this work?
+- Is this a repository-specific precedent, a stable contract, or only adjacent research?
+- Which prior failure or decision pattern would most reduce downstream churn?
+- What preventive checks should travel forward even if no exact precedent exists?
+- Was the search posture narrow enough to miss relevant precedent?
+
+## Red Flags — STOP
+
+If you catch yourself thinking any of these, STOP and return to Phase 1:
+
+- "I already know what the precedent says from prior context"
+- "No results means no precedent exists" (without checking query specificity)
+- "I'll summarize the whole docs folder instead of targeting the query"
+- "This research is taking too long, I'll skip the consult"
+- "The precedent is probably outdated so I'll ignore it"
+
+## Common Rationalizations
+
+| Excuse                                                      | Reality                                                                                        |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| "I remember the precedent from earlier"                     | Hidden recall is not explicit consult. Query the layer and cite what you find.                 |
+| "No results, so no precedent exists"                        | A vague query returns no results. Refine the query before declaring absence.                   |
+| "The precedent layer is sparse, so it's not worth checking" | Sparse layers still contain hard-won lessons. Check anyway.                                    |
+| "Adjacent docs are close enough"                            | Architecture docs and solution records serve different functions. Label the source type.       |
+| "I'll do the consult mentally and save time"                | Mental consult leaves no audit trail. Downstream review cannot verify what you did not record. |
+
+## Concrete Example
 
 Input: "Before we redesign the WAL recovery path, find prior repository-specific replay and rollback precedents."
 
-Output: `knowledge_brief`, `precedent_refs`, `preventive_checks`, `precedent_query_summary`, `precedent_consult_status`.
+Output:
+
+```json
+{
+  "knowledge_brief": "Two prior solution records address WAL recovery. The replay-epoch-stale-drop fix (2024-11) established that replay must pin epoch to post-replay value before emitting events. The rollback-journal-corruption fix (2024-09) established that rollback artifacts must be written atomically. Both are directly relevant to any recovery path redesign.",
+  "precedent_refs": [
+    {
+      "path": "docs/solutions/replay-epoch-stale-drop.md",
+      "problem_class": "WAL replay",
+      "key_lesson": "Pin epoch to post-replay value in ReplayService.finalize()"
+    },
+    {
+      "path": "docs/solutions/rollback-journal-corruption.md",
+      "problem_class": "rollback durability",
+      "key_lesson": "Atomic write for rollback journal; never partial-flush"
+    }
+  ],
+  "preventive_checks": [
+    {
+      "check": "Any new replay path must assert epoch >= current before event emit",
+      "source": "replay-epoch-stale-drop.md"
+    },
+    {
+      "check": "Rollback artifacts must use atomic write or rename pattern",
+      "source": "rollback-journal-corruption.md"
+    },
+    {
+      "check": "Recovery tests must include mid-replay crash scenario",
+      "source": "inferred from both precedents"
+    }
+  ],
+  "precedent_query_summary": "Searched docs/solutions/** for 'WAL', 'replay', 'rollback', 'recovery', 'epoch'. Two direct matches. Also checked docs/reference/events.md and docs/architecture/system-architecture.md for adjacent context on event pipeline durability.",
+  "precedent_consult_status": "matched"
+}
+```
+
+## Handoff Expectations
+
+- `knowledge_brief` teaches `design` or `review` what matters from the precedent layer without requiring a second round of document hunting.
+- `precedent_refs` identify the exact records consulted, not just vague category names.
+- `preventive_checks` are concrete enough to appear later in design, review, QA, or verification reasoning.
+- `precedent_query_summary` is auditably specific: search terms, filters, source types, and scope.
+
+## Stop Conditions
+
+- The task is demonstrably trivial and precedent retrieval would only add noise.
+- Repository, boundary, or problem kind are too ambiguous to search credibly.
+- The available corpus is missing and no adjacent bootstrap sources exist.
+- The same precedent consult was already performed in this session with the same query shape.

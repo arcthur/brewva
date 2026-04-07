@@ -44,15 +44,15 @@ while IFS= read -r file; do
     missing+=("execution_hints_field")
   fi
 
-  if ! grep -Eq '^## Intent' "${file}"; then
-    missing+=("intent")
+  if ! grep -Eq '^## (The Iron Law|Intent)' "${file}"; then
+    missing+=("iron_law_or_intent")
   fi
 
-  if ! grep -Eq '^## Trigger' "${file}"; then
+  if ! grep -Eq '^## (Trigger|When to Use)' "${file}"; then
     missing+=("trigger")
   fi
 
-  if ! grep -Eq '^## Workflow' "${file}"; then
+  if ! grep -Eq '^## (Workflow|The Four Phases)' "${file}"; then
     missing+=("workflow")
   fi
 
@@ -60,12 +60,82 @@ while IFS= read -r file; do
     missing+=("stop_conditions")
   fi
 
-  if ! grep -Eq '^## Anti-Patterns' "${file}"; then
-    missing+=("anti_patterns")
+  if ! grep -Eq '^## (Anti-Patterns|Red Flags)' "${file}"; then
+    missing+=("anti_patterns_or_red_flags")
   fi
 
-  if ! grep -Eq '^## Example' "${file}"; then
+  if ! grep -Eq '^## (Example|Concrete Example)' "${file}"; then
     missing+=("example")
+  fi
+
+  # Determine skill category and overlay status
+  dir="$(dirname "${file}")"
+  category=""
+  is_overlay=false
+  if echo "${dir}" | grep -q '/project/overlays/'; then
+    is_overlay=true
+  elif echo "${dir}" | grep -q '/core/'; then
+    category="core"
+  elif echo "${dir}" | grep -q '/domain/'; then
+    category="domain"
+  elif echo "${dir}" | grep -q '/operator/'; then
+    category="operator"
+  fi
+
+  # Overlays are delta documents — skip v2-specific checks
+  if [ "${is_overlay}" = true ]; then
+    if [ "${#missing[@]}" -gt 0 ]; then
+      # For overlays, only fail on truly missing structural sections
+      overlay_missing=()
+      for m in "${missing[@]}"; do
+        case "${m}" in
+          frontmatter|workflow|stop_conditions|anti_patterns_or_red_flags) overlay_missing+=("${m}") ;;
+        esac
+      done
+      if [ "${#overlay_missing[@]}" -gt 0 ]; then
+        status=1
+        printf 'FAIL %s\n' "${file}"
+        printf '  missing: %s\n' "${overlay_missing[*]}"
+      else
+        printf 'PASS %s (overlay)\n' "${file}"
+      fi
+    else
+      printf 'PASS %s (overlay)\n' "${file}"
+    fi
+    continue
+  fi
+
+  if [ "${category}" = "core" ] || [ "${category}" = "domain" ]; then
+    if ! grep -Eq '^## The Iron Law' "${file}"; then
+      missing+=("iron_law_v2")
+    fi
+  fi
+
+  # v2 check: Red Flags section for core and domain skills
+  if [ "${category}" = "core" ] || [ "${category}" = "domain" ]; then
+    if ! grep -Eq '^## Red Flags' "${file}"; then
+      missing+=("red_flags_v2")
+    fi
+  fi
+
+  # v2 check: scripts/ directory should exist for domain and operator skills
+  # that have conditional/deterministic logic (check if scripts field in frontmatter)
+  if [ "${category}" = "domain" ] || [ "${category}" = "operator" ]; then
+    if grep -Eq '^scripts:' "${file}"; then
+      skill_dir="$(dirname "${file}")"
+      if [ ! -d "${skill_dir}/scripts" ]; then
+        missing+=("scripts_directory_missing")
+      fi
+    fi
+  fi
+
+  # v2 check: Example section must have substantial content (at least 5 lines after header)
+  example_lines=0
+  if grep -Eq '^## (Example|Concrete Example)' "${file}"; then
+    example_lines=$(sed -n '/^## \(Example\|Concrete Example\)/,/^## /p' "${file}" | tail -n +2 | head -n -1 | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')
+  fi
+  if [ "${example_lines}" -lt 5 ] 2>/dev/null; then
+    missing+=("example_too_short")
   fi
 
   if [ "${#missing[@]}" -gt 0 ]; then

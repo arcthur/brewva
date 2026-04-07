@@ -95,110 +95,143 @@ requires: []
 
 # Repository Analysis Skill
 
-## Intent
+## The Iron Law
 
-Build a path-grounded understanding of the codebase that downstream skills can reuse.
+```
+NO IMPACT MAP WITHOUT PATH-GROUNDED EVIDENCE
+```
 
-## Trigger
+Violating the letter of this rule is violating the spirit of this rule.
 
-Use this skill when:
+## When to Use / When NOT to Use
+
+Use when:
 
 - the repository or module boundary is unfamiliar
 - a task needs impact analysis before implementation
 - debugging or review requires structural context
 
+Do NOT use when:
+
+- the developer already has a clear, verified understanding of the affected paths
+- the request is a problem-framing question, not a code-location question (use `discovery`)
+- the task is precedent retrieval, not repository mapping (use `learning-research`)
+
 ## Workflow
 
-### Step 1: Map the active surface
+### Phase 1: Map the active surface
 
 Identify entrypoints, main packages, ownership boundaries, and the hot path relevant to the request.
 
-### Step 2: Narrow to the task-bearing path
+**If entrypoints cannot be identified from the local repo**: Stop. Record what is missing in `unknowns`. Do not guess at ownership.
+**If entrypoints are clear**: Proceed to Phase 2.
 
-Prefer the smallest set of files and boundaries that explain the request. Keep
-expanding only while uncertainty is still material.
+### Phase 2: Narrow to the task-bearing path
 
-### Step 3: Build the reusable snapshot
+Follow the smallest set of files and boundaries that explain the request. Expand only while uncertainty is still material.
 
-Produce:
+**If the path leads into generated or external code that hides real ownership**: Stop. Record the boundary gap in `unknowns`.
+**If the path is traceable**: Proceed to Phase 3.
 
-- `repository_snapshot`: main zones, responsibilities, and key paths
-- `impact_map`: structured scope and classifier output with:
-  - `summary`
-  - `affected_paths`
-  - `boundaries`
-  - `high_risk_touchpoints`
-  - `change_categories`
-  - `changed_file_classes`
-- `planning_posture`: `trivial`, `moderate`, `complex`, or `high_risk`
-- `unknowns`: gaps that still block confident action
+### Phase 3: Build the impact map
 
-### Step 4: Stop broad scanning
+Produce `repository_snapshot`, `impact_map` (with all required fields), `planning_posture`, and `unknowns`.
 
-Once the hot path and boundary map are clear, stop expanding and hand off.
+**If any `affected_paths` entry was added without reading the actual file**: Remove it. Every path must come from evidence, not assumption.
+**If the map is path-grounded**: Proceed to Phase 4.
 
-## Interaction Protocol
+### Phase 4: Stop broad scanning
 
-- Re-ground the user on the specific path you are mapping, not on the whole
-  repository.
-- Ask questions only when the target surface is genuinely ambiguous or when
-  multiple product boundaries could own the request.
-- Prefer a recommended reading path over a giant inventory dump. The goal is to
-  reduce future uncertainty, not to prove you scanned many files.
+Once the hot path and boundary map are clear, stop expanding. Do not scan more files to look thorough.
 
-## Mapping Questions
+**If you are still scanning after the hot path is mapped**: Stop. You are past the point of useful return.
+**If complete**: Hand off to downstream skills.
 
-Use these questions to avoid aimless scanning:
+## Decision Protocol
 
 - Which entrypoint or public boundary is most likely to own this request?
 - What file or module would have to change if the user's complaint is real?
 - Which adjacent boundary is most likely to create hidden blast radius?
 - What unknown still blocks downstream design, review, or debugging work?
-- What planning posture best matches the actual blast radius and evidence depth
-  required here?
+- What planning posture matches the actual blast radius and evidence depth?
 
-## Search Protocol
+## Red Flags — STOP
 
-- Start from likely entrypoints, public boundaries, and ownership seams.
-- Expand outward only when the current evidence cannot explain responsibility,
-  coupling, or expected impact.
-- Treat directory listings, symbol searches, and grep results as routing aids.
-  They are not the analysis itself.
-- Stop once downstream design, debugging, or review can act without repeating
-  the same exploration.
+If you catch yourself thinking any of these, STOP and return to Phase 1:
 
-## Handoff Expectations
+- "I'll list every file in the directory to be thorough"
+- "This file is probably related" (without reading it)
+- "I'll keep scanning — more coverage is better"
+- "The boundary is obvious, I don't need to verify"
+- "I'll add this path to the impact map just in case"
 
-- `repository_snapshot` should explain the main zones, their responsibilities,
-  and the specific path relevant to the request.
-- `impact_map` should identify likely touchpoints, ownership boundaries, and
-  blast-radius concerns so downstream skills know where to look first.
-- `impact_map.change_categories` should use the canonical review taxonomy when
-  the relevant risk class is clear.
-- `impact_map.changed_file_classes` should always be populated with at least one
-  canonical file class so review can classify the change deterministically even
-  when `change_categories` stays broad.
-- `planning_posture` should classify the next planning step conservatively.
-  Use `trivial` only for demonstrably local, low-risk work. Use `high_risk`
-  for public, persisted, security-sensitive, or consistency-sensitive changes.
-- `unknowns` should be concrete and decision-relevant. Record what is still
-  unclear and why it blocks confident action.
+## Common Rationalizations
 
-## Stop Conditions
+| Excuse                                     | Reality                                                                             |
+| ------------------------------------------ | ----------------------------------------------------------------------------------- |
+| "More files scanned means better analysis" | Scanning without a hypothesis is waste. Targeted reads beat breadth.                |
+| "I know this boundary from prior context"  | Path-grounded means verified this session, not remembered from last time.           |
+| "I'll mark it high_risk to be safe"        | Posture inflation wastes downstream planning effort. Classify from evidence.        |
+| "The directory listing tells me enough"    | Directory structure is a routing aid, not an impact analysis. Read the actual code. |
+| "I'll add the path and verify later"       | Unverified paths in the impact map mislead every downstream consumer.               |
 
-- entrypoints cannot be identified from the local repo
-- generated or external code hides the real ownership boundary
-- the request depends on systems not present in the workspace
-
-## Anti-Patterns
-
-- reading random files without a hypothesis
-- dumping directory trees without explaining why they matter
-- confusing file count with architectural importance
-- continuing to scan after the hot path is already clear
-
-## Example
+## Concrete Example
 
 Input: "Map the runtime-to-gateway-to-cli path and identify high-risk coupling points."
 
-Output: `repository_snapshot`, `impact_map`, `planning_posture`, `unknowns`.
+Output:
+
+```json
+{
+  "repository_snapshot": "Brewva monorepo: runtime (packages/brewva-runtime) exposes semantic ports consumed by gateway (packages/brewva-gateway) via @brewva/brewva-runtime and @brewva/brewva-runtime/internal. Gateway exposes host session creation and runtime plugins. CLI (packages/brewva-cli) consumes gateway's host entrypoint for session lifecycle. Three-package chain with two cross-package boundaries.",
+  "impact_map": {
+    "summary": "Runtime→gateway boundary is the primary coupling surface. Gateway→CLI boundary is narrow (host session factory only). Runtime internal imports in gateway are the highest risk touchpoint.",
+    "affected_paths": [
+      "packages/brewva-runtime/src/runtime.ts",
+      "packages/brewva-runtime/src/contracts/index.ts",
+      "packages/brewva-gateway/src/host/create-hosted-session.ts",
+      "packages/brewva-gateway/src/runtime-plugins/index.ts",
+      "packages/brewva-cli/src/index.ts"
+    ],
+    "boundaries": [
+      {
+        "from": "brewva-runtime",
+        "to": "brewva-gateway",
+        "surface": "@brewva/brewva-runtime, @brewva/brewva-runtime/internal"
+      },
+      { "from": "brewva-gateway", "to": "brewva-cli", "surface": "@brewva/brewva-gateway/host" }
+    ],
+    "high_risk_touchpoints": [
+      {
+        "path": "packages/brewva-gateway/src/host/create-hosted-session.ts",
+        "reason": "Imports @brewva/brewva-runtime/internal — changes to internal exports break gateway silently"
+      }
+    ],
+    "change_categories": ["cross_package_contract", "public_api_surface"],
+    "changed_file_classes": ["runtime_contract", "gateway_host", "cli_entrypoint"]
+  },
+  "planning_posture": "complex",
+  "unknowns": [
+    {
+      "gap": "Gateway runtime-plugin re-export surface not fully traced",
+      "impact": "May hide additional coupling if plugins depend on runtime internals"
+    }
+  ]
+}
+```
+
+## Handoff Expectations
+
+- `repository_snapshot` explains main zones, responsibilities, and the specific path relevant to the request.
+- `impact_map` identifies likely touchpoints, ownership boundaries, and blast-radius concerns so downstream skills know where to look first.
+- `impact_map.change_categories` uses the canonical review taxonomy when the relevant risk class is clear.
+- `impact_map.changed_file_classes` is always populated with at least one canonical file class.
+- `planning_posture` classifies conservatively. Use `trivial` only for demonstrably local, low-risk work. Use `high_risk` for public, persisted, security-sensitive, or consistency-sensitive changes.
+- `unknowns` are concrete and decision-relevant: what is unclear and why it blocks confident action.
+
+## Stop Conditions
+
+- Entrypoints cannot be identified from the local repo.
+- Generated or external code hides the real ownership boundary.
+- The request depends on systems not present in the workspace.
+- The hot path and boundary map are already clear from prior analysis in this session.

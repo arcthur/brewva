@@ -1,0 +1,7 @@
+review_report: "Review activated correctness, boundaries, operability, and compatibility lanes. Boundary lane flagged public export widening. Compatibility lane flagged semver risk."
+review_findings:
+  - condition: Internal routing types SkillRouteMatch and SkillRouteContext exported from public entrypoint
+    impact: Widens the public API surface, creating a semver commitment for types that were previously internal
+    evidence: Diff adds export lines in contracts/index.ts
+    next_action: Move exports to @brewva/brewva-runtime/internal instead
+merge_decision: needs_changes

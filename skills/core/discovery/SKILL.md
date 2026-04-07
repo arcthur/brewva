@@ -69,95 +69,125 @@ requires: []
 
 # Discovery Skill
 
-## Intent
+## The Iron Law
 
-Turn an initial request into the right problem statement before `design`
-commits to an implementation path.
+```
+NO DESIGN WITHOUT A CLEAR PROBLEM FRAME FIRST
+```
 
-## Trigger
+Violating the letter of this rule is violating the spirit of this rule.
 
-Use this skill when:
+## When to Use / When NOT to Use
+
+Use when:
 
 - the user has an idea but the real problem is still fuzzy
 - product pain, wedge, or non-goals are unclear
 - the next step should be better framing, not execution planning
 
+Do NOT use when:
+
+- the request is already a crisp, execution-ready problem statement
+- the real blocker is repository understanding, not problem framing (use `repository-analysis`)
+- the user is asking for implementation help on a well-defined task (use `design`)
+
 ## Workflow
 
-### Step 1: Reconstruct the real problem
+### Phase 1: Reconstruct the real problem
 
-Identify the user pain, current workaround, and why the stated request may be a
-proxy for a deeper need.
+Identify the user pain, current workaround, and why the stated request may be a proxy for a deeper need.
 
-### Step 2: Challenge assumptions and scope
+**If no concrete pain or workaround can be inferred**: Stop. Record the gap in `open_questions`. Do not invent a problem frame from thin air.
+**If pain is clear**: Proceed to Phase 2.
 
-Separate core need, tempting overreach, and the narrowest credible wedge worth
-designing now.
+### Phase 2: Challenge assumptions and scope
 
-### Step 3: Emit design-ready artifacts
+Separate core need from tempting overreach. Identify the narrowest credible wedge worth designing now.
 
-Produce:
+**If the narrowest wedge is still too broad to act on**: Return to Phase 1 with sharper questions.
+**If wedge is bounded**: Proceed to Phase 3.
 
-- `problem_frame`: the reframed problem and why it matters
-- `user_pains`: concrete pain points or unmet needs
-- `scope_recommendation`: what to build now and what not to build yet
-- `design_seed`: the minimum starting point that `design` should elaborate
-- `open_questions`: unknowns that still matter before design is final
+### Phase 3: Emit design-ready artifacts
 
-## Interaction Protocol
+Produce `problem_frame`, `user_pains`, `scope_recommendation`, `design_seed`, and `open_questions`.
 
-- Re-ground on concrete pain and user experience, not just the feature label.
-- Ask only when the missing answer changes the actual problem framing or the
-  recommended scope wedge.
-- Recommend one primary framing and one bounded alternative when ambiguity
-  remains; do not leave the user with a pile of unranked possibilities.
+**If the problem frame restates the original request without reframing**: Stop. Return to Phase 1.
+**If artifacts are concrete and actionable**: Hand off to downstream skills.
 
-## Discovery Questions
-
-Use these questions to separate the request from the real need:
+## Decision Protocol
 
 - What pain is happening now, not just what feature was requested?
 - What workaround already exists, and why is it insufficient?
 - What is the narrowest wedge that would still change user reality?
-- Which tempting scope expansion is really hiding uncertainty rather than
-  leverage?
+- Which tempting scope expansion hides uncertainty rather than leverage?
+- Is the stated request a proxy for a different, deeper need?
 
-## Framing Protocol
+## Red Flags — STOP
 
-- Distinguish stated request from underlying problem.
-- Prefer the narrowest wedge that can teach something real over a broad vision
-  that is impossible to validate quickly.
-- Name non-goals explicitly so `design` does not silently expand the surface.
-- If the request is already well framed and execution-ready, stop and hand off
-  to `design` instead of inventing discovery work.
+If you catch yourself thinking any of these, STOP and return to Phase 1:
 
-## Handoff Expectations
+- "The user said it, so that's the problem"
+- "I'll restate the request in cleaner prose — that counts as framing"
+- "Let me just expand the scope to cover everything"
+- "I don't see a pain, but I'll assume one"
+- "Discovery is taking too long, let me jump to design"
 
-- `problem_frame` should give `design` a clean problem statement rather than a
-  raw brainstorm transcript.
-- `user_pains` should be concrete enough that downstream skills can judge tradeoffs
-  against real user friction.
-- `scope_recommendation` should make the recommended wedge and deferred scope
-  explicit.
-- `design_seed` should be the shortest useful handoff into execution planning.
-- `open_questions` should include only questions that still affect design
-  quality, not generic curiosity.
+## Common Rationalizations
 
-## Stop Conditions
+| Excuse                                           | Reality                                                                                        |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| "The request is clear enough to start designing" | If you cannot name the user pain separately from the feature label, the problem is not framed. |
+| "Scope will sort itself out during design"       | Unframed scope creates churn in design and review. Frame it now.                               |
+| "I'll just do a light reframe and move on"       | A reframe that restates the request in cleaner prose is not discovery.                         |
+| "The user wants speed, not a framing exercise"   | A wrong frame wastes more time than a clear one.                                               |
 
-- the request is already framed well enough for direct design work
-- no meaningful user or operator pain can be inferred from available context
-- the real blocker is repository understanding, not problem framing
-
-## Anti-Patterns
-
-- repeating the user request in cleaner prose without reframing it
-- turning discovery into abstract product theater with no wedge recommendation
-- using discovery to avoid making a scope recommendation
-- slipping into execution planning that belongs to `design`
-
-## Example
+## Concrete Example
 
 Input: "I want to build a daily briefing app for my calendar."
 
-Output: `problem_frame`, `user_pains`, `scope_recommendation`, `design_seed`, `open_questions`.
+Output:
+
+```json
+{
+  "problem_frame": "Morning calendar review is manual and slow. Users open 2-3 apps to understand their day, miss conflicts, and lack a single surface that prioritizes what matters. The real problem is decision-ready daily context, not a new app.",
+  "user_pains": [
+    {
+      "pain": "Checking calendar, email, and tasks separately every morning",
+      "severity": "high",
+      "workaround": "Manual tab-switching routine that takes 10-15 minutes"
+    },
+    {
+      "pain": "Missing scheduling conflicts until they happen",
+      "severity": "medium",
+      "workaround": "None — discovered reactively"
+    }
+  ],
+  "scope_recommendation": "Build now: a read-only morning digest that pulls calendar events and flags conflicts. Defer: task integration, email triage, AI summarization. Non-goals: full calendar replacement, meeting scheduling.",
+  "design_seed": "Single daily digest endpoint that reads calendar events for the next 12 hours, detects time overlaps, and renders a priority-ordered briefing. No write operations in v1.",
+  "open_questions": [
+    {
+      "question": "Which calendar provider(s) must be supported in the first wedge?",
+      "why_it_matters": "Provider choice determines auth complexity and time-to-first-value"
+    },
+    {
+      "question": "Is the briefing push-based (notification) or pull-based (open app)?",
+      "why_it_matters": "Push requires background scheduling infrastructure that may be premature"
+    }
+  ]
+}
+```
+
+## Handoff Expectations
+
+- `problem_frame` gives `design` a clean problem statement, not a raw brainstorm transcript.
+- `user_pains` are concrete enough that downstream skills can judge tradeoffs against real user friction.
+- `scope_recommendation` makes the recommended wedge and deferred scope explicit.
+- `design_seed` is the shortest useful handoff into execution planning.
+- `open_questions` include only questions that still affect design quality, not generic curiosity.
+
+## Stop Conditions
+
+- The request is already framed well enough for direct design work.
+- No meaningful user or operator pain can be inferred from available context.
+- The real blocker is repository understanding, not problem framing.
+- Discovery is circling without producing a sharper frame after two passes.

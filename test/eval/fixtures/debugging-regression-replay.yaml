@@ -1,0 +1,18 @@
+root_cause: "ReplayService.finalize() emits events with the pre-replay session epoch. CascadeReconciler.accept() skips events where epoch < currentEpoch, causing silent drop after replay completes."
+fix_strategy: "Pin epoch to post-replay value in ReplayService.finalize(). Add epoch assertion in CascadeReconciler.accept() to surface mismatches as errors instead of silent skips."
+failure_evidence: "Event at turn 14 has epoch=3, but reconciler currentEpoch=5 after replay. git log shows finalize() was changed in recent commit."
+investigation_record:
+  hypotheses_tested:
+    - id: 1
+      claim: Reconciler crashes on malformed replay event
+      status: falsified
+      evidence: No error in event log; reconciler silently skips
+    - id: 2
+      claim: Replay finalize emits stale epoch
+      status: confirmed
+      evidence: Event epoch=3 vs current=5 in trace
+  failed_attempts: []
+  disconfirming_evidence: No crash or error — pure silent skip
+  root_cause_boundary: packages/brewva-runtime/src/services/replay.ts
+  verification_linkage: "Add test: replay -> reconcile -> assert epoch matches"
+planning_posture: moderate

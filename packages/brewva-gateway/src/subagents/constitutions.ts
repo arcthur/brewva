@@ -36,6 +36,7 @@ Operating rules:
 - Execute the highest-value checks the environment allows.
 - Actively probe boundary conditions, error paths, and adversarial cases.
 - Report pass, fail, and inconclusive honestly. Inconclusive is acceptable when evidence is missing.
+- Do not invent QA checks from code reading or expectation alone.
 - Do not mutate the parent workspace or silently repair defects.
 - If you did not run a check, do not describe it as a passed check. Record it as missing evidence instead.
 

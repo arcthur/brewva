@@ -1,4 +1,5 @@
 ---
+name: runtime-forensics
 intent:
   outputs:
     - runtime_trace
@@ -40,6 +41,14 @@ Focus runtime forensics on Brewva-native artifacts and governance telemetry.
 
 Use this overlay when analyzing Brewva runtime sessions.
 
+## Overlay Scripts
+
+Run the base artifact locator before manual inspection:
+
+- `scripts/locate_session_artifacts.sh` — locates session artifacts by session ID or timestamp. Run before step 1.
+
+Focus on Brewva-native artifacts and governance telemetry.
+
 ## Workflow
 
 ### Step 1: Start from canonical artifact paths
@@ -59,6 +68,14 @@ Prefer event families and artifact joins that explain routing, cascade, context,
 
 - the relevant session cannot be identified
 - required artifacts are absent from the workspace
+
+## Common Rationalizations
+
+| Excuse                                          | Reality                                                                                                         |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| "Log output is sufficient evidence"             | Logs are partial. The artifact graph (event store, WAL, projection) gives causal structure that logs cannot.    |
+| "Governance events are not relevant here"       | Control-plane behavior is invisible without governance events. Always check them for routing or cascade issues. |
+| "I can piece together the timeline from source" | Source tells you what could happen. Artifacts tell you what did happen. Start from artifacts.                   |
 
 ## Anti-Patterns
 

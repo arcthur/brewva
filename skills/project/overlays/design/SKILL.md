@@ -1,4 +1,5 @@
 ---
+name: design
 effects:
   allowed_effects:
     - workspace_read
@@ -37,6 +38,14 @@ Force design decisions to respect Brewva's governance-kernel boundary and migrat
 
 Use this overlay when designing changes inside Brewva.
 
+## Overlay Scripts
+
+Run the base posture classification before design work:
+
+- `scripts/classify_planning_posture.py` — classifies whether the task requires exploratory, incremental, or architectural posture. Run before step 1.
+
+Additionally check Brewva boundary ownership.
+
 ## Workflow
 
 ### Step 1: Check boundary ownership
@@ -56,6 +65,15 @@ Prefer moving lifecycle choreography out of public skills and into runtime or co
 
 - the change is purely local and does not touch ownership boundaries
 - required package ownership is still uncertain
+
+## Common Rationalizations
+
+| Excuse                                         | Reality                                                                                         |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| "This is a small change, no boundary impact"   | Small changes at boundary edges have outsized blast radius. Check ownership first.              |
+| "Putting it in runtime is simpler for now"     | Convenience in runtime is debt in governance. If it is not a kernel concern, keep it out.       |
+| "We can refactor the boundary later"           | Boundary moves are expensive. Design the placement correctly now.                               |
+| "No public export change, so no boundary risk" | Internal-only changes that touch shared contracts still propagate through transitive consumers. |
 
 ## Anti-Patterns
 

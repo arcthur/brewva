@@ -1,7 +1,7 @@
 ---
 name: ci-iteration
-description: Drive PR and CI repair loops with explicit exit conditions, verification
-  evidence, and durable iteration discipline.
+description: Use when failing checks, PR feedback, or repair loops need bounded iteration
+  with current CI state and local verification evidence.
 stability: experimental
 selection:
   when_to_use: Use when failing checks, PR feedback, or repair loops need bounded iteration with current CI state and local verification evidence.
@@ -66,153 +66,163 @@ consumes:
   - verification_evidence
   - change_set
 requires: []
+scripts:
+  - scripts/parse_ci_state.sh
+  - scripts/check_loop_safety.sh
 ---
 
 # CI Iteration Skill
 
-## Intent
+## The Iron Law
 
-Close the loop on CI failures and review feedback without turning repair work
-into an unbounded retry treadmill.
+```
+NO RETRY WITHOUT FRESH EVIDENCE FROM THE LAST ATTEMPT
+```
 
-## Trigger
+## When to Use
 
-Use this skill when:
+- The task centers on failing checks, PR review feedback, or repeated repair attempts
+- The next move depends on current CI state plus local verification evidence
+- A bounded retry loop needs explicit stop conditions
 
-- the task centers on failing checks, PR review feedback, or repeated repair attempts
-- the next move depends on current CI state plus local verification evidence
-- a bounded retry loop needs explicit stop conditions
+## When NOT to Use
 
-Do not use this skill when:
-
-- the work is still mostly discovery or design ambiguity
-- there is no concrete PR, branch, workflow run, or failing check to iterate on
-- the user only wants a one-shot CI summary with no repair loop
+- The work is still mostly discovery or design ambiguity
+- There is no concrete PR, branch, or failing check to iterate on
+- The user only wants a one-shot CI summary with no repair loop (use `github`)
+- The failure is a deeper design or architecture problem, not a CI fix
 
 ## Workflow
 
-### Step 1: Resolve the repair target
+### Phase 1: Resolve the repair target
 
-Lock the target before acting:
+Lock the target: repository, branch/PR, failing checks, and exit condition.
 
-- repository
-- branch or PR reference
-- failing checks or actionable review threads
-- exit condition for the current loop
+Run `scripts/parse_ci_state.sh <PR_NUMBER>` to get current check state.
 
-If the target is ambiguous, stop and clarify before mutating code or remote
-state.
+**If the target is ambiguous**: Stop and clarify. Do not mutate code or remote state.
+**If no failing checks exist**: Report clean state. Do not manufacture work.
+**If resolved**: Proceed to Phase 2.
 
-### Step 2: Capture the baseline snapshot
+### Phase 2: Check loop safety
 
-Produce `ci_snapshot` with:
+Run `scripts/check_loop_safety.sh` with the safety gate JSON on stdin.
 
-- current failing checks and their status
-- review feedback that still needs action
-- current branch / PR posture
-- local verification posture and any already-known blockers
+**If `safe_to_continue` is false**: Stop. Address each item in `blocking` before proceeding.
+**If safe**: Proceed to Phase 3.
 
-The snapshot is the baseline. Do not compare later attempts against memory.
+### Phase 3: Plan the bounded attempt
 
-### Step 3: Choose the iteration shape
+Produce `ci_snapshot` (baseline) and `iteration_plan` naming:
 
-Pick one explicit mode:
+- Chosen mode: `repair_local`, `delegate_patch`, or `review_only`
+- Exact failing checks or review threads in scope
+- Verification path for the next attempt
+- Stop condition for this bounded run
 
-- `repair_local`: apply a direct bounded fix locally
-- `delegate_patch`: isolate the repair into a delegated patch worker
-- `review_only`: stop at diagnosis and handoff because the requested write is not authorized
+**If the plan touches surfaces beyond the failing evidence**: Stop. Scope is drifting.
+**If scoped**: Proceed to Phase 4.
 
-`iteration_plan` must name:
+### Phase 4: Execute one bounded attempt
 
-- the chosen mode
-- the exact failing checks or threads in scope
-- the verification path for the next attempt
-- the stop condition for this bounded run
+1. Change only the surface justified by active CI or review evidence
+2. Rerun the narrowest local verification that can falsify the fix
+3. Record the outcome in `iteration_report`
 
-### Step 4: Execute one bounded attempt
+Use `iteration_fact` for objective observations only — metric counts, guard results. Not narrative.
 
-For a repair attempt:
+**If the fix introduces new failures**: Stop. Do not stack fixes.
+**If clean**: Proceed to Phase 5.
 
-1. change only the surface justified by the active CI or review evidence
-2. rerun the narrowest local verification that can falsify the fix
-3. record the outcome honestly in `iteration_report`
+### Phase 5: Decide exit
 
-If repeated attempts are expected, persist only objective loop facts:
+Choose exactly one:
 
-- a metric observation such as failing-check count, failing-test count, or lint-error count
-- a guard result such as "branch still clean", "targeted tests pass", or "no new failures introduced"
+- `done`: targeted failures resolved, verification evidence sufficient
+- `continue`: fresh evidence justifies another bounded run — re-enter Phase 2
+- `blocked`: external dependency or missing permission prevents progress
+- `handoff`: route to a different skill, worker, or operator
 
-Use `iteration_fact` for evidence, not for narrative interpretation.
+Produce `remaining_blockers` listing only concrete blockers with the next owner named.
 
-### Step 5: Stop, continue, or escalate
+## Scripts
 
-At the end of the bounded run, decide one:
+- `scripts/parse_ci_state.sh` — Input: PR number as CLI arg. Output: JSON with `failing_checks`, `passing_count`, `failing_count`, `pending_count`. Run at Phase 1.
+- `scripts/check_loop_safety.sh` — Input: JSON on stdin with `target_pr`, `failing_evidence_current`, `next_verification_step`, `stop_condition`, `is_design_drift`. Output: JSON with `safe_to_continue`, `blocking`. Run at Phase 2 before every attempt.
 
-- `done`: the targeted failures are resolved and verification evidence is sufficient
-- `continue`: another bounded run is justified by fresh evidence and an explicit next plan
-- `blocked`: an external dependency or missing permission prevents progress
-- `handoff`: the next owner should be a different skill, worker, or operator
+## Decision Protocol
 
-`remaining_blockers` must list only real blockers, not generic uncertainty.
+- Is the failing evidence current, or am I acting on stale state from a previous attempt?
+- Is this still a CI iteration problem, or has it drifted into design territory?
+- Can I falsify this fix with a single narrowly-scoped local verification?
+- If CI is green locally but red remotely, am I conflating "likely fixed" with "confirmed fixed"?
 
-## Loop Safety Gate
+## Red Flags — STOP
 
-Before starting or continuing a repair loop, all of these must be true:
+If you catch yourself thinking any of these, STOP and return to Phase 1:
 
-- [ ] the target PR / branch / workflow run is explicit
-- [ ] the failing evidence is current enough to act on
-- [ ] the next verification step is concrete
-- [ ] the stop condition for this run is explicit
-- [ ] the loop is still a CI iteration problem rather than design drift
+- "Same fix should work, let me just push again"
+- "I'll fix this new failure too while I'm at it"
+- "Local checks pass, so it's probably fine remotely"
+- "One more attempt" (when already tried 2+)
+- "I don't need to re-check CI state, nothing changed"
 
-If any box is false, stop and route back to `github`, `design`, `debugging`, or
-the user.
+## Common Rationalizations
 
-## Interaction Protocol
+| Excuse                                   | Reality                                                             |
+| ---------------------------------------- | ------------------------------------------------------------------- |
+| "Same fix, just retry"                   | If it failed, something is different. Get fresh evidence.           |
+| "I'll batch these two failures together" | Multi-cause batching hides which fix worked. One cause per attempt. |
+| "Local green = remote green"             | Environment differences are real. Separate the two claims.          |
+| "Quick fix, skip the safety gate"        | The safety gate IS the quick path. Skipping it causes thrashing.    |
+| "This is still CI iteration"             | If you're redesigning interfaces, you left CI-iteration territory.  |
 
-- Re-ground every attempt in concrete failing evidence instead of assuming the
-  prior hypothesis is still right.
-- Ask only when repository identity, write authority, or the requested retry
-  boundary is ambiguous enough to risk acting on the wrong target.
-- Prefer one bounded causal repair per attempt over multi-cause speculative batching.
-- If CI is green locally but still red remotely, separate "likely fixed" from
-  "confirmed fixed" in the report.
+## Concrete Example
 
-## Delegation Protocol
+Input: "Fix the failing typecheck on PR #42 and stop if it turns out to be an architecture issue."
 
-- Use `delegate_patch` when the repair is bounded but benefits from isolated execution.
-- Keep delegated objectives narrow: one failing check family, one review thread,
-  or one root-cause hypothesis per child run.
-- Inspect `subagent_status` before merging or retrying; do not guess whether a
-  delegated attempt produced a usable patch or only diagnosis.
+Output:
+
+```json
+{
+  "ci_snapshot": {
+    "pr": 42,
+    "branch": "fix/type-check-regression",
+    "failing_checks": [{ "name": "typecheck", "conclusion": "FAILURE" }],
+    "passing_count": 6,
+    "failing_count": 1,
+    "pending_count": 0
+  },
+  "iteration_plan": {
+    "mode": "repair_local",
+    "in_scope": ["typecheck"],
+    "verification": "bun run check",
+    "stop_condition": "typecheck passes locally OR root cause is a missing interface contract"
+  },
+  "iteration_report": {
+    "attempt": 1,
+    "change": "Added type guard in normalize.ts:47",
+    "local_verification": "bun run check — 0 errors",
+    "remote_status": "pending — pushed, awaiting CI",
+    "outcome": "done"
+  },
+  "remaining_blockers": []
+}
+```
 
 ## Handoff Expectations
 
-- `ci_snapshot` should let the next owner see the exact baseline without
-  reopening the whole CI surface.
-- `iteration_plan` should say what this bounded run will try, how success is
-  checked, and what ends the attempt.
-- `iteration_report` should distinguish diagnosis, code change, local
-  verification, and remote CI posture.
-- `remaining_blockers` should list only concrete blockers with the next owner or
-  authority boundary named explicitly.
+- `ci_snapshot` lets the next owner see the exact baseline without reopening the whole CI surface.
+- `iteration_plan` says what this bounded run will try, how success is checked, and what ends the attempt.
+- `iteration_report` distinguishes diagnosis, code change, local verification, and remote CI posture.
+- `remaining_blockers` lists only concrete blockers with the next owner or authority boundary named.
 
 ## Stop Conditions
 
-- target repository or PR identity is unresolved
-- the requested write exceeds the current effect or permission posture
-- failing evidence is stale enough that a new baseline is required
-- the loop has become a deeper design or debugging problem instead of CI iteration
+- Target repository or PR identity is unresolved
+- The requested write exceeds the current effect or permission posture
+- Failing evidence is stale enough that a new baseline is required
+- The loop has become a deeper design or debugging problem
+- Two consecutive attempts produced no measurable progress
 
-## Anti-Patterns
-
-- retrying the same fix without fresh evidence
-- collapsing diagnosis, patching, push, and remote waiting into one opaque step
-- treating green local checks as proof that remote CI is resolved
-- storing loop narrative inside `iteration_fact`
-
-## Example
-
-Input: "Iterate on this PR until the failing type-check and lint jobs are fixed, and stop if the failure is external."
-
-Output: `ci_snapshot`, `iteration_plan`, `iteration_report`, `remaining_blockers`.
+Violating the letter of these rules is violating the spirit of these rules.

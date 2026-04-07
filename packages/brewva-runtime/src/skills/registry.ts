@@ -277,6 +277,8 @@ export class SkillRegistry {
   private skills = new Map<string, SkillDocument>();
   private sharedContextEntries: SharedContextEntry[] = [];
   private skillOrigins = new Map<string, LoadedSkillOrigin>();
+  private baseMarkdownBySkill = new Map<string, string>();
+  private overlayMarkdownsBySkill = new Map<string, string[]>();
 
   constructor(options: SkillRegistryOptions) {
     this.workspaceRoot = options.workspaceRoot;
@@ -288,6 +290,8 @@ export class SkillRegistry {
     this.skills.clear();
     this.sharedContextEntries = [];
     this.skillOrigins.clear();
+    this.baseMarkdownBySkill.clear();
+    this.overlayMarkdownsBySkill.clear();
 
     const discoveredRoots =
       this.rootsOverride ??
@@ -486,6 +490,8 @@ export class SkillRegistry {
         );
       }
       this.skills.set(parsed.name, parsed);
+      this.baseMarkdownBySkill.set(parsed.name, parsed.markdown);
+      this.overlayMarkdownsBySkill.set(parsed.name, []);
       this.skillOrigins.set(parsed.name, {
         base: {
           filePath: parsed.filePath,
@@ -521,11 +527,16 @@ export class SkillRegistry {
         );
       }
 
+      const baseMarkdown = this.baseMarkdownBySkill.get(overlay.name) ?? baseSkill.markdown;
+      const overlayMarkdowns = this.overlayMarkdownsBySkill.get(overlay.name) ?? [];
+      overlayMarkdowns.push(overlay.markdown);
+      this.overlayMarkdownsBySkill.set(overlay.name, overlayMarkdowns);
+
       const sharedMarkdown = renderSharedContext(this.sharedContextEntries);
       const mergedMarkdown = joinMarkdownSections([
         sharedMarkdown,
-        baseSkill.markdown,
-        overlay.markdown,
+        baseMarkdown,
+        ...overlayMarkdowns,
       ]);
       const mergedResources = mergeSkillResources(
         mergeSkillResources(baseSkill.resources, overlay.resources),

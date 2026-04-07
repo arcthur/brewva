@@ -2,6 +2,7 @@ import { IDENTITY_PARSE_WARNING_EVENT_TYPE } from "../events/event-types.js";
 import { buildTaskStateBlock } from "../runtime-helpers.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type { SkillLifecycleService } from "../services/skill-lifecycle.js";
+import type { SkillRegistry } from "../skills/registry.js";
 import {
   readAgentConstitutionProfile,
   readAgentMemoryProfile,
@@ -9,6 +10,7 @@ import {
 } from "./identity.js";
 import type { ContextSourceProvider, ContextSourceProviderRegistry } from "./provider.js";
 import { buildRuntimeStatusBlock } from "./runtime-status.js";
+import { createSkillRoutingContextProvider } from "./skill-routing.js";
 import { CONTEXT_SOURCES } from "./sources.js";
 import type { ToolFailureEntry } from "./tool-failures.js";
 import {
@@ -21,6 +23,7 @@ export interface BuiltInContextSourceProviderDeps {
   agentId: string;
   kernel: RuntimeKernelContext;
   skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
+  skillRegistry?: SkillRegistry;
 }
 
 export function registerBuiltInContextSourceProviders(
@@ -48,6 +51,14 @@ export function createBuiltInContextSourceProviders(
   }
   if (deps.kernel.config.projection.enabled) {
     providers.push(createProjectionWorkingProvider(deps));
+  }
+  if (deps.skillRegistry) {
+    providers.push(
+      createSkillRoutingContextProvider({
+        skills: deps.skillRegistry,
+        sessionState: deps.kernel.sessionState,
+      }),
+    );
   }
 
   return providers;

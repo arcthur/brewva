@@ -1,0 +1,33 @@
+id: implementation-cross-package
+skill: implementation
+description: Implement a cross-package change that touches runtime and tools packages, requiring coordinated_rollout mode and scope-drift detection.
+context:
+  task_description: |
+    Add a new runtime event type for skill completion timing. Requires changes
+    in both brewva-runtime (event definition) and brewva-tools (emission point).
+  available_artifacts:
+    design_spec: "Add skill_timing event to runtime event pipeline. Tools package emits on skill_complete."
+    execution_plan:
+      - step: 1
+        intent: "Define SkillTimingEvent type in runtime contracts"
+        owner: "packages/brewva-runtime/src/contracts/"
+      - step: 2
+        intent: "Add emission in tools skill-complete handler"
+        owner: "packages/brewva-tools/src/skill-complete.ts"
+    execution_mode_hint: coordinated_rollout
+    implementation_targets:
+      ["packages/brewva-runtime/src/contracts/", "packages/brewva-tools/src/skill-complete.ts"]
+rubric_path: ../rubrics/implementation-cross-package.yaml
+fixture_path: ../fixtures/implementation-cross-package.yaml
+output_contracts:
+  change_set:
+    kind: text
+    min_words: 3
+    min_length: 18
+  files_changed:
+    kind: json
+    min_items: 1
+  verification_evidence:
+    kind: text
+    min_words: 2
+    min_length: 12

@@ -87,6 +87,10 @@ parent-side synthesis. The canonical child review fields are:
 - `strongestCounterpoint`
 - `confidence`
 
+Compatibility aliases (`missing_evidence`, `open_questions`,
+`strongest_counterpoint`, `primary_claim`) may be accepted at ingestion time,
+but delegated review lanes should emit the canonical camelCase child fields.
+
 Lane synthesis rules:
 
 - `blocked` if any activated lane fails, is missing, or remains inconclusive on

@@ -1,7 +1,7 @@
 ---
 name: github
-description: Operate on GitHub issues, PRs, CI, and repository metadata through one
-  coherent `gh`-driven workflow.
+description: Use when a request targets GitHub issues, pull requests, checks, or
+  repository metadata and should run through one coherent gh workflow.
 stability: stable
 selection:
   when_to_use: Use when a request targets GitHub issues, pull requests, checks, or repository metadata and should run through one coherent gh workflow.
@@ -62,108 +62,136 @@ consumes:
   - verification_evidence
   - review_report
 requires: []
+scripts:
+  - scripts/resolve_github_context.sh
 ---
 
 # GitHub Skill
 
-## Intent
+## The Iron Law
 
-Handle issue, PR, and CI work as one domain so repository operations stay coherent and auditable.
+```
+NO GITHUB WRITE WITHOUT EXPLICIT TARGET CONFIRMATION
+```
 
-## Trigger
+## When to Use
 
-Use this skill when:
+- The request targets issues, PRs, checks, or workflow runs on GitHub
+- A repository action should happen through `gh`
+- CI evidence or GitHub metadata is required by a downstream skill
 
-- the request targets issues, PRs, checks, or workflow runs
-- a repo action should happen through `gh`
-- CI evidence or GitHub metadata is required
+## When NOT to Use
+
+- The task is general git work with no GitHub-specific surface
+- The user only needs local branch operations
+- The work has moved into a bounded CI repair loop (hand off to `ci-iteration`)
+- Browser-driven GitHub interaction is required rather than CLI
 
 ## Workflow
 
-### Step 1: Resolve repo context
+### Phase 1: Resolve repo context
 
-Verify `gh` availability, auth, and target repository.
+Run `scripts/resolve_github_context.sh` to detect repo, owner, auth, branch, and current PR.
 
-### Step 2: Select workflow mode
+**If gh is missing or unauthenticated**: Stop. Report the gap. Do not attempt workarounds.
+**If repo is unresolvable**: Ask the user for the target repository explicitly.
+**If resolved**: Proceed to Phase 2.
 
-Choose `issue`, `pull_request`, `ci`, or `api_query`.
+### Phase 2: Select workflow mode
 
-### Step 3: Emit domain artifacts
+Choose exactly one mode: `issue`, `pull_request`, `ci`, or `api_query`.
 
-Produce:
+**If the mode is ambiguous**: Ask the user. Do not guess between PR and issue workflows.
+**If clear**: Proceed to Phase 3.
+
+### Phase 3: Confirm write targets
+
+Before any mutation, restate: repository, target object, exact action, and why it matches the request.
+
+**If the user did not explicitly request the write**: Stop at a draft artifact. Do not execute.
+**If confirmed**: Proceed to Phase 4.
+
+### Phase 4: Emit domain artifacts
+
+Produce the relevant subset of:
 
 - `github_context`: repo, auth, and target object
-- `issue_brief` or `pr_brief`: actionable artifact draft
-- `ci_findings`: failed checks and next actions when CI is involved
+- `issue_brief` or `pr_brief`: actionable artifact draft tied to acceptance signals
+- `ci_findings`: failing checks, likely causes, and recommended next actions
 
-### Workflow Gate
+## Scripts
 
-Before leaving triage and touching a live GitHub target, clear this gate:
+- `scripts/resolve_github_context.sh` — No input required. Output: JSON with `repo`, `owner`, `authenticated`, `current_pr`, `branch`. Run at Phase 1 before any `gh` commands.
 
-- [ ] repository and host are resolved
-- [ ] auth posture and permissions are known
-- [ ] workflow mode is explicit: `issue`, `pull_request`, `ci`, or `api_query`
-- [ ] any write target is named exactly: issue number, PR number, comment, label, or workflow run
+## Decision Protocol
 
-## Interaction Protocol
+- Is the request a read (query/summary) or a write (create/update/close/merge)?
+- Which single workflow mode covers the center of gravity: `issue`, `pull_request`, `ci`, or `api_query`?
+- Does this need `ci-iteration` instead? The boundary is: triage stays here, bounded repair loops belong there.
+- Is the write target named with enough precision to avoid acting on the wrong object?
 
-- Re-ground on repository, branch or PR, and requested GitHub action before
-  issuing `gh` commands.
-- Ask only when repository identity, permissions, or the intended write action
-  are ambiguous enough to risk operating on the wrong target.
-- Prefer one coherent GitHub workflow per request instead of mixing issue, PR,
-  and CI actions opportunistically.
+## Red Flags — STOP
 
-## Write Confirmation Gate
+If you catch yourself thinking any of these, STOP and return to Phase 1:
 
-For GitHub writes, do not rely on implication. Before mutating remote state,
-restate:
+- "I'll just create this issue/PR and the user can fix it later"
+- "The repo is probably the one in the current directory"
+- "I'll combine issue triage and PR creation in one pass"
+- "The user implied they want this merged"
 
-1. repository
-2. target object
-3. exact action
-4. why that action matches the user's request
+## Common Rationalizations
 
-If the user did not explicitly ask for the write, stop at a draft `issue_brief`,
-`pr_brief`, or `ci_findings` artifact instead of executing the mutation.
+| Excuse                                         | Reality                                                            |
+| ---------------------------------------------- | ------------------------------------------------------------------ |
+| "Obvious which repo, skip context resolution"  | Wrong-repo writes are unrecoverable. Always resolve first.         |
+| "User said 'fix it' so I should push directly" | 'Fix it' is not write confirmation. Restate the target and action. |
+| "I'll batch issue + PR + CI in one workflow"   | Mixed modes drift. Pick one center of gravity per activation.      |
+| "Raw gh output is good enough"                 | Downstream skills need synthesized artifacts, not log dumps.       |
 
-## Mode Selection Protocol
+## Concrete Example
 
-- Use `issue` when the main artifact is problem framing, triage, or actionable
-  follow-up work.
-- Use `pull_request` when the center of gravity is a diff, merge path, or PR
-  communication.
-- Use `ci` when the decisive evidence lives in checks, workflow runs, or job
-  logs.
-- Hand off to `ci-iteration` when the work has moved from CI triage into a
-  bounded repair loop with explicit retry and verification posture.
-- Use `api_query` only when the request is metadata-heavy and not well served by
-  the higher-level workflows.
+Input: "Summarize the failing checks on PR #42 and draft a follow-up comment."
+
+Output:
+
+```json
+{
+  "github_context": {
+    "repo": "brewva",
+    "owner": "bytedance",
+    "authenticated": true,
+    "current_pr": 42,
+    "branch": "fix/type-check-regression"
+  },
+  "ci_findings": {
+    "failing_checks": [
+      { "name": "typecheck", "conclusion": "FAILURE" },
+      { "name": "lint", "conclusion": "FAILURE" }
+    ],
+    "passing_count": 5,
+    "failing_count": 2,
+    "pending_count": 0,
+    "likely_causes": ["Type error in packages/brewva-runtime/src/config/normalize.ts:47"],
+    "recommended_actions": ["Fix the type narrowing, rerun bun run check locally"]
+  },
+  "pr_brief": {
+    "summary": "Two checks failing: typecheck and lint. Root cause is a missing type guard in normalize.ts. Suggested comment drafts a fix path and asks for confirmation before pushing.",
+    "draft_comment": "CI shows typecheck + lint failures tracing to a missing type guard in `normalize.ts:47`. Proposed fix: add the narrowing guard and verify with `bun run check`. Want me to proceed?"
+  }
+}
+```
 
 ## Handoff Expectations
 
-- `github_context` should identify the exact repository, auth posture, and
-  target object so later steps do not risk drifting to a different repo or PR.
-- `issue_brief` and `pr_brief` should be concrete, actionable, and tied to real
-  acceptance or verification signals.
-- `ci_findings` should separate failing checks, likely causes, and recommended
-  next actions instead of dumping raw workflow output.
+- `github_context` identifies the exact repository, auth posture, and target object so later steps do not drift to a different repo or PR.
+- `issue_brief` and `pr_brief` are concrete, actionable, and tied to real acceptance or verification signals.
+- `ci_findings` separates failing checks, likely causes, and recommended next actions instead of dumping raw workflow output.
 
 ## Stop Conditions
 
-- `gh` is unavailable or unauthenticated
-- repository permissions block the requested write action
-- the task needs browser-driven interaction rather than CLI workflows
+- `gh` is unavailable or unauthenticated and cannot be resolved
+- Repository permissions block the requested write action
+- The task needs browser-driven interaction rather than CLI workflows
+- The target object (issue number, PR number, workflow run) cannot be identified
 
-## Anti-Patterns
-
-- splitting issue triage and PR flow into separate public skills
-- acting on the wrong repository context
-- creating vague issues or PRs with no acceptance or verification signal
-- treating raw CI logs as the final artifact instead of synthesizing next actions
-
-## Example
-
-Input: "Use gh to summarize the failing checks on this PR and draft a follow-up comment."
-
-Output: `github_context`, `ci_findings`, `pr_brief`.
+Violating the letter of these rules is violating the spirit of these rules.

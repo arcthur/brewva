@@ -1,4 +1,5 @@
 ---
+name: implementation
 effects:
   allowed_effects:
     - workspace_read
@@ -41,6 +42,14 @@ Keep Brewva implementation work minimal, boundary-aware, and evidence-first.
 
 Use this overlay when implementing changes inside Brewva.
 
+## Overlay Scripts
+
+Run the base scope drift check during implementation:
+
+- `scripts/check_scope_drift.py` — detects when implementation drifts beyond the approved change boundary. Run after each milestone.
+
+Additionally preserve Brewva public surfaces and dist guardrails.
+
 ## Workflow
 
 ### Step 1: Preserve public surfaces
@@ -61,6 +70,14 @@ When touching routing, verification, or distribution behavior, keep verification
 
 - the requested implementation implies a broader architecture redesign
 - required verification cannot be defined from the change boundary
+
+## Common Rationalizations
+
+| Excuse                                         | Reality                                                                                           |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| "While I'm here I'll fix this other thing too" | Mixed changes are harder to review, revert, and verify. Stay within the approved boundary.        |
+| "Relaxing the dist gate saves time"            | Dist gate failures caught late cost far more than the minutes saved now.                          |
+| "The migration is basically a refactor"        | Category migrations that touch public surfaces are not refactors. Treat them as boundary changes. |
 
 ## Anti-Patterns
 

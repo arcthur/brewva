@@ -1,0 +1,27 @@
+id: goal-loop-convergence-flat
+skill: goal-loop
+description: A bounded optimization loop has flat metrics for 3 consecutive runs. The skill must recognize stall and escalate rather than continuing.
+context:
+  task_description: |
+    Coverage improvement loop has been running. Last 3 runs show no metric
+    improvement (72.1% -> 72.3% -> 72.1%). min_delta is 1.0.
+    Decide whether to continue or escalate.
+  available_artifacts:
+    design_spec: "Raise test coverage from 70% to 85% over bounded runs"
+    execution_plan: "Each run identifies uncovered paths and adds tests"
+    verification_evidence: "bun test --coverage shows 72.1%"
+rubric_path: ../rubrics/goal-loop-convergence-flat.yaml
+fixture_path: ../fixtures/goal-loop-convergence-flat.yaml
+output_contracts:
+  loop_contract:
+    kind: json
+    min_items: 8
+  iteration_report:
+    kind: json
+    min_items: 5
+  convergence_report:
+    kind: json
+    min_items: 4
+  continuation_plan:
+    kind: json
+    min_items: 3

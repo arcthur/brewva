@@ -1,7 +1,7 @@
 ---
 name: telegram
-description: Design Telegram channel behavior and interactive payloads as one channel-native
-  response workflow.
+description: Use when output is delivered in Telegram and message structure, interaction
+  payloads, or CTA design must be channel-native.
 stability: stable
 selection:
   when_to_use: Use when output is delivered in Telegram and message structure, interaction payloads, or CTA design must be channel-native.
@@ -52,98 +52,137 @@ consumes:
   - structured_payload
   - review_report
 requires: []
+scripts:
+  - scripts/validate_telegram_payload.py
 ---
 
 # Telegram Skill
 
-## Intent
+## The Iron Law
 
-Choose the right Telegram interaction strategy and the matching payload in one pass.
+```
+NO TELEGRAM PAYLOAD WITHOUT CONSTRAINT VALIDATION
+```
 
-## Trigger
+## When to Use
 
-Use this skill when:
+- The output will be delivered in Telegram
+- Channel behavior and interactive components must stay aligned
+- Message density, interaction design, or CTA structure matters
 
-- the output will be delivered in Telegram
-- channel behavior and interactive components must stay aligned
-- message density, interaction design, or CTA structure matters
+## When NOT to Use
+
+- The target channel is not Telegram
+- The task is general UX design, not Telegram-specific delivery
+- Upstream content is too ambiguous to shape into a safe interaction
+- The payload is purely server-side with no user-facing message
 
 ## Workflow
 
-### Step 1: Pick response strategy
+### Phase 1: Pick response strategy
 
-Determine whether the message should be push-only, choice-driven, or workflow-guided.
+Determine whether the message should be `push_only`, `choice_driven`, or `workflow_guided`.
 
-### Step 2: Shape the payload
+**If the intended user action is unclear**: Ask the user. Do not guess the interaction pattern.
+**If clear**: Proceed to Phase 2.
 
-Design text structure, buttons, and interaction constraints together.
+### Phase 2: Shape the payload
 
-### Step 3: Emit channel artifacts
+Design text, buttons, and interaction constraints together as one unit.
+
+**If text exceeds 4096 chars or buttons exceed API limits**: Restructure. Do not truncate silently.
+**If the decision load exceeds what a small screen can handle**: Split into steps.
+**If shaped**: Proceed to Phase 3.
+
+### Phase 3: Validate constraints
+
+Run `scripts/validate_telegram_payload.py` with the draft payload on stdin.
+
+**If `valid` is false**: Fix every error before proceeding. Do not ship invalid payloads.
+**If warnings exist**: Evaluate each. Near-limit text is a design smell.
+**If valid**: Proceed to Phase 4.
+
+### Phase 4: Emit channel artifacts
 
 Produce:
 
-- `telegram_response_plan`: tone, density, CTA strategy
-- `telegram_payload`: channel-ready structure for the chosen interaction
+- `telegram_response_plan`: tone, density, CTA strategy, and intended user action
+- `telegram_payload`: channel-ready JSON structure validated against API constraints
 
-## Interaction Protocol
+## Scripts
 
-- Re-ground on audience, urgency, and the exact action the Telegram message is
-  meant to drive.
-- Ask only when the target user action, safety posture, or channel constraints
-  are too ambiguous to design a responsible interaction.
-- Recommend one primary interaction pattern instead of offering several equally
-  vague message shapes.
+- `scripts/validate_telegram_payload.py` — Input: JSON on stdin with `text`, `buttons`, `parse_mode`. Output: JSON with `valid`, `errors`, `warnings`. Run at Phase 3 before emitting the final payload.
 
-## Channel Questions
-
-Use these questions to keep the payload channel-native:
+## Decision Protocol
 
 - What single user action should this message optimize for?
 - What decision load is realistic on a small screen with interrupted attention?
 - Which step needs explicit confirmation because the action is risky?
-- What information is necessary now versus better deferred to a follow-up step?
+- What information is necessary now versus better deferred to a follow-up?
+- Is the button grid serving the user's decision or the developer's convenience?
 
-## Channel Design Protocol
+## Red Flags — STOP
 
-- Design copy, buttons, and decision load as one unit.
-- Bias toward concise, high-signal messages that survive Telegram reading
-  conditions: small screens, interrupted attention, and low tolerance for dense
-  menus.
-- If an action is risky, make the confirmation flow explicit instead of hiding
-  it in verbose text.
-- Keep payload structure aligned with channel constraints rather than mirroring
-  desktop or web UI habits.
+If you catch yourself thinking any of these, STOP and return to Phase 1:
 
-## Pre-Delivery Checklist
+- "This is fine, it's only slightly over the limit"
+- "Users can scroll, so longer text is okay"
+- "I'll add all the options as buttons and let the user pick"
+- "Skip validation, the payload looks right"
+- "Desktop-style menu will work on mobile too"
 
-- [ ] The primary CTA is obvious.
-- [ ] The message fits interrupted mobile reading conditions.
-- [ ] Risky actions use an explicit confirmation path.
-- [ ] Buttons and copy support one coherent decision model.
+## Common Rationalizations
 
-## Handoff Expectations
+| Excuse                                     | Reality                                                                               |
+| ------------------------------------------ | ------------------------------------------------------------------------------------- |
+| "Slightly over 4096 chars is fine"         | Telegram silently drops or truncates. There is no graceful overflow.                  |
+| "More buttons means more choice"           | More buttons means more cognitive load on a small screen. Fewer, clearer.             |
+| "Skip validation for simple messages"      | Simple messages have constraints too. Validation is fast. Run it.                     |
+| "Copy this web UI pattern"                 | Web patterns assume mouse, large screen, and sustained attention. Telegram has none.  |
+| "Confirmation is overkill for this action" | If the action mutates state, the user deserves to see what happens before it happens. |
 
-- `telegram_response_plan` should explain the intended interaction posture,
-  message density, and CTA strategy so downstream channel delivery stays on
-  purpose.
-- `telegram_payload` should be a concrete, channel-ready structure that maps the
-  chosen strategy into text, buttons, and interaction flow.
-
-## Stop Conditions
-
-- the target channel is not Telegram
-- upstream content is too ambiguous to shape into a safe interaction
-- the task is really about general UX, not Telegram delivery
-
-## Anti-Patterns
-
-- separating channel strategy from payload generation
-- mirroring desktop UX patterns without Telegram constraints
-- overloading one message with too many decisions
-- using channel payload structure without a clear decision model for the user
-
-## Example
+## Concrete Example
 
 Input: "Design a Telegram admin prompt with concise copy and two-step confirmation buttons."
 
-Output: `telegram_response_plan`, `telegram_payload`.
+Output:
+
+```json
+{
+  "telegram_response_plan": {
+    "strategy": "workflow_guided",
+    "tone": "direct, low-density",
+    "primary_action": "Confirm deploy to production",
+    "confirmation_model": "two-step: preview then commit"
+  },
+  "telegram_payload": {
+    "text": "Deploy v2.4.1 to production?\n\nChanges: 3 files, auth token rotation fix.\nRisk: low — no schema migration.",
+    "parse_mode": null,
+    "buttons": [
+      [
+        { "text": "Preview changes", "callback_data": "deploy_preview_v2.4.1" },
+        { "text": "Cancel", "callback_data": "deploy_cancel_v2.4.1" }
+      ]
+    ]
+  },
+  "validation": {
+    "valid": true,
+    "errors": [],
+    "warnings": []
+  }
+}
+```
+
+## Handoff Expectations
+
+- `telegram_response_plan` explains the intended interaction posture, message density, and CTA strategy so downstream channel delivery stays on purpose.
+- `telegram_payload` is a concrete, channel-ready structure that maps the chosen strategy into text, buttons, and interaction flow — validated against Telegram API constraints.
+
+## Stop Conditions
+
+- The target channel is not Telegram
+- Upstream content is too ambiguous to shape into a safe interaction
+- The task is really about general UX, not Telegram delivery
+- API constraint validation fails and the payload cannot be restructured within limits
+
+Violating the letter of these rules is violating the spirit of these rules.

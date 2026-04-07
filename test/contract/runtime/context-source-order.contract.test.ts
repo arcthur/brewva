@@ -132,6 +132,12 @@ describe("context source order integration", () => {
         order: 13,
       },
       {
+        source: CONTEXT_SOURCES.skillRouting,
+        category: "narrative",
+        budgetClass: "recall",
+        order: 15,
+      },
+      {
         source: CONTEXT_SOURCES.runtimeStatus,
         category: "narrative",
         budgetClass: "core",
@@ -304,6 +310,12 @@ describe("context source order integration", () => {
         category: "narrative",
         budgetClass: "core",
         order: 13,
+      },
+      {
+        source: CONTEXT_SOURCES.skillRouting,
+        category: "narrative",
+        budgetClass: "recall",
+        order: 15,
       },
       {
         source: CONTEXT_SOURCES.runtimeStatus,

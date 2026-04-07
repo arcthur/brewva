@@ -1,7 +1,7 @@
 ---
 name: structured-extraction
-description: Convert noisy text or semi-structured input into validated structured
-  output with repair-minded discipline.
+description: Use when noisy or free-form input must be converted into validated
+  structured data with stable keys.
 stability: stable
 selection:
   when_to_use: Use when noisy or free-form input must be converted into validated structured data with stable keys.
@@ -50,7 +50,9 @@ references:
   - references/contract-validation.md
   - references/projection-patterns.md
   - references/repair-loop-protocol.md
-  - templates/extract-api-response.md
+  - templates/extraction-report.md
+scripts:
+  - scripts/validate_extraction.py
 consumes:
   - browser_observations
 requires: []
@@ -58,92 +60,116 @@ requires: []
 
 # Structured Extraction Skill
 
-## Intent
+## The Iron Law
 
-Turn messy input into durable structured data and make the repair logic explicit.
+```
+NO CONFIDENT JSON WITHOUT SOURCE EVIDENCE FOR EVERY REQUIRED FIELD
+```
 
-## Trigger
+Turn messy input into durable structured data. Make the repair logic explicit.
+Fields without source evidence are `null`, not invented.
 
-Use this skill when:
+**Violating the letter of this rule is violating the spirit of this rule.**
 
-- free-form text must be normalized into a schema
-- extraction quality matters more than raw summarization
-- downstream systems need stable keys instead of prose
+## When to Use
+
+- Free-form text must be normalized into a schema
+- Extraction quality matters more than raw summarization
+- Downstream systems need stable keys instead of prose
+
+**Do NOT use when:**
+
+- No stable schema can be defined from the request
+- The task is ordinary summarization rather than structured extraction
 
 ## Workflow
 
-### Step 1: Define the target shape
+### Phase 1: Define the target shape
 
-Name the schema, required fields, and repair rules.
+Name the schema, required fields, optional fields, and field types.
 
-### Step 2: Extract and validate
+**If no stable schema can be defined**: Stop. Say so directly.
 
-Normalize the input, repair obvious shape issues, and flag unresolved ambiguity.
+### Phase 2: Extract and validate
 
-### Step 3: Emit extraction artifacts
+Extract values from the source. For each field:
 
-Produce:
+- Evidence-backed → populate with value
+- Mechanically repairable → repair and log the repair
+- Ambiguous → keep ambiguity explicit (e.g., `"P1_or_P2"`)
+- No source evidence → set to `null`
 
-- `structured_payload`: the structured result
-- `extraction_report`: confidence, repairs, and unresolved gaps
+Run `scripts/validate_extraction.py` with the schema and payload.
 
-## Interaction Protocol
+**If validation fails**: Fix missing required fields or type errors. Do not
+invent content to pass validation.
 
-- Re-ground on the target schema, required fields, and acceptable repair rules
-  before extracting.
-- Ask only when the output shape, source authority, or ambiguity policy is too
-  unclear to extract safely.
-- If the source cannot support a stable schema, say so directly instead of
-  forcing a shape that only looks valid.
+### Phase 3: Emit artifacts
 
-## Extraction Questions
+Produce `structured_payload` and `extraction_report`.
+Use `templates/extraction-report.md` for the report structure.
 
-Use these questions to keep extraction honest:
+## Scripts
+
+- `scripts/validate_extraction.py` — Input: schema (required_fields, field_types)
+  - payload. Output: valid, missing_required, type_errors, null_fields.
+    Run after extraction to catch structural issues.
+
+## Decision Protocol
 
 - Which fields are directly supported by source evidence?
 - Which fields can be repaired mechanically versus only guessed semantically?
 - Where should ambiguity stay explicit instead of being normalized away?
-- What downstream consumer expectation makes this schema worth enforcing?
+- What downstream consumer makes this schema worth enforcing?
 
-## Extraction Protocol
+## Red Flags — STOP
 
-- Separate three things clearly: source evidence, repaired normalization, and
-  unresolved ambiguity.
-- Repair only obvious, well-justified shape problems. Do not invent semantic
-  content to make a schema look complete.
-- Prefer stable keys and explicit null or missing-state handling over prose
-  escape hatches.
-- Validation is part of the skill, not an optional cleanup pass.
+If you catch yourself thinking any of these, STOP:
 
-## Pre-Delivery Checklist
+- "I'll fill this field with a reasonable guess" — null is more honest
+- "The schema requires it so I'll invent something" — source evidence or null
+- "This ambiguity is probably X" — keep it explicit
+- "Close enough to the schema" — run the validator
 
-- [ ] Every required field is either evidence-backed or explicitly unresolved.
-- [ ] Repairs are mechanical and described in `extraction_report`.
-- [ ] Missing or null states are explicit where source support is absent.
-- [ ] The output is stable enough for downstream tooling without reparsing prose.
+## Common Rationalizations
+
+| Excuse                                    | Reality                                                                   |
+| ----------------------------------------- | ------------------------------------------------------------------------- |
+| "The field is obviously X"                | Obvious to you, not supported by source. Use null.                        |
+| "Downstream needs a value"                | Downstream needs a correct value. Null with explanation beats wrong data. |
+| "I'll note the uncertainty in the report" | Note it AND set the field to null. Report doesn't excuse invention.       |
+| "The source probably means X"             | Probably is not evidence. Keep the ambiguity.                             |
+
+## Concrete Example
+
+Input: "Extract a triage record from: 'Deploy broke prod at 3pm. Users seeing
+500s on /api/checkout. Rolled back at 3:15. Not sure if config or auth
+middleware. Sarah saw memory spikes. P1 or P2, needs triage.'"
+
+```json
+{
+  "structured_payload": {
+    "incident_id": null,
+    "severity": "P1_or_P2",
+    "affected_endpoint": "/api/checkout",
+    "symptom": "HTTP 500 errors on checkout endpoint",
+    "timeline": { "detected": "15:00", "mitigated": "15:15", "action": "rollback" },
+    "suspected_causes": ["config change", "new auth middleware"],
+    "supplemental_signals": [{ "source": "Sarah", "observation": "memory spikes" }],
+    "root_cause": null,
+    "status": "needs_triage"
+  },
+  "extraction_report": "Extracted 8/10 fields. severity is ambiguous (P1 or P2) — kept as explicit uncertainty. incident_id and root_cause are null (no source evidence). Source quality: noisy."
+}
+```
 
 ## Handoff Expectations
 
-- `structured_payload` should be stable enough for downstream tools or skills to
-  consume without reparsing the original text.
-- `extraction_report` should explain confidence, repairs applied, ambiguities
-  left unresolved, and any fields that need human or downstream judgment.
+- `structured_payload` stable enough for downstream tools without reparsing.
+- `extraction_report` explains confidence, repairs, and unresolved ambiguities.
 
 ## Stop Conditions
 
-- no stable schema can be defined from the request
-- source ambiguity is too high to repair safely
-- the task is ordinary summarization rather than structured extraction
-
-## Anti-Patterns
-
-- returning prose when a schema was requested
-- silently inventing fields to satisfy shape requirements
-- mixing extraction with downstream business decisions
-- hiding source ambiguity behind confident-looking JSON
-
-## Example
-
-Input: "Extract a stable issue triage record from this noisy incident thread."
-
-Output: `structured_payload`, `extraction_report`.
+- No stable schema can be defined from the request
+- Source ambiguity is too high to repair safely
+- The task is summarization, not structured extraction

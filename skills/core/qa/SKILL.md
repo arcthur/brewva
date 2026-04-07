@@ -1,7 +1,7 @@
 ---
 name: qa
-description: Verify the shipped behavior through realistic flows, try to break it,
-  and leave reproducible evidence for release decisions.
+description: Use when shipped behavior must be validated through realistic flows and
+  executable evidence before release.
 stability: stable
 selection:
   when_to_use: Use when shipped behavior must be validated through realistic flows, adversarial probes, or executable evidence.
@@ -58,6 +58,9 @@ execution_hints:
 references:
   - skills/meta/skill-authoring/references/authored-behavior.md
   - references/exploratory-regression-checklist.md
+  - references/qa-taxonomy.md
+scripts:
+  - scripts/classify_qa_verdict.py
 consumes:
   - design_spec
   - execution_plan
@@ -75,157 +78,167 @@ requires: []
 
 # QA Skill
 
-## Intent
+## The Iron Law
 
-Test the actual behavior, not just the intended diff, and turn real failures
-into concrete release blockers or clearly scoped handoffs.
+```
+NO PASS VERDICT WITHOUT EXECUTABLE EVIDENCE
+```
 
-## Trigger
+Test the actual behavior, not the intended diff. Turn real failures into
+concrete release blockers. Reading code is not verification.
 
-Use this skill when:
+**Violating the letter of this rule is violating the spirit of this rule.**
 
-- the next question is whether the feature really works in realistic usage
-- browser or executable behavior matters more than static code inspection
-- release confidence requires executable evidence and adversarial probes
+## When to Use
+
+- The next question is whether the feature really works in realistic usage
+- Browser or executable behavior matters more than static code inspection
+- Release confidence requires executable evidence and adversarial probes
+
+**Do NOT use when:**
+
+- There is no testable artifact yet
+- The real work is design or implementation, not verification
+- Static analysis alone answers the question
 
 ## Workflow
 
-### Step 1: Establish a credible starting state
+### Phase 1: Establish credible starting state
 
-Identify whether the environment is testable, whether the target flow is
-reachable, and whether the current branch or workspace state is coherent enough
-to interpret failures.
+Verify: environment testable, target flow reachable, branch/workspace state
+coherent enough to interpret failures.
 
-If the environment, auth, or target URL is broken, say so early and classify it
-as a blocker. Do not bury setup failure inside a vague QA summary.
+**If environment is broken**: Stop. Classify as blocker. Emit `qa_environment_limits`
+and set verdict to `inconclusive`. Do not bury setup failure inside a vague summary.
 
-### Step 2: Reconstruct the risk surface from the actual diff
+### Phase 2: Reconstruct risk surface from actual diff
 
 Start from `change_set`, `files_changed`, `risk_register`, `review_findings`,
-`implementation_targets`, and the intended user flow. Prefer a diff-aware test
-path over generic click-around.
+`implementation_targets`. Build a diff-aware test path. Use
+`risk_register.required_evidence` and `execution_plan[*].verification_intent`
+to pick probes.
 
-### Step 3: Run the highest-value test path
+**If upstream evidence is missing**: Widen the test surface. Missing evidence
+means more testing, not less.
 
-Prefer realistic end-to-end behavior over synthetic checklists. Use browser
-evidence when the product surface is UI-driven; use executable verification when
-the change is service or CLI heavy.
+### Phase 3: Execute highest-value test path
 
-### Step 4: Decide pass, fail, or inconclusive
+Run realistic end-to-end checks. Use browser evidence for UI surfaces,
+executable verification for service/CLI. At least one probe must be adversarial.
+Use `templates/qa-report.md` for structuring output.
+Classify findings using `references/qa-taxonomy.md` severity and categories.
 
-Do not silently repair defects. If the issue implies design drift, unclear
-ownership, or weak reproduction, stop and report instead of guessing. Escalate
-repairs back to implementation instead of mutating product code inside QA.
+**If a check cannot be executed**: Record it under `qa_missing_evidence`.
+Do not emit it as a passed check.
 
-Recognize your own rationalizations:
+### Phase 4: Classify verdict
 
-- "The code looks correct based on my reading." Reading is not verification.
-- "The implementer's tests already pass." Verify independently.
-- "This is probably fine." Probably is not verified.
-- "This would take too long." Run the strongest bounded check you can and record the limits honestly.
-- "I do not have the exact tool." Check the available managed tools before downgrading the verdict.
+Run `scripts/classify_qa_verdict.py` with execution summary. The script
+returns the deterministic verdict from executed checks, failed checks,
+adversarial coverage, and required-evidence coverage.
 
-### Step 5: Emit QA artifacts
+**If verdict is `fail`**: Do not silently repair. Escalate to implementation.
+**If verdict is `inconclusive`**: Name exactly what is missing and why.
 
-Produce:
+### Phase 5: Emit QA artifacts
 
-- `qa_report`: tested flows, what passed, what failed, and what changed
-- `qa_findings`: ranked failures or residual concerns
-- `qa_verdict`: `pass`, `fail`, or `inconclusive`
-- `qa_checks`: executed checks with command or tool identity, observed output, probe type, and evidence refs
-- `qa_missing_evidence`: evidence that should exist before stronger release claims are made
-- `qa_confidence_gaps`: remaining uncertainty after the executed checks
-- `qa_environment_limits`: environment or access limits that prevented stronger validation
+Produce `qa_report`, `qa_findings`, `qa_verdict`, `qa_checks`,
+`qa_missing_evidence`, `qa_confidence_gaps`, `qa_environment_limits`.
+
+## Scripts
+
+- `scripts/classify_qa_verdict.py` — Input: checks_executed, failed_checks,
+  adversarial_attempted, environment_reachable, plus either
+  required_evidence_covered or missing_required_evidence. Output: verdict and
+  reason. Missing required evidence yields `inconclusive`; executed failing
+  checks yield `fail`. Run after Phase 3, before emitting final artifacts.
+
+## Decision Protocol
+
+- Which user-visible path is most likely to fail for the reasons this diff is risky?
+- What setup assumption must be true before this result means anything?
+- If the first path passes, what second path would still reduce uncertainty?
+- What evidence must be captured now so `ship` does not have to trust prose?
+- Did I actually run the check, or am I reasoning about what it would show?
 
 ## Interaction Protocol
 
-- Ask only when the environment, target URL, credentials, or acceptance target
-  are too unclear to test safely.
-- Prefer browser-first evidence when the user risk is visible behavior. Do not
-  substitute static reasoning for the real flow when the UI is the product.
-- Re-ground on the changed user flow before opening the browser or running
-  executable checks.
-- Treat executable evidence as mandatory for a pass verdict.
-- Recommend the release path you believe the evidence supports. Do not hide
-  behind a neutral report when the right verdict is obvious.
+- Recognize your own rationalizations before downgrading or skipping a check.
+- "The code looks correct based on my reading." Reading is not verification. Run it.
+- Do not invent QA checks from code reading or expectation alone.
+- Prefer a browser-first path for UI surfaces, executable traces for CLI/service
+  behavior, and rerun the same failing path after any bounded fix.
 
-## QA Questions
+## Red Flags — STOP
 
-Use these questions to pick the right test path:
+If you catch yourself thinking any of these, STOP and return to Phase 1:
 
-- Which user-visible path is most likely to fail for the reasons this diff is risky?
-- What setup or environment assumption must be true before this result means anything?
-- If the first failing path passes, what second path would still meaningfully reduce uncertainty?
-- What evidence must be captured now so `ship` does not have to trust prose?
+- "The code looks correct based on my reading" — reading is not verification
+- "The implementer's tests already pass" — verify independently
+- "This is probably fine" — probably is not verified
+- "This would take too long" — run the strongest bounded check and record limits
+- "I don't have the exact tool" — check available managed tools before downgrading
 
-## Test Execution Protocol
+## Common Rationalizations
 
-- Start from the narrowest realistic flow that can fail for the reasons this
-  diff is dangerous.
-- Use `files_changed`, `risk_register`, and `review_findings` to pick the first
-  path. Use `risk_register.required_evidence` and
-  `execution_plan[*].verification_intent` to decide which probes matter first.
-  QA is not a generic tour of the app.
-- Treat saved snapshots, screenshots, command output, and after-fix reruns as
-  first-class evidence. If evidence cannot be replayed by another operator, it
-  is too weak.
-- If you did not run the check, do not emit it as a passed `qa_check`. Record
-  the missing probe under `qa_missing_evidence` instead.
-- When setup is missing, record the missing prerequisite and downgrade to
-  `inconclusive` instead of pretending the flow was validated.
-- At least one executed check should be adversarial, boundary-seeking, or
-  otherwise aimed at breaking the claimed happy path.
-- `qa_verdict = pass` requires covering the plan-declared `required_evidence`.
-  Coverage may come from the current `qa_checks` or from fresh authoritative
-  `runtime.authority.verification.*` evidence. If the required evidence was not
-  covered, stay `inconclusive`.
+| Excuse                                          | Reality                                                                                    |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| "Unit tests pass, so it works"                  | Unit tests are not QA. Real flows can fail with green unit tests.                          |
+| "I read the code and it's correct"              | Reading is not execution. Run the check.                                                   |
+| "Environment is too hard to set up"             | Record it as `inconclusive`. Do not fake a pass.                                           |
+| "The happy path works, edge cases are unlikely" | At least one adversarial probe is mandatory. Skip it and the verdict stays `inconclusive`. |
+| "Fixing it myself is faster"                    | QA does not patch product code. Hand off defects to implementation.                        |
 
-## QA Decision Protocol
-
-- Prefer the narrowest realistic flow that can prove or disprove release
-  confidence quickly.
-- Do not patch product code from QA by default. Hand off defects instead.
-- Report instead of fixing when the defect points to wrong scope, wrong design,
-  missing product decisions, or any change that belongs to implementation.
-- Treat missing environments, broken auth, and irreproducible behavior as
-  `inconclusive`, not as silent skips.
-
-## Release Confidence Gate
-
-- [ ] The highest-risk realistic path was actually exercised.
-- [ ] The observed result is backed by replayable evidence.
-- [ ] At least one adversarial or edge-oriented probe was attempted.
-- [ ] Remaining uncertainty is named explicitly as `qa_confidence_gaps` or `qa_environment_limits`.
-
-## Handoff Expectations
-
-- `qa_report` should tell `ship` exactly what was exercised, what changed during
-  QA, and what confidence level was earned.
-- `qa_findings` should be reproducible and actionable, not generic complaints.
-- `qa_verdict` should summarize real release confidence, not just the count of
-  found issues.
-- `qa_checks` should preserve command or tool identity, observed output, and
-  probe types on every entry; command-based checks also preserve exit codes,
-  and artifact refs stay supplemental rather than replacing observed output, so
-  later release or debugging work does not restart from zero.
-- The handoff should explain which risky path was exercised first, why that path
-  was chosen, and why the verdict is `pass`, `fail`, or `inconclusive`.
-
-## Stop Conditions
-
-- the target environment cannot be reached or exercised credibly
-- the real blocker is unresolved design or review debt, not QA execution
-- the requested product surface cannot be tested with current access
-
-## Anti-Patterns
-
-- calling unit-test output "QA" without checking real behavior
-- fixing product code inside QA without an explicit escalation
-- skipping browser or runtime evidence when the user-facing flow is the actual risk
-- reporting results without a release-oriented verdict
-
-## Example
+## Concrete Example
 
 Input: "Exercise the staging onboarding flow, try to break the risky path, and tell me if this is safe to ship."
 
-Output: `qa_report`, `qa_findings`, `qa_verdict`, `qa_checks`, `qa_missing_evidence`, `qa_confidence_gaps`, `qa_environment_limits`.
+```json
+{
+  "qa_verdict": "fail",
+  "qa_findings": [
+    {
+      "severity": "high",
+      "category": "functional",
+      "description": "Email validation accepts malformed addresses with double dots",
+      "evidence": "browser_snapshot: input 'user@test..com' accepted, form submitted",
+      "reproducible": true
+    }
+  ],
+  "qa_checks": [
+    {
+      "flow": "onboarding happy path",
+      "probe_type": "happy_path",
+      "tool": "browser_fill + browser_click",
+      "observed": "Form submits, welcome screen shown",
+      "status": "pass"
+    },
+    {
+      "flow": "onboarding email validation",
+      "probe_type": "adversarial",
+      "tool": "browser_fill",
+      "observed": "Malformed email accepted without error",
+      "status": "fail"
+    }
+  ],
+  "qa_missing_evidence": [],
+  "qa_confidence_gaps": ["Password strength meter not exercised"],
+  "qa_environment_limits": []
+}
+```
+
+## Handoff Expectations
+
+- `qa_report`: what was exercised, what changed, confidence level earned.
+- `qa_findings`: reproducible, actionable, classified per `references/qa-taxonomy.md`.
+- `qa_verdict`: real release confidence, not issue count.
+- `qa_checks`: command/tool identity, observed output, probe type on every entry.
+- Handoff explains which risky path was exercised first and why the verdict
+  is `pass`, `fail`, or `inconclusive`.
+
+## Stop Conditions
+
+- The target environment cannot be reached or exercised credibly
+- The real blocker is unresolved design or review debt, not QA execution
+- The requested product surface cannot be tested with current access
+- Setup requires credentials or approvals not available in the current context

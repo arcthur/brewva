@@ -474,6 +474,7 @@ export function createRuntimeServiceDependencies(
     agentId: options.agentId,
     kernel: options.kernel,
     skillLifecycleService,
+    skillRegistry: options.coreDependencies.skillRegistry,
   });
   const contextService = new ContextService({
     config: options.config,

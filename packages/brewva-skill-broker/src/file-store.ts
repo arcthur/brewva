@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { writeFileAtomic } from "@brewva/brewva-deliberation";
+import { isRecord, readNumber, readString, readStringArray } from "./parse.js";
 import {
   SKILL_PROMOTION_STATE_SCHEMA,
   SKILL_PROMOTION_STATUSES,
@@ -13,25 +14,6 @@ import {
   type SkillPromotionState,
   type SkillPromotionTarget,
 } from "./types.js";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readString(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : undefined;
-}
-
-function readNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function readStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((entry) => readString(entry) ?? "").filter((entry) => entry.length > 0);
-}
 
 function readEvidenceRef(value: unknown): SkillPromotionEvidenceRef | undefined {
   if (!isRecord(value)) return undefined;

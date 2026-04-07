@@ -1,7 +1,7 @@
 ---
 name: design
-description: Turn a request into a bounded design and executable plan, choosing the
-  right implementation mode without over-designing trivial work.
+description: Use when a request has multiple viable approaches, crosses boundaries, or
+  needs explicit trade-offs before implementation.
 stability: stable
 selection:
   when_to_use: Use when a request needs a bounded design, explicit trade-offs, or an executable plan before code changes.
@@ -54,6 +54,8 @@ references:
   - references/executable-evidence-bridge.md
   - references/advisor-consultation-protocol.md
   - references/plan-output-template.md
+scripts:
+  - scripts/classify_planning_posture.py
 consumes:
   - problem_frame
   - user_pains
@@ -78,124 +80,175 @@ requires: []
 
 # Design Skill
 
-## Intent
+## The Iron Law
 
-Choose the minimum correct solution shape and turn it into an execution-ready plan.
+```
+NO PLAN WITHOUT EXPLICIT TRADE-OFFS AND CHOSEN PATH
+```
 
-## Trigger
+Every emitted plan names what was rejected and why.
 
-Use this skill when:
+**Violating the letter of this rule is violating the spirit of this rule.**
 
-- the task has multiple viable approaches
-- a change crosses package or module boundaries
-- implementation mode is not obvious
+## When to Use
+
+- The task has multiple viable approaches
+- A change crosses package or module boundaries
+- Implementation mode is not obvious
+- Upstream asks for a bounded design before code changes
+
+**Do NOT use when:**
+
+- The change is a single-file, single-concern fix with no trade-offs
+- The real work is debugging, not planning
+- No design decision actually exists
 
 ## Workflow
 
-### Step 1: Validate planning posture
+### Phase 1: Classify planning posture
 
-Start from upstream `planning_posture` if it exists. If posture is missing,
-default conservatively instead of silently assuming triviality.
+Run `scripts/classify_planning_posture.py` with scope data. Use the returned
+posture to calibrate depth: `trivial` gets a lightweight plan, `high_risk`
+gets full trade-off analysis and risk register.
 
-### Step 2: Compare approaches
+If upstream `planning_posture` exists, reconcile it with script output. If they
+disagree, use the stricter posture and note the gap.
 
-Offer 1-3 materially different approaches with trade-offs, then choose one.
+**If scope data is unavailable**: Default to `moderate`. Do not assume triviality.
 
-### Step 3: Reuse or intentionally reject precedent
+### Phase 2: Compare approaches
+
+Offer 1–3 materially different approaches with explicit trade-offs on boundary
+ownership, blast radius, migration/rollback cost, and verification strength.
+Choose one path explicitly.
+
+**If all approaches violate hard constraints**: Stop. Report the constraint
+conflict. Do not force a plan through broken constraints.
+
+### Phase 3: Validate against precedent
 
 Use retrieved repository precedents when they fit. If you deliberately diverge
-from a consulted precedent, explain why the current case is materially
-different.
+from a consulted precedent, explain why the current case is materially different.
 
-### Step 4: Force the key decisions into the open
+**If no precedent exists**: Proceed. Note the absence in the risk register.
+
+### Phase 4: Force key decisions into the open
 
 Make boundary ownership, migration posture, verification posture, rollback
-assumptions, and preventive checks explicit before emitting the final plan.
+assumptions, and preventive checks explicit. Every deferred decision must be
+named as deferred and assigned to a downstream skill.
 
-### Step 5: Emit bounded artifacts
+**If a key decision cannot be made**: Stop at that decision. Do not paper over
+it with optimistic assumptions.
 
-Produce:
+### Phase 5: Emit bounded artifacts
 
-- `design_spec`: objective, boundaries, and chosen approach
-- `execution_plan`: ordered steps and verification intent
-- `execution_mode_hint`: `direct_patch`, `test_first`, or `coordinated_rollout`
-- `risk_register`: concrete risks and mitigations
-- `implementation_targets`: concrete path-scoped files or directories the executor must touch
+Produce `design_spec`, `execution_plan`, `execution_mode_hint`, `risk_register`,
+`implementation_targets`. Every artifact must reference concrete paths, not
+vague areas.
 
-## Interaction Protocol
+## Scripts
 
-- Ask questions only when the answer changes the primary architecture choice,
-  effect boundary, or acceptance criteria.
-- If context may be stale, briefly re-ground the request in current repository
-  reality before recommending a path.
-- When user input is needed, recommend one primary path and one bounded
-  alternative instead of presenting an open menu of possibilities.
-- Treat `planning_posture` and precedent consultation as upstream inputs to
-  planning, not as optional afterthoughts once design is already decided.
+- `scripts/classify_planning_posture.py` — Input: affected_paths_count,
+  boundaries_crossed, has_public_surface, has_persisted_format, has_security_surface.
+  Output: posture classification and reason. Run before Phase 1 depth calibration.
 
-## Design Questions
-
-Use these questions to keep planning first-principles-driven:
+## Decision Protocol
 
 - Which boundary actually owns this change?
 - Which option minimizes blast radius without weakening the outcome?
 - What verification evidence would prove this path was the right one?
-- What migration, rollback, or operator cost is being hidden by the most
-  attractive-looking option?
+- What migration, rollback, or operator cost is hidden by the most attractive option?
+- What was rejected, and would a downstream reader agree with the rejection?
 
-## Decision Protocol
+## Red Flags — STOP
 
-- Start with at most three viable approaches.
-- Compare them on boundary ownership, blast radius, migration or rollback cost,
-  verification strength, and operational risk.
-- Choose one path explicitly. Do not leave the main design undecided unless the
-  missing choice genuinely belongs to the user.
-- Prefer complete but bounded work over shortcut plans that defer obvious edge
-  cases into follow-up churn.
+If you catch yourself thinking any of these, STOP and return to Phase 2:
 
-## Plan Emission Gate
+- "There's really only one way to do this" — without proving alternatives are worse
+- "The trade-offs are obvious" — without writing them down
+- "This is trivial" — when posture classification says otherwise
+- "I'll figure out the rollback story later"
+- "The boundary question doesn't matter for this change"
 
-- [ ] The chosen path is explicit.
-- [ ] Deferred or rejected scope is named explicitly.
-- [ ] Verification posture is concrete, not implied.
-- [ ] Migration or rollback assumptions are visible to downstream skills.
+## Common Rationalizations
 
-## Handoff Expectations
+| Excuse                         | Reality                                                                                                                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| "Only one viable approach"     | Then proving it takes one sentence. If you can't, there are alternatives you haven't considered.                               |
+| "Trade-offs are implied"       | Implied trade-offs are invisible trade-offs. Write them.                                                                       |
+| "Too small to need a plan"     | Small changes that cross a boundary have outsized blast radius. If the posture script says moderate or above, it needs a plan. |
+| "Precedent doesn't apply here" | State why. Precedent is a starting point, not a prison, but silent divergence is a red flag.                                   |
+| "Rollback isn't relevant"      | Every change that touches shared state or public surface has a rollback story. Name it.                                        |
 
-- `design_spec` should tell implementation what is changing, what is not
-  changing, which modules own the work, and which constraints are non-negotiable.
-- `design_spec` should also state which precedents were reused and where the
-  plan intentionally deviates from prior repository guidance.
-- `execution_plan` should be ordered, concrete, and verification-aware so the
-  implementation skill can execute without redesigning the task.
-- `execution_plan` entries must stay structured enough that review and QA can
-  consume step ownership, exit criteria, and verification intent without
-  re-parsing prose.
-- `execution_mode_hint` should be evidence-based. Use `direct_patch` only for
-  truly local work, `test_first` when behavior needs pinning, and
-  `coordinated_rollout` when change spans multiple boundaries.
-- `risk_register` should be ranked by likely impact and should name the signals
-  that review or verification must watch later.
-- `risk_register` must name canonical change categories, required evidence, and
-  the owner lane responsible for closing each risk.
-- `implementation_targets` should name the highest-value path-scoped files or
-  directories, not vague areas of the codebase.
-
-## Stop Conditions
-
-- a critical requirement is missing and changes the primary architecture choice
-- all viable options violate hard constraints
-- the real blocker is lack of repository understanding
-
-## Anti-Patterns
-
-- forcing design on an obvious one-file fix
-- skipping trade-offs and presenting one option as inevitable
-- producing a plan that is not tied to real path-scoped files or directories
-- emitting generic architecture prose that does not help the next skill act
-
-## Example
+## Concrete Example
 
 Input: "Refactor skill routing to add profile-aware filtering without weakening runtime governance."
 
-Output: `design_spec`, `execution_plan`, `execution_mode_hint`, `risk_register`, `implementation_targets`.
+```json
+{
+  "design_spec": {
+    "objective": "Add profile-aware filtering to skill routing without widening governance bypass surface",
+    "chosen_approach": "Inject profile predicate into existing SkillRouter.filter() pipeline",
+    "rejected_approaches": [
+      {
+        "name": "New parallel router",
+        "reason": "Duplicates governance checks, doubles maintenance surface"
+      },
+      {
+        "name": "Governance-layer filter",
+        "reason": "Mixes routing concern into governance boundary"
+      }
+    ],
+    "boundaries": ["packages/brewva-runtime/src/services/skill-router.ts"],
+    "non_negotiable_constraints": ["Governance port contract unchanged", "No new public exports"]
+  },
+  "execution_plan": [
+    {
+      "step": 1,
+      "action": "Add ProfilePredicate type to internal types",
+      "verification": "Type-check passes"
+    },
+    {
+      "step": 2,
+      "action": "Thread predicate through SkillRouter.filter()",
+      "verification": "Existing tests pass"
+    },
+    {
+      "step": 3,
+      "action": "Add profile-aware test cases",
+      "verification": "New cases cover empty/single/multi profile"
+    }
+  ],
+  "execution_mode_hint": "test_first",
+  "risk_register": [
+    {
+      "risk": "Profile predicate widens SkillRouter public API",
+      "mitigation": "Keep predicate in internal types only",
+      "owner_lane": "review-boundaries"
+    }
+  ],
+  "implementation_targets": [
+    "packages/brewva-runtime/src/services/skill-router.ts",
+    "packages/brewva-runtime/src/types/internal.ts"
+  ]
+}
+```
+
+## Handoff Expectations
+
+- `design_spec`: what is changing, what is not, which modules own it, which
+  constraints are non-negotiable, which precedents were reused or rejected.
+- `execution_plan`: ordered, concrete, verification-aware. Implementation
+  executes without redesigning.
+- `execution_mode_hint`: evidence-based. `direct_patch` for local work,
+  `test_first` when behavior needs pinning, `coordinated_rollout` for
+  multi-boundary changes.
+- `risk_register`: change categories, required evidence, owner lane per risk.
+- `implementation_targets`: path-scoped files or directories, not vague areas.
+
+## Stop Conditions
+
+- A critical requirement is missing and changes the primary architecture choice
+- All viable options violate hard constraints
+- The real blocker is lack of repository understanding, not lack of design

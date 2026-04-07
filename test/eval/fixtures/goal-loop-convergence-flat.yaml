@@ -1,0 +1,44 @@
+loop_contract:
+  goal: "Raise test coverage to 85%"
+  scope:
+    - packages/brewva-runtime/src/services/
+  cadence:
+    type: delay
+    value: 900000
+  continuity_mode: inherit
+  loop_key: coverage-raise-2026-04-06
+  baseline:
+    value: 70.0
+    source: bun test --coverage
+  metric:
+    key: coverage_pct
+    direction: up
+    unit: "%"
+    min_delta: 1.0
+  convergence_condition:
+    kind: truth_resolved
+    factId: coverage_gte_85
+  max_runs: 12
+  escalation_policy:
+    trigger: 3 consecutive below_noise_floor
+    next_owner: design
+iteration_report:
+  iteration_key: coverage-raise-2026-04-06/run-4/iter-1
+  metric_value: 72.1
+  delta: -0.2
+  guard_status: pass
+  outcome: below_noise_floor
+  summary: "Coverage unchanged at 72.1% after adding 3 test files. Delta -0.2 is below min_delta 1.0."
+convergence_report:
+  run_key: coverage-raise-2026-04-06/run-4
+  status: escalate
+  reason_code: 3 consecutive below_noise_floor runs
+  metric_trajectory:
+    - 72.1
+    - 72.3
+    - 72.1
+  evidence: "Runs 2-4 all below min_delta. Remaining uncovered paths require architectural changes."
+continuation_plan:
+  next_owner: design
+  next_objective: "Redesign test strategy — remaining uncovered paths are behind dependency injection boundaries"
+  evidence_for_handoff: "Last 3 runs added tests but coverage gains are below noise floor. DI refactor needed."

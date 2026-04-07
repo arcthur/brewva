@@ -63,6 +63,10 @@ Current rules:
 
 Skill frontmatter supports intent, effect, resource, and execution metadata:
 
+- `name`
+  - optional; defaults to the containing skill directory name when omitted
+- `description`
+  - optional short summary; defaults to `<name> skill`
 - `intent.outputs/intent.output_contracts/intent.semantic_bindings`
 - `selection.when_to_use/selection.examples/selection.paths/selection.phases`
 - `effects.allowed_effects/effects.denied_effects`
@@ -76,7 +80,7 @@ hardcoding per-skill routing heuristics in the gateway. Current authored fields
 are:
 
 - `selection.when_to_use`
-  - required for loadable routable skills
+  - required for loadable `core` / `domain` / `operator` / `meta` skills
   - concise natural-language intent statement for when the skill should own the task
 - `selection.examples`
   - optional task or user-utterance examples that make the selection intent concrete
@@ -86,6 +90,10 @@ are:
   - optional structured task-phase hints
   - vocabulary is closed and aligned to runtime `TaskPhase`:
     `align`, `investigate`, `execute`, `verify`, `ready_for_acceptance`, `blocked`, `done`
+
+Operator and meta skills still need `selection` because they remain loadable
+catalog entries and may be exposed when routing scopes explicitly include their
+categories.
 
 Runtime compiles internal selection features from authored `selection`,
 `description`, and markdown trigger text at load time. Authors do not maintain a
@@ -435,6 +443,9 @@ Overlays merge onto the base skill contract with project semantics:
 - multiple overlays apply in deterministic root load order; within one root,
   overlay files are applied in lexical path order, and later overlays only
   tighten or replace fields according to the merge contract
+- shared project context is prepended in root load order and each discovered
+  shared-context document is attached at most once per final loaded skill,
+  even when multiple same-name overlays merge across roots
 
 Config-layer `skills.overrides` remain tightening-only. Shared project context is
 prepended from:

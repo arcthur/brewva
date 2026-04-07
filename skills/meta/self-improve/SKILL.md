@@ -77,145 +77,176 @@ consumes:
 requires: []
 ---
 
-# Self Improve Skill
+# Self Improve
 
-## Intent
+## The Iron Law
 
-Turn repeated mistakes, stuck loops, or review friction into explicit learning
-loops instead of one-off observations.
+```
+NO SYSTEMIC CLAIM WITHOUT REPEATED EVIDENCE
+```
 
-Use the helper scripts when they help with workspace learning hygiene, but
-build the hypothesis from durable evidence first. That evidence may come from
-review artifacts, runtime traces, or lineage-scoped iteration facts.
+## When to Use / When NOT to Use
 
-## Trigger
+Use when:
 
-Use this skill when:
-
-- the same failure pattern keeps recurring
-- review findings reveal a systemic weakness
+- the same failure pattern has recurred across multiple sessions or loops
+- review findings reveal a systemic weakness, not a one-off bug
 - runtime forensics show repeated operational waste
-- a bounded loop keeps failing to improve, regressing guard checks,
-  escalating, or stalling for the same reason
+- a bounded loop keeps stalling, regressing, or escalating for the same reason
+
+Do NOT use when:
+
+- there is only a single isolated incident — route to debugging
+- the need is immediate fix, not retrospective learning — route to implementation
+- the "pattern" is based on feeling rather than traceable evidence
+- active incident response is in progress — do not interrupt with learning work
 
 ## Workflow
 
-### Step 1: Collect repeated signals with bounded evidence
+### Phase 1: Collect repeated signals
 
-Identify patterns across reviews, runtime traces, failure artifacts, or
-iteration-fact history.
+Gather evidence from reviews, runtime traces, failure artifacts, or
+iteration-fact history. Cluster the evidence:
 
-When the learning target spans scheduled inherited runs:
-
-- query `iteration_fact` across the control-plane lineage view for the inherited run family
-- narrow with `source = "goal-loop:<loop_key>"`
-- collect the concrete metric and guard records before naming a system lesson
-- use explicit reports, handoff artifacts, or verification outcomes for
-  disposition context instead of inventing planner-state facts
-
-Treat the evidence as clustered signals, not as one undifferentiated pile:
-
-- repeat findings
-- repeat fact references
+- repeat findings (same failure class across sessions)
+- repeat fact references (iteration_fact with `source = "goal-loop:<loop_key>"`)
 - repeat escalation or rollback outcomes
-- repeat user or operator intervention points
+- repeat operator intervention points
 
-### Step 2: Distill improvement candidates
+**If fewer than 2 independent occurrences exist**: Stop. The pattern is not
+repeated. Record the single observation and exit — do not inflate it.
+**If evidence is available**: Proceed to Phase 2.
+
+### Phase 2: Distill improvement candidates
 
 Produce:
 
-- `improvement_hypothesis`: the suspected systemic weakness
-- `learning_backlog`: ranked fixes or experiments
-- `improvement_plan`: the smallest next iteration to test
+- `improvement_hypothesis`: the suspected systemic weakness, naming the repeated
+  pattern, bounded evidence set, and smallest corrective change
+- `learning_backlog`: ranked fixes or experiments with evidence references
+- `improvement_plan`: smallest next iteration to test the hypothesis
 
-Each artifact must remain traceable to evidence. A convincing lesson names the
-repeated pattern, the bounded evidence set, and the smallest corrective change
-that can falsify or validate the hypothesis.
+**If the hypothesis cannot name specific evidence anchors**: Stop. Return to
+Phase 1 and collect more data.
 
-### Step 3: Route the lesson to the right home
+### Phase 3: Route the lesson
 
-Decide whether the improvement should land in:
+Decide the improvement home:
 
-- a public skill contract or authored-behavior section
-- a project overlay or shared project rule
+- public skill contract or authored-behavior section
+- project overlay or shared project rule
 - runtime or tool documentation
-- a small workflow or tooling improvement
-- a bounded follow-up experiment instead of an immediate permanent rule
+- bounded follow-up experiment (not an immediate permanent rule)
 
-## Interaction Protocol
+Run `scripts/review.sh` to check the improvement against existing patterns.
+Run `scripts/promote.sh` when the improvement is validated and ready for its home.
 
-- Re-ground on the repeated failure pattern or recurring friction before naming
-  a systemic lesson.
-- Ask only when the repetition claim, scope of the learning loop, or intended
-  improvement target is too weak to support a credible hypothesis.
-- Do not interrupt active incident response with learning work unless the user
-  explicitly wants retrospective analysis now.
-- If the supposed lesson depends on one ambiguous event, say that the evidence
-  is too thin rather than inflating it into a systemic story.
+**If the improvement home is unclear**: Propose the experiment first, not the
+permanent rule. Validate before promoting.
 
-## Learning Questions
+## Scripts
 
-Use these questions to keep improvement work evidence-backed:
+- `scripts/activator.sh` — Activate the self-improve workspace learning loop.
+- `scripts/error-detector.sh` — Scan artifacts for recurring error patterns.
+- `scripts/extract-skill.sh` — Extract a validated improvement into skill form.
+- `scripts/promote.sh` — Promote a validated improvement to its target home.
+- `scripts/review.sh` — Review an improvement hypothesis against existing patterns.
+- `scripts/setup.sh` — Initialize the self-improve workspace state.
 
-- What exactly repeated, and how many times?
+## Decision Protocol
+
+- What exactly repeated, and how many independent times?
+- Is the evidence traceable to specific fact references, report IDs, or artifact paths?
 - What is the smallest hypothesis that explains the repeated waste?
-- Which home should absorb the fix: skill, overlay, project rule, runtime doc,
-  or tool?
+- Which home should absorb the fix: skill, overlay, project rule, runtime doc, or tool?
 - What bounded experiment would falsify this lesson if it is wrong?
+- Is the improvement narrow enough to match the evidence, or is it over-generalized?
 
-## Learning Protocol
+## Red Flags — STOP
 
-- Require repetition or a clearly recurring pattern. One-off bugs are not
-  automatically system lessons.
-- Distinguish evidence, hypothesis, and intervention. The fact that something
-  hurt twice does not yet prove the root process flaw.
-- When loop history is involved, prefer objective stuck signals over narrative
-  memory: flat metric streaks, guard flakiness, repeated escalations, and
-  repeated verification failures are stronger than "it felt stuck".
-- Prefer the smallest next improvement that can validate the hypothesis instead
-  of proposing broad architecture rewrites.
-- Every systemic claim should point back to concrete fact references, report
-  ids, or runtime evidence anchors.
-- Route high-value improvements toward the right home: skill instructions,
-  shared project rules, runtime docs, or targeted tooling.
-- No broad remediation without bounded evidence. If the evidence is narrow, the
-  improvement should stay narrow too.
+If you catch yourself thinking any of these, STOP and return to Phase 1:
 
-## Promotion Gate
+- "This feels like a systemic problem" (without naming 2+ occurrences)
+- "The architecture needs a broad rewrite based on this incident"
+- "This is obviously a pattern, no need to find more evidence"
+- "Let me propose the fix during this active incident"
 
-- [ ] The pattern is repeated, not isolated.
-- [ ] Evidence anchors are traceable.
-- [ ] The proposed improvement home is explicit.
-- [ ] The next change is bounded enough to validate the lesson.
+## Common Rationalizations
+
+| Excuse                                              | Reality                                                                   |
+| --------------------------------------------------- | ------------------------------------------------------------------------- |
+| "One bad incident proves a systemic flaw"           | One incident is a data point, not a pattern. Require repetition.          |
+| "Broad rewrite prevents future failures"            | Narrow, evidence-scoped fixes validate faster and break less.             |
+| "The pattern is obvious from context"               | Obvious patterns still need traceable evidence anchors.                   |
+| "Learning work can interrupt incident response"     | Active incidents need fixes, not retrospectives. Sequence matters.        |
+| "Iteration-fact events are just like skill outputs" | Fact events have different semantics — do not treat them interchangeably. |
+
+## Concrete Example
+
+Input: "The same bounded loop has stalled 3 times on guard-check regression. Use
+iteration facts and review artifacts to decide what should change."
+
+Output:
+
+```json
+{
+  "improvement_hypothesis": {
+    "pattern": "Guard-check regression after metric improvement",
+    "occurrences": 3,
+    "evidence": [
+      {
+        "source": "goal-loop:perf-opt",
+        "iteration": 4,
+        "fact": "guard_regressed",
+        "metric": "p95_latency"
+      },
+      {
+        "source": "goal-loop:perf-opt",
+        "iteration": 7,
+        "fact": "guard_regressed",
+        "metric": "p95_latency"
+      },
+      {
+        "source": "goal-loop:perf-opt",
+        "iteration": 11,
+        "fact": "guard_regressed",
+        "metric": "p95_latency"
+      }
+    ],
+    "root_cause": "Optimization steps do not run guard checks before committing, only after. Regressions are detected one iteration late."
+  },
+  "learning_backlog": [
+    {
+      "rank": 1,
+      "fix": "Add pre-commit guard check to goal-loop optimization phase",
+      "effort": "small",
+      "evidence_refs": ["iter-4", "iter-7", "iter-11"]
+    },
+    {
+      "rank": 2,
+      "fix": "Add guard-regression counter to loop exit criteria",
+      "effort": "medium",
+      "evidence_refs": ["iter-7", "iter-11"]
+    }
+  ],
+  "improvement_plan": "Add pre-commit guard check in goal-loop skill Phase 3. Target home: skills/domain/goal-loop/SKILL.md. Falsification: if next 3 iterations show zero guard regressions, the fix is validated."
+}
+```
 
 ## Handoff Expectations
 
-- `improvement_hypothesis` should name the recurring weakness, the evidence for
-  repetition, and why it is systemic rather than isolated.
-- `learning_backlog` should rank concrete fixes or experiments by leverage and
-  implementation cost, with evidence references for each item.
-- `improvement_plan` should define the smallest next change that can test the
-  hypothesis or reduce repeated waste, plus the home where that change belongs.
+- `improvement_hypothesis` names the recurring weakness, evidence for repetition,
+  and why it is systemic rather than isolated.
+- `learning_backlog` ranks concrete fixes or experiments by leverage and cost,
+  with evidence references for each item.
+- `improvement_plan` defines the smallest next change to test the hypothesis,
+  the home where the change belongs, and the falsification condition.
 
 ## Stop Conditions
 
-- there is only a single isolated incident
-- no repeated pattern can be justified from evidence
-- the real need is immediate debugging or implementation, not learning
+- Fewer than 2 independent occurrences of the claimed pattern.
+- No traceable evidence anchors (fact references, report IDs, artifact paths).
+- The real need is immediate debugging or implementation, not learning.
+- Active incident response is in progress and the operator has not requested retrospective.
 
-## Anti-Patterns
-
-- calling every bug a system-level lesson
-- proposing broad rewrites without evidence of repetition
-- mixing retrospective learning with immediate incident response
-- turning vague dissatisfaction into a fake systemic pattern
-- treating iteration-fact event kinds as if they were ordinary skill outputs
-- naming a systemic failure without traceable fact or report references
-
-## Example
-
-Input: "We keep stalling in the same bounded loop; use the recorded iteration
-facts and review artifacts to decide what protocol or catalog rule should
-change."
-
-Output: `improvement_hypothesis`, `learning_backlog`, `improvement_plan`.
+Violating the letter is violating the spirit.

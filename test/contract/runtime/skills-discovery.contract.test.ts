@@ -459,10 +459,15 @@ describe("skill discovery and loading", () => {
     const external = mkdtempSync(join(tmpdir(), "brewva-skill-overlay-order-external-"));
     const projectOverlayPath = join(workspace, ".brewva/skills/project/overlays/foo/SKILL.md");
     const externalOverlayPath = join(external, "project/overlays/foo/SKILL.md");
+    const projectSharedPath = join(workspace, ".brewva/skills/project/shared/project-rules.md");
+    const externalSharedPath = join(external, "project/shared/external-rules.md");
 
     writeSkill(join(workspace, ".brewva/skills/core/foo/SKILL.md"), {
       name: "foo",
     });
+
+    mkdirSync(dirname(projectSharedPath), { recursive: true });
+    writeFileSync(projectSharedPath, "# Project Rules\n\n- project shared context\n", "utf8");
 
     mkdirSync(dirname(projectOverlayPath), { recursive: true });
     writeFileSync(
@@ -481,6 +486,9 @@ describe("skill discovery and loading", () => {
       ].join("\n"),
       "utf8",
     );
+
+    mkdirSync(dirname(externalSharedPath), { recursive: true });
+    writeFileSync(externalSharedPath, "# External Rules\n\n- external shared context\n", "utf8");
 
     mkdirSync(dirname(externalOverlayPath), { recursive: true });
     writeFileSync(
@@ -512,6 +520,8 @@ describe("skill discovery and loading", () => {
       resolve(projectOverlayPath),
       resolve(externalOverlayPath),
     ]);
+    expect(skill?.markdown.match(/## Project Context: project-rules/g)).toHaveLength(1);
+    expect(skill?.markdown.match(/## Project Context: external-rules/g)).toHaveLength(1);
     expect(skill?.contract.resources?.defaultLease?.maxToolCalls).toBe(5);
     expect(skill?.contract.executionHints?.preferredTools).toContain("tape_search");
     expect(skill?.contract.effects?.deniedEffects).toContain("local_exec");

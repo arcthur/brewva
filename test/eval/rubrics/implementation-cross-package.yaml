@@ -1,0 +1,17 @@
+criteria:
+  - name: coordinated_mode_chosen
+    weight: 2
+    description: Change set mentions coordinated rollout or ordered sequencing
+    pass_condition: "output_contains:change_set:coordinated"
+  - name: files_within_targets
+    weight: 3
+    description: All changed files are within the declared implementation targets
+    pass_condition: "output_contains:files_changed:brewva-runtime"
+  - name: verification_evidence_present
+    weight: 3
+    description: Verification evidence includes concrete test/check results
+    pass_condition: "output_contains:verification_evidence:pass"
+  - name: both_packages_touched
+    weight: 2
+    description: Files changed span both runtime and tools packages
+    pass_condition: "output_contains:files_changed:brewva-tools"

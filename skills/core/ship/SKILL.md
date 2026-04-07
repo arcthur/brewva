@@ -1,7 +1,7 @@
 ---
 name: ship
-description: Convert reviewed and tested work into a release-ready handoff with explicit
-  blockers, final checks, and release-path clarity.
+description: Use when implemented and reviewed work needs release readiness checks, merge-path
+  clarity, or operator-facing handoff.
 stability: stable
 selection:
   when_to_use: Use when implemented and reviewed work needs release readiness checks, merge-path clarity, or operator-facing handoff.
@@ -46,6 +46,8 @@ execution_hints:
 references:
   - skills/meta/skill-authoring/references/authored-behavior.md
   - references/release-readiness-checklist.md
+scripts:
+  - scripts/check_release_gates.py
 consumes:
   - change_set
   - files_changed
@@ -67,138 +69,143 @@ requires: []
 
 # Ship Skill
 
-## Intent
+## The Iron Law
 
-Make release readiness explicit and operational instead of assuming review and
-tests automatically imply a clean ship path.
+```
+NO SHIP DECISION WITHOUT CURRENT EVIDENCE FOR EVERY GATE
+```
 
-This skill is a read-only release engineer workflow. It audits the requested
-release path and prepares operator handoff; it does not patch product code or
-silently perform release mutations.
+Make release readiness explicit and operational. This skill is a read-only
+release engineer: it audits the release path and prepares operator handoff.
+It does not patch product code or perform release mutations.
 
-## Trigger
+**Violating the letter of this rule is violating the spirit of this rule.**
 
-Use this skill when:
+## When to Use
 
-- the work has been implemented and reviewed and now needs a release decision
-- the team wants final release checks, PR handoff, or merge-path clarity
-- operator-facing blockers must be surfaced before landing
+- Work has been implemented and reviewed and now needs a release decision
+- Final release checks, PR handoff, or merge-path clarity needed
+- Operator-facing blockers must be surfaced before landing
+
+**Do NOT use when:**
+
+- Implementation or review is still in progress
+- The real work is QA, not release readiness
+- No concrete release target exists
 
 ## Workflow
 
-### Step 1: Rebuild release context
+### Phase 1: Rebuild release context
 
-Collect the current branch state, release target, workflow posture, review
-state, QA result, and outstanding blockers.
+Collect current branch state, release target, review state, QA result, CI
+status, and outstanding blockers from upstream artifacts.
 
-### Step 2: Choose the release path you are evaluating
+**If upstream artifacts are missing**: Record each gap. Missing evidence is a
+blocking gate, not an assumption to fill in.
 
-Make the target explicit:
+### Phase 2: Choose release path
 
-- PR handoff
-- merge readiness
-- deploy handoff
+Make the target explicit: PR handoff, merge readiness, or deploy handoff.
+These are not interchangeable.
 
-If the request does not say which path matters, infer the narrowest credible
-one and state that assumption.
+**If the request doesn't specify**: Infer the narrowest credible path and state
+that assumption. Do not default to the most optimistic interpretation.
 
-### Step 3: Audit the actual release path
+### Phase 3: Evaluate release gates
 
-Check whether the work is ready for the intended outcome: PR creation, merge,
-deploy preparation, or a clear operator handoff.
+Run `scripts/check_release_gates.py` with current evidence. The script returns
+pass/fail for each gate deterministically.
 
-### Step 4: Decide ready, follow-up, or blocked
+**If any gate fails**: The decision cannot be `ready`. Period. Report the
+blocking gates and what must change.
 
-Use the strongest available evidence. Do not mark work ready when review, QA,
-verification, CI, or release mechanics still leave unresolved risk.
+### Phase 4: Decide ship posture
 
-### Step 5: Emit shipping artifacts
+- `ready`: evidence supports the intended release action, no material blockers
+- `needs_follow_up`: close but missing CI, metadata, or bounded follow-up
+- `blocked`: correctness, QA, approval, or safety is unresolved
 
-Produce:
+**If new code edits are required**: Route back to implementation or QA. Do not
+perform release-time patch work.
 
-- `ship_report`: current release posture, evidence, and operator-facing next step
-- `release_checklist`: final checks, approvals, and unresolved blockers
-- `ship_decision`: `ready`, `needs_follow_up`, or `blocked`
+### Phase 5: Emit shipping artifacts
 
-## Interaction Protocol
+Produce `ship_report`, `release_checklist`, `ship_decision`.
 
-- Ask only when the target release path, repository target, or required approval
-  boundary is unclear enough to risk operating on the wrong branch or outcome.
-- Stay read-only with respect to product code and release side effects. If the
-  next correct action is mutating GitHub, CI, or deployment state, describe the
-  handoff instead of pretending it already happened.
-- Re-ground on current review, QA, and verification evidence before speaking in
-  release language.
-- Recommend the release path you actually believe is safe. Do not hide behind a
-  generic checklist if the release is clearly blocked.
+## Scripts
 
-## Release Questions
+- `scripts/check_release_gates.py` — Input: review_state, qa_state, ci_state,
+  branch_state. Output: all_clear flag, per-gate results, blocking gate list.
+  Run during Phase 3 before deciding ship posture.
 
-Use these questions before declaring anything shippable:
+## Decision Protocol
 
 - Which exact release action is being judged: PR, merge, or deploy handoff?
-- What evidence is current, and what evidence is stale relative to the latest change?
-- Which approval, CI, or repository-state gate still stands between now and the intended action?
+- What evidence is current versus stale relative to the latest change?
+- Which approval, CI, or repository-state gate still stands between now and the action?
 - If this moved forward now, what operator burden or rollback risk would remain?
+- Am I evaluating current evidence, or am I remembering evidence from an earlier state?
 
-## Ship Confirmation Gate
+## Red Flags — STOP
 
-Before setting `ship_decision` to `ready`, clear this gate:
+If you catch yourself thinking any of these, STOP and return to Phase 1:
 
-- [ ] The exact release path being judged is explicit: PR, merge, or deploy handoff.
-- [ ] Review, QA, and verification evidence is current relative to the latest
-      risky change, not inherited from an earlier diff state.
-- [ ] No unresolved CI, approval, or repository-state blocker remains.
-- [ ] Operator burden and rollback posture are named, not assumed away.
+- "Review passed, so it's ready to ship" — review is one gate, not all gates
+- "QA was inconclusive but it's probably fine" — inconclusive blocks `ready`
+- "CI will pass eventually" — evaluate current state, not future hope
+- "The branch is a little behind but that's okay" — diverged is not clean
+- "I'll just fix this one thing before shipping" — ship does not patch code
 
-If any item is unclear, stop at `needs_follow_up` or `blocked` instead of
-declaring readiness.
+## Common Rationalizations
 
-## Release Path Protocol
+| Excuse                                           | Reality                                                                                                     |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| "Review approved, so it's shippable"             | Review is one of four gates. Check all of them.                                                             |
+| "QA was mostly good"                             | `inconclusive` or `fail` blocks `ready`. Partial evidence is not full evidence.                             |
+| "CI is probably green by now"                    | Check. If unknown, the gate fails.                                                                          |
+| "Just a one-liner, faster than switching skills" | Ship is read-only. A one-liner during ship bypasses review and verification gates. Route to implementation. |
+| "We can fix it after merge"                      | That is a rollback story. Name it as a risk, not as a plan.                                                 |
 
-- Distinguish clearly between "ready for PR", "ready to merge", and
-  "ready for deploy handoff". They are not interchangeable.
-- Check repository hygiene before giving a positive verdict: branch intent, diff
-  state, CI status, approval state, and any environment-specific blockers.
-- If `ship` finds product correctness issues, route back to `implementation`,
-  `review`, or `qa` instead of stretching release language to cover unfinished work.
-
-## Release Decision Protocol
-
-- `ready`: the evidence supports the intended release action and no material
-  blockers remain.
-- `needs_follow_up`: the work is close, but missing CI results, release metadata,
-  or another bounded follow-up still blocks handoff.
-- `blocked`: merge or release should not proceed because correctness, QA,
-  approval, or operational safety is still unresolved.
-- If new code edits are required, hand control back to implementation or QA
-  instead of quietly performing release-time patch work.
-
-## Handoff Expectations
-
-- `ship_report` should tell the operator what is ready now, what evidence backs
-  that claim, and what exact next release action is appropriate.
-- `release_checklist` should enumerate gating checks, remaining approvals,
-  repository state, and any deployment-sensitive concerns.
-- `ship_decision` should summarize real release posture, not optimistic intent.
-- The handoff must say which release path was evaluated and which release action
-  still remains for an operator, CI system, or GitHub workflow.
-
-## Stop Conditions
-
-- the requested release path is unclear
-- repository or credential context cannot support the intended release action
-- code or QA work is still the real blocker
-
-## Anti-Patterns
-
-- treating review pass as automatic release permission
-- patching product code inside a release workflow
-- hiding CI, approval, or deployment blockers behind "looks fine"
-- conflating "ready for PR" with "ready for production" without saying which
-
-## Example
+## Concrete Example
 
 Input: "Check whether this branch is ready for a PR and tell me what still blocks release."
 
-Output: `ship_report`, `release_checklist`, `ship_decision`.
+```json
+{
+  "ship_decision": "needs_follow_up",
+  "ship_report": {
+    "release_path": "PR handoff",
+    "evidence_summary": {
+      "review": "ready — approved with no blocking findings",
+      "qa": "pass — onboarding flow exercised, adversarial probe passed",
+      "ci": "unknown — pipeline not yet triggered for latest push",
+      "branch": "clean — no uncommitted changes, up to date with target"
+    },
+    "blocking_gates": ["ci"],
+    "operator_next_step": "Trigger CI pipeline. Once green, PR is ready to open."
+  },
+  "release_checklist": [
+    { "gate": "review", "status": "clear", "detail": "Approved, no blocking findings" },
+    { "gate": "qa", "status": "clear", "detail": "Pass with adversarial coverage" },
+    { "gate": "ci", "status": "blocking", "detail": "Pipeline not yet run on latest commit" },
+    { "gate": "branch", "status": "clear", "detail": "Clean, up to date" }
+  ]
+}
+```
+
+## Handoff Expectations
+
+- `ship_report` tells the operator what is ready, what evidence backs the
+  claim, and the exact next release action.
+- `release_checklist` enumerates gating checks, remaining approvals,
+  repository state, and deployment-sensitive concerns.
+- `ship_decision` reflects real release posture, not optimistic intent.
+- The handoff names which release path was evaluated and which action still
+  remains for an operator, CI system, or GitHub workflow.
+
+## Stop Conditions
+
+- The requested release path is unclear and cannot be inferred
+- Repository or credential context cannot support the intended release action
+- Code or QA work is still the real blocker, not release mechanics
+- A gate cannot be evaluated because its upstream evidence is completely absent

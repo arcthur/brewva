@@ -1,0 +1,17 @@
+criteria:
+  - name: ambiguity_preserved
+    weight: 3
+    description: Severity ambiguity is preserved rather than guessed
+    pass_condition: "output_contains:extraction_report:ambiguous"
+  - name: null_for_unknown
+    weight: 3
+    description: Fields without source evidence are null, not invented
+    pass_condition: "output_contains:structured_payload:null"
+  - name: endpoint_extracted
+    weight: 2
+    description: The affected endpoint is correctly extracted
+    pass_condition: "output_contains:structured_payload:checkout"
+  - name: report_explains_repairs
+    weight: 2
+    description: Extraction report explains what was repaired or left unresolved
+    pass_condition: "output_contains:extraction_report:null"

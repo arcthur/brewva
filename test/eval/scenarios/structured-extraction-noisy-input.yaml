@@ -1,0 +1,22 @@
+id: structured-extraction-noisy-input
+skill: structured-extraction
+description: Extract a structured issue triage record from a noisy incident thread with missing fields and ambiguous severity.
+context:
+  task_description: |
+    Extract a structured triage record from this incident thread:
+    "Deploy broke prod at 3pm. Users seeing 500s on /api/checkout.
+    Rolled back at 3:15. Not sure if it was the config change or
+    the new auth middleware. Sarah said she saw memory spikes.
+    P1 or P2, needs triage."
+  available_artifacts: {}
+rubric_path: ../rubrics/structured-extraction-noisy-input.yaml
+fixture_path: ../fixtures/structured-extraction-noisy-input.yaml
+output_contracts:
+  structured_payload:
+    kind: json
+    min_keys: 1
+    min_items: 1
+  extraction_report:
+    kind: text
+    min_words: 3
+    min_length: 18

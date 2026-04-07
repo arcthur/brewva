@@ -72,140 +72,134 @@ requires: []
 
 # Strategy Review Skill
 
-## Intent
+## The Iron Law
 
-Decide whether the current idea should expand, hold, or narrow before `design`
-turns it into an execution plan.
+```
+NO SCOPE DECISION WITHOUT EXPLICIT TIMING RATIONALE
+```
 
-## Trigger
+Violating the letter of this rule is violating the spirit of this rule.
 
-Use this skill when:
+## When to Use / When NOT to Use
+
+Use when:
 
 - the user has a plausible wedge but scope quality is still uncertain
 - a plan needs strategic pressure before implementation planning
 - product value, leverage, or sequencing matters more than local technical detail
 
+Do NOT use when:
+
+- the request is a purely local implementation or debugging task
+- the problem itself is still fuzzy (use `discovery` first)
+- repository understanding is missing and blocks scope judgment (use `repository-analysis`)
+
 ## Workflow
 
-### Step 1: Reconstruct the bet and the clock
+### Phase 1: Reconstruct the bet and the clock
 
-Restate the wedge, intended user value, and why this work matters now. If the
-timing argument is weak, say so explicitly instead of treating every plausible
-idea as urgent.
+Restate the wedge, intended user value, and why this work matters now.
 
-### Step 2: Pressure-test timing, leverage, and scope
+**If the timing argument is weak or absent**: Record it as a strategic risk. Do not default to "now is fine."
+**If timing is clear**: Proceed to Phase 2.
 
-Interrogate the proposal before recommending a posture:
+### Phase 2: Pressure-test leverage and scope
 
-- what becomes true for the user if this lands in the next cycle
-- what is still false if this slips or is narrowed
-- which adjacent scope is genuinely leverage-bearing versus roadmap drag
-- which assumptions belong to later cycles rather than this wedge
+Interrogate: what becomes true for the user if this lands next cycle? What stays false if it slips or narrows? Which adjacent scope is leverage versus drag?
 
-### Step 3: Choose the scope posture
+**If no user-visible value can be articulated**: Stop. The wedge is not ready for strategy review. Return to `discovery`.
+**If leverage is clear**: Proceed to Phase 3.
 
-Decide whether the current scope should:
+### Phase 3: Choose the scope posture
 
-- expand because leverage is obviously under-claimed
-- hold because the wedge is already right-sized
-- narrow because the proposed surface is too broad or premature
+Decide whether scope should expand, hold, or narrow. Record an accepted /
+deferred / non-goals scope ledger so downstream planning inherits the exact
+decision boundary rather than a vague recommendation.
 
-Make the decision explicit with an accepted / deferred / rejected scope ledger.
-Do not leave downstream planning to infer which parts are merely postponed.
+**If the scope posture cannot be justified without speculation**: Stop. Record the gap and the missing evidence.
+**If posture is justified**: Proceed to Phase 4.
 
-### Step 4: Emit strategy artifacts
+### Phase 4: Emit strategy artifacts
 
-Produce:
+Produce `strategy_review`, `scope_decision`, `planning_posture`, and `strategic_risks`.
 
-- `strategy_review`: the strategic judgment and why it is the best path now
-- `scope_decision`: the recommended wedge, explicit non-goals, and sequencing
-- `planning_posture`: the expected planning depth and precedent-retrieval
-  posture for downstream work
-- `strategic_risks`: concrete scope, adoption, and sequencing risks
+**If the scope decision lacks "why not larger" and "why not smaller" reasoning**: Return to Phase 3.
+**If artifacts are complete**: Hand off to downstream skills.
 
-## Interaction Protocol
-
-- Ask only when the missing answer changes the wedge, timing, or strategic
-  sequencing materially.
-- Force "why now" into the open. If the timing rationale is fuzzy, treat that
-  as a real strategic weakness, not as background noise.
-- Re-ground on actual user pain and value, not on feature theater or roadmap
-  inflation.
-- Recommend one primary posture and one bounded alternative when ambiguity
-  remains. Do not leave scope unresolved by presenting a neutral menu.
-
-## Planning Posture Protocol
-
-- `trivial`: only for demonstrably local follow-through with low blast radius
-  and no meaningful precedent or rollout risk
-- `moderate`: bounded but non-trivial work that still benefits from precedent
-  lookup and explicit planning
-- `complex`: multi-step or cross-boundary work where design depth and precedent
-  retrieval are both expected
-- `high_risk`: public surface, persisted format, security-sensitive,
-  concurrency-sensitive, or operator-sensitive work where planning and review
-  must widen rather than compress
-
-## Strategy Questions
-
-Use these questions to pressure-test the wedge:
+## Decision Protocol
 
 - Why now, specifically, rather than one cycle later?
 - What becomes true for the user if this lands, and what stays false?
 - Which adjacent scope adds leverage versus just adding surface area?
 - If we cut this in half, what is the smallest still-credible bet?
+- Is the proposed posture conservative enough, or does it assume away risk?
 
-## Scope Posture Protocol
+## Red Flags — STOP
 
-- Expand only when the broader scope clearly compounds user value without
-  destroying delivery focus.
-- Hold scope when the wedge is already sharp, timely, and implementation-ready.
-- Narrow scope when the proposal is overbuilt, speculative, or hides the real
-  learning loop behind too much surface area.
-- Record accepted scope, deferred scope, and explicit non-goals separately. A
-  vague "later" bucket is not a real scope decision.
-- Name explicit non-goals so `design` inherits a real boundary instead of a
-  vague ambition statement.
-- When recommending expansion, say what must still remain out of scope so the
-  next plan does not silently sprawl.
+If you catch yourself thinking any of these, STOP and return to Phase 1:
 
-## Scope Decision Gate
+- "This is obviously important, timing doesn't need justification"
+- "Bigger scope means more value"
+- "I'll leave scope resolution to the design phase"
+- "This sounds ambitious, so it must be high-leverage"
+- "Every item in the proposal is equally important"
 
-- [ ] Accepted scope is explicit.
-- [ ] Deferred scope is explicit.
-- [ ] Non-goals are explicit.
-- [ ] Timing rationale is strong enough to justify the proposed posture.
+## Common Rationalizations
 
-## Handoff Expectations
+| Excuse                                            | Reality                                                                               |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| "The timing is obvious — we should just build it" | If you cannot articulate what changes for the user next cycle, timing is not obvious. |
+| "Expanding scope captures more leverage"          | Expansion without evidence is roadmap drag, not leverage.                             |
+| "Narrowing feels like giving up"                  | Narrowing to the credible bet is strategic discipline, not retreat.                   |
+| "We can sort scope out during design"             | Design inherits your scope decision. Ambiguity here multiplies downstream.            |
+| "The user wants all of it"                        | Wanting all of it and building all of it now are different decisions.                 |
 
-- `strategy_review` should tell `design` what kind of bet this is, why this
-  scope posture was chosen, and what leverage the plan must preserve.
-- `scope_decision` should make the in-scope wedge, deferred surface, and
-  sequencing assumptions explicit enough that downstream planning does not need
-  to re-litigate them.
-- `planning_posture` should be conservative and explicit because
-  `learning-research` and `design` use it to decide how much precedent
-  retrieval and planning rigor are required.
-- `strategic_risks` should rank the ways this bet can fail, including timing,
-  complexity, adoption, and hidden scope drag.
-- The handoff should include "why not larger" and "why not smaller" reasoning
-  so `design` inherits the decision boundaries, not just the conclusion.
-
-## Stop Conditions
-
-- the request is already a purely local implementation or debugging task
-- there is not enough context to justify any strategic posture
-- repository understanding is still missing and blocks scope judgment
-
-## Anti-Patterns
-
-- rephrasing the request without actually choosing a scope posture
-- expanding scope because a bigger idea sounds more exciting
-- treating "be ambitious" as a substitute for leverage analysis
-- handing `design` a brainstorm instead of a bounded strategic decision
-
-## Example
+## Concrete Example
 
 Input: "We should add an AI inbox assistant to the product."
 
-Output: `strategy_review`, `scope_decision`, `planning_posture`, `strategic_risks`.
+Output:
+
+```json
+{
+  "strategy_review": "The inbox assistant addresses real triage pain but the timing argument rests on assumed volume growth, not measured demand. The credible next-cycle bet is classification, not full AI response generation. Leverage is in reducing triage latency, not in replacing human replies.",
+  "scope_decision": {
+    "accepted": "Read-only inbox classification: tag incoming messages by urgency and topic. Surface top-3 priority items in a digest view.",
+    "deferred": "AI-drafted replies, multi-account inbox aggregation, and smart scheduling.",
+    "non_goals": "Full email client replacement. Outbound send-on-behalf. Calendar integration."
+  },
+  "planning_posture": "moderate",
+  "strategic_risks": [
+    {
+      "risk": "Classification accuracy below user trust threshold in first cycle",
+      "severity": "high",
+      "mitigation": "Ship with confidence scores visible; let users override and train"
+    },
+    {
+      "risk": "Scope creep into reply generation during implementation",
+      "severity": "medium",
+      "mitigation": "Non-goal boundary in scope_decision; review gate enforces it"
+    },
+    {
+      "risk": "Timing depends on volume growth that has not been measured",
+      "severity": "medium",
+      "mitigation": "Validate triage latency pain with current volume before expanding"
+    }
+  ]
+}
+```
+
+## Handoff Expectations
+
+- `strategy_review` tells `design` what kind of bet this is, why this scope posture was chosen, and what leverage the plan must preserve.
+- `scope_decision` makes accepted wedge, deferred surface, and non-goals explicit enough that downstream planning does not re-litigate them.
+- `planning_posture` is conservative and explicit; `learning-research` and `design` use it to decide precedent retrieval and planning rigor.
+- `strategic_risks` rank how the bet can fail, including timing, complexity, adoption, and hidden scope drag.
+- The handoff includes "why not larger" and "why not smaller" reasoning so `design` inherits decision boundaries, not just conclusions.
+
+## Stop Conditions
+
+- The request is already a purely local implementation or debugging task.
+- There is not enough context to justify any strategic posture.
+- Repository understanding is still missing and blocks scope judgment.
+- The wedge has no articulable user-visible value.

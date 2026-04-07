@@ -71,103 +71,138 @@ requires: []
 
 # Agent Browser Skill
 
-## Intent
+## The Iron Law
 
-Capture browser-grounded evidence instead of guessing from static assumptions.
+```
+NO BROWSER ACTION WITHOUT A SPECIFIC EVIDENCE TARGET
+```
 
-## Trigger
+## When to Use
 
-Use this skill when:
-
-- the page or workflow must be inspected live
+- The page or workflow must be inspected live, not inferred from static code
 - UI behavior needs evidence from an actual render
-- navigation, forms, or auth state matter
+- Navigation, forms, or auth state matter for the current task
+- Static code and docs are insufficient for the question at hand
+
+## When NOT to Use
+
+- The question can be answered from code, docs, or test output alone
+- There is no concrete page or workflow to inspect
+- The browser environment is unavailable or sandboxed beyond useful observation
+- The request is about code structure, not rendered behavior
 
 ## Workflow
 
-### Step 1: Define the navigation target
+### Phase 1: Define the navigation target
 
-State the URL, the objective, and the evidence needed.
+State the URL, the objective, and the specific evidence needed.
 
-### Navigation Gate
+**If the evidence target is vague or unbounded**: Stop. Tighten the question
+before opening the browser. "Look at the page" is not a target.
+**If clear**: Proceed to Phase 2.
 
-- [ ] URL or entry surface is explicit.
-- [ ] Evidence target is explicit.
-- [ ] Auth posture is known or named as an uncertainty.
-- [ ] Static code or docs are insufficient for the question.
+### Phase 2: Validate navigation readiness
 
-### Step 2: Run the browser workflow
+Confirm before opening anything:
 
-Use managed `browser_*` tools only. Do not invoke `agent-browser` directly
-through shell workflows for this skill.
+- URL or entry surface is explicit
+- Auth posture is known or named as an uncertainty
+- Evidence target is a specific question, not "see what's there"
 
-Before every browser action, make the loop explicit:
+**If auth or environment blocks access**: Stop. Report the blocker. Do not
+improvise credentials or retry without new information.
+**If ready**: Proceed to Phase 3.
 
-- `evaluation_previous_goal`: did the last observation or action move the task forward?
-- `memory`: what page identity, refs, blockers, and artifacts must survive the next step?
+### Phase 3: Run the browser workflow
+
+Use managed `browser_*` tools only. Before every browser action, make the
+loop explicit:
+
+- `evaluation_previous_goal`: did the last action move the task forward?
+- `memory`: page identity, refs, blockers, and artifacts that must survive
 - `next_goal`: what exact browser state should the next step prove?
-- `action`: run one browser action that is sufficient to test that next goal
+- `action`: one browser action sufficient to test that goal
 
-Keep the loop narrow. Do not chain multiple blind browser actions when one new
-snapshot or state read would reduce uncertainty.
+One observation per step. If uncertainty increases, refresh the snapshot
+instead of pushing forward blindly.
 
-### Step 3: Emit browser evidence
+**If the page is unreachable or errors block observation**: Stop. Record what
+was observed and what blocked progress. Do not retry blindly.
+**If evidence is captured**: Proceed to Phase 4.
+
+### Phase 4: Emit browser evidence
 
 Produce:
 
-- `browser_observations`: what was seen, what changed, and what that implies
-- `browser_artifacts`: snapshots, screenshots, PDFs, saved state files, or captured evidence references
+- `browser_observations`: what was seen, what changed, what that implies
+- `browser_artifacts`: snapshots, screenshots, PDFs, saved state, or captured
+  evidence references
 
-## Interaction Protocol
+**If observations do not answer the original evidence target**: Return to
+Phase 3 with a narrower goal. Do not emit partial evidence as complete.
 
-- Re-ground on the URL, user goal, and exact evidence target before opening or
-  mutating the browser state.
-- Ask only when auth, target environment, or the intended workflow cannot be
-  inferred safely from the request.
-- Prefer one observation or action per loop step. If uncertainty increases,
-  refresh the snapshot instead of pushing forward blindly.
-
-## Browser Questions
-
-Use these questions to keep the session narrow:
+## Decision Protocol
 
 - What exact browser state should the next action prove or falsify?
 - What single observation would reduce the most uncertainty right now?
+- Has the evidence target drifted from where the session started?
 - What evidence handle should be preserved so later work can resume from here?
+- Is there a static-code answer that would make this browser session unnecessary?
 
-## Evidence Protocol
+## Red Flags — STOP
 
-- Treat screenshots and snapshots as raw evidence, not conclusions by
-  themselves.
-- Explain what changed, what was expected, and why the observed state matters.
-- Use browser actions to answer a specific question. Do not browse just to see
-  what happens.
-- Save artifacts when they will help downstream implementation, review, or bug
-  reports continue from the same observed state.
+If you catch yourself thinking any of these, STOP and return to Phase 1:
+
+- "Let me just browse around and see what's there"
+- "I'll take a few more screenshots to be thorough"
+- "The page looks fine, let me keep exploring"
+- "I don't have a specific question but the browser is open"
+- "One more click to see what happens"
+
+## Common Rationalizations
+
+| Excuse                                            | Reality                                                                                 |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| "Quick look won't hurt"                           | Every action without an evidence target is noise. Define the target first.              |
+| "I'll figure out what I need once I see the page" | That is browsing, not investigation. Name the question before opening the browser.      |
+| "More screenshots = more evidence"                | Unanchored screenshots are clutter. Each capture must answer a specific question.       |
+| "The page changed, let me keep exploring"         | Changes are evidence only if they relate to the original target. Re-ground first.       |
+| "I should check the whole flow while I'm here"    | Scope creep. Finish the current evidence target, then decide if a new one is warranted. |
+
+## Concrete Example
+
+Input: "Open the docs site, confirm the broken nav state, and capture the failing selector."
+
+Output:
+
+```json
+{
+  "browser_observations": "Navigation sidebar on /docs/reference/runtime renders an empty <ul> with class 'nav-tree'. Console shows 'TypeError: Cannot read properties of undefined (reading map)' at nav-tree.tsx:42. The sidebar data fetch returns 200 but payload.children is null when category is 'reference'. Other categories render correctly. The broken state is deterministic on page load, not a race condition.",
+  "browser_artifacts": {
+    "screenshots": ["docs-nav-broken-state.png"],
+    "snapshots": ["docs-nav-aria-snapshot.yaml"],
+    "console_errors": [
+      "TypeError: Cannot read properties of undefined (reading 'map') at NavTree (nav-tree.tsx:42)"
+    ],
+    "failing_selector": "ul.nav-tree > li (zero children when category=reference)",
+    "evidence_url": "http://localhost:3000/docs/reference/runtime"
+  }
+}
+```
 
 ## Handoff Expectations
 
 - `browser_observations` should tell downstream skills what was seen, what was
-  attempted, what changed, and what the evidence implies.
-- `browser_artifacts` should include the concrete evidence handles that a later
-  step can reopen, compare, or cite without repeating the same browser session.
+  attempted, what changed, and what the evidence implies for the original question.
+- `browser_artifacts` should include concrete evidence handles that a later step
+  can reopen, compare, or cite without repeating the same browser session.
 
 ## Stop Conditions
 
-- the environment cannot access the target page
-- auth or sandbox constraints block reliable observation
-- the request can be answered confidently from code and docs alone
+- The environment cannot access the target page
+- Auth or sandbox constraints block reliable observation
+- The request can be answered confidently from code and docs alone
+- The evidence target has been answered and no follow-up question remains
+- Two consecutive browser actions produced no new information
 
-## Anti-Patterns
-
-- browsing without an evidence target
-- taking multiple browser actions without a fresh snapshot after uncertainty increases
-- treating screenshots as proof without explanation
-- replacing repository analysis with page poking
-- continuing UI exploration when static code or docs already answer the question
-
-## Example
-
-Input: "Open the docs site, confirm the broken nav state, and capture the failing selector."
-
-Output: `browser_observations`, `browser_artifacts`.
+Violating the letter of these rules is violating the spirit of these rules.

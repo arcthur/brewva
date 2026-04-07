@@ -1,4 +1,5 @@
 ---
+name: debugging
 intent:
   outputs:
     - root_cause
@@ -44,6 +45,14 @@ Make Brewva debugging distinguish clearly between source bugs and runtime-artifa
 
 Use this overlay when debugging Brewva itself.
 
+## Overlay Scripts
+
+Run the base hypothesis tracker during debugging:
+
+- `scripts/hypothesis_tracker.py` — tracks hypotheses, evidence, and dispositions throughout investigation. Run to record each hypothesis.
+
+Additionally split source vs runtime evidence for Brewva-specific failures.
+
 ## Workflow
 
 ### Step 1: Split source vs runtime evidence
@@ -63,6 +72,16 @@ Prefer reproducible commands, event traces, and artifact correlations over specu
 
 - the issue cannot be separated into source behavior vs artifact behavior
 - there is no reproducible signal yet
+
+## Common Rationalizations
+
+| Excuse                                               | Reality                                                                                                                 |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| "It's a runtime bug, not a source bug"               | Split the evidence first. Most runtime symptoms trace back to source-level causes.                                      |
+| "The artifact traces are too noisy to use"           | Noisy artifacts still narrow the search space faster than guessing from source alone.                                   |
+| "I can reproduce it without Brewva-specific context" | Brewva-specific boundaries (replay, projection, governance) often own the failure. Skipping them misses the real cause. |
+| "I'll just check the tests, not the WAL"             | WAL state divergence is the #1 hidden root cause in replay bugs. Tests verify intent; WAL reveals actual execution.     |
+| "The error message tells me the cause"               | Brewva error surfaces are designed for operators, not diagnosis. Trace the artifact graph to confirm.                   |
 
 ## Anti-Patterns
 

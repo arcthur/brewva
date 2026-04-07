@@ -1,4 +1,5 @@
 ---
+name: review
 effects:
   allowed_effects:
     - workspace_read
@@ -44,6 +45,15 @@ Review Brewva changes against project invariants, not just generic code quality.
 
 Use this overlay when reviewing changes in the Brewva monorepo.
 
+## Overlay Scripts
+
+Run base review scripts before Brewva-specific judgment:
+
+- `scripts/activate_lanes.py` — activates review lanes from change categories. Run before step 1.
+- `scripts/synthesize_lane_dispositions.py` — synthesizes lane outcomes into a merge decision. Run after all lanes report.
+
+Additionally check Brewva invariants: package boundaries, CLI branding, dist safety.
+
 ## Workflow
 
 ### Step 1: Check invariant-sensitive surfaces
@@ -63,6 +73,14 @@ Surface violations of the migration matrix, skill DoD, or artifact contract clar
 
 - there is no concrete diff or artifact to review
 - the review target is missing the evidence needed for Brewva-specific judgment
+
+## Common Rationalizations
+
+| Excuse                                  | Reality                                                                                                               |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| "The code looks clean, approve it"      | Style is not safety. Brewva review must check invariants, boundaries, and dist gates -- not just readability.         |
+| "Docs changes don't need deep review"   | Doc and export surface changes in catalog refactors can silently break downstream consumers.                          |
+| "The tests pass, so the change is safe" | Passing tests prove what was tested. Brewva invariants (branding, boundaries, governance) need explicit verification. |
 
 ## Anti-Patterns
 

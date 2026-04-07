@@ -1,0 +1,21 @@
+criteria:
+  - name: root_cause_identified
+    weight: 3
+    description: Root cause names a specific boundary and mechanism, not just a symptom
+    pass_condition: "output_contains:root_cause:epoch"
+  - name: fix_strategy_bounded
+    weight: 2
+    description: Fix strategy targets the root cause boundary, not a workaround
+    pass_condition: "output_contains:fix_strategy:finalize"
+  - name: hypotheses_tracked
+    weight: 2
+    description: Investigation record contains at least one falsified hypothesis
+    pass_condition: "output_field_exists:investigation_record.hypotheses_tested"
+  - name: planning_posture_present
+    weight: 1
+    description: Planning posture is set to a valid enum value
+    pass_condition: "output_present:planning_posture"
+  - name: failure_evidence_specific
+    weight: 2
+    description: Failure evidence contains concrete data (epoch numbers, trace references)
+    pass_condition: "output_contains:failure_evidence:epoch"

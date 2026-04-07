@@ -1,0 +1,37 @@
+id: review-boundary-drift
+skill: review
+description: Review a diff that moves internal runtime types into the public export surface, checking boundary drift and merge safety.
+context:
+  task_description: |
+    Review this diff that refactors skill routing types. Some internal types
+    were moved to the public package entrypoint.
+  workspace_state: |
+    packages/brewva-runtime/src/contracts/index.ts modified.
+    packages/brewva-runtime/src/skills/registry.ts modified.
+  available_artifacts:
+    change_set: "Moved SkillRouteMatch and SkillRouteContext from internal to public exports."
+    files_changed:
+      [
+        "packages/brewva-runtime/src/contracts/index.ts",
+        "packages/brewva-runtime/src/skills/registry.ts",
+      ]
+    impact_map:
+      summary: "Public export surface widened with internal routing types"
+      affected_paths: ["packages/brewva-runtime/src/contracts/index.ts"]
+      boundaries: ["runtime public API"]
+      high_risk_touchpoints: ["public export map"]
+      change_categories: ["public_api", "package_boundary"]
+      changed_file_classes: ["public_api", "package_boundary"]
+rubric_path: ../rubrics/review-boundary-drift.yaml
+fixture_path: ../fixtures/review-boundary-drift.yaml
+output_contracts:
+  review_report:
+    kind: text
+    min_words: 3
+    min_length: 18
+  review_findings:
+    kind: json
+    min_items: 1
+  merge_decision:
+    kind: enum
+    values: [ready, needs_changes, blocked]

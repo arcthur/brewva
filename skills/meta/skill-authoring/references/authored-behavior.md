@@ -6,6 +6,17 @@ The contract tells Brewva what a skill is allowed to do and what artifacts it
 must emit. The skill body tells the model how a capable specialist should
 behave while doing the work. Strong skills need both.
 
+## v2 Anatomy Reference
+
+For the canonical skill structure, content-type classification (deterministic /
+judgment / knowledge), and writing patterns (Iron Laws, Red Flags,
+rationalization tables, concrete examples), see
+`references/skill-anatomy-v2.md`.
+
+The patterns below remain valid and complement the v2 anatomy. Skills should
+use both: v2 anatomy for structure, authored-behavior patterns for specialist
+depth.
+
 ## What To Encode In The Skill Body
 
 Prefer explicit sections for the following behavior:
@@ -167,6 +178,18 @@ Example: the base `review` skill has a Merge Readiness Gate. The Brewva review
 overlay adds project-specific review questions about package boundaries and
 branding consistency, but does not restate the merge gate — the base gate still
 applies.
+
+## Cross-Skill Anti-Rationalizations
+
+These excuses apply across all skills. Every skill activation should resist them.
+
+| Excuse                                       | Reality                                                                                                                      |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| "This skill doesn't apply to my task"        | Check the selection criteria. If ambiguous, run the skill anyway — a false activation is cheap, a missed skill is expensive. |
+| "I'll skip the skill and just do the work"   | Skills encode hard-won failure modes. Skipping is betting you won't hit them.                                                |
+| "I know the answer, the process is overhead" | Process produces evidence. Knowing without evidence is guessing with confidence.                                             |
+| "The user wants speed, not process"          | The fastest path is the one that doesn't require rework. Process prevents rework.                                            |
+| "I'll follow the spirit, not the letter"     | Spirit without steps produces inconsistent outputs. Follow the steps, then adapt.                                            |
 
 ## What To Avoid
 

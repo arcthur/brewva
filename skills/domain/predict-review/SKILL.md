@@ -1,7 +1,7 @@
 ---
 name: predict-review
-description: Advisory multi-perspective review using structured delegation, explicit
-  anti-herd checks, and ranked hypotheses.
+description: Use when a hard problem needs competing explanations from multiple perspectives
+  before choosing the next action.
 stability: experimental
 selection:
   when_to_use: Use when a hard problem needs multi-perspective advisory review and explicit disagreement before choosing the next action.
@@ -54,6 +54,8 @@ execution_hints:
 references:
   - skills/meta/skill-authoring/references/authored-behavior.md
   - references/perspectives.md
+scripts:
+  - scripts/validate_debate_setup.py
 consumes:
   - design_spec
   - change_set
@@ -65,171 +67,168 @@ requires: []
 
 # Predict Review Skill
 
-## Intent
+## The Iron Law
 
-Generate competing, evidence-backed hypotheses from multiple perspectives
-before `debugging`, `design`, `review`, or `goal-loop` commits to the next
-move.
+```
+NO ADVISORY CONSENSUS WITHOUT EXPLICIT DISAGREEMENT CHECK
+```
 
-This skill is advisory only. It strengthens judgment; it does not create
-runtime authority, bypass verification, or cross the proposal boundary.
+## When to Use
 
-## Trigger
+- A complex problem has multiple plausible explanations
+- A one-pass review is likely to miss architecture, security, or reliability trade-offs
+- Explicit disagreement must be surfaced before choosing the next owner
+- A bounded loop keeps failing and needs competing explanations
 
-Use this skill when:
+## When NOT to Use
 
-- a complex problem has multiple plausible explanations
-- a one-pass review is likely to miss architectural, security, reliability, or
-  performance trade-offs
-- the team needs explicit disagreement surfaced before choosing the next owner
-- a bounded loop keeps failing and needs competing explanations before another
-  run
-
-Do not use this skill when:
-
-- the next step is already obvious and low risk
-- there is no concrete target to analyze
-- the work needs immediate implementation rather than read-only judgment
+- The next step is already obvious and low risk
+- There is no concrete target to analyze
+- The work needs implementation, not read-only judgment
+- The debate would only restate one obvious conclusion
 
 ## Workflow
 
-### Step 1: Frame the review target
+### Phase 1: Frame the review target
 
 Name the exact target, scope, and decision the debate is meant to inform.
+Run `scripts/validate_debate_setup.py` with the setup conditions.
 
-Typical outputs of this step:
+**If the script returns `ready: false`**: Stop. Resolve every item in
+`blocking` before proceeding. Do not skip validation.
+**If ready**: Proceed to Phase 2.
 
-- the code or design slice under review
-- the concrete question to answer
-- the likely downstream owner: `debugging`, `design`, `review`, or `goal-loop`
+### Phase 2: Run independent first-pass analysis
 
-### Step 2: Run independent first-pass analysis
+Use `subagent_fanout` when perspectives can run independently. Each must
+return concrete claims, evidence anchors, and confidence — not brainstorming.
+Perspective-to-profile mapping lives in `references/perspectives.md`. Select
+at least two. Include Devil's Advocate when three or more are active.
 
-Use `subagent_fanout` when the perspectives can run independently.
+**If a perspective returns without concrete claims**: Discard and re-run with
+a tighter objective.
+**If all return substantive findings**: Proceed to Phase 3.
 
-Perspective-to-profile mapping:
+### Phase 3: Force structured challenge
 
-| Perspective                  | Built-in agent spec  | Use                                                               |
-| ---------------------------- | -------------------- | ----------------------------------------------------------------- |
-| Architecture Reviewer        | `review-boundaries`  | boundary integrity, coupling, and contract drift                  |
-| Security Analyst             | `review-security`    | exposure, trust, and misuse paths                                 |
-| Reliability Engineer         | `review-operability` | failure handling, retries, edge conditions, and operator burden   |
-| Performance Engineer         | `review-performance` | hot spots, scaling, and measurable regressions                    |
-| Devil's Advocate             | `explore`            | alternative explanations, missing context, and anti-herd pressure |
-| Optional empirical follow-up | `qa`                 | executable follow-up against the live risk surface                |
-
-The perspective lives in the delegation packet:
-
-- `objective`
-- `sharedNotes`
-- required output shape
-
-When ordering, replay, or state-transition risk dominates, prefer
-`review-concurrency` over `review-operability`. When public-surface or format
-drift dominates, prefer `review-compatibility`.
-
-### Step 3: Force structured challenge
-
-Independent analysis happens first. Debate happens second.
-
-Require all of the following:
+Independent analysis first. Debate second. Require:
 
 1. Each perspective states its primary claim and strongest evidence.
 2. Each perspective names at least one uncertainty or evidence gap.
-3. The Devil's Advocate challenges majority positions explicitly.
-4. Majority agreement is not enough on its own; unresolved objections must stay
-   visible.
-5. Use `subagent_run` for an optional QA pass when the debate needs executable
-   confirmation or a targeted attempt to break the leading hypothesis.
+3. Devil's Advocate challenges the majority position explicitly.
+4. Unresolved objections stay visible — do not smooth them away.
 
-### Step 4: Emit advisory artifacts
+Optional: `subagent_run` QA pass to break the leading hypothesis.
 
-Produce:
+**If majority agreement forms with no recorded dissent**: Stop. The Iron Law
+is violated. Force explicit disagreement.
+**If disagreements are preserved**: Proceed to Phase 4.
 
-- `perspective_findings`: perspective-by-perspective claims, evidence, and
-  disagreements
-- `debate_summary`: converged points, unresolved conflicts, and missing
-  evidence
-- `ranked_hypotheses`: ordered next hypotheses or failure explanations for the
-  downstream owner
+### Phase 4: Emit advisory artifacts
 
-## Interaction Protocol
+- `perspective_findings`: per-perspective claims, evidence, and disagreements
+- `debate_summary`: converged points, unresolved conflicts, missing evidence
+- `ranked_hypotheses`: ordered hypotheses with rationale, validation steps,
+  and falsification conditions
 
-- Ask only when the review target, decision to inform, or downstream owner is
-  too vague to make the debate useful.
-- Re-ground every perspective in the same concrete scope. If the participants
-  are debating different problems, restart with a tighter target.
-- Prefer one strong debate packet over a large number of shallow delegated
-  runs.
+**If `ranked_hypotheses` lacks falsification conditions**: Return to Phase 3.
 
-## Debate Setup Gate
+## Scripts
 
-- [ ] The review target is bounded.
-- [ ] The decision the debate should inform is explicit.
-- [ ] Each perspective has a distinct reason to exist.
-- [ ] There is enough existing evidence to support read-only judgment.
+- `scripts/validate_debate_setup.py` — Input: setup conditions JSON.
+  Output: `{"ready": bool, "blocking": [str]}`. Run before Phase 2.
 
-## Debate Questions
-
-Use these questions to keep the multi-perspective pass honest:
+## Decision Protocol
 
 - What is the strongest claim each perspective can actually support?
 - What evidence gap, if closed, would most likely reorder the hypotheses?
 - What is the strongest challenge to the emerging majority view?
-- Which disagreement is substantive enough that downstream work must see it?
+- Which disagreement is substantive enough that downstream must see it?
 
-## Delegation Protocol
+## Red Flags — STOP
 
-- `subagent_fanout` is the default when the perspectives are independent.
-- `subagent_run` is for a follow-up challenge or QA pass, not a
-  replacement for the initial independent sweep.
-- Keep all delegated runs read-only.
-- Require each perspective packet to return concrete claims, evidence anchors,
-  and confidence rather than free-form brainstorming.
+If you catch yourself thinking any of these, STOP and return to Phase 1:
 
-## Debate Protocol
+- "All perspectives basically agree"
+- "The Devil's Advocate has nothing substantive to add"
+- "We can skip the disagreement check — the answer is clear"
+- "One more perspective will settle this"
+- "The minority view isn't worth recording"
 
-- Independent analysis must precede synthesis.
-- Consensus is advisory evidence, not authority.
-- Security, reliability, and performance concerns should not be collapsed into
-  one generic "risk" bucket before their strongest claims are compared.
-- If two perspectives disagree materially, preserve the disagreement in the
-  output instead of smoothing it away.
+## Common Rationalizations
 
-## Anti-Herd Protocol
+| Excuse                                   | Reality                                                                                                                 |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| "Perspectives agree, so we're done"      | Agreement without recorded dissent violates the Iron Law. Force the disagreement check.                                 |
+| "Devil's Advocate is performative"       | DA that finds nothing real is evidence of shallow analysis, not evidence of correctness. Dig harder or widen the frame. |
+| "Skip validation, the target is obvious" | Obvious targets still need bounded scope. Run the script.                                                               |
+| "More perspectives = better coverage"    | Shallow fan-out produces noise. Two strong perspectives beat five shallow ones.                                         |
+| "Consensus is strong enough to act on"   | Consensus is advisory evidence, not authority. Downstream still owns the decision.                                      |
 
-- When a majority position forms, record the strongest challenge against it.
-- The Devil's Advocate must challenge at least one high-confidence or
-  majority-backed claim.
-- Ranked hypotheses must show why the top item won, what evidence still argues
-  against it, and what evidence would falsify it.
+## Concrete Example
+
+Input: "Before we run another bounded optimization pass, predict why the metric keeps stalling."
+
+Output:
+
+```json
+{
+  "perspective_findings": [
+    {
+      "perspective": "Reliability Engineer",
+      "profile": "review-operability",
+      "primary_claim": "Optimization loop silently drops iterations when WAL replay hits a stale epoch boundary, causing the metric to plateau at the pre-replay value.",
+      "evidence": [
+        "WAL replay logs show epoch=3 while optimizer expects epoch=5",
+        "Metric flatlines exactly at replay timestamp"
+      ],
+      "uncertainty": "Unknown whether epoch mismatch is from replay or optimizer checkpointing."
+    },
+    {
+      "perspective": "Devil's Advocate",
+      "profile": "explore",
+      "primary_claim": "The metric may have genuinely converged — the stall could be a real plateau, not a bug.",
+      "evidence": ["Loss curve shape matches typical convergence for this problem class"],
+      "uncertainty": "No controlled run exists to compare converged vs stalled behavior."
+    }
+  ],
+  "debate_summary": {
+    "converged": ["Stall correlates with WAL replay timing"],
+    "unresolved": [
+      "Genuine convergence vs epoch-boundary bug — no controlled baseline to distinguish"
+    ],
+    "missing_evidence": ["Controlled run without replay to establish true convergence baseline"]
+  },
+  "ranked_hypotheses": [
+    {
+      "rank": 1,
+      "claim": "Stale epoch after WAL replay causes silent iteration drops",
+      "confidence": "medium-high",
+      "validation": "Pin epoch to post-replay value and compare trajectory",
+      "falsification": "If metric still stalls after epoch fix, cause is genuine convergence"
+    },
+    {
+      "rank": 2,
+      "claim": "True convergence plateau",
+      "confidence": "medium",
+      "validation": "Run controlled baseline without replay on same input",
+      "falsification": "If controlled run improves past stall point, convergence is ruled out"
+    }
+  ]
+}
+```
 
 ## Handoff Expectations
 
-- `perspective_findings` should identify the perspective, mapped profile,
-  primary claim, evidence, open questions, and conflicts.
-- `debate_summary` should separate converged claims, unresolved disagreements,
-  and missing evidence that blocks confidence.
-- `ranked_hypotheses` should be actionable by the next owner, with explicit
-  rationale and recommended validation steps.
+- `perspective_findings`: perspective, profile, claim, evidence, and conflicts.
+- `debate_summary`: converged claims, unresolved disagreements, missing evidence.
+- `ranked_hypotheses`: actionable by next owner with rationale, validation
+  steps, and falsification conditions.
 
 ## Stop Conditions
 
-- there is no bounded review target
-- the debate would only restate one obvious conclusion
-- required evidence is missing and no useful advisory judgment can be made
+- There is no bounded review target
+- The debate would only restate one obvious conclusion
+- Required evidence is missing and no useful advisory judgment can be made
 
-## Anti-Patterns
-
-- treating delegated consensus as runtime authority
-- writing code or issuing effectful actions inside the debate
-- using removed legacy profile aliases instead of real built-in agent specs
-- smoothing away disagreements to make the output look cleaner than the
-  evidence supports
-
-## Example
-
-Input: "Before we run another bounded optimization pass, use multiple
-perspectives to predict why the metric keeps stalling."
-
-Output: `perspective_findings`, `debate_summary`, `ranked_hypotheses`.
+Violating the letter of these rules is violating the spirit of these rules.

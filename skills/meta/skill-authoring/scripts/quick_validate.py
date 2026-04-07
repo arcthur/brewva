@@ -600,6 +600,154 @@ def validate_routing(
     return True, None
 
 
+WORKFLOW_LEAK_PATTERNS = [
+    re.compile(r"\breproducе?\b.*\brank\b.*\bhypothes", re.IGNORECASE),
+    re.compile(r"\bstructured delegation\b", re.IGNORECASE),
+    re.compile(r"\btry to break\b", re.IGNORECASE),
+    re.compile(r"\bconvert.*into.*handoff\b", re.IGNORECASE),
+    re.compile(r"\bturn.*into.*plan\b", re.IGNORECASE),
+    re.compile(r"\bfan[- ]?out\b", re.IGNORECASE),
+    re.compile(r"\breproduce.*rank.*confirm\b", re.IGNORECASE),
+    re.compile(r"\banti[- ]?herd checks\b", re.IGNORECASE),
+]
+
+V2_REQUIRED_SECTIONS_CORE_DOMAIN = [
+    "## The Iron Law",
+    "## Red Flags",
+]
+
+V2_REQUIRED_SECTIONS_ALL = [
+    "## When to Use",
+    "## Workflow",
+    "## Stop Conditions",
+]
+
+V2_BODY_LINE_LIMIT = 180
+
+
+def validate_v2_doctrine(
+    frontmatter: dict[str, object],
+    content: str,
+    skill_dir: Path,
+) -> tuple[bool, str | None]:
+    """Validate v2 anatomy doctrine: section structure, description hygiene, body size."""
+    overlay = is_overlay_skill(skill_dir)
+    if overlay:
+        return True, None
+
+    routed_scope = derive_routing_scope(skill_dir)
+
+    description = frontmatter.get("description", "")
+    if isinstance(description, str):
+        for pattern in WORKFLOW_LEAK_PATTERNS:
+            if pattern.search(description):
+                return (
+                    False,
+                    f"Description leaks workflow methodology (matched: {pattern.pattern}). "
+                    "Description must contain trigger conditions only, never workflow summary.",
+                )
+
+    match = re.match(r"^---\n.*?\n---\n(.*)", content, re.DOTALL)
+    if not match:
+        return True, None
+    body = match.group(1)
+
+    body_lines = [line for line in body.split("\n") if line.strip()]
+    if len(body_lines) > V2_BODY_LINE_LIMIT:
+        return (
+            False,
+            f"SKILL.md body has {len(body_lines)} non-empty lines (limit: {V2_BODY_LINE_LIMIT}). "
+            "Move heavy content to references/.",
+        )
+
+    for section in V2_REQUIRED_SECTIONS_ALL:
+        if section not in body:
+            alt = section.replace("## When to Use", "## Trigger")
+            if alt not in body and section not in body:
+                return (
+                    False,
+                    f"Missing required v2 section: '{section}' (or equivalent)",
+                )
+
+    if routed_scope in ("core", "domain"):
+        for section in V2_REQUIRED_SECTIONS_CORE_DOMAIN:
+            if section not in body:
+                return (
+                    False,
+                    f"Missing required v2 section for {routed_scope} skill: '{section}'",
+                )
+
+    if routed_scope in ("core", "domain"):
+        phase_headers = re.findall(r"^###\s+Phase\s+\d+", body, re.MULTILINE)
+        if len(phase_headers) >= 2:
+            failure_indicators = [
+                "**If ", "**If not", "**If any", "**If the",
+                "If not reproducible", "If any check fails",
+                "If validation fails", "If reproducible",
+            ]
+            has_failure_branch = any(ind in body for ind in failure_indicators)
+            if not has_failure_branch:
+                return (
+                    False,
+                    "Workflow has multiple phases but no explicit failure branches. "
+                    "Each phase transition must say what happens on failure.",
+                )
+
+    example_match = re.search(r"^## (?:Concrete )?Example\b.*?\n(.*?)(?=^## |\Z)", body, re.DOTALL | re.MULTILINE)
+    if example_match:
+        example_body = example_match.group(1).strip()
+        example_content_lines = [line for line in example_body.split("\n") if line.strip()]
+        if len(example_content_lines) < 5:
+            return (
+                False,
+                f"Example section has only {len(example_content_lines)} content lines (minimum: 5). "
+                "Show actual artifact content, not just names.",
+            )
+
+    return True, None
+
+
+def validate_file_references(
+    frontmatter: dict[str, object], skill_dir: Path
+) -> tuple[bool, str | None]:
+    overlay = is_overlay_skill(skill_dir)
+
+    scripts = frontmatter.get("scripts")
+    if scripts is not None and isinstance(scripts, list):
+        for entry in scripts:
+            if not isinstance(entry, str):
+                continue
+            script_path = skill_dir / entry
+            if not script_path.exists():
+                return (
+                    False,
+                    f"Declared script not found: {entry} (expected at {script_path})",
+                )
+
+    references = frontmatter.get("references")
+    if references is not None and isinstance(references, list):
+        for entry in references:
+            if not isinstance(entry, str):
+                continue
+            if entry.startswith("skills/"):
+                repo_root = skill_dir
+                while repo_root.name != "skills" and repo_root != repo_root.parent:
+                    repo_root = repo_root.parent
+                if repo_root.name == "skills":
+                    repo_root = repo_root.parent
+                ref_path = repo_root / entry
+            else:
+                ref_path = skill_dir / entry
+            if not ref_path.exists():
+                if not overlay:
+                    return (
+                        False,
+                        f"Declared reference not found: {entry} (expected at {ref_path})",
+                    )
+
+    return True, None
+
+
 def validate_skill(skill_path: str | Path) -> tuple[bool, str]:
     """Basic validation of a latest-generation skill directory."""
     skill_dir = Path(skill_path)
@@ -695,6 +843,14 @@ def validate_skill(skill_path: str | Path) -> tuple[bool, str]:
     compatibility = frontmatter.get("compatibility", "")
     if compatibility and (not isinstance(compatibility, str) or len(compatibility) > 500):
         return False, "Field 'compatibility' must be a string shorter than 500 characters"
+
+    ok, message = validate_file_references(frontmatter, skill_dir)
+    if not ok:
+        return False, message or "Invalid file references"
+
+    ok, message = validate_v2_doctrine(frontmatter, content, skill_dir)
+    if not ok:
+        return False, message or "v2 doctrine violation"
 
     return True, "Skill is valid!"
 
