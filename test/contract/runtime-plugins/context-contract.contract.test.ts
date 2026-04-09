@@ -1,37 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import { applyContextContract } from "@brewva/brewva-gateway/runtime-plugins";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import {
+  applyContextContract,
+  buildContextContractBlock,
+} from "@brewva/brewva-gateway/runtime-plugins";
 
 describe("context contract", () => {
-  test("refreshes dynamic thresholds when an existing contract block is present", () => {
-    const runtime = {
-      inspect: {
-        context: {
-          getCompactionThresholdRatio(_sessionId: string, usage?: { percent?: number | null }) {
-            return usage?.percent === 0.5 ? 0.82 : 0.9;
-          },
-          getHardLimitRatio(_sessionId: string, usage?: { percent?: number | null }) {
-            return usage?.percent === 0.5 ? 0.94 : 0.97;
-          },
-        },
-      },
-    } as BrewvaHostedRuntimePort;
+  test("keeps the contract static and deduplicated", () => {
+    const contract = buildContextContractBlock();
+    const first = applyContextContract("base prompt");
+    const refreshed = applyContextContract(first);
 
-    const first = applyContextContract("base prompt", runtime, "contract-1", {
-      tokens: 500,
-      contextWindow: 1000,
-      percent: 0.5,
-    });
-    const refreshed = applyContextContract(first, runtime, "contract-1", {
-      tokens: 900000,
-      contextWindow: 1000000,
-      percent: 0.9,
-    });
-
-    expect(refreshed).toContain("compact soon when context pressure reaches high (90%)");
-    expect(refreshed).toContain("compact immediately when context pressure becomes critical (97%)");
-    expect(refreshed).not.toContain("82%");
-    expect(refreshed).not.toContain("94%");
+    expect(contract).toContain("[Brewva Context Contract]");
+    expect(contract).not.toContain("%");
+    expect(contract).not.toContain("compact soon when context pressure reaches high");
+    expect(contract).not.toContain("compact immediately when context pressure becomes critical");
+    expect(first).toBe(`base prompt\n\n${contract}`);
+    expect(refreshed).toBe(first);
     expect(refreshed.match(/\[Brewva Context Contract\]/g)?.length).toBe(1);
   });
 });

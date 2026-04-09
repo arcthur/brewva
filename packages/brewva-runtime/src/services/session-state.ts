@@ -1,11 +1,13 @@
 import type {
   ActiveSkillRuntimeState,
   OpenToolCallRecord,
+  PromptStabilityState,
   ResourceLeaseRecord,
   SessionHydrationState,
   SessionUncleanShutdownDiagnostic,
   SkillCompletionFailureRecord,
   SkillOutputRecord,
+  TransientReductionState,
 } from "../contracts/index.js";
 
 interface ReservedContextInjectionTokens {
@@ -32,6 +34,8 @@ export class RuntimeSessionStateCell {
   inflightEffectCommitmentRequestIds = new Set<string>();
   lastInjectedContextFingerprintByScope = new Map<string, string>();
   reservedContextInjectionTokensByScope = new Map<string, ReservedContextInjectionTokens>();
+  promptStability?: PromptStabilityState;
+  transientReduction?: TransientReductionState;
   lastLedgerCompactionTurn?: number;
   toolContractWarnings = new Set<string>();
   governanceMetadataWarnings = new Set<string>();
@@ -169,6 +173,22 @@ export class RuntimeSessionStateStore {
     this.getCell(
       RuntimeSessionStateStore.readSessionIdFromScopeKey(scopeKey),
     ).lastInjectedContextFingerprintByScope.set(scopeKey, fingerprint);
+  }
+
+  getPromptStability(sessionId: string): PromptStabilityState | undefined {
+    return this.getExistingCell(sessionId)?.promptStability;
+  }
+
+  setPromptStability(sessionId: string, state: PromptStabilityState): void {
+    this.getCell(sessionId).promptStability = state;
+  }
+
+  getTransientReduction(sessionId: string): TransientReductionState | undefined {
+    return this.getExistingCell(sessionId)?.transientReduction;
+  }
+
+  setTransientReduction(sessionId: string, state: TransientReductionState): void {
+    this.getCell(sessionId).transientReduction = state;
   }
 
   clearInjectionFingerprintsForSession(sessionId: string): void {

@@ -22,6 +22,8 @@ import type {
   ContextPressureStatus,
   ContextCompactionGateStatus,
   ContextBudgetUsage,
+  PromptStabilityObservationInput,
+  PromptStabilityState,
   ResourceLeaseCancelResult,
   ResourceLeaseQuery,
   ResourceLeaseRecord,
@@ -92,6 +94,8 @@ import type {
   TaskTargetDescriptor,
   TaskSpec,
   TaskState,
+  TransientReductionObservationInput,
+  TransientReductionState,
   RecoveryWalRecord,
   RecoveryWalRecoveryResult,
   RecoveryWalSource,
@@ -318,7 +322,17 @@ interface BrewvaRuntimeMethodGroups {
     onUserInput(sessionId: string): void;
     sanitizeInput(text: string): string;
     observeUsage(sessionId: string, usage: ContextBudgetUsage | undefined): void;
+    observePromptStability(
+      sessionId: string,
+      input: PromptStabilityObservationInput,
+    ): PromptStabilityState;
+    observeTransientReduction(
+      sessionId: string,
+      input: TransientReductionObservationInput,
+    ): TransientReductionState;
     getUsage(sessionId: string): ContextBudgetUsage | undefined;
+    getPromptStability(sessionId: string): PromptStabilityState | undefined;
+    getTransientReduction(sessionId: string): TransientReductionState | undefined;
     getUsageRatio(usage: ContextBudgetUsage | undefined): number | null;
     getHardLimitRatio(sessionId: string, usage?: ContextBudgetUsage): number;
     getCompactionThresholdRatio(sessionId: string, usage?: ContextBudgetUsage): number;
@@ -707,6 +721,8 @@ export interface BrewvaInspectionPort {
     BrewvaRuntimeMethodGroups["context"],
     | "sanitizeInput"
     | "getUsage"
+    | "getPromptStability"
+    | "getTransientReduction"
     | "getUsageRatio"
     | "getHardLimitRatio"
     | "getCompactionThresholdRatio"
@@ -774,6 +790,8 @@ export interface BrewvaMaintenancePort {
     | "onTurnEnd"
     | "onUserInput"
     | "observeUsage"
+    | "observePromptStability"
+    | "observeTransientReduction"
     | "registerProvider"
     | "unregisterProvider"
     | "buildInjection"
@@ -1074,7 +1092,13 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
         sanitizeInput: (text) => this.sanitizeInput(text),
         observeUsage: (sessionId, usage) =>
           this.contextService.observeContextUsage(sessionId, usage),
+        observePromptStability: (sessionId, input) =>
+          this.contextService.observePromptStability(sessionId, input),
+        observeTransientReduction: (sessionId, input) =>
+          this.contextService.observeTransientReduction(sessionId, input),
         getUsage: (sessionId) => this.contextService.getContextUsage(sessionId),
+        getPromptStability: (sessionId) => this.contextService.getPromptStability(sessionId),
+        getTransientReduction: (sessionId) => this.contextService.getTransientReduction(sessionId),
         getUsageRatio: (usage) => this.contextService.getContextUsageRatio(usage),
         getHardLimitRatio: (sessionId, usage) =>
           this.contextService.getContextHardLimitRatio(sessionId, usage),
@@ -1408,6 +1432,8 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
         context: bindMethods(methodGroups.context, [
           "sanitizeInput",
           "getUsage",
+          "getPromptStability",
+          "getTransientReduction",
           "getUsageRatio",
           "getHardLimitRatio",
           "getCompactionThresholdRatio",
@@ -1467,6 +1493,8 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "onTurnEnd",
           "onUserInput",
           "observeUsage",
+          "observePromptStability",
+          "observeTransientReduction",
           "registerProvider",
           "unregisterProvider",
           "buildInjection",

@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  ITERATION_METRIC_OBSERVED_EVENT_TYPE,
+  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+} from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   createCostViewTool,
@@ -132,6 +136,34 @@ describe("observability tool contracts", () => {
         outcome: "passed",
       },
     });
+    runtime.maintain.context.observePromptStability(sessionId, {
+      stablePrefixHash: "prefix-1",
+      dynamicTailHash: "tail-1",
+      injectionScopeId: "leaf-1",
+      turn: 1,
+      timestamp: 1_740_000_000_100,
+    });
+    runtime.maintain.context.observeTransientReduction(sessionId, {
+      status: "completed",
+      reason: null,
+      eligibleToolResults: 6,
+      clearedToolResults: 2,
+      clearedChars: 2048,
+      estimatedTokenSavings: 580,
+      pressureLevel: "high",
+      turn: 1,
+      timestamp: 1_740_000_000_101,
+    });
+    runtime.authority.cost.recordAssistantUsage({
+      sessionId,
+      model: "test/model",
+      inputTokens: 20,
+      outputTokens: 5,
+      cacheReadTokens: 30,
+      cacheWriteTokens: 12,
+      totalTokens: 55,
+      costUsd: 0.001,
+    });
 
     const assertTool = createObsSloAssertTool({ runtime: createBundledToolRuntime(runtime) });
     const assertResult = await assertTool.execute(
@@ -163,6 +195,18 @@ describe("observability tool contracts", () => {
     expect(snapshotText).toContain("[ObsSnapshot]");
     expect(snapshotText).toContain("tape_pressure:");
     expect(snapshotText).toContain("context_pressure:");
+    expect(snapshotText).toContain("prompt_prefix_stable: true");
+    expect(snapshotText).toContain("dynamic_tail_stable: true");
+    expect(snapshotText).toContain(`prompt_scope_key: ${sessionId}::leaf-1`);
+    expect(snapshotText).toContain("transient_reduction_status: completed");
+    expect(snapshotText).toContain("transient_reduction_reason: none");
+    expect(snapshotText).toContain("transient_reduction_cleared_tool_results: 2");
+    expect(snapshotText).toContain("transient_reduction_estimated_token_savings: 580");
+    expect(snapshotText).toContain("cache_read_tokens: 30");
+    expect(snapshotText).toContain("cache_write_tokens: 12");
     expect(snapshotText).toContain("verification_level: standard");
+    expect(
+      runtime.inspect.events.query(sessionId, { type: ITERATION_METRIC_OBSERVED_EVENT_TYPE }),
+    ).toHaveLength(0);
   });
 });

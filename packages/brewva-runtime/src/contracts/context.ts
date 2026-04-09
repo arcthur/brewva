@@ -30,6 +30,48 @@ export interface ContextCompactionGateStatus {
   turnsSinceCompaction: number | null;
 }
 
+export interface PromptStabilityObservationInput {
+  stablePrefixHash: string;
+  dynamicTailHash: string;
+  injectionScopeId?: string;
+  turn?: number;
+  timestamp?: number;
+}
+
+export interface PromptStabilityState {
+  turn: number;
+  updatedAt: number;
+  scopeKey: string;
+  stablePrefixHash: string;
+  dynamicTailHash: string;
+  stablePrefix: boolean;
+  stableTail: boolean;
+}
+
+export interface TransientReductionObservationInput {
+  status: "completed" | "skipped";
+  reason?: string | null;
+  eligibleToolResults: number;
+  clearedToolResults: number;
+  clearedChars?: number;
+  estimatedTokenSavings?: number;
+  pressureLevel?: ContextPressureLevel | "unknown";
+  turn?: number;
+  timestamp?: number;
+}
+
+export interface TransientReductionState {
+  turn: number;
+  updatedAt: number;
+  status: "completed" | "skipped";
+  reason: string | null;
+  eligibleToolResults: number;
+  clearedToolResults: number;
+  clearedChars: number;
+  estimatedTokenSavings: number;
+  pressureLevel: ContextPressureLevel | "unknown";
+}
+
 export interface TapeAnchorState {
   id: string;
   name?: string;

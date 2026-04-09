@@ -127,6 +127,8 @@ Implementation anchors:
 - `packages/brewva-gateway/src/runtime-plugins/hosted-context-telemetry.ts`
 - `packages/brewva-gateway/src/runtime-plugins/context-composer.ts`
 - `packages/brewva-gateway/src/runtime-plugins/context-contract.ts`
+- `packages/brewva-gateway/src/runtime-plugins/provider-request-reduction.ts`
+- `packages/brewva-gateway/src/runtime-plugins/provider-request-recovery.ts`
 - `packages/brewva-gateway/src/runtime-plugins/quality-gate.ts`
 - `packages/brewva-gateway/src/runtime-plugins/completion-guard.ts`
 - `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`
@@ -227,11 +229,62 @@ The hosted context path is split across these explicit adapters:
   - `context`, `sessionCompact`, and `sessionShutdown` reactions
 - `hosted-context-injection-pipeline`
   - `beforeAgentStart` orchestration
-  - context contract application
+  - static context contract application
   - admitted context + supplemental block composition
   - delegation-outcome surfacing
+  - live prompt-stability observation
+  - non-durable prompt-stability evidence samples written to
+    `.orchestrator/context-evidence`
+- `provider-request-reduction`
+  - first `before_provider_request` adapter in the hosted ring
+  - clone-only transient outbound reduction for older large tool-result bodies
+  - active only under high pressure and outside recovery / output-budget posture
+  - pressure evaluation prefers live runtime usage, but falls back to a
+    request-local payload estimate when request-time usage is missing or stale;
+    the estimate reuses the current session `contextWindow` when available and
+    only consults Pi model metadata when the window is otherwise unknown
+  - writes live request-reduction state through
+    `runtime.maintain.context.observeTransientReduction(...)`
+  - records non-durable transient-reduction evidence samples in the same
+    context-evidence sidecar
+- `provider-request-recovery`
+  - second `before_provider_request` adapter in the hosted ring
+  - clone-only output-budget escalation for bounded retry paths
 - `hosted-context-telemetry`
   - `context_compaction_*` and `context_composed` payload emission
+
+The hosted runtime-plugins package also exposes
+`buildContextEvidenceReport(...)` and `persistContextEvidenceReport(...)`.
+These helpers aggregate:
+
+- sidecar prompt-stability and transient-reduction samples from
+  `.orchestrator/context-evidence`
+- durable `message_end` summaries that preserve whether the provider explicitly
+  reported `usage.cacheRead` / `usage.cacheWrite`
+- durable `session_compact` receipts
+- existing cost summaries for `cacheReadTokens` / `cacheWriteTokens`
+
+The repository script `bun run report:context-evidence` wraps those helpers and
+emits `report-latest.json` into the same sidecar directory. This keeps
+promotion evidence outside the tape and outside `context_composed`. Stable
+prefix readiness is evaluated per scope baseline: the first prompt sample in a
+new hosted leaf or injection scope seeds a new baseline instead of counting as
+prefix drift from the previous scope. Cache-accounting readiness is stricter
+than “totals exist”: it requires explicit provider-reported cache fields plus
+observed non-zero cache token totals, so zero-default summaries do not
+accidentally satisfy promotion gates.
+
+Window-derived context-pressure numbers do not live in the session-cached
+system prompt contract. The hosted path keeps those fields in turn-scoped
+hidden-tail composition blocks such as `[ContextCompactionGate]` and
+`[ContextCompactionAdvisory]`.
+
+Transient outbound reduction is intentionally not a compaction authority. It is
+a cache-class request-copy optimization: it may clear older large tool-result
+bodies on the outbound provider payload, but it does not mutate durable history,
+replacement history, WAL rows, compaction receipts, or `context_composed`
+payloads. Request-local estimation only influences the one outbound copy; it
+does not backfill or overwrite stored runtime usage telemetry.
 
 `registerEventStream(...)` also consumes the shared turn clock to stamp durable
 runtime turn numbers and clear per-session turn state on shutdown.

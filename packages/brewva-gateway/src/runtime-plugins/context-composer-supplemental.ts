@@ -86,16 +86,26 @@ function makeSupplementalBlock(
   };
 }
 
+function sortDelegationRuns(runs: readonly DelegationRunRecord[]): DelegationRunRecord[] {
+  return runs.toSorted(
+    (left, right) =>
+      left.runId.localeCompare(right.runId) ||
+      left.delegate.localeCompare(right.delegate) ||
+      (left.label ?? "").localeCompare(right.label ?? "") ||
+      left.status.localeCompare(right.status),
+  );
+}
+
 export function listPendingDelegations(
   runtime: ContextComposerSupplementalRuntime,
   sessionId: string,
 ): DelegationRunRecord[] {
-  return (
+  return sortDelegationRuns(
     runtime.delegation?.listRuns?.(sessionId, {
       statuses: ["pending", "running"],
       includeTerminal: false,
       limit: 6,
-    }) ?? []
+    }) ?? [],
   );
 }
 
@@ -107,16 +117,16 @@ export function listPendingDelegationOutcomes(
     limit: 6,
   });
   if (pending) {
-    return pending;
+    return sortDelegationRuns(pending);
   }
-  return (
+  return sortDelegationRuns(
     runtime.delegation
       ?.listRuns?.(sessionId, {
         statuses: ["completed", "failed", "timeout", "cancelled"],
         includeTerminal: true,
         limit: 6,
       })
-      ?.filter((run) => run.delivery?.handoffState === "pending_parent_turn") ?? []
+      ?.filter((run) => run.delivery?.handoffState === "pending_parent_turn") ?? [],
   );
 }
 

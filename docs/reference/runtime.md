@@ -217,6 +217,8 @@ Verification semantics to preserve:
 
 - `sanitizeInput(text)`
 - `getUsage(sessionId)`
+- `getPromptStability(sessionId)`
+- `getTransientReduction(sessionId)`
 - `getUsageRatio(usage)`
 - `getHardLimitRatio(sessionId, usage?)`
 - `getCompactionThresholdRatio(sessionId, usage?)`
@@ -228,6 +230,16 @@ Verification semantics to preserve:
 - `getPendingCompactionReason(sessionId)`
 - `getCompactionInstructions()`
 - `getCompactionWindowTurns()`
+
+`getPromptStability(...)` and `getTransientReduction(...)` are live
+session-local inspection surfaces. They are cleared with normal session-state
+teardown and do not imply new durable event families. Hosted longitudinal
+evidence for these fields lives in the sidecar context-evidence store under
+`.orchestrator/context-evidence`; operators can aggregate it with
+`bun run report:context-evidence`. Prompt-stability is scope-aware: the first
+sample in a new hosted leaf or injection scope seeds a fresh stable-prefix
+baseline, while `stableTail` still requires the same scope key plus the same
+tail hash.
 
 ### `inspect.tools`
 
@@ -366,6 +378,8 @@ This is the explicit skill-registry rebuild path.
 - `onTurnEnd(sessionId)`
 - `onUserInput(sessionId)`
 - `observeUsage(sessionId, usage)`
+- `observePromptStability(sessionId, input)`
+- `observeTransientReduction(sessionId, input)`
 - `registerProvider(provider)`
 - `unregisterProvider(source)`
 - `buildInjection(sessionId, prompt, usage?, injectionScopeId?, sourceAllowlist?)`

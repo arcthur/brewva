@@ -1,50 +1,24 @@
-import type { BrewvaHostedRuntimePort, ContextBudgetUsage } from "@brewva/brewva-runtime";
-import { formatPercent } from "./context-shared.js";
-
 const CONTEXT_CONTRACT_MARKER = "[Brewva Context Contract]";
+const STATIC_CONTEXT_CONTRACT_BLOCK = [
+  CONTEXT_CONTRACT_MARKER,
+  "Operating model:",
+  "- `tape_handoff` records durable handoff state; it does not reduce message tokens.",
+  "- `session_compact` reduces message-history pressure; it does not rewrite tape semantics.",
+  "- If a compaction gate or advisory block appears, follow it before broad tool work.",
+  "- Prefer current task state, supplemental context, and working projection before replaying tape.",
+  "Hard rules:",
+  "- call `session_compact` directly, never through `exec` or shell wrappers.",
+].join("\n");
 
-function resolveContextInspectPort(runtime: BrewvaHostedRuntimePort): {
-  getCompactionThresholdRatio: (sessionId: string, usage?: ContextBudgetUsage) => number;
-  getHardLimitRatio: (sessionId: string, usage?: ContextBudgetUsage) => number;
-} {
-  return runtime.inspect.context;
+export function buildContextContractBlock(): string {
+  return STATIC_CONTEXT_CONTRACT_BLOCK;
 }
 
-export function buildContextContractBlock(input: {
-  runtime: BrewvaHostedRuntimePort;
-  sessionId: string;
-  usage?: ContextBudgetUsage;
-}): string {
-  const context = resolveContextInspectPort(input.runtime);
-  const highThresholdPercent = formatPercent(
-    context.getCompactionThresholdRatio(input.sessionId, input.usage),
-  );
-  const hardLimitPercent = formatPercent(context.getHardLimitRatio(input.sessionId, input.usage));
-
-  return [
-    CONTEXT_CONTRACT_MARKER,
-    "Operating model:",
-    "- `tape_handoff` records durable handoff state; it does not reduce message tokens.",
-    "- `session_compact` reduces message-history pressure; it does not rewrite tape semantics.",
-    "- If a compaction gate or advisory block appears, follow it before broad tool work.",
-    "- Prefer current task state, supplemental context, and working projection before replaying tape.",
-    "Hard rules:",
-    "- call `session_compact` directly, never through `exec` or shell wrappers.",
-    `- compact soon when context pressure reaches high (${highThresholdPercent}).`,
-    `- compact immediately when context pressure becomes critical (${hardLimitPercent}).`,
-  ].join("\n");
-}
-
-export function applyContextContract(
-  systemPrompt: unknown,
-  runtime: BrewvaHostedRuntimePort,
-  sessionId: string,
-  usage?: ContextBudgetUsage,
-): string {
+export function applyContextContract(systemPrompt: unknown): string {
   const base = typeof systemPrompt === "string" ? systemPrompt : "";
   const markerIndex = base.indexOf(CONTEXT_CONTRACT_MARKER);
   const baseWithoutContract = markerIndex >= 0 ? base.slice(0, markerIndex).trimEnd() : base;
-  const contract = buildContextContractBlock({ runtime, sessionId, usage });
+  const contract = buildContextContractBlock();
   if (baseWithoutContract.trim().length === 0) {
     return contract;
   }

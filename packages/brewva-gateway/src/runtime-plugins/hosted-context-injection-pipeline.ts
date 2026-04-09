@@ -17,10 +17,12 @@ import {
   resolveSupplementalContextBlocks,
 } from "./context-composer.js";
 import { applyContextContract } from "./context-contract.js";
+import { recordPromptStabilityEvidence } from "./context-evidence.js";
 import { resolveInjectionScopeId } from "./context-shared.js";
 import { appendSupplementalContextBlocks } from "./context-supplemental.js";
 import type { HostedContextGateStatePort } from "./hosted-compaction-controller.js";
 import type { HostedContextTelemetry } from "./hosted-context-telemetry.js";
+import { buildPromptStabilityObservation } from "./prompt-stability.js";
 import { buildReadPathRecoveryBlocks } from "./read-path-recovery.js";
 import { resolveRecoveryWorkingSetBlock } from "./recovery-working-set.js";
 import {
@@ -210,6 +212,40 @@ function buildHiddenInjectionResult(input: {
   };
 }
 
+function observePromptStability(
+  runtime: BrewvaHostedRuntimePort,
+  input: {
+    sessionId: string;
+    turn: number;
+    injectionScopeId?: string;
+    systemPrompt: string;
+    composed: ContextComposerResult;
+    usage?: ContextBudgetUsage;
+    pendingCompactionReason?: string | null;
+    gateRequired: boolean;
+  },
+): void {
+  const observed = runtime.maintain.context.observePromptStability(
+    input.sessionId,
+    buildPromptStabilityObservation({
+      systemPrompt: input.systemPrompt,
+      composedContent: input.composed.content,
+      injectionScopeId: input.injectionScopeId,
+      turn: input.turn,
+    }),
+  );
+  const pressure = runtime.inspect.context.getPressureStatus(input.sessionId, input.usage);
+  recordPromptStabilityEvidence({
+    workspaceRoot: runtime.workspaceRoot,
+    sessionId: input.sessionId,
+    observed,
+    pressureLevel: pressure.level,
+    usageRatio: pressure.usageRatio,
+    pendingCompactionReason: input.pendingCompactionReason,
+    gateRequired: input.gateRequired,
+  });
+}
+
 function buildSkillRecommendationBlocks(
   runtime: BrewvaHostedRuntimePort,
   input: {
@@ -354,12 +390,7 @@ export function createHostedContextInjectionPipeline(
           gateStatus,
         });
       }
-      const systemPromptWithContract = applyContextContract(
-        input.systemPrompt,
-        runtime,
-        input.sessionId,
-        input.usage,
-      );
+      const systemPromptWithContract = applyContextContract(input.systemPrompt);
 
       if (gateStatus.required) {
         const supplementalBlocks = buildHostedSupplementalBlocks(runtime, contextComposerRuntime, {
@@ -390,6 +421,16 @@ export function createHostedContextInjectionPipeline(
           turn,
           composed,
           injectionAccepted: false,
+        });
+        observePromptStability(runtime, {
+          sessionId: input.sessionId,
+          turn,
+          injectionScopeId,
+          systemPrompt: systemPromptWithContract,
+          composed,
+          usage: input.usage,
+          pendingCompactionReason,
+          gateRequired: true,
         });
         markSurfacedDelegationOutcomes(options.delegationStore, {
           sessionId: input.sessionId,
@@ -479,6 +520,16 @@ export function createHostedContextInjectionPipeline(
         turn,
         composed,
         injectionAccepted: injection.accepted,
+      });
+      observePromptStability(runtime, {
+        sessionId: input.sessionId,
+        turn,
+        injectionScopeId,
+        systemPrompt: systemPromptWithContract,
+        composed,
+        usage: input.usage,
+        pendingCompactionReason,
+        gateRequired: gateStatus.required,
       });
       markSurfacedDelegationOutcomes(options.delegationStore, {
         sessionId: input.sessionId,

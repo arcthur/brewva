@@ -80,6 +80,7 @@ None currently.
 - `docs/research/active/recovery-robustness-under-interrupt-conditions.md`
 - `docs/research/active/cost-observability-and-budget-governance.md`
 - `docs/research/active/rollback-ergonomics-and-patch-lifecycle-safety.md`
+- `docs/research/active/prefix-stable-context-management-and-progressive-compaction.md`
 
 ## Promoted notes (status pointers)
 
