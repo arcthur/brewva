@@ -5,6 +5,7 @@ import {
   type ContextCompactionGateStatus,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { readContextEvidenceRecords } from "../../../packages/brewva-gateway/src/runtime-plugins/context-evidence.js";
 import { createHostedContextInjectionPipeline } from "../../../packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.js";
 import { createHostedContextTelemetry } from "../../../packages/brewva-gateway/src/runtime-plugins/hosted-context-telemetry.js";
 import { createMockRuntimePluginApi } from "../../helpers/runtime-plugin.js";
@@ -146,6 +147,199 @@ describe("hosted context injection pipeline", () => {
     expect(recordedTypes).toContain("context_compaction_gate_armed");
     expect(recordedTypes).toContain("critical_without_compact");
     expect(recordedTypes).toContain("context_composed");
+    expect(recordedTypes.some((type) => type.startsWith("context_cache_"))).toBe(false);
+    expect(runtime.inspect.context.getPromptStability("s-gated")).toMatchObject({
+      turn: 12,
+      scopeKey: "s-gated::leaf-gated",
+      stablePrefix: true,
+      stableTail: true,
+    });
+    expect(
+      readContextEvidenceRecords({
+        workspaceRoot: runtime.workspaceRoot,
+        sessionIds: ["s-gated"],
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        kind: "prompt_stability",
+        sessionId: "s-gated",
+        turn: 12,
+        scopeKey: "s-gated::leaf-gated",
+        stablePrefix: true,
+        stableTail: true,
+        pressureLevel: "critical",
+        pendingCompactionReason: "hard_limit",
+        gateRequired: true,
+      }),
+    ]);
+  });
+
+  test("records prompt stability on the normal composition path and tracks scope changes", async () => {
+    const recordedTypes: string[] = [];
+    const runtime = createRuntimeFixture({
+      context: {
+        observeUsage: () => undefined,
+        getCompactionGateStatus: () => ({
+          required: false,
+          reason: null,
+          pressure: {
+            level: "low",
+            usageRatio: 0.2,
+            hardLimitRatio: 0.95,
+            compactionThresholdRatio: 0.8,
+          },
+          recentCompaction: false,
+          windowTurns: 0,
+          lastCompactionTurn: null,
+          turnsSinceCompaction: null,
+        }),
+        getPendingCompactionReason: () => null,
+        buildInjection: async () => ({
+          text: "",
+          entries: [],
+          accepted: false,
+          originalTokens: 0,
+          finalTokens: 0,
+          truncated: false,
+        }),
+      },
+      events: {
+        record: (input: { type: string }) => {
+          recordedTypes.push(input.type);
+          return undefined;
+        },
+      },
+    });
+    const telemetry = createHostedContextTelemetry(runtime);
+    const { api } = createMockRuntimePluginApi();
+    const pipeline = createHostedContextInjectionPipeline(api, runtime, telemetry, {
+      getTurnIndex: () => 7,
+      setLastRuntimeGateRequired: () => undefined,
+    });
+
+    const invoke = (leafId: string) =>
+      pipeline.beforeAgentStart({
+        sessionId: "s-stability",
+        sessionManager: {
+          getLeafId: () => leafId,
+        },
+        prompt: "continue",
+        systemPrompt: "base prompt",
+        usage: {
+          tokens: 100,
+          contextWindow: 4000,
+          percent: 0.025,
+        },
+      });
+
+    await invoke("leaf-a");
+    expect(runtime.inspect.context.getPromptStability("s-stability")).toMatchObject({
+      turn: 7,
+      scopeKey: "s-stability::leaf-a",
+      stablePrefix: true,
+      stableTail: true,
+    });
+
+    await invoke("leaf-a");
+    expect(runtime.inspect.context.getPromptStability("s-stability")).toMatchObject({
+      scopeKey: "s-stability::leaf-a",
+      stablePrefix: true,
+      stableTail: true,
+    });
+
+    await invoke("leaf-b");
+    expect(runtime.inspect.context.getPromptStability("s-stability")).toMatchObject({
+      scopeKey: "s-stability::leaf-b",
+      stablePrefix: true,
+      stableTail: false,
+    });
+    const evidenceRecords = readContextEvidenceRecords({
+      workspaceRoot: runtime.workspaceRoot,
+      sessionIds: ["s-stability"],
+    }).filter((record) => record.kind === "prompt_stability");
+    expect(evidenceRecords).toHaveLength(3);
+    expect(evidenceRecords.at(-1)).toEqual(
+      expect.objectContaining({
+        sessionId: "s-stability",
+        turn: 7,
+        scopeKey: "s-stability::leaf-b",
+        stablePrefix: true,
+        stableTail: false,
+        gateRequired: false,
+      }),
+    );
+    expect(recordedTypes.some((type) => type.startsWith("context_cache_"))).toBe(false);
+  });
+
+  test("keeps the system contract static while pressure guidance stays in the dynamic tail", async () => {
+    const runtime = createRuntimeFixture({
+      context: {
+        observeUsage: () => undefined,
+        getCompactionGateStatus: (_sessionId: string, usage?: ContextBudgetUsage) => ({
+          required: false,
+          reason: null,
+          pressure: {
+            level: "high",
+            usageRatio: usage?.percent ?? 0,
+            hardLimitRatio: usage?.contextWindow === 1000 ? 0.95 : 0.97,
+            compactionThresholdRatio: usage?.contextWindow === 1000 ? 0.8 : 0.9,
+          },
+          recentCompaction: false,
+          windowTurns: 0,
+          lastCompactionTurn: null,
+          turnsSinceCompaction: null,
+        }),
+        getPendingCompactionReason: () => "usage_threshold",
+        buildInjection: async () => ({
+          text: "",
+          entries: [],
+          accepted: false,
+          originalTokens: 0,
+          finalTokens: 0,
+          truncated: false,
+        }),
+      },
+    });
+    const telemetry = createHostedContextTelemetry(runtime);
+    const { api } = createMockRuntimePluginApi();
+    const pipeline = createHostedContextInjectionPipeline(api, runtime, telemetry, {
+      getTurnIndex: () => 8,
+      setLastRuntimeGateRequired: () => undefined,
+    });
+
+    const invoke = (usage: ContextBudgetUsage) =>
+      pipeline.beforeAgentStart({
+        sessionId: "s-guidance",
+        sessionManager: {
+          getLeafId: () => "leaf-guidance",
+        },
+        prompt: "continue",
+        systemPrompt: "base prompt",
+        usage,
+      });
+
+    const first = await invoke({
+      tokens: 820,
+      contextWindow: 1000,
+      percent: 0.82,
+    });
+    const second = await invoke({
+      tokens: 1800,
+      contextWindow: 2000,
+      percent: 0.9,
+    });
+
+    expect(first.systemPrompt).toBe(second.systemPrompt);
+    expect(first.systemPrompt).toContain("[Brewva Context Contract]");
+    expect(first.systemPrompt).not.toContain("80%");
+    expect(first.systemPrompt).not.toContain("90%");
+    expect(first.message.content).toContain("Current usage: 82% (compact-soon threshold: 80%).");
+    expect(second.message.content).toContain("Current usage: 90% (compact-soon threshold: 90%).");
+    expect(runtime.inspect.context.getPromptStability("s-guidance")).toMatchObject({
+      scopeKey: "s-guidance::leaf-guidance",
+      stablePrefix: true,
+      stableTail: false,
+    });
   });
 
   test("adds a recovery working-set block after hosted recovery transitions", async () => {

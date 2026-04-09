@@ -33,6 +33,7 @@ import { registerEventStream } from "./event-stream.js";
 import { registerLedgerWriter } from "./ledger-writer.js";
 import { createNarrativeMemoryLifecycle } from "./narrative-memory-lifecycle.js";
 import { registerProviderRequestRecovery } from "./provider-request-recovery.js";
+import { registerProviderRequestReduction } from "./provider-request-reduction.js";
 import { createQualityGateLifecycle, registerQualityGate } from "./quality-gate.js";
 import { createReadPathRecoveryLifecycle } from "./read-path-recovery.js";
 import { createRuntimeTurnClockStore } from "./runtime-turn-clock.js";
@@ -161,6 +162,7 @@ function registerHostedPipeline(
 
   runtimePluginApi.on("tool_call", qualityGate.toolCall);
   runtimePluginApi.on("context", contextTransform.context);
+  registerProviderRequestReduction(runtimePluginApi, hostedRuntime);
   registerProviderRequestRecovery(runtimePluginApi, runtime);
   registerEventStream(runtimePluginApi, hostedRuntime, turnClock, {
     toolDefinitionsByName,
@@ -291,6 +293,22 @@ export { registerCompletionGuard } from "./completion-guard.js";
 export { registerToolSurface, type ToolSurfaceRuntime } from "./tool-surface.js";
 export { registerToolResultDistiller } from "./tool-result-distiller.js";
 export { applyContextContract, buildContextContractBlock } from "./context-contract.js";
+export {
+  buildContextEvidenceReport,
+  persistContextEvidenceReport,
+  readContextEvidenceRecords,
+  readContextEvidenceSamples,
+  recordPromptStabilityEvidence,
+  recordTransientReductionEvidence,
+  type ContextEvidenceAggregateReport,
+  type ContextEvidenceArtifactRef,
+  type ContextEvidencePromotionReadiness,
+  type ContextEvidenceReport,
+  type ContextEvidenceSample,
+  type ContextEvidenceSessionReport,
+  type PromptStabilityEvidenceSample,
+  type TransientReductionEvidenceSample,
+} from "./context-evidence.js";
 export { createRuntimeChannelTurnBridge } from "./channel-turn-bridge.js";
 export { createRuntimeTelegramChannelBridge } from "./telegram-channel-bridge.js";
 export {

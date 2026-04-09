@@ -25,6 +25,7 @@
     "install:local": "bash script/install-local.sh",
     "lint": "oxlint --type-aware",
     "lint:fix": "oxlint --type-aware --fix && bun run format",
+    "report:context-evidence": "bun run script/report-context-evidence.ts",
     "start": "bun run packages/brewva-cli/src/index.ts",
     "test": "bun run test:default",
     "test:contract": "bun test test/contract --timeout 600000 --max-concurrency 8",

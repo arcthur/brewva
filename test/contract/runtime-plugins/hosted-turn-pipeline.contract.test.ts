@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createHostedTurnPipeline } from "@brewva/brewva-gateway/runtime-plugins";
+import {
+  buildContextEvidenceReport,
+  createHostedTurnPipeline,
+} from "@brewva/brewva-gateway/runtime-plugins";
 import {
   createMockRuntimePluginApi,
   invokeHandler,
@@ -44,6 +47,10 @@ function createRuntimeFixture(
       config.infrastructure.events.level = "debug";
     }),
   });
+  const rawEventQuery = runtime.inspect.events.query.bind(runtime.inspect.events);
+  const rawEventQueryStructured = runtime.inspect.events.queryStructured.bind(
+    runtime.inspect.events,
+  );
 
   Object.assign(runtime.authority.tools, {
     start(payload: Record<string, unknown>) {
@@ -181,7 +188,7 @@ function createRuntimeFixture(
     },
   });
 
-  return { runtime, calls };
+  return { runtime, calls, rawEventQuery, rawEventQueryStructured };
 }
 
 function createSessionContext(sessionId: string): {
@@ -194,6 +201,31 @@ function createSessionContext(sessionId: string): {
     },
     getContextUsage: () => ({ tokens: 320, contextWindow: 4096, percent: 0.078 }),
   };
+}
+
+function invokeBeforeProviderRequestChain(
+  handlers: Map<
+    string,
+    Array<(event: Record<string, unknown>, ctx: Record<string, unknown>) => unknown>
+  >,
+  payload: Record<string, unknown>,
+  sessionId: string,
+): Record<string, unknown> {
+  let currentPayload = payload;
+  for (const handler of handlers.get("before_provider_request") ?? []) {
+    const nextPayload = handler(
+      { payload: currentPayload },
+      {
+        sessionManager: {
+          getSessionId: () => sessionId,
+        },
+      },
+    );
+    if (nextPayload && typeof nextPayload === "object" && !Array.isArray(nextPayload)) {
+      currentPayload = nextPayload as Record<string, unknown>;
+    }
+  }
+  return currentPayload;
 }
 
 describe("hosted turn pipeline", () => {
@@ -355,5 +387,167 @@ describe("hosted turn pipeline", () => {
     );
 
     expect(calls.cleared).toContain("hosted-shutdown");
+  });
+
+  test("routes prompt stability, transient reduction, and message usage through the canonical hosted pipeline into context evidence readiness", async () => {
+    const { api, handlers } = createMockRuntimePluginApi();
+    const { runtime, rawEventQuery, rawEventQueryStructured } = createRuntimeFixture();
+    const sessionId = "hosted-context-evidence-ready";
+    Object.assign(runtime.inspect.events, {
+      query: rawEventQuery,
+      queryStructured: rawEventQueryStructured,
+    });
+    Object.assign(runtime.inspect.context, {
+      getUsage(requestedSessionId?: string) {
+        if (requestedSessionId === sessionId) {
+          return { tokens: 0, contextWindow: 1_000, percent: 0 };
+        }
+        return { tokens: 320, contextWindow: 4096, percent: 0.078 };
+      },
+      getPressureStatus(_sessionId: string, usage?: { percent?: number }) {
+        const usageRatio = typeof usage?.percent === "number" ? usage.percent : 0;
+        if (usageRatio >= 0.98) {
+          return {
+            level: "critical",
+            usageRatio,
+            hardLimitRatio: 0.98,
+            compactionThresholdRatio: 0.8,
+          };
+        }
+        if (usageRatio >= 0.8) {
+          return {
+            level: "high",
+            usageRatio,
+            hardLimitRatio: 0.98,
+            compactionThresholdRatio: 0.8,
+          };
+        }
+        return {
+          level: "low",
+          usageRatio,
+          hardLimitRatio: 0.98,
+          compactionThresholdRatio: 0.8,
+        };
+      },
+      getCompactionGateStatus(_sessionId: string, usage?: { percent?: number }) {
+        const pressure = this.getPressureStatus(_sessionId, usage) as {
+          level: "low" | "high" | "critical";
+          usageRatio: number;
+          hardLimitRatio: number;
+          compactionThresholdRatio: number;
+        };
+        return {
+          required: pressure.level === "critical",
+          reason: pressure.level === "critical" ? "hard_limit" : null,
+          pressure,
+          recentCompaction: false,
+          windowTurns: 2,
+          lastCompactionTurn: null,
+          turnsSinceCompaction: null,
+        };
+      },
+      getPendingCompactionReason(_sessionId: string, usage?: { percent?: number }) {
+        const pressure = this.getPressureStatus(_sessionId, usage) as {
+          level: "low" | "high" | "critical";
+        };
+        return pressure.level === "critical" ? "hard_limit" : null;
+      },
+    });
+    await createHostedTurnPipeline({
+      runtime,
+      registerTools: false,
+    })(api);
+
+    await invokeHandlersAsync(
+      handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "continue task",
+        systemPrompt: "base prompt",
+      },
+      createSessionContext(sessionId),
+    );
+
+    runtime.maintain.context.observeUsage(sessionId, {
+      tokens: 0,
+      contextWindow: 1_000,
+      percent: 0,
+    });
+    const reducedPayload = invokeBeforeProviderRequestChain(
+      handlers,
+      {
+        model: "gpt-5.4",
+        messages: Array.from({ length: 6 }, (_, index) => ({
+          role: "tool",
+          tool_call_id: `call-${index + 1}`,
+          name: "read",
+          content: `${"x".repeat(512)}:${index + 1}`,
+        })),
+      },
+      sessionId,
+    );
+
+    expect((reducedPayload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
+      "[cleared_for_request]",
+    );
+
+    invokeHandlers(
+      handlers,
+      "message_end",
+      {
+        message: {
+          role: "assistant",
+          provider: "openai",
+          model: "gpt-5.4",
+          stopReason: "end_turn",
+          usage: {
+            input: 18,
+            output: 6,
+            cacheRead: 40,
+            cacheWrite: 9,
+            totalTokens: 73,
+            cost: {
+              total: 0.0002,
+            },
+          },
+          content: [{ type: "text", text: "cached response" }],
+        },
+      },
+      createSessionContext(sessionId),
+    );
+
+    const report = buildContextEvidenceReport(runtime, {
+      sessionIds: [sessionId],
+    });
+
+    expect(report.aggregate).toMatchObject({
+      sessionsObserved: 1,
+      promptObservedTurns: 1,
+      stablePrefixTurns: 1,
+      reductionObservedTurns: 1,
+      reductionCompletedTurns: 1,
+      totalCacheReadTokens: 40,
+      totalCacheWriteTokens: 9,
+      sessionsWithObservedCacheAccounting: 1,
+      sessionsWithCompletedReductionAndNoCompaction: 1,
+    });
+    expect(report.promotionReadiness).toEqual({
+      stablePrefixTargetMet: true,
+      reductionEvidenceObserved: true,
+      cacheAccountingObserved: true,
+      ready: true,
+      gaps: [],
+    });
+    expect(report.sessions).toEqual([
+      expect.objectContaining({
+        sessionId,
+        cacheReadReported: true,
+        cacheWriteReported: true,
+        cacheAccountingObserved: true,
+        reductionCompletedTurns: 1,
+        stablePrefixRate: 1,
+      }),
+    ]);
   });
 });

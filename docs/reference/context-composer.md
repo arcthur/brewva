@@ -69,6 +69,25 @@ Each block carries:
 - `content`
 - `estimatedTokens`
 
+## Static Contract Boundary
+
+Hosted `beforeAgentStart` appends one static `[Brewva Context Contract]`
+suffix to the system prompt before context composition runs.
+
+That contract is invariant. It does not carry live usage, `contextWindow`,
+threshold percentages, provider-window selection, or other per-turn pressure
+fields.
+
+Current compaction pressure stays in the turn-scoped hidden tail:
+
+- `[ContextCompactionGate]`
+- `[ContextCompactionAdvisory]`
+- supplemental operational diagnostics when they are useful
+
+This keeps the Brewva-owned prompt prefix stable while leaving current pressure
+guidance in the same turn-scoped composition path that already owns gate and
+advisory rendering.
+
 ## Capability Rendering
 
 Capability disclosure is derived from the semantic capability view.
@@ -153,6 +172,10 @@ The lifecycle adapter records `context_composed` with:
 - total composed tokens
 - narrative tokens
 - narrative ratio
+
+It intentionally does not carry prompt hashes, prompt-stability booleans, or
+provider cache-token counters. Those belong to live inspect surfaces and the
+existing cost summary path, not the coarse composition receipt.
 
 This preserves the product rule:
 

@@ -474,6 +474,8 @@ Runtime behavior:
   global cap + hard-limit gate + arena SLO (`arena.maxEntriesPerSession`).
 - Effective compaction / hard-limit ratios are computed from the current session `contextWindow`:
   `1 - headroomTokens / contextWindow`, then clamped into each threshold's configured floor/ceiling band.
+- These live ratios feed pressure evaluation plus turn-scoped gate/advisory
+  guidance. They do not become session-cached system-prompt contract text.
 - When pressure is `critical` and no recent compaction has been performed, runtime arms a compaction gate:
   tool calls are blocked until `session_compact` is performed (only `session_compact` and `skill_complete` bypass the gate).
 - Projection injection is working-only (`brewva.projection-working`) and follows the same budget gate.

@@ -69,20 +69,28 @@ function summarizeMessage(message: unknown): Record<string, unknown> {
   };
 
   const content = summarizeContent(value.content);
+  const usage =
+    value.usage && typeof value.usage === "object" && !Array.isArray(value.usage)
+      ? value.usage
+      : null;
   return {
     role: value.role ?? null,
     timestamp: typeof value.timestamp === "number" ? value.timestamp : null,
     stopReason: value.stopReason ?? null,
     provider: value.provider ?? null,
     model: value.model ?? null,
-    usage: value.usage
+    usage: usage
       ? {
-          input: value.usage.input ?? 0,
-          output: value.usage.output ?? 0,
-          cacheRead: value.usage.cacheRead ?? 0,
-          cacheWrite: value.usage.cacheWrite ?? 0,
-          totalTokens: value.usage.totalTokens ?? 0,
-          costTotal: value.usage.cost?.total ?? 0,
+          input: usage.input ?? 0,
+          output: usage.output ?? 0,
+          cacheRead: usage.cacheRead ?? 0,
+          cacheWrite: usage.cacheWrite ?? 0,
+          totalTokens: usage.totalTokens ?? 0,
+          costTotal: usage.cost?.total ?? 0,
+          cacheReadReported:
+            typeof usage.cacheRead === "number" && Number.isFinite(usage.cacheRead),
+          cacheWriteReported:
+            typeof usage.cacheWrite === "number" && Number.isFinite(usage.cacheWrite),
         }
       : null,
     contentItems: content.items,

@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { registerEventStream, registerQualityGate } from "@brewva/brewva-gateway/runtime-plugins";
+import {
+  buildContextEvidenceReport,
+  recordPromptStabilityEvidence,
+  recordTransientReductionEvidence,
+  registerEventStream,
+  registerQualityGate,
+} from "@brewva/brewva-gateway/runtime-plugins";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { requireDefined, requireNumber, requireRecord } from "../../helpers/assertions.js";
 import { createMockRuntimePluginApi, invokeHandlers } from "../../helpers/runtime-plugin.js";
@@ -242,13 +248,17 @@ maxcalls`,
     expect(runtime.inspect.events.query(sessionId, { type: "message_update" })).toHaveLength(0);
     const ends = runtime.inspect.events.query(sessionId, { type: "message_end" });
     expect(ends).toHaveLength(1);
-    const payload = ends[0]?.payload as { health?: { score?: number; windowChars?: number } };
+    const payload = ends[0]?.payload as {
+      health?: { score?: number; windowChars?: number };
+      usage?: { cacheReadReported?: boolean; cacheWriteReported?: boolean } | null;
+    };
     const health = requireRecord(payload.health, "Expected message_end health summary.") as {
       score?: unknown;
       windowChars?: unknown;
     };
     requireNumber(health.score, "Expected numeric health.score.");
     expect(health.windowChars).toBe(3);
+    expect(payload.usage).toBeNull();
   });
 
   test("given the ledger directory disappears before message_end, when assistant usage is recorded, then event stream recreates the ledger path", () => {
@@ -297,10 +307,138 @@ maxcalls`,
     );
 
     expect(existsSync(join(workspace, ".orchestrator", "ledger", "evidence.jsonl"))).toBe(true);
-    expect(runtime.inspect.events.query(sessionId, { type: "message_end" })).toHaveLength(1);
+    const messageEnds = runtime.inspect.events.query(sessionId, { type: "message_end" });
+    expect(messageEnds).toHaveLength(1);
+    expect(messageEnds[0]?.payload).toMatchObject({
+      usage: {
+        cacheRead: 0,
+        cacheWrite: 0,
+        cacheReadReported: true,
+        cacheWriteReported: true,
+      },
+    });
     expect(runtime.inspect.events.query(sessionId, { type: "cost_update" })).toHaveLength(1);
     const ledgerRows = runtime.inspect.ledger.listRows(sessionId);
     expect(ledgerRows).toHaveLength(1);
     expect(ledgerRows[0]?.tool).toBe("brewva_cost");
+  });
+
+  test("given event-stream message_end usage and sidecar evidence, when building the context evidence report, then readiness reflects explicit provider cache accounting", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-context-evidence-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+    const sessionId = "ext-context-evidence-1";
+
+    const prompt = runtime.maintain.context.observePromptStability(sessionId, {
+      stablePrefixHash: "prefix-live",
+      dynamicTailHash: "tail-live",
+      injectionScopeId: "leaf-live",
+      turn: 1,
+      timestamp: 1_740_000_003_100,
+    });
+    recordPromptStabilityEvidence({
+      workspaceRoot: runtime.workspaceRoot,
+      sessionId,
+      observed: prompt,
+      pressureLevel: "high",
+      usageRatio: 0.9,
+      pendingCompactionReason: "usage_threshold",
+      gateRequired: false,
+    });
+
+    const reduction = runtime.maintain.context.observeTransientReduction(sessionId, {
+      status: "completed",
+      reason: null,
+      eligibleToolResults: 4,
+      clearedToolResults: 2,
+      clearedChars: 1536,
+      estimatedTokenSavings: 410,
+      pressureLevel: "high",
+      turn: 1,
+      timestamp: 1_740_000_003_110,
+    });
+    recordTransientReductionEvidence({
+      workspaceRoot: runtime.workspaceRoot,
+      sessionId,
+      observed: reduction,
+    });
+
+    const { api, handlers } = createMockRuntimePluginApi();
+    registerEventStream(api, runtime);
+
+    invokeHandlers(
+      handlers,
+      "message_end",
+      {
+        message: {
+          role: "assistant",
+          provider: "openai",
+          model: "gpt-5.4",
+          stopReason: "end_turn",
+          usage: {
+            input: 18,
+            output: 6,
+            cacheRead: 40,
+            cacheWrite: 9,
+            totalTokens: 73,
+            cost: {
+              total: 0.0002,
+            },
+          },
+          content: [{ type: "text", text: "cached response" }],
+        },
+      },
+      {
+        cwd: workspace,
+        sessionManager: {
+          getSessionId: () => sessionId,
+        },
+      },
+    );
+
+    const messageEnds = runtime.inspect.events.query(sessionId, { type: "message_end" });
+    expect(messageEnds).toHaveLength(1);
+    expect(messageEnds[0]?.payload).toMatchObject({
+      usage: {
+        cacheRead: 40,
+        cacheWrite: 9,
+        cacheReadReported: true,
+        cacheWriteReported: true,
+      },
+    });
+
+    const report = buildContextEvidenceReport(runtime, {
+      sessionIds: [sessionId],
+    });
+    expect(report.aggregate).toMatchObject({
+      sessionsObserved: 1,
+      promptObservedTurns: 1,
+      stablePrefixTurns: 1,
+      reductionObservedTurns: 1,
+      reductionCompletedTurns: 1,
+      totalEstimatedTokenSavings: 410,
+      totalCacheReadTokens: 40,
+      totalCacheWriteTokens: 9,
+      sessionsWithReportedCacheRead: 1,
+      sessionsWithReportedCacheWrite: 1,
+      sessionsWithObservedCacheAccounting: 1,
+    });
+    expect(report.promotionReadiness).toEqual({
+      stablePrefixTargetMet: true,
+      reductionEvidenceObserved: true,
+      cacheAccountingObserved: true,
+      ready: true,
+      gaps: [],
+    });
+    expect(report.sessions).toEqual([
+      expect.objectContaining({
+        sessionId,
+        cacheReadTokens: 40,
+        cacheWriteTokens: 9,
+        cacheReadReported: true,
+        cacheWriteReported: true,
+        cacheAccountingObserved: true,
+        reductionCompletedTurns: 1,
+      }),
+    ]);
   });
 });

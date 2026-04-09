@@ -250,6 +250,9 @@ Default mappings in Brewva:
   - `rebuildable state`
 - channel helper state, routing hints, and other UX continuity helpers
   - `cache`
+- transient outbound provider-request reduction and other request-copy-only
+  prompt-shaping helpers
+  - `cache`
 
 Boundary rule:
 
@@ -370,6 +373,9 @@ Model-facing composition is separate:
 - runtime admission decides which sources are allowed
 - `ContextComposer` decides how admitted blocks are shown to the model
 - default hosted session behavior is narrative-first
+- the hosted system prompt carries one static Brewva context contract; live
+  pressure and threshold numbers stay in turn-scoped hidden-tail blocks rather
+  than in the session-cached prompt prefix
 - the model may choose any valid path unless an independent governance boundary
   blocks it
 

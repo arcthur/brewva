@@ -21,7 +21,11 @@ import type {
   ContextCompactionReason,
   ContextPressureLevel,
   ContextPressureStatus,
+  PromptStabilityObservationInput,
+  PromptStabilityState,
   SkillDocument,
+  TransientReductionObservationInput,
+  TransientReductionState,
   TruthState,
 } from "../contracts/index.js";
 import type { GovernancePort } from "../governance/port.js";
@@ -174,6 +178,58 @@ export class ContextService {
 
   getContextPressureLevel(sessionId: string, usage?: ContextBudgetUsage): ContextPressureLevel {
     return this.contextPressure.getContextPressureLevel(sessionId, usage);
+  }
+
+  observePromptStability(
+    sessionId: string,
+    input: PromptStabilityObservationInput,
+  ): PromptStabilityState {
+    const scopeKey = this.sessionState.buildInjectionScopeKey(sessionId, input.injectionScopeId);
+    const previous = this.sessionState.getPromptStability(sessionId);
+    const scopeChanged = previous !== undefined && previous.scopeKey !== scopeKey;
+    const nextState: PromptStabilityState = {
+      turn: input.turn ?? this.getCurrentTurn(sessionId),
+      updatedAt: input.timestamp ?? Date.now(),
+      scopeKey,
+      stablePrefixHash: input.stablePrefixHash,
+      dynamicTailHash: input.dynamicTailHash,
+      stablePrefix:
+        previous === undefined ||
+        scopeChanged ||
+        previous.stablePrefixHash === input.stablePrefixHash,
+      stableTail:
+        previous === undefined ||
+        (previous.dynamicTailHash === input.dynamicTailHash && previous.scopeKey === scopeKey),
+    };
+    this.sessionState.setPromptStability(sessionId, nextState);
+    return nextState;
+  }
+
+  getPromptStability(sessionId: string): PromptStabilityState | undefined {
+    return this.sessionState.getPromptStability(sessionId);
+  }
+
+  observeTransientReduction(
+    sessionId: string,
+    input: TransientReductionObservationInput,
+  ): TransientReductionState {
+    const nextState: TransientReductionState = {
+      turn: input.turn ?? this.getCurrentTurn(sessionId),
+      updatedAt: input.timestamp ?? Date.now(),
+      status: input.status,
+      reason: input.reason ?? null,
+      eligibleToolResults: Math.max(0, Math.trunc(input.eligibleToolResults)),
+      clearedToolResults: Math.max(0, Math.trunc(input.clearedToolResults)),
+      clearedChars: Math.max(0, Math.trunc(input.clearedChars ?? 0)),
+      estimatedTokenSavings: Math.max(0, Math.trunc(input.estimatedTokenSavings ?? 0)),
+      pressureLevel: input.pressureLevel ?? "unknown",
+    };
+    this.sessionState.setTransientReduction(sessionId, nextState);
+    return nextState;
+  }
+
+  getTransientReduction(sessionId: string): TransientReductionState | undefined {
+    return this.sessionState.getTransientReduction(sessionId);
   }
 
   getRecentCompactionWindowTurns(): number {

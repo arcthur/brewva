@@ -24,6 +24,8 @@ export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinitio
       const sessionId = getSessionId(ctx);
       const tape = options.runtime.inspect.events.getTapeStatus(sessionId);
       const usage = options.runtime.inspect.context.getUsage(sessionId);
+      const promptStability = options.runtime.inspect.context.getPromptStability(sessionId);
+      const transientReduction = options.runtime.inspect.context.getTransientReduction(sessionId);
       const pressure = options.runtime.inspect.context.getPressureStatus(sessionId, usage);
       const cost = options.runtime.inspect.cost.getSummary(sessionId);
       const task = options.runtime.inspect.task.getState(sessionId);
@@ -44,7 +46,16 @@ export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinitio
         `tape_entries_total: ${tape.totalEntries}`,
         `context_pressure: ${pressure.level}`,
         `context_usage: ${formatPercent(pressure.usageRatio)}`,
+        `prompt_prefix_stable: ${promptStability?.stablePrefix ?? "unknown"}`,
+        `dynamic_tail_stable: ${promptStability?.stableTail ?? "unknown"}`,
+        `prompt_scope_key: ${promptStability?.scopeKey ?? "none"}`,
+        `transient_reduction_status: ${transientReduction?.status ?? "unknown"}`,
+        `transient_reduction_reason: ${transientReduction?.reason ?? "none"}`,
+        `transient_reduction_cleared_tool_results: ${transientReduction?.clearedToolResults ?? 0}`,
+        `transient_reduction_estimated_token_savings: ${transientReduction?.estimatedTokenSavings ?? 0}`,
         `cost_total_usd: ${cost.totalCostUsd.toFixed(6)}`,
+        `cache_read_tokens: ${cost.cacheReadTokens}`,
+        `cache_write_tokens: ${cost.cacheWriteTokens}`,
         `budget_action: ${cost.budget.action}`,
         `task_phase: ${task.status?.phase ?? "none"}`,
         `task_blockers: ${task.blockers.length}`,
@@ -70,6 +81,8 @@ export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinitio
         context: {
           usage,
           pressure,
+          promptStability: promptStability ?? null,
+          transientReduction: transientReduction ?? null,
         },
         cost,
         task: {

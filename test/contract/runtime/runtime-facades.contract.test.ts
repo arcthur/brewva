@@ -765,6 +765,78 @@ describe("runtime facade coverage", () => {
     expect(runtime.inspect.context.getCompactionWindowTurns()).toBe(5);
   });
 
+  test("context facade exposes live prompt stability state without a durable event dependency", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createTestWorkspace("runtime-facade-prompt-stability"),
+      config: createOpsRuntimeConfig(),
+    });
+    const sessionId = "runtime-facade-prompt-stability-1";
+
+    expect(runtime.inspect.context.getPromptStability(sessionId)).toBeUndefined();
+
+    const observed = runtime.maintain.context.observePromptStability(sessionId, {
+      stablePrefixHash: sha256("system-prefix"),
+      dynamicTailHash: sha256("dynamic-tail"),
+      injectionScopeId: "leaf-one",
+      turn: 4,
+      timestamp: 1_740_000_000_400,
+    });
+
+    expect(observed).toEqual({
+      turn: 4,
+      updatedAt: 1_740_000_000_400,
+      scopeKey: "runtime-facade-prompt-stability-1::leaf-one",
+      stablePrefixHash: sha256("system-prefix"),
+      dynamicTailHash: sha256("dynamic-tail"),
+      stablePrefix: true,
+      stableTail: true,
+    });
+    expect(runtime.inspect.context.getPromptStability(sessionId)).toEqual(observed);
+
+    runtime.maintain.session.clearState(sessionId);
+
+    expect(runtime.inspect.context.getPromptStability(sessionId)).toBeUndefined();
+  });
+
+  test("context facade exposes transient outbound reduction state without a durable event dependency", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createTestWorkspace("runtime-facade-transient-reduction"),
+      config: createOpsRuntimeConfig(),
+    });
+    const sessionId = "runtime-facade-transient-reduction-1";
+
+    expect(runtime.inspect.context.getTransientReduction(sessionId)).toBeUndefined();
+
+    const observed = runtime.maintain.context.observeTransientReduction(sessionId, {
+      status: "completed",
+      reason: null,
+      eligibleToolResults: 5,
+      clearedToolResults: 1,
+      clearedChars: 1536,
+      estimatedTokenSavings: 431,
+      pressureLevel: "high",
+      turn: 5,
+      timestamp: 1_740_000_000_500,
+    });
+
+    expect(observed).toEqual({
+      turn: 5,
+      updatedAt: 1_740_000_000_500,
+      status: "completed",
+      reason: null,
+      eligibleToolResults: 5,
+      clearedToolResults: 1,
+      clearedChars: 1536,
+      estimatedTokenSavings: 431,
+      pressureLevel: "high",
+    });
+    expect(runtime.inspect.context.getTransientReduction(sessionId)).toEqual(observed);
+
+    runtime.maintain.session.clearState(sessionId);
+
+    expect(runtime.inspect.context.getTransientReduction(sessionId)).toBeUndefined();
+  });
+
   test("context lifecycle hooks hydrate cold sessions and clear turn-local injection reservations", async () => {
     const runtime = new BrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-context-lifecycle"),
