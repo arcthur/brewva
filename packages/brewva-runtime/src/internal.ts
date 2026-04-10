@@ -16,6 +16,7 @@ export * from "./schedule/service.js";
 export * from "./services/credential-vault.js";
 export * from "./services/session-wire.js";
 export * from "./skills/registry.js";
+export * from "./skills/validation/evidence.js";
 export * from "./state/file-change-tracker.js";
 export * from "./state/patch-history.js";
 export * from "./state/workspace-paths.js";

@@ -612,6 +612,15 @@ Skill sequencing is model-native.
 
 There is no public skill-cascade or chain-control tool.
 
+`skill_complete` keeps the existing two-step posture:
+
+1. preview output validation
+2. verification
+3. authoritative commit-time revalidation against fresh post-verification evidence
+
+It also requires an active skill; calling it without a loaded skill is a
+fail-closed contract error rather than a no-op success.
+
 In the generic hosted path, when no skill is active yet and no TaskSpec is
 recorded, the hosted control plane first narrows the turn to bootstrap
 control-plane tools so the next semantic decision is `task_set_spec`. After

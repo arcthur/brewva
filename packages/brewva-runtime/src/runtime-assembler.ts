@@ -59,6 +59,13 @@ import { TruthService } from "./services/truth.js";
 import { VerificationProjectorService } from "./services/verification-projector.js";
 import { VerificationService } from "./services/verification.js";
 import { SkillRegistry } from "./skills/registry.js";
+import { SkillValidationContextBuilder } from "./skills/validation/builders/validation-context-builder.js";
+import { SkillOutputValidationPipeline } from "./skills/validation/pipeline.js";
+import { ContractValidator } from "./skills/validation/validators/contract-validator.js";
+import { ImplementationOutputValidator } from "./skills/validation/validators/implementation-validator.js";
+import { PlanningOutputValidator } from "./skills/validation/validators/planning-validator.js";
+import { QaOutputValidator } from "./skills/validation/validators/qa-validator.js";
+import { ReviewOutputValidator } from "./skills/validation/validators/review-validator.js";
 import { FileChangeTracker } from "./state/file-change-tracker.js";
 import { ReasoningReplayEngine } from "./tape/reasoning-replay.js";
 import { TurnReplayEngine } from "./tape/replay-engine.js";
@@ -341,12 +348,25 @@ export function createRuntimeServiceDependencies(
         spec: options.kernel.getTaskState(sessionId).spec,
       }),
   });
+  const skillValidationContextBuilder = new SkillValidationContextBuilder({
+    skills: options.coreDependencies.skillRegistry,
+    sessionState: options.sessionState,
+    listEvents: (sessionId) => options.coreDependencies.eventStore.list(sessionId),
+  });
+  const skillValidationPipeline = new SkillOutputValidationPipeline([
+    new ContractValidator(),
+    new PlanningOutputValidator(),
+    new ImplementationOutputValidator(),
+    new ReviewOutputValidator(),
+    new QaOutputValidator(),
+  ]);
   const skillLifecycleService = new SkillLifecycleService({
     skills: options.coreDependencies.skillRegistry,
     sessionState: options.sessionState,
     getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
     getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
-    listEvents: (sessionId) => options.coreDependencies.eventStore.list(sessionId),
+    validationContextBuilder: skillValidationContextBuilder,
+    validationPipeline: skillValidationPipeline,
     recordEvent: (input) => options.kernel.recordEvent(input),
     setTaskSpec: (sessionId, spec) => taskService.setTaskSpec(sessionId, spec),
   });

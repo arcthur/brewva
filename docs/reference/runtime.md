@@ -79,6 +79,13 @@ state, or rollback identity.
 - `activate(sessionId, name)`
 - `complete(sessionId, output, options?)`
 
+`complete(...)` remains the authoritative skill commit boundary. It re-runs the
+same closed validation composition exposed through
+`inspect.skills.validateOutputs(...)`, but rebuilds validation context from the
+latest post-verification evidence before recording `skill_completed`. Both
+`validateOutputs(...)` and `complete(...)` fail closed when no active skill is
+loaded for the target session.
+
 ### `authority.proposals`
 
 - `submit(sessionId, proposal)`
@@ -207,6 +214,11 @@ Verification semantics to preserve:
 - `validateOutputs(sessionId, outputs)`
 - `getOutputs(sessionId, skillName)`
 - `getConsumedOutputs(sessionId, targetSkillName)`
+
+`validateOutputs(...)` is the preview surface for the same runtime-owned
+validator composition used by `authority.skills.complete(...)`. It does not
+cache commit decisions or transfer caller-owned validation state across the
+verification boundary, and it requires an active skill.
 
 ### `inspect.proposals`
 

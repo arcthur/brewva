@@ -1,14 +1,14 @@
 import {
   PLANNING_EVIDENCE_KEYS,
-  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-  collectLatestPlanningOutputTimestamps,
   collectPlanningRiskCategories,
   coercePlanningArtifactSet,
-  derivePlanningEvidenceState,
   REVIEW_CHANGE_CATEGORIES,
-  resolveLatestWorkspaceWriteTimestamp,
   type SkillDocument,
 } from "@brewva/brewva-runtime";
+import {
+  deriveSkillPlanningEvidenceStateFromEvents,
+  resolveSkillVerificationEvidenceContext,
+} from "@brewva/brewva-runtime/internal";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import {
@@ -89,44 +89,6 @@ function readStringArray(value: unknown): string[] | undefined {
     .map((entry) => readString(entry))
     .filter((entry): entry is string => Boolean(entry));
   return items.length === value.length ? items : undefined;
-}
-
-function resolveVerificationEvidenceState(input: {
-  verificationOutcomes: ReturnType<
-    BrewvaToolOptions["runtime"]["inspect"]["events"]["queryStructured"]
-  >;
-  latestWriteAt: number;
-  hasConsumedVerificationEvidence: boolean;
-}): ReviewEvidenceState {
-  const verificationOutcomes = input.verificationOutcomes.toSorted(
-    (left, right) => left.timestamp - right.timestamp || left.id.localeCompare(right.id),
-  );
-  if (verificationOutcomes.length === 0) {
-    return input.hasConsumedVerificationEvidence ? "present" : "missing";
-  }
-  let sawVerificationAfterLatestWrite = input.latestWriteAt === 0;
-  let sawStaleVerification = false;
-  for (let index = verificationOutcomes.length - 1; index >= 0; index -= 1) {
-    const event = verificationOutcomes[index]!;
-    if (event.timestamp < input.latestWriteAt) {
-      break;
-    }
-    sawVerificationAfterLatestWrite = true;
-    if (!isRecord(event.payload)) {
-      continue;
-    }
-    const evidenceFreshness = readString(event.payload.evidenceFreshness)?.toLowerCase();
-    if (evidenceFreshness === "fresh") {
-      return "present";
-    }
-    if (evidenceFreshness === "stale" || evidenceFreshness === "mixed") {
-      sawStaleVerification = true;
-    }
-  }
-  if (!sawVerificationAfterLatestWrite || sawStaleVerification) {
-    return "stale";
-  }
-  return input.hasConsumedVerificationEvidence ? "present" : "missing";
 }
 
 function coercePlanningPosture(value: unknown): ReviewPlanningPosture | undefined {
@@ -250,25 +212,17 @@ function deriveEvidenceStateFromConsumedOutputs(input: {
 }): ReviewEvidenceStateRecord | undefined {
   const out: ReviewEvidenceStateRecord = {};
   const sessionEvents = input.runtime.inspect.events.query(input.sessionId);
-  const latestWriteAt = resolveLatestWorkspaceWriteTimestamp(sessionEvents);
-  const planningEvidenceState = derivePlanningEvidenceState({
+  const planningEvidenceState = deriveSkillPlanningEvidenceStateFromEvents({
+    events: sessionEvents,
     consumedOutputs: input.consumedOutputs,
-    latestOutputTimestamps: collectLatestPlanningOutputTimestamps(sessionEvents),
-    latestWriteAt,
   });
-  const verificationOutcomes = input.runtime.inspect.events.queryStructured(input.sessionId, {
-    type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-  });
+  const verificationEvidenceContext = resolveSkillVerificationEvidenceContext(sessionEvents);
   for (const key of ["impact_map", ...PLANNING_EVIDENCE_KEYS, "verification_evidence"] as const) {
     if (!input.consumedKeys.includes(key)) {
       continue;
     }
     if (key === "verification_evidence") {
-      out[key] = resolveVerificationEvidenceState({
-        verificationOutcomes,
-        latestWriteAt,
-        hasConsumedVerificationEvidence: hasOwn(input.consumedOutputs, key),
-      });
+      out[key] = verificationEvidenceContext.state;
       continue;
     }
     if (key === "impact_map") {
@@ -569,6 +523,22 @@ export function createSkillCompleteTool(options: BrewvaToolOptions): ToolDefinit
         ? params.learningResearch
         : undefined;
       const reviewEnsemble = isRecord(params.reviewEnsemble) ? params.reviewEnsemble : undefined;
+      const activeSkill = options.runtime.inspect.skills.getActive(sessionId);
+      if (!activeSkill) {
+        return failTextResult(
+          "Skill completion rejected. No active skill is loaded for the current session.",
+          {
+            ok: false,
+            missing: [],
+            invalid: [
+              {
+                name: "skill",
+                reason: "No active skill is loaded for this session.",
+              },
+            ],
+          },
+        );
+      }
       let outputs = rawOutputs;
       let learningResearchSynthesis:
         | {
@@ -587,15 +557,6 @@ export function createSkillCompleteTool(options: BrewvaToolOptions): ToolDefinit
         | undefined;
 
       if (learningResearch) {
-        const activeSkill = options.runtime.inspect.skills.getActive(sessionId);
-        if (!activeSkill) {
-          return failTextResult(
-            "Learning research synthesis rejected. No active skill is loaded for the current session.",
-            {
-              ok: false,
-            },
-          );
-        }
         const scope = resolveToolTargetScope(options.runtime, ctx);
         const synthesized = buildLearningResearchOutputs({
           activeSkill,

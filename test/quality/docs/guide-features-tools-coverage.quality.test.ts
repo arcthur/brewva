@@ -42,7 +42,7 @@ function collectToolNames(sourceRoot: string): string[] {
   const names = new Set<string>();
   for (const file of files) {
     const text = readFileSync(join(sourceRoot, file), "utf-8");
-    const matches = text.match(/name:\s*"([a-z0-9_]+)"/g) ?? [];
+    const matches = text.match(/defineBrewvaTool\s*\(\s*\{[\s\S]*?name:\s*"([a-z0-9_]+)"/g) ?? [];
     for (const match of matches) {
       const parsed = /name:\s*"([a-z0-9_]+)"/.exec(match)?.[1];
       if (parsed) names.add(parsed);

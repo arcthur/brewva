@@ -93,6 +93,31 @@ function buildImpactMap(input: {
 }
 
 describe("skill_complete tool", () => {
+  test("rejects completion when no active skill is loaded", async () => {
+    const runtime = createIsolatedRuntime("no-active-skill");
+    const sessionId = "skill-complete-no-active-skill";
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
+
+    const result = await completeTool.execute(
+      "tc-complete-no-active-skill",
+      {
+        outputs: {
+          summary: "attempted completion without skill activation",
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("No active skill is loaded for the current session.");
+    expect(runtime.inspect.skills.getActive(sessionId)).toBeUndefined();
+  });
+
   test("allows omitted outputs for skills whose contract declares no outputs", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-complete-empty-"));
     writeSkill(join(workspace, ".brewva/skills/core/noop/SKILL.md"), {
@@ -1973,6 +1998,231 @@ The WAL boundary must keep replay ordering deterministic.
       merge_decision: "blocked",
       review_report: expect.objectContaining({
         missing_evidence: expect.arrayContaining(["verification_evidence:stale"]),
+      }),
+    });
+  });
+
+  test("treats artifact-only verification evidence as missing until runtime verification receipts exist", async () => {
+    const workspace = mkdtempSync(
+      join(tmpdir(), "brewva-skill-complete-review-missing-verification-receipt-"),
+    );
+    writeSkill(join(workspace, ".brewva/skills/core/planning-context/SKILL.md"), {
+      name: "planning-context",
+      outputs: ["impact_map", "planning_posture"],
+      outputContracts: [
+        "  impact_map:",
+        "    kind: json",
+        "    min_keys: 1",
+        "  planning_posture:",
+        "    kind: enum",
+        "    values: [trivial, moderate, complex, high_risk]",
+      ],
+    });
+    writeSkill(join(workspace, ".brewva/skills/core/plan-artifacts/SKILL.md"), {
+      name: "plan-artifacts",
+      outputs: [
+        "design_spec",
+        "execution_plan",
+        "execution_mode_hint",
+        "risk_register",
+        "implementation_targets",
+      ],
+      outputContracts: [
+        "  design_spec:",
+        "    kind: text",
+        "    min_words: 3",
+        "    min_length: 18",
+        "  execution_plan:",
+        "    kind: json",
+        "    min_items: 1",
+        "  execution_mode_hint:",
+        "    kind: enum",
+        "    values: [direct_patch, test_first, coordinated_rollout]",
+        "  risk_register:",
+        "    kind: json",
+        "    min_items: 1",
+        "  implementation_targets:",
+        "    kind: json",
+        "    min_items: 1",
+      ],
+    });
+    writeSkill(join(workspace, ".brewva/skills/core/implementation-producer/SKILL.md"), {
+      name: "implementation-producer",
+      outputs: ["change_set", "files_changed", "verification_evidence"],
+      outputContracts: [
+        "  change_set:",
+        "    kind: text",
+        "    min_words: 3",
+        "    min_length: 18",
+        "  files_changed:",
+        "    kind: json",
+        "    min_items: 1",
+        "  verification_evidence:",
+        "    kind: json",
+        "    min_items: 1",
+      ],
+    });
+    writeSkill(join(workspace, ".brewva/skills/core/review-contract/SKILL.md"), {
+      name: "review-contract",
+      outputs: ["review_report", "review_findings", "merge_decision"],
+      outputContracts: [
+        "  review_report:",
+        "    kind: json",
+        "    min_keys: 7",
+        "    required_fields: [summary, activated_lanes, activation_basis, missing_evidence, residual_blind_spots, precedent_query_summary, precedent_consult_status]",
+        "  review_findings:",
+        "    kind: json",
+        "    min_items: 0",
+        "  merge_decision:",
+        "    kind: enum",
+        "    values: [ready, needs_changes, blocked]",
+      ],
+      consumes: [
+        "impact_map",
+        "planning_posture",
+        "design_spec",
+        "execution_plan",
+        "risk_register",
+        "implementation_targets",
+        "change_set",
+        "files_changed",
+        "verification_evidence",
+      ],
+    });
+
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "skill-complete-review-missing-verification-receipt";
+    const loadTool = createSkillLoadTool({ runtime });
+
+    runtime.authority.skills.activate(sessionId, "planning-context");
+    runtime.authority.skills.complete(sessionId, {
+      impact_map: buildImpactMap({
+        summary: "Review synthesis should require runtime verification receipts.",
+        changedFileClasses: ["runtime_coordination"],
+        changeCategories: ["public_api"],
+      }),
+      planning_posture: "moderate",
+    });
+
+    runtime.authority.skills.activate(sessionId, "plan-artifacts");
+    runtime.authority.skills.complete(sessionId, {
+      design_spec: "Require runtime-owned verification receipts before review can claim readiness.",
+      execution_plan: [
+        {
+          step: "Preserve canonical planning evidence for the review window.",
+          intent:
+            "Keep design evidence complete while verification evidence is checked separately.",
+          owner: "runtime.review",
+          exit_criteria: "Review sees the bounded planning artifacts directly.",
+          verification_intent: "Review blocks if runtime verification receipts are absent.",
+        },
+      ],
+      execution_mode_hint: "direct_patch",
+      risk_register: [
+        {
+          risk: "Artifact-only verification evidence could be mistaken for fresh runtime verification.",
+          category: "public_api",
+          severity: "high",
+          mitigation:
+            "Require runtime verification receipts before review synthesis marks verification_evidence present.",
+          required_evidence: ["runtime_verification_receipt"],
+          owner_lane: "review-operability",
+        },
+      ],
+      implementation_targets: [
+        {
+          target: "packages/brewva-runtime/src/skills/validation",
+          kind: "module",
+          owner_boundary: "runtime.review",
+          reason: "Review scope is bounded to the runtime validation evidence path.",
+        },
+      ],
+    });
+
+    runtime.authority.skills.activate(sessionId, "implementation-producer");
+    runtime.authority.skills.complete(sessionId, {
+      change_set:
+        "Implementation recorded a verification_evidence artifact without appending a runtime verification receipt.",
+      files_changed: ["packages/brewva-runtime/src/skills/validation/evidence.ts"],
+      verification_evidence: [
+        "runtime verification artifact text without an authoritative receipt",
+      ],
+    });
+
+    await loadTool.execute(
+      "tc-load-review-missing-verification-receipt",
+      { name: "review-contract" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const allReviewLanes = [
+      "review-correctness",
+      "review-boundaries",
+      "review-operability",
+      "review-security",
+      "review-concurrency",
+      "review-compatibility",
+      "review-performance",
+    ] as const;
+    const activationTimestamp = Date.now();
+    const reviewRuns: DelegationRunRecord[] = allReviewLanes.map((lane, index) => ({
+      runId: `${lane}-missing-verification-receipt`,
+      delegate: lane,
+      agentSpec: lane,
+      parentSessionId: sessionId,
+      status: "completed",
+      createdAt: activationTimestamp + index * 2,
+      updatedAt: activationTimestamp + index * 2 + 1,
+      label: lane,
+      parentSkill: "review-contract",
+      kind: "consult",
+      consultKind: "review",
+      summary: `${lane} cleared the current scope.`,
+      resultData: {
+        kind: "consult",
+        consultKind: "review",
+        conclusion: `${lane} cleared the current scope.`,
+        lane,
+        disposition: "clear",
+        primaryClaim: `${lane} cleared the current scope.`,
+      },
+    }));
+
+    const completeTool = createSkillCompleteTool({
+      runtime: Object.assign(runtime, {
+        delegation: {
+          listRuns() {
+            return reviewRuns;
+          },
+        },
+      }),
+      verification: { executeCommands: false },
+    });
+
+    const result = await completeTool.execute(
+      "tc-complete-review-missing-verification-receipt",
+      {
+        reviewEnsemble: {
+          precedentQuerySummary:
+            "query_intent=precedent_lookup | query=runtime verification receipt | source_types=auto | search_mode=solution_only",
+          precedentConsultStatus: {
+            status: "not_required",
+          },
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("Skill completed");
+    expect(runtime.inspect.skills.getOutputs(sessionId, "review-contract")).toMatchObject({
+      merge_decision: "blocked",
+      review_report: expect.objectContaining({
+        missing_evidence: expect.arrayContaining(["verification_evidence:missing"]),
       }),
     });
   });
