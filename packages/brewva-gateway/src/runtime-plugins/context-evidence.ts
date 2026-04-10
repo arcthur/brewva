@@ -1,11 +1,5 @@
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { appendFile, mkdir } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import type {
   BrewvaHostedRuntimePort,
@@ -20,6 +14,9 @@ const SESSION_FILE_PREFIX = "sess_";
 const REPORT_FILE_NAME = "report-latest.json";
 const CONTEXT_EVIDENCE_SAMPLE_SCHEMA = "brewva.context_evidence.sample.v1";
 const CONTEXT_EVIDENCE_REPORT_SCHEMA = "brewva.context_evidence.report.v1";
+const queuedSamplesByPath = new Map<string, ContextEvidenceSample[]>();
+const flushingSamplesByPath = new Map<string, ContextEvidenceSample[]>();
+const flushPromisesByPath = new Map<string, Promise<void>>();
 
 function encodeSessionId(sessionId: string): string {
   return Buffer.from(sessionId, "utf8").toString("base64url");
@@ -197,14 +194,51 @@ function appendContextEvidenceSample(
 ): ContextEvidenceArtifactRef | null {
   try {
     const absolutePath = resolveSessionEvidencePath(workspaceRoot, sample.sessionId);
-    ensureParentDirectory(absolutePath);
-    appendFileSync(absolutePath, `${JSON.stringify(sample)}\n`, "utf8");
+    const queued = queuedSamplesByPath.get(absolutePath) ?? [];
+    queued.push(sample);
+    queuedSamplesByPath.set(absolutePath, queued);
+    scheduleContextEvidenceFlush(absolutePath);
     return {
       artifactRef: normalizeRelativePath(relative(workspaceRoot, absolutePath)),
       absolutePath,
     };
   } catch {
     return null;
+  }
+}
+
+function scheduleContextEvidenceFlush(filePath: string): void {
+  if (flushPromisesByPath.has(filePath)) {
+    return;
+  }
+  const flushPromise = flushContextEvidencePath(filePath).finally(() => {
+    flushPromisesByPath.delete(filePath);
+    if ((queuedSamplesByPath.get(filePath)?.length ?? 0) > 0) {
+      scheduleContextEvidenceFlush(filePath);
+    }
+  });
+  flushPromisesByPath.set(filePath, flushPromise);
+}
+
+async function flushContextEvidencePath(filePath: string): Promise<void> {
+  const queued = queuedSamplesByPath.get(filePath);
+  if (!queued || queued.length === 0) {
+    return;
+  }
+
+  queuedSamplesByPath.delete(filePath);
+  flushingSamplesByPath.set(filePath, queued);
+  try {
+    await mkdir(dirname(filePath), { recursive: true });
+    await appendFile(
+      filePath,
+      queued.map((sample) => `${JSON.stringify(sample)}\n`).join(""),
+      "utf8",
+    );
+  } catch {
+    // Best-effort sidecar telemetry must not block hosted request paths.
+  } finally {
+    flushingSamplesByPath.delete(filePath);
   }
 }
 
@@ -335,17 +369,32 @@ function parseContextEvidenceSample(raw: unknown): ContextEvidenceSample | null 
 function listEvidenceFiles(workspaceRoot: string, sessionIds?: readonly string[]): string[] {
   const directory = resolveEvidenceDir(workspaceRoot);
   if (!existsSync(directory)) {
-    return [];
+    if (sessionIds && sessionIds.length > 0) {
+      return [...new Set(sessionIds)]
+        .map((sessionId) => resolveSessionEvidencePath(workspaceRoot, sessionId))
+        .filter((path) => queuedSamplesByPath.has(path) || flushingSamplesByPath.has(path));
+    }
+    return [...new Set([...queuedSamplesByPath.keys(), ...flushingSamplesByPath.keys()])]
+      .filter((path) => dirname(path) === directory)
+      .toSorted();
   }
   if (sessionIds && sessionIds.length > 0) {
     return [...new Set(sessionIds)]
       .map((sessionId) => resolveSessionEvidencePath(workspaceRoot, sessionId))
-      .filter((path) => existsSync(path));
+      .filter(
+        (path) =>
+          existsSync(path) || queuedSamplesByPath.has(path) || flushingSamplesByPath.has(path),
+      );
   }
-  return readdirSync(directory)
-    .filter((name) => name.startsWith(SESSION_FILE_PREFIX) && name.endsWith(".jsonl"))
-    .map((name) => join(directory, name))
-    .toSorted();
+  return [
+    ...new Set([
+      ...readdirSync(directory)
+        .filter((name) => name.startsWith(SESSION_FILE_PREFIX) && name.endsWith(".jsonl"))
+        .map((name) => join(directory, name)),
+      ...[...queuedSamplesByPath.keys()].filter((path) => dirname(path) === directory),
+      ...[...flushingSamplesByPath.keys()].filter((path) => dirname(path) === directory),
+    ]),
+  ].toSorted();
 }
 
 export function readContextEvidenceSamples(input: {
@@ -354,19 +403,27 @@ export function readContextEvidenceSamples(input: {
 }): ContextEvidenceSample[] {
   const samples: ContextEvidenceSample[] = [];
   for (const path of listEvidenceFiles(input.workspaceRoot, input.sessionIds)) {
-    const lines = readFileSync(path, "utf8")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-    for (const line of lines) {
-      try {
-        const parsed = parseContextEvidenceSample(JSON.parse(line));
-        if (parsed) {
-          samples.push(parsed);
+    if (existsSync(path)) {
+      const lines = readFileSync(path, "utf8")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      for (const line of lines) {
+        try {
+          const parsed = parseContextEvidenceSample(JSON.parse(line));
+          if (parsed) {
+            samples.push(parsed);
+          }
+        } catch {
+          continue;
         }
-      } catch {
-        continue;
       }
+    }
+    for (const sample of flushingSamplesByPath.get(path) ?? []) {
+      samples.push(sample);
+    }
+    for (const sample of queuedSamplesByPath.get(path) ?? []) {
+      samples.push(sample);
     }
   }
   return samples.toSorted((left, right) => {

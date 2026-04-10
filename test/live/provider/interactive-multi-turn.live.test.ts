@@ -37,7 +37,6 @@ type RegressionRunResult = {
 const COMPACTION_FOLLOW_TYPES = new Set([
   "session_before_compact",
   "session_compact",
-  "context_compacted",
   "context_compaction_skipped",
 ]);
 
@@ -287,7 +286,6 @@ function summarizeCounts(events: RuntimeEvent[]): string {
   const compactionRequested = countEvents(events, "context_compaction_requested");
   const beforeCompact = countEvents(events, "session_before_compact");
   const sessionCompact = countEvents(events, "session_compact");
-  const compacted = countEvents(events, "context_compacted");
   const compactionSkipped = countEvents(events, "context_compaction_skipped");
 
   return [
@@ -298,7 +296,6 @@ function summarizeCounts(events: RuntimeEvent[]): string {
     `compaction_requested=${compactionRequested}`,
     `session_before_compact=${beforeCompact}`,
     `session_compact=${sessionCompact}`,
-    `context_compacted=${compacted}`,
     `compaction_skipped=${compactionSkipped}`,
   ].join(" ");
 }

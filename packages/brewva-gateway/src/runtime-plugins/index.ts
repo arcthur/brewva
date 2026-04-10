@@ -253,6 +253,21 @@ export function createHostedTurnPipeline(
 export { registerContextTransform } from "./context-transform.js";
 export { createRuntimeTurnClockStore, type RuntimeTurnClockStore } from "./runtime-turn-clock.js";
 export {
+  createHostedContextInjectionPipeline,
+  type HostedContextInjectionInput,
+  type HostedContextInjectionMessageDetails,
+  type HostedContextInjectionPipeline,
+  type HostedContextInjectionPipelineOptions,
+  type HostedContextInjectionResult,
+  type HostedInjectionSessionManager,
+  HOSTED_CONTEXT_INJECTION_MESSAGE_TYPE,
+} from "./hosted-context-injection-pipeline.js";
+export {
+  AUTO_COMPACTION_WATCHDOG_ERROR,
+  createHostedContextTelemetry,
+  type HostedContextTelemetry,
+} from "./hosted-context-telemetry.js";
+export {
   composeContextBlocks,
   type ComposedContextBlock,
   type ContextBlockCategory,
@@ -309,6 +324,8 @@ export {
   type PromptStabilityEvidenceSample,
   type TransientReductionEvidenceSample,
 } from "./context-evidence.js";
+export { registerProviderRequestRecovery } from "./provider-request-recovery.js";
+export { registerProviderRequestReduction } from "./provider-request-reduction.js";
 export { createRuntimeChannelTurnBridge } from "./channel-turn-bridge.js";
 export { createRuntimeTelegramChannelBridge } from "./telegram-channel-bridge.js";
 export {

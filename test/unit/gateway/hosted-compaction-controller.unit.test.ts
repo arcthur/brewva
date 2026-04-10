@@ -26,6 +26,7 @@ describe("hosted compaction controller", () => {
     const baseState = {
       hydrated: true,
       turnIndex: 1,
+      lastObservedUsageTokens: null,
       lastRuntimeGateRequired: false,
       autoCompactionInFlight: false,
       autoCompactionWatchdog: null,
@@ -141,14 +142,10 @@ describe("hosted compaction controller", () => {
 
   test("clears a previously armed runtime gate when session compact completes", () => {
     const eventTypes: string[] = [];
-    const markCompactedCalls: Array<Record<string, unknown>> = [];
     const runtime = createRuntimeFixture({
       context: {
         onTurnStart: () => undefined,
         observeUsage: () => undefined,
-        markCompacted: (_sessionId: string, payload: unknown) => {
-          markCompactedCalls.push(payload as Record<string, unknown>);
-        },
       },
       events: {
         record: (input: { type: string }) => {
@@ -157,6 +154,14 @@ describe("hosted compaction controller", () => {
         },
       },
     });
+    const commitCompactionCalls: Array<Record<string, unknown>> = [];
+    const originalCommitCompaction = runtime.authority.session.commitCompaction.bind(
+      runtime.authority.session,
+    );
+    runtime.authority.session.commitCompaction = (sessionId, payload) => {
+      commitCompactionCalls.push(payload as unknown as Record<string, unknown>);
+      return originalCommitCompaction(sessionId, payload);
+    };
     const telemetry = createHostedContextTelemetry(runtime);
     const controller = createHostedCompactionController(runtime, telemetry);
 
@@ -164,6 +169,13 @@ describe("hosted compaction controller", () => {
       sessionId: "s-compact",
       turnIndex: 8,
       timestamp: 20,
+    });
+    controller.context({
+      sessionId: "s-compact",
+      usage: HIGH_USAGE,
+      hasUI: false,
+      idle: false,
+      compact: undefined,
     });
     controller.setLastRuntimeGateRequired("s-compact", true);
     controller.sessionCompact({
@@ -176,12 +188,17 @@ describe("hosted compaction controller", () => {
       fromExtension: true,
     });
 
-    expect(markCompactedCalls).toEqual([
+    expect(commitCompactionCalls).toEqual([
       {
-        fromTokens: null,
+        compactId: "cmp-1",
+        sanitizedSummary: "Compacted working set",
+        summaryDigest: expect.any(String),
+        sourceTurn: 0,
+        leafEntryId: null,
+        referenceContextDigest: null,
+        fromTokens: 990,
         toTokens: 990,
-        summary: "Compacted working set",
-        entryId: "cmp-1",
+        origin: "extension_api",
       },
     ]);
     expect(eventTypes).toContain("session_compact");
@@ -196,7 +213,6 @@ describe("hosted compaction controller", () => {
         observeUsage: () => undefined,
         checkAndRequestCompaction: () => true,
         getPendingCompactionReason: () => "usage_threshold",
-        markCompacted: () => undefined,
       },
     });
     const telemetry = createHostedContextTelemetry(runtime);

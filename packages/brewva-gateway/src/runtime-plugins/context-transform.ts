@@ -122,6 +122,7 @@ export function createContextTransformLifecycle(
       compactionController.sessionCompact({
         sessionId: lifecycleContext.sessionManager.getSessionId(),
         usage: resolveUsage(lifecycleContext),
+        sessionManager: lifecycleContext.sessionManager,
         compactionEntry: compactEvent.compactionEntry,
         fromExtension: compactEvent.fromExtension,
       });

@@ -18,7 +18,6 @@ import {
 interface RuntimeCalls {
   started: Array<Record<string, unknown>>;
   finished: Array<Record<string, unknown>>;
-  compacted: Array<{ sessionId: string; input: Record<string, unknown> }>;
   events: Array<Record<string, unknown>>;
   cleared: string[];
   observedContext: Array<{ sessionId: string; usage: unknown }>;
@@ -34,7 +33,6 @@ function createRuntimeFixture(
   const calls: RuntimeCalls = {
     started: [],
     finished: [],
-    compacted: [],
     events: [],
     cleared: [],
     observedContext: [],
@@ -73,9 +71,6 @@ function createRuntimeFixture(
   });
 
   Object.assign(runtime.maintain.context, {
-    markCompacted(sessionId: string, payload: Record<string, unknown>) {
-      calls.compacted.push({ sessionId, input: payload });
-    },
     observeUsage(sessionId: string, usage: unknown) {
       calls.observedContext.push({ sessionId, usage });
     },
@@ -393,6 +388,7 @@ describe("hosted turn pipeline", () => {
     const { api, handlers } = createMockRuntimePluginApi();
     const { runtime, rawEventQuery, rawEventQueryStructured } = createRuntimeFixture();
     const sessionId = "hosted-context-evidence-ready";
+    let sessionUsage = { tokens: 320, contextWindow: 4096, percent: 0.078 };
     Object.assign(runtime.inspect.events, {
       query: rawEventQuery,
       queryStructured: rawEventQueryStructured,
@@ -400,7 +396,7 @@ describe("hosted turn pipeline", () => {
     Object.assign(runtime.inspect.context, {
       getUsage(requestedSessionId?: string) {
         if (requestedSessionId === sessionId) {
-          return { tokens: 0, contextWindow: 1_000, percent: 0 };
+          return sessionUsage;
         }
         return { tokens: 320, contextWindow: 4096, percent: 0.078 };
       },
@@ -469,11 +465,12 @@ describe("hosted turn pipeline", () => {
       createSessionContext(sessionId),
     );
 
-    runtime.maintain.context.observeUsage(sessionId, {
-      tokens: 0,
-      contextWindow: 1_000,
-      percent: 0,
-    });
+    sessionUsage = {
+      tokens: 88_000,
+      contextWindow: 100_000,
+      percent: 0.88,
+    };
+    runtime.maintain.context.observeUsage(sessionId, sessionUsage);
     const reducedPayload = invokeBeforeProviderRequestChain(
       handlers,
       {

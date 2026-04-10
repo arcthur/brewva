@@ -191,6 +191,7 @@ Verification semantics to preserve:
 
 ### `authority.session`
 
+- `commitCompaction(sessionId, input)`
 - `applyMergedWorkerResults(sessionId, report)`
 
 ## `inspect`
@@ -218,6 +219,7 @@ Verification semantics to preserve:
 - `sanitizeInput(text)`
 - `getUsage(sessionId)`
 - `getPromptStability(sessionId)`
+- `getHistoryViewBaseline(sessionId)`
 - `getTransientReduction(sessionId)`
 - `getUsageRatio(usage)`
 - `getHardLimitRatio(sessionId, usage?)`
@@ -240,6 +242,11 @@ evidence for these fields lives in the sidecar context-evidence store under
 sample in a new hosted leaf or injection scope seeds a fresh stable-prefix
 baseline, while `stableTail` still requires the same scope key plus the same
 tail hash.
+
+`getHistoryViewBaseline(...)` is the read model for the current
+model-visible baseline derived from replay-visible history rewrite receipts.
+It is leaf-scoped, transcript-equivalent, and does not include task state,
+tool lifecycle hints, or recovery instructions.
 
 ### `inspect.tools`
 
@@ -274,9 +281,28 @@ tail hash.
 ### `inspect.recovery`
 
 - `listPending()`
+- `getPosture(sessionId)`
+- `getWorkingSet(sessionId)`
 
-This is the public read model for pending WAL-backed recovery state.
+This is the public read model for bounded recovery state.
 Mutation of WAL rows is not part of the public runtime contract.
+
+- `getPosture(...)` exposes the recovery mode (`resumable`, `degraded`, or
+  `diagnostic_only`) plus any degraded reason derived from canonicalization and
+  transition state. `duplicateSideEffectSuppressionCount` is replay-derived from
+  durable replay-guard receipts such as consumed or in-flight
+  `effect_commitment` blocks; it is not process-local bookkeeping.
+- `getPosture(...)` is fully tape-derived. Durable
+  `unclean_shutdown_reconciled` receipts explain degraded startup, but later
+  recovery transition receipts supersede that degraded posture instead of
+  pinning the session on a sticky in-memory diagnostic.
+- `getWorkingSet(...)` exposes the recovery-only operational state that must
+  stay out of the history-view baseline, such as open tool lifecycle counts,
+  pending recovery family, and effect replay guards.
+- `getHistoryViewBaseline(...)` exposes the current baseline snapshot metadata
+  for operators. The model-visible baseline block is intentionally slimmer:
+  digest, lineage, and reference-context metadata stay on the inspect surface,
+  while the admitted prompt block carries only the history rewrite itself.
 
 ### `inspect.reasoning`
 
@@ -382,14 +408,23 @@ This is the explicit skill-registry rebuild path.
 - `observeTransientReduction(sessionId, input)`
 - `registerProvider(provider)`
 - `unregisterProvider(source)`
-- `buildInjection(sessionId, prompt, usage?, injectionScopeId?, sourceAllowlist?)`
+- `buildInjection(sessionId, prompt, usage?, options?)`
 - `appendSupplementalInjection(sessionId, inputText, usage?, injectionScopeId?)`
 - `checkAndRequestCompaction(sessionId, usage)`
 - `requestCompaction(sessionId, reason)`
-- `markCompacted(sessionId, input)`
 
 This surface owns deterministic context admission and explicit compaction
-maintenance. It does not authorize effects.
+maintenance. Durable compaction receipts are committed through
+`authority.session.commitCompaction(...)`, not `maintain.context`. This surface
+also carries the current admission-time recovery contract:
+
+- `options.injectionScopeId` selects the branch or leaf scope for duplicate
+  fingerprinting and turn-local budgeting
+- `options.sourceAllowlist` narrows the provider set without changing provider
+  order
+- `options.referenceContextDigest` is the current stable reference-context
+  digest used to reject incompatible history-view baselines during admission
+  does not authorize effects.
 
 ### `maintain.tools`
 

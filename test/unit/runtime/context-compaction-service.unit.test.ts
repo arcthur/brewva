@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { SkillDocument } from "../../../packages/brewva-runtime/src/contracts/index.js";
+import type {
+  BrewvaEventRecord,
+  SkillDocument,
+} from "../../../packages/brewva-runtime/src/contracts/index.js";
 import {
-  markContextCompacted,
+  commitSessionCompaction,
   type ContextCompactionDeps,
 } from "../../../packages/brewva-runtime/src/services/context-compaction.js";
 import { RuntimeSessionStateStore } from "../../../packages/brewva-runtime/src/services/session-state.js";
@@ -9,6 +12,25 @@ import { RuntimeSessionStateStore } from "../../../packages/brewva-runtime/src/s
 async function flushAsyncEvents(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function createRecordedEvent(
+  index: number,
+  input: {
+    sessionId: string;
+    type: string;
+    turn?: number;
+    payload?: object;
+  },
+): BrewvaEventRecord {
+  return {
+    id: `ev-${index}`,
+    sessionId: input.sessionId,
+    type: input.type,
+    timestamp: 1,
+    turn: input.turn,
+    payload: input.payload as BrewvaEventRecord["payload"],
+  };
 }
 
 describe("context-compaction module", () => {
@@ -48,15 +70,20 @@ describe("context-compaction module", () => {
         }) as SkillDocument,
       recordEvent: (input) => {
         events.push(input);
-        return undefined;
+        return createRecordedEvent(events.length, input);
       },
     };
 
-    markContextCompacted(deps, "session-a", {
+    commitSessionCompaction(deps, "session-a", {
+      compactId: "  cmp-42 ",
+      sanitizedSummary: "  keep latest failures only  ",
+      summaryDigest: "unused",
+      sourceTurn: 17,
+      leafEntryId: "leaf-a",
+      referenceContextDigest: "ref-digest",
       fromTokens: 900,
       toTokens: 320,
-      summary: "  keep latest failures only  ",
-      entryId: "  cmp-42 ",
+      origin: "auto_compaction",
     });
 
     expect(pressureMarks).toEqual(["session-a"]);
@@ -69,13 +96,15 @@ describe("context-compaction module", () => {
     expect(events[0]).toEqual(
       expect.objectContaining({
         sessionId: "session-a",
-        type: "context_compacted",
+        type: "session_compact",
         turn: 17,
         payload: expect.objectContaining({
+          compactId: "cmp-42",
           fromTokens: 900,
           toTokens: 320,
-          entryId: "cmp-42",
-          summaryChars: "keep latest failures only".length,
+          leafEntryId: "leaf-a",
+          referenceContextDigest: "ref-digest",
+          sanitizedSummary: "keep latest failures only",
         }),
       }),
     );
@@ -85,16 +114,16 @@ describe("context-compaction module", () => {
       expect.objectContaining({
         sessionId: "session-a",
         turn: 17,
-        tool: "brewva_context_compaction",
+        tool: "brewva_session_compaction",
         skill: "implementation",
       }),
     );
     expect(ledgerRows[0]?.metadata).toEqual(
       expect.objectContaining({
-        source: "context_budget",
+        source: "session_compact",
         fromTokens: 900,
         toTokens: 320,
-        entryId: "cmp-42",
+        compactId: "cmp-42",
       }),
     );
   });
@@ -118,21 +147,26 @@ describe("context-compaction module", () => {
       getActiveSkill: () => undefined,
       recordEvent: (input) => {
         events.push(input);
-        return undefined;
+        return createRecordedEvent(events.length, input);
       },
     };
 
-    markContextCompacted(deps, "session-a", {
+    commitSessionCompaction(deps, "session-a", {
+      compactId: "  ",
+      sanitizedSummary: "   ",
+      summaryDigest: "unused",
+      sourceTurn: 3,
+      leafEntryId: null,
+      referenceContextDigest: null,
       fromTokens: null,
       toTokens: null,
-      summary: "   ",
-      entryId: "  ",
+      origin: "auto_compaction",
     });
 
     expect(events[0]?.payload).toEqual(
       expect.objectContaining({
-        entryId: "",
-        summaryChars: 0,
+        compactId: "",
+        sanitizedSummary: "",
       }),
     );
   });
@@ -158,15 +192,20 @@ describe("context-compaction module", () => {
       getActiveSkill: () => undefined,
       recordEvent: (input) => {
         events.push(input);
-        return undefined;
+        return createRecordedEvent(events.length, input);
       },
     };
 
-    markContextCompacted(deps, "session-a", {
+    commitSessionCompaction(deps, "session-a", {
+      compactId: "cmp-ok",
+      sanitizedSummary: "compact summary",
+      summaryDigest: "unused",
+      sourceTurn: 3,
+      leafEntryId: null,
+      referenceContextDigest: null,
       fromTokens: 400,
       toTokens: 120,
-      summary: "compact summary",
-      entryId: "cmp-ok",
+      origin: "auto_compaction",
     });
     await flushAsyncEvents();
 
@@ -196,15 +235,20 @@ describe("context-compaction module", () => {
       getActiveSkill: () => undefined,
       recordEvent: (input) => {
         events.push(input);
-        return undefined;
+        return createRecordedEvent(events.length, input);
       },
     };
 
-    markContextCompacted(deps, "session-a", {
+    commitSessionCompaction(deps, "session-a", {
+      compactId: "cmp-failed",
+      sanitizedSummary: "compact summary",
+      summaryDigest: "unused",
+      sourceTurn: 3,
+      leafEntryId: null,
+      referenceContextDigest: null,
       fromTokens: 400,
       toTokens: 120,
-      summary: "compact summary",
-      entryId: "cmp-failed",
+      origin: "auto_compaction",
     });
     await flushAsyncEvents();
 
@@ -237,15 +281,20 @@ describe("context-compaction module", () => {
       getActiveSkill: () => undefined,
       recordEvent: (input) => {
         events.push(input);
-        return undefined;
+        return createRecordedEvent(events.length, input);
       },
     };
 
-    markContextCompacted(deps, "session-a", {
+    commitSessionCompaction(deps, "session-a", {
+      compactId: "cmp-error",
+      sanitizedSummary: "compact summary",
+      summaryDigest: "unused",
+      sourceTurn: 3,
+      leafEntryId: null,
+      referenceContextDigest: null,
       fromTokens: 400,
       toTokens: 120,
-      summary: "compact summary",
-      entryId: "cmp-error",
+      origin: "auto_compaction",
     });
     await flushAsyncEvents();
 

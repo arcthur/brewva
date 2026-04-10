@@ -24,7 +24,6 @@ import type { HostedContextGateStatePort } from "./hosted-compaction-controller.
 import type { HostedContextTelemetry } from "./hosted-context-telemetry.js";
 import { buildPromptStabilityObservation } from "./prompt-stability.js";
 import { buildReadPathRecoveryBlocks } from "./read-path-recovery.js";
-import { resolveRecoveryWorkingSetBlock } from "./recovery-working-set.js";
 import {
   buildSkillRecommendationReceiptPayload,
   buildSkillFirstPolicyBlock,
@@ -89,10 +88,12 @@ export interface HostedContextInjectionPipelineOptions {
 }
 
 const CONTEXT_PROFILES = {
-  minimal: [] as const,
+  minimal: [CONTEXT_SOURCES.historyViewBaseline, CONTEXT_SOURCES.recoveryWorkingSet] as const,
   standard: [
+    CONTEXT_SOURCES.historyViewBaseline,
     CONTEXT_SOURCES.runtimeStatus,
     CONTEXT_SOURCES.taskState,
+    CONTEXT_SOURCES.recoveryWorkingSet,
     CONTEXT_SOURCES.toolOutputsDistilled,
     CONTEXT_SOURCES.projectionWorking,
   ] as const,
@@ -145,6 +146,7 @@ async function resolveContextInjection(
     usage?: ContextBudgetUsage;
     injectionScopeId?: string;
     sourceAllowlist?: ReadonlySet<string>;
+    referenceContextDigest?: string | null;
   },
 ): Promise<{
   text: string;
@@ -154,13 +156,11 @@ async function resolveContextInjection(
   finalTokens: number;
   truncated: boolean;
 }> {
-  return runtime.maintain.context.buildInjection(
-    input.sessionId,
-    input.prompt,
-    input.usage,
-    input.injectionScopeId,
-    input.sourceAllowlist,
-  );
+  return runtime.maintain.context.buildInjection(input.sessionId, input.prompt, input.usage, {
+    injectionScopeId: input.injectionScopeId,
+    sourceAllowlist: input.sourceAllowlist,
+    referenceContextDigest: input.referenceContextDigest ?? null,
+  });
 }
 
 function buildMessageDetails(input: {
@@ -225,15 +225,13 @@ function observePromptStability(
     gateRequired: boolean;
   },
 ): void {
-  const observed = runtime.maintain.context.observePromptStability(
-    input.sessionId,
-    buildPromptStabilityObservation({
-      systemPrompt: input.systemPrompt,
-      composedContent: input.composed.content,
-      injectionScopeId: input.injectionScopeId,
-      turn: input.turn,
-    }),
-  );
+  const observation = buildPromptStabilityObservation({
+    systemPrompt: input.systemPrompt,
+    composedContent: input.composed.content,
+    injectionScopeId: input.injectionScopeId,
+    turn: input.turn,
+  });
+  const observed = runtime.maintain.context.observePromptStability(input.sessionId, observation);
   const pressure = runtime.inspect.context.getPressureStatus(input.sessionId, input.usage);
   recordPromptStabilityEvidence({
     workspaceRoot: runtime.workspaceRoot,
@@ -333,12 +331,6 @@ function buildHostedSupplementalBlocks(
     usage: input.usage,
     injectionScopeId: input.injectionScopeId,
     blocks: [
-      ...[
-        resolveRecoveryWorkingSetBlock(runtime, {
-          sessionId: input.sessionId,
-          delegationStore: input.delegationStore,
-        }),
-      ].filter((block): block is NonNullable<typeof block> => block !== null),
       ...buildSkillRoutingAvailabilityBlocks(runtime),
       ...resolveSupplementalContextBlocks({
         runtime: contextComposerRuntime,
@@ -391,6 +383,12 @@ export function createHostedContextInjectionPipeline(
         });
       }
       const systemPromptWithContract = applyContextContract(input.systemPrompt);
+      const promptStabilitySeed = buildPromptStabilityObservation({
+        systemPrompt: systemPromptWithContract,
+        composedContent: "",
+        injectionScopeId,
+        turn,
+      });
 
       if (gateStatus.required) {
         const supplementalBlocks = buildHostedSupplementalBlocks(runtime, contextComposerRuntime, {
@@ -458,6 +456,7 @@ export function createHostedContextInjectionPipeline(
         usage: input.usage,
         injectionScopeId,
         sourceAllowlist,
+        referenceContextDigest: promptStabilitySeed.stablePrefixHash,
       });
 
       const supportAfterInjection = prepareContextComposerSupport({

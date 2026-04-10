@@ -161,6 +161,23 @@ breaker rehydration, and post-compaction state inspection depend on it. These
 events stay hosted/experience-ring signals; they do not widen kernel authority
 or replace receipt-bearing runtime facts.
 
+`session_compact` is the only durable compaction receipt. Its payload carries:
+
+- `compactId`
+- `sanitizedSummary`
+- `summaryDigest`
+- `sourceTurn`
+- `leafEntryId`
+- `referenceContextDigest`
+- `fromTokens`
+- `toTokens`
+- `origin`
+- `integrityViolations`
+
+The sanitized summary text is the durable baseline authority input. Any
+artifact or cache layered on top of this receipt is an acceleration aid, not a
+correctness dependency.
+
 `session_shutdown` remains the durable terminal receipt for a session. When the
 worker process cannot record it itself, gateway reconciliation writes the
 receipt directly to the persisted agent event log path. There is no config- or

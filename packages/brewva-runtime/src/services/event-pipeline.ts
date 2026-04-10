@@ -263,7 +263,6 @@ const OPS_EVENT_TYPES = new Set<string>([
   CHANNEL_UPDATE_REQUESTED_EVENT_TYPE,
   "channel_workspace_cost_summary",
   "context_arena_slo_enforced",
-  "context_compacted",
   "context_compaction_advisory",
   "context_compaction_auto_completed",
   "context_compaction_auto_failed",

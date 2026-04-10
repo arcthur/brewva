@@ -132,6 +132,12 @@ describe("context source order integration", () => {
         order: 13,
       },
       {
+        source: CONTEXT_SOURCES.historyViewBaseline,
+        category: "narrative",
+        budgetClass: "core",
+        order: 14,
+      },
+      {
         source: CONTEXT_SOURCES.skillRouting,
         category: "narrative",
         budgetClass: "recall",
@@ -150,6 +156,12 @@ describe("context source order integration", () => {
         order: 40,
       },
       {
+        source: CONTEXT_SOURCES.recoveryWorkingSet,
+        category: "constraint",
+        budgetClass: "working",
+        order: 45,
+      },
+      {
         source: CONTEXT_SOURCES.projectionWorking,
         category: "narrative",
         budgetClass: "working",
@@ -161,7 +173,7 @@ describe("context source order integration", () => {
       sessionId,
       "verify context source ordering",
       { tokens: 320, contextWindow: 16_000, percent: 0.02 },
-      "leaf-order",
+      { injectionScopeId: "leaf-order" },
     );
     expect(injected.accepted).toBe(true);
     expect(injected.text.length).toBeGreaterThan(0);
@@ -230,7 +242,7 @@ describe("context source order integration", () => {
       sessionId,
       "verify externally registered provider order",
       { tokens: 320, contextWindow: 16_000, percent: 0.02 },
-      "leaf-custom-provider",
+      { injectionScopeId: "leaf-custom-provider" },
     );
 
     const runtimeStatusPosition = blockIndex(injected.text, "RuntimeStatus");
@@ -268,7 +280,7 @@ describe("context source order integration", () => {
       otherSessionId,
       "verify provider removal",
       { tokens: 320, contextWindow: 16_000, percent: 0.02 },
-      "leaf-custom-provider-removed",
+      { injectionScopeId: "leaf-custom-provider-removed" },
     );
     expect(afterRemoval.text.includes("[CustomOperatorNote]")).toBe(false);
   });
@@ -312,6 +324,12 @@ describe("context source order integration", () => {
         order: 13,
       },
       {
+        source: CONTEXT_SOURCES.historyViewBaseline,
+        category: "narrative",
+        budgetClass: "core",
+        order: 14,
+      },
+      {
         source: CONTEXT_SOURCES.skillRouting,
         category: "narrative",
         budgetClass: "recall",
@@ -334,6 +352,12 @@ describe("context source order integration", () => {
         category: "narrative",
         budgetClass: "core",
         order: 40,
+      },
+      {
+        source: CONTEXT_SOURCES.recoveryWorkingSet,
+        category: "constraint",
+        budgetClass: "working",
+        order: 45,
       },
       {
         source: CONTEXT_SOURCES.projectionWorking,

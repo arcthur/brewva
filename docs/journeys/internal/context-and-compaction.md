@@ -51,7 +51,7 @@ flowchart TD
   G -->|Yes, agent active| I["Defer auto-compaction and expose advisory"]
   G -->|Yes, idle| J["Run auto-compaction watchdog path"]
   J --> K["session_compact"]
-  K --> L["markCompacted + telemetry"]
+  K --> L["authority.session.commitCompaction + telemetry reset"]
   L --> M["Resume interrupted turn from current evidence state"]
 ```
 
@@ -72,8 +72,9 @@ flowchart TD
 6. If pressure is elevated but still below hard-gate posture, the hosted path
    may clear older large tool-result bodies on the outbound provider request
    copy before the provider call is sent.
-7. After `session_compact` completes, the runtime records the compaction
-   summary, clears the gate, and resumes the interrupted turn when required.
+7. After `session_compact` completes, the runtime commits the durable
+   compaction receipt, clears the gate, and resumes the interrupted turn when
+   required.
 8. If a durable `reasoning_revert` arrives, hosted recovery rebuilds the active
    branch from the target checkpoint and resumes from that surviving context
    instead of keeping superseded branch history visible to the model.

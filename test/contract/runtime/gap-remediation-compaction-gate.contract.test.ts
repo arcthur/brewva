@@ -66,9 +66,16 @@ describe("Gap remediation: runtime core compaction gate", () => {
     });
     expect(compactAllowed.allowed).toBe(true);
 
-    runtime.maintain.context.markCompacted(sessionId, {
+    runtime.authority.session.commitCompaction(sessionId, {
+      compactId: "cmp-core-gate",
+      sanitizedSummary: "Keep only the active recovery baseline.",
+      summaryDigest: "unused",
+      sourceTurn: 3,
+      leafEntryId: null,
+      referenceContextDigest: null,
       fromTokens: usage.tokens,
       toTokens: 40,
+      origin: "auto_compaction",
     });
 
     const unblocked = runtime.authority.tools.start({

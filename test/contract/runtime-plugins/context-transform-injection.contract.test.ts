@@ -16,7 +16,14 @@ import {
 describe("context transform injection contract", () => {
   test("passes the session leaf id into runtime context injection", async () => {
     const { api, handlers } = createMockRuntimePluginApi();
-    const scopes: Array<string | undefined> = [];
+    const optionsSeen: Array<
+      | {
+          injectionScopeId?: string;
+          referenceContextDigest?: string | null;
+          sourceAllowlist?: ReadonlySet<string>;
+        }
+      | undefined
+    > = [];
     const runtime = createRuntimeFixture({
       context: {
         onTurnStart: () => undefined,
@@ -27,9 +34,13 @@ describe("context transform injection contract", () => {
           _sessionId: string,
           _prompt: string,
           _usage: unknown,
-          scopeId?: string,
+          options?: {
+            injectionScopeId?: string;
+            referenceContextDigest?: string | null;
+            sourceAllowlist?: ReadonlySet<string>;
+          },
         ) => {
-          scopes.push(scopeId);
+          optionsSeen.push(options);
           return {
             text: "",
             entries: [],
@@ -61,7 +72,9 @@ describe("context transform injection contract", () => {
       },
     );
 
-    expect(scopes).toEqual(["leaf-1"]);
+    expect(optionsSeen).toHaveLength(1);
+    expect(optionsSeen[0]?.injectionScopeId).toBe("leaf-1");
+    expect(typeof optionsSeen[0]?.referenceContextDigest).toBe("string");
   });
 
   test("uses the async buildInjection result when the runtime returns it", async () => {

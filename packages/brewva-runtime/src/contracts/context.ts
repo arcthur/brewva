@@ -72,6 +72,70 @@ export interface TransientReductionState {
   pressureLevel: ContextPressureLevel | "unknown";
 }
 
+export type SessionCompactionOrigin = "extension_api" | "auto_compaction" | "hosted_recovery";
+export type HistoryViewBaselineOrigin = SessionCompactionOrigin | "exact_history";
+
+export interface SessionCompactionCommitInput {
+  compactId: string;
+  sanitizedSummary: string;
+  summaryDigest: string;
+  sourceTurn: number;
+  leafEntryId: string | null;
+  referenceContextDigest: string | null;
+  fromTokens: number | null;
+  toTokens: number | null;
+  origin: SessionCompactionOrigin;
+}
+
+export interface HistoryViewBaselineSnapshot {
+  compactId: string;
+  sanitizedSummary: string;
+  summaryDigest: string;
+  sourceTurn: number;
+  leafEntryId: string | null;
+  referenceContextDigest: string | null;
+  fromTokens: number | null;
+  toTokens: number | null;
+  origin: HistoryViewBaselineOrigin;
+  eventId: string;
+  timestamp: number;
+  rebuildSource: "receipt" | "cache" | "exact_history";
+  diagnostics: string[];
+}
+
+export type RecoveryPendingFamily =
+  | "context"
+  | "output_budget"
+  | "approval"
+  | "delegation"
+  | "interrupt"
+  | "recovery";
+
+export type RecoveryPostureMode = "idle" | "resumable" | "degraded" | "diagnostic_only";
+
+export interface RecoveryPostureSnapshot {
+  mode: RecoveryPostureMode;
+  latestReason: string | null;
+  latestStatus: string | null;
+  pendingFamily: RecoveryPendingFamily | null;
+  degradedReason: string | null;
+  duplicateSideEffectSuppressionCount: number;
+}
+
+export interface RecoveryWorkingSetSnapshot {
+  latestReason: string | null;
+  latestStatus: string | null;
+  pendingFamily: RecoveryPendingFamily | null;
+  taskGoal: string | null;
+  taskPhase: string | null;
+  taskHealth: string | null;
+  acceptanceStatus: string | null;
+  openBlockers: number;
+  openToolCalls: number;
+  duplicateSideEffectSuppressionCount: number;
+  resumeContract: string;
+}
+
 export interface TapeAnchorState {
   id: string;
   name?: string;
@@ -152,6 +216,12 @@ export interface ContextInjectionDecision {
   finalTokens: number;
   truncated: boolean;
   droppedReason?: "hard_limit";
+}
+
+export interface BuildContextInjectionOptions {
+  injectionScopeId?: string;
+  sourceAllowlist?: ReadonlySet<string>;
+  referenceContextDigest?: string | null;
 }
 
 export interface ContextCompactionDecision {

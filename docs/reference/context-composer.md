@@ -37,12 +37,20 @@ It only decides how admitted context is shown to the model.
 Admitted entries come from the kernel path. There is no raw-text runtime-plugin
 fallback.
 
+`buildInjection(...)` admission is now explicit about recovery-sensitive inputs:
+
+- branch or leaf scope travels through `options.injectionScopeId`
+- provider narrowing travels through `options.sourceAllowlist`
+- history-view baseline compatibility is checked against
+  `options.referenceContextDigest`
+
 ## Output Contract
 
 The composer returns ordered blocks in three categories:
 
 - `narrative`
   - identity
+  - history-view baseline
   - hosted narrative memory
   - runtime status
   - task state
@@ -52,6 +60,7 @@ The composer returns ordered blocks in three categories:
   - optional distilled tool output
   - same-turn supplemental return blocks
 - `constraint`
+  - recovery working set
   - capability summary
   - capability policy
   - optional capability inventory
@@ -123,6 +132,15 @@ strings:
 - hidden planning hints
 
 Those stay in runtime services and lifecycle plumbing.
+
+Special rule for recovery context:
+
+- `history-view baseline` is admitted through the normal provider path, but the
+  model-visible block contains only the rewrite text itself
+- digest, lineage, and reference-context compatibility metadata stay on
+  `runtime.inspect.context.getHistoryViewBaseline(...)`
+- `recovery working set` remains a separate constraint block so operational
+  state does not leak back into the baseline plane
 
 Hosted deliberation reminder:
 

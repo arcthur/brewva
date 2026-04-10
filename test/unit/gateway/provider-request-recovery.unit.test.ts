@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  PROVIDER_REQUEST_RECOVERY_TEST_ONLY,
-  registerProviderRequestRecovery,
-} from "../../../packages/brewva-gateway/src/runtime-plugins/provider-request-recovery.js";
+import { registerProviderRequestRecovery } from "@brewva/brewva-gateway/runtime-plugins";
 import { armNextPromptOutputBudgetEscalation } from "../../../packages/brewva-gateway/src/session/prompt-recovery-state.js";
 import { createMockRuntimePluginApi, invokeHandler } from "../../helpers/runtime-plugin.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
@@ -98,25 +95,40 @@ describe("provider request recovery", () => {
   });
 
   test("recognizes supported output-budget fields across top-level and nested payloads", () => {
-    expect(
-      PROVIDER_REQUEST_RECOVERY_TEST_ONLY.applyOutputBudgetEscalationToPayload(
-        {
+    const runtime = createRuntimeFixture();
+    const { api, handlers } = createMockRuntimePluginApi();
+    const sessionId = "provider-request-recovery-supported-fields";
+
+    registerProviderRequestRecovery(api, runtime);
+    armNextPromptOutputBudgetEscalation(runtime, {
+      sessionId,
+      targetMaxTokens: 8_192,
+      model: "openai/gpt-5.4",
+    });
+
+    const patched = invokeHandler<Record<string, unknown>>(
+      handlers,
+      "before_provider_request",
+      {
+        payload: {
           max_completion_tokens: 4_096,
           generationConfig: {
             maxOutputTokens: 2_048,
           },
         },
-        8_192,
-      ),
-    ).toEqual({
-      payload: {
-        max_completion_tokens: 8_192,
-        generationConfig: {
-          maxOutputTokens: 8_192,
+      },
+      {
+        sessionManager: {
+          getSessionId: () => sessionId,
         },
       },
-      status: "completed",
-      detail: null,
+    );
+
+    expect(patched).toEqual({
+      max_completion_tokens: 8_192,
+      generationConfig: {
+        maxOutputTokens: 8_192,
+      },
     });
   });
 });

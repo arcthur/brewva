@@ -49,6 +49,29 @@ Deletion consequences:
 
 ## Recovery Path
 
+Target recovery order is:
+
+1. canonicalize and diagnose recovery posture
+2. hydrate replay-owned runtime state from tape
+3. rebuild the history-view baseline
+4. derive the recovery working set
+5. admit context through the normal provider path
+
+Current implementation now performs the first recovery canonicalization pass
+before hydration from tape alone. If the tape already contains a durable
+`unclean_shutdown_reconciled` receipt, that receipt is reused directly; if not,
+the canonicalization pass still detects replay-visible open tool, open turn,
+and dangling active-skill conditions from the tape before any fold state is
+rebuilt. Hydration apply may still materialize a new
+`unclean_shutdown_reconciled` receipt afterward when an older session needs a
+durable reconciliation record.
+
+Recovery posture remains tape-derived after hydration as well. The runtime keeps
+the `unclean_shutdown_reconciled` receipt for explainability and operator
+inspection, but later recovery transition receipts supersede that degraded
+posture instead of letting a process-local diagnostic pin the session in
+permanent degradation.
+
 - On `SIGINT`/`SIGTERM`, CLI records `session_turn_transition` with
   `reason=signal_interrupt`, waits for agent idle (bounded by graceful
   timeout), then exits.
@@ -59,6 +82,11 @@ Deletion consequences:
   branch; it only carries the in-flight turn envelope.
 - First `onTurnStart()` hydrates session-local runtime state from tape events
   (skill/budget/cost counters, warning dedupe, ledger compaction cooldown).
+- Recovery posture is derived from two bounded read models:
+  - the history-view baseline, which is authority-anchored and scoped by the
+    current reference-context digest
+  - the recovery working set, which carries operational continuation state such
+    as pending recovery family, open tool calls, and resume contract hints
 - Gateway and frontend session replay do not consume raw `inspect.events`.
   Runtime-scoped replay uses `runtime.inspect.sessionWire`; gateway public
   replay uses the same runtime-owned compiler semantics against archived

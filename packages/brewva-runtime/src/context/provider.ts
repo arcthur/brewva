@@ -12,6 +12,7 @@ export interface ContextSourceProviderInput {
   promptText: string;
   usage?: ContextBudgetUsage;
   injectionScopeId?: string;
+  referenceContextDigest?: string | null;
   register(input: ContextSourceProviderRegistration): void;
 }
 
@@ -50,6 +51,7 @@ export class ContextSourceProviderRegistry {
     promptText: string;
     usage?: ContextBudgetUsage;
     injectionScopeId?: string;
+    referenceContextDigest?: string | null;
     sourceAllowlist?: ReadonlySet<string>;
     register(input: RegisterContextInjectionInput): void;
   }): void {
@@ -62,6 +64,7 @@ export class ContextSourceProviderRegistry {
         promptText: input.promptText,
         usage: input.usage,
         injectionScopeId: input.injectionScopeId,
+        referenceContextDigest: input.referenceContextDigest,
         register: (registration) =>
           input.register({
             ...registration,

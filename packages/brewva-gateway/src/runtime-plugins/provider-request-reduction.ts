@@ -1,24 +1,12 @@
 import { type BrewvaHostedRuntimePort, type ContextBudgetUsage } from "@brewva/brewva-runtime";
 import { getModels, getProviders } from "@mariozechner/pi-ai";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import {
-  getHostedTurnTransitionCoordinator,
-  type HostedTransitionSnapshot,
-} from "../session/turn-transition.js";
 import { recordTransientReductionEvidence } from "./context-evidence.js";
 import { estimateTokens } from "./tool-output-distiller.js";
 
 const CLEARED_TOOL_RESULT_PLACEHOLDER = "[cleared_for_request]";
 const RECENT_TOOL_RESULT_RETAIN_COUNT = 4;
 const MIN_CLEARABLE_TOOL_RESULT_CHARS = 512;
-const RECOVERY_REDUCTION_SKIP_REASONS = new Set([
-  "compaction_retry",
-  "provider_fallback_retry",
-  "max_output_recovery",
-  "reasoning_revert_resume",
-  "output_budget_escalation",
-  "wal_recovery_resume",
-]);
 const THINKING_LEVEL_SUFFIXES = new Set(["off", "minimal", "low", "medium", "high", "xhigh"]);
 const NON_TEXTUAL_PAYLOAD_TYPES = new Set([
   "image",
@@ -318,38 +306,21 @@ function buildEstimatedPayloadUsage(
   };
 }
 
+function hasUsableRuntimeUsage(runtimeUsage: ContextBudgetUsage | undefined): boolean {
+  return (
+    resolveUsageContextWindow(runtimeUsage) !== null &&
+    (resolveUsageTokens(runtimeUsage) !== null || resolveUsageRatio(runtimeUsage) !== null)
+  );
+}
+
 function buildEffectiveReductionUsage(
   payload: unknown,
   runtimeUsage: ContextBudgetUsage | undefined,
 ): ContextBudgetUsage | undefined {
-  const estimatedUsage = buildEstimatedPayloadUsage(payload, runtimeUsage);
-  if (!runtimeUsage) {
-    return estimatedUsage;
-  }
-  if (!estimatedUsage) {
+  if (hasUsableRuntimeUsage(runtimeUsage)) {
     return runtimeUsage;
   }
-
-  const contextWindow =
-    resolveUsageContextWindow(runtimeUsage) ?? resolveUsageContextWindow(estimatedUsage);
-  if (!contextWindow) {
-    return runtimeUsage;
-  }
-
-  const runtimeRatio = resolveUsageRatio(runtimeUsage) ?? 0;
-  const estimatedRatio = resolveUsageRatio(estimatedUsage) ?? 0;
-  const effectiveRatio = Math.max(runtimeRatio, estimatedRatio);
-  const effectiveTokens = Math.max(
-    resolveUsageTokens(runtimeUsage) ?? 0,
-    resolveUsageTokens(estimatedUsage) ?? 0,
-    Math.ceil(effectiveRatio * contextWindow),
-  );
-
-  return {
-    tokens: effectiveTokens > 0 ? effectiveTokens : null,
-    contextWindow,
-    percent: effectiveRatio,
-  };
+  return buildEstimatedPayloadUsage(payload, runtimeUsage);
 }
 
 function buildStringCandidate(
@@ -548,13 +519,19 @@ function collectReductionCandidates(payload: Record<string, unknown>): Reduction
   return candidates;
 }
 
-function shouldSkipForRecovery(snapshot: HostedTransitionSnapshot): boolean {
-  if (snapshot.pendingFamily === "recovery" || snapshot.pendingFamily === "output_budget") {
+function shouldSkipForRecovery(runtime: BrewvaHostedRuntimePort, sessionId: string): boolean {
+  const posture = runtime.inspect.recovery.getPosture(sessionId);
+  if (posture.mode === "degraded" || posture.mode === "diagnostic_only") {
     return true;
   }
+  if (posture.mode !== "resumable") {
+    return false;
+  }
+  const workingSet = runtime.inspect.recovery.getWorkingSet(sessionId);
   return (
-    snapshot.latest?.status === "entered" &&
-    RECOVERY_REDUCTION_SKIP_REASONS.has(snapshot.latest.reason)
+    posture.pendingFamily !== null ||
+    posture.latestStatus === "entered" ||
+    (workingSet?.openToolCalls ?? 0) > 0
   );
 }
 
@@ -571,8 +548,7 @@ export function resolveTransientOutboundReductionEligibility(
     };
   }
 
-  const snapshot = getHostedTurnTransitionCoordinator(runtime).getSnapshot(sessionId);
-  if (shouldSkipForRecovery(snapshot)) {
+  if (shouldSkipForRecovery(runtime, sessionId)) {
     return {
       allowed: false,
       detail: "recovery posture is active",

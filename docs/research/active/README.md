@@ -14,6 +14,7 @@ active theme.
 - [`context-budget-behavior-in-long-running-sessions.md`](./context-budget-behavior-in-long-running-sessions.md)
 - [`recovery-robustness-under-interrupt-conditions.md`](./recovery-robustness-under-interrupt-conditions.md)
 - [`prefix-stable-context-management-and-progressive-compaction.md`](./prefix-stable-context-management-and-progressive-compaction.md)
+- [`recovery-first-context-governance-and-history-view-baselines.md`](./recovery-first-context-governance-and-history-view-baselines.md)
 
 ## Operator And Control Surfaces
 

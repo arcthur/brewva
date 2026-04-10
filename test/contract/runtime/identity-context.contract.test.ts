@@ -91,7 +91,7 @@ describe("Identity context injection", () => {
       "identity-agent-scope-1",
       "continue",
       undefined,
-      "leaf-a",
+      { injectionScopeId: "leaf-a" },
     );
     expect(first.text).toContain("Reviewer A");
     expect(first.text).not.toContain("Reviewer B");
@@ -100,20 +100,27 @@ describe("Identity context injection", () => {
       "identity-agent-scope-1",
       "continue",
       undefined,
-      "leaf-b",
+      { injectionScopeId: "leaf-b" },
     );
     expect(second.accepted).toBe(true);
     expect(second.text).not.toContain("[PersonaProfile]");
 
-    runtimeA.maintain.context.markCompacted("identity-agent-scope-1", {
+    runtimeA.authority.session.commitCompaction("identity-agent-scope-1", {
+      compactId: "cmp-identity-reset",
+      sanitizedSummary: "Keep the current identity contract and active branch only.",
+      summaryDigest: "unused",
+      sourceTurn: 0,
+      leafEntryId: null,
+      referenceContextDigest: null,
       fromTokens: 1000,
       toTokens: 300,
+      origin: "auto_compaction",
     });
     const third = await runtimeA.maintain.context.buildInjection(
       "identity-agent-scope-1",
       "continue",
       undefined,
-      "leaf-c",
+      { injectionScopeId: "leaf-c" },
     );
     expect(third.accepted).toBe(true);
     expect(third.text).toContain("Reviewer A");

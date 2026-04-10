@@ -14,6 +14,7 @@ import {
   ContextSourceProviderRegistry,
 } from "../context/provider.js";
 import type {
+  BuildContextInjectionOptions,
   BrewvaConfig,
   BrewvaEventRecord,
   ContextBudgetUsage,
@@ -31,7 +32,7 @@ import type {
 import type { GovernancePort } from "../governance/port.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import { sanitizeByTrust, wrapByTrust } from "../security/sanitize.js";
-import { type ContextCompactionDeps, markContextCompacted } from "./context-compaction.js";
+import { commitSessionCompaction, type ContextCompactionDeps } from "./context-compaction.js";
 import { ContextPressureService } from "./context-pressure.js";
 import {
   commitSupplementalContextInjection,
@@ -275,8 +276,7 @@ export class ContextService {
     sessionId: string,
     prompt: string,
     usage?: ContextBudgetUsage,
-    injectionScopeId?: string,
-    sourceAllowlist?: ReadonlySet<string>,
+    options?: BuildContextInjectionOptions,
   ): Promise<{
     text: string;
     entries: ContextInjectionEntry[];
@@ -285,13 +285,7 @@ export class ContextService {
     finalTokens: number;
     truncated: boolean;
   }> {
-    return this.finalizeContextInjection(
-      sessionId,
-      prompt,
-      usage,
-      injectionScopeId,
-      sourceAllowlist,
-    );
+    return this.finalizeContextInjection(sessionId, prompt, usage, options);
   }
 
   appendSupplementalContextInjection(
@@ -349,13 +343,18 @@ export class ContextService {
   markContextCompacted(
     sessionId: string,
     input: {
-      fromTokens?: number | null;
-      toTokens?: number | null;
-      summary?: string;
-      entryId?: string;
+      compactId: string;
+      sanitizedSummary: string;
+      summaryDigest: string;
+      sourceTurn: number;
+      leafEntryId: string | null;
+      referenceContextDigest: string | null;
+      fromTokens: number | null;
+      toTokens: number | null;
+      origin: "extension_api" | "auto_compaction" | "hosted_recovery";
     },
-  ): void {
-    markContextCompacted(this.contextCompactionDeps, sessionId, input);
+  ): BrewvaEventRecord {
+    return commitSessionCompaction(this.contextCompactionDeps, sessionId, input);
   }
 
   isContextBudgetEnabled(): boolean {
@@ -378,8 +377,7 @@ export class ContextService {
     sessionId: string,
     prompt: string,
     usage?: ContextBudgetUsage,
-    injectionScopeId?: string,
-    sourceAllowlist?: ReadonlySet<string>,
+    options?: BuildContextInjectionOptions,
   ): {
     text: string;
     entries: ContextInjectionEntry[];
@@ -392,8 +390,9 @@ export class ContextService {
       sessionId,
       prompt,
       usage,
-      injectionScopeId,
-      sourceAllowlist,
+      injectionScopeId: options?.injectionScopeId,
+      sourceAllowlist: options?.sourceAllowlist,
+      referenceContextDigest: options?.referenceContextDigest ?? null,
     });
   }
 
