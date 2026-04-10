@@ -68,7 +68,7 @@ describe("Context injection orchestrator characterization", () => {
       sessionId,
       "continue context characterization",
       { tokens: 800, contextWindow: 4000, percent: 20 },
-      "leaf-a",
+      { injectionScopeId: "leaf-a" },
     );
     expect(injection.accepted).toBe(true);
     expect(injection.text).toContain("[PersonaProfile]");
@@ -115,7 +115,7 @@ describe("Context injection orchestrator characterization", () => {
       sessionId,
       "duplicate fingerprint probe",
       { tokens: 600, contextWindow: 4000, percent: 0.15 },
-      "leaf-a",
+      { injectionScopeId: "leaf-a" },
     );
     expect(first.accepted).toBe(true);
     expect(first.text.length).toBeGreaterThan(0);
@@ -125,7 +125,7 @@ describe("Context injection orchestrator characterization", () => {
       sessionId,
       "duplicate fingerprint probe",
       { tokens: 600, contextWindow: 4000, percent: 0.15 },
-      "leaf-a",
+      { injectionScopeId: "leaf-a" },
     );
     expect(second.accepted).toBe(false);
     expect(second.text).toBe("");

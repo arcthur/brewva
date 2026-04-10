@@ -1,22 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import { createHostedRuntimePort } from "@brewva/brewva-runtime";
-import { readContextEvidenceRecords } from "../../../packages/brewva-gateway/src/runtime-plugins/context-evidence.js";
-import { registerProviderRequestRecovery } from "../../../packages/brewva-gateway/src/runtime-plugins/provider-request-recovery.js";
+import { recordSessionTurnTransition } from "@brewva/brewva-gateway";
 import {
-  PROVIDER_REQUEST_REDUCTION_TEST_ONLY,
+  readContextEvidenceRecords,
+  registerProviderRequestRecovery,
   registerProviderRequestReduction,
-} from "../../../packages/brewva-gateway/src/runtime-plugins/provider-request-reduction.js";
+} from "@brewva/brewva-gateway/runtime-plugins";
+import { createHostedRuntimePort } from "@brewva/brewva-runtime";
 import { armNextPromptOutputBudgetEscalation } from "../../../packages/brewva-gateway/src/session/prompt-recovery-state.js";
-import { recordSessionTurnTransition } from "../../../packages/brewva-gateway/src/session/turn-transition.js";
 import {
   createMockRuntimePluginApi,
   type RuntimePluginTestHandler,
 } from "../../helpers/runtime-plugin.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
-const LARGE_TOOL_RESULT = "x".repeat(
-  PROVIDER_REQUEST_REDUCTION_TEST_ONLY.MIN_CLEARABLE_TOOL_RESULT_CHARS,
-);
+const CLEARED_TOOL_RESULT_PLACEHOLDER = "[cleared_for_request]";
+const MIN_CLEARABLE_TOOL_RESULT_CHARS = 512;
+const LARGE_TOOL_RESULT = "x".repeat(MIN_CLEARABLE_TOOL_RESULT_CHARS);
 
 function buildToolMessages(count: number): Array<Record<string, unknown>> {
   return buildToolMessagesWithSize(count, LARGE_TOOL_RESULT.length);
@@ -59,33 +58,36 @@ function invokeBeforeProviderRequestChain(
 
 describe("provider request reduction", () => {
   test("clears only older OpenAI-style tool result messages in the outbound copy", () => {
+    const runtime = createRuntimeFixture();
+    const { api, handlers } = createMockRuntimePluginApi();
+    const sessionId = "provider-request-reduction-openai";
+
+    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
+    runtime.maintain.context.observeUsage(sessionId, {
+      tokens: 88_000,
+      contextWindow: 100_000,
+      percent: 88,
+    });
+
     const payload = {
       model: "gpt-5.4",
       messages: buildToolMessages(6),
     };
 
-    const result =
-      PROVIDER_REQUEST_REDUCTION_TEST_ONLY.applyTransientOutboundReductionToPayload(payload);
+    const result = invokeBeforeProviderRequestChain(handlers, payload, sessionId);
 
-    expect(result.status).toBe("completed");
-    expect(result.eligibleToolResults).toBe(6);
-    expect(result.clearedToolResults).toBe(2);
-    expect(result.clearedChars).toBe(
-      `${LARGE_TOOL_RESULT}:1`.length + `${LARGE_TOOL_RESULT}:2`.length,
-    );
-    expect(result.estimatedTokenSavings).toBeGreaterThan(0);
-    expect((result.payload as { messages: Array<Record<string, unknown>> }).messages).toEqual([
+    expect(result.messages as Array<Record<string, unknown>>).toEqual([
       {
         role: "tool",
         tool_call_id: "call-1",
         name: "read",
-        content: PROVIDER_REQUEST_REDUCTION_TEST_ONLY.CLEARED_TOOL_RESULT_PLACEHOLDER,
+        content: CLEARED_TOOL_RESULT_PLACEHOLDER,
       },
       {
         role: "tool",
         tool_call_id: "call-2",
         name: "read",
-        content: PROVIDER_REQUEST_REDUCTION_TEST_ONLY.CLEARED_TOOL_RESULT_PLACEHOLDER,
+        content: CLEARED_TOOL_RESULT_PLACEHOLDER,
       },
       {
         role: "tool",
@@ -113,9 +115,27 @@ describe("provider request reduction", () => {
       },
     ]);
     expect(payload.messages[0]?.content).toBe(`${LARGE_TOOL_RESULT}:1`);
+    expect(runtime.inspect.context.getTransientReduction(sessionId)).toEqual(
+      expect.objectContaining({
+        status: "completed",
+        eligibleToolResults: 6,
+        clearedToolResults: 2,
+      }),
+    );
   });
 
   test("reduces OpenAI Responses text-only tool outputs but preserves recent items", () => {
+    const runtime = createRuntimeFixture();
+    const { api, handlers } = createMockRuntimePluginApi();
+    const sessionId = "provider-request-reduction-responses";
+
+    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
+    runtime.maintain.context.observeUsage(sessionId, {
+      tokens: 88_000,
+      contextWindow: 100_000,
+      percent: 88,
+    });
+
     const payload = {
       input: Array.from({ length: 5 }, (_, index) => ({
         type: "function_call_output",
@@ -129,25 +149,19 @@ describe("provider request reduction", () => {
       })),
     };
 
-    const result =
-      PROVIDER_REQUEST_REDUCTION_TEST_ONLY.applyTransientOutboundReductionToPayload(payload);
+    const result = invokeBeforeProviderRequestChain(handlers, payload, sessionId);
 
-    expect(result.status).toBe("completed");
-    expect(result.eligibleToolResults).toBe(5);
-    expect(result.clearedToolResults).toBe(1);
-    expect(result.clearedChars).toBe(`${LARGE_TOOL_RESULT}:1`.length);
-    expect(result.estimatedTokenSavings).toBeGreaterThan(0);
-    expect((result.payload as { input: Array<Record<string, unknown>> }).input[0]).toEqual({
+    expect((result.input as Array<Record<string, unknown>>)[0]).toEqual({
       type: "function_call_output",
       call_id: "call-1",
       output: [
         {
           type: "input_text",
-          text: PROVIDER_REQUEST_REDUCTION_TEST_ONLY.CLEARED_TOOL_RESULT_PLACEHOLDER,
+          text: CLEARED_TOOL_RESULT_PLACEHOLDER,
         },
       ],
     });
-    expect((result.payload as { input: Array<Record<string, unknown>> }).input[4]?.output).toEqual([
+    expect((result.input as Array<Record<string, unknown>>)[4]?.output).toEqual([
       {
         type: "input_text",
         text: `${LARGE_TOOL_RESULT}:5`,
@@ -157,105 +171,179 @@ describe("provider request reduction", () => {
 
   test("allows transient reduction only for high pressure outside recovery posture", () => {
     const runtime = createRuntimeFixture();
+    const { api, handlers } = createMockRuntimePluginApi();
     const sessionId = "provider-request-reduction-eligibility";
 
+    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
     runtime.maintain.context.observeUsage(sessionId, {
       tokens: 88_000,
       contextWindow: 100_000,
       percent: 88,
     });
-    expect(
-      PROVIDER_REQUEST_REDUCTION_TEST_ONLY.resolveTransientOutboundReductionEligibility(
-        createHostedRuntimePort(runtime),
-        sessionId,
-      ),
-    ).toEqual({
-      allowed: true,
-      detail: null,
-      pressureLevel: "high",
-    });
+    const reducedPayload = invokeBeforeProviderRequestChain(
+      handlers,
+      {
+        model: "gpt-5.4",
+        messages: buildToolMessages(6),
+      },
+      sessionId,
+    );
+    expect((reducedPayload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
+      CLEARED_TOOL_RESULT_PLACEHOLDER,
+    );
+    expect(runtime.inspect.context.getTransientReduction(sessionId)).toEqual(
+      expect.objectContaining({
+        status: "completed",
+        pressureLevel: "high",
+      }),
+    );
 
     runtime.maintain.context.observeUsage(sessionId, {
       tokens: 0,
       contextWindow: 1_000,
       percent: 0,
     });
-    expect(
-      PROVIDER_REQUEST_REDUCTION_TEST_ONLY.resolveTransientOutboundReductionEligibility(
-        createHostedRuntimePort(runtime),
-        sessionId,
-        {
-          model: "gpt-5.4",
-          messages: buildToolMessages(6),
-        },
-      ),
-    ).toEqual({
-      allowed: true,
-      detail: null,
-      pressureLevel: "high",
-    });
+    const untouchedPayload = invokeBeforeProviderRequestChain(
+      handlers,
+      {
+        model: "gpt-5.4",
+        messages: buildToolMessages(6),
+      },
+      sessionId,
+    );
+    expect((untouchedPayload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
+      `${LARGE_TOOL_RESULT}:1`,
+    );
+    expect(runtime.inspect.context.getTransientReduction(sessionId)).toEqual(
+      expect.objectContaining({
+        status: "skipped",
+        reason: "context pressure is below the transient reduction threshold",
+        pressureLevel: "none",
+      }),
+    );
 
     recordSessionTurnTransition(runtime, {
       sessionId,
       reason: "provider_fallback_retry",
       status: "entered",
     });
-    expect(
-      PROVIDER_REQUEST_REDUCTION_TEST_ONLY.resolveTransientOutboundReductionEligibility(
-        createHostedRuntimePort(runtime),
-        sessionId,
-      ),
-    ).toEqual({
-      allowed: false,
-      detail: "recovery posture is active",
-      pressureLevel: "unknown",
-    });
+    const recoveryPayload = invokeBeforeProviderRequestChain(
+      handlers,
+      {
+        model: "gpt-5.4",
+        messages: buildToolMessages(6),
+      },
+      sessionId,
+    );
+    expect((recoveryPayload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
+      `${LARGE_TOOL_RESULT}:1`,
+    );
+    expect(runtime.inspect.context.getTransientReduction(sessionId)).toEqual(
+      expect.objectContaining({
+        status: "skipped",
+        reason: "recovery posture is active",
+        pressureLevel: "unknown",
+      }),
+    );
   });
 
   test("uses payload model metadata when live usage is unavailable", () => {
     const runtime = createRuntimeFixture();
+    const { api, handlers } = createMockRuntimePluginApi();
     const sessionId = "provider-request-reduction-model-window";
 
-    expect(
-      PROVIDER_REQUEST_REDUCTION_TEST_ONLY.resolveTransientOutboundReductionEligibility(
-        createHostedRuntimePort(runtime),
-        sessionId,
-        {
-          model: "azure-openai-responses/gpt-4",
-          messages: buildToolMessagesWithSize(6, 4_000),
-        },
-      ),
-    ).toEqual({
-      allowed: true,
-      detail: null,
-      pressureLevel: "high",
-    });
+    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
+    const payload = invokeBeforeProviderRequestChain(
+      handlers,
+      {
+        model: "azure-openai-responses/gpt-4",
+        messages: buildToolMessagesWithSize(6, 4_000),
+      },
+      sessionId,
+    );
+    expect((payload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
+      CLEARED_TOOL_RESULT_PLACEHOLDER,
+    );
+    expect(runtime.inspect.context.getTransientReduction(sessionId)).toEqual(
+      expect.objectContaining({
+        status: "completed",
+        pressureLevel: "high",
+      }),
+    );
   });
 
-  test("estimated critical pressure still defers to replay-visible compaction handling", () => {
+  test("runtime usage takes precedence over payload estimation when live usage is available", () => {
     const runtime = createRuntimeFixture();
-    const sessionId = "provider-request-reduction-estimated-critical";
+    const { api, handlers } = createMockRuntimePluginApi();
+    const sessionId = "provider-request-reduction-runtime-usage-precedence";
 
+    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
     runtime.maintain.context.observeUsage(sessionId, {
       tokens: 0,
       contextWindow: 1_000,
       percent: 0,
     });
 
-    expect(
-      PROVIDER_REQUEST_REDUCTION_TEST_ONLY.resolveTransientOutboundReductionEligibility(
-        createHostedRuntimePort(runtime),
-        sessionId,
-        {
-          model: "gpt-5.4",
-          messages: buildToolMessagesWithSize(6, 3_000),
-        },
-      ),
-    ).toEqual({
-      allowed: false,
-      detail: "hard-limit posture requires replay-visible compaction handling",
-      pressureLevel: "critical",
+    const payload = invokeBeforeProviderRequestChain(
+      handlers,
+      {
+        model: "gpt-5.4",
+        messages: buildToolMessagesWithSize(6, 3_000),
+      },
+      sessionId,
+    );
+    expect((payload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
+      `${"x".repeat(3_000)}:1`,
+    );
+    expect(runtime.inspect.context.getTransientReduction(sessionId)).toEqual(
+      expect.objectContaining({
+        status: "skipped",
+        reason: "context pressure is below the transient reduction threshold",
+        pressureLevel: "none",
+      }),
+    );
+  });
+
+  test("diagnostic-only recovery posture blocks transient reduction", () => {
+    const runtime = createRuntimeFixture();
+    const { api, handlers } = createMockRuntimePluginApi();
+    const sessionId = "provider-request-reduction-diagnostic-only";
+
+    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
+    Object.assign(runtime.inspect.recovery, {
+      getPosture() {
+        return {
+          mode: "diagnostic_only",
+          latestReason: "exact_history_over_budget",
+          latestStatus: null,
+          pendingFamily: null,
+          degradedReason: "exact_history_over_budget",
+          duplicateSideEffectSuppressionCount: 0,
+        };
+      },
+      getWorkingSet() {
+        return undefined;
+      },
     });
+
+    const payload = invokeBeforeProviderRequestChain(
+      handlers,
+      {
+        model: "gpt-5.4",
+        messages: buildToolMessages(6),
+      },
+      sessionId,
+    );
+    expect((payload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
+      `${LARGE_TOOL_RESULT}:1`,
+    );
+    expect(runtime.inspect.context.getTransientReduction(sessionId)).toEqual(
+      expect.objectContaining({
+        status: "skipped",
+        reason: "recovery posture is active",
+        pressureLevel: "unknown",
+      }),
+    );
   });
 
   test("records live transient reduction state when a high-pressure outbound payload is reduced", () => {
@@ -265,9 +353,9 @@ describe("provider request reduction", () => {
 
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
     runtime.maintain.context.observeUsage(sessionId, {
-      tokens: 0,
-      contextWindow: 1_000,
-      percent: 0,
+      tokens: 88_000,
+      contextWindow: 100_000,
+      percent: 88,
     });
 
     const finalPayload = invokeBeforeProviderRequestChain(
@@ -280,7 +368,7 @@ describe("provider request reduction", () => {
     );
 
     expect((finalPayload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
-      PROVIDER_REQUEST_REDUCTION_TEST_ONLY.CLEARED_TOOL_RESULT_PLACEHOLDER,
+      CLEARED_TOOL_RESULT_PLACEHOLDER,
     );
     expect(runtime.inspect.context.getTransientReduction(sessionId)).toEqual(
       expect.objectContaining({

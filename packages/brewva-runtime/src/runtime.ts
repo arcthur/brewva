@@ -15,6 +15,10 @@ import {
   type ContextSourceProvider,
   type ContextSourceProviderDescriptor,
 } from "./context/provider.js";
+import {
+  resolveHistoryViewBaselineStateFromKernel,
+  resolveRecoveryContextReadModels,
+} from "./context/read-models.js";
 import type { ToolOutputDistillationEntry } from "./context/tool-output-distilled.js";
 import type {
   ContextCompactionReason,
@@ -22,8 +26,12 @@ import type {
   ContextPressureStatus,
   ContextCompactionGateStatus,
   ContextBudgetUsage,
+  BuildContextInjectionOptions,
+  HistoryViewBaselineSnapshot,
   PromptStabilityObservationInput,
   PromptStabilityState,
+  RecoveryPostureSnapshot,
+  RecoveryWorkingSetSnapshot,
   ResourceLeaseCancelResult,
   ResourceLeaseQuery,
   ResourceLeaseRecord,
@@ -76,6 +84,7 @@ import type {
   SessionHydrationState,
   SessionUncleanShutdownDiagnostic,
   SessionCostSummary,
+  SessionCompactionCommitInput,
   SessionWireFrame,
   OpenToolCallRecord,
   ReasoningCheckpointRecord,
@@ -347,6 +356,7 @@ interface BrewvaRuntimeMethodGroups {
       toolName: string,
       usage?: ContextBudgetUsage,
     ): { allowed: boolean; reason?: string };
+    getHistoryViewBaseline(sessionId: string): HistoryViewBaselineSnapshot | undefined;
     registerProvider(provider: ContextSourceProvider): void;
     unregisterProvider(source: string): boolean;
     listProviders(): readonly ContextSourceProviderDescriptor[];
@@ -354,8 +364,7 @@ interface BrewvaRuntimeMethodGroups {
       sessionId: string,
       prompt: string,
       usage?: ContextBudgetUsage,
-      injectionScopeId?: string,
-      sourceAllowlist?: ReadonlySet<string>,
+      options?: BuildContextInjectionOptions,
     ): Promise<{
       text: string;
       entries: ContextInjectionEntry[];
@@ -382,15 +391,6 @@ interface BrewvaRuntimeMethodGroups {
     getPendingCompactionReason(sessionId: string): ContextCompactionReason | null;
     getCompactionInstructions(): string;
     getCompactionWindowTurns(): number;
-    markCompacted(
-      sessionId: string,
-      input: {
-        fromTokens?: number | null;
-        toTokens?: number | null;
-        summary?: string;
-        entryId?: string;
-      },
-    ): void;
   };
   tools: {
     checkAccess(
@@ -559,6 +559,8 @@ interface BrewvaRuntimeMethodGroups {
     markFailed(walId: string, error?: string): RecoveryWalRecord | undefined;
     markExpired(walId: string): RecoveryWalRecord | undefined;
     listPending(): RecoveryWalRecord[];
+    getPosture(sessionId: string): RecoveryPostureSnapshot;
+    getWorkingSet(sessionId: string): RecoveryWorkingSetSnapshot | undefined;
     recover(): Promise<RecoveryWalRecoveryResult>;
     compact(): {
       scope: string;
@@ -643,6 +645,7 @@ interface BrewvaRuntimeMethodGroups {
     onClearState(listener: (sessionId: string) => void): () => void;
     getHydration(sessionId: string): SessionHydrationState;
     getIntegrity(sessionId: string): IntegrityStatus;
+    commitCompaction(sessionId: string, input: SessionCompactionCommitInput): BrewvaEventRecord;
     resolveCredentialBindings(sessionId: string, toolName: string): Record<string, string>;
     resolveSandboxApiKey(sessionId: string): string | undefined;
   };
@@ -693,7 +696,10 @@ export interface BrewvaAuthorityPort {
   >;
   readonly verification: BrewvaRuntimeMethodGroups["verification"];
   readonly cost: Pick<BrewvaRuntimeMethodGroups["cost"], "recordAssistantUsage">;
-  readonly session: Pick<BrewvaRuntimeMethodGroups["session"], "applyMergedWorkerResults">;
+  readonly session: Pick<
+    BrewvaRuntimeMethodGroups["session"],
+    "commitCompaction" | "applyMergedWorkerResults"
+  >;
 }
 
 export interface BrewvaInspectionPort {
@@ -730,6 +736,7 @@ export interface BrewvaInspectionPort {
     | "getPressureLevel"
     | "getCompactionGateStatus"
     | "checkCompactionGate"
+    | "getHistoryViewBaseline"
     | "listProviders"
     | "getPendingCompactionReason"
     | "getCompactionInstructions"
@@ -750,10 +757,10 @@ export interface BrewvaInspectionPort {
     BrewvaRuntimeMethodGroups["schedule"],
     "listIntents" | "getProjectionSnapshot"
   >;
-  // This is the public read model for WAL-backed recovery state.
-  readonly recovery: {
-    listPending(): RecoveryWalRecord[];
-  };
+  readonly recovery: Pick<
+    BrewvaRuntimeMethodGroups["recoveryWal"],
+    "listPending" | "getPosture" | "getWorkingSet"
+  >;
   readonly events: Pick<
     BrewvaRuntimeMethodGroups["events"],
     | "query"
@@ -798,7 +805,6 @@ export interface BrewvaMaintenancePort {
     | "appendSupplementalInjection"
     | "checkAndRequestCompaction"
     | "requestCompaction"
-    | "markCompacted"
   >;
   readonly tools: Pick<
     BrewvaRuntimeMethodGroups["tools"],
@@ -1112,17 +1118,12 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           this.contextService.getContextCompactionGateStatus(sessionId, usage),
         checkCompactionGate: (sessionId, toolName, usage) =>
           this.contextService.checkContextCompactionGate(sessionId, toolName, usage),
+        getHistoryViewBaseline: (sessionId) => this.getHistoryViewBaseline(sessionId),
         registerProvider: (provider) => this.contextService.registerContextSourceProvider(provider),
         unregisterProvider: (source) => this.contextService.unregisterContextSourceProvider(source),
         listProviders: () => this.contextService.listContextSourceProviders(),
-        buildInjection: (sessionId, prompt, usage, injectionScopeId, sourceAllowlist) =>
-          this.contextService.buildContextInjection(
-            sessionId,
-            prompt,
-            usage,
-            injectionScopeId,
-            sourceAllowlist,
-          ),
+        buildInjection: (sessionId, prompt, usage, options) =>
+          this.contextService.buildContextInjection(sessionId, prompt, usage, options),
         appendSupplementalInjection: (sessionId, inputText, usage, injectionScopeId) =>
           this.contextService.appendSupplementalContextInjection(
             sessionId,
@@ -1138,8 +1139,6 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           this.contextService.getPendingCompactionReason(sessionId),
         getCompactionInstructions: () => this.contextService.getCompactionInstructions(),
         getCompactionWindowTurns: () => this.contextService.getRecentCompactionWindowTurns(),
-        markCompacted: (sessionId, input) =>
-          this.contextService.markContextCompacted(sessionId, input),
       },
       tools: {
         checkAccess: (sessionId, toolName, args) =>
@@ -1252,6 +1251,8 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
         markFailed: (walId, error) => this.recoveryWalStore.markFailed(walId, error),
         markExpired: (walId) => this.recoveryWalStore.markExpired(walId),
         listPending: () => this.recoveryWalStore.listPending(),
+        getPosture: (sessionId) => this.getRecoveryPosture(sessionId),
+        getWorkingSet: (sessionId) => this.getRecoveryWorkingSet(sessionId),
         recover: async () => {
           const recovery = new RecoveryWalRecovery({
             workspaceRoot: this.workspaceRoot,
@@ -1329,6 +1330,8 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           this.sessionLifecycleService.ensureHydrated(sessionId);
           return this.sessionLifecycleService.getIntegrityStatus(sessionId);
         },
+        commitCompaction: (sessionId, input) =>
+          this.contextService.markContextCompacted(sessionId, input),
         resolveCredentialBindings: (sessionId, toolName) => {
           this.sessionLifecycleService.ensureHydrated(sessionId);
           return this.credentialVaultService.resolveToolBindings(
@@ -1403,7 +1406,10 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
         ] as const),
         verification: methodGroups.verification,
         cost: bindMethods(methodGroups.cost, ["recordAssistantUsage"] as const),
-        session: bindMethods(methodGroups.session, ["applyMergedWorkerResults"] as const),
+        session: bindMethods(methodGroups.session, [
+          "commitCompaction",
+          "applyMergedWorkerResults",
+        ] as const),
       },
       inspect: {
         skills: bindMethods(methodGroups.skills, [
@@ -1441,6 +1447,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "getPressureLevel",
           "getCompactionGateStatus",
           "checkCompactionGate",
+          "getHistoryViewBaseline",
           "listProviders",
           "getPendingCompactionReason",
           "getCompactionInstructions",
@@ -1460,7 +1467,11 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "listIntents",
           "getProjectionSnapshot",
         ] as const),
-        recovery: bindMethods(methodGroups.recoveryWal, ["listPending"] as const),
+        recovery: bindMethods(methodGroups.recoveryWal, [
+          "listPending",
+          "getPosture",
+          "getWorkingSet",
+        ] as const),
         events: bindMethods(methodGroups.events, [
           "query",
           "queryStructured",
@@ -1501,7 +1512,6 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "appendSupplementalInjection",
           "checkAndRequestCompaction",
           "requestCompaction",
-          "markCompacted",
         ] as const),
         tools: bindMethods(methodGroups.tools, [
           "registerGovernanceDescriptor",
@@ -1524,6 +1534,37 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
 
   private getTaskState(sessionId: string): TaskState {
     return this.turnReplay.getTaskState(sessionId);
+  }
+
+  private resolveHistoryViewBaselineState(sessionId: string) {
+    return resolveHistoryViewBaselineStateFromKernel(this.kernel, {
+      sessionId,
+      usage: this.contextService.getContextUsage(sessionId),
+      referenceContextDigest: this.sessionState.getPromptStability(sessionId)?.stablePrefixHash,
+    });
+  }
+
+  private getHistoryViewBaseline(sessionId: string): HistoryViewBaselineSnapshot | undefined {
+    this.sessionLifecycleService.ensureHydrated(sessionId);
+    return this.resolveHistoryViewBaselineState(sessionId).snapshot;
+  }
+
+  private getRecoveryPosture(sessionId: string): RecoveryPostureSnapshot {
+    this.sessionLifecycleService.ensureHydrated(sessionId);
+    return resolveRecoveryContextReadModels(this.kernel, {
+      sessionId,
+      usage: this.contextService.getContextUsage(sessionId),
+      referenceContextDigest: this.sessionState.getPromptStability(sessionId)?.stablePrefixHash,
+    }).posture;
+  }
+
+  private getRecoveryWorkingSet(sessionId: string): RecoveryWorkingSetSnapshot | undefined {
+    this.sessionLifecycleService.ensureHydrated(sessionId);
+    return resolveRecoveryContextReadModels(this.kernel, {
+      sessionId,
+      usage: this.contextService.getContextUsage(sessionId),
+      referenceContextDigest: this.sessionState.getPromptStability(sessionId)?.stablePrefixHash,
+    }).workingSet;
   }
 
   private getTaskTargetDescriptor(sessionId: string): TaskTargetDescriptor {

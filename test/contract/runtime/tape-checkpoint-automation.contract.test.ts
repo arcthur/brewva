@@ -364,7 +364,7 @@ requires: []
       sessionId,
       "continue",
       { tokens: 320, contextWindow: 16_000, percent: 0.02 },
-      "workflow-rehydrate-before",
+      { injectionScopeId: "workflow-rehydrate-before" },
     );
     expect(beforeRestart.text).toContain("[WorkingProjection]");
 
@@ -374,7 +374,7 @@ requires: []
       sessionId,
       "continue",
       { tokens: 320, contextWindow: 16_000, percent: 0.02 },
-      "workflow-rehydrate-after",
+      { injectionScopeId: "workflow-rehydrate-after" },
     );
 
     expect(afterRestart.accepted).toBe(true);
@@ -434,7 +434,7 @@ requires: []
       sessionId,
       "continue",
       { tokens: 320, contextWindow: 16_000, percent: 0.02 },
-      "workflow-pending-worker-after",
+      { injectionScopeId: "workflow-pending-worker-after" },
     );
 
     expect(injected.accepted).toBe(true);

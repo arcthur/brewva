@@ -71,7 +71,6 @@ describe("context transform session hook contract", () => {
   test("arms the critical gate for non-session_compact flows and clears it after compaction", async () => {
     const { api, handlers } = createMockRuntimePluginApi();
     const eventTypes: string[] = [];
-    const capturedCompactions: Array<Record<string, unknown>> = [];
 
     const runtime = createRuntimeFixture({
       config: createRuntimeConfig((config) => {
@@ -81,9 +80,6 @@ describe("context transform session hook contract", () => {
         onTurnStart: () => undefined,
         observeUsage: () => undefined,
         checkAndRequestCompaction: () => true,
-        markCompacted: (_sessionId: string, payload: Record<string, unknown>) => {
-          capturedCompactions.push(payload);
-        },
         buildInjection: async () => ({
           text: "",
           entries: [],
@@ -100,6 +96,14 @@ describe("context transform session hook contract", () => {
         },
       },
     });
+    const capturedCompactions: Array<Record<string, unknown>> = [];
+    const originalCommitCompaction = runtime.authority.session.commitCompaction.bind(
+      runtime.authority.session,
+    );
+    runtime.authority.session.commitCompaction = (sessionId, payload) => {
+      capturedCompactions.push(payload as unknown as Record<string, unknown>);
+      return originalCommitCompaction(sessionId, payload);
+    };
 
     registerContextTransform(api, runtime);
 
@@ -154,8 +158,8 @@ describe("context transform session hook contract", () => {
     );
 
     expect(capturedCompactions).toHaveLength(1);
-    expect(capturedCompactions[0]?.entryId).toBe("cmp-entry-1");
-    expect(capturedCompactions[0]?.summary).toBe("Keep active goals only.");
+    expect(capturedCompactions[0]?.compactId).toBe("cmp-entry-1");
+    expect(capturedCompactions[0]?.sanitizedSummary).toBe("Keep active goals only.");
     expect(capturedCompactions[0]?.toTokens).toBe(1200);
     expect(eventTypes).toContain("session_compact");
     expect(eventTypes).toContain("context_compaction_gate_cleared");

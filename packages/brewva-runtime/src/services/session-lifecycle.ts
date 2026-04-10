@@ -25,6 +25,7 @@ import type { ParallelBudgetManager } from "../parallel/budget.js";
 import type { ParallelResultStore } from "../parallel/results.js";
 import { deriveParallelBudgetStateFromEvents } from "../parallel/state.js";
 import type { ProjectionEngine } from "../projection/engine.js";
+import { deriveRecoveryCanonicalization } from "../recovery/read-model.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type { FileChangeTracker } from "../state/file-change-tracker.js";
 import { TAPE_CHECKPOINT_EVENT_TYPE, coerceTapeCheckpointPayload } from "../tape/events.js";
@@ -268,6 +269,7 @@ export class SessionLifecycleService {
 
     const events = this.events.list(sessionId);
     const integrityIssues = this.events.getIntegrityIssues(sessionId);
+    this.applyRecoveryCanonicalization(sessionId, events, state, integrityIssues);
     this.resetHydrationSupportStores(sessionId);
     const parallelBudgetState = deriveParallelBudgetStateFromEvents(events);
     this.parallel.restoreSession(sessionId, {
@@ -291,6 +293,37 @@ export class SessionLifecycleService {
     this.replayHydrationEvents(sessionId, events, hydrationRun, replayState);
     this.applyHydrationRun(state, events, hydrationRun);
     this.reconcileUncleanShutdown(sessionId, events, state);
+  }
+
+  private applyRecoveryCanonicalization(
+    sessionId: string,
+    events: BrewvaEventRecord[],
+    state: RuntimeSessionStateCell,
+    integrityIssues: IntegrityIssue[],
+  ): void {
+    const canonicalization = deriveRecoveryCanonicalization(events);
+    if (events.length === 0 || canonicalization.mode !== "degraded") {
+      return;
+    }
+    const latestEvent = events[events.length - 1];
+    if (!latestEvent || latestEvent.type === SESSION_SHUTDOWN_EVENT_TYPE) {
+      return;
+    }
+    if (Date.now() - latestEvent.timestamp < UNCLEAN_SHUTDOWN_RECONCILIATION_GRACE_MS) {
+      return;
+    }
+    const issue: IntegrityIssue = {
+      domain: "event_tape",
+      severity: "degraded",
+      sessionId,
+      eventType: SESSION_UNCLEAN_SHUTDOWN_RECONCILED_EVENT_TYPE,
+      reason: canonicalization.degradedReason ?? "recovery_canonicalization_degraded",
+    };
+    const issueKey = this.integrityIssueKey(issue);
+    if (integrityIssues.some((entry) => this.integrityIssueKey(entry) === issueKey)) {
+      return;
+    }
+    integrityIssues.push(issue);
   }
 
   private resetHydrationSupportStores(sessionId: string): void {

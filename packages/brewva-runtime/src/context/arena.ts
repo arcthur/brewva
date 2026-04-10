@@ -5,7 +5,11 @@ import type {
   ContextInjectionRegisterResult,
   RegisterContextInjectionInput,
 } from "./injection.js";
-import type { ContextInjectionBudgetClass } from "./sources.js";
+import {
+  isNonTruncatableContextSource,
+  resolveReservedContextSourceBudget,
+  type ContextInjectionBudgetClass,
+} from "./sources.js";
 
 const ENTRY_SEPARATOR = "\n\n";
 const ARENA_TRIM_MIN_ENTRIES = 2_048;
@@ -43,6 +47,11 @@ interface ArenaCapacityDecision {
   dropped: boolean;
   degradationApplied: boolean;
   replaceIndex?: number;
+}
+
+interface ReservedSourceBudgetState {
+  budgetClass: ContextInjectionBudgetClass;
+  remainingTokens: number;
 }
 
 export interface ArenaSnapshot {
@@ -177,10 +186,12 @@ export class ContextArena {
     }
 
     const classBudgets = this.allocateBudgetByClass(allCandidates, totalTokenBudget);
+    const reservedBudgets = this.allocateReservedBudgetBySource(allCandidates, totalTokenBudget);
     const finalPlan = this.planEntriesAcrossClassBudgets(
       allCandidates,
       totalTokenBudget,
       classBudgets,
+      reservedBudgets,
     );
     const accepted = finalPlan.entries;
     const truncated = finalPlan.truncated;
@@ -330,6 +341,7 @@ export class ContextArena {
     entries: readonly ArenaEntry[],
     totalTokenBudget: number,
     classBudgets: Record<ContextInjectionBudgetClass, number>,
+    reservedBudgets: Map<string, ReservedSourceBudgetState>,
   ): { entries: ContextInjectionEntry[]; truncated: boolean } {
     const separatorTokens = estimateTokenCount(ENTRY_SEPARATOR);
     const remainingByClass: Record<ContextInjectionBudgetClass, number> = {
@@ -337,6 +349,9 @@ export class ContextArena {
       working: Math.max(0, Math.floor(classBudgets.working)),
       recall: Math.max(0, Math.floor(classBudgets.recall)),
     };
+    const remainingReservedBySource = new Map(
+      [...reservedBudgets.entries()].map(([source, state]) => [source, { ...state }]),
+    );
     let remainingTokens = Math.max(0, Math.floor(totalTokenBudget));
     let truncated = false;
     const accepted: ContextInjectionEntry[] = [];
@@ -349,10 +364,16 @@ export class ContextArena {
 
       const separatorCost = accepted.length > 0 ? separatorTokens : 0;
       const classBudget = remainingByClass[entry.budgetClass];
+      const reservedState = remainingReservedBySource.get(entry.source);
+      const reservedHoldback = [...remainingReservedBySource.values()]
+        .filter((state) => state.budgetClass === entry.budgetClass)
+        .reduce((sum, state) => sum + state.remainingTokens, 0);
+      const availableClassBudget =
+        reservedState === undefined ? Math.max(0, classBudget - reservedHoldback) : classBudget;
       const reservedTokens =
         remainingByClass.core + remainingByClass.working + remainingByClass.recall;
       const overflowBudget = Math.max(0, remainingTokens - reservedTokens);
-      const sharedBudget = Math.min(remainingTokens, classBudget + overflowBudget);
+      const sharedBudget = Math.min(remainingTokens, availableClassBudget + overflowBudget);
       if (sharedBudget <= separatorCost) {
         truncated = true;
         continue;
@@ -369,6 +390,14 @@ export class ContextArena {
         const consumed = separatorCost + entry.estimatedTokens;
         remainingTokens = Math.max(0, remainingTokens - consumed);
         remainingByClass[entry.budgetClass] = Math.max(0, classBudget - consumed);
+        if (reservedState) {
+          reservedState.remainingTokens = Math.max(0, reservedState.remainingTokens - consumed);
+        }
+        continue;
+      }
+
+      if (isNonTruncatableContextSource(entry.source)) {
+        truncated = true;
         continue;
       }
 
@@ -381,12 +410,33 @@ export class ContextArena {
       const consumed = separatorCost + fitted.estimatedTokens;
       remainingTokens = Math.max(0, remainingTokens - consumed);
       remainingByClass[entry.budgetClass] = Math.max(0, classBudget - consumed);
+      if (reservedState) {
+        reservedState.remainingTokens = Math.max(0, reservedState.remainingTokens - consumed);
+      }
     }
 
     return {
       entries: accepted,
       truncated,
     };
+  }
+
+  private allocateReservedBudgetBySource(
+    entries: readonly ArenaEntry[],
+    totalTokenBudget: number,
+  ): Map<string, ReservedSourceBudgetState> {
+    const reservedBySource = new Map<string, ReservedSourceBudgetState>();
+    for (const entry of entries) {
+      const reservedBudget = resolveReservedContextSourceBudget(entry.source, totalTokenBudget);
+      if (reservedBudget === null) {
+        continue;
+      }
+      reservedBySource.set(entry.source, {
+        budgetClass: entry.budgetClass,
+        remainingTokens: reservedBudget,
+      });
+    }
+    return reservedBySource;
   }
 
   private resolveSourceLimit(source: string): number {

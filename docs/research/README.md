@@ -81,6 +81,7 @@ None currently.
 - `docs/research/active/cost-observability-and-budget-governance.md`
 - `docs/research/active/rollback-ergonomics-and-patch-lifecycle-safety.md`
 - `docs/research/active/prefix-stable-context-management-and-progressive-compaction.md`
+- `docs/research/active/recovery-first-context-governance-and-history-view-baselines.md`
 
 ## Promoted notes (status pointers)
 

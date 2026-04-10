@@ -127,6 +127,55 @@ describe("session coordination tool contracts", () => {
     expect(payload?.usagePercent).toBe(0.95);
   });
 
+  test("authority.session.commitCompaction records the durable compaction receipt and updates history-view baseline", () => {
+    const runtime = createCleanRuntime();
+    const sessionId = "s11-commit";
+
+    runtime.maintain.context.onTurnStart(sessionId, 1);
+
+    runtime.authority.session.commitCompaction(sessionId, {
+      compactId: "cmp-42",
+      sanitizedSummary: "[CompactSummary]\nKeep only the latest verification failures.",
+      summaryDigest: "digest-42",
+      sourceTurn: 1,
+      leafEntryId: "leaf-42",
+      referenceContextDigest: "prefix-42",
+      fromTokens: 900,
+      toTokens: 320,
+      origin: "extension_api",
+    });
+
+    const compactEvent = runtime.inspect.events.query(sessionId, {
+      type: "session_compact",
+      last: 1,
+    })[0];
+    expect(compactEvent?.payload).toEqual(
+      expect.objectContaining({
+        compactId: "cmp-42",
+        sanitizedSummary: "[CompactSummary]\nKeep only the latest verification failures.",
+        summaryDigest: expect.any(String),
+        sourceTurn: 1,
+        leafEntryId: "leaf-42",
+        referenceContextDigest: "prefix-42",
+        fromTokens: 900,
+        toTokens: 320,
+        origin: "extension_api",
+        integrityViolations: null,
+      }),
+    );
+    expect(runtime.inspect.events.query(sessionId, { type: "context_compacted" })).toHaveLength(0);
+
+    expect(runtime.inspect.context.getHistoryViewBaseline(sessionId)).toEqual(
+      expect.objectContaining({
+        compactId: "cmp-42",
+        sanitizedSummary: "[CompactSummary]\nKeep only the latest verification failures.",
+        summaryDigest: expect.any(String),
+        leafEntryId: "leaf-42",
+        referenceContextDigest: "prefix-42",
+      }),
+    );
+  });
+
   test("tape_handoff writes an anchor and tape_info reports tape and context pressure", async () => {
     const tapeInfoWorkspace = mkdtempSync(join(tmpdir(), "brewva-tools-tape-info-"));
     const runtime = new BrewvaRuntime({ cwd: tapeInfoWorkspace });

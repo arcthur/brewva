@@ -46,7 +46,7 @@ describe("Gap remediation: context budget", () => {
         contextWindow: 4000,
         percent: 0.15,
       },
-      "leaf-a",
+      { injectionScopeId: "leaf-a" },
     );
     expect(first.accepted).toBe(true);
     expect(first.text.length).toBeGreaterThan(0);
@@ -60,7 +60,7 @@ describe("Gap remediation: context budget", () => {
         contextWindow: 4000,
         percent: 0.16,
       },
-      "leaf-a",
+      { injectionScopeId: "leaf-a" },
     );
     expect(second.accepted).toBe(false);
 
@@ -73,14 +73,21 @@ describe("Gap remediation: context budget", () => {
         contextWindow: 4000,
         percent: 0.17,
       },
-      "leaf-b",
+      { injectionScopeId: "leaf-b" },
     );
     expect(third.accepted).toBe(true);
     expect(third.text.length).toBeGreaterThan(0);
 
-    runtime.maintain.context.markCompacted(sessionId, {
+    runtime.authority.session.commitCompaction(sessionId, {
+      compactId: "cmp-dedup-reset",
+      sanitizedSummary: "Reset the history-view baseline after compaction.",
+      summaryDigest: "unused",
+      sourceTurn: 3,
+      leafEntryId: null,
+      referenceContextDigest: null,
       fromTokens: 1500,
       toTokens: 500,
+      origin: "auto_compaction",
     });
     runtime.maintain.context.onTurnStart(sessionId, 4);
 
@@ -92,7 +99,7 @@ describe("Gap remediation: context budget", () => {
         contextWindow: 4000,
         percent: 0.18,
       },
-      "leaf-a",
+      { injectionScopeId: "leaf-a" },
     );
     expect(fourth.accepted).toBe(true);
     expect(fourth.text.length).toBeGreaterThan(0);
@@ -156,7 +163,7 @@ describe("Gap remediation: context budget", () => {
         contextWindow: 2000,
         percent: 0.45,
       },
-      "leaf-a",
+      { injectionScopeId: "leaf-a" },
     );
     expect(primary.accepted).toBe(true);
     expect(primary.finalTokens).toBeGreaterThan(0);
@@ -195,7 +202,7 @@ describe("Gap remediation: context budget", () => {
       sessionId,
       "fix flaky tests",
       usage,
-      "leaf-a",
+      { injectionScopeId: "leaf-a" },
     );
     const supplemental = runtime.maintain.context.appendSupplementalInjection(
       sessionId,
@@ -311,7 +318,7 @@ describe("Gap remediation: context budget", () => {
       sessionId,
       "stabilize duplicate scope budget",
       usage,
-      "leaf-a",
+      { injectionScopeId: "leaf-a" },
     );
     expect(primary.accepted).toBe(true);
 
@@ -328,7 +335,7 @@ describe("Gap remediation: context budget", () => {
       sessionId,
       "stabilize duplicate scope budget",
       usage,
-      "leaf-a",
+      { injectionScopeId: "leaf-a" },
     );
     expect(duplicatePrimary.accepted).toBe(false);
 

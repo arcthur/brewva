@@ -1,14 +1,20 @@
 import { IDENTITY_PARSE_WARNING_EVENT_TYPE } from "../events/event-types.js";
+import { buildRecoveryWorkingSetBlock } from "../recovery/read-model.js";
 import { buildTaskStateBlock } from "../runtime-helpers.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type { SkillLifecycleService } from "../services/skill-lifecycle.js";
 import type { SkillRegistry } from "../skills/registry.js";
+import { buildHistoryViewBaselineBlock } from "./history-view-baseline.js";
 import {
   readAgentConstitutionProfile,
   readAgentMemoryProfile,
   readPersonaProfile,
 } from "./identity.js";
 import type { ContextSourceProvider, ContextSourceProviderRegistry } from "./provider.js";
+import {
+  resolveHistoryViewBaselineStateFromKernel,
+  resolveRecoveryContextReadModels,
+} from "./read-models.js";
 import { buildRuntimeStatusBlock } from "./runtime-status.js";
 import { createSkillRoutingContextProvider } from "./skill-routing.js";
 import { CONTEXT_SOURCES } from "./sources.js";
@@ -42,8 +48,10 @@ export function createBuiltInContextSourceProviders(
     createIdentityProvider(deps),
     createAgentConstitutionProvider(deps),
     createAgentMemoryProvider(deps),
+    createHistoryViewBaselineProvider(deps),
     createRuntimeStatusProvider(deps),
     createTaskStateProvider(deps),
+    createRecoveryWorkingSetProvider(deps),
   ];
 
   if (deps.kernel.config.infrastructure.toolOutputDistillationInjection.enabled) {
@@ -206,6 +214,30 @@ function createRuntimeStatusProvider(
   };
 }
 
+function createHistoryViewBaselineProvider(
+  deps: BuiltInContextSourceProviderDeps,
+): ContextSourceProvider {
+  return {
+    source: CONTEXT_SOURCES.historyViewBaseline,
+    category: "narrative",
+    budgetClass: "core",
+    order: 14,
+    collect: (input) => {
+      const baseline = resolveHistoryViewBaselineStateFromKernel(deps.kernel, {
+        sessionId: input.sessionId,
+        usage: input.usage,
+        referenceContextDigest: input.referenceContextDigest,
+      }).snapshot;
+      const block = buildHistoryViewBaselineBlock(baseline);
+      if (!block) return;
+      input.register({
+        id: "history-view-baseline",
+        content: block,
+      });
+    },
+  };
+}
+
 function createToolOutputDistilledProvider(
   deps: BuiltInContextSourceProviderDeps,
 ): ContextSourceProvider {
@@ -253,6 +285,30 @@ function createTaskStateProvider(deps: BuiltInContextSourceProviderDeps): Contex
       input.register({
         id: "task-state",
         content: taskBlock,
+      });
+    },
+  };
+}
+
+function createRecoveryWorkingSetProvider(
+  deps: BuiltInContextSourceProviderDeps,
+): ContextSourceProvider {
+  return {
+    source: CONTEXT_SOURCES.recoveryWorkingSet,
+    category: "constraint",
+    budgetClass: "working",
+    order: 45,
+    collect: (input) => {
+      const snapshot = resolveRecoveryContextReadModels(deps.kernel, {
+        sessionId: input.sessionId,
+        usage: input.usage,
+        referenceContextDigest: input.referenceContextDigest,
+      }).workingSet;
+      const block = buildRecoveryWorkingSetBlock(snapshot);
+      if (!block) return;
+      input.register({
+        id: "recovery-working-set",
+        content: block,
       });
     },
   };

@@ -1,5 +1,6 @@
 import type {
   ActiveSkillRuntimeState,
+  HistoryViewBaselineSnapshot,
   OpenToolCallRecord,
   PromptStabilityState,
   ResourceLeaseRecord,
@@ -36,6 +37,13 @@ export class RuntimeSessionStateCell {
   reservedContextInjectionTokensByScope = new Map<string, ReservedContextInjectionTokens>();
   promptStability?: PromptStabilityState;
   transientReduction?: TransientReductionState;
+  historyViewBaselineCache?: HistoryViewBaselineSnapshot;
+  historyViewBaselineCacheLatestEventId?: string | null;
+  historyViewBaselineCacheEventCount?: number;
+  historyViewBaselineCacheDegradedReason?: string | null;
+  historyViewBaselineCachePostureMode?: "degraded" | "diagnostic_only" | null;
+  historyViewBaselineCacheReferenceContextDigest?: string | null;
+  historyViewBaselineCacheMaxBaselineTokens?: number | null;
   lastLedgerCompactionTurn?: number;
   toolContractWarnings = new Set<string>();
   governanceMetadataWarnings = new Set<string>();
@@ -189,6 +197,61 @@ export class RuntimeSessionStateStore {
 
   setTransientReduction(sessionId: string, state: TransientReductionState): void {
     this.getCell(sessionId).transientReduction = state;
+  }
+
+  getHistoryViewBaselineCache(sessionId: string):
+    | {
+        snapshot?: HistoryViewBaselineSnapshot;
+        latestEventId: string | null;
+        eventCount: number;
+        degradedReason: string | null;
+        postureMode: "degraded" | "diagnostic_only" | null;
+        referenceContextDigest: string | null;
+        maxBaselineTokens: number | null;
+      }
+    | undefined {
+    const cell = this.getExistingCell(sessionId);
+    if (
+      !cell ||
+      cell.historyViewBaselineCacheEventCount === undefined ||
+      cell.historyViewBaselineCacheLatestEventId === undefined
+    ) {
+      return undefined;
+    }
+    return {
+      snapshot: cell.historyViewBaselineCache,
+      latestEventId: cell.historyViewBaselineCacheLatestEventId,
+      eventCount: cell.historyViewBaselineCacheEventCount,
+      degradedReason: cell.historyViewBaselineCacheDegradedReason ?? null,
+      postureMode: cell.historyViewBaselineCachePostureMode ?? null,
+      referenceContextDigest: cell.historyViewBaselineCacheReferenceContextDigest ?? null,
+      maxBaselineTokens: cell.historyViewBaselineCacheMaxBaselineTokens ?? null,
+    };
+  }
+
+  setHistoryViewBaselineCache(
+    sessionId: string,
+    input: {
+      snapshot?: HistoryViewBaselineSnapshot;
+      latestEventId: string | null;
+      eventCount: number;
+      degradedReason: string | null;
+      postureMode: "degraded" | "diagnostic_only" | null;
+      referenceContextDigest: string | null;
+      maxBaselineTokens: number | null;
+    },
+  ): void {
+    const cell = this.getCell(sessionId);
+    cell.historyViewBaselineCache = input.snapshot;
+    cell.historyViewBaselineCacheLatestEventId = input.latestEventId;
+    cell.historyViewBaselineCacheEventCount = Math.max(0, Math.trunc(input.eventCount));
+    cell.historyViewBaselineCacheDegradedReason = input.degradedReason;
+    cell.historyViewBaselineCachePostureMode = input.postureMode;
+    cell.historyViewBaselineCacheReferenceContextDigest = input.referenceContextDigest;
+    cell.historyViewBaselineCacheMaxBaselineTokens =
+      input.maxBaselineTokens === null || input.maxBaselineTokens === undefined
+        ? null
+        : Math.max(0, Math.trunc(input.maxBaselineTokens));
   }
 
   clearInjectionFingerprintsForSession(sessionId: string): void {

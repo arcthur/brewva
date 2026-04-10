@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   buildContextEvidenceReport,
   persistContextEvidenceReport,
   readContextEvidenceRecords,
   recordPromptStabilityEvidence,
   recordTransientReductionEvidence,
-} from "../../../packages/brewva-gateway/src/runtime-plugins/context-evidence.js";
+} from "@brewva/brewva-gateway/runtime-plugins";
+import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 describe("context evidence", () => {

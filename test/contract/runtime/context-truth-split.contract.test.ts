@@ -47,7 +47,7 @@ describe("truth split channels", () => {
       sessionId,
       "first turn",
       undefined,
-      "scope-1",
+      { injectionScopeId: "scope-1" },
     );
     expect(first.accepted).toBe(true);
     expect(first.text).not.toContain("[TruthLedger]");
@@ -60,7 +60,7 @@ describe("truth split channels", () => {
       sessionId,
       "second turn",
       undefined,
-      "scope-2",
+      { injectionScopeId: "scope-2" },
     );
     expect(second.accepted).toBe(true);
     expect(second.text).not.toContain("[TruthLedger]");
@@ -79,7 +79,7 @@ describe("truth split channels", () => {
       sessionId,
       "third turn",
       undefined,
-      "scope-3",
+      { injectionScopeId: "scope-3" },
     );
     expect(third.accepted).toBe(true);
     expect(third.text).not.toContain("[TruthLedger]");

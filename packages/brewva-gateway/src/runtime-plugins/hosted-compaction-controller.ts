@@ -1,5 +1,10 @@
+import { createHash } from "node:crypto";
 import type { BrewvaHostedRuntimePort, ContextBudgetUsage } from "@brewva/brewva-runtime";
-import { extractCompactionEntryId, extractCompactionSummary } from "./context-shared.js";
+import {
+  extractCompactionEntryId,
+  extractCompactionSummary,
+  resolveInjectionScopeId,
+} from "./context-shared.js";
 import {
   AUTO_COMPACTION_WATCHDOG_ERROR,
   type HostedContextTelemetry,
@@ -31,6 +36,9 @@ export interface HostedCompactionController extends HostedContextGateStatePort {
   sessionCompact: (input: {
     sessionId: string;
     usage?: ContextBudgetUsage;
+    sessionManager?: {
+      getLeafId?: () => string | null | undefined;
+    };
     compactionEntry?: {
       id?: unknown;
       summary?: unknown;
@@ -62,6 +70,7 @@ interface CompactionLadderDecision {
 interface CompactionGateState {
   hydrated: boolean;
   turnIndex: number;
+  lastObservedUsageTokens: number | null;
   lastRuntimeGateRequired: boolean;
   autoCompactionInFlight: boolean;
   autoCompactionWatchdog: ReturnType<typeof setTimeout> | null;
@@ -80,6 +89,16 @@ const AUTO_COMPACTION_COMPLETED_EVENT_TYPE = "context_compaction_auto_completed"
 const AUTO_COMPACTION_FAILED_EVENT_TYPE = "context_compaction_auto_failed";
 const SESSION_COMPACT_EVENT_TYPE = "session_compact";
 
+function normalizeUsageTokens(usage: ContextBudgetUsage | undefined): number | null {
+  return typeof usage?.tokens === "number" && Number.isFinite(usage.tokens) && usage.tokens >= 0
+    ? Math.max(0, Math.trunc(usage.tokens))
+    : null;
+}
+
+function sha256(input: string): string {
+  return createHash("sha256").update(input).digest("hex");
+}
+
 function getOrCreateGateState(
   store: Map<string, CompactionGateState>,
   sessionId: string,
@@ -91,6 +110,7 @@ function getOrCreateGateState(
   const created: CompactionGateState = {
     hydrated: false,
     turnIndex: 0,
+    lastObservedUsageTokens: null,
     lastRuntimeGateRequired: false,
     autoCompactionInFlight: false,
     autoCompactionWatchdog: null,
@@ -239,6 +259,7 @@ export function createHostedCompactionController(
     },
     context(input) {
       const state = getSessionState(input.sessionId);
+      state.lastObservedUsageTokens = normalizeUsageTokens(input.usage);
       runtime.maintain.context.observeUsage(input.sessionId, input.usage);
       const decision = resolveCompactionLadderDecision({
         runtime,
@@ -377,24 +398,29 @@ export function createHostedCompactionController(
       state.lastRuntimeGateRequired = false;
       clearAutoCompactionExecutionState(state);
       resetAutoCompactionBreaker(state);
-
-      runtime.maintain.context.markCompacted(input.sessionId, {
-        fromTokens: null,
-        toTokens: input.usage?.tokens ?? null,
-        summary: extractCompactionSummary({
+      const sanitizedSummary =
+        extractCompactionSummary({
           compactionEntry: input.compactionEntry,
-        }),
-        entryId: extractCompactionEntryId({
+        }) ?? "";
+      const compactId =
+        extractCompactionEntryId({
           compactionEntry: input.compactionEntry,
-        }),
-      });
+        }) ?? `compact:${input.sessionId}:${state.turnIndex}`;
+      const toTokens = normalizeUsageTokens(input.usage);
 
-      telemetry.emitSessionCompact({
-        sessionId: input.sessionId,
-        turn: state.turnIndex,
-        entryId: typeof input.compactionEntry?.id === "string" ? input.compactionEntry.id : null,
-        fromExtension: input.fromExtension === true ? true : undefined,
+      runtime.authority.session.commitCompaction(input.sessionId, {
+        compactId,
+        sanitizedSummary,
+        summaryDigest: sha256(sanitizedSummary),
+        sourceTurn: state.turnIndex,
+        leafEntryId: resolveInjectionScopeId(input.sessionManager) ?? null,
+        referenceContextDigest:
+          runtime.inspect.context.getPromptStability(input.sessionId)?.stablePrefixHash ?? null,
+        fromTokens: state.lastObservedUsageTokens,
+        toTokens,
+        origin: input.fromExtension === true ? "extension_api" : "auto_compaction",
       });
+      state.lastObservedUsageTokens = toTokens;
 
       if (wasGated) {
         telemetry.emitGateCleared({

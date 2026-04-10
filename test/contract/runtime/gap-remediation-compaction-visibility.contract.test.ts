@@ -8,17 +8,22 @@ import {
 } from "./gap-remediation.helpers.js";
 
 describe("Gap remediation: compaction visibility", () => {
-  test("keeps compaction summaries hidden across repeated compactions in the default profile", async () => {
+  test("injects the latest history-view baseline after repeated compactions", async () => {
     const workspace = createWorkspace("context-compaction-summary");
     writeConfig(workspace, createConfig({}));
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
     const sessionId = "context-compaction-summary-1";
 
-    runtime.maintain.context.markCompacted(sessionId, {
+    runtime.authority.session.commitCompaction(sessionId, {
+      compactId: "cmp-1",
+      sanitizedSummary: "Keep failing tests, active objective, and latest diff only.",
+      summaryDigest: "unused",
+      sourceTurn: 0,
+      leafEntryId: null,
+      referenceContextDigest: null,
       fromTokens: 1600,
       toTokens: 500,
-      entryId: "cmp-1",
-      summary: "Keep failing tests, active objective, and latest diff only.",
+      origin: "auto_compaction",
     });
 
     const first = await runtime.maintain.context.buildInjection(sessionId, "fix flaky tests", {
@@ -27,8 +32,8 @@ describe("Gap remediation: compaction visibility", () => {
       percent: 0.2,
     });
     expect(first.accepted).toBe(true);
-    expect(first.text).not.toContain("[CompactionSummary]");
-    expect(first.text).not.toContain("active objective");
+    expect(first.text).toContain("[HistoryViewBaseline]");
+    expect(first.text).toContain("active objective");
 
     const second = await runtime.maintain.context.buildInjection(
       sessionId,
@@ -39,13 +44,20 @@ describe("Gap remediation: compaction visibility", () => {
         percent: 0.21,
       },
     );
-    expect(second.text).not.toContain("[CompactionSummary]");
+    expect(second.accepted).toBe(false);
+    expect(second.text).toBe("");
 
-    runtime.maintain.context.markCompacted(sessionId, {
+    runtime.authority.session.commitCompaction(sessionId, {
+      compactId: "cmp-2",
+      sanitizedSummary:
+        "Preserve unresolved assertion mismatch and the last failing command output.",
+      summaryDigest: "unused",
+      sourceTurn: 0,
+      leafEntryId: null,
+      referenceContextDigest: null,
       fromTokens: 1700,
       toTokens: 480,
-      entryId: "cmp-2",
-      summary: "Preserve unresolved assertion mismatch and the last failing command output.",
+      origin: "auto_compaction",
     });
 
     const third = await runtime.maintain.context.buildInjection(sessionId, "resume bugfix", {
@@ -54,21 +66,27 @@ describe("Gap remediation: compaction visibility", () => {
       percent: 0.19,
     });
     expect(third.accepted).toBe(true);
-    expect(third.text).not.toContain("[CompactionSummary]");
-    expect(third.text).not.toContain("unresolved assertion mismatch");
+    expect(third.text).toContain("[HistoryViewBaseline]");
+    expect(third.text).toContain("unresolved assertion mismatch");
+    expect(third.text).not.toContain("Keep failing tests, active objective, and latest diff only.");
   });
 
-  test("keeps pending context behavior without exposing compaction summary blocks", async () => {
+  test("retains the history-view baseline after hard-limit recovery", async () => {
     const workspace = createWorkspace("context-hard-limit-retain");
     writeConfig(workspace, createConfig({}));
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
     const sessionId = "context-hard-limit-retain-1";
 
-    runtime.maintain.context.markCompacted(sessionId, {
+    runtime.authority.session.commitCompaction(sessionId, {
+      compactId: "cmp-retain-1",
+      sanitizedSummary: "Keep unresolved failures and active objective only.",
+      summaryDigest: "unused",
+      sourceTurn: 0,
+      leafEntryId: null,
+      referenceContextDigest: null,
       fromTokens: 1800,
       toTokens: 520,
-      entryId: "cmp-retain-1",
-      summary: "Keep unresolved failures and active objective only.",
+      origin: "auto_compaction",
     });
 
     const dropped = await runtime.maintain.context.buildInjection(sessionId, "resume task", {
@@ -85,8 +103,8 @@ describe("Gap remediation: compaction visibility", () => {
       percent: 0.3,
     });
     expect(recovered.accepted).toBe(true);
-    expect(recovered.text).not.toContain("[CompactionSummary]");
-    expect(recovered.text).not.toContain("active objective");
+    expect(recovered.text).toContain("[HistoryViewBaseline]");
+    expect(recovered.text).toContain("active objective");
   });
 
   test("respects minTurnsBetweenCompaction when usage stays high", async () => {
@@ -103,7 +121,17 @@ describe("Gap remediation: compaction visibility", () => {
         percent: 0.9,
       }),
     ).toBe(true);
-    runtime.maintain.context.markCompacted(sessionId, { fromTokens: 820, toTokens: 120 });
+    runtime.authority.session.commitCompaction(sessionId, {
+      compactId: "cmp-interval",
+      sanitizedSummary: "Reset compaction interval state.",
+      summaryDigest: "unused",
+      sourceTurn: 1,
+      leafEntryId: null,
+      referenceContextDigest: null,
+      fromTokens: 820,
+      toTokens: 120,
+      origin: "auto_compaction",
+    });
 
     runtime.maintain.context.onTurnStart(sessionId, 2);
     expect(
@@ -163,19 +191,26 @@ describe("Gap remediation: compaction visibility", () => {
     expect(rows.map((row) => row.turn)).toEqual([7, 7, 7]);
   });
 
-  test("writes context_compacted evidence into ledger", async () => {
+  test("writes session_compact evidence into ledger", async () => {
     const workspace = createWorkspace("context-compaction-ledger");
     writeConfig(workspace, createConfig({}));
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
     const sessionId = "context-compaction-ledger-1";
 
     runtime.maintain.context.onTurnStart(sessionId, 3);
-    runtime.maintain.context.markCompacted(sessionId, {
+    runtime.authority.session.commitCompaction(sessionId, {
+      compactId: "cmp-ledger",
+      sanitizedSummary: "Persist the durable compaction receipt in the ledger.",
+      summaryDigest: "unused",
+      sourceTurn: 3,
+      leafEntryId: null,
+      referenceContextDigest: null,
       fromTokens: 8000,
       toTokens: 1200,
+      origin: "auto_compaction",
     });
 
     const rows = runtime.inspect.ledger.listRows(sessionId);
-    expect(rows.map((row) => row.tool)).toContain("brewva_context_compaction");
+    expect(rows.map((row) => row.tool)).toContain("brewva_session_compaction");
   });
 });

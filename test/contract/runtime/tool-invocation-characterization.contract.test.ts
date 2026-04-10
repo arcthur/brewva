@@ -531,9 +531,16 @@ describe("Tool invocation characterization", () => {
     });
     expect(compactAllowed.allowed).toBe(true);
 
-    runtime.maintain.context.markCompacted(sessionId, {
+    runtime.authority.session.commitCompaction(sessionId, {
+      compactId: "cmp-tool-gate",
+      sanitizedSummary: "Retain only the active working summary after compaction.",
+      summaryDigest: "unused",
+      sourceTurn: 0,
+      leafEntryId: null,
+      referenceContextDigest: null,
       fromTokens: usage.tokens,
       toTokens: 40,
+      origin: "auto_compaction",
     });
     const unblocked = runtime.authority.tools.start({
       sessionId,

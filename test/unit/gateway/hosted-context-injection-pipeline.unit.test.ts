@@ -1,13 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import {
+  createHostedContextInjectionPipeline,
+  createHostedContextTelemetry,
+  readContextEvidenceRecords,
+} from "@brewva/brewva-gateway/runtime-plugins";
+import {
   TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
   type ContextBudgetUsage,
   type ContextCompactionGateStatus,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import { readContextEvidenceRecords } from "../../../packages/brewva-gateway/src/runtime-plugins/context-evidence.js";
-import { createHostedContextInjectionPipeline } from "../../../packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.js";
-import { createHostedContextTelemetry } from "../../../packages/brewva-gateway/src/runtime-plugins/hosted-context-telemetry.js";
 import { createMockRuntimePluginApi } from "../../helpers/runtime-plugin.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
@@ -361,14 +363,6 @@ describe("hosted context injection pipeline", () => {
           turnsSinceCompaction: null,
         }),
         getPendingCompactionReason: () => null,
-        buildInjection: async () => ({
-          text: "",
-          entries: [],
-          accepted: false,
-          originalTokens: 0,
-          finalTokens: 0,
-          truncated: false,
-        }),
       },
     });
     const sessionId = "s-recovery-working-set";
@@ -381,7 +375,7 @@ describe("hosted context injection pipeline", () => {
       type: "session_turn_transition",
       payload: {
         reason: "provider_fallback_retry",
-        status: "completed",
+        status: "entered",
         sequence: 1,
         family: "recovery",
         attempt: 1,

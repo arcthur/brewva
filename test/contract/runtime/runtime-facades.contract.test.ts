@@ -203,6 +203,12 @@ describe("runtime facade coverage", () => {
       expect(
         reloaded.inspect.events.query(sessionId, { type: "unclean_shutdown_reconciled" }),
       ).toHaveLength(1);
+      expect(reloaded.inspect.recovery.getPosture(sessionId)).toEqual(
+        expect.objectContaining({
+          mode: "degraded",
+          degradedReason: expect.stringContaining("active_skill_without_terminal_receipt"),
+        }),
+      );
     } finally {
       restoreNow();
     }

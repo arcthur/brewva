@@ -142,7 +142,7 @@ describe("system: workflow recovery", () => {
         sessionId,
         "continue",
         { tokens: 320, contextWindow: 16_000, percent: 0.02 },
-        "workflow-system-recovery",
+        { injectionScopeId: "workflow-system-recovery" },
       );
 
       expect(injected.accepted).toBe(true);

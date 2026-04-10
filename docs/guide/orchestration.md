@@ -95,6 +95,9 @@ Execution posture is intentionally split:
 - `patch-worker` is the isolated patch-producing specialist
 - hosted envelopes also pin `contextProfile`; `advisor` and `qa`
   default to `minimal`, while `patch-worker` uses `standard`
+- `minimal` still keeps the recovery-critical baseline pair
+  (`historyViewBaseline` + `recoveryWorkingSet`); it only drops the broader
+  runtime-status and working-projection narrative set
 - `review-operability` remains the internal audit lane for stale evidence,
   missing probes, rollback posture, and operator-visible recovery burden
 
