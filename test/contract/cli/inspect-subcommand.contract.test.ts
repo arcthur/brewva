@@ -198,69 +198,76 @@ describe("inspect subcommand", () => {
     { timeout: 20_000 },
   );
 
-  test("prefers a bootstrapped replay session even when many newer synthetic runtime-only sessions exist", () => {
-    const workspace = createTestWorkspace("inspect-default-session");
-    const xdgConfigHome = join(workspace, ".xdg");
-    mkdirSync(join(xdgConfigHome, "brewva"), { recursive: true });
-    writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");
-    const restoreEnv = patchProcessEnv({
-      XDG_CONFIG_HOME: xdgConfigHome,
-    });
-
-    try {
-      const runtime = new BrewvaRuntime({
-        cwd: workspace,
-        config: structuredClone(DEFAULT_BREWVA_CONFIG),
-      });
-      const interactiveSessionId = "inspect-default-real-1";
-
-      recordRuntimeEvent(runtime, {
-        sessionId: interactiveSessionId,
-        type: "session_bootstrap",
-        payload: {
-          managedToolMode: "direct",
-        },
-      });
-      recordRuntimeEvent(runtime, {
-        sessionId: interactiveSessionId,
-        type: "session_start",
-        payload: {
-          cwd: workspace,
-        },
-      });
-      recordRuntimeEvent(runtime, {
-        sessionId: interactiveSessionId,
-        type: "message_end",
-        payload: {
-          role: "assistant",
-          contentItems: 1,
-          contentTextChars: 12,
-        },
-      });
-
-      for (let index = 0; index < 60; index += 1) {
-        const syntheticSessionId = `output-reg-${index}`;
-        runtime.authority.skills.activate(syntheticSessionId, "repository-analysis");
-        runtime.authority.skills.complete(syntheticSessionId, {
-          repository_snapshot: `synthetic registry session ${index}`,
-          impact_map: buildImpactMap(`synthetic impact map ${index}`),
-          planning_posture: "moderate",
-          unknowns: ["synthetic only"],
-        });
-      }
-
-      const result = runInspect(["--cwd", workspace, "--config", ".brewva/brewva.json", "--json"], {
-        ...process.env,
+  test(
+    "prefers a bootstrapped replay session even when many newer synthetic runtime-only sessions exist",
+    () => {
+      const workspace = createTestWorkspace("inspect-default-session");
+      const xdgConfigHome = join(workspace, ".xdg");
+      mkdirSync(join(xdgConfigHome, "brewva"), { recursive: true });
+      writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");
+      const restoreEnv = patchProcessEnv({
         XDG_CONFIG_HOME: xdgConfigHome,
       });
-      expect(result.status).toBe(0);
 
-      const payload = JSON.parse(result.stdout) as { sessionId: string };
-      expect(payload.sessionId).toBe(interactiveSessionId);
-    } finally {
-      restoreEnv();
-    }
-  });
+      try {
+        const runtime = new BrewvaRuntime({
+          cwd: workspace,
+          config: structuredClone(DEFAULT_BREWVA_CONFIG),
+        });
+        const interactiveSessionId = "inspect-default-real-1";
+
+        recordRuntimeEvent(runtime, {
+          sessionId: interactiveSessionId,
+          type: "session_bootstrap",
+          payload: {
+            managedToolMode: "direct",
+          },
+        });
+        recordRuntimeEvent(runtime, {
+          sessionId: interactiveSessionId,
+          type: "session_start",
+          payload: {
+            cwd: workspace,
+          },
+        });
+        recordRuntimeEvent(runtime, {
+          sessionId: interactiveSessionId,
+          type: "message_end",
+          payload: {
+            role: "assistant",
+            contentItems: 1,
+            contentTextChars: 12,
+          },
+        });
+
+        for (let index = 0; index < 60; index += 1) {
+          const syntheticSessionId = `output-reg-${index}`;
+          runtime.authority.skills.activate(syntheticSessionId, "repository-analysis");
+          runtime.authority.skills.complete(syntheticSessionId, {
+            repository_snapshot: `synthetic registry session ${index}`,
+            impact_map: buildImpactMap(`synthetic impact map ${index}`),
+            planning_posture: "moderate",
+            unknowns: ["synthetic only"],
+          });
+        }
+
+        const result = runInspect(
+          ["--cwd", workspace, "--config", ".brewva/brewva.json", "--json"],
+          {
+            ...process.env,
+            XDG_CONFIG_HOME: xdgConfigHome,
+          },
+        );
+        expect(result.status).toBe(0);
+
+        const payload = JSON.parse(result.stdout) as { sessionId: string };
+        expect(payload.sessionId).toBe(interactiveSessionId);
+      } finally {
+        restoreEnv();
+      }
+    },
+    { timeout: 20_000 },
+  );
 
   test(
     "can inspect a directory-scoped deterministic analysis directly from inspect",

@@ -37,6 +37,7 @@ grow back into long-form archived RFCs.
 - [`rfc-narrative-memory-product-and-bounded-semantic-recall.md`](./rfc-narrative-memory-product-and-bounded-semantic-recall.md)
 - [`rfc-repository-native-compound-knowledge-and-review-ensemble.md`](./rfc-repository-native-compound-knowledge-and-review-ensemble.md)
 - [`rfc-skill-distribution-refresh-and-catalog-surface.md`](./rfc-skill-distribution-refresh-and-catalog-surface.md)
+- [`rfc-skill-contract-layering-project-context-and-explicit-activation.md`](./rfc-skill-contract-layering-project-context-and-explicit-activation.md)
 - [`rfc-specialist-subagents-and-adversarial-verification.md`](./rfc-specialist-subagents-and-adversarial-verification.md)
 
 ## Gateway, Session, And Scheduling
