@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, type BrewvaConfig } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  DEFAULT_BREWVA_CONFIG,
+  PATCH_RECORDED_EVENT_TYPE,
+  type BrewvaConfig,
+} from "@brewva/brewva-runtime";
 import { createReadSpansTool, createTocTools } from "@brewva/brewva-tools";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createBundledToolRuntime } from "../../helpers/runtime.js";
@@ -372,6 +377,187 @@ describe("TOC tools", () => {
       "Expected top-ranked TOC search match.",
     );
     expect(firstMatchLine).toContain("kind=function name=runtime");
+  });
+
+  test("toc_search exposes advisor telemetry and keeps exact symbols ahead of patched path-only candidates", async () => {
+    const workspace = createTocWorkspace("brewva-toc-advisor-");
+    writeFileSync(
+      join(workspace, "src/runtime.ts"),
+      "export function buildRuntimeHelpers(): void {}\n",
+      "utf8",
+    );
+    writeFileSync(join(workspace, "src/util.ts"), "export function runtime(): void {}\n", "utf8");
+    const runtime = createRuntime(workspace);
+    const bundledRuntime = createBundledToolRuntime(runtime);
+    const sessionId = "toc-advisor-session";
+    const now = Date.now();
+    bundledRuntime.internal?.recordEvent?.({
+      sessionId,
+      type: PATCH_RECORDED_EVENT_TYPE,
+      timestamp: now,
+      payload: {
+        toolName: "write",
+        applyStatus: "applied",
+        changes: [{ path: "src/runtime.ts", action: "modify" }],
+        failedPaths: [],
+      },
+    });
+    const tool = requireTool(createTocTools({ runtime: bundledRuntime }), "toc_search");
+
+    const result = await tool.execute(
+      "tc-toc-advisor",
+      {
+        query: "runtime",
+        paths: ["src"],
+        limit: 2,
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId, workspace),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    const details = (result as { details?: Record<string, any> }).details;
+    const firstMatchLine = requireDefined(
+      text.split("\n").find((line) => line.startsWith("- score=")),
+      "Expected top-ranked TOC search match.",
+    );
+    expect(firstMatchLine).toContain("kind=function name=runtime");
+    expect(details?.advisor?.scoringMode).toBe("multiplicative");
+    expect(typeof details?.advisor?.status).toBe("string");
+
+    const events = runtime.inspect.events.query(sessionId, { type: "tool_toc_query" });
+    expect(events).toHaveLength(1);
+    expect(events[0]?.payload?.advisorStatus).toBeDefined();
+    expect(events[0]?.payload?.advisorReorderedMatches).toBeDefined();
+  });
+
+  test("toc_search promotes repeated query-conditioned follow-through without tool recursion", async () => {
+    const workspace = createTocWorkspace("brewva-toc-combo-");
+    const defaultsFile = join(workspace, "src/defaults.ts");
+    const configFile = join(workspace, "src/config.ts");
+    writeFileSync(defaultsFile, "export function createRuntimeConfig(): void {}\n", "utf8");
+    writeFileSync(configFile, "export function loadConfig(): void {}\n", "utf8");
+
+    const runtime = createRuntime(workspace);
+    const bundledRuntime = createBundledToolRuntime(runtime);
+    const sessionId = "toc-combo-session";
+    const tocSearch = requireTool(createTocTools({ runtime: bundledRuntime }), "toc_search");
+    const readSpans = createReadSpansTool({ runtime: bundledRuntime });
+
+    for (let index = 0; index < 3; index += 1) {
+      await tocSearch.execute(
+        `tc-toc-combo-seed-${index}`,
+        {
+          query: "config",
+          paths: ["src"],
+          limit: 2,
+        },
+        undefined,
+        undefined,
+        fakeContext(sessionId, workspace),
+      );
+      await readSpans.execute(
+        `tc-toc-combo-read-${index}`,
+        {
+          file_path: defaultsFile,
+          spans: [{ start_line: 1, end_line: 1 }],
+        },
+        undefined,
+        undefined,
+        fakeContext(sessionId, workspace),
+      );
+    }
+
+    const result = await tocSearch.execute(
+      "tc-toc-combo-final",
+      {
+        query: "config",
+        paths: ["src"],
+        limit: 2,
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId, workspace),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    const firstMatchLine = requireDefined(
+      text.split("\n").find((line) => line.startsWith("- score=")),
+      "Expected top-ranked TOC search match after combo learning.",
+    );
+    const details = (result as { details?: Record<string, any> }).details;
+    expect(firstMatchLine).toContain("file=src/defaults.ts");
+    expect(details?.advisor?.comboMatches).toBeGreaterThan(0);
+  });
+
+  test("toc_search suggestion-only results can reinforce combo memory and emit aligned telemetry", async () => {
+    const workspace = createTocWorkspace("brewva-toc-suggestion-combo-");
+    const runtimeFile = join(workspace, "src/runtime.ts");
+    writeFileSync(runtimeFile, "export function buildRuntime(): void {}\n", "utf8");
+
+    const runtime = createRuntime(workspace);
+    const bundledRuntime = createBundledToolRuntime(runtime);
+    const sessionId = "toc-suggestion-combo-session";
+    bundledRuntime.internal?.recordEvent?.({
+      sessionId,
+      type: PATCH_RECORDED_EVENT_TYPE,
+      timestamp: Date.now(),
+      payload: {
+        toolName: "write",
+        applyStatus: "applied",
+        changes: [{ path: "src/runtime.ts", action: "modify" }],
+        failedPaths: [],
+      },
+    });
+
+    const tocSearch = requireTool(createTocTools({ runtime: bundledRuntime }), "toc_search");
+    const readSpans = createReadSpansTool({ runtime: bundledRuntime });
+
+    const firstResult = await tocSearch.execute(
+      "tc-toc-suggestion-combo-first",
+      {
+        query: "definitely_nomatch",
+        paths: ["src"],
+        limit: 3,
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId, workspace),
+    );
+    const firstDetails = (firstResult as { details?: Record<string, any> }).details;
+    expect(firstDetails?.advisor?.status).toBe("suggestion_only");
+
+    await readSpans.execute(
+      "tc-toc-suggestion-combo-read",
+      {
+        file_path: runtimeFile,
+        spans: [{ start_line: 1, end_line: 1 }],
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId, workspace),
+    );
+
+    const secondResult = await tocSearch.execute(
+      "tc-toc-suggestion-combo-second",
+      {
+        query: "definitely_nomatch",
+        paths: ["src"],
+        limit: 3,
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId, workspace),
+    );
+    const secondDetails = (secondResult as { details?: Record<string, any> }).details;
+    expect(secondDetails?.advisor?.status).toBe("suggestion_only");
+    expect(secondDetails?.advisor?.comboMatches).toBeGreaterThan(0);
+
+    const events = runtime.inspect.events.query(sessionId, { type: "tool_toc_query" });
+    expect(events).toHaveLength(2);
+    expect(events[0]?.payload?.advisorStatus).toBe("suggestion_only");
+    expect(events[1]?.payload?.advisorStatus).toBe("suggestion_only");
   });
 
   test("toc_search avoids duplicate traversal through symlink loops", async () => {

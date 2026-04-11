@@ -1,145 +1,47 @@
 import { existsSync, statSync } from "node:fs";
-import { basename, extname, relative } from "node:path";
 import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { LRUCache } from "lru-cache";
-import ts from "typescript";
 import { buildReadPathDiscoveryObservationPayload } from "./read-path-discovery.js";
 import {
   recordToolRuntimeEvent,
   registerToolRuntimeClearStateListener,
 } from "./runtime-internal.js";
-import { escapeRegexLiteral, tokenizeSearchTerms } from "./shared/query.js";
-import { DEFAULT_SKIPPED_WORKSPACE_DIRS, walkWorkspaceFiles } from "./shared/workspace-walk.js";
+import {
+  attachSearchIntentPreviewCandidates,
+  normalizeSearchAdvisorPath,
+  registerSearchIntent,
+} from "./search-advisor.js";
 import { resolveScopedPath, resolveToolTargetScope, type ToolTargetScope } from "./target-scope.js";
 import {
   readSourceTextWithCache,
   registerTocSourceCacheRuntime,
   resolveTocSessionKey,
 } from "./toc-cache.js";
+import {
+  DEFAULT_TOC_SEARCH_LIMIT,
+  MAX_TOC_FILE_BYTES,
+  MAX_TOC_SEARCH_CANDIDATE_FILES,
+  MAX_TOC_SEARCH_INDEXED_BYTES,
+  MAX_TOC_SEARCH_LIMIT,
+  createTocSearchSessionCacheStore,
+  formatLineSpan,
+  lookupTocDocument,
+  normalizeRelativePath,
+  runTocSearchCore,
+  supportsToc,
+  type TocDocument,
+  type TocSearchMatch,
+  type TocSearchSessionCacheStore,
+  type TocSearchSummary,
+} from "./toc-search-core.js";
 import type { BrewvaBundledToolRuntime } from "./types.js";
-import { getOrCreateLruValue } from "./utils/lru.js";
 import { getToolSessionId } from "./utils/parallel-read.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
 import { defineBrewvaTool } from "./utils/tool.js";
 
 const TOC_EVENT_TYPE = "tool_toc_query";
-const JS_TS_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
-const MAX_CACHE_SESSIONS = 64;
-const MAX_CACHE_ENTRIES_PER_SESSION = 512;
-const DEFAULT_TOC_SEARCH_LIMIT = 8;
-const MAX_TOC_SEARCH_LIMIT = 50;
-const MAX_TOC_FILE_BYTES = 1_000_000;
-const MAX_TOC_SEARCH_CANDIDATE_FILES = 2_000;
-const MAX_TOC_SEARCH_INDEXED_BYTES = 8_000_000;
-const BROAD_QUERY_MIN_FILE_COUNT = 3;
-const BROAD_QUERY_SINGLE_TOKEN_RATIO = 0.35;
-const BROAD_QUERY_MULTI_TOKEN_RATIO = 0.6;
-const BROAD_QUERY_FACTOR = 4;
-const BROAD_QUERY_ABSOLUTE_CANDIDATES = 12;
 const UNAVAILABLE_STATUS = "unavailable";
-
-type TocDeclarationKind = "interface" | "type_alias" | "enum";
-type TocSymbolKind =
-  | "function"
-  | "const_function"
-  | "class"
-  | TocDeclarationKind
-  | "method"
-  | "getter"
-  | "setter";
-type TocSearchMatchKind = TocSymbolKind | "module" | "import";
-
-interface TocImportEntry {
-  source: string;
-  clause: string | null;
-  lineStart: number;
-  lineEnd: number;
-}
-
-interface TocMethodEntry {
-  kind: "method" | "getter" | "setter";
-  name: string;
-  static: boolean;
-  lineStart: number;
-  lineEnd: number;
-  signature: string;
-  summary: string | null;
-}
-
-interface TocFunctionEntry {
-  kind: "function" | "const_function";
-  name: string;
-  exported: boolean;
-  lineStart: number;
-  lineEnd: number;
-  signature: string;
-  summary: string | null;
-}
-
-interface TocClassEntry {
-  kind: "class";
-  name: string;
-  exported: boolean;
-  lineStart: number;
-  lineEnd: number;
-  signature: string;
-  summary: string | null;
-  methods: TocMethodEntry[];
-}
-
-interface TocDeclarationEntry {
-  kind: TocDeclarationKind;
-  name: string;
-  exported: boolean;
-  lineStart: number;
-  lineEnd: number;
-  signature: string;
-  summary: string | null;
-}
-
-interface TocDocument {
-  filePath: string;
-  language: string;
-  moduleSummary: string | null;
-  imports: TocImportEntry[];
-  functions: TocFunctionEntry[];
-  classes: TocClassEntry[];
-  declarations: TocDeclarationEntry[];
-}
-
-interface TocSearchMatch {
-  filePath: string;
-  kind: TocSearchMatchKind;
-  name: string;
-  score: number;
-  lineStart: number;
-  lineEnd: number;
-  signature: string | null;
-  summary: string | null;
-  parentName: string | null;
-}
-
-interface TocCacheEntry {
-  signature: string;
-  toc: TocDocument;
-}
-
-interface TocLookupResult {
-  toc: TocDocument;
-  cacheHit: boolean;
-}
-
-interface TocSearchSummary {
-  indexedFiles: number;
-  candidateFiles: number;
-  cacheHits: number;
-  cacheMisses: number;
-  skippedFiles: number;
-  oversizedFiles: number;
-  indexedBytes: number;
-}
 
 function recordTocReadPathObservation(input: {
   runtime?: BrewvaBundledToolRuntime;
@@ -165,543 +67,12 @@ function recordTocReadPathObservation(input: {
   });
 }
 
-type TocFileCache = LRUCache<string, TocCacheEntry>;
-type TocSessionCacheStore = LRUCache<string, TocFileCache>;
-
-function trimToSingleLine(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const firstLine = value
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .find((line) => line.length > 0);
-  return firstLine ? firstLine.replace(/\s+/gu, " ") : null;
-}
-
-function normalizeRelativePath(baseDir: string, filePath: string): string {
-  const relativePath = relative(baseDir, filePath).replaceAll("\\", "/");
-  return relativePath.length > 0 && !relativePath.startsWith("..") ? relativePath : filePath;
-}
-
-function supportsToc(filePath: string): boolean {
-  return JS_TS_EXTENSIONS.has(extname(filePath).toLowerCase());
-}
-
-function resolveScriptKind(filePath: string): ts.ScriptKind {
-  const extension = extname(filePath).toLowerCase();
-  if (extension === ".ts") return ts.ScriptKind.TS;
-  if (extension === ".tsx") return ts.ScriptKind.TSX;
-  if (extension === ".jsx") return ts.ScriptKind.JSX;
-  if (extension === ".js") return ts.ScriptKind.JS;
-  if (extension === ".mjs") return ts.ScriptKind.JS;
-  if (extension === ".cjs") return ts.ScriptKind.JS;
-  return ts.ScriptKind.Unknown;
-}
-
-function lineSpan(
-  sourceFile: ts.SourceFile,
-  node: ts.Node,
-): { lineStart: number; lineEnd: number } {
-  const start = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-  const endPosition = Math.max(node.getStart(sourceFile), node.getEnd() - 1);
-  const end = sourceFile.getLineAndCharacterOfPosition(endPosition);
-  return {
-    lineStart: start.line + 1,
-    lineEnd: end.line + 1,
-  };
-}
-
-function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
-  const modifiers = (node as ts.Node & { modifiers?: ts.NodeArray<ts.ModifierLike> }).modifiers;
-  return Boolean(modifiers?.some((modifier) => modifier.kind === kind));
-}
-
-function isExportedDeclaration(node: ts.Node): boolean {
-  return (
-    hasModifier(node, ts.SyntaxKind.ExportKeyword) ||
-    hasModifier(node, ts.SyntaxKind.DefaultKeyword)
-  );
-}
-
-function buildFunctionSignature(
-  name: string,
-  parameters: ts.NodeArray<ts.ParameterDeclaration>,
-  type: ts.TypeNode | undefined,
-  sourceFile: ts.SourceFile,
-  prefix = "function",
-): string {
-  const params = parameters.map((parameter) => parameter.getText(sourceFile)).join(", ");
-  const returnType = type ? `: ${type.getText(sourceFile)}` : "";
-  return `${prefix} ${name}(${params})${returnType}`;
-}
-
-function buildAnonymousDefaultFunctionSignature(
-  parameters: ts.NodeArray<ts.ParameterDeclaration>,
-  type: ts.TypeNode | undefined,
-  sourceFile: ts.SourceFile,
-): string {
-  const params = parameters.map((parameter) => parameter.getText(sourceFile)).join(", ");
-  const returnType = type ? `: ${type.getText(sourceFile)}` : "";
-  return `export default function(${params})${returnType}`;
-}
-
-function formatTypeParameters(
-  typeParameters: ts.NodeArray<ts.TypeParameterDeclaration> | undefined,
-  sourceFile: ts.SourceFile,
-): string {
-  if (!typeParameters || typeParameters.length === 0) return "";
-  return `<${typeParameters.map((parameter) => parameter.getText(sourceFile)).join(", ")}>`;
-}
-
-function compactInlineText(value: string, maxChars = 180): string {
-  const compact = trimToSingleLine(value) ?? "";
-  if (compact.length <= maxChars) return compact;
-  return `${compact.slice(0, Math.max(1, maxChars - 3))}...`;
-}
-
-function buildMethodSignature(
-  name: string,
-  node:
-    | ts.MethodDeclaration
-    | ts.GetAccessorDeclaration
-    | ts.SetAccessorDeclaration
-    | ts.MethodSignature,
-  sourceFile: ts.SourceFile,
-): string {
-  if (ts.isGetAccessorDeclaration(node)) {
-    const returnType = node.type ? `: ${node.type.getText(sourceFile)}` : "";
-    return `get ${name}()${returnType}`;
-  }
-  if (ts.isSetAccessorDeclaration(node)) {
-    const params = node.parameters.map((parameter) => parameter.getText(sourceFile)).join(", ");
-    return `set ${name}(${params})`;
-  }
-  const params = node.parameters.map((parameter) => parameter.getText(sourceFile)).join(", ");
-  const returnType = node.type ? `: ${node.type.getText(sourceFile)}` : "";
-  return `${name}(${params})${returnType}`;
-}
-
-function buildImportClauseText(node: ts.ImportDeclaration): string | null {
-  const clause = node.importClause;
-  if (!clause) return null;
-
-  const parts: string[] = [];
-  if (clause.name) {
-    parts.push(clause.name.text);
-  }
-  if (clause.namedBindings) {
-    if (ts.isNamespaceImport(clause.namedBindings)) {
-      parts.push(`* as ${clause.namedBindings.name.text}`);
-    } else {
-      const names = clause.namedBindings.elements.map((element) => {
-        const propertyName = element.propertyName?.text;
-        const localName = element.name.text;
-        return propertyName && propertyName !== localName
-          ? `${propertyName} as ${localName}`
-          : localName;
-      });
-      parts.push(`{ ${names.join(", ")} }`);
-    }
-  }
-
-  return parts.length > 0 ? parts.join(", ") : null;
-}
-
-function extractTopOfFileSummary(sourceText: string): string | null {
-  const text = sourceText.replace(/^\uFEFF/u, "");
-  const lines = text.split(/\r?\n/u);
-  let index = 0;
-
-  while (index < lines.length) {
-    const line = (lines[index] ?? "").trim();
-    if (!line || line === "#!/usr/bin/env node") {
-      index += 1;
-      continue;
-    }
-
-    if (line.startsWith("//")) {
-      return trimToSingleLine(line.replace(/^\/\/+\s*/u, ""));
-    }
-
-    if (line.startsWith("/*")) {
-      const block: string[] = [];
-      for (; index < lines.length; index += 1) {
-        const current = lines[index] ?? "";
-        block.push(
-          current
-            .replace(/^\s*\/\*\*?/u, "")
-            .replace(/\*\/\s*$/u, "")
-            .replace(/^\s*\*\s?/u, "")
-            .trim(),
-        );
-        if (current.includes("*/")) break;
-      }
-      return trimToSingleLine(block.join("\n"));
-    }
-
-    return null;
-  }
-
-  return null;
-}
-
-function extractNodeSummary(node: ts.Node, sourceFile: ts.SourceFile): string | null {
-  const jsDocNodes = (node as ts.Node & { jsDoc?: Array<{ comment?: unknown }> }).jsDoc;
-  if (Array.isArray(jsDocNodes) && jsDocNodes.length > 0) {
-    const jsDocComment = jsDocNodes[0]?.comment;
-    if (typeof jsDocComment === "string") {
-      return trimToSingleLine(jsDocComment);
-    }
-    if (Array.isArray(jsDocComment)) {
-      const text = jsDocComment
-        .map((part) => {
-          if (!part || typeof part !== "object") return "";
-          const value = (part as { text?: unknown }).text;
-          return typeof value === "string" ? value : "";
-        })
-        .join("");
-      return trimToSingleLine(text);
-    }
-  }
-
-  const ranges = ts.getLeadingCommentRanges(sourceFile.text, node.getFullStart()) ?? [];
-  const lastRange = ranges.at(-1);
-  if (!lastRange) return null;
-  const commentText = sourceFile.text.slice(lastRange.pos, lastRange.end);
-  const normalized = commentText
-    .replace(/^\/\*\*?/u, "")
-    .replace(/\*\/$/u, "")
-    .replace(/^\/\/+/u, "")
-    .replace(/^\s*\*\s?/gmu, "")
-    .trim();
-  return trimToSingleLine(normalized);
-}
-
-function buildMethodEntry(
-  node: ts.ClassElement,
-  sourceFile: ts.SourceFile,
-): TocMethodEntry | undefined {
-  if (
-    !ts.isMethodDeclaration(node) &&
-    !ts.isGetAccessorDeclaration(node) &&
-    !ts.isSetAccessorDeclaration(node)
-  ) {
-    return undefined;
-  }
-  const nameNode = node.name;
-  if (!nameNode || !ts.isIdentifier(nameNode)) return undefined;
-  if (
-    hasModifier(node, ts.SyntaxKind.PrivateKeyword) ||
-    hasModifier(node, ts.SyntaxKind.ProtectedKeyword)
-  ) {
-    return undefined;
-  }
-
-  const span = lineSpan(sourceFile, node);
-  const kind: TocMethodEntry["kind"] = ts.isGetAccessorDeclaration(node)
-    ? "getter"
-    : ts.isSetAccessorDeclaration(node)
-      ? "setter"
-      : "method";
-  return {
-    kind,
-    name: nameNode.text,
-    static: hasModifier(node, ts.SyntaxKind.StaticKeyword),
-    lineStart: span.lineStart,
-    lineEnd: span.lineEnd,
-    signature: buildMethodSignature(nameNode.text, node, sourceFile),
-    summary: extractNodeSummary(node, sourceFile),
-  };
-}
-
-function buildFunctionEntry(
-  node: ts.FunctionDeclaration | ts.VariableStatement,
-  sourceFile: ts.SourceFile,
-): TocFunctionEntry[] {
-  if (ts.isFunctionDeclaration(node)) {
-    const isAnonymousDefaultExport = !node.name && hasModifier(node, ts.SyntaxKind.DefaultKeyword);
-    if (!node.name && !isAnonymousDefaultExport) return [];
-    const name = node.name?.text ?? "default";
-    const span = lineSpan(sourceFile, node);
-    return [
-      {
-        kind: "function",
-        name,
-        exported: isExportedDeclaration(node),
-        lineStart: span.lineStart,
-        lineEnd: span.lineEnd,
-        signature: isAnonymousDefaultExport
-          ? buildAnonymousDefaultFunctionSignature(node.parameters, node.type, sourceFile)
-          : buildFunctionSignature(name, node.parameters, node.type, sourceFile, "function"),
-        summary: extractNodeSummary(node, sourceFile),
-      },
-    ];
-  }
-
-  const entries: TocFunctionEntry[] = [];
-  for (const declaration of node.declarationList.declarations) {
-    if (!ts.isIdentifier(declaration.name)) continue;
-    const initializer = declaration.initializer;
-    if (
-      !initializer ||
-      (!ts.isArrowFunction(initializer) && !ts.isFunctionExpression(initializer))
-    ) {
-      continue;
-    }
-    const span = lineSpan(sourceFile, declaration);
-    entries.push({
-      kind: "const_function",
-      name: declaration.name.text,
-      exported: isExportedDeclaration(node),
-      lineStart: span.lineStart,
-      lineEnd: span.lineEnd,
-      signature: buildFunctionSignature(
-        declaration.name.text,
-        initializer.parameters,
-        initializer.type,
-        sourceFile,
-        "const",
-      ),
-      summary: extractNodeSummary(node, sourceFile),
-    });
-  }
-  return entries;
-}
-
-function buildDeclarationEntry(
-  node: ts.InterfaceDeclaration | ts.TypeAliasDeclaration | ts.EnumDeclaration,
-  sourceFile: ts.SourceFile,
-): TocDeclarationEntry {
-  const span = lineSpan(sourceFile, node);
-
-  if (ts.isInterfaceDeclaration(node)) {
-    const typeParams = formatTypeParameters(node.typeParameters, sourceFile);
-    const heritage = node.heritageClauses
-      ?.map((clause) => {
-        const clauseName = clause.token === ts.SyntaxKind.ExtendsKeyword ? "extends" : "implements";
-        const types = clause.types.map((entry) => entry.getText(sourceFile)).join(", ");
-        return `${clauseName} ${types}`;
-      })
-      .join(" ");
-
-    return {
-      kind: "interface",
-      name: node.name.text,
-      exported: isExportedDeclaration(node),
-      lineStart: span.lineStart,
-      lineEnd: span.lineEnd,
-      signature: `interface ${node.name.text}${typeParams}${heritage ? ` ${heritage}` : ""}`,
-      summary: extractNodeSummary(node, sourceFile),
-    };
-  }
-
-  if (ts.isTypeAliasDeclaration(node)) {
-    const typeParams = formatTypeParameters(node.typeParameters, sourceFile);
-    return {
-      kind: "type_alias",
-      name: node.name.text,
-      exported: isExportedDeclaration(node),
-      lineStart: span.lineStart,
-      lineEnd: span.lineEnd,
-      signature: `type ${node.name.text}${typeParams} = ${compactInlineText(node.type.getText(sourceFile))}`,
-      summary: extractNodeSummary(node, sourceFile),
-    };
-  }
-
-  return {
-    kind: "enum",
-    name: node.name.text,
-    exported: isExportedDeclaration(node),
-    lineStart: span.lineStart,
-    lineEnd: span.lineEnd,
-    signature: `${hasModifier(node, ts.SyntaxKind.ConstKeyword) ? "const " : ""}enum ${node.name.text}`,
-    summary: extractNodeSummary(node, sourceFile),
-  };
-}
-
-function parseTocDocument(filePath: string, sourceText: string): TocDocument {
-  const language = extname(filePath).replace(/^\./u, "").toLowerCase() || "unknown";
-  const sourceFile = ts.createSourceFile(
-    filePath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    resolveScriptKind(filePath),
-  );
-
-  const imports: TocImportEntry[] = [];
-  const functions: TocFunctionEntry[] = [];
-  const classes: TocClassEntry[] = [];
-  const declarations: TocDeclarationEntry[] = [];
-
-  for (const statement of sourceFile.statements) {
-    if (ts.isImportDeclaration(statement)) {
-      const span = lineSpan(sourceFile, statement);
-      const moduleSpecifier = statement.moduleSpecifier
-        .getText(sourceFile)
-        .replace(/^['"]|['"]$/gu, "");
-      imports.push({
-        source: moduleSpecifier,
-        clause: buildImportClauseText(statement),
-        lineStart: span.lineStart,
-        lineEnd: span.lineEnd,
-      });
-      continue;
-    }
-
-    if (ts.isFunctionDeclaration(statement) || ts.isVariableStatement(statement)) {
-      functions.push(...buildFunctionEntry(statement, sourceFile));
-      continue;
-    }
-
-    if (
-      ts.isInterfaceDeclaration(statement) ||
-      ts.isTypeAliasDeclaration(statement) ||
-      ts.isEnumDeclaration(statement)
-    ) {
-      declarations.push(buildDeclarationEntry(statement, sourceFile));
-      continue;
-    }
-
-    if (ts.isClassDeclaration(statement)) {
-      const isAnonymousDefaultExport =
-        !statement.name && hasModifier(statement, ts.SyntaxKind.DefaultKeyword);
-      if (!statement.name && !isAnonymousDefaultExport) {
-        continue;
-      }
-      const className = statement.name?.text ?? "default";
-      const span = lineSpan(sourceFile, statement);
-      const methods = statement.members
-        .map((member) => buildMethodEntry(member, sourceFile))
-        .filter((entry): entry is TocMethodEntry => Boolean(entry));
-      classes.push({
-        kind: "class",
-        name: className,
-        exported: isExportedDeclaration(statement),
-        lineStart: span.lineStart,
-        lineEnd: span.lineEnd,
-        signature: isAnonymousDefaultExport ? "export default class" : `class ${className}`,
-        summary: extractNodeSummary(statement, sourceFile),
-        methods,
-      });
-    }
-  }
-
-  return {
-    filePath,
-    language,
-    moduleSummary: extractTopOfFileSummary(sourceText),
-    imports,
-    functions,
-    classes,
-    declarations,
-  };
-}
-
-function getSessionCache(cacheStore: TocSessionCacheStore, sessionKey: string): TocFileCache {
-  return getOrCreateLruValue(cacheStore, sessionKey, () => {
-    return new LRUCache({
-      max: MAX_CACHE_ENTRIES_PER_SESSION,
-    });
-  });
-}
-
-function cacheLookup(input: {
-  cacheStore: TocSessionCacheStore;
-  sessionKey: string;
-  absolutePath: string;
-  signature: string;
-  sourceText: string;
-}): TocLookupResult {
-  const cache = getSessionCache(input.cacheStore, input.sessionKey);
-  const cached = cache.get(input.absolutePath);
-  if (cached && cached.signature === input.signature) {
-    return {
-      toc: cached.toc,
-      cacheHit: true,
-    };
-  }
-
-  const toc = parseTocDocument(input.absolutePath, input.sourceText);
-  cache.set(input.absolutePath, {
-    signature: input.signature,
-    toc,
-  });
-  return {
-    toc,
-    cacheHit: false,
-  };
-}
-
 function resolveBaseDir(ctx: unknown, runtime?: BrewvaBundledToolRuntime): ToolTargetScope {
   return resolveToolTargetScope(runtime, ctx);
 }
 
 function resolveAbsolutePath(scope: ToolTargetScope, target: string): string | null {
   return resolveScopedPath(target, scope);
-}
-
-function walkTocFiles(paths: string[]): { files: string[]; scopeOverflow: boolean } {
-  const { files, overflow } = walkWorkspaceFiles({
-    roots: paths,
-    maxFiles: MAX_TOC_SEARCH_CANDIDATE_FILES,
-    isMatch: (filePath) => supportsToc(filePath),
-    skippedDirs: DEFAULT_SKIPPED_WORKSPACE_DIRS,
-  });
-  return { files: files.toSorted(), scopeOverflow: overflow };
-}
-
-function splitSearchTerms(value: string): string[] {
-  return [
-    ...new Set(
-      value
-        .replace(/([a-z0-9])([A-Z])/gu, "$1 $2")
-        .toLowerCase()
-        .split(/[^\p{L}\p{N}_-]+/u)
-        .map((token) => token.trim())
-        .filter((token) => token.length >= 2),
-    ),
-  ];
-}
-
-function hasWordBoundaryMatch(value: string, token: string): boolean {
-  if (!value || !token) return false;
-  return new RegExp(
-    `(^|[^\\p{L}\\p{N}_-])${escapeRegexLiteral(token)}($|[^\\p{L}\\p{N}_-])`,
-    "iu",
-  ).test(value);
-}
-
-function scoreField(query: string, tokens: string[], field: string | null | undefined): number {
-  if (!field) return 0;
-  const lower = field.toLowerCase();
-  const fieldTerms = new Set(splitSearchTerms(field));
-  let score = 0;
-  if (lower === query) score += 30;
-  if (fieldTerms.has(query)) score += 20;
-  if (hasWordBoundaryMatch(lower, query)) score += 10;
-  if (lower.includes(query)) score += 12;
-  for (const token of tokens) {
-    if (lower === token) {
-      score += 12;
-      continue;
-    }
-    if (fieldTerms.has(token)) {
-      score += Math.max(4, token.length + 2);
-      continue;
-    }
-    if (hasWordBoundaryMatch(lower, token)) {
-      score += Math.max(3, token.length + 1);
-      continue;
-    }
-    if (lower.includes(token)) {
-      score += Math.max(2, token.length);
-    }
-  }
-  return score;
-}
-
-function formatLineSpan(lineStart: number, lineEnd: number): string {
-  return lineStart === lineEnd ? `L${lineStart}` : `L${lineStart}-L${lineEnd}`;
 }
 
 function buildDocumentText(toc: TocDocument, baseDir: string): string {
@@ -771,136 +142,6 @@ function buildDocumentText(toc: TocDocument, baseDir: string): string {
   }
 
   return lines.join("\n");
-}
-
-function searchDocument(
-  toc: TocDocument,
-  baseDir: string,
-  query: string,
-  tokens: string[],
-): TocSearchMatch[] {
-  const relativePath = normalizeRelativePath(baseDir, toc.filePath);
-  const matches: TocSearchMatch[] = [];
-
-  const moduleScore =
-    scoreField(query, tokens, relativePath) + scoreField(query, tokens, toc.moduleSummary);
-  if (moduleScore > 0) {
-    matches.push({
-      filePath: toc.filePath,
-      kind: "module",
-      name: basename(toc.filePath),
-      score: moduleScore,
-      lineStart: 1,
-      lineEnd: 1,
-      signature: null,
-      summary: toc.moduleSummary,
-      parentName: null,
-    });
-  }
-
-  for (const entry of toc.imports) {
-    const score =
-      scoreField(query, tokens, entry.source) +
-      scoreField(query, tokens, entry.clause) +
-      scoreField(query, tokens, relativePath);
-    if (score <= 0) continue;
-    matches.push({
-      filePath: toc.filePath,
-      kind: "import",
-      name: entry.source,
-      score,
-      lineStart: entry.lineStart,
-      lineEnd: entry.lineEnd,
-      signature: entry.clause
-        ? `import ${entry.clause} from "${entry.source}"`
-        : `import "${entry.source}"`,
-      summary: null,
-      parentName: null,
-    });
-  }
-
-  for (const entry of toc.functions) {
-    const score =
-      scoreField(query, tokens, entry.name) +
-      scoreField(query, tokens, entry.signature) +
-      scoreField(query, tokens, entry.summary) +
-      scoreField(query, tokens, entry.exported ? "export" : undefined);
-    if (score <= 0) continue;
-    matches.push({
-      filePath: toc.filePath,
-      kind: entry.kind,
-      name: entry.name,
-      score,
-      lineStart: entry.lineStart,
-      lineEnd: entry.lineEnd,
-      signature: entry.signature,
-      summary: entry.summary,
-      parentName: null,
-    });
-  }
-
-  for (const entry of toc.declarations) {
-    const score =
-      scoreField(query, tokens, entry.name) +
-      scoreField(query, tokens, entry.signature) +
-      scoreField(query, tokens, entry.summary) +
-      scoreField(query, tokens, entry.exported ? "export" : undefined);
-    if (score <= 0) continue;
-    matches.push({
-      filePath: toc.filePath,
-      kind: entry.kind,
-      name: entry.name,
-      score,
-      lineStart: entry.lineStart,
-      lineEnd: entry.lineEnd,
-      signature: entry.signature,
-      summary: entry.summary,
-      parentName: null,
-    });
-  }
-
-  for (const entry of toc.classes) {
-    const classScore =
-      scoreField(query, tokens, entry.name) +
-      scoreField(query, tokens, entry.signature) +
-      scoreField(query, tokens, entry.summary) +
-      scoreField(query, tokens, entry.exported ? "export" : undefined);
-    if (classScore > 0) {
-      matches.push({
-        filePath: toc.filePath,
-        kind: "class",
-        name: entry.name,
-        score: classScore,
-        lineStart: entry.lineStart,
-        lineEnd: entry.lineEnd,
-        signature: entry.signature,
-        summary: entry.summary,
-        parentName: null,
-      });
-    }
-
-    for (const method of entry.methods) {
-      const methodScore =
-        scoreField(query, tokens, method.name) +
-        scoreField(query, tokens, method.signature) +
-        scoreField(query, tokens, method.summary) +
-        scoreField(query, tokens, entry.name);
-      if (methodScore <= 0) continue;
-      matches.push({
-        filePath: toc.filePath,
-        kind: method.kind,
-        name: method.name,
-        score: methodScore,
-        lineStart: method.lineStart,
-        lineEnd: method.lineEnd,
-        signature: method.signature,
-        summary: method.summary,
-        parentName: entry.name,
-      });
-    }
-  }
-
-  return matches;
 }
 
 function summarizeSearch(
@@ -1019,6 +260,40 @@ function summarizeIndexBudgetExceeded(input: {
   return lines.join("\n");
 }
 
+function summarizeNoMatchWithSuggestions(input: {
+  query: string;
+  indexedFiles: number;
+  cacheHits: number;
+  cacheMisses: number;
+  skippedFiles: number;
+  oversizedFiles: number;
+  indexedBytes: number;
+  suggestions: string[];
+}): string {
+  const lines: string[] = [
+    "[TOCSearch]",
+    `query: ${input.query}`,
+    `status: ${UNAVAILABLE_STATUS}`,
+    "reason: no_match",
+    `indexed_files: ${input.indexedFiles}`,
+    `cache_hits: ${input.cacheHits}`,
+    `cache_misses: ${input.cacheMisses}`,
+    `skipped_files: ${input.skippedFiles}`,
+    `oversized_files: ${input.oversizedFiles}`,
+    `indexed_bytes: ${input.indexedBytes}`,
+    "next_step: Try grep for raw text search or inspect one of the suggested files.",
+  ];
+
+  if (input.suggestions.length > 0) {
+    lines.push("", "[SuggestedFiles]");
+    for (const suggestion of input.suggestions) {
+      lines.push(`- ${suggestion}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
 function recordTocEvent(
   runtime: BrewvaBundledToolRuntime | undefined,
   sessionId: string | undefined,
@@ -1032,28 +307,8 @@ function recordTocEvent(
   });
 }
 
-function resolveBroadQuery(input: {
-  candidateFiles: number;
-  indexedFiles: number;
-  limit: number;
-  tokens: string[];
-}): boolean {
-  if (input.indexedFiles <= 0 || input.candidateFiles <= 0) return false;
-  const ratio = input.candidateFiles / input.indexedFiles;
-  const ratioThreshold =
-    input.tokens.length <= 1 ? BROAD_QUERY_SINGLE_TOKEN_RATIO : BROAD_QUERY_MULTI_TOKEN_RATIO;
-  const absoluteThreshold = Math.max(
-    input.limit * BROAD_QUERY_FACTOR,
-    BROAD_QUERY_ABSOLUTE_CANDIDATES,
-  );
-  if (input.candidateFiles > absoluteThreshold) return true;
-  return input.candidateFiles >= BROAD_QUERY_MIN_FILE_COUNT && ratio >= ratioThreshold;
-}
-
 export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime }): ToolDefinition[] {
-  const sessionCache: TocSessionCacheStore = new LRUCache({
-    max: MAX_CACHE_SESSIONS,
-  });
+  const sessionCache: TocSearchSessionCacheStore = createTocSearchSessionCacheStore();
   registerTocSourceCacheRuntime(options?.runtime);
   registerToolRuntimeClearStateListener(options?.runtime, (sessionId) => {
     sessionCache.delete(resolveTocSessionKey(sessionId));
@@ -1140,7 +395,7 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
         signature,
       });
       const startedAt = Date.now();
-      const lookup = cacheLookup({
+      const lookup = lookupTocDocument({
         cacheStore: sessionCache,
         sessionKey: resolveTocSessionKey(sessionId),
         absolutePath,
@@ -1197,12 +452,30 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
         );
       }
       const sessionId = getToolSessionId(ctx);
-      const sessionKey = resolveTocSessionKey(sessionId);
-      const query = params.query.trim().toLowerCase();
-      const tokens = tokenizeSearchTerms(query);
+      const queryText = params.query.trim();
       const limit = params.limit ?? DEFAULT_TOC_SEARCH_LIMIT;
+      registerSearchIntent({
+        runtime: options?.runtime,
+        sessionId,
+        toolName: "toc_search",
+        query: queryText,
+        requestedPaths: roots
+          .map((root) => normalizeSearchAdvisorPath(scope.baseCwd, root))
+          .filter((root): root is string => Boolean(root)),
+      });
 
-      if (tokens.length === 0) {
+      const startedAt = Date.now();
+      const core = runTocSearchCore({
+        runtime: options?.runtime,
+        sessionId,
+        baseDir: scope.baseCwd,
+        roots,
+        queryText,
+        limit,
+        cacheStore: sessionCache,
+      });
+
+      if (core.tokens.length === 0) {
         return inconclusiveTextResult(
           [
             "toc_search unavailable: query is too broad or empty after tokenization.",
@@ -1218,35 +491,32 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
         );
       }
 
-      const walk = walkTocFiles(roots);
-      if (walk.scopeOverflow) {
+      if (core.scopeOverflow) {
         recordTocEvent(options?.runtime, sessionId, {
           toolName: "toc_search",
           operation: "search",
           broadQuery: false,
           scopeOverflow: true,
-          candidateFilesScanned: walk.files.length,
+          candidateFilesScanned: core.scopedFileCount,
           durationMs: 0,
         });
         return inconclusiveTextResult(
           summarizeScopeOverflow({
-            query: params.query.trim(),
-            candidateFiles: walk.files.length,
+            query: queryText,
+            candidateFiles: core.scopedFileCount,
             baseDir: scope.baseCwd,
           }),
           {
             status: UNAVAILABLE_STATUS,
             reason: "search_scope_too_large",
-            candidateFiles: walk.files.length,
+            candidateFiles: core.scopedFileCount,
             walkLimit: MAX_TOC_SEARCH_CANDIDATE_FILES,
             nextStep: "Narrow paths to a package/folder first, then retry toc_search.",
           },
         );
       }
 
-      const files = walk.files;
-
-      if (files.length === 0) {
+      if (core.noSupportedFiles) {
         return inconclusiveTextResult(
           [
             "toc_search unavailable: no supported TS/JS files found in the requested paths.",
@@ -1261,116 +531,68 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
         );
       }
 
-      const startedAt = Date.now();
-      const allMatches: TocSearchMatch[] = [];
-      let indexedFiles = 0;
-      let cacheHits = 0;
-      let cacheMisses = 0;
-      let skippedFiles = 0;
-      let oversizedFiles = 0;
-      let indexedBytes = 0;
-      let budgetExceeded = false;
-      for (const filePath of files) {
-        try {
-          const stats = statSync(filePath);
-          if (stats.size > MAX_TOC_FILE_BYTES) {
-            oversizedFiles += 1;
-            continue;
-          }
-          if (indexedBytes + stats.size > MAX_TOC_SEARCH_INDEXED_BYTES) {
-            budgetExceeded = true;
-            break;
-          }
-          const source = readSourceTextWithCache({
-            sessionId,
-            absolutePath: filePath,
-            signature: `${stats.mtimeMs}:${stats.size}`,
-          });
-          const lookup = cacheLookup({
-            cacheStore: sessionCache,
-            sessionKey,
-            absolutePath: filePath,
-            signature: `${stats.mtimeMs}:${stats.size}`,
-            sourceText: source.sourceText,
-          });
-          indexedFiles += 1;
-          indexedBytes += stats.size;
-          if (lookup.cacheHit) {
-            cacheHits += 1;
-          } else {
-            cacheMisses += 1;
-          }
-          allMatches.push(...searchDocument(lookup.toc, scope.baseCwd, query, tokens));
-        } catch {
-          skippedFiles += 1;
-          continue;
-        }
-      }
-
-      if (indexedFiles === 0) {
+      if (core.noAccessibleFiles || core.noIndexableFiles) {
         return inconclusiveTextResult(
           [
             "toc_search unavailable: no accessible TS/JS files could be indexed.",
-            `reason=${oversizedFiles > 0 ? "no_indexable_files" : "no_accessible_files"}`,
-            `candidate_files: ${files.length}`,
-            `skipped_files: ${skippedFiles}`,
-            `oversized_files: ${oversizedFiles}`,
+            `reason=${core.noIndexableFiles ? "no_indexable_files" : "no_accessible_files"}`,
+            `candidate_files: ${core.scopedFileCount}`,
+            `skipped_files: ${core.summary.skippedFiles}`,
+            `oversized_files: ${core.summary.oversizedFiles}`,
             "next_step=Check file permissions, narrow paths, or use read_spans on a specific file.",
           ].join("\n"),
           {
             status: UNAVAILABLE_STATUS,
-            reason: oversizedFiles > 0 ? "no_indexable_files" : "no_accessible_files",
-            candidateFiles: files.length,
-            skippedFiles,
-            oversizedFiles,
+            reason: core.noIndexableFiles ? "no_indexable_files" : "no_accessible_files",
+            candidateFiles: core.scopedFileCount,
+            skippedFiles: core.summary.skippedFiles,
+            oversizedFiles: core.summary.oversizedFiles,
             nextStep: "Check file permissions, narrow paths, or use read_spans on a specific file.",
           },
         );
       }
 
-      allMatches.sort((left, right) => {
-        if (left.score !== right.score) return right.score - left.score;
-        if (left.filePath !== right.filePath) return left.filePath.localeCompare(right.filePath);
-        if (left.lineStart !== right.lineStart) return left.lineStart - right.lineStart;
-        return left.name.localeCompare(right.name);
-      });
-
-      const candidateFiles = new Set(allMatches.map((match) => match.filePath)).size;
-      const searchSummary: TocSearchSummary = {
-        indexedFiles,
-        candidateFiles,
-        cacheHits,
-        cacheMisses,
-        skippedFiles,
-        oversizedFiles,
-        indexedBytes,
+      const searchSummary = core.summary;
+      const candidateFiles = searchSummary.candidateFiles;
+      const durationMs = Date.now() - startedAt;
+      const rankedMatches = core.rankedMatches;
+      const recordSearchEvent = (input: {
+        returnedMatches: number;
+        advisorStatus: string;
+        broadQuery: boolean;
+        budgetExceeded: boolean;
+      }): void => {
+        recordTocEvent(options?.runtime, sessionId, {
+          toolName: "toc_search",
+          operation: "search",
+          indexedFiles: searchSummary.indexedFiles,
+          candidateFiles,
+          returnedMatches: input.returnedMatches,
+          cacheHits: searchSummary.cacheHits,
+          cacheMisses: searchSummary.cacheMisses,
+          skippedFiles: searchSummary.skippedFiles,
+          oversizedFiles: searchSummary.oversizedFiles,
+          indexedBytes: searchSummary.indexedBytes,
+          broadQuery: input.broadQuery,
+          budgetExceeded: input.budgetExceeded,
+          advisorStatus: input.advisorStatus,
+          advisorSignalFiles: core.advisor.signalFiles,
+          advisorReorderedMatches: core.advisor.reorderedMatches,
+          comboMatches: core.advisor.comboMatches,
+          durationMs,
+        });
       };
 
-      const broadQuery = resolveBroadQuery({
-        candidateFiles,
-        indexedFiles,
-        limit,
-        tokens,
-      });
-      const durationMs = Date.now() - startedAt;
-      recordTocEvent(options?.runtime, sessionId, {
-        toolName: "toc_search",
-        operation: "search",
-        indexedFiles,
-        candidateFiles,
-        returnedMatches: Math.min(limit, allMatches.length),
-        cacheHits,
-        cacheMisses,
-        skippedFiles,
-        oversizedFiles,
-        indexedBytes,
-        broadQuery,
-        budgetExceeded,
-        durationMs,
-      });
-
-      if (budgetExceeded) {
-        const preview = allMatches.slice(0, Math.min(5, limit));
+      if (core.budgetExceeded) {
+        const preview = rankedMatches.slice(0, Math.min(5, limit));
+        attachSearchIntentPreviewCandidates({
+          sessionId,
+          toolName: "toc_search",
+          query: queryText,
+          candidatePaths: preview
+            .map((match) => normalizeSearchAdvisorPath(scope.baseCwd, match.filePath))
+            .filter((path): path is string => Boolean(path)),
+        });
         recordTocReadPathObservation({
           runtime: options?.runtime,
           sessionId,
@@ -1379,9 +601,15 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
           evidenceKind: "search_preview",
           observedPaths: preview.map((match) => match.filePath),
         });
+        recordSearchEvent({
+          returnedMatches: 0,
+          advisorStatus: core.advisor.status,
+          broadQuery: false,
+          budgetExceeded: true,
+        });
         return inconclusiveTextResult(
           summarizeIndexBudgetExceeded({
-            query: params.query.trim(),
+            query: queryText,
             preview,
             summary: searchSummary,
             baseDir: scope.baseCwd,
@@ -1389,50 +617,83 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
           {
             status: UNAVAILABLE_STATUS,
             reason: "indexing_budget_exceeded",
-            indexedFiles,
+            indexedFiles: searchSummary.indexedFiles,
             candidateFiles,
-            cacheHits,
-            cacheMisses,
-            skippedFiles,
-            oversizedFiles,
-            indexedBytes,
+            cacheHits: searchSummary.cacheHits,
+            cacheMisses: searchSummary.cacheMisses,
+            skippedFiles: searchSummary.skippedFiles,
+            oversizedFiles: searchSummary.oversizedFiles,
+            indexedBytes: searchSummary.indexedBytes,
             indexedBytesLimit: MAX_TOC_SEARCH_INDEXED_BYTES,
             nextStep: "Narrow paths or query terms before retrying toc_search.",
+            advisor: core.advisor,
           },
         );
       }
 
-      if (allMatches.length === 0) {
+      if (rankedMatches.length === 0) {
+        const suggestions = [
+          ...new Set(
+            [core.advisor.comboSuggestion, ...core.advisor.hotFiles].filter(
+              (suggestion): suggestion is string => Boolean(suggestion),
+            ),
+          ),
+        ];
+        const advisorStatus = suggestions.length > 0 ? "suggestion_only" : core.advisor.status;
+        if (suggestions.length > 0) {
+          attachSearchIntentPreviewCandidates({
+            sessionId,
+            toolName: "toc_search",
+            query: queryText,
+            candidatePaths: suggestions,
+          });
+        }
+        recordSearchEvent({
+          returnedMatches: 0,
+          advisorStatus,
+          broadQuery: false,
+          budgetExceeded: false,
+        });
         return inconclusiveTextResult(
-          [
-            "[TOCSearch]",
-            `query: ${params.query.trim()}`,
-            `status: ${UNAVAILABLE_STATUS}`,
-            "reason: no_match",
-            `indexed_files: ${indexedFiles}`,
-            `cache_hits: ${cacheHits}`,
-            `cache_misses: ${cacheMisses}`,
-            `skipped_files: ${skippedFiles}`,
-            `oversized_files: ${oversizedFiles}`,
-            `indexed_bytes: ${indexedBytes}`,
-            "next_step: Try a symbol name, import path, or use grep for raw text search.",
-          ].join("\n"),
+          summarizeNoMatchWithSuggestions({
+            query: queryText,
+            indexedFiles: searchSummary.indexedFiles,
+            cacheHits: searchSummary.cacheHits,
+            cacheMisses: searchSummary.cacheMisses,
+            skippedFiles: searchSummary.skippedFiles,
+            oversizedFiles: searchSummary.oversizedFiles,
+            indexedBytes: searchSummary.indexedBytes,
+            suggestions,
+          }),
           {
             status: UNAVAILABLE_STATUS,
             reason: "no_match",
-            indexedFiles,
-            cacheHits,
-            cacheMisses,
-            skippedFiles,
-            oversizedFiles,
-            indexedBytes,
+            indexedFiles: searchSummary.indexedFiles,
+            cacheHits: searchSummary.cacheHits,
+            cacheMisses: searchSummary.cacheMisses,
+            skippedFiles: searchSummary.skippedFiles,
+            oversizedFiles: searchSummary.oversizedFiles,
+            indexedBytes: searchSummary.indexedBytes,
             nextStep: "Try a symbol name, import path, or use grep for raw text search.",
+            advisor: {
+              ...core.advisor,
+              status: advisorStatus,
+              scoringMode: "multiplicative",
+            },
           },
         );
       }
 
-      if (broadQuery) {
-        const preview = allMatches.slice(0, Math.min(5, limit));
+      if (core.broadQuery) {
+        const preview = rankedMatches.slice(0, Math.min(5, limit));
+        attachSearchIntentPreviewCandidates({
+          sessionId,
+          toolName: "toc_search",
+          query: queryText,
+          candidatePaths: preview
+            .map((match) => normalizeSearchAdvisorPath(scope.baseCwd, match.filePath))
+            .filter((path): path is string => Boolean(path)),
+        });
         recordTocReadPathObservation({
           runtime: options?.runtime,
           sessionId,
@@ -1441,9 +702,15 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
           evidenceKind: "search_preview",
           observedPaths: preview.map((match) => match.filePath),
         });
+        recordSearchEvent({
+          returnedMatches: 0,
+          advisorStatus: core.advisor.status,
+          broadQuery: true,
+          budgetExceeded: false,
+        });
         return inconclusiveTextResult(
           summarizeBroadQuery({
-            query: params.query.trim(),
+            query: queryText,
             preview,
             summary: searchSummary,
             baseDir: scope.baseCwd,
@@ -1451,20 +718,29 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
           {
             status: UNAVAILABLE_STATUS,
             reason: "broad_query",
-            indexedFiles,
+            indexedFiles: searchSummary.indexedFiles,
             candidateFiles,
-            cacheHits,
-            cacheMisses,
-            skippedFiles,
-            oversizedFiles,
-            indexedBytes,
+            cacheHits: searchSummary.cacheHits,
+            cacheMisses: searchSummary.cacheMisses,
+            skippedFiles: searchSummary.skippedFiles,
+            oversizedFiles: searchSummary.oversizedFiles,
+            indexedBytes: searchSummary.indexedBytes,
             nextStep:
               "Narrow the query to a symbol/import name or switch to grep for broad text search.",
+            advisor: core.advisor,
           },
         );
       }
 
-      const matches = allMatches.slice(0, limit);
+      const matches = rankedMatches.slice(0, limit);
+      attachSearchIntentPreviewCandidates({
+        sessionId,
+        toolName: "toc_search",
+        query: queryText,
+        candidatePaths: matches
+          .map((match) => normalizeSearchAdvisorPath(scope.baseCwd, match.filePath))
+          .filter((path): path is string => Boolean(path)),
+      });
       recordTocReadPathObservation({
         runtime: options?.runtime,
         sessionId,
@@ -1473,20 +749,24 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
         evidenceKind: "search_match",
         observedPaths: matches.map((match) => match.filePath),
       });
-      return textResult(
-        summarizeSearch(params.query.trim(), matches, searchSummary, scope.baseCwd),
-        {
-          status: "ok",
-          indexedFiles,
-          candidateFiles,
-          cacheHits,
-          cacheMisses,
-          skippedFiles,
-          oversizedFiles,
-          indexedBytes,
-          matchesReturned: matches.length,
-        },
-      );
+      recordSearchEvent({
+        returnedMatches: matches.length,
+        advisorStatus: core.advisor.status,
+        broadQuery: false,
+        budgetExceeded: false,
+      });
+      return textResult(summarizeSearch(queryText, matches, searchSummary, scope.baseCwd), {
+        status: "ok",
+        indexedFiles: searchSummary.indexedFiles,
+        candidateFiles,
+        cacheHits: searchSummary.cacheHits,
+        cacheMisses: searchSummary.cacheMisses,
+        skippedFiles: searchSummary.skippedFiles,
+        oversizedFiles: searchSummary.oversizedFiles,
+        indexedBytes: searchSummary.indexedBytes,
+        matchesReturned: matches.length,
+        advisor: core.advisor,
+      });
     },
   });
 

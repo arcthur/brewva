@@ -345,6 +345,20 @@ search/navigation tools. The hosted read wrapper uses this evidence to decide
 when later `read` calls are allowed again. There is no output-text parsing or
 filesystem-probe compatibility shim in the recovery path.
 
+These same existing event families also feed tools-layer search assistance.
+`grep` and `toc_search` fold `tool_read_path_discovery_observed`,
+`patch_recorded`, and `tool_read_path_gate_armed` into session-local path
+memory for advisory reranking and zero-result recovery. This does not create a
+new durable search-memory event family, does not turn search ordering into
+replay truth, and does not make query-conditioned `query -> file` combo memory
+rebuildable from runtime history. That combo layer remains process-local.
+
+Repo-owned tool telemetry such as `tool_toc_query` may also expose flat
+advisor fields like `advisorStatus`, `advisorSignalFiles`,
+`advisorReorderedMatches`, and `comboMatches`. Those telemetry records are
+inspection aids only; they do not replace the read-path recovery protocol and
+do not make advisor memory durable runtime truth.
+
 `tool_contract_warning` is a broader warning surface, not a read-path-specific
 event. It currently covers both:
 

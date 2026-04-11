@@ -43,6 +43,7 @@ refresh the pointer summary and `Last reviewed` metadata here.
 - [`rfc-skill-distribution-refresh-and-catalog-surface.md`](./rfc-skill-distribution-refresh-and-catalog-surface.md)
 - [`rfc-skill-contract-layering-project-context-and-explicit-activation.md`](./rfc-skill-contract-layering-project-context-and-explicit-activation.md)
 - [`rfc-specialist-subagents-and-adversarial-verification.md`](./rfc-specialist-subagents-and-adversarial-verification.md)
+- [`rfc-tool-search-advisor-and-auto-broadened-discovery.md`](./rfc-tool-search-advisor-and-auto-broadened-discovery.md)
 
 ## Gateway, Session, And Scheduling
 

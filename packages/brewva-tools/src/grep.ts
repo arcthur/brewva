@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { relative, resolve } from "node:path";
+import { statSync } from "node:fs";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
@@ -7,8 +8,26 @@ import {
   buildReadPathDiscoveryObservationPayload,
   collectObservedPathsFromLocationLines,
 } from "./read-path-discovery.js";
-import { recordToolRuntimeEvent } from "./runtime-internal.js";
+import {
+  recordToolRuntimeEvent,
+  registerToolRuntimeClearStateListener,
+} from "./runtime-internal.js";
+import {
+  attachSearchIntentPreviewCandidates,
+  buildDelimiterInsensitivePattern,
+  buildSearchAdvisorSnapshot,
+  normalizeSearchAdvisorPath,
+  registerSearchIntent,
+} from "./search-advisor.js";
 import { resolveToolTargetScope, isPathInsideRoots, resolveScopedPath } from "./target-scope.js";
+import { resolveTocSessionKey } from "./toc-cache.js";
+import {
+  createTocSearchSessionCacheStore,
+  formatLineSpan,
+  normalizeRelativePath,
+  runTocSearchCore,
+  type TocSearchSessionCacheStore,
+} from "./toc-search-core.js";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { getToolSessionId } from "./utils/parallel-read.js";
@@ -20,6 +39,7 @@ interface GrepToolOptions extends BrewvaToolOptions {
 }
 
 type GrepCase = "smart" | "ignore" | "sensitive";
+type GrepSuggestionMode = "combo" | "toc" | "path" | "hybrid";
 const GREP_CASE_VALUES = ["smart", "insensitive", "sensitive"] as const;
 const GREP_CASE_SCHEMA = buildStringEnumSchema(GREP_CASE_VALUES, {
   defaultValue: "smart",
@@ -52,6 +72,47 @@ export type GrepRunResult = {
   timedOut: boolean;
   terminationReason: "process_exit" | "truncate" | "timeout" | "abort";
 };
+
+type GrepAdvisorStatus =
+  | "applied"
+  | "skipped"
+  | "auto_broadened"
+  | "fuzzy_retry"
+  | "suggestion_only";
+
+interface GrepAdvisorDetails {
+  status: GrepAdvisorStatus;
+  signalFiles: number;
+  reorderedFiles: number;
+  comboMatches: number;
+  autoBroaden?: {
+    from: string[];
+    to: string[];
+  };
+  fuzzyRetry?: {
+    from: string;
+    to: string;
+  };
+  suggestionMode?: GrepSuggestionMode;
+}
+
+interface GrepGroupedLines {
+  path?: string;
+  lines: string[];
+  originalOrder: number;
+}
+
+interface GrepSuggestionItem {
+  path: string;
+  text: string;
+  source: Exclude<GrepSuggestionMode, "hybrid">;
+}
+
+const GREP_LOCATION_PATTERN = /^([^:\n]+):\d+(?::\d+)?(?:\s|:|$)/u;
+const GREP_TOC_SUGGESTION_LIMIT = 3;
+const GREP_TOC_SUGGESTION_MAX_FILES = 400;
+const GREP_TOC_SUGGESTION_MAX_INDEXED_BYTES = 2_000_000;
+const GREP_MAX_SUGGESTIONS = 5;
 
 function clampInt(value: unknown, fallback: number, options: { min: number; max: number }): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
@@ -184,7 +245,280 @@ function resolveRipgrepExitCode(
   return -1;
 }
 
+function buildRipgrepArgs(input: {
+  query: string;
+  paths: string[];
+  globs: string[];
+  caseMode: GrepCase;
+  fixed?: boolean;
+  forceIgnoreCase?: boolean;
+}): string[] {
+  const args: string[] = ["--line-number", "--no-heading", "--color", "never", "--hidden"];
+
+  for (const glob of input.globs) {
+    args.push("--glob", glob);
+  }
+
+  if (input.fixed) {
+    args.push("--fixed-strings");
+  }
+
+  if (input.forceIgnoreCase || input.caseMode === "ignore") {
+    args.push("--ignore-case");
+  } else if (input.caseMode === "smart") {
+    args.push("--smart-case");
+  } else if (input.caseMode === "sensitive") {
+    args.push("--case-sensitive");
+  }
+
+  args.push("--", input.query);
+  args.push(...(input.paths.length > 0 ? input.paths : ["."]));
+  return args;
+}
+
+function groupLocationLines(baseCwd: string, lines: string[]): GrepGroupedLines[] {
+  const groups: GrepGroupedLines[] = [];
+  let current: GrepGroupedLines | undefined;
+  let hasUnparsedLine = false;
+
+  for (const line of lines) {
+    const match = GREP_LOCATION_PATTERN.exec(line.trim());
+    const normalizedPath = match?.[1] ? normalizeSearchAdvisorPath(baseCwd, match[1]) : undefined;
+    if (!normalizedPath) {
+      hasUnparsedLine = true;
+      groups.push({
+        lines: [line],
+        originalOrder: groups.length,
+      });
+      current = undefined;
+      continue;
+    }
+    if (current?.path === normalizedPath) {
+      current.lines.push(line);
+      continue;
+    }
+    current = {
+      path: normalizedPath,
+      lines: [line],
+      originalOrder: groups.length,
+    };
+    groups.push(current);
+  }
+
+  if (hasUnparsedLine) {
+    return groups;
+  }
+  return groups;
+}
+
+function rerankGroupedLines(input: {
+  baseCwd: string;
+  query: string;
+  lines: string[];
+  runtime?: BrewvaToolOptions["runtime"];
+  sessionId?: string;
+}): {
+  lines: string[];
+  candidatePaths: string[];
+  advisor: GrepAdvisorDetails;
+} {
+  const snapshot = buildSearchAdvisorSnapshot({
+    runtime: input.runtime,
+    sessionId: input.sessionId,
+  });
+  const groups = groupLocationLines(input.baseCwd, input.lines);
+  if (groups.some((group) => !group.path)) {
+    return {
+      lines: input.lines,
+      candidatePaths: [],
+      advisor: {
+        status: snapshot.signalFiles > 0 ? "applied" : "skipped",
+        signalFiles: snapshot.signalFiles,
+        reorderedFiles: 0,
+        comboMatches: 0,
+      },
+    };
+  }
+
+  const ranked = groups.map((group) => {
+    const score = snapshot.scoreFile({
+      toolName: "grep",
+      query: input.query,
+      filePath: group.path ?? "",
+    });
+    return {
+      path: group.path,
+      lines: group.lines,
+      originalOrder: group.originalOrder,
+      score,
+    };
+  });
+
+  ranked.sort((left, right) => {
+    if (left.score.comboThresholdHit !== right.score.comboThresholdHit) {
+      return left.score.comboThresholdHit ? -1 : 1;
+    }
+    if (left.score.comboBias !== right.score.comboBias) {
+      return right.score.comboBias - left.score.comboBias;
+    }
+    if (left.score.pathScore !== right.score.pathScore) {
+      return right.score.pathScore - left.score.pathScore;
+    }
+    return left.originalOrder - right.originalOrder;
+  });
+
+  const reorderedFiles = ranked.filter((group, index) => group.originalOrder !== index).length;
+  const candidatePaths = ranked
+    .map((group) => group.path)
+    .filter((path): path is string => Boolean(path));
+  return {
+    lines: ranked.flatMap((group) => group.lines),
+    candidatePaths,
+    advisor: {
+      status:
+        reorderedFiles > 0 ||
+        snapshot.signalFiles > 0 ||
+        ranked.some((group) => group.score.comboHits > 0)
+          ? "applied"
+          : "skipped",
+      signalFiles: snapshot.signalFiles,
+      reorderedFiles,
+      comboMatches: Math.max(0, ...ranked.map((group) => group.score.comboHits)),
+    },
+  };
+}
+
+function deriveBroadenedPaths(cwd: string, paths: string[]): string[] {
+  const broadened = new Set<string>();
+  for (const path of paths) {
+    const normalized = path.replaceAll("\\", "/");
+    if (normalized === ".") {
+      broadened.add(".");
+      continue;
+    }
+    const absolutePath = isAbsolute(path) ? path : resolve(cwd, path);
+    let broadenedPath = dirname(absolutePath);
+    try {
+      const stats = statSync(absolutePath);
+      if (stats.isDirectory()) {
+        broadenedPath = dirname(absolutePath);
+      }
+    } catch {
+      broadenedPath = dirname(absolutePath);
+    }
+    const relativePath = relative(cwd, broadenedPath).replaceAll("\\", "/");
+    broadened.add(relativePath.length === 0 ? "." : relativePath);
+  }
+  return [...broadened];
+}
+
+function buildAdvisorHeader(header: string[], advisor: GrepAdvisorDetails): string[] {
+  const nextHeader = [...header];
+  nextHeader.push(`- advisor_status: ${advisor.status}`);
+  nextHeader.push(`- advisor_signal_files: ${advisor.signalFiles}`);
+  nextHeader.push(`- advisor_reordered_files: ${advisor.reorderedFiles}`);
+  if (advisor.autoBroaden) {
+    nextHeader.push(`- auto_broadened_from: ${advisor.autoBroaden.from.join(", ")}`);
+    nextHeader.push(`- auto_broadened_to: ${advisor.autoBroaden.to.join(", ")}`);
+  }
+  if (advisor.fuzzyRetry) {
+    nextHeader.push(`- fuzzy_retry_from: ${advisor.fuzzyRetry.from}`);
+    nextHeader.push(`- fuzzy_retry_to: ${advisor.fuzzyRetry.to}`);
+  }
+  return nextHeader;
+}
+
+function buildGrepTocSuggestions(input: {
+  runtime?: BrewvaToolOptions["runtime"];
+  sessionId?: string;
+  baseCwd: string;
+  roots: string[];
+  query: string;
+  cacheStore: TocSearchSessionCacheStore;
+}): GrepSuggestionItem[] {
+  const core = runTocSearchCore({
+    runtime: input.runtime,
+    sessionId: input.sessionId,
+    baseDir: input.baseCwd,
+    roots: input.roots,
+    queryText: input.query,
+    limit: GREP_TOC_SUGGESTION_LIMIT,
+    cacheStore: input.cacheStore,
+    maxCandidateFiles: GREP_TOC_SUGGESTION_MAX_FILES,
+    maxIndexedBytes: GREP_TOC_SUGGESTION_MAX_INDEXED_BYTES,
+  });
+  if (
+    core.tokens.length === 0 ||
+    core.scopeOverflow ||
+    core.noSupportedFiles ||
+    core.noAccessibleFiles ||
+    core.noIndexableFiles ||
+    core.rankedMatches.length === 0
+  ) {
+    return [];
+  }
+  return core.rankedMatches.slice(0, GREP_TOC_SUGGESTION_LIMIT).map((match) => {
+    const displayPath = normalizeRelativePath(input.baseCwd, match.filePath);
+    return {
+      path: normalizeSearchAdvisorPath(input.baseCwd, match.filePath) ?? displayPath,
+      text: `${displayPath} (toc ${match.kind} ${match.name} @ ${formatLineSpan(match.lineStart, match.lineEnd)})`,
+      source: "toc",
+    };
+  });
+}
+
+function finalizeSuggestionItems(input: {
+  comboPath?: string;
+  hotFiles: string[];
+  tocSuggestions: GrepSuggestionItem[];
+}): GrepSuggestionItem[] {
+  const items: GrepSuggestionItem[] = [];
+  if (input.comboPath) {
+    items.push({
+      path: input.comboPath,
+      text: input.comboPath,
+      source: "combo",
+    });
+  }
+  items.push(...input.tocSuggestions);
+  for (const hotFile of input.hotFiles) {
+    items.push({
+      path: hotFile,
+      text: hotFile,
+      source: "path",
+    });
+  }
+
+  const unique: GrepSuggestionItem[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (!item.path || seen.has(item.path)) {
+      continue;
+    }
+    seen.add(item.path);
+    unique.push(item);
+    if (unique.length >= GREP_MAX_SUGGESTIONS) {
+      break;
+    }
+  }
+  return unique;
+}
+
+function resolveSuggestionMode(items: GrepSuggestionItem[]): GrepSuggestionMode {
+  const sources = [...new Set(items.map((item) => item.source))];
+  const primarySource = sources[0];
+  if (!primarySource) {
+    return "path";
+  }
+  return sources.length === 1 ? primarySource : "hybrid";
+}
+
 export function createGrepTool(options: GrepToolOptions): ToolDefinition {
+  const tocSearchCache = createTocSearchSessionCacheStore();
+  registerToolRuntimeClearStateListener(options.runtime, (sessionId) => {
+    tocSearchCache.delete(resolveTocSessionKey(sessionId));
+  });
+
   return defineBrewvaTool({
     name: "grep",
     label: "Grep",
@@ -239,63 +573,74 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
       }
       const globs = (params.glob ?? []).map((entry) => entry.trim()).filter(Boolean);
       const caseMode = normalizeGrepCase(params.case);
-
-      const args: string[] = ["--line-number", "--no-heading", "--color", "never", "--hidden"];
-
-      for (const glob of globs) {
-        args.push("--glob", glob);
-      }
-
-      if (params.fixed) {
-        args.push("--fixed-strings");
-      }
-
-      if (caseMode === "ignore") {
-        args.push("--ignore-case");
-      } else if (caseMode === "smart") {
-        args.push("--smart-case");
-      } else if (caseMode === "sensitive") {
-        args.push("--case-sensitive");
-      }
-
-      args.push("--", query);
-      args.push(...(paths.length > 0 ? paths : ["."]));
+      const sessionId = getToolSessionId(ctx);
+      registerSearchIntent({
+        runtime: options.runtime,
+        sessionId,
+        toolName: "grep",
+        query,
+        requestedPaths: paths
+          .map((path) => normalizeSearchAdvisorPath(scope.baseCwd, path))
+          .filter((path): path is string => Boolean(path)),
+      });
 
       try {
-        const result = await runRipgrep(
-          {
-            cwd,
-            args,
-            maxLines,
-            timeoutMs,
-            signal,
+        const runAttempt = async (
+          attemptQuery: string,
+          attemptPaths: string[],
+          extra?: {
+            fixed?: boolean;
+            forceIgnoreCase?: boolean;
           },
-          {
-            command: options.ripgrepCommand,
-          },
-        );
+        ): Promise<GrepRunResult> => {
+          return runRipgrep(
+            {
+              cwd,
+              args: buildRipgrepArgs({
+                query: attemptQuery,
+                paths: attemptPaths,
+                globs,
+                caseMode,
+                fixed: extra?.fixed ?? params.fixed,
+                forceIgnoreCase: extra?.forceIgnoreCase,
+              }),
+              maxLines,
+              timeoutMs,
+              signal,
+            },
+            {
+              command: options.ripgrepCommand,
+            },
+          );
+        };
 
-        const header = [
+        const baseHeader = [
           "# Grep",
           `- query: ${query}`,
           `- workdir: ${cwd}`,
           `- paths: ${paths.length > 0 ? paths.join(", ") : "."}`,
           globs.length > 0 ? `- glob: ${globs.join(", ")}` : null,
-          `- exit_code: ${result.exitCode}`,
-          `- matches_shown: ${result.lines.length}`,
-          `- truncated: ${result.truncated}`,
-          `- timed_out: ${result.timedOut}`,
-        ].filter(Boolean);
+        ].filter(Boolean) as string[];
 
-        if (result.exitCode === 0 && result.lines.length > 0) {
-          const sessionId = getToolSessionId(ctx);
+        const finalizeMatchedResult = (input: {
+          result: GrepRunResult;
+          advisor: GrepAdvisorDetails;
+          lines: string[];
+          candidatePaths: string[];
+        }) => {
+          attachSearchIntentPreviewCandidates({
+            sessionId,
+            toolName: "grep",
+            query,
+            candidatePaths: input.candidatePaths,
+          });
           const discoveryPayload = buildReadPathDiscoveryObservationPayload({
             baseCwd: scope.baseCwd,
             toolName: "grep",
             evidenceKind: "search_match",
             observedPaths: collectObservedPathsFromLocationLines({
               baseCwd: scope.baseCwd,
-              lines: result.lines,
+              lines: input.lines,
             }),
           });
           if (sessionId && discoveryPayload) {
@@ -305,28 +650,197 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
               payload: discoveryPayload,
             });
           }
-        }
-
-        if (result.exitCode === 0) {
-          return textResult([...header, "", ...result.lines].join("\n"), {
+          const header = buildAdvisorHeader(
+            [
+              ...baseHeader,
+              `- exit_code: ${input.result.exitCode}`,
+              `- matches_shown: ${input.lines.length}`,
+              `- truncated: ${input.result.truncated}`,
+              `- timed_out: ${input.result.timedOut}`,
+            ],
+            input.advisor,
+          );
+          return textResult([...header, "", ...input.lines].join("\n"), {
             ok: true,
-            ...result,
+            ...input.result,
+            advisor: input.advisor,
           });
+        };
+
+        const rerankAndFinalize = (
+          result: GrepRunResult,
+          advisorOverrides?: Partial<GrepAdvisorDetails>,
+        ) => {
+          const reranked = rerankGroupedLines({
+            baseCwd: scope.baseCwd,
+            query,
+            lines: result.lines,
+            runtime: options.runtime,
+            sessionId,
+          });
+          return finalizeMatchedResult({
+            result,
+            advisor: { ...reranked.advisor, ...advisorOverrides },
+            lines: reranked.lines,
+            candidatePaths: reranked.candidatePaths,
+          });
+        };
+
+        const exactResult = await runAttempt(query, paths);
+        if (exactResult.exitCode === 0 && exactResult.lines.length > 0) {
+          return rerankAndFinalize(exactResult);
         }
 
-        // Exit code 1 means "no matches".
-        if (result.exitCode === 1) {
-          return textResult([...header, "", "(no matches)"].join("\n"), {
-            ok: true,
-            ...result,
-          });
+        let finalNoMatchResult = exactResult;
+        let retryPaths = paths;
+        let autoBroaden:
+          | {
+              from: string[];
+              to: string[];
+            }
+          | undefined;
+        if (exactResult.exitCode === 1 && Array.isArray(params.paths) && params.paths.length > 0) {
+          const broadenedPaths = deriveBroadenedPaths(cwd, paths);
+          if (broadenedPaths.join("\n") !== paths.join("\n")) {
+            retryPaths = broadenedPaths;
+            autoBroaden = {
+              from: paths,
+              to: broadenedPaths,
+            };
+            const broadenedResult = await runAttempt(query, broadenedPaths);
+            if (broadenedResult.exitCode === 0 && broadenedResult.lines.length > 0) {
+              return rerankAndFinalize(broadenedResult, {
+                status: "auto_broadened",
+                autoBroaden,
+              });
+            }
+            finalNoMatchResult = broadenedResult;
+          }
         }
 
-        const stderr = result.stderr ? `\n\nstderr:\n${result.stderr}` : "";
-        return failTextResult([...header, "", "(rg failed)", stderr.trim()].join("\n").trim(), {
-          ok: false,
-          ...result,
-        });
+        const delimiterPattern = buildDelimiterInsensitivePattern(query);
+        if (finalNoMatchResult.exitCode === 1 && delimiterPattern) {
+          const fallbackResult = await runAttempt(delimiterPattern, retryPaths, {
+            fixed: false,
+            forceIgnoreCase: true,
+          });
+          if (fallbackResult.exitCode === 0 && fallbackResult.lines.length > 0) {
+            return rerankAndFinalize(fallbackResult, {
+              status: "fuzzy_retry",
+              ...(autoBroaden ? { autoBroaden } : {}),
+              fuzzyRetry: {
+                from: query,
+                to: delimiterPattern,
+              },
+            });
+          }
+          finalNoMatchResult = fallbackResult;
+        }
+
+        if (finalNoMatchResult.exitCode === 1) {
+          const snapshot = buildSearchAdvisorSnapshot({
+            runtime: options.runtime,
+            sessionId,
+          });
+          const comboMatch = snapshot.getComboMatch({
+            toolName: "grep",
+            query,
+          });
+          const tocSuggestions = buildGrepTocSuggestions({
+            runtime: options.runtime,
+            sessionId,
+            baseCwd: scope.baseCwd,
+            roots: paths.length > 0 ? paths.map((path) => resolve(cwd, path)) : [scope.baseCwd],
+            query,
+            cacheStore: tocSearchCache,
+          });
+          const suggestionItems = finalizeSuggestionItems({
+            comboPath: comboMatch?.filePath,
+            tocSuggestions,
+            hotFiles: snapshot.hotFiles.slice(0, 3),
+          });
+
+          if (suggestionItems.length > 0) {
+            attachSearchIntentPreviewCandidates({
+              sessionId,
+              toolName: "grep",
+              query,
+              candidatePaths: suggestionItems.map((item) => item.path),
+            });
+            const advisor: GrepAdvisorDetails = {
+              status: "suggestion_only",
+              signalFiles: snapshot.signalFiles,
+              reorderedFiles: 0,
+              comboMatches: comboMatch?.hitCount ?? 0,
+              suggestionMode: resolveSuggestionMode(suggestionItems),
+            };
+            const header = buildAdvisorHeader(
+              [
+                ...baseHeader,
+                `- exit_code: ${finalNoMatchResult.exitCode}`,
+                "- matches_shown: 0",
+                `- truncated: ${finalNoMatchResult.truncated}`,
+                `- timed_out: ${finalNoMatchResult.timedOut}`,
+              ],
+              advisor,
+            );
+            return textResult(
+              [
+                ...header,
+                "",
+                "[Suggestions]",
+                ...suggestionItems.map((item) => `- ${item.text}`),
+              ].join("\n"),
+              {
+                ok: true,
+                ...finalNoMatchResult,
+                advisor,
+              },
+            );
+          }
+
+          return textResult(
+            [
+              ...baseHeader,
+              `- exit_code: ${finalNoMatchResult.exitCode}`,
+              "- matches_shown: 0",
+              `- truncated: ${finalNoMatchResult.truncated}`,
+              `- timed_out: ${finalNoMatchResult.timedOut}`,
+              "",
+              "(no matches)",
+            ].join("\n"),
+            {
+              ok: true,
+              ...finalNoMatchResult,
+              advisor: {
+                status: "skipped",
+                signalFiles: snapshot.signalFiles,
+                reorderedFiles: 0,
+                comboMatches: comboMatch?.hitCount ?? 0,
+              },
+            },
+          );
+        }
+
+        const stderr = finalNoMatchResult.stderr ? `\n\nstderr:\n${finalNoMatchResult.stderr}` : "";
+        return failTextResult(
+          [
+            ...baseHeader,
+            `- exit_code: ${finalNoMatchResult.exitCode}`,
+            `- matches_shown: ${finalNoMatchResult.lines.length}`,
+            `- truncated: ${finalNoMatchResult.truncated}`,
+            `- timed_out: ${finalNoMatchResult.timedOut}`,
+            "",
+            "(rg failed)",
+            stderr.trim(),
+          ]
+            .join("\n")
+            .trim(),
+          {
+            ok: false,
+            ...finalNoMatchResult,
+          },
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const notFound = /ENOENT|not found|spawn rg/i.test(message);

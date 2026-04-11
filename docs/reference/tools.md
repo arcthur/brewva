@@ -143,6 +143,32 @@ Notes:
 - `lsp_*`, `toc_*`, `look_at`, `read_spans`, `grep`, `git_*`, and `ast_grep_*`
   resolve file access against the current task target roots; when a task target
   descriptor is present they cannot escape the allowed roots
+- `grep` and `toc_search` include a tools-layer `SearchAdvisor` that folds
+  session-scoped discovery evidence into advisory reranking and zero-result
+  recovery only; it does not widen runtime authority, replay truth, or
+  target-root boundaries
+- SearchAdvisor path memory is rebuilt from existing runtime events, while
+  query-conditioned combo memory is process-local only; repeated live-process
+  queries may therefore prefer the file that the same query repeatedly led to,
+  but that query-conditioned state is intentionally lost across process restart
+- `grep` runs a bounded zero-result recovery ladder: exact search, one-shot
+  path auto-broaden for explicit narrow `paths`, one delimiter-insensitive
+  retry, then compact suggestion-only output or final no-match
+- `grep.details.advisor` is the stable inspection surface for search-assistance
+  outcomes. It carries `status`, `signalFiles`, `reorderedFiles`,
+  `comboMatches`, and optional `autoBroaden`, `fuzzyRetry`, and
+  `suggestionMode`
+- `toc_search` keeps structural scoring authoritative and applies advisor
+  memory through bounded multiplicative scaling so weak session memory does not
+  displace clearly stronger structural matches by additive bias alone
+- `toc_search.details.advisor` carries `status`, `signalFiles`,
+  `reorderedMatches`, `comboMatches`, and `scoringMode="multiplicative"`
+- suggestion-only `grep` and `toc_search` results remain successful
+  navigation guidance, not effect authorization or hidden tool chaining
+- repo-owned `tool_toc_query` telemetry mirrors advisor counters such as
+  `advisorStatus`, `advisorSignalFiles`, `advisorReorderedMatches`, and
+  `comboMatches` for inspection; the stable result contract remains
+  `details.advisor`
 - `lsp_diagnostics.severity` canonical values are
   `error | warning | information | hint | all`
 - `toc_document` is the preferred structural overview tool
