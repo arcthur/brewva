@@ -376,4 +376,24 @@ describe("subagent delegation catalog", () => {
       instructionsMarkdown: "Focus on durable operator-facing regressions.",
     });
   });
+
+  test("rejects Markdown-authored agent overlays with malformed frontmatter", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-agent-markdown-invalid-"));
+    const agentDir = join(workspace, ".brewva", "agents");
+    mkdirSync(agentDir, { recursive: true });
+    writeFileSync(
+      join(agentDir, "reviewer.md"),
+      ["---", "description: [unterminated", "---", "Focus on durable regressions."].join("\n"),
+      "utf8",
+    );
+
+    try {
+      await loadHostedDelegationCatalog(workspace);
+      throw new Error("expected loadHostedDelegationCatalog to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("invalid_subagent_config:reviewer.md");
+      expect((error as Error).message).toContain("invalid frontmatter");
+    }
+  });
 });

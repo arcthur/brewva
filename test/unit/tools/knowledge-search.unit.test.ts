@@ -31,6 +31,11 @@ module: brewva-runtime
 boundaries:
   - runtime.maintain.recovery
   - runtime.authority.tools
+source_artifacts:
+  - investigation_record
+metadata:
+  owners:
+    - runtime
 tags:
   - wal
   - recovery
@@ -135,6 +140,8 @@ This note mentions replay experiments but is not the canonical precedent.
 title: Review lane guidance
 status: active
 problem_kind: knowledge
+source_artifacts:
+  - review_findings
 tags:
   - review
   - lanes
@@ -199,6 +206,8 @@ title: Replay cursor pinning
 status: active
 problem_kind: bugfix
 module: brewva-runtime
+source_artifacts:
+  - investigation_record
 tags:
   - replay
   - wal
@@ -218,6 +227,8 @@ title: Replay boundary ordering
 status: active
 problem_kind: bugfix
 module: brewva-runtime
+source_artifacts:
+  - retro_findings
 tags:
   - replay
   - wal
@@ -409,5 +420,29 @@ Replay ordering and cursor movement are normative runtime contracts.
         authorityRank: 1,
       }),
     );
+  });
+
+  test("fails fast when a solution document frontmatter is malformed", async () => {
+    const workspace = createTestWorkspace("knowledge-search-invalid-frontmatter");
+    writeKnowledgeDoc(
+      workspace,
+      "docs/solutions/runtime-errors/broken.md",
+      ["---", "title: Broken precedent", "tags: [wal", "---", "", "# Broken precedent"].join("\n"),
+    );
+
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const tool = createKnowledgeSearchTool({ runtime });
+
+    expect(
+      tool.execute(
+        "tc-knowledge-search-invalid-frontmatter",
+        {
+          query: "broken precedent",
+        } as never,
+        undefined,
+        undefined,
+        { cwd: workspace } as never,
+      ),
+    ).rejects.toThrow("invalid frontmatter");
   });
 });

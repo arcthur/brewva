@@ -1,6 +1,6 @@
 import { join } from "node:path";
+import { parseMarkdownFrontmatter } from "@brewva/brewva-runtime/internal";
 import { Type } from "@sinclair/typebox";
-import { parseFrontmatter, readFrontmatterString } from "./utils/frontmatter.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 
 export const SOLUTION_STATUSES = ["active", "stale", "superseded"] as const;
@@ -464,7 +464,7 @@ function parseBodySections(body: string): {
 }
 
 export function parseSolutionDocument(input: string): ParsedSolutionDocument {
-  const { data, body } = parseFrontmatter(input);
+  const { data, body } = parseMarkdownFrontmatter(input);
   const parsedBody = parseBodySections(body);
   const title = readTrimmedString(data.title) ?? extractHeadingTitle(body) ?? "";
   const record = normalizeSolutionRecord({
@@ -476,7 +476,7 @@ export function parseSolutionDocument(input: string): ParsedSolutionDocument {
     boundaries: data.boundaries,
     source_artifacts: data.source_artifacts,
     tags: data.tags,
-    updated_at: readFrontmatterString(data, "updated_at"),
+    updated_at: readTrimmedString(data.updated_at),
     sections: parsedBody.sections,
     derivative_links: parsedBody.derivativeLinks.map((link) => {
       const normalizedLink: {

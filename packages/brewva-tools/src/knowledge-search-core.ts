@@ -1,8 +1,8 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative } from "node:path";
+import { parseMarkdownFrontmatter } from "@brewva/brewva-runtime/internal";
 import Fuse from "fuse.js";
 import type { FuseResultMatch } from "fuse.js";
-import { parseFrontmatter, readFrontmatterString } from "./utils/frontmatter.js";
 
 export const KNOWLEDGE_SOURCE_TYPES = [
   "solution",
@@ -159,9 +159,9 @@ function truncate(value: string, maxChars: number): string {
 
 function readUpdatedAt(data: Record<string, unknown>): string | undefined {
   return (
-    readFrontmatterString(data, "updated_at") ??
-    readFrontmatterString(data, "last_updated") ??
-    readFrontmatterString(data, "last_reviewed")
+    readTrimmedString(data.updated_at) ??
+    readTrimmedString(data.last_updated) ??
+    readTrimmedString(data.last_reviewed)
   );
 }
 
@@ -282,7 +282,17 @@ function loadKnowledgeDocs(searchRoot: string, workspaceRoot: string): LoadedKno
 
     for (const absolutePath of collectMarkdownFiles(absoluteDir)) {
       const raw = readFileSync(absolutePath, "utf8");
-      const { data, body } = parseFrontmatter(raw);
+      const relativePath = relative(workspaceRoot, absolutePath).replace(/\\/g, "/");
+      let data: Record<string, unknown>;
+      let body: string;
+      try {
+        ({ data, body } = parseMarkdownFrontmatter(raw));
+      } catch (error) {
+        throw new Error(
+          `invalid_knowledge_document:${relativePath}:${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
+        );
+      }
       const title =
         readTrimmedString(data.title) ?? extractHeadingTitle(body) ?? basename(absolutePath);
       const module = readTrimmedString(data.module);
@@ -294,7 +304,7 @@ function loadKnowledgeDocs(searchRoot: string, workspaceRoot: string): LoadedKno
       const freshness = resolveFreshnessSignal(updatedAt);
       docs.push({
         absolutePath,
-        relativePath: relative(workspaceRoot, absolutePath).replace(/\\/g, "/"),
+        relativePath,
         sourceType: sourceRoot.sourceType,
         title,
         body,

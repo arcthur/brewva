@@ -2,25 +2,18 @@ import { existsSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { parseJsonc, type ManagedToolMode } from "@brewva/brewva-runtime";
+import { parseMarkdownFrontmatter } from "@brewva/brewva-runtime/internal";
 import type {
   AdvisorConsultKind,
   SubagentContextBudget,
   SubagentExecutionBoundary,
   SubagentResultMode,
 } from "@brewva/brewva-tools";
-import { parse as parseYaml } from "yaml";
 
 export type HostedDelegationBuiltinToolName = "read" | "edit" | "write";
 export type HostedWorkspaceSubagentConfigKind = "envelope" | "agentSpec";
 export type HostedWorkspaceSubagentConfigSource = "json" | "markdown";
 export type HostedContextProfile = "minimal" | "standard" | "full";
-
-interface ParsedFrontmatter {
-  body: string;
-  data: Record<string, unknown>;
-}
-
-const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n)?([\s\S]*)$/;
 
 export interface HostedWorkspaceSubagentConfigFile {
   fileName: string;
@@ -139,31 +132,11 @@ export function classifyHostedWorkspaceSubagentConfig(
   return normalized;
 }
 
-function parseFrontmatter(markdown: string): ParsedFrontmatter {
-  const match = markdown.match(FRONTMATTER_REGEX);
-  if (!match) {
-    return {
-      body: markdown,
-      data: {},
-    };
-  }
-  const yamlText = match[1] ?? "";
-  const body = match[2] ?? "";
-  const parsed = parseYaml(yamlText);
-  return {
-    body,
-    data:
-      typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : {},
-  };
-}
-
 function parseHostedWorkspaceAgentMarkdownConfig(input: {
   fileName: string;
   raw: string;
 }): Record<string, unknown> {
-  const frontmatter = parseFrontmatter(input.raw);
+  const frontmatter = parseMarkdownFrontmatter(input.raw);
   const parsed: Record<string, unknown> = {
     ...frontmatter.data,
     name: asString(frontmatter.data.name) ?? basename(input.fileName, ".md"),

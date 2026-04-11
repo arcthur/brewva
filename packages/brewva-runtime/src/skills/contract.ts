@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
-import { parse as parseYaml } from "yaml";
 import type {
   LoadableSkillCategory,
   SemanticArtifactSchemaId,
@@ -26,14 +25,9 @@ import type {
   ToolEffectClass,
 } from "../contracts/index.js";
 import { isSemanticArtifactSchemaId } from "../contracts/semantic-artifacts.js";
+import { parseMarkdownFrontmatter } from "../markdown/frontmatter.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 
-interface ParsedFrontmatter {
-  body: string;
-  data: Record<string, unknown>;
-}
-
-const FRONTMATTER_REGEX = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
 const TASK_PHASE_VALUES: TaskPhase[] = [
   "align",
   "investigate",
@@ -43,21 +37,6 @@ const TASK_PHASE_VALUES: TaskPhase[] = [
   "blocked",
   "done",
 ];
-
-function parseFrontmatter(markdown: string): ParsedFrontmatter {
-  const match = markdown.match(FRONTMATTER_REGEX);
-  if (!match) {
-    return { body: markdown, data: {} };
-  }
-
-  const yamlText = match[1] ?? "";
-  const body = match[2] ?? "";
-  const parsed = parseYaml(yamlText);
-  const data =
-    typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
-
-  return { body, data };
-}
 
 function failSkillContract(filePath: string, message: string): never {
   throw new Error(`[skill_contract] ${filePath}: ${message}`);
@@ -1478,7 +1457,13 @@ export function parseSkillDocument(
 export function parseSkillDocument(filePath: string, category: SkillCategory): ParsedSkillDocument;
 export function parseSkillDocument(filePath: string, category: SkillCategory): ParsedSkillDocument {
   const raw = readFileSync(filePath, "utf8");
-  const { body, data } = parseFrontmatter(raw);
+  let body: string;
+  let data: Record<string, unknown>;
+  try {
+    ({ body, data } = parseMarkdownFrontmatter(raw));
+  } catch (error) {
+    failSkillContract(filePath, error instanceof Error ? error.message : String(error));
+  }
   if (Object.prototype.hasOwnProperty.call(data, "tier")) {
     failSkillContract(
       filePath,

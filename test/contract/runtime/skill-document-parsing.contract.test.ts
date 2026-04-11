@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import {
   getSkillOutputContracts,
   listSkillOutputs,
@@ -79,6 +82,65 @@ describe("skill document parsing", () => {
     );
 
     expect(() => parseSkillDocument(filePath, "core")).toThrow("category");
+  });
+
+  test("parses CRLF-authored skill documents", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-crlf-"));
+    const filePath = join(workspace, "skills/core/review/SKILL.md");
+    mkdirSync(dirname(filePath), { recursive: true });
+    writeFileSync(
+      filePath,
+      [
+        "---",
+        "name: review",
+        "description: review skill",
+        ...MINIMAL_SELECTION_LINES,
+        "intent:",
+        "  outputs: []",
+        "effects:",
+        "  allowed_effects: [workspace_read]",
+        "resources:",
+        "  default_lease:",
+        "    max_tool_calls: 10",
+        "    max_tokens: 10000",
+        "  hard_ceiling:",
+        "    max_tool_calls: 20",
+        "    max_tokens: 20000",
+        "execution_hints:",
+        "  preferred_tools: [read]",
+        "  fallback_tools: []",
+        "consumes: []",
+        "---",
+        "# review",
+      ].join("\r\n"),
+      "utf8",
+    );
+
+    expect(parseSkillDocument(filePath, "core").contract.selection).toEqual({
+      whenToUse: "Use when the task needs the routed test skill.",
+      examples: ["test skill"],
+      phases: ["align"],
+    });
+  });
+
+  test("fails fast when frontmatter contains malformed YAML", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-invalid-frontmatter-"));
+    const filePath = join(workspace, "skills/core/review/SKILL.md");
+    mkdirSync(dirname(filePath), { recursive: true });
+    writeFileSync(
+      filePath,
+      [
+        "---",
+        "name: review",
+        "description: review skill",
+        "selection: [unterminated",
+        "---",
+        "# review",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(() => parseSkillDocument(filePath, "core")).toThrow("invalid frontmatter");
   });
 
   test("fails fast when non-overlay skills omit hard_ceiling", () => {

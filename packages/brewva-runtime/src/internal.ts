@@ -9,6 +9,7 @@ export * from "./events/store.js";
 export * from "./ledger/digest.js";
 export * from "./ledger/evidence-ledger.js";
 export * from "./ledger/query.js";
+export * from "./markdown/frontmatter.js";
 export * from "./parallel/budget.js";
 export * from "./parallel/results.js";
 export * from "./schedule/projection.js";
