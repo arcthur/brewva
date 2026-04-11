@@ -2,12 +2,14 @@
 
 ## Workspace Topology
 
-| Package                  | Responsibility                                                              | Must Not Own                              |
-| ------------------------ | --------------------------------------------------------------------------- | ----------------------------------------- |
-| `@brewva/brewva-runtime` | governance kernel, contracts, gates, verification state, context boundaries | CLI wiring or transport-specific behavior |
-| `@brewva/brewva-tools`   | concrete tool adapters and runtime-aware helpers                            | orchestration policy                      |
-| `@brewva/brewva-cli`     | user entrypoints and frontend command surface                               | channel/control-plane ownership           |
-| `@brewva/brewva-gateway` | daemon control plane, session supervision, channel host, and runtime wiring | kernel semantics                          |
+| Package                       | Responsibility                                                                          | Must Not Own                                |
+| ----------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `@brewva/brewva-runtime`      | governance kernel, contracts, gates, verification state, context boundaries             | CLI wiring or transport-specific behavior   |
+| `@brewva/brewva-deliberation` | narrative memory, optimization continuity, and non-authoritative deliberation substrate | kernel commitments or transport ownership   |
+| `@brewva/brewva-skill-broker` | post-execution skill-promotion brokerage and persisted promotion review state           | turn-time skill routing or kernel authority |
+| `@brewva/brewva-tools`        | concrete tool adapters and runtime-aware helpers                                        | orchestration policy                        |
+| `@brewva/brewva-cli`          | user entrypoints and frontend command surface                                           | channel/control-plane ownership             |
+| `@brewva/brewva-gateway`      | daemon control plane, session supervision, channel host, and runtime wiring             | kernel semantics                            |
 
 ## Invariants
 

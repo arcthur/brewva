@@ -42,7 +42,7 @@ Use this overlay when designing changes inside Brewva.
 
 Run the base posture classification before design work:
 
-- `scripts/classify_planning_posture.py` — classifies whether the task requires exploratory, incremental, or architectural posture. Run before step 1.
+- `scripts/classify_planning_posture.py` — classifies whether the task requires exploratory, incremental, or architectural posture. Run before step 1 using the base design helper.
 
 Additionally check Brewva boundary ownership.
 
@@ -50,7 +50,8 @@ Additionally check Brewva boundary ownership.
 
 ### Step 1: Check boundary ownership
 
-Decide whether a concern belongs in runtime, tools, extensions, CLI, or gateway before proposing code movement.
+Decide whether a concern belongs in runtime, deliberation, skill-broker, tools,
+runtime plugins, CLI, or gateway before proposing code movement.
 
 ### Step 2: Bias toward kernel clarity
 
@@ -82,4 +83,4 @@ Prefer moving lifecycle choreography out of public skills and into runtime or co
 
 ## Example
 
-Input: "Redesign the public skill taxonomy without reintroducing pack filtering."
+Input: "Redesign delegated consult routing without widening the public worker taxonomy."

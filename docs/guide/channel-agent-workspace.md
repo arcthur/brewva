@@ -4,12 +4,16 @@
 `channels.orchestration.enabled=true`.
 The default is now `false`; set it explicitly to enable multi-agent workspace
 orchestration. Leaving it `false` routes turns to a single default agent session.
+This page focuses on channel-workspace behavior and recovery boundaries, not on
+the full command or runtime-plugin contract.
 
 ## What It Enables
 
 - Multi-agent registry under `.brewva/agents/<agentId>/`
 - Per-agent runtime state isolation (`.brewva/agents/<agentId>/state/*`)
-- In-channel command routing (`/new-agent`, `/del-agent`, `/agents`, `/focus`, `/run`, `/discuss`, `@agent ...`)
+- In-channel command routing (`/agents`, `/cost`, `/questions`, `/answer`,
+  `/inspect`, `/insights`, `/update`, `/new-agent`, `/del-agent`, `/focus`,
+  `/run`, `/discuss`, `@agent ...`)
 - Fan-out and bounded discussion loops
 - Optional A2A tools (`agent_send`, `agent_broadcast`, `agent_list`)
 
@@ -51,9 +55,23 @@ This override happens in runtime manager code and cannot be bypassed by agent-lo
 
 ## Recovery and Lifecycle
 
-- Registry persists in `.brewva/channel/agent-registry.json`.
-- Telegram inline approval callbacks route by scanning active runtimes for the matching pending effect-commitment request; if no active runtime matches, they fall back to the current focus.
+- Channel workspace agent/focus state persists in `.brewva/channel/agent-registry.json`.
+  This is channel orchestration workspace state, not runtime replay truth.
+- Telegram inline approval callbacks route by exact `requestId` match against
+  live sessions that still expose a replayable effect-commitment request.
+  Matching prefers the current scope, then other live scopes; there is no
+  fallback that blindly routes approval callbacks to the current focus.
 - Telegram screen state is process-local cache only. There is no durable `.brewva/channel/approval-state*` or `.brewva/channel/approval-routing.json` recovery contract.
 - Worker runtimes are lazy-created on first routing hit.
 - Runtime pool uses `maxLiveRuntimes` + idle TTL eviction.
 - `/del-agent` performs soft delete and tears down active sessions for that agent.
+
+## Related Docs
+
+- CLI and channel command surface: `docs/guide/cli.md`,
+  `docs/reference/commands.md`
+- Hosted and channel lifecycle semantics: `docs/guide/orchestration.md`,
+  `docs/reference/session-lifecycle.md`
+- Operator channel walkthrough: `docs/journeys/operator/channel-gateway-and-turn-flow.md`
+- Runtime plugin wiring: `docs/reference/runtime-plugins.md`
+- Workspace artifacts and durability classes: `docs/reference/artifacts-and-paths.md`

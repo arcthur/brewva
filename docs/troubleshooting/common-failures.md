@@ -3,6 +3,8 @@
 Start with `brewva inspect` for any persisted-session issue. It rebuilds the
 authoritative replay state first, then reports which derived layer is stale or
 inconsistent.
+This page is incident-first operator guidance, not the full command, event, or
+runtime contract.
 
 ## `skill_complete` Is Rejected
 
@@ -42,3 +44,11 @@ inconsistent.
   - If `failedFiles` is consistently high, verify file permissions and path stability.
   - If `durationMs` and `batches` are high for large scans, tune `parallel.maxConcurrent`.
   - Note: per-session total parallel starts are capped by `parallel.maxTotalPerSession` (default `10`).
+
+## Related Docs
+
+- CLI and operator entrypoints: `docs/guide/cli.md`
+- Inspect / replay / recovery walkthrough: `docs/journeys/operator/inspect-replay-and-recovery.md`
+- Runtime event contract: `docs/reference/events.md`
+- Session lifecycle and artifacts: `docs/reference/session-lifecycle.md`,
+  `docs/reference/artifacts-and-paths.md`

@@ -5,6 +5,9 @@ This guide documents a minimal, production-oriented layered deployment:
 - Cloudflare Worker as the edge ingress adapter (signature validation, ACL, rate limiting, edge dedupe)
 - Fly-hosted `brewva --channel telegram` as the channel host (session lifecycle, agent orchestration, tool execution)
 
+This page is a deployment recipe. For the exact CLI flags and config/env
+surface, use the reference docs.
+
 Implementation references:
 
 - Worker handler: `packages/brewva-ingress/src/telegram-webhook-worker.ts`
@@ -31,7 +34,7 @@ Channel mode enables webhook ingress when any of the following is true:
 
 - `channelConfig.telegram.webhook.enabled = true`
 - `BREWVA_TELEGRAM_WEBHOOK_ENABLED=1` is set
-- `BREWVA_TELEGRAM_INGRESS_PORT` is set
+- `channelConfig.telegram.webhook.port` or `BREWVA_TELEGRAM_INGRESS_PORT` is set
 
 Recommended baseline is HMAC mode:
 
@@ -49,6 +52,8 @@ export BREWVA_TELEGRAM_INGRESS_NONCE_TTL_MS=300000
 bun run start -- --channel telegram --telegram-token <bot-token>
 ```
 
+Port-based enablement only turns the ingress listener on. The listener still fails closed unless webhook auth resolves to bearer, HMAC, or both.
+
 If you need dual authentication, configure ingress with bearer + HMAC (`authMode=both`).
 
 ## 2) Deploy the Cloudflare Worker
@@ -64,6 +69,9 @@ Required variables:
 - `BREWVA_INGRESS_URL`
 - `BREWVA_INGRESS_HMAC_SECRET`
 
+If Fly ingress runs in `bearer` or `both` auth mode, the Worker also needs the
+matching `BREWVA_INGRESS_BEARER_TOKEN` secret.
+
 Optional variables:
 
 - `BREWVA_INGRESS_BEARER_TOKEN`
@@ -76,6 +84,8 @@ Optional variables:
 - `BREWVA_TELEGRAM_RATE_LIMIT_MAX`
 - `BREWVA_TELEGRAM_RATE_LIMIT_WINDOW_SECONDS`
 - `BREWVA_TELEGRAM_RATE_LIMIT_SCOPE` (`chat|user|global`)
+- `BREWVA_TELEGRAM_DEDUPE_KV` Cloudflare KV binding for best-effort
+  cross-instance dedupe
 
 Dedupe storage:
 
@@ -96,16 +106,32 @@ If `BREWVA_TELEGRAM_EXPECTED_PATH` is set in Worker config, the webhook path mus
 
 ## 4) Response and Retry Semantics
 
-- Worker returns `200 accepted`: forwarded successfully, Telegram does not retry
+- Worker returns `200 accepted`: edge forward reached Fly ingress and got
+  success-class ingress status, Telegram does not retry
 - Worker returns `200 duplicate`: edge dedupe hit, Telegram does not retry
+- Worker returns `200 dropped_acl`: dropped by edge allow-list policy, never reaches Fly, Telegram does not retry
 - Worker returns `429 rate_limited`: throttled, Telegram retries per provider behavior
 - Worker returns `502 forward_failed/forward_rejected`: ingress unavailable/rejected, Telegram retries
 
-When forwarding to Fly ingress, `2xx` and `409` are both treated as success (`409` = channel-host idempotency hit).
+When forwarding to Fly ingress, `2xx` and `409` are both treated as success:
+
+- `ingressStatus=202`: Fly ingress accepted the webhook request and the running
+  host path handled it without immediate ingress failure. This is upstream
+  acceptance, not proof that a replay-relevant `TurnEnvelope` was projected,
+  that `channel_turn_ingested` was recorded, or that a new Recovery WAL row was
+  durably admitted.
+- `ingressStatus=409`: channel-host idempotency hit. The Worker still returns
+  `200 accepted`, but this does not represent a fresh admission.
 
 ## 5) Production Recommendations
 
-- Keep dual-layer dedupe: Worker (`update_id`) + Fly ingress (`buildTelegramInboundDedupeKey`)
+- Keep layered dedupe boundaries explicit:
+  - edge Worker reserves by Telegram `update_id`
+  - Fly ingress dedupes by projected channel identity when available
+    (`buildTelegramInboundDedupeKey`, such as message/callback identity), with
+    `update_id` fallback when no projection key exists
+  - downstream channel Recovery WAL still has its own host-local recoverable
+    dedupe keyed by `${turn.channel}:${turn.turnId}`
 - Use secret separation: do not reuse `BREWVA_TELEGRAM_SECRET_TOKEN` as HMAC secret
 - Roll out gradually: start with a single bot/chat and expand ACL scope
 - Track key edge metrics: `forward_rejected`, `rate_limited`, `duplicate`
@@ -120,7 +146,7 @@ bun run test:webhook-smoke
 
 The script starts a local ingress server, sends the same update through Worker twice, and validates:
 
-- first request is accepted
+- first request is accepted at the edge / ingress layer
 - second request is deduped
 - ingress dispatch count is exactly one
 
@@ -147,4 +173,14 @@ bun run test:webhook-smoke:live
 The strict check passes when the second request is handled as:
 
 - edge duplicate (`code=duplicate`), or
-- channel-host idempotency (`code=accepted`, `ingressStatus=409`).
+- channel-host idempotency (`code=accepted`, `ingressStatus=409`), which is a
+  success-class forward result rather than a fresh admission.
+
+## Related Docs
+
+- CLI and webhook command/env surface: `docs/guide/cli.md`,
+  `docs/reference/commands.md`
+- Gateway daemon operations: `docs/guide/gateway-control-plane-daemon.md`
+- Operator channel walkthrough: `docs/journeys/operator/channel-gateway-and-turn-flow.md`
+- Runtime and replay lifecycle: `docs/reference/session-lifecycle.md`
+- General runtime config contract: `docs/reference/configuration.md`

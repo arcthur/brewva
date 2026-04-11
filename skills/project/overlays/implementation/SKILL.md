@@ -46,7 +46,7 @@ Use this overlay when implementing changes inside Brewva.
 
 Run the base scope drift check during implementation:
 
-- `scripts/check_scope_drift.py` — detects when implementation drifts beyond the approved change boundary. Run after each milestone.
+- `scripts/check_scope_drift.py` — detects when implementation drifts beyond the approved change boundary. Run after each milestone using the base implementation helper.
 
 Additionally preserve Brewva public surfaces and dist guardrails.
 
@@ -64,7 +64,7 @@ When touching routing, verification, or distribution behavior, keep verification
 
 - [ ] Public surfaces stayed explicit.
 - [ ] Verification evidence is captured with the change.
-- [ ] Category migration did not quietly widen into architecture churn.
+- [ ] Public-surface changes did not quietly widen into architecture churn.
 
 ## Stop Conditions
 
@@ -81,9 +81,9 @@ When touching routing, verification, or distribution behavior, keep verification
 
 ## Anti-Patterns
 
-- mixing category migration with opportunistic runtime rewrites
+- mixing public-surface churn with opportunistic runtime rewrites
 - weakening dist or verification guardrails to make the refactor easier
 
 ## Example
 
-Input: "Implement the new routing profile config and remove legacy pack filtering."
+Input: "Implement the new delegated consult routing config without widening the runtime surface."

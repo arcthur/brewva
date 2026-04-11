@@ -25,8 +25,8 @@ reference, and operator docs.
 
 Stable implementation now includes:
 
-- the public delegated specialist surface is `explore`, `plan`, `review`,
-  `qa`, and `patch-worker`
+- the public delegated specialist surface is `advisor`, `qa`, and
+  `patch-worker`
 - public `general` and delegated public `verification` were removed from new
   public requests
 - delegated `resultMode = "qa"` replaces the old delegated
@@ -43,19 +43,21 @@ Stable implementation now includes:
   on thin preambles
 - read-only specialists gained dedicated repository observation tools:
   `git_status`, `git_diff`, and `git_log`
-- `discovery` now resolves through `explore`
-- delegated `plan` is a first-class result posture rather than an
-  `exploration` variant
-- delegated `plan` persists canonical planning data and projects it into the
-  `design` artifact lane
-- `design` now emits the full planning handoff set:
+- public semantic skills route into explicit consult posture instead of
+  expanding the public worker taxonomy:
+  `discovery -> advisor (investigate)`, `debugging -> advisor (diagnose)`,
+  `design -> advisor (design)`, and `review -> advisor (review)`
+- `consult` is the first-class read-only delegated result posture, keyed by
+  explicit `consultKind`, rather than a second public `explore` / `plan` /
+  `review` worker surface
+- parent-owned `design` now emits the full planning handoff set:
   `design_spec`, `execution_plan`, `execution_mode_hint`, `risk_register`, and
-  `implementation_targets`
+  `implementation_targets`; delegated `design` consults inform this artifact
+  lane without becoming a separate public planning worker contract
 - canonical QA semantics preserve `pass`, `fail`, and `inconclusive`, and a
   `pass` requires executable evidence, at least one adversarial probe, and
   coverage of plan-declared `required_evidence`
-- delegated outcome contracts are canonical-only: `exploration`, `plan`,
-  `review`, `qa`, and `patch`
+- delegated outcome contracts are canonical-only: `consult`, `qa`, and `patch`
 
 Stable references:
 
@@ -74,7 +76,8 @@ Stable references:
 The promoted contract is:
 
 1. Brewva keeps a small public delegated specialist surface and does not retain
-   `general` as a public escape hatch.
+   `general` as a public escape hatch. The stable built-in worker presets are
+   `advisor`, `qa`, and `patch-worker`.
 2. Delegated executable QA and `runtime.verification.*` are separate concepts:
    QA tries to break the change; the runtime decides whether evidence is
    sufficient and fresh.
@@ -85,21 +88,24 @@ The promoted contract is:
    output.
 5. Envelope-declared tool surfaces are hard ceilings, and context narrowing is
    explicit through `contextProfile`.
-6. Internal review lanes remain internal fan-out behind the single public
-   `review` boundary.
-7. Delegated `plan` is a distinct contract that produces machine-readable
-   planning handoff artifacts rather than planning-flavored exploration prose.
-8. Delegated outcome kinds are canonical-only; runtime verification remains a
-   separate kernel authority rather than a delegated specialist result kind.
+6. Internal review lanes remain internal fan-out behind the public semantic
+   `review` boundary; they are not part of the public worker taxonomy.
+7. `consult` is the canonical read-only delegated posture, and `consultKind`
+   differentiates `investigate`, `diagnose`, `design`, and `review` without
+   widening the public specialist surface.
+8. Delegated outcome kinds are canonical-only: `consult`, `qa`, and `patch`.
+   Runtime verification remains a separate kernel authority rather than a
+   delegated specialist result kind.
 
 ## Validation Status
 
 Promotion is backed by:
 
-- contract and routing coverage for the new delegated public surface
+- contract and routing coverage for the stable delegated public surface
 - QA semantic validation and normalization coverage
 - workflow derivation coverage for canonical QA outcome data
-- contract and workflow coverage for canonical delegated `plan` outcomes
+- contract and workflow coverage for parent-owned planning artifacts informed
+  by delegated `design` consult outcomes
 - replay/inspect coverage for historical delegated `verification` records
 - docs coverage across architecture, reference, and operator journeys
 - repository verification:

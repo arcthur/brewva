@@ -8,18 +8,22 @@ What remains is an explicit control-plane heartbeat path.
 
 Current heartbeat behavior is intentionally direct:
 
-1. `HeartbeatScheduler` fires a rule from `HEARTBEAT.md`.
+1. `HeartbeatScheduler` fires a rule from the configured `HEARTBEAT.md` policy
+   file (default `<global brewva root>/agent/gateway/HEARTBEAT.md`).
 2. Gateway resolves the target session and opens it if needed.
 3. Gateway sends the rule's explicit `prompt`.
 4. The worker processes that prompt like any other turn.
 
 There is no separate wake plan, skip plan, or replayable wake metadata event.
+The live control plane may emit `heartbeat.fired`, but that event is not
+durable tape truth and it is not replayed as runtime wake metadata.
 
 ## Heartbeat Rule Shape
 
-Current JSON-block rule fields:
+Current file shape is a fenced `heartbeat` JSON/JSONC block whose payload
+contains one `rules` array. Each rule object supports:
 
-- `id`
+- `id?`
 - `intervalMinutes`
 - `prompt`
 - `sessionId?`
@@ -27,6 +31,12 @@ Current JSON-block rule fields:
 Semantics:
 
 - `prompt` is the primary model-facing instruction.
+- when `id` is omitted, gateway assigns the deterministic fallback
+  `rule-<index>` during policy load
+- when `sessionId` is omitted, gateway uses the deterministic default
+  `heartbeat:<id>`
+- the file path itself is control-plane configuration; `brewva gateway
+--state-dir` / `--heartbeat` may relocate it without changing rule semantics
 
 ## Removed Semantics
 

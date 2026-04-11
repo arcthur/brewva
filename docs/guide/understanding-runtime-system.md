@@ -1,5 +1,12 @@
 # Understanding Runtime System
 
+This guide explains the conceptual shape of the runtime surface. For the full
+method-level contract and caller-specific ports, use:
+
+- `docs/reference/runtime.md`
+- `docs/reference/session-lifecycle.md`
+- `docs/reference/artifacts-and-paths.md`
+
 ## Runtime Shape
 
 `BrewvaRuntime` (`packages/brewva-runtime/src/runtime.ts`) is the stable runtime
@@ -11,8 +18,10 @@ Its public root shape is semantic, not implementation-organized:
 - `runtime.inspect`
 - `runtime.maintain`
 
-This is the default product vocabulary that hosted sessions, tools, and
-operator products are expected to read against.
+This is the default semantic runtime vocabulary that product surfaces read
+against. Caller-specific ports still narrow it by role: hosted sessions get all
+three roots, tools get `authority + inspect`, and operator products get
+`inspect + limited maintain`.
 
 The point is not to hide internal machinery. The point is to make the default
 public surface line up with authority boundaries instead of exposing a wide bag
@@ -101,3 +110,12 @@ Config contract entry points:
 
 `BrewvaConfig` remains runtime-owned configuration state. Products consume the
 normalized readonly snapshot exposed on the runtime instance.
+
+## Related Docs
+
+- `docs/guide/orchestration.md`
+- `docs/journeys/operator/interactive-session.md`
+- `docs/reference/runtime.md`
+- `docs/reference/session-lifecycle.md`
+- `docs/reference/artifacts-and-paths.md`
+- `docs/reference/configuration.md`

@@ -39,14 +39,15 @@ The durable ideas that carried forward were:
 
 ## What Superseded It
 
-The final public delegation contract moved beyond this document:
+A later delegation phase, itself later narrowed by today's stable docs, moved
+the contract beyond this document:
 
 - `SkillContract` owns semantic work meaning
 - `ExecutionEnvelope` owns execution posture and isolation
 - `AgentSpec` composes skill plus envelope into a named delegated worker shape
 - `HostedDelegationTarget` is the runtime materialization of one delegated run
-- delegated result kinds settled on `exploration`, `plan`, `review`, `qa`, and
-  `patch`
+- that later phase described delegated result kinds as `exploration`, `plan`,
+  `review`, `qa`, and `patch`
 
 This archive note remains useful only as the bridge between the earlier
 profile-based phase and the later skill-first phase.

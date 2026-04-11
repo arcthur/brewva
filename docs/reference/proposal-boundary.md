@@ -10,6 +10,10 @@ Boundary contract sources:
 
 The public proposal boundary is now intentionally small.
 
+This page owns approval-bearing commitment semantics and replay-visible receipt
+flow. Public runtime surface listing stays in `docs/reference/runtime.md`, and
+the event-family catalog stays in `docs/reference/events.md`.
+
 Current rule:
 
 - the only proposal kind is `effect_commitment`
@@ -91,14 +95,16 @@ Typical cases:
 - `schedule_mutation`
 - external network or side-effecting tools that require operator approval
 
-Accepted effect:
+Current flow:
 
-- kernel creates a replayable pending approval request
+- initial admission normally returns `defer` and creates a replayable pending
+  approval request
 - operator approval is recorded through the effect-commitment desk
-- the caller must resume the exact request with
+- the caller must then resume the exact request with
   `runtime.authority.tools.start({ ..., effectCommitmentRequestId })`
 - exact resume binds to the approved `requestId`, original `toolCallId`, and
   canonical `argsDigest`
+- only that approved exact-resume path returns `accept`
 - approval is consumed only after a durable linked tool result is recorded
 
 This means the commitment path is explicitly at-least-once across crashes after
@@ -123,10 +129,12 @@ Current admission is conservative:
 
 Decision meanings:
 
-- `accept`: pending approval-bearing commitment created
-- `reject`: invalid or disallowed
-- `defer`: durable pending approval-bearing commitment created, but not yet
-  approved or resumed
+- `accept`: an existing approved request matched exact resume and may proceed;
+  this does not create a new pending approval request
+- `reject`: invalid, disallowed, rejected by the operator desk, already
+  consumed, or mismatched on exact resume
+- `defer`: durable pending approval-bearing commitment exists, but it is not
+  yet approved for exact resume
 
 ## Direct Commit Boundary
 
@@ -155,7 +163,16 @@ Approval state is layered on top through:
 - `effect_commitment_approval_consumed`
 
 `runtime.inspect.proposals.list(sessionId, query?)` returns newest-first
-`EffectCommitmentRecord` values by receipt timestamp.
+`EffectCommitmentRecord` values by receipt timestamp. The read model rebuilds
+those records from `decision_receipt_recorded.payload = { proposal, receipt }`
+rather than rejoining `proposal_received` and `proposal_decided`.
+
+Request-state views are intentionally separate:
+
+- `listEffectCommitmentRequests(sessionId, query?)` is the normalized
+  request-lifecycle view ordered by `updatedAt` descending
+- `listPendingEffectCommitments(sessionId)` is the pending-only queue ordered
+  by request `createdAt` descending
 
 The operator desk surface lives in the same domain:
 

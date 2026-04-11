@@ -10,10 +10,13 @@
 
 - `brewva gateway start`
 - `brewva gateway install`
+- `brewva gateway uninstall`
 - `brewva gateway status`
 - `brewva gateway stop`
 - `brewva gateway rotate-token`
+- `brewva gateway logs --tail <N>`
 - `brewva onboard --install-daemon`
+- `brewva onboard --uninstall-daemon`
 
 ## Objective
 
@@ -38,12 +41,13 @@ long-running operation through status, logs, install, and token rotation.
 
 ```mermaid
 flowchart TD
-  A["brewva gateway command"] --> B{"start | install | status | stop | logs"}
+  A["brewva gateway command"] --> B{"start | install | uninstall | status | stop | logs | rotate-token"}
   B -->|start| C["Bootstrap daemon and bind loopback control plane"]
   C --> D["Write state dir artifacts (pid/log/token/children)"]
   D --> E["Accept authenticated control-plane clients"]
   E --> F["Create or supervise hosted sessions"]
   B -->|install| G["Write OS supervisor unit and optional auto-start"]
+  B -->|uninstall| U["Remove OS supervisor unit and stop managing the daemon"]
   B -->|status| H["Probe daemon and return deep health"]
   B -->|rotate-token| I["Issue new token and revoke old connections"]
   B -->|stop| J["Graceful shutdown and child cleanup"]
@@ -73,6 +77,8 @@ flowchart TD
 - `rotate-token` revokes the old token immediately
 - the gateway state directory contains control-plane material, not runtime
   replay truth
+- public-session replay binding is resolved from the gateway control tape
+  (`gateway_session_bound` receipts), not from `children.json`
 
 ## Failure And Recovery
 
@@ -81,8 +87,10 @@ flowchart TD
 - `children.json` supports orphan cleanup so child processes do not leak across
   restart boundaries
 - `children.json` also carries the hosted agent session id and persisted agent
-  event-log path, letting the supervisor write the missing `session_shutdown`
-  receipt directly instead of reconstructing runtime config
+  event-log path, letting the supervisor synthesize a missing
+  `session_shutdown` receipt without reconstructing runtime config
+- public-session replay lookup remains control-tape backed and restart-safe; it
+  is not reconstructed from `children.json`
 - `status --deep` is the first diagnostic entrypoint for liveness, probe
   failures, and missing auth files
 - after token rotation, old connections fail immediately and clients must
@@ -114,3 +122,5 @@ flowchart TD
 - Gateway guide: `docs/guide/gateway-control-plane-daemon.md`
 - Gateway command reference: `docs/reference/commands.md`
 - Gateway control-plane protocol: `docs/reference/gateway-control-plane-protocol.md`
+- Session lifecycle and artifacts: `docs/reference/session-lifecycle.md`,
+  `docs/reference/artifacts-and-paths.md`

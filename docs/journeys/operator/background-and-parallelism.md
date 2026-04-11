@@ -2,7 +2,8 @@
 
 ## Audience
 
-- operators using `subagent_run`, `subagent_fanout`, and `worker_results_*`
+- operators using `subagent_run`, `subagent_fanout`, `subagent_status`,
+  `subagent_cancel`, and `worker_results_*`
 - developers reviewing delegated workers, parallel-budget policy, and
   merge/apply flows
 
@@ -11,6 +12,7 @@
 - `subagent_run`
 - `subagent_fanout`
 - `subagent_status`
+- `subagent_cancel`
 - `worker_results_merge`
 - `worker_results_apply`
 
@@ -66,8 +68,8 @@ flowchart TD
    hidden auto-spawn path.
 3. `advisor` consultation returns typed `consult` results keyed by an explicit
    `consultKind` and required `consultBrief`; those results may be used through
-   same-turn supplemental injection or preserved as replay-visible handoff
-   state.
+   same-turn supplemental injection, but replay-visible delivery state is still
+   tracked separately through the delegation handoff record.
 4. Executable `qa` runs may use isolated execution and artifact capture, but
    they do not produce `WorkerResult` and never enter merge/apply posture.
 5. `PatchSet`-producing delegation runs inside an isolated snapshot workspace
@@ -94,6 +96,12 @@ flowchart TD
   references, and output contracts
 - internal review lanes remain explicit parent-orchestrated fan-out and run as
   `consult/review` delegates under the advisor envelope family
+- same-turn `returnMode=supplemental` and durable handoff state are separate:
+  - same-turn supplemental append affects the current parent-turn hidden tail
+  - detached delivery still remains durable control-plane state with
+    `handoffState` progression such as `pending_parent_turn -> surfaced`
+  - `subagent_delivery_surfaced` is emitted only when a later parent turn
+    actually surfaces that pending durable outcome
 - detached runs are durable control-plane work, not best-effort background
   helpers
 - late detached outcomes remain explicit parent-attention blockers; the runtime
@@ -134,11 +142,13 @@ flowchart TD
 - Workspace isolation: `packages/brewva-gateway/src/subagents/workspace.ts`
 - Runtime parallel state: `packages/brewva-runtime/src/services/parallel.ts`
 - Delegation store: `packages/brewva-gateway/src/subagents/delegation-store.ts`
-- Tool surface: `packages/brewva-tools/src/subagent-run.ts`
+- Run / fan-out tools: `packages/brewva-tools/src/subagent-run.ts`
+- Status / cancel tools: `packages/brewva-tools/src/subagent-control.ts`
 - Worker adoption: `packages/brewva-tools/src/worker-results.ts`
 
 ## Related Docs
 
 - Orchestration guide: `docs/guide/orchestration.md`
+- Tools reference: `docs/reference/tools.md`
 - Runtime API: `docs/reference/runtime.md`
 - Scheduling: `docs/journeys/operator/intent-driven-scheduling.md`

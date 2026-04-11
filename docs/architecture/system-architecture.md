@@ -158,7 +158,7 @@ Stable decisions:
 - `docs/solutions/**` is the canonical repository-native precedent store
 - precedent retrieval and maintenance happen through explicit surfaces such as
   `knowledge_search`, `precedent_audit`, `precedent_sweep`, and
-  `knowledge-capture`
+  `knowledge_capture`
 - these surfaces may inform planning, debugging, review, and repository-fitness
   judgment, but they do not create a `runtime.knowledge.*` domain and they do
   not widen effect authority
@@ -417,7 +417,9 @@ Current host defaults:
   `createTrustedLocalGovernancePort({ profile: "personal" })`
 - gateway/hosted/channel runtimes install
   `createTrustedLocalGovernancePort({ profile: "team" })`
-- raw runtimes without a governance port fail closed at the approval boundary
+- raw runtimes without a governance port fail closed by routing approval-bound
+  effectful actions through the replayable operator desk rather than silently
+  auto-authorizing them
 
 This preserves the kernel promise: the kernel governs execution, but adaptive
 selection logic stays outside the core path.
@@ -426,3 +428,12 @@ External repository-fitness systems may still interact with Brewva through host
 policy, explicit tools, or imported evidence. That integration should feed the
 runtime as external judgment input rather than expanding the kernel into a
 repository merge controller.
+
+## Related Docs
+
+- `docs/architecture/design-axioms.md`
+- `docs/architecture/invariants-and-reliability.md`
+- `docs/reference/runtime.md`
+- `docs/reference/proposal-boundary.md`
+- `docs/reference/budget-matrix.md`
+- `docs/guide/overview.md`

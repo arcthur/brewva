@@ -24,6 +24,10 @@ pipeline:
 - `agent-overlays`
 - `update`
 
+User-facing slash-command syntax and mode-specific availability live in
+`docs/reference/commands.md`. This page focuses on runtime-plugin wiring,
+factory options, and port ownership.
+
 Implementation anchors:
 
 - `packages/brewva-cli/src/inspect-command-runtime-plugin.ts`
@@ -32,9 +36,16 @@ Implementation anchors:
 - `packages/brewva-cli/src/agent-overlays-command-runtime-plugin.ts`
 - `packages/brewva-cli/src/update-command-runtime-plugin.ts`
 
+`questions-command-runtime-plugin.ts` currently registers both `questions` and
+`answer`; there is no separate `answer` runtime-plugin file.
+
 These commands are intentionally thin. They inspect or route against durable
 runtime / gateway state instead of creating a second planner or hidden task
 store inside the runtime plugin layer.
+
+They own command registration, widget lifecycle, and follow-up delivery
+behavior. They do not redefine runtime read-model shapes, event payload
+contracts, or durable receipt semantics.
 
 Port reading:
 
@@ -43,6 +54,11 @@ Port reading:
 - hosted lifecycle adapters are built against `BrewvaHostedRuntimePort`
 - the managed tool bundle is built from `BrewvaToolRuntimePort` plus explicit
   repo-owned internal hooks where needed
+
+The port mapping above is the wiring boundary. User-facing command syntax lives
+in `docs/reference/commands.md`; the underlying `inspect.*` and event
+semantics live in `docs/reference/runtime.md` and
+`docs/reference/events.md`.
 
 ## Factory API
 
@@ -61,8 +77,13 @@ Current factory option surface:
 - `runtimePlugins?` on `createHostedSession(...)` / `createBrewvaSession(...)` for composing additional runtime plugins alongside the canonical hosted pipeline
 - `registerTools?` (default `true`)
 - `orchestration?`
+- `delegationStore?`
 - `managedToolNames?`
+- `contextProfile?`
+- `semanticReranker?`
 - `ports?`
+- `toolExecutionCoordinator?`
+- `hostedToolDefinitionsByName?`
 
 When `runtime` is omitted, `createHostedTurnPipeline(...)` also accepts
 inherited `BrewvaRuntimeOptions` for runtime construction:
@@ -81,8 +102,21 @@ is supplied, the hosted pipeline constructs its runtime with
 available by default while still respecting an explicit
 `skills.routing.enabled=true|false` decision from config.
 
-There are no longer public runtime plugin profiles such as `core`, `memory`, or
-`full`.
+`contextProfile` is the current hosted context-source narrowing switch:
+
+- `minimal`
+  - passes `sourceAllowlist={historyViewBaseline,recoveryWorkingSet}`
+- `standard`
+  - passes `sourceAllowlist={historyViewBaseline,runtimeStatus,taskState,recoveryWorkingSet,toolOutputsDistilled,projectionWorking}`
+- `full`
+  - disables source narrowing and lets the kernel provider registry consider
+    the full admitted source set
+
+When `contextProfile` is omitted, the hosted pipeline behaves like `full` for
+source selection: it does not install a profile allowlist ahead of
+`runtime.maintain.context.buildInjection(...)`.
+
+There are no longer legacy runtime plugin profiles such as `core` or `memory`.
 
 ## Port Narrowing
 
@@ -110,8 +144,9 @@ contracts.
 - `registerToolResultDistiller`
 - internal bridge adapter for `tool_call` (`quality-gate`)
 - internal bridge adapter for `context` (`context-transform` lifecycle shell)
-- typed lifecycle ports for `input`, `turnStart`, `beforeAgentStart`, `toolResult`,
-  `agentEnd`, `sessionCompact`, and `sessionShutdown`
+- current built-in typed lifecycle handlers attach at `input`, `turnStart`,
+  `beforeAgentStart`, `toolResult`, `agentEnd`, `sessionCompact`, and
+  `sessionShutdown`
 
 Implementation anchors:
 
@@ -131,6 +166,7 @@ Implementation anchors:
 - `packages/brewva-gateway/src/runtime-plugins/provider-request-recovery.ts`
 - `packages/brewva-gateway/src/runtime-plugins/quality-gate.ts`
 - `packages/brewva-gateway/src/runtime-plugins/completion-guard.ts`
+- `packages/brewva-gateway/src/runtime-plugins/narrative-memory-lifecycle.ts`
 - `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`
 
 There is no longer a reduced runtime-core bridge variant. Hosted sessions use
@@ -153,6 +189,9 @@ tools do not all share the same runtime view.
 - `agentEnd`
 - `sessionCompact`
 - `sessionShutdown`
+
+`sessionStart` remains part of the public port, but the canonical hosted
+pipeline does not currently install a built-in handler there.
 
 Intentional non-port stages:
 
@@ -230,7 +269,8 @@ The hosted context path is split across these explicit adapters:
 - `hosted-context-injection-pipeline`
   - `beforeAgentStart` orchestration
   - static context contract application
-  - admitted context + supplemental block composition
+  - admitted provider context plus hosted supplemental / recovery block
+    composition
   - delegation-outcome surfacing
   - live prompt-stability observation
   - non-durable prompt-stability evidence samples written to
@@ -279,6 +319,16 @@ system prompt contract. The hosted path keeps those fields in turn-scoped
 hidden-tail composition blocks such as `[ContextCompactionGate]` and
 `[ContextCompactionAdvisory]`.
 
+Important boundary:
+
+- `contextProfile` / `sourceAllowlist` narrows only kernel provider collection
+  before `runtime.maintain.context.buildInjection(...)`
+- hosted supplemental and recovery blocks, including operational diagnostics,
+  delegation-outcome surfacing, read-path recovery, skill-routing availability,
+  skill recommendations, and same-turn supplemental returns, are appended after
+  admission by the hosted pipeline and are not suppressed by that provider
+  allowlist
+
 Transient outbound reduction is intentionally not a compaction authority. It is
 a cache-class request-copy optimization: it may clear older large tool-result
 bodies on the outbound provider payload, but it does not mutate durable history,
@@ -312,8 +362,21 @@ experience-ring ownership model explicit.
 - tool-result distiller only changes the model-visible return payload after the
   raw result is already durable
 
-`registerCompletionGuard` keeps completion model-native but not lax. It blocks
-premature completion when required verification has not passed.
+`registerCompletionGuard` is a hosted UX guard around active skill completion,
+not a verification gate and not a kernel authority block.
+
+Current behavior:
+
+- it runs on lifecycle `agentEnd`
+- when a skill is still active, it sends a follow-up `brewva-guard` message
+  reminding the model to call `skill_complete`
+- after the per-prompt nudge budget is exhausted, it degrades to a UI warning
+  instead of silently succeeding or writing a new durable authority receipt
+
+`createNarrativeMemoryLifecycle(...)` is also part of the canonical hosted
+pipeline. It records passive narrative-memory proposals from turn input and
+tool evidence on lifecycle `agentEnd`; it is control-plane recall capture, not
+kernel authority and not a hidden skill-routing controller.
 
 ## Event Surface Split
 

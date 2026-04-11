@@ -25,7 +25,7 @@ This RFC has been implemented.
 It is now best read as a rationale record and promotion pointer rather than an
 open proposal.
 
-The resolved model is:
+The cutover implemented at that time resolved to:
 
 - public delegated agent specs are `advisor`, `qa`, and `patch-worker`
 - public delegated result modes are `consult`, `qa`, and `patch`
@@ -47,7 +47,7 @@ was not retained.
 The final implementation chose a hard stable cutover for new writes, routing,
 and stable docs rather than long-lived public aliases.
 
-## Stable Contract Summary
+## Historical Cutover Result
 
 The first-principles architectural line is:
 
@@ -55,7 +55,7 @@ The first-principles architectural line is:
 semantic skills still define what the work means and what workflow progress
 exists
 
-Current-state clarification:
+Cutover clarification:
 
 - `advisor` is an execution identity, not a semantic workflow stage
 - `consult` outcomes are advisory and typed; they do not complete semantic
@@ -69,7 +69,8 @@ Current-state clarification:
 
 ## Stable Docs Owning The Result
 
-The current stable contract now lives in:
+The current stable contract now lives in the following stable docs and may have
+continued evolving after this archived cutover:
 
 - `docs/reference/tools.md`
   - public delegation packet schema, `consultBrief`, `consultKind`, and

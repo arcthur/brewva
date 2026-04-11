@@ -55,18 +55,19 @@ Stable references:
 The promoted contract is:
 
 1. Hosted seam hardening repairs structure, not semantics.
-   Provider compatibility may normalize wrapped or truncated tool-call payloads
-   and may raise an explicitly present low tool-output budget, but it must not
-   invent new authority, bypass tool gating, or guess semantic intent.
+   Hosted request shaping may raise an explicitly present low output-budget on
+   bounded retry paths, but it must not invent new authority, bypass tool
+   gating, or guess semantic intent.
 2. The self bundle is narrative only.
    `identity.md`, `constitution.md`, and `memory.md` are explicit
    provenance-bearing context providers. They do not become kernel state,
    routing policy, or durable control hints. `HEARTBEAT.md` remains separate
    control-plane material.
 3. Delegation uses canonical public posture names.
-   The model-facing default language is `explore`, `plan`, `review`, and
-   `general`. Removed legacy aliases are not preserved as compatibility
-   shims on the built-in surface.
+   The stable public specialist surface is `advisor`, `qa`, and
+   `patch-worker`; consult runs remain explicit via `investigate`,
+   `diagnose`, `design`, and `review`, and removed legacy aliases are not
+   preserved as compatibility shims on the built-in surface.
 4. Capability disclosure is a scan-friendly exploration surface.
    It shows duty, risk, approval, and rollbackability so the model can see
    available capability without turning disclosure into a routing engine.
@@ -87,16 +88,17 @@ Promotion is backed by repo-local implementation and regression coverage.
 
 Primary validation anchors:
 
-- `test/unit/gateway/provider-compatibility.unit.test.ts`
-  - validates bounded tool-call repair and explicit-budget raising
+- `test/unit/gateway/provider-request-recovery.unit.test.ts`
+  - validates hosted provider-request patching for explicit output-budget
+    recovery
 - `test/contract/runtime/identity-context.contract.test.ts`
   - validates self-bundle identity and per-agent narrative context behavior
-- `test/unit/gateway/subagent-profiles.unit.test.ts`
-  - validates canonical delegated profiles and fail-fast removal of legacy
-    profile names
+- `test/unit/gateway/subagent-catalog.unit.test.ts`
+  - validates canonical advisor/review-lane delegation profiles and fail-fast
+    rejection of legacy envelope aliases
 - `test/contract/tools/subagent-run.contract.test.ts`
   - validates the public delegation tool surface against canonical profiles
-- `test/contract/extensions/capability-view.contract.test.ts`
+- `test/contract/runtime-plugins/capability-view.contract.test.ts`
   - validates manifest-style capability disclosure, including rollbackability
 - `test/unit/deliberation/memory-plane.unit.test.ts`
   - validates live-refresh deliberation memory behavior

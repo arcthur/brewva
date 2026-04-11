@@ -157,41 +157,46 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 
 ## Concrete Example
 
-Input: "Before we redesign the WAL recovery path, find prior repository-specific replay and rollback precedents."
+Input: "Before we change hosted recovery posture, find repository precedent about `session_turn_transition`, fallback recovery, and `workflow_status`."
 
 Output:
 
 ```json
 {
-  "knowledge_brief": "Two prior solution records address WAL recovery. The replay-epoch-stale-drop fix (2024-11) established that replay must pin epoch to post-replay value before emitting events. The rollback-journal-corruption fix (2024-09) established that rollback artifacts must be written atomically. Both are directly relevant to any recovery path redesign.",
+  "knowledge_brief": "No direct `docs/solutions/**` precedent covers this exact provider-fallback posture case. Adjacent stable references do establish three guardrails: `session_turn_transition` is the rebuildable hosted-flow contract, recovery posture is derived from transition state rather than process-local memory, and `workflow_status` is advisory only.",
   "precedent_refs": [
     {
-      "path": "docs/solutions/replay-epoch-stale-drop.md",
-      "problem_class": "WAL replay",
-      "key_lesson": "Pin epoch to post-replay value in ReplayService.finalize()"
+      "path": "docs/reference/events.md",
+      "source_type": "reference",
+      "key_lesson": "`session_turn_transition` is the durable contract for hosted recovery and interrupt posture"
     },
     {
-      "path": "docs/solutions/rollback-journal-corruption.md",
-      "problem_class": "rollback durability",
-      "key_lesson": "Atomic write for rollback journal; never partial-flush"
+      "path": "docs/reference/session-lifecycle.md",
+      "source_type": "reference",
+      "key_lesson": "Recovery state is rebuilt from durable runtime surfaces, not from process-local session memory"
+    },
+    {
+      "path": "test/unit/gateway/turn-transition.unit.test.ts",
+      "source_type": "test_anchor",
+      "key_lesson": "Transition sequences and snapshot clearing already have unit-level contract coverage"
     }
   ],
   "preventive_checks": [
     {
-      "check": "Any new replay path must assert epoch >= current before event emit",
-      "source": "replay-epoch-stale-drop.md"
+      "check": "If a recovery path emits `status=entered`, tests must prove a later closing transition for the same reason and attempt",
+      "source": "docs/reference/events.md + test/unit/gateway/turn-transition.unit.test.ts"
     },
     {
-      "check": "Rollback artifacts must use atomic write or rename pattern",
-      "source": "rollback-journal-corruption.md"
+      "check": "Do not fix recovery posture only in `workflow_status`; the hosted transition snapshot must also clear",
+      "source": "docs/reference/session-lifecycle.md"
     },
     {
-      "check": "Recovery tests must include mid-replay crash scenario",
-      "source": "inferred from both precedents"
+      "check": "If a reduction or gating plugin reads recovery posture, add a regression that observes the gate after successful recovery",
+      "source": "inferred from runtime plugin posture rules"
     }
   ],
-  "precedent_query_summary": "Searched docs/solutions/** for 'WAL', 'replay', 'rollback', 'recovery', 'epoch'. Two direct matches. Also checked docs/reference/events.md and docs/architecture/system-architecture.md for adjacent context on event pipeline durability.",
-  "precedent_consult_status": "matched"
+  "precedent_query_summary": "Searched `docs/solutions/**` for `provider_fallback_retry`, `session_turn_transition`, `recovery posture`, and `workflow_status`; no direct solution record matched. Then checked `docs/reference/events.md`, `docs/reference/session-lifecycle.md`, and `test/unit/gateway/turn-transition.unit.test.ts` for stable contract anchors.",
+  "precedent_consult_status": "no_relevant_precedent_found"
 }
 ```
 

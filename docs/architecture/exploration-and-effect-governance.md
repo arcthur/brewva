@@ -329,6 +329,10 @@ Current implementation note:
 - managed tool disclosure may use execution hints for prioritization
 - the visible skill-oriented surface still includes managed tools whose known
   effect descriptors are authorized by the current effect contract
+- warning-only metadata fallback is narrower than surface disclosure: if a tool
+  resolves as `effectful`, execution still requires an exact or registry-backed
+  descriptor; hint-matched effectful tools emit ambiguity signals and fail
+  closed until their metadata is made exact
 
 ## Verification Consequences
 
@@ -365,10 +369,11 @@ This architecture does not mean:
 - treating workflow posture or runtime verification freshness as sufficient
   repository fitness on their own
 
-## Related Documents
+## Related Docs
 
 - `docs/architecture/system-architecture.md`
 - `docs/architecture/design-axioms.md`
 - `docs/architecture/cognitive-product-architecture.md`
 - `docs/reference/proposal-boundary.md`
+- `docs/reference/budget-matrix.md`
 - `docs/research/archive/rfc-effect-governance-and-contract-vnext.md`

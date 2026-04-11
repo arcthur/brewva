@@ -2,31 +2,53 @@
 
 CLI implementation: `packages/brewva-cli/src/index.ts`.
 
+This guide focuses on the operator-facing entrypoints and how they fit
+together. For the complete flag-level contract, use
+`docs/reference/commands.md`.
+
 ## Execution Modes
 
 - Interactive mode (default)
 - One-shot text mode (`--print`)
-- One-shot JSON mode (`--mode json` or `--json`; newline-delimited JSON output, plus final `brewva_event_bundle`)
+- One-shot JSON mode (`--mode json` or `--json`; newline-delimited JSON output,
+  plus final `brewva_event_bundle`)
 - Undo mode (`--undo`)
 - Replay mode (`--replay`)
 - Scheduler daemon mode (`--daemon`)
 - Channel gateway mode (`--channel`)
 
+## Primary Subcommands
+
+- `brewva credentials`: encrypted credential vault management
+- `brewva inspect`: replay-first inspection for one persisted session
+- `brewva insights`: multi-session aggregation and project-level analysis
+- `brewva onboard`: convenience wrapper around gateway daemon install/uninstall
+- `brewva gateway`: local control-plane daemon lifecycle and operations
+
 ## Gateway Subcommand (`brewva gateway`)
 
-In addition to `brewva [flags]` primary modes, the CLI exposes control-plane subcommands:
+Control-plane commands:
 
 - `brewva gateway start`
 - `brewva gateway install`
 - `brewva gateway uninstall`
 - `brewva gateway status`
 - `brewva gateway stop`
+- `brewva gateway scheduler-pause`
+- `brewva gateway scheduler-resume`
 - `brewva gateway heartbeat-reload`
 - `brewva gateway rotate-token`
 - `brewva gateway logs`
 
-`brewva gateway` and `--channel` are different execution paths: the former is the local control-plane daemon, while the latter is channel ingress/egress orchestration.
+`brewva gateway` and `--channel` are different execution paths:
+
+- `brewva gateway` runs the local control-plane daemon for hosted sessions,
+  process isolation, and local clients
+- `--channel` runs external channel ingress/egress orchestration such as
+  Telegram
+
 For operational details, see `docs/guide/gateway-control-plane-daemon.md`.
+For the full subcommand and flag contract, see `docs/reference/commands.md`.
 
 ## Config Loading
 
@@ -36,10 +58,10 @@ If removed or invalid config fields remain in the selected config file, normal
 CLI startup fails fast during config load. Rewrite or delete those fields
 before rerunning Brewva.
 
-## Credentials Subcommand (`brewva credentials`)
+## Subcommand Roles
 
-`brewva credentials` is the encrypted credential vault management surface.
-It supports:
+`brewva credentials` is the encrypted credential vault management surface. It
+supports:
 
 - `brewva credentials list`
 - `brewva credentials add --ref <vault://...> --value <secret>`
@@ -47,30 +69,16 @@ It supports:
 - `brewva credentials remove --ref <vault://...>`
 - `brewva credentials discover`
 
-The subcommand accepts the shared `--cwd`, `--config`, and `--json` flags, and
-also uses `--ref`, `--value`, and `--from-env` on the `add` / `remove` paths.
-Root-level flags may appear before the subcommand, for example
-`brewva --cwd /repo credentials list`.
+`brewva inspect` is the canonical replay-first operator view for a persisted
+session. It summarizes:
 
-## Inspect Subcommand (`brewva inspect`)
-
-`brewva inspect` is the canonical replay-first operator view for a persisted session.
-It summarizes:
-
-- session hydration status and any degraded replay issues
-- tape/event volume and tape pressure
-- folded task/truth state
+- session hydration status and degraded replay issues
+- tape and event volume
+- folded task and truth state
 - latest verification outcome
-- hosted transition snapshot, including pending family and breaker state
-- ledger chain status
-- projection/WAL/snapshot artifact paths
+- hosted transition snapshot
+- ledger and runtime artifact paths
 - deterministic directory-scoped diagnostics and evidence gaps
-
-By default it loads a forensic-safe merge of global and workspace config, strips
-removed or unknown fields for inspection only, and reports any stripped fields
-back in the inspect output. When a session recorded bootstrap provenance,
-artifact-path reporting prefers those persisted runtime dirs over the current
-config view.
 
 Typical usage:
 
@@ -80,182 +88,104 @@ Typical usage:
 - `brewva inspect --session <session-id>`
 - `brewva inspect --json --session <session-id>`
 
-## Onboard Subcommand (`brewva onboard`)
+`brewva insights` is the multi-session aggregation surface. It summarizes recent
+session patterns, friction hotspots, verification posture, and notable
+high-signal sessions for the current workspace or a scoped directory.
+
+Typical usage:
+
+- `brewva insights`
+- `brewva insights packages/brewva-runtime/src`
+- `brewva insights --limit 50`
+- `brewva insights --json`
 
 `brewva onboard` is a wrapper around gateway service lifecycle:
 
 - `brewva onboard --install-daemon`
 - `brewva onboard --uninstall-daemon`
 
-Useful flags:
+Shared onboard flags mirror gateway install and uninstall. Use
+`docs/reference/commands.md` when you need the complete list.
 
-- `--launchd` / `--systemd`
-- `--no-start`
-- `--dry-run`
-- `--json`
+## Flag Coverage Map
+
+This guide is intentionally not the flag-level authority, but these are the
+long-form flags you will encounter across the primary CLI surfaces:
+
+- shared and root entrypoints: `--cwd`, `--config`, `--model`, `--agent`,
+  `--task`, `--task-file`, `--managed-tools`, `--print`, `--interactive`,
+  `--mode`, `--backend`, `--json`, `--undo`, `--replay`, `--daemon`,
+  `--channel`, `--session`, `--verbose`
+- credentials-specific: `--ref`, `--value`, `--from-env`
+- onboard and gateway install lifecycle: `--install-daemon`,
+  `--uninstall-daemon`, `--launchd`, `--systemd`, `--no-start`, `--dry-run`
+- Telegram channel inputs: `--telegram-token`,
+  `--telegram-callback-secret`, `--telegram-poll-timeout`,
+  `--telegram-poll-limit`, `--telegram-poll-retry-ms`
+
+For subcommand-scoped flags such as `--host`, `--port`, `--state-dir`,
+`--pid-file`, `--log-file`, `--token-file`, `--heartbeat`,
+`--tick-interval-ms`, `--session-idle-ms`, `--max-workers`,
+`--max-open-queue`, `--max-payload-bytes`, `--health-http-port`,
+`--health-http-path`, `--label`, `--service-name`, `--plist-file`,
+`--unit-file`, `--deep`, `--timeout-ms`, `--tail`, and `--force`, use
+`docs/reference/commands.md`.
 
 ## Startup Behavior
 
-- Interactive mode defaults to quiet startup, reducing banner/changelog/version-check noise during initialization.
-- Startup UI behavior is controlled by `BrewvaConfig.ui` (`ui.quietStartup`) and applied by `@brewva/brewva-cli`.
+- Interactive mode defaults to quiet startup, reducing
+  banner/changelog/version-check noise during initialization
+- Startup UI behavior is controlled by `BrewvaConfig.ui` (`ui.quietStartup`)
+  and applied by `@brewva/brewva-cli`
 
 ## Mode and Input Resolution
 
-- `--task` and `--task-file` are mutually exclusive.
-- If both TaskSpec and prompt text are provided, prompt text overrides `TaskSpec.goal`.
-- When stdin/stdout is not a TTY and no explicit mode is selected, CLI falls back to text print mode.
-- Explicit `--interactive` requires a TTY terminal and exits with an error otherwise.
-- `--replay`/`--undo` default to auto-resolved sessions when `--session` is omitted.
-- `--replay` and `--undo` are mutually exclusive.
-- `--replay`/`--undo` cannot be combined with `--task`/`--task-file`.
-- CLI parse/validation failures return non-zero exit code (`1`).
-- `--help` and `--version` return success exit code (`0`).
+- `--task` and `--task-file` are mutually exclusive
+- If both TaskSpec and prompt text are provided, prompt text overrides
+  `TaskSpec.goal`
+- When stdin/stdout is not a TTY and no explicit mode is selected, CLI falls
+  back to text print mode
+- Explicit `--interactive` requires a TTY terminal and exits with an error
+  otherwise
+- `--replay` and `--undo` are mutually exclusive
+- `--replay` and `--undo` default to auto-resolved sessions when `--session` is
+  omitted
+- `--replay` and `--undo` cannot be combined with `--task` or `--task-file`
+- CLI parse and validation failures return exit code `1`
+- `--help` and `--version` return exit code `0`
 
-## Flags
+## Managed Tools and Backend Selection
 
-- `--cwd`
-- `--config`
-- `--write`
-- `--ref`
-- `--from-env`
-- `--model`
-- `--agent`
-- `--task`
-- `--task-file`
-- `--managed-tools`
-- `--print`
-- `--interactive`
-- `--mode`
-- `--backend`
-- `--json`
-- `--undo`
-- `--replay`
-- `--daemon`
-- `--channel`
-- `--telegram-token`
-- `--telegram-callback-secret`
-- `--telegram-poll-timeout`
-- `--telegram-poll-limit`
-- `--telegram-poll-retry-ms`
-- `--session`
-- `--verbose`
-- `--version`
-- `--help`
+`--managed-tools <runtime_plugin|direct>` controls how Brewva-managed tools
+reach the hosted session:
 
-### Onboard Subcommand Flags
+- `runtime_plugin` (default): register managed tools through the hosted runtime
+  plugin path before each turn
+- `direct`: keep the same hosted pipeline, but provide managed tools directly
+  during session creation
 
-- `--install-daemon`
-- `--uninstall-daemon`
-- `--launchd`
-- `--systemd`
-- `--no-start`
-- `--dry-run`
-
-### Gateway Subcommand Flags
-
-- `--pid-file`
-- `--log-file`
-- `--token-file`
-- `--heartbeat`
-- `--tick-interval-ms`
-- `--session-idle-ms`
-- `--max-workers`
-- `--max-open-queue`
-- `--max-payload-bytes`
-- `--health-http-port`
-- `--health-http-path`
-- `--label`
-- `--service-name`
-- `--plist-file`
-- `--unit-file`
-
-Short aliases:
-
-- `-p` for `--print`
-- `-i` for `--interactive`
-- `-v` for `--version`
-- `-h` for `--help`
-
-`--managed-tools <runtime_plugin|direct>` controls how Brewva-managed tools reach the
-session:
-
-- `runtime_plugin` (default): the hosted pipeline registers managed tools through the
-  runtime plugin API before each turn.
-- `direct`: the same hosted pipeline remains active, but the host provides
-  managed tools directly when creating the session.
-
-Both modes keep the same tool policy, compaction gate, ledger write, event
-stream, and lifecycle-port behavior. There is no reduced runtime-core bridge
-variant anymore.
-
-Both modes also preserve the same semantic runtime split:
-
-- hosted lifecycle wiring uses the hosted runtime port
-- operator commands use the operator runtime port
-- the repo-owned default managed-tool bundle receives explicit injected
-  internal hooks only where bundled tool behavior genuinely needs them
+Both modes keep the same tool policy, event stream, compaction gate, ledger
+write behavior, and semantic runtime split.
 
 `--backend` selects the primary session backend:
 
-- `auto` (default): for `--print`, try gateway first then fall back to embedded only on pre-ack failures.
-- `embedded`: always run local in-process session.
-- `gateway`: force gateway path (currently supports `--print` only).
+- `auto` (default): for `--print`, try gateway first and fall back to embedded
+  only on pre-ack failures
+- `embedded`: always run local in-process session
+- `gateway`: force gateway path for supported one-shot text flows
 
 Current backend constraints:
 
-- `--backend gateway` is rejected for interactive mode.
-- `--backend gateway` is rejected for `--mode json`.
-- `--backend gateway` is rejected with `--undo`, `--replay`, `--daemon`, and `--channel`.
-- `--backend gateway` is rejected with `--task` / `--task-file`.
-- `--backend auto` skips gateway when `--task` / `--task-file` is provided.
+- `--backend gateway` is rejected for interactive mode
+- `--backend gateway` is rejected for `--mode json`
+- `--backend gateway` is rejected with `--undo`, `--replay`, `--daemon`, and
+  `--channel`
+- `--backend gateway` is rejected with `--task` or `--task-file`
+- `--backend auto` skips gateway when `--task` or `--task-file` is provided
 
-Advanced gateway discovery overrides (environment variables):
+## Interactive And Channel Commands
 
-- `BREWVA_GATEWAY_STATE_DIR`
-- `BREWVA_GATEWAY_PID_FILE`
-- `BREWVA_GATEWAY_TOKEN_FILE`
-- `BREWVA_GATEWAY_HOST`
-- `BREWVA_GATEWAY_PORT`
-
-`--verbose` overrides quiet startup and emits the full startup output.
-
-`--daemon` runs a scheduler process for intent execution without creating an
-interactive coding session. Due intents are executed in child sessions with
-wakeup context and continuity metadata.
-It cannot be combined with `--print`/`--json`/`--mode`, `--undo`/`--replay`,
-`--task`/`--task-file`, or inline prompt text.
-It also requires `schedule.enabled=true` and `infrastructure.events.enabled=true`.
-
-`--channel` runs gateway mode for channel ingress/egress.
-Current supported value is `telegram`.
-It cannot be combined with `--daemon`, `--undo`/`--replay`, `--task`/`--task-file`,
-non-interactive output flags (`--print`/`--json`/`--mode`), or inline prompt text.
-For `--channel telegram`, `--telegram-token` is required.
-Other Telegram flags are optional and mapped into channel-scoped config:
-`channelConfig.telegram.callbackSecret`,
-`channelConfig.telegram.pollTimeoutSeconds`,
-`channelConfig.telegram.pollLimit`,
-`channelConfig.telegram.pollRetryMs`.
-Telegram channel skill policy does not currently have dedicated CLI flags; it is read from
-built-in default skill `telegram`.
-
-When `channels.orchestration.enabled=true`, channel orchestration commands include:
-
-- `/agents`
-- `/cost [@agent] [top=N]`
-- `/questions [@agent]`
-- `/answer [@agent] <question-id> <answer>`
-- `/inspect [dir]`
-- `/inspect @agent [dir]`
-- `/update [operator hints]`
-- `/new-agent <name>`
-- `/del-agent <name>`
-- `/focus @<agent>`
-- `/run @a,@b <task>`
-- `/discuss @a,@b [maxRounds=N] <topic>`
-- `@agent <task>`
-
-Embedded interactive sessions also register a small runtime-plugin command set:
+Embedded interactive sessions register a small runtime-plugin command set:
 
 - `/inspect [dir] | /inspect clear`
 - `/insights [dir] | /insights clear`
@@ -264,36 +194,53 @@ Embedded interactive sessions also register a small runtime-plugin command set:
 - `/agent-overlays | /agent-overlays validate | /agent-overlays <name> | /agent-overlays clear`
 - `/update [operator hints]`
 
-`/inspect [dir]` is the canonical channel command for the same deterministic analysis
-layer used by `brewva inspect`, but reports on the currently focused agent session inline
-in the channel. `/inspect @agent [dir]` overrides the current focus and targets a specific
-active agent session. Channel inspect output is rendered as a concise chat-friendly summary
-rather than the full CLI layout.
+When `channels.orchestration.enabled=true`, channel orchestration commands
+include:
 
-`/update [operator hints]` is available in interactive mode and channel orchestration.
-It queues a shared LLM-driven Brewva upgrade workflow that must review the relevant
-changelog or release notes, apply only the required Brewva-owned migrations
-(config/schema/state), and finish with validation before reporting success.
-In channel mode, `/update` targets the currently focused agent.
+- `/agents`
+- `/cost [@agent] [top=N]`
+- `/questions [@agent]`
+- `/answer [@agent] <question-id> <answer>`
+- `/inspect [@agent] [dir]`
+- `/insights [@agent] [dir]`
+- `/update [operator hints]`
+- `/new-agent <name> [model=<exact-id[:thinking]>]`
+- `/del-agent <name>`
+- `/focus @agent`
+- `/run @a,@b <task>`
+- `/discuss @a,@b [maxRounds=N] <topic>`
+- `@agent <task>`
 
-`/cost [@agent] [top=N]` is the thin operator veneer for the typed
-`inspect_cost` action over the same session cost surface exposed through
-`cost_view`. It resolves to the focused agent by default, supports explicit
-`@agent` targeting, and keeps the output replay-safe and deterministic instead
-of routing through a generic self-command path.
+These are thin control-plane veneers over replay-visible session state. They do
+not create hidden planner state or a second command authority model.
 
-`/questions [@agent]` inspects unresolved questions derived from `skill_completed`
-and delegated consult outcomes for the targeted live session.
-`/answer [@agent] <question-id> <answer>` records a durable
-`operator_question_answered` event and then routes the answer back into the
-target session as explicit operator input. This keeps the questionnaire surface
-replay-visible instead of hiding it inside transient channel state.
+`/questions` inspects unresolved questions derived from `skill_completed` and
+delegated consult outcomes. `/answer` records
+`operator_question_answered` before routing the answer back into the target
+session as explicit operator input.
 
-`/agent-overlays` is the author-facing interactive inspect / validate surface
-for Markdown-authored delegated-worker overlays under `.brewva/agents/*.md` and
-`.config/brewva/agents/*.md`.
+## Telegram Channel And Webhook Inputs
 
-Webhook ingress can be enabled via environment variables (no additional CLI flags):
+`--channel` runs channel ingress and egress. The current supported value is
+`telegram`.
+
+Channel mode rejects incompatible input surfaces:
+
+- `--daemon`
+- `--undo` and `--replay`
+- `--task` and `--task-file`
+- non-interactive output flags (`--print`, `--json`, `--mode`)
+- inline prompt text
+
+For `--channel telegram`, `--telegram-token` is required.
+Other Telegram flags map into channel-scoped config:
+
+- `channelConfig.telegram.callbackSecret`
+- `channelConfig.telegram.pollTimeoutSeconds`
+- `channelConfig.telegram.pollLimit`
+- `channelConfig.telegram.pollRetryMs`
+
+Webhook ingress can be enabled through environment variables:
 
 - `BREWVA_TELEGRAM_WEBHOOK_ENABLED=1`
 - `BREWVA_TELEGRAM_INGRESS_HOST`
@@ -305,20 +252,10 @@ Webhook ingress can be enabled via environment variables (no additional CLI flag
 - `BREWVA_TELEGRAM_INGRESS_HMAC_SECRET`
 - `BREWVA_TELEGRAM_INGRESS_HMAC_MAX_SKEW_MS`
 - `BREWVA_TELEGRAM_INGRESS_NONCE_TTL_MS`
+- optional override: `BREWVA_TELEGRAM_API_BASE_URL`
 
-Optional Telegram API endpoint override (useful for local integration/fake API tests):
-
-- `BREWVA_TELEGRAM_API_BASE_URL`
-
-For the complete Worker + Fly webhook deployment path, see:
-`docs/guide/telegram-webhook-edge-ingress.md`
-
-To temporarily restore startup version-check notifications, launch with an
-empty Brewva override:
-
-```bash
-BREWVA_SKIP_VERSION_CHECK= bun run start
-```
+For the complete Worker + Fly webhook deployment path, see
+`docs/guide/telegram-webhook-edge-ingress.md`.
 
 ## Typical Commands
 
@@ -328,16 +265,18 @@ bun run start -- --print "Refactor runtime cost tracker"
 bun run start -- --mode json "Summarize recent changes"
 bun run start -- --print --task-file ./task.json
 bun run start -- inspect --session <session-id>
+bun run start -- insights --limit 50
 bun run start -- --undo --session <session-id>
 bun run start -- --replay --mode json --session <session-id>
-bun run start -- --version
 bun run start -- onboard --install-daemon
+bun run start -- gateway status --deep
 bun run start -- --channel telegram --telegram-token <bot-token>
-bun run start -- --channel telegram --telegram-token <bot-token> --telegram-poll-timeout 15
 BREWVA_TELEGRAM_WEBHOOK_ENABLED=1 BREWVA_TELEGRAM_INGRESS_HMAC_SECRET=<secret> bun run start -- --channel telegram --telegram-token <bot-token>
 ```
 
-## Related Journey
+## Related Docs
 
-- `docs/journeys/operator/channel-gateway-and-turn-flow.md`
 - `docs/guide/gateway-control-plane-daemon.md`
+- `docs/guide/telegram-webhook-edge-ingress.md`
+- `docs/journeys/operator/channel-gateway-and-turn-flow.md`
+- `docs/reference/commands.md`

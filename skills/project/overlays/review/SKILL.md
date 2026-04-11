@@ -49,8 +49,8 @@ Use this overlay when reviewing changes in the Brewva monorepo.
 
 Run base review scripts before Brewva-specific judgment:
 
-- `scripts/activate_lanes.py` — activates review lanes from change categories. Run before step 1.
-- `scripts/synthesize_lane_dispositions.py` — synthesizes lane outcomes into a merge decision. Run after all lanes report.
+- `scripts/activate_lanes.py` — activates review lanes from change categories. Run before step 1 using the base review helper.
+- `scripts/synthesize_lane_dispositions.py` — synthesizes lane outcomes into a merge decision. Run after all lanes report using the base review helper.
 
 Additionally check Brewva invariants: package boundaries, CLI branding, dist safety.
 
@@ -89,4 +89,4 @@ Surface violations of the migration matrix, skill DoD, or artifact contract clar
 
 ## Example
 
-Input: "Review whether the v2 taxonomy change leaked internal phases back into the public catalog."
+Input: "Review whether delegated consult changes leaked internal review lanes back into the public surface."

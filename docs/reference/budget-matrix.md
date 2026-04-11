@@ -3,16 +3,20 @@
 This document summarizes Brewva budget pipelines, their units, enforcement boundaries,
 and replay/observability sources.
 
+This page is the enforcement summary. Full event-family semantics live in
+`docs/reference/events.md`, and config-key meaning stays in
+`docs/reference/configuration.md`.
+
 ## Runtime Budget Pipelines
 
-| Pipeline                    | Unit                  | Enforcement Point                                                          | Events                                                                                                                                  | Config Key                                                                               | Recovery Source                                       |
-| --------------------------- | --------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| **Session Cost**            | USD                   | `ToolGateService.checkToolAccess` via `SessionCostTracker.getBudgetStatus` | `tool_call_marked`, `cost_update`, `budget_alert`                                                                                       | `infrastructure.costTracking.*`                                                          | checkpoint `state.cost` + shared cost fold            |
-| **Context Injection**       | tokens                | `ContextBudgetManager.planInjection`                                       | `context_injected`, `context_injection_dropped`                                                                                         | `infrastructure.contextBudget.*`                                                         | runtime-local state only                              |
-| **Context Compaction Gate** | context window ratio  | `ContextPressureService.checkContextCompactionGate`                        | `context_compaction_requested`, `context_compaction_gate_blocked_tool`, `session_compact`                                               | `infrastructure.contextBudget.compaction.*`, `infrastructure.contextBudget.thresholds.*` | `session_compact` receipts + runtime-local gate state |
-| **Context Arena SLO**       | entry count           | `ContextArena.ensureAppendCapacity`                                        | `context_arena_slo_enforced`                                                                                                            | `infrastructure.contextBudget.arena.maxEntriesPerSession`                                | runtime-local arena state only                        |
-| **Governance Checks**       | checks / turn         | effect authorization plus verification/cost/compaction governance hooks    | `proposal_*`, `decision_receipt_recorded`, `governance_verify_spec_*`, `governance_cost_anomaly_*`, `governance_compaction_integrity_*` | `BrewvaRuntimeOptions.governancePort`                                                    | tape events + checkpoint replay                       |
-| **Parallel**                | concurrent/total runs | `ParallelBudgetManager.acquire`                                            | operational acquire/release telemetry                                                                                                   | `parallel.*` (`parallel.maxTotalPerSession`)                                             | runtime-local slot state only                         |
+| Pipeline                    | Unit                  | Enforcement Point                                                          | Events                                                                                                                                                                                                                   | Config Key                                                                               | Recovery Source                                                                 |
+| --------------------------- | --------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **Session Cost**            | USD                   | `ToolGateService.checkToolAccess` via `SessionCostTracker.getBudgetStatus` | `tool_call_marked`, `cost_update`, `budget_alert`                                                                                                                                                                        | `infrastructure.costTracking.*`                                                          | checkpoint `state.cost` + shared cost fold                                      |
+| **Context Injection**       | tokens                | `ContextBudgetManager.planInjection`                                       | `context_injected`, `context_injection_dropped`                                                                                                                                                                          | `infrastructure.contextBudget.*`                                                         | runtime-local state only                                                        |
+| **Context Compaction Gate** | context window ratio  | `ContextPressureService.checkContextCompactionGate`                        | `context_compaction_advisory`, `context_compaction_requested`, `context_compaction_gate_armed`, `critical_without_compact`, `context_compaction_gate_blocked_tool`, `session_compact`, `context_compaction_gate_cleared` | `infrastructure.contextBudget.compaction.*`, `infrastructure.contextBudget.thresholds.*` | runtime-local gate state; `session_compact` receipts remain durable evidence    |
+| **Context Arena SLO**       | entry count           | `ContextArena.ensureAppendCapacity`                                        | `context_arena_slo_enforced`                                                                                                                                                                                             | `infrastructure.contextBudget.arena.maxEntriesPerSession`                                | runtime-local arena state only                                                  |
+| **Governance Checks**       | checks / turn         | effect authorization plus verification/cost/compaction governance hooks    | `proposal_*`, `decision_receipt_recorded`, `governance_verify_spec_*`, `governance_cost_anomaly_*`, `governance_compaction_integrity_*`                                                                                  | `BrewvaRuntimeOptions.governancePort`                                                    | tape events + checkpoint replay                                                 |
+| **Parallel**                | concurrent/total runs | `ParallelBudgetManager.acquire`                                            | `parallel_slot_rejected` plus durable delegation lifecycle events such as `subagent_*` and `worker_results_applied`                                                                                                      | `parallel.*` (`parallel.maxTotalPerSession`)                                             | durable delegation events reconciled into runtime-local slot state on hydration |
 
 ## Skill Contract Budgets (Orthogonal)
 
@@ -24,6 +28,10 @@ Skill contract budgets are enforced at tool gate and are separate from session U
 | `maxToolCalls` | tool call count                                                    | `off \| warn \| enforce` (via `security.enforcement.skillMaxToolCallsMode`) | `skill_budget_warning`, `tool_call_blocked` |
 
 ## `costTracking.enabled` Semantics
+
+For compaction, this matrix lists the primary advisory, hard-gate, and durable
+receipt events only. Hosted auto-compaction controller telemetry
+(`context_compaction_auto_*`) is covered in `docs/reference/events.md`.
 
 When `infrastructure.costTracking.enabled=false`:
 
@@ -57,8 +65,10 @@ runtime decision loop:
 - Performance-only counters, fingerprints, and caches may remain local if
   losing them changes efficiency only and does not alter replayable outcomes.
 - Context-injection and compaction observability events improve diagnostics, but
-  they do not currently rebuild the arena or compaction planner from tape.
-- Parallel slot state likewise remains implementation-local today and should
-  not be interpreted as commitment memory.
+  they do not currently rebuild the arena or compaction planner from tape;
+  `session_compact` remains durable evidence, not current gate-state hydration.
+- Parallel slot state remains implementation-local at runtime, but hydration
+  can reconstruct the active/started budget snapshot from durable delegation
+  lifecycle events before normal execution continues.
 - `context_arena_slo_enforced` records that the ceiling was hit; it is not a
   replay contract for reconstructing exact prior arena contents.

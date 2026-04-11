@@ -1,6 +1,9 @@
 # Invariants And Reliability
 
-This document captures runtime invariants that must remain true for safety, recoverability, and observability.
+This document captures runtime invariants that must remain true for safety,
+recoverability, and observability.
+Use it for non-negotiable properties, not as the full public event or session
+contract.
 
 ## Invariant Set
 
@@ -103,6 +106,7 @@ Relevant implementation:
 
 - `packages/brewva-runtime/src/runtime.ts`
 - `packages/brewva-gateway/src/host/create-hosted-session.ts`
+- `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`
 
 ## 9) Profile Transparency Invariant
 
@@ -117,6 +121,7 @@ Relevant implementation:
 Relevant implementation:
 
 - `packages/brewva-gateway/src/host/create-hosted-session.ts`
+- `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`
 - `packages/brewva-gateway/src/runtime-plugins/index.ts`
 
 ## 10) Working Projection Integrity Invariant
@@ -151,3 +156,11 @@ Relevant implementation:
 
 Tests under `test/unit/runtime/`, `test/contract/runtime/`, and
 `test/contract/runtime-plugins/` validate these invariants.
+
+## Related Docs
+
+- `docs/architecture/design-axioms.md`
+- `docs/architecture/system-architecture.md`
+- `docs/reference/runtime.md`
+- `docs/reference/events.md`
+- `docs/reference/session-lifecycle.md`

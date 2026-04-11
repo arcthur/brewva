@@ -62,20 +62,55 @@ function extractInlineCodeRefs(markdown: string, sourceFile: string): InlineCode
   return refs;
 }
 
-function isRepoPathCandidate(raw: string): boolean {
+const STABLE_REPO_PATH_TOP_LEVELS = new Set([
+  "docs",
+  "packages",
+  "skills",
+  "script",
+  "test",
+  "distribution",
+  ".github",
+]);
+
+function collectRepoRootFileEntries(repoRoot: string): Set<string> {
+  return new Set(
+    readdirSync(repoRoot, { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name),
+  );
+}
+
+function isRepoPathCandidate(raw: string, repoRootFiles: Set<string>): boolean {
   const value = raw.trim();
   if (!value) return false;
   if (value.includes(" ")) return false;
+  if (value.includes("...")) return false;
   if (/[*?[\]]/.test(value)) return false;
   if (/[<>]/.test(value)) return false;
   if (/[{}]/.test(value)) return false;
-  return /^(src|docs|script|packages|distribution|skills)\//.test(value);
+  if (value.startsWith("./") || value.startsWith("../")) return false;
+  if (!value.includes("/")) return repoRootFiles.has(value);
+
+  const [topLevel = ""] = value.split("/", 1);
+  if (!topLevel) return false;
+  return STABLE_REPO_PATH_TOP_LEVELS.has(topLevel);
 }
 
 describe("docs code path refs", () => {
-  it("inline code path references exist in repo (docs tree)", () => {
+  it("treats root-level repo files as repo-owned path refs", () => {
+    const repoRoot = resolve(import.meta.dirname, "../../..");
+    const repoRootFiles = collectRepoRootFileEntries(repoRoot);
+
+    expect(isRepoPathCandidate("README.md", repoRootFiles)).toBe(true);
+    expect(isRepoPathCandidate("AGENTS.md", repoRootFiles)).toBe(true);
+    expect(isRepoPathCandidate("package.json", repoRootFiles)).toBe(true);
+    expect(isRepoPathCandidate("tsconfig.json", repoRootFiles)).toBe(true);
+  });
+
+  it("inline repo-owned source path references exist in repo (docs tree)", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const docsDir = resolve(repoRoot, "docs");
+    const repoRootFiles = collectRepoRootFileEntries(repoRoot);
     const markdownFiles = listMarkdownFiles(docsDir);
 
     const errors: string[] = [];
@@ -86,7 +121,7 @@ describe("docs code path refs", () => {
 
       for (const ref of refs) {
         const value = ref.raw.trim();
-        if (!isRepoPathCandidate(value)) continue;
+        if (!isRepoPathCandidate(value, repoRootFiles)) continue;
 
         const resolvedPath = resolve(repoRoot, value);
         if (!existsSync(resolvedPath)) {

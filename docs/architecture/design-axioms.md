@@ -10,6 +10,8 @@ Implementation-grade reading:
 
 This document fixes the architectural taste behind that line so new features
 can be judged against a stable standard instead of local convenience.
+It defines authority precedence and architectural taste, not method-level
+public contracts.
 
 ## Axioms
 
@@ -147,3 +149,10 @@ The kernel may not:
 
 The ring model matters more than package count. A package split is useful only
 when it protects authority boundaries instead of hiding them.
+
+## Related Docs
+
+- `docs/architecture/system-architecture.md`
+- `docs/architecture/invariants-and-reliability.md`
+- `docs/reference/runtime.md`
+- `docs/reference/proposal-boundary.md`

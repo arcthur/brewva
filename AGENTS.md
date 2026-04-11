@@ -10,7 +10,7 @@
 ## Repo At A Glance
 
 - `Brewva` is a Bun + TypeScript monorepo for an AI-native coding-agent runtime built on `@mariozechner/pi-coding-agent`.
-- Workspace packages live under `packages/*`; the primary surfaces are `runtime`, `channels-telegram`, `ingress`, `tools`, `addons`, `cli`, and `gateway`.
+- Workspace packages live under `packages/*`; the primary surfaces are `runtime`, `deliberation`, `skill-broker`, `channels-telegram`, `ingress`, `tools`, `cli`, and `gateway`.
 - Distribution surfaces live under `distribution/brewva`, `distribution/brewva-*`, and `distribution/worker`.
 - Support roots: `script/` for build and verification, `docs/` for design/reference material, and `test/` for workspace coverage.
 - `docs/solutions/**` is the canonical repository-native precedent store; for non-trivial planning, debugging, and review, consult it explicitly through `knowledge_search` instead of relying on hidden recall, use `precedent_audit` when refreshing, displacing, or deactivating an existing precedent, and use `precedent_sweep` only for explicit repository-wide maintenance passes.
@@ -85,7 +85,7 @@
 - Runtime config and semantics: `packages/brewva-runtime/src/config/defaults.ts`, `packages/brewva-runtime/src/config/normalize.ts`, `packages/brewva-runtime/src/security/mode.ts`, `packages/brewva-runtime/src/services/event-pipeline.ts`
 - Runtime context and durability: `packages/brewva-runtime/src/context/arena.ts`, `packages/brewva-runtime/src/context/injection-orchestrator.ts`, `packages/brewva-runtime/src/services/context*.ts`, `packages/brewva-runtime/src/channels/recovery-wal*.ts`, `packages/brewva-runtime/src/governance/port.ts`
 - Runtime authorization / rollback / diagnostics: `packages/brewva-runtime/src/services/tool-gate.ts`, `packages/brewva-runtime/src/services/effect-commitment-desk.ts`, `packages/brewva-runtime/src/services/reversible-mutation.ts`, `packages/brewva-runtime/src/services/mutation-rollback.ts`, `packages/brewva-runtime/src/services/task-watchdog.ts`
-- Package entrypoints: `packages/brewva-tools/src/index.ts`, `packages/brewva-gateway/src/runtime-plugins/index.ts`, `packages/brewva-gateway/src/channels/host.ts`, `packages/brewva-gateway/src/host/create-hosted-session.ts`, `packages/brewva-gateway/src/subagents`, `packages/brewva-ingress/src/index.ts`, `packages/brewva-cli/src/index.ts`, `packages/brewva-gateway/src`
+- Package entrypoints: `packages/brewva-deliberation/src/index.ts`, `packages/brewva-skill-broker/src/index.ts`, `packages/brewva-tools/src/index.ts`, `packages/brewva-gateway/src/runtime-plugins/index.ts`, `packages/brewva-gateway/src/channels/host.ts`, `packages/brewva-gateway/src/host/create-hosted-session.ts`, `packages/brewva-gateway/src/subagents`, `packages/brewva-ingress/src/index.ts`, `packages/brewva-cli/src/index.ts`, `packages/brewva-gateway/src`
 - Verification and release tooling: `script/verify-dist.ts`, `script/build-binaries.ts`, `distribution/worker`, `.github/workflows/ci.yml`
 - Reference docs: `docs/index.md`, `docs/architecture/system-architecture.md`, `docs/reference/runtime.md`, `docs/reference/proposal-boundary.md`, `docs/reference/events.md`, `docs/reference/*.md`, `docs/research/README.md`, `docs/solutions/README.md`
 
