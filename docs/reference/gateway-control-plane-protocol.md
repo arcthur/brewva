@@ -26,7 +26,7 @@ Error payload structure:
 ## Handshake Flow
 
 1. Client opens WebSocket connection.
-2. Server emits `connect.challenge` with `nonce`.
+2. Server emits `connect.challenge` with `nonce` and `ts`.
 3. Client sends `connect`:
    - `protocol` must exactly match server protocol version.
    - `challengeNonce` must match the nonce from step 2.
@@ -73,10 +73,29 @@ Parameter summary (current semantics):
 ## Heartbeat Policy Surface
 
 `HEARTBEAT.md` rules are control-plane policy, not gateway RPC methods.
+The default daemon-owned policy path is
+`<global brewva root>/agent/gateway/HEARTBEAT.md`; `brewva gateway start` /
+`install` may relocate it with `--state-dir` or `--heartbeat`.
 
-Current JSON-block rule shape:
+Current file shape is a fenced `heartbeat` JSON/JSONC block whose payload
+contains one `rules` array:
 
-- `id`
+```json
+{
+  "rules": [
+    {
+      "id": "ops-follow-up",
+      "intervalMinutes": 30,
+      "prompt": "Review the latest gateway health and summarize drift.",
+      "sessionId": "ops-session"
+    }
+  ]
+}
+```
+
+Each rule object supports:
+
+- `id?`
 - `intervalMinutes`
 - `prompt`
 - `sessionId?`
@@ -84,17 +103,23 @@ Current JSON-block rule shape:
 Rule semantics:
 
 - `prompt` is the model-facing wake-up instruction.
+- when `id` is omitted, gateway assigns the deterministic fallback
+  `rule-<index>` during policy load
+- when `sessionId` is omitted, gateway uses the deterministic default
+  `heartbeat:<id>`
 - heartbeat rules are always explicit fires now; there is no cognition-driven
   wake suppression layer.
 
 ## Response Semantics (Key Methods)
 
 - `connect`: `hello-ok` payload with `protocol`, `server`, `features`, and `policy`.
+- `sessions.open`: `{ requestedSessionId, sessionId, created, workerPid, agentSessionId? }`.
 - `sessions.send`: immediate ack payload `{ sessionId, agentSessionId?, turnId, accepted: true }`; final turn outcome arrives through `session.wire.frame`.
 - `sessions.abort`: accepts optional `reason: "user_submit"` so hosted execution can emit `user_submit_interrupt` as a `session_turn_transition` without widening kernel authority.
-- `status.deep`: includes `heartbeat` plus live `scheduler` execution state. The `scheduler` block exposes whether scheduling is available, whether execution is paused, and current projection/timer counters.
-- `scheduler.pause`: `{ paused: true, changed, available, pausedAt, reason }`.
-- `scheduler.resume`: `{ paused: false, changed, available, previousPausedAt, previousReason }`.
+- `status.deep`: includes `heartbeat` plus live `scheduler` execution state. The `heartbeat` block exposes `sourcePath`, `loadedAt`, and the currently loaded rules with their live `nextRunAt` timestamps. The `scheduler` block exposes availability, config-vs-execution enablement (`configEnabled`, `executionEnabled`), pause state, current projection/timer counters, and `unavailableReason` when scheduling is unavailable.
+- `heartbeat.reload`: `{ sourcePath, loadedAt, rules, removedRules, closedSessions, removedRuleIds, closedSessionIds }`. `closedSessionIds` only covers daemon-owned default heartbeat sessions (`heartbeat:<id>`) that became orphaned after rule removal or rule retargeting; explicitly named `sessionId` targets are not force-closed by reload cleanup.
+- `scheduler.pause`: `{ paused, changed, available, pausedAt, reason, unavailableReason? }`. When scheduling is unavailable, the current implementation returns `{ paused: false, changed: false, available: false, pausedAt: null, reason: null, unavailableReason }`.
+- `scheduler.resume`: `{ paused, changed, available, pausedAt, reason, previousPausedAt, previousReason, unavailableReason? }`. When scheduling is unavailable, the current implementation returns `{ paused: false, changed: false, available: false, pausedAt: null, reason: null, previousPausedAt: null, previousReason: null, unavailableReason }`.
 - `gateway.rotate-token`: `{ rotated: true, rotatedAt, revokedConnections }`.
 - `gateway.stop`: `{ stopping: true, reason }`.
 
@@ -108,6 +133,9 @@ Rule semantics:
 
 Session-scoped events (`session.wire.frame`) are routed by subscription scope,
 not broadcast to every authenticated connection.
+`heartbeat.fired` is a live gateway event only; it is not a durable tape event
+or a replay contract. The current payload is
+`{ ruleId, sessionId, ts, hasResult }`.
 
 ## Session Wire Stream
 
@@ -159,8 +187,12 @@ Important protocol rules:
 - `turn.committed.toolOutputs` includes only accepted final-attempt tool state.
   Late superseded-attempt live tool frames remain telemetry and do not re-enter
   committed replay state.
-- only live cache emits `assistant.delta`, `attempt.started(reason=initial)`,
-  and `session.status`.
+- only live cache emits `assistant.delta`, `session.status`, and the initial
+  `attempt.started(reason=initial)`.
+- replay may still emit durable `attempt.superseded` plus
+  `attempt.started(reason=output_budget_escalation|compaction_retry|provider_fallback_retry|max_output_recovery|reasoning_revert_resume)`
+  when those retry attempts are derived from durable `session_turn_transition`
+  receipts; replay does not promise the full live attempt timeline.
 - durable session-wire frames carry `sourceEventId` and `sourceEventType`;
   cache frames and replay control frames do not.
 - `session.status.contextPressure` is a live cache projection derived from

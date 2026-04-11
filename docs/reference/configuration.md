@@ -49,7 +49,9 @@ config-file keys:
 
 Current front-door defaults:
 
-- CLI-owned runtimes use `personal`
+- standalone forensic / daemon-style CLI runtimes such as `brewva inspect`,
+  `brewva insights`, and `--daemon` use `personal`
+- interactive embedded CLI sessions use `team`
 - gateway/hosted/channel runtimes use `team`
 - interactive hosted front doors use `routingDefaultScopes=["core", "domain"]`
   so skill-first routing is available by default without overriding an explicit
@@ -86,13 +88,14 @@ Kernel admission now happens through proposal submission:
 - `DecisionReceipt.decision = accept | reject | defer`
 
 `skills.routing.enabled=false` keeps skills loadable but disables default
-routing-proposal surfaces. `routingDefaultScopes` does not override that
+routing recommendation surfaces. `routingDefaultScopes` does not override that
 explicit disable. Hard `routingScopes` overrides or direct `skill_load` usage
 can still activate skills.
 
 When routing is enabled, `skills.routing.scopes` is the explicit scope allowlist
 used by skill discovery and external deliberation layers. Operator/meta skills
-may still be loaded while remaining hidden from standard proposal producers.
+may still be loaded while remaining hidden from standard recommendation
+surfaces.
 
 Skill discovery accepts either:
 
@@ -270,10 +273,10 @@ and approval-bearing flows; runtime does not enter a silent no-audit write path.
 - `infrastructure.interruptRecovery.enabled`: `true`
 - `infrastructure.interruptRecovery.gracefulTimeoutMs`: `8000`
 - `infrastructure.costTracking.enabled`: `true`
-- `infrastructure.costTracking.maxCostUsdPerSession`: `0`
+- `infrastructure.costTracking.maxCostUsdPerSession`: `0` (`0` disables the
+  session cost cap)
 - `infrastructure.costTracking.alertThresholdRatio`: `0.8`
 - `infrastructure.costTracking.actionOnExceed`: `warn`
-  `0` disables the session cost cap.
 - `infrastructure.recoveryWal.enabled`: `true`
 - `infrastructure.recoveryWal.dir`: `.orchestrator/recovery-wal`
 - `infrastructure.recoveryWal.defaultTtlMs`: `300000`
@@ -299,9 +302,12 @@ and approval-bearing flows; runtime does not enter a silent no-audit write path.
 - `strict`
   - Enforce denied effects and all policy checks (`enforce`)
 
-If a tool lacks governance metadata entirely, runtime currently warns instead
-of hard-blocking it. Effect authorization can only be enforced for tools whose
-effect descriptors are known.
+If governance metadata is missing, or only inferred through hint matching,
+runtime emits warning signals because effect authorization cannot be proven
+from an ambiguous descriptor alone. That warning is not an execution permit
+for effectful paths: tools that resolve as `effectful` without an exact or
+registry-backed descriptor fail closed regardless of `security.mode`. Only
+safe hint-matched tools remain warn-only until their metadata is made exact.
 
 `security.sanitizeContext` controls pattern-based text sanitization before skill selection and
 context injection. Structural boundary wrapping remains enabled even when this flag is `false`.
@@ -571,4 +577,6 @@ This means malformed or unsupported fields are never silently applied as active 
 
 ## Current Limitations
 
-- Startup UI config currently exposes `ui.quietStartup` only; there is no `ui.collapseChangelog` field.
+Temporary or intentionally narrow caveats are centralized in
+`docs/reference/limitations.md` so the configuration contract here can stay
+focused on stable keys, defaults, and merge behavior.

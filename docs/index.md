@@ -10,18 +10,44 @@ This repository uses a layered documentation system:
 - `troubleshooting`: failure patterns and remediation
 - `research`: incubating design notes with explicit promotion targets
 
+## How To Navigate
+
+- Use `guide` when you want operator-facing setup, deployment, or conceptual
+  orientation.
+- Use `reference` when you need the exact current command, config, runtime, or
+  tool contract.
+- Use `architecture` when you need implemented boundaries, invariants, or
+  rationale.
+- Use `journeys` when you want step-by-step operator flows across multiple
+  packages or surfaces.
+- Use `troubleshooting` when you are diagnosing a concrete failure and need the
+  fastest operator entrypoint first.
+- Use `solutions` when you want repository-specific engineering precedent or
+  proof of what worked before.
+- Use `research` when a design is still incubating and has not yet been
+  promoted into stable docs.
+
 ## Getting Started
+
+Operator and deployment entrypoints:
 
 - Overview: `docs/guide/overview.md`
 - Installation: `docs/guide/installation.md`
-- Features: `docs/guide/features.md`
 - CLI: `docs/guide/cli.md`
 - Gateway daemon: `docs/guide/gateway-control-plane-daemon.md`
 - Telegram webhook edge ingress: `docs/guide/telegram-webhook-edge-ingress.md`
-- Runtime architecture: `docs/guide/understanding-runtime-system.md`
-- Orchestration: `docs/guide/orchestration.md`
-- Skill categories: `docs/guide/category-and-skills.md`
 - Channel agent workspace: `docs/guide/channel-agent-workspace.md`
+
+Conceptual orientation:
+
+- Features: `docs/guide/features.md`
+- Runtime system concepts: `docs/guide/understanding-runtime-system.md`
+- Hosted orchestration concepts: `docs/guide/orchestration.md`
+- Skill categories and routing: `docs/guide/category-and-skills.md`
+
+Workflow walkthroughs:
+
+- Journeys overview: `docs/journeys/README.md`
 
 ## Journeys
 

@@ -20,12 +20,12 @@ have been implemented and promoted into stable documentation.
 
 Implemented direction:
 
-- hosted sessions install a provider compatibility seam during bootstrap
-- request payload patching is driven by an explicit model capability registry
-- pre-parse tool-call normalization repairs only structural shape and fails fast
-  when repair would require guessing
-- normalization evidence is durable; model capability telemetry remains
-  session/ops scoped
+- hosted sessions install bounded request-shaping hooks inside the canonical
+  hosted pipeline rather than a separate provider-compatibility seam
+- request payload patching stays explicit and narrow, limited to hosted recovery
+  and reduction paths instead of a standalone model-capability registry
+- durable tape begins at admitted runtime activity rather than a separate
+  provider-normalization family
 - live assistant deltas and tool-execution updates remain outside the durable
   tape
 - replay-critical approval and delegation lifecycle events remain audit-retained
@@ -44,18 +44,18 @@ claims.
 
 Primary validation anchors:
 
-- `test/unit/gateway/provider-compatibility.unit.test.ts`
-  - validates structural repair and provider-specific request patching
+- `test/unit/gateway/provider-request-recovery.unit.test.ts`
+  - validates explicit provider-request patching for output-budget recovery
 - `test/contract/runtime/event-pipeline-levels.contract.test.ts`
   - validates audit-vs-ops retention rules for normalization, model telemetry,
     approval, and delegation events
-- `test/contract/extensions/extension-observability-guardrails.contract.test.ts`
+- `test/contract/runtime-plugins/runtime-plugin-observability-guardrails.contract.test.ts`
   - validates that hosted live-only message deltas are not persisted into the
     durable tape
 - `test/unit/gateway/agent-browser-validation.unit.test.ts`
   - validates that high-noise `agent-browser` browser actions benefit from
     repair, provider compatibility patching, and browser-output distillation
-- `test/contract/extensions/tool-output-distiller.contract.test.ts`
+- `test/contract/runtime-plugins/tool-output-distiller.contract.test.ts`
   - validates browser snapshot and browser-get summary compaction with artifact
     preservation
 
@@ -63,12 +63,11 @@ Primary validation anchors:
 
 The promoted contract is:
 
-- the provider compatibility seam sits before runtime authority
+- hosted request shaping stays in the control plane and does not create a
+  standalone provider-compatibility seam ahead of runtime authority
 - the runtime kernel receives only admitted tool calls, not raw model output
-- normalization may repair syntax and wrapper shape, but it must not invent
-  semantic intent
-- the model capability registry may adapt request shape, but it must not choose
-  models dynamically by task
+- hosted recovery/reduction hooks may patch explicit request fields, but they do
+  not invent semantic intent or choose models dynamically by task
 - the runtime event API exposes durable tape semantics, not ephemeral hosted
   stream semantics
 - live activity and durable audit surfaces are intentionally separate even when

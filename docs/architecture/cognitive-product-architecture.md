@@ -206,7 +206,7 @@ Current product surfaces:
 
 Related productized repository-precedent surfaces also include:
 
-- `knowledge-capture` as terminal materialization into `docs/solutions/**`
+- `knowledge_capture` as terminal materialization into `docs/solutions/**`
 - internal review-lane fan-out behind the single public `advisor`
   consultation boundary, while `review` remains a parent-owned semantic skill
 
@@ -278,3 +278,11 @@ This keeps the boundary honest:
 
 - control plane may schedule and deliver explicit prompts
 - kernel authority is unchanged
+
+## Related Docs
+
+- `docs/architecture/system-architecture.md`
+- `docs/guide/understanding-runtime-system.md`
+- `docs/guide/orchestration.md`
+- `docs/reference/context-composer.md`
+- `docs/reference/runtime.md`

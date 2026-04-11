@@ -126,7 +126,8 @@ flowchart TD
 ## Code Pointers
 
 - CLI entrypoint: `packages/brewva-cli/src/index.ts`
-- Hosted session creation: `packages/brewva-gateway/src/host/create-hosted-session.ts`
+- Hosted session entrypoint: `packages/brewva-gateway/src/host/create-hosted-session.ts`
+- Hosted session implementation: `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`
 - Hosted runtime plugins: `packages/brewva-gateway/src/runtime-plugins/index.ts`
 - Completion tool: `packages/brewva-tools/src/skill-complete.ts`
 - Workflow derivation: `packages/brewva-runtime/src/workflow/derivation.ts`
@@ -135,6 +136,7 @@ flowchart TD
 ## Related Docs
 
 - CLI: `docs/guide/cli.md`
+- Orchestration guide: `docs/guide/orchestration.md`
 - Runtime plugins: `docs/reference/runtime-plugins.md`
 - Runtime API: `docs/reference/runtime.md`
 - Inspect / replay / undo: `docs/journeys/operator/inspect-replay-and-recovery.md`

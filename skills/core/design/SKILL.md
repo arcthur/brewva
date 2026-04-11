@@ -183,54 +183,70 @@ If you catch yourself thinking any of these, STOP and return to Phase 2:
 
 ## Concrete Example
 
-Input: "Refactor skill routing to add profile-aware filtering without weakening runtime governance."
+Input: "Refresh skill discovery so inspect and subagent workspace tooling can rely on `.brewva/skills_index.json` overlay metadata."
 
 ```json
 {
   "design_spec": {
-    "objective": "Add profile-aware filtering to skill routing without widening governance bypass surface",
-    "chosen_approach": "Inject profile predicate into existing SkillRouter.filter() pipeline",
+    "objective": "Expose overlay origins and routing metadata in `.brewva/skills_index.json` without widening the root runtime surface",
+    "chosen_approach": "Extend the existing skill-index contracts in `packages/brewva-runtime/src/contracts/skill.ts` and emit the fields from `packages/brewva-runtime/src/skills/registry.ts`; keep gateway consumers read-only.",
     "rejected_approaches": [
       {
-        "name": "New parallel router",
-        "reason": "Duplicates governance checks, doubles maintenance surface"
+        "name": "CLI-side rescan of skill directories",
+        "reason": "Duplicates runtime-owned discovery rules and drifts from the registry contract"
       },
       {
-        "name": "Governance-layer filter",
-        "reason": "Mixes routing concern into governance boundary"
+        "name": "Gateway-local reconstruction of overlay metadata",
+        "reason": "Creates a second source of truth and widens cross-package coupling"
       }
     ],
-    "boundaries": ["packages/brewva-runtime/src/services/skill-router.ts"],
-    "non_negotiable_constraints": ["Governance port contract unchanged", "No new public exports"]
+    "boundaries": [
+      "packages/brewva-runtime/src/contracts/skill.ts",
+      "packages/brewva-runtime/src/skills/registry.ts",
+      "packages/brewva-gateway/src/subagents/workspace.ts"
+    ],
+    "non_negotiable_constraints": [
+      "Keep `.brewva/skills_index.json` as an inspect artifact, not durable truth",
+      "No new root exports from `@brewva/brewva-runtime`",
+      "Do not make gateway or CLI rescan skill directories"
+    ]
   },
   "execution_plan": [
     {
       "step": 1,
-      "action": "Add ProfilePredicate type to internal types",
-      "verification": "Type-check passes"
+      "action": "Extend skill-index types for overlay provenance and routable metadata",
+      "verification": "`bun run check` stays clean"
     },
     {
       "step": 2,
-      "action": "Thread predicate through SkillRouter.filter()",
-      "verification": "Existing tests pass"
+      "action": "Thread the new fields through `SkillRegistry.buildIndex()` and the write path",
+      "verification": "`test/contract/runtime/skills-discovery.contract.test.ts` covers the serialized artifact"
     },
     {
       "step": 3,
-      "action": "Add profile-aware test cases",
-      "verification": "New cases cover empty/single/multi profile"
+      "action": "Verify subagent workspace tooling still ignores `.brewva/skills_index.json` as generated state",
+      "verification": "`test/unit/gateway/subagent-workspace.unit.test.ts` still passes"
     }
   ],
-  "execution_mode_hint": "test_first",
+  "execution_mode_hint": "coordinated_rollout",
   "risk_register": [
     {
-      "risk": "Profile predicate widens SkillRouter public API",
-      "mitigation": "Keep predicate in internal types only",
+      "risk": "Consumers may start treating the generated index as durable state instead of an inspect artifact",
+      "mitigation": "Keep contract docs and tests explicit that registry rebuild remains authoritative",
       "owner_lane": "review-boundaries"
+    },
+    {
+      "risk": "Generated skill-index diffs leak into worker patch sets",
+      "mitigation": "Retain `.brewva/skills_index.json` ignore handling and cover it in workspace patch tests",
+      "owner_lane": "review-operability"
     }
   ],
   "implementation_targets": [
-    "packages/brewva-runtime/src/services/skill-router.ts",
-    "packages/brewva-runtime/src/types/internal.ts"
+    "packages/brewva-runtime/src/contracts/skill.ts",
+    "packages/brewva-runtime/src/skills/registry.ts",
+    "packages/brewva-gateway/src/subagents/workspace.ts",
+    "test/contract/runtime/skills-discovery.contract.test.ts",
+    "test/unit/gateway/subagent-workspace.unit.test.ts"
   ]
 }
 ```

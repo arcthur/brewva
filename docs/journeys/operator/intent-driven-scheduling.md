@@ -12,6 +12,8 @@
 - `schedule_intent`
 - `follow_up`
 - `brewva --daemon`
+- `brewva gateway scheduler-pause`
+- `brewva gateway scheduler-resume`
 - `optimization_continuity`
 
 ## Objective
@@ -94,7 +96,8 @@ flowchart TD
 - retry backoff grows exponentially from `minIntervalMs` and caps at one hour
 - child session iteration facts remain in the child session; they are not
   mirrored back into the parent session
-- gateway `scheduler.pause` / `scheduler.resume` is an incident-control latch
+- `brewva gateway scheduler-pause` / `brewva gateway scheduler-resume` are
+  incident-control latches
   for live execution only; it is not a durable config replacement for
   `schedule.enabled`
 
@@ -120,10 +123,15 @@ flowchart TD
 - Schedule events: `packages/brewva-runtime/src/schedule/events.ts`
 - Schedule projection: `packages/brewva-runtime/src/schedule/projection.ts`
 - Cron / timezone: `packages/brewva-runtime/src/schedule/cron.ts`
-- Daemon entry: `packages/brewva-cli/src/index.ts`
+- Continuity inspection tool: `packages/brewva-tools/src/optimization-continuity.ts`
+- Scheduler daemon dispatch: `packages/brewva-cli/src/index.ts`
+- Scheduler daemon implementation: `packages/brewva-cli/src/daemon-mode.ts`
+- Live scheduler controls: `packages/brewva-gateway/src/cli.ts`
 
 ## Related Docs
 
 - CLI: `docs/guide/cli.md`
+- Gateway daemon guide: `docs/guide/gateway-control-plane-daemon.md`
 - Runtime API: `docs/reference/runtime.md`
+- Configuration reference: `docs/reference/configuration.md`
 - Background delegation: `docs/journeys/operator/background-and-parallelism.md`

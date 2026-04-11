@@ -31,7 +31,7 @@ The lasting decisions were:
 - optimization remains model-native protocol behavior instead of runtime-owned
   planning authority
 
-## Current Contract
+## Current Stable References
 
 Read current behavior from:
 

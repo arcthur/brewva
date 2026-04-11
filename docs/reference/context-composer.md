@@ -14,6 +14,12 @@ Implementation anchors:
 `ContextComposer` is the model-facing presentation layer for already-admitted
 runtime context.
 
+This page owns block ordering and model-visible rendering only. Source
+semantics for `brewva.projection-working` live in
+`docs/reference/working-projection.md`, while inspect-facing baseline and
+pressure metadata live on the runtime surfaces described in
+`docs/reference/runtime.md`.
+
 It does not decide:
 
 - which sources exist
@@ -37,6 +43,10 @@ It only decides how admitted context is shown to the model.
 Admitted entries come from the kernel path. There is no raw-text runtime-plugin
 fallback.
 
+Hosted supplemental blocks are post-admission inputs. They are rendered by the
+composer, but they are not provider-registry entries returned from
+`runtime.maintain.context.buildInjection(...)`.
+
 `buildInjection(...)` admission is now explicit about recovery-sensitive inputs:
 
 - branch or leaf scope travels through `options.injectionScopeId`
@@ -44,17 +54,45 @@ fallback.
 - history-view baseline compatibility is checked against
   `options.referenceContextDigest`
 
+Hosted context profiles narrow sources before composition:
+
+- `minimal` allows only `brewva.history-view-baseline` and
+  `brewva.recovery-working-set`
+- `standard` additionally allows `brewva.runtime-status`,
+  `brewva.task-state`, `brewva.tool-outputs-distilled`, and
+  `brewva.projection-working`
+- `full` or omitted `contextProfile` installs no source allowlist, so the
+  kernel provider registry decides from the full registered source set
+
+`ContextComposer` therefore renders only the already-admitted subset for the
+current hosted profile; it does not widen a minimal or standard profile back to
+the full source set on its own.
+
+This source narrowing is limited to kernel provider collection. Hosted
+supplemental / recovery blocks appended after admission, such as operational
+diagnostics, pending delegation outcomes, read-path recovery, skill-routing
+availability, skill recommendations, and same-turn supplemental returns, do not
+flow through `options.sourceAllowlist`.
+
 ## Output Contract
 
-The composer returns ordered blocks in three categories:
+The composer returns ordered blocks in three categories from the admitted input
+set:
 
 - `narrative`
   - identity
   - history-view baseline
+    - rewrite text only; digest, lineage, and compatibility metadata remain on
+      `runtime.inspect.context`
   - hosted narrative memory
   - runtime status
   - task state
   - working projection
+    - bounded rebuildable task/truth/workflow snapshot; not history rewrite
+      authority
+    - arrives from the admitted `brewva.projection-working` provider after
+      runtime refresh; `ContextComposer` does not read
+      `.orchestrator/projection/**` directly
   - hosted deliberation artifacts such as deliberation memory, optimization
     continuity, and pending promotion drafts
   - optional distilled tool output
@@ -139,6 +177,8 @@ Special rule for recovery context:
   model-visible block contains only the rewrite text itself
 - digest, lineage, and reference-context compatibility metadata stay on
   `runtime.inspect.context.getHistoryViewBaseline(...)`
+- `working projection` stays a separate narrative block for rebuildable
+  execution state; it does not backfill or widen baseline authority
 - `recovery working set` remains a separate constraint block so operational
   state does not leak back into the baseline plane
 
@@ -159,28 +199,37 @@ Narrative-memory reminder:
   sees it as advisory context rather than timeless truth
 - repository precedent remains explicit and separate under `docs/solutions/**`
 
-## Frozen Snapshot Invariant
+## Provider Refresh Semantics
 
-Deliberation memory, optimization continuity, and skill promotion context
-providers use cached state (`retrieveCached`, `listCached`) during context
-collection. State is synced once during session setup by the hosted lifecycle
-adapter, then frozen for the remainder of the session.
+Hosted recall providers do not share one session-start frozen snapshot.
 
-This is intentional. Mid-session writes such as new skill completions,
-verification outcomes, or iteration facts update the durable store on disk but
-do not change the context snapshot that was injected at session start. The
-snapshot refreshes on the next session.
+Current provider behavior is source-specific:
+
+- `brewva.deliberation-memory` retrieves through `plane.retrieve(...)`
+- `brewva.optimization-continuity` checks lineages through `plane.list(...)`
+  and injects matches through `plane.retrieve(...)`
+- `brewva.skill-promotion-drafts` currently injects from `broker.listCached()`
+
+For deliberation memory and optimization continuity, the underlying planes
+reconcile derived state on demand when relevant events or session digests mark
+them dirty, subject to their refresh throttles (`minRefreshIntervalMs`).
+
+For skill-promotion drafts, the injected view can lag recent completions until
+the broker refreshes its derived state.
+
+What stays invariant is narrower:
+
+- once a turn's context has been composed, that composed block set is fixed for
+  the current turn
+- later writes do not mutate an already-injected hidden message in place
+- refreshed derived recall can appear on a later composition pass or later turn
 
 Rationale:
 
-- preserves prompt cache stability across the full session
-- prevents context oscillation from mid-turn event activity
-- matches the design principle that deliberation memory is derived and
-  advisory, not a live authority channel
-
-This pattern follows the same discipline as Brewva's existing context injection
-model: sources are admitted once per turn via the deterministic injection path,
-not reactively mutated mid-conversation.
+- preserves per-turn prompt stability
+- prevents reactive mutation of already-rendered model context
+- keeps deliberation, continuity, and promotion sources derived and advisory
+  rather than live authority channels
 
 ## Metrics
 

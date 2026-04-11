@@ -38,6 +38,7 @@ Default tools registered by `buildBrewvaTools()`:
 - `process`
 - `cost_view`
 - `deliberation_memory`
+- `narrative_memory`
 - `knowledge_capture`
 - `knowledge_search`
 - `precedent_audit`
@@ -55,6 +56,8 @@ Default tools registered by `buildBrewvaTools()`:
 - `tape_handoff`
 - `tape_info`
 - `tape_search`
+- `reasoning_checkpoint`
+- `reasoning_revert`
 - `resource_lease`
 - `session_compact`
 - `rollback_last_patch`
@@ -75,7 +78,9 @@ Default tools registered by `buildBrewvaTools()`:
 - `task_resolve_blocker`
 - `task_view_state`
 
-Optional channel tools:
+Optional channel tools are not part of `buildBrewvaTools()`. They are
+registered by channel / A2A runtime plugins when an orchestration adapter is
+available:
 
 - `agent_send`
 - `agent_broadcast`
@@ -555,16 +560,23 @@ Semantics:
   supplemental replay evidence rather than a substitute for observed output
 - typed outcome extraction currently uses one sentinel-wrapped JSON block; if
   extraction fails, the outcome degrades gracefully to text-only fields
-- `supplemental` appends same-turn return context to the parent session
-- late detached outcomes surface through replay-visible pending delegation
-  outcome state instead of a proposal-backed return mode
+- `supplemental` requests a runtime-owned same-turn hidden append attempt to the
+  parent session scope; the append may still be skipped for budget reasons such
+  as `hard_limit` or `budget_exhausted`, and the tool result reports whether
+  delivery was accepted or skipped
+- `waitMode=start` does not support `returnMode=supplemental`; background
+  delegated runs must use `text_only` and surface outcomes later through
+  durable delegation state
+- late detached outcomes surface through replay-visible
+  `handoffState=pending_parent_turn|surfaced` delegation state instead of a
+  proposal-backed return mode
 - workspace-defined delegated workers live under `.brewva/subagents/*.json`
   and are parsed as JSONC, so comments and trailing commas are accepted
   and must declare `kind: "envelope"` or `kind: "agentSpec"` with `extends`
-  support; markdown worker files under `.brewva/agents/*.md` and
-  `.config/brewva/agents/*.md` default to `agentSpec`; their frontmatter
-  compiles into the hosted worker spec and the body becomes additive authored
-  instructions; overrides remain narrowing-only
+  support; markdown worker files under the workspace-relative directories
+  `.brewva/agents/*.md` and `.config/brewva/agents/*.md` default to
+  `agentSpec`; their frontmatter compiles into the hosted worker spec and the
+  body becomes additive authored instructions; overrides remain narrowing-only
 
 `task_record_acceptance` is an operator-visible closure write. It only succeeds
 when the active `TaskSpec` explicitly requires acceptance, and it does not
@@ -583,7 +595,14 @@ These tools inspect or stop existing delegated runs.
 - `live?`
 - `cancelable?`
 - `delivery.handoffState?`
+- `delivery.supplementalAppended?`
+- `delivery.surfacedAt?`
 - `artifactRefs?`
+
+`live?` and `cancelable?` are live orchestration enrichments when a hosted
+adapter can answer current child-run state. They are not durable delegation-ledger
+fields returned by `runtime.delegation.listRuns(...)`, while `delivery.*` and
+artifact refs are replay-visible run record data.
 
 `subagent_cancel` records explicit cancellation intent. It does not erase run
 history.
@@ -596,8 +615,12 @@ Patch-producing delegated runs return `WorkerResult` artifacts for the parent.
 and evidence capture, but it is intentionally non-patch-producing.
 
 - `worker_results_merge` is read-only and reports `empty | conflicts | merged`
-- `worker_results_apply` mutates the parent workspace only after the parent
-  explicitly adopts the merged result
+- `worker_results_apply` reports `empty | conflicts | apply_failed | applied`
+  and mutates the parent workspace only after the parent explicitly adopts the
+  merged result
+- conflicting or failed apply attempts do not clear the recorded worker
+  results; the parent keeps the same replay-visible patch candidates until a
+  later successful apply or explicit cleanup
 
 ## `skill_load`, `skill_complete`, And `skill_promotion`
 
@@ -780,6 +803,10 @@ Derived workflow inspection surface.
   outcomes awaiting a parent turn; pending worker results and pending
   delegation outcomes both keep ship posture blocked until the parent
   explicitly resolves them
+- `pendingDelegationOutcomes` tracks durable delivery handoffs still waiting in
+  `handoffState=pending_parent_turn`; runs already marked `surfaced` and
+  same-turn supplemental append attempts do not count as pending delegation
+  outcomes on this surface
 - optionally includes recent derived workflow artifacts
 
 This tool is advisory. It does not create a runtime-owned chain planner and it

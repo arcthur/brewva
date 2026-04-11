@@ -1,6 +1,8 @@
 # Control And Data Flow
 
 This document models governance-first runtime flow and persistence boundaries.
+It is a descriptive wiring view, not the source of truth for public methods,
+event schemas, or CLI/session contracts.
 
 Interpretation rule:
 
@@ -80,7 +82,7 @@ flowchart LR
   IN["Prompt / Tool IO / Usage"] --> RT["BrewvaRuntime"]
   RT --> EV["event tape (.orchestrator/events/*.jsonl)"]
   RT --> LD["evidence ledger (.orchestrator/ledger/evidence.jsonl)"]
-  RT --> MEM["working projection cache/export (.orchestrator/projection/units.jsonl + sessions/sess_<id>/working.md)"]
+  RT --> MEM["working projection cache/export (.orchestrator/projection/units.jsonl + state.json + sessions/sess_<id>/working.md)"]
   RT --> SNAP["rollback snapshots (.orchestrator/snapshots/<session>/*)"]
 ```
 
@@ -94,11 +96,14 @@ flowchart LR
 
   AUDIT["Durable audit tape"] --> A1["message_end summary"]
   AUDIT --> A2["tool_execution_end summary"]
+  AUDIT --> A3["tool_result_recorded outcome truth"]
   AUDIT --> A4["approval + delegation lifecycle"]
 ```
 
 Live activity stays channel-oriented and ephemeral. Durable tape keeps replay,
-evidence, and recovery semantics.
+evidence, and recovery semantics. Hosted summaries such as `message_end` and
+`tool_execution_end` stay distinct from runtime-owned durable outcome truth
+such as `tool_result_recorded`.
 
 ## Hosted Admission Flow
 
@@ -132,7 +137,9 @@ flowchart TD
   A["startup"] --> B["load event tape"]
   B --> C["TurnReplayEngine (checkpoint + delta)"]
   C --> D["hydrate task/truth/cost/verification replay state"]
-  D --> E["if rebuildable projection files are missing: rebuild from tape"]
+  D --> E{"projection units already present?"}
+  E -->|yes| F["refresh working snapshot from projection state"]
+  E -->|no| G["replay tape through ProjectionEngine and rebuild projection state"]
 ```
 
 ## Rollback Flow
@@ -158,3 +165,13 @@ flowchart TD
   C -->|none available| E["return no_mutation_receipt"]
   D --> F["emit rollback event trail"]
 ```
+
+## Related Docs
+
+- `docs/architecture/system-architecture.md`
+- `docs/reference/runtime.md`
+- `docs/reference/runtime-plugins.md`
+- `docs/reference/session-lifecycle.md`
+- `docs/reference/events.md`
+- `docs/journeys/operator/interactive-session.md`
+- `docs/journeys/operator/inspect-replay-and-recovery.md`

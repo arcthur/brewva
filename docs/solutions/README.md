@@ -6,6 +6,8 @@ and capture flows can retrieve explicitly through `knowledge_search`.
 
 This directory is not runtime authority and it is not hidden memory. It is the
 cold knowledge layer for reusable repository-specific experience.
+This page defines the precedent layer and capture rules, not the stable product
+or runtime contract itself.
 
 ## Source Authority And Contradiction Resolution
 
@@ -169,3 +171,11 @@ Use `knowledge_capture` to write or update canonical solution records.
   capture
 - `precedent_sweep` is the read-only broad maintenance surface; it exists for
   explicit cleanup passes, not as a default hosted sweep
+
+## Related Docs
+
+- Documentation map: `docs/index.md`
+- Stable design docs: `docs/architecture/system-architecture.md`
+- Stable contract docs: `docs/reference/tools.md`,
+  `docs/reference/skills.md`
+- Repository research and incubation: `docs/research/README.md`

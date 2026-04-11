@@ -77,6 +77,7 @@ state, or rollback identity.
 ### `authority.skills`
 
 - `activate(sessionId, name)`
+- `recordCompletionFailure(sessionId, outputs, validation, usage?)`
 - `complete(sessionId, output, options?)`
 
 `complete(...)` remains the authoritative skill commit boundary. It re-runs the
@@ -86,6 +87,13 @@ latest post-verification evidence before recording `skill_completed`. Both
 `validateOutputs(...)` and `complete(...)` fail closed when no active skill is
 loaded for the target session.
 
+Current implementation note:
+
+- completion semantics are driven by the validated `outputs` payload
+- although the public type still accepts an optional completion annotation
+  object, the current runtime-owned completion fold does not persist or inspect
+  those extra fields when committing `skill_completed`
+
 ### `authority.proposals`
 
 - `submit(sessionId, proposal)`
@@ -93,7 +101,9 @@ loaded for the target session.
 
 This is the proposal / approval authority surface. Inspection of proposal state
 lives under `inspect.proposals`. The stable proposal boundary is described in
-`docs/reference/proposal-boundary.md`.
+`docs/reference/proposal-boundary.md`. Raw receipt chronology remains on
+`inspect.events`; this surface is the authority entrypoint, not the event
+catalog.
 
 ### `authority.tools`
 
@@ -194,16 +204,24 @@ Verification semantics to preserve:
 
 ### `authority.cost`
 
-- `recordAssistantUsage(sessionId, input)`
+- `recordAssistantUsage(input)`
 
 ### `authority.session`
 
 - `commitCompaction(sessionId, input)`
-- `applyMergedWorkerResults(sessionId, report)`
+- `applyMergedWorkerResults(sessionId, { toolName, toolCallId? })`
+
+`applyMergedWorkerResults(...)` does not accept an arbitrary merged patch report
+from the caller. The runtime recomputes merge state from the session's recorded
+`WorkerResult` artifacts, then records the parent-controlled adoption outcome.
 
 ## `inspect`
 
 `inspect` is the read-only operator and host read-model surface.
+
+Slash-command syntax such as `/inspect`, `/insights`, `/questions`, and
+`/answer` is documented in `docs/reference/commands.md`. This page defines the
+underlying replay-first contracts those operator products read from.
 
 ### `inspect.skills`
 
@@ -211,6 +229,8 @@ Verification semantics to preserve:
 - `list()`
 - `get(name)`
 - `getActive(sessionId)`
+- `getActiveState(sessionId)`
+- `getLatestFailure(sessionId)`
 - `validateOutputs(sessionId, outputs)`
 - `getOutputs(sessionId, skillName)`
 - `getConsumedOutputs(sessionId, targetSkillName)`
@@ -225,6 +245,19 @@ verification boundary, and it requires an active skill.
 - `list(sessionId, query?)`
 - `listEffectCommitmentRequests(sessionId, query?)`
 - `listPendingEffectCommitments(sessionId)`
+
+This is the normalized replay-first read model for proposal and approval
+status. For raw receipt chronology and payload inspection, use
+`inspect.events` together with `docs/reference/events.md`.
+
+Ordering semantics:
+
+- `list(sessionId, query?)` returns newest-first `EffectCommitmentRecord`
+  values by receipt timestamp
+- `listEffectCommitmentRequests(sessionId, query?)` returns newest-first
+  request-state rows by `updatedAt`
+- `listPendingEffectCommitments(sessionId)` is the pending-only queue ordered
+  by request `createdAt`
 
 ### `inspect.context`
 
@@ -256,9 +289,23 @@ baseline, while `stableTail` still requires the same scope key plus the same
 tail hash.
 
 `getHistoryViewBaseline(...)` is the read model for the current
-model-visible baseline derived from replay-visible history rewrite receipts.
-It is leaf-scoped, transcript-equivalent, and does not include task state,
-tool lifecycle hints, or recovery instructions.
+model-visible baseline. When a compatible `session_compact` receipt exists, it
+returns that leaf-scoped rewrite baseline; otherwise it can fall back to a
+bounded `exact_history` snapshot derived from replay-visible
+`turn_input_recorded` / `turn_render_committed` receipts.
+It therefore does not guarantee full transcript equivalence, and it does not
+include task state, tool lifecycle hints, or recovery instructions.
+
+The returned snapshot carries `rebuildSource = receipt | cache | exact_history`.
+`exact_history` is continuity fallback rather than replacement authority: it is
+bounded to recent turns and can disappear into recovery
+`diagnostic_only` posture when branch lineage is ambiguous or the baseline
+budget is exceeded.
+
+This inspect surface is intentionally richer than the model-facing baseline
+block. `docs/reference/context-composer.md` covers how the rewrite text is
+rendered for the model, while `docs/reference/working-projection.md` covers the
+separate rebuildable working snapshot that may appear alongside it.
 
 ### `inspect.tools`
 
@@ -290,6 +337,20 @@ tool lifecycle hints, or recovery instructions.
 - `listIntents(query?)`
 - `getProjectionSnapshot()`
 
+`inspect.schedule` is the read model over rebuildable schedule projection state.
+
+- `listIntents(query?)` filters by `parentSessionId?` and `status?`
+  (`active | cancelled | converged | error`) and returns projected intent
+  records ordered by `updatedAt` descending, then `intentId`
+- `getProjectionSnapshot()` returns the current schedule projection snapshot
+  after recovery has rebuilt scheduler state from schedule events. Its shape is
+  (`schema`, `generatedAt`, `watermarkOffset`, `intents`), but `generatedAt`
+  reflects the current snapshot build time, not necessarily the timestamp of
+  the last on-disk projection file
+- this snapshot is not the same as daemon startup recovery summary such as
+  `projectionMatched` or `catchUp.*`; those are scheduler-recovery diagnostics,
+  not the public runtime inspect surface
+
 ### `inspect.recovery`
 
 - `listPending()`
@@ -311,10 +372,11 @@ Mutation of WAL rows is not part of the public runtime contract.
 - `getWorkingSet(...)` exposes the recovery-only operational state that must
   stay out of the history-view baseline, such as open tool lifecycle counts,
   pending recovery family, and effect replay guards.
-- `getHistoryViewBaseline(...)` exposes the current baseline snapshot metadata
-  for operators. The model-visible baseline block is intentionally slimmer:
-  digest, lineage, and reference-context metadata stay on the inspect surface,
-  while the admitted prompt block carries only the history rewrite itself.
+- `inspect.context.getHistoryViewBaseline(...)` exposes the current baseline
+  snapshot metadata for operators. The model-visible baseline block is
+  intentionally slimmer: digest, lineage, and reference-context metadata stay
+  on the inspect surface, while the admitted prompt block carries only the
+  history rewrite itself.
 
 ### `inspect.reasoning`
 
@@ -350,8 +412,8 @@ Stable rules:
 - `listGuardResults(sessionId, query?)`
 - `getTapeStatus(sessionId)`
 - `getTapePressureThresholds()`
-- `searchTape(sessionId, query, scope?)`
-- `listReplaySessions()`
+- `searchTape(sessionId, { query, scope?, limit? })`
+- `listReplaySessions(limit?)`
 - `subscribe(listener)`
 - `toStructured(event)`
 - `list(sessionId, query?)`
@@ -362,16 +424,30 @@ Stable rules:
 `inspect.events` is the raw tape inspection surface. It is intentionally wider
 than the frontend/session transport contract.
 
+Operator products may summarize or project from this tape, but they do not
+replace it. When raw receipt chronology matters, this surface remains the
+source to inspect.
+
+`listReplaySessions(...)` enumerates sessions with durable event-tape history.
+It is a replay inventory, not a registry of currently attached live sessions.
+
 ### `inspect.cost`
 
 - `getSummary(sessionId)`
 
 ### `inspect.session`
 
-- `listWorkerResults(sessionId, query?)`
-- `mergeWorkerResults(sessionId, query?)`
+- `listWorkerResults(sessionId)`
+- `getOpenToolCalls(sessionId)`
+- `getUncleanShutdownDiagnostic(sessionId)`
+- `mergeWorkerResults(sessionId)`
 - `getHydration(sessionId)`
 - `getIntegrity(sessionId)`
+
+This surface is the operator diagnostic view over current hydrated session
+state, unclean-shutdown explainability, and artifact integrity. It is not the
+raw event chronology (`inspect.events`) and it is not the frontend/gateway
+replay compiler (`inspect.sessionWire`).
 
 ### `inspect.sessionWire`
 
@@ -387,6 +463,11 @@ approval receipts, subagent lifecycle receipts, and `session_shutdown`.
 This surface does not replace `inspect.events`. The tape remains the durable
 source of truth; `inspect.sessionWire` is the versioned projection that
 frontends and transports consume.
+
+Operator-only diagnostics such as hydration status, integrity issues, unclean
+shutdown explanation, and bounded recovery working state stay on
+`inspect.session` / `inspect.recovery` instead of entering this transport
+projection.
 
 This surface is keyed by runtime session ids. Gateway public-session replay is
 one layer higher: gateway first resolves public session ids through durable
@@ -510,7 +591,8 @@ Operator products receive:
 This keeps inspection rich while narrowing mutation authority.
 
 Embedded operator commands such as `/inspect` and `/insights` are built against
-this port rather than against the full hosted runtime surface.
+this port rather than against the full hosted runtime surface. Command syntax
+and widget or transport behavior still live outside this page.
 
 ## Internal Subpath
 

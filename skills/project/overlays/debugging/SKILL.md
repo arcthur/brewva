@@ -49,7 +49,7 @@ Use this overlay when debugging Brewva itself.
 
 Run the base hypothesis tracker during debugging:
 
-- `scripts/hypothesis_tracker.py` — tracks hypotheses, evidence, and dispositions throughout investigation. Run to record each hypothesis.
+- `scripts/hypothesis_tracker.py` — tracks hypotheses, evidence, and dispositions throughout investigation. Run to record each hypothesis using the base debugging helper.
 
 Additionally split source vs runtime evidence for Brewva-specific failures.
 
@@ -90,4 +90,4 @@ Prefer reproducible commands, event traces, and artifact correlations over specu
 
 ## Example
 
-Input: "Why did replay keep an outdated cascade intent after the taxonomy refactor?"
+Input: "Why did replay rebuild a stale workflow posture after a hosted-session restart?"

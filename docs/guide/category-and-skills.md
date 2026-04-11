@@ -1,6 +1,9 @@
 # Category And Skills
 
-Skills are loaded by category, not by lifecycle tier.
+This guide explains how the skill catalog is organized and how routing sees it.
+It focuses on catalog layout and routing boundaries, not the exhaustive skill
+inventory. For the authoritative skill list and contract details, use
+`docs/reference/skills.md`.
 
 ## Current Layout
 
@@ -12,88 +15,95 @@ Skills are loaded by category, not by lifecycle tier.
 - Shared project context: `skills/project/shared`
 - Project overlays: `skills/project/overlays`
 
+Category is directory-derived. The catalog does not use a separate lifecycle
+tier naming scheme.
+
+## Semantic Roles
+
 The important distinction is semantic:
 
-- public skill = routable capability boundary
-- runtime/control-plane workflow semantics = not public skills
-- project overlay = project-specific tightening plus shared context
-- operator/meta = loaded, but hidden from standard routing by default
+- public skill: routable capability boundary
+- runtime or control-plane workflow semantics: not public skills
+- project overlay: project-specific tightening plus shared context
+- operator and meta skills: loaded catalog entries, usually hidden from default
+  routing scopes
 
-Skills should also remain behavior-rich, not just contract-rich. The frontmatter
-defines runtime authority and artifact shape; the markdown body should still
-teach the model how the specialist behaves, decides, asks questions, and hands
-work off to the next skill.
+Skills should remain behavior-rich, not just contract-rich. Frontmatter defines
+authority, outputs, effects, and resources; the Markdown body still teaches the
+model how the specialist reasons, decides, asks questions, and hands work off.
 
 ## Routing Scopes
 
-`skills.routing.enabled=false` by default. When enabled,
-`skills.routing.scopes` is the only allowlist for auto routing visibility.
-Typical defaults are `core` and `domain`; operator/meta stay loaded but hidden
-unless scopes explicitly opt in. Interactive hosted entrypoints may apply
+`skills.routing.enabled=false` by default. When routing is enabled,
+`skills.routing.scopes` is the explicit allowlist for auto-routing visibility.
+
+Typical defaults are `core` and `domain`. Operator and meta skills remain
+loaded but hidden unless scopes explicitly opt in.
+
+Interactive hosted entrypoints may apply
 `routingDefaultScopes=["core", "domain"]`; that default only activates when
 config omitted `skills.routing.enabled`, and it does not replace explicit
 `skills.routing.scopes`.
 
 Bounded or advisory protocol skills are still gated by routing context and
-required artifacts. For example, `goal-loop` is not auto-routed for ordinary
-one-shot implementation prompts, and `predict-review` is not a generic review
-replacement.
+required artifacts. For example:
 
-## Current Inventory
+- `goal-loop` is not a generic implementation fallback
+- `predict-review` is not a generic replacement for `review`
+- `learning-research` is the explicit precedent-consult posture before
+  non-trivial planning or review
 
-- Core: `repository-analysis`, `discovery`, `learning-research`, `strategy-review`, `design`, `implementation`, `debugging`, `review`, `qa`, `ship`, `retro`, `knowledge-capture`
-- Domain: `agent-browser`, `ci-iteration`, `frontend-design`, `github`, `telegram`, `structured-extraction`, `goal-loop`, `predict-review`
-- Operator: `runtime-forensics`, `git-ops`
-- Meta: `skill-authoring`, `self-improve`
-- Overlays: `repository-analysis`, `design`, `implementation`, `debugging`, `review`, `runtime-forensics`
-- Shared project context: `critical-rules`, `migration-priority-matrix`, `package-boundaries`, `runtime-artifacts`
+## Reading The Catalog
 
-Special protocol posture:
+At a high level, the families map like this:
 
-- `goal-loop` owns bounded continuity, explicit cadence, and objective
-  iteration-fact discipline
-- `ci-iteration` owns bounded PR / CI repair loops, explicit retry contracts,
-  and verification-backed stop conditions
-- `learning-research` owns explicit planning-time proof of consult against the
-  repository-native precedent layer
-- `knowledge-capture` owns terminal materialization of canonical repository
-  precedents under `docs/solutions/**`
-- `predict-review` owns advisory multi-perspective debate and hypothesis
-  ranking, not runtime authority
-- `self-improve` mines repeated evidence into learning backlog items rather
-  than acting as a hidden optimizer
+- core: delivery and engineering lifecycle surfaces such as
+  `repository-analysis`, `design`, `implementation`, `review`, `qa`, and
+  `ship`
+- domain: specialized environments and bounded protocols such as
+  `agent-browser`, `github`, `telegram`, `structured-extraction`, and
+  `goal-loop`
+- operator: runtime and repository operations such as `runtime-forensics` and
+  `git-ops`
+- meta: authoring and learning surfaces such as `skill-authoring` and
+  `self-improve`
 
-One common software-delivery chain is:
+Project overlays specialize a subset of public skills for this repository.
+Shared project context is injected centrally from `skills/project/shared`.
 
-`repository-analysis -> discovery -> strategy-review -> learning-research -> design -> implementation -> review -> qa -> ship -> retro -> knowledge-capture`
-
-This is a catalog convention, not a kernel-owned stage machine.
+Use `docs/reference/skills.md` when you need the exact current inventory rather
+than examples.
 
 ## Overlay Semantics
 
 Project overlays do not create new semantic territory. They:
 
-- can add project-specific execution hints and shared context
-- tighten allowed/denied effects, resource ceilings, and routing constraints
-- keep base outputs/consumes unless the overlay explicitly replaces them
+- add project-specific execution hints and shared context
+- tighten allowed and denied effects, resource ceilings, and routing
+  constraints
+- keep base outputs and consumes unless the overlay explicitly replaces them
 - prepend shared project context from `skills/project/shared` in root order,
   with each shared document injected at most once per final loaded skill
 
-This keeps project knowledge centralized without turning every project into a new
-catalog of public super-skills.
+This keeps project knowledge centralized without turning every project into a
+new catalog of public super-skills.
 
 ## Runtime-Owned Workflow Semantics
 
-These are no longer public skills:
+These are not public skills:
 
 - verification
 - finishing
 - recovery
 - compose-style workflow semantics
 
-`skills/internal/` is intentionally reserved for future structured runtime
-workflow or recovery docs. Today those runtime-owned semantics are implemented
-in code, not as routable skills.
+`skills/internal/` remains reserved for future structured runtime workflow or
+recovery docs. Today those semantics are implemented in code, not as routable
+skills.
 
-Skill configuration contract is defined in `packages/brewva-runtime/src/contracts/index.ts`
-(`BrewvaConfig.skills`).
+## Related Docs
+
+- `docs/guide/features.md`
+- `docs/reference/skills.md`
+- `docs/reference/skill-routing.md`
+- `packages/brewva-runtime/src/contracts/index.ts`

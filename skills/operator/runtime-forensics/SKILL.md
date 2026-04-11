@@ -161,26 +161,28 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 
 ## Concrete Example
 
-Input: "Explain why cascade events stopped reconciling after session replay."
+Input: "Explain why the session still looked like it was recovering after provider fallback already succeeded."
 
 Output:
 
 ```json
 {
-  "runtime_trace": "Turn 3: ReplayService.finalize() emitted 4 cascade events with epoch=3. Turn 4: CascadeReconciler.accept() received events but current epoch was 5. Events silently dropped by epoch < current guard. No error logged — guard is a silent skip, not a throw.",
-  "session_summary": {
-    "session_id": "sess_abc123",
-    "state": "stalled",
-    "active_blockers": ["cascade reconciliation halted — epoch mismatch"],
-    "last_healthy_turn": 2
-  },
+  "runtime_trace": "Turn 8 records `provider_fallback_retry` with `status=entered` and `attempt=1`. The fallback-model request then succeeds and output resumes, but no later `completed` or `failed` transition is present for that attempt. On the next turn, the hosted transition snapshot still reports `pendingFamily=recovery`, so posture-aware runtime plugins keep treating the session as mid-recovery.",
+  "session_summary": "Session `sess_abc123` is functionally resumed but still advertises recovery posture because the durable provider-fallback transition sequence never closed.",
   "artifact_findings": [
     {
       "type": "anomaly",
       "layer": "event_store",
-      "detail": "Post-replay events carry pre-replay epoch (3 vs expected 5)",
+      "detail": "`provider_fallback_retry` has an `entered` record with no later `completed` or `failed` event for attempt=1",
       "severity": "high",
-      "evidence_path": ".brewva/sessions/sess_abc123/events.jsonl:L42-L45"
+      "evidence_path": ".orchestrator/sessions/sess_abc123/events.jsonl"
+    },
+    {
+      "type": "divergence",
+      "layer": "derived_projection",
+      "detail": "Recovery posture stays active even though later output was rendered successfully",
+      "severity": "medium",
+      "evidence_path": ".orchestrator/sessions/sess_abc123/projections"
     }
   ]
 }
@@ -190,8 +192,8 @@ Output:
 
 - `runtime_trace` is a time-ordered causal account that downstream skills can
   rely on without replaying the entire artifact graph.
-- `session_summary` captures current runtime posture, active blockers, and key
-  artifact state at a glance.
+- `session_summary` is a concise text snapshot of current runtime posture,
+  active blockers, and key artifact state.
 - `artifact_findings` identifies anomalies, missing evidence, integrity risks, or
   decisive signals with enough precision to hand off to debugging or recovery.
 

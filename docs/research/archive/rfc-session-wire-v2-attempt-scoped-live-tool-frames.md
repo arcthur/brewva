@@ -26,7 +26,7 @@ The lasting decisions were:
 - replay remains committed-only; standalone durable `tool.finished` is still
   not projected
 
-## Current Contract
+## Current Stable References
 
 Read current behavior from:
 

@@ -3,6 +3,10 @@
 This page captures current, intentional, or temporary limitations that are easy
 to miss when reading individual module docs.
 
+Normative key shapes and command surfaces remain in
+`docs/reference/configuration.md` and `docs/reference/commands.md`. This page
+only collects caveats and intentionally narrow behavior.
+
 ## Runtime Surface
 
 - `runtime.inspect.events.subscribe(...)` is in-process and ephemeral.

@@ -33,7 +33,7 @@ What did not survive as the public model:
 - progressive trust as a lasting user-facing architecture boundary
 - exploration-supervision framing as an active design goal
 
-## Current Contract
+## Current Stable References
 
 Read current behavior from:
 

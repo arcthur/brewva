@@ -53,7 +53,8 @@ flowchart TD
 1. Telegram updates enter the system through polling or webhook ingress.
 2. The projector and adapter dedupe layer normalize raw updates into
    `TurnEnvelope`.
-3. The bridge records ingest events and hands the turn to the channel loop.
+3. The bridge records pre-WAL ingest telemetry and then hands the turn to the
+   channel loop, where dispatcher-owned Recovery WAL acceptance begins.
 4. The command router resolves slash commands, `@agent` routing, and ACL
    decisions.
 5. Channel scope binds to the agent session while preserving the original
@@ -63,7 +64,8 @@ flowchart TD
 7. The adapter renders outbound payloads according to channel capabilities and
    sends them.
 8. Approval callbacks are signature-validated, projected into approval turns,
-   and rebound to the target agent session.
+   and routed by exact `requestId` match to a live agent session. Matching
+   prefers the current scope, then other live scopes.
 
 ## Execution Semantics
 
@@ -71,8 +73,19 @@ flowchart TD
   watermark rather than from Telegram redelivery
 - the ingress watermark is ingress-level state, not proof that local execution
   finished successfully
-- outbound delivery is not replay-critical durable state; the system performs
-  bounded retry and then records an outbound error
+- webhook edge `code=accepted` and Fly ingress `202 accepted` are upstream
+  transport-acceptance signals only; they do not by themselves prove a
+  replay-relevant turn, bridge ingest telemetry, or hosted turn completion
+- `channel_turn_ingested` is bridge handoff telemetry emitted before
+  dispatcher-owned `appendPending(...)`; durable recovery ownership starts only
+  after the Recovery WAL row exists
+- `channel_turn_emitted` records successful bridge delivery of the prepared
+  outbound turn; `channel_turn_bridge_error` records failures from that same
+  outbound bridge path
+- outbound delivery is not replay-critical durable state; Telegram transport
+  may do bounded local retry for retryable send failures, but
+  `channel_turn_outbound_error` records any outbound turn that still fails
+  after transport handling, including immediate non-retryable failures
 - Telegram channel policy is the built-in `telegram` skill, not a
   user-authored transport-policy injection path
 
@@ -85,7 +98,8 @@ flowchart TD
 - outbound requests use bounded retry only for explicitly retryable provider
   rejections
 - approval screen state is process-local cache; approval truth remains derived
-  from runtime events
+  from runtime events, and callback routing does not fall back to the current
+  focus when no exact replayable request match exists
 
 ## Observability
 
@@ -122,4 +136,6 @@ flowchart TD
 
 - CLI: `docs/guide/cli.md`
 - Telegram webhook ingress: `docs/guide/telegram-webhook-edge-ingress.md`
+- Channel workspace guide: `docs/guide/channel-agent-workspace.md`
+- Command reference: `docs/reference/commands.md`
 - Session lifecycle: `docs/reference/session-lifecycle.md`

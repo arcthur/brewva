@@ -1,5 +1,16 @@
 import type { BrewvaHostedRuntimePort, ContextCompactionGateStatus } from "@brewva/brewva-runtime";
-import { CONTEXT_COMPOSED_EVENT_TYPE } from "@brewva/brewva-runtime";
+import {
+  CONTEXT_COMPACTION_ADVISORY_EVENT_TYPE,
+  CONTEXT_COMPACTION_AUTO_COMPLETED_EVENT_TYPE,
+  CONTEXT_COMPACTION_AUTO_FAILED_EVENT_TYPE,
+  CONTEXT_COMPACTION_AUTO_REQUESTED_EVENT_TYPE,
+  CONTEXT_COMPACTION_GATE_ARMED_EVENT_TYPE,
+  CONTEXT_COMPACTION_GATE_CLEARED_EVENT_TYPE,
+  CONTEXT_COMPACTION_SKIPPED_EVENT_TYPE,
+  CONTEXT_COMPOSED_EVENT_TYPE,
+  CRITICAL_WITHOUT_COMPACT_EVENT_TYPE,
+  SESSION_COMPACT_EVENT_TYPE,
+} from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   buildContextComposedEventPayload,
@@ -85,7 +96,7 @@ export function createHostedContextTelemetry(
       emitRuntimeEvent({
         sessionId: input.sessionId,
         turn: input.turn,
-        type: "context_compaction_skipped",
+        type: CONTEXT_COMPACTION_SKIPPED_EVENT_TYPE,
         payload: {
           reason: input.reason,
         },
@@ -95,7 +106,7 @@ export function createHostedContextTelemetry(
       emitRuntimeEvent({
         sessionId: input.sessionId,
         turn: input.turn,
-        type: "context_compaction_auto_requested",
+        type: CONTEXT_COMPACTION_AUTO_REQUESTED_EVENT_TYPE,
         payload: {
           reason: input.reason,
           usagePercent: input.usagePercent,
@@ -107,7 +118,7 @@ export function createHostedContextTelemetry(
       emitRuntimeEvent({
         sessionId: input.sessionId,
         turn: input.turn,
-        type: "context_compaction_auto_completed",
+        type: CONTEXT_COMPACTION_AUTO_COMPLETED_EVENT_TYPE,
         payload: {
           reason: input.reason,
         },
@@ -117,7 +128,7 @@ export function createHostedContextTelemetry(
       emitRuntimeEvent({
         sessionId: input.sessionId,
         turn: input.turn,
-        type: "context_compaction_auto_failed",
+        type: CONTEXT_COMPACTION_AUTO_FAILED_EVENT_TYPE,
         payload: {
           reason: input.reason,
           error: input.error,
@@ -129,7 +140,7 @@ export function createHostedContextTelemetry(
       emitRuntimeEvent({
         sessionId: input.sessionId,
         turn: input.turn,
-        type: "context_compaction_gate_armed",
+        type: CONTEXT_COMPACTION_GATE_ARMED_EVENT_TYPE,
         payload: {
           reason: input.reason,
           usagePercent: input.gateStatus.pressure.usageRatio,
@@ -139,7 +150,7 @@ export function createHostedContextTelemetry(
       emitRuntimeEvent({
         sessionId: input.sessionId,
         turn: input.turn,
-        type: "critical_without_compact",
+        type: CRITICAL_WITHOUT_COMPACT_EVENT_TYPE,
         payload: {
           reason: input.reason,
           usagePercent: input.gateStatus.pressure.usageRatio,
@@ -153,7 +164,7 @@ export function createHostedContextTelemetry(
       emitRuntimeEvent({
         sessionId: input.sessionId,
         turn: input.turn,
-        type: "context_compaction_advisory",
+        type: CONTEXT_COMPACTION_ADVISORY_EVENT_TYPE,
         payload: {
           reason: input.reason,
           usagePercent: input.gateStatus.pressure.usageRatio,
@@ -168,7 +179,7 @@ export function createHostedContextTelemetry(
       emitRuntimeEvent({
         sessionId: input.sessionId,
         turn: input.turn,
-        type: "session_compact",
+        type: SESSION_COMPACT_EVENT_TYPE,
         payload: {
           entryId: input.entryId,
           fromExtension: input.fromExtension,
@@ -179,7 +190,7 @@ export function createHostedContextTelemetry(
       emitRuntimeEvent({
         sessionId: input.sessionId,
         turn: input.turn,
-        type: "context_compaction_gate_cleared",
+        type: CONTEXT_COMPACTION_GATE_CLEARED_EVENT_TYPE,
         payload: {
           reason: input.reason,
         },

@@ -154,35 +154,35 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 
 ## Concrete Example
 
-Input: "Record the replay bug fix so the next planner can find the root cause, failed attempts, and prevention guidance."
+Input: "Record the stuck recovery-posture fix so the next planner can find the root cause, failed attempts, and prevention guidance."
 
 Output:
 
 ```json
 {
   "solution_record": {
-    "problem_class": "WAL replay epoch staleness",
-    "boundary": "packages/brewva-runtime/src/services/replay.ts",
-    "root_cause": "ReplayService emits events with stale session epoch. Cascade reconciler skips events where epoch < current, causing silent drop after replay completes.",
-    "fix": "Pin epoch to post-replay value in ReplayService.finalize(). Add epoch assertion in CascadeReconciler.accept().",
+    "problem_class": "Hosted recovery posture remained active after successful provider fallback",
+    "boundary": "packages/brewva-gateway/src/session/compaction-recovery.ts",
+    "root_cause": "A provider fallback success path returned without recording `provider_fallback_retry` as `completed`, leaving the hosted transition snapshot in `pendingFamily=recovery`.",
+    "fix": "Record the closing transition on every recovered fallback path and add regression coverage for recovery snapshot clearing plus the reduction gate that reads recovery posture.",
     "failed_attempts": [
       {
-        "attempt": "Reset epoch at replay start",
-        "outcome": "Caused duplicate event emission during replay window",
-        "lesson": "Epoch must be pinned at finalize, not at start"
+        "attempt": "Treat the issue as a `workflow_status` derivation bug",
+        "outcome": "Left the underlying recovery snapshot inconsistent and the next turn still looked active",
+        "lesson": "The durable transition sequence, not the advisory read model, owns recovery posture"
       }
     ],
     "preventive_guidance": [
-      "Any future replay path must assert epoch >= current before event emit",
-      "Add regression test for mid-replay crash recovery"
+      "Every hosted transition reason that emits `status=entered` must emit a closing `completed`, `failed`, or `skipped` event before normal turn flow resumes",
+      "Recovery regression tests must assert that `pendingFamily` clears after a successful fallback retry"
     ],
     "source_artifacts": [
-      "investigation_record:replay-epoch-2024-11",
-      "review_report:advisory-v2-review"
+      "investigation_record:provider-fallback-stuck-recovery",
+      "verification_evidence:turn-transition-posture-regression"
     ],
-    "derivative_links": ["docs/reference/events.md — epoch contract section may need update"]
+    "derivative_links": ["docs/reference/events.md", "docs/reference/session-lifecycle.md"]
   },
-  "solution_doc_path": "docs/solutions/replay-epoch-stale-drop.md",
+  "solution_doc_path": "docs/solutions/provider-fallback-stuck-recovery-posture.md",
   "capture_status": "created"
 }
 ```

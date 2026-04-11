@@ -71,6 +71,8 @@ Implementation detail and system boundaries:
 
 - `@brewva/brewva-runtime`: runtime contracts, replay, projection, verification, governance, cost, and WAL durability
 - `@brewva/brewva-tools`: runtime-aware tools for code, tape, task, schedule, observability, and explicit subagent flows
+- `@brewva/brewva-deliberation`: evidence-backed narrative memory and optimization-continuity substrate
+- `@brewva/brewva-skill-broker`: post-execution skill-promotion brokerage and persisted draft/review flow
 - `@brewva/brewva-gateway/runtime-plugins`: runtime plugin wiring, integration guards, and hidden-context composition
 - `@brewva/brewva-cli`: interactive CLI, print/json modes, replay/undo, daemon, and the user-facing front door into gateway-hosted channels
 - `@brewva/brewva-gateway`: local control-plane daemon, worker supervision, and subagent/session orchestration
@@ -94,16 +96,21 @@ Protocol-oriented skills:
   iteration facts across repeated runs
 - `learning-research` performs explicit precedent retrieval before non-trivial
   planning or review
-- `precedent_audit` performs explicit repository-precedent maintenance checks
-  before a record is displaced or refreshed
-- `precedent_sweep` performs explicit repository-wide precedent maintenance
-  sweeps without turning stale-document cleanup into a default path
 - `knowledge-capture` materializes canonical repository precedents under
   `docs/solutions/**`
 - `predict-review` provides read-only multi-perspective debate and ranked
   hypotheses through public delegation tools
 - `self-improve` distills repeated evidence, including loop-history facts, into
   improvement hypotheses and backlog items
+
+Adjacent repository-knowledge tools:
+
+- `knowledge_search` is the explicit repository-native precedent retrieval
+  surface used before non-trivial planning, debugging, and review
+- `precedent_audit` performs explicit repository-precedent maintenance checks
+  before a record is displaced or refreshed
+- `precedent_sweep` performs explicit repository-wide precedent maintenance
+  sweeps without turning stale-document cleanup into a default path
 
 For taxonomy details and project overlays, see `docs/guide/features.md` and `docs/reference/skills.md`.
 

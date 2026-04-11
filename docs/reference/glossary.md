@@ -16,8 +16,8 @@
 - Channel Host: hosted runtime loop behind `brewva --channel ...`; binds channel scopes to agent sessions and runs tool-governed turns
 - Gateway (Control Plane): local daemon exposed via `brewva gateway ...`, providing a typed WebSocket API to control-plane clients
 - Runtime Plugin: the canonical Brewva hosted session integration unit registered through `@brewva/brewva-gateway/runtime-plugins`; implemented on top of the upstream `ExtensionFactory` contract
-- Proposal: an envelope submitted to the kernel for authorization; contains issuer, subject, payload, evidence references, and optional confidence/expiry metadata
-- DecisionReceipt: the kernel decision record for a Proposal; captures the decision, policy basis, reasons, committed effects, evidence references, turn, and timestamp
+- Proposal: the public approval-bearing authorization envelope; current stable public shape is `EffectCommitmentProposal`
+- DecisionReceipt: the durable kernel decision record for a public `EffectCommitmentProposal`; captures the decision, policy basis, reasons, committed effects, evidence references, turn, and timestamp
 - Context Arena: the context injection workspace that manages source reservations and token budgets per turn
 - Recovery WAL: write-ahead log for turn durability; enables crash recovery and replay of in-flight turns
 - Effect Boundary: the runtime execution class for a tool invocation: `safe` or `effectful`

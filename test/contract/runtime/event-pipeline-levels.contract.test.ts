@@ -217,6 +217,36 @@ describe("event pipeline level classification", () => {
     }
   });
 
+  test("keeps hosted compaction warning events visible at audit level", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-compaction-")),
+      config: createAuditConfig(),
+    });
+    const sessionId = "audit-level-compaction-session";
+
+    const compactionTypes = [
+      "context_compaction_advisory",
+      "context_compaction_requested",
+      "context_compaction_gate_armed",
+      "critical_without_compact",
+    ] as const;
+
+    for (const type of compactionTypes) {
+      recordRuntimeEvent(runtime, {
+        sessionId,
+        type,
+        payload: {
+          reason: "unit-test",
+          requiredTool: "session_compact",
+        },
+      });
+    }
+
+    for (const type of compactionTypes) {
+      expect(runtime.inspect.events.query(sessionId, { type })).toHaveLength(1);
+    }
+  });
+
   test("keeps read-path and skill recommendation protocol receipts at audit level", () => {
     const runtime = new BrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-hosted-protocol-")),

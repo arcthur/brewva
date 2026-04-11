@@ -114,7 +114,8 @@ flowchart TD
 
 ## Code Pointers
 
-- Inspect / replay / undo CLI: `packages/brewva-cli/src/index.ts`
+- Inspect / replay / undo CLI dispatch: `packages/brewva-cli/src/index.ts`
+- Inspect report implementation: `packages/brewva-cli/src/inspect.ts`
 - Session lifecycle: `packages/brewva-runtime/src/services/session-lifecycle.ts`
 - Replay engine: `packages/brewva-runtime/src/tape/replay-engine.ts`
 - Patch-set rollback: `packages/brewva-runtime/src/services/file-change.ts`
@@ -123,7 +124,9 @@ flowchart TD
 
 ## Related Docs
 
+- CLI: `docs/guide/cli.md`
 - Session lifecycle reference: `docs/reference/session-lifecycle.md`
+- Artifact and path reference: `docs/reference/artifacts-and-paths.md`
 - Control and data flow: `docs/architecture/control-and-data-flow.md`
 - Common failures: `docs/troubleshooting/common-failures.md`
 - Approval path: `docs/journeys/operator/approval-and-rollback.md`

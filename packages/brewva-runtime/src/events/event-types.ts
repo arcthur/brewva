@@ -32,6 +32,9 @@ export const CHANNEL_SESSION_BOUND_EVENT_TYPE = "channel_session_bound" as const
 export const GATEWAY_SESSION_BOUND_EVENT_TYPE = "gateway_session_bound" as const;
 export const CHANNEL_UPDATE_LOCK_BLOCKED_EVENT_TYPE = "channel_update_lock_blocked" as const;
 export const CHANNEL_UPDATE_REQUESTED_EVENT_TYPE = "channel_update_requested" as const;
+export const CONTEXT_COMPACTION_ADVISORY_EVENT_TYPE = "context_compaction_advisory" as const;
+export const CONTEXT_COMPACTION_REQUESTED_EVENT_TYPE = "context_compaction_requested" as const;
+export const CONTEXT_COMPACTION_GATE_ARMED_EVENT_TYPE = "context_compaction_gate_armed" as const;
 export const CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE =
   "context_compaction_gate_blocked_tool" as const;
 export const CONTEXT_COMPACTION_GATE_CLEARED_EVENT_TYPE =
@@ -106,6 +109,7 @@ export const TASK_STUCK_DETECTED_EVENT_TYPE = "task_stuck_detected" as const;
 export const TASK_STUCK_CLEARED_EVENT_TYPE = "task_stuck_cleared" as const;
 export const TASK_STALL_ADJUDICATED_EVENT_TYPE = "task_stall_adjudicated" as const;
 export const TASK_STALL_ADJUDICATION_ERROR_EVENT_TYPE = "task_stall_adjudication_error" as const;
+export const CRITICAL_WITHOUT_COMPACT_EVENT_TYPE = "critical_without_compact" as const;
 export const TOOL_EFFECT_GATE_SELECTED_EVENT_TYPE = "tool_effect_gate_selected" as const;
 export const REVERSIBLE_MUTATION_PREPARED_EVENT_TYPE = "reversible_mutation_prepared" as const;
 export const REVERSIBLE_MUTATION_RECORDED_EVENT_TYPE = "reversible_mutation_recorded" as const;
@@ -186,6 +190,9 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   GATEWAY_SESSION_BOUND_EVENT_TYPE,
   CHANNEL_UPDATE_LOCK_BLOCKED_EVENT_TYPE,
   CHANNEL_UPDATE_REQUESTED_EVENT_TYPE,
+  CONTEXT_COMPACTION_ADVISORY_EVENT_TYPE,
+  CONTEXT_COMPACTION_REQUESTED_EVENT_TYPE,
+  CONTEXT_COMPACTION_GATE_ARMED_EVENT_TYPE,
   CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE,
   CONTEXT_COMPACTION_GATE_CLEARED_EVENT_TYPE,
   CONTEXT_COMPACTION_AUTO_REQUESTED_EVENT_TYPE,
@@ -241,6 +248,7 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   PATCH_RECORDED_EVENT_TYPE,
   TURN_END_EVENT_TYPE,
   TURN_START_EVENT_TYPE,
+  CRITICAL_WITHOUT_COMPACT_EVENT_TYPE,
   EXEC_ROUTED_EVENT_TYPE,
   EXEC_FALLBACK_HOST_EVENT_TYPE,
   EXEC_BLOCKED_ISOLATION_EVENT_TYPE,

@@ -5,6 +5,12 @@ interactive sessions and channel hosts also expose a thin set of
 slash-command veneers. They do not create new kernel authority; they are
 inspectable control-plane / runtime-plugin entrypoints.
 
+This page owns command names, argument forms, mode availability, and
+operator-facing intent. Underlying runtime read models live in
+`docs/reference/runtime.md`, runtime-plugin registration and delivery wiring
+live in `docs/reference/runtime-plugins.md`, and durable receipt/event
+semantics live in `docs/reference/events.md`.
+
 Implementation source: `packages/brewva-cli/src/index.ts`.
 
 ## Mode Commands
@@ -33,6 +39,20 @@ These commands are thin session-local veneers over existing replay, workflow,
 delegation, authored-overlay, and update surfaces. They do not introduce hidden
 planner state or generic self-command injection.
 
+`/inspect` and `/insights` are read-only operator products built from existing
+`runtime.inspect.*` data. The slash forms here describe invocation and
+interactive-session UX, not a second inspection API.
+
+`/inspect` is scoped to the current embedded session or the targeted active
+channel session. It follows live conversation focus and does not perform the
+default "latest replayable session" selection used by the standalone
+`brewva inspect` subcommand.
+
+`/questions` and `/answer` expose the operator questionnaire UX. Only
+`/answer` records the durable `operator_question_answered` receipt described in
+`docs/reference/events.md`; listing or clearing questions is session-local
+presentation behavior.
+
 ## Channel Orchestration Commands
 
 When `channels.orchestration.enabled=true`, channel hosts expose a small
@@ -57,9 +77,22 @@ the overlay RFC: open questions remain derived from durable session state, and
 answering a question records `operator_question_answered` before the answer is
 routed back into the target session.
 
+These channel commands are transport veneers over the same underlying runtime
+surfaces. `@agent` routing, focus resolution, and inline delivery are channel
+UX concerns rather than separate runtime contracts.
+
 ## Config Loading
 
 Brewva no longer exposes `brewva config`.
+
+Default CLI/runtime config loading follows the same merge order documented in
+`docs/reference/configuration.md`:
+
+- normal runtime startup consults global config first, then workspace config
+- explicit `--config <path>` disables that merge and loads only the named file
+- `brewva inspect` uses the same consulted paths when `--config` is omitted, but
+  applies the forensic-safe stripping path described below instead of failing on
+  removed or unknown fields
 
 If removed or invalid config fields are present, normal CLI and runtime startup
 fail fast at config load time. Rewrite or delete those fields in the config
@@ -291,6 +324,15 @@ artifacts, then layers in deterministic directory-scoped analysis so the same
 surface can show replay facts, evidence-backed diagnostics, and explicit
 evidence gaps together.
 
+This standalone subcommand is distinct from slash `/inspect`: the CLI
+subcommand is a replay-first inspection entrypoint over persisted session
+artifacts, while the slash command is an interactive-session veneer over the
+same inspection family.
+
+Without `--session`, `brewva inspect` resolves its target from durable
+replayable sessions rather than from the current focused live session or
+transport attachment.
+
 The report now includes replay-derived session hydration status (`ready` or
 `degraded`) plus per-event hydrate issues when reconstruction of
 non-authoritative session state encountered malformed or failing events.
@@ -328,6 +370,10 @@ per-session facets (outcome,
 smoothness, work type, verification state, scope discipline) and aggregating
 them into friction hotspots, verification quality summaries, guidance
 suggestions, and notable session highlights.
+
+Slash `/insights` is the interactive-session veneer over this inspection
+family; this subcommand remains the canonical standalone CLI entrypoint for
+project-level aggregation.
 
 - `brewva insights`: analyze recent sessions for the current working directory
 - `brewva insights <dir>`: analyze sessions scoped to a specific directory
@@ -430,7 +476,7 @@ immediately. Daemon recovery also emits per-session
 With `--verbose`, daemon prints a rolling 60-second scheduler window summary
 (`fired/errored/deferred/circuit_opened` plus child session lifecycle counts).
 
-## Flags
+## Top-Level Flags
 
 - `--cwd`
 - `--config`
@@ -448,32 +494,11 @@ With `--verbose`, daemon prints a rolling 60-second scheduler window summary
 - `--replay`
 - `--daemon`
 - `--channel`
-- `--install-daemon`
-- `--uninstall-daemon`
-- `--launchd`
-- `--systemd`
-- `--no-start`
-- `--dry-run`
 - `--telegram-token`
 - `--telegram-callback-secret`
 - `--telegram-poll-timeout`
 - `--telegram-poll-limit`
 - `--telegram-poll-retry-ms`
-- `--pid-file`
-- `--log-file`
-- `--token-file`
-- `--heartbeat`
-- `--tick-interval-ms`
-- `--session-idle-ms`
-- `--max-workers`
-- `--max-open-queue`
-- `--max-payload-bytes`
-- `--health-http-port`
-- `--health-http-path`
-- `--label`
-- `--service-name`
-- `--plist-file`
-- `--unit-file`
 - `--session`
 - `--verbose`
 - `--version`
@@ -485,6 +510,20 @@ Short aliases:
 - `-i` for `--interactive`
 - `-v` for `--version`
 - `-h` for `--help`
+
+## Subcommand-Specific Flags
+
+Subcommand-only flags are documented under their own sections instead of being
+flattened into the root CLI surface:
+
+- `brewva gateway`: daemon and control-plane flags such as `--pid-file`,
+  `--log-file`, `--token-file`, `--heartbeat`, `--tick-interval-ms`,
+  `--session-idle-ms`, `--max-workers`, `--max-open-queue`,
+  `--max-payload-bytes`, and `--health-http-*`
+- `brewva onboard`: install / uninstall wrapper flags such as
+  `--install-daemon`, `--uninstall-daemon`, `--launchd`, `--systemd`,
+  `--no-start`, `--dry-run`, `--label`, `--service-name`, `--plist-file`, and
+  `--unit-file`
 
 `--managed-tools <runtime_plugin|direct>` switches only the managed-tool registration
 surface:

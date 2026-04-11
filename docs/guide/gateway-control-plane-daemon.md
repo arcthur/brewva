@@ -22,6 +22,8 @@ This is a different path from `--channel` (for example, Telegram ingress/egress)
 brewva gateway start
 brewva gateway install
 brewva gateway status --deep
+brewva gateway scheduler-pause --reason incident_mitigation
+brewva gateway scheduler-resume
 brewva gateway rotate-token
 brewva gateway logs --tail 200
 brewva gateway stop
@@ -56,6 +58,8 @@ brewva gateway rotate-token --json
 - `stop`: graceful stop; use `--force` as fallback.
 - `install`: install OS supervisor service (macOS `launchd`, Linux `systemd --user`).
 - `uninstall`: remove installed OS supervisor service.
+- `scheduler-pause`: pause due-intent execution in the live daemon.
+- `scheduler-resume`: resume schedule execution and trigger catch-up / rearm.
 - `heartbeat-reload`: hot-reload `HEARTBEAT.md` policy.
 - `rotate-token`: rotate token and immediately revoke authenticated connections using the previous token.
 - `logs`: read daemon logs (`--tail` and `--json` supported).
@@ -89,12 +93,28 @@ Key files:
   - Each row also persists the hosted agent session id and agent event-log path so
     supervisor recovery can synthesize a durable `session_shutdown` receipt
     without reloading workspace config or inferring paths from the filesystem.
+  - `children.json` is operational recovery metadata only. Public-session replay
+    binding is resolved from the gateway control tape (`gateway_session_bound`
+    receipts), not from this registry.
 
 Optional HTTP probe endpoint:
 
 - `--health-http-port <port>` enables loopback HTTP probe server.
 - `--health-http-path <path>` customizes probe path (default `/healthz`).
 - Response schema: `brewva.gateway.health-http.v1`.
+
+## Replay Boundary
+
+- `sessions.subscribe` is replay-first: gateway replays durable frames compiled
+  from the archived agent-session tapes bound to the public session, flushes
+  replay-window buffered live traffic, then emits a gateway-owned
+  `session.status` snapshot only when no newer live status is already buffered
+  or in flight.
+- The durable replay lookup is restart-safe and control-tape backed. Gateway
+  does not reconstruct public-session replay from worker-local memory or
+  `children.json`.
+- `session.status` remains a live cache projection with current worker/context
+  pressure; it is not part of the durable session-wire compiler output.
 
 ## Latest-Only Protocol Semantics
 
@@ -110,8 +130,12 @@ Primary implementation surfaces:
 - `packages/brewva-gateway/src/client.ts`
 - `packages/brewva-gateway/src/daemon/gateway-daemon.ts`
 
-## Further Reading
+## Related Docs
 
+- Operator lifecycle walkthrough: `docs/journeys/operator/gateway-control-plane-lifecycle.md`
 - Protocol and method details: `docs/reference/gateway-control-plane-protocol.md`
 - Main CLI subcommand entry: `packages/brewva-cli/src/index.ts`
 - Gateway CLI implementation: `packages/brewva-gateway/src/cli.ts`
+- Command surface reference: `docs/reference/commands.md`
+- Session lifecycle and artifacts: `docs/reference/session-lifecycle.md`,
+  `docs/reference/artifacts-and-paths.md`

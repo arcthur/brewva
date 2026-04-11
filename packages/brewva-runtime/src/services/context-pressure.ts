@@ -8,6 +8,7 @@ import type {
   ContextPressureLevel,
   ContextPressureStatus,
 } from "../contracts/index.js";
+import { CONTEXT_COMPACTION_REQUESTED_EVENT_TYPE } from "../events/event-types.js";
 import { resolveContextUsageRatio } from "../utils/token.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import type { RuntimeCallback } from "./callback.js";
@@ -267,7 +268,7 @@ export class ContextPressureService {
     this.contextBudget.requestCompaction(sessionId, reason);
     this.recordEvent({
       sessionId,
-      type: "context_compaction_requested",
+      type: CONTEXT_COMPACTION_REQUESTED_EVENT_TYPE,
       payload: {
         reason,
         usagePercent: this.getContextUsageRatio(usage),

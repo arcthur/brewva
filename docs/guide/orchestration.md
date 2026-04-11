@@ -5,9 +5,21 @@ Orchestration is driven by runtime state management plus runtime-plugin lifecycl
 - Runtime governance facade and service wiring: `packages/brewva-runtime/src/runtime.ts`
 - Runtime plugin registration: `@brewva/brewva-gateway/runtime-plugins` (`packages/brewva-gateway/src/runtime-plugins/index.ts`)
 
+This guide focuses on the hosted turn pipeline, delegated worker routing, and
+operator-visible control-plane behavior. For the full runtime-plugin factory
+contract and session lifecycle details, use:
+
+- `docs/reference/runtime-plugins.md`
+- `docs/reference/session-lifecycle.md`
+- `docs/reference/runtime.md`
+
 ## Hosted Pipeline
 
-1. Gateway host creates a session (`@brewva/brewva-gateway/host`, implemented in `packages/brewva-gateway/src/host/create-hosted-session.ts`)
+1. Gateway host creates a session through the stable host entrypoint
+   `@brewva/brewva-gateway/host`
+   (`packages/brewva-gateway/src/host/create-hosted-session.ts`), with the
+   current implementation in
+   `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`
 2. Gateway host installs `createHostedTurnPipeline` (`@brewva/brewva-gateway/runtime-plugins`)
 3. `before_agent_start` runs lifecycle plumbing (`context-transform`) and model-facing composition (`context-composer`)
 4. `tool_call` passes quality/security/budget gates (`quality-gate`)
@@ -140,3 +152,13 @@ new kernel state:
 This keeps questionnaire flow, authored overlay inspection, and delegated
 worker ergonomics in the control plane. The runtime kernel still owns replay,
 governance, rollback, and event truth.
+
+## Related Docs
+
+- `docs/guide/understanding-runtime-system.md`
+- `docs/guide/channel-agent-workspace.md`
+- `docs/journeys/operator/interactive-session.md`
+- `docs/journeys/operator/background-and-parallelism.md`
+- `docs/reference/runtime-plugins.md`
+- `docs/reference/session-lifecycle.md`
+- `docs/reference/runtime.md`

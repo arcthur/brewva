@@ -8,6 +8,11 @@ Skill parsing, merge, and runtime-facing lifecycle logic:
 - `packages/brewva-gateway/src/runtime-plugins/tool-surface.ts`
 - `packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.ts`
 
+This page is the contract and configuration reference for skill metadata,
+catalog shape, routing scopes, and explicit activation semantics. Turn-level
+recommendation order, warm-transition heuristics, and canonical lifecycle
+chains live in `docs/reference/skill-routing.md`.
+
 ## Current Model
 
 Skill taxonomy is now split by role:
@@ -73,6 +78,16 @@ Skill frontmatter supports intent, effect, resource, and execution metadata:
 - `resources.default_lease/resources.hard_ceiling`
 - `execution_hints.preferred_tools/execution_hints.fallback_tools/execution_hints.cost_hint`
 - resource lists: `references`, `scripts`, `heuristics`, `invariants`
+
+Authoring vs runtime path semantics:
+
+- `parseSkillDocument(...)` preserves authored resource strings exactly
+- skill-local entries such as `references/foo.md` or `scripts/bar.py` are
+  interpreted relative to the skill directory
+- root-scoped entries such as `skills/project/shared/*.md` are interpreted
+  relative to the discovered skill root
+- the loaded runtime catalog resolves these resource entries to filesystem paths
+  before exposing them through `runtime.inspect.skills.get(...)` or `skill_load`
 
 `selection` is the stable skill-authored control-plane signal for skill-first
 recommendation. It keeps selection ownership with the skill contract rather than
@@ -158,15 +173,21 @@ behavior improves specialist quality without creating a second control loop.
 
 ## Routing Scopes And Profiles
 
-Skill discovery and deliberation are now separated from kernel commitment:
+This section covers stable routing enablement and activation boundaries.
+Per-turn recommendation order, post-completion transitions, and canonical skill
+chains live in `docs/reference/skill-routing.md`.
 
-1. Deliberation layers may surface candidate sets, evidence, or packets that
-   help the model choose skills.
-2. Runtime does not emit a dedicated durable `skill_routing_*` family in the
-   default path.
-3. Activation remains explicit through `skill_load`.
-4. The proposal boundary is reserved for `effect_commitment`, not for skill selection.
-5. Runtime does not run adaptive inference loops or online model reranking in the kernel path.
+Skill discovery and deliberation remain separated from kernel commitment:
+
+- deliberation layers may surface candidate sets, evidence, or packets that
+  help the model choose skills
+- runtime does not emit a dedicated durable `skill_routing_*` family in the
+  default path
+- activation remains explicit through `skill_load`
+- the proposal boundary is reserved for `effect_commitment`, not for skill
+  selection
+- runtime does not run adaptive inference loops or online model reranking in
+  the kernel path
 
 Routing is disabled by default (`skills.routing.enabled=false`). When enabled,
 `skills.routing.scopes` is the single explicit routing allowlist. Interactive
@@ -174,21 +195,11 @@ front doors may opt into `routingDefaultScopes=["core", "domain"]`; that only
 turns routing on when config omitted `skills.routing.enabled`, and it preserves
 explicit scope lists when they are present.
 
-Interactive hosted turns still keep activation explicit, but the control plane
-now derives a skill-first recommendation before ordinary tool work:
-
-- when no skill is active yet and no TaskSpec is recorded, the hosted path
-  first narrows the turn to the bootstrap control-plane surface so the model
-  must record `task_set_spec` before deeper repository work
-- candidate skills are then derived from TaskSpec-first intent signals plus
-  task context, not from raw prompt scoring alone
-- strong post-TaskSpec matches inject a skill-first policy block into hosted
-  context
-- when no skill is active yet, a strong post-TaskSpec match narrows the turn to
-  the minimal pre-skill control-plane tool surface so the next semantic
-  decision is `skill_load`
-- this path still does not create an automatic routing state machine; actual
-  activation remains explicit through `skill_load`
+Interactive hosted turns may still inject a TaskSpec-first skill policy block
+and narrow the pre-skill bootstrap surface after `task_set_spec`, but that
+remains a control-plane steering aid rather than a second activation path.
+Actual cold-start recommendation and warm-transition heuristics are documented
+in `docs/reference/skill-routing.md`.
 
 ## Kernel vs Control Plane
 
@@ -235,6 +246,12 @@ One common delivery chain now present in the catalog is:
 
 This remains a prompt-side and control-plane convention. Runtime still owns
 verification, replay, derived workflow status, and effect governance.
+
+Naming note:
+
+- `knowledge-capture` is the skill name in routing and lifecycle discussions
+- `knowledge_capture` is the managed tool that materializes repository-native
+  precedent records under `docs/solutions/**`
 
 `planning_posture` is an upstream handoff output, not a standalone skill. It is
 expected to exist before non-trivial `design`, typically from

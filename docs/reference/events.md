@@ -3,6 +3,13 @@
 This reference summarizes the current runtime event families used across
 replay, hosted execution, and operator inspection.
 
+This page is the event-family and payload-shape catalog. Session ordering and
+recovery interpretation live in `docs/reference/session-lifecycle.md`; API and
+inspect surface details live in `docs/reference/runtime.md`.
+
+Slash-command availability, argument syntax, and widget or transport behavior
+do not live here; those product veneers are documented separately.
+
 ## Event Envelope
 
 Every runtime event follows the same shape:
@@ -50,9 +57,9 @@ registry.
 The exported constant registry lives in
 `packages/brewva-runtime/src/events/event-types.ts`.
 
-The runtime also reserves a small set of accepted event families directly in
-`packages/brewva-runtime/src/services/event-pipeline.ts` for hosted/context
-flows that do not need public constant exports.
+The runtime also keeps a small hosted/context-focused accepted-family allowlist
+in `packages/brewva-runtime/src/services/event-pipeline.ts` for admission-time
+checks and pipeline-owned flows.
 
 Use this reference as the stable, operator-relevant runtime event surface
 across both files.
@@ -71,6 +78,16 @@ across both files.
 
 `projection_ingested` and `projection_refreshed` describe rebuildable-state
 maintenance. They do not promote projection files into source-of-truth inputs.
+They are still durable events, but tape checkpoint cadence and
+`entriesSinceCheckpoint` pressure counters skip `projection_*`; these events do
+not advance semantic checkpoint pressure on their own.
+
+`projection_ingested` reports append-only projection-unit maintenance:
+`upsertedUnits` and `resolvedUnits` track rows added to `units.jsonl`, and
+resolution appends `status="resolved"` updates instead of deleting prior rows.
+`projection_refreshed.unitCount` counts only the current `active` units
+materialized into the working snapshot, not the total number of rows retained in
+the projection-unit log.
 
 `reasoning_checkpoint` and `reasoning_revert` are append-only reasoning-branch
 receipts. They are replay inputs for the active reasoning lineage, but they do
@@ -129,8 +146,10 @@ at `1200` bytes before the receipt is admitted.
 - `session_compact_requested`
 - `session_compact_failed`
 - `session_compact_request_failed`
+- `context_compaction_advisory`
 - `context_compaction_requested`
 - `context_compaction_gate_armed`
+- `critical_without_compact`
 - `context_compaction_gate_cleared`
 - `context_compaction_auto_requested`
 - `context_compaction_auto_completed`
@@ -160,6 +179,26 @@ Hosted compaction telemetry remains audit-visible because gateway continuity,
 breaker rehydration, and post-compaction state inspection depend on it. These
 events stay hosted/experience-ring signals; they do not widen kernel authority
 or replace receipt-bearing runtime facts.
+
+`context_compaction_advisory` is the pre-gate compaction warning surface. Its
+payload carries:
+
+- `reason`
+- `usagePercent`
+- `compactionThresholdPercent`
+- `hardLimitPercent`
+- `contextPressure`
+- `requiredTool`
+
+`critical_without_compact` is the hard-gate warning that pairs with
+`context_compaction_gate_armed` when hosted execution reaches the point where
+continuation requires an immediate `session_compact`. Its payload carries:
+
+- `reason`
+- `usagePercent`
+- `hardLimitPercent`
+- `contextPressure`
+- `requiredTool`
 
 `session_compact` is the only durable compaction receipt. Its payload carries:
 
@@ -306,6 +345,19 @@ search/navigation tools. The hosted read wrapper uses this evidence to decide
 when later `read` calls are allowed again. There is no output-text parsing or
 filesystem-probe compatibility shim in the recovery path.
 
+`tool_contract_warning` is a broader warning surface, not a read-path-specific
+event. It currently covers both:
+
+- skill/tool contract warnings emitted by the tool gate when a skill reaches a
+  tool through a warning-only access path
+- hosted read-path guard warnings for blocked `read` calls after the read-path
+  gate is armed
+
+The read-path warning shape carries recovery-specific fields such as
+`requestedPath`, `recentFailedPaths`, `observedPaths`, `observedDirectories`,
+`consecutiveMissingPathFailures`, `phase`, and
+`reason=path_discovery_required_after_missing_path_failures`.
+
 - `reversible_mutation_rolled_back`
 - `rollback`
 - `patch_recorded`
@@ -389,6 +441,45 @@ Current guard notes:
 - `governance_compaction_integrity_failed`
 - `governance_compaction_integrity_error`
 
+`proposal_received`, `proposal_decided`, and `decision_receipt_recorded` are
+the durable receipt sequence for the approval-bearing proposal boundary
+described in `docs/reference/proposal-boundary.md`.
+
+Current payload boundary:
+
+- `proposal_received` is metadata-only (`proposalId`, `kind`, `issuer`,
+  `subject`, `evidenceCount`, `expiresAt`)
+- `proposal_decided` is the decision summary
+  (`proposalId`, `kind`, `decision`, `policyBasis`, `reasons`)
+- `decision_receipt_recorded` is the full-fidelity replay record with
+  `{ proposal, receipt }`; `runtime.inspect.proposals.list(...)` rebuilds
+  `EffectCommitmentRecord` from this event instead of joining the earlier
+  summary events
+
+`effect_commitment_approval_*` records the operator-desk lifecycle layered on
+top of that same replay-first namespace. Normalized pending/decided request
+state is exposed through `runtime.inspect.proposals`, while this page remains
+the raw tape-event catalog.
+
+Approval-event boundary:
+
+- `effect_commitment_approval_requested` is the first request-bearing desk
+  receipt; it carries `requestId`, proposal/tool identity, effect summary, and
+  a cloned `proposal` payload so desk state can hydrate without looking up
+  process-local state
+- `effect_commitment_approval_decided` and
+  `effect_commitment_approval_consumed` carry `requestId`, `proposalId`,
+  `toolName`, `toolCallId`, `decision`, `actor`, and `reason`
+- `effect_commitment_approval_consumed` may additionally include `ledgerId`,
+  `verdict`, and `channelSuccess` from the linked durable tool outcome
+
+In structured queries, these proposal and effect-commitment approval families
+classify as `category=governance`.
+
+`governance_*` events are audit-visible policy and integrity telemetry. They
+may influence authority decisions or operator inspection, but they are not
+proposal objects and they do not themselves create approval-bearing requests.
+
 ### Context And Watchdog
 
 - `context_composed`
@@ -407,6 +498,40 @@ whether TaskSpec is already present, and the ranked candidate set with
 categories, scores, and matched reasons. The hosted path may emit another
 receipt in the same turn after `task_set_spec` or other task-state mutations if
 the routed posture changes.
+
+`context_composed` is the coarse hosted composition receipt. Its payload stays
+metrics-only:
+
+- `narrativeBlockCount`
+- `constraintBlockCount`
+- `diagnosticBlockCount`
+- `totalTokens`
+- `narrativeTokens`
+- `narrativeRatio`
+- `injectionAccepted`
+
+It does not carry prompt hashes, provider cache counters, or the composed text
+itself.
+
+`tool_surface_resolved` is the hosted tool-surface posture receipt. Its payload
+records the resolved visible-surface counts and recommendation posture, such as:
+
+- `availableCount`
+- `activeCount`
+- `managedCount`
+- `managedActiveCount`
+- `requestedToolNames`
+- `requestedActivatedToolNames`
+- `ignoredRequestedToolNames`
+- `skillNames`
+- `recommendedSkillNames`
+- `skillGateMode`
+- `taskSpecReady`
+- `operatorProfile`
+- `repairRequired`
+
+plus the per-surface active and hidden counts used by hosted operator
+inspection.
 
 ### Schedule, Subagent, And Worker
 
@@ -431,8 +556,13 @@ Current schedule-recovery notes:
 - `schedule_recovery_deferred.reason` may be
   `max_recovery_catchups_exceeded`, `recovery_wal_inflight`, or
   `stale_one_shot_recovery`
+- `schedule_recovery_deferred` also records the rescheduled window through
+  `deferredFrom`, `deferredTo`, `queueSequence`, and `backlogSize`
 - `schedule_recovery_summary` remains per-parent-session telemetry for the
   same recovery pass
+- `schedule_recovery_summary` records per-parent-session `dueIntents`,
+  `firedIntents`, `deferredIntents`, and the configured
+  `maxRecoveryCatchUps`
 
 ## Workflow-Derived Surfaces
 
@@ -466,7 +596,7 @@ events and session state:
 - `iteration_guard_recorded`
   - `workflow.iteration_guard`
 - `subagent_*`
-  - delegated patch-worker lifecycle signals
+  - delegated-run lifecycle signals across consult, QA, and patch child runs
 - `subagent_outcome_parse_failed`
   - typed outcome extraction fell back to prose-only handling
 - `subagent_delivery_surfaced`
@@ -474,9 +604,9 @@ events and session state:
 - `worker_results_applied` / `worker_results_apply_failed`
   - parent-controlled worker adoption outcomes
 
-Those derived workflow surfaces are exposed through working projection and
-`workflow_status`. They are advisory working-state views, not new audit-critical
-authority events.
+Those derived workflow views are exposed through working projection and
+`workflow_status`. The views are advisory working-state reads; the underlying
+events above remain durable receipts and do not become a hidden controller.
 
 Those surfaces are explicit inspection views. They do not become a default
 turn-time workflow brief or a hidden next-step controller.
@@ -485,6 +615,10 @@ turn-time workflow brief or a hidden next-step controller.
 durable operator-input receipt for the questionnaire surface exposed through
 `/questions` and `/answer`. The answer itself remains explicit, replay-visible
 session input rather than hidden channel-local state.
+
+Read-only operator products such as `/inspect` and `/insights` do not mint
+their own command-specific durable event families. They are command veneers
+over existing replay state and inspection reads.
 
 ## Audit-Critical Families
 
@@ -502,6 +636,8 @@ The audit-retained core includes:
   `turn_start`, `turn_end`, `message_end`, and `agent_end`
 - hosted compaction receipts such as `session_compact_requested`,
   `session_compact`, and `session_turn_transition`
+- hosted compaction warning telemetry such as `context_compaction_advisory`,
+  `context_compaction_gate_armed`, and `critical_without_compact`
 - `unclean_shutdown_reconciled`
 - tool execution receipts such as `tool_call`, `tool_execution_start`,
   `tool_execution_end`, and `tool_result_recorded`
@@ -546,9 +682,11 @@ The audit-retained core includes:
 - `patch_recorded`
 - schedule lifecycle events
 
-This audit-retained set is the effective `durable source of truth` subset of
-the event registry. It is the part of the registry that replay, restart, and
-receipt linkage depend on.
+Most of this audit-retained set is the effective `durable source of truth`
+subset of the event registry: the part that replay, restart, and receipt
+linkage depend on. A smaller continuity/diagnostic subset, such as hosted
+compaction warnings and `event_listener_error`, remains audit-retained for
+explainability and hosted recovery continuity without widening authority.
 
 `tool_result_recorded` is the durable outcome event. When present,
 `effectCommitmentRequestId` and `toolCallId` link the result back to the exact
@@ -592,6 +730,17 @@ properties such as:
 - `deliverySurfacedAt`
 - `supplementalAppended`
 
+`deliveryHandoffState` and `supplementalAppended` are related but not
+equivalent:
+
+- `supplementalAppended` tracks whether the delivery path used same-turn
+  supplemental append behavior on the parent side
+- `deliveryHandoffState` tracks the durable replay-visible handoff lifecycle
+  (`none` | `pending_parent_turn` | `surfaced`)
+- a run may therefore carry `supplementalAppended=true` while its durable
+  handoff state still remains `pending_parent_turn` until a later parent turn
+  actually surfaces the pending outcome
+
 `subagent_spawned` records durable run creation. `subagent_running` records the
 later transition where the child pid/session is actually live. Readers accept
 older replay tapes that encoded the running transition as
@@ -608,11 +757,29 @@ orchestrated slash commands. They remain ops-facing orchestration telemetry,
 but they are now part of the formal registered event contract so replay,
 documentation, and downstream consumers can rely on stable identifiers.
 
+`channel_turn_ingested` records adapter-to-host bridge handoff for an inbound
+turn before dispatcher-owned Recovery WAL acceptance begins.
+`channel_turn_emitted` records successful bridge delivery of the prepared
+outbound turn and any provider message id returned by the adapter; it is live
+egress telemetry, not replay-critical delivery truth.
+`channel_turn_bridge_error` records failures from that bridge-owned outbound
+`sendTurn(...)` path and is narrower than generic inbound processing failure
+telemetry.
+
+`channel_turn_outbound_complete` records that agent dispatch finished its
+outbound send pass and reports how many outbound turns were actually sent; it
+is not an all-success guarantee for every rendered provider request.
+`channel_turn_outbound_error` records an outbound assistant or tool turn whose
+`sendTurn(...)` failed after any transport-local retry policy has already run,
+including immediate non-retryable failures.
+
 `subagent_outcome_parse_failed` records when typed-outcome extraction misses and
 the delegated run falls back to prose-only summary handling.
 
-`subagent_delivery_surfaced` records when a background delegation outcome is
-surfaced into a later parent turn and its replayable handoff state advances.
+`subagent_delivery_surfaced` records the later parent-turn transition where a
+delivery already in `handoffState=pending_parent_turn` is actually surfaced and
+its replayable handoff state advances to `surfaced`. It is not the same thing
+as same-turn supplemental append.
 
 Iteration fact events record objective optimization evidence only:
 

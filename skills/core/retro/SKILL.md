@@ -148,34 +148,34 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 
 ## Concrete Example
 
-Input: "We shipped the workflow advisory feature; summarize what slowed us down and what to fix next time."
+Input: "We shipped the `brewva insights` refresh; summarize what slowed us down and what to fix next time."
 
 Output:
 
 ```json
 {
-  "retro_summary": "Workflow advisory shipped after a 3-day delay. Scope was right-sized but review surfaced two missed boundary crossings (runtime→gateway event contract, gateway→CLI help text). QA caught a regression in the fallback path that required a second implementation pass. The primary lesson is that boundary-crossing changes need explicit contract checks before review, not during it.",
+  "retro_summary": "The `brewva insights` refresh shipped after a 1-day delay. Runtime and CLI code landed quickly, but inspect-payload wording and docs drift created two extra review loops. The main lesson is that command-surface and reference-doc changes need to travel in the same batch when an inspect artifact or CLI view changes.",
   "retro_findings": [
     {
-      "finding": "Missed runtime→gateway event contract change",
+      "finding": "Inspect payload change reached review before docs and command help were updated",
       "type": "systemic",
-      "evidence": "review_report flagged EventPayload shape mismatch; same class of miss occurred in the prior ingress rollout",
-      "impact": "2-day review loop to resolve contract alignment"
+      "evidence": "review_report flagged stale docs and help-surface wording after the CLI renderer already matched the new payload",
+      "impact": "Two extra review passes to realign command, docs, and examples"
     },
     {
-      "finding": "Fallback path regression caught in QA, not in unit tests",
+      "finding": "Generated inspect artifacts needed explicit patch-ignore verification",
       "type": "local",
-      "evidence": "qa_report: fallback handler returned stale advisory after session replay",
-      "impact": "1-day rework; added targeted regression test"
+      "evidence": "qa_report noted `.brewva/skills_index.json` appearing in workspace patch previews until the generated-artifact expectation was rechecked",
+      "impact": "Short rework cycle; added targeted workspace regression coverage"
     },
     {
-      "finding": "Scope decision held correctly — no creep during implementation",
+      "finding": "Scope discipline held: the refresh stayed read-only and did not widen into daemon mutations",
       "type": "positive",
-      "evidence": "ship_report scope matches original scope_decision exactly",
-      "impact": "Avoided the scope drag seen in the previous cycle"
+      "evidence": "ship_report matched the original scope_decision and no release-time patch work was introduced",
+      "impact": "Avoided a larger operator-surface rewrite"
     }
   ],
-  "followup_recommendation": "Add a pre-review boundary contract check to the implementation skill workflow. When the impact_map shows cross-package boundaries, require explicit contract verification before entering review. Route the systemic finding to self-improve for process-level encoding."
+  "followup_recommendation": "Add a pre-review checklist item for CLI and inspect-surface work: when an output payload, command surface, or generated inspect artifact changes, update the paired docs/tests in the same batch before review begins."
 }
 ```
 

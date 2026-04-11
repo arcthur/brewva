@@ -12,6 +12,10 @@ Archived notes may intentionally retain:
 - intermediate API shapes
 - rollout steps that no longer describe the current contract
 
+Governance rule: archived notes stay terse and historical. Fix them only when
+the archive summary, metadata, or stable-reference breadcrumbs become wrong; do
+not revive them into living design docs.
+
 Do not treat them as the current source of truth. Read stable docs and code
 first, then use archived notes only when you need historical rationale.
 

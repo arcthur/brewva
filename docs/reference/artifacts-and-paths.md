@@ -26,6 +26,10 @@ The split is intentional: kernel replay/state stays isolated from operator and
 gateway control-plane material, even though both roots live under the same
 workspace.
 
+Unless noted otherwise, the projection paths below describe the default config
+shape (`projection.dir=.orchestrator/projection`,
+`projection.workingFile=working.md`).
+
 - Evidence ledger (`durable source of truth`): `.orchestrator/ledger/evidence.jsonl`
 - Event stream (event tape, `durable source of truth`): `.orchestrator/events/sess_<base64url(sessionId)>.jsonl`
   - file name uses a reversible base64url encoding of the UTF-8 `sessionId` to avoid filesystem collisions and preserve the original identifier
@@ -34,16 +38,22 @@ workspace.
     telemetry when `infrastructure.events.level` is raised
   - for example, `tool_parallel_read` appears only at `debug` level
 - Projection units cache (`rebuildable state`): `.orchestrator/projection/units.jsonl`
-- Working projection export (`rebuildable state`): `.orchestrator/projection/sessions/sess_<base64url(sessionId)>/working.md`
+- Working projection export (`rebuildable state`): `.orchestrator/projection/sessions/sess_<base64url(sessionId)>/<projection.workingFile>`
 - Projection cache state (`rebuildable state`): `.orchestrator/projection/state.json`
-- Projection refresh advisory lock (`cache`): `.orchestrator/projection/.refresh.lock`
-- Optional control-plane session artifacts (`cache`): `.orchestrator/artifacts/sessions/sess_<base64url(sessionId)>/*`
-  - reserved for non-kernel helper outputs when an optional control-plane path
-    is installed
-  - not part of the kernel replay contract
+- These projection files are rebuildable execution helpers. They are not the
+  history-view baseline and they are not receipt authority.
 - Tape checkpoints (`durable source of truth`): `checkpoint` events embedded in the per-session event tape (`.orchestrator/events/sess_<base64url(sessionId)>.jsonl`)
 - Runtime recovery source (`durable source of truth`): event tape replay (`checkpoint + delta`); no standalone runtime session-state snapshot file
-- Projection cache is never a recovery precondition; runtime may rebuild it on demand from durable tape plus task/truth state
+- History-view baseline (`durable source of truth`, receipt-derived): no
+  standalone baseline snapshot file; operator-visible baseline state is rebuilt
+  from `session_compact` receipts on the per-session event tape and exposed
+  through inspect/context surfaces
+- The baseline therefore stays authority-bearing even though the current
+  inspect/context view is rebuilt on demand. Its correctness depends on durable
+  `session_compact` receipts, not on `.orchestrator/projection/**`.
+- Projection cache is never a recovery precondition; runtime may rebuild it on
+  demand from durable tape replay (or refresh from existing projection units
+  when they are already present)
 - Rollback snapshots (`durable transient`): `.orchestrator/snapshots/<session>/*.snap`
   - per-file pre-mutation snapshots used only by rollback
 - Rollback patch history (`durable transient`): `.orchestrator/snapshots/<session>/patchsets.json`
@@ -74,7 +84,15 @@ helper material, not session-state durability surfaces in the taxonomy above.
   - distinct from the operator-authored self bundle and distinct from
     repository-native precedent under `docs/solutions/**`
 - Heartbeat policy remains separate control-plane material:
-  - gateway heartbeat policy: `HEARTBEAT.md`
+  - gateway heartbeat policy default path:
+    `<global brewva root>/agent/gateway/HEARTBEAT.md`
+  - `brewva gateway start --state-dir` / `install --state-dir` change the
+    default parent directory for daemon state and heartbeat policy
+  - control subcommands such as `status`, `stop`, `scheduler-pause`,
+    `scheduler-resume`, `heartbeat-reload`, `rotate-token`, and `logs` use the
+    same `--state-dir` to discover pid/token/log/heartbeat files
+  - `brewva gateway start --heartbeat` / `install --heartbeat` may point the
+    daemon at a different policy file
   - heartbeat is not part of the agent self bundle
 
 Legacy operator-owned cognition directories such as `.brewva/cognition/**` may
@@ -84,13 +102,17 @@ runtime path.
 ## Global Roots
 
 - Global Brewva root: `$XDG_CONFIG_HOME/brewva` (or `~/.config/brewva`)
-  - resolution can be overridden via `BREWVA_CODING_AGENT_DIR` (see `packages/brewva-runtime/src/config/paths.ts`)
+  - if `BREWVA_CODING_AGENT_DIR` is set, runtime derives the global root from the parent of that path; the variable is not a direct global-root override
 - Bundled system skill root: `<globalRoot>/skills/.system`
   - Brewva-managed installed copy of bundled default skills
   - deterministic runtime-owned install target, distinct from mutable user-global skills
 - Bundled system skill marker: `<globalRoot>/skills/.system.marker.json`
   - stores bundled payload fingerprint and install metadata
 - Agent directory: `<globalRoot>/agent` (default: `~/.config/brewva/agent`)
+  - `BREWVA_CODING_AGENT_DIR` therefore needs to point at the agent directory itself (`<globalRoot>/agent`), not at the global root
+  - this variable only affects global Brewva roots such as gateway state,
+    auth/model registry, and bundled skills; it does not relocate the
+    workspace-local `.brewva/agents/<agent-id>/` self bundle
   - authentication: `auth.json`
   - model registry: `models.json`
 

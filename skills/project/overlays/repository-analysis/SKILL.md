@@ -47,7 +47,8 @@ No new base scripts. Bias to Brewva package boundaries and governance-critical p
 
 ### Step 1: Bias to package boundaries
 
-Start from runtime, tools, extensions, CLI, gateway, and distribution boundaries.
+Start from runtime, deliberation, skill-broker, tools, runtime-plugin, CLI,
+gateway, and distribution boundaries.
 
 ### Step 2: Highlight governance-critical paths
 
@@ -79,4 +80,4 @@ Prioritize routing, verification, context, replay, and artifact persistence path
 
 ## Example
 
-Input: "Map which packages own routing, cascade, and skill catalog persistence."
+Input: "Map which packages own delegated consult routing, narrative memory, and skills index persistence."

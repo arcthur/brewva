@@ -28,7 +28,7 @@ The lasting decisions were:
 - resource prescription belongs closer to planner policy than to the kernel's
   core authority boundary
 
-## Current Contract
+## Current Stable References
 
 Read current behavior from:
 

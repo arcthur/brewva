@@ -8,6 +8,10 @@ Read `docs/research/README.md` for lifecycle rules. Use this directory when you
 need the current open questions, source anchors, and promotion criteria for an
 active theme.
 
+Governance rule: `active/` is for unresolved design work only. When the target
+stable docs already carry the accepted contract, move the note out of this
+directory rather than keeping it as a shadow reference.
+
 ## Runtime Fidelity
 
 - [`event-stream-consistency-and-replay-fidelity.md`](./event-stream-consistency-and-replay-fidelity.md)

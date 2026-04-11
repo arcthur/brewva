@@ -1,10 +1,15 @@
 # Installation
 
+This guide covers local operator setup and command availability. For the exact
+CLI/config contract, use the reference docs.
+
 ## Prerequisites
 
-- Bun `1.3.11+`
+- Bun `1.3.11`
 - Node `^20.19.0 || >=22.12.0` for CLI execution and tooling
 - Model/provider setup supported by the bundled agent engine
+
+Build and test with Bun, not npm or yarn.
 
 ## Local Setup
 
@@ -49,6 +54,9 @@ brewva onboard --install-daemon
 brewva onboard --uninstall-daemon
 ```
 
+For service lifecycle and control-plane details, see
+`docs/guide/gateway-control-plane-daemon.md`.
+
 ## Validation Commands
 
 ```bash
@@ -62,3 +70,13 @@ bun run test:docs
 - Root scripts: `package.json`
 - Workspace TS project graph: `tsconfig.json`
 - Runtime defaults: `packages/brewva-runtime/src/config/defaults.ts`
+- Command surface reference: `docs/reference/commands.md`
+
+## Related Docs
+
+- Documentation map: `docs/index.md`
+- Repository orientation: `docs/guide/overview.md`
+- CLI usage: `docs/guide/cli.md`
+- Gateway daemon lifecycle: `docs/guide/gateway-control-plane-daemon.md`
+- Command and config contracts: `docs/reference/commands.md`,
+  `docs/reference/configuration.md`

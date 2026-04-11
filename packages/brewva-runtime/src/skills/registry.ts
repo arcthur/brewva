@@ -7,7 +7,8 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { formatISO } from "date-fns";
 import { resolveGlobalBrewvaRootDir, resolveProjectBrewvaRootDir } from "../config/paths.js";
 import type {
@@ -225,6 +226,79 @@ function joinMarkdownSections(sections: string[]): string {
     .map((section) => section.trim())
     .filter(Boolean)
     .join("\n\n");
+}
+
+function normalizeResourcePathInput(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed) return trimmed;
+  if (trimmed === "~") return homedir();
+  if (trimmed.startsWith("~/")) {
+    return join(homedir(), trimmed.slice(2));
+  }
+  return trimmed;
+}
+
+function resolveSkillResourcePath(input: {
+  resourcePath: string;
+  baseDir: string;
+  skillDir: string;
+}): string {
+  const normalized = normalizeResourcePathInput(input.resourcePath).replaceAll("\\", "/");
+  if (!normalized) {
+    return normalized;
+  }
+  if (isAbsolute(normalized)) {
+    return resolve(normalized);
+  }
+
+  if (normalized.startsWith("skills/")) {
+    const anchorDir =
+      basename(input.skillDir) === "skills" ? dirname(input.skillDir) : input.skillDir;
+    const relativePath =
+      basename(input.skillDir) === "skills" ? normalized : normalized.slice("skills/".length);
+    return resolve(anchorDir, relativePath);
+  }
+
+  return resolve(input.baseDir, normalized);
+}
+
+function resolveSkillResources(
+  resources: SkillDocument["resources"],
+  input: {
+    baseDir: string;
+    skillDir: string;
+  },
+): SkillDocument["resources"] {
+  return {
+    references: resources.references.map((resourcePath) =>
+      resolveSkillResourcePath({
+        resourcePath,
+        baseDir: input.baseDir,
+        skillDir: input.skillDir,
+      }),
+    ),
+    scripts: resources.scripts.map((resourcePath) =>
+      resolveSkillResourcePath({
+        resourcePath,
+        baseDir: input.baseDir,
+        skillDir: input.skillDir,
+      }),
+    ),
+    heuristics: resources.heuristics.map((resourcePath) =>
+      resolveSkillResourcePath({
+        resourcePath,
+        baseDir: input.baseDir,
+        skillDir: input.skillDir,
+      }),
+    ),
+    invariants: resources.invariants.map((resourcePath) =>
+      resolveSkillResourcePath({
+        resourcePath,
+        baseDir: input.baseDir,
+        skillDir: input.skillDir,
+      }),
+    ),
+  };
 }
 
 function renderSharedContext(entries: SharedContextEntry[]): string {
@@ -483,13 +557,20 @@ export class SkillRegistry {
     const files = listSkillFiles(dir);
     for (const filePath of files) {
       const parsed = parseSkillDocument(filePath, category);
+      const resolvedResources = resolveSkillResources(parsed.resources, {
+        baseDir: parsed.baseDir,
+        skillDir: root.skillDir,
+      });
       const existing = this.skills.get(parsed.name);
       if (existing) {
         throw new Error(
           `[skill_registry] ${filePath}: duplicate skill name '${parsed.name}' conflicts with '${existing.filePath}'. Skill names must be globally unique across loaded roots and categories; use a project overlay for same-name specialization.`,
         );
       }
-      this.skills.set(parsed.name, parsed);
+      this.skills.set(parsed.name, {
+        ...parsed,
+        resources: resolvedResources,
+      });
       this.baseMarkdownBySkill.set(parsed.name, parsed.markdown);
       this.overlayMarkdownsBySkill.set(parsed.name, []);
       this.skillOrigins.set(parsed.name, {
@@ -514,6 +595,10 @@ export class SkillRegistry {
     const overlayFiles = listSkillFiles(dir);
     for (const filePath of overlayFiles) {
       const overlay = parseSkillDocument(filePath, "overlay");
+      const resolvedOverlayResources = resolveSkillResources(overlay.resources, {
+        baseDir: overlay.baseDir,
+        skillDir: root.skillDir,
+      });
       const baseSkill = this.skills.get(overlay.name);
       if (!baseSkill) {
         throw new Error(
@@ -539,7 +624,7 @@ export class SkillRegistry {
         ...overlayMarkdowns,
       ]);
       const mergedResources = mergeSkillResources(
-        mergeSkillResources(baseSkill.resources, overlay.resources),
+        mergeSkillResources(baseSkill.resources, resolvedOverlayResources),
         {
           ...createEmptySkillResources(),
           references: this.sharedContextEntries.map((entry) => entry.filePath),

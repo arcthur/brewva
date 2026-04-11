@@ -16,6 +16,10 @@ When you need full superseded proposal detail, read
 history. Promoted notes may keep short `Historical Notes`, but they should not
 grow back into long-form archived RFCs.
 
+Governance rule: a promoted note is a status pointer, not a second normative
+spec. If the stable contract changes, update the stable docs first and then
+refresh the pointer summary and `Last reviewed` metadata here.
+
 ## Runtime Shape And Policy
 
 - [`rfc-architecture-doc-precision-review.md`](./rfc-architecture-doc-precision-review.md)

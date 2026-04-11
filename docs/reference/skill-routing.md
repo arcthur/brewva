@@ -1,22 +1,41 @@
 # Skill Routing
 
+Implementation anchors:
+
+- `packages/brewva-gateway/src/runtime-plugins/skill-first.ts`
+- `packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.ts`
+- `packages/brewva-tools/src/skill-load.ts`
+- `packages/brewva-tools/src/workflow-status.ts`
+- `packages/brewva-runtime/src/services/skill-lifecycle.ts`
+
 This document describes how Brewva routes tasks to skills and how skills
 transition to one another during a session. It is the canonical reference for
-routing philosophy; deterministic routing logic lives in scripts and runtime
-context providers, not in this prose.
+routing philosophy; deterministic behavior lives in hosted runtime plugins,
+runtime inspect/tool surfaces, and skill contract parsing, not in this prose.
+
+`docs/reference/skills.md` owns contract metadata, routing-scope
+configuration, and explicit activation semantics. This page owns the turn-level
+recommendation and transition heuristics built on top of those contracts.
+
+Routing remains explicit:
+
+- Brewva may recommend a skill
+- Brewva does not auto-activate the next skill
+- the model or operator still switches through `skill_load`
 
 ## Three Routing Mechanisms
 
 Brewva uses three cooperating mechanisms. None works alone.
 
-| Mechanism                                          | When it fires                                                | What it decides                                                         |
-| -------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| **Skill-first recommendation** (runtime, per-turn) | Every turn when no skill is active                           | "Which skill best matches the current prompt and task spec?"            |
-| **Routing context provider** (runtime, per-turn)   | When no skill is active and at least one skill has completed | "Given what has been produced so far, which skills are unblocked next?" |
-| **Selection metadata** (frontmatter, design-time)  | During recommendation scoring                                | "Under what conditions should this skill be considered?"                |
+| Mechanism                                                        | When it fires                                               | What it decides or exposes                                              |
+| ---------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
+| **Skill-first recommendation** (hosted control plane, per-turn)  | Every hosted turn when no skill is active                   | "Which skill best matches the current prompt and task spec?"            |
+| **Artifact-aware transition surfaces** (runtime inspect + tools) | On demand after prior skill outputs or workflow state exist | "What inputs, artifacts, and posture are available for the next skill?" |
+| **Selection metadata** (frontmatter, design-time)                | During recommendation scoring                               | "Under what conditions should this skill be considered?"                |
 
 Skill-first recommendation handles cold starts (first skill selection).
-Routing context handles warm transitions (next skill after completion).
+Artifact-aware transition surfaces handle warm transitions (next skill after
+completion).
 Selection metadata is the data substrate for both.
 
 ## Phase Lifecycle
@@ -25,19 +44,20 @@ Every task moves through phases. Skills declare which phases they serve via
 `selection.phases` in their frontmatter.
 
 ```
-align ──→ investigate ──→ execute ──→ verify ──→ done
-  │            │              │          │
-  └── blocked ←┘──── blocked ←┘── blocked┘
+align ──→ investigate ──→ execute ──→ verify ──→ ready_for_acceptance ──→ done
+  │            │              │             │                    │
+  └── blocked ←┘──── blocked ←┘──── blocked ←┘──────── blocked ←┘
 ```
 
-| Phase         | Purpose                                          | Typical skills                         |
-| ------------- | ------------------------------------------------ | -------------------------------------- |
-| `align`       | Frame the problem, challenge scope, set strategy | discovery, strategy-review             |
-| `investigate` | Understand the repository, research approaches   | repository-analysis, learning-research |
-| `execute`     | Design, implement, iterate                       | design, implementation, goal-loop      |
-| `verify`      | Review, QA, ship-readiness                       | review, qa, ship                       |
-| `blocked`     | Escalation, debugging, forensics                 | debugging, runtime-forensics           |
-| `done`        | Retrospective, knowledge capture                 | retro, knowledge-capture               |
+| Phase                  | Purpose                                          | Typical skills                         |
+| ---------------------- | ------------------------------------------------ | -------------------------------------- |
+| `align`                | Frame the problem, challenge scope, set strategy | discovery, strategy-review             |
+| `investigate`          | Understand the repository, research approaches   | repository-analysis, learning-research |
+| `execute`              | Design, implement, iterate                       | design, implementation, goal-loop      |
+| `verify`               | Review, QA, and evidence gathering               | review, qa                             |
+| `ready_for_acceptance` | Final go/no-go and release posture               | ship                                   |
+| `blocked`              | Escalation, debugging, forensics                 | debugging, runtime-forensics           |
+| `done`                 | Retrospective, knowledge capture                 | retro, knowledge-capture               |
 
 Phase membership is a routing signal, not a hard gate. A skill can activate
 outside its declared phases when the model has strong evidence.
@@ -63,22 +83,29 @@ the session and at least one of its `consumes` outputs exists.
 A skill is **consumption-blocked** when any of its `requires` outputs are
 missing.
 
-The routing context provider computes consumption readiness per turn and
-surfaces it to the model. The model does not need to compute this manually.
+Runtime exposes the relevant warm-transition data through explicit surfaces:
+
+- `skill_load` previews `availableConsumedOutputs` for the chosen candidate skill
+- `workflow_status` surfaces derived workflow posture and artifact readiness
+- `runtime.inspect.skills.getConsumedOutputs(sessionId, targetSkillName)` exposes the exact consumed-output materialization for a target skill
+
+These surfaces inform the next choice; they do not auto-switch skills.
 
 ## Transition Heuristics
 
 ### After skill completion
 
-When a skill completes via `skill_complete`, the routing context provider:
+When a skill completes via `skill_complete`:
 
-1. Lists the newly available output keys.
-2. Identifies skills that became consumption-ready.
-3. Surfaces the top candidates ordered by: full `requires` satisfaction first,
-   then number of satisfied `consumes`, then phase alignment.
+1. Brewva records durable `skill_completed` outputs for that session.
+2. Candidate next skills can inspect matching prior outputs through `skill_load`
+   and `runtime.inspect.skills.getConsumedOutputs(...)`.
+3. `workflow_status` reflects the derived artifact and posture state, which is
+   often a better warm-transition signal than prompt text alone.
 
-The model should prefer the highest-ranked candidate unless the user's intent
-or task spec clearly points elsewhere.
+The model should usually prefer a candidate whose `requires` are fully
+satisfied and whose `consumes` now materialize concrete prior outputs, unless
+the user's intent or task spec clearly points elsewhere.
 
 ### Escalation transitions
 
@@ -99,8 +126,9 @@ escalation trigger when switching.
 ### Return transitions
 
 After an escalation resolves, the model should return to the skill that
-triggered the escalation, not restart the lifecycle. The routing context
-preserves the session's completion history to support this.
+triggered the escalation, not restart the lifecycle. Session outputs and
+durable `skill_completed` history preserve enough context to resume the
+interrupted chain explicitly.
 
 ## Canonical Lifecycle Chains
 
@@ -121,6 +149,9 @@ debugging → implementation → review → qa
 ```
 discovery → learning-research → knowledge-capture
 ```
+
+`knowledge-capture` in this chain names the skill. The explicit repository
+materialization tool remains `knowledge_capture`.
 
 ### Performance optimization (iterative)
 
@@ -145,18 +176,20 @@ is the correct chain.
 | Running `review` without `verification_evidence`                      | Review cannot assess merge readiness without execution evidence                     |
 | Restarting the lifecycle after an escalation                          | Wastes completed artifacts; return to the interrupted skill instead                 |
 | Loading a skill "just in case" without checking consumption readiness | Skill will lack required inputs and produce shallow outputs                         |
-| Ignoring routing context recommendations                              | The consumption graph reflects actual artifact availability, not opinion            |
+| Ignoring `workflow_status` or consumed-output signals                 | Prompt-only routing misses the artifacts and posture already produced               |
 
 ## Relationship to `skill-first.ts`
 
-`skill-first.ts` scores skills by matching prompt tokens, task spec, selection
-examples, phase alignment, and path patterns. It runs every turn and produces
-the `[Brewva Skill-First Policy]` block.
+`packages/brewva-gateway/src/runtime-plugins/skill-first.ts` scores skills by
+matching prompt tokens, TaskSpec content, selection examples, phase alignment,
+and path patterns. It runs on hosted turns when no skill is active and may
+produce the `[Brewva Skill-First Policy]` block.
 
-The routing context provider is complementary: it focuses on **what has already
-been produced** rather than what the prompt says. Together they cover cold
-starts (skill-first) and warm transitions (routing context).
+Warm transitions are not handled by a second autonomous recommender. They are
+model-native decisions informed by `workflow_status`, consumed outputs, and the
+current session artifact state.
 
-When both recommend the same skill, confidence is high. When they disagree,
-the model should prefer the routing context for lifecycle transitions and
-skill-first for fresh tasks.
+In practice:
+
+- prefer `skill-first` for cold starts and fresh tasks with no prior outputs
+- prefer artifact-aware state for warm transitions after one or more skills have completed

@@ -526,4 +526,184 @@ describe("skill discovery and loading", () => {
     expect(skill?.contract.executionHints?.preferredTools).toContain("tape_search");
     expect(skill?.contract.effects?.deniedEffects).toContain("local_exec");
   });
+
+  test("runtime-loaded project skills resolve skill-local and root-scoped resource paths", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-resource-resolution-project-"));
+    const baseSkillPath = join(workspace, ".brewva/skills/core/foo/SKILL.md");
+    const baseReferencePath = join(workspace, ".brewva/skills/core/foo/references/base.md");
+    const baseScriptPath = join(workspace, ".brewva/skills/core/foo/scripts/base.py");
+    const overlayPath = join(workspace, ".brewva/skills/project/overlays/foo/SKILL.md");
+    const projectSharedPath = join(workspace, ".brewva/skills/project/shared/project.md");
+    const projectScriptPath = join(workspace, ".brewva/skills/project/scripts/check.sh");
+
+    mkdirSync(dirname(baseSkillPath), { recursive: true });
+    mkdirSync(dirname(baseReferencePath), { recursive: true });
+    mkdirSync(dirname(baseScriptPath), { recursive: true });
+    mkdirSync(dirname(projectSharedPath), { recursive: true });
+    mkdirSync(dirname(projectScriptPath), { recursive: true });
+    mkdirSync(dirname(overlayPath), { recursive: true });
+
+    writeFileSync(
+      baseSkillPath,
+      [
+        "---",
+        "name: foo",
+        "description: foo skill",
+        "selection:",
+        "  when_to_use: Use when the task needs the routed test skill.",
+        "  examples: [test skill]",
+        "  phases: [align]",
+        "intent:",
+        "  outputs: []",
+        "effects:",
+        "  allowed_effects: [workspace_read]",
+        "resources:",
+        "  default_lease:",
+        "    max_tool_calls: 20",
+        "    max_tokens: 20000",
+        "  hard_ceiling:",
+        "    max_tool_calls: 30",
+        "    max_tokens: 30000",
+        "execution_hints:",
+        "  preferred_tools: [read]",
+        "  fallback_tools: []",
+        "references:",
+        "  - references/base.md",
+        "scripts:",
+        "  - scripts/base.py",
+        "consumes: []",
+        "---",
+        "# foo",
+      ].join("\n"),
+      "utf8",
+    );
+    writeFileSync(baseReferencePath, "# base\n", "utf8");
+    writeFileSync(baseScriptPath, "print('base')\n", "utf8");
+    writeFileSync(projectSharedPath, "# shared\n", "utf8");
+    writeFileSync(projectScriptPath, "#!/usr/bin/env bash\nexit 0\n", "utf8");
+
+    writeFileSync(
+      overlayPath,
+      [
+        "---",
+        "resources:",
+        "  default_lease:",
+        "    max_tool_calls: 10",
+        "    max_tokens: 10000",
+        "references:",
+        "  - skills/project/shared/project.md",
+        "scripts:",
+        "  - skills/project/scripts/check.sh",
+        "execution_hints:",
+        "  preferred_tools: [read]",
+        "  fallback_tools: []",
+        "consumes: []",
+        "---",
+        "# foo overlay",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const skill = requireDefined(runtime.inspect.skills.get("foo"), "expected foo skill to load");
+
+    expect(skill.resources.references).toEqual(
+      expect.arrayContaining([resolve(baseReferencePath), resolve(projectSharedPath)]),
+    );
+    expect(skill.resources.scripts).toEqual(
+      expect.arrayContaining([resolve(baseScriptPath), resolve(projectScriptPath)]),
+    );
+  });
+
+  test("runtime-loaded direct-layout roots resolve skills-prefixed resource paths against the root skill directory", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-resource-resolution-direct-"));
+    const external = mkdtempSync(join(tmpdir(), "brewva-skill-resource-resolution-external-"));
+    const baseSkillPath = join(external, "core/foo/SKILL.md");
+    const baseReferencePath = join(external, "core/foo/references/base.md");
+    const baseScriptPath = join(external, "core/foo/scripts/base.py");
+    const overlayPath = join(external, "project/overlays/foo/SKILL.md");
+    const sharedPath = join(external, "project/shared/project.md");
+    const scriptPath = join(external, "project/scripts/check.sh");
+
+    mkdirSync(dirname(baseSkillPath), { recursive: true });
+    mkdirSync(dirname(baseReferencePath), { recursive: true });
+    mkdirSync(dirname(baseScriptPath), { recursive: true });
+    mkdirSync(dirname(sharedPath), { recursive: true });
+    mkdirSync(dirname(scriptPath), { recursive: true });
+    mkdirSync(dirname(overlayPath), { recursive: true });
+
+    writeFileSync(
+      baseSkillPath,
+      [
+        "---",
+        "name: foo",
+        "description: foo skill",
+        "selection:",
+        "  when_to_use: Use when the task needs the routed test skill.",
+        "  examples: [test skill]",
+        "  phases: [align]",
+        "intent:",
+        "  outputs: []",
+        "effects:",
+        "  allowed_effects: [workspace_read]",
+        "resources:",
+        "  default_lease:",
+        "    max_tool_calls: 20",
+        "    max_tokens: 20000",
+        "  hard_ceiling:",
+        "    max_tool_calls: 30",
+        "    max_tokens: 30000",
+        "execution_hints:",
+        "  preferred_tools: [read]",
+        "  fallback_tools: []",
+        "references:",
+        "  - references/base.md",
+        "scripts:",
+        "  - scripts/base.py",
+        "consumes: []",
+        "---",
+        "# foo",
+      ].join("\n"),
+      "utf8",
+    );
+    writeFileSync(baseReferencePath, "# base\n", "utf8");
+    writeFileSync(baseScriptPath, "print('base')\n", "utf8");
+    writeFileSync(sharedPath, "# shared\n", "utf8");
+    writeFileSync(scriptPath, "#!/usr/bin/env bash\nexit 0\n", "utf8");
+
+    writeFileSync(
+      overlayPath,
+      [
+        "---",
+        "resources:",
+        "  default_lease:",
+        "    max_tool_calls: 10",
+        "    max_tokens: 10000",
+        "references:",
+        "  - skills/project/shared/project.md",
+        "scripts:",
+        "  - skills/project/scripts/check.sh",
+        "execution_hints:",
+        "  preferred_tools: [read]",
+        "  fallback_tools: []",
+        "consumes: []",
+        "---",
+        "# foo overlay",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.skills.roots = [external];
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const skill = requireDefined(runtime.inspect.skills.get("foo"), "expected foo skill to load");
+
+    expect(skill.resources.references).toEqual(
+      expect.arrayContaining([resolve(baseReferencePath), resolve(sharedPath)]),
+    );
+    expect(skill.resources.scripts).toEqual(
+      expect.arrayContaining([resolve(baseScriptPath), resolve(scriptPath)]),
+    );
+  });
 });

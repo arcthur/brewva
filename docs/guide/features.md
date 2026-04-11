@@ -1,32 +1,65 @@
 # Features
 
+This guide summarizes the major Brewva capability areas. It is intentionally
+high-level. For the authoritative tool and skill inventories, use
+`docs/reference/tools.md` and `docs/reference/skills.md`.
+
 ## Runtime Capabilities
 
-- Skill contract activation and enforcement
+- Skill contract activation, validation, and completion tracking
 - Tool access policy checks, effect boundaries, and budget checks
-- Evidence ledger and digest injection
-- Task/truth state management with event-sourced replay
+- Evidence ledger recording and replay-visible governance receipts
+- Task and truth state management with event-sourced replay
 - Verification gates (`quick`, `standard`, `strict`)
-- Model-native review and repair with receipt-bearing rollback / approval surfaces
-- Context budget tracking and compaction events
-- Event-first runtime persistence and replay
+- Receipt-bearing rollback and approval surfaces for reversible mutation flows
+- Context budget tracking, pressure reporting, and compaction signaling
+- Event-first runtime persistence, replay, and deterministic recovery
 - Cost observability and threshold-based budget alerts
-- Derived workflow artifacts and explicit advisory inspection surfaces
-- First-class delegated planning contract with typed design artifacts and
-  planning-assurance workflow posture
-- Durable stall adjudication surfaced through workflow inspection rather than a
-  hidden recovery planner
-- Objective iteration fact persistence and lineage-aware query for
-  model-native optimization loops
-- Typed narrative memory with explicit inspection, selective recall, and
-  provenance-bearing storage for collaboration semantics that are not
-  derivable from code or git
-- Deliberation memory retention, pruning, and explicit inspection surfaces for
-  durable evidence-backed artifacts
-- Repository-native compound knowledge under `docs/solutions/**` with explicit
-  precedent retrieval rather than hidden recall
+- Derived workflow artifacts and advisory workflow inspection surfaces
+- Typed planning and delegated-worker handoff artifacts
+- Durable stall adjudication surfaced through explicit inspection, not hidden
+  planning loops
+- Iteration-fact persistence and lineage-aware query for bounded optimization
+  loops
+- Typed narrative and deliberation memory inspection surfaces
+- Repository-native precedent retrieval and write-back under `docs/solutions/**`
 
-## Tool Surface
+## Operator And Delivery Surfaces
+
+- Interactive CLI and one-shot CLI entrypoints
+- Replay-first session inspection through `brewva inspect`
+- Multi-session project analysis through `brewva insights`
+- Gateway control-plane daemon for local hosted-session orchestration
+- Scheduler daemon mode for intent execution
+- Telegram channel host mode and webhook ingress integration
+- Multi-agent channel orchestration when `channels.orchestration.enabled=true`
+
+## Managed Tool Families
+
+The default managed tool bundle covers these families:
+
+- code navigation and structural search: `lsp_*`, `toc_*`, `grep`,
+  `ast_grep_*`, `git_*`
+- command and browser execution: `exec`, `process`, `browser_*`
+- replay and observability inspection: `cost_view`, `obs_*`, `ledger_query`,
+  `workflow_status`, `tape_*`, `output_search`
+- memory and precedent surfaces: `deliberation_memory`, `narrative_memory`,
+  `knowledge_search`, `knowledge_capture`, `precedent_audit`,
+  `precedent_sweep`, `iteration_fact`, `optimization_continuity`
+- delegation and workflow control: `skill_*`, `subagent_*`,
+  `worker_results_*`, `task_*`, `follow_up`, `schedule_intent`,
+  `resource_lease`, `session_compact`, `rollback_last_patch`
+
+Channel-specific A2A tools (`agent_send`, `agent_broadcast`, `agent_list`) are
+not part of the default bundle. They are registered by channel runtime plugins
+when orchestration is enabled.
+
+For the exact tool names and surface classification, use
+`docs/reference/tools.md`.
+
+## Current Tool Name Index
+
+The exact current managed tool names are:
 
 - `lsp_goto_definition`
 - `lsp_find_references`
@@ -41,6 +74,9 @@
 - `look_at`
 - `read_spans`
 - `grep`
+- `git_status`
+- `git_diff`
+- `git_log`
 - `exec`
 - `browser_open`
 - `browser_wait`
@@ -69,11 +105,14 @@
 - `iteration_fact`
 - `output_search`
 - `workflow_status`
+- `follow_up`
 - `schedule_intent`
 - `optimization_continuity`
 - `tape_handoff`
 - `tape_info`
 - `tape_search`
+- `reasoning_checkpoint`
+- `reasoning_revert`
 - `session_compact`
 - `rollback_last_patch`
 - `worker_results_merge`
@@ -94,104 +133,105 @@
 - `task_view_state`
 - `resource_lease`
 
-Channel-conditional tools (available in a2a channels):
+Channel-conditional A2A tools:
 
 - `agent_send`
 - `agent_broadcast`
 - `agent_list`
 
-Tool registry source: `packages/brewva-tools/src/index.ts`
+## Skill And Delegation Model
 
-## Skill Surface
+Skill taxonomy is now split by role rather than exposing one flat public
+catalog:
 
-- Core capability skills: `repository-analysis`, `discovery`, `learning-research`, `strategy-review`, `design`, `implementation`, `debugging`, `review`, `qa`, `ship`, `retro`, `knowledge-capture`
-- Domain capability skills: `agent-browser`, `ci-iteration`, `frontend-design`, `github`, `telegram`, `structured-extraction`, `goal-loop`, `predict-review`
-- Operator skills: `runtime-forensics`, `git-ops`
-- Meta skills: `skill-authoring`, `self-improve`
-- `goal-loop` is the bounded continuity and objective optimization protocol,
-  not a generic implementation skill
-- `ci-iteration` is the bounded PR / CI repair-loop skill for explicit retry,
-  verification, and handoff posture
-- `deliberation_memory` is the explicit surface for inspecting retained
-  repository, user, agent, and loop memory artifacts
-- `narrative_memory` is the explicit surface for typed collaboration semantics
-  such as operator preferences, working conventions, project context notes, and
-  external reference notes; it remains non-authoritative and distinct from
-  repository precedent
-- `knowledge_search` is the explicit precedent retrieval surface for
-  `docs/solutions/**` plus bootstrap repository knowledge sources, with
-  query-intent-aware ordering over a single canonical authority model
-- `precedent_audit` is the explicit maintenance surface for authority overlap,
-  stale routing, and contradiction review across repository precedents and
-  stable docs
-- `precedent_sweep` is the explicit repository-wide stale-document maintenance
-  surface; it is available for deliberate cleanup passes but is not a default
-  hosted behavior
-- `skill_complete` can synthesize canonical `review_report`,
-  `review_findings`, and `merge_decision` from durable delegated review lanes
-  via `reviewEnsemble`, instead of requiring the parent reviewer to hand-copy
-  child lane output
-- `skill_complete` can also synthesize canonical `learning-research` outputs
-  via `learningResearch`, turning repository precedent consult into a
-  deterministic proof-of-consult packet instead of relying on handwritten
-  summaries
-- delegated `design -> advisor (design)` routing now uses a first-class
-  consult payload rather than reusing exploration semantics, while downstream
-  implementation/review/qa continue to consume the canonical `design`
-  artifact lane
-- `knowledge_capture` is the deterministic write-back surface that materializes
-  canonical solution records under `docs/solutions/**`
-- `learning-research` turns planning-time precedent retrieval into explicit
-  handoff artifacts before non-trivial design or review
-- `knowledge-capture` orchestrates terminal repository precedent capture and
-  should prefer `knowledge_capture` for the actual canonical write-back path
-- built-in public agent specs are `advisor`, `qa`, and `patch-worker`
-- `advisor` is the single public read-only consultation role; `qa` is
-  executable but parent-source-non-mutating, and `patch-worker` remains the
-  isolated patch executor
-- `qa` is adversarial by contract: a stable `pass` requires evidence-backed
-  executed checks, at least one adversarial probe, and no unresolved evidence
-  gaps
-- built-in review-lane delegates for internal fan-out are
-  `review-correctness`, `review-boundaries`, `review-operability`,
-  `review-security`, `review-concurrency`, `review-compatibility`, and
-  `review-performance`; removed legacy aliases such as `researcher`,
-  `reviewer`, and `verifier` now fail fast
-- `optimization_continuity` is the inspection surface for deliberation-owned
-  loop continuity, not a runtime-owned optimizer; its `attention` view surfaces
-  overdue or long-running lineages for explicit review
-- `predict-review` is an advisory multi-perspective debate skill built on
-  public delegation tools and existing built-in agent specs / envelopes
-- `self-improve` distills repeated evidence, including iteration-fact history,
-  into explicit improvement hypotheses
-- `skill_promotion` exposes the post-execution promotion pipeline for reviewing
-  and materializing evidence-backed skill or rule drafts
-- Project overlays: `repository-analysis`, `design`, `implementation`, `debugging`, `review`, `runtime-forensics`
-- Shared project context: `critical-rules`, `migration-priority-matrix`, `package-boundaries`, `runtime-artifacts`
+- public routable semantic territory is primarily carried by `core` and
+  `domain` skills
+- `operator` and `meta` skills are still loaded catalog entries, but they are
+  usually hidden from the standard routable index unless routing scopes
+  explicitly include them
+- runtime/control-plane workflow semantics such as verification, finishing, and
+  recovery are not public skills
 
-Runtime-owned workflow semantics, not public skills:
+Authoring layout still uses the four directory families:
 
-- verification
-- finishing
-- recovery
-- compose-style workflow semantics
+- core: repository analysis, planning, implementation, review, QA, and ship
+  flows
+- domain: environment-specific or problem-specific specialties such as browser,
+  GitHub, Telegram, structured extraction, and bounded goal loops
+- operator: replay, runtime, and git-operations oriented surfaces
+- meta: skill-authoring and self-improvement surfaces
 
-One common public delivery chain is:
+Project overlays and shared project context tighten behavior without creating a
+second public catalog.
 
-`repository-analysis -> discovery -> strategy-review -> learning-research -> design -> implementation -> review -> qa -> ship -> retro -> knowledge-capture`
+Delegated workers are a separate control-plane surface from skills. The stable
+public specialist set is `advisor`, `qa`, and `patch-worker`; internal review
+lanes remain control-plane implementation detail rather than public taxonomy.
 
-The chain is a skill-layer convention, not a runtime-owned DAG. Verification,
-derived workflow status, and ship advisories remain explicit runtime inspection
-surfaces rather than default injected planning hints.
+For routing behavior, catalog layout, and the full skill inventory, use:
 
-`planning_posture` is part of the upstream handoff into non-trivial planning. It
-is produced before `design`, not retroactively inferred by `design` itself.
+- `docs/guide/category-and-skills.md`
+- `docs/reference/skills.md`
 
-Skill roots:
+## Current Skill Name Index
 
-- `skills/core`
-- `skills/domain`
-- `skills/operator`
-- `skills/meta`
-- `skills/project/shared`
-- `skills/project/overlays`
+Core capability skills:
+
+- `repository-analysis`
+- `discovery`
+- `learning-research`
+- `strategy-review`
+- `design`
+- `implementation`
+- `debugging`
+- `review`
+- `qa`
+- `ship`
+- `retro`
+- `knowledge-capture`
+
+Domain capability skills:
+
+- `agent-browser`
+- `ci-iteration`
+- `frontend-design`
+- `github`
+- `telegram`
+- `structured-extraction`
+- `goal-loop`
+- `predict-review`
+
+Operator skills:
+
+- `runtime-forensics`
+- `git-ops`
+
+Meta skills:
+
+- `skill-authoring`
+- `self-improve`
+
+Project overlays:
+
+- `repository-analysis`
+- `design`
+- `implementation`
+- `debugging`
+- `review`
+- `runtime-forensics`
+
+Shared project context:
+
+- `critical-rules`
+- `migration-priority-matrix`
+- `package-boundaries`
+- `runtime-artifacts`
+
+## Related Docs
+
+- `docs/guide/cli.md`
+- `docs/guide/category-and-skills.md`
+- `docs/guide/understanding-runtime-system.md`
+- `docs/guide/orchestration.md`
+- `docs/reference/tools.md`
+- `docs/reference/skills.md`

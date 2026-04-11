@@ -51,7 +51,7 @@ flowchart TD
   G -->|Yes, agent active| I["Defer auto-compaction and expose advisory"]
   G -->|Yes, idle| J["Run auto-compaction watchdog path"]
   J --> K["session_compact"]
-  K --> L["authority.session.commitCompaction + telemetry reset"]
+  K --> L["authority.session.commitCompaction + clear breaker and gate state"]
   L --> M["Resume interrupted turn from current evidence state"]
 ```
 
@@ -63,8 +63,9 @@ flowchart TD
    admitted injection plan for the turn.
 3. `ContextPressureService` computes gate status from usage ratio, hard limit,
    and the recent-compaction window.
-4. Under critical pressure without recent compaction, ordinary non-control-plane
-   tools are blocked by the gate.
+4. Under critical pressure without recent compaction, every tool except
+   `session_compact` and the minimal context-critical allowlist is blocked by
+   the gate.
 5. The hosted path then decides whether to:
    - emit advisory state only
    - defer auto-compaction because the agent is active
@@ -90,8 +91,9 @@ flowchart TD
   percentages
 - recent-compaction cooldown is governed by both `minTurnsBetween` and
   `minSecondsBetween`; severe pressure may cross the fixed bypass line
-- `session_compact` and a small set of control-plane tools remain allowed while
-  the compaction gate is armed
+- while the compaction gate is armed, `session_compact` remains the required
+  repair action and only the minimal context-critical allowlist remains usable;
+  this is narrower than the broader control-plane tool set
 - hosted auto-compaction uses an idle-versus-active policy:
   - when the agent is active, the host records advisory state rather than
     triggering implicit compaction
@@ -197,6 +199,7 @@ flowchart TD
 
 - Runtime context service: `packages/brewva-runtime/src/services/context.ts`
 - Pressure / gate logic: `packages/brewva-runtime/src/services/context-pressure.ts`
+- Context-critical allowlist: `packages/brewva-runtime/src/security/control-plane-tools.ts`
 - Context budget policy: `packages/brewva-runtime/src/context/budget.ts`
 - Compaction integrity: `packages/brewva-runtime/src/services/context-compaction.ts`
 - Hosted compaction controller: `packages/brewva-gateway/src/runtime-plugins/hosted-compaction-controller.ts`

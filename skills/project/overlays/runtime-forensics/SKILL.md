@@ -45,7 +45,7 @@ Use this overlay when analyzing Brewva runtime sessions.
 
 Run the base artifact locator before manual inspection:
 
-- `scripts/locate_session_artifacts.sh` — locates session artifacts by session ID or timestamp. Run before step 1.
+- `scripts/locate_session_artifacts.sh` — locates session artifacts by session ID or timestamp. Run before step 1 using the base runtime-forensics helper.
 
 Focus on Brewva-native artifacts and governance telemetry.
 
@@ -55,14 +55,15 @@ Focus on Brewva-native artifacts and governance telemetry.
 
 Inspect event store, evidence ledger, projection artifacts, WAL, and schedule projection before ad hoc searches.
 
-### Step 2: Correlate governance and cascade behavior
+### Step 2: Correlate governance and workflow behavior
 
-Prefer event families and artifact joins that explain routing, cascade, context, and verification decisions.
+Prefer event families and artifact joins that explain routing, workflow,
+context, and verification decisions.
 
 ## Overlay Questions
 
 - Which canonical artifact path should answer this first?
-- Which governance or cascade event family would falsify the current suspicion?
+- Which governance or workflow event family would falsify the current suspicion?
 
 ## Stop Conditions
 
@@ -71,11 +72,11 @@ Prefer event families and artifact joins that explain routing, cascade, context,
 
 ## Common Rationalizations
 
-| Excuse                                          | Reality                                                                                                         |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| "Log output is sufficient evidence"             | Logs are partial. The artifact graph (event store, WAL, projection) gives causal structure that logs cannot.    |
-| "Governance events are not relevant here"       | Control-plane behavior is invisible without governance events. Always check them for routing or cascade issues. |
-| "I can piece together the timeline from source" | Source tells you what could happen. Artifacts tell you what did happen. Start from artifacts.                   |
+| Excuse                                          | Reality                                                                                                                |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| "Log output is sufficient evidence"             | Logs are partial. The artifact graph (event store, WAL, projection) gives causal structure that logs cannot.           |
+| "Governance events are not relevant here"       | Control-plane behavior is invisible without governance events. Always check them for routing or workflow-state issues. |
+| "I can piece together the timeline from source" | Source tells you what could happen. Artifacts tell you what did happen. Start from artifacts.                          |
 
 ## Anti-Patterns
 
@@ -84,4 +85,4 @@ Prefer event families and artifact joins that explain routing, cascade, context,
 
 ## Example
 
-Input: "Trace how the new routing scopes affected runtime selection and cascade planning in one session."
+Input: "Trace how the new routing scopes affected delegated consult posture and workflow status in one session."
