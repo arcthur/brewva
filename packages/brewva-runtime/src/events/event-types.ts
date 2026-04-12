@@ -80,6 +80,9 @@ export const NARRATIVE_MEMORY_REVIEWED_EVENT_TYPE = "narrative_memory_reviewed" 
 export const NARRATIVE_MEMORY_PROMOTED_EVENT_TYPE = "narrative_memory_promoted" as const;
 export const NARRATIVE_MEMORY_ARCHIVED_EVENT_TYPE = "narrative_memory_archived" as const;
 export const NARRATIVE_MEMORY_FORGOTTEN_EVENT_TYPE = "narrative_memory_forgotten" as const;
+export const RECALL_CURATION_RECORDED_EVENT_TYPE = "recall_curation_recorded" as const;
+export const RECALL_UTILITY_OBSERVED_EVENT_TYPE = "recall_utility_observed" as const;
+export const RECALL_RESULTS_SURFACED_EVENT_TYPE = "recall_results_surfaced" as const;
 export const SEMANTIC_EXTRACTION_INVOKED_EVENT_TYPE = "semantic_extraction_invoked" as const;
 export const SEMANTIC_RERANK_INVOKED_EVENT_TYPE = "semantic_rerank_invoked" as const;
 export const TOOL_CALL_EVENT_TYPE = "tool_call" as const;
@@ -233,6 +236,9 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   NARRATIVE_MEMORY_PROMOTED_EVENT_TYPE,
   NARRATIVE_MEMORY_ARCHIVED_EVENT_TYPE,
   NARRATIVE_MEMORY_FORGOTTEN_EVENT_TYPE,
+  RECALL_CURATION_RECORDED_EVENT_TYPE,
+  RECALL_UTILITY_OBSERVED_EVENT_TYPE,
+  RECALL_RESULTS_SURFACED_EVENT_TYPE,
   SEMANTIC_EXTRACTION_INVOKED_EVENT_TYPE,
   SEMANTIC_RERANK_INVOKED_EVENT_TYPE,
   TOOL_CALL_EVENT_TYPE,

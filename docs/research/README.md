@@ -134,6 +134,7 @@ None currently.
 - `docs/research/promoted/rfc-model-native-product-reconstruction-and-closure-vnext.md`
 - `docs/research/promoted/rfc-narrative-memory-product-and-bounded-semantic-recall.md`
 - `docs/research/promoted/rfc-preparse-normalization-model-capability-and-live-audit-split.md`
+- `docs/research/promoted/rfc-recall-first-compounding-intelligence-and-experience-products.md`
 - `docs/research/promoted/rfc-repository-fitness-plane-and-runtime-boundary.md`
 - `docs/research/promoted/rfc-repository-native-compound-knowledge-and-review-ensemble.md`
 - `docs/research/promoted/rfc-schedule-intent-hardening-and-control-plane-ergonomics.md`

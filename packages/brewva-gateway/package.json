@@ -29,6 +29,7 @@
     "@brewva/brewva-channels-telegram": "workspace:*",
     "@brewva/brewva-deliberation": "workspace:*",
     "@brewva/brewva-ingress": "workspace:*",
+    "@brewva/brewva-recall": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
     "@brewva/brewva-skill-broker": "workspace:*",
     "@brewva/brewva-tools": "workspace:*",

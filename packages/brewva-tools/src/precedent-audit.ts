@@ -1,13 +1,13 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { relative } from "node:path";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
 import {
   executeKnowledgeSearch,
   type ExecutedKnowledgeSearch,
   type KnowledgeSourceType,
   type ScoredKnowledgeDoc,
-} from "./knowledge-search-core.js";
+} from "@brewva/brewva-recall";
+import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import { Type } from "@sinclair/typebox";
 import {
   type DerivativeLink,
   type NormalizedSolutionRecord,

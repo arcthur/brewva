@@ -1,0 +1,17 @@
+criteria:
+  - name: baseline_is_strong
+    weight: 2
+    description: The session-local baseline finds the current-session evidence.
+    pass_condition: "output_number_gte:metrics.baseline_precision_at_k:1"
+  - name: broker_keeps_useful_result
+    weight: 3
+    description: Broker recall still surfaces the relevant current-session evidence.
+    pass_condition: "output_number_gte:metrics.broker_useful_recall_rate:1"
+  - name: no_harmful_results
+    weight: 3
+    description: Broker recall does not add harmful results to the top-k slice.
+    pass_condition: "output_number_lte:metrics.broker_harmful_recall_rate:0"
+  - name: no_contradictions
+    weight: 2
+    description: Broker recall does not add contradictory results to the top-k slice.
+    pass_condition: "output_number_lte:metrics.broker_contradiction_rate:0"

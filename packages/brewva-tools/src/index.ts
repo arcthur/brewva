@@ -25,6 +25,7 @@ import { createProcessTool } from "./process.js";
 import { createReadSpansTool } from "./read-spans.js";
 import { createReasoningCheckpointTool } from "./reasoning-checkpoint.js";
 import { createReasoningRevertTool } from "./reasoning-revert.js";
+import { createRecallCurateTool, createRecallSearchTool } from "./recall.js";
 import { createResourceLeaseTool } from "./resource-lease.js";
 import { createRollbackLastPatchTool } from "./rollback-last-patch.js";
 import { createScheduleIntentTool } from "./schedule-intent.js";
@@ -83,6 +84,8 @@ export function buildBrewvaTools(options: BuildBrewvaToolsOptions): ToolDefiniti
     createDeliberationMemoryTool({ runtime }),
     createNarrativeMemoryTool({ runtime }),
     createKnowledgeCaptureTool({ runtime }),
+    createRecallSearchTool({ runtime }),
+    createRecallCurateTool({ runtime }),
     createKnowledgeSearchTool({ runtime }),
     createPrecedentAuditTool({ runtime }),
     createPrecedentSweepTool({ runtime }),
@@ -128,6 +131,7 @@ export { createBrowserTools } from "./browser.js";
 export { createDeliberationMemoryTool } from "./deliberation-memory.js";
 export { createNarrativeMemoryTool } from "./narrative-memory.js";
 export { createKnowledgeCaptureTool } from "./knowledge-capture.js";
+export { createRecallSearchTool, createRecallCurateTool } from "./recall.js";
 export { createKnowledgeSearchTool } from "./knowledge-search.js";
 export { createPrecedentAuditTool } from "./precedent-audit.js";
 export { createPrecedentSweepTool } from "./precedent-sweep.js";

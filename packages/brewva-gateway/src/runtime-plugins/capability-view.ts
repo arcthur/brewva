@@ -533,7 +533,7 @@ function renderInventoryBlock(inventory: CapabilityVisibilityInventory): string 
   }
   if (inventory.hints.includes("operator_profile_available")) {
     lines.push(
-      "operator_hint: operator/full profile keeps these tools visible; otherwise request one via `$name` for the current turn.",
+      "operator_hint: operator/full profile keeps these tools visible by default; only requestable operator tools can be surfaced via `$name` for the current turn.",
     );
   }
   return lines.join("\n");
@@ -548,7 +548,7 @@ function renderPolicyBlock(
   for (const policy of policies) {
     if (policy.id === "surface_visibility") {
       lines.push(
-        "surface_policy: base tools stay visible; skill tools follow current skill commitments; any managed tool can be surfaced for one turn with an explicit $name request; operator/full profile keeps operator tools visible by default.",
+        "surface_policy: base tools stay visible; skill tools follow current skill commitments; requestable managed tools can be surfaced for one turn with an explicit $name request; operator/full profile keeps operator tools visible by default, while operator-gated tools remain profile-only.",
       );
       continue;
     }

@@ -34,6 +34,9 @@ function cloneGovernanceDescriptor(input: ToolGovernanceDescriptor): ToolGoverna
     defaultRisk: input.defaultRisk,
     boundary: input.boundary,
     rollbackable: input.rollbackable,
+    requiredRoutingScopes: input.requiredRoutingScopes
+      ? [...new Set(input.requiredRoutingScopes)]
+      : undefined,
   };
 }
 

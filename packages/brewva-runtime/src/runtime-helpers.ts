@@ -39,6 +39,7 @@ export function inferEventCategory(type: string): BrewvaEventCategory {
     type.startsWith("resource_lease_") ||
     type.startsWith("schedule_") ||
     type.startsWith("subagent_") ||
+    type.startsWith("recall_") ||
     type.startsWith("narrative_memory_") ||
     type.startsWith("semantic_")
   ) {

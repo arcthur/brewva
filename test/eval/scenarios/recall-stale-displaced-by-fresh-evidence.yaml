@@ -1,0 +1,34 @@
+id: recall-stale-displaced-by-fresh-evidence
+skill: recall
+kind: recall
+description: Fresh evidence with explicit stale routing displaces older contradictory recall.
+context:
+  task_description: |
+    Compare broker recall against the session-local tape baseline for a recovery replay regression with stale prior guidance.
+rubric_path: ../rubrics/recall-stale-displaced-by-fresh-evidence.yaml
+fixture_path: ../fixtures/recall-stale-displaced-by-fresh-evidence.yaml
+dataset_path: ../datasets/recall-stale-displaced-by-fresh-evidence.yaml
+output_contracts:
+  summary:
+    kind: text
+    min_words: 8
+    min_length: 32
+  top_result:
+    kind: json
+    required_fields:
+      - stable_id
+      - source_family
+  broker_results:
+    kind: json
+    min_items: 1
+  metrics:
+    kind: json
+    required_fields:
+      - baseline_precision_at_k
+      - broker_precision_at_k
+      - precision_gain_at_k
+      - broker_useful_recall_rate
+      - broker_harmful_recall_rate
+      - broker_contradiction_rate
+      - added_latency_ms
+      - added_token_cost

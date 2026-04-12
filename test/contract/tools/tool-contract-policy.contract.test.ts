@@ -5,8 +5,10 @@ import {
   DEFAULT_BREWVA_CONFIG,
   BrewvaRuntime,
   getToolGovernanceDescriptor,
+  sameToolGovernanceDescriptor,
   type BrewvaConfig,
   type SkillContractOverride,
+  type SkillRoutingScope,
 } from "@brewva/brewva-runtime";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -22,6 +24,7 @@ function createRuntime(
   options: {
     security?: Partial<BrewvaConfig["security"]>;
     skillOverrides?: Record<string, SkillContractOverride>;
+    routingScopes?: SkillRoutingScope[];
   } = {},
 ): BrewvaRuntime {
   const config = structuredClone(DEFAULT_BREWVA_CONFIG);
@@ -34,6 +37,9 @@ function createRuntime(
       ...config.skills.overrides,
       ...options.skillOverrides,
     };
+  }
+  if (options.routingScopes) {
+    config.skills.routing.scopes = [...new Set(options.routingScopes)];
   }
   config.infrastructure.events.enabled = true;
   config.ledger.path = ".orchestrator/ledger/evidence.jsonl";
@@ -414,6 +420,72 @@ describe("effect governance policy modes", () => {
     expect(promoteStart.allowed).toBe(true);
     expect(promoteStart.boundary).toBe("effectful");
     expect(promoteStart.mutationReceipt).toBeUndefined();
+  });
+
+  test("recall tools expose explicit read and curation governance descriptors", () => {
+    expect(getToolGovernanceDescriptor("recall_search")).toEqual({
+      effects: ["workspace_read", "runtime_observe"],
+      defaultRisk: "low",
+      boundary: "safe",
+    });
+    expect(getToolGovernanceDescriptor("recall_curate")).toEqual({
+      effects: ["memory_write"],
+      defaultRisk: "medium",
+      boundary: "effectful",
+      rollbackable: false,
+      requiredRoutingScopes: ["operator", "meta"],
+    });
+  });
+
+  test("recall_curate requires an operator or meta routing scope", () => {
+    const workspace = createPolicyWorkspace("recall-curate-routing-scope");
+    const sessionId = "recall-curate-routing-scope-1";
+
+    const defaultRuntime = createRuntime(workspace);
+    defaultRuntime.maintain.context.onTurnStart(sessionId, 1);
+    const blocked = defaultRuntime.inspect.tools.checkAccess(sessionId, "recall_curate");
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.reason).toContain("routing scopes");
+
+    const operatorRuntime = createRuntime(workspace, {
+      routingScopes: ["core", "domain", "operator"],
+    });
+    operatorRuntime.maintain.context.onTurnStart(sessionId, 1);
+    expect(operatorRuntime.inspect.tools.checkAccess(sessionId, "recall_curate").allowed).toBe(
+      true,
+    );
+  });
+
+  test("tool governance descriptor equality includes required routing scopes", () => {
+    expect(
+      sameToolGovernanceDescriptor(
+        {
+          effects: ["memory_write"],
+          defaultRisk: "medium",
+          requiredRoutingScopes: ["operator"],
+        },
+        {
+          effects: ["memory_write"],
+          defaultRisk: "medium",
+          requiredRoutingScopes: ["meta"],
+        },
+      ),
+    ).toBe(false);
+
+    expect(
+      sameToolGovernanceDescriptor(
+        {
+          effects: ["memory_write"],
+          defaultRisk: "medium",
+          requiredRoutingScopes: ["meta", "operator"],
+        },
+        {
+          effects: ["memory_write"],
+          defaultRisk: "medium",
+          requiredRoutingScopes: ["operator", "meta"],
+        },
+      ),
+    ).toBe(true);
   });
 });
 

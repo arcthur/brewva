@@ -1,0 +1,17 @@
+criteria:
+  - name: precedent_is_top_result
+    weight: 3
+    description: The top broker result is the repository precedent.
+    pass_condition: "output_contains:top_result:repository_precedent"
+  - name: precision_gain_present
+    weight: 3
+    description: Broker recall improves precision over the session-local baseline.
+    pass_condition: "output_number_gte:metrics.precision_gain_at_k:0.9"
+  - name: useful_recall_present
+    weight: 2
+    description: Broker recall surfaces a relevant precedent.
+    pass_condition: "output_number_gte:metrics.broker_useful_recall_rate:1"
+  - name: no_harmful_results
+    weight: 2
+    description: Advisory tape evidence does not remain in the broker top-k slice.
+    pass_condition: "output_number_lte:metrics.broker_harmful_recall_rate:0"

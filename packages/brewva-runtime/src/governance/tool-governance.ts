@@ -1,4 +1,5 @@
 import type {
+  SkillRoutingScope,
   ToolEffectClass,
   ToolExecutionBoundary,
   ToolGovernanceDescriptor,
@@ -8,27 +9,40 @@ import type {
 } from "../contracts/index.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 
-function descriptor(input: {
-  effects: ToolEffectClass[];
+type ToolGovernanceDescriptorInput = {
+  effects: readonly ToolEffectClass[];
   defaultRisk?: ToolGovernanceRisk;
   boundary?: ToolExecutionBoundary;
   rollbackable?: boolean;
-}): ToolGovernanceDescriptor {
+  requiredRoutingScopes?: readonly SkillRoutingScope[];
+};
+
+function uniqueValues<T>(values: readonly T[] | undefined): T[] | undefined {
+  return values ? [...new Set(values)] : undefined;
+}
+
+function buildDescriptor(
+  input: ToolGovernanceDescriptorInput,
+  options: {
+    dedupeEffects?: boolean;
+  } = {},
+): ToolGovernanceDescriptor {
+  const effects = options.dedupeEffects ? [...new Set(input.effects)] : [...input.effects];
   return {
-    effects: input.effects,
+    effects,
     defaultRisk: input.defaultRisk,
-    boundary: input.boundary ?? resolveToolExecutionBoundaryFromEffects(input.effects),
+    boundary: input.boundary ?? resolveToolExecutionBoundaryFromEffects(effects),
     rollbackable: input.rollbackable,
+    requiredRoutingScopes: uniqueValues(input.requiredRoutingScopes),
   };
 }
 
+function descriptor(input: ToolGovernanceDescriptorInput): ToolGovernanceDescriptor {
+  return buildDescriptor(input);
+}
+
 function normalizeDescriptor(input: ToolGovernanceDescriptor): ToolGovernanceDescriptor {
-  return {
-    effects: [...new Set(input.effects)],
-    defaultRisk: input.defaultRisk,
-    boundary: input.boundary ?? resolveToolExecutionBoundaryFromEffects(input.effects),
-    rollbackable: input.rollbackable,
-  };
+  return buildDescriptor(input, { dedupeEffects: true });
 }
 
 export function resolveToolExecutionBoundaryFromEffects(
@@ -75,6 +89,18 @@ function sameEffects(
 ): boolean {
   const leftValues = [...new Set(left ?? [])].toSorted();
   const rightValues = [...new Set(right ?? [])].toSorted();
+  if (leftValues.length !== rightValues.length) {
+    return false;
+  }
+  return leftValues.every((value, index) => value === rightValues[index]);
+}
+
+function sameRoutingScopes(
+  left: readonly SkillRoutingScope[] | undefined,
+  right: readonly SkillRoutingScope[] | undefined,
+): boolean {
+  const leftValues = uniqueValues(left)?.toSorted() ?? [];
+  const rightValues = uniqueValues(right)?.toSorted() ?? [];
   if (leftValues.length !== rightValues.length) {
     return false;
   }
@@ -287,6 +313,16 @@ export const TOOL_GOVERNANCE_BY_NAME: Record<string, ToolGovernanceDescriptor> =
   knowledge_capture: descriptor({
     effects: ["workspace_write"],
     defaultRisk: "high",
+  }),
+  recall_search: descriptor({
+    effects: ["workspace_read", "runtime_observe"],
+    defaultRisk: "low",
+  }),
+  recall_curate: descriptor({
+    effects: ["memory_write"],
+    defaultRisk: "medium",
+    rollbackable: false,
+    requiredRoutingScopes: ["operator", "meta"],
   }),
   knowledge_search: descriptor({
     effects: ["workspace_read"],
@@ -588,7 +624,8 @@ export function sameToolGovernanceDescriptor(
     left.defaultRisk === right.defaultRisk &&
     left.boundary === right.boundary &&
     left.rollbackable === right.rollbackable &&
-    sameEffects(left.effects, right.effects)
+    sameEffects(left.effects, right.effects) &&
+    sameRoutingScopes(left.requiredRoutingScopes, right.requiredRoutingScopes)
   );
 }
 

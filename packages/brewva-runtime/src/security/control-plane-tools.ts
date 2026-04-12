@@ -19,6 +19,7 @@ export const CONTROL_PLANE_TOOLS = [
   "tape_handoff",
   "tape_info",
   "tape_search",
+  "recall_search",
   "reasoning_checkpoint",
   "reasoning_revert",
   "session_compact",
@@ -38,6 +39,7 @@ export const CONTEXT_CRITICAL_ALLOWED_TOOLS = [
   "task_view_state",
   "tape_info",
   "tape_search",
+  "recall_search",
   "reasoning_checkpoint",
   "reasoning_revert",
 ];

@@ -1,0 +1,66 @@
+schema: brewva.recall-eval.dataset.v1
+workspace_files:
+  - path: packages/gateway/bootstrap.ts
+    content: |
+      export const bootstrapGateway = true;
+sessions:
+  - id: prior-session
+    goal: Fix the hosted gateway bootstrap regression
+    target_files:
+      - packages/gateway/bootstrap.ts
+    events:
+      - alias: prior-fix
+        type: task_event
+        payload:
+          schema: brewva.task.ledger.v1
+          kind: item_added
+          item:
+            id: prior-fix-item
+            text: Removed duplicate startup hooks from the hosted gateway bootstrap path
+            status: done
+  - id: current-session
+    goal: Trace the latest startup regression
+    target_files:
+      - packages/gateway/bootstrap.ts
+    events:
+      - type: recall_curation_recorded
+        payload:
+          source: recall_curate
+          signal: helpful
+          stableIds:
+            - tape:prior-session:prior-fix
+      - type: recall_curation_recorded
+        payload:
+          source: recall_curate
+          signal: helpful
+          stableIds:
+            - tape:prior-session:prior-fix
+      - type: recall_curation_recorded
+        payload:
+          source: recall_curate
+          signal: helpful
+          stableIds:
+            - tape:prior-session:prior-fix
+      - type: recall_curation_recorded
+        payload:
+          source: recall_curate
+          signal: helpful
+          stableIds:
+            - tape:prior-session:prior-fix
+      - type: recall_curation_recorded
+        payload:
+          source: recall_curate
+          signal: helpful
+          stableIds:
+            - tape:prior-session:prior-fix
+query:
+  session_id: current-session
+  text: hosted gateway bootstrap duplicate startup hooks
+  scope: user_repository_root
+  limit: 1
+expectations:
+  relevant_stable_ids:
+    - tape:prior-session:prior-fix
+  harmful_stable_ids: []
+  contradictory_stable_ids: []
+  expected_top_stable_id: tape:prior-session:prior-fix

@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@brewva/brewva-deliberation": "workspace:*",
+    "@brewva/brewva-recall": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
     "@brewva/brewva-skill-broker": "workspace:*",
     "@mariozechner/pi-coding-agent": "^0.64.0",

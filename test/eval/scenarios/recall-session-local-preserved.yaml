@@ -1,0 +1,34 @@
+id: recall-session-local-preserved
+skill: recall
+kind: recall
+description: Broker recall must preserve a strong current-session hit instead of regressing the session-local baseline.
+context:
+  task_description: |
+    Compare broker recall against the session-local tape baseline for a current-session recovery repair.
+rubric_path: ../rubrics/recall-session-local-preserved.yaml
+fixture_path: ../fixtures/recall-session-local-preserved.yaml
+dataset_path: ../datasets/recall-session-local-preserved.yaml
+output_contracts:
+  summary:
+    kind: text
+    min_words: 8
+    min_length: 32
+  top_result:
+    kind: json
+    required_fields:
+      - stable_id
+      - source_family
+  broker_results:
+    kind: json
+    min_items: 1
+  metrics:
+    kind: json
+    required_fields:
+      - baseline_precision_at_k
+      - broker_precision_at_k
+      - precision_gain_at_k
+      - broker_useful_recall_rate
+      - broker_harmful_recall_rate
+      - broker_contradiction_rate
+      - added_latency_ms
+      - added_token_cost

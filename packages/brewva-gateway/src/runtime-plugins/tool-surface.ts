@@ -51,6 +51,7 @@ const PRE_SKILL_CONTROL_PLANE_TOOL_NAMES = [
 ] as const;
 const BOOTSTRAP_MANAGED_TOOL_NAMES = [
   ...PRE_SKILL_CONTROL_PLANE_TOOL_NAMES,
+  "recall_search",
   "knowledge_search",
   "precedent_audit",
   "precedent_sweep",
@@ -58,7 +59,6 @@ const BOOTSTRAP_MANAGED_TOOL_NAMES = [
   "output_search",
   "ledger_query",
   "tape_info",
-  "tape_search",
   "tape_handoff",
 ] as const;
 const TASK_CONTEXT_MUTATION_TOOL_NAMES = new Set([
@@ -207,6 +207,24 @@ function resolveManagedToolGovernanceDescriptor(
   );
 }
 
+function collectRequestableOperatorManagedToolNames(
+  runtime: ToolSurfaceRuntime,
+  knownToolNames: ReadonlySet<string>,
+  dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>,
+): string[] {
+  return OPERATOR_BREWVA_TOOL_NAMES.filter((toolName) => {
+    if (!knownToolNames.has(toolName)) {
+      return false;
+    }
+    const descriptor = resolveManagedToolGovernanceDescriptor(
+      runtime,
+      toolName,
+      dynamicToolDefinitions,
+    );
+    return descriptor !== undefined && (descriptor.requiredRoutingScopes?.length ?? 0) === 0;
+  });
+}
+
 function collectSkillToolNames(
   runtime: ToolSurfaceRuntime,
   skills: ToolSurfaceSkill[],
@@ -323,6 +341,8 @@ function resolveActiveToolNames(input: {
   allTools: ToolInfo[];
   activeToolNames: string[];
   turnPlan: TurnSurfacePlan;
+  runtime: ToolSurfaceRuntime;
+  dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
 }): {
   activeToolNames: string[];
   managedActiveCount: number;
@@ -363,11 +383,16 @@ function resolveActiveToolNames(input: {
   const bootstrapManagedToolNames = new Set<string>(
     turnPlan.preSkillGateActive ? PRE_SKILL_CONTROL_PLANE_TOOL_NAMES : BOOTSTRAP_MANAGED_TOOL_NAMES,
   );
+  const requestableOperatorManagedToolNames = collectRequestableOperatorManagedToolNames(
+    input.runtime,
+    knownToolNames,
+    input.dynamicToolDefinitions,
+  );
   const allowedRequestedManagedToolNames = turnPlan.hasActiveSkill
     ? new Set<string>(MANAGED_BREWVA_TOOL_NAMES)
     : turnPlan.preSkillGateActive
       ? new Set<string>(PRE_SKILL_CONTROL_PLANE_TOOL_NAMES)
-      : new Set<string>([...BOOTSTRAP_MANAGED_TOOL_NAMES, ...OPERATOR_BREWVA_TOOL_NAMES]);
+      : new Set<string>([...BOOTSTRAP_MANAGED_TOOL_NAMES, ...requestableOperatorManagedToolNames]);
   const requestedActivatedToolNames = resolveRequestedManagedToolNames(
     turnPlan.requestedToolNames,
     knownToolNames,
@@ -625,6 +650,8 @@ function resolveAndActivateToolSurface(input: {
     allTools: refreshedTools,
     activeToolNames: activeToolsGetter.call(input.extensionApi),
     turnPlan,
+    runtime: input.runtime,
+    dynamicToolDefinitions: input.dynamicToolDefinitions,
   });
   setActiveTools.call(input.extensionApi, resolved.activeToolNames);
 

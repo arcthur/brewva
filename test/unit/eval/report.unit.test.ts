@@ -83,4 +83,86 @@ describe("eval report semantics", () => {
     expect(text).toContain("pass@1 (any success in k runs)");
     expect(text).toContain("All 1 runs pass");
   });
+
+  test("aggregates recall metrics separately from generic pass-rate reporting", () => {
+    const recallRunA = {
+      ...buildResult({ scenarioId: "recall-a", runIndex: 0, pass: true }),
+      outputs: {
+        summary: "broker found the prior fix while the session-local baseline missed it",
+      },
+      telemetry: {
+        kind: "recall",
+        metrics: {
+          baseline_precision_at_k: 0,
+          broker_precision_at_k: 1,
+          precision_gain_at_k: 1,
+          baseline_useful_recall_rate: 0,
+          broker_useful_recall_rate: 1,
+          useful_recall_gain: 1,
+          baseline_harmful_recall_rate: 0,
+          broker_harmful_recall_rate: 0,
+          baseline_contradiction_rate: 0,
+          broker_contradiction_rate: 0,
+          baseline_latency_ms: 1,
+          broker_latency_ms: 4,
+          added_latency_ms: 3,
+          baseline_token_cost: 8,
+          broker_token_cost: 28,
+          added_token_cost: 20,
+        },
+      },
+    } as EvalResult;
+    const recallRunB = {
+      ...buildResult({ scenarioId: "recall-b", runIndex: 0, pass: true }),
+      outputs: {
+        summary: "broker preferred the repository precedent over weaker tape evidence",
+      },
+      telemetry: {
+        kind: "recall",
+        metrics: {
+          baseline_precision_at_k: 0.5,
+          broker_precision_at_k: 1,
+          precision_gain_at_k: 0.5,
+          baseline_useful_recall_rate: 1,
+          broker_useful_recall_rate: 1,
+          useful_recall_gain: 0,
+          baseline_harmful_recall_rate: 0.5,
+          broker_harmful_recall_rate: 0,
+          baseline_contradiction_rate: 0.5,
+          broker_contradiction_rate: 0,
+          baseline_latency_ms: 2,
+          broker_latency_ms: 5,
+          added_latency_ms: 3,
+          baseline_token_cost: 12,
+          broker_token_cost: 24,
+          added_token_cost: 12,
+        },
+      },
+    } as EvalResult;
+
+    const report = buildReport(
+      [buildResult({ scenarioId: "generic", runIndex: 0, pass: true }), recallRunA, recallRunB],
+      "test-model",
+      1,
+    );
+
+    expect(report.summary.recall_metrics).toEqual(
+      expect.objectContaining({
+        run_count: 2,
+        baseline_precision_at_k: 0.25,
+        broker_precision_at_k: 1,
+        precision_gain_at_k: 0.75,
+        baseline_harmful_recall_rate: 0.25,
+        broker_harmful_recall_rate: 0,
+        added_latency_ms: 3,
+        added_token_cost: 16,
+      }),
+    );
+
+    const text = formatReport(report);
+    expect(text).toContain("## Recall Metrics");
+    expect(text).toContain("Broker precision@k");
+    expect(text).toContain("Useful recall rate");
+    expect(text).toContain("Added token cost");
+  });
 });

@@ -1,5 +1,3 @@
-import type { SkillDocument } from "@brewva/brewva-runtime";
-import { summarizeImpactMapSearchSignal } from "./impact-map.js";
 import {
   executeKnowledgeSearch,
   hasKnowledgeSearchSignal,
@@ -7,7 +5,9 @@ import {
   type KnowledgeSearchInput,
   type KnowledgeSourceType,
   type ScoredKnowledgeDoc,
-} from "./knowledge-search-core.js";
+} from "@brewva/brewva-recall";
+import type { SkillDocument } from "@brewva/brewva-runtime";
+import { summarizeImpactMapSearchSignal } from "./impact-map.js";
 
 export const LEARNING_RESEARCH_OUTPUT_KEYS = [
   "knowledge_brief",

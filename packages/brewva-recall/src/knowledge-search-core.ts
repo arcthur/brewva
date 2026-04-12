@@ -795,3 +795,17 @@ export function executeKnowledgeSearch(
     searchPlan,
   };
 }
+
+export function findKnowledgeDocByRelativePath(
+  searchRoots: readonly string[],
+  relativePath: string,
+): KnowledgeDocRecord | undefined {
+  const normalizedRelativePath = readTrimmedString(relativePath)?.replace(/\\/g, "/");
+  if (!normalizedRelativePath) {
+    return undefined;
+  }
+  const corpora = searchRoots.map((root) => loadKnowledgeDocs(root, root));
+  return corpora
+    .flatMap((corpus) => corpus.docs)
+    .find((doc) => doc.relativePath === normalizedRelativePath);
+}

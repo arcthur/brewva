@@ -172,9 +172,10 @@ Current responsibilities:
 - optimization protocol presentation
   - exposes objective iteration facts such as metric observations, guard
     results
-  - may present hosted narrative memory and evidence-backed deliberation
-    artifacts such as optimization continuity and promotion drafts after kernel
-    admission
+  - may present broker-first hosted recall after kernel admission, while
+    preserving source typing across narrative memory, deliberation artifacts,
+    optimization continuity, promotion drafts, tape evidence, and repository
+    precedent
   - keeps loop strategy and any optional sequencing decisions in the
     model-native layer rather than moving them into kernel authority
 - narrative memory presentation
@@ -196,6 +197,7 @@ new kernel authority object.
 Current product surfaces:
 
 - `workflow_status` as an explicit inspection tool
+- `recall_search` as the default cross-session prior-work recall tool
 - `knowledge_search` as an explicit repository-native precedent retrieval tool
 - `precedent_audit` as an explicit repository-precedent maintenance tool
 - `precedent_sweep` as an explicit repository-wide precedent maintenance tool
@@ -207,6 +209,7 @@ Current product surfaces:
 Related productized repository-precedent surfaces also include:
 
 - `knowledge_capture` as terminal materialization into `docs/solutions/**`
+- `recall_curate` as the operator-only recall ranking feedback surface
 - internal review-lane fan-out behind the single public `advisor`
   consultation boundary, while `review` remains a parent-owned semantic skill
 

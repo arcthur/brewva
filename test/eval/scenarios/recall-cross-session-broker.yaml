@@ -1,0 +1,34 @@
+id: recall-cross-session-broker
+skill: recall
+kind: recall
+description: Broker recall surfaces prior same-root tape evidence that the session-local baseline misses.
+context:
+  task_description: |
+    Compare broker-first recall against the session-local tape baseline for a repeated hosted bootstrap regression.
+rubric_path: ../rubrics/recall-cross-session-broker.yaml
+fixture_path: ../fixtures/recall-cross-session-broker.yaml
+dataset_path: ../datasets/recall-cross-session-broker.yaml
+output_contracts:
+  summary:
+    kind: text
+    min_words: 8
+    min_length: 32
+  top_result:
+    kind: json
+    required_fields:
+      - stable_id
+      - source_family
+  broker_results:
+    kind: json
+    min_items: 1
+  metrics:
+    kind: json
+    required_fields:
+      - baseline_precision_at_k
+      - broker_precision_at_k
+      - precision_gain_at_k
+      - broker_useful_recall_rate
+      - broker_harmful_recall_rate
+      - broker_contradiction_rate
+      - added_latency_ms
+      - added_token_cost

@@ -88,13 +88,13 @@ describe("skill contract tightening", () => {
         deniedEffects: ["external_network"],
       },
       executionHints: {
-        preferredTools: ["tape_search"],
+        preferredTools: ["recall_search"],
         fallbackTools: ["cost_view"],
       },
     });
 
     expect(merged.executionHints?.preferredTools).toEqual(
-      expect.arrayContaining(["read", "exec", "tape_search"]),
+      expect.arrayContaining(["read", "exec", "recall_search"]),
     );
     expect(merged.executionHints?.fallbackTools).toEqual(
       expect.arrayContaining(["grep", "cost_view"]),

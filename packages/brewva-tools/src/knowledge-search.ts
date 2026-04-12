@@ -1,12 +1,12 @@
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
 import {
   executeKnowledgeSearch,
   hasKnowledgeSearchSignal,
   KNOWLEDGE_QUERY_INTENTS,
   KNOWLEDGE_SOURCE_TYPES,
   normalizeKnowledgeSourceTypes,
-} from "./knowledge-search-core.js";
+} from "@brewva/brewva-recall";
+import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import { Type } from "@sinclair/typebox";
 import { resolveToolTargetScope } from "./target-scope.js";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";

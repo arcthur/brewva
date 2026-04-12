@@ -40,6 +40,8 @@ Default tools registered by `buildBrewvaTools()`:
 - `deliberation_memory`
 - `narrative_memory`
 - `knowledge_capture`
+- `recall_search`
+- `recall_curate`
 - `knowledge_search`
 - `precedent_audit`
 - `precedent_sweep`
@@ -198,6 +200,8 @@ Notes:
 - `cost_view`
 - `deliberation_memory`
 - `knowledge_capture`
+- `recall_search`
+- `recall_curate`
 - `knowledge_search`
 - `precedent_audit`
 - `precedent_sweep`
@@ -706,6 +710,42 @@ Explicit inspection surface for deliberation memory artifacts.
 - remains read-only and non-authoritative; it does not write new memory or
   widen kernel truth
 
+## `recall_search` And `recall_curate`
+
+Unified recall surfaces for the new broker-first read path.
+
+- `recall_search` is the default prior-work recall tool
+- it retrieves source-typed results across tape evidence, narrative memory,
+  deliberation memory, optimization continuity, promotion drafts, and
+  repository precedent
+- it also accepts `stable_ids` for direct inspection of previously surfaced
+  recall items without widening to a different tool surface
+- every result carries stable identity, `source_family`, `scope`,
+  `freshness`, provenance fields such as `session_id` or `path`, and any
+  available curation snapshot
+- default scope is `user_repository_root`; use `session_local` for current-turn
+  or current-session forensics, and treat `workspace_wide` as an explicit
+  opt-in rather than the default recall boundary
+- worktrees under the same repository root do not share recall automatically
+  unless repository policy widens the scope
+- `recall_search` is advisory and read-only; it does not promote, materialize,
+  or mutate truth
+- `recall_curate` is the operator-only curation surface
+- it records explicit feedback signals (`helpful`, `stale`, `superseded`,
+  `wrong_scope`, `misleading`) against stable ids
+- curation uses rebuildable, time-decayed weights derived from durable feedback
+  evidence; decayed ranking is inspectable through `recall_search` result
+  metadata for surfaced stable ids
+- curation influences future recall ranking and candidate review priority, but
+  it does not delete source records or validate typed materialization on its
+  own
+
+`tape_search` still exists, but its role is narrower:
+
+- it is a session-local tape primitive
+- use it for current-session forensics or phase-local inspection
+- do not treat it as the generic prior-work recall path
+
 ## `narrative_memory`
 
 Explicit inspection and management surface for typed narrative memory records.
@@ -768,6 +808,11 @@ Explicit repository-native precedent retrieval surface.
 - replacing the current matcher is not a goal by itself; future optimization
   should prefer corpus/index caching or measured recall improvements over
   reintroducing a hand-rolled scorer
+
+Repository precedent may also appear through `recall_search`, but
+`knowledge_search` remains the explicit proof-of-consult surface when a turn
+needs targeted repository-native precedent retrieval rather than mixed-source
+recall.
 
 ## `knowledge_capture`
 

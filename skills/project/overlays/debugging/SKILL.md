@@ -21,7 +21,7 @@ execution_hints:
     - grep
   fallback_tools:
     - ledger_query
-    - tape_search
+    - recall_search
     - cost_view
     - skill_complete
 references:

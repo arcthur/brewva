@@ -1,0 +1,34 @@
+id: recall-precedent-outranks-advisory
+skill: recall
+kind: recall
+description: Repository precedent should outrank weaker advisory tape evidence for repository-scoped recall.
+context:
+  task_description: |
+    Compare broker recall against the session-local tape baseline for a hosted bootstrap precedent lookup.
+rubric_path: ../rubrics/recall-precedent-outranks-advisory.yaml
+fixture_path: ../fixtures/recall-precedent-outranks-advisory.yaml
+dataset_path: ../datasets/recall-precedent-outranks-advisory.yaml
+output_contracts:
+  summary:
+    kind: text
+    min_words: 8
+    min_length: 32
+  top_result:
+    kind: json
+    required_fields:
+      - stable_id
+      - source_family
+  broker_results:
+    kind: json
+    min_items: 1
+  metrics:
+    kind: json
+    required_fields:
+      - baseline_precision_at_k
+      - broker_precision_at_k
+      - precision_gain_at_k
+      - broker_useful_recall_rate
+      - broker_harmful_recall_rate
+      - broker_contradiction_rate
+      - added_latency_ms
+      - added_token_cost

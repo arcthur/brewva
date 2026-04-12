@@ -157,8 +157,8 @@ Stable decisions:
 
 - `docs/solutions/**` is the canonical repository-native precedent store
 - precedent retrieval and maintenance happen through explicit surfaces such as
-  `knowledge_search`, `precedent_audit`, `precedent_sweep`, and
-  `knowledge_capture`
+  `knowledge_search`, `recall_search`, `precedent_audit`, `precedent_sweep`,
+  and `knowledge_capture`
 - these surfaces may inform planning, debugging, review, and repository-fitness
   judgment, but they do not create a `runtime.knowledge.*` domain and they do
   not widen effect authority
@@ -168,14 +168,14 @@ Stable decisions:
 
 ## State Taxonomy
 
-| Category                 | Role                                                           | Authority                    | Typical carriers                                                         |
-| ------------------------ | -------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------ |
-| `Kernel Commitments`     | authoritative system commitments                               | authoritative                | tape, receipts, task, truth, ledger                                      |
-| `Working State`          | session-local working view and budgeted context admission      | non-authoritative            | projection, context arena, active tool surface                           |
-| `Narrative Memory`       | typed collaboration semantics and selective recall             | non-authoritative            | self bundle, narrative memory records, explicit promotions               |
-| `Deliberation Artifacts` | non-kernel evidence, derived memory, and optimization sediment | non-authoritative            | deliberation memory, promotion drafts, optimization continuity artifacts |
-| `Tool Surface`           | turn-visible action surface                                    | policy-governed              | base tools, skill-scoped tools, operator tools                           |
-| `Control Plane`          | scheduling, delegation, and operator-facing orchestration      | non-authoritative by default | schedulers, wake prompts, child-run controllers                          |
+| Category                 | Role                                                                                 | Authority                    | Typical carriers                                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------ | ---------------------------- | --------------------------------------------------------------------------------------------- |
+| `Kernel Commitments`     | authoritative system commitments                                                     | authoritative                | tape, receipts, task, truth, ledger                                                           |
+| `Working State`          | session-local working view and budgeted context admission                            | non-authoritative            | projection, context arena, active tool surface                                                |
+| `Narrative Memory`       | typed collaboration semantics and selective recall                                   | non-authoritative            | self bundle, narrative memory records, explicit promotions                                    |
+| `Deliberation Artifacts` | non-kernel evidence, derived memory, recall ranking state, and optimization sediment | non-authoritative            | deliberation memory, recall broker state, promotion drafts, optimization continuity artifacts |
+| `Tool Surface`           | turn-visible action surface                                                          | policy-governed              | base tools, skill-scoped tools, operator tools                                                |
+| `Control Plane`          | scheduling, delegation, and operator-facing orchestration                            | non-authoritative by default | schedulers, wake prompts, child-run controllers                                               |
 
 Important distinctions:
 
@@ -183,6 +183,11 @@ Important distinctions:
 - narrative memory is a non-authoritative cognitive product, not kernel truth
 - repository precedent remains explicit under `docs/solutions/**`, not hidden
   inside memory products
+- broker-first hosted recall is still a deliberation product; it changes the
+  default read path, not the authority boundary
+- default broker recall scope is `user + repository root`; broader
+  workspace-wide or cross-workspace recall is policy-gated, and worktrees do
+  not share recall automatically by default
 - workflow artifacts/posture are derived working-state views, not new
   commitment-memory event families
 - session-scoped workflow posture is not repository merge or release
@@ -372,7 +377,8 @@ Model-facing composition is separate:
 
 - runtime admission decides which sources are allowed
 - `ContextComposer` decides how admitted blocks are shown to the model
-- default hosted session behavior is narrative-first
+- default hosted session behavior is broker-first within the narrative recall
+  path
 - the hosted system prompt carries one static Brewva context contract; live
   pressure and threshold numbers stay in turn-scoped hidden-tail blocks rather
   than in the session-cached prompt prefix

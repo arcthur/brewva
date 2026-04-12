@@ -50,7 +50,7 @@ execution_hints:
     - workflow_status
   fallback_tools:
     - ledger_query
-    - tape_search
+    - recall_search
     - skill_complete
 references:
   - skills/meta/skill-authoring/references/authored-behavior.md

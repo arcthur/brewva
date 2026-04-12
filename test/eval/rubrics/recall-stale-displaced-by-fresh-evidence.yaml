@@ -1,0 +1,17 @@
+criteria:
+  - name: precision_gain_present
+    weight: 3
+    description: Broker recall improves precision over the session-local baseline.
+    pass_condition: "output_number_gte:metrics.precision_gain_at_k:0.9"
+  - name: useful_recall_present
+    weight: 2
+    description: Broker recall surfaces the fresh relevant fix.
+    pass_condition: "output_number_gte:metrics.broker_useful_recall_rate:1"
+  - name: no_harmful_results
+    weight: 3
+    description: Stale contradictory evidence does not remain in the broker top-k slice.
+    pass_condition: "output_number_lte:metrics.broker_harmful_recall_rate:0"
+  - name: no_contradictions
+    weight: 2
+    description: Contradictory recall is suppressed from the surfaced slice.
+    pass_condition: "output_number_lte:metrics.broker_contradiction_rate:0"

@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
+  buildBrewvaTools,
   createReasoningCheckpointTool,
   createReasoningRevertTool,
   createSessionCompactTool,
@@ -289,6 +290,277 @@ describe("session coordination tool contracts", () => {
     expect(text).toContain("[TapeSearch]");
     expect(text).toContain("matches:");
     expect(text.toLowerCase()).toContain("flaky");
+  });
+
+  test("recall_search returns source-typed recall across prior sessions", async () => {
+    const recallWorkspace = mkdtempSync(join(tmpdir(), "brewva-tools-recall-search-"));
+    const runtime = new BrewvaRuntime({ cwd: recallWorkspace });
+    const priorSessionId = "s12-recall-prior";
+    const currentSessionId = "s12-recall-current";
+
+    runtime.maintain.context.onTurnStart(priorSessionId, 1);
+    runtime.authority.task.setSpec(priorSessionId, {
+      schema: "brewva.task.v1",
+      goal: "Fix flaky worker bootstrap in the gateway runtime",
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId: priorSessionId,
+      type: "task_event",
+      payload: {
+        schema: "brewva.task.inspect.ledger.v1",
+        kind: "item_added",
+        item: { id: "i-recall-1", text: "Stabilize flaky worker bootstrap", status: "todo" },
+      } as Record<string, unknown>,
+    });
+
+    runtime.maintain.context.onTurnStart(currentSessionId, 1);
+    runtime.authority.task.setSpec(currentSessionId, {
+      schema: "brewva.task.v1",
+      goal: "Investigate whether the flaky worker bootstrap issue already has precedent",
+    });
+
+    const tools = buildBrewvaTools({
+      runtime: createBundledToolRuntime(runtime),
+      toolNames: ["recall_search"],
+    });
+    const recallSearch = requireTool(tools, "recall_search");
+
+    const result = await recallSearch.execute(
+      "tc-recall-search",
+      { query: "flaky worker bootstrap", limit: 5 },
+      undefined,
+      undefined,
+      fakeContext(currentSessionId),
+    );
+
+    const text = extractTextContent(result);
+    expect(text).toContain("[RecallSearch]");
+    expect(text).toContain("source_family=tape_evidence");
+    expect(text).toContain(`session_id=${priorSessionId}`);
+
+    const details = result.details as
+      | {
+          results?: Array<{
+            sourceFamily?: string;
+            sessionId?: string | null;
+          }>;
+        }
+      | undefined;
+    expect(details?.results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceFamily: "tape_evidence",
+          sessionId: priorSessionId,
+        }),
+      ]),
+    );
+  });
+
+  test("recall_search can inspect stable ids and surface curation metadata", async () => {
+    const recallWorkspace = mkdtempSync(join(tmpdir(), "brewva-tools-recall-inspect-"));
+    const runtime = new BrewvaRuntime({ cwd: recallWorkspace });
+    const priorSessionId = "s12-recall-inspect-prior";
+    const currentSessionId = "s12-recall-inspect-current";
+
+    runtime.maintain.context.onTurnStart(priorSessionId, 1);
+    runtime.authority.task.setSpec(priorSessionId, {
+      schema: "brewva.task.v1",
+      goal: "Fix flaky gateway bootstrap recall",
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId: priorSessionId,
+      type: "task_event",
+      payload: {
+        schema: "brewva.task.inspect.ledger.v1",
+        kind: "item_added",
+        item: {
+          id: "i-recall-inspect-1",
+          text: "Fix flaky gateway bootstrap recall",
+          status: "todo",
+        },
+      } as Record<string, unknown>,
+    });
+
+    runtime.maintain.context.onTurnStart(currentSessionId, 1);
+    runtime.authority.task.setSpec(currentSessionId, {
+      schema: "brewva.task.v1",
+      goal: "Inspect prior recall state for the gateway bootstrap flake",
+    });
+
+    const tools = buildBrewvaTools({
+      runtime: createBundledToolRuntime(runtime),
+      toolNames: ["recall_search"],
+    });
+    const recallSearch = requireTool(tools, "recall_search");
+
+    const initialResult = await recallSearch.execute(
+      "tc-recall-inspect-search",
+      { query: "gateway bootstrap recall", limit: 5 },
+      undefined,
+      undefined,
+      fakeContext(currentSessionId),
+    );
+    const initialDetails = initialResult.details as
+      | {
+          results?: Array<{
+            stableId?: string;
+          }>;
+        }
+      | undefined;
+    const stableId = (initialDetails?.results ?? [])
+      .map((entry) => entry.stableId)
+      .find((value): value is string => typeof value === "string" && value.startsWith("tape:"));
+    expect(stableId).toBeDefined();
+
+    recordRuntimeEvent(runtime, {
+      sessionId: currentSessionId,
+      type: "recall_curation_recorded",
+      payload: {
+        source: "recall_curate",
+        signal: "helpful",
+        stableIds: [stableId],
+      } as Record<string, unknown>,
+    });
+
+    const inspectionResult = await recallSearch.execute(
+      "tc-recall-inspect-stable-id",
+      { stable_ids: [stableId] },
+      undefined,
+      undefined,
+      fakeContext(currentSessionId),
+    );
+    const inspectionText = extractTextContent(inspectionResult);
+    expect(inspectionText).toContain("mode: inspect");
+    expect(inspectionText).toContain(`requested_stable_ids: ${stableId}`);
+    expect(inspectionText).toContain("curation_adjustment=");
+
+    const inspectionDetails = inspectionResult.details as
+      | {
+          mode?: string;
+          unresolvedStableIds?: string[];
+          results?: Array<{
+            stableId?: string;
+            curation?: {
+              helpfulSignals?: number;
+              scoreAdjustment?: number;
+            } | null;
+          }>;
+        }
+      | undefined;
+    expect(inspectionDetails?.mode).toBe("inspect");
+    expect(inspectionDetails?.unresolvedStableIds).toEqual([]);
+    expect(inspectionDetails?.results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stableId,
+          curation: expect.objectContaining({
+            helpfulSignals: 1,
+          }),
+        }),
+      ]),
+    );
+    expect(inspectionDetails?.results?.[0]?.curation?.scoreAdjustment).toBeGreaterThan(0);
+  });
+
+  test("recall_search keeps user_repository_root scoped by default and only widens with workspace_wide", async () => {
+    const recallWorkspace = mkdtempSync(join(tmpdir(), "brewva-tools-recall-scope-"));
+    mkdirSync(join(recallWorkspace, "packages", "gateway"), { recursive: true });
+    mkdirSync(join(recallWorkspace, "packages", "cli"), { recursive: true });
+    const runtime = new BrewvaRuntime({ cwd: recallWorkspace });
+    const gatewaySessionId = "s12-recall-scope-gateway";
+    const cliSessionId = "s12-recall-scope-cli";
+    const currentSessionId = "s12-recall-scope-current";
+
+    runtime.maintain.context.onTurnStart(gatewaySessionId, 1);
+    runtime.authority.task.setSpec(gatewaySessionId, {
+      schema: "brewva.task.v1",
+      goal: "Fix bootstrap ordering in the gateway runtime",
+      targets: {
+        files: ["packages/gateway"],
+      },
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId: gatewaySessionId,
+      type: "task_event",
+      payload: {
+        schema: "brewva.task.inspect.ledger.v1",
+        kind: "item_added",
+        item: { id: "gateway-bootstrap", text: "Fix gateway bootstrap ordering", status: "todo" },
+      } as Record<string, unknown>,
+    });
+
+    runtime.maintain.context.onTurnStart(cliSessionId, 1);
+    runtime.authority.task.setSpec(cliSessionId, {
+      schema: "brewva.task.v1",
+      goal: "Fix bootstrap ordering in the cli runtime",
+      targets: {
+        files: ["packages/cli"],
+      },
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId: cliSessionId,
+      type: "task_event",
+      payload: {
+        schema: "brewva.task.inspect.ledger.v1",
+        kind: "item_added",
+        item: { id: "cli-bootstrap", text: "Fix cli bootstrap ordering", status: "todo" },
+      } as Record<string, unknown>,
+    });
+
+    runtime.maintain.context.onTurnStart(currentSessionId, 1);
+    runtime.authority.task.setSpec(currentSessionId, {
+      schema: "brewva.task.v1",
+      goal: "Check whether gateway bootstrap ordering already has prior work",
+      targets: {
+        files: ["packages/gateway"],
+      },
+    });
+
+    const tools = buildBrewvaTools({
+      runtime: createBundledToolRuntime(runtime),
+      toolNames: ["recall_search"],
+    });
+    const recallSearch = requireTool(tools, "recall_search");
+
+    const defaultResult = await recallSearch.execute(
+      "tc-recall-scope-default",
+      { query: "bootstrap ordering", limit: 10 },
+      undefined,
+      undefined,
+      fakeContext(currentSessionId),
+    );
+    const defaultDetails = defaultResult.details as
+      | {
+          results?: Array<{
+            sessionId?: string | null;
+          }>;
+        }
+      | undefined;
+    const defaultSessionIds = new Set(
+      (defaultDetails?.results ?? []).map((entry) => entry.sessionId).filter(Boolean),
+    );
+    expect(defaultSessionIds.has(gatewaySessionId)).toBe(true);
+    expect(defaultSessionIds.has(cliSessionId)).toBe(false);
+
+    const widenedResult = await recallSearch.execute(
+      "tc-recall-scope-wide",
+      { query: "bootstrap ordering", scope: "workspace_wide", limit: 10 },
+      undefined,
+      undefined,
+      fakeContext(currentSessionId),
+    );
+    const widenedDetails = widenedResult.details as
+      | {
+          results?: Array<{
+            sessionId?: string | null;
+          }>;
+        }
+      | undefined;
+    const widenedSessionIds = new Set(
+      (widenedDetails?.results ?? []).map((entry) => entry.sessionId).filter(Boolean),
+    );
+    expect(widenedSessionIds.has(gatewaySessionId)).toBe(true);
+    expect(widenedSessionIds.has(cliSessionId)).toBe(true);
   });
 
   test("reasoning_checkpoint records a durable checkpoint and tape_info reports the active branch", async () => {

@@ -7,6 +7,7 @@ export const CONTEXT_SOURCES = {
   identity: "brewva.identity",
   agentConstitution: "brewva.agent-constitution",
   agentMemory: "brewva.agent-memory",
+  recallBroker: "brewva.recall-broker",
   narrativeMemory: "brewva.narrative-memory",
   deliberationMemory: "brewva.deliberation-memory",
   optimizationContinuity: "brewva.optimization-continuity",
@@ -26,6 +27,7 @@ export const CONTEXT_SOURCE_CATEGORIES: Record<ContextSourceId, ContextInjection
   [CONTEXT_SOURCES.identity]: "narrative",
   [CONTEXT_SOURCES.agentConstitution]: "narrative",
   [CONTEXT_SOURCES.agentMemory]: "narrative",
+  [CONTEXT_SOURCES.recallBroker]: "narrative",
   [CONTEXT_SOURCES.narrativeMemory]: "narrative",
   [CONTEXT_SOURCES.deliberationMemory]: "narrative",
   [CONTEXT_SOURCES.optimizationContinuity]: "narrative",
@@ -43,6 +45,9 @@ export const CONTEXT_SOURCE_BUDGET_CLASSES: Record<ContextSourceId, ContextInjec
   [CONTEXT_SOURCES.identity]: "core",
   [CONTEXT_SOURCES.agentConstitution]: "core",
   [CONTEXT_SOURCES.agentMemory]: "core",
+  // Broker-first recall now consumes the shared recall budget as one provider;
+  // per-source balancing happens inside the recall broker rather than the arena.
+  [CONTEXT_SOURCES.recallBroker]: "recall",
   [CONTEXT_SOURCES.narrativeMemory]: "recall",
   [CONTEXT_SOURCES.deliberationMemory]: "recall",
   [CONTEXT_SOURCES.optimizationContinuity]: "recall",

@@ -1,10 +1,82 @@
 import type {
   EvalReport,
   EvalResult,
+  RecallEvalMetrics,
+  RecallEvalMetricsAggregate,
   ScenarioReport,
   ShapeCheck,
   RubricCriterion,
 } from "./types.js";
+
+function average(values: readonly number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function aggregateRecallMetrics(
+  results: readonly EvalResult[],
+): RecallEvalMetricsAggregate | undefined {
+  const recallResults = results.filter(
+    (
+      result,
+    ): result is EvalResult & { telemetry: { kind: "recall"; metrics: RecallEvalMetrics } } =>
+      result.telemetry?.kind === "recall",
+  );
+  if (recallResults.length === 0) {
+    return undefined;
+  }
+
+  const metricKeys = [
+    "baseline_precision_at_k",
+    "broker_precision_at_k",
+    "precision_gain_at_k",
+    "baseline_useful_recall_rate",
+    "broker_useful_recall_rate",
+    "useful_recall_gain",
+    "baseline_harmful_recall_rate",
+    "broker_harmful_recall_rate",
+    "baseline_contradiction_rate",
+    "broker_contradiction_rate",
+    "baseline_latency_ms",
+    "broker_latency_ms",
+    "added_latency_ms",
+    "baseline_token_cost",
+    "broker_token_cost",
+    "added_token_cost",
+  ] as const satisfies readonly (keyof RecallEvalMetrics)[];
+
+  const averages = new Map(
+    metricKeys.map((key) => [
+      key,
+      average(recallResults.map((result) => result.telemetry.metrics[key])),
+    ]),
+  );
+
+  return {
+    scenario_count: new Set(recallResults.map((result) => result.scenario_id)).size,
+    run_count: recallResults.length,
+    baseline_precision_at_k: averages.get("baseline_precision_at_k")!,
+    broker_precision_at_k: averages.get("broker_precision_at_k")!,
+    precision_gain_at_k: averages.get("precision_gain_at_k")!,
+    baseline_useful_recall_rate: averages.get("baseline_useful_recall_rate")!,
+    broker_useful_recall_rate: averages.get("broker_useful_recall_rate")!,
+    useful_recall_gain: averages.get("useful_recall_gain")!,
+    baseline_harmful_recall_rate: averages.get("baseline_harmful_recall_rate")!,
+    broker_harmful_recall_rate: averages.get("broker_harmful_recall_rate")!,
+    baseline_contradiction_rate: averages.get("baseline_contradiction_rate")!,
+    broker_contradiction_rate: averages.get("broker_contradiction_rate")!,
+    baseline_latency_ms: averages.get("baseline_latency_ms")!,
+    broker_latency_ms: averages.get("broker_latency_ms")!,
+    added_latency_ms: averages.get("added_latency_ms")!,
+    baseline_token_cost: averages.get("baseline_token_cost")!,
+    broker_token_cost: averages.get("broker_token_cost")!,
+    added_token_cost: averages.get("added_token_cost")!,
+  };
+}
+
+function formatPercent(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
+}
 
 export function buildReport(
   results: EvalResult[],
@@ -12,10 +84,10 @@ export function buildReport(
   runsPerScenario: number,
 ): EvalReport {
   const grouped = new Map<string, EvalResult[]>();
-  for (const r of results) {
-    const existing = grouped.get(r.scenario_id) ?? [];
-    existing.push(r);
-    grouped.set(r.scenario_id, existing);
+  for (const result of results) {
+    const existing = grouped.get(result.scenario_id) ?? [];
+    existing.push(result);
+    grouped.set(result.scenario_id, existing);
   }
 
   const scenarios: ScenarioReport[] = [];
@@ -26,7 +98,7 @@ export function buildReport(
 
   for (const [scenarioId, runs] of grouped) {
     const passCount = runs.filter(
-      (r) => r.shape_grade.pass && (r.rubric_grade?.pass ?? true),
+      (result) => result.shape_grade.pass && (result.rubric_grade?.pass ?? true),
     ).length;
 
     const passRate = passCount / runs.length;
@@ -45,6 +117,7 @@ export function buildReport(
       pass_at_k: passAtK,
       all_runs_pass: allRunsPass,
       pass_rate: passRate,
+      recall_metrics: aggregateRecallMetrics(runs),
     });
   }
 
@@ -62,6 +135,7 @@ export function buildReport(
       all_runs_pass: totalScenarios > 0 ? totalAllRunsPass / totalScenarios : 0,
       k: runsPerScenario,
       total_runs: totalRuns,
+      recall_metrics: aggregateRecallMetrics(results),
     },
   };
 }
@@ -78,9 +152,9 @@ export function formatReport(report: EvalReport): string {
     `|--------|-------|`,
     `| Scenarios | ${report.summary.total_scenarios} |`,
     `| Total runs | ${report.summary.total_runs} |`,
-    `| Single-run success rate (empirical) | ${(report.summary.empirical_pass_rate * 100).toFixed(1)}% |`,
-    `| pass@${report.runs_per_scenario} (any success in k runs) | ${(report.summary.pass_at_k * 100).toFixed(1)}% |`,
-    `| All ${report.runs_per_scenario} runs pass | ${(report.summary.all_runs_pass * 100).toFixed(1)}% |`,
+    `| Single-run success rate (empirical) | ${formatPercent(report.summary.empirical_pass_rate)} |`,
+    `| pass@${report.runs_per_scenario} (any success in k runs) | ${formatPercent(report.summary.pass_at_k)} |`,
+    `| All ${report.runs_per_scenario} runs pass | ${formatPercent(report.summary.all_runs_pass)} |`,
     "",
     "## Per-Scenario",
     "",
@@ -88,34 +162,75 @@ export function formatReport(report: EvalReport): string {
     `|----------|-------|-----------|-------------------|---------------|`,
   ];
 
-  for (const s of report.scenarios) {
+  for (const scenario of report.scenarios) {
     lines.push(
-      `| ${s.scenario_id} | ${s.skill} | ${(s.pass_rate * 100).toFixed(0)}% | ${s.pass_at_k ? "yes" : "no"} | ${s.all_runs_pass ? "yes" : "no"} |`,
+      `| ${scenario.scenario_id} | ${scenario.skill} | ${formatPercent(scenario.pass_rate)} | ${scenario.pass_at_k ? "yes" : "no"} | ${scenario.all_runs_pass ? "yes" : "no"} |`,
     );
   }
 
   lines.push("");
 
-  for (const s of report.scenarios) {
-    lines.push(`### ${s.scenario_id}`);
+  if (report.summary.recall_metrics) {
+    const metrics = report.summary.recall_metrics;
+    lines.push("## Recall Metrics");
     lines.push("");
-    for (const run of s.runs) {
+    lines.push(`Recall runs: ${metrics.run_count} across ${metrics.scenario_count} scenario(s)`);
+    lines.push("");
+    lines.push(`| Metric | Baseline | Broker | Delta |`);
+    lines.push(`|--------|----------|--------|-------|`);
+    lines.push(
+      `| Broker precision@k | ${formatPercent(metrics.baseline_precision_at_k)} | ${formatPercent(metrics.broker_precision_at_k)} | ${formatPercent(metrics.precision_gain_at_k)} |`,
+    );
+    lines.push(
+      `| Useful recall rate | ${formatPercent(metrics.baseline_useful_recall_rate)} | ${formatPercent(metrics.broker_useful_recall_rate)} | ${formatPercent(metrics.useful_recall_gain)} |`,
+    );
+    lines.push(
+      `| Harmful recall rate | ${formatPercent(metrics.baseline_harmful_recall_rate)} | ${formatPercent(metrics.broker_harmful_recall_rate)} | ${formatPercent(metrics.broker_harmful_recall_rate - metrics.baseline_harmful_recall_rate)} |`,
+    );
+    lines.push(
+      `| Contradiction rate | ${formatPercent(metrics.baseline_contradiction_rate)} | ${formatPercent(metrics.broker_contradiction_rate)} | ${formatPercent(metrics.broker_contradiction_rate - metrics.baseline_contradiction_rate)} |`,
+    );
+    lines.push(
+      `| Startup latency (ms) | ${metrics.baseline_latency_ms.toFixed(2)} | ${metrics.broker_latency_ms.toFixed(2)} | ${metrics.added_latency_ms.toFixed(2)} |`,
+    );
+    lines.push(
+      `| Added token cost | ${metrics.baseline_token_cost.toFixed(1)} | ${metrics.broker_token_cost.toFixed(1)} | ${metrics.added_token_cost.toFixed(1)} |`,
+    );
+    lines.push("");
+  }
+
+  for (const scenario of report.scenarios) {
+    lines.push(`### ${scenario.scenario_id}`);
+    lines.push("");
+    if (scenario.recall_metrics) {
+      lines.push(
+        `- Recall metrics: baseline_precision@k=${scenario.recall_metrics.baseline_precision_at_k.toFixed(2)} broker_precision@k=${scenario.recall_metrics.broker_precision_at_k.toFixed(2)} useful_rate=${scenario.recall_metrics.broker_useful_recall_rate.toFixed(2)} harmful_rate=${scenario.recall_metrics.broker_harmful_recall_rate.toFixed(2)} contradiction_rate=${scenario.recall_metrics.broker_contradiction_rate.toFixed(2)} added_latency_ms=${scenario.recall_metrics.added_latency_ms.toFixed(2)} added_token_cost=${scenario.recall_metrics.added_token_cost.toFixed(1)}`,
+      );
+    }
+    for (const run of scenario.runs) {
       const shapeStatus = run.shape_grade.pass ? "PASS" : "FAIL";
       const rubricStatus = run.rubric_grade ? (run.rubric_grade.pass ? "PASS" : "FAIL") : "N/A";
       lines.push(
         `- Run ${run.run_index}: shape=${shapeStatus} rubric=${rubricStatus} (${run.duration_ms}ms)`,
       );
+      if (run.telemetry?.kind === "recall") {
+        lines.push(
+          `  - Broker precision@k=${run.telemetry.metrics.broker_precision_at_k.toFixed(2)} useful=${run.telemetry.metrics.broker_useful_recall_rate.toFixed(2)} harmful=${run.telemetry.metrics.broker_harmful_recall_rate.toFixed(2)} contradiction=${run.telemetry.metrics.broker_contradiction_rate.toFixed(2)}`,
+        );
+      }
       if (run.error) {
         lines.push(`  - ERROR: ${run.error}`);
       }
       if (!run.shape_grade.pass) {
-        for (const c of run.shape_grade.checks.filter((ch: ShapeCheck) => !ch.pass)) {
-          lines.push(`  - FAIL: ${c.output_name} — ${c.rule} (${c.detail ?? ""})`);
+        for (const check of run.shape_grade.checks.filter((entry: ShapeCheck) => !entry.pass)) {
+          lines.push(`  - FAIL: ${check.output_name} — ${check.rule} (${check.detail ?? ""})`);
         }
       }
       if (run.rubric_grade && !run.rubric_grade.pass) {
-        for (const c of run.rubric_grade.criteria.filter((cr: RubricCriterion) => !cr.pass)) {
-          lines.push(`  - FAIL: ${c.name} — ${c.evidence}`);
+        for (const criterion of run.rubric_grade.criteria.filter(
+          (entry: RubricCriterion) => !entry.pass,
+        )) {
+          lines.push(`  - FAIL: ${criterion.name} — ${criterion.evidence}`);
         }
       }
     }

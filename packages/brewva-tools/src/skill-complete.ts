@@ -1,3 +1,4 @@
+import { KNOWLEDGE_SOURCE_TYPES } from "@brewva/brewva-recall";
 import {
   PLANNING_EVIDENCE_KEYS,
   collectPlanningRiskCategories,
@@ -15,7 +16,6 @@ import {
   deriveImpactMapChangeCategories,
   deriveImpactMapChangedFileClasses,
 } from "./impact-map.js";
-import { KNOWLEDGE_SOURCE_TYPES } from "./knowledge-search-core.js";
 import { buildLearningResearchOutputs } from "./learning-research.js";
 import {
   REVIEW_CHANGED_FILE_CLASSES,

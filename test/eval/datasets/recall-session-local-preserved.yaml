@@ -1,0 +1,31 @@
+schema: brewva.recall-eval.dataset.v1
+workspace_files:
+  - path: packages/runtime/recovery.ts
+    content: |
+      export const verifyRecovery = true;
+sessions:
+  - id: current-session
+    goal: Validate the current recovery repair
+    target_files:
+      - packages/runtime/recovery.ts
+    events:
+      - alias: local-fix
+        type: task_event
+        payload:
+          schema: brewva.task.ledger.v1
+          kind: item_added
+          item:
+            id: local-fix-item
+            text: rebuild recovery baseline before verification
+            status: done
+query:
+  session_id: current-session
+  text: rebuild recovery baseline before verification
+  scope: user_repository_root
+  limit: 1
+expectations:
+  relevant_stable_ids:
+    - tape:$current:local-fix
+  harmful_stable_ids: []
+  contradictory_stable_ids: []
+  expected_top_stable_id: tape:$current:local-fix

@@ -84,7 +84,6 @@ set:
   - history-view baseline
     - rewrite text only; digest, lineage, and compatibility metadata remain on
       `runtime.inspect.context`
-  - hosted narrative memory
   - runtime status
   - task state
   - working projection
@@ -93,8 +92,11 @@ set:
     - arrives from the admitted `brewva.projection-working` provider after
       runtime refresh; `ContextComposer` does not read
       `.orchestrator/projection/**` directly
-  - hosted deliberation artifacts such as deliberation memory, optimization
-    continuity, and pending promotion drafts
+  - hosted recall broker results
+    - default hosted recall source is `brewva.recall-broker`
+    - entries remain source-typed and may originate from tape evidence,
+      narrative memory, deliberation memory, optimization continuity,
+      promotion drafts, or repository precedent
   - optional distilled tool output
   - same-turn supplemental return blocks
 - `constraint`
@@ -182,11 +184,13 @@ Special rule for recovery context:
 - `recovery working set` remains a separate constraint block so operational
   state does not leak back into the baseline plane
 
-Hosted deliberation reminder:
+Hosted recall reminder:
 
-- hosted sessions may register internal sources such as
-  `brewva.narrative-memory`, `brewva.deliberation-memory`,
-  `brewva.optimization-continuity`, and `brewva.skill-promotion-drafts`
+- hosted sessions now install `brewva.recall-broker` as the default recall
+  provider
+- the broker may surface source-typed recall from narrative memory,
+  deliberation memory, optimization continuity, promotion drafts, tape
+  evidence, and repository precedent
 - these blocks are already-admitted narrative context, not new kernel
   authority
 - `ContextComposer` presents them, but it does not fold, refresh, or interpret
@@ -201,21 +205,20 @@ Narrative-memory reminder:
 
 ## Provider Refresh Semantics
 
-Hosted recall providers do not share one session-start frozen snapshot.
+Hosted recall does not share one session-start frozen snapshot.
 
-Current provider behavior is source-specific:
+Current default hosted behavior is broker-first:
 
-- `brewva.deliberation-memory` retrieves through `plane.retrieve(...)`
-- `brewva.optimization-continuity` checks lineages through `plane.list(...)`
-  and injects matches through `plane.retrieve(...)`
-- `brewva.skill-promotion-drafts` currently injects from `broker.listCached()`
-
-For deliberation memory and optimization continuity, the underlying planes
-reconcile derived state on demand when relevant events or session digests mark
-them dirty, subject to their refresh throttles (`minRefreshIntervalMs`).
-
-For skill-promotion drafts, the injected view can lag recent completions until
-the broker refreshes its derived state.
+- `brewva.recall-broker` is the default hosted recall provider
+- the broker rebuilds session digests, cross-session evidence index, and
+  curation aggregates from durable tape-visible evidence
+- default broker scope is `user + repository root`; `workspace_wide` and
+  `cross_workspace` behavior remain policy-gated rather than implicit defaults
+- worktrees under the same repository root do not share hosted recall
+  automatically unless repository policy explicitly widens the scope
+- underlying products such as narrative memory, deliberation memory,
+  optimization continuity, and skill-promotion drafts still reconcile through
+  their own derived-state stores before the broker ranks them
 
 What stays invariant is narrower:
 

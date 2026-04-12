@@ -1,0 +1,45 @@
+outputs:
+  summary: "broker ranked the repository precedent above weaker advisory tape evidence while the session-local baseline returned nothing."
+  top_result:
+    stable_id: precedent:docs/solutions/gateway/bootstrap-entrypoint-race.md
+    source_family: repository_precedent
+  broker_results:
+    - stable_id: precedent:docs/solutions/gateway/bootstrap-entrypoint-race.md
+      source_family: repository_precedent
+  baseline_results: []
+  metrics:
+    baseline_precision_at_k: 0
+    broker_precision_at_k: 1
+    precision_gain_at_k: 1
+    baseline_useful_recall_rate: 0
+    broker_useful_recall_rate: 1
+    useful_recall_gain: 1
+    baseline_harmful_recall_rate: 0
+    broker_harmful_recall_rate: 0
+    baseline_contradiction_rate: 0
+    broker_contradiction_rate: 0
+    baseline_latency_ms: 0.1
+    broker_latency_ms: 4.8
+    added_latency_ms: 4.7
+    baseline_token_cost: 0
+    broker_token_cost: 24
+    added_token_cost: 24
+telemetry:
+  kind: recall
+  metrics:
+    baseline_precision_at_k: 0
+    broker_precision_at_k: 1
+    precision_gain_at_k: 1
+    baseline_useful_recall_rate: 0
+    broker_useful_recall_rate: 1
+    useful_recall_gain: 1
+    baseline_harmful_recall_rate: 0
+    broker_harmful_recall_rate: 0
+    baseline_contradiction_rate: 0
+    broker_contradiction_rate: 0
+    baseline_latency_ms: 0.1
+    broker_latency_ms: 4.8
+    added_latency_ms: 4.7
+    baseline_token_cost: 0
+    broker_token_cost: 24
+    added_token_cost: 24

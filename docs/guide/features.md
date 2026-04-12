@@ -95,6 +95,8 @@ The exact current managed tool names are:
 - `narrative_memory`
 - `deliberation_memory`
 - `knowledge_capture`
+- `recall_search`
+- `recall_curate`
 - `knowledge_search`
 - `precedent_audit`
 - `precedent_sweep`
@@ -132,6 +134,10 @@ The exact current managed tool names are:
 - `task_resolve_blocker`
 - `task_view_state`
 - `resource_lease`
+
+`recall_search` is the default prior-work recall surface. `tape_search`
+remains available for session-local tape forensics, and `recall_curate`
+remains an operator-only curation surface.
 
 Channel-conditional A2A tools:
 

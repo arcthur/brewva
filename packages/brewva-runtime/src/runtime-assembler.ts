@@ -664,6 +664,7 @@ export function createRuntimeServiceDependencies(
     contextService,
     proposalAdmissionService,
     effectCommitmentDeskService,
+    hasRoutingScope: (scope) => options.config.skills.routing.scopes.includes(scope),
   });
   const toolInvocationSpine = new ToolInvocationSpine({
     toolGateService,

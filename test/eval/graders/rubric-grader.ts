@@ -46,6 +46,18 @@ export function gradeRubric(outputs: Record<string, unknown>, rubricPath: string
   };
 }
 
+function resolveOutputPath(outputs: Record<string, unknown>, pathSpec: string): unknown {
+  const parts = pathSpec.split(".").filter((part) => part.length > 0);
+  let current: unknown = outputs;
+  for (const part of parts) {
+    if (typeof current !== "object" || current === null || Array.isArray(current)) {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
+}
+
 function evaluateCriterion(
   criterion: RubricDefinition["criteria"][number],
   outputs: Record<string, unknown>,
@@ -82,25 +94,41 @@ function evaluateCriterion(
 
   if (condition.startsWith("output_field_exists:")) {
     const spec = condition.slice("output_field_exists:".length).trim();
-    const [outputKey, field] = spec.split(".");
-    const value = outputs[outputKey!];
-    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-      const obj = value as Record<string, unknown>;
-      const exists = field! in obj;
-      return {
-        name: criterion.name,
-        pass: exists,
-        weight: criterion.weight,
-        evidence: exists
-          ? `Field "${field}" exists in "${outputKey}"`
-          : `Field "${field}" missing from "${outputKey}"`,
-      };
-    }
+    const value = resolveOutputPath(outputs, spec);
+    const exists = value !== undefined;
     return {
       name: criterion.name,
-      pass: false,
+      pass: exists,
       weight: criterion.weight,
-      evidence: `Output "${outputKey}" is not an object`,
+      evidence: exists ? `Field "${spec}" exists` : `Field "${spec}" is missing`,
+    };
+  }
+
+  if (condition.startsWith("output_number_gte:") || condition.startsWith("output_number_lte:")) {
+    const isGte = condition.startsWith("output_number_gte:");
+    const spec = condition
+      .slice((isGte ? "output_number_gte:" : "output_number_lte:").length)
+      .trim();
+    const [pathSpec, thresholdRaw] = spec.split(":");
+    const threshold = Number.parseFloat(thresholdRaw ?? "");
+    const value = resolveOutputPath(outputs, pathSpec ?? "");
+    const numericValue =
+      typeof value === "number"
+        ? value
+        : typeof value === "string"
+          ? Number.parseFloat(value)
+          : Number.NaN;
+    const pass =
+      Number.isFinite(numericValue) &&
+      Number.isFinite(threshold) &&
+      (isGte ? numericValue >= threshold : numericValue <= threshold);
+    return {
+      name: criterion.name,
+      pass,
+      weight: criterion.weight,
+      evidence: Number.isFinite(numericValue)
+        ? `${pathSpec}=${numericValue} ${isGte ? ">=" : "<="} ${threshold}`
+        : `${pathSpec} is not numeric`,
     };
   }
 

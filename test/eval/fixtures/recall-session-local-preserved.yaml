@@ -1,0 +1,47 @@
+outputs:
+  summary: "broker preserved the current-session recovery evidence instead of regressing the session-local baseline."
+  top_result:
+    stable_id: tape:current-session:local-fix
+    source_family: tape_evidence
+  broker_results:
+    - stable_id: tape:current-session:local-fix
+      source_family: tape_evidence
+  baseline_results:
+    - stable_id: tape:current-session:local-fix
+      source_family: tape_evidence
+  metrics:
+    baseline_precision_at_k: 1
+    broker_precision_at_k: 1
+    precision_gain_at_k: 0
+    baseline_useful_recall_rate: 1
+    broker_useful_recall_rate: 1
+    useful_recall_gain: 0
+    baseline_harmful_recall_rate: 0
+    broker_harmful_recall_rate: 0
+    baseline_contradiction_rate: 0
+    broker_contradiction_rate: 0
+    baseline_latency_ms: 0.1
+    broker_latency_ms: 3.7
+    added_latency_ms: 3.6
+    baseline_token_cost: 6
+    broker_token_cost: 10
+    added_token_cost: 4
+telemetry:
+  kind: recall
+  metrics:
+    baseline_precision_at_k: 1
+    broker_precision_at_k: 1
+    precision_gain_at_k: 0
+    baseline_useful_recall_rate: 1
+    broker_useful_recall_rate: 1
+    useful_recall_gain: 0
+    baseline_harmful_recall_rate: 0
+    broker_harmful_recall_rate: 0
+    baseline_contradiction_rate: 0
+    broker_contradiction_rate: 0
+    baseline_latency_ms: 0.1
+    broker_latency_ms: 3.7
+    added_latency_ms: 3.6
+    baseline_token_cost: 6
+    broker_token_cost: 10
+    added_token_cost: 4

@@ -4,6 +4,7 @@ import type {
   ContextBudgetUsage,
   DecisionReceipt,
   EffectCommitmentProposal,
+  SkillRoutingScope,
   SkillDocument,
   ToolExecutionBoundary,
   ToolMutationReceipt,
@@ -102,6 +103,7 @@ export interface ToolGateServiceOptions {
     EffectCommitmentDeskService,
     "prepareResume" | "getRequestIdForProposal"
   >;
+  hasRoutingScope: (scope: SkillRoutingScope) => boolean;
 }
 
 export class ToolGateService {
@@ -155,6 +157,7 @@ export class ToolGateService {
     sessionId: string,
     proposalId: string,
   ) => string | undefined;
+  private readonly hasRoutingScope: (scope: SkillRoutingScope) => boolean;
 
   constructor(options: ToolGateServiceOptions) {
     this.workspaceRoot = options.workspaceRoot;
@@ -188,6 +191,7 @@ export class ToolGateService {
       options.effectCommitmentDeskService.prepareResume(input);
     this.getEffectCommitmentRequestIdForProposal = (sessionId, proposalId) =>
       options.effectCommitmentDeskService.getRequestIdForProposal(sessionId, proposalId);
+    this.hasRoutingScope = (scope) => options.hasRoutingScope(scope);
   }
 
   private buildAccessContext(
@@ -217,12 +221,21 @@ export class ToolGateService {
       },
       args,
     );
+    const requiredRoutingScopes = authority.descriptor?.requiredRoutingScopes ?? [];
+    const routingScopeAccess =
+      requiredRoutingScopes.length === 0 ||
+      requiredRoutingScopes.some((scope) => this.hasRoutingScope(scope))
+        ? access
+        : {
+            allowed: false,
+            reason: `Tool '${normalizedToolName}' requires one of the routing scopes: ${requiredRoutingScopes.join(", ")}.`,
+          };
     return {
       state,
       skill,
       normalizedToolName,
       authority,
-      access,
+      access: routingScopeAccess,
     };
   }
 

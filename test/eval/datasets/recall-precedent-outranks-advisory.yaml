@@ -1,0 +1,61 @@
+schema: brewva.recall-eval.dataset.v1
+workspace_files:
+  - path: packages/gateway/bootstrap.ts
+    content: |
+      export const hostedBootstrap = true;
+  - path: docs/solutions/gateway/bootstrap-entrypoint-race.md
+    content: |
+      ---
+      id: sol-gateway-bootstrap-entrypoint-race
+      title: Hosted bootstrap duplicate startup hooks
+      status: active
+      problem_kind: bugfix
+      module: brewva-gateway
+      boundaries:
+        - host.bootstrap
+      tags:
+        - gateway
+        - bootstrap
+        - startup
+      updated_at: 2026-04-11
+      ---
+      # Hosted bootstrap duplicate startup hooks
+
+      ## Problem
+
+      Duplicate startup hooks can boot the hosted gateway twice and create a bootstrap race.
+
+      ## Solution
+
+      Keep a single hosted bootstrap entrypoint and remove duplicate startup hooks before the hosted gateway starts.
+sessions:
+  - id: prior-session
+    goal: Gather notes about hosted startup regressions
+    target_files:
+      - packages/gateway/bootstrap.ts
+    events:
+      - alias: prior-note
+        type: task_event
+        payload:
+          schema: brewva.task.ledger.v1
+          kind: item_added
+          item:
+            id: prior-note-item
+            text: Investigated a hosted startup regression without a confirmed fix
+            status: done
+  - id: current-session
+    goal: Find the current bootstrap precedent
+    target_files:
+      - packages/gateway/bootstrap.ts
+query:
+  session_id: current-session
+  text: hosted bootstrap duplicate startup hooks
+  scope: user_repository_root
+  limit: 1
+expectations:
+  relevant_stable_ids:
+    - precedent:docs/solutions/gateway/bootstrap-entrypoint-race.md
+  harmful_stable_ids:
+    - tape:prior-session:prior-note
+  contradictory_stable_ids: []
+  expected_top_stable_id: precedent:docs/solutions/gateway/bootstrap-entrypoint-race.md

@@ -1,0 +1,72 @@
+schema: brewva.recall-eval.dataset.v1
+workspace_files:
+  - path: packages/runtime/recovery.ts
+    content: |
+      export const recoveryBaseline = true;
+sessions:
+  - id: old-session
+    goal: Fix the recovery replay race
+    target_files:
+      - packages/runtime/recovery.ts
+    events:
+      - alias: old-fix
+        type: task_event
+        age_days: 180
+        payload:
+          schema: brewva.task.ledger.v1
+          kind: item_added
+          item:
+            id: old-fix-item
+            text: Skipped replay checkpoints during recovery verification
+            status: done
+  - id: fresh-session
+    goal: Fix the recovery replay race
+    target_files:
+      - packages/runtime/recovery.ts
+    events:
+      - alias: fresh-fix
+        type: task_event
+        age_days: 5
+        payload:
+          schema: brewva.task.ledger.v1
+          kind: item_added
+          item:
+            id: fresh-fix-item
+            text: Replayed checkpoints before recovery verification and rebuilt the recovery baseline
+            status: done
+  - id: current-session
+    goal: Audit the latest recovery regression
+    target_files:
+      - packages/runtime/recovery.ts
+    events:
+      - type: recall_curation_recorded
+        payload:
+          source: recall_curate
+          signal: stale
+          stableIds:
+            - tape:old-session:old-fix
+      - type: recall_curation_recorded
+        payload:
+          source: recall_curate
+          signal: superseded
+          stableIds:
+            - tape:old-session:old-fix
+      - type: recall_curation_recorded
+        payload:
+          source: recall_curate
+          signal: helpful
+          stableIds:
+            - tape:fresh-session:fresh-fix
+query:
+  session_id: current-session
+  text: replay checkpoints recovery verification baseline
+  scope: user_repository_root
+  limit: 1
+expectations:
+  relevant_stable_ids:
+    - tape:fresh-session:fresh-fix
+  harmful_stable_ids:
+    - tape:old-session:old-fix
+  contradictory_stable_ids:
+    - tape:old-session:old-fix
+  expected_top_stable_id: tape:fresh-session:fresh-fix

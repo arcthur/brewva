@@ -51,7 +51,7 @@ execution_hints:
     - grep
   fallback_tools:
     - ledger_query
-    - tape_search
+    - recall_search
     - cost_view
     - task_view_state
     - exec

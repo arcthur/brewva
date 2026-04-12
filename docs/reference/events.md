@@ -410,20 +410,37 @@ restricted repair posture without committing partial outputs.
 budget is exhausted. It is the durable failure receipt for semantic-bound skill
 completion, distinct from a generic hosted interruption or process shutdown.
 
-### Narrative Memory And Semantic Recall
+### Narrative Memory And Recall
 
 - `narrative_memory_recorded`
 - `narrative_memory_reviewed`
 - `narrative_memory_promoted`
 - `narrative_memory_archived`
 - `narrative_memory_forgotten`
+- `recall_results_surfaced`
+- `recall_curation_recorded`
+- `recall_utility_observed`
 - `semantic_extraction_invoked`
 - `semantic_rerank_invoked`
 
-These are control-plane audit receipts for the narrative memory product and
-bounded semantic recall. In structured queries they classify as `category=control`,
-remain non-authoritative, and do not become replay inputs for task truth,
-approval truth, or WAL recovery.
+These are control-plane audit receipts for the narrative memory product,
+broker-first recall, and bounded semantic rerank. In structured queries they
+classify as `category=control`, remain non-authoritative, and do not become
+replay inputs for task truth, approval truth, or WAL recovery.
+
+Recall durability is intentionally split:
+
+- `recall_results_surfaced`
+- `recall_curation_recorded`
+- `recall_utility_observed`
+
+are durable evidence events on tape
+
+- broker session digests
+- cross-session evidence indexes
+- curation aggregates and decayed ranking weights
+
+remain rebuildable state under `.brewva/recall/**`
 
 ### Iteration Facts
 
@@ -689,6 +706,9 @@ The audit-retained core includes:
 - `skill_promotion_reviewed`
 - `skill_promotion_promoted`
 - `skill_promotion_materialized`
+- `recall_results_surfaced`
+- `recall_curation_recorded`
+- `recall_utility_observed`
 - `tool_output_artifact_persist_failed`
 - `cost_update`
 - `budget_alert`

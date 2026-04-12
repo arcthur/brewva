@@ -308,7 +308,7 @@ const READONLY_MANAGED_TOOLS = [
   "lsp_symbols",
   "output_search",
   "ledger_query",
-  "tape_search",
+  "recall_search",
   "task_view_state",
   "workflow_status",
 ] as const;

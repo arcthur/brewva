@@ -3,7 +3,15 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { parse } from "yaml";
 import { gradeRubric } from "./graders/rubric-grader.js";
 import { gradeShape } from "./graders/shape-grader.js";
-import type { EvalResult, EvalScenario, OutputContract, ShapeGrade, RubricGrade } from "./types.js";
+import { executeRecallRuntimeScenario } from "./recall-runtime.js";
+import type {
+  EvalResult,
+  EvalScenario,
+  EvalTelemetry,
+  OutputContract,
+  ShapeGrade,
+  RubricGrade,
+} from "./types.js";
 
 /**
  * SkillExecutor is the abstraction boundary between execution and grading.
@@ -16,7 +24,12 @@ import type { EvalResult, EvalScenario, OutputContract, ShapeGrade, RubricGrade 
  * - RuntimeExecutor: reserved for real skill execution and fails closed until wired
  */
 export interface SkillExecutor {
-  execute(scenario: EvalScenario): Promise<Record<string, unknown>>;
+  execute(scenario: EvalScenario): Promise<SkillExecutionResult>;
+}
+
+export interface SkillExecutionResult {
+  outputs: Record<string, unknown>;
+  telemetry?: EvalTelemetry;
 }
 
 function loadYamlFile<T>(filePath: string): T {
@@ -29,7 +42,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export class FixtureExecutor implements SkillExecutor {
-  async execute(scenario: EvalScenario): Promise<Record<string, unknown>> {
+  async execute(scenario: EvalScenario): Promise<SkillExecutionResult> {
     if (!scenario.fixture_path) {
       throw new Error(
         `Scenario ${scenario.id}: fixture mode requires fixture_path; fixture outputs are intentionally kept out of scenario definitions`,
@@ -43,7 +56,16 @@ export class FixtureExecutor implements SkillExecutor {
       );
     }
 
-    return fixture;
+    if (isRecord(fixture.outputs)) {
+      return {
+        outputs: fixture.outputs,
+        telemetry: fixture.telemetry as EvalTelemetry | undefined,
+      };
+    }
+
+    return {
+      outputs: fixture,
+    };
   }
 }
 
@@ -61,7 +83,13 @@ export class RuntimeExecutor implements SkillExecutor {
     private readonly _workspaceRoot: string,
   ) {}
 
-  async execute(scenario: EvalScenario): Promise<Record<string, unknown>> {
+  async execute(scenario: EvalScenario): Promise<SkillExecutionResult> {
+    if (scenario.kind === "recall" && scenario.dataset_path) {
+      return executeRecallRuntimeScenario({
+        datasetPath: scenario.dataset_path,
+        workspaceRoot: this._workspaceRoot,
+      });
+    }
     throw new Error(
       `Runtime evaluation is not wired for scenario ${scenario.id} (model=${this.model}). ` +
         `Refusing to fall back to fixture outputs because that would contaminate grading. ` +
@@ -85,6 +113,12 @@ export function loadScenarios(scenariosDir: string): EvalScenario[] {
       scenario.fixture_path = isAbsolute(scenario.fixture_path)
         ? scenario.fixture_path
         : resolve(scenarioDir, scenario.fixture_path);
+    }
+
+    if (scenario.dataset_path) {
+      scenario.dataset_path = isAbsolute(scenario.dataset_path)
+        ? scenario.dataset_path
+        : resolve(scenarioDir, scenario.dataset_path);
     }
 
     return scenario;
@@ -125,9 +159,12 @@ export async function runEval(
   const start = Date.now();
   let outputs: Record<string, unknown>;
   let error: string | undefined;
+  let telemetry: EvalTelemetry | undefined;
 
   try {
-    outputs = await executor.execute(scenario);
+    const execution = await executor.execute(scenario);
+    outputs = execution.outputs;
+    telemetry = execution.telemetry;
   } catch (e) {
     outputs = {};
     error = e instanceof Error ? e.message : String(e);
@@ -145,5 +182,6 @@ export async function runEval(
     rubric_grade: rubricGrade,
     duration_ms: Date.now() - start,
     error,
+    telemetry,
   };
 }

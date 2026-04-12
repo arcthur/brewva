@@ -2,7 +2,8 @@
 
 `docs/solutions/**` is Brewva's canonical repository-native compound knowledge
 plane. It stores engineering precedents that later planning, debugging, review,
-and capture flows can retrieve explicitly through `knowledge_search`.
+and capture flows can retrieve explicitly through `knowledge_search` or as one
+typed source family inside `recall_search`.
 
 This directory is not runtime authority and it is not hidden memory. It is the
 cold knowledge layer for reusable repository-specific experience.
@@ -140,6 +141,7 @@ Recommended design or feature lesson sections:
 
 For non-trivial planning, debugging, or review:
 
+- use `recall_search` for mixed-source prior-work recall across sessions
 - query this layer explicitly with `knowledge_search`
 - use `precedent_audit` when checking whether a stable doc or successor
   precedent displaced an older record

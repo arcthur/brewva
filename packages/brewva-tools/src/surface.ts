@@ -23,6 +23,8 @@ export const BREWVA_TOOL_SURFACE_BY_NAME = {
   deliberation_memory: "skill",
   narrative_memory: "operator",
   knowledge_capture: "skill",
+  recall_search: "skill",
+  recall_curate: "operator",
   knowledge_search: "skill",
   precedent_audit: "skill",
   precedent_sweep: "skill",

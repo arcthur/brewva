@@ -316,6 +316,9 @@ describe("ContextPressureService", () => {
     expect(
       runtime.inspect.context.checkCompactionGate(sessionId, "tape_search", usage).allowed,
     ).toBe(true);
+    expect(
+      runtime.inspect.context.checkCompactionGate(sessionId, "recall_search", usage).allowed,
+    ).toBe(true);
     expect(runtime.inspect.context.checkCompactionGate(sessionId, "cost_view", usage).allowed).toBe(
       true,
     );

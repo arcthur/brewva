@@ -1,10 +1,6 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import {
-  createNarrativeMemoryContextProvider,
-  createDeliberationMemoryContextProvider,
-  createOptimizationContinuityContextProvider,
-} from "@brewva/brewva-deliberation";
+import { createRecallContextProvider } from "@brewva/brewva-recall";
 import {
   BrewvaRuntime,
   CONTEXT_SOURCES,
@@ -16,7 +12,6 @@ import {
   type ManagedToolMode,
 } from "@brewva/brewva-runtime";
 import { createToolRuntimeInternalPort, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import { createSkillPromotionContextProvider } from "@brewva/brewva-skill-broker";
 import {
   attachBrewvaToolExecutionTraits,
   buildReadPathDiscoveryObservationPayload,
@@ -486,43 +481,10 @@ function installContextProviders(runtime: BrewvaRuntime): void {
   if (
     !runtime.inspect.context
       .listProviders()
-      .some((provider) => provider.source === CONTEXT_SOURCES.narrativeMemory)
+      .some((provider) => provider.source === CONTEXT_SOURCES.recallBroker)
   ) {
     runtime.maintain.context.registerProvider(
-      createNarrativeMemoryContextProvider({
-        runtime,
-      }),
-    );
-  }
-  if (
-    !runtime.inspect.context
-      .listProviders()
-      .some((provider) => provider.source === CONTEXT_SOURCES.deliberationMemory)
-  ) {
-    runtime.maintain.context.registerProvider(
-      createDeliberationMemoryContextProvider({
-        runtime,
-      }),
-    );
-  }
-  if (
-    !runtime.inspect.context
-      .listProviders()
-      .some((provider) => provider.source === CONTEXT_SOURCES.optimizationContinuity)
-  ) {
-    runtime.maintain.context.registerProvider(
-      createOptimizationContinuityContextProvider({
-        runtime,
-      }),
-    );
-  }
-  if (
-    !runtime.inspect.context
-      .listProviders()
-      .some((provider) => provider.source === CONTEXT_SOURCES.skillPromotionDrafts)
-  ) {
-    runtime.maintain.context.registerProvider(
-      createSkillPromotionContextProvider({
+      createRecallContextProvider({
         runtime,
       }),
     );

@@ -83,6 +83,16 @@ helper material, not session-state durability surfaces in the taxonomy above.
   - stores typed, provenance-bearing, non-authoritative narrative memory records
   - distinct from the operator-authored self bundle and distinct from
     repository-native precedent under `docs/solutions/**`
+- Recall broker state:
+  - `.brewva/recall/broker-state.json`
+  - rebuildable state only
+  - stores session digests, cross-session evidence index, and curation
+    aggregates for broker-first recall
+  - curation aggregates keep raw signal counts plus time-decayed ranking
+    weights; they are rebuilt from durable recall feedback evidence rather than
+    acting as source-of-truth memory
+  - explicit curation feedback and passive utility observations remain durable
+    tape-visible events; this file is not source-of-truth memory
 - Heartbeat policy remains separate control-plane material:
   - gateway heartbeat policy default path:
     `<global brewva root>/agent/gateway/HEARTBEAT.md`

@@ -3,7 +3,12 @@ import {
   registerToolSurface,
   type ToolSurfaceRuntime,
 } from "@brewva/brewva-gateway/runtime-plugins";
-import type { SkillRegistryLoadReport, SkillRoutingScope, TaskPhase } from "@brewva/brewva-runtime";
+import type {
+  SkillRegistryLoadReport,
+  SkillRoutingScope,
+  TaskPhase,
+  ToolGovernanceDescriptor,
+} from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import type { ToolInfo } from "@mariozechner/pi-coding-agent";
@@ -93,6 +98,10 @@ interface ToolSurfaceRuntimeOptions {
   taskState?: ReturnType<ToolSurfaceRuntime["inspect"]["task"]["getState"]>;
   recordEvent?: ToolSurfaceRuntime["recordEvent"];
   routingScopes?: SkillRoutingScope[];
+  governanceDescriptors?: Array<{
+    toolName: string;
+    descriptor: ToolGovernanceDescriptor;
+  }>;
 }
 
 function createToolSurfaceRuntime(options: ToolSurfaceRuntimeOptions = {}): ToolSurfaceRuntime {
@@ -102,6 +111,12 @@ function createToolSurfaceRuntime(options: ToolSurfaceRuntimeOptions = {}): Tool
       config.skills.routing.scopes = options.routingScopes ?? ["core", "domain"];
     }),
   });
+  for (const registration of options.governanceDescriptors ?? []) {
+    runtime.maintain.tools.registerGovernanceDescriptor(
+      registration.toolName,
+      registration.descriptor,
+    );
+  }
   const listSkills = options.listSkills ?? (() => []);
   const routingScopes = options.routingScopes ?? ["core", "domain"];
   const buildLoadReport = (): SkillRegistryLoadReport => {
@@ -299,6 +314,81 @@ describe("tool surface runtime plugin", () => {
     expect(extensionApi.activeTools).toContain("narrative_memory");
   });
 
+  test("explicit requests do not surface operator-gated tools without an operator profile", async () => {
+    const extensionApi = createMockRuntimePluginApi();
+    registerTools(extensionApi.api, [
+      "read",
+      "edit",
+      "write",
+      "session_compact",
+      "skill_load",
+      "workflow_status",
+      "recall_curate",
+    ]);
+
+    const runtime = createToolSurfaceRuntime();
+
+    registerToolSurface(extensionApi.api, runtime);
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "Use $recall_curate if recall ranking needs correction.",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-recall-curate-no-operator",
+        },
+      },
+    );
+
+    expect(extensionApi.activeTools).not.toContain("recall_curate");
+  });
+
+  test("explicit requests respect runtime governance routing-scope requirements, not hardcoded tool names", async () => {
+    const extensionApi = createMockRuntimePluginApi();
+    registerTools(extensionApi.api, [
+      "read",
+      "edit",
+      "write",
+      "session_compact",
+      "skill_load",
+      "workflow_status",
+      "narrative_memory",
+    ]);
+
+    const runtime = createToolSurfaceRuntime({
+      governanceDescriptors: [
+        {
+          toolName: "narrative_memory",
+          descriptor: {
+            effects: ["runtime_observe"],
+            defaultRisk: "low",
+            requiredRoutingScopes: ["operator"],
+          },
+        },
+      ],
+    });
+
+    registerToolSurface(extensionApi.api, runtime);
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "Use $narrative_memory to inspect collaboration memory.",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-narrative-memory-no-operator",
+        },
+      },
+    );
+
+    expect(extensionApi.activeTools).not.toContain("narrative_memory");
+  });
+
   test("operator profile exposes operator tools even before any skill is active", async () => {
     const extensionApi = createMockRuntimePluginApi();
     registerTools(extensionApi.api, [
@@ -311,6 +401,7 @@ describe("tool surface runtime plugin", () => {
       "cost_view",
       "obs_query",
       "narrative_memory",
+      "recall_curate",
     ]);
 
     const runtime = createToolSurfaceRuntime({
@@ -335,6 +426,7 @@ describe("tool surface runtime plugin", () => {
     expect(extensionApi.activeTools).toContain("cost_view");
     expect(extensionApi.activeTools).toContain("obs_query");
     expect(extensionApi.activeTools).toContain("narrative_memory");
+    expect(extensionApi.activeTools).toContain("recall_curate");
   });
 
   test("tool surface records which requested managed tools were activated after admission", async () => {
@@ -878,7 +970,7 @@ describe("tool surface runtime plugin", () => {
       "task_record_blocker",
       "ledger_query",
       "output_search",
-      "tape_search",
+      "recall_search",
       "tape_handoff",
     ]);
 
@@ -922,7 +1014,7 @@ describe("tool surface runtime plugin", () => {
     expect(extensionApi.activeTools).toContain("task_record_blocker");
     expect(extensionApi.activeTools).toContain("ledger_query");
     expect(extensionApi.activeTools).toContain("output_search");
-    expect(extensionApi.activeTools).toContain("tape_search");
+    expect(extensionApi.activeTools).toContain("recall_search");
     expect(extensionApi.activeTools).toContain("tape_handoff");
   });
 

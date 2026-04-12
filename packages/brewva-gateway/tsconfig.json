@@ -10,7 +10,8 @@
     { "path": "../brewva-runtime" },
     { "path": "../brewva-tools" },
     { "path": "../brewva-deliberation" },
-    { "path": "../brewva-skill-broker" }
+    { "path": "../brewva-skill-broker" },
+    { "path": "../brewva-recall" }
   ],
   "include": ["src/**/*.ts"]
 }

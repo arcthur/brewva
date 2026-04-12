@@ -90,7 +90,7 @@ Implementation note:
   - replay, WAL, recovery
 - `Deliberation Ring`
   - evidence-backed artifact folding and retrieval
-  - deliberation memory, promotion, and continuity products
+  - deliberation memory, recall broker, curation, promotion, and continuity products
   - optional search or delegation assistance outside kernel authority
   - future multi-model reasoning flows
 - `Experience Ring`

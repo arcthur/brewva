@@ -10,6 +10,7 @@
         "@brewva/brewva-deliberation": "workspace:*",
         "@brewva/brewva-gateway": "workspace:*",
         "@brewva/brewva-ingress": "workspace:*",
+        "@brewva/brewva-recall": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
         "@brewva/brewva-skill-broker": "workspace:*",
         "@brewva/brewva-tools": "workspace:*",
@@ -128,6 +129,7 @@
         "@brewva/brewva-channels-telegram": "workspace:*",
         "@brewva/brewva-deliberation": "workspace:*",
         "@brewva/brewva-ingress": "workspace:*",
+        "@brewva/brewva-recall": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
         "@brewva/brewva-skill-broker": "workspace:*",
         "@brewva/brewva-tools": "workspace:*",
@@ -137,7 +139,6 @@
         "ajv": "^8.18.0",
         "lru-cache": "^11.2.7",
         "ws": "^8.20.0",
-        "yaml": "^2.8.3",
       },
     },
     "packages/brewva-ingress": {
@@ -146,6 +147,16 @@
       "dependencies": {
         "@brewva/brewva-channels-telegram": "workspace:*",
         "lru-cache": "^11.2.7",
+      },
+    },
+    "packages/brewva-recall": {
+      "name": "@brewva/brewva-recall",
+      "version": "0.1.0",
+      "dependencies": {
+        "@brewva/brewva-deliberation": "workspace:*",
+        "@brewva/brewva-runtime": "workspace:*",
+        "@brewva/brewva-skill-broker": "workspace:*",
+        "fuse.js": "^7.1.0",
       },
     },
     "packages/brewva-runtime": {
@@ -171,6 +182,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@brewva/brewva-deliberation": "workspace:*",
+        "@brewva/brewva-recall": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
         "@brewva/brewva-skill-broker": "workspace:*",
         "@mariozechner/pi-coding-agent": "^0.64.0",
@@ -281,6 +293,8 @@
     "@brewva/brewva-linux-x64": ["@brewva/brewva-linux-x64@workspace:distribution/brewva-linux-x64"],
 
     "@brewva/brewva-linux-x64-musl": ["@brewva/brewva-linux-x64-musl@workspace:distribution/brewva-linux-x64-musl"],
+
+    "@brewva/brewva-recall": ["@brewva/brewva-recall@workspace:packages/brewva-recall"],
 
     "@brewva/brewva-runtime": ["@brewva/brewva-runtime@workspace:packages/brewva-runtime"],
 

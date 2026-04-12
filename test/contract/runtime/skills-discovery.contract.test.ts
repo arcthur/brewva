@@ -347,7 +347,7 @@ describe("skill discovery and loading", () => {
         "    max_tool_calls: 4",
         "    max_tokens: 6000",
         "execution_hints:",
-        "  preferred_tools: [read, tape_search]",
+        "  preferred_tools: [read, recall_search]",
         "  fallback_tools: []",
         "---",
         "# review overlay",
@@ -363,7 +363,7 @@ describe("skill discovery and loading", () => {
 
     expect(skill.overlayFiles).toContain(resolve(overlayPath));
     expect(skill.contract.resources?.defaultLease?.maxToolCalls).toBe(4);
-    expect(skill.contract.executionHints?.preferredTools).toContain("tape_search");
+    expect(skill.contract.executionHints?.preferredTools).toContain("recall_search");
 
     const index = JSON.parse(
       readFileSync(join(workspace, ".brewva", "skills_index.json"), "utf8"),
@@ -407,7 +407,7 @@ describe("skill discovery and loading", () => {
         "    max_tool_calls: 5",
         "    max_tokens: 8000",
         "execution_hints:",
-        "  preferred_tools: [read, tape_search]",
+        "  preferred_tools: [read, recall_search]",
         "  fallback_tools: [ledger_query]",
         "consumes: []",
         "requires: []",
@@ -447,7 +447,7 @@ describe("skill discovery and loading", () => {
     const skill = runtime.inspect.skills.get("foo");
 
     expect(skill?.contract.executionHints?.preferredTools).toEqual(
-      expect.arrayContaining(["read", "tape_search"]),
+      expect.arrayContaining(["read", "recall_search"]),
     );
     expect(skill?.contract.executionHints?.fallbackTools).toContain("ledger_query");
     expect(skill?.contract.effects?.allowedEffects).toEqual(["workspace_read"]);
@@ -502,7 +502,7 @@ describe("skill discovery and loading", () => {
         "    max_tool_calls: 5",
         "    max_tokens: 7000",
         "execution_hints:",
-        "  preferred_tools: [read, tape_search]",
+        "  preferred_tools: [read, recall_search]",
         "  fallback_tools: []",
         "---",
         "# external overlay",
@@ -523,7 +523,7 @@ describe("skill discovery and loading", () => {
     expect(skill?.markdown.match(/## Project Context: project-rules/g)).toHaveLength(1);
     expect(skill?.markdown.match(/## Project Context: external-rules/g)).toHaveLength(1);
     expect(skill?.contract.resources?.defaultLease?.maxToolCalls).toBe(5);
-    expect(skill?.contract.executionHints?.preferredTools).toContain("tape_search");
+    expect(skill?.contract.executionHints?.preferredTools).toContain("recall_search");
     expect(skill?.contract.effects?.deniedEffects).toContain("local_exec");
   });
 

@@ -1,4 +1,5 @@
 import type { RollbackOutcome } from "./shared.js";
+import type { SkillRoutingScope } from "./skill.js";
 
 export type ToolEffectClass =
   | "workspace_read"
@@ -17,6 +18,7 @@ export interface ToolGovernanceDescriptor {
   defaultRisk?: ToolGovernanceRisk;
   boundary?: ToolExecutionBoundary;
   rollbackable?: boolean;
+  requiredRoutingScopes?: SkillRoutingScope[];
 }
 
 export interface ToolGovernanceResolverInput {
