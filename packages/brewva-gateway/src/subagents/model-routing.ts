@@ -1,16 +1,12 @@
-import { join } from "node:path";
 import type { DelegationModelRouteRecord } from "@brewva/brewva-runtime";
 import { resolveBrewvaAgentDir } from "@brewva/brewva-runtime";
+import type { BrewvaModelCatalog } from "@brewva/brewva-substrate";
 import type { DelegationPacket, SubagentExecutionShape } from "@brewva/brewva-tools";
 import { resolveBrewvaModelSelection } from "@brewva/brewva-tools";
-import {
-  AuthStorage,
-  ModelRegistry,
-  type ModelRegistry as PiModelRegistry,
-} from "@mariozechner/pi-coding-agent";
+import { createHostedSessionDriver } from "../host/hosted-session-driver.js";
 import type { HostedDelegationTarget } from "./targets.js";
 
-type RegisteredModel = ReturnType<PiModelRegistry["getAll"]>[number];
+type RegisteredModel = ReturnType<BrewvaModelCatalog["getAll"]>[number];
 
 interface DelegationRoutingPolicy {
   id: string;
@@ -112,7 +108,7 @@ function formatSelectedModel(input: {
 
 function createRegistryAdapter(
   availableModels: RegisteredModel[],
-): Pick<PiModelRegistry, "getAll"> {
+): Pick<BrewvaModelCatalog, "getAll"> {
   return {
     getAll() {
       return availableModels;
@@ -213,7 +209,7 @@ const ROUTING_POLICIES: readonly DelegationRoutingPolicy[] = [
 ] as const;
 
 export function createDelegationModelRoutingContext(
-  registry: Pick<PiModelRegistry, "getAll">,
+  registry: Pick<BrewvaModelCatalog, "getAll">,
 ): DelegationModelRoutingContext {
   return {
     availableModels: registry.getAll(),
@@ -223,9 +219,8 @@ export function createDelegationModelRoutingContext(
 export function createDelegationModelRoutingContextFromAgentDir(
   agentDir = resolveBrewvaAgentDir(),
 ): DelegationModelRoutingContext {
-  const authStorage = AuthStorage.create(join(agentDir, "auth.json"));
-  const modelRegistry = ModelRegistry.create(authStorage, join(agentDir, "models.json"));
-  return createDelegationModelRoutingContext(modelRegistry);
+  const sessionDriver = createHostedSessionDriver(agentDir);
+  return createDelegationModelRoutingContext(sessionDriver.modelCatalog);
 }
 
 export function resolveDelegationModelRoute(input: {

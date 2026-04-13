@@ -7,22 +7,26 @@ import {
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type {
+  BrewvaModelCatalog,
+  BrewvaProviderCompletionDriver,
+  BrewvaRegisteredModel,
+} from "@brewva/brewva-substrate";
+import { isUnsupportedBrewvaProviderApiError } from "@brewva/brewva-substrate";
+import type {
   BrewvaSemanticReranker,
   SemanticRerankerNarrativeExtractionInput,
   SemanticRerankerNarrativeExtractionResult,
   SemanticRerankerRerankInput,
   SemanticRerankerRerankResult,
 } from "@brewva/brewva-tools";
-import { complete, type Message } from "@mariozechner/pi-ai";
-import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
-
-type RegisteredModel = NonNullable<ReturnType<ModelRegistry["getAll"]>[number]>;
+import { createHostedProviderDriver } from "./hosted-provider-driver.js";
 
 interface HostedSemanticRerankerOptions {
-  model?: RegisteredModel;
-  modelRegistry: Pick<ModelRegistry, "getApiKeyAndHeaders">;
+  model?: BrewvaRegisteredModel;
+  resolveModel?: () => BrewvaRegisteredModel | undefined;
+  modelCatalog: Pick<BrewvaModelCatalog, "getApiKeyAndHeaders">;
   runtime: BrewvaRuntime;
-  completeFn?: typeof complete;
+  providerDriver?: BrewvaProviderCompletionDriver;
 }
 
 type SemanticCompletionOutcome = "completed" | "error" | "unavailable";
@@ -59,7 +63,7 @@ function resolveLocalDateStamp(now = new Date()): string {
   return `${byType.get("year") ?? "0000"}-${byType.get("month") ?? "00"}-${byType.get("day") ?? "00"}`;
 }
 
-function resolveModelRef(model: RegisteredModel | undefined): string | undefined {
+function resolveModelRef(model: BrewvaRegisteredModel | undefined): string | undefined {
   return model ? `${model.provider}/${model.id}` : undefined;
 }
 
@@ -127,8 +131,15 @@ function readString(value: unknown): string | undefined {
 
 class HostedSemanticReranker implements BrewvaSemanticReranker {
   private readonly rerankCache = new Map<string, SemanticRerankerRerankResult>();
+  private readonly providerDriver: BrewvaProviderCompletionDriver;
 
-  constructor(private readonly options: HostedSemanticRerankerOptions) {}
+  constructor(private readonly options: HostedSemanticRerankerOptions) {
+    this.providerDriver = options.providerDriver ?? createHostedProviderDriver();
+  }
+
+  private resolveModel(): BrewvaRegisteredModel | undefined {
+    return this.options.resolveModel?.() ?? this.options.model;
+  }
 
   async rerankNarrativeMemory(
     input: SemanticRerankerRerankInput,
@@ -398,7 +409,7 @@ class HostedSemanticReranker implements BrewvaSemanticReranker {
     userText: string;
     sessionId: string;
   }): Promise<SemanticJsonCompletion> {
-    const model = this.options.model;
+    const model = this.resolveModel();
     if (!model) {
       return {
         parsed: null,
@@ -407,7 +418,7 @@ class HostedSemanticReranker implements BrewvaSemanticReranker {
     }
 
     const modelRef = resolveModelRef(model);
-    const auth = await this.options.modelRegistry.getApiKeyAndHeaders(model);
+    const auth = await this.options.modelCatalog.getApiKeyAndHeaders(model);
     if (!auth.ok) {
       return {
         parsed: null,
@@ -416,21 +427,13 @@ class HostedSemanticReranker implements BrewvaSemanticReranker {
       };
     }
 
-    const userMessage: Message = {
-      role: "user",
-      content: [{ type: "text", text: input.userText }],
-      timestamp: Date.now(),
-    };
-
     try {
-      const response = await (this.options.completeFn ?? complete)(
+      const response = await this.providerDriver.complete({
         model,
-        {
-          systemPrompt: input.systemPrompt,
-          messages: [userMessage],
-        },
-        { apiKey: auth.apiKey, headers: auth.headers },
-      );
+        systemPrompt: input.systemPrompt,
+        userText: input.userText,
+        auth: { apiKey: auth.apiKey, headers: auth.headers },
+      });
       recordAssistantUsageFromMessage(this.options.runtime, input.sessionId, response);
       return {
         parsed: tryParseJson(extractTextContent(response.content)),
@@ -438,10 +441,10 @@ class HostedSemanticReranker implements BrewvaSemanticReranker {
         modelRef,
         response,
       };
-    } catch {
+    } catch (error) {
       return {
         parsed: null,
-        outcome: "error",
+        outcome: isUnsupportedBrewvaProviderApiError(error) ? "unavailable" : "error",
         modelRef,
       };
     }

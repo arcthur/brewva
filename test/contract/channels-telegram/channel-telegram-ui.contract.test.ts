@@ -67,7 +67,7 @@ describe("channel telegram telegram-ui rendering", () => {
     expect(inlineKeyboard).toHaveLength(1);
     expect(inlineKeyboard[0]).toHaveLength(2);
 
-    const callbackData = (inlineKeyboard[0]?.[0]?.callback_data ?? "").toString();
+    const callbackData = inlineKeyboard[0]?.[0]?.callback_data ?? "";
     const decoded = requireDefined(
       decodeTelegramApprovalCallback(callbackData, "callback-secret", {
         context: "12345",
@@ -77,7 +77,7 @@ describe("channel telegram telegram-ui rendering", () => {
     expect(decoded.actionId).toBe("confirm");
     const requestId = requireNonEmptyString(decoded.requestId, "Expected decoded requestId.");
 
-    const cancelCallbackData = (inlineKeyboard?.[0]?.[1]?.callback_data ?? "").toString();
+    const cancelCallbackData = inlineKeyboard?.[0]?.[1]?.callback_data ?? "";
     const cancelDecoded = requireDefined(
       decodeTelegramApprovalCallback(cancelCallbackData, "callback-secret", {
         context: "12345",
@@ -144,7 +144,7 @@ describe("channel telegram telegram-ui rendering", () => {
 
     const firstDecoded = requireDefined(
       decodeTelegramApprovalCallback(
-        (inlineKeyboard[0]?.[0]?.callback_data ?? "").toString(),
+        inlineKeyboard[0]?.[0]?.callback_data ?? "",
         "callback-secret",
         {
           context: "12345",
@@ -154,7 +154,7 @@ describe("channel telegram telegram-ui rendering", () => {
     );
     const secondDecoded = requireDefined(
       decodeTelegramApprovalCallback(
-        (inlineKeyboard[0]?.[1]?.callback_data ?? "").toString(),
+        inlineKeyboard[0]?.[1]?.callback_data ?? "",
         "callback-secret",
         {
           context: "12345",
@@ -229,7 +229,7 @@ describe("channel telegram telegram-ui rendering", () => {
           inline_keyboard?: Array<Array<{ callback_data?: string }>>;
         }
       )?.inline_keyboard;
-      const callbackData = (keyboard?.[0]?.[0]?.callback_data ?? "").toString();
+      const callbackData = keyboard?.[0]?.[0]?.callback_data ?? "";
       const decoded = decodeTelegramApprovalCallback(callbackData, "callback-secret", {
         context: "12345",
       });
@@ -282,13 +282,12 @@ describe("channel telegram telegram-ui rendering", () => {
       callbackSecret: secret,
     });
 
-    const callbackData = (
+    const callbackData =
       (
         requests[0]?.params.reply_markup as {
           inline_keyboard?: Array<Array<{ callback_data?: string }>>;
         }
-      )?.inline_keyboard?.[0]?.[0]?.callback_data ?? ""
-    ).toString();
+      )?.inline_keyboard?.[0]?.[0]?.callback_data ?? "";
     expect(callbackData.length).toBeGreaterThan(0);
 
     const callbackUpdate: TelegramUpdate = {
@@ -495,12 +494,10 @@ next
 
     const firstDecoded = decodeTelegramApprovalCallback(
       (
-        (
-          callbackMessages[0]?.params.reply_markup as {
-            inline_keyboard?: Array<Array<{ callback_data?: string }>>;
-          }
-        )?.inline_keyboard?.[0]?.[0]?.callback_data ?? ""
-      ).toString(),
+        callbackMessages[0]?.params.reply_markup as {
+          inline_keyboard?: Array<Array<{ callback_data?: string }>>;
+        }
+      )?.inline_keyboard?.[0]?.[0]?.callback_data ?? "",
       "callback-secret",
       {
         context: "12345",
@@ -508,12 +505,10 @@ next
     );
     const secondDecoded = decodeTelegramApprovalCallback(
       (
-        (
-          callbackMessages[1]?.params.reply_markup as {
-            inline_keyboard?: Array<Array<{ callback_data?: string }>>;
-          }
-        )?.inline_keyboard?.[0]?.[0]?.callback_data ?? ""
-      ).toString(),
+        callbackMessages[1]?.params.reply_markup as {
+          inline_keyboard?: Array<Array<{ callback_data?: string }>>;
+        }
+      )?.inline_keyboard?.[0]?.[0]?.callback_data ?? "",
       "callback-secret",
       {
         context: "12345",
@@ -660,13 +655,12 @@ next
     });
 
     expect(requests.length).toBeGreaterThan(0);
-    const callbackData = (
+    const callbackData =
       (
         requests[0]?.params.reply_markup as {
           inline_keyboard?: Array<Array<{ callback_data?: string }>>;
         }
-      )?.inline_keyboard?.[0]?.[0]?.callback_data ?? ""
-    ).toString();
+      )?.inline_keyboard?.[0]?.[0]?.callback_data ?? "";
     const decoded = decodeTelegramApprovalCallback(callbackData, "callback-secret", {
       context: "12345",
     });

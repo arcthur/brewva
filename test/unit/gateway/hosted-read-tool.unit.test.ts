@@ -3,7 +3,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import { createReadTool, type ReadToolOptions } from "@mariozechner/pi-coding-agent";
+import {
+  createBrewvaReadToolDefinition,
+  type BrewvaReadToolOptions,
+} from "@brewva/brewva-substrate";
 import { createCompactReadTool } from "../../../packages/brewva-gateway/src/host/hosted-session-bootstrap.js";
 import {
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
@@ -19,8 +22,8 @@ function extractText(result: { content: Array<{ type: string; text?: string }> }
 describe("hosted compact read tool", () => {
   test("reads session-scoped read options at execute time", async () => {
     let autoResizeImages = true;
-    const observedOptions: Array<ReadToolOptions | undefined> = [];
-    const templateTool = createReadTool(process.cwd());
+    const observedOptions: Array<BrewvaReadToolOptions | undefined> = [];
+    const templateTool = createBrewvaReadToolDefinition(process.cwd());
 
     const compactReadTool = createCompactReadTool({
       cwd: process.cwd(),
@@ -68,7 +71,7 @@ describe("hosted compact read tool", () => {
     const workspace = createTestWorkspace("hosted-read-path-guard");
     const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "hosted-read-path-guard";
-    const templateTool = createReadTool(workspace);
+    const templateTool = createBrewvaReadToolDefinition(workspace);
     let delegateCalls = 0;
 
     for (const path of ["src/missing-a.ts", "src/missing-b.ts"]) {
@@ -134,7 +137,7 @@ describe("hosted compact read tool", () => {
     mkdirSync(join(workspace, "src"), { recursive: true });
     const filePath = join(workspace, "src/existing.ts");
     writeFileSync(filePath, "export const existing = true;\n", "utf8");
-    const templateTool = createReadTool(workspace);
+    const templateTool = createBrewvaReadToolDefinition(workspace);
     let delegateCalls = 0;
 
     recordRuntimeEvent(runtime, {
@@ -186,7 +189,7 @@ describe("hosted compact read tool", () => {
     mkdirSync(join(workspace, "src"), { recursive: true });
     writeFileSync(join(workspace, "src/index.ts"), "export const index = true;\n", "utf8");
     writeFileSync(join(workspace, "src/existing.ts"), "export const existing = true;\n", "utf8");
-    const templateTool = createReadTool(workspace);
+    const templateTool = createBrewvaReadToolDefinition(workspace);
     let delegateCalls = 0;
 
     recordRuntimeEvent(runtime, {

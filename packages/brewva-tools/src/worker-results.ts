@@ -1,5 +1,5 @@
 import type { WorkerApplyReport, WorkerMergeReport } from "@brewva/brewva-runtime";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";

@@ -26,18 +26,19 @@
     }
   },
   "dependencies": {
+    "@brewva/brewva-agent-engine": "workspace:*",
     "@brewva/brewva-channels-telegram": "workspace:*",
     "@brewva/brewva-deliberation": "workspace:*",
     "@brewva/brewva-ingress": "workspace:*",
+    "@brewva/brewva-provider-core": "workspace:*",
     "@brewva/brewva-recall": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
     "@brewva/brewva-skill-broker": "workspace:*",
+    "@brewva/brewva-substrate": "workspace:*",
     "@brewva/brewva-tools": "workspace:*",
-    "@mariozechner/pi-ai": "^0.64.0",
-    "@mariozechner/pi-coding-agent": "^0.64.0",
-    "@sinclair/typebox": "^0.34.48",
+    "@sinclair/typebox": "^0.34.49",
     "ajv": "^8.18.0",
-    "lru-cache": "^11.2.7",
+    "lru-cache": "^11.3.5",
     "ws": "^8.20.0"
   },
   "engines": {

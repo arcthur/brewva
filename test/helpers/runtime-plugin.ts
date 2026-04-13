@@ -62,13 +62,14 @@ export function invokeHandler<T = unknown>(
   eventName: string,
   event: Record<string, unknown>,
   ctx: Record<string, unknown>,
+  coerce: (value: unknown) => T = (value) => value as T,
 ): T {
   const list = handlers.get(eventName) ?? [];
   const handler = list[0];
   if (!handler) {
     throw new Error(`Missing handler for event: ${eventName}`);
   }
-  return handler(event, ctx) as T;
+  return coerce(handler(event, ctx));
 }
 
 export async function invokeHandlerAsync<T = unknown>(

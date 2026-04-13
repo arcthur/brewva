@@ -68,10 +68,8 @@ describe("compaction recovery controller", () => {
         }
         await resumePromptReleased;
       },
-      agent: {
-        async waitForIdle(): Promise<void> {
-          return;
-        },
+      async waitForIdle(): Promise<void> {
+        return;
       },
       dispose(): void {
         return;
@@ -159,10 +157,8 @@ describe("compaction recovery controller", () => {
           inFlightResumePrompts -= 1;
         }
       },
-      agent: {
-        async waitForIdle(): Promise<void> {
-          return;
-        },
+      async waitForIdle(): Promise<void> {
+        return;
       },
       dispose(): void {
         return;
@@ -216,10 +212,8 @@ describe("compaction recovery controller", () => {
           throw new Error("prompt too long");
         }
       },
-      agent: {
-        async waitForIdle(): Promise<void> {
-          return;
-        },
+      async waitForIdle(): Promise<void> {
+        return;
       },
       dispose(): void {
         return;
@@ -304,18 +298,16 @@ describe("compaction recovery controller", () => {
           throw new Error("provider returned error 529");
         }
       },
-      agent: {
-        async waitForIdle(): Promise<void> {
-          return;
-        },
-        setModel(model: typeof currentModel) {
-          activeModel = model;
-          modelChanges.push(model.id);
-        },
-        setThinkingLevel(level: string) {
-          activeThinkingLevel = level;
-          thinkingLevelChanges.push(level);
-        },
+      async waitForIdle(): Promise<void> {
+        return;
+      },
+      setModel(model: typeof currentModel) {
+        activeModel = model;
+        modelChanges.push(model.id);
+      },
+      setThinkingLevel(level: string) {
+        activeThinkingLevel = level;
+        thinkingLevelChanges.push(level);
       },
       dispose(): void {
         return;
@@ -378,10 +370,8 @@ describe("compaction recovery controller", () => {
       async prompt(_content: string, _options?: unknown): Promise<void> {
         return;
       },
-      agent: {
-        async waitForIdle(): Promise<void> {
-          await idleReleased;
-        },
+      async waitForIdle(): Promise<void> {
+        await idleReleased;
       },
       dispose(): void {
         return;
@@ -425,10 +415,8 @@ describe("compaction recovery controller", () => {
           });
         }
       },
-      agent: {
-        async waitForIdle(): Promise<void> {
-          return;
-        },
+      async waitForIdle(): Promise<void> {
+        return;
       },
       async delegatePrompt(content: string): Promise<void> {
         await this.prompt(content);
@@ -467,10 +455,8 @@ describe("compaction recovery controller", () => {
         getSessionId: () => "agent-session-4",
       },
       prompt,
-      agent: {
-        async waitForIdle(): Promise<void> {
-          return;
-        },
+      async waitForIdle(): Promise<void> {
+        return;
       },
       dispose(): void {
         disposeCalls.push("disposed");
@@ -506,10 +492,8 @@ describe("compaction recovery controller", () => {
       async prompt(): Promise<void> {
         return;
       },
-      agent: {
-        async waitForIdle(): Promise<void> {
-          return;
-        },
+      async waitForIdle(): Promise<void> {
+        return;
       },
       dispose(): void {
         return;
@@ -542,10 +526,8 @@ describe("compaction recovery controller", () => {
           throw new Error("resume_failed");
         }
       },
-      agent: {
-        async waitForIdle(): Promise<void> {
-          return;
-        },
+      async waitForIdle(): Promise<void> {
+        return;
       },
       dispose(): void {
         return;
@@ -609,10 +591,8 @@ describe("compaction recovery controller", () => {
         });
         throw new Error("max output tokens exceeded");
       },
-      agent: {
-        async waitForIdle(): Promise<void> {
-          return;
-        },
+      async waitForIdle(): Promise<void> {
+        return;
       },
       dispose(): void {
         return;
@@ -653,10 +633,8 @@ describe("compaction recovery controller", () => {
           throw new Error("max output tokens exceeded");
         }
       },
-      agent: {
-        async waitForIdle(): Promise<void> {
-          return;
-        },
+      async waitForIdle(): Promise<void> {
+        return;
       },
       dispose(): void {
         return;
@@ -708,10 +686,8 @@ describe("compaction recovery controller", () => {
         }
         throw new Error("max output tokens exceeded");
       },
-      agent: {
-        async waitForIdle(): Promise<void> {
-          return;
-        },
+      async waitForIdle(): Promise<void> {
+        return;
       },
       dispose(): void {
         return;

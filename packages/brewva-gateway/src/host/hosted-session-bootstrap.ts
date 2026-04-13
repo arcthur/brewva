@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { createRecallContextProvider } from "@brewva/brewva-recall";
 import {
   BrewvaRuntime,
@@ -12,6 +12,11 @@ import {
   type ManagedToolMode,
 } from "@brewva/brewva-runtime";
 import { createToolRuntimeInternalPort, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import type {
+  BrewvaManagedPromptSession,
+  BrewvaModelCatalog,
+  BrewvaRegisteredModel,
+} from "@brewva/brewva-substrate";
 import {
   attachBrewvaToolExecutionTraits,
   buildReadPathDiscoveryObservationPayload,
@@ -21,20 +26,6 @@ import {
   type BrewvaSemanticReranker,
   type BrewvaToolOrchestration,
 } from "@brewva/brewva-tools";
-import {
-  AuthStorage,
-  createReadTool,
-  createEditTool,
-  createAgentSession,
-  DefaultResourceLoader,
-  ModelRegistry,
-  type ReadToolDetails,
-  type ReadToolOptions,
-  SettingsManager,
-  type ToolDefinition,
-  createWriteTool,
-  type CreateAgentSessionResult,
-} from "@mariozechner/pi-coding-agent";
 import { createHostedTurnPipeline, type RuntimePlugin } from "../runtime-plugins/index.js";
 import {
   analyzeReadPathRecoveryState,
@@ -55,11 +46,27 @@ import {
   wrapToolDefinitionsWithHostedExecutionTraits,
   type HostedToolExecutionCoordinator,
 } from "../tool-execution-traits.js";
+import {
+  createHostedEditTool,
+  createHostedReadTool,
+  createHostedSessionDriver,
+  createHostedSettingsManager,
+  createHostedWriteTool,
+  type HostedSessionDriver,
+  type HostedSessionCustomTool,
+  type HostedSessionReadToolDetails,
+  type HostedSessionReadToolOptions,
+  type HostedSessionSettingsView,
+} from "./hosted-session-driver.js";
 import { DEFAULT_HOSTED_ROUTING_SCOPES } from "./routing-defaults.js";
 import { createHostedSemanticReranker } from "./semantic-reranker.js";
 
-export interface HostedSessionResult extends CreateAgentSessionResult {
+export type HostedSession = BrewvaManagedPromptSession;
+
+export interface HostedSessionResult {
+  session: HostedSession;
   runtime: BrewvaRuntime;
+  modelFallbackMessage?: string;
 }
 
 export interface CreateHostedSessionOptions extends RuntimeCreateBrewvaSessionOptions {
@@ -76,9 +83,13 @@ export interface CreateHostedSessionOptions extends RuntimeCreateBrewvaSessionOp
 interface HostedEnvironment {
   cwd: string;
   agentDir: string;
-  authStorage: AuthStorage;
-  modelRegistry: ModelRegistry;
-  selectedModel: ReturnType<typeof resolveBrewvaModelSelection>;
+  sessionDriver: HostedSessionDriver;
+  requestedModelSelection: ReturnType<typeof resolveBrewvaModelSelection>;
+}
+
+interface HostedToolRenderTheme {
+  bold(text: string): string;
+  fg(tone: string, text: string): string;
 }
 
 function createStaticTextComponent(text: string): {
@@ -123,8 +134,8 @@ interface CompactReadTextOutput {
 interface CompactReadToolInput {
   cwd: string;
   runtime?: BrewvaRuntime;
-  getReadToolOptions?: () => ReadToolOptions | undefined;
-  createReadDelegate?: typeof createReadTool;
+  getReadToolOptions?: () => HostedSessionReadToolOptions | undefined;
+  createReadDelegate?: typeof createHostedReadTool;
 }
 
 function splitCompactReadTextOutput(output: string): CompactReadTextOutput {
@@ -210,18 +221,16 @@ function didReadToolSucceed(result: { details?: unknown } | undefined): boolean 
   return true;
 }
 
-export function createCompactReadTool(
-  input: CompactReadToolInput,
-): ToolDefinition<ReturnType<typeof createReadTool>["parameters"], ReadToolDetails> {
-  const createReadDelegate = input.createReadDelegate ?? createReadTool;
+export function createCompactReadTool(input: CompactReadToolInput): HostedSessionCustomTool {
+  const createReadDelegate = input.createReadDelegate ?? createHostedReadTool;
   const originalRead = createReadDelegate(input.cwd);
-  return {
+  const tool: typeof originalRead = {
     name: originalRead.name,
     label: originalRead.label,
     description: originalRead.description,
     parameters: originalRead.parameters,
     async execute(toolCallId, params, signal, onUpdate, ctx) {
-      const requestedPath = resolveRequestedReadPath(params);
+      const requestedPath = resolveRequestedReadPath(params as Record<string, unknown> | undefined);
       const sessionId = resolveReadSessionId(ctx);
       if (input.runtime && requestedPath && sessionId) {
         const recoveryState = analyzeReadPathRecoveryState(input.runtime, sessionId);
@@ -234,7 +243,7 @@ export function createCompactReadTool(
           return buildReadPathGuardResult({
             requestedPath,
             state: recoveryState,
-          }) as unknown as Awaited<ReturnType<ReturnType<typeof createReadTool>["execute"]>>;
+          }) as unknown as Awaited<ReturnType<HostedSessionCustomTool["execute"]>>;
         }
       }
 
@@ -243,6 +252,7 @@ export function createCompactReadTool(
         params,
         signal,
         onUpdate,
+        ctx,
       );
       if (input.runtime && requestedPath && sessionId && didReadToolSucceed(result)) {
         const discoveryPayload = buildReadPathDiscoveryObservationPayload({
@@ -262,30 +272,33 @@ export function createCompactReadTool(
       return result;
     },
     renderCall(args, theme) {
-      const filePathCandidate = (args as { file_path?: unknown } | undefined)?.file_path;
+      const renderTheme = theme as HostedToolRenderTheme;
+      const normalizedArgs = args as Record<string, unknown> | undefined;
+      const filePathCandidate = normalizedArgs?.file_path;
       const rawPath =
-        typeof args?.path === "string"
-          ? args.path
+        typeof normalizedArgs?.path === "string"
+          ? normalizedArgs.path
           : typeof filePathCandidate === "string"
             ? filePathCandidate
             : "";
-      const offset = typeof args?.offset === "number" ? args.offset : undefined;
-      const limit = typeof args?.limit === "number" ? args.limit : undefined;
+      const offset = typeof normalizedArgs?.offset === "number" ? normalizedArgs.offset : undefined;
+      const limit = typeof normalizedArgs?.limit === "number" ? normalizedArgs.limit : undefined;
       let pathDisplay = rawPath
-        ? theme.fg("accent", shortenPath(rawPath))
-        : theme.fg("toolOutput", "...");
+        ? renderTheme.fg("accent", shortenPath(rawPath))
+        : renderTheme.fg("toolOutput", "...");
 
       if (offset !== undefined || limit !== undefined) {
         const startLine = offset ?? 1;
         const endLine = limit !== undefined ? startLine + limit - 1 : "";
-        pathDisplay += theme.fg("warning", `:${startLine}${endLine ? `-${endLine}` : ""}`);
+        pathDisplay += renderTheme.fg("warning", `:${startLine}${endLine ? `-${endLine}` : ""}`);
       }
 
       return createStaticTextComponent(
-        `${theme.fg("toolTitle", theme.bold("read"))} ${pathDisplay}`,
+        `${renderTheme.fg("toolTitle", renderTheme.bold("read"))} ${pathDisplay}`,
       );
     },
     renderResult(result, { expanded }, theme) {
+      const renderTheme = theme as HostedToolRenderTheme;
       const hasImage = Array.isArray(result.content)
         ? result.content.some(
             (item) =>
@@ -293,7 +306,7 @@ export function createCompactReadTool(
           )
         : false;
       if (hasImage) {
-        return createStaticTextComponent(`\n${theme.fg("success", "Image loaded")}`);
+        return createStaticTextComponent(`\n${renderTheme.fg("success", "Image loaded")}`);
       }
 
       const output = extractTextContent(result);
@@ -301,12 +314,14 @@ export function createCompactReadTool(
         return createStaticTextComponent("");
       }
 
-      const details = result.details as ReadToolDetails | undefined;
+      const details = result.details as HostedSessionReadToolDetails | undefined;
       if (details?.truncation?.firstLineExceedsLimit) {
         if (!expanded) {
-          return createStaticTextComponent(`\n${theme.fg("warning", "Line exceeds output limit")}`);
+          return createStaticTextComponent(
+            `\n${renderTheme.fg("warning", "Line exceeds output limit")}`,
+          );
         }
-        return createStaticTextComponent(`\n${theme.fg("warning", output)}`);
+        return createStaticTextComponent(`\n${renderTheme.fg("warning", output)}`);
       }
 
       const { body, continuationFooter } = splitCompactReadTextOutput(output);
@@ -316,9 +331,12 @@ export function createCompactReadTool(
           : countRenderedLines(body);
 
       if (!expanded) {
-        let summary = theme.fg("success", formatLineCount(lineCount));
+        let summary = renderTheme.fg("success", formatLineCount(lineCount));
         if (details?.truncation?.truncated && typeof details.truncation.totalLines === "number") {
-          summary += theme.fg("warning", ` (truncated from ${details.truncation.totalLines})`);
+          summary += renderTheme.fg(
+            "warning",
+            ` (truncated from ${details.truncation.totalLines})`,
+          );
         }
         return createStaticTextComponent(`\n${summary}`);
       }
@@ -326,25 +344,25 @@ export function createCompactReadTool(
       const renderedLines = body
         .split("\n")
         .filter((_line, index, lines) => !(lines.length === 1 && lines[0] === ""))
-        .map((line) => theme.fg("toolOutput", line));
+        .map((line) => renderTheme.fg("toolOutput", line));
 
       if (details?.truncation?.truncated) {
         if (details.truncation.firstLineExceedsLimit) {
-          renderedLines.push(theme.fg("warning", "[First line exceeds output limit]"));
+          renderedLines.push(renderTheme.fg("warning", "[First line exceeds output limit]"));
         } else if (details.truncation.truncatedBy === "lines") {
           renderedLines.push(
-            theme.fg(
+            renderTheme.fg(
               "warning",
               `[Truncated: showing ${details.truncation.outputLines} of ${details.truncation.totalLines} lines]`,
             ),
           );
         } else {
           renderedLines.push(
-            theme.fg("warning", `[Truncated: ${details.truncation.outputLines} lines shown]`),
+            renderTheme.fg("warning", `[Truncated: ${details.truncation.outputLines} lines shown]`),
           );
         }
       } else if (continuationFooter) {
-        renderedLines.push(theme.fg("warning", continuationFooter));
+        renderedLines.push(renderTheme.fg("warning", continuationFooter));
       }
 
       return createStaticTextComponent(
@@ -352,6 +370,7 @@ export function createCompactReadTool(
       );
     },
   };
+  return tool;
 }
 
 const READ_EXECUTION_TRAITS: BrewvaToolExecutionTraits = {
@@ -371,12 +390,12 @@ const MUTATING_FILE_EXECUTION_TRAITS: BrewvaToolExecutionTraits = {
 function createHostedCustomTools(input: {
   cwd: string;
   runtime: BrewvaRuntime;
-  settingsManager: SettingsManager;
+  settingsManager: HostedSessionSettingsView;
   builtinToolNames: readonly HostedDelegationBuiltinToolName[] | undefined;
   directManagedTools: ReturnType<typeof createDirectManagedTools>;
   toolExecutionCoordinator: HostedToolExecutionCoordinator;
-}): ToolDefinition[] | undefined {
-  const tools: ToolDefinition[] = [];
+}): HostedSessionCustomTool[] | undefined {
+  const tools: HostedSessionCustomTool[] = [];
   const requestedBuiltinTools = new Set(input.builtinToolNames ?? ["read", "edit", "write"]);
 
   if (requestedBuiltinTools.has("read")) {
@@ -387,7 +406,7 @@ function createHostedCustomTools(input: {
         getReadToolOptions: () => ({
           autoResizeImages: input.settingsManager.getImageAutoResize(),
         }),
-      }) as unknown as ToolDefinition,
+      }),
       READ_EXECUTION_TRAITS,
     );
     tools.push(
@@ -397,7 +416,7 @@ function createHostedCustomTools(input: {
 
   if (requestedBuiltinTools.has("edit")) {
     const editDefinition = attachBrewvaToolExecutionTraits(
-      createEditTool(input.cwd),
+      createHostedEditTool(input.cwd),
       MUTATING_FILE_EXECUTION_TRAITS,
     );
     tools.push(
@@ -407,7 +426,7 @@ function createHostedCustomTools(input: {
 
   if (requestedBuiltinTools.has("write")) {
     const writeDefinition = attachBrewvaToolExecutionTraits(
-      createWriteTool(input.cwd),
+      createHostedWriteTool(input.cwd),
       MUTATING_FILE_EXECUTION_TRAITS,
     );
     tools.push(
@@ -430,12 +449,43 @@ function sameRoutingScopes(actual: readonly string[], expected: readonly string[
 }
 
 function applyRuntimeUiSettings(
-  settingsManager: SettingsManager,
+  settingsManager: HostedSessionSettingsView,
   uiConfig: BrewvaRuntime["config"]["ui"],
 ): void {
   settingsManager.applyOverrides({
     quietStartup: uiConfig.quietStartup,
   });
+}
+
+function toRegisteredSemanticModel(
+  model: HostedSession["model"] | undefined,
+  modelCatalog: Pick<BrewvaModelCatalog, "find">,
+): BrewvaRegisteredModel | undefined {
+  if (!model) {
+    return undefined;
+  }
+  return (
+    modelCatalog.find(model.provider, model.id) ?? {
+      provider: model.provider,
+      id: model.id,
+      name: model.name ?? model.displayName ?? model.id,
+      api: model.api ?? "openai-responses",
+      baseUrl: model.baseUrl ?? "",
+      reasoning: model.reasoning,
+      input: model.input ?? ["text"],
+      cost: model.cost ?? {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+      },
+      contextWindow: model.contextWindow,
+      maxTokens: model.maxTokens,
+      ...(model.headers ? { headers: model.headers } : {}),
+      ...(model.compat != null ? { compat: model.compat } : {}),
+      ...(model.displayName ? { displayName: model.displayName } : {}),
+    }
+  );
 }
 
 function resolveManagedToolMode(mode: ManagedToolMode | undefined): ManagedToolMode {
@@ -446,16 +496,17 @@ function resolveHostedEnvironment(options: CreateHostedSessionOptions): HostedEn
   const cwd = resolve(options.cwd ?? process.cwd());
   const agentDir = resolveBrewvaAgentDir();
 
-  const authStorage = AuthStorage.create(join(agentDir, "auth.json"));
-  const modelRegistry = ModelRegistry.create(authStorage, join(agentDir, "models.json"));
-  const selectedModel = resolveBrewvaModelSelection(options.model, modelRegistry);
+  const sessionDriver = createHostedSessionDriver(agentDir);
+  const requestedModelSelection = resolveBrewvaModelSelection(
+    options.model,
+    sessionDriver.modelCatalog,
+  );
 
   return {
     cwd,
     agentDir,
-    authStorage,
-    modelRegistry,
-    selectedModel,
+    sessionDriver,
+    requestedModelSelection,
   };
 }
 
@@ -548,23 +599,23 @@ function createHostedOrchestration(input: {
   runtime: BrewvaRuntime;
   delegationStore: HostedDelegationStore | undefined;
   cwd: string;
-  modelRegistry: ModelRegistry;
+  modelCatalog: Pick<BrewvaModelCatalog, "getAll">;
 }): BrewvaToolOrchestration | undefined {
-  const { options, runtime, delegationStore, cwd, modelRegistry } = input;
+  const { options, runtime, delegationStore, cwd, modelCatalog } = input;
   if (options.enableSubagents === false || options.orchestration?.subagents) {
     return options.orchestration;
   }
 
   const subagents = createHostedSubagentAdapter({
     runtime,
-    modelRouting: createDelegationModelRoutingContext(modelRegistry),
+    modelRouting: createDelegationModelRoutingContext(modelCatalog),
     delegationStore,
     backgroundController: createDetachedSubagentBackgroundController({
       runtime,
       delegationStore,
       configPath: options.configPath,
       routingScopes: options.routingScopes,
-      modelRouting: createDelegationModelRoutingContext(modelRegistry),
+      modelRouting: createDelegationModelRoutingContext(modelCatalog),
     }),
     createChildSession: (childOptions) =>
       createHostedSession({
@@ -596,7 +647,7 @@ function createRuntimePlugins(input: {
   delegationStore: HostedDelegationStore | undefined;
   semanticReranker?: BrewvaSemanticReranker;
   toolExecutionCoordinator: HostedToolExecutionCoordinator;
-  hostedToolDefinitionsByName?: ReadonlyMap<string, ToolDefinition>;
+  hostedToolDefinitionsByName?: ReadonlyMap<string, HostedSessionCustomTool>;
 }): RuntimePlugin[] {
   const managedToolMode = resolveManagedToolMode(input.options.managedToolMode);
   const registerManagedTools = managedToolMode === "runtime_plugin";
@@ -694,16 +745,17 @@ export async function createHostedSession(
     runtime,
     delegationStore,
     cwd: environment.cwd,
-    modelRegistry: environment.modelRegistry,
+    modelCatalog: environment.sessionDriver.modelCatalog,
   });
 
-  const settingsManager = SettingsManager.create(environment.cwd, environment.agentDir);
-  applyRuntimeUiSettings(settingsManager, runtime.config.ui);
+  const settings = createHostedSettingsManager(environment.cwd, environment.agentDir);
+  applyRuntimeUiSettings(settings.view, runtime.config.ui);
 
   const managedToolMode = resolveManagedToolMode(options.managedToolMode);
+  let activeSemanticModel = environment.requestedModelSelection.model;
   const semanticReranker = createHostedSemanticReranker({
-    model: environment.selectedModel.model,
-    modelRegistry: environment.modelRegistry,
+    resolveModel: () => activeSemanticModel,
+    modelCatalog: environment.sessionDriver.modelCatalog,
     runtime,
   });
   const toolExecutionCoordinator = createHostedToolExecutionCoordinator();
@@ -721,12 +773,12 @@ export async function createHostedSession(
   const customTools = createHostedCustomTools({
     cwd: environment.cwd,
     runtime,
-    settingsManager,
+    settingsManager: settings.view,
     builtinToolNames: options.builtinToolNames,
     directManagedTools,
     toolExecutionCoordinator,
   });
-  const hostedToolDefinitionsByName = new Map<string, ToolDefinition>();
+  const hostedToolDefinitionsByName = new Map<string, HostedSessionCustomTool>();
   for (const tool of customTools ?? []) {
     hostedToolDefinitionsByName.set(tool.name, tool);
   }
@@ -740,28 +792,24 @@ export async function createHostedSession(
     hostedToolDefinitionsByName,
   });
 
-  const resourceLoader = new DefaultResourceLoader({
+  const sessionRuntime = await environment.sessionDriver.createRuntime({
     cwd: environment.cwd,
-    agentDir: environment.agentDir,
-    settingsManager,
-    extensionFactories: runtimePlugins,
-  });
-  await resourceLoader.reload();
-
-  const sessionResult = await createAgentSession({
-    cwd: environment.cwd,
-    agentDir: environment.agentDir,
-    authStorage: environment.authStorage,
-    modelRegistry: environment.modelRegistry,
-    settingsManager,
-    resourceLoader,
-    model: environment.selectedModel.model,
-    thinkingLevel: environment.selectedModel.thinkingLevel,
-    tools: [],
+    settings,
+    runtime,
+    runtimePlugins,
+    requestedModel: environment.requestedModelSelection.model,
+    requestedThinkingLevel: environment.requestedModelSelection.thinkingLevel,
     customTools,
   });
+  activeSemanticModel =
+    toRegisteredSemanticModel(
+      sessionRuntime.session.model,
+      environment.sessionDriver.modelCatalog,
+    ) ?? activeSemanticModel;
 
-  const session = installSessionCompactionRecovery(sessionResult.session, { runtime });
+  const session = installSessionCompactionRecovery(sessionRuntime.session, {
+    runtime,
+  });
   const sessionId = session.sessionManager.getSessionId();
   recordHostedBootstrap({
     runtime,
@@ -772,8 +820,8 @@ export async function createHostedSession(
   });
 
   return {
-    ...sessionResult,
     session,
     runtime,
+    modelFallbackMessage: sessionRuntime.modelFallbackMessage,
   };
 }

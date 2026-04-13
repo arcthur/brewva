@@ -24,6 +24,7 @@ refresh the pointer summary and `Last reviewed` metadata here.
 
 - [`rfc-architecture-doc-precision-review.md`](./rfc-architecture-doc-precision-review.md)
 - [`rfc-authority-surface-narrowing-and-runtime-facade-compression.md`](./rfc-authority-surface-narrowing-and-runtime-facade-compression.md)
+- [`rfc-brewva-c2-full-internalization-and-kernel-substrate-boundaries.md`](./rfc-brewva-c2-full-internalization-and-kernel-substrate-boundaries.md)
 - [`rfc-boundary-first-subtraction-and-model-native-recovery.md`](./rfc-boundary-first-subtraction-and-model-native-recovery.md)
 - [`rfc-boundary-policy-credential-vault-and-loop-guard.md`](./rfc-boundary-policy-credential-vault-and-loop-guard.md)
 - [`rfc-capability-compression-and-output-distillation.md`](./rfc-capability-compression-and-output-distillation.md)

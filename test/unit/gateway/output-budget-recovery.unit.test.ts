@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionWireFrame } from "@brewva/brewva-runtime";
-import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
+import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
 import { registerProviderRequestRecovery } from "../../../packages/brewva-gateway/src/runtime-plugins/provider-request-recovery.js";
 import { collectSessionPromptOutput } from "../../../packages/brewva-gateway/src/session/collect-output.js";
 import { COMPACTION_RECOVERY_TEST_ONLY } from "../../../packages/brewva-gateway/src/session/compaction-recovery.js";
@@ -17,10 +17,10 @@ describe("output budget recovery chain", () => {
     const promptedMessages: string[] = [];
     const streamedPayloads: Array<Record<string, unknown> | undefined> = [];
     const frames: SessionWireFrame[] = [];
-    let listener: ((event: AgentSessionEvent) => void) | undefined;
+    let listener: ((event: BrewvaPromptSessionEvent) => void) | undefined;
 
     const session = {
-      subscribe(next: (event: AgentSessionEvent) => void) {
+      subscribe(next: (event: BrewvaPromptSessionEvent) => void) {
         listener = next;
         return () => {
           listener = undefined;
@@ -48,7 +48,7 @@ describe("output budget recovery chain", () => {
               type: "text_delta",
               delta: "draft answer that will be superseded",
             },
-          } as AgentSessionEvent);
+          } as BrewvaPromptSessionEvent);
           throw new Error("max output tokens exceeded");
         }
 
@@ -80,7 +80,7 @@ describe("output budget recovery chain", () => {
               type: "text_delta",
               delta: "second draft still too long",
             },
-          } as AgentSessionEvent);
+          } as BrewvaPromptSessionEvent);
           throw new Error("max output tokens exceeded");
         }
 
@@ -94,7 +94,7 @@ describe("output budget recovery chain", () => {
             role: "assistant",
             content: [{ type: "text", text: "final concise answer" }],
           },
-        } as AgentSessionEvent);
+        } as BrewvaPromptSessionEvent);
       },
       agent: {
         async waitForIdle(): Promise<void> {

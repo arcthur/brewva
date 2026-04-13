@@ -338,6 +338,9 @@ function severityRank(severity: "info" | "warn" | "error"): number {
     case "error":
       return 2;
   }
+
+  const exhaustive: never = severity;
+  return exhaustive;
 }
 
 function frictionCodeSummary(code: string, sessionCount: number): string {

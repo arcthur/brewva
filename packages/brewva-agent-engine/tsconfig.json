@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "references": [{ "path": "../brewva-substrate" }, { "path": "../brewva-provider-core" }],
+  "include": ["src/**/*.ts"]
+}

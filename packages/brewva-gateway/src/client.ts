@@ -108,7 +108,7 @@ export class GatewayClient {
     const host = normalizeGatewayHost(options.host);
     assertLoopbackHost(host);
 
-    const port = Number(options.port);
+    const port = options.port;
     if (!Number.isInteger(port) || port <= 0 || port > 65535) {
       throw new Error(`invalid gateway port: ${options.port}`);
     }

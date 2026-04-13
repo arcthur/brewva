@@ -109,13 +109,11 @@ describe("reasoning revert recovery controller", () => {
           messages: rebuiltMessages,
         }),
       },
-      agent: {
-        async waitForIdle(): Promise<void> {
-          return;
-        },
-        replaceMessages(messages: unknown): void {
-          replacedMessages.push(messages);
-        },
+      async waitForIdle(): Promise<void> {
+        return;
+      },
+      replaceMessages(messages: unknown): void {
+        replacedMessages.push(messages);
       },
     } as any;
 
@@ -203,13 +201,11 @@ describe("reasoning revert recovery controller", () => {
           },
           buildSessionContext: () => ({ messages: [] }),
         },
-        agent: {
-          async waitForIdle(): Promise<void> {
-            return;
-          },
-          replaceMessages(): void {
-            throw new Error("should not rebuild messages once revert is already completed");
-          },
+        async waitForIdle(): Promise<void> {
+          return;
+        },
+        replaceMessages(): void {
+          throw new Error("should not rebuild messages once revert is already completed");
         },
       } as any,
       {

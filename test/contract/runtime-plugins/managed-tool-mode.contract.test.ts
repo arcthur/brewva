@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createHostedTurnPipeline } from "@brewva/brewva-gateway/runtime-plugins";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
-import type { ToolInfo } from "@mariozechner/pi-coding-agent";
+import type { BrewvaToolDefinition } from "@brewva/brewva-substrate";
+import { Type } from "@sinclair/typebox";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createMockRuntimePluginApi, invokeHandlerAsync } from "../../helpers/runtime-plugin.js";
 import { createRuntimeFixture } from "./fixtures/runtime.js";
@@ -73,15 +73,11 @@ describe("managed tool registration modes", () => {
   test("registerTools=false does not late-register managed Brewva tools", async () => {
     const runtime = createRuntimeFixture();
     const api = createMockRuntimePluginApi();
-    const emptyParameters = {
-      type: "object",
-      properties: {},
-    } as unknown as ToolInfo["parameters"];
-    const foreignTool: ToolDefinition = {
+    const foreignTool: BrewvaToolDefinition = {
       name: "foreign_tool",
       label: "Foreign Tool",
       description: "Foreign tool",
-      parameters: emptyParameters,
+      parameters: Type.Object({}),
       async execute() {
         return { content: [{ type: "text", text: "foreign" }], details: {} };
       },

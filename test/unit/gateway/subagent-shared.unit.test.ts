@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
+import type { BrewvaModelCatalog } from "@brewva/brewva-substrate";
 import { loadHostedDelegationCatalog } from "../../../packages/brewva-gateway/src/subagents/catalog.js";
 import {
   assertDelegationShapeNarrowing,
@@ -33,7 +33,7 @@ function buildAvailableModel(input: {
   provider: string;
   id: string;
   name: string;
-}): ReturnType<ModelRegistry["getAll"]>[number] {
+}): ReturnType<BrewvaModelCatalog["getAll"]>[number] {
   return {
     provider: input.provider,
     id: input.id,

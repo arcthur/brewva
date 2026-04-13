@@ -210,6 +210,9 @@ export function validateOutputContract(
       return `${label} must be a non-empty object or array`;
     }
   }
+
+  const exhaustive: never = contract;
+  return exhaustive;
 }
 
 export function readStringArray(value: unknown): string[] | null {

@@ -32,9 +32,12 @@ export interface SkillExecutionResult {
   telemetry?: EvalTelemetry;
 }
 
-function loadYamlFile<T>(filePath: string): T {
+function loadYamlFile<T>(
+  filePath: string,
+  coerce: (value: unknown) => T = (value) => value as T,
+): T {
   const raw = readFileSync(filePath, "utf8");
-  return parse(raw) as T;
+  return coerce(parse(raw));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

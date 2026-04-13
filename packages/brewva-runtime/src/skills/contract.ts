@@ -326,7 +326,7 @@ function parseOutputContract(
       };
     }
     default:
-      failSkillContract(filePath, `${fieldPath}.kind must be one of: text | enum | json.`);
+      return failSkillContract(filePath, `${fieldPath}.kind must be one of: text | enum | json.`);
   }
 }
 
@@ -787,7 +787,10 @@ function normalizeExecutionHints(
     if (hints.cost_hint === "low" || hints.cost_hint === "medium" || hints.cost_hint === "high") {
       return hints.cost_hint;
     }
-    failSkillContract(filePath, "execution_hints.cost_hint must be one of: low | medium | high.");
+    return failSkillContract(
+      filePath,
+      "execution_hints.cost_hint must be one of: low | medium | high.",
+    );
   })();
 
   return {

@@ -6,7 +6,7 @@ import {
   type WorkflowArtifact,
   type WorkflowLaneStatus,
 } from "@brewva/brewva-runtime";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { textResult, withVerdict } from "./utils/result.js";

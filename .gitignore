@@ -7,6 +7,7 @@ dist
 .pi
 .config/brewva
 .orchestrator
+.factory
 distribution/brewva-*/bin/brewva
 distribution/brewva-*/bin/brewva.exe
 distribution/brewva-*/bin/package.json

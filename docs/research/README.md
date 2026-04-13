@@ -120,6 +120,7 @@ None currently.
 
 - `docs/research/promoted/rfc-architecture-doc-precision-review.md`
 - `docs/research/promoted/rfc-authority-surface-narrowing-and-runtime-facade-compression.md`
+- `docs/research/promoted/rfc-brewva-c2-full-internalization-and-kernel-substrate-boundaries.md`
 - `docs/research/promoted/rfc-boundary-first-subtraction-and-model-native-recovery.md`
 - `docs/research/promoted/rfc-boundary-policy-credential-vault-and-loop-guard.md`
 - `docs/research/promoted/rfc-capability-compression-and-output-distillation.md`

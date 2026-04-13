@@ -1,0 +1,26 @@
+{
+  "name": "@brewva/brewva-agent-engine",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@brewva/brewva-provider-core": "workspace:*",
+    "@brewva/brewva-substrate": "workspace:*",
+    "@sinclair/typebox": "^0.34.49",
+    "ajv": "^8.18.0",
+    "ajv-formats": "^3.0.1"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  }
+}

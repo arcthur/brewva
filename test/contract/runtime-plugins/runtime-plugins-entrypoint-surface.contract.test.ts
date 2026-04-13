@@ -9,6 +9,7 @@ describe("runtime plugins entrypoint surface", () => {
     ]);
 
     expect(typeof host.createHostedSession).toBe("function");
+    expect("adaptRuntimePluginFactories" in host).toBe(false);
     expect(typeof runtimePlugins.createHostedTurnPipeline).toBe("function");
     expect("createHostedSession" in gateway).toBe(false);
     expect("createHostedTurnPipeline" in gateway).toBe(false);

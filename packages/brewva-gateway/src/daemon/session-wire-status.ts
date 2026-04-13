@@ -1,4 +1,5 @@
 import type { SessionWireFrame, SessionWireStatusState } from "@brewva/brewva-runtime";
+import { deriveSessionPhaseFromRuntimeFactHistory } from "../session/session-phase-runtime-facts.js";
 
 export interface SessionStatusSeed {
   state: SessionWireStatusState;
@@ -21,6 +22,28 @@ export function deriveSessionStatusSeedFromHistory(
   frames: readonly SessionWireFrame[],
   fallbackState: SessionWireStatusState,
 ): SessionStatusSeed {
+  const runtimeFactPhase = deriveSessionPhaseFromRuntimeFactHistory(sessionId, frames);
+  if (runtimeFactPhase.phase.kind === "waiting_approval") {
+    return {
+      state: "waiting_approval",
+      reason: runtimeFactPhase.reason,
+      detail: runtimeFactPhase.detail,
+    };
+  }
+  if (runtimeFactPhase.phase.kind === "recovering") {
+    return {
+      state: "restarting",
+      reason: runtimeFactPhase.reason,
+      detail: runtimeFactPhase.detail,
+    };
+  }
+  if (runtimeFactPhase.phase.kind === "terminated") {
+    return {
+      state: "closed",
+      reason: runtimeFactPhase.reason,
+    };
+  }
+
   for (let index = frames.length - 1; index >= 0; index -= 1) {
     const frame = frames[index];
     if (!frame || frame.sessionId !== sessionId) {
@@ -32,31 +55,6 @@ export function deriveSessionStatusSeedFromHistory(
           state: "closed",
           reason: frame.reason,
         };
-      case "approval.requested":
-        return {
-          state: "waiting_approval",
-          reason: "approval_requested",
-          detail: frame.subject,
-        };
-      case "turn.transition":
-        if (frame.status !== "entered") {
-          continue;
-        }
-        if (frame.family === "approval") {
-          return {
-            state: "waiting_approval",
-            reason: frame.reason,
-            detail: frame.error,
-          };
-        }
-        if (frame.family === "recovery" || frame.family === "output_budget") {
-          return {
-            state: "restarting",
-            reason: frame.reason,
-            detail: frame.error,
-          };
-        }
-        continue;
       case "turn.committed":
         return {
           state: frame.status === "failed" ? "error" : fallbackState,
@@ -79,6 +77,28 @@ export function deriveSessionStatusSeedFromHistory(
 export function deriveSessionStatusSeedFromFrame(
   frame: SessionWireFrame,
 ): SessionStatusSeed | null {
+  const runtimeFactPhase = deriveSessionPhaseFromRuntimeFactHistory(frame.sessionId, [frame]);
+  if (runtimeFactPhase.phase.kind === "waiting_approval") {
+    return {
+      state: "waiting_approval",
+      reason: runtimeFactPhase.reason,
+      detail: runtimeFactPhase.detail,
+    };
+  }
+  if (runtimeFactPhase.phase.kind === "recovering") {
+    return {
+      state: "restarting",
+      reason: runtimeFactPhase.reason,
+      detail: runtimeFactPhase.detail,
+    };
+  }
+  if (runtimeFactPhase.phase.kind === "terminated") {
+    return {
+      state: "closed",
+      reason: runtimeFactPhase.reason,
+    };
+  }
+
   switch (frame.type) {
     case "turn.input":
     case "attempt.started":

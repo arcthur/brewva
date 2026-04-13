@@ -99,13 +99,16 @@ function writeJsonFile(filePath: string, value: unknown): void {
   }
 }
 
-function readJsonFile<T>(filePath: string): T | undefined {
+function readJsonFile<T>(
+  filePath: string,
+  coerce: (value: unknown) => T = (value) => value as T,
+): T | undefined {
   const resolvedPath = resolve(filePath);
   if (!existsSync(resolvedPath)) {
     return undefined;
   }
   try {
-    return JSON.parse(readFileSync(resolvedPath, "utf8")) as T;
+    return coerce(JSON.parse(readFileSync(resolvedPath, "utf8")));
   } catch {
     return undefined;
   }

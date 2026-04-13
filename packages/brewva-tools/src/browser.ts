@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import { recordToolRuntimeEvent } from "./runtime-internal.js";
 import type { BrewvaBundledToolOptions } from "./types.js";

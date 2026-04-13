@@ -1,34 +1,23 @@
 import type {
-  AgentEndEvent,
-  BeforeAgentStartEvent,
-  ExtensionAPI,
-  ExtensionContext,
-  InputEvent,
-  InputEventResult,
-  SessionCompactEvent,
-  SessionShutdownEvent,
-  SessionStartEvent,
-  ToolResultEvent,
-  TurnStartEvent,
-} from "@mariozechner/pi-coding-agent";
+  BrewvaHostAgentEndEvent as AgentEndEvent,
+  BrewvaHostBeforeAgentStartEvent as BeforeAgentStartEvent,
+  BrewvaHostBeforeAgentStartResult,
+  BrewvaHostContext as ExtensionContext,
+  BrewvaHostInputEvent as InputEvent,
+  BrewvaHostInputEventResult as InputEventResult,
+  BrewvaHostPluginApi as ExtensionAPI,
+  BrewvaHostSessionCompactEvent as SessionCompactEvent,
+  BrewvaHostSessionShutdownEvent as SessionShutdownEvent,
+  BrewvaHostSessionStartEvent as SessionStartEvent,
+  BrewvaHostToolResultEvent as ToolResultEvent,
+  BrewvaHostToolResultResult,
+  BrewvaHostTurnStartEvent as TurnStartEvent,
+} from "@brewva/brewva-substrate";
 
 type MaybePromise<T> = T | Promise<T>;
 
-interface BeforeAgentStartLifecycleResult {
-  message?: {
-    customType: string;
-    content: string;
-    display?: boolean;
-    details?: unknown;
-  };
-  systemPrompt?: string;
-}
-
-interface ToolResultLifecycleResult {
-  content?: ToolResultEvent["content"];
-  details?: unknown;
-  isError?: boolean;
-}
+type BeforeAgentStartLifecycleResult = BrewvaHostBeforeAgentStartResult;
+type ToolResultLifecycleResult = BrewvaHostToolResultResult;
 
 type BeforeAgentStartRegistrar = (
   event: "before_agent_start",

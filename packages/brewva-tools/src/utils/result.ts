@@ -1,9 +1,9 @@
-import type { AgentToolResult } from "@mariozechner/pi-coding-agent";
+import type { BrewvaToolResult as AgentToolResult } from "@brewva/brewva-substrate";
 
 export type ToolResultVerdict = "pass" | "fail" | "inconclusive";
 
-export function toolDetails<T extends object>(details: T): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(details));
+export function toolDetails(details: object): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(details as Record<string, unknown>));
 }
 
 export function textResult(

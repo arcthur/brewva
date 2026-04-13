@@ -137,8 +137,8 @@ function compareCategory(left: ContextBlockCategory, right: ContextBlockCategory
   return order[left] - order[right];
 }
 
-function buildMetrics<T extends Pick<ComposedContextBlock, "category" | "estimatedTokens">>(
-  blocks: T[],
+function buildMetrics(
+  blocks: Array<Pick<ComposedContextBlock, "category" | "estimatedTokens">>,
 ): ContextComposerMetrics {
   let narrativeTokens = 0;
   let constraintTokens = 0;

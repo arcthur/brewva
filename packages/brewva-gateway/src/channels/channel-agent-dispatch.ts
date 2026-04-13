@@ -1,7 +1,7 @@
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { TurnEnvelope, TurnPart } from "@brewva/brewva-runtime/channels";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
+import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
 import {
   resolveToolDisplayStatus,
   resolveToolDisplayText,
@@ -60,7 +60,7 @@ function extractMessageText(message: unknown): string {
   return parts.join("");
 }
 
-function asToolExecutionEndEvent(event: AgentSessionEvent): {
+function asToolExecutionEndEvent(event: BrewvaPromptSessionEvent): {
   toolCallId: string;
   toolName: string;
   isError: boolean;
@@ -240,7 +240,7 @@ export async function collectPromptTurnOutputs(
   const toolOutputs: ChannelToolTurnOutput[] = [];
   const seenToolCallIds = new Set<string>();
 
-  const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
+  const unsubscribe = session.subscribe((event: BrewvaPromptSessionEvent) => {
     const toolEvent = asToolExecutionEndEvent(event);
     if (toolEvent) {
       if (seenToolCallIds.has(toolEvent.toolCallId)) {

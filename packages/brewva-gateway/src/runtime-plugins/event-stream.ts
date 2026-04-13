@@ -11,8 +11,9 @@ import {
   type BrewvaHostedRuntimePort,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import type { BrewvaHostPluginApi, BrewvaToolDefinition } from "@brewva/brewva-substrate";
 import { resolveBrewvaToolExecutionTraits } from "@brewva/brewva-tools";
-import type { ExtensionAPI, ToolDefinition } from "@mariozechner/pi-coding-agent";
+import { buildTranscriptMessagePayload } from "../session/runtime-session-transcript.js";
 import { ToolAttemptBindingRegistry } from "../session/tool-attempt-binding.js";
 import { getHostedTurnTransitionCoordinator } from "../session/turn-transition.js";
 import { ensureSessionShutdownRecorded } from "../utils/runtime.js";
@@ -27,76 +28,6 @@ type MessageHealth = {
   drunk: boolean;
   flags: string[];
 };
-
-function summarizeContent(content: unknown): { items: number; textChars: number } {
-  if (!Array.isArray(content)) {
-    return { items: 0, textChars: 0 };
-  }
-
-  let textChars = 0;
-  for (const item of content) {
-    if (!item || typeof item !== "object") continue;
-    const text = (item as { text?: unknown }).text;
-    if (typeof text === "string") {
-      textChars += text.length;
-    }
-  }
-  return { items: content.length, textChars };
-}
-
-function summarizeMessage(message: unknown): Record<string, unknown> {
-  if (!message || typeof message !== "object") {
-    return {};
-  }
-
-  const value = message as {
-    role?: string;
-    timestamp?: number;
-    content?: unknown;
-    stopReason?: string;
-    model?: string;
-    provider?: string;
-    usage?: {
-      input?: number;
-      output?: number;
-      cacheRead?: number;
-      cacheWrite?: number;
-      totalTokens?: number;
-      cost?: {
-        total?: number;
-      };
-    };
-  };
-
-  const content = summarizeContent(value.content);
-  const usage =
-    value.usage && typeof value.usage === "object" && !Array.isArray(value.usage)
-      ? value.usage
-      : null;
-  return {
-    role: value.role ?? null,
-    timestamp: typeof value.timestamp === "number" ? value.timestamp : null,
-    stopReason: value.stopReason ?? null,
-    provider: value.provider ?? null,
-    model: value.model ?? null,
-    usage: usage
-      ? {
-          input: usage.input ?? 0,
-          output: usage.output ?? 0,
-          cacheRead: usage.cacheRead ?? 0,
-          cacheWrite: usage.cacheWrite ?? 0,
-          totalTokens: usage.totalTokens ?? 0,
-          costTotal: usage.cost?.total ?? 0,
-          cacheReadReported:
-            typeof usage.cacheRead === "number" && Number.isFinite(usage.cacheRead),
-          cacheWriteReported:
-            typeof usage.cacheWrite === "number" && Number.isFinite(usage.cacheWrite),
-        }
-      : null,
-    contentItems: content.items,
-    contentTextChars: content.textChars,
-  };
-}
 
 function resolveLeafEntryId(ctx: {
   sessionManager?: { getLeafId?: () => unknown };
@@ -279,11 +210,11 @@ type ToolExecutionTerminalReason =
   | "cancelled_by_shutdown";
 
 export interface EventStreamOptions {
-  toolDefinitionsByName?: ReadonlyMap<string, ToolDefinition>;
+  toolDefinitionsByName?: ReadonlyMap<string, BrewvaToolDefinition>;
 }
 
 function resolveExecutionTraitsPayload(input: {
-  toolDefinitionsByName?: ReadonlyMap<string, ToolDefinition>;
+  toolDefinitionsByName?: ReadonlyMap<string, BrewvaToolDefinition>;
   toolName: string;
   args: unknown;
   cwd?: string | null;
@@ -306,7 +237,7 @@ function resolveExecutionTraitsPayload(input: {
 }
 
 export function registerEventStream(
-  extensionApi: ExtensionAPI,
+  extensionApi: BrewvaHostPluginApi,
   runtime: BrewvaHostedRuntimePort,
   turnClock: RuntimeTurnClockStore = createRuntimeTurnClockStore(),
   options: EventStreamOptions = {},
@@ -626,7 +557,7 @@ export function registerEventStream(
       turn: runtimeTurn,
       payload: {
         localTurn: event.turnIndex,
-        message: summarizeMessage(event.message),
+        message: buildTranscriptMessagePayload(event.message),
         toolResults: event.toolResults.length,
       },
     });
@@ -640,7 +571,7 @@ export function registerEventStream(
     recordRuntimeEvent(runtime, {
       sessionId,
       type: "message_start",
-      payload: summarizeMessage(event.message),
+      payload: buildTranscriptMessagePayload(event.message),
     });
     return undefined;
   });
@@ -682,7 +613,7 @@ export function registerEventStream(
       sessionId,
       type: "message_end",
       payload: {
-        ...summarizeMessage(event.message),
+        ...buildTranscriptMessagePayload(event.message),
         health: computeMessageHealth(healthWindow, healthWindow.length),
       },
     });

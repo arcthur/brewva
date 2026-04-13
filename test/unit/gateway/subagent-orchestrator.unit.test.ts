@@ -10,7 +10,7 @@ import {
 } from "@brewva/brewva-gateway";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
+import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
 
 function createTempWorkspace(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -32,7 +32,7 @@ describe("hosted subagent orchestrator", () => {
         childWorkspaceRoot = input.cwd ?? "";
         const childRuntime = new BrewvaRuntime({ cwd: input.cwd });
         const childSessionId = "child-session";
-        const listeners = new Set<(event: AgentSessionEvent) => void>();
+        const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
 
         return {
           runtime: childRuntime,
@@ -62,12 +62,10 @@ describe("hosted subagent orchestrator", () => {
                     role: "assistant",
                     content: [{ type: "text", text: "Patched src/message.ts in isolation." }],
                   },
-                } as AgentSessionEvent);
+                } as BrewvaPromptSessionEvent);
               }
             },
-            agent: {
-              async waitForIdle() {},
-            },
+            async waitForIdle() {},
             sessionManager: {
               getSessionId() {
                 return childSessionId;
@@ -178,7 +176,7 @@ describe("hosted subagent orchestrator", () => {
         capturedEventsLevel = input.config?.infrastructure.events.level ?? "";
         const childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
         const childSessionId = "child-observe";
-        const listeners = new Set<(event: AgentSessionEvent) => void>();
+        const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
 
         return {
           runtime: childRuntime,
@@ -192,12 +190,10 @@ describe("hosted subagent orchestrator", () => {
                     role: "assistant",
                     content: [{ type: "text", text: "Observation only." }],
                   },
-                } as AgentSessionEvent);
+                } as BrewvaPromptSessionEvent);
               }
             },
-            agent: {
-              async waitForIdle() {},
-            },
+            async waitForIdle() {},
             sessionManager: {
               getSessionId() {
                 return childSessionId;
@@ -258,7 +254,7 @@ describe("hosted subagent orchestrator", () => {
       async createChildSession(input: HostedSubagentSessionOptions) {
         const childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
         const childSessionId = "child-recovery-attempt";
-        const listeners = new Set<(event: AgentSessionEvent) => void>();
+        const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
 
         return {
           runtime: childRuntime,
@@ -272,7 +268,7 @@ describe("hosted subagent orchestrator", () => {
                   toolName: "read",
                   result: "first attempt tool output",
                   isError: false,
-                } as AgentSessionEvent);
+                } as BrewvaPromptSessionEvent);
               }
 
               recordRuntimeEvent(childRuntime, {
@@ -299,19 +295,17 @@ describe("hosted subagent orchestrator", () => {
                   toolName: "read",
                   result: "second attempt tool output",
                   isError: false,
-                } as AgentSessionEvent);
+                } as BrewvaPromptSessionEvent);
                 listener({
                   type: "message_end",
                   message: {
                     role: "assistant",
                     content: [{ type: "text", text: "Recovered child answer." }],
                   },
-                } as AgentSessionEvent);
+                } as BrewvaPromptSessionEvent);
               }
             },
-            agent: {
-              async waitForIdle() {},
-            },
+            async waitForIdle() {},
             sessionManager: {
               getSessionId() {
                 return childSessionId;
@@ -376,7 +370,7 @@ describe("hosted subagent orchestrator", () => {
       async createChildSession(input: HostedSubagentSessionOptions) {
         const childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
         const childSessionId = "child-structured-success";
-        const listeners = new Set<(event: AgentSessionEvent) => void>();
+        const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
 
         return {
           runtime: childRuntime,
@@ -463,12 +457,10 @@ describe("hosted subagent orchestrator", () => {
                       },
                     ],
                   },
-                } as AgentSessionEvent);
+                } as BrewvaPromptSessionEvent);
               }
             },
-            agent: {
-              async waitForIdle() {},
-            },
+            async waitForIdle() {},
             sessionManager: {
               getSessionId() {
                 return childSessionId;
@@ -559,7 +551,7 @@ describe("hosted subagent orchestrator", () => {
       async createChildSession(input: HostedSubagentSessionOptions) {
         const childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
         const childSessionId = "child-review-structured";
-        const listeners = new Set<(event: AgentSessionEvent) => void>();
+        const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
 
         return {
           runtime: childRuntime,
@@ -597,12 +589,10 @@ describe("hosted subagent orchestrator", () => {
                       },
                     ],
                   },
-                } as AgentSessionEvent);
+                } as BrewvaPromptSessionEvent);
               }
             },
-            agent: {
-              async waitForIdle() {},
-            },
+            async waitForIdle() {},
             sessionManager: {
               getSessionId() {
                 return childSessionId;
@@ -699,7 +689,7 @@ describe("hosted subagent orchestrator", () => {
       async createChildSession(input: HostedSubagentSessionOptions) {
         const childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
         const childSessionId = "child-structured-fallback";
-        const listeners = new Set<(event: AgentSessionEvent) => void>();
+        const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
 
         return {
           runtime: childRuntime,
@@ -718,12 +708,10 @@ describe("hosted subagent orchestrator", () => {
                       },
                     ],
                   },
-                } as AgentSessionEvent);
+                } as BrewvaPromptSessionEvent);
               }
             },
-            agent: {
-              async waitForIdle() {},
-            },
+            async waitForIdle() {},
             sessionManager: {
               getSessionId() {
                 return childSessionId;
@@ -782,7 +770,7 @@ describe("hosted subagent orchestrator", () => {
       async createChildSession(input: HostedSubagentSessionOptions) {
         const childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
         const childSessionId = "child-background";
-        const listeners = new Set<(event: AgentSessionEvent) => void>();
+        const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
 
         return {
           runtime: childRuntime,
@@ -796,9 +784,7 @@ describe("hosted subagent orchestrator", () => {
                 rejectPendingPrompt = (error) => reject(error);
               });
             },
-            agent: {
-              async waitForIdle() {},
-            },
+            async waitForIdle() {},
             sessionManager: {
               getSessionId() {
                 return childSessionId;
@@ -924,7 +910,7 @@ describe("hosted subagent orchestrator", () => {
       async createChildSession(input: HostedSubagentSessionOptions) {
         const childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
         const childSessionId = "child-delivery";
-        const listeners = new Set<(event: AgentSessionEvent) => void>();
+        const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
 
         return {
           runtime: childRuntime,
@@ -949,12 +935,10 @@ describe("hosted subagent orchestrator", () => {
                     role: "assistant",
                     content: [{ type: "text", text: "Background delegated run completed." }],
                   },
-                } as AgentSessionEvent);
+                } as BrewvaPromptSessionEvent);
               }
             },
-            agent: {
-              async waitForIdle() {},
-            },
+            async waitForIdle() {},
             sessionManager: {
               getSessionId() {
                 return childSessionId;

@@ -2,6 +2,9 @@
   "files": [],
   "references": [
     { "path": "./packages/brewva-runtime" },
+    { "path": "./packages/brewva-substrate" },
+    { "path": "./packages/brewva-provider-core" },
+    { "path": "./packages/brewva-agent-engine" },
     { "path": "./packages/brewva-deliberation" },
     { "path": "./packages/brewva-recall" },
     { "path": "./packages/brewva-skill-broker" },

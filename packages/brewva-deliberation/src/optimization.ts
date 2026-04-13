@@ -818,6 +818,9 @@ function scoreStatus(status: OptimizationLineageStatus): number {
     case "converged":
       return 0.45;
   }
+
+  const exhaustive: never = status;
+  return exhaustive;
 }
 
 function buildOptimizationLineages(

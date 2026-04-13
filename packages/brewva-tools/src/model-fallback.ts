@@ -1,4 +1,4 @@
-import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
+import type { BrewvaModelCatalog as ModelRegistry } from "@brewva/brewva-substrate";
 
 type RegisteredModel = ReturnType<ModelRegistry["getAll"]>[number];
 

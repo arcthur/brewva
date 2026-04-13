@@ -9,7 +9,7 @@ import {
   type BrewvaHostedRuntimePort,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { BrewvaHostPluginApi } from "@brewva/brewva-substrate";
 import { LRUCache } from "lru-cache";
 import { persistToolOutputArtifact } from "./tool-output-artifact-store.js";
 import { distillToolOutput, estimateTokens } from "./tool-output-distiller.js";
@@ -449,7 +449,7 @@ function recordToolOutcome(
 }
 
 export function registerLedgerWriter(
-  extensionApi: ExtensionAPI,
+  extensionApi: BrewvaHostPluginApi,
   runtime: BrewvaHostedRuntimePort,
 ): void {
   const lifecycleStatesBySession = new Map<string, Map<string, ToolLifecycleState>>();

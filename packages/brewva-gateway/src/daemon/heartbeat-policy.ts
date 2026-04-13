@@ -24,7 +24,7 @@ function normalizeRule(
 ): HeartbeatRule | undefined {
   const id = (input.id ?? fallbackId).trim();
   const prompt = (input.prompt ?? "").trim();
-  const intervalMinutes = Number(input.intervalMinutes ?? 0);
+  const intervalMinutes = input.intervalMinutes ?? 0;
   if (!id || !prompt || !Number.isFinite(intervalMinutes) || intervalMinutes <= 0) {
     return undefined;
   }

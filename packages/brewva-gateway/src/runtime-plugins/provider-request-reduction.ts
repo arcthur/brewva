@@ -1,13 +1,11 @@
 import { type BrewvaHostedRuntimePort, type ContextBudgetUsage } from "@brewva/brewva-runtime";
-import { getModels, getProviders } from "@mariozechner/pi-ai";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { BrewvaHostPluginApi } from "@brewva/brewva-substrate";
 import { recordTransientReductionEvidence } from "./context-evidence.js";
 import { estimateTokens } from "./tool-output-distiller.js";
 
 const CLEARED_TOOL_RESULT_PLACEHOLDER = "[cleared_for_request]";
 const RECENT_TOOL_RESULT_RETAIN_COUNT = 4;
 const MIN_CLEARABLE_TOOL_RESULT_CHARS = 512;
-const THINKING_LEVEL_SUFFIXES = new Set(["off", "minimal", "low", "medium", "high", "xhigh"]);
 const NON_TEXTUAL_PAYLOAD_TYPES = new Set([
   "image",
   "image_url",
@@ -64,12 +62,6 @@ const LOW_SIGNAL_STRING_KEYS = new Set([
   "format",
   "role",
 ]);
-let cachedProviderModels: Array<{
-  provider: string;
-  id: string;
-  contextWindow: number;
-}> | null = null;
-
 interface ReductionCandidate {
   charLength: number;
   clear: () => void;
@@ -101,10 +93,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     return null;
   }
   return value as Record<string, unknown>;
-}
-
-function readPositiveNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
 
 function resolveUsageRatio(usage: ContextBudgetUsage | undefined): number | null {
@@ -209,86 +197,11 @@ function estimatePayloadTextTokens(value: unknown, context: PayloadStringContext
   return total;
 }
 
-function getProviderModels(): Array<{
-  provider: string;
-  id: string;
-  contextWindow: number;
-}> {
-  if (cachedProviderModels) {
-    return cachedProviderModels;
-  }
-  const resolved: Array<{
-    provider: string;
-    id: string;
-    contextWindow: number;
-  }> = [];
-  for (const provider of getProviders()) {
-    for (const model of getModels(provider)) {
-      const contextWindow = readPositiveNumber(model.contextWindow);
-      if (!contextWindow) {
-        continue;
-      }
-      resolved.push({
-        provider,
-        id: model.id,
-        contextWindow,
-      });
-    }
-  }
-  cachedProviderModels = resolved;
-  return resolved;
-}
-
-function stripThinkingLevelSuffix(modelText: string): string {
-  const trimmed = modelText.trim();
-  const lastColonIndex = trimmed.lastIndexOf(":");
-  if (lastColonIndex === -1) {
-    return trimmed;
-  }
-  const suffix = trimmed
-    .slice(lastColonIndex + 1)
-    .trim()
-    .toLowerCase();
-  return THINKING_LEVEL_SUFFIXES.has(suffix) ? trimmed.slice(0, lastColonIndex) : trimmed;
-}
-
-function resolvePayloadModelContextWindow(payload: unknown): number | null {
-  const record = asRecord(payload);
-  const rawModel = typeof record?.model === "string" ? record.model.trim() : "";
-  if (!rawModel) {
-    return null;
-  }
-
-  const normalized = stripThinkingLevelSuffix(rawModel);
-  if (!normalized) {
-    return null;
-  }
-
-  const providerModels = getProviderModels();
-  const slashIndex = normalized.indexOf("/");
-  const matches =
-    slashIndex > 0
-      ? providerModels.filter(
-          (model) =>
-            model.provider === normalized.slice(0, slashIndex) &&
-            model.id === normalized.slice(slashIndex + 1),
-        )
-      : providerModels.filter((model) => model.id === normalized);
-  if (matches.length === 0) {
-    return null;
-  }
-
-  return matches.reduce((maxContextWindow, model) => {
-    return Math.max(maxContextWindow, model.contextWindow);
-  }, 0);
-}
-
 function buildEstimatedPayloadUsage(
   payload: unknown,
   runtimeUsage: ContextBudgetUsage | undefined,
 ): ContextBudgetUsage | undefined {
-  const contextWindow =
-    resolveUsageContextWindow(runtimeUsage) ?? resolvePayloadModelContextWindow(payload);
+  const contextWindow = resolveUsageContextWindow(runtimeUsage);
   if (!contextWindow) {
     return undefined;
   }
@@ -654,7 +567,7 @@ export function applyTransientOutboundReductionToPayload(payload: unknown): Redu
 }
 
 export function registerProviderRequestReduction(
-  extensionApi: ExtensionAPI,
+  extensionApi: BrewvaHostPluginApi,
   runtime: BrewvaHostedRuntimePort,
 ): void {
   extensionApi.on("before_provider_request", (event, ctx) => {
@@ -712,6 +625,5 @@ export const PROVIDER_REQUEST_REDUCTION_TEST_ONLY = {
   buildEstimatedPayloadUsage,
   estimatePayloadTextTokens,
   resolveTransientOutboundReductionEligibility,
-  resolvePayloadModelContextWindow,
   shouldSkipForRecovery,
 };

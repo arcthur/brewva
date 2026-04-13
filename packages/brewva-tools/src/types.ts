@@ -15,7 +15,7 @@ import type {
   ToolGovernanceDescriptor,
   ToolExecutionBoundary,
 } from "@brewva/brewva-runtime";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import type { TSchema } from "@sinclair/typebox";
 import type { BrewvaSemanticReranker } from "./semantic-reranker.js";
 
@@ -73,6 +73,14 @@ export interface BrewvaToolInternalRuntime {
     finalTokens?: number;
     droppedReason?: "hard_limit" | "budget_exhausted";
   };
+}
+
+export interface BrewvaToolMetadataCarrier {
+  name: string;
+  parameters?: TSchema;
+  brewva?: BrewvaToolMetadata;
+  brewvaExecutionTraits?: BrewvaToolExecutionTraitsDefinition;
+  brewvaAgentParameters?: TSchema;
 }
 
 export type BrewvaManagedToolDefinition = ToolDefinition & {

@@ -6,7 +6,7 @@ import {
   type BrewvaHostedRuntimePort,
   type SkillDocument,
 } from "@brewva/brewva-runtime";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { BrewvaHostPluginApi } from "@brewva/brewva-substrate";
 
 const MAX_NUDGES_PER_PROMPT = 2;
 
@@ -81,7 +81,7 @@ function formatGuardMessage(
 }
 
 export function registerCompletionGuard(
-  extensionApi: ExtensionAPI,
+  extensionApi: BrewvaHostPluginApi,
   runtime: BrewvaHostedRuntimePort,
 ): void {
   const hooks = extensionApi as unknown as {
@@ -98,7 +98,7 @@ export interface CompletionGuardLifecycle {
 }
 
 export function createCompletionGuardLifecycle(
-  extensionApi: ExtensionAPI,
+  extensionApi: BrewvaHostPluginApi,
   runtime: BrewvaHostedRuntimePort,
 ): CompletionGuardLifecycle {
   const nudgeCounts = new Map<string, number>();

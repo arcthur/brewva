@@ -1,22 +1,31 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createInMemoryModelCatalog } from "@brewva/brewva-substrate";
 import { resolveBrewvaModelSelection } from "@brewva/brewva-tools";
-import { AuthStorage, ModelRegistry } from "@mariozechner/pi-coding-agent";
 
-function createRegistry(): ModelRegistry {
-  const tempDir = mkdtempSync(join(tmpdir(), "brewva-model-selection-"));
-  const registry = ModelRegistry.inMemory(AuthStorage.create(join(tempDir, "auth.json")));
+function createRegistry() {
+  const registry = createInMemoryModelCatalog({
+    models: [],
+    auth: {
+      async getApiKey() {
+        return undefined;
+      },
+      hasAuth() {
+        return true;
+      },
+      isUsingOAuth() {
+        return false;
+      },
+    },
+  });
 
   registry.registerProvider("demo", {
     baseUrl: "https://demo.example.com/v1",
     apiKey: "DEMO_API_KEY",
-    api: "openai-completions",
     models: [
       {
         id: "alpha",
         name: "Alpha",
+        api: "openai-completions",
         reasoning: true,
         input: ["text"],
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -26,6 +35,7 @@ function createRegistry(): ModelRegistry {
       {
         id: "alpha-20260101",
         name: "Alpha Snapshot",
+        api: "openai-completions",
         reasoning: true,
         input: ["text"],
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -35,6 +45,7 @@ function createRegistry(): ModelRegistry {
       {
         id: "alpha:exacto",
         name: "Alpha Exacto",
+        api: "openai-completions",
         reasoning: true,
         input: ["text"],
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -44,6 +55,7 @@ function createRegistry(): ModelRegistry {
       {
         id: "beta-mini",
         name: "Beta Mini",
+        api: "openai-completions",
         reasoning: true,
         input: ["text"],
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -53,6 +65,7 @@ function createRegistry(): ModelRegistry {
       {
         id: "alpha-mini",
         name: "Alpha Mini",
+        api: "openai-completions",
         reasoning: true,
         input: ["text"],
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -65,11 +78,11 @@ function createRegistry(): ModelRegistry {
   registry.registerProvider("proxy", {
     baseUrl: "https://proxy.example.com/v1",
     apiKey: "PROXY_API_KEY",
-    api: "openai-completions",
     models: [
       {
         id: "demo/alt",
         name: "Proxy Alt",
+        api: "openai-completions",
         reasoning: true,
         input: ["text"],
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },

@@ -2,11 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 
-function runJsonScript<T>(input: {
-  scriptPath: string;
-  payload: Record<string, unknown>;
-  cwd: string;
-}): { status: number | null; stdout: T; stderr: string } {
+function runJsonScript<T>(
+  input: {
+    scriptPath: string;
+    payload: Record<string, unknown>;
+    cwd: string;
+  },
+  coerce: (value: unknown) => T = (value) => value as T,
+): { status: number | null; stdout: T; stderr: string } {
   const result = spawnSync("python3", [input.scriptPath], {
     cwd: input.cwd,
     env: process.env,
@@ -16,7 +19,7 @@ function runJsonScript<T>(input: {
 
   return {
     status: result.status,
-    stdout: JSON.parse(result.stdout) as T,
+    stdout: coerce(JSON.parse(result.stdout)),
     stderr: result.stderr,
   };
 }

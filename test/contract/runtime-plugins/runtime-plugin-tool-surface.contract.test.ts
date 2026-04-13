@@ -10,25 +10,20 @@ import type {
   ToolGovernanceDescriptor,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
-import type { ToolInfo } from "@mariozechner/pi-coding-agent";
+import type { BrewvaToolDefinition } from "@brewva/brewva-substrate";
+import { Type } from "@sinclair/typebox";
 import { createMockRuntimePluginApi, invokeHandlerAsync } from "../../helpers/runtime-plugin.js";
 import {
   createRuntimeConfig,
   createRuntimeFixture as createBaseRuntimeFixture,
 } from "../../helpers/runtime.js";
 
-const EMPTY_PARAMETERS = {
-  type: "object",
-  properties: {},
-} as unknown as ToolInfo["parameters"];
-
-function createToolDefinition(name: string): ToolDefinition {
+function createToolDefinition(name: string): BrewvaToolDefinition {
   return {
     name,
     label: name,
     description: `${name} description`,
-    parameters: EMPTY_PARAMETERS,
+    parameters: Type.Object({}),
     async execute() {
       return {
         content: [{ type: "text", text: name }],

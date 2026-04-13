@@ -5,6 +5,7 @@
     "outDir": "dist"
   },
   "references": [
+    { "path": "../brewva-agent-engine" },
     { "path": "../brewva-channels-telegram" },
     { "path": "../brewva-ingress" },
     { "path": "../brewva-runtime" },

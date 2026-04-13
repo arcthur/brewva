@@ -1,8 +1,7 @@
 #!/usr/bin/env bun
 
 import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { $ } from "bun";
 
 interface PlatformTarget {
@@ -18,13 +17,11 @@ interface RuntimePackageJson {
   description?: string;
   license?: string;
   type?: string;
-  piConfig?: {
+  brewvaConfig?: {
     name?: string;
     configDir?: string;
   };
 }
-
-const brewvaCliRequire = createRequire(join(process.cwd(), "packages/brewva-cli/package.json"));
 
 export const PLATFORMS: PlatformTarget[] = [
   {
@@ -73,15 +70,10 @@ export const PLATFORMS: PlatformTarget[] = [
 
 const ENTRY_POINT = "packages/brewva-cli/src/index.ts";
 const WRAPPER_PACKAGE_JSON = "distribution/brewva/package.json";
-
-const PI_CODING_AGENT_PACKAGE_DIR = dirname(
-  brewvaCliRequire.resolve("@mariozechner/pi-coding-agent/package.json"),
-);
-const piCodingAgentRequire = createRequire(join(PI_CODING_AGENT_PACKAGE_DIR, "package.json"));
-const PHOTON_WASM_PATH = join(
-  dirname(piCodingAgentRequire.resolve("@silvia-odwyer/photon-node/package.json")),
-  "photon_rs_bg.wasm",
-);
+const BREWVA_RUNTIME_ASSETS_DIR = join(process.cwd(), "packages", "brewva-cli", "runtime-assets");
+const BREWVA_THEME_ASSETS_DIR = join(BREWVA_RUNTIME_ASSETS_DIR, "theme");
+const BREWVA_EXPORT_HTML_ASSETS_DIR = join(BREWVA_RUNTIME_ASSETS_DIR, "export-html");
+const PHOTON_WASM_PATH = join(BREWVA_RUNTIME_ASSETS_DIR, "photon_rs_bg.wasm");
 const BREWVA_CONFIG_SCHEMA_PATH = join(
   process.cwd(),
   "packages",
@@ -105,7 +97,7 @@ function copyFile(source: string, target: string): void {
 function buildRuntimeReadme(runtimePackage: RuntimePackageJson): string {
   const packageName = runtimePackage.name || "@brewva/brewva";
   const version = runtimePackage.version || "unknown";
-  const configDir = runtimePackage.piConfig?.configDir ?? ".config/brewva";
+  const configDir = runtimePackage.brewvaConfig?.configDir ?? ".config/brewva";
   return `# Brewva Runtime Bundle
 
 This directory contains the packaged runtime assets that ship with \`${packageName}\` ${version}.
@@ -149,9 +141,9 @@ function copyRuntimeAssets(outDir: string): void {
     description: wrapperPackage.description,
     license: wrapperPackage.license,
     type: wrapperPackage.type ?? "module",
-    piConfig: {
-      name: wrapperPackage.piConfig?.name ?? "brewva",
-      configDir: wrapperPackage.piConfig?.configDir ?? ".config/brewva",
+    brewvaConfig: {
+      name: wrapperPackage.brewvaConfig?.name ?? "brewva",
+      configDir: wrapperPackage.brewvaConfig?.configDir ?? ".config/brewva",
     },
   };
 
@@ -160,14 +152,8 @@ function copyRuntimeAssets(outDir: string): void {
   copyFile(PHOTON_WASM_PATH, join(outDir, "photon_rs_bg.wasm"));
   copyFile(BREWVA_CONFIG_SCHEMA_PATH, join(outDir, "brewva.schema.json"));
   copyFile(BREWVA_LICENSE_PATH, join(outDir, "LICENSE"));
-  copyDirectory(
-    join(PI_CODING_AGENT_PACKAGE_DIR, "dist", "modes", "interactive", "theme"),
-    join(outDir, "theme"),
-  );
-  copyDirectory(
-    join(PI_CODING_AGENT_PACKAGE_DIR, "dist", "core", "export-html"),
-    join(outDir, "export-html"),
-  );
+  copyDirectory(BREWVA_THEME_ASSETS_DIR, join(outDir, "theme"));
+  copyDirectory(BREWVA_EXPORT_HTML_ASSETS_DIR, join(outDir, "export-html"));
   copyDirectory(join(process.cwd(), "skills"), join(outDir, "skills"));
   writeFileSync(join(outDir, ".gitkeep"), "");
 }

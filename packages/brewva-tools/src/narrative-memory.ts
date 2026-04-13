@@ -17,7 +17,7 @@ import {
   NARRATIVE_MEMORY_RECORDED_EVENT_TYPE,
   NARRATIVE_MEMORY_REVIEWED_EVENT_TYPE,
 } from "@brewva/brewva-runtime";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import { recordToolRuntimeEvent } from "./runtime-internal.js";
 import { shouldInvokeSemanticRerank } from "./semantic-reranker.js";

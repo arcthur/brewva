@@ -1,6 +1,6 @@
 import type { RuntimePlugin, RuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
 import type { BrewvaOperatorRuntimePort } from "@brewva/brewva-runtime";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { BrewvaHostContext } from "@brewva/brewva-substrate";
 import { clampText, resolveInspectDirectory } from "./inspect-analysis.js";
 import { buildSessionInspectReport, formatInspectText } from "./inspect.js";
 
@@ -8,7 +8,7 @@ const DEFAULT_WIDGET_ID = "brewva-inspect";
 const DEFAULT_MAX_WIDGET_LINES = 28;
 const DEFAULT_MAX_LINE_CHARS = 220;
 
-function clearInspectWidget(ctx: ExtensionContext, widgetId: string): void {
+function clearInspectWidget(ctx: BrewvaHostContext, widgetId: string): void {
   if (!ctx.hasUI) return;
   ctx.ui.setWidget(widgetId, undefined, {
     placement: "belowEditor",
@@ -63,7 +63,7 @@ export function createInspectCommandRuntimePlugin(
       clearInspectWidget(ctx, widgetId);
     });
 
-    const handler = async (args: string, ctx: ExtensionContext) => {
+    const handler = async (args: string, ctx: BrewvaHostContext) => {
       const normalizedArgs = normalizeCommandArgs(args);
       if (normalizedArgs === "clear") {
         clearInspectWidget(ctx, widgetId);

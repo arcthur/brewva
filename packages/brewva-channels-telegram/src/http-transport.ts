@@ -389,7 +389,7 @@ export class TelegramHttpTransport implements TelegramChannelTransport {
     }
 
     for (const update of updates) {
-      const updateId = Number(update.update_id);
+      const updateId = update.update_id;
       await handler(update);
       if (Number.isInteger(updateId)) {
         this.nextOffset = Math.max(this.nextOffset, updateId + 1);

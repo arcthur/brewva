@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
+import type { BrewvaModelCatalog } from "@brewva/brewva-substrate";
 import { resolveDelegationModelRoute } from "../../../packages/brewva-gateway/src/subagents/model-routing.js";
 import type { HostedDelegationTarget } from "../../../packages/brewva-gateway/src/subagents/targets.js";
 
-type RegisteredModel = ReturnType<ModelRegistry["getAll"]>[number];
+type RegisteredModel = ReturnType<BrewvaModelCatalog["getAll"]>[number];
 
 function buildAvailableModel(input: {
   provider: string;

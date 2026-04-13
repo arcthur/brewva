@@ -5,7 +5,7 @@ import {
   type ContextBudgetUsage,
 } from "@brewva/brewva-runtime";
 import { type ContextInjectionEntry, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { BrewvaHostPluginApi } from "@brewva/brewva-substrate";
 import type { HostedDelegationStore } from "../subagents/delegation-store.js";
 import { type BuildCapabilityViewResult } from "./capability-view.js";
 import { prepareContextComposerSupport } from "./context-composer-support.js";
@@ -350,7 +350,7 @@ function buildHostedSupplementalBlocks(
 }
 
 export function createHostedContextInjectionPipeline(
-  extensionApi: ExtensionAPI,
+  extensionApi: BrewvaHostPluginApi,
   runtime: BrewvaHostedRuntimePort,
   telemetry: HostedContextTelemetry,
   statePort: HostedContextGateStatePort,

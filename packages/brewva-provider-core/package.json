@@ -1,0 +1,35 @@
+{
+  "name": "@brewva/brewva-provider-core",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.88.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1029.0",
+    "@google/genai": "^1.49.0",
+    "@mistralai/mistralai": "2.2.0",
+    "@sinclair/typebox": "^0.34.49",
+    "@smithy/node-http-handler": "^4.5.2",
+    "ajv": "^8.18.0",
+    "ajv-formats": "^3.0.1",
+    "chalk": "^5.6.2",
+    "openai": "6.34.0",
+    "partial-json": "^0.1.7",
+    "proxy-agent": "^8.0.1",
+    "undici": "^8.0.3",
+    "zod-to-json-schema": "^3.25.2"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  }
+}

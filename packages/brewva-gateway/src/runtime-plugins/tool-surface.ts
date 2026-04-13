@@ -9,6 +9,12 @@ import {
   listSkillPreferredTools,
   type SkillDocument,
 } from "@brewva/brewva-runtime";
+import type {
+  BrewvaHostPluginApi as ExtensionAPI,
+  BrewvaHostToolInfo as ToolInfo,
+  BrewvaHostToolResultEvent as ToolResultEvent,
+  BrewvaToolDefinition as ToolDefinition,
+} from "@brewva/brewva-substrate";
 import {
   BASE_BREWVA_TOOL_NAMES,
   CONTROL_PLANE_BREWVA_TOOL_NAMES,
@@ -19,12 +25,6 @@ import {
   SKILL_BREWVA_TOOL_NAMES,
   isManagedBrewvaToolName,
 } from "@brewva/brewva-tools";
-import type {
-  ExtensionAPI,
-  ToolDefinition,
-  ToolInfo,
-  ToolResultEvent,
-} from "@mariozechner/pi-coding-agent";
 import {
   buildSkillRecommendationReceiptPayload,
   buildSkillFirstPolicyBlock,

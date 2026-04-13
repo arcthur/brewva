@@ -95,6 +95,17 @@ function normalizeUsageTokens(usage: ContextBudgetUsage | undefined): number | n
     : null;
 }
 
+function extractSourceLeafEntryId(input: unknown): string | null {
+  const compactionEntry = (
+    input as { compactionEntry?: { sourceLeafEntryId?: unknown } } | undefined
+  )?.compactionEntry;
+  if (!compactionEntry || typeof compactionEntry.sourceLeafEntryId !== "string") {
+    return null;
+  }
+  const normalized = compactionEntry.sourceLeafEntryId.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 function sha256(input: string): string {
   return createHash("sha256").update(input).digest("hex");
 }
@@ -413,7 +424,12 @@ export function createHostedCompactionController(
         sanitizedSummary,
         summaryDigest: sha256(sanitizedSummary),
         sourceTurn: state.turnIndex,
-        leafEntryId: resolveInjectionScopeId(input.sessionManager) ?? null,
+        leafEntryId:
+          extractSourceLeafEntryId({
+            compactionEntry: input.compactionEntry,
+          }) ??
+          resolveInjectionScopeId(input.sessionManager) ??
+          null,
         referenceContextDigest:
           runtime.inspect.context.getPromptStability(input.sessionId)?.stablePrefixHash ?? null,
         fromTokens: state.lastObservedUsageTokens,

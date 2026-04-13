@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
-import { getShellConfig } from "@mariozechner/pi-coding-agent";
+import { resolveShellConfig as getShellConfig } from "@brewva/brewva-substrate";
 import { differenceInMilliseconds } from "date-fns";
 
 const MAX_AGGREGATED_OUTPUT_CHARS = 1_000_000;

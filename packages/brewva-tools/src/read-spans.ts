@@ -1,6 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import { buildReadPathDiscoveryObservationPayload } from "./read-path-discovery.js";
 import { recordToolRuntimeEvent } from "./runtime-internal.js";

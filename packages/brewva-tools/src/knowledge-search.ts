@@ -5,7 +5,7 @@ import {
   KNOWLEDGE_SOURCE_TYPES,
   normalizeKnowledgeSourceTypes,
 } from "@brewva/brewva-recall";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import { resolveToolTargetScope } from "./target-scope.js";
 import type { BrewvaToolOptions } from "./types.js";

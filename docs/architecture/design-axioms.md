@@ -59,6 +59,13 @@ Implementation note:
 
 - runtime authority centers on effect classes, approval requirements, and
   receipt-bearing rollback
+- substrate owns how the agent loop runs: session lifecycle, turn orchestration,
+  tool execution phases, prompt/context resource loading, and session
+  persistence
+- hosted, CLI, and channel execution surfaces should converge on the same
+  substrate rather than maintaining separate runtime-shaped compatibility shells
+- Pi compatibility may survive as import/export and reference material, but not
+  as an execution-path dependency
 - repository-level change fitness may consume runtime evidence, but it remains
   a separate judgment structure from runtime commitment authority
 - runtime may persist objective iteration facts such as metric observations,
@@ -149,6 +156,12 @@ The kernel may not:
 
 The ring model matters more than package count. A package split is useful only
 when it protects authority boundaries instead of hiding them.
+
+Practical boundary rule:
+
+- if a concern decides how a turn runs, it belongs to the substrate
+- if a concern decides whether an effect may commit, it belongs to the kernel
+- the runtime contract stays narrow even when the substrate grows more capable
 
 ## Related Docs
 

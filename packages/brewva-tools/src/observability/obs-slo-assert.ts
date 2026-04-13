@@ -2,7 +2,7 @@ import {
   OBSERVABILITY_ASSERTION_RECORDED_EVENT_TYPE,
   OBSERVABILITY_QUERY_EXECUTED_EVENT_TYPE,
 } from "@brewva/brewva-runtime";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import { recordToolRuntimeEvent } from "../runtime-internal.js";
 import type { BrewvaBundledToolOptions } from "../types.js";

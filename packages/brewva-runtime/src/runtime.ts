@@ -342,6 +342,8 @@ interface BrewvaRuntimeMethodGroups {
     getUsage(sessionId: string): ContextBudgetUsage | undefined;
     getPromptStability(sessionId: string): PromptStabilityState | undefined;
     getTransientReduction(sessionId: string): TransientReductionState | undefined;
+    getReservedPrimaryTokens(sessionId: string, injectionScopeId?: string): number;
+    getReservedSupplementalTokens(sessionId: string, injectionScopeId?: string): number;
     getUsageRatio(usage: ContextBudgetUsage | undefined): number | null;
     getHardLimitRatio(sessionId: string, usage?: ContextBudgetUsage): number;
     getCompactionThresholdRatio(sessionId: string, usage?: ContextBudgetUsage): number;
@@ -729,6 +731,8 @@ export interface BrewvaInspectionPort {
     | "getUsage"
     | "getPromptStability"
     | "getTransientReduction"
+    | "getReservedPrimaryTokens"
+    | "getReservedSupplementalTokens"
     | "getUsageRatio"
     | "getHardLimitRatio"
     | "getCompactionThresholdRatio"
@@ -1105,6 +1109,10 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
         getUsage: (sessionId) => this.contextService.getContextUsage(sessionId),
         getPromptStability: (sessionId) => this.contextService.getPromptStability(sessionId),
         getTransientReduction: (sessionId) => this.contextService.getTransientReduction(sessionId),
+        getReservedPrimaryTokens: (sessionId, injectionScopeId) =>
+          this.contextService.getReservedPrimaryTokens(sessionId, injectionScopeId),
+        getReservedSupplementalTokens: (sessionId, injectionScopeId) =>
+          this.contextService.getReservedSupplementalTokens(sessionId, injectionScopeId),
         getUsageRatio: (usage) => this.contextService.getContextUsageRatio(usage),
         getHardLimitRatio: (sessionId, usage) =>
           this.contextService.getContextHardLimitRatio(sessionId, usage),
@@ -1440,6 +1448,8 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "getUsage",
           "getPromptStability",
           "getTransientReduction",
+          "getReservedPrimaryTokens",
+          "getReservedSupplementalTokens",
           "getUsageRatio",
           "getHardLimitRatio",
           "getCompactionThresholdRatio",

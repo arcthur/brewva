@@ -8,22 +8,20 @@ import {
   resolveSupportedChannel,
 } from "@brewva/brewva-gateway";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
+import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 type SessionLike = {
-  subscribe: (listener: (event: AgentSessionEvent) => void) => () => void;
+  subscribe: (listener: (event: BrewvaPromptSessionEvent) => void) => () => void;
   prompt: (
     content: string,
     options?: { streamingBehavior?: "followUp" | "steer" },
   ) => Promise<void>;
-  agent: {
-    waitForIdle: () => Promise<void>;
-  };
+  waitForIdle: () => Promise<void>;
 };
 
-function createSessionMock(eventsToEmit: AgentSessionEvent[]): SessionLike {
-  let listener: ((event: AgentSessionEvent) => void) | undefined;
+function createSessionMock(eventsToEmit: BrewvaPromptSessionEvent[]): SessionLike {
+  let listener: ((event: BrewvaPromptSessionEvent) => void) | undefined;
   return {
     subscribe(next) {
       listener = next;
@@ -36,10 +34,8 @@ function createSessionMock(eventsToEmit: AgentSessionEvent[]): SessionLike {
         listener?.(event);
       }
     },
-    agent: {
-      async waitForIdle(): Promise<void> {
-        return;
-      },
+    async waitForIdle(): Promise<void> {
+      return;
     },
   };
 }
@@ -82,14 +78,14 @@ describe("channel mode prompt output collector", () => {
           content: [{ type: "text", text: "done" }],
         },
         isError: false,
-      } as AgentSessionEvent,
+      } as BrewvaPromptSessionEvent,
       {
         type: "message_end",
         message: {
           role: "assistant",
           content: [{ type: "text", text: "final answer" }],
         },
-      } as AgentSessionEvent,
+      } as BrewvaPromptSessionEvent,
     ]);
 
     const outputs = await collectPromptTurnOutputs(
@@ -112,7 +108,7 @@ describe("channel mode prompt output collector", () => {
           details: { verdict: "fail" },
         },
         isError: false,
-      } as AgentSessionEvent,
+      } as BrewvaPromptSessionEvent,
     ]);
 
     const outputs = await collectPromptTurnOutputs(
@@ -129,7 +125,7 @@ describe("channel mode prompt output collector", () => {
       (event: { id: string; sessionId: string; type: string; timestamp: number }) => void
     >();
     const sentMessages: string[] = [];
-    let sessionListener: ((event: AgentSessionEvent) => void) | undefined;
+    let sessionListener: ((event: BrewvaPromptSessionEvent) => void) | undefined;
     const session: SessionLike = {
       subscribe(next) {
         sessionListener = next;
@@ -157,12 +153,10 @@ describe("channel mode prompt output collector", () => {
             role: "assistant",
             content: [{ type: "text", text: "telegram resumed" }],
           },
-        } as AgentSessionEvent);
+        } as BrewvaPromptSessionEvent);
       },
-      agent: {
-        async waitForIdle(): Promise<void> {
-          return;
-        },
+      async waitForIdle(): Promise<void> {
+        return;
       },
     };
 

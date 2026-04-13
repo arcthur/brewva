@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createRequire } from "node:module";
+import type { BrewvaToolContext, BrewvaToolDefinition } from "@brewva/brewva-substrate";
 import { attachBrewvaToolExecutionTraits } from "@brewva/brewva-tools";
-import type { ExtensionContext, ToolDefinition } from "@mariozechner/pi-coding-agent";
 import {
   createHostedToolExecutionCoordinator,
   wrapToolDefinitionWithHostedExecutionTraits,
@@ -25,19 +25,32 @@ const { Type } = requireFromBrewvaTools("@sinclair/typebox") as {
   Type: TypeBoxFactory;
 };
 
-function createExtensionContext(sessionId: string): ExtensionContext {
+function createToolContext(sessionId: string): BrewvaToolContext {
   return {
-    ui: {} as ExtensionContext["ui"],
+    ui: {} as BrewvaToolContext["ui"],
     hasUI: false,
     cwd: "/tmp/brewva-tool-execution",
     sessionManager: {
       getSessionId: () => sessionId,
-    } as ExtensionContext["sessionManager"],
+      getLeafId: () => null,
+    },
     modelRegistry: {
       getAll() {
         return [];
       },
-    } as unknown as ExtensionContext["modelRegistry"],
+      getAvailable() {
+        return [];
+      },
+      find() {
+        return undefined;
+      },
+      hasConfiguredAuth() {
+        return false;
+      },
+      async getApiKeyAndHeaders() {
+        return { ok: false as const, error: "not_configured" };
+      },
+    },
     model: undefined,
     signal: new AbortController().signal,
     isIdle() {
@@ -93,13 +106,13 @@ describe("hosted tool execution traits", () => {
     const read2 = createDeferred();
     const write = createDeferred();
 
-    const baseTool: ToolDefinition = {
+    const baseTool: BrewvaToolDefinition = {
       name: "execution_traits_probe",
       label: "probe",
       description: "probe tool",
       parameters: Type.Object({
         mode: Type.String(),
-      }) as ToolDefinition["parameters"],
+      }) as BrewvaToolDefinition["parameters"],
       async execute(_toolCallId, params) {
         const input = params as ExecutionProbeInput;
         startOrder.push(`start:${input.mode}`);
@@ -127,7 +140,7 @@ describe("hosted tool execution traits", () => {
     }));
 
     const wrapped = wrapToolDefinitionWithHostedExecutionTraits(tool, coordinator);
-    const ctx = createExtensionContext("tool-execution-shared-exclusive");
+    const ctx = createToolContext("tool-execution-shared-exclusive");
 
     const readPromise1 = wrapped.execute("tc-read-1", { mode: "read1" }, undefined, undefined, ctx);
     const readPromise2 = wrapped.execute("tc-read-2", { mode: "read2" }, undefined, undefined, ctx);
@@ -165,13 +178,13 @@ describe("hosted tool execution traits", () => {
     const started: string[] = [];
     const firstGate = createDeferred();
 
-    const baseTool: ToolDefinition = {
+    const baseTool: BrewvaToolDefinition = {
       name: "execution_traits_interrupt_probe",
       label: "probe",
       description: "interrupt probe",
       parameters: Type.Object({
         mode: Type.String(),
-      }) as ToolDefinition["parameters"],
+      }) as BrewvaToolDefinition["parameters"],
       async execute(_toolCallId, params, signal) {
         const input = params as ExecutionProbeInput;
         started.push(input.mode);
@@ -198,7 +211,7 @@ describe("hosted tool execution traits", () => {
     });
 
     const wrapped = wrapToolDefinitionWithHostedExecutionTraits(tool, coordinator);
-    const ctx = createExtensionContext("tool-execution-interrupts");
+    const ctx = createToolContext("tool-execution-interrupts");
 
     const holding = wrapped.execute("tc-hold", { mode: "hold" }, undefined, undefined, ctx);
     await Promise.resolve();

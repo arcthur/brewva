@@ -247,13 +247,12 @@ describe("channel telegram adapter", () => {
     });
     await adapter.sendTurn(outboundTurn);
 
-    const callbackData = (
+    const callbackData =
       (
         transport.sent[0]?.params.reply_markup as {
           inline_keyboard?: Array<Array<{ callback_data?: string }>>;
         }
-      )?.inline_keyboard?.[0]?.[0]?.callback_data ?? ""
-    ).toString();
+      )?.inline_keyboard?.[0]?.[0]?.callback_data ?? "";
     const decoded = decodeTelegramApprovalCallback(callbackData, secret, {
       context: "12345",
     });
@@ -341,13 +340,12 @@ describe("channel telegram adapter", () => {
           step: index,
         }),
       );
-      const callbackData = (
+      const callbackData =
         (
           transport.sent.at(-1)?.params.reply_markup as {
             inline_keyboard?: Array<Array<{ callback_data?: string }>>;
           }
-        )?.inline_keyboard?.[0]?.[0]?.callback_data ?? ""
-      ).toString();
+        )?.inline_keyboard?.[0]?.[0]?.callback_data ?? "";
       if (index === 1) callbackDataA = callbackData;
       if (index === 2) callbackDataB = callbackData;
     }

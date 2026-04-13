@@ -14,7 +14,7 @@ import {
   type ToolOutputView,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
+import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
 import { sendPromptWithCompactionRecovery } from "./compaction-recovery.js";
 import type { SubscribablePromptSession } from "./contracts.js";
 import { preparePendingSessionReasoningRevertResume } from "./reasoning-revert-recovery.js";
@@ -112,7 +112,7 @@ function extractMessageText(message: unknown): string {
   return parts.join("");
 }
 
-function asToolExecutionStartEvent(event: AgentSessionEvent): {
+function asToolExecutionStartEvent(event: BrewvaPromptSessionEvent): {
   toolCallId: string;
   toolName: string;
 } | null {
@@ -135,7 +135,7 @@ function asToolExecutionStartEvent(event: AgentSessionEvent): {
   };
 }
 
-function asToolExecutionEndEvent(event: AgentSessionEvent): {
+function asToolExecutionEndEvent(event: BrewvaPromptSessionEvent): {
   toolCallId: string;
   toolName: string;
   isError: boolean;
@@ -164,7 +164,7 @@ function asToolExecutionEndEvent(event: AgentSessionEvent): {
   };
 }
 
-function asToolExecutionUpdateEvent(event: AgentSessionEvent): {
+function asToolExecutionUpdateEvent(event: BrewvaPromptSessionEvent): {
   toolCallId: string;
   toolName: string;
   partialResult: unknown;
@@ -190,7 +190,7 @@ function asToolExecutionUpdateEvent(event: AgentSessionEvent): {
   };
 }
 
-function asAssistantDelta(event: AgentSessionEvent): {
+function asAssistantDelta(event: BrewvaPromptSessionEvent): {
   lane: AssistantDeltaFrameLane;
   delta: string;
 } | null {
@@ -444,7 +444,7 @@ export async function collectSessionPromptOutput(
   toolAttemptBindings.beginTurn(currentAttemptSequence);
   beginAttempt("initial", resolveAuthoritativeCurrentAttemptSequence() ?? 1);
 
-  const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
+  const unsubscribe = session.subscribe((event: BrewvaPromptSessionEvent) => {
     const assistantDelta = asAssistantDelta(event);
     if (assistantDelta) {
       emitFrame(

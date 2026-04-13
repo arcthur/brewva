@@ -8,14 +8,14 @@ import {
 import type { RuntimePlugin, RuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { BrewvaHostContext } from "@brewva/brewva-substrate";
 import { clampText } from "./inspect-analysis.js";
 
 const QUESTIONS_WIDGET_ID = "brewva-questions";
 const MAX_WIDGET_LINES = 28;
 const MAX_LINE_CHARS = 220;
 
-function clearQuestionsWidget(ctx: ExtensionContext, widgetId: string): void {
+function clearQuestionsWidget(ctx: BrewvaHostContext, widgetId: string): void {
   if (!ctx.hasUI) return;
   ctx.ui.setWidget(widgetId, undefined, {
     placement: "belowEditor",

@@ -1,5 +1,5 @@
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { ExtensionAPI, ToolInfo } from "@mariozechner/pi-coding-agent";
+import type { BrewvaHostPluginApi, BrewvaHostToolInfo } from "@brewva/brewva-substrate";
 import { buildCapabilityView, type BuildCapabilityViewResult } from "./capability-view.js";
 import { deriveSkillRecommendations, type SkillRecommendationSet } from "./skill-first.js";
 
@@ -12,7 +12,7 @@ export interface PreparedContextComposerSupport {
 
 export function prepareContextComposerSupport(input: {
   runtime: BrewvaHostedRuntimePort;
-  extensionApi: ExtensionAPI;
+  extensionApi: BrewvaHostPluginApi;
   sessionId: string;
   prompt: string;
   usage: Parameters<BrewvaHostedRuntimePort["maintain"]["context"]["observeUsage"]>[1];
@@ -24,7 +24,8 @@ export function prepareContextComposerSupport(input: {
   const pendingCompactionReason = input.runtime.inspect.context.getPendingCompactionReason(
     input.sessionId,
   );
-  const allToolsGetter = (input.extensionApi as { getAllTools?: () => ToolInfo[] }).getAllTools;
+  const allToolsGetter = (input.extensionApi as { getAllTools?: () => BrewvaHostToolInfo[] })
+    .getAllTools;
   const activeToolsGetter = (input.extensionApi as { getActiveTools?: () => string[] })
     .getActiveTools;
   const capabilityView = buildCapabilityView({

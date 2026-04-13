@@ -247,7 +247,7 @@ describe("provider request reduction", () => {
     );
   });
 
-  test("uses payload model metadata when live usage is unavailable", () => {
+  test("skips transient reduction when live usage is unavailable", () => {
     const runtime = createRuntimeFixture();
     const { api, handlers } = createMockRuntimePluginApi();
     const sessionId = "provider-request-reduction-model-window";
@@ -262,12 +262,13 @@ describe("provider request reduction", () => {
       sessionId,
     );
     expect((payload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
-      CLEARED_TOOL_RESULT_PLACEHOLDER,
+      `${"x".repeat(4_000)}:1`,
     );
     expect(runtime.inspect.context.getTransientReduction(sessionId)).toEqual(
       expect.objectContaining({
-        status: "completed",
-        pressureLevel: "high",
+        status: "skipped",
+        reason: "context usage is unavailable",
+        pressureLevel: "unknown",
       }),
     );
   });

@@ -23,9 +23,9 @@ import {
   type ManagedToolMode,
   type TaskSpec,
 } from "@brewva/brewva-runtime";
-import { InteractiveMode, runPrintMode } from "@mariozechner/pi-coding-agent";
 import { formatISO } from "date-fns";
 import { createAgentOverlaysCommandRuntimePlugin } from "./agent-overlays-command-runtime-plugin.js";
+import { runCliInteractiveSession, runCliPrintSession } from "./cli-runtime.js";
 import { runCredentialsCli } from "./credentials.js";
 import { runDaemon } from "./daemon-mode.js";
 import {
@@ -1206,7 +1206,7 @@ async function run(): Promise<void> {
         });
     }, gracefulTimeoutMs);
 
-    void session.agent
+    void session
       .waitForIdle()
       .catch(() => undefined)
       .finally(() => {
@@ -1222,23 +1222,22 @@ async function run(): Promise<void> {
 
   try {
     if (mode === "interactive") {
-      const interactiveMode = new InteractiveMode(session, {
+      await runCliInteractiveSession(session, {
         initialMessage,
         verbose: parsed.verbose,
       });
-      await interactiveMode.run();
       printCostSummary(getSessionId(), runtime);
       return;
     }
 
     if (mode === "print-json") {
-      await runPrintMode(printSession, {
+      await runCliPrintSession(printSession, {
         mode: "json",
         initialMessage,
       });
       emitJsonBundle = true;
     } else {
-      await runPrintMode(printSession, {
+      await runCliPrintSession(printSession, {
         mode: "text",
         initialMessage,
       });

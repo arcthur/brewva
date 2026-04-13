@@ -4,6 +4,12 @@ This page describes hosted-session ordering, durability, and recovery
 boundaries. Runtime-plugin factory options, port ownership, and command-plugin
 composition live in `docs/reference/runtime-plugins.md`.
 
+Hosted and CLI entrypoints now converge on the same repo-owned substrate route:
+`createHostedSession(...)` and `createBrewvaSession(...)` bootstrap the same
+managed session lifecycle, and `Pi runtime` is no longer on the
+execution-critical path. `Pi` compatibility remains limited to import/export
+artifacts and reference comparison.
+
 ## Lifecycle Stages
 
 1. Parse CLI args and resolve mode/input (`packages/brewva-cli/src/index.ts`)
@@ -12,6 +18,7 @@ composition live in `docs/reference/runtime-plugins.md`.
    lives in `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`)
    - runtime config is loaded/normalized first
    - startup UI setting (`ui.quietStartup`) is applied from `runtime.config.ui` into session settings overrides
+   - CLI and hosted routes share the same substrate-owned session bootstrap
 3. Register lifecycle handlers through the canonical hosted pipeline (`packages/brewva-gateway/src/runtime-plugins/index.ts`)
    - `managedToolMode=runtime_plugin`: register managed Brewva tools through the runtime plugin API
    - `managedToolMode=direct`: provide managed Brewva tools directly from the host
@@ -25,6 +32,8 @@ composition live in `docs/reference/runtime-plugins.md`.
 - Replay (`--replay`): query structured events and print text/JSON timeline
 - Undo (`--undo`): resolve target session and rollback the latest tracked `PatchSet`
 - JSON one-shot (`--mode json`/`--json`): emits normal stream plus final `brewva_event_bundle`
+- Interactive CLI: uses the same managed session substrate as hosted execution;
+  product differences stay in operator UX and transport, not in runtime truth
 - `brewva inspect`: builds an operator forensic report for one replayable
   session from tape plus nearby artifact diagnostics; it is not the live
   transport replay stream

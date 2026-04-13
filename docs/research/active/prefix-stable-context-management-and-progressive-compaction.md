@@ -42,21 +42,18 @@ However, the full model request still has four gaps:
    receives a `contextWindow` value after starting without one. This makes the
    Brewva-owned prompt suffix unstable at model-transition boundaries and can
    freeze stale numbers if session-cached.
-
 2. **The hosted dynamic tail is not canonicalized end-to-end before render.**
    `buildInjection()` may already drop duplicate primary injection content by
    scope, but `ContextComposer` still re-renders supplemental and capability
    blocks from multiple inputs. If those upstream inputs contain unordered
    collections, timestamps, freshness strings, or other turn-local noise, the
    rendered tail changes even when the semantic state did not.
-
 3. **There is no replay-safe reduction stage between normal operation and
    `session_compact`.**
    Today `session_compact` is the only replay-visible history rewrite path.
    Brewva lacks an intermediate request-local reduction stage that can shrink
    the next outbound provider request without mutating durable history, WAL
    recovery state, or compaction receipts.
-
 4. **Cache-efficiency observability is not aligned to Brewva durability rules.**
    The hosted path records useful context telemetry such as `context_composed`,
    but there is no explicit prompt-stability observation layer. The upstream Pi
@@ -184,7 +181,7 @@ Relevant lesson for Brewva:
 - **The remaining instability lives in presentation, not only admission.**
   `ContextComposer` and hosted supplemental blocks still need stronger
   canonicalization guarantees.
-- **`session_compact` is the only replay-visible compaction authority.**
+- `**session_compact` is the only replay-visible compaction authority.\*\*
   This is correct and must remain correct unless Brewva adds a new durable
   receipt family and recovery contract.
 - **Context telemetry exists, but cache-specific telemetry does not.**
@@ -246,13 +243,16 @@ That causes two separate problems:
 Split the contract into two layers:
 
 1. **Static Context Contract**
-   - lives in the system prompt
-   - contains only invariant Brewva rules
-   - safe to cache for the session lifetime
+
+- lives in the system prompt
+- contains only invariant Brewva rules
+- safe to cache for the session lifetime
+
 2. **Dynamic Pressure Guidance**
-   - remains in the turn-scoped hidden tail
-   - carries current threshold percentages, usage ratios, gate/advisory state,
-     and any window-derived numbers
+
+- remains in the turn-scoped hidden tail
+- carries current threshold percentages, usage ratios, gate/advisory state,
+  and any window-derived numbers
 
 This aligns with Brewva's existing product shape because the hosted path already
 has turn-scoped compaction gate/advisory blocks in `ContextComposer`.
@@ -573,12 +573,15 @@ V1 uses one default observability layer and leaves durable metric writes turned
 off by default:
 
 1. **Live inspection / hosted telemetry**
-   - rebuildable or ops-oriented prompt-stability state
-   - suitable for debugging and live operator inspection
+
+- rebuildable or ops-oriented prompt-stability state
+- suitable for debugging and live operator inspection
+
 2. **Future durable iteration metrics**
-   - not written automatically in v1
-   - if longitudinal analysis becomes necessary later, reuse
-     `recordMetricObservation(...)`
+
+- not written automatically in v1
+- if longitudinal analysis becomes necessary later, reuse
+  `recordMetricObservation(...)`
 
 ### Upstream Reuse Rule
 
@@ -604,15 +607,18 @@ The repository already has two adjacent observability surfaces, and they should
 stay separate:
 
 1. **Hosted composition telemetry**
-   - `packages/brewva-gateway/src/runtime-plugins/hosted-context-telemetry.ts`
-   - currently emits `context_composed` through `recordRuntimeEvent(...)`
-   - appropriate for coarse composition facts such as block counts, token
-     totals, and `injectionAccepted`
+
+- `packages/brewva-gateway/src/runtime-plugins/hosted-context-telemetry.ts`
+- currently emits `context_composed` through `recordRuntimeEvent(...)`
+- appropriate for coarse composition facts such as block counts, token
+  totals, and `injectionAccepted`
+
 2. **Durable iteration facts**
-   - `packages/brewva-runtime/src/runtime.ts`
-   - payload schema in `packages/brewva-runtime/src/iteration/facts.ts`
-   - appropriate only for selected normalized numeric facts worth retaining as
-     replayable evidence
+
+- `packages/brewva-runtime/src/runtime.ts`
+- payload schema in `packages/brewva-runtime/src/iteration/facts.ts`
+- appropriate only for selected normalized numeric facts worth retaining as
+  replayable evidence
 
 This split matters because `context_composed` already rides a runtime event
 path. The RFC should therefore treat it as a coarse existing receipt, not as a
@@ -854,16 +860,21 @@ conditions.
 Provider cache counters already enter Brewva through the normal Pi event flow:
 
 1. `packages/brewva-gateway/src/runtime-plugins/event-stream.ts`
-   - receives upstream assistant `message_end`
-   - forwards the message into `recordAssistantUsageFromMessage(...)`
+
+- receives upstream assistant `message_end`
+- forwards the message into `recordAssistantUsageFromMessage(...)`
+
 2. `packages/brewva-runtime/src/cost/assistant-usage.ts`
-   - copies `usage.input`, `usage.output`, `usage.cacheRead`,
-     `usage.cacheWrite`, and `usage.totalTokens`
+
+- copies `usage.input`, `usage.output`, `usage.cacheRead`,
+  `usage.cacheWrite`, and `usage.totalTokens`
+
 3. `packages/brewva-runtime/src/services/cost.ts`
-   - normalizes those values
-   - keeps Brewva budget semantics explicit: tracked tokens exclude
-     `cacheReadTokens`
-   - emits `cost_update` and updates `runtime.inspect.cost.getSummary(...)`
+
+- normalizes those values
+- keeps Brewva budget semantics explicit: tracked tokens exclude
+  `cacheReadTokens`
+- emits `cost_update` and updates `runtime.inspect.cost.getSummary(...)`
 
 Implication:
 
@@ -935,8 +946,10 @@ The main intentional behavior change is prompt composition shape:
 ### Phase 1: Prefix Determinism (P0)
 
 1. Split the `Context Contract` into:
-   - static module-level constant contract text (no per-session state)
-   - dynamic pressure guidance in the turn-scoped hidden tail
+
+- static module-level constant contract text (no per-session state)
+- dynamic pressure guidance in the turn-scoped hidden tail
+
 2. Audit `ContextComposer` inputs and remove volatile fields from stable blocks.
 3. Preserve source-level semantic order; normalize unordered collections at the
    source boundary instead of adding a global `block.id` sort.
@@ -967,14 +980,18 @@ Validation:
    `before_provider_request` recovery adapter.
 2. Implement outbound tool-result body clearing on cloned request payloads only.
 3. Restrict the first rollout to safe turn classes:
-   - elevated pressure
-   - below hard-gate conditions
-   - no active recovery posture from `session_turn_transition`
+
+- elevated pressure
+- below hard-gate conditions
+- no active recovery posture from `session_turn_transition`
+
 4. Derive request-time pressure from the strongest available signal:
-   - prefer live runtime usage when it is present and meaningful
-   - otherwise estimate the outbound payload directly, anchored by the current
-     session `contextWindow` when available and by Pi model metadata only as a
-     final request-local fallback
+
+- prefer live runtime usage when it is present and meaningful
+- otherwise estimate the outbound payload directly, anchored by the current
+  session `contextWindow` when available and by Pi model metadata only as a
+  final request-local fallback
+
 5. Re-estimate the outbound request after reduction before continuing into the
    existing compaction-request path.
 
@@ -1010,7 +1027,7 @@ Validation:
   visible in hosted telemetry
 - integration validation: Brewva-inspect cache counters match the underlying Pi
   session stats for the same turn stream
-- no new durable `context_*` event family is required for cache efficiency
+- no new durable `context_`\* event family is required for cache efficiency
 
 ## Non-Goals
 

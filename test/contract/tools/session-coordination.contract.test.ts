@@ -128,6 +128,47 @@ describe("session coordination tool contracts", () => {
     expect(payload?.usagePercent).toBe(0.95);
   });
 
+  test("session_compact fails fast when the host reports compaction unsupported synchronously", async () => {
+    const runtime = createCleanRuntime();
+    const sessionId = "s11-unsupported";
+    const tool = createSessionCompactTool({ runtime: createBundledToolRuntime(runtime) });
+
+    const result = await tool.execute(
+      "tc-compact-unsupported",
+      { reason: "hosted runtime missing compaction" },
+      undefined,
+      undefined,
+      mergeContext(sessionId, {
+        compact: (options?: {
+          customInstructions?: string;
+          onError?: (error: unknown) => void;
+        }) => {
+          options?.onError?.(
+            new Error(
+              "Hosted compaction is not yet supported by the Brewva-native session runtime.",
+            ),
+          );
+        },
+        getContextUsage: () => ({ tokens: 900, contextWindow: 1000, percent: 90 }),
+      }),
+    );
+
+    const text = extractTextContent(result);
+    expect(text).toContain("Session compaction request failed");
+    expect(
+      runtime.inspect.events.query(sessionId, { type: "session_compact_requested" }),
+    ).toHaveLength(0);
+    const failedEvent = runtime.inspect.events.query(sessionId, {
+      type: "session_compact_failed",
+      last: 1,
+    })[0];
+    expect(failedEvent?.payload).toEqual(
+      expect.objectContaining({
+        error: "Hosted compaction is not yet supported by the Brewva-native session runtime.",
+      }),
+    );
+  });
+
   test("authority.session.commitCompaction records the durable compaction receipt and updates history-view baseline", () => {
     const runtime = createCleanRuntime();
     const sessionId = "s11-commit";

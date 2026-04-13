@@ -3,11 +3,12 @@ import {
   type ToolGovernanceDescriptor,
   normalizeToolName,
 } from "@brewva/brewva-runtime";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import type { TSchema } from "@sinclair/typebox";
 import { getBrewvaToolSurface } from "../surface.js";
 import type {
   BrewvaManagedToolDefinition,
+  BrewvaToolMetadataCarrier,
   BrewvaToolExecutionTraitResolverInput,
   BrewvaToolExecutionTraits,
   BrewvaToolExecutionTraitsDefinition,
@@ -83,8 +84,8 @@ function resolveCanonicalBrewvaToolMetadata(
   };
 }
 
-function defineExecutionTraitsProperty<T extends object>(
-  target: T,
+function defineExecutionTraitsProperty(
+  target: object,
   definition: BrewvaToolExecutionTraitsDefinition | undefined,
 ): void {
   if (!definition) {
@@ -99,10 +100,7 @@ function defineExecutionTraitsProperty<T extends object>(
   });
 }
 
-function copyToolMetadataProperties<TSource extends object, TTarget extends object>(
-  source: TSource,
-  target: TTarget,
-): void {
+function copyToolMetadataProperties(source: object, target: object): void {
   for (const propertyName of [
     "brewva",
     "brewvaExecutionTraits",
@@ -176,7 +174,7 @@ export function attachBrewvaToolExecutionTraits<T extends ToolDefinition>(
 }
 
 export function getBrewvaToolMetadata(
-  tool: ToolDefinition | BrewvaManagedToolDefinition | undefined,
+  tool: BrewvaToolMetadataCarrier | undefined,
 ): BrewvaToolMetadata | undefined {
   const managedTool = tool as BrewvaManagedToolDefinition | undefined;
   const metadata = managedTool?.brewva;
@@ -222,7 +220,7 @@ function resolveExecutionTraitsFromDefinition(
 }
 
 export function resolveBrewvaToolExecutionTraits(
-  tool: ToolDefinition | BrewvaManagedToolDefinition | undefined,
+  tool: BrewvaToolMetadataCarrier | undefined,
   input: Partial<Omit<BrewvaToolExecutionTraitResolverInput, "toolName">> & {
     toolName?: string;
   } = {},
@@ -241,7 +239,7 @@ export function resolveBrewvaToolExecutionTraits(
 }
 
 export function getBrewvaAgentParameters(
-  tool: ToolDefinition | BrewvaManagedToolDefinition | undefined,
+  tool: BrewvaToolMetadataCarrier | undefined,
 ): TSchema | undefined {
   const parameters = (tool as BrewvaManagedToolDefinition | undefined)?.brewvaAgentParameters;
   return parameters ?? tool?.parameters;

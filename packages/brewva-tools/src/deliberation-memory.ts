@@ -7,7 +7,7 @@ import {
   type DeliberationMemoryArtifact,
   type DeliberationMemoryState,
 } from "@brewva/brewva-deliberation";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import { shouldInvokeSemanticRerank } from "./semantic-reranker.js";
 import type { BrewvaToolOptions } from "./types.js";

@@ -3,26 +3,67 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  createHostedTurnPipeline,
   registerContextTransform,
   registerEventStream,
   registerLedgerWriter,
   registerQualityGate,
 } from "@brewva/brewva-gateway/runtime-plugins";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import {
-  AuthStorage,
-  createEventBus,
-  discoverAndLoadExtensions,
-  ExtensionRunner,
-  ModelRegistry,
-  SessionManager,
-} from "@mariozechner/pi-coding-agent";
+import { createBrewvaHostPluginRunner, type BrewvaHostContext } from "@brewva/brewva-substrate";
 import { requireNonEmptyString } from "../../helpers/assertions.js";
 import { createMockRuntimePluginApi, invokeHandlers } from "../../helpers/runtime-plugin.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 
+function createHostContext(workspace: string, sessionId: string): BrewvaHostContext {
+  return {
+    ui: {
+      select: async () => undefined,
+      confirm: async () => false,
+      input: async () => undefined,
+      notify: () => undefined,
+      onTerminalInput: () => () => undefined,
+      setStatus: () => undefined,
+      setWorkingMessage: () => undefined,
+      setHiddenThinkingLabel: () => undefined,
+      setWidget: () => undefined,
+      setFooter: () => undefined,
+      setHeader: () => undefined,
+      setTitle: () => undefined,
+      custom: async () => undefined as never,
+      pasteToEditor: () => undefined,
+      setEditorText: () => undefined,
+      getEditorText: () => "",
+      editor: async () => undefined,
+      setEditorComponent: () => undefined,
+      theme: {},
+      getAllThemes: () => [],
+      getTheme: () => undefined,
+      setTheme: () => ({ success: false }),
+      getToolsExpanded: () => false,
+      setToolsExpanded: () => undefined,
+    },
+    hasUI: false,
+    cwd: workspace,
+    sessionManager: {
+      getSessionId: () => sessionId,
+      getLeafId: () => "leaf-1",
+    },
+    modelRegistry: undefined,
+    model: undefined,
+    isIdle: () => true,
+    signal: undefined,
+    abort: () => undefined,
+    hasPendingMessages: () => false,
+    shutdown: () => undefined,
+    getContextUsage: () => ({ tokens: 700, contextWindow: 4000, percent: 0.175 }),
+    compact: () => undefined,
+    getSystemPrompt: () => "base",
+  };
+}
+
 describe("Runtime plugin integration: observability injection", () => {
-  test("given runtime plugin runner contract, when emitBeforeAgentStart executes, then brewva context message is included", async () => {
+  test("given host plugin runner contract, when emitBeforeAgentStart executes, then brewva context message is included", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-dual-injection-"));
     mkdirSync(join(workspace, ".orchestrator"), { recursive: true });
     mkdirSync(join(workspace, ".brewva"), { recursive: true });
@@ -39,78 +80,34 @@ describe("Runtime plugin integration: observability injection", () => {
       ),
       "utf8",
     );
-
-    const agentDir = join(workspace, ".brewva-agent-test-dual-injection");
-    const runtimePluginPath = join(workspace, "brewva-inline-runtime-plugin.ts");
-    const brewvaExtensionEntry = join(
-      process.cwd(),
-      "packages/brewva-gateway/src/runtime-plugins.ts",
-    ).replaceAll("\\", "/");
-    writeFileSync(
-      runtimePluginPath,
-      [
-        `import { createHostedTurnPipeline } from '${brewvaExtensionEntry}';`,
-        `export default createHostedTurnPipeline({ registerTools: false, cwd: ${JSON.stringify(workspace)} });`,
-      ].join("\n"),
-      "utf8",
-    );
-
-    const loaded = await discoverAndLoadExtensions(
-      [runtimePluginPath],
-      workspace,
-      agentDir,
-      createEventBus(),
-    );
-    expect(loaded.errors).toHaveLength(0);
-
-    const sessionManager = SessionManager.inMemory(workspace);
-    const modelRegistry = ModelRegistry.inMemory(
-      AuthStorage.create(join(workspace, ".auth-test.json")),
-    );
-    const runner = new ExtensionRunner(
-      loaded.extensions,
-      loaded.runtime,
-      workspace,
-      sessionManager,
-      modelRegistry,
-    );
-
-    runner.bindCore(
-      {
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: createOpsRuntimeConfig((config) => {
+        config.projection.enabled = true;
+      }),
+    });
+    const runner = await createBrewvaHostPluginRunner({
+      plugins: [createHostedTurnPipeline({ runtime, registerTools: false, cwd: workspace })],
+      actions: {
         sendMessage: () => undefined,
         sendUserMessage: () => undefined,
-        appendEntry: () => undefined,
-        setSessionName: () => undefined,
-        getSessionName: () => undefined,
-        setLabel: () => undefined,
         getActiveTools: () => [],
         getAllTools: () => [],
         setActiveTools: () => undefined,
         refreshTools: () => undefined,
-        getCommands: () => [],
-        setModel: async () => true,
-        getThinkingLevel: () => "medium",
-        setThinkingLevel: () => undefined,
       },
-      {
-        getModel: () => undefined,
-        isIdle: () => true,
-        abort: () => undefined,
-        getSignal: () => new AbortController().signal,
-        hasPendingMessages: () => false,
-        shutdown: () => undefined,
-        getContextUsage: () => ({ tokens: 700, contextWindow: 4000, percent: 0.175 }),
-        compact: () => undefined,
-        getSystemPrompt: () => "base",
-      },
-    );
+    });
+    const ctx = createHostContext(workspace, "dual-injection-session");
 
-    await runner.emit({ type: "agent_end", messages: [] });
+    await runner.emit("agent_end", { type: "agent_end", messages: [] }, ctx);
 
     const result = await runner.emitBeforeAgentStart(
-      "continue fixing flaky tests",
-      undefined,
-      "base",
+      {
+        type: "before_agent_start",
+        prompt: "continue fixing flaky tests",
+        systemPrompt: "base",
+      },
+      ctx,
     );
     const messageTypes = (result?.messages ?? []).map((message) => message.customType);
     const mergedContent = (result?.messages ?? [])

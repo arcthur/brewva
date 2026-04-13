@@ -3,12 +3,15 @@ import {
   coerceContextBudgetUsage,
   type BrewvaHostedRuntimePort,
 } from "@brewva/brewva-runtime";
+import type {
+  BrewvaHostInputEventResult as InputEventResult,
+  BrewvaHostPluginApi,
+  BrewvaHostToolResultEvent as ToolResultEvent,
+} from "@brewva/brewva-substrate";
 import {
   collectStringEnumContractMismatches,
   getBrewvaAgentParameters,
 } from "@brewva/brewva-tools";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import type { InputEventResult, ToolResultEvent } from "@mariozechner/pi-coding-agent";
 
 interface QualityGateToolCallResult {
   block?: boolean;
@@ -283,7 +286,7 @@ export function createQualityGateLifecycle(
 }
 
 export function registerQualityGate(
-  extensionApi: ExtensionAPI,
+  extensionApi: BrewvaHostPluginApi,
   runtime: BrewvaHostedRuntimePort,
   options: QualityGateLifecycleOptions = {},
 ): void {

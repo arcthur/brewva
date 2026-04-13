@@ -31,10 +31,8 @@ interface ReasoningRevertRecoverySessionLike {
       messages: unknown;
     };
   };
-  agent?: {
-    waitForIdle?(): Promise<void>;
-    replaceMessages?(messages: unknown): void;
-  };
+  waitForIdle?(): Promise<void>;
+  replaceMessages?(messages: unknown): void;
 }
 
 interface RequiredReasoningRevertRecoverySessionManager {
@@ -95,11 +93,10 @@ function applyHostedReasoningBranchReset(
     true,
   );
   const sessionContext = sessionManager.buildSessionContext();
-  const agent = session.agent;
-  if (!agent || typeof agent.replaceMessages !== "function") {
-    throw new Error("hosted reasoning revert requires agent.replaceMessages()");
+  if (typeof session.replaceMessages !== "function") {
+    throw new Error("hosted reasoning revert requires session.replaceMessages()");
   }
-  agent.replaceMessages(sessionContext.messages);
+  session.replaceMessages(sessionContext.messages);
 }
 
 function buildReasoningSummaryDetails(revert: ReasoningRevertRecord): Record<string, unknown> {
@@ -167,9 +164,8 @@ function resolvePendingReasoningRevert(
 }
 
 async function waitForSessionIdle(session: ReasoningRevertRecoverySessionLike): Promise<void> {
-  const agent = session.agent;
-  if (agent && typeof agent.waitForIdle === "function") {
-    await agent.waitForIdle();
+  if (typeof session.waitForIdle === "function") {
+    await session.waitForIdle();
   }
 }
 
@@ -195,10 +191,8 @@ function recordReasoningRevertResumeTransition(
   });
 }
 
-export async function preparePendingSessionReasoningRevertResume<
-  T extends ReasoningRevertRecoverySessionLike,
->(
-  session: T,
+export async function preparePendingSessionReasoningRevertResume(
+  session: ReasoningRevertRecoverySessionLike,
   input: {
     runtime: BrewvaRuntime;
     sessionId?: string;

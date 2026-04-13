@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
+import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
 import {
   createChannelAgentDispatch,
   buildChannelDispatchPrompt,
@@ -189,9 +189,9 @@ describe("channel agent dispatch", () => {
       },
     ];
     const replacedMessages: unknown[] = [];
-    let listener: ((event: AgentSessionEvent) => void) | undefined;
+    let listener: ((event: BrewvaPromptSessionEvent) => void) | undefined;
     const session = {
-      subscribe(next: (event: AgentSessionEvent) => void) {
+      subscribe(next: (event: BrewvaPromptSessionEvent) => void) {
         listener = next;
         return () => {
           listener = undefined;
@@ -225,7 +225,7 @@ describe("channel agent dispatch", () => {
             toolName: "read",
             result: "stale branch output",
             isError: false,
-          } as AgentSessionEvent);
+          } as BrewvaPromptSessionEvent);
           runtime.authority.reasoning.revert(sessionId, {
             toCheckpointId: checkpointA.checkpointId,
             trigger: "operator_request",
@@ -239,22 +239,20 @@ describe("channel agent dispatch", () => {
           toolName: "read",
           result: "current branch output",
           isError: false,
-        } as AgentSessionEvent);
+        } as BrewvaPromptSessionEvent);
         listener?.({
           type: "message_end",
           message: {
             role: "assistant",
             content: [{ type: "text", text: "channel resumed answer" }],
           },
-        } as AgentSessionEvent);
+        } as BrewvaPromptSessionEvent);
       },
-      agent: {
-        async waitForIdle(): Promise<void> {
-          return;
-        },
-        replaceMessages(messages: unknown): void {
-          replacedMessages.push(messages);
-        },
+      async waitForIdle(): Promise<void> {
+        return;
+      },
+      replaceMessages(messages: unknown): void {
+        replacedMessages.push(messages);
       },
     };
 

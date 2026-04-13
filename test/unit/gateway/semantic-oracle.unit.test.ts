@@ -5,6 +5,7 @@ import {
   SEMANTIC_RERANK_INVOKED_EVENT_TYPE,
   BrewvaRuntime,
 } from "@brewva/brewva-runtime";
+import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate";
 import { createHostedSemanticReranker } from "../../../packages/brewva-gateway/src/host/semantic-reranker.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -29,18 +30,77 @@ function createAssistantResponse(jsonText: string) {
   } as const;
 }
 
+function createSemanticModel(): BrewvaRegisteredModel {
+  return {
+    provider: "anthropic",
+    id: "sonnet",
+    name: "Sonnet",
+    api: "anthropic-messages",
+    baseUrl: "https://api.anthropic.com",
+    reasoning: true,
+    input: ["text"],
+    cost: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+    },
+    contextWindow: 200_000,
+    maxTokens: 8_192,
+  };
+}
+
 describe("hosted semantic reranker", () => {
+  test("uses a live model resolver when the model becomes available after construction", async () => {
+    const workspace = createTestWorkspace("semantic-reranker-live-model");
+    const runtime = new BrewvaRuntime({ cwd: workspace, agentId: "default" });
+    const sessionId = "semantic-reranker-live-model-session";
+    let activeModel: BrewvaRegisteredModel | undefined;
+    let completedModel: BrewvaRegisteredModel | undefined;
+    const reranker = createHostedSemanticReranker({
+      runtime,
+      resolveModel: () => activeModel,
+      modelCatalog: {
+        getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-api-key" }),
+      },
+      providerDriver: {
+        complete: async (input) => {
+          completedModel = input.model;
+          return createAssistantResponse('{"ordered_ids":["b","a"]}') as never;
+        },
+      },
+    });
+
+    activeModel = createSemanticModel();
+    const result = await reranker.rerankNarrativeMemory?.({
+      sessionId,
+      surface: "narrative_memory",
+      query: "bun commands",
+      targetRoots: ["packages"],
+      stateRevision: "1",
+      candidates: [
+        { id: "a", title: "A", summary: "A summary", content: "Use npm" },
+        { id: "b", title: "B", summary: "B summary", content: "Use Bun" },
+      ],
+    });
+
+    expect(completedModel).toEqual(activeModel);
+    expect(result?.orderedIds).toEqual(["b", "a"]);
+  });
+
   test("records rerank receipts and cost updates for successful model calls", async () => {
     const workspace = createTestWorkspace("semantic-reranker-rerank");
     const runtime = new BrewvaRuntime({ cwd: workspace, agentId: "default" });
     const sessionId = "semantic-reranker-rerank-session";
     const reranker = createHostedSemanticReranker({
       runtime,
-      model: { provider: "anthropic", id: "sonnet" } as never,
-      modelRegistry: {
+      model: createSemanticModel(),
+      modelCatalog: {
         getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-api-key" }),
       },
-      completeFn: async () => createAssistantResponse('{"ordered_ids":["b","a"]}') as never,
+      providerDriver: {
+        complete: async () => createAssistantResponse('{"ordered_ids":["b","a"]}') as never,
+      },
     });
 
     const result = await reranker.rerankNarrativeMemory?.({
@@ -73,11 +133,13 @@ describe("hosted semantic reranker", () => {
     const sessionId = "semantic-reranker-extraction-session";
     const reranker = createHostedSemanticReranker({
       runtime,
-      model: { provider: "anthropic", id: "sonnet" } as never,
-      modelRegistry: {
+      model: createSemanticModel(),
+      modelCatalog: {
         getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-api-key" }),
       },
-      completeFn: async () => createAssistantResponse('{"accept":false}') as never,
+      providerDriver: {
+        complete: async () => createAssistantResponse('{"accept":false}') as never,
+      },
     });
 
     const result = await reranker.extractNarrativeMemoryCandidate?.({
@@ -108,27 +170,16 @@ describe("hosted semantic reranker", () => {
     let capturedUserText = "";
     const reranker = createHostedSemanticReranker({
       runtime,
-      model: { provider: "anthropic", id: "sonnet" } as never,
-      modelRegistry: {
+      model: createSemanticModel(),
+      modelCatalog: {
         getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-api-key" }),
       },
-      completeFn: async (
-        _model: unknown,
-        request: {
-          systemPrompt?: string;
-          messages: Array<{ content?: unknown }>;
+      providerDriver: {
+        complete: async (input) => {
+          capturedSystemPrompt = input.systemPrompt;
+          capturedUserText = input.userText;
+          return createAssistantResponse('{"accept":false}') as never;
         },
-      ) => {
-        capturedSystemPrompt = request.systemPrompt ?? "";
-        const content = request.messages[0]?.content;
-        capturedUserText =
-          Array.isArray(content) &&
-          content[0] &&
-          typeof content[0] === "object" &&
-          (content[0] as { type?: unknown }).type === "text"
-            ? (((content[0] as { text?: unknown }).text as string) ?? "")
-            : "";
-        return createAssistantResponse('{"accept":false}') as never;
       },
     });
 
@@ -145,5 +196,47 @@ describe("hosted semantic reranker", () => {
     expect(capturedSystemPrompt).toContain("'How to apply:'");
     expect(capturedSystemPrompt).toContain("normalize relative dates");
     expect(capturedUserText).toContain("today_local_date=");
+  });
+
+  test("treats unsupported provider APIs as unavailable instead of semantic errors", async () => {
+    const workspace = createTestWorkspace("semantic-reranker-unsupported-api");
+    const runtime = new BrewvaRuntime({ cwd: workspace, agentId: "default" });
+    const sessionId = "semantic-reranker-unsupported-api-session";
+    const reranker = createHostedSemanticReranker({
+      runtime,
+      model: {
+        ...createSemanticModel(),
+        provider: "google",
+        id: "gemini-cli",
+        name: "Gemini CLI",
+        api: "google-gemini-cli",
+        baseUrl: "https://example.invalid",
+      },
+      modelCatalog: {
+        getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-api-key" }),
+      },
+    });
+
+    const result = await reranker.rerankNarrativeMemory?.({
+      sessionId,
+      surface: "narrative_memory",
+      query: "bun commands",
+      targetRoots: ["packages"],
+      stateRevision: "1",
+      candidates: [
+        { id: "a", title: "A", summary: "A summary", content: "Use npm" },
+        { id: "b", title: "B", summary: "B summary", content: "Use Bun" },
+      ],
+    });
+
+    expect(result).toBeNull();
+    const rerankEvent = runtime.inspect.events.query(sessionId, {
+      type: SEMANTIC_RERANK_INVOKED_EVENT_TYPE,
+      last: 1,
+    })[0];
+    expect(rerankEvent?.payload?.outcome).toBe("unavailable");
+    expect(runtime.inspect.events.query(sessionId, { type: COST_UPDATE_EVENT_TYPE })).toHaveLength(
+      0,
+    );
   });
 });

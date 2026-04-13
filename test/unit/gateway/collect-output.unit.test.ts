@@ -4,23 +4,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime, type SessionWireFrame } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
+import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
 import { collectSessionPromptOutput } from "../../../packages/brewva-gateway/src/session/collect-output.js";
 
 type SessionLike = {
-  subscribe: (listener: (event: AgentSessionEvent) => void) => () => void;
+  subscribe: (listener: (event: BrewvaPromptSessionEvent) => void) => () => void;
   prompt: (content: string) => Promise<void>;
-  agent: {
-    waitForIdle: () => Promise<void>;
-  };
+  waitForIdle: () => Promise<void>;
   sessionManager?: {
     getSessionId?: () => string;
   };
   dispose?: () => void;
 };
 
-function createSessionMock(eventsToEmit: AgentSessionEvent[]): SessionLike {
-  let listener: ((event: AgentSessionEvent) => void) | undefined;
+function createSessionMock(eventsToEmit: BrewvaPromptSessionEvent[]): SessionLike {
+  let listener: ((event: BrewvaPromptSessionEvent) => void) | undefined;
   return {
     subscribe(next) {
       listener = next;
@@ -33,10 +31,8 @@ function createSessionMock(eventsToEmit: AgentSessionEvent[]): SessionLike {
         listener?.(event);
       }
     },
-    agent: {
-      async waitForIdle(): Promise<void> {
-        return;
-      },
+    async waitForIdle(): Promise<void> {
+      return;
     },
   };
 }
@@ -102,14 +98,14 @@ describe("gateway collect output", () => {
         toolCallId: "tc-gw-exec",
         toolName: "exec",
         args: { command: "pwd" },
-      } as AgentSessionEvent,
+      } as BrewvaPromptSessionEvent,
       {
         type: "tool_execution_end",
         toolCallId: "tc-gw-exec",
         toolName: "exec",
         result: noisyOutput,
         isError: true,
-      } as AgentSessionEvent,
+      } as BrewvaPromptSessionEvent,
     ]);
 
     const output = await collectSessionPromptOutput(
@@ -141,20 +137,20 @@ describe("gateway collect output", () => {
         toolCallId: "tc-gw-update",
         toolName: "exec",
         args: { command: "pwd" },
-      } as AgentSessionEvent,
+      } as BrewvaPromptSessionEvent,
       {
         type: "tool_execution_update",
         toolCallId: "tc-gw-update",
         toolName: "exec",
         partialResult: noisyPartial,
-      } as AgentSessionEvent,
+      } as BrewvaPromptSessionEvent,
       {
         type: "tool_execution_end",
         toolCallId: "tc-gw-update",
         toolName: "exec",
         result: "done",
         isError: false,
-      } as AgentSessionEvent,
+      } as BrewvaPromptSessionEvent,
     ]);
 
     const frames: SessionWireFrame[] = [];
@@ -197,7 +193,7 @@ describe("gateway collect output", () => {
         toolCallId: "tc-gw-fail-verdict",
         toolName: "exec",
         args: { command: "pwd" },
-      } as AgentSessionEvent,
+      } as BrewvaPromptSessionEvent,
       {
         type: "tool_execution_end",
         toolCallId: "tc-gw-fail-verdict",
@@ -207,7 +203,7 @@ describe("gateway collect output", () => {
           details: { verdict: "fail" },
         },
         isError: false,
-      } as AgentSessionEvent,
+      } as BrewvaPromptSessionEvent,
     ]);
 
     const output = await collectSessionPromptOutput(
@@ -229,7 +225,7 @@ describe("gateway collect output", () => {
     const eventBridge = createRuntimeEventBridge();
     recordTurnInput(eventBridge, "agent-session-1", "turn-compact");
     const sentMessages: string[] = [];
-    let listener: ((event: AgentSessionEvent) => void) | undefined;
+    let listener: ((event: BrewvaPromptSessionEvent) => void) | undefined;
     const session: SessionLike = {
       subscribe(next) {
         listener = next;
@@ -249,7 +245,7 @@ describe("gateway collect output", () => {
             toolName: "session_compact",
             result: "requested",
             isError: false,
-          } as AgentSessionEvent);
+          } as BrewvaPromptSessionEvent);
           recordRuntimeEvent(eventBridge.runtime, {
             sessionId: "agent-session-1",
             type: "session_compact",
@@ -266,12 +262,10 @@ describe("gateway collect output", () => {
             role: "assistant",
             content: [{ type: "text", text: "resumed answer" }],
           },
-        } as AgentSessionEvent);
+        } as BrewvaPromptSessionEvent);
       },
-      agent: {
-        async waitForIdle(): Promise<void> {
-          return;
-        },
+      async waitForIdle(): Promise<void> {
+        return;
       },
     };
 
@@ -379,9 +373,9 @@ describe("gateway collect output", () => {
         content: [{ type: "text", text: "restored branch summary" }],
       },
     ];
-    let listener: ((event: AgentSessionEvent) => void) | undefined;
+    let listener: ((event: BrewvaPromptSessionEvent) => void) | undefined;
     const session = {
-      subscribe(next: (event: AgentSessionEvent) => void) {
+      subscribe(next: (event: BrewvaPromptSessionEvent) => void) {
         listener = next;
         return () => {
           listener = undefined;
@@ -422,15 +416,13 @@ describe("gateway collect output", () => {
             role: "assistant",
             content: [{ type: "text", text: "restored answer" }],
           },
-        } as AgentSessionEvent);
+        } as BrewvaPromptSessionEvent);
       },
-      agent: {
-        async waitForIdle(): Promise<void> {
-          return;
-        },
-        replaceMessages(messages: unknown): void {
-          replacedMessages.push(messages);
-        },
+      async waitForIdle(): Promise<void> {
+        return;
+      },
+      replaceMessages(messages: unknown): void {
+        replacedMessages.push(messages);
       },
     };
 
@@ -513,7 +505,7 @@ describe("gateway collect output", () => {
   test("given a late tool completion from a superseded attempt, when collecting output, then stale tool output stays live-scoped to its original attempt and stays out of committed state", async () => {
     const eventBridge = createRuntimeEventBridge();
     recordTurnInput(eventBridge, "agent-session-stale-tool", "turn-stale-tool");
-    let listener: ((event: AgentSessionEvent) => void) | undefined;
+    let listener: ((event: BrewvaPromptSessionEvent) => void) | undefined;
     const session: SessionLike = {
       subscribe(next) {
         listener = next;
@@ -530,7 +522,7 @@ describe("gateway collect output", () => {
           toolCallId: "tc-stale-attempt-1",
           toolName: "read",
           args: { path: "a.txt" },
-        } as AgentSessionEvent);
+        } as BrewvaPromptSessionEvent);
         recordRuntimeEvent(eventBridge.runtime, {
           sessionId: "agent-session-stale-tool",
           type: "session_turn_transition",
@@ -553,32 +545,30 @@ describe("gateway collect output", () => {
           toolName: "read",
           result: "stale attempt output",
           isError: false,
-        } as AgentSessionEvent);
+        } as BrewvaPromptSessionEvent);
         listener?.({
           type: "tool_execution_start",
           toolCallId: "tc-current-attempt-2",
           toolName: "read",
           args: { path: "b.txt" },
-        } as AgentSessionEvent);
+        } as BrewvaPromptSessionEvent);
         listener?.({
           type: "tool_execution_end",
           toolCallId: "tc-current-attempt-2",
           toolName: "read",
           result: "current attempt output",
           isError: false,
-        } as AgentSessionEvent);
+        } as BrewvaPromptSessionEvent);
         listener?.({
           type: "message_end",
           message: {
             role: "assistant",
             content: [{ type: "text", text: "final answer" }],
           },
-        } as AgentSessionEvent);
+        } as BrewvaPromptSessionEvent);
       },
-      agent: {
-        async waitForIdle(): Promise<void> {
-          return;
-        },
+      async waitForIdle(): Promise<void> {
+        return;
       },
     };
 
@@ -627,21 +617,21 @@ describe("gateway collect output", () => {
         toolCallId: "tc-missing-binding",
         toolName: "exec",
         partialResult: "partial output",
-      } as AgentSessionEvent,
+      } as BrewvaPromptSessionEvent,
       {
         type: "tool_execution_end",
         toolCallId: "tc-missing-binding",
         toolName: "exec",
         result: "terminal output",
         isError: false,
-      } as AgentSessionEvent,
+      } as BrewvaPromptSessionEvent,
       {
         type: "message_end",
         message: {
           role: "assistant",
           content: [{ type: "text", text: "final answer" }],
         },
-      } as AgentSessionEvent,
+      } as BrewvaPromptSessionEvent,
     ]);
 
     const frames: SessionWireFrame[] = [];

@@ -1,4 +1,4 @@
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import { recordToolRuntimeEvent, resolveToolRuntimeContextPort } from "./runtime-internal.js";
 import type { BrewvaBundledToolOptions } from "./types.js";
@@ -39,21 +39,29 @@ export function createSessionCompactTool(options: BrewvaBundledToolOptions): Too
             : usage.percent
           : null);
       const customInstructions = contextPort?.getCompactionInstructions?.() ?? "";
+      let compactError: string | undefined;
 
       try {
         ctx.compact({
           customInstructions,
           onError: (error) => {
+            compactError = normalizeErrorMessage(error);
             recordToolRuntimeEvent(options.runtime, {
               sessionId,
               type: "session_compact_failed",
               payload: {
                 reason: reason ?? null,
-                error: normalizeErrorMessage(error),
+                error: compactError,
               },
             });
           },
         });
+        if (compactError) {
+          return failTextResult(`Session compaction request failed (${compactError}).`, {
+            ok: false,
+            error: compactError,
+          });
+        }
         recordToolRuntimeEvent(options.runtime, {
           sessionId,
           type: "session_compact_requested",

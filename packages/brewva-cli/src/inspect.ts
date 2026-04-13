@@ -236,11 +236,12 @@ function readLatestEventPayload<T extends object>(
   runtime: BrewvaOperatorRuntimePort,
   sessionId: string,
   type: string,
+  coerce: (payload: Record<string, unknown>) => T = (payload) => payload as T,
 ): { payload: T; timestamp: number } | null {
   const event = runtime.inspect.events.query(sessionId, { type, last: 1 })[0];
   if (!event?.payload) return null;
   return {
-    payload: event.payload as T,
+    payload: coerce(event.payload as Record<string, unknown>),
     timestamp: event.timestamp,
   };
 }

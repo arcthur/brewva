@@ -135,9 +135,9 @@ export async function waitForRawFrame<T>(
   );
 }
 
-export async function waitForNoRawFrame<T>(
+export async function waitForNoRawFrame(
   ws: WebSocket,
-  predicate: (frame: unknown) => frame is T,
+  predicate: (frame: unknown) => boolean,
   timeoutMs = 700,
 ): Promise<void> {
   await withTimeout(

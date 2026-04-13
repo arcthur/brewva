@@ -23,8 +23,11 @@ function extractText(result: { content: Array<{ type: string; text?: string }> }
   );
 }
 
-function extractDetails<T>(result: { details?: unknown }): T | undefined {
-  return result.details as T | undefined;
+function extractDetails<T>(
+  result: { details?: unknown },
+  coerce: (details: unknown) => T = (details) => details as T,
+): T | undefined {
+  return result.details === undefined ? undefined : coerce(result.details);
 }
 
 function createToolContext(sessionId: string) {

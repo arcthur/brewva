@@ -14,7 +14,7 @@ export function normalizePercent(
   if (value === null || value === undefined) return null;
   if (!Number.isFinite(value)) return null;
 
-  const raw = Number(value);
+  const raw = value;
   const tokens = options?.tokens;
   const contextWindow = options?.contextWindow;
   const hasTokenTelemetry =

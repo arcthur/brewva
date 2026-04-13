@@ -81,9 +81,9 @@ export const BREWVA_TOOL_SURFACE_BY_NAME = {
   rollback_last_patch: "operator",
 } as const satisfies Record<string, BrewvaToolSurface>;
 
-function toolNamesBySurface<S extends BrewvaToolSurface>(surface: S) {
+function toolNamesBySurface(surface: BrewvaToolSurface): string[] {
   return (Object.entries(BREWVA_TOOL_SURFACE_BY_NAME) as [string, BrewvaToolSurface][])
-    .filter((entry): entry is [string, S] => entry[1] === surface)
+    .filter((entry) => entry[1] === surface)
     .map(([name]) => name)
     .toSorted();
 }

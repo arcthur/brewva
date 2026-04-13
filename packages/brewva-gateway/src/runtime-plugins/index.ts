@@ -8,6 +8,11 @@ import {
   type BrewvaRuntimeOptions,
 } from "@brewva/brewva-runtime";
 import { createToolRuntimeInternalPort, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import type {
+  BrewvaHostPluginApi,
+  BrewvaHostPluginFactory,
+  BrewvaToolDefinition,
+} from "@brewva/brewva-substrate";
 import {
   buildBrewvaTools,
   getBrewvaToolMetadata,
@@ -15,10 +20,6 @@ import {
   type BrewvaSemanticReranker,
   type BrewvaToolOrchestration,
 } from "@brewva/brewva-tools";
-import type {
-  ExtensionFactory as UpstreamExtensionFactory,
-  ToolDefinition,
-} from "@mariozechner/pi-coding-agent";
 import { DEFAULT_HOSTED_ROUTING_SCOPES } from "../host/routing-defaults.js";
 import type { HostedDelegationStore } from "../subagents/delegation-store.js";
 import {
@@ -45,8 +46,8 @@ import {
 } from "./tool-surface.js";
 import { registerTurnLifecyclePorts, type TurnLifecyclePort } from "./turn-lifecycle-port.js";
 
-export type RuntimePlugin = UpstreamExtensionFactory;
-export type RuntimePluginApi = Parameters<RuntimePlugin>[0];
+export type RuntimePlugin = BrewvaHostPluginFactory;
+export type RuntimePluginApi = BrewvaHostPluginApi;
 
 export interface CreateHostedTurnPipelineOptions extends BrewvaRuntimeOptions {
   runtime?: BrewvaRuntime;
@@ -58,7 +59,7 @@ export interface CreateHostedTurnPipelineOptions extends BrewvaRuntimeOptions {
   semanticReranker?: BrewvaSemanticReranker;
   ports?: readonly TurnLifecyclePort[];
   toolExecutionCoordinator?: HostedToolExecutionCoordinator;
-  hostedToolDefinitionsByName?: ReadonlyMap<string, ToolDefinition>;
+  hostedToolDefinitionsByName?: ReadonlyMap<string, BrewvaToolDefinition>;
 }
 
 function assertHostedPipelineRuntimeCompatibility(options: CreateHostedTurnPipelineOptions): void {
@@ -125,14 +126,14 @@ function registerHostedPipeline(
   runtime: BrewvaRuntime,
   runtimePluginApi: RuntimePluginApi,
   tools: ReturnType<typeof buildBrewvaTools>,
-  extraToolDefinitionsByName: ReadonlyMap<string, ToolDefinition>,
+  extraToolDefinitionsByName: ReadonlyMap<string, BrewvaToolDefinition>,
   registerTools: boolean,
   delegationStore: HostedDelegationStore | undefined,
   contextProfile: "minimal" | "standard" | "full" | undefined,
   semanticReranker: BrewvaSemanticReranker | undefined,
   userPorts: readonly TurnLifecyclePort[],
 ): void {
-  const toolDefinitionsByName = new Map<string, ToolDefinition>(extraToolDefinitionsByName);
+  const toolDefinitionsByName = new Map<string, BrewvaToolDefinition>(extraToolDefinitionsByName);
   for (const tool of tools) {
     toolDefinitionsByName.set(tool.name, tool);
   }
@@ -240,7 +241,7 @@ export function createHostedTurnPipeline(
       runtime,
       runtimePluginApi,
       allTools,
-      options.hostedToolDefinitionsByName ?? new Map<string, ToolDefinition>(),
+      options.hostedToolDefinitionsByName ?? new Map<string, BrewvaToolDefinition>(),
       registerTools,
       options.delegationStore,
       options.contextProfile,

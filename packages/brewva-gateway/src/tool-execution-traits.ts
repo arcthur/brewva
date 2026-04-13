@@ -1,5 +1,5 @@
+import type { BrewvaToolDefinition } from "@brewva/brewva-substrate";
 import { resolveBrewvaToolExecutionTraits } from "@brewva/brewva-tools";
-import type { ExtensionContext, ToolDefinition } from "@mariozechner/pi-coding-agent";
 
 type WaitMode = "shared" | "exclusive";
 
@@ -16,11 +16,31 @@ interface SessionExecutionState {
   queue: SessionExecutionWaiter[];
 }
 
+interface HostedExecutionContextLike {
+  cwd: string;
+  sessionManager: {
+    getSessionId(): string;
+  };
+}
+
+interface HostedExecutableToolDefinition {
+  name: string;
+  execute(
+    toolCallId: string,
+    params: unknown,
+    signal: AbortSignal | undefined,
+    onUpdate: unknown,
+    ctx: HostedExecutionContextLike,
+  ): Promise<unknown>;
+}
+
+type HostedRegisteredToolDefinition = HostedExecutableToolDefinition | BrewvaToolDefinition;
+
 function createAbortError(): Error {
   return new Error("tool_execution_aborted_before_start");
 }
 
-function getSessionId(ctx: ExtensionContext): string {
+function getSessionId(ctx: HostedExecutionContextLike): string {
   const sessionId = ctx.sessionManager.getSessionId();
   return sessionId.trim().length > 0 ? sessionId.trim() : "__anonymous__";
 }
@@ -174,10 +194,7 @@ class SessionScopedExecutionCoordinator implements HostedToolExecutionCoordinato
   }
 }
 
-function copyToolMetadataProperties(
-  source: ToolDefinition,
-  target: ToolDefinition,
-): ToolDefinition {
+function copyToolMetadataProperties<T extends object>(source: object, target: T): T {
   for (const propertyName of [
     "brewva",
     "brewvaExecutionTraits",
@@ -195,41 +212,51 @@ export function createHostedToolExecutionCoordinator(): HostedToolExecutionCoord
   return new SessionScopedExecutionCoordinator();
 }
 
-export function wrapToolDefinitionWithHostedExecutionTraits<T extends ToolDefinition>(
-  tool: T,
-  coordinator: HostedToolExecutionCoordinator,
-): T {
+export function wrapToolDefinitionWithHostedExecutionTraits<
+  T extends HostedRegisteredToolDefinition,
+>(tool: T, coordinator: HostedToolExecutionCoordinator): T {
   const wrapped = {
     ...tool,
-    async execute(toolCallId, params, signal, onUpdate, ctx) {
+    async execute(
+      ...[toolCallId, params, signal, onUpdate, ctx]: Parameters<T["execute"]>
+    ): Promise<Awaited<ReturnType<T["execute"]>>> {
       const traits = resolveBrewvaToolExecutionTraits(tool, {
         toolName: tool.name,
         args: params,
-        cwd: ctx.cwd,
+        cwd: (ctx as HostedExecutionContextLike).cwd,
       });
       const mode: WaitMode = traits.concurrencySafe ? "shared" : "exclusive";
-      const release = await coordinator.acquire(getSessionId(ctx), mode, {
-        signal,
-        honorAbort: traits.interruptBehavior === "cancel",
-      });
+      const release = await coordinator.acquire(
+        getSessionId(ctx as HostedExecutionContextLike),
+        mode,
+        {
+          signal,
+          honorAbort: traits.interruptBehavior === "cancel",
+        },
+      );
 
       const executionSignal = traits.interruptBehavior === "cancel" ? signal : undefined;
+      const execute = tool.execute as (
+        ...args: Parameters<T["execute"]>
+      ) => ReturnType<T["execute"]>;
+      const executeArgs = [toolCallId, params, executionSignal, onUpdate, ctx] as Parameters<
+        T["execute"]
+      >;
 
       try {
-        return await tool.execute(toolCallId, params, executionSignal, onUpdate, ctx);
+        return await execute(...executeArgs);
       } finally {
         release();
       }
     },
-  } satisfies ToolDefinition;
+  };
 
-  return copyToolMetadataProperties(tool, wrapped as ToolDefinition) as T;
+  return copyToolMetadataProperties(tool, wrapped);
 }
 
-export function wrapToolDefinitionsWithHostedExecutionTraits<T extends ToolDefinition>(
-  tools: readonly T[] | undefined,
-  coordinator: HostedToolExecutionCoordinator,
-): T[] | undefined {
+export function wrapToolDefinitionsWithHostedExecutionTraits<
+  T extends HostedRegisteredToolDefinition,
+>(tools: readonly T[] | undefined, coordinator: HostedToolExecutionCoordinator): T[] | undefined {
   if (!tools || tools.length === 0) {
     return undefined;
   }

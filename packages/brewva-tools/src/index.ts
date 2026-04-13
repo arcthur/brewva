@@ -1,4 +1,4 @@
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { createAstGrepTools } from "./ast-grep.js";
 import { createBrowserTools } from "./browser.js";
 import { createCostViewTool } from "./cost-view.js";

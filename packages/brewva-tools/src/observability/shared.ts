@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { BrewvaToolContext as ExtensionContext } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import { resolveToolRuntimeEventPort } from "../runtime-internal.js";
 import type { BrewvaToolRuntime } from "../types.js";

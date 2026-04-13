@@ -68,6 +68,9 @@ function buildGenericExpectedOutput(outputName: string, contract: SkillOutputCon
         ]),
       );
   }
+
+  const exhaustive: never = contract;
+  return exhaustive;
 }
 
 function deriveTaskSpecFromOutputs(outputs: Record<string, unknown>): TaskSpec | null {

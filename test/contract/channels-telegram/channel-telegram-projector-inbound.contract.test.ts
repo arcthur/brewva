@@ -80,13 +80,12 @@ describe("channel telegram projector inbound", () => {
     });
     expect(requests).toHaveLength(1);
 
-    const callbackData = (
+    const callbackData =
       (
         requests[0]?.params.reply_markup as {
           inline_keyboard?: Array<Array<{ callback_data?: string }>>;
         }
-      )?.inline_keyboard?.[0]?.[0]?.callback_data ?? ""
-    ).toString();
+      )?.inline_keyboard?.[0]?.[0]?.callback_data ?? "";
     const decoded = decodeTelegramApprovalCallback(callbackData, secret, { context: "12345" });
     expect(decoded).toEqual({
       requestId: "req-1234567890",

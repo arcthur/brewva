@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { createToolRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaToolContext } from "@brewva/brewva-substrate";
 import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { createRuntimeConfig, createRuntimeFixture } from "../../helpers/runtime.js";
 
 type RecordedExecTestEvent = {
@@ -22,7 +22,7 @@ export function extractTextContent(result: {
   return textPart?.text ?? "";
 }
 
-export function fakeContext(sessionId: string): ExtensionContext {
+export function fakeContext(sessionId: string): BrewvaToolContext {
   return {
     cwd: process.cwd(),
     sessionManager: {
@@ -30,7 +30,7 @@ export function fakeContext(sessionId: string): ExtensionContext {
         return sessionId;
       },
     },
-  } as unknown as ExtensionContext;
+  } as unknown as BrewvaToolContext;
 }
 
 export function createRuntimeForExecTests(input?: {

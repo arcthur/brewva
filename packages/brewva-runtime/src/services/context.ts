@@ -233,6 +233,16 @@ export class ContextService {
     return this.sessionState.getTransientReduction(sessionId);
   }
 
+  getReservedPrimaryTokens(sessionId: string, injectionScopeId?: string): number {
+    const scopeKey = this.sessionState.buildInjectionScopeKey(sessionId, injectionScopeId);
+    return this.sessionState.getReservedPrimaryInjectionTokens(scopeKey) ?? 0;
+  }
+
+  getReservedSupplementalTokens(sessionId: string, injectionScopeId?: string): number {
+    const scopeKey = this.sessionState.buildInjectionScopeKey(sessionId, injectionScopeId);
+    return this.sessionState.getReservedSupplementalInjectionTokens(scopeKey) ?? 0;
+  }
+
   getRecentCompactionWindowTurns(): number {
     return this.contextPressure.getRecentCompactionWindowTurns();
   }

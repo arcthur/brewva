@@ -5,14 +5,14 @@ import {
 } from "@brewva/brewva-gateway";
 import type { RuntimePlugin, RuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { BrewvaHostContext } from "@brewva/brewva-substrate";
 import { clampText } from "./inspect-analysis.js";
 
 const OVERLAY_WIDGET_ID = "brewva-agent-overlays";
 const MAX_WIDGET_LINES = 28;
 const MAX_LINE_CHARS = 220;
 
-function clearOverlayWidget(ctx: ExtensionContext, widgetId: string): void {
+function clearOverlayWidget(ctx: BrewvaHostContext, widgetId: string): void {
   if (!ctx.hasUI) return;
   ctx.ui.setWidget(widgetId, undefined, {
     placement: "belowEditor",

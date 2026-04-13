@@ -79,6 +79,26 @@ Boundary rule:
 - every committed decision produces a receipt
 - tape is commitment memory, not a best-effort debug log
 
+## Substrate Boundary
+
+Between the kernel ring and the experience ring, Brewva now treats the
+`substrate` as the execution foundation rather than as an informal host
+implementation detail.
+
+- substrate owns session lifecycle driving
+- substrate owns turn-loop and stream orchestration
+- substrate owns tool execution phases and host-facing tool surfaces
+- substrate owns prompt/context resource loading and session persistence bridges
+- hosted, CLI, and channel routes all run on that same repo-owned substrate
+- Pi compatibility is limited to import/export and reference-study value, not
+  runtime-path dependency
+
+Kernel boundary reminder:
+
+- kernel still owns effect taxonomy, authorization/defer/deny/allow semantics,
+  verification authority, and receipt-bearing rollback
+- substrate growth must not be used to widen kernel authority vocabulary
+
 ## Operational Planes
 
 - `Working State Plane`

@@ -1,6 +1,11 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type {
+  BrewvaPromptOptions,
+  BrewvaPromptThinkingLevel,
+  BrewvaSessionModelCatalogView,
+  BrewvaSessionModelDescriptor,
+} from "@brewva/brewva-substrate";
 import { selectBrewvaFallbackModel } from "@brewva/brewva-tools";
-import type { AgentSession, PromptOptions } from "@mariozechner/pi-coding-agent";
 import type { PromptDispatchSession } from "./contracts.js";
 import {
   armNextPromptOutputBudgetEscalation,
@@ -25,7 +30,7 @@ const controllerStoreByRuntime = new WeakMap<
 >();
 const RECOVERY_MODE_SYMBOL = Symbol("brewva.compactionRecoveryMode");
 
-type PromptDispatchOptions = PromptOptions;
+type PromptDispatchOptions = BrewvaPromptOptions;
 type CompactionRecoveryMode = "background" | "settled";
 type PromptRecoveryPolicyName =
   | "deterministic_context_reduction"
@@ -40,21 +45,19 @@ interface PromptRecoveryResult {
 
 export type CompactionRecoverySessionLike = PromptDispatchSession;
 
-type PromptSessionModel = NonNullable<AgentSession["model"]>;
-type PromptSessionThinkingLevel = AgentSession["thinkingLevel"];
+type PromptSessionModel = BrewvaSessionModelDescriptor;
+type PromptSessionThinkingLevel = BrewvaPromptThinkingLevel;
+type FallbackComparableModel = Parameters<typeof selectBrewvaFallbackModel>[0]["currentModel"] &
+  PromptSessionModel;
 
 interface ModelAwarePromptDispatchSession extends PromptDispatchSession {
   readonly model?: PromptSessionModel;
   readonly thinkingLevel?: PromptSessionThinkingLevel;
-  readonly modelRegistry?: {
-    getAvailable?: () => Promise<PromptSessionModel[]>;
-    getAll?: () => PromptSessionModel[];
-  };
+  readonly modelRegistry?: BrewvaSessionModelCatalogView;
   readonly getAvailableThinkingLevels?: () => PromptSessionThinkingLevel[];
-  readonly agent: PromptDispatchSession["agent"] & {
-    setModel?: (model: PromptSessionModel) => void;
-    setThinkingLevel?: (level: PromptSessionThinkingLevel) => void;
-  };
+  readonly setModel?: (model: PromptSessionModel) => Promise<void> | void;
+  readonly setThinkingLevel?: (level: PromptSessionThinkingLevel) => void;
+  readonly waitForIdle?: () => Promise<void>;
 }
 
 interface CompactionRecoveryController {
@@ -160,6 +163,29 @@ function readCurrentModel(session: CompactionRecoverySessionLike): PromptSession
   return (session as ModelAwarePromptDispatchSession).model;
 }
 
+function toFallbackComparableModel(model: PromptSessionModel): FallbackComparableModel {
+  return {
+    provider: model.provider,
+    id: model.id,
+    name: model.name ?? model.displayName ?? model.id,
+    api: model.api ?? "openai-responses",
+    baseUrl: model.baseUrl ?? "",
+    reasoning: model.reasoning,
+    input: model.input ?? ["text"],
+    cost: model.cost ?? {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+    },
+    contextWindow: model.contextWindow,
+    maxTokens: model.maxTokens,
+    ...(model.headers ? { headers: model.headers } : {}),
+    ...(model.compat != null ? { compat: model.compat } : {}),
+    ...(model.displayName ? { displayName: model.displayName } : {}),
+  };
+}
+
 function formatModelKey(model: PromptSessionModel | undefined): string | null {
   if (!model) {
     return null;
@@ -172,10 +198,10 @@ async function listAvailableModels(
 ): Promise<PromptSessionModel[]> {
   const modelRegistry = (session as ModelAwarePromptDispatchSession).modelRegistry;
   if (typeof modelRegistry?.getAvailable === "function") {
-    return await modelRegistry.getAvailable();
+    return [...(await modelRegistry.getAvailable())];
   }
   if (typeof modelRegistry?.getAll === "function") {
-    return modelRegistry.getAll();
+    return [...modelRegistry.getAll()];
   }
   return [];
 }
@@ -203,17 +229,15 @@ async function withTemporaryModel<T>(
   const typedSession = session as ModelAwarePromptDispatchSession;
   const previousModel = typedSession.model;
   const previousThinkingLevel = typedSession.thinkingLevel ?? "off";
-  typedSession.agent.setModel?.(model);
-  typedSession.agent.setThinkingLevel?.(
-    resolveFallbackThinkingLevel(session, previousThinkingLevel),
-  );
+  await typedSession.setModel?.(model);
+  typedSession.setThinkingLevel?.(resolveFallbackThinkingLevel(session, previousThinkingLevel));
   try {
     return await fn();
   } finally {
     if (previousModel) {
-      typedSession.agent.setModel?.(previousModel);
+      await typedSession.setModel?.(previousModel);
     }
-    typedSession.agent.setThinkingLevel?.(previousThinkingLevel);
+    typedSession.setThinkingLevel?.(previousThinkingLevel);
   }
 }
 
@@ -372,8 +396,10 @@ const providerFallbackPolicy: PromptRecoveryPolicy = {
     const currentModel = readCurrentModel(input.session);
     const fallbackModel = currentModel
       ? selectBrewvaFallbackModel({
-          currentModel,
-          availableModels: await listAvailableModels(input.session),
+          currentModel: toFallbackComparableModel(currentModel),
+          availableModels: (await listAvailableModels(input.session)).map(
+            toFallbackComparableModel,
+          ),
         })
       : undefined;
     if (!fallbackModel) {
@@ -559,8 +585,11 @@ function createCompactionRecoveryController(
   const seenCompactionEventIds = new Set<string>();
   const pendingGenerationPromises = new Map<number, Promise<void>>();
   const transitionCoordinator = getHostedTurnTransitionCoordinator(options.runtime);
-  const basePrompt = session.prompt.bind(session);
+  // Wrapper teardown must restore the exact original prompt function identity.
+  // eslint-disable-next-line @typescript-eslint/unbound-method
   const originalPrompt = session.prompt;
+  const basePrompt: CompactionRecoverySessionLike["prompt"] = (content, promptOptions) =>
+    originalPrompt.call(session, content, promptOptions);
   const originalDispose = session.dispose?.bind(session);
   const sessionState = session as unknown as Record<PropertyKey, unknown>;
   let latestPromptSettlement: Promise<void> = Promise.resolve();
@@ -598,7 +627,7 @@ function createCompactionRecoveryController(
     if (sessionState[RECOVERY_MODE_SYMBOL] === mode) {
       return;
     }
-    const promptWrapper: AgentSession["prompt"] = (content, promptOptions) => {
+    const promptWrapper: CompactionRecoverySessionLike["prompt"] = (content, promptOptions) => {
       if (mode === "settled") {
         return sendPromptWithCompactionRecovery(session, content, {
           runtime: options.runtime,
@@ -639,7 +668,7 @@ function createCompactionRecoveryController(
       while (true) {
         await latestPromptSettlement;
         await waitForCompactionToFinish(session);
-        await session.agent.waitForIdle();
+        await session.waitForIdle?.();
 
         const targetGeneration = requestedGeneration;
         if (targetGeneration <= afterGeneration) {
@@ -656,7 +685,7 @@ function createCompactionRecoveryController(
 
         await latestPromptSettlement;
         await waitForCompactionToFinish(session);
-        await session.agent.waitForIdle();
+        await session.waitForIdle?.();
 
         if (requestedGeneration === targetGeneration && completedGeneration >= targetGeneration) {
           return;
@@ -728,7 +757,7 @@ function createCompactionRecoveryController(
     const currentGeneration = previousGeneration.then(async () => {
       await latestPromptSettlement;
       await waitForCompactionToFinish(session);
-      await session.agent.waitForIdle();
+      await session.waitForIdle?.();
 
       try {
         await dispatchResumePrompt({

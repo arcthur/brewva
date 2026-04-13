@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { extname, resolve } from "node:path";
 
 const NODE_VERSION_RANGE = "^20.19.0 || >=22.12.0";
 
@@ -67,6 +67,83 @@ function assertSupportedNodeRuntime(repoRoot: string): void {
   if (!parsed || !isSupportedNodeVersion(parsed)) {
     throw new Error(
       `node version check failed: detected ${versionText.trim()}, expected Node.js ${NODE_VERSION_RANGE} (ES2023 baseline).`,
+    );
+  }
+}
+
+const DIST_TEXT_EXTENSIONS = new Set([
+  ".css",
+  ".d.ts",
+  ".html",
+  ".js",
+  ".json",
+  ".map",
+  ".md",
+  ".mjs",
+  ".txt",
+  ".yaml",
+  ".yml",
+]);
+
+const DIST_FORBIDDEN_MARKERS = [
+  "pi-mono",
+  "@mariozechner/pi-coding-agent",
+  "@mariozechner/pi-tui",
+  "@mariozechner/pi-agent-core",
+  '"piConfig"',
+];
+
+function collectTextFiles(root: string): string[] {
+  if (!existsSync(root)) {
+    return [];
+  }
+
+  const pending = [root];
+  const files: string[] = [];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current) {
+      continue;
+    }
+
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const entryPath = resolve(current, entry.name);
+      if (entry.isDirectory()) {
+        pending.push(entryPath);
+        continue;
+      }
+      if (!entry.isFile()) {
+        continue;
+      }
+      const extension = extname(entry.name);
+      if (
+        DIST_TEXT_EXTENSIONS.has(extension) ||
+        entry.name.endsWith(".d.ts") ||
+        entry.name.endsWith(".d.ts.map")
+      ) {
+        files.push(entryPath);
+      }
+    }
+  }
+  return files;
+}
+
+function assertNoPiEraMarkers(paths: string[]): void {
+  const matches: string[] = [];
+  for (const filePath of paths) {
+    const content = readFileSync(filePath, "utf8");
+    for (const marker of DIST_FORBIDDEN_MARKERS) {
+      if (content.includes(marker)) {
+        matches.push(`${filePath}: ${marker}`);
+      }
+    }
+  }
+
+  if (matches.length > 0) {
+    throw new Error(
+      `dist artifact branding check failed:\n${matches.slice(0, 20).join("\n")}${
+        matches.length > 20 ? `\n...and ${matches.length - 20} more` : ""
+      }`,
     );
   }
 }
@@ -159,6 +236,11 @@ function main(): void {
     cwd: repoRoot,
     step: "dist package import smoke",
   });
+
+  assertNoPiEraMarkers([
+    ...collectTextFiles(resolve(repoRoot, "distribution")),
+    ...collectTextFiles(resolve(repoRoot, "packages", "brewva-cli", "runtime-assets")),
+  ]);
 
   console.log("dist smoke checks passed");
 }
