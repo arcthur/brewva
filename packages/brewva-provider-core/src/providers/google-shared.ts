@@ -3,8 +3,21 @@
  */
 
 import { type Content, FinishReason, FunctionCallingConfigMode, type Part } from "@google/genai";
-import type { Context, ImageContent, Model, StopReason, TextContent, Tool } from "../types.js";
+import type {
+  Context,
+  ImageContent,
+  Model,
+  StopReason,
+  StreamOptions,
+  TextContent,
+  Tool,
+} from "../types.js";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.js";
+import {
+  buildGoogleFileDataPart,
+  materializeResolvedUserMessageContentPart,
+  resolveUserMessageContent,
+} from "./prompt-content.js";
 import { transformMessages } from "./transform-messages.js";
 
 type GoogleApiType = "google-generative-ai" | "google-gemini-cli" | "google-vertex";
@@ -96,6 +109,7 @@ function supportsMultimodalFunctionResponse(modelId: string): boolean {
 export function convertMessages<T extends GoogleApiType>(
   model: Model<T>,
   context: Context,
+  options?: Pick<StreamOptions, "resolveFile">,
 ): Content[] {
   const contents: Content[] = [];
   const normalizeToolCallId = (id: string): string => {
@@ -107,33 +121,47 @@ export function convertMessages<T extends GoogleApiType>(
 
   for (const msg of transformedMessages) {
     if (msg.role === "user") {
-      if (typeof msg.content === "string") {
-        contents.push({
-          role: "user",
-          parts: [{ text: sanitizeSurrogates(msg.content) }],
-        });
-      } else {
-        const parts: Part[] = msg.content.map((item) => {
-          if (item.type === "text") {
-            return { text: sanitizeSurrogates(item.text) };
-          } else {
-            return {
-              inlineData: {
-                mimeType: item.mimeType,
-                data: item.data,
-              },
-            };
+      const parts: Part[] = [];
+      for (const item of resolveUserMessageContent(model, msg.content, options)) {
+        if (item.type === "text") {
+          parts.push({ text: sanitizeSurrogates(item.text) });
+          continue;
+        }
+        if (item.type === "image") {
+          parts.push({
+            inlineData: {
+              mimeType: item.mimeType,
+              data: item.data,
+            },
+          });
+          continue;
+        }
+        const nativeFile = buildGoogleFileDataPart(item);
+        if (nativeFile) {
+          parts.push(nativeFile);
+          continue;
+        }
+        for (const materialized of materializeResolvedUserMessageContentPart(model, item)) {
+          if (materialized.type === "text") {
+            parts.push({ text: sanitizeSurrogates(materialized.text) });
+            continue;
           }
-        });
-        const filteredParts = !model.input.includes("image")
-          ? parts.filter((p) => p.text !== undefined)
-          : parts;
-        if (filteredParts.length === 0) continue;
-        contents.push({
-          role: "user",
-          parts: filteredParts,
-        });
+          parts.push({
+            inlineData: {
+              mimeType: materialized.mimeType,
+              data: materialized.data,
+            },
+          });
+        }
       }
+      const filteredParts = !model.input.includes("image")
+        ? parts.filter((part) => part.text !== undefined || part.fileData !== undefined)
+        : parts;
+      if (filteredParts.length === 0) continue;
+      contents.push({
+        role: "user",
+        parts: filteredParts,
+      });
     } else if (msg.role === "assistant") {
       const parts: Part[] = [];
       // Check if message is from same provider and model - only then keep thinking blocks

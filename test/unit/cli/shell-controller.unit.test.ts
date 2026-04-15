@@ -1,9 +1,18 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { BrewvaReplaySession, SessionWireFrame } from "@brewva/brewva-runtime";
-import type { BrewvaPromptSessionEvent, BrewvaToolUiPort } from "@brewva/brewva-substrate";
+import {
+  buildBrewvaPromptText,
+  type BrewvaPromptContentPart,
+  type BrewvaPromptSessionEvent,
+  type BrewvaToolUiPort,
+} from "@brewva/brewva-substrate";
 import { DEFAULT_TUI_THEME } from "@brewva/brewva-tui";
-import { CliShellController } from "../../../packages/brewva-cli/src/tui-app/controller.js";
-import type { CliShellSessionBundle } from "../../../packages/brewva-cli/src/tui-app/types.js";
+import { CliShellController } from "../../../packages/brewva-cli/src/shell/controller.js";
+import { createCliShellPromptStore } from "../../../packages/brewva-cli/src/shell/prompt-store.js";
+import type { CliShellSessionBundle } from "../../../packages/brewva-cli/src/shell/types.js";
 
 function createFakeBundle(
   options: {
@@ -48,8 +57,8 @@ function createFakeBundle(
         }
       };
     },
-    async prompt(text: string) {
-      await options.promptHandler?.(text);
+    async prompt(parts: readonly BrewvaPromptContentPart[]) {
+      await options.promptHandler?.(buildBrewvaPromptText(parts));
     },
     async waitForIdle() {},
     async abort() {},
@@ -61,6 +70,7 @@ function createFakeBundle(
 
   const bundle = {
     session,
+    toolDefinitions: new Map(),
     runtime: {
       authority: {
         proposals: {
@@ -102,7 +112,7 @@ function createFakeBundle(
   };
 }
 
-describe("cli shell controller", () => {
+describe("shell controller", () => {
   test("attaches the shell ui port to the managed session", () => {
     const { bundle, getAttachedUi } = createFakeBundle();
 
@@ -309,6 +319,523 @@ describe("cli shell controller", () => {
     controller.dispose();
   });
 
+  test("streaming transcript updates preserve slash completion metadata and selection", async () => {
+    const fixture = createFakeBundle();
+    const { bundle } = fixture;
+
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await controller.start();
+    controller.ui.setEditorText("/qu");
+
+    // Fuzzy sort: "/quit" (prefix score 1000-4=996) ranks above "/questions" (1000-9=991).
+    const initialCompletion = controller.getState().composer.completion;
+    expect(initialCompletion).toMatchObject({
+      kind: "slash",
+      query: "qu",
+      selectedIndex: 0,
+    });
+    expect(initialCompletion?.items[0]).toMatchObject({ value: "quit" });
+    expect(initialCompletion?.items[1]).toMatchObject({ value: "questions" });
+
+    await controller.handleSemanticInput({
+      key: "down",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    // After "down", selectedIndex moves to index 1 (questions).
+    expect(controller.getState().composer.completion?.items.at(1)).toMatchObject({
+      value: "questions",
+      description: "List unresolved operator questions.",
+    });
+    expect(controller.getState().composer.completion?.selectedIndex).toBe(1);
+
+    fixture.emitSessionEvent({
+      type: "message_update",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Streaming update while typing." }],
+        stopReason: "toolUse",
+      },
+    });
+
+    // Streaming event must not reset the completion state.
+    expect(controller.ui.getEditorText()).toBe("/qu");
+    expect(controller.getState().composer.completion?.selectedIndex).toBe(1);
+    expect(
+      controller.getState().composer.completion?.items[
+        controller.getState().composer.completion?.selectedIndex ?? 0
+      ],
+    ).toMatchObject({
+      value: "questions",
+      description: "List unresolved operator questions.",
+    });
+
+    controller.dispose();
+  });
+
+  test("composer history navigates from input boundaries and restores the in-flight draft", async () => {
+    const prompts: string[] = [];
+    const { bundle } = createFakeBundle({
+      promptHandler: async (text) => {
+        prompts.push(text);
+      },
+    });
+
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    controller.ui.setEditorText("first prompt");
+    await controller.handleSemanticInput({
+      key: "enter",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    controller.ui.setEditorText("second prompt");
+    await controller.handleSemanticInput({
+      key: "enter",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    expect(prompts).toEqual(["first prompt", "second prompt"]);
+
+    controller.ui.setEditorText("draft now");
+    expect(
+      controller.wantsSemanticInput({
+        key: "up",
+        ctrl: false,
+        meta: false,
+        shift: false,
+      }),
+    ).toBe(false);
+
+    controller.syncComposerFromEditor("draft now", 0);
+    expect(
+      controller.wantsSemanticInput({
+        key: "up",
+        ctrl: false,
+        meta: false,
+        shift: false,
+      }),
+    ).toBe(true);
+
+    await controller.handleSemanticInput({
+      key: "up",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+    expect(controller.ui.getEditorText()).toBe("second prompt");
+    expect(controller.getState().composer.cursor).toBe(0);
+
+    await controller.handleSemanticInput({
+      key: "up",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+    expect(controller.ui.getEditorText()).toBe("first prompt");
+    expect(controller.getState().composer.cursor).toBe(0);
+
+    controller.syncComposerFromEditor("first prompt", "first prompt".length);
+    await controller.handleSemanticInput({
+      key: "down",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+    expect(controller.ui.getEditorText()).toBe("second prompt");
+    expect(controller.getState().composer.cursor).toBe("second prompt".length);
+
+    controller.syncComposerFromEditor("second prompt", "second prompt".length);
+    await controller.handleSemanticInput({
+      key: "down",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+    expect(controller.ui.getEditorText()).toBe("draft now");
+    expect(controller.getState().composer.cursor).toBe("draft now".length);
+
+    controller.dispose();
+  });
+
+  test("slash completion escape clears partial command text and reopens on next typed slash", async () => {
+    const fixture = createFakeBundle();
+    const { bundle } = fixture;
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    controller.ui.setEditorText("/qu");
+    expect(controller.getState().composer.completion).toMatchObject({
+      kind: "slash",
+      query: "qu",
+    });
+
+    // Escape on an incomplete "/command" clears the text entirely (opencode parity).
+    await controller.handleSemanticInput({
+      key: "escape",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+    expect(controller.getState().composer.text).toBe("");
+    expect(controller.getState().composer.completion).toBeUndefined();
+
+    fixture.emitSessionEvent({
+      type: "message_update",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "streaming while completion is dismissed" }],
+        stopReason: "toolUse",
+      },
+    });
+    expect(controller.getState().composer.completion).toBeUndefined();
+
+    // After clearing, the user can type a new slash command and completion reopens.
+    controller.ui.setEditorText("/qui");
+    const afterReopen = controller.getState().composer.completion;
+    expect(afterReopen).toMatchObject({ kind: "slash", query: "qui" });
+    // "/quit" is the best match for "qui" (prefix: 1000-4=996).
+    expect(afterReopen?.items[0]).toMatchObject({ value: "quit" });
+
+    controller.dispose();
+  });
+
+  test("slash completion closes after a trailing space and path completion expands directories on tab", async () => {
+    const { bundle } = createFakeBundle();
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    controller.ui.setEditorText("/quit ");
+    expect(controller.getState().composer.completion).toBeUndefined();
+
+    controller.ui.setEditorText("@pack");
+    const completion = controller.getState().composer.completion;
+    expect(completion).toMatchObject({
+      kind: "path",
+    });
+
+    const directoryIndex =
+      completion?.items.findIndex(
+        (item) => item.kind === "path" && item.detail === "directory" && item.value === "packages/",
+      ) ?? -1;
+    expect(directoryIndex).toBeGreaterThanOrEqual(0);
+
+    controller.setCompletionSelection(directoryIndex);
+    await controller.handleSemanticInput({
+      key: "tab",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    expect(controller.ui.getEditorText()).toBe("@packages/");
+    expect(controller.getState().composer.completion).toMatchObject({
+      kind: "path",
+      query: "packages/",
+    });
+
+    controller.dispose();
+  });
+
+  test("accepting path completion creates a file prompt part and restores it from persisted history", async () => {
+    const promptRoot = mkdtempSync(join(tmpdir(), "brewva-cli-prompt-history-"));
+    const promptStore = createCliShellPromptStore({ rootDir: promptRoot });
+    const prompts: string[] = [];
+    const { bundle } = createFakeBundle({
+      promptHandler: async (text) => {
+        prompts.push(text);
+      },
+    });
+
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      promptStore,
+    });
+
+    try {
+      controller.ui.setEditorText("review @READ");
+      const completion = controller.getState().composer.completion;
+      const fileIndex =
+        completion?.items.findIndex(
+          (item) => item.kind === "path" && item.detail === "file" && item.value === "README.md",
+        ) ?? -1;
+      expect(fileIndex).toBeGreaterThanOrEqual(0);
+
+      controller.setCompletionSelection(fileIndex);
+      await controller.handleSemanticInput({
+        key: "tab",
+        ctrl: false,
+        meta: false,
+        shift: false,
+      });
+
+      expect(controller.ui.getEditorText()).toBe("review @README.md");
+      expect(controller.getState().composer.parts).toEqual([
+        {
+          id: expect.any(String),
+          type: "file",
+          path: "README.md",
+          source: {
+            text: {
+              start: 7,
+              end: 17,
+              value: "@README.md",
+            },
+          },
+        },
+      ]);
+
+      await controller.handleSemanticInput({
+        key: "escape",
+        ctrl: false,
+        meta: false,
+        shift: false,
+      });
+      await controller.handleSemanticInput({
+        key: "enter",
+        ctrl: false,
+        meta: false,
+        shift: false,
+      });
+      expect(prompts).toEqual(["review @README.md"]);
+
+      controller.dispose();
+
+      const restored = new CliShellController(bundle, {
+        cwd: process.cwd(),
+        openSession: async () => bundle,
+        createSession: async () => bundle,
+        promptStore,
+      });
+
+      try {
+        expect(
+          restored.wantsSemanticInput({
+            key: "up",
+            ctrl: false,
+            meta: false,
+            shift: false,
+          }),
+        ).toBe(true);
+
+        await restored.handleSemanticInput({
+          key: "up",
+          ctrl: false,
+          meta: false,
+          shift: false,
+        });
+
+        expect(restored.ui.getEditorText()).toBe("review @README.md");
+        expect(restored.getState().composer.parts).toEqual([
+          {
+            id: expect.any(String),
+            type: "file",
+            path: "README.md",
+            source: {
+              text: {
+                start: 7,
+                end: 17,
+                value: "@README.md",
+              },
+            },
+          },
+        ]);
+      } finally {
+        restored.dispose();
+      }
+    } finally {
+      rmSync(promptRoot, { force: true, recursive: true });
+    }
+  });
+
+  test("stashing the current prompt persists it and ctrl+y restores the latest stashed prompt", async () => {
+    const promptRoot = mkdtempSync(join(tmpdir(), "brewva-cli-prompt-stash-"));
+    const promptStore = createCliShellPromptStore({ rootDir: promptRoot });
+    const { bundle } = createFakeBundle();
+
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      promptStore,
+    });
+
+    try {
+      controller.ui.setEditorText("stash @READ");
+      const completion = controller.getState().composer.completion;
+      const fileIndex =
+        completion?.items.findIndex(
+          (item) => item.kind === "path" && item.detail === "file" && item.value === "README.md",
+        ) ?? -1;
+      expect(fileIndex).toBeGreaterThanOrEqual(0);
+
+      controller.setCompletionSelection(fileIndex);
+      await controller.handleSemanticInput({
+        key: "tab",
+        ctrl: false,
+        meta: false,
+        shift: false,
+      });
+
+      await controller.handleSemanticInput({
+        key: "s",
+        ctrl: true,
+        meta: false,
+        shift: false,
+      });
+
+      expect(controller.ui.getEditorText()).toBe("");
+      expect(controller.getState().composer.parts).toEqual([]);
+      expect(controller.getState().notifications.at(-1)).toMatchObject({
+        level: "info",
+        message: "Stashed prompt: stash @README.md. Press Ctrl+Y to restore the latest draft.",
+      });
+
+      controller.dispose();
+
+      const restored = new CliShellController(bundle, {
+        cwd: process.cwd(),
+        openSession: async () => bundle,
+        createSession: async () => bundle,
+        promptStore,
+      });
+
+      try {
+        await restored.handleSemanticInput({
+          key: "y",
+          ctrl: true,
+          meta: false,
+          shift: false,
+        });
+
+        expect(restored.ui.getEditorText()).toBe("stash @README.md");
+        expect(restored.getState().composer.parts).toEqual([
+          {
+            id: expect.any(String),
+            type: "file",
+            path: "README.md",
+            source: {
+              text: {
+                start: 6,
+                end: 16,
+                value: "@README.md",
+              },
+            },
+          },
+        ]);
+        expect(restored.getState().notifications.at(-1)).toMatchObject({
+          level: "info",
+          message: "Restored stashed prompt: stash @README.md",
+        });
+      } finally {
+        restored.dispose();
+      }
+    } finally {
+      rmSync(promptRoot, { force: true, recursive: true });
+    }
+  });
+
+  test("ctrl+y warns clearly when no stashed prompt is available", async () => {
+    const { bundle } = createFakeBundle();
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    await controller.handleSemanticInput({
+      key: "y",
+      ctrl: true,
+      meta: false,
+      shift: false,
+    });
+
+    expect(controller.getState().notifications.at(-1)).toMatchObject({
+      level: "warning",
+      message: "No stashed prompts yet. Press Ctrl+S to stash the current prompt first.",
+    });
+
+    controller.dispose();
+  });
+
+  test("ctrl+s warns clearly when there is no prompt to stash", async () => {
+    const { bundle } = createFakeBundle();
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    await controller.handleSemanticInput({
+      key: "s",
+      ctrl: true,
+      meta: false,
+      shift: false,
+    });
+
+    expect(controller.getState().notifications.at(-1)).toMatchObject({
+      level: "warning",
+      message: "Nothing to stash yet. Type a prompt, then press Ctrl+S.",
+    });
+
+    controller.dispose();
+  });
+
+  test("slash stash warns clearly when no stashed prompts are available", async () => {
+    const promptRoot = mkdtempSync(join(tmpdir(), "brewva-cli-prompt-stash-empty-"));
+    const promptStore = createCliShellPromptStore({ rootDir: promptRoot });
+    const { bundle } = createFakeBundle();
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      promptStore,
+    });
+
+    try {
+      await controller.start();
+      controller.ui.setEditorText("/stash ");
+      await controller.handleSemanticInput({
+        key: "enter",
+        ctrl: false,
+        meta: false,
+        shift: false,
+      });
+
+      expect(controller.getState().notifications.at(-1)).toMatchObject({
+        level: "warning",
+        message: "No stashed prompts yet. Press Ctrl+S to stash the current prompt first.",
+      });
+    } finally {
+      controller.dispose();
+      rmSync(promptRoot, { force: true, recursive: true });
+    }
+  });
+
   test("serializes submit actions so rapid enter presses do not overlap prompts", async () => {
     let resolvePrompt: (() => void) | undefined;
     const prompts: string[] = [];
@@ -344,6 +871,43 @@ describe("cli shell controller", () => {
     await firstSubmit;
     await secondSubmit;
     expect(prompts).toEqual(["ship it"]);
+    controller.dispose();
+  });
+
+  test("user message appears exactly once even when session emits message_end for the user turn", async () => {
+    const fixture = createFakeBundle();
+    const { bundle } = fixture;
+
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await controller.start();
+    controller.ui.setEditorText("你是谁");
+    await controller.handleSemanticInput({
+      key: "enter",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    // submitComposer adds the user message; simulate the session also emitting
+    // message_end for the same user turn (the normal session behaviour).
+    fixture.emitSessionEvent({
+      type: "message_end",
+      message: {
+        role: "user",
+        content: [{ type: "text", text: "你是谁" }],
+      },
+    });
+
+    const userMessages = controller.getState().transcript.messages.filter((m) => m.role === "user");
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0]?.parts[0]).toMatchObject({ type: "text", text: "你是谁" });
+
     controller.dispose();
   });
 
@@ -405,12 +969,175 @@ describe("cli shell controller", () => {
     expect(
       controller
         .getState()
-        .transcript.entries.some(
-          (entry) =>
-            entry.role === "assistant" &&
-            entry.text.includes("No API key for provider: openai-codex"),
+        .transcript.messages.some(
+          (message) =>
+            message.role === "assistant" &&
+            message.parts.some(
+              (part) =>
+                part.type === "text" && part.text.includes("No API key for provider: openai-codex"),
+            ),
         ),
     ).toBe(true);
+
+    controller.dispose();
+  });
+
+  test("groups assistant reasoning and tool execution updates into transcript parts", async () => {
+    const fixture = createFakeBundle();
+    const { bundle } = fixture;
+
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await controller.start();
+
+    const partialAssistantMessage = {
+      role: "assistant",
+      content: [
+        { type: "thinking", thinking: "Inspect the file before editing." },
+        { type: "text", text: "# Plan\n\n- inspect\n- patch" },
+        {
+          type: "toolCall",
+          id: "tool-read-1",
+          name: "read",
+          arguments: { path: "src/app.ts", offset: 1, limit: 20 },
+        },
+      ],
+      stopReason: "toolUse",
+    };
+
+    fixture.emitSessionEvent({
+      type: "message_update",
+      message: partialAssistantMessage,
+      assistantMessageEvent: {
+        type: "toolcall_end",
+        contentIndex: 2,
+        toolCall: partialAssistantMessage.content[2] as {
+          type: "toolCall";
+          id: string;
+          name: string;
+          arguments: Record<string, unknown>;
+        },
+        partial: partialAssistantMessage,
+      },
+    });
+    fixture.emitSessionEvent({
+      type: "tool_execution_update",
+      toolCallId: "tool-read-1",
+      toolName: "read",
+      args: { path: "src/app.ts", offset: 1, limit: 20 },
+      partialResult: {
+        content: [{ type: "text", text: "const value = 1;" }],
+        details: { phase: "partial" },
+      },
+    });
+    fixture.emitSessionEvent({
+      type: "tool_execution_end",
+      toolCallId: "tool-read-1",
+      toolName: "read",
+      result: {
+        content: [{ type: "text", text: "const value = 1;\nconst next = 2;" }],
+        details: { lines: 2 },
+      },
+      isError: false,
+    });
+    fixture.emitSessionEvent({
+      type: "message_end",
+      message: partialAssistantMessage,
+    });
+    fixture.emitSessionEvent({
+      type: "message_end",
+      message: {
+        role: "toolResult",
+        toolCallId: "tool-read-1",
+        toolName: "read",
+        content: [{ type: "text", text: "const value = 1;\nconst next = 2;" }],
+        details: { lines: 2 },
+        isError: false,
+      },
+    });
+
+    expect(controller.getState().transcript.messages).toHaveLength(1);
+    expect(controller.getState().transcript.messages[0]).toMatchObject({
+      role: "assistant",
+      parts: [
+        { type: "reasoning", text: "Inspect the file before editing." },
+        { type: "text", text: "# Plan\n\n- inspect\n- patch" },
+        {
+          type: "tool",
+          toolCallId: "tool-read-1",
+          toolName: "read",
+          status: "completed",
+          result: {
+            details: { lines: 2 },
+          },
+        },
+      ],
+    });
+
+    controller.dispose();
+  });
+
+  test("rebuilds assistant transcript from assistantMessageEvent.partial when message_update omits message", async () => {
+    const fixture = createFakeBundle();
+    const { bundle } = fixture;
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    await controller.start();
+
+    const partialAssistantMessage = {
+      role: "assistant",
+      content: [
+        { type: "thinking", thinking: "Inspect the target file." },
+        { type: "text", text: "Reading the file first." },
+        {
+          type: "toolCall",
+          id: "tool-read-partial-only",
+          name: "read",
+          arguments: { path: "src/app.ts", offset: 1, limit: 10 },
+        },
+      ],
+      stopReason: "toolUse",
+    };
+
+    fixture.emitSessionEvent({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "toolcall_end",
+        contentIndex: 2,
+        toolCall: partialAssistantMessage.content[2] as {
+          type: "toolCall";
+          id: string;
+          name: string;
+          arguments: Record<string, unknown>;
+        },
+        partial: partialAssistantMessage,
+      },
+    });
+
+    expect(controller.getState().transcript.messages).toHaveLength(1);
+    expect(controller.getState().transcript.messages[0]).toMatchObject({
+      role: "assistant",
+      renderMode: "streaming",
+      parts: [
+        { type: "reasoning", text: "Inspect the target file." },
+        { type: "text", text: "Reading the file first." },
+        {
+          type: "tool",
+          toolCallId: "tool-read-partial-only",
+          toolName: "read",
+          status: "pending",
+        },
+      ],
+    });
 
     controller.dispose();
   });

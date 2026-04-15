@@ -23,20 +23,25 @@ describe("Runtime plugin gaps: quality gate", () => {
 
     registerQualityGate(api, runtime);
 
-    const result = invokeHandler<{ action: string; text?: string; images?: unknown[] }>(
+    const result = invokeHandler<{ action: string; parts?: Array<Record<string, unknown>> }>(
       handlers,
       "input",
       {
         source: "user",
         text: "hello",
-        images: [{ type: "image", url: "test://image" }],
+        parts: [
+          { type: "text", text: "hello" },
+          { type: "image", data: "ZmFrZQ==", mimeType: "image/png" },
+        ],
       },
       { sessionManager: { getSessionId: () => "quality-input-1" } },
     );
 
     expect(result.action).toBe("transform");
-    expect(result.text).toBe("sanitized:hello");
-    expect(result.images).toHaveLength(1);
+    expect(result.parts).toEqual([
+      { type: "text", text: "sanitized:hello" },
+      { type: "image", data: "ZmFrZQ==", mimeType: "image/png" },
+    ]);
     expect(userInputs).toEqual(["quality-input-1"]);
   });
 
@@ -64,7 +69,7 @@ describe("Runtime plugin gaps: quality gate", () => {
       {
         source: "user",
         text: "hello",
-        images: [],
+        parts: [{ type: "text", text: "hello" }],
       },
       { sessionManager: { getSessionId: () => "quality-input-2" } },
     );
@@ -97,7 +102,7 @@ describe("Runtime plugin gaps: quality gate", () => {
       {
         source: "interactive",
         text: "请 review this change",
-        images: [],
+        parts: [{ type: "text", text: "请 review this change" }],
       },
       { sessionManager: { getSessionId: () => "quality-input-3" } },
     );

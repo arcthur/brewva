@@ -76,14 +76,14 @@ Promotion is backed by:
 
 ## Source Anchors
 
-- `packages/brewva-cli/src/tui-app/state/index.ts`
-- `packages/brewva-cli/src/tui-app/controller.ts`
-- `packages/brewva-cli/src/tui-app/transcript.ts`
-- `packages/brewva-cli/src/tui-app/task-details.ts`
-- `packages/brewva-cli/runtime/opentui-shell.ts`
+- `packages/brewva-cli/src/shell/state/index.ts`
+- `packages/brewva-cli/src/shell/controller.ts`
+- `packages/brewva-cli/src/shell/transcript.ts`
+- `packages/brewva-cli/src/shell/task-details.ts`
+- `packages/brewva-cli/runtime/opentui-shell-renderer.tsx`
 - `test/unit/cli/shell-state.unit.test.ts`
-- `test/unit/cli/tui-shell-controller.unit.test.ts`
-- `test/unit/cli/opentui-shell-runtime.unit.test.ts`
+- `test/unit/cli/shell-controller.unit.test.ts`
+- `test/unit/cli/opentui-shell-renderer.unit.test.ts`
 - `test/unit/tui/focus-overlay.unit.test.ts`
 - `test/unit/tui/keybinding-resolver.unit.test.ts`
 

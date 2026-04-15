@@ -3,10 +3,13 @@ import {
   coerceContextBudgetUsage,
   type BrewvaHostedRuntimePort,
 } from "@brewva/brewva-runtime";
-import type {
+import {
   BrewvaHostInputEventResult as InputEventResult,
   BrewvaHostPluginApi,
+  BrewvaPromptContentPart,
   BrewvaHostToolResultEvent as ToolResultEvent,
+  brewvaPromptContentPartsEqual,
+  mapBrewvaPromptTextParts,
 } from "@brewva/brewva-substrate";
 import {
   collectStringEnumContractMismatches,
@@ -21,8 +24,6 @@ interface QualityGateToolCallResult {
 interface QualityGateToolResultResult {
   content?: ToolResultEvent["content"];
 }
-
-type QualityGateTransformResult = Extract<InputEventResult, { action: "transform" }>;
 
 export interface QualityGateLifecycle {
   toolCall: (event: unknown, ctx: unknown) => QualityGateToolCallResult | undefined;
@@ -262,24 +263,24 @@ export function createQualityGateLifecycle(
       };
     },
     input(event, ctx) {
-      const rawEvent = event as { text?: unknown; images?: unknown };
+      const rawEvent = event as { text?: unknown; parts?: unknown };
       const sessionId = getSessionId(ctx);
       if (sessionId.length > 0) {
         runtime.maintain.context.onUserInput(sessionId);
       }
-      const text = typeof rawEvent.text === "string" ? rawEvent.text : "";
-      const images = Array.isArray(rawEvent.images)
-        ? (rawEvent.images as QualityGateTransformResult["images"])
-        : undefined;
-      const sanitized = runtime.inspect.context.sanitizeInput(text);
-      if (sanitized === text) {
+      const parts = Array.isArray(rawEvent.parts)
+        ? (rawEvent.parts as BrewvaPromptContentPart[])
+        : [];
+      const sanitizedParts = mapBrewvaPromptTextParts(parts, (partText) =>
+        runtime.inspect.context.sanitizeInput(partText),
+      );
+      if (brewvaPromptContentPartsEqual(sanitizedParts, parts)) {
         return { action: "continue" };
       }
 
       return {
         action: "transform",
-        text: sanitized,
-        images,
+        parts: sanitizedParts,
       };
     },
   };

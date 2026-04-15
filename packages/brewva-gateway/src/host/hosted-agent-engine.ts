@@ -3,6 +3,7 @@ export type {
   BrewvaAgentEngineAfterToolCallContext,
   BrewvaAgentEngineBeforeToolCallContext,
   BrewvaAgentEngineEvent,
+  BrewvaAgentEngineFileContent,
   BrewvaAgentEngineImageContent,
   BrewvaAgentEngineMessage,
   BrewvaAgentEngineTextContent,

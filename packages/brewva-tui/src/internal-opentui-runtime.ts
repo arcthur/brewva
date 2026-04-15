@@ -16,14 +16,34 @@ export interface OpenTuiKeyEvent {
 export interface OpenTuiTextareaHandle {
   isDestroyed?: boolean;
   plainText: string;
+  cursorOffset?: number;
   logicalCursor: {
     row: number;
     col: number;
   };
   focus(): void;
   blur(): void;
+  clear(): void;
+  insertText(text: string): void;
+  gotoBufferEnd?(): void;
   setText(text: string): void;
   setCursor(row: number, col: number): void;
+  extmarks: {
+    registerType(name: string): number;
+    clear(): void;
+    create(input: {
+      start: number;
+      end: number;
+      virtual?: boolean;
+      styleId?: number;
+      typeId: number;
+    }): number;
+    getAllForTypeId(typeId: number): Array<{
+      id: number;
+      start: number;
+      end: number;
+    }>;
+  };
   editBuffer: {
     on(event: "content-changed" | "cursor-changed", handler: () => void): void;
     off(event: "content-changed" | "cursor-changed", handler: () => void): void;
@@ -34,6 +54,8 @@ export interface OpenTuiScrollBoxHandle {
   isDestroyed?: boolean;
   scrollTop: number;
   scrollHeight: number;
+  scrollBy(delta: number): void;
+  scrollTo(offset: number): void;
   viewport: {
     height: number;
   };
@@ -88,6 +110,8 @@ export interface OpenTuiTestRenderSetup {
   captureCharFrame(): string;
 }
 
+export type OpenTuiSolidNode = () => unknown;
+
 export interface OpenTuiTestRenderOptions {
   width: number;
   height: number;
@@ -119,6 +143,28 @@ export const openTuiReact: OpenTuiReactRuntime = {
     throw createUnsupportedRuntimeError();
   },
 };
+
+export function createOpenTuiSolidElement(
+  _type: unknown,
+  _props?: Record<string, unknown> | null,
+  ..._children: unknown[]
+): OpenTuiSolidNode {
+  void _type;
+  void _props;
+  void _children;
+  throw createUnsupportedRuntimeError();
+}
+
+export async function openTuiSolidAct(_callback: () => void | Promise<void>): Promise<void> {
+  throw createUnsupportedRuntimeError();
+}
+
+export async function openTuiSolidTestRender(
+  _node: OpenTuiSolidNode,
+  _options: OpenTuiTestRenderOptions,
+): Promise<OpenTuiTestRenderSetup> {
+  throw createUnsupportedRuntimeError();
+}
 
 export function isOpenTuiRuntimeAvailable(): boolean {
   return false;

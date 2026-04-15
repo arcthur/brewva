@@ -105,6 +105,7 @@ describe("Runtime plugin integration: observability injection", () => {
       {
         type: "before_agent_start",
         prompt: "continue fixing flaky tests",
+        parts: [{ type: "text", text: "continue fixing flaky tests" }],
         systemPrompt: "base",
       },
       ctx,

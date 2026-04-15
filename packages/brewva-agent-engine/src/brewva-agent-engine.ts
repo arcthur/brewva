@@ -121,6 +121,12 @@ class HostedBrewvaAgentEngine implements BrewvaAgentEngine {
     messages: BrewvaAgentEngineMessage[],
   ) => Promise<BrewvaAgentEngineMessage[]>;
   readonly #shouldStopAfterToolResults: BrewvaAgentEngineStopAfterToolResults | undefined;
+  readonly #resolveFile:
+    | ((
+        part: import("./agent-engine-types.js").BrewvaAgentEngineFileContent,
+        model: BrewvaRegisteredModel,
+      ) => unknown)
+    | undefined;
 
   #state: MutableEngineState;
   #activeRun: ActiveRun | undefined;
@@ -155,6 +161,12 @@ class HostedBrewvaAgentEngine implements BrewvaAgentEngine {
     transformContext: (messages: BrewvaAgentEngineMessage[]) => Promise<BrewvaAgentEngineMessage[]>;
     shouldStopAfterToolResults: BrewvaAgentEngineStopAfterToolResults | undefined;
     resolveRequestAuth: BrewvaAgentEngineResolveRequestAuth | undefined;
+    resolveFile:
+      | ((
+          part: import("./agent-engine-types.js").BrewvaAgentEngineFileContent,
+          model: BrewvaRegisteredModel,
+        ) => unknown)
+      | undefined;
     streamFn: BrewvaAgentEngineStreamFunction;
   }) {
     this.#state = {
@@ -179,6 +191,7 @@ class HostedBrewvaAgentEngine implements BrewvaAgentEngine {
     this.#onPayload = input.onPayload;
     this.#transformContext = input.transformContext;
     this.#shouldStopAfterToolResults = input.shouldStopAfterToolResults;
+    this.#resolveFile = input.resolveFile;
   }
 
   get state() {
@@ -295,6 +308,7 @@ class HostedBrewvaAgentEngine implements BrewvaAgentEngine {
       getSteeringMessages: async () => this.#steeringQueue.drain(),
       getFollowUpMessages: async () => this.#followUpQueue.drain(),
       resolveRequestAuth: this.#resolveRequestAuth,
+      resolveFile: this.#resolveFile,
       toolExecution: "parallel",
       shouldStopAfterToolResults: this.#shouldStopAfterToolResults,
     };
@@ -413,6 +427,10 @@ export function createHostedAgentEngine(input: {
   transformContext: (messages: BrewvaAgentEngineMessage[]) => Promise<BrewvaAgentEngineMessage[]>;
   shouldStopAfterToolResults?: BrewvaAgentEngineStopAfterToolResults;
   resolveRequestAuth?: BrewvaAgentEngineResolveRequestAuth;
+  resolveFile?: (
+    part: import("./agent-engine-types.js").BrewvaAgentEngineFileContent,
+    model: BrewvaRegisteredModel,
+  ) => unknown;
   streamFn?: BrewvaAgentEngineStreamFunction;
 }): BrewvaAgentEngine {
   return new HostedBrewvaAgentEngine({
@@ -430,6 +448,7 @@ export function createHostedAgentEngine(input: {
     transformContext: input.transformContext,
     shouldStopAfterToolResults: input.shouldStopAfterToolResults,
     resolveRequestAuth: input.resolveRequestAuth,
+    resolveFile: input.resolveFile,
     streamFn: input.streamFn ?? createHostedProviderStreamFunction(),
   });
 }

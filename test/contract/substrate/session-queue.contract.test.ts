@@ -8,7 +8,7 @@ import {
 function prompt(promptId: string, content: string): BrewvaPromptEnvelope {
   return {
     promptId,
-    content,
+    parts: [{ type: "text", text: content }],
     submittedAt: Number(promptId.replace(/\D+/gu, "") || "0"),
   };
 }

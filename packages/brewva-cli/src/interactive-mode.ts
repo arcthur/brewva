@@ -5,8 +5,8 @@ import {
 
 export type CliResolvedMode = "interactive" | "print-text" | "print-json";
 
-export const INTERACTIVE_TUI_UNSUPPORTED_TERMINAL_MESSAGE =
-  "Error: interactive TUI requires a full-screen terminal (stdin/stdout must be TTY and TERM must not be dumb). Use --print or --mode json.";
+export const INTERACTIVE_SHELL_UNSUPPORTED_TERMINAL_MESSAGE =
+  "Error: interactive shell requires a full-screen terminal (stdin/stdout must be TTY and TERM must not be dumb). Use --print or --mode json.";
 
 interface ResolveEffectiveCliModeInput {
   requestedMode: CliResolvedMode;
@@ -46,6 +46,6 @@ export function resolveEffectiveCliMode(
   }
 
   return {
-    error: INTERACTIVE_TUI_UNSUPPORTED_TERMINAL_MESSAGE,
+    error: INTERACTIVE_SHELL_UNSUPPORTED_TERMINAL_MESSAGE,
   };
 }

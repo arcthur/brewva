@@ -43,6 +43,14 @@ export interface BrewvaAgentEngineImageContent {
   mimeType: string;
 }
 
+export interface BrewvaAgentEngineFileContent {
+  type: "file";
+  uri: string;
+  name?: string;
+  mimeType?: string;
+  displayText?: string;
+}
+
 export interface BrewvaAgentEngineToolCall {
   type: "toolCall";
   id: string;
@@ -70,7 +78,9 @@ export type BrewvaAgentEngineStopReason = "stop" | "length" | "toolUse" | "error
 
 export interface BrewvaAgentEngineUserMessage {
   role: "user";
-  content: string | Array<BrewvaAgentEngineTextContent | BrewvaAgentEngineImageContent>;
+  content: Array<
+    BrewvaAgentEngineTextContent | BrewvaAgentEngineImageContent | BrewvaAgentEngineFileContent
+  >;
   timestamp: number;
 }
 
@@ -326,6 +336,7 @@ export interface BrewvaAgentEngineStreamOptions {
   headers?: Record<string, string>;
   maxRetryDelayMs?: number;
   thinkingBudgets?: BrewvaAgentEngineThinkingBudgets;
+  resolveFile?: (part: BrewvaAgentEngineFileContent, model: BrewvaRegisteredModel) => unknown;
 }
 
 export type BrewvaAgentEngineStopAfterToolResults = (

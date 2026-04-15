@@ -38,6 +38,10 @@ export interface BrewvaAgentLoopConfig {
   transport: BrewvaAgentEngineTransport;
   thinkingBudgets?: BrewvaAgentEngineThinkingBudgets;
   maxRetryDelayMs?: number;
+  resolveFile?: (
+    part: import("./agent-engine-types.js").BrewvaAgentEngineFileContent,
+    model: BrewvaRegisteredModel,
+  ) => unknown;
   streamFn: BrewvaAgentEngineStreamFunction;
   beforeToolCall?: (
     context: BrewvaAgentEngineBeforeToolCallContext,
@@ -236,6 +240,7 @@ async function streamAssistantResponse(
     headers: requestAuth.headers,
     maxRetryDelayMs: config.maxRetryDelayMs,
     thinkingBudgets: config.thinkingBudgets,
+    resolveFile: config.resolveFile,
   };
 
   const response = await config.streamFn(config.model, streamContext, streamOptions);

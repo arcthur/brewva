@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
+import {
+  buildBrewvaPromptText,
+  type BrewvaPromptContentPart,
+  type BrewvaPromptSessionEvent,
+} from "@brewva/brewva-substrate";
 import {
   createChannelAgentDispatch,
   buildChannelDispatchPrompt,
@@ -216,7 +220,8 @@ describe("channel agent dispatch", () => {
           messages: rebuiltMessages,
         }),
       },
-      async prompt(content: string): Promise<void> {
+      async prompt(parts: readonly BrewvaPromptContentPart[]): Promise<void> {
+        const content = buildBrewvaPromptText(parts);
         sentMessages.push(content);
         if (sentMessages.length === 1) {
           listener?.({

@@ -50,7 +50,15 @@ const LSP_DIAGNOSTIC_SEVERITIES = ["error", "warning", "information", "hint", "a
 const LSP_SYMBOL_SCOPE_VALUES = ["document", "workspace"] as const;
 
 const require = createRequire(import.meta.url);
-const TSC_BIN_PATH = require.resolve("typescript/bin/tsc");
+
+function resolveTscBinPath(): string {
+  try {
+    return require.resolve("typescript/bin/tsc");
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`TypeScript diagnostics runtime is unavailable: ${detail}`, { cause: error });
+  }
+}
 
 interface LspParallelReadContext {
   runtime?: BrewvaBundledToolRuntime;
@@ -339,7 +347,7 @@ async function diagnostics(
   severity?: string,
 ): Promise<DiagnosticsRun> {
   const tsconfigPath = resolve(cwd, "tsconfig.json");
-  const args = [TSC_BIN_PATH, "--noEmit", "--pretty", "false"];
+  const args = [resolveTscBinPath(), "--noEmit", "--pretty", "false"];
   if (existsSync(tsconfigPath)) {
     args.push("--project", tsconfigPath);
   }

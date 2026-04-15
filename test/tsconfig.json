@@ -4,6 +4,7 @@
     "allowJs": true,
     "noEmit": true,
     "composite": false,
+    "jsx": "preserve",
     "types": ["node", "bun-types"]
   },
   "references": [
@@ -17,5 +18,5 @@
     { "path": "../packages/brewva-tui" },
     { "path": "../packages/brewva-cli" }
   ],
-  "include": ["./**/*.ts", "./**/*.d.ts"]
+  "include": ["./**/*.ts", "./**/*.tsx", "./**/*.d.ts"]
 }

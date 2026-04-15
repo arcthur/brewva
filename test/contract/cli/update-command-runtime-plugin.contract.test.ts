@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { createUpdateCommandRuntimePlugin } from "@brewva/brewva-cli";
 import type { RuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { buildBrewvaPromptText, type BrewvaPromptContentPart } from "@brewva/brewva-substrate";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -15,10 +16,13 @@ type RegisteredCommand = {
 function createCommandApiMock(): {
   api: RuntimePluginApi;
   commands: Map<string, RegisteredCommand>;
-  sentMessages: Array<{ content: string; options?: Record<string, unknown> }>;
+  sentMessages: Array<{ content: BrewvaPromptContentPart[]; options?: Record<string, unknown> }>;
 } {
   const commands = new Map<string, RegisteredCommand>();
-  const sentMessages: Array<{ content: string; options?: Record<string, unknown> }> = [];
+  const sentMessages: Array<{
+    content: BrewvaPromptContentPart[];
+    options?: Record<string, unknown>;
+  }> = [];
 
   const api = {
     on() {
@@ -27,7 +31,7 @@ function createCommandApiMock(): {
     registerCommand(name: string, definition: RegisteredCommand) {
       commands.set(name, definition);
     },
-    sendUserMessage(content: string, options?: Record<string, unknown>) {
+    sendUserMessage(content: BrewvaPromptContentPart[], options?: Record<string, unknown>) {
       sentMessages.push({ content, options });
     },
   } as unknown as RuntimePluginApi;
@@ -68,11 +72,11 @@ describe("update interactive command runtime plugin", () => {
 
     expect(sentMessages).toHaveLength(1);
     expect(sentMessages[0]?.options).toBeUndefined();
-    expect(sentMessages[0]?.content).toContain(
+    expect(buildBrewvaPromptText(sentMessages[0]?.content ?? [])).toContain(
       "Run a Brewva update workflow for this environment.",
     );
-    expect(sentMessages[0]?.content).toContain("target=latest");
-    expect(sentMessages[0]?.content).toContain(
+    expect(buildBrewvaPromptText(sentMessages[0]?.content ?? [])).toContain("target=latest");
+    expect(buildBrewvaPromptText(sentMessages[0]?.content ?? [])).toContain(
       "Do not claim the update is complete until validation has passed.",
     );
     expect(notifications).toEqual([{ message: "Queued Brewva update workflow.", level: "info" }]);

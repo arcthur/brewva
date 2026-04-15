@@ -916,7 +916,7 @@ export function buildRequest(
   options: GoogleGeminiCliOptions = {},
   isAntigravity = false,
 ): CloudCodeAssistRequest {
-  const contents = convertMessages(model, context);
+  const contents = convertMessages(model, context, options);
 
   const generationConfig: CloudCodeAssistRequest["request"]["generationConfig"] = {};
   if (options.temperature !== undefined) {

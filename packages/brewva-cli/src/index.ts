@@ -49,11 +49,11 @@ import { createBrewvaSession } from "./session.js";
 import { createUpdateCommandRuntimePlugin } from "./update-command-runtime-plugin.js";
 
 const NODE_VERSION_RANGE = "^20.19.0 || >=22.12.0";
-const BREWVA_TUI_SMOKE_ENV = "BREWVA_TUI_SMOKE";
+const BREWVA_SHELL_SMOKE_ENV = "BREWVA_SHELL_SMOKE";
 const BREWVA_OPENTUI_UNSUPPORTED_MESSAGE =
-  "Interactive TUI is not available on this Brewva build target yet. Use --print/--mode json or a promoted glibc/macOS build.";
+  "Interactive shell is not available on this Brewva build target yet. Use --print/--mode json or a promoted glibc/macOS build.";
 
-type CliInteractiveRuntimeModule = typeof import("@brewva/brewva-cli/internal-tui-runtime");
+type CliInteractiveShellRuntimeModule = typeof import("@brewva/brewva-cli/internal-shell-runtime");
 
 type Semver = Readonly<{ major: number; minor: number; patch: number }>;
 
@@ -128,7 +128,7 @@ Subcommands:
   brewva onboard ...   One-shot onboarding helpers (daemon install/uninstall)
 
 Modes:
-  default               Interactive TUI mode
+  default               Interactive shell mode
   --print               One-shot mode (prints final answer and exits)
   --mode json           One-shot JSON event stream
 
@@ -142,7 +142,7 @@ Options:
   --managed-tools <runtime_plugin|direct>
                        Register managed Brewva tools through the hosted runtime plugin or provide them directly (default: runtime_plugin)
   --print, -p           Run one-shot mode
-  --interactive, -i     Force interactive TUI mode
+  --interactive, -i     Force interactive shell mode
   --mode <text|json>    One-shot output mode
   --backend <kind>      Session backend: auto | embedded | gateway (default: auto)
   --json                Alias for --mode json
@@ -205,12 +205,12 @@ function printVersion(): void {
   console.log(CLI_VERSION);
 }
 
-const loadCliInteractiveRuntime: () => Promise<CliInteractiveRuntimeModule> =
+const loadCliInteractiveRuntime: () => Promise<CliInteractiveShellRuntimeModule> =
   process.env.BREWVA_OPENTUI_SUPPORTED === "0"
     ? async () => {
         throw new Error(BREWVA_OPENTUI_UNSUPPORTED_MESSAGE);
       }
-    : async () => await import("@brewva/brewva-cli/internal-tui-runtime");
+    : async () => await import("@brewva/brewva-cli/internal-shell-runtime");
 
 type CliMode = "interactive" | "print-text" | "print-json";
 type CliBackendKind = "auto" | "embedded" | "gateway";
@@ -831,7 +831,7 @@ function printGatewayCostSummary(input: {
 
 async function run(): Promise<void> {
   process.title = "brewva";
-  if (process.env[BREWVA_TUI_SMOKE_ENV] === "1") {
+  if (process.env[BREWVA_SHELL_SMOKE_ENV] === "1") {
     const { runCliInteractiveSmoke } = await loadCliInteractiveRuntime();
     await runCliInteractiveSmoke();
     return;

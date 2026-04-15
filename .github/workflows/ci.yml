@@ -101,7 +101,7 @@ jobs:
 
       - name: Build ${{ matrix.label }} Binary
         shell: bash
-        run: BREWVA_BINARY_TARGETS=${{ matrix.target }} BREWVA_TUI_SMOKE=1 bun run build:binaries
+        run: BREWVA_BINARY_TARGETS=${{ matrix.target }} BREWVA_SHELL_SMOKE=1 bun run build:binaries
 
       - name: ${{ matrix.label }} Binary Smoke Test
         shell: bash

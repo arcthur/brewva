@@ -1,7 +1,8 @@
 import type { ContextState } from "../contracts/context-state.js";
-import type { BrewvaToolContentPart } from "../contracts/tool.js";
+import type { BrewvaToolDefinition } from "../contracts/tool.js";
 import type { ToolExecutionPhase } from "../execution/tool-phase.js";
 import type { BrewvaToolUiPort } from "../host-api/ui.js";
+import type { BrewvaPromptContentPart } from "./prompt-content.js";
 
 export type BrewvaPromptQueueBehavior = "steer" | "followUp";
 export type BrewvaPromptInputSource = "interactive" | "extension" | (string & {});
@@ -16,7 +17,6 @@ export type BrewvaPromptThinkingLevel =
 
 export interface BrewvaPromptOptions {
   expandPromptTemplates?: boolean;
-  images?: BrewvaToolContentPart[];
   streamingBehavior?: BrewvaPromptQueueBehavior;
   source?: BrewvaPromptInputSource;
 }
@@ -72,7 +72,7 @@ export interface BrewvaManagedSessionSettingsView extends BrewvaSessionSettingsV
 }
 
 export interface BrewvaPromptDispatchSession {
-  prompt(text: string, options?: BrewvaPromptOptions): Promise<void>;
+  prompt(parts: readonly BrewvaPromptContentPart[], options?: BrewvaPromptOptions): Promise<void>;
   sessionManager?: BrewvaPromptSessionManagerView;
   settingsManager?: BrewvaSessionSettingsView;
   model?: BrewvaSessionModelDescriptor;
@@ -91,9 +91,79 @@ export interface BrewvaPromptDispatchSession {
 }
 
 export interface BrewvaPromptMessageDeltaEvent {
-  type?: string;
-  delta?: string;
+  type: "start";
+  partial: unknown;
 }
+
+export type BrewvaPromptAssistantMessageEvent =
+  | BrewvaPromptMessageDeltaEvent
+  | {
+      type: "text_start";
+      contentIndex: number;
+      partial: unknown;
+    }
+  | {
+      type: "text_delta";
+      contentIndex: number;
+      delta: string;
+      partial: unknown;
+    }
+  | {
+      type: "text_end";
+      contentIndex: number;
+      content: string;
+      partial: unknown;
+    }
+  | {
+      type: "thinking_start";
+      contentIndex: number;
+      partial: unknown;
+    }
+  | {
+      type: "thinking_delta";
+      contentIndex: number;
+      delta: string;
+      partial: unknown;
+    }
+  | {
+      type: "thinking_end";
+      contentIndex: number;
+      content: string;
+      partial: unknown;
+    }
+  | {
+      type: "toolcall_start";
+      contentIndex: number;
+      partial: unknown;
+    }
+  | {
+      type: "toolcall_delta";
+      contentIndex: number;
+      delta: string;
+      partial: unknown;
+    }
+  | {
+      type: "toolcall_end";
+      contentIndex: number;
+      toolCall: {
+        type: "toolCall";
+        id: string;
+        name: string;
+        arguments: Record<string, unknown>;
+        thoughtSignature?: string;
+      };
+      partial: unknown;
+    }
+  | {
+      type: "done";
+      reason: "stop" | "length" | "toolUse";
+      message: unknown;
+    }
+  | {
+      type: "error";
+      reason: "aborted" | "error";
+      error: unknown;
+    };
 
 export type BrewvaPromptSessionEvent =
   | {
@@ -103,7 +173,7 @@ export type BrewvaPromptSessionEvent =
   | {
       type: "message_update";
       message?: unknown;
-      assistantMessageEvent?: BrewvaPromptMessageDeltaEvent;
+      assistantMessageEvent?: BrewvaPromptAssistantMessageEvent;
     }
   | {
       type: "message_end";
@@ -154,6 +224,7 @@ export interface BrewvaSubscribablePromptSession extends BrewvaPromptDispatchSes
 export interface BrewvaManagedPromptSession extends BrewvaSubscribablePromptSession {
   sessionManager: BrewvaPromptSessionManagerView;
   settingsManager: BrewvaManagedSessionSettingsView;
+  getRegisteredTools(): readonly BrewvaToolDefinition[];
   getContextState(): ContextState;
   waitForIdle(): Promise<void>;
   setUiPort(ui: BrewvaToolUiPort): void;

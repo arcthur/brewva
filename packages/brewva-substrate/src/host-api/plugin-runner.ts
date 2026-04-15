@@ -1,8 +1,10 @@
-import type {
-  BrewvaTextContentPart,
-  BrewvaToolContentPart,
-  BrewvaToolDefinition,
-} from "../contracts/tool.js";
+import type { BrewvaToolContentPart, BrewvaToolDefinition } from "../contracts/tool.js";
+import {
+  buildBrewvaPromptText,
+  brewvaPromptContentPartsEqual,
+  cloneBrewvaPromptContentParts,
+  type BrewvaPromptContentPart,
+} from "../session/prompt-content.js";
 import type {
   BrewvaHostBeforeAgentStartEvent,
   BrewvaHostBeforeAgentStartResult,
@@ -37,7 +39,7 @@ export interface BrewvaHostPluginRunnerActionPort {
     options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
   ): void;
   sendUserMessage(
-    content: string | BrewvaTextContentPart[],
+    content: BrewvaPromptContentPart[],
     options?: { deliverAs?: "steer" | "followUp" },
   ): void;
   getActiveTools(): string[];
@@ -248,25 +250,27 @@ export async function createBrewvaHostPluginRunner(
       };
     },
     async emitInput(payload, ctx) {
-      let currentText = payload.text;
-      let currentImages = payload.images;
+      let currentParts = cloneBrewvaPromptContentParts(payload.parts);
 
       for (const handler of handlers.input) {
         const result = (await handler(
-          { ...payload, text: currentText, images: currentImages },
+          {
+            ...payload,
+            parts: currentParts,
+            text: buildBrewvaPromptText(currentParts),
+          },
           ctx,
         )) as BrewvaHostInputEventResult | undefined;
         if (result?.action === "handled") {
           return result;
         }
         if (result?.action === "transform") {
-          currentText = result.text;
-          currentImages = result.images ?? currentImages;
+          currentParts = cloneBrewvaPromptContentParts(result.parts);
         }
       }
 
-      if (currentText !== payload.text || currentImages !== payload.images) {
-        return { action: "transform", text: currentText, images: currentImages };
+      if (!brewvaPromptContentPartsEqual(currentParts, payload.parts)) {
+        return { action: "transform", parts: currentParts };
       }
       return { action: "continue" };
     },

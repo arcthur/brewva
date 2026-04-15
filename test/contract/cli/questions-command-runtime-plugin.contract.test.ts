@@ -9,6 +9,7 @@ import {
   OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { buildBrewvaPromptText, type BrewvaPromptContentPart } from "@brewva/brewva-substrate";
 import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -20,14 +21,17 @@ type RegisteredCommand = {
 function createCommandApiMock(): {
   api: RuntimePluginApi;
   commands: Map<string, RegisteredCommand>;
-  sentMessages: Array<{ content: string; options?: Record<string, unknown> }>;
+  sentMessages: Array<{ content: BrewvaPromptContentPart[]; options?: Record<string, unknown> }>;
   handlers: Map<
     string,
     Array<(event: Record<string, unknown>, ctx: Record<string, unknown>) => unknown>
   >;
 } {
   const commands = new Map<string, RegisteredCommand>();
-  const sentMessages: Array<{ content: string; options?: Record<string, unknown> }> = [];
+  const sentMessages: Array<{
+    content: BrewvaPromptContentPart[];
+    options?: Record<string, unknown>;
+  }> = [];
   const handlers = new Map<
     string,
     Array<(event: Record<string, unknown>, ctx: Record<string, unknown>) => unknown>
@@ -45,7 +49,7 @@ function createCommandApiMock(): {
     registerCommand(name: string, definition: RegisteredCommand) {
       commands.set(name, definition);
     },
-    sendUserMessage(content: string, options?: Record<string, unknown>) {
+    sendUserMessage(content: BrewvaPromptContentPart[], options?: Record<string, unknown>) {
       sentMessages.push({ content, options });
     },
   } as unknown as RuntimePluginApi;
@@ -165,8 +169,12 @@ describe("questions interactive command runtime plugin", () => {
 
     expect(sentMessages).toHaveLength(1);
     expect(sentMessages[0]?.options).toEqual({ deliverAs: "followUp" });
-    expect(sentMessages[0]?.content).toContain(`Question ID: ${questionId}`);
-    expect(sentMessages[0]?.content).toContain("Answer: Use the gateway daemon path.");
+    expect(buildBrewvaPromptText(sentMessages[0]?.content ?? [])).toContain(
+      `Question ID: ${questionId}`,
+    );
+    expect(buildBrewvaPromptText(sentMessages[0]?.content ?? [])).toContain(
+      "Answer: Use the gateway daemon path.",
+    );
     const answerEvents = runtime.inspect.events
       .query(sessionId)
       .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE);

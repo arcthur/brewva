@@ -7,6 +7,7 @@ import {
   createHostedResourceLoader,
   createInMemoryModelCatalog,
   type BrewvaHostPluginFactory,
+  type BrewvaPromptContentPart,
   type BrewvaHostedResourceLoader,
   type BrewvaPromptThinkingLevel,
   type BrewvaRegisteredModel,
@@ -37,6 +38,10 @@ const TEST_MODEL: BrewvaRegisteredModel = {
   contextWindow: 128000,
   maxTokens: 8192,
 };
+
+function textPrompt(text: string): BrewvaPromptContentPart[] {
+  return [{ type: "text", text }];
+}
 
 function createUsage() {
   return {
@@ -597,7 +602,7 @@ describe("managed agent session compaction", () => {
       });
 
       try {
-        await session.prompt("Resume from the restored context.", {
+        await session.prompt(textPrompt("Resume from the restored context."), {
           expandPromptTemplates: false,
         });
 
@@ -643,6 +648,135 @@ describe("managed agent session compaction", () => {
         expect(observedContexts[0]?.[5]).toEqual(
           expect.objectContaining({
             role: "custom",
+          }),
+        );
+      } finally {
+        session.dispose();
+      }
+    } finally {
+      fauxProvider.unregister();
+    }
+  });
+
+  test("preserves structured file prompt parts in the hosted user message context", async () => {
+    const workspace = createTestWorkspace("managed-agent-session-file-parts");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionStore = new HostedRuntimeTapeSessionStore(
+      runtime,
+      workspace,
+      "managed-agent-session-file-parts-session",
+    );
+    const fauxProvider = registerFauxProvider({
+      api: "managed-session-file-parts-faux",
+      provider: "managed-session-file-parts",
+      models: [
+        {
+          id: "managed-session-file-parts-model",
+          name: "Managed Session File Parts Model",
+          reasoning: false,
+          input: ["text"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: 128000,
+          maxTokens: 4096,
+        },
+      ],
+    });
+    const replayModel = fauxProvider.getModel();
+    const observedContexts: Array<Array<{ role?: unknown; content?: unknown }>> = [];
+    const captureContextPlugin: BrewvaHostPluginFactory = (api) => {
+      api.on("context", (event) => {
+        observedContexts.push(
+          structuredClone(event.messages) as Array<{ role?: unknown; content?: unknown }>,
+        );
+        return event;
+      });
+    };
+
+    try {
+      sessionStore.appendModelChange(replayModel.provider, replayModel.id);
+      sessionStore.appendThinkingLevelChange("off");
+
+      const modelCatalog = createInMemoryModelCatalog();
+      modelCatalog.registerProvider(replayModel.provider, {
+        baseUrl: replayModel.baseUrl,
+        apiKey: "test-key",
+        models: [
+          {
+            id: replayModel.id,
+            name: replayModel.name,
+            api: replayModel.api,
+            reasoning: replayModel.reasoning,
+            input: replayModel.input,
+            cost: replayModel.cost,
+            contextWindow: replayModel.contextWindow,
+            maxTokens: replayModel.maxTokens,
+          },
+        ],
+      });
+
+      fauxProvider.setResponses([
+        () => ({
+          role: "assistant",
+          content: [{ type: "text", text: "Structured file prompt acknowledged." }],
+          api: replayModel.api,
+          provider: replayModel.provider,
+          model: replayModel.id,
+          usage: createUsage(),
+          stopReason: "stop",
+          timestamp: Date.now() + 1,
+        }),
+      ]);
+
+      const session = await createBrewvaManagedAgentSession({
+        cwd: workspace,
+        agentDir: join(workspace, ".brewva-agent"),
+        sessionStore,
+        settings: createSettingsStub(),
+        modelCatalog,
+        resourceLoader: await createResourceLoader(workspace),
+        customTools: [],
+        runtimePlugins: [
+          captureContextPlugin,
+          createHostedTurnPipeline({ runtime, registerTools: false }),
+        ],
+        initialModel: replayModel,
+        initialThinkingLevel: "off",
+      });
+
+      try {
+        await (
+          session as unknown as {
+            prompt(parts: unknown[], options?: Record<string, unknown>): Promise<void>;
+          }
+        ).prompt(
+          [
+            { type: "text", text: "Review this attachment: " },
+            {
+              type: "file",
+              uri: `file://${join(workspace, "README.md")}`,
+              displayText: "@README.md",
+              name: "README.md",
+            },
+          ],
+          {
+            expandPromptTemplates: false,
+            source: "interactive",
+          },
+        );
+
+        expect(observedContexts).toHaveLength(1);
+        expect(observedContexts[0]?.[0]).toEqual(
+          expect.objectContaining({
+            role: "user",
+            content: [
+              { type: "text", text: "Review this attachment: " },
+              {
+                type: "file",
+                uri: `file://${join(workspace, "README.md")}`,
+                displayText: "@README.md",
+                name: "README.md",
+              },
+            ],
           }),
         );
       } finally {
@@ -1183,7 +1317,7 @@ describe("managed agent session compaction", () => {
           });
         });
 
-        await session.prompt("Continue from the compacted state.", {
+        await session.prompt(textPrompt("Continue from the compacted state."), {
           expandPromptTemplates: false,
         });
 

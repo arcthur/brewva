@@ -1,6 +1,7 @@
 import { DEFAULT_TUI_THEME, type TuiTheme } from "@brewva/brewva-tui";
 import { FocusManager, OverlayManager, type OverlayEntry } from "@brewva/brewva-tui";
-import type { CliShellOverlayPayload } from "../types.js";
+import type { CliShellTranscriptMessage } from "../transcript.js";
+import type { CliShellOverlayPayload, CliShellPromptPart } from "../types.js";
 
 export type ShellFocusOwner =
   | "composer"
@@ -15,13 +16,6 @@ export type ShellFocusOwner =
   | "pager"
   | "dialog"
   | (string & {});
-
-export interface CliShellTranscriptEntry {
-  id: string;
-  role: "assistant" | "user" | "tool" | "custom" | "system";
-  text: string;
-  renderMode?: "stable" | "streaming";
-}
 
 export interface CliShellNotification {
   id: string;
@@ -47,10 +41,19 @@ export interface CliShellStatusState {
   toolsExpanded: boolean;
 }
 
+export interface CliShellCompletionItem {
+  label: string;
+  value: string;
+  insertText: string;
+  description?: string;
+  detail?: string;
+  kind: "slash" | "path";
+}
+
 export interface CliShellCompletionState {
   kind: "slash" | "path";
   query: string;
-  items: string[];
+  items: CliShellCompletionItem[];
   selectedIndex: number;
 }
 
@@ -79,13 +82,20 @@ export interface CliShellState {
   };
   overlay: CliShellOverlayState;
   transcript: {
-    entries: CliShellTranscriptEntry[];
+    messages: CliShellTranscriptMessage[];
     followMode: "live" | "scrolled";
     scrollOffset: number;
+    navigationRequest?:
+      | {
+          id: number;
+          kind: "pageUp" | "pageDown" | "top" | "bottom";
+        }
+      | undefined;
   };
   composer: {
     text: string;
     cursor: number;
+    parts: CliShellPromptPart[];
     completion?: CliShellCompletionState;
   };
   pager?: {
@@ -114,12 +124,13 @@ export type CliShellAction =
       id: string;
     }
   | {
-      type: "transcript.append";
-      entry: CliShellTranscriptEntry;
+      type: "transcript.setMessages";
+      messages: CliShellTranscriptMessage[];
     }
   | {
-      type: "transcript.upsert";
-      entry: CliShellTranscriptEntry;
+      type: "transcript.setScrollState";
+      followMode: "live" | "scrolled";
+      scrollOffset: number;
     }
   | {
       type: "transcript.scroll";
@@ -129,9 +140,23 @@ export type CliShellAction =
       type: "transcript.followLive";
     }
   | {
+      type: "transcript.requestNavigation";
+      request: NonNullable<CliShellState["transcript"]["navigationRequest"]>;
+    }
+  | {
+      type: "transcript.clearNavigation";
+      id: number;
+    }
+  | {
       type: "composer.setText";
       text: string;
       cursor?: number;
+    }
+  | {
+      type: "composer.setPromptState";
+      text: string;
+      cursor: number;
+      parts: CliShellPromptPart[];
     }
   | {
       type: "completion.set";
@@ -204,13 +229,15 @@ export function createCliShellState(): CliShellState {
       queue: [],
     },
     transcript: {
-      entries: [],
+      messages: [],
       followMode: "live",
       scrollOffset: 0,
+      navigationRequest: undefined,
     },
     composer: {
       text: "",
       cursor: 0,
+      parts: [],
     },
     notifications: [],
     status: {
@@ -299,35 +326,23 @@ export function reduceCliShellState(state: CliShellState, action: CliShellAction
           active: action.overlay,
         },
       };
-    case "transcript.append":
+    case "transcript.setMessages":
       return {
         ...state,
         transcript: {
           ...state.transcript,
-          entries: [...state.transcript.entries, action.entry],
+          messages: action.messages,
         },
       };
-    case "transcript.upsert": {
-      const index = state.transcript.entries.findIndex((entry) => entry.id === action.entry.id);
-      if (index < 0) {
-        return {
-          ...state,
-          transcript: {
-            ...state.transcript,
-            entries: [...state.transcript.entries, action.entry],
-          },
-        };
-      }
-      const nextEntries = [...state.transcript.entries];
-      nextEntries[index] = action.entry;
+    case "transcript.setScrollState":
       return {
         ...state,
         transcript: {
           ...state.transcript,
-          entries: nextEntries,
+          followMode: action.followMode,
+          scrollOffset: Math.max(0, action.scrollOffset),
         },
       };
-    }
     case "transcript.scroll":
       return {
         ...state,
@@ -346,6 +361,25 @@ export function reduceCliShellState(state: CliShellState, action: CliShellAction
           scrollOffset: 0,
         },
       };
+    case "transcript.requestNavigation":
+      return {
+        ...state,
+        transcript: {
+          ...state.transcript,
+          navigationRequest: action.request,
+        },
+      };
+    case "transcript.clearNavigation":
+      if (state.transcript.navigationRequest?.id !== action.id) {
+        return state;
+      }
+      return {
+        ...state,
+        transcript: {
+          ...state.transcript,
+          navigationRequest: undefined,
+        },
+      };
     case "composer.setText":
       return {
         ...state,
@@ -356,6 +390,17 @@ export function reduceCliShellState(state: CliShellState, action: CliShellAction
             typeof action.cursor === "number"
               ? Math.max(0, Math.min(action.text.length, action.cursor))
               : Math.max(0, Math.min(action.text.length, state.composer.cursor)),
+          parts: [],
+        },
+      };
+    case "composer.setPromptState":
+      return {
+        ...state,
+        composer: {
+          ...state.composer,
+          text: action.text,
+          cursor: Math.max(0, Math.min(action.text.length, action.cursor)),
+          parts: [...action.parts],
         },
       };
     case "completion.set":

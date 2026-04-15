@@ -15,6 +15,7 @@ import type {
   ShellConfigPort,
   WorkspaceCompletionPort,
 } from "../types.js";
+export { createCliShellPromptStore } from "../prompt-store.js";
 
 const SLASH_COMMANDS = [
   {
@@ -70,6 +71,14 @@ const SLASH_COMMANDS = [
     description: "Show credential vault references and management commands.",
   },
   {
+    command: "stash",
+    description: "Browse stashed prompt drafts.",
+  },
+  {
+    command: "unstash",
+    description: "Restore the latest stashed prompt.",
+  },
+  {
     command: "quit",
     description: "Exit the interactive shell.",
   },
@@ -107,8 +116,8 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
     getThinkingLevel() {
       return bundle.session.thinkingLevel ?? "off";
     },
-    prompt(text, options) {
-      return bundle.session.prompt(text, options);
+    prompt(parts, options) {
+      return bundle.session.prompt(parts, options);
     },
     waitForIdle() {
       return bundle.session.waitForIdle();
@@ -166,12 +175,12 @@ export function createOperatorSurfacePort(input: {
       }
       const prompt = buildOperatorQuestionAnswerPrompt({ question, answerText });
       if (bundle.session.isStreaming) {
-        await bundle.session.prompt(prompt, {
+        await bundle.session.prompt([{ type: "text", text: prompt }], {
           source: "interactive",
           streamingBehavior: "followUp",
         });
       } else {
-        await bundle.session.prompt(prompt, { source: "interactive" });
+        await bundle.session.prompt([{ type: "text", text: prompt }], { source: "interactive" });
       }
       recordRuntimeEvent(bundle.runtime, {
         sessionId,
@@ -214,8 +223,15 @@ export function createWorkspaceCompletionPort(cwd: string): WorkspaceCompletionP
       try {
         return readdirSync(directory, { withFileTypes: true })
           .filter((entry) => entry.name.startsWith(search))
-          .map((entry) => join(directory, entry.name))
-          .map((path) => formatPathSuggestion(cwd, path))
+          .map((entry) => {
+            const isDirectory = entry.isDirectory();
+            const suggestion = formatPathSuggestion(cwd, join(directory, entry.name));
+            return {
+              value: isDirectory ? `${suggestion}/` : suggestion,
+              kind: isDirectory ? ("directory" as const) : ("file" as const),
+              description: isDirectory ? "directory" : "file",
+            };
+          })
           .slice(0, 20);
       } catch {
         return [];

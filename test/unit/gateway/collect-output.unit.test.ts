@@ -4,12 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime, type SessionWireFrame } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
+import {
+  buildBrewvaPromptText,
+  type BrewvaPromptContentPart,
+  type BrewvaPromptSessionEvent,
+} from "@brewva/brewva-substrate";
 import { collectSessionPromptOutput } from "../../../packages/brewva-gateway/src/session/collect-output.js";
 
 type SessionLike = {
   subscribe: (listener: (event: BrewvaPromptSessionEvent) => void) => () => void;
-  prompt: (content: string) => Promise<void>;
+  prompt: (parts: readonly BrewvaPromptContentPart[]) => Promise<void>;
   waitForIdle: () => Promise<void>;
   sessionManager?: {
     getSessionId?: () => string;
@@ -26,7 +30,7 @@ function createSessionMock(eventsToEmit: BrewvaPromptSessionEvent[]): SessionLik
         listener = undefined;
       };
     },
-    async prompt(_content: string): Promise<void> {
+    async prompt(_parts: readonly BrewvaPromptContentPart[]): Promise<void> {
       for (const event of eventsToEmit) {
         listener?.(event);
       }
@@ -236,7 +240,8 @@ describe("gateway collect output", () => {
       sessionManager: {
         getSessionId: () => "agent-session-1",
       },
-      async prompt(content): Promise<void> {
+      async prompt(parts: readonly BrewvaPromptContentPart[]): Promise<void> {
+        const content = buildBrewvaPromptText(parts);
         sentMessages.push(content);
         if (sentMessages.length === 1) {
           listener?.({
@@ -400,7 +405,8 @@ describe("gateway collect output", () => {
           messages: rebuiltMessages,
         }),
       },
-      async prompt(content: string): Promise<void> {
+      async prompt(parts: readonly BrewvaPromptContentPart[]): Promise<void> {
+        const content = buildBrewvaPromptText(parts);
         sentMessages.push(content);
         if (sentMessages.length === 1) {
           eventBridge.runtime.authority.reasoning.revert(sessionId, {

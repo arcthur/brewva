@@ -2,12 +2,20 @@
   "name": "brewva",
   "version": "0.1.0",
   "private": true,
+  "description": "<p align=\"center\">   <a href=\"https://github.com/arcthur/brewva/actions/workflows/ci.yml?branch=main\"><img src=\"https://img.shields.io/github/actions/workflow/status/arcthur/brewva/ci.yml?branch=main&style=for-the-badge\" alt=\"CI status\"></a>   <a href=\"https://github.com/arcthur/brewva/releases\"><img src=\"https://img.shields.io/github/v/release/arcthur/brewva?include_prereleases&style=for-the-badge\" alt=\"GitHub release\"></a>   <a href=\"LICENSE\"><img src=\"https://img.shields.io/badge/License-Apache-blue.svg?style=for-the-badge\" alt=\"Apache License\"></a> </p>",
+  "keywords": [],
   "license": "Apache-2.0",
+  "author": "",
+  "directories": {
+    "doc": "docs",
+    "test": "test"
+  },
   "workspaces": [
     "packages/*",
     "distribution/*"
   ],
   "type": "module",
+  "main": "index.js",
   "scripts": {
     "analyze:projection": "bun run script/analyze-projection.ts",
     "build": "bun run typecheck && bun run build:binaries",
@@ -29,7 +37,7 @@
     "lint": "oxlint --type-aware",
     "lint:fix": "oxlint --type-aware --fix && bun run format",
     "report:context-evidence": "bun run script/report-context-evidence.ts",
-    "start": "bun run packages/brewva-cli/src/index.ts",
+    "start": "bun run --preload @opentui/solid/preload packages/brewva-cli/src/index.ts",
     "test": "bun run test:default",
     "test:contract": "bun test test/contract --timeout 600000 --max-concurrency 8",
     "test:default": "bun run test:unit && bun run test:contract && bun run test:system && bun run test:quality",
@@ -49,6 +57,9 @@
     "typecheck:test": "tsc -b test/tsconfig.json",
     "uninstall:local": "bash script/install-local.sh --uninstall"
   },
+  "dependencies": {
+    "rolldown": "^1.0.0-rc.4"
+  },
   "devDependencies": {
     "@brewva/brewva-agent-engine": "workspace:*",
     "@brewva/brewva-channels-telegram": "workspace:*",
@@ -63,6 +74,7 @@
     "@brewva/brewva-substrate": "workspace:*",
     "@brewva/brewva-tools": "workspace:*",
     "@brewva/brewva-tui": "workspace:*",
+    "@opentui/solid": "^0.1.99",
     "@sinclair/typebox": "^0.34.49",
     "@types/node": "^25.6.0",
     "@types/react": "19.2.7",
@@ -72,6 +84,7 @@
     "oxfmt": "0.45.0",
     "oxlint": "^1.60.0",
     "oxlint-tsgolint": "^0.20.0",
+    "solid-js": "^1.9.12",
     "ts-json-schema-generator": "^2.9.0",
     "typescript": "^6.0.2",
     "yaml": "^2.8.3"

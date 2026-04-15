@@ -27,6 +27,11 @@ import { AssistantMessageEventStream } from "../utils/event-stream.js";
 import { shortHash } from "../utils/hash.js";
 import { parseStreamingJson } from "../utils/json-parse.js";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.js";
+import {
+  buildMistralDocumentUrlChunk,
+  materializeResolvedUserMessageContentPart,
+  resolveUserMessageContent,
+} from "./prompt-content.js";
 import { buildBaseOptions, clampReasoning } from "./simple-options.js";
 import { transformMessages } from "./transform-messages.js";
 
@@ -242,7 +247,7 @@ function buildChatPayload(
   const payload: ChatCompletionStreamRequest = {
     model: model.id,
     stream: true,
-    messages: toChatMessages(messages, model.input.includes("image")),
+    messages: toChatMessages(messages, model, model.input.includes("image"), options),
   };
 
   if (context.tools?.length) payload.tools = toFunctionTools(context.tools);
@@ -463,23 +468,50 @@ function toFunctionTools(tools: Tool[]): Array<FunctionTool & { type: "function"
 
 function toChatMessages(
   messages: Message[],
+  model: Model<"mistral-conversations">,
   supportsImages: boolean,
+  options?: Pick<StreamOptions, "resolveFile">,
 ): ChatCompletionStreamRequestMessage[] {
   const result: ChatCompletionStreamRequestMessage[] = [];
 
   for (const msg of messages) {
     if (msg.role === "user") {
-      if (typeof msg.content === "string") {
-        result.push({ role: "user", content: sanitizeSurrogates(msg.content) });
-        continue;
+      const content: ContentChunk[] = [];
+      let hadImages = false;
+      for (const item of resolveUserMessageContent(model, msg.content, options)) {
+        if (item.type === "text") {
+          content.push({ type: "text", text: sanitizeSurrogates(item.text) });
+          continue;
+        }
+        if (item.type === "image") {
+          hadImages = true;
+          if (supportsImages) {
+            content.push({
+              type: "image_url",
+              imageUrl: `data:${item.mimeType};base64,${item.data}`,
+            });
+          }
+          continue;
+        }
+        const nativeDocument = buildMistralDocumentUrlChunk(item);
+        if (nativeDocument) {
+          content.push(nativeDocument);
+          continue;
+        }
+        for (const materialized of materializeResolvedUserMessageContentPart(model, item)) {
+          if (materialized.type === "text") {
+            content.push({ type: "text", text: sanitizeSurrogates(materialized.text) });
+            continue;
+          }
+          hadImages = true;
+          if (supportsImages) {
+            content.push({
+              type: "image_url",
+              imageUrl: `data:${materialized.mimeType};base64,${materialized.data}`,
+            });
+          }
+        }
       }
-      const hadImages = msg.content.some((item) => item.type === "image");
-      const content: ContentChunk[] = msg.content
-        .filter((item) => item.type === "text" || supportsImages)
-        .map((item) => {
-          if (item.type === "text") return { type: "text", text: sanitizeSurrogates(item.text) };
-          return { type: "image_url", imageUrl: `data:${item.mimeType};base64,${item.data}` };
-        });
       if (content.length > 0) {
         result.push({ role: "user", content });
         continue;

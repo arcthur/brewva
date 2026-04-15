@@ -1,110 +1,116 @@
 import { describe, expect, test } from "bun:test";
 import {
-  computeTranscriptVisibleWindow,
-  measureRenderedTranscriptEntryHeight,
-  measureTranscriptEntryLines,
-  renderTranscriptEntryBodyLines,
-} from "../../../packages/brewva-cli/src/tui-app/transcript.js";
+  buildSeedTranscriptMessages,
+  buildTranscriptMessageFromMessage,
+  upsertToolExecutionIntoTranscriptMessages,
+} from "../../../packages/brewva-cli/src/shell/transcript.js";
 
-describe("cli transcript rendering", () => {
-  test("renders stable transcript entries through the markdown renderer", () => {
-    const lines = renderTranscriptEntryBodyLines(
+describe("cli transcript model", () => {
+  test("builds assistant transcript messages with reasoning, markdown text, and grouped tool parts", () => {
+    const messages = buildSeedTranscriptMessages([
       {
-        id: "assistant:1",
         role: "assistant",
-        text: "# Plan\n\n- first item\n- second item\n\n```ts\nconst value = 1;\n```",
+        content: [
+          { type: "thinking", thinking: "Check the file first." },
+          { type: "text", text: "# Plan\n\n- inspect\n- patch" },
+          {
+            type: "toolCall",
+            id: "tool-read-1",
+            name: "read",
+            arguments: { path: "src/app.ts", offset: 1, limit: 20 },
+          },
+        ],
       },
-      40,
-      "stable",
+      {
+        role: "toolResult",
+        toolCallId: "tool-read-1",
+        toolName: "read",
+        content: [{ type: "text", text: "const value = 1;" }],
+        details: { firstLine: 1 },
+        isError: false,
+      },
+    ]);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      role: "assistant",
+      parts: [
+        { type: "reasoning", text: "Check the file first." },
+        { type: "text", text: "# Plan\n\n- inspect\n- patch" },
+        {
+          type: "tool",
+          toolCallId: "tool-read-1",
+          toolName: "read",
+          status: "completed",
+          result: {
+            details: { firstLine: 1 },
+          },
+        },
+      ],
+    });
+  });
+
+  test("preserves streamed tool execution state when the assistant partial message is rebuilt", () => {
+    const partial = buildTranscriptMessageFromMessage(
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "toolCall",
+            id: "tool-edit-1",
+            name: "edit",
+            arguments: { path: "src/app.ts" },
+          },
+        ],
+      },
+      {
+        id: "assistant:stream",
+        renderMode: "streaming",
+      },
     );
 
-    expect(lines).toContain("# Plan");
-    expect(lines).toContain("• first item");
-    expect(lines).toContain("• second item");
-    expect(lines).toContain("```ts");
-    expect(lines).toContain("  const value = 1;");
-  });
-
-  test("treats streaming transcript entries as plain wrapped text", () => {
-    const entry = {
-      id: "assistant:2",
-      role: "assistant" as const,
-      text: "# heading\n- bullet",
-      renderMode: "streaming" as const,
-    };
-
-    const lines = renderTranscriptEntryBodyLines(entry, 40);
-
-    expect(lines).toEqual(["# heading", "- bullet"]);
-    expect(measureTranscriptEntryLines(entry, 40)).toBe(3);
-  });
-
-  test("reuses streaming transcript caches across immutable entry replacements", () => {
-    const firstEntry = {
-      id: "assistant:stream",
-      role: "assistant" as const,
-      text: "Streaming response",
-      renderMode: "streaming" as const,
-    };
-    const replacedEntry = {
-      ...firstEntry,
-    };
-    const updatedEntry = {
-      ...firstEntry,
-      text: "Streaming response updated",
-    };
-
-    const firstLines = renderTranscriptEntryBodyLines(firstEntry, 40);
-    const replacedLines = renderTranscriptEntryBodyLines(replacedEntry, 40);
-    const updatedLines = renderTranscriptEntryBodyLines(updatedEntry, 40);
-
-    expect(replacedLines).toBe(firstLines);
-    expect(updatedLines).not.toBe(firstLines);
-  });
-
-  test("computes a bottom-anchored visible window for scrolled transcripts", () => {
-    const entries = Array.from({ length: 12 }, (_, index) => ({
-      id: `assistant:${index + 1}`,
-      role: "assistant" as const,
-      text: `entry-${index + 1}`,
-    }));
-
-    const entryHeight = measureRenderedTranscriptEntryHeight(entries[0]!, 40);
-    const window = computeTranscriptVisibleWindow({
-      entries,
-      width: 40,
-      viewportHeight: entryHeight * 3,
-      followMode: "scrolled",
-      scrollOffset: entryHeight * 4,
-      overscanLines: 0,
+    const withToolUpdate = upsertToolExecutionIntoTranscriptMessages(partial ? [partial] : [], {
+      toolCallId: "tool-edit-1",
+      toolName: "edit",
+      partialResult: {
+        content: [{ type: "text", text: "Applying diff..." }],
+        details: { phase: "partial" },
+      },
+      status: "running",
+      renderMode: "streaming",
     });
 
-    expect(window.startIndex).toBe(5);
-    expect(window.endIndex).toBe(8);
-    expect(window.topPadding).toBe(entryHeight * 5);
-    expect(window.bottomPadding).toBe(entryHeight * 4);
-  });
+    const rebuilt = buildTranscriptMessageFromMessage(
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "toolCall",
+            id: "tool-edit-1",
+            name: "edit",
+            arguments: { path: "src/app.ts" },
+          },
+        ],
+      },
+      {
+        id: "assistant:stream",
+        renderMode: "streaming",
+        previousMessage: withToolUpdate[0],
+      },
+    );
 
-  test("extends the visible window with overscan for live transcripts", () => {
-    const entries = Array.from({ length: 10 }, (_, index) => ({
-      id: `assistant:${index + 1}`,
-      role: "assistant" as const,
-      text: `entry-${index + 1}`,
-    }));
-
-    const entryHeight = measureRenderedTranscriptEntryHeight(entries[0]!, 40);
-    const window = computeTranscriptVisibleWindow({
-      entries,
-      width: 40,
-      viewportHeight: entryHeight * 2,
-      followMode: "live",
-      scrollOffset: 0,
-      overscanLines: entryHeight,
+    expect(rebuilt).toMatchObject({
+      parts: [
+        {
+          type: "tool",
+          toolCallId: "tool-edit-1",
+          toolName: "edit",
+          status: "running",
+          partialResult: {
+            details: { phase: "partial" },
+          },
+        },
+      ],
     });
-
-    expect(window.startIndex).toBe(7);
-    expect(window.endIndex).toBe(10);
-    expect(window.topPadding).toBe(entryHeight * 7);
-    expect(window.bottomPadding).toBe(0);
   });
 });

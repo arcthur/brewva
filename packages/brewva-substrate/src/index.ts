@@ -166,6 +166,18 @@ export {
   type CreateInMemorySessionHostOptions,
 } from "./session/session-host.js";
 export {
+  buildBrewvaPromptText,
+  brewvaPromptContentPartsEqual,
+  cloneBrewvaPromptContentPart,
+  cloneBrewvaPromptContentParts,
+  mapBrewvaPromptTextParts,
+  promptPartsArePlainText,
+  type BrewvaPromptContentPart,
+  type BrewvaPromptFileContentPart,
+  type BrewvaPromptImageContentPart,
+  type BrewvaPromptTextContentPart,
+} from "./session/prompt-content.js";
+export {
   type BrewvaManagedPromptSession,
   type BrewvaManagedSessionSettingsView,
   type BrewvaPromptDispatchSession,

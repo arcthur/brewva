@@ -1,12 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { basename, extname, resolve } from "node:path";
 import type { SessionWireFrame } from "@brewva/brewva-runtime";
 import {
   DEFAULT_CONTEXT_STATE,
   advanceSessionPhase,
   buildBrewvaSystemPrompt,
+  buildBrewvaPromptText,
+  cloneBrewvaPromptContentParts,
   createBrewvaHostPluginRunner,
   expandBrewvaPromptTemplate,
+  promptPartsArePlainText,
   type BrewvaHostedResourceLoader,
   type BrewvaHostCommandContext,
   type BrewvaHostCustomMessage,
@@ -17,6 +21,7 @@ import {
   type BrewvaManagedSessionSettingsView,
   type BrewvaMutableModelCatalog,
   type BrewvaCompactionRequest,
+  type BrewvaPromptContentPart,
   type BrewvaPromptOptions,
   type BrewvaPromptQueueBehavior,
   type BrewvaPromptSessionEvent,
@@ -28,7 +33,6 @@ import {
   type BrewvaSessionModelCatalogView,
   type BrewvaSessionModelDescriptor,
   type BrewvaSessionContext,
-  BrewvaTextContentPart,
   BrewvaToolContext,
   BrewvaToolDefinition,
   BrewvaToolResult,
@@ -45,9 +49,8 @@ import {
   type BrewvaAgentEngineAfterToolCallContext,
   type BrewvaAgentEngineBeforeToolCallContext,
   type BrewvaAgentEngineEvent,
-  type BrewvaAgentEngineImageContent,
+  type BrewvaAgentEngineFileContent,
   type BrewvaAgentEngineMessage,
-  type BrewvaAgentEngineTextContent,
   type BrewvaAgentEngineThinkingBudgets,
   type BrewvaAgentEngineThinkingLevel,
   type BrewvaAgentEngineTool,
@@ -81,7 +84,10 @@ export interface CreateBrewvaManagedAgentSessionOptions {
 }
 
 type PendingQueuedItem =
-  | { kind: "user"; text: string; images?: BrewvaAgentEngineImageContent[] }
+  | {
+      kind: "user";
+      parts: BrewvaPromptContentPart[];
+    }
   | { kind: "custom"; message: BrewvaHostCustomMessage };
 
 type ManagedAgentSessionStoreCore = Pick<
@@ -210,6 +216,22 @@ interface PendingCompactionRequestState {
 const COMPACTION_SUMMARY_MAX_LINES = 8;
 const COMPACTION_SUMMARY_MAX_CHARS = 220;
 const REQUIRED_HOSTED_PERSISTENCE_EVENTS = ["message_end", "session_compact"] as const;
+const PROMPT_FILE_MAX_BYTES = 50 * 1024;
+const PROMPT_BINARY_INLINE_MAX_BYTES = 5 * 1024 * 1024;
+const PROMPT_DIRECTORY_ENTRY_LIMIT = 64;
+
+const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
+  ".gif": "image/gif",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+};
+
+const FILE_MIME_BY_EXTENSION: Record<string, string> = {
+  ...IMAGE_MIME_BY_EXTENSION,
+  ".pdf": "application/pdf",
+};
 
 function normalizeSummaryText(text: string): string {
   return text.replace(/\s+/gu, " ").trim();
@@ -336,33 +358,6 @@ function inferRecoveryCrashPoint(
   }
 }
 
-function toImageContent(
-  parts: readonly unknown[] | undefined,
-): BrewvaAgentEngineImageContent[] | undefined {
-  if (!Array.isArray(parts) || parts.length === 0) {
-    return undefined;
-  }
-  const images: BrewvaAgentEngineImageContent[] = [];
-  for (const part of parts) {
-    if (!part || typeof part !== "object") {
-      continue;
-    }
-    const record = part as { type?: unknown; data?: unknown; mimeType?: unknown };
-    if (
-      record.type === "image" &&
-      typeof record.data === "string" &&
-      typeof record.mimeType === "string"
-    ) {
-      images.push({
-        type: "image",
-        data: record.data,
-        mimeType: record.mimeType,
-      });
-    }
-  }
-  return images.length > 0 ? images : undefined;
-}
-
 function parseCommand(text: string): { name: string; args: string } | null {
   if (!text.startsWith("/")) {
     return null;
@@ -372,6 +367,168 @@ function parseCommand(text: string): { name: string; args: string } | null {
     name: spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex),
     args: spaceIndex === -1 ? "" : text.slice(spaceIndex + 1),
   };
+}
+
+function buildTextPromptParts(text: string): BrewvaPromptContentPart[] {
+  return [{ type: "text", text }];
+}
+
+function toAgentUserContent(
+  parts: readonly BrewvaPromptContentPart[],
+): Extract<BrewvaAgentEngineMessage, { role: "user" }>["content"] {
+  return parts.map((part) => {
+    if (part.type === "text") {
+      return { type: "text", text: part.text };
+    }
+    if (part.type === "image") {
+      return {
+        type: "image",
+        data: part.data,
+        mimeType: part.mimeType,
+      };
+    }
+    return {
+      type: "file",
+      uri: part.uri,
+      name: part.name,
+      mimeType: part.mimeType,
+      displayText: part.displayText,
+    };
+  });
+}
+
+function isProbablyTextBuffer(buffer: Buffer): boolean {
+  let suspicious = 0;
+  const sample = buffer.subarray(0, Math.min(buffer.length, 1024));
+  for (const byte of sample) {
+    if (byte === 0) {
+      return false;
+    }
+    if (byte < 7 || (byte > 13 && byte < 32)) {
+      suspicious += 1;
+    }
+  }
+  return suspicious <= Math.max(2, Math.floor(sample.length * 0.02));
+}
+
+function truncatePromptFileText(text: string): string {
+  const lines = text.split("\n");
+  let usedBytes = 0;
+  const output: string[] = [];
+  for (const line of lines) {
+    const lineBytes = Buffer.byteLength(line, "utf8") + (output.length > 0 ? 1 : 0);
+    if (output.length >= 2000 || usedBytes + lineBytes > PROMPT_FILE_MAX_BYTES) {
+      break;
+    }
+    output.push(line);
+    usedBytes += lineBytes;
+  }
+  const content = output.join("\n");
+  if (content.length === text.length) {
+    return content;
+  }
+  return `${content}\n\n[truncated to ${PROMPT_FILE_MAX_BYTES} bytes / 2000 lines]`;
+}
+
+function resolvePromptFilePart(
+  cwd: string,
+  part: BrewvaAgentEngineFileContent,
+):
+  | {
+      kind: "text";
+      uri: string;
+      text: string;
+      name?: string;
+      mimeType?: string;
+    }
+  | {
+      kind: "image";
+      uri: string;
+      data: string;
+      mimeType: string;
+      name?: string;
+    }
+  | {
+      kind: "binary";
+      uri: string;
+      name?: string;
+      mimeType?: string;
+      sizeBytes?: number;
+      summary?: string;
+      dataBase64?: string;
+    }
+  | {
+      kind: "directory";
+      uri: string;
+      name?: string;
+      entries?: string[];
+      summary?: string;
+    }
+  | undefined {
+  let absolutePath: string;
+  try {
+    if (part.uri.startsWith("file://")) {
+      absolutePath = new URL(part.uri).pathname;
+    } else if (part.uri.startsWith("/")) {
+      absolutePath = part.uri;
+    } else {
+      absolutePath = resolve(cwd, part.uri);
+    }
+  } catch {
+    return undefined;
+  }
+
+  try {
+    const stats = statSync(absolutePath);
+    if (stats.isDirectory()) {
+      return {
+        kind: "directory",
+        uri: part.uri,
+        name: part.name ?? basename(absolutePath),
+        entries: readdirSync(absolutePath).slice(0, PROMPT_DIRECTORY_ENTRY_LIMIT),
+        summary: "Directory reference",
+      };
+    }
+
+    const fileName = part.name ?? basename(absolutePath);
+    const mimeType = part.mimeType ?? FILE_MIME_BY_EXTENSION[extname(absolutePath).toLowerCase()];
+    if (mimeType && mimeType.startsWith("image/")) {
+      return {
+        kind: "image",
+        uri: part.uri,
+        data: readFileSync(absolutePath).toString("base64"),
+        mimeType,
+        name: fileName,
+      };
+    }
+
+    const buffer = readFileSync(absolutePath);
+    if (!isProbablyTextBuffer(buffer)) {
+      return {
+        kind: "binary",
+        uri: part.uri,
+        name: fileName,
+        mimeType,
+        sizeBytes: stats.size,
+        summary:
+          stats.size > PROMPT_BINARY_INLINE_MAX_BYTES
+            ? `Binary file reference (raw bytes omitted; exceeds ${PROMPT_BINARY_INLINE_MAX_BYTES} bytes)`
+            : "Binary file reference",
+        dataBase64:
+          stats.size <= PROMPT_BINARY_INLINE_MAX_BYTES ? buffer.toString("base64") : undefined,
+      };
+    }
+
+    return {
+      kind: "text",
+      uri: part.uri,
+      text: truncatePromptFileText(buffer.toString("utf8")),
+      name: fileName,
+      mimeType,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 function buildSkillCommandText(text: string, resourceLoader: BrewvaHostedResourceLoader): string {
@@ -420,7 +577,6 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   readonly sessionManager: ManagedAgentSessionStore;
   readonly settingsManager: BrewvaManagedSessionSettingsView;
   readonly modelRegistry: BrewvaSessionModelCatalogView;
-  readonly _customTools: BrewvaToolDefinition[];
 
   readonly #cwd: string;
   readonly #settings: BrewvaManagedAgentSessionSettingsPort;
@@ -428,6 +584,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   readonly #resourceLoader: BrewvaHostedResourceLoader;
   readonly #agent: BrewvaAgentEngine;
   readonly #runner: BrewvaHostPluginRunner;
+  readonly #registeredTools: BrewvaToolDefinition[];
   readonly #toolDefinitions = new Map<string, BrewvaToolDefinition>();
   readonly #toolPromptSnippets = new Map<string, string>();
   readonly #toolPromptGuidelines = new Map<string, string[]>();
@@ -469,7 +626,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.sessionManager = input.sessionStore;
     this.settingsManager = new ManagedSessionSettingsView(input.settings);
     this.modelRegistry = new ManagedSessionModelCatalogView(input.catalog);
-    this._customTools = [...input.customTools];
+    this.#registeredTools = [...input.customTools];
     this.#runner = input.runner;
     this.#agent = input.agent;
   }
@@ -594,6 +751,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
           session.createHostContext(),
         ) as Promise<BrewvaAgentEngineMessage[]>;
       },
+      resolveFile: (part) => resolvePromptFilePart(options.cwd, part),
       shouldStopAfterToolResults: (toolResults) =>
         session?.consumeToolResultStop(toolResults) ?? false,
     });
@@ -659,9 +817,20 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     return { ...this.#contextState };
   }
 
-  async prompt(text: string, options?: BrewvaPromptOptions): Promise<void> {
+  getRegisteredTools(): readonly BrewvaToolDefinition[] {
+    return [...this.#registeredTools];
+  }
+
+  async prompt(
+    parts: readonly BrewvaPromptContentPart[],
+    options?: BrewvaPromptOptions,
+  ): Promise<void> {
     const expandPromptTemplates = options?.expandPromptTemplates ?? true;
-    const command = expandPromptTemplates ? parseCommand(text) : null;
+    let currentParts = cloneBrewvaPromptContentParts(parts);
+    const command =
+      expandPromptTemplates && promptPartsArePlainText(currentParts)
+        ? parseCommand(buildBrewvaPromptText(currentParts))
+        : null;
     if (command) {
       const handled = await this.tryExecuteRegisteredCommand(command.name, command.args);
       if (handled) {
@@ -670,14 +839,12 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       }
     }
 
-    let currentText = text;
-    let currentImages = toImageContent(options?.images);
     if (this.#runner.hasHandlers("input")) {
       const result = await this.#runner.emitInput(
         {
           type: "input",
-          text: currentText,
-          images: (options?.images as never) ?? undefined,
+          text: buildBrewvaPromptText(currentParts),
+          parts: currentParts,
           source: options?.source,
         },
         this.createHostContext(),
@@ -686,18 +853,18 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         return;
       }
       if (result.action === "transform") {
-        currentText = result.text;
-        currentImages = toImageContent(result.images);
+        currentParts = cloneBrewvaPromptContentParts(result.parts);
       }
     }
 
-    let expandedText = currentText;
-    if (expandPromptTemplates) {
+    if (expandPromptTemplates && promptPartsArePlainText(currentParts)) {
+      let expandedText = buildBrewvaPromptText(currentParts);
       expandedText = buildSkillCommandText(expandedText, this.#resourceLoader);
       expandedText = expandBrewvaPromptTemplate(
         expandedText,
         this.#resourceLoader.getPrompts().prompts,
       );
+      currentParts = buildTextPromptParts(expandedText);
     }
 
     if (this.isStreaming) {
@@ -707,7 +874,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
           "Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.",
         );
       }
-      await this.queueUserMessage(expandedText, currentImages, behavior);
+      await this.queueUserMessage(currentParts, behavior);
       return;
     }
 
@@ -721,7 +888,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     const messages: BrewvaAgentEngineMessage[] = [
       {
         role: "user",
-        content: [{ type: "text", text: expandedText }, ...(currentImages ?? [])],
+        content: toAgentUserContent(currentParts),
         timestamp: Date.now(),
       },
       ...this.#pendingNextTurnMessages,
@@ -731,8 +898,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     const beforeStart = await this.#runner.emitBeforeAgentStart(
       {
         type: "before_agent_start",
-        prompt: expandedText,
-        images: (options?.images as never) ?? undefined,
+        prompt: buildBrewvaPromptText(currentParts),
+        parts: cloneBrewvaPromptContentParts(currentParts),
         systemPrompt: this.#baseSystemPrompt,
       },
       this.createHostContext(),
@@ -882,7 +1049,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.#toolPromptSnippets.clear();
     this.#toolPromptGuidelines.clear();
 
-    for (const tool of this._customTools) {
+    for (const tool of this.#registeredTools) {
       this.#toolDefinitions.set(tool.name, tool);
       const promptSnippet = this.normalizePromptSnippet(tool.promptSnippet);
       if (promptSnippet) {
@@ -1005,9 +1172,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     }
     for (const item of buffer) {
       if (item.kind === "user") {
-        await this.prompt(item.text, {
+        await this.prompt(item.parts, {
           expandPromptTemplates: false,
-          images: item.images as never,
           source: "extension",
         });
         continue;
@@ -1017,15 +1183,16 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   }
 
   private async queueUserMessage(
-    text: string,
-    images: BrewvaAgentEngineImageContent[] | undefined,
+    parts: readonly BrewvaPromptContentPart[],
     behavior: BrewvaPromptQueueBehavior,
   ): Promise<void> {
+    const text = buildBrewvaPromptText(parts);
+    const content = toAgentUserContent(parts);
     if (behavior === "followUp") {
       this.#queuedFollowUps.push(text);
       this.#agent.followUp({
         role: "user",
-        content: [{ type: "text", text }, ...(images ?? [])],
+        content,
         timestamp: Date.now(),
       });
       return;
@@ -1033,7 +1200,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.#queuedSteering.push(text);
     this.#agent.steer({
       role: "user",
-      content: [{ type: "text", text }, ...(images ?? [])],
+      content,
       timestamp: Date.now(),
     });
   }
@@ -1097,28 +1264,20 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   }
 
   private async sendUserMessage(
-    content: string | BrewvaTextContentPart[],
+    content: BrewvaPromptContentPart[],
     options?: { deliverAs?: "steer" | "followUp" },
   ): Promise<void> {
-    let text: string;
-    let images: BrewvaAgentEngineImageContent[] | undefined;
-
-    if (typeof content === "string") {
-      text = content;
-    } else {
-      text = content.map((part) => part.text).join("\n");
-      images = undefined;
-    }
-
     if (this.#commandDispatchBuffer && !this.isStreaming) {
-      this.#commandDispatchBuffer.push({ kind: "user", text, images });
+      this.#commandDispatchBuffer.push({
+        kind: "user",
+        parts: cloneBrewvaPromptContentParts(content),
+      });
       return;
     }
 
-    await this.prompt(text, {
+    await this.prompt(content, {
       expandPromptTemplates: false,
       streamingBehavior: options?.deliverAs,
-      images: images as never,
       source: "extension",
     });
   }
@@ -1284,7 +1443,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       } catch (error) {
         for (let attempt = 0; attempt < 3; attempt += 1) {
           await Promise.resolve();
-          await new Promise((resolve) => setTimeout(resolve, 0));
+          await new Promise((settle) => setTimeout(settle, 0));
           const persistedBranch = this.sessionManager.getBranch();
           const persistedLeaf = persistedBranch[persistedBranch.length - 1];
           const persistedContext = this.sessionManager.buildSessionContext();
@@ -1308,7 +1467,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       this.#stopAfterCurrentToolResults = false;
       if (pendingCompactEvent) {
         await Promise.resolve();
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise((settle) => setTimeout(settle, 0));
         const settledBranch = this.sessionManager.getBranch();
         const settledLeaf = settledBranch[settledBranch.length - 1];
         const settledContext = this.sessionManager.buildSessionContext();
@@ -1607,12 +1766,16 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   private extractUserMessageText(
     message: Extract<BrewvaAgentEngineMessage, { role: "user" }>,
   ): string {
-    if (typeof message.content === "string") {
-      return message.content;
-    }
     return message.content
-      .filter((block): block is BrewvaAgentEngineTextContent => block.type === "text")
-      .map((block) => block.text)
+      .map((block) => {
+        if (block.type === "text") {
+          return block.text;
+        }
+        if (block.type === "file") {
+          return block.displayText ?? block.name ?? block.uri;
+        }
+        return "";
+      })
       .join("");
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createCliShellState, reduceCliShellState } from "@brewva/brewva-cli/tui-app/state";
+import { createCliShellState, reduceCliShellState } from "@brewva/brewva-cli/shell/state";
 
 describe("cli shell state", () => {
   test("queues priority overlays without stealing focus and restores the composer focus after the queue drains", () => {
@@ -52,12 +52,15 @@ describe("cli shell state", () => {
     let state = createCliShellState();
 
     state = reduceCliShellState(state, {
-      type: "transcript.append",
-      entry: {
-        id: "assistant:1",
-        role: "assistant",
-        text: "hello",
-      },
+      type: "transcript.setMessages",
+      messages: [
+        {
+          id: "assistant:1",
+          role: "assistant",
+          renderMode: "stable",
+          parts: [{ id: "assistant:1:text:0", type: "text", text: "hello", renderMode: "stable" }],
+        },
+      ],
     });
     state = reduceCliShellState(state, {
       type: "transcript.scroll",
@@ -147,12 +150,15 @@ describe("cli shell state", () => {
     let state = createCliShellState();
 
     state = reduceCliShellState(state, {
-      type: "transcript.append",
-      entry: {
-        id: "assistant:1",
-        role: "assistant",
-        text: "hello",
-      },
+      type: "transcript.setMessages",
+      messages: [
+        {
+          id: "assistant:1",
+          role: "assistant",
+          renderMode: "stable",
+          parts: [{ id: "assistant:1:text:0", type: "text", text: "hello", renderMode: "stable" }],
+        },
+      ],
     });
     state = reduceCliShellState(state, {
       type: "transcript.scroll",
@@ -163,12 +169,18 @@ describe("cli shell state", () => {
     expect(state.transcript.scrollOffset).toBe(3);
 
     state = reduceCliShellState(state, {
-      type: "transcript.append",
-      entry: {
-        id: "assistant:2",
-        role: "assistant",
-        text: "more output",
-      },
+      type: "transcript.setMessages",
+      messages: [
+        ...state.transcript.messages,
+        {
+          id: "assistant:2",
+          role: "assistant",
+          renderMode: "stable",
+          parts: [
+            { id: "assistant:2:text:0", type: "text", text: "more output", renderMode: "stable" },
+          ],
+        },
+      ],
     });
 
     expect(state.transcript.followMode).toBe("scrolled");

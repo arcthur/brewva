@@ -4,11 +4,11 @@ import {
   type CliInteractiveSessionOptions,
   type CliInteractiveSmokeResult,
 } from "../src/cli-runtime.js";
-import { renderCliInteractiveShell } from "./opentui-shell.js";
+import { renderCliInteractiveOpenTuiShell } from "./opentui-shell-renderer.js";
 
-const BREWVA_TUI_SMOKE_ENV = "BREWVA_TUI_SMOKE";
+const BREWVA_SHELL_SMOKE_ENV = "BREWVA_SHELL_SMOKE";
 
-export const CLI_INTERNAL_TUI_RUNTIME_KIND = "bun-runtime";
+export const CLI_INTERNAL_SHELL_RUNTIME_KIND = "bun-runtime";
 
 export function isCliInteractiveRuntimeAvailable(): boolean {
   return true;
@@ -26,12 +26,12 @@ export async function runCliInteractiveSession(
   session: BrewvaManagedPromptSession,
   options: CliInteractiveSessionOptions,
 ): Promise<void> {
-  if (process.env[BREWVA_TUI_SMOKE_ENV] === "1") {
+  if (process.env[BREWVA_SHELL_SMOKE_ENV] === "1") {
     await runCliInteractiveSmoke();
     return;
   }
 
   await runCliInteractiveSessionBase(session, options, async (bundle, shellOptions) => {
-    await renderCliInteractiveShell(bundle, shellOptions);
+    await renderCliInteractiveOpenTuiShell(bundle, shellOptions);
   });
 }

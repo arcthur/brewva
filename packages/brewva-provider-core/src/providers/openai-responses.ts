@@ -201,7 +201,13 @@ function buildParams(
   context: Context,
   options?: OpenAIResponsesOptions,
 ) {
-  const messages = convertResponsesMessages(model, context, OPENAI_TOOL_CALL_PROVIDERS);
+  const messages = convertResponsesMessages(
+    model,
+    context,
+    OPENAI_TOOL_CALL_PROVIDERS,
+    undefined,
+    options,
+  );
 
   const cacheRetention = resolveCacheRetention(options?.cacheRetention);
   const params: ResponseCreateParamsStreaming = {

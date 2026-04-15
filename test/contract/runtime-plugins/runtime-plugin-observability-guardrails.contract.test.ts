@@ -261,6 +261,78 @@ maxcalls`,
     expect(payload.usage).toBeNull();
   });
 
+  test("given assistant partial-only update events, when the message completes, then health tracking still uses the partial payload", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-throttle-partial-only-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+    const sessionId = "ext-throttle-partial-only-1";
+
+    const { api, handlers } = createMockRuntimePluginApi();
+    registerEventStream(api, runtime);
+
+    const ctx = {
+      cwd: workspace,
+      sessionManager: {
+        getSessionId: () => sessionId,
+      },
+    };
+
+    invokeHandlers(handlers, "message_start", { message: { role: "assistant", content: [] } }, ctx);
+    invokeHandlers(
+      handlers,
+      "message_update",
+      {
+        assistantMessageEvent: {
+          type: "text_delta",
+          delta: "a",
+          partial: { role: "assistant", content: [{ type: "text", text: "a" }] },
+        },
+      },
+      ctx,
+    );
+    invokeHandlers(
+      handlers,
+      "message_update",
+      {
+        assistantMessageEvent: {
+          type: "text_delta",
+          delta: "b",
+          partial: { role: "assistant", content: [{ type: "text", text: "ab" }] },
+        },
+      },
+      ctx,
+    );
+    invokeHandlers(
+      handlers,
+      "message_update",
+      {
+        assistantMessageEvent: {
+          type: "text_delta",
+          delta: "c",
+          partial: { role: "assistant", content: [{ type: "text", text: "abc" }] },
+        },
+      },
+      ctx,
+    );
+    invokeHandlers(
+      handlers,
+      "message_end",
+      {
+        message: { role: "assistant", content: [{ type: "text", text: "abc" }] },
+      },
+      ctx,
+    );
+
+    const ends = runtime.inspect.events.query(sessionId, { type: "message_end" });
+    expect(ends).toHaveLength(1);
+    const payload = ends[0]?.payload as {
+      health?: { score?: number; windowChars?: number };
+    };
+    const health = requireRecord(payload.health, "Expected message_end health summary.") as {
+      windowChars?: unknown;
+    };
+    expect(health.windowChars).toBe(3);
+  });
+
   test("given the ledger directory disappears before message_end, when assistant usage is recorded, then event stream recreates the ledger path", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-message-ledger-recovery-"));
     const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });

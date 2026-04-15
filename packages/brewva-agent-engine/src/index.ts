@@ -9,6 +9,7 @@ export type {
   BrewvaAgentEngineContext,
   BrewvaAgentEngineCustomMessage,
   BrewvaAgentEngineEvent,
+  BrewvaAgentEngineFileContent,
   BrewvaAgentEngineImageContent,
   BrewvaAgentEngineLlmMessage,
   BrewvaAgentEngineMessage,

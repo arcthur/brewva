@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionWireFrame } from "@brewva/brewva-runtime";
-import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
+import {
+  buildBrewvaPromptText,
+  type BrewvaPromptContentPart,
+  type BrewvaPromptSessionEvent,
+} from "@brewva/brewva-substrate";
 import { registerProviderRequestRecovery } from "../../../packages/brewva-gateway/src/runtime-plugins/provider-request-recovery.js";
 import { collectSessionPromptOutput } from "../../../packages/brewva-gateway/src/session/collect-output.js";
 import { COMPACTION_RECOVERY_TEST_ONLY } from "../../../packages/brewva-gateway/src/session/compaction-recovery.js";
@@ -34,7 +38,8 @@ describe("output budget recovery chain", () => {
         id: "gpt-5.4",
         maxTokens: 16_384,
       },
-      async prompt(content: string): Promise<void> {
+      async prompt(parts: readonly BrewvaPromptContentPart[]): Promise<void> {
+        const content = buildBrewvaPromptText(parts);
         promptedMessages.push(content);
 
         if (promptedMessages.length === 1) {

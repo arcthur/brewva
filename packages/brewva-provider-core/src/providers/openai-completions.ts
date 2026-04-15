@@ -30,6 +30,7 @@ import { AssistantMessageEventStream } from "../utils/event-stream.js";
 import { parseStreamingJson } from "../utils/json-parse.js";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.js";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.js";
+import { materializeUserMessageContent } from "./prompt-content.js";
 import { buildBaseOptions, clampReasoning } from "./simple-options.js";
 import { transformMessages } from "./transform-messages.js";
 
@@ -386,7 +387,7 @@ function buildParams(
   options?: OpenAICompletionsOptions,
 ) {
   const compat = getCompat(model);
-  const messages = convertMessages(model, context, compat);
+  const messages = convertMessages(model, context, compat, options);
   maybeAddOpenRouterAnthropicCacheControl(model, messages);
 
   const params: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
@@ -521,6 +522,7 @@ export function convertMessages(
   model: Model<"openai-completions">,
   context: Context,
   compat: Required<OpenAICompletionsCompat>,
+  options?: Pick<StreamOptions, "resolveFile">,
 ): ChatCompletionMessageParam[] {
   const params: ChatCompletionMessageParam[] = [];
 
@@ -567,38 +569,31 @@ export function convertMessages(
     }
 
     if (msg.role === "user") {
-      if (typeof msg.content === "string") {
-        params.push({
-          role: "user",
-          content: sanitizeSurrogates(msg.content),
-        });
-      } else {
-        const content: ChatCompletionContentPart[] = msg.content.map(
-          (item): ChatCompletionContentPart => {
-            if (item.type === "text") {
-              return {
-                type: "text",
-                text: sanitizeSurrogates(item.text),
-              } satisfies ChatCompletionContentPartText;
-            } else {
-              return {
-                type: "image_url",
-                image_url: {
-                  url: `data:${item.mimeType};base64,${item.data}`,
-                },
-              } satisfies ChatCompletionContentPartImage;
-            }
-          },
-        );
-        const filteredContent = !model.input.includes("image")
-          ? content.filter((c) => c.type !== "image_url")
-          : content;
-        if (filteredContent.length === 0) continue;
-        params.push({
-          role: "user",
-          content: filteredContent,
-        });
-      }
+      const materializedContent = materializeUserMessageContent(model, msg.content, options);
+      const content: ChatCompletionContentPart[] = materializedContent.map(
+        (item): ChatCompletionContentPart => {
+          if (item.type === "text") {
+            return {
+              type: "text",
+              text: sanitizeSurrogates(item.text),
+            } satisfies ChatCompletionContentPartText;
+          }
+          return {
+            type: "image_url",
+            image_url: {
+              url: `data:${item.mimeType};base64,${item.data}`,
+            },
+          } satisfies ChatCompletionContentPartImage;
+        },
+      );
+      const filteredContent = !model.input.includes("image")
+        ? content.filter((c) => c.type !== "image_url")
+        : content;
+      if (filteredContent.length === 0) continue;
+      params.push({
+        role: "user",
+        content: filteredContent,
+      });
     } else if (msg.role === "assistant") {
       // Some providers don't accept null content, use empty string instead
       const assistantMsg: ChatCompletionAssistantMessageParam = {

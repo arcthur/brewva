@@ -1,10 +1,11 @@
 import type { SessionPhase } from "../contracts/session-phase.js";
 import type { HostRuntimePlugin, HostRuntimePluginContext } from "../host-api/plugin.js";
 import { advanceSessionPhase, type SessionPhaseEvent } from "./phase-machine.js";
+import type { BrewvaPromptContentPart } from "./prompt-content.js";
 
 export interface BrewvaPromptEnvelope {
   promptId: string;
-  content: string;
+  parts: BrewvaPromptContentPart[];
   submittedAt: number;
 }
 
@@ -100,7 +101,7 @@ class InMemorySessionHost implements BrewvaSessionHost {
     }
     return {
       promptId: next.promptId,
-      content: next.content,
+      parts: next.parts,
       submittedAt: next.submittedAt,
     };
   }

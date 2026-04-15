@@ -801,7 +801,8 @@ export function registerEventStream(
       payload: {
         source: event.source,
         textChars: event.text.length,
-        images: event.images?.length ?? 0,
+        images: event.parts.filter((part) => part.type === "image").length,
+        files: event.parts.filter((part) => part.type === "file").length,
       },
     });
     return undefined;

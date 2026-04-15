@@ -15,17 +15,17 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
-    "./internal-tui-runtime": {
-      "types": "./dist/internal-tui-runtime.d.ts",
-      "bun": "./runtime/internal-tui-runtime.ts",
-      "import": "./dist/internal-tui-runtime.js",
-      "default": "./dist/internal-tui-runtime.js"
+    "./internal-shell-runtime": {
+      "types": "./dist/internal-shell-runtime.d.ts",
+      "bun": "./runtime/internal-shell-runtime.ts",
+      "import": "./dist/internal-shell-runtime.js",
+      "default": "./dist/internal-shell-runtime.js"
     },
-    "./tui-app/state": {
-      "types": "./dist/tui-app/state/index.d.ts",
-      "bun": "./src/tui-app/state/index.ts",
-      "import": "./dist/tui-app/state/index.js",
-      "default": "./dist/tui-app/state/index.js"
+    "./shell/state": {
+      "types": "./dist/shell/state/index.d.ts",
+      "bun": "./src/shell/state/index.ts",
+      "import": "./dist/shell/state/index.js",
+      "default": "./dist/shell/state/index.js"
     }
   },
   "dependencies": {
@@ -33,9 +33,12 @@
     "@brewva/brewva-runtime": "workspace:*",
     "@brewva/brewva-substrate": "workspace:*",
     "@brewva/brewva-tui": "workspace:*",
+    "@opentui/core": "^0.1.99",
+    "@opentui/solid": "^0.1.99",
     "date-fns": "^4.1.0",
     "marked": "^18.0.0",
-    "react": "19.2.5"
+    "react": "19.2.5",
+    "solid-js": "^1.9.12"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

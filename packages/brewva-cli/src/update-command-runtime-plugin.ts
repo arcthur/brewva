@@ -19,14 +19,16 @@ export function createUpdateCommandRuntimePlugin(runtime: BrewvaRuntime): Runtim
         });
 
         if (ctx.isIdle()) {
-          runtimePluginApi.sendUserMessage(prompt);
+          runtimePluginApi.sendUserMessage([{ type: "text", text: prompt }]);
           if (ctx.hasUI) {
             ctx.ui.notify("Queued Brewva update workflow.", "info");
           }
           return;
         }
 
-        runtimePluginApi.sendUserMessage(prompt, { deliverAs: "followUp" });
+        runtimePluginApi.sendUserMessage([{ type: "text", text: prompt }], {
+          deliverAs: "followUp",
+        });
         if (ctx.hasUI) {
           ctx.ui.notify("Queued Brewva update workflow after the current run.", "info");
         }

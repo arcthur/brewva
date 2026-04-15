@@ -106,6 +106,7 @@ export interface StreamOptions {
    * For example, Anthropic uses `user_id` for abuse tracking and rate limiting.
    */
   metadata?: Record<string, unknown>;
+  resolveFile?: (part: FileContent, model: Model<Api>) => ResolvedFileContent | undefined;
 }
 
 export type ProviderStreamOptions = StreamOptions & Record<string, unknown>;
@@ -158,6 +159,54 @@ export interface ImageContent {
   mimeType: string; // e.g., "image/jpeg", "image/png"
 }
 
+export interface FileContent {
+  type: "file";
+  uri: string;
+  name?: string;
+  mimeType?: string;
+  displayText?: string;
+}
+
+export interface ResolvedTextFileContent {
+  kind: "text";
+  uri: string;
+  text: string;
+  name?: string;
+  mimeType?: string;
+}
+
+export interface ResolvedImageFileContent {
+  kind: "image";
+  uri: string;
+  data: string;
+  mimeType: string;
+  name?: string;
+}
+
+export interface ResolvedBinaryFileContent {
+  kind: "binary";
+  uri: string;
+  name?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  summary?: string;
+  dataBase64?: string;
+}
+
+export interface ResolvedDirectoryFileContent {
+  kind: "directory";
+  uri: string;
+  name?: string;
+  entries?: string[];
+  summary?: string;
+}
+
+export type ResolvedFileContent =
+  | ResolvedTextFileContent
+  | ResolvedImageFileContent
+  | ResolvedBinaryFileContent
+  | ResolvedDirectoryFileContent;
+
 export interface ToolCall {
   type: "toolCall";
   id: string;
@@ -185,7 +234,7 @@ export type StopReason = "stop" | "length" | "toolUse" | "error" | "aborted";
 
 export interface UserMessage {
   role: "user";
-  content: string | (TextContent | ImageContent)[];
+  content: (TextContent | ImageContent | FileContent)[];
   timestamp: number; // Unix timestamp in milliseconds
 }
 

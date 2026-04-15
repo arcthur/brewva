@@ -3,6 +3,7 @@ import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type {
   BrewvaManagedPromptSession,
   BrewvaPromptSessionEvent,
+  BrewvaToolDefinition,
 } from "@brewva/brewva-substrate";
 import {
   extractMessageError,
@@ -11,7 +12,7 @@ import {
   readMessageStopReason,
 } from "./message-content.js";
 import type { BrewvaSessionResult } from "./session.js";
-import type { CliShellSessionBundle } from "./tui-app/types.js";
+import type { CliShellSessionBundle } from "./shell/types.js";
 
 type CliPrintMode = "json" | "text";
 
@@ -59,6 +60,29 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     return undefined;
   }
   return value as Record<string, unknown>;
+}
+
+function createToolDefinitionMap(
+  session: BrewvaManagedPromptSession,
+): ReadonlyMap<string, BrewvaToolDefinition> {
+  return new Map(
+    session
+      .getRegisteredTools()
+      .map((tool) => [tool.name, tool] satisfies [string, BrewvaToolDefinition]),
+  );
+}
+
+function toCliShellSessionBundle(input: {
+  session: BrewvaManagedPromptSession;
+  runtime: BrewvaRuntime;
+  orchestration?: BrewvaSessionResult["orchestration"];
+}): CliShellSessionBundle {
+  return {
+    session: input.session,
+    runtime: input.runtime,
+    toolDefinitions: createToolDefinitionMap(input.session),
+    orchestration: input.orchestration,
+  };
 }
 
 async function runCliTurn(
@@ -114,7 +138,7 @@ async function runCliTurn(
   });
 
   try {
-    await session.prompt(prompt, { source: "interactive" });
+    await session.prompt([{ type: "text", text: prompt }], { source: "interactive" });
     await session.waitForIdle();
   } finally {
     unsubscribe();
@@ -137,11 +161,11 @@ export async function runCliInteractiveSession(
   launchInteractiveShell: CliInteractiveShellLauncher,
 ): Promise<void> {
   await launchInteractiveShell(
-    {
+    toCliShellSessionBundle({
       session,
       runtime: options.runtime,
       orchestration: options.orchestration,
-    },
+    }),
     {
       cwd: options.cwd,
       initialMessage: options.initialMessage,
@@ -149,12 +173,12 @@ export async function runCliInteractiveSession(
       async openSession(sessionId) {
         const result = await options.openSession(sessionId);
         options.onSessionChange?.(result);
-        return result;
+        return toCliShellSessionBundle(result);
       },
       async createSession() {
         const result = await options.createSession();
         options.onSessionChange?.(result);
-        return result;
+        return toCliShellSessionBundle(result);
       },
       onBundleChange(bundle) {
         options.onSessionChange?.({

@@ -42,6 +42,7 @@ import type {
 import { AssistantMessageEventStream } from "../utils/event-stream.js";
 import { parseStreamingJson } from "../utils/json-parse.js";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.js";
+import { materializeUserMessageContent } from "./prompt-content.js";
 import { adjustMaxTokensForThinking, buildBaseOptions, clampReasoning } from "./simple-options.js";
 import { transformMessages } from "./transform-messages.js";
 
@@ -154,7 +155,7 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream", BedrockOpt
       const cacheRetention = resolveCacheRetention(options.cacheRetention);
       let commandInput = {
         modelId: model.id,
-        messages: convertMessages(context, model, cacheRetention),
+        messages: convertMessages(context, model, cacheRetention, options),
         system: buildSystemPrompt(context.systemPrompt, model, cacheRetention),
         inferenceConfig: { maxTokens: options.maxTokens, temperature: options.temperature },
         toolConfig: convertToolConfig(context.tools, options.toolChoice),
@@ -554,6 +555,7 @@ function convertMessages(
   context: Context,
   model: Model<"bedrock-converse-stream">,
   cacheRetention: CacheRetention,
+  options?: Pick<StreamOptions, "resolveFile">,
 ): Message[] {
   const result: Message[] = [];
   const transformedMessages = transformMessages(context.messages, model, normalizeToolCallId);
@@ -562,24 +564,18 @@ function convertMessages(
     const m = transformedMessages[i];
 
     switch (m.role) {
-      case "user":
+      case "user": {
+        const materializedContent = materializeUserMessageContent(model, m.content, options);
         result.push({
           role: ConversationRole.USER,
-          content:
-            typeof m.content === "string"
-              ? [{ text: sanitizeSurrogates(m.content) }]
-              : m.content.map((c) => {
-                  switch (c.type) {
-                    case "text":
-                      return { text: sanitizeSurrogates(c.text) };
-                    case "image":
-                      return { image: createImageBlock(c.mimeType, c.data) };
-                    default:
-                      throw new Error("Unknown user content type");
-                  }
-                }),
+          content: materializedContent.map((c) =>
+            c.type === "image"
+              ? { image: createImageBlock(c.mimeType, c.data) }
+              : { text: sanitizeSurrogates(c.text) },
+          ),
         });
         break;
+      }
       case "assistant": {
         // Skip assistant messages with empty content (e.g., from aborted requests)
         // Bedrock rejects messages with empty content arrays

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  INTERACTIVE_TUI_UNSUPPORTED_TERMINAL_MESSAGE,
+  INTERACTIVE_SHELL_UNSUPPORTED_TERMINAL_MESSAGE,
   resolveEffectiveCliMode,
 } from "../../../packages/brewva-cli/src/interactive-mode.js";
 
@@ -62,7 +62,7 @@ describe("cli interactive mode resolution", () => {
     });
 
     expect(result).toEqual({
-      error: INTERACTIVE_TUI_UNSUPPORTED_TERMINAL_MESSAGE,
+      error: INTERACTIVE_SHELL_UNSUPPORTED_TERMINAL_MESSAGE,
     });
   });
 

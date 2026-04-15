@@ -268,7 +268,7 @@ export async function collectPromptTurnOutputs(
     > | null = null;
     for (;;) {
       try {
-        await sendPromptWithCompactionRecovery(session, activePrompt, {
+        await sendPromptWithCompactionRecovery(session, [{ type: "text", text: activePrompt }], {
           runtime: options?.runtime,
           sessionId: options?.sessionId,
         });

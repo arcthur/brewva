@@ -8,13 +8,13 @@ import {
   resolveSupportedChannel,
 } from "@brewva/brewva-gateway";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
+import type { BrewvaPromptContentPart, BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 type SessionLike = {
   subscribe: (listener: (event: BrewvaPromptSessionEvent) => void) => () => void;
   prompt: (
-    content: string,
+    parts: readonly BrewvaPromptContentPart[],
     options?: { streamingBehavior?: "followUp" | "steer" },
   ) => Promise<void>;
   waitForIdle: () => Promise<void>;
@@ -29,7 +29,7 @@ function createSessionMock(eventsToEmit: BrewvaPromptSessionEvent[]): SessionLik
         listener = undefined;
       };
     },
-    async prompt(_content: string): Promise<void> {
+    async prompt(_parts: readonly BrewvaPromptContentPart[]): Promise<void> {
       for (const event of eventsToEmit) {
         listener?.(event);
       }
@@ -133,7 +133,16 @@ describe("channel mode prompt output collector", () => {
           sessionListener = undefined;
         };
       },
-      async prompt(content): Promise<void> {
+      async prompt(parts: readonly BrewvaPromptContentPart[]): Promise<void> {
+        const content = parts
+          .map((part) =>
+            part.type === "text"
+              ? part.text
+              : part.type === "file"
+                ? (part.displayText ?? part.uri)
+                : "",
+          )
+          .join("");
         sentMessages.push(content);
         if (sentMessages.length === 1) {
           for (const listener of listeners) {

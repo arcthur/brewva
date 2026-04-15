@@ -1,5 +1,7 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
-import type {
+import {
+  buildBrewvaPromptText,
+  type BrewvaPromptContentPart,
   BrewvaPromptOptions,
   BrewvaPromptThinkingLevel,
   BrewvaSessionModelCatalogView,
@@ -69,7 +71,10 @@ interface CompactionRecoveryController {
 }
 
 interface InstalledCompactionRecoveryController extends CompactionRecoveryController {
-  dispatchPrompt(content: string, promptOptions?: PromptDispatchOptions): Promise<void>;
+  dispatchPrompt(
+    content: readonly BrewvaPromptContentPart[],
+    promptOptions?: PromptDispatchOptions,
+  ): Promise<void>;
   readonly rawSession: CompactionRecoverySessionLike;
   readonly runtime: BrewvaRuntime;
 }
@@ -84,6 +89,7 @@ interface PromptRecoveryContext {
   runtime: BrewvaRuntime;
   session: CompactionRecoverySessionLike;
   sessionId: string;
+  parts: readonly BrewvaPromptContentPart[];
   prompt: string;
   promptOptions?: PromptDispatchOptions;
   error: unknown;
@@ -97,6 +103,10 @@ interface PromptRecoveryContext {
 interface PromptRecoveryPolicy {
   readonly name: PromptRecoveryPolicyName;
   execute(input: PromptRecoveryContext): Promise<PromptRecoveryResult>;
+}
+
+function buildTextPromptParts(text: string): BrewvaPromptContentPart[] {
+  return [{ type: "text", text }];
 }
 
 function normalizeSessionId(input: CompactionRecoverySessionLike): string | undefined {
@@ -243,38 +253,50 @@ async function withTemporaryModel<T>(
 
 async function dispatchResumePrompt(input: {
   session: CompactionRecoverySessionLike;
-  dispatchPrompt: (content: string, promptOptions?: PromptDispatchOptions) => Promise<void>;
+  dispatchPrompt: (
+    content: readonly BrewvaPromptContentPart[],
+    promptOptions?: PromptDispatchOptions,
+  ) => Promise<void>;
 }): Promise<void> {
   const promptOptions: PromptDispatchOptions = {
     expandPromptTemplates: false,
     source: "extension",
     ...(input.session.isStreaming === true ? { streamingBehavior: "followUp" as const } : {}),
   };
-  await input.dispatchPrompt(COMPACTION_RESUME_PROMPT, promptOptions);
+  await input.dispatchPrompt(buildTextPromptParts(COMPACTION_RESUME_PROMPT), promptOptions);
 }
 
 async function dispatchMaxOutputRecoveryPrompt(input: {
   session: CompactionRecoverySessionLike;
-  dispatchPrompt: (content: string, promptOptions?: PromptDispatchOptions) => Promise<void>;
+  dispatchPrompt: (
+    content: readonly BrewvaPromptContentPart[],
+    promptOptions?: PromptDispatchOptions,
+  ) => Promise<void>;
 }): Promise<void> {
   const promptOptions: PromptDispatchOptions = {
     expandPromptTemplates: false,
     source: "extension",
     ...(input.session.isStreaming === true ? { streamingBehavior: "followUp" as const } : {}),
   };
-  await input.dispatchPrompt(MAX_OUTPUT_RECOVERY_PROMPT, promptOptions);
+  await input.dispatchPrompt(buildTextPromptParts(MAX_OUTPUT_RECOVERY_PROMPT), promptOptions);
 }
 
 async function dispatchProviderFallbackRecoveryPrompt(input: {
   session: CompactionRecoverySessionLike;
-  dispatchPrompt: (content: string, promptOptions?: PromptDispatchOptions) => Promise<void>;
+  dispatchPrompt: (
+    content: readonly BrewvaPromptContentPart[],
+    promptOptions?: PromptDispatchOptions,
+  ) => Promise<void>;
 }): Promise<void> {
   const promptOptions: PromptDispatchOptions = {
     expandPromptTemplates: false,
     source: "extension",
     ...(input.session.isStreaming === true ? { streamingBehavior: "followUp" as const } : {}),
   };
-  await input.dispatchPrompt(PROVIDER_FALLBACK_RECOVERY_PROMPT, promptOptions);
+  await input.dispatchPrompt(
+    buildTextPromptParts(PROVIDER_FALLBACK_RECOVERY_PROMPT),
+    promptOptions,
+  );
 }
 
 function buildRecoveryFailureError(rootError: unknown, recoveryError: unknown): Error {
@@ -353,7 +375,7 @@ const outputBudgetEscalationPolicy: PromptRecoveryPolicy = {
       model: formatModelKey(currentModel),
     });
     try {
-      await input.controller.dispatchPrompt(input.prompt, input.promptOptions);
+      await input.controller.dispatchPrompt(input.parts, input.promptOptions);
       if (clearNextPromptOutputBudgetEscalation(input.runtime, input.sessionId)) {
         recordSessionTurnTransition(input.runtime, {
           sessionId: input.sessionId,
@@ -609,7 +631,7 @@ function createCompactionRecoveryController(
   };
 
   const dispatchPrompt = async (
-    content: string,
+    content: readonly BrewvaPromptContentPart[],
     promptOptions?: PromptDispatchOptions,
   ): Promise<void> => {
     const promptPromise = basePrompt(content, promptOptions);
@@ -661,7 +683,10 @@ function createCompactionRecoveryController(
     installMode(mode) {
       installPromptMode(mode);
     },
-    async dispatchPrompt(content: string, promptOptions?: PromptDispatchOptions): Promise<void> {
+    async dispatchPrompt(
+      content: readonly BrewvaPromptContentPart[],
+      promptOptions?: PromptDispatchOptions,
+    ): Promise<void> {
       return await dispatchPrompt(content, promptOptions);
     },
     async waitForSettled(afterGeneration = 0): Promise<void> {
@@ -813,7 +838,7 @@ function getOrInstallCompactionRecovery(
 
 async function sendPromptWithBackgroundCompactionRecovery(
   session: CompactionRecoverySessionLike,
-  prompt: string,
+  prompt: readonly BrewvaPromptContentPart[],
   options: CompactionRecoveryOptions = {},
 ): Promise<void> {
   const controller = getOrInstallCompactionRecovery(session, options);
@@ -828,6 +853,7 @@ async function handlePromptRecoveryFailure(input: {
   runtime: BrewvaRuntime;
   session: CompactionRecoverySessionLike;
   sessionId: string;
+  parts: readonly BrewvaPromptContentPart[];
   prompt: string;
   promptOptions?: PromptDispatchOptions;
   error: unknown;
@@ -851,6 +877,7 @@ async function handlePromptRecoveryFailure(input: {
       runtime: input.runtime,
       session: input.session,
       sessionId: input.sessionId,
+      parts: input.parts,
       prompt: input.prompt,
       promptOptions: input.promptOptions,
       error: currentError,
@@ -885,7 +912,7 @@ export function installSessionCompactionRecovery<T extends CompactionRecoverySes
 
 export async function sendPromptWithCompactionRecovery(
   session: CompactionRecoverySessionLike,
-  prompt: string,
+  prompt: readonly BrewvaPromptContentPart[],
   options: CompactionRecoveryOptions = {},
 ): Promise<void> {
   const controller = getOrInstallCompactionRecovery(session, options);
@@ -922,7 +949,8 @@ export async function sendPromptWithCompactionRecovery(
           runtime: options.runtime,
           session,
           sessionId,
-          prompt,
+          parts: prompt,
+          prompt: buildBrewvaPromptText(prompt),
           promptOptions: options.promptOptions,
           error,
           controller,

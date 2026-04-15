@@ -147,9 +147,11 @@ export function createQuestionsCommandRuntimePlugin(runtime: BrewvaRuntime): Run
           answerText: parsed.answerText,
         });
         if (ctx.isIdle()) {
-          runtimePluginApi.sendUserMessage(prompt);
+          runtimePluginApi.sendUserMessage([{ type: "text", text: prompt }]);
         } else {
-          runtimePluginApi.sendUserMessage(prompt, { deliverAs: "followUp" });
+          runtimePluginApi.sendUserMessage([{ type: "text", text: prompt }], {
+            deliverAs: "followUp",
+          });
         }
         recordRuntimeEvent(runtime, {
           sessionId,

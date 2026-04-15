@@ -6,6 +6,7 @@ import type {
   ResponseFunctionToolCall,
   ResponseInput,
   ResponseInputContent,
+  ResponseInputFile,
   ResponseInputImage,
   ResponseInputText,
   ResponseOutputMessage,
@@ -20,6 +21,7 @@ import type {
   ImageContent,
   Model,
   StopReason,
+  StreamOptions,
   TextContent,
   TextSignatureV1,
   ThinkingContent,
@@ -31,6 +33,11 @@ import type { AssistantMessageEventStream } from "../utils/event-stream.js";
 import { shortHash } from "../utils/hash.js";
 import { parseStreamingJson } from "../utils/json-parse.js";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.js";
+import {
+  buildOpenAIInputFilePart,
+  materializeResolvedUserMessageContentPart,
+  resolveUserMessageContent,
+} from "./prompt-content.js";
 import { transformMessages } from "./transform-messages.js";
 
 // =============================================================================
@@ -88,6 +95,7 @@ export function convertResponsesMessages<TApi extends Api>(
   context: Context,
   allowedToolCallProviders: ReadonlySet<string>,
   options?: ConvertResponsesMessagesOptions,
+  streamOptions?: Pick<StreamOptions, "resolveFile">,
 ): ResponseInput {
   const messages: ResponseInput = [];
 
@@ -136,34 +144,51 @@ export function convertResponsesMessages<TApi extends Api>(
   let msgIndex = 0;
   for (const msg of transformedMessages) {
     if (msg.role === "user") {
-      if (typeof msg.content === "string") {
-        messages.push({
-          role: "user",
-          content: [{ type: "input_text", text: sanitizeSurrogates(msg.content) }],
-        });
-      } else {
-        const content: ResponseInputContent[] = msg.content.map((item): ResponseInputContent => {
-          if (item.type === "text") {
-            return {
-              type: "input_text",
-              text: sanitizeSurrogates(item.text),
-            } satisfies ResponseInputText;
-          }
-          return {
+      const content: ResponseInputContent[] = [];
+      for (const item of resolveUserMessageContent(model, msg.content, streamOptions)) {
+        if (item.type === "text") {
+          content.push({
+            type: "input_text",
+            text: sanitizeSurrogates(item.text),
+          } satisfies ResponseInputText);
+          continue;
+        }
+        if (item.type === "image") {
+          content.push({
             type: "input_image",
             detail: "auto",
             image_url: `data:${item.mimeType};base64,${item.data}`,
-          } satisfies ResponseInputImage;
-        });
-        const filteredContent = !model.input.includes("image")
-          ? content.filter((c) => c.type !== "input_image")
-          : content;
-        if (filteredContent.length === 0) continue;
-        messages.push({
-          role: "user",
-          content: filteredContent,
-        });
+          } satisfies ResponseInputImage);
+          continue;
+        }
+        const nativeFile = buildOpenAIInputFilePart(item);
+        if (nativeFile) {
+          content.push(nativeFile satisfies ResponseInputFile);
+          continue;
+        }
+        for (const materialized of materializeResolvedUserMessageContentPart(model, item)) {
+          if (materialized.type === "text") {
+            content.push({
+              type: "input_text",
+              text: sanitizeSurrogates(materialized.text),
+            } satisfies ResponseInputText);
+            continue;
+          }
+          content.push({
+            type: "input_image",
+            detail: "auto",
+            image_url: `data:${materialized.mimeType};base64,${materialized.data}`,
+          } satisfies ResponseInputImage);
+        }
       }
+      const filteredContent = !model.input.includes("image")
+        ? content.filter((c) => c.type !== "input_image")
+        : content;
+      if (filteredContent.length === 0) continue;
+      messages.push({
+        role: "user",
+        content: filteredContent,
+      });
     } else if (msg.role === "assistant") {
       const output: ResponseInput = [];
       const assistantMsg = msg as AssistantMessage;

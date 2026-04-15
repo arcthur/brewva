@@ -4,11 +4,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { buildBrewvaPromptText, type BrewvaPromptContentPart } from "@brewva/brewva-substrate";
 import {
   COMPACTION_RECOVERY_TEST_ONLY,
   installSessionCompactionRecovery,
   wrapSessionWithSettledPrompts,
 } from "../../../packages/brewva-gateway/src/session/compaction-recovery.js";
+
+function textPrompt(text: string): BrewvaPromptContentPart[] {
+  return [{ type: "text", text }];
+}
+
+function promptText(parts: readonly BrewvaPromptContentPart[]): string {
+  return buildBrewvaPromptText(parts);
+}
 
 function createRuntimeEventBridge() {
   const runtime = new BrewvaRuntime({
@@ -55,7 +64,8 @@ describe("compaction recovery controller", () => {
       sessionManager: {
         getSessionId: () => "agent-session-1",
       },
-      async prompt(content: string): Promise<void> {
+      async prompt(parts: readonly BrewvaPromptContentPart[]): Promise<void> {
+        const content = promptText(parts);
         promptedMessages.push(content);
         if (promptedMessages.length === 1) {
           recordRuntimeEvent(eventBridge.runtime, {
@@ -81,7 +91,7 @@ describe("compaction recovery controller", () => {
     });
 
     const initialPromptResult = await Promise.race([
-      wrapped.prompt("interactive prompt").then(() => "resolved"),
+      wrapped.prompt(textPrompt("interactive prompt")).then(() => "resolved"),
       new Promise<string>((resolve) => {
         setTimeout(() => resolve("timed_out"), 20);
       }),
@@ -126,7 +136,8 @@ describe("compaction recovery controller", () => {
       sessionManager: {
         getSessionId: () => "agent-session-2",
       },
-      async prompt(content: string): Promise<void> {
+      async prompt(parts: readonly BrewvaPromptContentPart[]): Promise<void> {
+        const content = promptText(parts);
         promptedMessages.push(content);
         if (promptedMessages.length === 1) {
           recordRuntimeEvent(eventBridge.runtime, {
@@ -173,7 +184,7 @@ describe("compaction recovery controller", () => {
       runtime: eventBridge.runtime as any,
       sessionId: "agent-session-2",
     });
-    await wrapped.prompt("initial prompt");
+    await wrapped.prompt(textPrompt("initial prompt"));
 
     expect(promptedMessages[0]).toBe("initial prompt");
     expect(promptedMessages[1]).toContain("Resume the interrupted turn");
@@ -200,7 +211,8 @@ describe("compaction recovery controller", () => {
       sessionManager: {
         getSessionId: () => "agent-session-deterministic-recovery",
       },
-      async prompt(content: string): Promise<void> {
+      async prompt(parts: readonly BrewvaPromptContentPart[]): Promise<void> {
+        const content = promptText(parts);
         promptedMessages.push(content);
         if (promptedMessages.length === 1) {
           recordRuntimeEvent(eventBridge.runtime, {
@@ -225,7 +237,7 @@ describe("compaction recovery controller", () => {
       sessionId: "agent-session-deterministic-recovery",
     });
 
-    await wrapped.prompt("recover via compaction generation");
+    await wrapped.prompt(textPrompt("recover via compaction generation"));
 
     expect(promptedMessages).toEqual([
       "recover via compaction generation",
@@ -289,7 +301,8 @@ describe("compaction recovery controller", () => {
       sessionManager: {
         getSessionId: () => "agent-session-provider-fallback",
       },
-      async prompt(content: string): Promise<void> {
+      async prompt(parts: readonly BrewvaPromptContentPart[]): Promise<void> {
+        const content = promptText(parts);
         promptedMessages.push({
           content,
           model: activeModel.id,
@@ -319,7 +332,7 @@ describe("compaction recovery controller", () => {
       sessionId: "agent-session-provider-fallback",
     });
 
-    await wrapped.prompt("recover through fallback model");
+    await wrapped.prompt(textPrompt("recover through fallback model"));
 
     expect(promptedMessages).toEqual([
       {
@@ -367,7 +380,7 @@ describe("compaction recovery controller", () => {
       sessionManager: {
         getSessionId: () => "agent-session-queued",
       },
-      async prompt(_content: string, _options?: unknown): Promise<void> {
+      async prompt(_parts: readonly BrewvaPromptContentPart[], _options?: unknown): Promise<void> {
         return;
       },
       async waitForIdle(): Promise<void> {
@@ -385,7 +398,7 @@ describe("compaction recovery controller", () => {
 
     const queuedPromptResult = await Promise.race([
       wrapped
-        .prompt("queued prompt", {
+        .prompt(textPrompt("queued prompt"), {
           streamingBehavior: "followUp",
         })
         .then(() => "resolved"),
@@ -405,7 +418,8 @@ describe("compaction recovery controller", () => {
       sessionManager: {
         getSessionId: () => "agent-session-3",
       },
-      async prompt(content: string): Promise<void> {
+      async prompt(parts: readonly BrewvaPromptContentPart[]): Promise<void> {
+        const content = promptText(parts);
         promptedMessages.push(content);
         if (promptedMessages.length === 1) {
           recordRuntimeEvent(eventBridge.runtime, {
@@ -418,8 +432,8 @@ describe("compaction recovery controller", () => {
       async waitForIdle(): Promise<void> {
         return;
       },
-      async delegatePrompt(content: string): Promise<void> {
-        await this.prompt(content);
+      async delegatePrompt(parts: readonly BrewvaPromptContentPart[]): Promise<void> {
+        await this.prompt(parts);
       },
       marker(): string {
         return this.sessionManager.getSessionId();
@@ -436,7 +450,7 @@ describe("compaction recovery controller", () => {
       runtime: eventBridge.runtime as any,
     });
 
-    await wrapped.delegatePrompt("print prompt");
+    await wrapped.delegatePrompt(textPrompt("print prompt"));
 
     expect(promptedMessages).toHaveLength(2);
     expect(promptedMessages[0]).toBe("print prompt");
@@ -446,7 +460,7 @@ describe("compaction recovery controller", () => {
 
   test("dispose on wrapped sessions tears down recovery and restores the raw prompt", async () => {
     const eventBridge = createRuntimeEventBridge();
-    const prompt = async (): Promise<void> => {
+    const prompt = async (_parts: readonly BrewvaPromptContentPart[]): Promise<void> => {
       return;
     };
     const disposeCalls: string[] = [];
@@ -520,7 +534,8 @@ describe("compaction recovery controller", () => {
       sessionManager: {
         getSessionId: () => "agent-session-breaker",
       },
-      async prompt(content: string): Promise<void> {
+      async prompt(parts: readonly BrewvaPromptContentPart[]): Promise<void> {
+        const content = promptText(parts);
         promptedMessages.push(content);
         if (content.includes("Resume the interrupted turn")) {
           throw new Error("resume_failed");
@@ -581,7 +596,7 @@ describe("compaction recovery controller", () => {
       sessionManager: {
         getSessionId: () => "agent-session-withheld",
       },
-      async prompt(_content: string): Promise<void> {
+      async prompt(_parts: readonly BrewvaPromptContentPart[]): Promise<void> {
         recordRuntimeEvent(eventBridge.runtime, {
           sessionId: "agent-session-withheld",
           type: "tool_call_blocked",
@@ -605,7 +620,7 @@ describe("compaction recovery controller", () => {
     });
 
     try {
-      await wrapped.prompt("trigger failure");
+      await wrapped.prompt(textPrompt("trigger failure"));
       expect.unreachable("expected prompt failure");
     } catch (error) {
       expect(error).toBeInstanceOf(Error);
@@ -627,7 +642,8 @@ describe("compaction recovery controller", () => {
       sessionManager: {
         getSessionId: () => "agent-session-max-output-success",
       },
-      async prompt(content: string): Promise<void> {
+      async prompt(parts: readonly BrewvaPromptContentPart[]): Promise<void> {
+        const content = promptText(parts);
         promptedMessages.push(content);
         if (promptedMessages.length === 1) {
           throw new Error("max output tokens exceeded");
@@ -646,7 +662,7 @@ describe("compaction recovery controller", () => {
       sessionId: "agent-session-max-output-success",
     });
 
-    await wrapped.prompt("trigger concise recovery");
+    await wrapped.prompt(textPrompt("trigger concise recovery"));
 
     expect(promptedMessages).toEqual([
       "trigger concise recovery",
@@ -679,7 +695,8 @@ describe("compaction recovery controller", () => {
       sessionManager: {
         getSessionId: () => "agent-session-max-output-breaker",
       },
-      async prompt(content: string): Promise<void> {
+      async prompt(parts: readonly BrewvaPromptContentPart[]): Promise<void> {
+        const content = promptText(parts);
         promptedMessages.push(content);
         if (content === COMPACTION_RECOVERY_TEST_ONLY.MAX_OUTPUT_RECOVERY_PROMPT) {
           throw new Error("recovery_prompt_failed");
@@ -701,7 +718,7 @@ describe("compaction recovery controller", () => {
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        await wrapped.prompt(`trigger failure ${attempt}`);
+        await wrapped.prompt(textPrompt(`trigger failure ${attempt}`));
         expect.unreachable("expected recovery failure");
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
@@ -709,7 +726,7 @@ describe("compaction recovery controller", () => {
     }
 
     try {
-      await wrapped.prompt("trigger breaker-open skip");
+      await wrapped.prompt(textPrompt("trigger breaker-open skip"));
       expect.unreachable("expected breaker-open failure");
     } catch (error) {
       expect(error).toBeInstanceOf(Error);

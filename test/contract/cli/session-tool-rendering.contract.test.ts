@@ -24,7 +24,7 @@ interface ReadToolRendererLike {
 }
 
 interface SessionWithToolRegistry {
-  _customTools: ReadToolRendererLike[];
+  getRegisteredTools(): readonly ReadToolRendererLike[];
 }
 
 const plainTheme: ThemeLike = {
@@ -46,7 +46,9 @@ describe("brewva session tool rendering", () => {
 
     try {
       const sessionWithRegistry = result.session as unknown as SessionWithToolRegistry;
-      const readTool = sessionWithRegistry._customTools.find((tool) => tool.name === "read");
+      const readTool = sessionWithRegistry
+        .getRegisteredTools()
+        .find((tool) => tool.name === "read");
 
       expect(typeof readTool?.renderResult).toBe("function");
 
@@ -104,7 +106,9 @@ describe("brewva session tool rendering", () => {
 
     try {
       const sessionWithRegistry = result.session as unknown as SessionWithToolRegistry;
-      const readTool = sessionWithRegistry._customTools.find((tool) => tool.name === "read");
+      const readTool = sessionWithRegistry
+        .getRegisteredTools()
+        .find((tool) => tool.name === "read");
 
       expect(typeof readTool?.renderResult).toBe("function");
 

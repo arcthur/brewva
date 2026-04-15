@@ -1,13 +1,14 @@
 import type { ContextState } from "../contracts/context-state.js";
 import type { SessionPhase } from "../contracts/session-phase.js";
 import type {
-  BrewvaTextContentPart,
   BrewvaToolContentPart,
   BrewvaToolContextUsage,
   BrewvaToolDefinition,
   BrewvaToolResult,
 } from "../contracts/tool.js";
 import type { ToolExecutionPhase } from "../execution/tool-phase.js";
+import type { BrewvaPromptContentPart } from "../session/prompt-content.js";
+import type { BrewvaPromptAssistantMessageEvent } from "../session/prompt-session.js";
 import type { BrewvaToolUiPort } from "./ui.js";
 
 export interface HostCommandPort {
@@ -153,7 +154,7 @@ export interface BrewvaHostBeforeProviderRequestEvent {
 export interface BrewvaHostBeforeAgentStartEvent {
   type: "before_agent_start";
   prompt: string;
-  images?: BrewvaToolContentPart[];
+  parts: BrewvaPromptContentPart[];
   systemPrompt: string;
 }
 
@@ -187,10 +188,7 @@ export interface BrewvaHostMessageStartEvent {
 export interface BrewvaHostMessageUpdateEvent {
   type: "message_update";
   message: unknown;
-  assistantMessageEvent: {
-    type: string;
-    delta?: string;
-  };
+  assistantMessageEvent: BrewvaPromptAssistantMessageEvent;
 }
 
 export interface BrewvaHostMessageEndEvent {
@@ -264,13 +262,13 @@ export interface BrewvaHostThinkingLevelSelectEvent {
 
 export type BrewvaHostInputEventResult =
   | { action: "continue" }
-  | { action: "transform"; text: string; images?: BrewvaToolContentPart[] }
+  | { action: "transform"; parts: BrewvaPromptContentPart[] }
   | { action: "handled" };
 
 export interface BrewvaHostInputEvent {
   type: "input";
   text: string;
-  images?: BrewvaToolContentPart[];
+  parts: BrewvaPromptContentPart[];
   source?: string;
 }
 
@@ -366,7 +364,7 @@ export interface BrewvaHostPluginApi {
     options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
   ): void;
   sendUserMessage(
-    content: string | BrewvaTextContentPart[],
+    content: BrewvaPromptContentPart[],
     options?: { deliverAs?: "steer" | "followUp" },
   ): void;
   getActiveTools(): string[];

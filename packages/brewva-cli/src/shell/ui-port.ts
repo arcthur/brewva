@@ -5,6 +5,7 @@ import {
   resolveTuiTheme,
   type TuiTheme,
 } from "@brewva/brewva-tui";
+import { cloneCliShellPromptParts, rebasePromptPartsAfterTextReplace } from "./prompt-parts.js";
 import type { CliShellAction, CliShellState } from "./state/index.js";
 import type { CliShellUiPort } from "./types.js";
 
@@ -147,9 +148,14 @@ export function createCliShellUiPortController(input: {
         text +
         state.composer.text.slice(state.composer.cursor);
       input.dispatch({
-        type: "composer.setText",
+        type: "composer.setPromptState",
         text: nextText,
         cursor: state.composer.cursor + text.length,
+        parts: rebasePromptPartsAfterTextReplace(cloneCliShellPromptParts(state.composer.parts), {
+          start: state.composer.cursor,
+          end: state.composer.cursor,
+          replacementText: text,
+        }),
       });
     },
     setEditorText(text) {

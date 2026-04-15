@@ -1,4 +1,5 @@
 import { createCliRenderer } from "@opentui/core";
+import { createElement as createSolidElement, testRender as solidTestRender } from "@opentui/solid";
 import React from "react";
 import type {
   OpenTuiKeyEvent,
@@ -8,6 +9,7 @@ import type {
   OpenTuiSmokeOptions,
   OpenTuiSmokeResult,
   OpenTuiScreenMode,
+  OpenTuiSolidNode,
   OpenTuiTerminalBackgroundMode,
   OpenTuiTextareaHandle,
   OpenTuiTestRenderOptions,
@@ -33,9 +35,12 @@ function createCliRendererConfig(
   return {
     exitOnCtrlC: false,
     screenMode: DEFAULT_SCREEN_MODE,
-    useMouse: false,
+    useMouse: true,
     consoleMode: "disabled",
     useKittyKeyboard: DEFAULT_KITTY_KEYBOARD_CONFIG,
+    externalOutputMode: "passthrough",
+    targetFps: 60,
+    gatherStats: false,
     ...overrides,
   };
 }
@@ -195,6 +200,33 @@ export async function openTuiTestRender(
   options: OpenTuiTestRenderOptions,
 ): Promise<OpenTuiTestRenderSetup> {
   return await testRender(node, options);
+}
+
+export function createOpenTuiSolidElement(
+  type: unknown,
+  props?: Record<string, unknown> | null,
+  ...children: unknown[]
+): OpenTuiSolidNode {
+  return () => {
+    if (typeof type === "function") {
+      return (type as (props: Record<string, unknown>) => unknown)({
+        ...props,
+        children,
+      });
+    }
+    return (createSolidElement as (...args: unknown[]) => unknown)(type, props, ...children);
+  };
+}
+
+export async function openTuiSolidAct(callback: () => void | Promise<void>): Promise<void> {
+  await callback();
+}
+
+export async function openTuiSolidTestRender(
+  node: OpenTuiSolidNode,
+  options: OpenTuiTestRenderOptions,
+): Promise<OpenTuiTestRenderSetup> {
+  return await solidTestRender(node, options);
 }
 
 export async function runOpenTuiSmoke(

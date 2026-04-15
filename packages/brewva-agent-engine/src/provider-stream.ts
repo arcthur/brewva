@@ -63,6 +63,7 @@ function toProviderOptions(options: BrewvaAgentEngineStreamOptions): ProviderStr
     headers: options.headers,
     maxRetryDelayMs: options.maxRetryDelayMs,
     thinkingBudgets: options.thinkingBudgets,
+    resolveFile: options.resolveFile as ProviderStreamOptions["resolveFile"],
   };
 }
 

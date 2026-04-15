@@ -2,8 +2,10 @@ import { afterEach, describe, expect, mock, test } from "bun:test";
 import process from "node:process";
 import type {
   BrewvaManagedPromptSession,
+  BrewvaPromptContentPart,
   BrewvaPromptSessionEvent,
 } from "@brewva/brewva-substrate";
+import { buildBrewvaPromptText } from "@brewva/brewva-substrate";
 import { runCliPrintSession } from "../../../packages/brewva-cli/src/cli-runtime.js";
 
 describe("cli runtime print mode", () => {
@@ -31,7 +33,8 @@ describe("cli runtime print mode", () => {
           }
         };
       },
-      async prompt(prompt: string) {
+      async prompt(parts: readonly BrewvaPromptContentPart[]) {
+        const prompt = buildBrewvaPromptText(parts);
         listener?.({
           type: "message_end",
           message: {

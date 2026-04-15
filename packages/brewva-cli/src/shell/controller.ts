@@ -10,37 +10,66 @@ import {
   openExternalEditorWithShell,
   openExternalPagerWithShell,
 } from "../external-process.js";
-import { formatInspectAnalysisText } from "../inspect-analysis.js";
 import { buildSessionInspectReport, resolveInspectDirectory } from "../inspect.js";
 import {
   extractMessageError,
-  extractVisibleTextFromMessage,
+  readAssistantMessageEventPartial,
   readMessageRole,
   readMessageStopReason,
+  readToolResultMessage,
 } from "../message-content.js";
 import {
   createOperatorSurfacePort,
+  createCliShellPromptStore,
   createSessionViewPort,
   createShellConfigPort,
   createWorkspaceCompletionPort,
 } from "./adapters/ports.js";
 import {
+  acceptComposerCompletion,
+  appendPromptHistoryEntry,
+  completionStateEquals,
+  createPromptHistoryState,
+  navigatePromptHistoryState,
+  resolveComposerCompletion,
+  type DismissedCompletionState,
+  type PromptHistoryState,
+} from "./controller-composer.js";
+import {
+  buildInspectSections,
+  buildNotificationsOverlayPayload,
+  buildOverlayView,
+  buildSessionsOverlayPayload,
+  CREDENTIAL_HELP_LINES,
+  resolveOverlayFocusOwner,
+} from "./controller-overlays.js";
+import {
+  buildCliShellPromptContentParts,
+  cloneCliShellPromptParts,
+  cloneCliShellPromptStashEntry,
+  promptPartArraysEqual,
+  summarizePromptSnapshot,
+} from "./prompt-parts.js";
+import {
   createCliShellState,
   reduceCliShellState,
   type CliShellAction,
+  type CliShellCompletionState,
   type CliShellState,
-  type CliShellTranscriptEntry,
 } from "./state/index.js";
+import { buildTaskRunOutputLines } from "./task-details.js";
 import {
-  buildTaskRunListLabel,
-  buildTaskRunOutputLines,
-  buildTaskRunPreviewLines,
-} from "./task-details.js";
-import { renderTranscriptEntryBodyLines, measureTranscriptEntryLines } from "./transcript.js";
+  buildSeedTranscriptMessages,
+  buildTextTranscriptMessage,
+  buildTranscriptMessageFromMessage,
+  upsertToolExecutionIntoTranscriptMessages,
+  type CliShellTranscriptMessage,
+} from "./transcript.js";
 import type {
-  CliOverlaySection,
-  CliNotificationsOverlayPayload,
   CliShellOverlayPayload,
+  CliShellPromptPart,
+  CliShellPromptStashEntry,
+  CliShellPromptStorePort,
   CliShellSessionBundle,
   CliShellUiPort,
   OperatorSurfaceSnapshot,
@@ -58,6 +87,7 @@ export interface CliShellControllerOptions {
   openExternalEditor?(title: string, prefill?: string): Promise<string | undefined>;
   openExternalPager?(title: string, lines: readonly string[]): Promise<boolean>;
   operatorPollIntervalMs?: number;
+  promptStore?: CliShellPromptStorePort;
 }
 
 export interface CliShellSemanticInput {
@@ -75,65 +105,6 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value as Record<string, unknown>;
 }
 
-function transcriptRole(role: string | undefined): CliShellTranscriptEntry["role"] {
-  switch (role) {
-    case "assistant":
-      return "assistant";
-    case "user":
-      return "user";
-    case "toolResult":
-      return "tool";
-    case "custom":
-      return "custom";
-    default:
-      return "system";
-  }
-}
-
-function buildSeedTranscript(messages: unknown[]): CliShellTranscriptEntry[] {
-  return messages.flatMap((message, index) => {
-    const text = extractVisibleTextFromMessage(message);
-    if (text.trim().length === 0) {
-      return [];
-    }
-    return [
-      {
-        id: `seed:${index}`,
-        role: transcriptRole(readMessageRole(message)),
-        text,
-        renderMode: "stable",
-      },
-    ];
-  });
-}
-
-function replaceRange(text: string, start: number, end: number, replacement: string): string {
-  return `${text.slice(0, start)}${replacement}${text.slice(end)}`;
-}
-
-function findPathCompletionRange(
-  text: string,
-  cursor: number,
-): { start: number; end: number; query: string } | null {
-  const before = text.slice(0, cursor);
-  const match = /(?:^|\s)@(?<path>"[^"]*|[^\s]*)$/u.exec(before);
-  if (!match?.groups?.path) {
-    return null;
-  }
-  const query = match.groups.path.replace(/^"/u, "");
-  return {
-    start: cursor - match.groups.path.length,
-    end: cursor,
-    query,
-  };
-}
-
-function findSlashCompletion(text: string, cursor: number): string | null {
-  const before = text.slice(0, cursor);
-  const match = /^\/(?<command>[^\s]*)$/u.exec(before.trim());
-  return match?.groups?.command ?? null;
-}
-
 function normalizeBindingKey(key: string): string {
   switch (key) {
     case "return":
@@ -144,333 +115,8 @@ function normalizeBindingKey(key: string): string {
   }
 }
 
-function renderListValue(values: readonly string[]): string {
-  return values.length > 0 ? values.join(", ") : "none";
-}
-
-function renderNullableBoolean(value: boolean | null): string {
-  if (value === null) {
-    return "n/a";
-  }
-  return value ? "yes" : "no";
-}
-
-function renderNotificationSummary(notification: {
-  level: "info" | "warning" | "error";
-  message: string;
-}): string {
-  return `[${notification.level}] ${notification.message}`;
-}
-
-function summarizeDraftPreview(text: string): {
-  characters: number;
-  lines: number;
-  preview: string;
-} {
-  const trimmed = text.trim();
-  return {
-    characters: text.length,
-    lines: Math.max(1, text.split(/\r?\n/u).length),
-    preview: trimmed.split(/\r?\n/u)[0]?.slice(0, 96) ?? "",
-  };
-}
-
-type SessionInspectReport = ReturnType<typeof buildSessionInspectReport>;
-
-const CREDENTIAL_HELP_LINES = [
-  "Brewva stores API keys in an encrypted local vault.",
-  "",
-  "Run these commands in a separate terminal to manage credentials:",
-  "",
-  "  Add from environment variable (recommended):",
-  "    brewva credentials add --ref vault://openai/apiKey    --from-env OPENAI_API_KEY",
-  "    brewva credentials add --ref vault://anthropic/apiKey --from-env ANTHROPIC_API_KEY",
-  "    brewva credentials add --ref vault://gemini/apiKey    --from-env GEMINI_API_KEY",
-  "    brewva credentials add --ref vault://google/apiKey    --from-env GOOGLE_API_KEY",
-  "    brewva credentials add --ref vault://mistral/apiKey   --from-env MISTRAL_API_KEY",
-  "    brewva credentials add --ref vault://groq/apiKey      --from-env GROQ_API_KEY",
-  "    brewva credentials add --ref vault://xai/apiKey       --from-env XAI_API_KEY",
-  "    brewva credentials add --ref vault://together/apiKey  --from-env TOGETHER_API_KEY",
-  "    brewva credentials add --ref vault://github/token     --from-env GITHUB_TOKEN",
-  "",
-  "  Add a raw value directly:",
-  "    brewva credentials add --ref vault://openai/apiKey --value sk-...",
-  "",
-  "  List stored credentials:",
-  "    brewva credentials list",
-  "",
-  "  Discover credentials from current environment:",
-  "    brewva credentials discover",
-  "",
-  "  Remove a credential:",
-  "    brewva credentials remove --ref vault://openai/apiKey",
-  "",
-  "Environment variables are also accepted directly without storing them in the vault.",
-  "Set OPENAI_API_KEY, ANTHROPIC_API_KEY, etc. before starting Brewva.",
-];
-
-function buildInspectSections(report: SessionInspectReport): CliOverlaySection[] {
-  const base = report.base;
-  const sections: CliOverlaySection[] = [
-    {
-      id: "summary",
-      title: "Summary",
-      lines: [
-        `Session: ${base.sessionId}`,
-        `Workspace: ${base.workspaceRoot}`,
-        `Config mode: ${base.configLoad.mode}`,
-        `Config paths: ${renderListValue(base.configLoad.paths)}`,
-        `Managed tool mode: ${base.bootstrap.managedToolMode ?? "n/a"}`,
-      ],
-    },
-    {
-      id: "runtime",
-      title: "Runtime",
-      lines: [
-        `Hydration: ${base.hydration.status} (issues=${base.hydration.issueCount})`,
-        `Integrity: ${base.integrity.status} (issues=${base.integrity.issueCount})`,
-        `Replay: events=${base.replay.eventCount} anchors=${base.replay.anchorCount} checkpoints=${base.replay.checkpointCount}`,
-        `Tape pressure: ${base.replay.tapePressure}`,
-        `Entries since anchor: ${base.replay.entriesSinceAnchor}`,
-      ],
-    },
-    {
-      id: "task",
-      title: "Task + Truth",
-      lines: [
-        `Goal: ${base.task.goal ?? "n/a"}`,
-        `Task phase: ${base.task.phase ?? "n/a"}`,
-        `Task health: ${base.task.health ?? "n/a"}`,
-        `Task items: ${base.task.items}`,
-        `Task blockers: ${base.task.blockers}`,
-        `Truth: ${base.truth.activeFacts}/${base.truth.totalFacts} active`,
-      ],
-    },
-    {
-      id: "skills",
-      title: "Skills + Verification",
-      lines: [
-        `Active skill: ${base.skills.activeSkill ?? "none"}`,
-        `Completed skills: ${renderListValue(base.skills.completedSkills)}`,
-        `Verification outcome: ${base.verification.outcome ?? "n/a"}`,
-        `Verification level: ${base.verification.level ?? "n/a"}`,
-        `Failed checks: ${renderListValue(base.verification.failedChecks)}`,
-        `Missing checks: ${renderListValue(base.verification.missingChecks)}`,
-        `Missing evidence: ${renderListValue(base.verification.missingEvidence)}`,
-        `Verification reason: ${base.verification.reason ?? "n/a"}`,
-      ],
-    },
-    {
-      id: "artifacts",
-      title: "Artifacts",
-      lines: [
-        `Ledger: rows=${base.ledger.rows} integrity=${base.ledger.integrityValid ? "valid" : "invalid"}`,
-        `Ledger path: ${base.ledger.path}`,
-        `Projection: enabled=${base.projection.enabled ? "yes" : "no"} working=${base.projection.workingExists ? "present" : "missing"}`,
-        `Projection path: ${base.projection.workingPath}`,
-        `Recovery WAL: enabled=${base.recoveryWal.enabled ? "yes" : "no"} pending=${base.recoveryWal.pendingCount} sessionPending=${base.recoveryWal.pendingSessionCount}`,
-        `Recovery WAL path: ${base.recoveryWal.filePath}`,
-        `Snapshots: sessionDir=${base.snapshots.sessionDirExists ? "present" : "missing"} patchHistory=${base.snapshots.patchHistoryExists ? "present" : "missing"}`,
-        `Patch history path: ${base.snapshots.patchHistoryPath}`,
-        `Consistency: ledger=${base.consistency.ledgerIntegrity} pendingRecoveryWal=${base.consistency.pendingRecoveryWal}`,
-      ],
-    },
-    {
-      id: "routing",
-      title: "Bootstrap + Routing",
-      lines: [
-        `Routing enabled: ${renderNullableBoolean(base.bootstrap.routingEnabled)}`,
-        `Routing scopes: ${renderListValue(base.bootstrap.routingScopes)}`,
-        `Routable skills: ${renderListValue(base.bootstrap.routableSkills)}`,
-        `Hidden skills: ${renderListValue(base.bootstrap.hiddenSkills)}`,
-        `Config path: ${base.bootstrap.configPath ?? "n/a"}`,
-        `Events dir: ${base.bootstrap.eventsDir ?? "n/a"}`,
-        `Recovery WAL dir: ${base.bootstrap.recoveryWalDir ?? "n/a"}`,
-        `Projection dir: ${base.bootstrap.projectionDir ?? "n/a"}`,
-      ],
-    },
-    {
-      id: "hosted",
-      title: "Hosted",
-      lines: [
-        `Transition sequence: ${base.hostedTransitions.sequence}`,
-        `Latest: ${
-          base.hostedTransitions.latest
-            ? `${base.hostedTransitions.latest.reason}:${base.hostedTransitions.latest.status}`
-            : "none"
-        }`,
-        `Pending family: ${base.hostedTransitions.pendingFamily ?? "none"}`,
-        `Operator-visible generation: ${base.hostedTransitions.operatorVisibleFactGeneration}`,
-        `Compaction breaker: ${base.hostedTransitions.breakerOpenByReason.compaction_retry ? "open" : "closed"} (${base.hostedTransitions.consecutiveFailuresByReason.compaction_retry ?? 0})`,
-        `Provider fallback breaker: ${base.hostedTransitions.breakerOpenByReason.provider_fallback_retry ? "open" : "closed"} (${base.hostedTransitions.consecutiveFailuresByReason.provider_fallback_retry ?? 0})`,
-        `Max-output breaker: ${base.hostedTransitions.breakerOpenByReason.max_output_recovery ? "open" : "closed"} (${base.hostedTransitions.consecutiveFailuresByReason.max_output_recovery ?? 0})`,
-      ],
-    },
-  ];
-
-  if (base.hydration.issues.length > 0 || base.integrity.issues.length > 0) {
-    sections.push({
-      id: "issues",
-      title: "Issues",
-      lines: [
-        ...base.hydration.issues.map(
-          (issue) =>
-            `Hydration issue #${issue.index}: ${issue.eventType} :: ${issue.reason} (${issue.eventId})`,
-        ),
-        ...base.integrity.issues.map(
-          (issue) =>
-            `Integrity issue: ${issue.domain}/${issue.severity} :: ${issue.reason} (${issue.eventId ?? "n/a"})`,
-        ),
-      ],
-    });
-  }
-
-  if (base.configLoad.warnings.length > 0) {
-    sections.push({
-      id: "config",
-      title: "Config Warnings",
-      lines: base.configLoad.warnings.map(
-        (warning) =>
-          `${warning.code}: ${warning.message} :: ${warning.configPath} :: ${renderListValue(
-            warning.fields,
-          )}`,
-      ),
-    });
-  }
-
-  if (base.recoveryWal.pendingRows.length > 0) {
-    sections.push({
-      id: "recovery",
-      title: "Recovery WAL",
-      lines: base.recoveryWal.pendingRows.map(
-        (row) =>
-          `${row.source}/${row.status} turn=${row.turnId} channel=${row.channel} tool=${row.toolName ?? "n/a"} updated=${row.updatedAt ?? "n/a"}`,
-      ),
-    });
-  }
-
-  sections.push({
-    id: "analysis",
-    title: "Analysis",
-    lines: formatInspectAnalysisText(report).split("\n"),
-  });
-
-  return sections;
-}
-
-function buildOverlayView(payload: CliShellOverlayPayload): { title: string; lines: string[] } {
-  switch (payload.kind) {
-    case "approval": {
-      const lines = [
-        `Pending approvals: ${payload.snapshot.approvals.length}`,
-        "Use ↑/↓ to choose, Enter or a to accept, r to reject, Esc to close.",
-      ];
-      for (const [index, item] of payload.snapshot.approvals.entries()) {
-        const marker = index === payload.selectedIndex ? ">" : " ";
-        lines.push(
-          `${marker} [${item.requestId}] ${item.toolName} :: ${item.subject} :: ${item.effects.join(", ")}`,
-        );
-      }
-      if (payload.snapshot.approvals.length === 0) {
-        lines.push("No pending approvals.");
-      }
-      return { title: "Approvals", lines };
-    }
-    case "question": {
-      const lines = [
-        `Open questions: ${payload.snapshot.questions.length}`,
-        "Use ↑/↓ to choose, Enter to answer from the composer, Esc to close.",
-      ];
-      for (const [index, item] of payload.snapshot.questions.entries()) {
-        const marker = index === payload.selectedIndex ? ">" : " ";
-        lines.push(`${marker} [${item.questionId}] ${item.sourceLabel} :: ${item.questionText}`);
-      }
-      if (payload.snapshot.questions.length === 0) {
-        lines.push("No open questions.");
-      }
-      return { title: "Questions", lines };
-    }
-    case "tasks": {
-      const lines = [
-        `Task runs: ${payload.snapshot.taskRuns.length}`,
-        "Use ↑/↓ to choose, c to cancel the selected run, Esc to close.",
-      ];
-      for (const [index, item] of payload.snapshot.taskRuns.entries()) {
-        const marker = index === payload.selectedIndex ? ">" : " ";
-        lines.push(`${marker} ${buildTaskRunListLabel(item)}`);
-      }
-      if (payload.snapshot.taskRuns.length === 0) {
-        lines.push("No recorded task runs.");
-      } else {
-        const selected = payload.snapshot.taskRuns[payload.selectedIndex];
-        if (selected) {
-          lines.push("", ...buildTaskRunPreviewLines(selected));
-        }
-      }
-      return { title: "Tasks", lines };
-    }
-    case "sessions": {
-      const lines = [
-        `Sessions: ${payload.sessions.length}`,
-        "Use ↑/↓ to choose, Enter to switch, n to create a new session, Esc to close.",
-      ];
-      for (const [index, item] of payload.sessions.entries()) {
-        const marker = index === payload.selectedIndex ? ">" : " ";
-        const current = item.sessionId === payload.currentSessionId ? " current" : "";
-        const draft = payload.draftStateBySessionId[item.sessionId];
-        const draftText = draft ? ` draft=${draft.lines}l/${draft.characters}c` : "";
-        lines.push(`${marker} [${item.sessionId}] events=${item.eventCount}${current}${draftText}`);
-      }
-      if (payload.sessions.length === 0) {
-        lines.push("No sessions found.");
-      }
-      return { title: "Sessions", lines };
-    }
-    case "notifications": {
-      const lines = [
-        `Notifications: ${payload.notifications.length}`,
-        "Use ↑/↓ to choose, Enter to inspect, d to dismiss, x to clear all, Esc to close.",
-      ];
-      for (const [index, item] of payload.notifications.entries()) {
-        const marker = index === payload.selectedIndex ? ">" : " ";
-        lines.push(`${marker} ${renderNotificationSummary(item)}`);
-      }
-      if (payload.notifications.length === 0) {
-        lines.push("No notifications.");
-      }
-      return { title: "Notifications", lines };
-    }
-    case "inspect":
-      return {
-        title: "Inspect",
-        lines: payload.sections.map(
-          (section, index) => `${index === payload.selectedIndex ? ">" : " "} ${section.title}`,
-        ),
-      };
-    case "pager":
-      return { title: payload.title ?? "Pager", lines: payload.lines };
-    case "confirm":
-      return { title: "Confirm", lines: [payload.message, "", "Enter=yes  Esc=no"] };
-    case "input":
-      return {
-        title: "Input",
-        lines: [payload.message ?? "", "", payload.value, "", "Enter=confirm  Esc=cancel"],
-      };
-    case "select":
-      return {
-        title: "Select",
-        lines: payload.options.map(
-          (item, index) => `${index === payload.selectedIndex ? ">" : " "} ${item}`,
-        ),
-      };
-    default: {
-      const exhaustiveCheck: never = payload;
-      return exhaustiveCheck;
-    }
-  }
-}
-
 export class CliShellController {
+  static readonly PROMPT_HISTORY_LIMIT = 50;
   static readonly STATUS_DEBOUNCE_MS = 120;
   readonly #completionPort;
   readonly #configPort = createShellConfigPort();
@@ -542,6 +188,18 @@ export class CliShellController {
       action: "scrollDown",
     },
     {
+      id: "global.scrollTop",
+      context: "global",
+      trigger: { key: "home", ctrl: false, meta: false, shift: false },
+      action: "scrollTop",
+    },
+    {
+      id: "global.scrollBottom",
+      context: "global",
+      trigger: { key: "end", ctrl: false, meta: false, shift: false },
+      action: "scrollBottom",
+    },
+    {
       id: "composer.submit",
       context: "composer",
       trigger: { key: "enter", ctrl: false, meta: false, shift: false },
@@ -552,6 +210,18 @@ export class CliShellController {
       context: "composer",
       trigger: { key: "j", ctrl: true, meta: false, shift: false },
       action: "newline",
+    },
+    {
+      id: "composer.stash",
+      context: "composer",
+      trigger: { key: "s", ctrl: true, meta: false, shift: false },
+      action: "stashPrompt",
+    },
+    {
+      id: "composer.unstash",
+      context: "composer",
+      trigger: { key: "y", ctrl: true, meta: false, shift: false },
+      action: "unstashPrompt",
     },
     {
       id: "completion.accept",
@@ -572,10 +242,28 @@ export class CliShellController {
       action: "nextCompletion",
     },
     {
+      id: "completion.nextCtrlN",
+      context: "completion",
+      trigger: { key: "n", ctrl: true, meta: false, shift: false },
+      action: "nextCompletion",
+    },
+    {
       id: "completion.prev",
       context: "completion",
       trigger: { key: "up", ctrl: false, meta: false, shift: false },
       action: "prevCompletion",
+    },
+    {
+      id: "completion.prevCtrlP",
+      context: "completion",
+      trigger: { key: "p", ctrl: true, meta: false, shift: false },
+      action: "prevCompletion",
+    },
+    {
+      id: "completion.dismiss",
+      context: "completion",
+      trigger: { key: "escape", ctrl: false, meta: false, shift: false },
+      action: "dismissCompletion",
     },
     {
       id: "overlay.close",
@@ -641,17 +329,25 @@ export class CliShellController {
   readonly #exitPromise: Promise<void>;
   #seenApprovals = new Set<string>();
   #seenQuestions = new Set<string>();
-  #measureWidth = 80;
   #viewportRows = 24;
   #semanticInputQueue: Promise<void> = Promise.resolve();
+  #transcriptNavigationRequestId = 0;
   #draftsBySessionId = new Map<
     string,
     {
       text: string;
       cursor: number;
+      parts: CliShellPromptPart[];
       updatedAt: number;
     }
   >();
+  readonly #promptStore;
+  #promptHistory: PromptHistoryState = {
+    entries: [],
+    index: 0,
+  };
+  #promptStashEntries: CliShellPromptStashEntry[] = [];
+  #dismissedCompletionBySessionId = new Map<string, DismissedCompletionState>();
   #started = false;
   #disposed = false;
 
@@ -662,6 +358,11 @@ export class CliShellController {
     this.#bundle = bundle;
     this.#sessionPort = createSessionViewPort(bundle);
     this.#completionPort = createWorkspaceCompletionPort(options.cwd);
+    this.#promptStore = options.promptStore ?? createCliShellPromptStore();
+    this.#promptHistory = createPromptHistoryState(this.#promptStore.loadHistory());
+    this.#promptStashEntries = this.#promptStore
+      .loadStash()
+      .map((entry) => cloneCliShellPromptStashEntry(entry));
     this.#operatorPort = createOperatorSurfacePort({
       getBundle: () => this.#bundle,
       openSession: (sessionId) => options.openSession(sessionId),
@@ -690,6 +391,43 @@ export class CliShellController {
 
   getBundle(): CliShellSessionBundle {
     return this.#bundle;
+  }
+
+  getOperatorSnapshot(): OperatorSurfaceSnapshot {
+    return this.#operatorSnapshot;
+  }
+
+  async decideApproval(requestId: string, decision: "accept" | "reject"): Promise<void> {
+    await this.#operatorPort.decideApproval(requestId, {
+      decision,
+      actor: "brewva-cli",
+    });
+    await this.refreshOperatorSnapshot();
+  }
+
+  prefillQuestionAnswer(questionId: string): void {
+    const answerPrefix = `/answer ${questionId} `;
+    this.dispatch({
+      type: "composer.setText",
+      text: answerPrefix,
+      cursor: answerPrefix.length,
+    });
+  }
+
+  openTasksOverlay(): void {
+    this.openOverlay({ kind: "tasks", selectedIndex: 0, snapshot: this.#operatorSnapshot });
+  }
+
+  openSessionsBrowser(): void {
+    this.openSessionsOverlay();
+  }
+
+  openNotificationsInbox(): void {
+    this.openNotificationsOverlay();
+  }
+
+  async openInspectPanel(): Promise<void> {
+    await this.openInspectOverlay();
   }
 
   subscribe(listener: () => void): () => void {
@@ -749,19 +487,75 @@ export class CliShellController {
   }
 
   setViewportSize(columns: number, _rows: number): void {
-    this.#measureWidth = Math.max(24, columns - 8);
+    void columns;
     this.#viewportRows = Math.max(12, _rows);
   }
 
-  syncComposerFromEditor(text: string, cursor: number): void {
-    if (this.#state.composer.text === text && this.#state.composer.cursor === cursor) {
+  syncComposerFromEditor(text: string, cursor: number, parts: CliShellPromptPart[] = []): void {
+    if (
+      this.#state.composer.text === text &&
+      this.#state.composer.cursor === cursor &&
+      promptPartArraysEqual(this.#state.composer.parts, parts)
+    ) {
       return;
     }
-    this.dispatch({
-      type: "composer.setText",
-      text,
-      cursor,
-    });
+    this.dispatch(
+      {
+        type: "composer.setPromptState",
+        text,
+        cursor,
+        parts: cloneCliShellPromptParts(parts),
+      },
+      false,
+    );
+  }
+
+  setCompletionSelection(index: number): void {
+    const completion = this.#state.composer.completion;
+    if (!completion) {
+      return;
+    }
+    if (index < 0 || index >= completion.items.length || completion.selectedIndex === index) {
+      return;
+    }
+    this.dispatch(
+      {
+        type: "completion.set",
+        completion: {
+          ...completion,
+          selectedIndex: index,
+        },
+      },
+      false,
+    );
+  }
+
+  acceptCurrentCompletion(): void {
+    this.acceptCompletion();
+  }
+
+  syncTranscriptScrollState(followMode: "live" | "scrolled", scrollOffset: number): void {
+    if (
+      this.#state.transcript.followMode === followMode &&
+      this.#state.transcript.scrollOffset === Math.max(0, scrollOffset)
+    ) {
+      return;
+    }
+    this.dispatch(
+      {
+        type: "transcript.setScrollState",
+        followMode,
+        scrollOffset,
+      },
+      false,
+    );
+  }
+
+  acknowledgeTranscriptNavigation(requestId: number): void {
+    if (this.#state.transcript.navigationRequest?.id !== requestId) {
+      return;
+    }
+    this.dispatch({ type: "transcript.clearNavigation", id: requestId }, false);
   }
 
   private getInputContexts(): KeybindingContext[] {
@@ -796,22 +590,7 @@ export class CliShellController {
       overlay: {
         id: `${payload.kind}:${Date.now()}`,
         kind: payload.kind,
-        focusOwner:
-          payload.kind === "approval"
-            ? "approvalOverlay"
-            : payload.kind === "question"
-              ? "questionOverlay"
-              : payload.kind === "tasks"
-                ? "taskBrowser"
-                : payload.kind === "sessions"
-                  ? "sessionSwitcher"
-                  : payload.kind === "notifications"
-                    ? "notificationCenter"
-                    : payload.kind === "inspect"
-                      ? "inspectOverlay"
-                      : payload.kind === "pager"
-                        ? "pager"
-                        : "dialog",
+        focusOwner: resolveOverlayFocusOwner(payload),
         priority: options.priority ?? "normal",
         suspendFocusOwner: options.suspendCurrent ? activeOverlay?.focusOwner : undefined,
         title: view.title,
@@ -832,6 +611,9 @@ export class CliShellController {
       shift: input.shift,
     });
     if (binding) {
+      return true;
+    }
+    if (this.shouldHandlePromptHistoryInput(input)) {
       return true;
     }
     if (activeOverlay) {
@@ -886,6 +668,11 @@ export class CliShellController {
         return handled || typeof input.text === "string" || input.key.length > 0;
       }
 
+      if (this.shouldHandlePromptHistoryInput(input)) {
+        this.navigatePromptHistory(normalizeBindingKey(input.key) === "up" ? -1 : 1);
+        return true;
+      }
+
       return false;
     } catch (error) {
       this.ui.notify(
@@ -903,16 +690,20 @@ export class CliShellController {
   }
 
   private initializeState(): void {
+    const sessionId = this.#sessionPort.getSessionId();
     this.#state = createCliShellState();
     this.#assistantEntryId = undefined;
     this.#seenApprovals = new Set();
     this.#seenQuestions = new Set();
-    const restoredDraft = this.#draftsBySessionId.get(this.#sessionPort.getSessionId());
+    const restoredDraft = this.#draftsBySessionId.get(sessionId);
+    this.#promptHistory.index = 0;
+    this.#promptHistory.draft = undefined;
+    this.#dismissedCompletionBySessionId.delete(sessionId);
     this.applyActions(
       [
         {
           type: "status.title",
-          title: `Session ${this.#sessionPort.getSessionId()} (${this.#sessionPort.getModelLabel()})`,
+          title: `Session ${sessionId} (${this.#sessionPort.getModelLabel()})`,
         },
         {
           type: "status.set",
@@ -928,22 +719,21 @@ export class CliShellController {
         notification: {
           id: "startup",
           level: "info",
-          message: `Interactive shell attached to ${this.#sessionPort.getSessionId()}.`,
+          message: `Interactive shell attached to ${sessionId}.`,
           createdAt: Date.now(),
         },
       });
     }
-    for (const entry of buildSeedTranscript(this.#sessionPort.getTranscriptSeed())) {
-      this.#state = reduceCliShellState(this.#state, {
-        type: "transcript.append",
-        entry,
-      });
-    }
+    this.#state = reduceCliShellState(this.#state, {
+      type: "transcript.setMessages",
+      messages: buildSeedTranscriptMessages(this.#sessionPort.getTranscriptSeed()),
+    });
     if (restoredDraft) {
       this.#state = reduceCliShellState(this.#state, {
-        type: "composer.setText",
+        type: "composer.setPromptState",
         text: restoredDraft.text,
         cursor: restoredDraft.cursor,
+        parts: cloneCliShellPromptParts(restoredDraft.parts),
       });
     }
     this.emitChange();
@@ -955,9 +745,22 @@ export class CliShellController {
     this.#sessionPort = createSessionViewPort(bundle);
     this.options.onBundleChange?.(bundle);
     this.#unsubscribeSession?.();
-    this.#unsubscribeSession = this.#sessionPort.subscribe((event) =>
-      this.handleSessionEvent(event),
-    );
+    this.#unsubscribeSession = this.#sessionPort.subscribe((event) => {
+      try {
+        this.handleSessionEvent(event);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to render the latest session event.";
+        this.ui.notify(message, "error");
+        this.appendTranscriptMessage(
+          buildTextTranscriptMessage({
+            id: `system:event:${Date.now()}`,
+            role: "system",
+            text: `TUI render error while handling ${event.type}: ${message}`,
+          }),
+        );
+      }
+    });
   }
 
   private applyActions(actions: readonly CliShellAction[], refreshCompletions = true): void {
@@ -1027,117 +830,127 @@ export class CliShellController {
     }
   }
 
-  private adjustScrolledTranscriptAnchor(
-    previousEntry: CliShellTranscriptEntry,
-    nextEntry: CliShellTranscriptEntry,
-    options: {
-      previousMode?: "stable" | "streaming";
-      nextMode?: "stable" | "streaming";
-    } = {},
-  ): void {
-    if (this.#state.transcript.followMode !== "scrolled") {
-      return;
-    }
-    const previousHeight = measureTranscriptEntryLines(
-      previousEntry,
-      this.#measureWidth,
-      options.previousMode ?? "stable",
-    );
-    const nextHeight = measureTranscriptEntryLines(
-      nextEntry,
-      this.#measureWidth,
-      options.nextMode ?? "stable",
-    );
-    const lineDelta = nextHeight - previousHeight;
-    if (lineDelta !== 0) {
-      this.dispatch(
-        {
-          type: "transcript.scroll",
-          delta: lineDelta,
-        },
-        false,
-      );
-    }
+  private findTranscriptMessage(id: string): CliShellTranscriptMessage | undefined {
+    return this.#state.transcript.messages.find((message) => message.id === id);
   }
 
-  private appendTranscriptEntry(
-    entry: CliShellTranscriptEntry,
-    options: {
-      nextMode?: "stable" | "streaming";
-    } = {},
-  ): void {
-    const nextEntry = {
-      ...entry,
-      renderMode: options.nextMode ?? entry.renderMode ?? "stable",
-    } satisfies CliShellTranscriptEntry;
-    this.adjustScrolledTranscriptAnchor(
-      {
-        id: nextEntry.id,
-        role: nextEntry.role,
-        text: "",
-        renderMode: nextEntry.renderMode,
-      },
-      nextEntry,
-      {
-        previousMode: nextEntry.renderMode,
-        nextMode: nextEntry.renderMode,
-      },
-    );
+  private replaceTranscriptMessages(messages: readonly CliShellTranscriptMessage[]): void {
     this.dispatch(
       {
-        type: "transcript.append",
-        entry: nextEntry,
+        type: "transcript.setMessages",
+        messages: [...messages],
       },
       false,
     );
   }
 
-  private upsertTranscriptEntry(
-    entry: CliShellTranscriptEntry,
-    options: {
-      previousMode?: "stable" | "streaming";
-      nextMode?: "stable" | "streaming";
-    } = {},
-  ): void {
-    const nextEntry = {
-      ...entry,
-      renderMode: options.nextMode ?? entry.renderMode ?? "stable",
-    } satisfies CliShellTranscriptEntry;
-    const existing = this.#state.transcript.entries.find(
-      (candidate) => candidate.id === nextEntry.id,
-    );
-    if (!existing) {
-      this.appendTranscriptEntry(nextEntry, { nextMode: nextEntry.renderMode });
+  private appendTranscriptMessage(message: CliShellTranscriptMessage | null): void {
+    if (!message) {
       return;
     }
-    this.adjustScrolledTranscriptAnchor(existing, nextEntry, options);
-    this.dispatch(
-      {
-        type: "transcript.upsert",
-        entry: nextEntry,
-      },
-      false,
+    this.replaceTranscriptMessages([...this.#state.transcript.messages, message]);
+  }
+
+  private upsertTranscriptMessage(message: CliShellTranscriptMessage | null): void {
+    if (!message) {
+      return;
+    }
+    const existingIndex = this.#state.transcript.messages.findIndex(
+      (candidate) => candidate.id === message.id,
+    );
+    if (existingIndex < 0) {
+      this.appendTranscriptMessage(message);
+      return;
+    }
+    const nextMessages = [
+      ...this.#state.transcript.messages.slice(0, existingIndex),
+      message,
+      ...this.#state.transcript.messages.slice(existingIndex + 1),
+    ];
+    this.replaceTranscriptMessages(nextMessages);
+  }
+
+  private readTranscriptText(message: CliShellTranscriptMessage | undefined): string {
+    if (!message) {
+      return "";
+    }
+    return message.parts
+      .filter(
+        (part): part is Extract<CliShellTranscriptMessage["parts"][number], { type: "text" }> =>
+          part.type === "text",
+      )
+      .map((part) => part.text)
+      .join("");
+  }
+
+  private upsertAssistantTranscriptMessage(
+    message: unknown,
+    renderMode: "stable" | "streaming",
+  ): void {
+    const id = this.#assistantEntryId ?? `assistant:${Date.now()}`;
+    this.#assistantEntryId = id;
+    const nextMessage = buildTranscriptMessageFromMessage(message, {
+      id,
+      renderMode,
+      previousMessage: this.findTranscriptMessage(id),
+    });
+    this.upsertTranscriptMessage(nextMessage);
+  }
+
+  private upsertToolExecutionInTranscript(update: {
+    toolCallId?: string;
+    toolName?: string;
+    args?: unknown;
+    phase?: string;
+    partialResult?: unknown;
+    result?: unknown;
+    status?: "pending" | "running" | "completed" | "error";
+    renderMode?: "stable" | "streaming";
+    fallbackMessageId?: string;
+  }): void {
+    if (typeof update.toolCallId !== "string" || update.toolCallId.length === 0) {
+      return;
+    }
+    this.replaceTranscriptMessages(
+      upsertToolExecutionIntoTranscriptMessages(this.#state.transcript.messages, {
+        toolCallId: update.toolCallId,
+        toolName: update.toolName,
+        args: update.args,
+        phase: update.phase,
+        partialResult: update.partialResult,
+        result: update.result,
+        status: update.status,
+        renderMode: update.renderMode,
+        fallbackMessageId: update.fallbackMessageId,
+      }),
     );
   }
 
   private handleSessionEvent(event: BrewvaPromptSessionEvent): void {
     if (event.type === "message_update") {
+      const assistantPartialMessage =
+        readMessageRole(event.message) === "assistant"
+          ? event.message
+          : readMessageRole(readAssistantMessageEventPartial(event.assistantMessageEvent)) ===
+              "assistant"
+            ? readAssistantMessageEventPartial(event.assistantMessageEvent)
+            : undefined;
+      if (assistantPartialMessage) {
+        this.upsertAssistantTranscriptMessage(assistantPartialMessage, "streaming");
+        return;
+      }
+
       const delta = asRecord(event.assistantMessageEvent)?.delta;
       if (typeof delta === "string" && delta.length > 0) {
         const id = this.#assistantEntryId ?? `assistant:${Date.now()}`;
         this.#assistantEntryId = id;
-        const existing = this.#state.transcript.entries.find((entry) => entry.id === id);
-        this.upsertTranscriptEntry(
-          {
+        this.upsertTranscriptMessage(
+          buildTextTranscriptMessage({
             id,
             role: "assistant",
-            text: `${existing?.text ?? ""}${delta}`,
+            text: `${this.readTranscriptText(this.findTranscriptMessage(id))}${delta}`,
             renderMode: "streaming",
-          },
-          {
-            previousMode: "streaming",
-            nextMode: "streaming",
-          },
+          }),
         );
       }
       return;
@@ -1145,7 +958,6 @@ export class CliShellController {
 
     if (event.type === "message_end") {
       const role = readMessageRole(event.message);
-      const text = extractVisibleTextFromMessage(event.message);
       const errorMessage =
         role === "assistant" && readMessageStopReason(event.message) === "error"
           ? extractMessageError(event.message)
@@ -1153,58 +965,105 @@ export class CliShellController {
       if (errorMessage) {
         this.ui.notify(errorMessage, "error");
       }
-      if (role === "assistant" && this.#assistantEntryId) {
-        const id = this.#assistantEntryId;
-        const existing = this.#state.transcript.entries.find((entry) => entry.id === id);
-        const nextEntry = {
-          id,
-          role: "assistant" as const,
-          text: text.trim().length > 0 ? text : (existing?.text ?? ""),
-          renderMode: "stable" as const,
-        };
-        if (nextEntry.text.length > 0) {
-          this.upsertTranscriptEntry(nextEntry, {
-            previousMode: "streaming",
-            nextMode: "stable",
-          });
+
+      const toolResult = readToolResultMessage(event.message);
+      if (toolResult) {
+        this.upsertToolExecutionInTranscript({
+          toolCallId: toolResult.toolCallId,
+          toolName: toolResult.toolName,
+          result: toolResult,
+          status: toolResult.isError ? "error" : "completed",
+          renderMode: "stable",
+          fallbackMessageId: `tool:result:${toolResult.toolCallId}`,
+        });
+        return;
+      }
+
+      if (role === "assistant") {
+        if (this.#assistantEntryId) {
+          this.upsertAssistantTranscriptMessage(event.message, "stable");
+          this.#assistantEntryId = undefined;
+          return;
         }
+        this.appendTranscriptMessage(
+          buildTranscriptMessageFromMessage(event.message, {
+            id: `assistant:end:${Date.now()}`,
+            renderMode: "stable",
+          }),
+        );
         this.#assistantEntryId = undefined;
         return;
       }
-      if (text.trim().length > 0 && role === "assistant" && !this.#assistantEntryId) {
-        this.appendTranscriptEntry({
-          id: `assistant:end:${Date.now()}`,
-          role: "assistant",
-          text,
-          renderMode: "stable",
-        });
+
+      if (role === "user") {
+        // User messages are added optimistically in submitComposer before session.prompt()
+        // is called. The session's message_end for user messages is redundant and must be
+        // skipped to prevent every submitted prompt appearing twice in the transcript.
+        this.#assistantEntryId = undefined;
+        return;
       }
+
+      this.appendTranscriptMessage(
+        buildTranscriptMessageFromMessage(event.message, {
+          id: `${role ?? "message"}:end:${Date.now()}`,
+          renderMode: "stable",
+        }),
+      );
       this.#assistantEntryId = undefined;
       return;
     }
 
-    if (event.type === "tool_execution_start" && event.toolName) {
-      const toolName = typeof event.toolName === "string" ? event.toolName : "tool";
-      const toolCallId =
-        typeof event.toolCallId === "string" ? event.toolCallId : String(Date.now());
-      this.appendTranscriptEntry({
-        id: `tool:${toolCallId}`,
-        role: "tool",
-        text: `${toolName} started`,
-        renderMode: "stable",
+    if (event.type === "tool_execution_start") {
+      const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
+      const toolName = typeof event.toolName === "string" ? event.toolName : undefined;
+      this.upsertToolExecutionInTranscript({
+        toolCallId,
+        toolName,
+        args: event.args,
+        status: "running",
+        renderMode: "streaming",
       });
       return;
     }
 
-    if (event.type === "tool_execution_end" && event.toolName) {
-      const toolName = typeof event.toolName === "string" ? event.toolName : "tool";
-      const toolCallId =
-        typeof event.toolCallId === "string" ? event.toolCallId : String(Date.now());
-      this.appendTranscriptEntry({
-        id: `tool:end:${toolCallId}`,
-        role: "tool",
-        text: `${toolName} ${event.isError ? "failed" : "completed"}`,
+    if (event.type === "tool_execution_update") {
+      const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
+      const toolName = typeof event.toolName === "string" ? event.toolName : undefined;
+      this.upsertToolExecutionInTranscript({
+        toolCallId,
+        toolName,
+        args: event.args,
+        partialResult: event.partialResult,
+        status: "running",
+        renderMode: "streaming",
+      });
+      return;
+    }
+
+    if (event.type === "tool_execution_end") {
+      const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
+      const toolName = typeof event.toolName === "string" ? event.toolName : undefined;
+      this.upsertToolExecutionInTranscript({
+        toolCallId,
+        toolName,
+        result: event.result,
+        status: event.isError ? "error" : "completed",
         renderMode: "stable",
+        fallbackMessageId: toolCallId ? `tool:end:${toolCallId}` : undefined,
+      });
+      return;
+    }
+
+    if (event.type === "tool_execution_phase_change") {
+      const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
+      const toolName = typeof event.toolName === "string" ? event.toolName : undefined;
+      this.upsertToolExecutionInTranscript({
+        toolCallId,
+        toolName,
+        args: event.args,
+        phase: typeof event.phase === "string" ? event.phase : undefined,
+        status: event.phase === "cleanup" ? "completed" : "running",
+        renderMode: "streaming",
       });
       return;
     }
@@ -1466,6 +1325,12 @@ export class CliShellController {
       case "newline":
         this.ui.pasteToEditor("\n");
         return;
+      case "stashPrompt":
+        this.stashCurrentPrompt();
+        return;
+      case "unstashPrompt":
+        this.restoreLatestStash();
+        return;
       case "acceptCompletion":
         this.acceptCompletion();
         return;
@@ -1474,6 +1339,9 @@ export class CliShellController {
         return;
       case "prevCompletion":
         this.moveCompletion(-1);
+        return;
+      case "dismissCompletion":
+        this.dismissCompletion();
         return;
       case "closeOverlay":
         this.closeActiveOverlay(false);
@@ -1531,13 +1399,16 @@ export class CliShellController {
         return;
       }
       case "scrollUp":
-        this.dispatch({ type: "transcript.scroll", delta: this.getTranscriptPageStep() }, false);
+        this.requestTranscriptNavigation("pageUp");
         return;
       case "scrollDown":
-        this.dispatch({ type: "transcript.scroll", delta: -this.getTranscriptPageStep() }, false);
-        if (this.#state.transcript.scrollOffset === 0) {
-          this.dispatch({ type: "transcript.followLive" }, false);
-        }
+        this.requestTranscriptNavigation("pageDown");
+        return;
+      case "scrollTop":
+        this.requestTranscriptNavigation("top");
+        return;
+      case "scrollBottom":
+        this.requestTranscriptNavigation("bottom");
         return;
       default:
         return;
@@ -1545,57 +1416,23 @@ export class CliShellController {
   }
 
   private refreshCompletion(): void {
-    const slashQuery = findSlashCompletion(this.#state.composer.text, this.#state.composer.cursor);
-    if (slashQuery !== null) {
-      const items = this.#completionPort
-        .listSlashCommands()
-        .filter((entry) => entry.command.startsWith(slashQuery))
-        .map((entry) => `/${entry.command}`);
-      this.#state = reduceCliShellState(this.#state, {
-        type: "completion.set",
-        completion:
-          items.length > 0
-            ? {
-                kind: "slash",
-                query: slashQuery,
-                items,
-                selectedIndex: 0,
-              }
-            : undefined,
-      });
-      return;
-    }
-
-    const pathRange = findPathCompletionRange(
-      this.#state.composer.text,
-      this.#state.composer.cursor,
-    );
-    if (pathRange) {
-      const items = this.#completionPort.listPaths(pathRange.query);
-      this.#state = reduceCliShellState(this.#state, {
-        type: "completion.set",
-        completion:
-          items.length > 0
-            ? {
-                kind: "path",
-                query: pathRange.query,
-                items: items.map((item) => `@${item}`),
-                selectedIndex: 0,
-              }
-            : undefined,
-      });
-      return;
-    }
-
-    this.#state = reduceCliShellState(this.#state, {
-      type: "completion.set",
-      completion: undefined,
+    const result = resolveComposerCompletion({
+      text: this.#state.composer.text,
+      cursor: this.#state.composer.cursor,
+      current: this.#state.composer.completion,
+      dismissed: this.getDismissedCompletionState(),
+      slashCommands: this.#completionPort.listSlashCommands(),
+      pathEntries: (query) => this.#completionPort.listPaths(query),
     });
+    if (result.clearDismissed) {
+      this.clearDismissedCompletionState();
+    }
+    this.setCompletionState(result.completion);
   }
 
   private moveCompletion(delta: number): void {
     const completion = this.#state.composer.completion;
-    if (!completion) {
+    if (!completion || completion.items.length === 0) {
       return;
     }
     const nextIndex =
@@ -1617,44 +1454,82 @@ export class CliShellController {
     if (!completion) {
       return;
     }
-    const selected = completion.items[completion.selectedIndex];
-    if (!selected) {
+    const nextState = acceptComposerCompletion({
+      completion,
+      composer: {
+        text: this.#state.composer.text,
+        cursor: this.#state.composer.cursor,
+        parts: this.#state.composer.parts,
+      },
+      createPromptPartId: (prefix) =>
+        `${prefix}-part:${Date.now()}:${Math.random().toString(16).slice(2, 10)}`,
+    });
+    if (!nextState) {
       return;
     }
+    this.dispatch(
+      {
+        type: "composer.setPromptState",
+        text: nextState.text,
+        cursor: nextState.cursor,
+        parts: nextState.parts,
+      },
+      false,
+    );
+  }
+
+  private dismissCompletion(): void {
+    const completion = this.#state.composer.completion;
+    if (!completion) {
+      return;
+    }
+    // Match opencode behavior: Escape on an incomplete slash command clears the text entirely
+    // rather than leaving a dangling partial "/command" in the composer. This also avoids the
+    // dismissed-state bug where backspace back to the same (text, cursor) would keep the
+    // completion suppressed.
     if (completion.kind === "slash") {
-      const nextText = `/${selected.slice(1)} `;
-      this.dispatch({
-        type: "composer.setText",
-        text: nextText,
-        cursor: nextText.length,
-      });
+      const text = this.#state.composer.text;
+      if (text.startsWith("/") && !text.includes(" ")) {
+        this.dispatch({ type: "composer.setText", text: "", cursor: 0 });
+        return;
+      }
+    }
+    this.#dismissedCompletionBySessionId.set(this.#sessionPort.getSessionId(), {
+      kind: completion.kind,
+      text: this.#state.composer.text,
+      cursor: this.#state.composer.cursor,
+    });
+    this.setCompletionState(undefined);
+    this.emitChange();
+  }
+
+  private setCompletionState(completion: CliShellCompletionState | undefined): void {
+    if (completionStateEquals(this.#state.composer.completion, completion)) {
       return;
     }
-    const pathRange = findPathCompletionRange(
-      this.#state.composer.text,
-      this.#state.composer.cursor,
-    );
-    if (!pathRange) {
-      return;
-    }
-    const nextText = replaceRange(
-      this.#state.composer.text,
-      pathRange.start,
-      pathRange.end,
-      selected.slice(1),
-    );
-    this.dispatch({
-      type: "composer.setText",
-      text: nextText,
-      cursor: pathRange.start + selected.length - 1,
+    this.#state = reduceCliShellState(this.#state, {
+      type: "completion.set",
+      completion,
     });
   }
 
   private async submitComposer(): Promise<void> {
-    const prompt = this.#state.composer.text.trim();
+    const promptText = this.#state.composer.text;
+    const promptParts = cloneCliShellPromptParts(this.#state.composer.parts);
+    const prompt = promptText.trim();
     if (!prompt) {
       return;
     }
+    const promptSnapshot = {
+      text: promptText,
+      parts: promptParts,
+    };
+    this.#promptHistory = appendPromptHistoryEntry(
+      this.#promptHistory,
+      promptSnapshot,
+      CliShellController.PROMPT_HISTORY_LIMIT,
+    );
+    this.#promptStore.appendHistory(promptSnapshot);
     const handled = await this.handleShellCommand(prompt);
     if (handled) {
       this.dispatch({
@@ -1664,20 +1539,179 @@ export class CliShellController {
       });
       return;
     }
-    this.appendTranscriptEntry({
-      id: `user:${Date.now()}`,
-      role: "user",
-      text: prompt,
-    });
+    this.appendTranscriptMessage(
+      buildTextTranscriptMessage({
+        id: `user:${Date.now()}`,
+        role: "user",
+        text: prompt,
+      }),
+    );
     this.dispatch({
       type: "composer.setText",
       text: "",
       cursor: 0,
     });
-    await this.#sessionPort.prompt(prompt, {
-      source: "interactive",
-      streamingBehavior: this.#bundle.session.isStreaming ? "followUp" : undefined,
+    await this.#sessionPort.prompt(
+      buildCliShellPromptContentParts(this.options.cwd, promptText, promptParts),
+      {
+        source: "interactive",
+        streamingBehavior: this.#bundle.session.isStreaming ? "followUp" : undefined,
+      },
+    );
+  }
+
+  private shouldHandlePromptHistoryInput(input: CliShellSemanticInput): boolean {
+    if (
+      input.ctrl ||
+      input.meta ||
+      input.shift ||
+      this.#state.overlay.active?.payload ||
+      this.#state.composer.completion
+    ) {
+      return false;
+    }
+    const key = normalizeBindingKey(input.key);
+    const history = this.#promptHistory;
+    if (key === "up") {
+      return this.#state.composer.cursor === 0 && history.entries.length > 0;
+    }
+    if (key === "down") {
+      return this.#state.composer.cursor === this.#state.composer.text.length && history.index > 0;
+    }
+    return false;
+  }
+
+  private navigatePromptHistory(direction: -1 | 1): void {
+    const result = navigatePromptHistoryState({
+      history: this.#promptHistory,
+      direction,
+      composer: {
+        text: this.#state.composer.text,
+        cursor: this.#state.composer.cursor,
+        parts: this.#state.composer.parts,
+      },
     });
+    if (!result) {
+      return;
+    }
+    this.#promptHistory = result.history;
+    this.dispatch(
+      {
+        type: "composer.setPromptState",
+        text: result.composer.text,
+        cursor: result.composer.cursor,
+        parts: result.composer.parts,
+      },
+      false,
+    );
+  }
+
+  private getDismissedCompletionState(): DismissedCompletionState | undefined {
+    return this.#dismissedCompletionBySessionId.get(this.#sessionPort.getSessionId());
+  }
+
+  private clearDismissedCompletionState(): void {
+    this.#dismissedCompletionBySessionId.delete(this.#sessionPort.getSessionId());
+  }
+
+  private stashCurrentPrompt(): void {
+    const snapshot = {
+      text: this.#state.composer.text,
+      parts: cloneCliShellPromptParts(this.#state.composer.parts),
+    };
+    if (snapshot.text.trim().length === 0) {
+      this.ui.notify("Nothing to stash yet. Type a prompt, then press Ctrl+S.", "warning");
+      return;
+    }
+    const entry = this.#promptStore.pushStash(snapshot);
+    this.#promptStashEntries = [
+      ...this.#promptStashEntries,
+      cloneCliShellPromptStashEntry(entry),
+    ].slice(-CliShellController.PROMPT_HISTORY_LIMIT);
+    this.dispatch(
+      {
+        type: "composer.setText",
+        text: "",
+        cursor: 0,
+      },
+      false,
+    );
+    this.ui.notify(
+      `Stashed prompt: ${summarizePromptSnapshot(snapshot)}. Press Ctrl+Y to restore the latest draft.`,
+      "info",
+    );
+  }
+
+  private restoreLatestStash(): void {
+    const entry = this.#promptStore.popStash();
+    if (!entry) {
+      this.ui.notify(
+        "No stashed prompts yet. Press Ctrl+S to stash the current prompt first.",
+        "warning",
+      );
+      return;
+    }
+    this.#promptStashEntries = this.#promptStore
+      .loadStash()
+      .map((item) => cloneCliShellPromptStashEntry(item));
+    this.dispatch(
+      {
+        type: "composer.setPromptState",
+        text: entry.text,
+        cursor: entry.text.length,
+        parts: cloneCliShellPromptParts(entry.parts),
+      },
+      false,
+    );
+    this.ui.notify(`Restored stashed prompt: ${summarizePromptSnapshot(entry)}`, "info");
+  }
+
+  private async selectStashedPrompt(): Promise<void> {
+    if (this.#promptStashEntries.length === 0) {
+      this.ui.notify(
+        "No stashed prompts yet. Press Ctrl+S to stash the current prompt first.",
+        "warning",
+      );
+      return;
+    }
+    const options = this.#promptStashEntries
+      .map((entry, index, items) => {
+        const reverseIndex = items.length - index;
+        return `${reverseIndex}. ${summarizePromptSnapshot(entry)}`;
+      })
+      .toReversed();
+    const selection = await this.requestDialog<string | undefined>({
+      id: `stash:${Date.now()}`,
+      kind: "select",
+      title: "Select Stashed Prompt",
+      options,
+      resolve: (value) => value,
+    });
+    if (!selection) {
+      return;
+    }
+    const match = /^(\d+)\.\s/u.exec(selection);
+    if (!match?.[1]) {
+      return;
+    }
+    const ordinal = Number.parseInt(match[1], 10);
+    if (Number.isNaN(ordinal) || ordinal <= 0) {
+      return;
+    }
+    const index = this.#promptStashEntries.length - ordinal;
+    const entry = this.#promptStashEntries[index];
+    if (!entry) {
+      return;
+    }
+    this.dispatch(
+      {
+        type: "composer.setPromptState",
+        text: entry.text,
+        cursor: entry.text.length,
+        parts: cloneCliShellPromptParts(entry.parts),
+      },
+      false,
+    );
   }
 
   private async handleShellCommand(prompt: string): Promise<boolean> {
@@ -1717,9 +1751,17 @@ export class CliShellController {
       this.openOverlay({
         kind: "pager",
         title: "Credentials",
-        lines: CREDENTIAL_HELP_LINES,
+        lines: [...CREDENTIAL_HELP_LINES],
         scrollOffset: 0,
       });
+      return true;
+    }
+    if (prompt === "/stash") {
+      await this.selectStashedPrompt();
+      return true;
+    }
+    if (prompt === "/stash pop" || prompt === "/unstash") {
+      this.restoreLatestStash();
       return true;
     }
     if (prompt === "/theme" || prompt === "/theme list") {
@@ -1803,6 +1845,19 @@ export class CliShellController {
 
   private getTranscriptPageStep(): number {
     return Math.max(3, Math.floor(Math.max(8, this.#viewportRows - 10) / 2));
+  }
+
+  private requestTranscriptNavigation(kind: "pageUp" | "pageDown" | "top" | "bottom"): void {
+    this.dispatch(
+      {
+        type: "transcript.requestNavigation",
+        request: {
+          id: ++this.#transcriptNavigationRequestId,
+          kind,
+        },
+      },
+      false,
+    );
   }
 
   private getOverlayPageStep(): number {
@@ -2006,21 +2061,8 @@ export class CliShellController {
       id?: string;
       index?: number;
     } = {},
-  ): CliNotificationsOverlayPayload {
-    const notifications = this.#state.notifications.toReversed();
-    const selectedIndexById =
-      typeof selection.id === "string"
-        ? notifications.findIndex((notification) => notification.id === selection.id)
-        : -1;
-    const selectedIndex =
-      selectedIndexById >= 0
-        ? selectedIndexById
-        : Math.max(0, Math.min(selection.index ?? 0, Math.max(0, notifications.length - 1)));
-    return {
-      kind: "notifications",
-      notifications,
-      selectedIndex,
-    };
+  ) {
+    return buildNotificationsOverlayPayload(this.#state.notifications, selection);
   }
 
   private openNotificationsOverlay(): void {
@@ -2034,53 +2076,13 @@ export class CliShellController {
       index?: number;
     } = {},
   ): CliShellOverlayPayload {
-    const currentSessionId = this.#sessionPort.getSessionId();
-    const currentSession = snapshot.sessions.find(
-      (session) => session.sessionId === currentSessionId,
-    ) ?? {
-      sessionId: currentSessionId,
-      eventCount: 0,
-      lastEventAt: 0,
-    };
-    const sessions = [
-      currentSession,
-      ...snapshot.sessions.filter((session) => session.sessionId !== currentSessionId),
-    ];
-    const selectedIndexById =
-      typeof selection.sessionId === "string"
-        ? sessions.findIndex((session) => session.sessionId === selection.sessionId)
-        : -1;
-    const fallbackCurrentIndex = sessions.findIndex(
-      (session) => session.sessionId === currentSessionId,
-    );
-    const selectedIndex =
-      selectedIndexById >= 0
-        ? selectedIndexById
-        : fallbackCurrentIndex >= 0
-          ? fallbackCurrentIndex
-          : Math.max(0, Math.min(selection.index ?? 0, Math.max(0, sessions.length - 1)));
-
-    const draftStateBySessionId = Object.fromEntries(
-      [...this.#draftsBySessionId.entries()].map(([sessionId, draft]) => [
-        sessionId,
-        summarizeDraftPreview(draft.text),
-      ]),
-    );
-
-    const currentDraft = this.#state.composer.text;
-    if (currentDraft.trim().length > 0) {
-      draftStateBySessionId[currentSessionId] = summarizeDraftPreview(currentDraft);
-    } else {
-      delete draftStateBySessionId[currentSessionId];
-    }
-
-    return {
-      kind: "sessions",
-      selectedIndex,
-      sessions,
-      currentSessionId,
-      draftStateBySessionId,
-    };
+    return buildSessionsOverlayPayload({
+      snapshot,
+      currentSessionId: this.#sessionPort.getSessionId(),
+      draftsBySessionId: this.#draftsBySessionId,
+      currentComposerText: this.#state.composer.text,
+      selection,
+    });
   }
 
   private openSessionsOverlay(): void {
@@ -2122,6 +2124,7 @@ export class CliShellController {
     this.#draftsBySessionId.set(sessionId, {
       text,
       cursor: this.#state.composer.cursor,
+      parts: cloneCliShellPromptParts(this.#state.composer.parts),
       updatedAt: Date.now(),
     });
   }
@@ -2266,12 +2269,4 @@ export class CliShellController {
     }
     return await openExternalPagerWithShell(pager, title, lines);
   }
-}
-
-export function getTranscriptEntryBodyLines(
-  entry: CliShellTranscriptEntry,
-  width: number,
-  mode: "stable" | "streaming" = "stable",
-): string[] {
-  return renderTranscriptEntryBodyLines(entry, width, mode);
 }

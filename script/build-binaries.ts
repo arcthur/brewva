@@ -2,11 +2,12 @@
 
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import solidPlugin from "@opentui/solid/bun-plugin";
 import { $ } from "bun";
 
 interface PlatformTarget {
   dir: string;
-  target: string;
+  target: Bun.Build.CompileTarget;
   binary: string;
   description: string;
 }
@@ -84,7 +85,7 @@ const BREWVA_CONFIG_SCHEMA_PATH = join(
 );
 const BREWVA_LICENSE_PATH = join(process.cwd(), "LICENSE");
 const BREWVA_BINARY_TARGETS_ENV = "BREWVA_BINARY_TARGETS";
-const BREWVA_TUI_SMOKE_ENV = "BREWVA_TUI_SMOKE";
+const BREWVA_SHELL_SMOKE_ENV = "BREWVA_SHELL_SMOKE";
 const BREWVA_OPENTUI_SUPPORTED_ENV = "BREWVA_OPENTUI_SUPPORTED";
 const BREWVA_OPENTUI_ENV_PREFIX = "BREWVA_OPENTUI_*";
 const OPEN_TUI_VERSION = "0.1.99";
@@ -194,7 +195,7 @@ function resolveCurrentHostTarget(): PlatformTarget["target"] | null {
 }
 
 async function maybeRunOpenTuiSmoke(platform: PlatformTarget, outfile: string): Promise<void> {
-  if (process.env[BREWVA_TUI_SMOKE_ENV] !== "1") {
+  if (process.env[BREWVA_SHELL_SMOKE_ENV] !== "1") {
     return;
   }
   if (resolveCurrentHostTarget() !== platform.target) {
@@ -204,7 +205,7 @@ async function maybeRunOpenTuiSmoke(platform: PlatformTarget, outfile: string): 
   console.log(`  smoke: booting OpenTUI runtime in ${platform.description}`);
   await $`${outfile}`.env({
     ...process.env,
-    [BREWVA_TUI_SMOKE_ENV]: "1",
+    [BREWVA_SHELL_SMOKE_ENV]: "1",
   });
 }
 
@@ -287,9 +288,34 @@ async function buildPlatform(platform: PlatformTarget): Promise<boolean> {
   try {
     await ensureOpenTuiNativePackage(platform);
     rmSync(outDir, { recursive: true, force: true });
-    await $`bun build --compile --minify --target=${platform.target} --env=${BREWVA_OPENTUI_ENV_PREFIX} ${ENTRY_POINT} --outfile=${outfile}`.env(
-      buildEnv,
-    );
+    const previousOpenTuiSupport = process.env[BREWVA_OPENTUI_SUPPORTED_ENV];
+    process.env[BREWVA_OPENTUI_SUPPORTED_ENV] = buildEnv[BREWVA_OPENTUI_SUPPORTED_ENV];
+    try {
+      const result = await Bun.build({
+        entrypoints: [ENTRY_POINT],
+        target: "bun",
+        minify: true,
+        env: BREWVA_OPENTUI_ENV_PREFIX,
+        compile: {
+          target: platform.target,
+          outfile,
+        },
+        plugins: [solidPlugin],
+      });
+      if (!result.success) {
+        for (const log of result.logs) {
+          console.error(log.message);
+        }
+        console.error("  failed: Bun.build returned errors");
+        return false;
+      }
+    } finally {
+      if (typeof previousOpenTuiSupport === "string") {
+        process.env[BREWVA_OPENTUI_SUPPORTED_ENV] = previousOpenTuiSupport;
+      } else {
+        delete process.env[BREWVA_OPENTUI_SUPPORTED_ENV];
+      }
+    }
 
     if (!existsSync(outfile)) {
       console.error(`  failed: output binary missing at ${outfile}`);

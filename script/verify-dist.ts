@@ -233,7 +233,7 @@ function main(): void {
     if ("createBrewvaSession" in cliModule || "registerRuntimeCoreEventBridge" in cliModule) {
       throw new Error("cli root entry unexpectedly re-exported gateway host helpers");
     }
-    const cliInternalRuntime = await import("@brewva/brewva-cli/internal-tui-runtime");
+    const cliInternalRuntime = await import("@brewva/brewva-cli/internal-shell-runtime");
     const tuiInternalRuntime = await import("@brewva/brewva-tui/internal-opentui-runtime");
     if (typeof cliInternalRuntime.runCliInteractiveSmoke !== "function") {
       throw new Error("cli internal runtime stub missing runCliInteractiveSmoke");

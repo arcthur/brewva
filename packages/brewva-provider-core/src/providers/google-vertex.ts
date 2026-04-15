@@ -418,7 +418,7 @@ function buildParams(
   context: Context,
   options: GoogleVertexOptions = {},
 ): GenerateContentParameters {
-  const contents = convertMessages(model, context);
+  const contents = convertMessages(model, context, options);
 
   const generationConfig: GenerateContentConfig = {};
   if (options.temperature !== undefined) {

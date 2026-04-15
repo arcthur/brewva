@@ -3,6 +3,7 @@ import {
   createBrewvaHostPluginRunner,
   type BrewvaHostCommandContext,
   type BrewvaHostContext,
+  type BrewvaPromptContentPart,
 } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 
@@ -66,6 +67,10 @@ function createCommandContext(): BrewvaHostCommandContext {
   };
 }
 
+function textPrompt(text: string): BrewvaPromptContentPart[] {
+  return [{ type: "text", text }];
+}
+
 describe("substrate host plugin runner", () => {
   test("initializes plugins, tracks registrations, and forwards registration callbacks", async () => {
     const registeredTools: string[] = [];
@@ -122,8 +127,7 @@ describe("substrate host plugin runner", () => {
         (api) => {
           api.on("input", async (event) => ({
             action: "transform" as const,
-            text: `one:${event.text}`,
-            images: event.images,
+            parts: textPrompt(`one:${event.text}`),
           }));
         },
         (api) => {
@@ -149,6 +153,7 @@ describe("substrate host plugin runner", () => {
       {
         type: "input",
         text: "hello",
+        parts: textPrompt("hello"),
         source: "interactive",
       },
       createHostContext(),
@@ -156,6 +161,71 @@ describe("substrate host plugin runner", () => {
 
     expect(result).toEqual({ action: "handled" });
     expect(seenInputs).toEqual(["one:hello"]);
+  });
+
+  test("chains structured prompt parts through input transforms without flattening file references", async () => {
+    const seenParts: BrewvaPromptContentPart[][] = [];
+    const runner = await createBrewvaHostPluginRunner({
+      plugins: [
+        (api) => {
+          api.on("input", async (event) => ({
+            action: "transform" as const,
+            parts: [
+              ...textPrompt("review carefully "),
+              ...event.parts.filter(
+                (part): part is Extract<BrewvaPromptContentPart, { type: "file" }> =>
+                  part.type === "file",
+              ),
+            ],
+          }));
+        },
+        (api) => {
+          api.on("input", async (event) => {
+            seenParts.push(event.parts);
+            return { action: "handled" as const };
+          });
+        },
+      ],
+      actions: {
+        sendMessage: () => undefined,
+        sendUserMessage: () => undefined,
+        getActiveTools: () => [],
+        getAllTools: () => [],
+        setActiveTools: () => undefined,
+        refreshTools: () => undefined,
+      },
+    });
+
+    const result = await runner.emitInput(
+      {
+        type: "input",
+        text: "review @packages/",
+        parts: [
+          { type: "text", text: "review " },
+          {
+            type: "file",
+            uri: "file:///tmp/workspace/packages",
+            displayText: "@packages/",
+            name: "packages",
+          },
+        ],
+        source: "interactive",
+      },
+      createHostContext(),
+    );
+
+    expect(result).toEqual({ action: "handled" });
+    expect(seenParts).toEqual([
+      [
+        { type: "text", text: "review carefully " },
+        {
+          type: "file",
+          uri: "file:///tmp/workspace/packages",
+          displayText: "@packages/",
+          name: "packages",
+        },
+      ],
+    ]);
   });
 
   test("chains context and provider request transforms in Brewva-owned order", async () => {
@@ -243,6 +313,7 @@ describe("substrate host plugin runner", () => {
       {
         type: "before_agent_start",
         prompt: "ship it",
+        parts: textPrompt("ship it"),
         systemPrompt: "base",
       },
       createHostContext(),
@@ -334,17 +405,14 @@ describe("substrate host plugin runner", () => {
   });
 
   test("forwards command-side messaging actions through the action port", async () => {
-    const sentUsers: Array<{
-      content: string | { type: "text"; text: string }[];
-      deliverAs?: string;
-    }> = [];
+    const sentUsers: Array<{ content: BrewvaPromptContentPart[]; deliverAs?: string }> = [];
 
     const runner = await createBrewvaHostPluginRunner({
       plugins: [
         (api) => {
           api.registerCommand("queue-demo", {
             async handler(_args, _ctx) {
-              api.sendUserMessage("queued", { deliverAs: "followUp" });
+              api.sendUserMessage(textPrompt("queued"), { deliverAs: "followUp" });
             },
           });
         },
@@ -365,6 +433,6 @@ describe("substrate host plugin runner", () => {
     expect(command).toBeDefined();
     await command?.handler("", createCommandContext());
 
-    expect(sentUsers).toEqual([{ content: "queued", deliverAs: "followUp" }]);
+    expect(sentUsers).toEqual([{ content: textPrompt("queued"), deliverAs: "followUp" }]);
   });
 });

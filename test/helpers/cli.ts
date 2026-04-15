@@ -1,6 +1,8 @@
 import { spawn, spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { repoRoot } from "./workspace.js";
 
+const CLI_ENTRYPOINT = "packages/brewva-cli/src/index.ts";
+
 export type CliRunResult = {
   status: number | null;
   stdout: string;
@@ -24,7 +26,7 @@ export function runCliSync(
     Object.assign(env, options.env);
   }
 
-  return spawnSync("bun", ["run", "start", "--cwd", workspace, ...args], {
+  return spawnSync("bun", [CLI_ENTRYPOINT, "--cwd", workspace, ...args], {
     cwd: repoRoot,
     encoding: "utf8",
     input: options?.input,
@@ -49,7 +51,7 @@ export async function runCli(
   }
 
   return await new Promise<CliRunResult>((resolveRun) => {
-    const child = spawn("bun", ["run", "start", "--cwd", workspace, ...args], {
+    const child = spawn("bun", [CLI_ENTRYPOINT, "--cwd", workspace, ...args], {
       cwd: repoRoot,
       env,
       stdio: ["pipe", "pipe", "pipe"],

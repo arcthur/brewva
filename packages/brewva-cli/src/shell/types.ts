@@ -7,8 +7,10 @@ import type {
 import type { DelegationRunRecord } from "@brewva/brewva-runtime";
 import type {
   BrewvaManagedPromptSession,
+  BrewvaPromptContentPart,
   BrewvaPromptOptions,
   BrewvaPromptSessionEvent,
+  BrewvaToolDefinition,
   BrewvaToolUiPort,
 } from "@brewva/brewva-substrate";
 import type { BrewvaSessionResult } from "../session.js";
@@ -16,7 +18,52 @@ import type { BrewvaSessionResult } from "../session.js";
 export interface CliShellSessionBundle {
   session: BrewvaManagedPromptSession;
   runtime: BrewvaRuntime;
+  toolDefinitions: ReadonlyMap<string, BrewvaToolDefinition>;
   orchestration?: BrewvaSessionResult["orchestration"];
+}
+
+export interface CliShellPromptSourceText {
+  start: number;
+  end: number;
+  value: string;
+}
+
+export interface CliShellPromptFilePart {
+  id: string;
+  type: "file";
+  path: string;
+  source: {
+    text: CliShellPromptSourceText;
+  };
+}
+
+export interface CliShellPromptTextPart {
+  id: string;
+  type: "text";
+  text: string;
+  source: {
+    text: CliShellPromptSourceText;
+  };
+}
+
+export type CliShellPromptPart = CliShellPromptFilePart | CliShellPromptTextPart;
+
+export interface CliShellPromptSnapshot {
+  text: string;
+  parts: CliShellPromptPart[];
+}
+
+export interface CliShellPromptStashEntry extends CliShellPromptSnapshot {
+  timestamp: number;
+}
+
+export interface CliShellPromptStorePort {
+  loadHistory(): CliShellPromptSnapshot[];
+  appendHistory(entry: CliShellPromptSnapshot): void;
+  loadStash(): CliShellPromptStashEntry[];
+  pushStash(entry: CliShellPromptSnapshot): CliShellPromptStashEntry;
+  popStash(): CliShellPromptStashEntry | undefined;
+  removeStash(index: number): void;
 }
 
 export interface SessionViewPort {
@@ -24,7 +71,7 @@ export interface SessionViewPort {
   getSessionId(): string;
   getModelLabel(): string;
   getThinkingLevel(): string;
-  prompt(text: string, options?: BrewvaPromptOptions): Promise<void>;
+  prompt(parts: readonly BrewvaPromptContentPart[], options?: BrewvaPromptOptions): Promise<void>;
   waitForIdle(): Promise<void>;
   abort(): Promise<void>;
   subscribe(listener: (event: BrewvaPromptSessionEvent) => void): () => void;
@@ -151,9 +198,15 @@ export interface SlashCommandEntry {
   description: string;
 }
 
+export interface PathCompletionEntry {
+  value: string;
+  kind: "file" | "directory";
+  description?: string;
+}
+
 export interface WorkspaceCompletionPort {
   listSlashCommands(): readonly SlashCommandEntry[];
-  listPaths(prefix: string): string[];
+  listPaths(prefix: string): readonly PathCompletionEntry[];
 }
 
 export interface ShellConfigPort {

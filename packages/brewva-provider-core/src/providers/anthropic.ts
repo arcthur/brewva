@@ -28,6 +28,11 @@ import { AssistantMessageEventStream } from "../utils/event-stream.js";
 import { parseStreamingJson } from "../utils/json-parse.js";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.js";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.js";
+import {
+  buildAnthropicDocumentBlock,
+  materializeResolvedUserMessageContentPart,
+  resolveUserMessageContent,
+} from "./prompt-content.js";
 import { adjustMaxTokensForThinking, buildBaseOptions } from "./simple-options.js";
 import { transformMessages } from "./transform-messages.js";
 
@@ -647,7 +652,7 @@ function buildParams(
   const { cacheControl } = getCacheControl(model.baseUrl, options?.cacheRetention);
   const params: MessageCreateParamsStreaming = {
     model: model.id,
-    messages: convertMessages(context.messages, model, isOAuthToken, cacheControl),
+    messages: convertMessages(context.messages, model, isOAuthToken, cacheControl, options),
     max_tokens: options?.maxTokens || (model.maxTokens / 3) | 0,
     stream: true,
   };
@@ -738,6 +743,7 @@ function convertMessages(
   model: Model<"anthropic-messages">,
   isOAuthToken: boolean,
   cacheControl?: { type: "ephemeral"; ttl?: "1h" },
+  options?: Pick<StreamOptions, "resolveFile">,
 ): MessageParam[] {
   const params: MessageParam[] = [];
 
@@ -748,50 +754,67 @@ function convertMessages(
     const msg = transformedMessages[i];
 
     if (msg.role === "user") {
-      if (typeof msg.content === "string") {
-        if (msg.content.trim().length > 0) {
-          params.push({
-            role: "user",
-            content: sanitizeSurrogates(msg.content),
+      const blocks: ContentBlockParam[] = [];
+      for (const item of resolveUserMessageContent(model, msg.content, options)) {
+        if (item.type === "text") {
+          blocks.push({
+            type: "text",
+            text: sanitizeSurrogates(item.text),
+          });
+          continue;
+        }
+        if (item.type === "image") {
+          blocks.push({
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: item.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+              data: item.data,
+            },
+          });
+          continue;
+        }
+        const documentBlock = buildAnthropicDocumentBlock(item);
+        if (documentBlock) {
+          blocks.push(documentBlock);
+          continue;
+        }
+        for (const materialized of materializeResolvedUserMessageContentPart(model, item)) {
+          if (materialized.type === "text") {
+            blocks.push({
+              type: "text",
+              text: sanitizeSurrogates(materialized.text),
+            });
+            continue;
+          }
+          blocks.push({
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: materialized.mimeType as
+                | "image/jpeg"
+                | "image/png"
+                | "image/gif"
+                | "image/webp",
+              data: materialized.data,
+            },
           });
         }
-      } else {
-        const blocks: ContentBlockParam[] = msg.content.map((item) => {
-          if (item.type === "text") {
-            return {
-              type: "text",
-              text: sanitizeSurrogates(item.text),
-            };
-          } else {
-            return {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: item.mimeType as
-                  | "image/jpeg"
-                  | "image/png"
-                  | "image/gif"
-                  | "image/webp",
-                data: item.data,
-              },
-            };
-          }
-        });
-        let filteredBlocks = !model?.input.includes("image")
-          ? blocks.filter((b) => b.type !== "image")
-          : blocks;
-        filteredBlocks = filteredBlocks.filter((b) => {
-          if (b.type === "text") {
-            return b.text.trim().length > 0;
-          }
-          return true;
-        });
-        if (filteredBlocks.length === 0) continue;
-        params.push({
-          role: "user",
-          content: filteredBlocks,
-        });
       }
+      let filteredBlocks = !model?.input.includes("image")
+        ? blocks.filter((b) => b.type !== "image")
+        : blocks;
+      filteredBlocks = filteredBlocks.filter((b) => {
+        if (b.type === "text") {
+          return b.text.trim().length > 0;
+        }
+        return true;
+      });
+      if (filteredBlocks.length === 0) continue;
+      params.push({
+        role: "user",
+        content: filteredBlocks,
+      });
     } else if (msg.role === "assistant") {
       const blocks: ContentBlockParam[] = [];
 

@@ -17,21 +17,37 @@ describe("cli contract: Brewva-native runtime boundary", () => {
       "packages",
       "brewva-cli",
       "runtime",
-      "internal-tui-runtime.ts",
+      "internal-shell-runtime.ts",
+    );
+    const solidShellPath = resolve(
+      repoRoot,
+      "packages",
+      "brewva-cli",
+      "runtime",
+      "shell",
+      "app.tsx",
+    );
+    const solidPromptPath = resolve(
+      repoRoot,
+      "packages",
+      "brewva-cli",
+      "runtime",
+      "shell",
+      "prompt.tsx",
     );
     const runtimeStubPath = resolve(
       repoRoot,
       "packages",
       "brewva-cli",
       "src",
-      "internal-tui-runtime.ts",
+      "internal-shell-runtime.ts",
     );
     const legacyStringShellPath = resolve(
       repoRoot,
       "packages",
       "brewva-cli",
       "src",
-      "tui-app",
+      "shell",
       "app.ts",
     );
     const legacyStringRenderPath = resolve(
@@ -39,7 +55,7 @@ describe("cli contract: Brewva-native runtime boundary", () => {
       "packages",
       "brewva-cli",
       "src",
-      "tui-app",
+      "shell",
       "render.ts",
     );
     const legacyTranscriptLayoutPath = resolve(
@@ -47,8 +63,39 @@ describe("cli contract: Brewva-native runtime boundary", () => {
       "packages",
       "brewva-cli",
       "src",
-      "tui-app",
+      "shell",
       "transcript-layout.ts",
+    );
+    const legacyReactOpenTuiShellPath = resolve(
+      repoRoot,
+      "packages",
+      "brewva-cli",
+      "runtime",
+      "opentui-shell.ts",
+    );
+    const legacyMarkdownRendererPath = resolve(
+      repoRoot,
+      "packages",
+      "brewva-cli",
+      "src",
+      "shell",
+      "markdown.ts",
+    );
+    const legacyShellChromePath = resolve(
+      repoRoot,
+      "packages",
+      "brewva-cli",
+      "src",
+      "shell",
+      "shell-chrome.ts",
+    );
+    const legacyShellLayoutPath = resolve(
+      repoRoot,
+      "packages",
+      "brewva-cli",
+      "src",
+      "shell",
+      "shell-layout.ts",
     );
     const packageJsonPath = resolve(repoRoot, "packages", "brewva-cli", "package.json");
     const legacyPiRuntimePath = resolve(
@@ -71,6 +118,10 @@ describe("cli contract: Brewva-native runtime boundary", () => {
     const runtimeEntrySource = existsSync(runtimeEntryPath)
       ? readFileSync(runtimeEntryPath, "utf8")
       : "";
+    const solidShellSource = existsSync(solidShellPath) ? readFileSync(solidShellPath, "utf8") : "";
+    const solidPromptSource = existsSync(solidPromptPath)
+      ? readFileSync(solidPromptPath, "utf8")
+      : "";
     const runtimeStubSource = existsSync(runtimeStubPath)
       ? readFileSync(runtimeStubPath, "utf8")
       : "";
@@ -80,12 +131,16 @@ describe("cli contract: Brewva-native runtime boundary", () => {
     expect(existsSync(legacyStringShellPath)).toBe(false);
     expect(existsSync(legacyStringRenderPath)).toBe(false);
     expect(existsSync(legacyTranscriptLayoutPath)).toBe(false);
+    expect(existsSync(legacyReactOpenTuiShellPath)).toBe(false);
+    expect(existsSync(legacyMarkdownRendererPath)).toBe(false);
+    expect(existsSync(legacyShellChromePath)).toBe(false);
+    expect(existsSync(legacyShellLayoutPath)).toBe(false);
 
     expect(indexSource).not.toContain('from "@mariozechner/pi-coding-agent"');
     expect(indexSource).not.toContain("./pi-cli-runtime");
     expect(indexSource).not.toContain("toPiCliSession(");
     expect(indexSource).not.toContain("PI_SKIP_VERSION_CHECK");
-    expect(indexSource).toContain("@brewva/brewva-cli/internal-tui-runtime");
+    expect(indexSource).toContain("@brewva/brewva-cli/internal-shell-runtime");
 
     expect(runtimeSource).not.toContain('from "@mariozechner/pi-coding-agent"');
     expect(runtimeSource).not.toContain("toPiCliSession(");
@@ -96,14 +151,23 @@ describe("cli contract: Brewva-native runtime boundary", () => {
     expect(runtimeSource).toContain("session.subscribe(");
     expect(runtimeSource).not.toContain("readline.createInterface");
     expect(runtimeSource).not.toContain("cli shell bootstrap invariant");
-    expect(packageJsonSource).toContain('"./internal-tui-runtime"');
+    expect(packageJsonSource).toContain('"./internal-shell-runtime"');
     expect(packageJsonSource).toContain('"bun"');
     expect(packageJsonSource).toContain('"import"');
     expect(packageJsonSource).toContain('"types"');
-    expect(runtimeStubSource).toContain("OpenTUI interactive runtime");
+    expect(runtimeStubSource).toContain("OpenTUI-backed interactive shell runtime");
     expect(runtimeStubSource).toContain("direct Node.js dist execution");
     expect(runtimeEntrySource).not.toContain("CliInteractiveShellApp");
-    expect(runtimeEntrySource).toContain("renderCliInteractiveShell");
+    expect(runtimeEntrySource).toContain("renderCliInteractiveOpenTuiShell");
+    expect(runtimeEntrySource).not.toContain("renderCliInteractiveShell");
+    expect(runtimeEntrySource).not.toContain("BREWVA_TUI_ENGINE");
+    expect(solidShellSource).toContain("getBundle().toolDefinitions");
+    expect(solidShellSource).toContain("CompletionOverlay");
+    expect(solidShellSource).toContain("promptAnchor");
+    expect(solidShellSource).not.toContain("_customTools");
+    expect(solidShellSource).toContain("resetForSession");
+    expect(solidPromptSource).toContain("setAnchor(node: BoxRenderable): void;");
+    expect(solidPromptSource).not.toContain("CompletionOverlay");
 
     expect(packageJsonSource).not.toContain('"@mariozechner/pi-coding-agent"');
     expect(packageJsonSource).toContain('"@brewva/brewva-tui"');

@@ -36,12 +36,12 @@ describe("substrate session host", () => {
 
     host.submitPrompt({
       promptId: "prompt_1",
-      content: "Inspect the runtime boundary",
+      parts: [{ type: "text", text: "Inspect the runtime boundary" }],
       submittedAt: 1,
     });
     host.submitPrompt({
       promptId: "prompt_2",
-      content: "Propose the next kernel cut",
+      parts: [{ type: "text", text: "Propose the next kernel cut" }],
       submittedAt: 2,
     });
 

@@ -3,6 +3,7 @@ import type {
   AssistantMessage,
   AssistantMessageEventStream,
   Context,
+  FileContent,
   ImageContent,
   Message,
   Model,
@@ -139,14 +140,14 @@ function randomId(prefix: string): string {
   return `${prefix}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
 }
 
-function contentToText(content: string | Array<TextContent | ImageContent>): string {
-  if (typeof content === "string") {
-    return content;
-  }
+function contentToText(content: Array<TextContent | ImageContent | FileContent>): string {
   return content
     .map((block) => {
       if (block.type === "text") {
         return block.text;
+      }
+      if (block.type === "file") {
+        return `[file:${block.displayText ?? block.name ?? block.uri}]`;
       }
       return `[image:${block.mimeType}:${block.data.length}]`;
     })

@@ -76,7 +76,7 @@ Promotion is backed by:
 - `bun run format:docs:check`
 - `bun run test:dist`
 - local binary packaging proof via
-  `BREWVA_BINARY_TARGETS=brewva-darwin-arm64 BREWVA_TUI_SMOKE=1 bun run build:binaries`
+  `BREWVA_BINARY_TARGETS=brewva-darwin-arm64 BREWVA_SHELL_SMOKE=1 bun run build:binaries`
   plus `./distribution/brewva-darwin-arm64/bin/brewva --help`
 - CI packaging matrix coverage for `linux-x64`, `linux-arm64`, `darwin-arm64`,
   `darwin-x64`, and `windows-x64`
@@ -87,8 +87,8 @@ Promotion is backed by:
 - `packages/brewva-tui/runtime/internal-opentui-runtime.ts`
 - `packages/brewva-cli/src/index.ts`
 - `packages/brewva-cli/src/interactive-mode.ts`
-- `packages/brewva-cli/runtime/internal-tui-runtime.ts`
-- `packages/brewva-cli/runtime/opentui-shell.ts`
+- `packages/brewva-cli/runtime/internal-shell-runtime.ts`
+- `packages/brewva-cli/runtime/opentui-shell-renderer.tsx`
 - `script/build-binaries.ts`
 - `script/verify-dist.ts`
 - `.github/workflows/ci.yml`
