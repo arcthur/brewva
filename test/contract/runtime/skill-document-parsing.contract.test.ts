@@ -748,6 +748,27 @@ describe("skill document parsing", () => {
     expect(parsed.contract.intent?.outputContracts).toBeUndefined();
   });
 
+  test("parses semantic bindings for pre-implementation skill", () => {
+    const parsed = parseSkillDocument(
+      `${repoRoot()}/skills/core/pre-implementation/SKILL.md`,
+      "core",
+    );
+
+    expect(parsed.contract.intent?.semanticBindings).toEqual({
+      implementation_targets: "planning.implementation_targets.v1",
+      success_criteria: "planning.success_criteria.v1",
+      approach_simplicity_check: "planning.approach_simplicity_check.v1",
+      scope_declaration: "planning.scope_declaration.v1",
+    });
+    expect(listSkillOutputs(parsed.contract)).toEqual([
+      "implementation_targets",
+      "success_criteria",
+      "approach_simplicity_check",
+      "scope_declaration",
+    ]);
+    expect(parsed.contract.intent?.outputContracts).toBeUndefined();
+  });
+
   test("rejects authored output contracts for semantic-bound outputs", () => {
     const filePath = createTempSkillDocument(
       "brewva-semantic-bound-authored-contract-",

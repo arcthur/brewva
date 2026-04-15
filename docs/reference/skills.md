@@ -242,7 +242,7 @@ skill-sequencing API in the runtime.
 
 One common delivery chain now present in the catalog is:
 
-`repository-analysis -> discovery -> strategy-review -> learning-research -> design -> implementation -> review -> qa -> ship -> retro -> knowledge-capture`
+`repository-analysis -> discovery -> strategy-review -> learning-research -> design -> pre-implementation -> implementation -> review -> qa -> ship -> retro -> knowledge-capture`
 
 This remains a prompt-side and control-plane convention. Runtime still owns
 verification, replay, derived workflow status, and effect governance.
@@ -316,6 +316,8 @@ runtime-owned planners:
   takes over
 - `learning-research` for explicit planning-time proof of consult against the
   repository-native precedent layer
+- `pre-implementation` for explicit scope, simplicity, and success-criteria
+  gating before mutation work begins
 
 Related control-plane products now sit beside those skills instead of hiding in
 prompt-only behavior:
@@ -335,6 +337,7 @@ prompt-only behavior:
 - `learning-research`
 - `strategy-review`
 - `design`
+- `pre-implementation`
 - `implementation`
 - `debugging`
 - `review`

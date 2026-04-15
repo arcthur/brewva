@@ -238,6 +238,30 @@ const IMPLEMENTATION_TARGETS_OUTPUT_CONTRACT: SkillOutputContract = {
   },
 };
 
+const APPROACH_SIMPLICITY_CHECK_OUTPUT_CONTRACT: SkillOutputContract = {
+  kind: "json",
+  minKeys: 4,
+  requiredFields: ["verdict", "speculative_features", "over_abstracted", "flags"],
+  fieldContracts: {
+    verdict: {
+      kind: "enum",
+      values: ["acceptable", "over_engineered"],
+    },
+    speculative_features: STRING_ARRAY_OPTIONAL,
+    flags: STRING_ARRAY_OPTIONAL,
+  },
+};
+
+const SCOPE_DECLARATION_OUTPUT_CONTRACT: SkillOutputContract = {
+  kind: "json",
+  minKeys: 2,
+  requiredFields: ["will_change", "will_not_change"],
+  fieldContracts: {
+    will_change: STRING_ARRAY_REQUIRED,
+    will_not_change: STRING_ARRAY_REQUIRED,
+  },
+};
+
 const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifactSchema> = {
   "planning.design_spec.v1": {
     id: "planning.design_spec.v1",
@@ -317,6 +341,37 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifa
           "Completion rejection and repair transitions are owned by the skill lifecycle service.",
       },
     ],
+  },
+  "planning.success_criteria.v1": {
+    id: "planning.success_criteria.v1",
+    family: "planning",
+    description: "Canonical verifiable success criteria for downstream implementation.",
+    outputContract: STRING_ARRAY_REQUIRED,
+    example: [
+      "bun test test/unit/gateway/signup.unit.test.ts -- covers invalid email rejection and valid email acceptance",
+    ],
+  },
+  "planning.approach_simplicity_check.v1": {
+    id: "planning.approach_simplicity_check.v1",
+    family: "planning",
+    description: "Canonical simplicity-gate verdict for the proposed implementation approach.",
+    outputContract: APPROACH_SIMPLICITY_CHECK_OUTPUT_CONTRACT,
+    example: {
+      verdict: "acceptable",
+      speculative_features: [],
+      over_abstracted: false,
+      flags: [],
+    },
+  },
+  "planning.scope_declaration.v1": {
+    id: "planning.scope_declaration.v1",
+    family: "planning",
+    description: "Canonical declaration of intended changes and explicit non-changes.",
+    outputContract: SCOPE_DECLARATION_OUTPUT_CONTRACT,
+    example: {
+      will_change: ["signup handler - add email format guard before credential creation"],
+      will_not_change: ["auth flow", "session handling", "user model schema", "other form fields"],
+    },
   },
   "implementation.change_set.v1": {
     id: "implementation.change_set.v1",

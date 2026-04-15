@@ -180,6 +180,82 @@ describe("skill validation pipeline", () => {
     );
   });
 
+  test("derives and enforces semantic contracts for pre-implementation outputs", () => {
+    writeSkill(join(workspace, ".brewva/skills/core/pre-implementation-contract/SKILL.md"), {
+      name: "pre-implementation-contract",
+      outputs: [
+        "implementation_targets",
+        "success_criteria",
+        "approach_simplicity_check",
+        "scope_declaration",
+      ],
+      semanticBindings: {
+        implementation_targets: "planning.implementation_targets.v1",
+        success_criteria: "planning.success_criteria.v1",
+        approach_simplicity_check: "planning.approach_simplicity_check.v1",
+        scope_declaration: "planning.scope_declaration.v1",
+      },
+    });
+    const registry = loadRegistry(workspace);
+    const skill = registry.get("pre-implementation-contract");
+    expect(skill).toBeDefined();
+    if (!skill) {
+      throw new Error("Expected pre-implementation-contract skill to load.");
+    }
+
+    const semanticBindings = getSkillSemanticBindings(skill.contract);
+    const context: SkillValidationContext = {
+      sessionId: "pipeline-pre-implementation-1",
+      skill,
+      outputs: {
+        implementation_targets: [
+          {
+            target: "packages/brewva-gateway/src/handlers/signup.ts",
+            kind: "source",
+            owner_boundary: "gateway-signup-handler",
+            reason: "Add email format guard before credential creation.",
+          },
+        ],
+        success_criteria: [],
+        approach_simplicity_check: {
+          verdict: "acceptable",
+          speculative_features: [],
+          over_abstracted: false,
+          flags: [],
+        },
+        scope_declaration: {
+          will_change: ["signup handler"],
+          will_not_change: [],
+        },
+      },
+      consumedOutputs: {},
+      outputContracts: getSkillOutputContracts(skill.contract),
+      semanticBindings,
+      semanticSchemaIds: new Set(Object.values(semanticBindings ?? {})),
+      evidence: {
+        getPlanningEvidenceState: () => ({}),
+        getVerificationEvidenceContext: () => ({ state: "missing", coverageTexts: [] }),
+        getVerificationCoverageTexts: () => [],
+      },
+    };
+
+    const result = new SkillOutputValidationPipeline([new ContractValidator()]).validate(context);
+    expect(result.ok).toBeFalse();
+    if (result.ok) {
+      throw new Error("Expected pre-implementation contract validation to fail.");
+    }
+
+    expect(result.missing).toEqual(expect.arrayContaining(["success_criteria"]));
+    expect(result.invalid).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "scope_declaration",
+          schemaId: "planning.scope_declaration.v1",
+        }),
+      ]),
+    );
+  });
+
   test("builder derives consumed outputs from prior completed skills", () => {
     writeSkill(join(workspace, ".brewva/skills/core/producer/SKILL.md"), {
       name: "producer",

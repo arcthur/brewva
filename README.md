@@ -83,7 +83,7 @@ Implementation detail and system boundaries:
 
 ## Skill Surface
 
-- Core skills: `repository-analysis`, `discovery`, `learning-research`, `strategy-review`, `design`, `implementation`, `debugging`, `review`, `qa`, `ship`, `retro`, `knowledge-capture`
+- Core skills: `repository-analysis`, `discovery`, `learning-research`, `strategy-review`, `design`, `pre-implementation`, `implementation`, `debugging`, `review`, `qa`, `ship`, `retro`, `knowledge-capture`
 - Domain skills: `agent-browser`, `ci-iteration`, `frontend-design`, `github`, `goal-loop`, `predict-review`, `structured-extraction`, `telegram`
 - Operator skills: `git-ops`, `runtime-forensics`
 - Meta skills: `self-improve`, `skill-authoring`
@@ -98,6 +98,8 @@ Protocol-oriented skills:
   planning or review
 - `knowledge-capture` materializes canonical repository precedents under
   `docs/solutions/**`
+- `pre-implementation` forces explicit targets, simplicity posture, and
+  verifiable success criteria before a coding task widens into edits
 - `predict-review` provides read-only multi-perspective debate and ranked
   hypotheses through public delegation tools
 - `self-improve` distills repeated evidence, including loop-history facts, into
@@ -116,7 +118,7 @@ For taxonomy details and project overlays, see `docs/guide/features.md` and `doc
 
 One common delivery chain is:
 
-`repository-analysis -> discovery -> strategy-review -> learning-research -> design -> implementation -> review -> qa -> ship -> retro -> knowledge-capture`
+`repository-analysis -> discovery -> strategy-review -> learning-research -> design -> pre-implementation -> implementation -> review -> qa -> ship -> retro -> knowledge-capture`
 
 This remains advisory and model-native. Runtime still owns verification,
 derived workflow inspection surfaces, replay, and effect governance rather

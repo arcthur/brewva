@@ -188,6 +188,7 @@ Core capability skills:
 - `learning-research`
 - `strategy-review`
 - `design`
+- `pre-implementation`
 - `implementation`
 - `debugging`
 - `review`

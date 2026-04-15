@@ -55,6 +55,9 @@ consumes:
   - implementation_targets
   - root_cause
   - fix_strategy
+  - approach_simplicity_check
+  - scope_declaration
+  - success_criteria
 requires: []
 scripts:
   - scripts/check_scope_drift.py
@@ -85,7 +88,9 @@ NO COMPLETION CLAIM WITHOUT FRESH VERIFICATION EVIDENCE
 
 ### Phase 1: Choose mode
 
-Pick one based on evidence, not habit:
+If `approach_simplicity_check` is present and `verdict: over_engineered`, stop. Do not proceed. Return to `pre-implementation` to trim the approach first.
+
+Pick a mode based on evidence, not habit:
 
 - `direct_patch` — bounded local edits, straightforward verification.
 - `test_first` — behavior is disputed, brittle, or easy to regress without pinning.
@@ -107,7 +112,7 @@ Run `scripts/check_scope_drift.py` with current `implementation_targets` and `fi
 
 ### Phase 3: Verify before claiming completion
 
-Run the concrete verification path. Capture commands, diagnostics, and runtime evidence while context is fresh. Treat verification as part of implementation, not follow-up.
+Run the verification path defined by `success_criteria` when present, otherwise derive it from the change. Capture commands, diagnostics, and runtime evidence while context is fresh. Treat verification as part of implementation, not follow-up.
 
 **If verification fails**: Preserve attempted evidence in `verification_evidence`. Hand control to debug loop. Do not retry blindly.
 **If verification passes**: Proceed to Phase 4.
@@ -143,6 +148,8 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 - "The tests probably still pass"
 - "This file isn't in scope but it's a quick fix"
 - "I'll skip the scope check, it's obviously fine"
+- "I'll add this helper — it might be useful later"
+- "This deserves a proper abstraction layer"
 - Claiming completion before running verification commands
 
 ## Common Rationalizations
