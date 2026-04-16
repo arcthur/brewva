@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { parseMarkdownFrontmatter } from "@brewva/brewva-runtime/internal";
 import { Type } from "@sinclair/typebox";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
+import { readLiteral } from "./utils/literal.js";
 
 export const SOLUTION_STATUSES = ["active", "stale", "superseded"] as const;
 export const DERIVATIVE_TARGET_KINDS = [
@@ -220,18 +221,14 @@ function normalizeDerivativeLinks(value: unknown): DerivativeLink[] {
     const targetKind = readTrimmedString((entry as { target_kind?: unknown }).target_kind);
     const ref = readTrimmedString((entry as { ref?: unknown }).ref);
     const note = readTrimmedString((entry as { note?: unknown }).note);
-    if (
-      !relation ||
-      !targetKind ||
-      !ref ||
-      !DERIVATIVE_RELATIONS.includes(relation as DerivativeRelation) ||
-      !DERIVATIVE_TARGET_KINDS.includes(targetKind as DerivativeTargetKind)
-    ) {
+    const normalizedRelation = readLiteral(relation, DERIVATIVE_RELATIONS);
+    const normalizedTargetKind = readLiteral(targetKind, DERIVATIVE_TARGET_KINDS);
+    if (!normalizedRelation || !normalizedTargetKind || !ref) {
       continue;
     }
     links.push({
-      relation: relation as DerivativeRelation,
-      targetKind: targetKind as DerivativeTargetKind,
+      relation: normalizedRelation,
+      targetKind: normalizedTargetKind,
       ref,
       ...(note ? { note } : {}),
     });
@@ -259,10 +256,7 @@ export function normalizeSolutionRecord(raw: {
   return {
     ...(id ? { id } : {}),
     title: readTrimmedString(raw.title) ?? "",
-    status:
-      status && SOLUTION_STATUSES.includes(status as SolutionStatus)
-        ? (status as SolutionStatus)
-        : "active",
+    status: readLiteral(status, SOLUTION_STATUSES) ?? "active",
     problemKind: readTrimmedString(raw.problem_kind) ?? "",
     ...(moduleName ? { module: moduleName } : {}),
     boundaries: uniqueStrings(readStringArray(raw.boundaries)),
@@ -395,9 +389,9 @@ function parseDerivativeLinkLine(line: string): DerivativeLink | undefined {
   if (!match?.[1] || !match[2] || !match[3]) {
     return undefined;
   }
-  const relation = match[1] as DerivativeRelation;
-  const targetKind = match[2] as DerivativeTargetKind;
-  if (!DERIVATIVE_RELATIONS.includes(relation) || !DERIVATIVE_TARGET_KINDS.includes(targetKind)) {
+  const relation = readLiteral(match[1], DERIVATIVE_RELATIONS);
+  const targetKind = readLiteral(match[2], DERIVATIVE_TARGET_KINDS);
+  if (!relation || !targetKind) {
     return undefined;
   }
   const ref = match[3].trim();

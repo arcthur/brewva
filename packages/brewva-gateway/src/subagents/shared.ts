@@ -518,9 +518,17 @@ export function buildWorkerResult(input: {
     };
   }
 
+  if (!input.patches) {
+    return {
+      workerId: input.workerId,
+      status: "skipped",
+      summary: input.summary,
+    };
+  }
+
   return {
     workerId: input.workerId,
-    status: input.patches ? "ok" : "skipped",
+    status: "ok",
     summary: input.summary,
     patches: input.patches,
   };

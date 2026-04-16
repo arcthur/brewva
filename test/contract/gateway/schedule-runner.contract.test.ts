@@ -11,6 +11,8 @@ import {
   SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
   SCHEDULE_WAKEUP_EVENT_TYPE,
+  asBrewvaIntentId,
+  asBrewvaSessionId,
   type ScheduleIntentProjectionRecord,
 } from "@brewva/brewva-runtime";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
@@ -20,8 +22,8 @@ function createScheduleIntent(
 ): ScheduleIntentProjectionRecord {
   const now = Date.now();
   return {
-    intentId: "intent-1",
-    parentSessionId: "parent-session",
+    intentId: asBrewvaIntentId("intent-1"),
+    parentSessionId: asBrewvaSessionId("parent-session"),
     reason: "nightly follow-up",
     goalRef: "goal-1",
     continuityMode: "inherit",

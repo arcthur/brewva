@@ -1,3 +1,5 @@
+import type { A2ABroadcastResult, A2ASendResult } from "@brewva/brewva-tools";
+
 export interface CoordinatorDispatchInput {
   agentId: string;
   task: string;
@@ -11,11 +13,18 @@ export interface CoordinatorDispatchInput {
 }
 
 export interface CoordinatorDispatchResult {
-  ok: boolean;
+  ok: true;
   agentId: string;
   responseText: string;
-  error?: string;
 }
+
+export interface CoordinatorDispatchFailure {
+  ok: false;
+  agentId: string;
+  error: string;
+}
+
+export type CoordinatorDispatchOutcome = CoordinatorDispatchResult | CoordinatorDispatchFailure;
 
 export interface CoordinatorFanOutInput {
   agentIds: string[];
@@ -59,7 +68,7 @@ export interface CoordinatorLimits {
 
 export interface CoordinatorDependencies {
   limits: CoordinatorLimits;
-  dispatch(input: CoordinatorDispatchInput): Promise<CoordinatorDispatchResult>;
+  dispatch(input: CoordinatorDispatchInput): Promise<CoordinatorDispatchOutcome>;
   isAgentActive(agentId: string): boolean;
   listAgents(input?: { includeDeleted?: boolean }): Array<{
     agentId: string;
@@ -70,10 +79,17 @@ export interface CoordinatorDependencies {
 }
 
 export interface CoordinatorFanOutResult {
-  ok: boolean;
+  ok: true;
   results: CoordinatorDispatchResult[];
-  error?: string;
 }
+
+export interface CoordinatorFanOutFailure {
+  ok: false;
+  results: CoordinatorDispatchOutcome[];
+  error: string;
+}
+
+export type CoordinatorFanOutOutcome = CoordinatorFanOutResult | CoordinatorFanOutFailure;
 
 export interface CoordinatorDiscussionRound {
   round: number;
@@ -82,11 +98,19 @@ export interface CoordinatorDiscussionRound {
 }
 
 export interface CoordinatorDiscussResult {
-  ok: boolean;
+  ok: true;
   rounds: CoordinatorDiscussionRound[];
   stoppedEarly: boolean;
-  reason?: string;
 }
+
+export interface CoordinatorDiscussFailure {
+  ok: false;
+  rounds: CoordinatorDiscussionRound[];
+  stoppedEarly: boolean;
+  reason: "requires_two_or_more_agents";
+}
+
+export type CoordinatorDiscussOutcome = CoordinatorDiscussResult | CoordinatorDiscussFailure;
 
 const MAX_CONCURRENT_FANOUT_DISPATCHES = 4;
 
@@ -98,7 +122,7 @@ export class ChannelCoordinator {
     this.deps = deps;
   }
 
-  async fanOut(input: CoordinatorFanOutInput): Promise<CoordinatorFanOutResult> {
+  async fanOut(input: CoordinatorFanOutInput): Promise<CoordinatorFanOutOutcome> {
     const uniqueAgentIds = Array.from(new Set(input.agentIds));
     if (uniqueAgentIds.length === 0) {
       return { ok: false, results: [], error: "no_targets" };
@@ -119,9 +143,8 @@ export class ChannelCoordinator {
           return {
             ok: false,
             agentId,
-            responseText: "",
             error: "agent_not_active",
-          } satisfies CoordinatorDispatchResult;
+          } satisfies CoordinatorDispatchFailure;
         }
         return this.deps.dispatch({
           agentId,
@@ -132,13 +155,24 @@ export class ChannelCoordinator {
       },
     );
 
+    const failure = results.find((entry) => !entry.ok);
+    if (failure) {
+      return {
+        ok: false,
+        results,
+        error: failure.error,
+      };
+    }
+    const successfulResults = results.filter(
+      (entry): entry is CoordinatorDispatchResult => entry.ok,
+    );
     return {
-      ok: results.every((entry) => entry.ok),
-      results,
+      ok: true,
+      results: successfulResults,
     };
   }
 
-  async discuss(input: CoordinatorDiscussInput): Promise<CoordinatorDiscussResult> {
+  async discuss(input: CoordinatorDiscussInput): Promise<CoordinatorDiscussOutcome> {
     const uniqueAgentIds = Array.from(new Set(input.agentIds));
     if (uniqueAgentIds.length < 2) {
       return {
@@ -211,14 +245,7 @@ export class ChannelCoordinator {
     };
   }
 
-  async a2aSend(input: CoordinatorA2ASendInput): Promise<{
-    ok: boolean;
-    toAgentId: string;
-    responseText?: string;
-    error?: string;
-    depth?: number;
-    hops?: number;
-  }> {
+  async a2aSend(input: CoordinatorA2ASendInput): Promise<A2ASendResult> {
     const fromAgentId =
       input.fromAgentId ?? this.deps.resolveAgentBySessionId?.(input.fromSessionId);
     const depth = Math.max(0, Math.floor(input.depth ?? 0));
@@ -274,28 +301,24 @@ export class ChannelCoordinator {
       depth: nextDepth,
       hops: nextHops,
     });
-    return {
-      ok: dispatch.ok,
-      toAgentId: input.toAgentId,
-      responseText: dispatch.responseText,
-      error: dispatch.error,
-      depth: nextDepth,
-      hops: nextHops,
-    };
+    return dispatch.ok
+      ? {
+          ok: true,
+          toAgentId: input.toAgentId,
+          responseText: dispatch.responseText,
+          depth: nextDepth,
+          hops: nextHops,
+        }
+      : {
+          ok: false,
+          toAgentId: input.toAgentId,
+          error: dispatch.error,
+          depth: nextDepth,
+          hops: nextHops,
+        };
   }
 
-  async a2aBroadcast(input: CoordinatorA2ABroadcastInput): Promise<{
-    ok: boolean;
-    error?: string;
-    results: Array<{
-      toAgentId: string;
-      ok: boolean;
-      responseText?: string;
-      error?: string;
-      depth?: number;
-      hops?: number;
-    }>;
-  }> {
+  async a2aBroadcast(input: CoordinatorA2ABroadcastInput): Promise<A2ABroadcastResult> {
     const targetIds = Array.from(new Set(input.toAgentIds));
     if (targetIds.length > this.deps.limits.fanoutMaxAgents) {
       return {
@@ -313,9 +336,20 @@ export class ChannelCoordinator {
           toAgentId,
         }),
     );
+    const failure = results.find((entry) => !entry.ok);
+    if (failure) {
+      return {
+        ok: false,
+        error: failure.error,
+        results,
+      };
+    }
+    const successes = results.filter(
+      (entry): entry is Extract<A2ASendResult, { ok: true }> => entry.ok,
+    );
     return {
-      ok: results.every((entry) => entry.ok),
-      results,
+      ok: true,
+      results: successes,
     };
   }
 

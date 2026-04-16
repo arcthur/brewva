@@ -1,4 +1,5 @@
 import type { BrewvaConfig } from "../contracts/index.js";
+import { asBrewvaIntentId, asBrewvaSessionId } from "../contracts/index.js";
 
 export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
   ui: {
@@ -103,8 +104,8 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     staleOneShotRecoveryThresholdMs: 3_600_000,
     selfImprove: {
       enabled: false,
-      parentSessionId: "schedule:policy:self-improve",
-      intentId: "schedule:policy:self-improve:recurring",
+      parentSessionId: asBrewvaSessionId("schedule:policy:self-improve"),
+      intentId: asBrewvaIntentId("schedule:policy:self-improve:recurring"),
       reason:
         "Run the self-improve skill on recurring repository friction and only emit reviewable promotion candidates.",
       goalRef: "schedule:self-improve",

@@ -69,7 +69,7 @@ function formatApplyReport(report: WorkerApplyReport): string {
 
   return [
     "# Worker Results Apply",
-    `Apply failed: ${report.reason ?? "unknown"}`,
+    `Apply failed: ${report.reason}`,
     ...(report.failedPaths.length > 0
       ? ["Failed paths:", ...report.failedPaths.map((path) => `- ${path}`)]
       : []),
@@ -164,7 +164,7 @@ export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDe
         conflicts: report.conflicts,
         mergedPatchSet: report.mergedPatchSet ?? null,
         failedPaths: report.failedPaths,
-        reason: report.reason ?? null,
+        reason: report.status === "apply_failed" ? report.reason : null,
       });
     },
   });

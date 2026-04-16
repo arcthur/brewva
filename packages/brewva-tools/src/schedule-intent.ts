@@ -5,6 +5,7 @@ import type {
   ScheduleIntentUpdateInput,
   TaskPhase,
 } from "@brewva/brewva-runtime";
+import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import { formatISO } from "date-fns";
@@ -212,19 +213,17 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
           cron: params.cron,
           timeZone: params.timeZone,
         });
-        if (!scheduleTarget.runAt && !scheduleTarget.cron) {
-          return failTextResult(
-            `Schedule intent rejected (${scheduleTarget.error ?? "invalid_schedule"}).`,
-            {
-              ok: false,
-              error: scheduleTarget.error ?? "invalid_schedule",
-            },
-          );
+        if (!scheduleTarget.ok) {
+          return failTextResult(`Schedule intent rejected (${scheduleTarget.error}).`, {
+            ok: false,
+            error: scheduleTarget.error,
+          });
         }
 
+        const rawIntentId = normalizeOptionalString(params.intentId);
         const created = await options.runtime.authority.schedule.createIntent(sessionId, {
           reason,
-          intentId: normalizeOptionalString(params.intentId),
+          intentId: rawIntentId !== undefined ? asBrewvaIntentId(rawIntentId) : undefined,
           goalRef: normalizeOptionalString(params.goalRef),
           continuityMode,
           runAt: scheduleTarget.runAt,
@@ -273,7 +272,7 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
           cron: params.cron,
           timeZone: params.timeZone,
         });
-        if (schedulePatch.error) {
+        if (!schedulePatch.ok) {
           return failTextResult(`Schedule intent update rejected (${schedulePatch.error}).`, {
             ok: false,
             error: schedulePatch.error,
@@ -309,7 +308,7 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
         }
 
         const updateInput: ScheduleIntentUpdateInput = {
-          intentId,
+          intentId: asBrewvaIntentId(intentId),
           continuityMode,
           maxRuns: params.maxRuns,
           convergenceCondition,
@@ -360,7 +359,7 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
         }
 
         const cancelled = await options.runtime.authority.schedule.cancelIntent(sessionId, {
-          intentId,
+          intentId: asBrewvaIntentId(intentId),
           reason: normalizeOptionalString(params.reason),
         });
         if (!cancelled.ok) {
@@ -381,7 +380,7 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
       const statusFilter = toStatusFilter(params.status);
       const statusLabel = typeof params.status === "string" ? params.status : "all";
       const listQuery = {
-        parentSessionId: params.includeAllSessions ? undefined : sessionId,
+        parentSessionId: params.includeAllSessions ? undefined : asBrewvaSessionId(sessionId),
         status: statusFilter,
       };
       const intents = await options.runtime.inspect.schedule.listIntents(listQuery);

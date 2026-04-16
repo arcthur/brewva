@@ -1,6 +1,6 @@
 import type { SessionPhase } from "../contracts/session-phase.js";
 import type { HostRuntimePlugin, HostRuntimePluginContext } from "../host-api/plugin.js";
-import { advanceSessionPhase, type SessionPhaseEvent } from "./phase-machine.js";
+import { advanceSessionPhaseResult, type SessionPhaseEvent } from "./phase-machine.js";
 import type { BrewvaPromptContentPart } from "./prompt-content.js";
 
 export interface BrewvaPromptEnvelope {
@@ -107,7 +107,11 @@ class InMemorySessionHost implements BrewvaSessionHost {
   }
 
   async transition(event: SessionPhaseEvent): Promise<SessionPhase> {
-    this.phase = advanceSessionPhase(this.phase, event);
+    const next = advanceSessionPhaseResult(this.phase, event);
+    if (!next.ok) {
+      throw new Error(next.error);
+    }
+    this.phase = next.phase;
     for (const plugin of this.plugins) {
       await plugin.onSessionPhaseChange?.(this.phase, this.pluginContext);
     }

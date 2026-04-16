@@ -452,10 +452,15 @@ describe("deliberation memory plane", () => {
     );
     expect(repositoryContract?.content).toContain("bun run check");
     expect(repositoryContract?.content).toContain("no backward compatibility");
+    expect(repositoryContract?.metadata?.repositoryRoot).toBe("/repo/workspace");
+    expect(repositoryContract?.metadata?.taskSpecCount).toBe(2);
 
     const loopMemory = state.artifacts.find((artifact) => artifact.id === "loop:coverage-raise");
     expect(loopMemory?.summary).toContain("62 -> 71");
     expect(loopMemory?.summary).toContain("unit-tests=pass");
+    expect(loopMemory?.metadata?.loopKey).toBe("coverage-raise");
+    expect(loopMemory?.metadata?.metricCount).toBe(2);
+    expect(loopMemory?.metadata?.guardCount).toBe(2);
   });
 
   test("retrieval boosts loop memory when the prompt is loop-specific", () => {

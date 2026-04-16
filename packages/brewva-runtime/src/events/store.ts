@@ -16,6 +16,7 @@ import type {
   BrewvaEventRecord,
   IntegrityIssue,
 } from "../contracts/index.js";
+import { asBrewvaEventType, asBrewvaSessionId } from "../contracts/index.js";
 import { redactUnknown } from "../security/redact.js";
 import {
   TAPE_ANCHOR_EVENT_TYPE,
@@ -92,8 +93,8 @@ function buildFrozenEventRecord<TPayload extends object>(
   const timestamp = input.timestamp ?? Date.now();
   return freezeEventRecord({
     id: `evt_${timestamp}_${randomUUID()}`,
-    sessionId: input.sessionId,
-    type: input.type,
+    sessionId: asBrewvaSessionId(input.sessionId),
+    type: asBrewvaEventType(input.type),
     timestamp,
     turn: input.turn,
     payload: normalizeJsonRecord(

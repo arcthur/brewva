@@ -183,9 +183,10 @@ function computeScopeScore(record: NarrativeMemoryRecord): number {
       return 0.08;
     case "repository":
       return 0.06;
-    default:
-      return 0;
   }
+
+  const exhaustive: never = record.applicabilityScope;
+  return exhaustive;
 }
 
 function computeClassScore(record: NarrativeMemoryRecord): number {
@@ -198,9 +199,10 @@ function computeClassScore(record: NarrativeMemoryRecord): number {
       return 0.08;
     case "external_reference_note":
       return 0.06;
-    default:
-      return 0;
   }
+
+  const exhaustive: never = record.class;
+  return exhaustive;
 }
 
 function tokenizeRecord(record: NarrativeMemoryRecord): string[] {
@@ -310,9 +312,10 @@ export function resolveNarrativeMemoryHeadingForClass(
     case "project_context_note":
     case "external_reference_note":
       return "Continuity Notes";
-    default:
-      return "Continuity Notes";
   }
+
+  const exhaustive: never = recordClass;
+  return exhaustive;
 }
 
 export class NarrativeMemoryPlane {

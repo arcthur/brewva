@@ -64,6 +64,7 @@ export interface BedrockOptions extends StreamOptions {
 }
 
 type Block = (TextContent | ThinkingContent | ToolCall) & { index?: number; partialJson?: string };
+type BedrockToolUseInput = NonNullable<NonNullable<ContentBlock["toolUse"]>["input"]>;
 
 export const streamBedrock: StreamFunction<"bedrock-converse-stream", BedrockOptions> = (
   model: Model<"bedrock-converse-stream">,
@@ -592,7 +593,11 @@ function convertMessages(
               break;
             case "toolCall":
               contentBlocks.push({
-                toolUse: { toolUseId: c.id, name: c.name, input: c.arguments },
+                toolUse: {
+                  toolUseId: c.id,
+                  name: c.name,
+                  input: c.arguments as BedrockToolUseInput,
+                },
               });
               break;
             case "thinking":

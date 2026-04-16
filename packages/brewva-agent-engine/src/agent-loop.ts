@@ -20,7 +20,11 @@ import type {
   BrewvaAgentEngineTransport,
   BrewvaAgentEngineStopAfterToolResults,
 } from "./agent-engine-types.js";
-import { validateToolArguments, prepareToolArguments } from "./validate-tool-arguments.js";
+import {
+  prepareToolArguments,
+  validateToolArguments,
+  type BrewvaValidatedToolArguments,
+} from "./validate-tool-arguments.js";
 
 type BrewvaAgentEventSink = (event: BrewvaAgentEngineEvent) => Promise<void> | void;
 
@@ -73,7 +77,7 @@ type PreparedToolCall = {
   kind: "prepared";
   toolCall: BrewvaAgentEngineToolCall;
   tool: BrewvaAgentEngineTool;
-  args: unknown;
+  args: BrewvaValidatedToolArguments;
   phase: "prepare";
 };
 
@@ -82,6 +86,7 @@ type ImmediateToolCallOutcome = {
   result: BrewvaAgentEngineToolResult;
   isError: boolean;
   phase: "classify" | "authorize";
+  args: unknown;
 };
 
 type ExecutedToolCallOutcome = {
@@ -374,7 +379,7 @@ async function executeToolCallsSequential(
           preparation.result,
           preparation.isError,
           preparation.phase,
-          toolCall.arguments,
+          preparation.args,
           emit,
         ),
       );
@@ -431,7 +436,7 @@ async function executeToolCallsParallel(
           preparation.result,
           preparation.isError,
           preparation.phase,
-          toolCall.arguments,
+          preparation.args,
           emit,
         ),
       );
@@ -478,38 +483,60 @@ async function prepareToolCall(
       result: createErrorToolResult(`Tool ${toolCall.name} not found`),
       isError: true,
       phase: "classify",
+      args: toolCall.arguments,
     };
   }
 
   try {
     const preparedToolCall = prepareToolArguments(tool, toolCall);
     const validatedArgs = validateToolArguments(tool, preparedToolCall);
-    await emitToolExecutionPhaseChange(toolCall, "authorize", emit, "classify", validatedArgs);
+    if (!validatedArgs.ok) {
+      return {
+        kind: "immediate",
+        result: createErrorToolResult(validatedArgs.error),
+        isError: true,
+        phase: "classify",
+        args: preparedToolCall.arguments,
+      };
+    }
+
+    await emitToolExecutionPhaseChange(toolCall, "authorize", emit, "classify", validatedArgs.args);
     if (config.beforeToolCall) {
-      const beforeResult = await config.beforeToolCall(
-        {
-          assistantMessage,
-          toolCall,
-          args: validatedArgs,
-          context: currentContext,
-        },
-        signal,
-      );
-      if (beforeResult?.block) {
+      try {
+        const beforeResult = await config.beforeToolCall(
+          {
+            assistantMessage,
+            toolCall,
+            args: validatedArgs.args,
+            context: currentContext,
+          },
+          signal,
+        );
+        if (beforeResult?.block) {
+          return {
+            kind: "immediate",
+            result: createErrorToolResult(beforeResult.reason ?? "Tool execution was blocked"),
+            isError: true,
+            phase: "authorize",
+            args: validatedArgs.args,
+          };
+        }
+      } catch (error) {
         return {
           kind: "immediate",
-          result: createErrorToolResult(beforeResult.reason ?? "Tool execution was blocked"),
+          result: createErrorToolResult(error instanceof Error ? error.message : String(error)),
           isError: true,
           phase: "authorize",
+          args: validatedArgs.args,
         };
       }
     }
-    await emitToolExecutionPhaseChange(toolCall, "prepare", emit, "authorize", validatedArgs);
+    await emitToolExecutionPhaseChange(toolCall, "prepare", emit, "authorize", validatedArgs.args);
     return {
       kind: "prepared",
       toolCall,
       tool,
-      args: validatedArgs,
+      args: validatedArgs.args,
       phase: "prepare",
     };
   } catch (error) {
@@ -518,6 +545,7 @@ async function prepareToolCall(
       result: createErrorToolResult(error instanceof Error ? error.message : String(error)),
       isError: true,
       phase: "classify",
+      args: toolCall.arguments,
     };
   }
 }

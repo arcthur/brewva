@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { asBrewvaEventType, asBrewvaSessionId } from "@brewva/brewva-runtime";
 import type {
   BrewvaEventRecord,
   SkillDocument,
@@ -25,8 +26,8 @@ function createRecordedEvent(
 ): BrewvaEventRecord {
   return {
     id: `ev-${index}`,
-    sessionId: input.sessionId,
-    type: input.type,
+    sessionId: asBrewvaSessionId(input.sessionId),
+    type: asBrewvaEventType(input.type),
     timestamp: 1,
     turn: input.turn,
     payload: input.payload as BrewvaEventRecord["payload"],

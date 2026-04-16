@@ -3,10 +3,13 @@ import { resolve } from "node:path";
 import { writeFileAtomic } from "./plane-substrate.js";
 import {
   DELIBERATION_MEMORY_ARTIFACT_KINDS,
+  DELIBERATION_MEMORY_RETENTION_BANDS,
   DELIBERATION_MEMORY_SCOPE_VALUES,
   DELIBERATION_MEMORY_STATE_SCHEMA,
   type DeliberationMemoryArtifact,
+  type DeliberationMemoryArtifactMetadata,
   type DeliberationMemoryEvidenceRef,
+  type DeliberationMemoryRetentionSnapshot,
   type DeliberationMemorySessionDigest,
   type DeliberationMemoryState,
 } from "./types.js";
@@ -25,9 +28,75 @@ function readNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function readLiteral<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
+  const normalized = readString(value);
+  return normalized && allowed.includes(normalized as T) ? (normalized as T) : undefined;
+}
+
 function readStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.map((entry) => readString(entry) ?? "").filter((entry) => entry.length > 0);
+}
+
+function readRetention(value: unknown): DeliberationMemoryRetentionSnapshot | undefined {
+  if (!isRecord(value)) return undefined;
+  const retentionScore = readNumber(value.retentionScore);
+  const retrievalBias = readNumber(value.retrievalBias);
+  const decayFactor = readNumber(value.decayFactor);
+  const ageDays = readNumber(value.ageDays);
+  const evidenceCount = readNumber(value.evidenceCount);
+  const sessionSpan = readNumber(value.sessionSpan);
+  const band = readLiteral(value.band, DELIBERATION_MEMORY_RETENTION_BANDS);
+  if (
+    retentionScore === undefined ||
+    retrievalBias === undefined ||
+    decayFactor === undefined ||
+    ageDays === undefined ||
+    evidenceCount === undefined ||
+    sessionSpan === undefined ||
+    !band
+  ) {
+    return undefined;
+  }
+  return {
+    retentionScore,
+    retrievalBias,
+    decayFactor,
+    ageDays,
+    evidenceCount,
+    sessionSpan,
+    band,
+  };
+}
+
+function readArtifactMetadata(value: unknown): DeliberationMemoryArtifactMetadata | undefined {
+  if (!isRecord(value)) return undefined;
+  const metadata: DeliberationMemoryArtifactMetadata = {};
+  const retention = readRetention(value.retention);
+  if (retention) {
+    metadata.retention = retention;
+  }
+  const repositoryRoot = readString(value.repositoryRoot);
+  if (repositoryRoot) {
+    metadata.repositoryRoot = repositoryRoot;
+  }
+  const taskSpecCount = readNumber(value.taskSpecCount);
+  if (taskSpecCount !== undefined) {
+    metadata.taskSpecCount = taskSpecCount;
+  }
+  const loopKey = readString(value.loopKey);
+  if (loopKey) {
+    metadata.loopKey = loopKey;
+  }
+  const metricCount = readNumber(value.metricCount);
+  if (metricCount !== undefined) {
+    metadata.metricCount = metricCount;
+  }
+  const guardCount = readNumber(value.guardCount);
+  if (guardCount !== undefined) {
+    metadata.guardCount = guardCount;
+  }
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
 function readEvidence(value: unknown): DeliberationMemoryEvidenceRef | undefined {
@@ -50,14 +119,17 @@ function readEvidence(value: unknown): DeliberationMemoryEvidenceRef | undefined
 function readArtifact(value: unknown): DeliberationMemoryArtifact | undefined {
   if (!isRecord(value)) return undefined;
   const id = readString(value.id);
-  const kind = readString(value.kind);
+  const kind = readLiteral(value.kind, DELIBERATION_MEMORY_ARTIFACT_KINDS);
   const title = readString(value.title);
   const summary = readString(value.summary);
   const content = readString(value.content);
   const confidenceScore = readNumber(value.confidenceScore);
   const firstCapturedAt = readNumber(value.firstCapturedAt);
   const lastValidatedAt = readNumber(value.lastValidatedAt);
-  const applicabilityScope = readString(value.applicabilityScope);
+  const applicabilityScope = readLiteral(
+    value.applicabilityScope,
+    DELIBERATION_MEMORY_SCOPE_VALUES,
+  );
   if (
     !id ||
     !kind ||
@@ -71,20 +143,6 @@ function readArtifact(value: unknown): DeliberationMemoryArtifact | undefined {
   ) {
     return undefined;
   }
-  if (
-    !DELIBERATION_MEMORY_ARTIFACT_KINDS.includes(
-      kind as (typeof DELIBERATION_MEMORY_ARTIFACT_KINDS)[number],
-    )
-  ) {
-    return undefined;
-  }
-  if (
-    !DELIBERATION_MEMORY_SCOPE_VALUES.includes(
-      applicabilityScope as (typeof DELIBERATION_MEMORY_SCOPE_VALUES)[number],
-    )
-  ) {
-    return undefined;
-  }
   const evidence = Array.isArray(value.evidence)
     ? value.evidence
         .map((entry) => readEvidence(entry))
@@ -92,17 +150,17 @@ function readArtifact(value: unknown): DeliberationMemoryArtifact | undefined {
     : [];
   const sessionIds = readStringArray(value.sessionIds);
   const tags = readStringArray(value.tags);
-  const metadata = isRecord(value.metadata) ? value.metadata : undefined;
+  const metadata = readArtifactMetadata(value.metadata);
   return {
     id,
-    kind: kind as DeliberationMemoryArtifact["kind"],
+    kind,
     title,
     summary,
     content,
     confidenceScore,
     firstCapturedAt,
     lastValidatedAt,
-    applicabilityScope: applicabilityScope as (typeof DELIBERATION_MEMORY_SCOPE_VALUES)[number],
+    applicabilityScope,
     evidence,
     sessionIds,
     tags,

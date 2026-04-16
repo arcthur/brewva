@@ -4,6 +4,7 @@ import type {
   ScheduleIntentProjectionRecord,
   ScheduleProjectionSnapshot,
 } from "../contracts/index.js";
+import { asBrewvaIntentId, asBrewvaSessionId } from "../contracts/index.js";
 import { writeFileAtomic } from "../utils/fs.js";
 
 interface ProjectionMetaLine {
@@ -23,37 +24,37 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function isProjectionRecord(value: unknown): value is ScheduleIntentProjectionRecord {
-  if (!isRecord(value)) return false;
-  if (typeof value.intentId !== "string" || value.intentId.trim().length === 0) return false;
+function readProjectionRecord(value: unknown): ScheduleIntentProjectionRecord | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.intentId !== "string" || value.intentId.trim().length === 0) return null;
   if (typeof value.parentSessionId !== "string" || value.parentSessionId.trim().length === 0)
-    return false;
-  if (typeof value.reason !== "string" || value.reason.trim().length === 0) return false;
-  if (value.continuityMode !== "inherit" && value.continuityMode !== "fresh") return false;
-  if (value.timeZone !== undefined && typeof value.timeZone !== "string") return false;
+    return null;
+  if (typeof value.reason !== "string" || value.reason.trim().length === 0) return null;
+  if (value.continuityMode !== "inherit" && value.continuityMode !== "fresh") return null;
+  if (value.timeZone !== undefined && typeof value.timeZone !== "string") return null;
   if (typeof value.maxRuns !== "number" || !Number.isFinite(value.maxRuns) || value.maxRuns <= 0) {
-    return false;
+    return null;
   }
   if (
     typeof value.runCount !== "number" ||
     !Number.isFinite(value.runCount) ||
     value.runCount < 0
   ) {
-    return false;
+    return null;
   }
   if (
     typeof value.updatedAt !== "number" ||
     !Number.isFinite(value.updatedAt) ||
     value.updatedAt <= 0
   ) {
-    return false;
+    return null;
   }
   if (
     typeof value.eventOffset !== "number" ||
     !Number.isFinite(value.eventOffset) ||
     value.eventOffset < 0
   ) {
-    return false;
+    return null;
   }
   if (
     value.status !== "active" &&
@@ -61,9 +62,34 @@ function isProjectionRecord(value: unknown): value is ScheduleIntentProjectionRe
     value.status !== "converged" &&
     value.status !== "error"
   ) {
-    return false;
+    return null;
   }
-  return true;
+  return {
+    intentId: asBrewvaIntentId(value.intentId),
+    parentSessionId: asBrewvaSessionId(value.parentSessionId),
+    reason: value.reason,
+    goalRef: typeof value.goalRef === "string" ? value.goalRef : undefined,
+    continuityMode: value.continuityMode,
+    cron: typeof value.cron === "string" ? value.cron : undefined,
+    timeZone: typeof value.timeZone === "string" ? value.timeZone : undefined,
+    runAt: typeof value.runAt === "number" ? value.runAt : undefined,
+    maxRuns: value.maxRuns,
+    runCount: value.runCount,
+    nextRunAt: typeof value.nextRunAt === "number" ? value.nextRunAt : undefined,
+    status: value.status,
+    convergenceCondition:
+      value.convergenceCondition as ScheduleIntentProjectionRecord["convergenceCondition"],
+    consecutiveErrors:
+      typeof value.consecutiveErrors === "number" && Number.isFinite(value.consecutiveErrors)
+        ? value.consecutiveErrors
+        : 0,
+    leaseUntilMs: typeof value.leaseUntilMs === "number" ? value.leaseUntilMs : undefined,
+    lastError: typeof value.lastError === "string" ? value.lastError : undefined,
+    lastEvaluationSessionId:
+      typeof value.lastEvaluationSessionId === "string" ? value.lastEvaluationSessionId : undefined,
+    updatedAt: value.updatedAt,
+    eventOffset: value.eventOffset,
+  };
 }
 
 function parseMetaLine(value: unknown): ProjectionMetaLine | null {
@@ -96,11 +122,12 @@ function parseIntentLine(value: unknown): ProjectionIntentLine | null {
   if (!isRecord(value)) return null;
   if (value.schema !== "brewva.schedule.projection.v1") return null;
   if (value.kind !== "intent") return null;
-  if (!isProjectionRecord(value.record)) return null;
+  const record = readProjectionRecord(value.record);
+  if (!record) return null;
   return {
     schema: "brewva.schedule.projection.v1",
     kind: "intent",
-    record: value.record,
+    record,
   };
 }
 

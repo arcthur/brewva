@@ -1,11 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import type { SessionWireFrame } from "@brewva/brewva-runtime";
+import {
+  asBrewvaSessionId,
+  asBrewvaToolCallId,
+  asBrewvaToolName,
+  type SessionWireFrame,
+} from "@brewva/brewva-runtime";
 import {
   deriveSessionStatusSeedFromFrame,
   deriveSessionStatusSeedFromHistory,
 } from "../../../packages/brewva-gateway/src/daemon/session-wire-status.js";
 
-const SESSION_ID = "session-wire-status";
+const SESSION_ID = asBrewvaSessionId("session-wire-status");
 
 function createTurnInputFrame(frameId: string): Extract<SessionWireFrame, { type: "turn.input" }> {
   return {
@@ -35,8 +40,8 @@ function createApprovalRequestedFrame(
     type: "approval.requested",
     turnId: "turn-1",
     requestId: "req-1",
-    toolName: "shell",
-    toolCallId: "tool-1",
+    toolName: asBrewvaToolName("shell"),
+    toolCallId: asBrewvaToolCallId("tool-1"),
     subject: "Run guarded command",
   };
 }

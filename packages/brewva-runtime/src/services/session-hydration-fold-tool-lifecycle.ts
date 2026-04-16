@@ -9,6 +9,7 @@ import type {
   SkillOutputValidationIssue,
   SkillRepairBudgetState,
 } from "../contracts/index.js";
+import { asBrewvaToolCallId, asBrewvaToolName } from "../contracts/index.js";
 import {
   SESSION_SHUTDOWN_EVENT_TYPE,
   SESSION_UNCLEAN_SHUTDOWN_RECONCILED_EVENT_TYPE,
@@ -22,20 +23,24 @@ import type {
 } from "./session-hydration-fold.js";
 import { readNonNegativeNumber } from "./session-hydration-fold.js";
 
-function readToolCallId(payload: Record<string, unknown> | null): string | null {
+function readToolCallId(
+  payload: Record<string, unknown> | null,
+): import("../contracts/index.js").BrewvaToolCallId | null {
   if (!payload || typeof payload.toolCallId !== "string") {
     return null;
   }
   const toolCallId = payload.toolCallId.trim();
-  return toolCallId.length > 0 ? toolCallId : null;
+  return toolCallId.length > 0 ? asBrewvaToolCallId(toolCallId) : null;
 }
 
-function readToolName(payload: Record<string, unknown> | null): string | null {
+function readToolName(
+  payload: Record<string, unknown> | null,
+): import("../contracts/index.js").BrewvaToolName | null {
   if (!payload || typeof payload.toolName !== "string") {
     return null;
   }
   const toolName = payload.toolName.trim();
-  return toolName.length > 0 ? toolName : null;
+  return toolName.length > 0 ? asBrewvaToolName(toolName) : null;
 }
 
 function readAttempt(payload: Record<string, unknown> | null): number | null | undefined {
@@ -187,8 +192,13 @@ function readOpenToolCallRecord(value: unknown): OpenToolCallRecord | null {
   }
   const candidate = value as Record<string, unknown>;
   const toolCallId =
-    typeof candidate.toolCallId === "string" ? candidate.toolCallId.trim() : undefined;
-  const toolName = typeof candidate.toolName === "string" ? candidate.toolName.trim() : undefined;
+    typeof candidate.toolCallId === "string"
+      ? asBrewvaToolCallId(candidate.toolCallId.trim())
+      : undefined;
+  const toolName =
+    typeof candidate.toolName === "string"
+      ? asBrewvaToolName(candidate.toolName.trim())
+      : undefined;
   const openedAt = readNonNegativeNumber(candidate.openedAt);
   if (!toolCallId || !toolName || openedAt === null) {
     return null;

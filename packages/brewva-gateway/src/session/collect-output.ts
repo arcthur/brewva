@@ -9,7 +9,13 @@ import {
   TOOL_CALL_EVENT_TYPE,
   TOOL_EXECUTION_END_EVENT_TYPE,
   TOOL_EXECUTION_START_EVENT_TYPE,
+  asBrewvaSessionId,
+  asBrewvaToolCallId,
+  asBrewvaToolName,
   type BrewvaRuntime,
+  type BrewvaSessionId,
+  type BrewvaToolCallId,
+  type BrewvaToolName,
   type SessionWireFrame,
   type ToolOutputView,
 } from "@brewva/brewva-runtime";
@@ -227,7 +233,7 @@ function asAssistantDelta(event: BrewvaPromptSessionEvent): {
 
 function emitFrame(
   options: CollectSessionPromptOutputOptions | undefined,
-  buildFrame: (frameId: string, sessionId: string, turnId: string) => SessionWireFrame,
+  buildFrame: (frameId: string, sessionId: BrewvaSessionId, turnId: string) => SessionWireFrame,
   nextFrameId: () => string,
 ): void {
   if (!options?.onFrame) {
@@ -239,7 +245,7 @@ function emitFrame(
     return;
   }
   try {
-    options.onFrame(buildFrame(nextFrameId(), sessionId, turnId));
+    options.onFrame(buildFrame(nextFrameId(), asBrewvaSessionId(sessionId), turnId));
   } catch {
     // best effort callback isolation
   }
@@ -254,21 +260,21 @@ function buildLiveToolFrameBase(input: {
   turnId: string;
 }): Pick<SessionWireFrame, "schema" | "sessionId" | "frameId" | "ts" | "source" | "durability"> & {
   attemptId: string;
-  toolCallId: string;
-  toolName: string;
+  toolCallId: BrewvaToolCallId;
+  toolName: BrewvaToolName;
   turnId: string;
 } {
   return {
     schema: SESSION_WIRE_SCHEMA,
-    sessionId: input.sessionId,
+    sessionId: asBrewvaSessionId(input.sessionId),
     frameId: input.frameId,
     ts: Date.now(),
     source: "live",
     durability: "cache",
     turnId: input.turnId,
     attemptId: input.attemptId,
-    toolCallId: input.toolCallId,
-    toolName: input.toolName,
+    toolCallId: asBrewvaToolCallId(input.toolCallId),
+    toolName: asBrewvaToolName(input.toolName),
   };
 }
 
@@ -556,8 +562,8 @@ export async function collectSessionPromptOutput(
         result: toolEvent.result,
       });
       const nextToolOutput: ToolOutputView = {
-        toolCallId: toolEvent.toolCallId,
-        toolName: toolEvent.toolName,
+        toolCallId: asBrewvaToolCallId(toolEvent.toolCallId),
+        toolName: asBrewvaToolName(toolEvent.toolName),
         isError: toolEvent.isError,
         verdict,
         text: resolveToolDisplayText({

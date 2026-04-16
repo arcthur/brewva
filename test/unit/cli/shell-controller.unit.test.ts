@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BrewvaReplaySession, SessionWireFrame } from "@brewva/brewva-runtime";
+import {
+  asBrewvaSessionId,
+  asBrewvaToolCallId,
+  asBrewvaToolName,
+  type BrewvaReplaySession,
+  type SessionWireFrame,
+} from "@brewva/brewva-runtime";
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
@@ -221,8 +227,8 @@ describe("shell controller", () => {
             {
               requestId: "approval-1",
               proposalId: "proposal-1",
-              toolName: "write_file",
-              toolCallId: "tool-call-1",
+              toolName: asBrewvaToolName("write_file"),
+              toolCallId: asBrewvaToolCallId("tool-call-1"),
               subject: "write app.ts",
               boundary: "effectful",
               effects: ["workspace_write"],
@@ -1206,7 +1212,7 @@ describe("shell controller", () => {
         "worker-session-1": [
           {
             schema: "brewva.session-wire.v2",
-            sessionId: "worker-session-1",
+            sessionId: asBrewvaSessionId("worker-session-1"),
             frameId: "frame-1",
             ts: Date.now(),
             source: "replay",
@@ -1218,8 +1224,8 @@ describe("shell controller", () => {
             assistantText: "QA summary line\nFound stale contract drift.",
             toolOutputs: [
               {
-                toolCallId: "tool-1",
-                toolName: "exec_command",
+                toolCallId: asBrewvaToolCallId("tool-1"),
+                toolName: asBrewvaToolName("exec_command"),
                 verdict: "pass",
                 isError: false,
                 text: "bun test\n1775 pass",
@@ -1246,12 +1252,12 @@ describe("shell controller", () => {
           {
             runId: "run-1",
             delegate: "worker-1",
-            parentSessionId: "session-1",
+            parentSessionId: asBrewvaSessionId("session-1"),
             status: "completed",
             createdAt: Date.now(),
             updatedAt: Date.now(),
             label: "Review operator state",
-            workerSessionId: "worker-session-1",
+            workerSessionId: asBrewvaSessionId("worker-session-1"),
             summary: "Collected output summary",
             resultData: {
               verdict: "pass",
@@ -1483,12 +1489,12 @@ describe("shell controller", () => {
   test("session switching preserves drafts per session and restores them when returning", async () => {
     const replaySessions = [
       {
-        sessionId: "session-1",
+        sessionId: asBrewvaSessionId("session-1"),
         eventCount: 14,
         lastEventAt: 1_710_000_000_000,
       },
       {
-        sessionId: "session-2",
+        sessionId: asBrewvaSessionId("session-2"),
         eventCount: 9,
         lastEventAt: 1_710_000_100_000,
       },
@@ -1574,7 +1580,7 @@ describe("shell controller", () => {
   test("session browser still surfaces the current session before any replay events exist", async () => {
     const replaySessions = [
       {
-        sessionId: "archived-session",
+        sessionId: asBrewvaSessionId("archived-session"),
         eventCount: 12,
         lastEventAt: 1_710_000_000_000,
       },
@@ -1607,7 +1613,7 @@ describe("shell controller", () => {
     });
     expect(
       payload?.kind === "sessions" ? payload.sessions.map((session) => session.sessionId) : [],
-    ).toEqual(["fresh-session", "archived-session"]);
+    ).toEqual([asBrewvaSessionId("fresh-session"), asBrewvaSessionId("archived-session")]);
     expect(
       payload?.kind === "sessions" ? payload.draftStateBySessionId["fresh-session"] : undefined,
     ).toMatchObject({

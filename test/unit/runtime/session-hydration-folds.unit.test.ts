@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { asBrewvaEventType, asBrewvaSessionId } from "@brewva/brewva-runtime";
 import type {
   BrewvaEventRecord,
   IntegrityIssue,
@@ -40,8 +41,8 @@ function createEvent(input: {
 }): BrewvaEventRecord {
   return {
     id: input.id,
-    sessionId: "session-hydration-folds",
-    type: input.type,
+    sessionId: asBrewvaSessionId("session-hydration-folds"),
+    type: asBrewvaEventType(input.type),
     timestamp: input.timestamp,
     turn: input.turn,
     payload: input.payload as Record<string, JsonValue> | undefined,

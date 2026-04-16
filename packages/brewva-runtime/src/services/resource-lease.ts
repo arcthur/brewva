@@ -11,6 +11,7 @@ import type {
   SkillDocument,
   SkillResourceBudget,
 } from "../contracts/index.js";
+import { asBrewvaSessionId } from "../contracts/index.js";
 import {
   RESOURCE_LEASE_CANCELLED_EVENT_TYPE,
   RESOURCE_LEASE_EXPIRED_EVENT_TYPE,
@@ -185,7 +186,7 @@ export class ResourceLeaseService {
     const now = Date.now();
     const lease: ResourceLeaseRecord = {
       id: randomUUID(),
-      sessionId,
+      sessionId: asBrewvaSessionId(sessionId),
       skillName: skill.name,
       reason,
       budget: grantedBudget,

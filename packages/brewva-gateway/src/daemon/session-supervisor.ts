@@ -4,6 +4,8 @@ import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  asBrewvaWalId,
+  type BrewvaWalId,
   type ContextPressureView,
   type ManagedToolMode,
   type RecoveryWalRecord,
@@ -377,7 +379,7 @@ export class SessionSupervisor implements SessionBackend {
         pendingTurns: new Map<string, PendingTurn>(),
         turnQueue: [],
         activeTurnId: null,
-        activeRecoveryWalIds: new Map<string, string>(),
+        activeRecoveryWalIds: new Map<string, BrewvaWalId>(),
         lastHeartbeatAt: Date.now(),
       };
       this.workers.set(input.sessionId, handle);
@@ -477,7 +479,7 @@ export class SessionSupervisor implements SessionBackend {
     const source = options.source ?? "gateway";
     const replayWalId = normalizeOptionalString(options.walReplayId);
     const waitForCompletion = options.waitForCompletion === true;
-    let walId = replayWalId;
+    let walId = replayWalId ? asBrewvaWalId(replayWalId) : undefined;
     if (!walId && this.recoveryWalStore?.isEnabled) {
       const walRecord = this.recoveryWalStore.appendPending(
         buildSessionTurnEnvelope({
@@ -662,7 +664,7 @@ export class SessionSupervisor implements SessionBackend {
       pendingTurns: new Map<string, PendingTurn>(),
       turnQueue: [],
       activeTurnId: input.activeTurnId ?? null,
-      activeRecoveryWalIds: new Map<string, string>(),
+      activeRecoveryWalIds: new Map<string, BrewvaWalId>(),
       readyRequestId: input.readyRequestId,
       lastHeartbeatAt: input.lastHeartbeatAt ?? now,
     });

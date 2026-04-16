@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  asBrewvaToolCallId,
+  asBrewvaToolName,
   createTrustedLocalGovernancePort,
   type GovernanceAuthorizeEffectCommitmentInput,
   type ToolEffectClass,
@@ -19,8 +21,8 @@ function createAuthorizationInput(
       evidenceRefs: [],
       createdAt: 1,
       payload: {
-        toolName: "exec",
-        toolCallId: "call-1",
+        toolName: asBrewvaToolName("exec"),
+        toolCallId: asBrewvaToolCallId("call-1"),
         boundary: "effectful",
         argsSummary: "exec --help",
         argsDigest: "digest",

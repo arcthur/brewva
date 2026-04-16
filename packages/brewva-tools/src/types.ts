@@ -368,41 +368,99 @@ export interface SubagentOutcomeFailure {
 
 export type SubagentOutcome = SubagentOutcomeSuccess | SubagentOutcomeFailure;
 
-export interface SubagentRunResult {
-  ok: boolean;
+export type SubagentRunSuccessResult = {
+  ok: true;
+  mode: SubagentDelegationMode;
+  delegate: string;
+  outcomes: SubagentOutcomeSuccess[];
+};
+
+export type SubagentRunFailureResult = {
+  ok: false;
   mode: SubagentDelegationMode;
   delegate: string;
   outcomes: SubagentOutcome[];
-  error?: string;
-}
+  error: string;
+};
 
-export interface SubagentStartResult {
-  ok: boolean;
+export type SubagentRunResult = SubagentRunSuccessResult | SubagentRunFailureResult;
+
+export type SubagentStartSuccessResult = {
+  ok: true;
   mode: SubagentDelegationMode;
   delegate: string;
   runs: DelegationRunRecord[];
-  error?: string;
-}
+};
 
-export interface SubagentStatusResult {
-  ok: boolean;
-  runs: Array<
-    DelegationRunRecord & {
-      live?: boolean;
-      cancelable?: boolean;
+export type SubagentStartFailureResult = {
+  ok: false;
+  mode: SubagentDelegationMode;
+  delegate: string;
+  runs: DelegationRunRecord[];
+  error: string;
+};
+
+export type SubagentStartResult = SubagentStartSuccessResult | SubagentStartFailureResult;
+
+export type SubagentStatusRunView = DelegationRunRecord & {
+  live?: boolean;
+  cancelable?: boolean;
+};
+
+export type SubagentStatusSuccessResult = {
+  ok: true;
+  runs: SubagentStatusRunView[];
+};
+
+export type SubagentStatusFailureResult = {
+  ok: false;
+  runs: SubagentStatusRunView[];
+  error: string;
+};
+
+export type SubagentStatusResult = SubagentStatusSuccessResult | SubagentStatusFailureResult;
+
+export type SubagentCancelSuccessResult = {
+  ok: true;
+  run: SubagentStatusRunView;
+};
+
+export type SubagentCancelFailureResult = {
+  ok: false;
+  error: string;
+  run?: SubagentStatusRunView;
+};
+
+export type SubagentCancelResult = SubagentCancelSuccessResult | SubagentCancelFailureResult;
+
+export type A2ASendSuccessResult = {
+  ok: true;
+  toAgentId: string;
+  responseText: string;
+  depth?: number;
+  hops?: number;
+};
+
+export type A2ASendFailureResult = {
+  ok: false;
+  toAgentId: string;
+  error: string;
+  depth?: number;
+  hops?: number;
+};
+
+export type A2ASendResult = A2ASendSuccessResult | A2ASendFailureResult;
+
+export type A2ABroadcastResult =
+  | {
+      ok: true;
+      results: A2ASendSuccessResult[];
     }
-  >;
-  error?: string;
-}
-
-export interface SubagentCancelResult {
-  ok: boolean;
-  run?: DelegationRunRecord & {
-    live?: boolean;
-    cancelable?: boolean;
-  };
-  error?: string;
-}
+  | {
+      ok: false;
+      error: string;
+      results: A2ASendResult[];
+    };
 
 export interface BrewvaToolOrchestration {
   a2a?: {
@@ -414,14 +472,7 @@ export interface BrewvaToolOrchestration {
       correlationId?: string;
       depth?: number;
       hops?: number;
-    }): Promise<{
-      ok: boolean;
-      toAgentId: string;
-      responseText?: string;
-      error?: string;
-      depth?: number;
-      hops?: number;
-    }>;
+    }): Promise<A2ASendResult>;
     broadcast(input: {
       fromSessionId: string;
       fromAgentId?: string;
@@ -430,18 +481,7 @@ export interface BrewvaToolOrchestration {
       correlationId?: string;
       depth?: number;
       hops?: number;
-    }): Promise<{
-      ok: boolean;
-      error?: string;
-      results: Array<{
-        toAgentId: string;
-        ok: boolean;
-        responseText?: string;
-        error?: string;
-        depth?: number;
-        hops?: number;
-      }>;
-    }>;
+    }): Promise<A2ABroadcastResult>;
     listAgents(input?: { includeDeleted?: boolean }): Promise<
       Array<{
         agentId: string;

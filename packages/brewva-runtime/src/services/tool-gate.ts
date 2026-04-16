@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { asBrewvaToolCallId, asBrewvaToolName } from "../contracts/index.js";
 import type {
   BrewvaEventRecord,
   ContextBudgetUsage,
@@ -745,8 +746,8 @@ export class ToolGateService {
       issuer: "brewva.runtime.tool-gate",
       subject: `tool:${normalizedToolName}`,
       payload: {
-        toolName: normalizedToolName,
-        toolCallId: input.toolCallId.trim(),
+        toolName: asBrewvaToolName(normalizedToolName),
+        toolCallId: asBrewvaToolCallId(input.toolCallId.trim()),
         boundary: "effectful",
         effects: [...descriptor.effects],
         defaultRisk: descriptor.defaultRisk,

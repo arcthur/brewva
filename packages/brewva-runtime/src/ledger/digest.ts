@@ -1,4 +1,5 @@
 import type { EvidenceLedgerRow, LedgerDigest } from "../contracts/index.js";
+import { asBrewvaSessionId } from "../contracts/index.js";
 import { estimateTokenCount } from "../utils/token.js";
 
 const INFRASTRUCTURE_TOOLS = new Set([
@@ -47,7 +48,7 @@ export function buildLedgerDigest(
 
   return {
     generatedAt: Date.now(),
-    sessionId,
+    sessionId: asBrewvaSessionId(sessionId),
     records,
     summary,
   };

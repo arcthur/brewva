@@ -380,6 +380,12 @@ The read-path warning shape carries recovery-specific fields such as
 - `context_compaction_gate_blocked_tool`
 - `cost_update`
 - `budget_alert`
+- `compaction_integrity_violation`
+- `parallel_slot_rejected`
+- `recovery_wal_appended`
+- `recovery_wal_status_changed`
+- `recovery_wal_recovery_completed`
+- `recovery_wal_compacted`
 
 ### Skill Lifecycle And Budget
 
@@ -514,6 +520,10 @@ proposal objects and they do not themselves create approval-bearing requests.
 ### Context And Watchdog
 
 - `context_composed`
+- `context_arena_slo_enforced`
+- `context_injected`
+- `context_injection_dropped`
+- `context_usage`
 - `tool_surface_resolved`
 - `skill_recommendation_derived`
 - `identity_parse_warning`
@@ -580,6 +590,7 @@ inspection.
 - `subagent_cancelled`
 - `subagent_outcome_parse_failed`
 - `subagent_delivery_surfaced`
+- `subagent_skill_output_validation_failed`
 - `worker_results_applied`
 - `worker_results_apply_failed`
 

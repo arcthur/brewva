@@ -2,6 +2,7 @@ import type { ReasoningCheckpointBoundary } from "@brewva/brewva-runtime";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolOptions } from "./types.js";
+import { readLiteral } from "./utils/literal.js";
 import { failTextResult, textResult } from "./utils/result.js";
 import { getSessionId } from "./utils/session.js";
 import { defineBrewvaTool } from "./utils/tool.js";
@@ -15,12 +16,7 @@ const CHECKPOINT_BOUNDARIES = [
 ] as const satisfies readonly ReasoningCheckpointBoundary[];
 
 function normalizeBoundary(value: unknown): ReasoningCheckpointBoundary {
-  if (typeof value !== "string") {
-    return "operator_marker";
-  }
-  return CHECKPOINT_BOUNDARIES.includes(value as never)
-    ? (value as ReasoningCheckpointBoundary)
-    : "operator_marker";
+  return readLiteral(value, CHECKPOINT_BOUNDARIES) ?? "operator_marker";
 }
 
 export function createReasoningCheckpointTool(options: BrewvaBundledToolOptions): ToolDefinition {

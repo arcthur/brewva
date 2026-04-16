@@ -12,10 +12,7 @@ export interface GovernanceVerifySpecInput {
   report: VerificationReport;
 }
 
-export interface GovernanceVerifySpecOutput {
-  ok: boolean;
-  reason?: string;
-}
+export type GovernanceVerifySpecOutput = { ok: true } | { ok: false; reason: string };
 
 export interface GovernanceCostAnomalyInput {
   sessionId: string;
@@ -33,10 +30,7 @@ export interface GovernanceCompactionIntegrityInput {
   violations: string[];
 }
 
-export interface GovernanceCompactionIntegrityOutput {
-  ok: boolean;
-  reason?: string;
-}
+export type GovernanceCompactionIntegrityOutput = { ok: true } | { ok: false; reason: string };
 
 export interface GovernanceAuthorizeEffectCommitmentInput {
   sessionId: string;

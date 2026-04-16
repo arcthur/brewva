@@ -30,6 +30,7 @@ import {
 import {
   DELIBERATION_MEMORY_STATE_SCHEMA,
   type DeliberationMemoryArtifact,
+  type DeliberationMemoryArtifactMetadata,
   type DeliberationMemoryEvidenceRef,
   type DeliberationMemoryRetentionSnapshot,
   type DeliberationMemoryRetrieval,
@@ -195,7 +196,7 @@ function createArtifact(input: {
   applicabilityScope: DeliberationMemoryArtifact["applicabilityScope"];
   sessionIds: readonly string[];
   evidence: readonly DeliberationMemoryEvidenceRef[];
-  metadata?: Record<string, unknown>;
+  metadata?: DeliberationMemoryArtifactMetadata;
 }): DeliberationMemoryArtifact {
   return {
     id: input.id,
@@ -230,9 +231,10 @@ function resolveScopeRetentionBias(
       return 0.92;
     case "loop":
       return 0.86;
-    default:
-      return 0.85;
   }
+
+  const exhaustive: never = scope;
+  return exhaustive;
 }
 
 function resolveKindRetentionBias(kind: DeliberationMemoryArtifact["kind"]): number {
@@ -245,9 +247,10 @@ function resolveKindRetentionBias(kind: DeliberationMemoryArtifact["kind"]): num
       return 0.93;
     case "loop_memory":
       return 0.84;
-    default:
-      return 0.85;
   }
+
+  const exhaustive: never = kind;
+  return exhaustive;
 }
 
 export function resolveDeliberationMemoryRetentionSnapshot(input: {
@@ -1048,8 +1051,7 @@ export function retrieveDeliberationMemoryArtifacts(input: {
 
 function renderContextEntry(artifact: DeliberationMemoryArtifact): string {
   const retention = artifact.metadata?.retention;
-  const repositoryRoot =
-    typeof artifact.metadata?.repositoryRoot === "string" ? artifact.metadata.repositoryRoot : null;
+  const repositoryRoot = artifact.metadata?.repositoryRoot ?? null;
   return [
     `[DeliberationMemory:${artifact.kind}:${artifact.id}]`,
     `title: ${artifact.title}`,
@@ -1065,9 +1067,7 @@ function renderContextEntry(artifact: DeliberationMemoryArtifact): string {
 }
 
 function getArtifactRepositoryRoot(artifact: DeliberationMemoryArtifact): string | null {
-  return typeof artifact.metadata?.repositoryRoot === "string"
-    ? artifact.metadata.repositoryRoot
-    : null;
+  return artifact.metadata?.repositoryRoot ?? null;
 }
 
 function createEmptyDeliberationMemoryState(

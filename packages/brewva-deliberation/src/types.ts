@@ -33,6 +33,15 @@ export interface DeliberationMemoryRetentionSnapshot {
   band: DeliberationMemoryRetentionBand;
 }
 
+export interface DeliberationMemoryArtifactMetadata {
+  retention?: DeliberationMemoryRetentionSnapshot;
+  repositoryRoot?: string;
+  taskSpecCount?: number;
+  loopKey?: string;
+  metricCount?: number;
+  guardCount?: number;
+}
+
 export interface DeliberationMemoryArtifact {
   id: string;
   kind: DeliberationMemoryArtifactKind;
@@ -46,9 +55,7 @@ export interface DeliberationMemoryArtifact {
   applicabilityScope: DeliberationMemoryApplicabilityScope;
   sessionIds: string[];
   evidence: DeliberationMemoryEvidenceRef[];
-  metadata?: Record<string, unknown> & {
-    retention?: DeliberationMemoryRetentionSnapshot;
-  };
+  metadata?: DeliberationMemoryArtifactMetadata;
 }
 
 export interface DeliberationMemorySessionDigest {
@@ -82,11 +89,17 @@ export const OPTIMIZATION_LINEAGE_STATUS_VALUES = [
 
 export type OptimizationLineageStatus = (typeof OPTIMIZATION_LINEAGE_STATUS_VALUES)[number];
 
+export const OPTIMIZATION_METRIC_DIRECTION_VALUES = ["increase", "decrease", "unknown"] as const;
+export type OptimizationMetricDirection = (typeof OPTIMIZATION_METRIC_DIRECTION_VALUES)[number];
+
+export const OPTIMIZATION_CONTINUITY_MODE_VALUES = ["inherit", "fresh"] as const;
+export type OptimizationContinuityMode = (typeof OPTIMIZATION_CONTINUITY_MODE_VALUES)[number];
+
 export type OptimizationEvidenceRef = DeliberationMemoryEvidenceRef;
 
 export interface OptimizationMetricSnapshot {
   metricKey: string;
-  direction?: string;
+  direction: OptimizationMetricDirection;
   unit?: string;
   aggregation?: string;
   minDelta?: number;
@@ -130,6 +143,12 @@ export interface OptimizationEscalationSnapshot {
   active: boolean;
 }
 
+export interface OptimizationLineageMetadata {
+  stuckSignalCount: number;
+  latestIterationOutcome?: string | null;
+  nextRunAt?: number | null;
+}
+
 export interface OptimizationLineageArtifact {
   id: string;
   loopKey: string;
@@ -138,7 +157,7 @@ export interface OptimizationLineageArtifact {
   goal?: string;
   summary: string;
   scope: string[];
-  continuityMode?: string;
+  continuityMode?: OptimizationContinuityMode;
   status: OptimizationLineageStatus;
   runCount: number;
   lineageSessionIds: string[];
@@ -153,7 +172,7 @@ export interface OptimizationLineageArtifact {
   firstObservedAt: number;
   lastObservedAt: number;
   evidence: OptimizationEvidenceRef[];
-  metadata?: Record<string, unknown>;
+  metadata?: OptimizationLineageMetadata;
 }
 
 export interface OptimizationContinuityState {

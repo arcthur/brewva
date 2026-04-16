@@ -21,6 +21,7 @@ import {
   normalizeAgentId,
   parseTaskSpec,
   type ManagedToolMode,
+  type RuntimeResult,
   type TaskSpec,
 } from "@brewva/brewva-runtime";
 import { formatISO } from "date-fns";
@@ -112,6 +113,16 @@ function printStartupError(error: unknown): void {
   }
   const message = error instanceof Error ? error.message : String(error);
   console.error(`Error: ${message}`);
+}
+
+type CliValueResult<T> = RuntimeResult<{ value: T }>;
+
+function okCliValue<T>(value: T): CliValueResult<T> {
+  return { ok: true, value };
+}
+
+function cliValueError(error: string): CliValueResult<never> {
+  return { ok: false, error };
 }
 
 function printHelp(): void {
@@ -407,35 +418,31 @@ function describeFlagValue(raw: unknown): string {
   }
 }
 
-function resolveManagedToolModeFlag(raw: unknown): { value: ManagedToolMode; error?: string } {
+function resolveManagedToolModeFlag(raw: unknown): CliValueResult<ManagedToolMode> {
   if (raw === undefined) {
-    return { value: "runtime_plugin" };
+    return okCliValue("runtime_plugin");
   }
   if (raw === "runtime_plugin" || raw === "direct") {
-    return { value: raw };
+    return okCliValue(raw);
   }
-  return {
-    value: "runtime_plugin",
-    error: `Error: --managed-tools must be "runtime_plugin" or "direct" (received "${describeFlagValue(raw)}").`,
-  };
+  return cliValueError(
+    `Error: --managed-tools must be "runtime_plugin" or "direct" (received "${describeFlagValue(raw)}").`,
+  );
 }
 
-function parseOptionalIntegerFlag(
-  name: string,
-  raw: unknown,
-): { value: number | undefined; error?: string } {
+function parseOptionalIntegerFlag(name: string, raw: unknown): CliValueResult<number | undefined> {
   if (typeof raw !== "string") {
-    return { value: undefined };
+    return okCliValue(undefined);
   }
   const normalized = raw.trim();
   if (!normalized) {
-    return { value: undefined, error: `Error: --${name} must be an integer.` };
+    return cliValueError(`Error: --${name} must be an integer.`);
   }
   const value = Number(normalized);
   if (!Number.isFinite(value) || !Number.isInteger(value)) {
-    return { value: undefined, error: `Error: --${name} must be an integer.` };
+    return cliValueError(`Error: --${name} must be an integer.`);
   }
-  return { value };
+  return okCliValue(value);
 }
 
 function parseCliArgs(argv: string[]): CliParseResult {
@@ -497,7 +504,7 @@ function parseCliArgs(argv: string[]): CliParseResult {
     return { kind: "error" };
   }
   const managedToolMode = resolveManagedToolModeFlag(parsed.values["managed-tools"]);
-  if (managedToolMode.error) {
+  if (!managedToolMode.ok) {
     console.error(managedToolMode.error);
     return { kind: "error" };
   }
@@ -507,7 +514,7 @@ function parseCliArgs(argv: string[]): CliParseResult {
     "telegram-poll-timeout",
     parsed.values["telegram-poll-timeout"],
   );
-  if (pollTimeout.error) {
+  if (!pollTimeout.ok) {
     console.error(pollTimeout.error);
     return { kind: "error" };
   }
@@ -515,7 +522,7 @@ function parseCliArgs(argv: string[]): CliParseResult {
     "telegram-poll-limit",
     parsed.values["telegram-poll-limit"],
   );
-  if (pollLimit.error) {
+  if (!pollLimit.ok) {
     console.error(pollLimit.error);
     return { kind: "error" };
   }
@@ -523,7 +530,7 @@ function parseCliArgs(argv: string[]): CliParseResult {
     "telegram-poll-retry-ms",
     parsed.values["telegram-poll-retry-ms"],
   );
-  if (pollRetryMs.error) {
+  if (!pollRetryMs.ok) {
     console.error(pollRetryMs.error);
     return { kind: "error" };
   }
@@ -678,7 +685,7 @@ async function runOnboardCli(argv: string[]): Promise<number> {
   if (installDaemon) {
     pushOnboardBooleanFlag(gatewayArgs, "no-start", parsed.values["no-start"]);
     const managedToolMode = resolveManagedToolModeFlag(parsed.values["managed-tools"]);
-    if (managedToolMode.error) {
+    if (!managedToolMode.ok) {
       console.error(managedToolMode.error);
       return 1;
     }
@@ -712,12 +719,12 @@ async function runOnboardCli(argv: string[]): Promise<number> {
   return gatewayResult.exitCode;
 }
 
-function loadTaskSpec(parsed: CliArgs): { spec?: TaskSpec; error?: string } {
+function loadTaskSpec(parsed: CliArgs): CliValueResult<TaskSpec | undefined> {
   if (!parsed.taskJson && !parsed.taskFile) {
-    return {};
+    return okCliValue(undefined);
   }
   if (parsed.taskJson && parsed.taskFile) {
-    return { error: "Error: use only one of --task or --task-file." };
+    return cliValueError("Error: use only one of --task or --task-file.");
   }
 
   let raw = "";
@@ -728,9 +735,9 @@ function loadTaskSpec(parsed: CliArgs): { spec?: TaskSpec; error?: string } {
     try {
       raw = readFileSync(absolute, "utf8");
     } catch (error) {
-      return {
-        error: `Error: failed to read TaskSpec file (${absolute}): ${error instanceof Error ? error.message : String(error)}`,
-      };
+      return cliValueError(
+        `Error: failed to read TaskSpec file (${absolute}): ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -738,16 +745,16 @@ function loadTaskSpec(parsed: CliArgs): { spec?: TaskSpec; error?: string } {
   try {
     value = JSON.parse(raw);
   } catch (error) {
-    return {
-      error: `Error: failed to parse TaskSpec JSON (${error instanceof Error ? error.message : String(error)}).`,
-    };
+    return cliValueError(
+      `Error: failed to parse TaskSpec JSON (${error instanceof Error ? error.message : String(error)}).`,
+    );
   }
 
   const result = parseTaskSpec(value);
   if (!result.ok) {
-    return { error: `Error: invalid TaskSpec: ${result.error}` };
+    return cliValueError(`Error: invalid TaskSpec: ${result.error}`);
   }
-  return { spec: result.spec };
+  return okCliValue(result.spec);
 }
 
 async function readPipedStdin(): Promise<string | undefined> {
@@ -1015,13 +1022,13 @@ async function run(): Promise<void> {
 
   const pipedInput = await readPipedStdin();
   const taskResolved = loadTaskSpec(parsed);
-  if (taskResolved.error) {
+  if (!taskResolved.ok) {
     console.error(taskResolved.error);
     process.exitCode = 1;
     return;
   }
 
-  let taskSpec = taskResolved.spec;
+  let taskSpec = taskResolved.value;
   let initialMessage = parsed.prompt ?? pipedInput;
   if (taskSpec && parsed.prompt) {
     taskSpec = { ...taskSpec, goal: parsed.prompt.trim() };

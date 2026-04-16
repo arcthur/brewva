@@ -151,6 +151,9 @@ describe("Gap remediation: parallel result lifecycle", () => {
     });
 
     expect(report.status).toBe("applied");
+    if (report.status !== "applied") {
+      throw new Error("expected applied worker report");
+    }
     requireNonEmptyString(report.appliedPatchSetId, "missing applied patch set id");
     expect(report.appliedPaths).toEqual(["src/value.ts"]);
     expect(readFileSync(filePath, "utf8")).toBe(afterText);
@@ -210,6 +213,9 @@ describe("Gap remediation: parallel result lifecycle", () => {
     });
 
     expect(report.status).toBe("apply_failed");
+    if (report.status !== "apply_failed") {
+      throw new Error("expected apply_failed worker report");
+    }
     expect(report.reason).toBe("missing_artifact");
     expect(readFileSync(filePath, "utf8")).toBe(beforeText);
     expect(runtime.inspect.session.listWorkerResults(sessionId)).toHaveLength(1);

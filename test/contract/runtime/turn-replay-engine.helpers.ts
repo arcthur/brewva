@@ -2,6 +2,7 @@ import {
   TASK_EVENT_TYPE,
   TAPE_CHECKPOINT_EVENT_TYPE,
   TRUTH_EVENT_TYPE,
+  asBrewvaSessionId,
   buildItemAddedEvent,
   buildTapeCheckpointPayload,
   buildTruthFactUpsertedEvent,
@@ -16,7 +17,7 @@ export function taskEvent(input: {
 }): BrewvaEventRecord {
   return {
     id: input.id,
-    sessionId: input.sessionId,
+    sessionId: asBrewvaSessionId(input.sessionId),
     type: TASK_EVENT_TYPE,
     timestamp: input.timestamp,
     payload: buildItemAddedEvent({
@@ -34,7 +35,7 @@ export function truthEvent(input: {
 }): BrewvaEventRecord {
   return {
     id: input.id,
-    sessionId: input.sessionId,
+    sessionId: asBrewvaSessionId(input.sessionId),
     type: TRUTH_EVENT_TYPE,
     timestamp: input.timestamp,
     payload: buildTruthFactUpsertedEvent({
@@ -72,7 +73,7 @@ export function checkpointEvent(input: {
 }): BrewvaEventRecord {
   return {
     id: input.id,
-    sessionId: input.sessionId,
+    sessionId: asBrewvaSessionId(input.sessionId),
     type: TAPE_CHECKPOINT_EVENT_TYPE,
     timestamp: input.timestamp,
     payload: buildTapeCheckpointPayload({
@@ -127,7 +128,7 @@ export function toolResultFailureEvent(input: {
 }): BrewvaEventRecord {
   return {
     id: input.id,
-    sessionId: input.sessionId,
+    sessionId: asBrewvaSessionId(input.sessionId),
     type: "tool_result_recorded",
     timestamp: input.timestamp,
     turn: input.turn,
@@ -154,7 +155,7 @@ export function anchorEvent(input: {
 }): BrewvaEventRecord {
   return {
     id: input.id,
-    sessionId: input.sessionId,
+    sessionId: asBrewvaSessionId(input.sessionId),
     type: "anchor",
     timestamp: input.timestamp,
     payload: {

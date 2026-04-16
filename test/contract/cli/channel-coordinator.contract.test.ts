@@ -77,7 +77,9 @@ describe("channel coordinator", () => {
       task: "review this",
     });
     expect(result.ok).toBe(false);
-    expect(result.error).toBe("fanout_limit_exceeded:2");
+    if (!result.ok) {
+      expect(result.error).toBe("fanout_limit_exceeded:2");
+    }
   });
 
   test("discussion stops early when agent emits [DONE]", async () => {
@@ -135,7 +137,9 @@ describe("channel coordinator", () => {
       message: "ping",
     });
     expect(selfBlocked.ok).toBe(false);
-    expect(selfBlocked.error).toBe("a2a_self_target_blocked");
+    if (!selfBlocked.ok) {
+      expect(selfBlocked.error).toBe("a2a_self_target_blocked");
+    }
 
     const depthBlocked = await coordinator.a2aSend({
       fromSessionId: "s1",
@@ -144,7 +148,9 @@ describe("channel coordinator", () => {
       depth: 1,
     });
     expect(depthBlocked.ok).toBe(false);
-    expect(depthBlocked.error).toBe("a2a_depth_limit_exceeded");
+    if (!depthBlocked.ok) {
+      expect(depthBlocked.error).toBe("a2a_depth_limit_exceeded");
+    }
   });
 
   test("a2a broadcast enforces fanout limit", async () => {
@@ -170,7 +176,9 @@ describe("channel coordinator", () => {
       message: "ping",
     });
     expect(result.ok).toBe(false);
-    expect(result.error).toBe("fanout_limit_exceeded:2");
+    if (!result.ok) {
+      expect(result.error).toBe("fanout_limit_exceeded:2");
+    }
     expect(result.results).toEqual([]);
   });
 });

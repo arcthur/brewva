@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime";
 import {
   deriveDuplicateSideEffectSuppressionCount,
   deriveRecoveryCanonicalization,
@@ -9,7 +10,7 @@ describe("recovery read model", () => {
     const canonicalization = deriveRecoveryCanonicalization([
       {
         id: "ev-skill-1",
-        sessionId: "s-recovery-read-model",
+        sessionId: asBrewvaSessionId("s-recovery-read-model"),
         type: "skill_activated",
         timestamp: 1,
         turn: 1,
@@ -32,7 +33,7 @@ describe("recovery read model", () => {
     const canonicalization = deriveRecoveryCanonicalization([
       {
         id: "ev-unclean-1",
-        sessionId: "s-recovery-read-model",
+        sessionId: asBrewvaSessionId("s-recovery-read-model"),
         type: "unclean_shutdown_reconciled",
         timestamp: 5,
         turn: 1,
@@ -72,7 +73,7 @@ describe("recovery read model", () => {
     const canonicalization = deriveRecoveryCanonicalization([
       {
         id: "ev-unclean-1",
-        sessionId: "s-recovery-read-model",
+        sessionId: asBrewvaSessionId("s-recovery-read-model"),
         type: "unclean_shutdown_reconciled",
         timestamp: 5,
         turn: 1,
@@ -93,7 +94,7 @@ describe("recovery read model", () => {
       },
       {
         id: "ev-transition-1",
-        sessionId: "s-recovery-read-model",
+        sessionId: asBrewvaSessionId("s-recovery-read-model"),
         type: "session_turn_transition",
         timestamp: 6,
         turn: 2,
@@ -119,7 +120,7 @@ describe("recovery read model", () => {
       deriveDuplicateSideEffectSuppressionCount([
         {
           id: "ev-blocked-1",
-          sessionId: "s-recovery-read-model",
+          sessionId: asBrewvaSessionId("s-recovery-read-model"),
           type: "tool_call_blocked",
           timestamp: 10,
           turn: 2,
@@ -130,7 +131,7 @@ describe("recovery read model", () => {
         },
         {
           id: "ev-blocked-2",
-          sessionId: "s-recovery-read-model",
+          sessionId: asBrewvaSessionId("s-recovery-read-model"),
           type: "tool_call_blocked",
           timestamp: 11,
           turn: 2,
@@ -141,7 +142,7 @@ describe("recovery read model", () => {
         },
         {
           id: "ev-blocked-3",
-          sessionId: "s-recovery-read-model",
+          sessionId: asBrewvaSessionId("s-recovery-read-model"),
           type: "tool_call_blocked",
           timestamp: 12,
           turn: 2,

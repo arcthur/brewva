@@ -1,3 +1,4 @@
+import type { BrewvaToolCallId, BrewvaToolName } from "./identifiers.js";
 import type { RollbackOutcome } from "./shared.js";
 import type { SkillRoutingScope } from "./skill.js";
 
@@ -36,8 +37,8 @@ export type ToolMutationRollbackKind = "patchset";
 
 export interface ToolMutationReceipt {
   id: string;
-  toolCallId: string;
-  toolName: string;
+  toolCallId: BrewvaToolCallId;
+  toolName: BrewvaToolName;
   boundary: "effectful";
   strategy: ToolMutationStrategy;
   rollbackKind: ToolMutationRollbackKind;
@@ -55,10 +56,10 @@ export type ToolMutationRollbackFailureReason =
   | "no_mutation_receipt"
   | PatchSetRollbackFailureReason;
 
-export interface ToolMutationRollbackResult extends RollbackOutcome<ToolMutationRollbackFailureReason> {
+export type ToolMutationRollbackResult = RollbackOutcome<ToolMutationRollbackFailureReason> & {
   receiptId?: string;
   patchSetId?: string;
   toolName?: string;
   strategy?: ToolMutationStrategy;
   rollbackKind?: ToolMutationRollbackKind;
-}
+};

@@ -1,3 +1,4 @@
+import type { BrewvaWalId } from "@brewva/brewva-runtime";
 import { validateSessionWireFramePayload } from "../../protocol/validate.js";
 import type {
   ParentToWorkerMessage,
@@ -119,7 +120,7 @@ export class SessionWorkerRpcController {
     });
   }
 
-  trackRecoveryWalId(handle: WorkerHandle, turnId: string, walId: string): void {
+  trackRecoveryWalId(handle: WorkerHandle, turnId: string, walId: BrewvaWalId): void {
     handle.activeRecoveryWalIds.set(turnId, walId);
     const pending = handle.pendingTurns.get(turnId);
     if (pending) {
@@ -127,7 +128,7 @@ export class SessionWorkerRpcController {
     }
   }
 
-  untrackRecoveryWalId(handle: WorkerHandle, turnId: string): string | undefined {
+  untrackRecoveryWalId(handle: WorkerHandle, turnId: string): BrewvaWalId | undefined {
     const walId = handle.activeRecoveryWalIds.get(turnId);
     handle.activeRecoveryWalIds.delete(turnId);
     return walId;

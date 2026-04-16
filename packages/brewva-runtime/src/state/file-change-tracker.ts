@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import type {
-  PatchApplyFailureReason,
+  PatchApplyResult,
   PatchFileAction,
   PatchSet,
   RollbackResult,
@@ -208,13 +208,7 @@ export class FileChangeTracker {
       patchSet: PatchSet;
       toolName: string;
     },
-  ): {
-    ok: boolean;
-    patchSetId?: string;
-    appliedPaths: string[];
-    failedPaths: string[];
-    reason?: PatchApplyFailureReason;
-  } {
+  ): PatchApplyResult {
     this.ensureHistoryLoaded(sessionId);
     if (input.patchSet.changes.length === 0) {
       return {

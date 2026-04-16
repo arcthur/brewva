@@ -19,6 +19,7 @@ import {
   type ToolExecutionBoundary,
 } from "@brewva/brewva-runtime";
 import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { recordSessionTurnTransition } from "../session/turn-transition.js";
 
@@ -28,6 +29,13 @@ type DelegationEvent = Pick<BrewvaStructuredEvent, "sessionId" | "type" | "times
 
 function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function readSessionId(
+  value: unknown,
+): import("@brewva/brewva-runtime").BrewvaSessionId | undefined {
+  const s = readString(value);
+  return s !== undefined ? asBrewvaSessionId(s) : undefined;
 }
 
 function readRunStatus(value: unknown): DelegationRunStatus | undefined {
@@ -346,7 +354,7 @@ function applyDelegationEvent(
       createdAt: existing?.createdAt ?? event.timestamp,
       updatedAt: event.timestamp,
       label: readString(payload?.label) ?? existing?.label,
-      workerSessionId: readString(payload?.childSessionId) ?? existing?.workerSessionId,
+      workerSessionId: readSessionId(payload?.childSessionId) ?? existing?.workerSessionId,
       parentSkill: readString(payload?.parentSkill) ?? existing?.parentSkill,
       kind: readDelegationKind(payload?.kind) ?? existing?.kind,
       consultKind: readDelegationConsultKind(payload?.consultKind, payload, existing),
@@ -378,7 +386,7 @@ function applyDelegationEvent(
       createdAt: existing?.createdAt ?? event.timestamp,
       updatedAt: event.timestamp,
       label: readString(payload?.label) ?? existing?.label,
-      workerSessionId: readString(payload?.childSessionId) ?? existing?.workerSessionId,
+      workerSessionId: readSessionId(payload?.childSessionId) ?? existing?.workerSessionId,
       parentSkill: readString(payload?.parentSkill) ?? existing?.parentSkill,
       kind: readDelegationKind(payload?.kind) ?? existing?.kind,
       consultKind: readDelegationConsultKind(payload?.consultKind, payload, existing),
@@ -460,7 +468,7 @@ function applyDelegationEvent(
       createdAt: existing?.createdAt ?? event.timestamp,
       updatedAt: event.timestamp,
       label: readString(payload?.label) ?? existing?.label,
-      workerSessionId: readString(payload?.childSessionId) ?? existing?.workerSessionId,
+      workerSessionId: readSessionId(payload?.childSessionId) ?? existing?.workerSessionId,
       parentSkill: readString(payload?.parentSkill) ?? existing?.parentSkill,
       kind: readDelegationKind(payload?.kind) ?? existing?.kind,
       consultKind: readDelegationConsultKind(payload?.consultKind, payload, existing),

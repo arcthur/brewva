@@ -264,9 +264,17 @@ describe("optimization continuity plane", () => {
       );
 
       expect(inheritedLineage?.metric?.latestValue).toBe(76);
+      expect(inheritedLineage?.metric?.direction).toBe("increase");
+      expect(inheritedLineage?.continuityMode).toBe("inherit");
       expect(inheritedLineage?.lineageSessionIds).toEqual([childSessionId, parentSessionId]);
+      expect(inheritedLineage?.metadata).toEqual({
+        stuckSignalCount: 0,
+        latestIterationOutcome: "progress",
+        nextRunAt: 1_710_000_086_400,
+      });
       expect(inheritedLineage?.status).toBe("scheduled");
       expect(freshLineage?.metric?.latestValue).toBe(99);
+      expect(freshLineage?.continuityMode).toBe("fresh");
       expect(freshLineage?.lineageSessionIds).toEqual([freshSessionId]);
 
       const afterSyncEntries: Array<{ id: string; content: string }> = [];

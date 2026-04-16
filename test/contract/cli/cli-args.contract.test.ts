@@ -175,4 +175,14 @@ describe("brewva cli args", () => {
       true,
     );
   });
+
+  test("given invalid managed tools mode, when parsing args, then parser rejects the flag", () => {
+    const { result, errors } = captureConsole(() =>
+      parseArgs(["--managed-tools", "invalid-mode", "--print", "hello"]),
+    );
+    expect(result).toBeNull();
+    expect(
+      errors.some((line) => line.includes('--managed-tools must be "runtime_plugin" or "direct"')),
+    ).toBe(true);
+  });
 });

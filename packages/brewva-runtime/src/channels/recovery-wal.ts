@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { resolve } from "node:path";
 import type {
+  BrewvaWalId,
   BrewvaConfig,
   IntegrityIssue,
   RecoveryWalIngressWatermarkRecord,
@@ -18,6 +19,7 @@ import type {
   RecoveryWalSource,
   RecoveryWalStatus,
 } from "../contracts/index.js";
+import { asBrewvaSessionId, asBrewvaWalId } from "../contracts/index.js";
 import { ensureDir, writeFileAtomic } from "../utils/fs.js";
 import { assertTurnEnvelope, type TurnEnvelope } from "./turn.js";
 
@@ -43,7 +45,7 @@ export interface RecoveryWalCompactResult {
 }
 
 interface RecoveryWalFileCache {
-  readonly rowsByWalId: Map<string, RecoveryWalRecord>;
+  readonly rowsByWalId: Map<BrewvaWalId, RecoveryWalRecord>;
   readonly ingressWatermarksByKey: Map<string, RecoveryWalIngressWatermarkRecord>;
   byteOffset: number;
   trailingFragment: string;
@@ -119,9 +121,9 @@ function parseRecoveryWalRecord(line: string): RecoveryWalRecord | null {
 
   const row: RecoveryWalRecord = {
     schema: "brewva.recovery-wal.v1",
-    walId: value.walId,
+    walId: asBrewvaWalId(value.walId),
     turnId: value.turnId,
-    sessionId: value.sessionId,
+    sessionId: asBrewvaSessionId(value.sessionId),
     channel: value.channel,
     conversationId: value.conversationId,
     status: value.status,
@@ -366,9 +368,9 @@ export class RecoveryWalStore {
 
     const row: RecoveryWalRecord = {
       schema: "brewva.recovery-wal.v1",
-      walId: `wal_${timestamp}_${randomUUID()}`,
+      walId: asBrewvaWalId(`wal_${timestamp}_${randomUUID()}`),
       turnId,
-      sessionId,
+      sessionId: asBrewvaSessionId(sessionId),
       channel,
       conversationId,
       status: "pending",
@@ -388,23 +390,23 @@ export class RecoveryWalStore {
     return cloneRecoveryWalRecord(row);
   }
 
-  markInflight(walId: string): RecoveryWalRecord | undefined {
+  markInflight(walId: BrewvaWalId): RecoveryWalRecord | undefined {
     return this.transitionStatus(walId, "inflight", {
       attemptsDelta: 1,
     });
   }
 
-  markDone(walId: string): RecoveryWalRecord | undefined {
+  markDone(walId: BrewvaWalId): RecoveryWalRecord | undefined {
     return this.transitionStatus(walId, "done");
   }
 
-  markFailed(walId: string, error?: string): RecoveryWalRecord | undefined {
+  markFailed(walId: BrewvaWalId, error?: string): RecoveryWalRecord | undefined {
     return this.transitionStatus(walId, "failed", {
       error: normalizeOptionalString(error),
     });
   }
 
-  markExpired(walId: string): RecoveryWalRecord | undefined {
+  markExpired(walId: BrewvaWalId): RecoveryWalRecord | undefined {
     return this.transitionStatus(walId, "expired");
   }
 
@@ -576,7 +578,7 @@ export class RecoveryWalStore {
   }
 
   private transitionStatus(
-    walId: string,
+    walId: BrewvaWalId,
     status: RecoveryWalStatus,
     options: {
       attemptsDelta?: number;

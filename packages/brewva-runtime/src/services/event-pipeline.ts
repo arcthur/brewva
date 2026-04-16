@@ -6,6 +6,7 @@ import type {
   BrewvaReplaySession,
   BrewvaStructuredEvent,
 } from "../contracts/index.js";
+import { asBrewvaSessionId } from "../contracts/index.js";
 import {
   AGENT_END_EVENT_TYPE,
   BUDGET_ALERT_EVENT_TYPE,
@@ -89,6 +90,7 @@ import {
   SUBAGENT_FAILED_EVENT_TYPE,
   SUBAGENT_OUTCOME_PARSE_FAILED_EVENT_TYPE,
   SUBAGENT_RUNNING_EVENT_TYPE,
+  SUBAGENT_SKILL_OUTPUT_VALIDATION_FAILED_EVENT_TYPE,
   SUBAGENT_SPAWNED_EVENT_TYPE,
   TASK_STALL_ADJUDICATED_EVENT_TYPE,
   TASK_STALL_ADJUDICATION_ERROR_EVENT_TYPE,
@@ -119,6 +121,19 @@ import {
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
   WORKER_RESULTS_APPLIED_EVENT_TYPE,
   WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
+  CONTEXT_ARENA_SLO_ENFORCED_EVENT_TYPE,
+  CONTEXT_INJECTED_EVENT_TYPE,
+  CONTEXT_INJECTION_DROPPED_EVENT_TYPE,
+  CONTEXT_USAGE_EVENT_TYPE,
+  PARALLEL_SLOT_REJECTED_EVENT_TYPE,
+  COMPACTION_INTEGRITY_VIOLATION_EVENT_TYPE,
+  PROJECTION_INGESTED_EVENT_TYPE,
+  PROJECTION_REFRESHED_EVENT_TYPE,
+  TOOL_SURFACE_RESOLVED_EVENT_TYPE,
+  RECOVERY_WAL_APPENDED_EVENT_TYPE,
+  RECOVERY_WAL_STATUS_CHANGED_EVENT_TYPE,
+  RECOVERY_WAL_RECOVERY_COMPLETED_EVENT_TYPE,
+  RECOVERY_WAL_COMPACTED_EVENT_TYPE,
 } from "../events/event-types.js";
 import { BrewvaEventStore } from "../events/store.js";
 import { SCHEDULE_EVENT_TYPE } from "../schedule/events.js";
@@ -273,35 +288,37 @@ const OPS_EVENT_TYPES = new Set<string>([
   CHANNEL_UPDATE_LOCK_BLOCKED_EVENT_TYPE,
   CHANNEL_UPDATE_REQUESTED_EVENT_TYPE,
   "channel_workspace_cost_summary",
-  "context_arena_slo_enforced",
-  "context_compaction_auto_completed",
-  "context_compaction_auto_failed",
-  "context_compaction_auto_requested",
-  "context_compaction_gate_cleared",
-  "context_compaction_skipped",
-  "context_injected",
-  "context_injection_dropped",
-  "context_usage",
+  CONTEXT_ARENA_SLO_ENFORCED_EVENT_TYPE,
+  CONTEXT_COMPACTION_AUTO_COMPLETED_EVENT_TYPE,
+  CONTEXT_COMPACTION_AUTO_FAILED_EVENT_TYPE,
+  CONTEXT_COMPACTION_AUTO_REQUESTED_EVENT_TYPE,
+  CONTEXT_COMPACTION_GATE_CLEARED_EVENT_TYPE,
+  CONTEXT_COMPACTION_SKIPPED_EVENT_TYPE,
+  COMPACTION_INTEGRITY_VIOLATION_EVENT_TYPE,
+  CONTEXT_INJECTED_EVENT_TYPE,
+  CONTEXT_INJECTION_DROPPED_EVENT_TYPE,
+  CONTEXT_USAGE_EVENT_TYPE,
   "exec_blocked_isolation",
   "exec_fallback_host",
   "exec_routed",
   "exec_sandbox_error",
   IDENTITY_PARSE_WARNING_EVENT_TYPE,
-  "parallel_slot_rejected",
-  "projection_ingested",
-  "projection_refreshed",
+  PARALLEL_SLOT_REJECTED_EVENT_TYPE,
+  PROJECTION_INGESTED_EVENT_TYPE,
+  PROJECTION_REFRESHED_EVENT_TYPE,
   SKILL_REFRESH_RECORDED_EVENT_TYPE,
+  SUBAGENT_SKILL_OUTPUT_VALIDATION_FAILED_EVENT_TYPE,
   "tool_parallel_read",
-  "tool_surface_resolved",
+  TOOL_SURFACE_RESOLVED_EVENT_TYPE,
 ]);
 
 const DEBUG_EVENT_TYPES = new Set<string>(["tool_parallel_read"]);
 
 const RECOVERY_WAL_EVENT_TYPES = new Set<string>([
-  "recovery_wal_appended",
-  "recovery_wal_status_changed",
-  "recovery_wal_recovery_completed",
-  "recovery_wal_compacted",
+  RECOVERY_WAL_APPENDED_EVENT_TYPE,
+  RECOVERY_WAL_STATUS_CHANGED_EVENT_TYPE,
+  RECOVERY_WAL_RECOVERY_COMPLETED_EVENT_TYPE,
+  RECOVERY_WAL_COMPACTED_EVENT_TYPE,
 ]);
 
 const RESERVED_RUNTIME_EVENT_PREFIXES = [
@@ -475,7 +492,7 @@ export class EventPipelineService {
       const events = this.events.list(sessionId);
       if (events.length === 0) continue;
       rows.push({
-        sessionId,
+        sessionId: asBrewvaSessionId(sessionId),
         eventCount: events.length,
         lastEventAt: events[events.length - 1]?.timestamp ?? 0,
       });

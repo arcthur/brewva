@@ -7,6 +7,7 @@ import {
   SessionBackendStateError,
   SessionSupervisor,
 } from "@brewva/brewva-gateway";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime";
 import { requireDefined } from "../../helpers/assertions.js";
 
 interface SentPromptMessage {
@@ -334,7 +335,7 @@ describe("session supervisor safeguards", () => {
           sessionId: "queued-session",
           frame: {
             schema: "brewva.session-wire.v2",
-            sessionId: "queued-session",
+            sessionId: asBrewvaSessionId("queued-session"),
             frameId: "live:turn-1",
             ts: Date.now(),
             source: "live",
@@ -432,7 +433,7 @@ describe("session supervisor safeguards", () => {
           sessionId: "completion-session",
           frame: {
             schema: "brewva.session-wire.v2",
-            sessionId: "completion-session",
+            sessionId: asBrewvaSessionId("completion-session"),
             frameId: "live:turn-complete",
             ts: Date.now(),
             source: "live",

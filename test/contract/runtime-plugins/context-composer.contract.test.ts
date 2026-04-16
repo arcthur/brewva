@@ -8,6 +8,7 @@ import {
   CONTEXT_SOURCES,
   CONTEXT_SOURCE_BUDGET_CLASSES,
   type ContextInjectionBudgetClass,
+  asBrewvaSessionId,
 } from "@brewva/brewva-runtime";
 import type { ContextInjectionEntry } from "@brewva/brewva-runtime/internal";
 
@@ -72,7 +73,7 @@ function createComposerRuntime(
           ...(options.pendingDelegations ?? []).map((run, index) => ({
             runId: run.runId,
             delegate: run.delegate,
-            parentSessionId: "compose-session",
+            parentSessionId: asBrewvaSessionId("compose-session"),
             status: run.status,
             createdAt: index + 1,
             updatedAt: index + 1,
@@ -80,7 +81,7 @@ function createComposerRuntime(
           ...(options.pendingDelegationOutcomes ?? []).map((run, index) => ({
             runId: run.runId,
             delegate: run.delegate,
-            parentSessionId: "compose-session",
+            parentSessionId: asBrewvaSessionId("compose-session"),
             status: run.status,
             createdAt: index + 11,
             updatedAt: index + 11,

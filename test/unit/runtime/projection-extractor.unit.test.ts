@@ -4,6 +4,8 @@ import {
   TASK_LEDGER_SCHEMA,
   TRUTH_EVENT_TYPE,
   TRUTH_LEDGER_SCHEMA,
+  asBrewvaEventType,
+  asBrewvaSessionId,
   type BrewvaEventRecord,
 } from "@brewva/brewva-runtime";
 import { extractProjectionFromEvent } from "../../../packages/brewva-runtime/src/projection/extractor.js";
@@ -17,8 +19,8 @@ function event(input: {
 }): BrewvaEventRecord {
   return {
     id: input.id,
-    sessionId: input.sessionId ?? "projection-extractor-session",
-    type: input.type,
+    sessionId: asBrewvaSessionId(input.sessionId ?? "projection-extractor-session"),
+    type: asBrewvaEventType(input.type),
     timestamp: input.timestamp ?? 1_700_000_000_000,
     payload: input.payload as BrewvaEventRecord["payload"],
   };

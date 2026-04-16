@@ -325,7 +325,7 @@ export class VerificationService {
         return;
       }
 
-      const reason = (result.reason ?? "unknown").trim() || "unknown";
+      const reason = result.reason.trim() || "unknown";
       this.recordEvent({
         sessionId,
         type: GOVERNANCE_VERIFY_SPEC_FAILED_EVENT_TYPE,

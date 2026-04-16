@@ -134,6 +134,11 @@ describe("workflow_status contract", () => {
       workerId: "worker-1",
       status: "ok",
       summary: "Patch result ready for merge/apply.",
+      patches: {
+        id: "ps-workflow-status-1",
+        createdAt: Date.now(),
+        changes: [{ path: "src/workflow-status.ts", action: "modify" }],
+      },
     });
 
     const tool = createWorkflowStatusTool({ runtime });

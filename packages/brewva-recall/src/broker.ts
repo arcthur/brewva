@@ -135,7 +135,7 @@ function collectStringLeaves(value: unknown, sink: string[]): void {
 }
 
 function extractEventSearchText(event: BrewvaEventRecord): string {
-  const parts = [event.type];
+  const parts: string[] = [event.type];
   if (isRecord(event.payload)) {
     const leaves: string[] = [];
     collectStringLeaves(event.payload, leaves);

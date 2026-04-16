@@ -121,7 +121,9 @@ describe("Gap remediation: rollback safety net", () => {
 
     const rollback = runtime.authority.tools.rollbackLastPatchSet(sessionId);
     expect(rollback.ok).toBe(false);
-    expect(rollback.reason).toBe("restore_failed");
+    if (!rollback.ok) {
+      expect(rollback.reason).toBe("restore_failed");
+    }
     expect(rollback.failedPaths).toContain("src/main.ts");
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 2;\n");
     expect(runtime.inspect.tools.resolveUndoSessionId(sessionId)).toBe(sessionId);

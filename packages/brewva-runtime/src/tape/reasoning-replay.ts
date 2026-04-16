@@ -1,4 +1,5 @@
 import type { BrewvaEventRecord } from "../contracts/index.js";
+import { asBrewvaSessionId } from "../contracts/index.js";
 import type {
   ActiveReasoningBranchState,
   ReasoningCheckpointRecord,
@@ -70,7 +71,7 @@ function hasRecordedBranchId(state: InternalReasoningBranchState, branchId: stri
 
 function createEmptyState(sessionId: string): InternalReasoningBranchState {
   return {
-    sessionId,
+    sessionId: asBrewvaSessionId(sessionId),
     rootBranchId: buildRootBranchId(sessionId),
     activeBranchId: buildRootBranchId(sessionId),
     activeBranchSequence: 0,

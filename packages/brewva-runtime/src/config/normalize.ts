@@ -1,4 +1,5 @@
 import type { BrewvaConfig, SkillRoutingScope, VerificationLevel } from "../contracts/index.js";
+import { asBrewvaIntentId, asBrewvaSessionId } from "../contracts/index.js";
 
 const VALID_COST_ACTIONS = new Set(["warn", "block_tools"]);
 const VALID_SECURITY_MODES = new Set(["permissive", "standard", "strict"]);
@@ -507,11 +508,15 @@ function normalizeScheduleConfig(
     ),
     selfImprove: {
       enabled: normalizeBoolean(selfImproveInput.enabled, defaults.selfImprove.enabled),
-      parentSessionId: normalizeNonEmptyString(
-        selfImproveInput.parentSessionId,
-        defaults.selfImprove.parentSessionId,
+      parentSessionId: asBrewvaSessionId(
+        normalizeNonEmptyString(
+          selfImproveInput.parentSessionId,
+          defaults.selfImprove.parentSessionId,
+        ),
       ),
-      intentId: normalizeNonEmptyString(selfImproveInput.intentId, defaults.selfImprove.intentId),
+      intentId: asBrewvaIntentId(
+        normalizeNonEmptyString(selfImproveInput.intentId, defaults.selfImprove.intentId),
+      ),
       reason: normalizeNonEmptyString(selfImproveInput.reason, defaults.selfImprove.reason),
       goalRef: normalizeNonEmptyString(selfImproveInput.goalRef, defaults.selfImprove.goalRef),
       continuityMode: normalizeStrictStringEnum(

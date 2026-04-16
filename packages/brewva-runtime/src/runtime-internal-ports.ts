@@ -1,19 +1,12 @@
-import type { BrewvaEventRecord, RecoveryWalRecord, RecoveryWalSource } from "./contracts/index.js";
+import type {
+  BrewvaEventRecord,
+  BrewvaWalId,
+  RecoveryWalRecord,
+  RecoveryWalSource,
+} from "./contracts/index.js";
 import { BREWVA_RUNTIME_METHOD_GROUPS } from "./runtime-symbols.js";
 import type { BrewvaHostedRuntimePort, BrewvaRuntime } from "./runtime.js";
-
-type RuntimeRecordEventInput<TPayload extends object> = {
-  sessionId: string;
-  type: string;
-  turn?: number;
-  timestamp?: number;
-  payload?: TPayload;
-  skipTapeCheckpoint?: boolean;
-};
-
-type RuntimeRecordEvent = <TPayload extends object>(
-  input: RuntimeRecordEventInput<TPayload>,
-) => BrewvaEventRecord | undefined;
+import type { RuntimeRecordEvent, RuntimeRecordEventInput } from "./services/event-pipeline.js";
 
 type InternalRecoveryWalPort = {
   appendPending(
@@ -21,10 +14,10 @@ type InternalRecoveryWalPort = {
     source: RecoveryWalSource,
     options?: { ttlMs?: number; dedupeKey?: string },
   ): RecoveryWalRecord;
-  markInflight(walId: string): RecoveryWalRecord | undefined;
-  markDone(walId: string): RecoveryWalRecord | undefined;
-  markFailed(walId: string, error?: string): RecoveryWalRecord | undefined;
-  markExpired(walId: string): RecoveryWalRecord | undefined;
+  markInflight(walId: BrewvaWalId): RecoveryWalRecord | undefined;
+  markDone(walId: BrewvaWalId): RecoveryWalRecord | undefined;
+  markFailed(walId: BrewvaWalId, error?: string): RecoveryWalRecord | undefined;
+  markExpired(walId: BrewvaWalId): RecoveryWalRecord | undefined;
   listPending(): RecoveryWalRecord[];
 };
 
@@ -71,10 +64,10 @@ export interface BrewvaSchedulerIngressPort {
     source: RecoveryWalSource,
     options?: { ttlMs?: number; dedupeKey?: string },
   ): RecoveryWalRecord;
-  markInflight(walId: string): RecoveryWalRecord | undefined;
-  markDone(walId: string): RecoveryWalRecord | undefined;
-  markFailed(walId: string, error?: string): RecoveryWalRecord | undefined;
-  markExpired(walId: string): RecoveryWalRecord | undefined;
+  markInflight(walId: BrewvaWalId): RecoveryWalRecord | undefined;
+  markDone(walId: BrewvaWalId): RecoveryWalRecord | undefined;
+  markFailed(walId: BrewvaWalId, error?: string): RecoveryWalRecord | undefined;
+  markExpired(walId: BrewvaWalId): RecoveryWalRecord | undefined;
   listPending(): RecoveryWalRecord[];
 }
 

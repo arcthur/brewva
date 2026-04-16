@@ -31,7 +31,7 @@ function createHostContext(): BrewvaHostContext {
       theme: {},
       getAllThemes: () => [],
       getTheme: () => undefined,
-      setTheme: () => ({ success: false }),
+      setTheme: () => ({ success: false, error: "unsupported" }),
       getToolsExpanded: () => false,
       setToolsExpanded: () => undefined,
     },

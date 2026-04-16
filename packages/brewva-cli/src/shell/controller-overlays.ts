@@ -1,3 +1,4 @@
+import { asBrewvaSessionId } from "@brewva/brewva-runtime";
 import { formatInspectAnalysisText } from "../inspect-analysis.js";
 import { buildSessionInspectReport } from "../inspect.js";
 import { buildTaskRunListLabel, buildTaskRunPreviewLines } from "./task-details.js";
@@ -380,7 +381,7 @@ export function buildSessionsOverlayPayload(input: {
   const currentSession = input.snapshot.sessions.find(
     (session) => session.sessionId === input.currentSessionId,
   ) ?? {
-    sessionId: input.currentSessionId,
+    sessionId: asBrewvaSessionId(input.currentSessionId),
     eventCount: 0,
     lastEventAt: 0,
   };

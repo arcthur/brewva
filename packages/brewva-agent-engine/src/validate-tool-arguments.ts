@@ -2,6 +2,22 @@ import AjvModule from "ajv";
 import addFormatsModule from "ajv-formats";
 import type { BrewvaAgentEngineTool, BrewvaAgentEngineToolCall } from "./agent-engine-types.js";
 
+declare const validatedToolArgumentsBrand: unique symbol;
+
+export type BrewvaValidatedToolArguments = Record<string, unknown> & {
+  readonly [validatedToolArgumentsBrand]: "BrewvaValidatedToolArguments";
+};
+
+export type BrewvaToolArgumentValidationResult =
+  | {
+      ok: true;
+      args: BrewvaValidatedToolArguments;
+    }
+  | {
+      ok: false;
+      error: string;
+    };
+
 type ValidationError = {
   instancePath: string;
   message?: string;
@@ -77,15 +93,21 @@ export function prepareToolArguments(
 export function validateToolArguments(
   tool: BrewvaAgentEngineTool,
   toolCall: BrewvaAgentEngineToolCall,
-): unknown {
+): BrewvaToolArgumentValidationResult {
   if (!ajv || !canUseRuntimeCodegen()) {
-    return toolCall.arguments;
+    return {
+      ok: true,
+      args: toolCall.arguments as BrewvaValidatedToolArguments,
+    };
   }
 
   const validate = ajv.compile(tool.parameters);
   const args = structuredClone(toolCall.arguments);
   if (validate(args)) {
-    return args;
+    return {
+      ok: true,
+      args: args as BrewvaValidatedToolArguments,
+    };
   }
 
   const errors =
@@ -98,7 +120,8 @@ export function validateToolArguments(
       })
       .join("\n") ?? "Unknown validation error";
 
-  throw new Error(
-    `Validation failed for tool "${toolCall.name}":\n${errors}\n\nReceived arguments:\n${JSON.stringify(toolCall.arguments, null, 2)}`,
-  );
+  return {
+    ok: false,
+    error: `Validation failed for tool "${toolCall.name}":\n${errors}\n\nReceived arguments:\n${JSON.stringify(toolCall.arguments, null, 2)}`,
+  };
 }

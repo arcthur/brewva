@@ -64,10 +64,12 @@ describe("channel a2a tools", () => {
             send: async () => ({ ok: false, toAgentId: "na", error: "unused" }),
             broadcast: async (input) => ({
               ok: false,
+              error: "broadcast_partial_failure",
               results: input.toAgentIds.map((toAgentId, index) => ({
                 toAgentId,
-                ok: index === 0,
-                error: index === 0 ? undefined : "a2a_depth_limit_exceeded",
+                ...(index === 0
+                  ? { ok: true as const, responseText: "ok" }
+                  : { ok: false as const, error: "a2a_depth_limit_exceeded" }),
               })),
             }),
             listAgents: async () => [],

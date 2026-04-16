@@ -1,4 +1,4 @@
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, type BrewvaWalId } from "@brewva/brewva-runtime";
 import { type TurnEnvelope, type TurnPart } from "@brewva/brewva-runtime/channels";
 import { type RecoveryWalStore, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { LRUCache } from "lru-cache";
@@ -38,7 +38,7 @@ export interface ChannelTurnDispatcher {
   enqueueInboundTurn(
     turn: TurnEnvelope,
     enqueueOptions?: {
-      walId?: string;
+      walId?: BrewvaWalId;
       awaitCompletion?: boolean;
     },
   ): Promise<void>;
@@ -61,7 +61,7 @@ export function createChannelTurnDispatcher(input: {
   resolveApprovalTargetAgentId(scopeKey: string, requestId: string): string | undefined;
   processUserTurnOnAgent(
     turn: TurnEnvelope,
-    walId: string,
+    walId: BrewvaWalId,
     scopeKey: string,
     targetAgentId: string,
   ): Promise<void>;
@@ -132,7 +132,7 @@ export function createChannelTurnDispatcher(input: {
 
   const processInboundTurn = async (
     turn: TurnEnvelope,
-    walId: string,
+    walId: BrewvaWalId,
     scopeKey: string,
     preparedCommand?: ChannelPreparedCommand,
   ): Promise<void> => {
@@ -217,7 +217,7 @@ export function createChannelTurnDispatcher(input: {
     async enqueueInboundTurn(
       turn: TurnEnvelope,
       enqueueOptions: {
-        walId?: string;
+        walId?: BrewvaWalId;
         awaitCompletion?: boolean;
       } = {},
     ): Promise<void> {

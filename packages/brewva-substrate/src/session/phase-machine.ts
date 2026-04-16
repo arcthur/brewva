@@ -1,6 +1,7 @@
 import type {
   SessionCrashPoint,
   SessionPhase,
+  SessionPhaseTransitionResult,
   SessionTerminationReason,
 } from "../contracts/session-phase.js";
 
@@ -23,12 +24,16 @@ export type SessionPhaseEvent =
   | { type: "finish_recovery" }
   | { type: "terminate"; reason: SessionTerminationReason };
 
+function invalidSessionPhaseTransition(): SessionPhaseTransitionResult {
+  return { ok: false, error: "invalid session phase transition" };
+}
+
 function buildCrashPhase(
   current: SessionPhase,
   event: Extract<SessionPhaseEvent, { type: "crash" }>,
-): SessionPhase {
+): SessionPhaseTransitionResult {
   if (current.kind === "terminated") {
-    throw new Error("invalid session phase transition");
+    return invalidSessionPhaseTransition();
   }
 
   const modelCallId = current.kind === "model_streaming" ? current.modelCallId : event.modelCallId;
@@ -38,16 +43,19 @@ function buildCrashPhase(
       : event.toolCallId;
 
   return {
-    kind: "crashed",
-    crashAt: event.crashAt,
-    turn: "turn" in current ? current.turn : (event.turn ?? 0),
-    ...(modelCallId ? { modelCallId } : {}),
-    ...(toolCallId ? { toolCallId } : {}),
-    recoveryAnchor:
-      event.recoveryAnchor ??
-      (current.kind === "recovering" || current.kind === "crashed"
-        ? current.recoveryAnchor
-        : undefined),
+    ok: true,
+    phase: {
+      kind: "crashed",
+      crashAt: event.crashAt,
+      turn: "turn" in current ? current.turn : (event.turn ?? 0),
+      ...(modelCallId ? { modelCallId } : {}),
+      ...(toolCallId ? { toolCallId } : {}),
+      recoveryAnchor:
+        event.recoveryAnchor ??
+        (current.kind === "recovering" || current.kind === "crashed"
+          ? current.recoveryAnchor
+          : undefined),
+    },
   };
 }
 
@@ -55,84 +63,97 @@ export function canTransitionSessionPhase(
   current: SessionPhase,
   event: SessionPhaseEvent,
 ): boolean {
-  try {
-    advanceSessionPhase(current, event);
-    return true;
-  } catch {
-    return false;
-  }
+  return advanceSessionPhaseResult(current, event).ok;
 }
 
-export function advanceSessionPhase(current: SessionPhase, event: SessionPhaseEvent): SessionPhase {
+export function advanceSessionPhaseResult(
+  current: SessionPhase,
+  event: SessionPhaseEvent,
+): SessionPhaseTransitionResult {
   switch (event.type) {
     case "start_model_stream":
       if (current.kind !== "idle") {
-        throw new Error("invalid session phase transition");
+        return invalidSessionPhaseTransition();
       }
       return {
-        kind: "model_streaming",
-        modelCallId: event.modelCallId,
-        turn: event.turn,
+        ok: true,
+        phase: {
+          kind: "model_streaming",
+          modelCallId: event.modelCallId,
+          turn: event.turn,
+        },
       };
     case "finish_model_stream":
       if (current.kind !== "model_streaming") {
-        throw new Error("invalid session phase transition");
+        return invalidSessionPhaseTransition();
       }
-      return { kind: "idle" };
+      return { ok: true, phase: { kind: "idle" } };
     case "start_tool_execution":
       if (current.kind !== "idle") {
-        throw new Error("invalid session phase transition");
+        return invalidSessionPhaseTransition();
       }
       return {
-        kind: "tool_executing",
-        toolCallId: event.toolCallId,
-        toolName: event.toolName,
-        turn: event.turn,
+        ok: true,
+        phase: {
+          kind: "tool_executing",
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          turn: event.turn,
+        },
       };
     case "finish_tool_execution":
       if (current.kind !== "tool_executing") {
-        throw new Error("invalid session phase transition");
+        return invalidSessionPhaseTransition();
       }
-      return { kind: "idle" };
+      return { ok: true, phase: { kind: "idle" } };
     case "wait_for_approval":
       if (current.kind !== "tool_executing") {
-        throw new Error("invalid session phase transition");
+        return invalidSessionPhaseTransition();
       }
       return {
-        kind: "waiting_approval",
-        requestId: event.requestId,
-        toolCallId: current.toolCallId,
-        toolName: current.toolName,
-        turn: current.turn,
+        ok: true,
+        phase: {
+          kind: "waiting_approval",
+          requestId: event.requestId,
+          toolCallId: current.toolCallId,
+          toolName: current.toolName,
+          turn: current.turn,
+        },
       };
     case "approval_resolved":
       if (current.kind !== "waiting_approval") {
-        throw new Error("invalid session phase transition");
+        return invalidSessionPhaseTransition();
       }
-      return { kind: "idle" };
+      return { ok: true, phase: { kind: "idle" } };
     case "crash":
       return buildCrashPhase(current, event);
     case "resume":
       if (current.kind !== "crashed") {
-        throw new Error("invalid session phase transition");
+        return invalidSessionPhaseTransition();
       }
       return {
-        kind: "recovering",
-        recoveryAnchor: current.recoveryAnchor,
-        turn: current.turn,
+        ok: true,
+        phase: {
+          kind: "recovering",
+          recoveryAnchor: current.recoveryAnchor,
+          turn: current.turn,
+        },
       };
     case "finish_recovery":
       if (current.kind !== "recovering") {
-        throw new Error("invalid session phase transition");
+        return invalidSessionPhaseTransition();
       }
-      return { kind: "idle" };
+      return { ok: true, phase: { kind: "idle" } };
     case "terminate":
       if (current.kind === "terminated") {
-        throw new Error("invalid session phase transition");
+        return invalidSessionPhaseTransition();
       }
       return {
-        kind: "terminated",
-        reason: event.reason,
+        ok: true,
+        phase: {
+          kind: "terminated",
+          reason: event.reason,
+        },
       };
   }
 

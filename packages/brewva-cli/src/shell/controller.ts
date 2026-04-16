@@ -1782,7 +1782,7 @@ export class CliShellController {
       if (result.success) {
         this.ui.notify(`Theme switched to ${selection}.`, "info");
       } else {
-        this.ui.notify(result.error ?? "Unknown theme selection.", "warning");
+        this.ui.notify(result.error, "warning");
       }
       return true;
     }

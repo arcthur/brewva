@@ -1,6 +1,13 @@
 import type { RecoveryWalStore } from "../channels/recovery-wal.js";
 import { buildTurnEnvelope } from "../channels/turn.js";
 import {
+  asBrewvaToolCallId,
+  asBrewvaToolName,
+  type BrewvaToolCallId,
+  type BrewvaToolName,
+  type BrewvaWalId,
+} from "../contracts/index.js";
+import {
   SESSION_SHUTDOWN_EVENT_TYPE,
   TOOL_EXECUTION_END_EVENT_TYPE,
   TOOL_EXECUTION_START_EVENT_TYPE,
@@ -19,7 +26,9 @@ function readNonEmptyString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function readToolCallPayload(payload: unknown): { toolCallId: string; toolName: string } | null {
+function readToolCallPayload(
+  payload: unknown,
+): { toolCallId: BrewvaToolCallId; toolName: BrewvaToolName } | null {
   if (!isRecord(payload)) {
     return null;
   }
@@ -29,12 +38,12 @@ function readToolCallPayload(payload: unknown): { toolCallId: string; toolName: 
     return null;
   }
   return {
-    toolCallId,
-    toolName,
+    toolCallId: asBrewvaToolCallId(toolCallId),
+    toolName: asBrewvaToolName(toolName),
   };
 }
 
-function buildToolLifecycleWalDedupeKey(sessionId: string, toolCallId: string): string {
+function buildToolLifecycleWalDedupeKey(sessionId: string, toolCallId: BrewvaToolCallId): string {
   return `tool:${sessionId}:${toolCallId}`;
 }
 
@@ -44,7 +53,7 @@ export interface ToolLifecycleRecoveryWalServiceOptions {
 }
 
 export class ToolLifecycleRecoveryWalService {
-  private readonly walIdsBySession = new Map<string, Map<string, string>>();
+  private readonly walIdsBySession = new Map<string, Map<BrewvaToolCallId, BrewvaWalId>>();
 
   constructor(private readonly options: ToolLifecycleRecoveryWalServiceOptions) {
     options.eventPipeline.subscribeEvents((event) => {
@@ -122,7 +131,7 @@ export class ToolLifecycleRecoveryWalService {
     this.deleteWalId(event.sessionId, payload.toolCallId);
   }
 
-  private resolveWalId(sessionId: string, toolCallId: string): string | undefined {
+  private resolveWalId(sessionId: string, toolCallId: BrewvaToolCallId): BrewvaWalId | undefined {
     const cached = this.walIdsBySession.get(sessionId)?.get(toolCallId);
     if (cached) {
       return cached;
@@ -141,7 +150,7 @@ export class ToolLifecycleRecoveryWalService {
     return row.walId;
   }
 
-  private setWalId(sessionId: string, toolCallId: string, walId: string): void {
+  private setWalId(sessionId: string, toolCallId: BrewvaToolCallId, walId: BrewvaWalId): void {
     const existing = this.walIdsBySession.get(sessionId);
     if (existing) {
       existing.set(toolCallId, walId);
@@ -150,7 +159,7 @@ export class ToolLifecycleRecoveryWalService {
     this.walIdsBySession.set(sessionId, new Map([[toolCallId, walId]]));
   }
 
-  private deleteWalId(sessionId: string, toolCallId: string): void {
+  private deleteWalId(sessionId: string, toolCallId: BrewvaToolCallId): void {
     const sessionWalIds = this.walIdsBySession.get(sessionId);
     if (!sessionWalIds) {
       return;

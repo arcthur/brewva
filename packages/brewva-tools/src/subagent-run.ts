@@ -508,18 +508,15 @@ function summarizeOutcomeForDelivery(outcome: SubagentOutcome): string {
 function buildDeliveryContent(input: {
   delegate: string;
   mode: SubagentDelegationMode;
-  result: {
-    ok: boolean;
-    outcomes: SubagentOutcome[];
-  };
+  outcomes: SubagentOutcome[];
 }): string {
   const lines = [
     `Delegation outcome for delegate=${input.delegate}`,
     `Mode: ${input.mode}`,
-    ...input.result.outcomes.slice(0, 8).map((outcome) => summarizeOutcomeForDelivery(outcome)),
+    ...input.outcomes.slice(0, 8).map((outcome) => summarizeOutcomeForDelivery(outcome)),
   ];
-  if (input.result.outcomes.length > 8) {
-    lines.push(`- ${input.result.outcomes.length - 8} additional delegated outcomes omitted`);
+  if (input.outcomes.length > 8) {
+    lines.push(`- ${input.outcomes.length - 8} additional delegated outcomes omitted`);
   }
   return lines.join("\n").trim();
 }
@@ -564,10 +561,7 @@ function deliverSubagentOutcome(input: {
   const content = buildDeliveryContent({
     delegate: input.delegate,
     mode: input.mode,
-    result: {
-      ok: input.outcomes.every((outcome) => outcome.ok),
-      outcomes: input.outcomes,
-    },
+    outcomes: input.outcomes,
   });
   const delivery: {
     supplemental?: {
@@ -804,7 +798,7 @@ async function executeSubagentToolWithRequest(input: {
   });
   if (!result.ok) {
     return failTextResult(
-      `${input.completionVerb} failed for delegate=${input.delegate}: ${result.error ?? "unknown_error"}`,
+      `${input.completionVerb} failed for delegate=${input.delegate}: ${result.error}`,
       toolDetails(result),
     );
   }

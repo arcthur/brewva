@@ -54,6 +54,7 @@ import type {
   BrewvaEventQuery,
   BrewvaEventRecord,
   BrewvaReplaySession,
+  BrewvaWalId,
   BrewvaConfig,
   BrewvaStructuredEvent,
   ActiveSkillRuntimeState,
@@ -556,10 +557,10 @@ interface BrewvaRuntimeMethodGroups {
       source: RecoveryWalSource,
       options?: { ttlMs?: number; dedupeKey?: string },
     ): RecoveryWalRecord;
-    markInflight(walId: string): RecoveryWalRecord | undefined;
-    markDone(walId: string): RecoveryWalRecord | undefined;
-    markFailed(walId: string, error?: string): RecoveryWalRecord | undefined;
-    markExpired(walId: string): RecoveryWalRecord | undefined;
+    markInflight(walId: BrewvaWalId): RecoveryWalRecord | undefined;
+    markDone(walId: BrewvaWalId): RecoveryWalRecord | undefined;
+    markFailed(walId: BrewvaWalId, error?: string): RecoveryWalRecord | undefined;
+    markExpired(walId: BrewvaWalId): RecoveryWalRecord | undefined;
     listPending(): RecoveryWalRecord[];
     getPosture(sessionId: string): RecoveryPostureSnapshot;
     getWorkingSet(sessionId: string): RecoveryWorkingSetSnapshot | undefined;

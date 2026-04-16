@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import WebSocket, { type RawData } from "ws";
 import { normalizeGatewayHost, assertLoopbackHost } from "./network.js";
-import type { GatewayErrorShape, GatewayMethod, GatewayParamsByMethod } from "./protocol/index.js";
+import type {
+  EventFrame as GatewayEventFrame,
+  GatewayFrame,
+  GatewayErrorShape,
+  GatewayMethod,
+  GatewayParamsByMethod,
+  ResponseFrame as GatewayResponseFrame,
+} from "./protocol/index.js";
 import { PROTOCOL_VERSION } from "./protocol/index.js";
 import { validateGatewayFrame } from "./protocol/validate.js";
 import { createDeferred } from "./utils/deferred.js";
@@ -13,22 +20,6 @@ interface PendingResponse {
   resolve: (frame: GatewayResponseFrame) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
-}
-
-interface GatewayResponseFrame {
-  type: "res";
-  id: string;
-  traceId?: string;
-  ok: boolean;
-  payload?: unknown;
-  error?: GatewayErrorShape;
-}
-
-interface GatewayEventFrame {
-  type: "event";
-  event: string;
-  payload?: unknown;
-  seq?: number;
 }
 
 export type GatewayClientEvent = GatewayEventFrame;
@@ -225,7 +216,7 @@ export class GatewayClient {
     if (!validateGatewayFrame(parsedRaw)) {
       return;
     }
-    const parsed = parsedRaw as GatewayEventFrame | GatewayResponseFrame;
+    const parsed = parsedRaw as GatewayFrame;
 
     if (parsed.type === "event") {
       if (parsed.event === "connect.challenge" && !this.challengeDeferred.settled()) {

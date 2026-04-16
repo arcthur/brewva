@@ -9,6 +9,8 @@ import {
   SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
   SCHEDULE_WAKEUP_EVENT_TYPE,
   SKILL_ACTIVATED_EVENT_TYPE,
+  asBrewvaIntentId,
+  asBrewvaSessionId,
   parseScheduleIntentEvent,
 } from "@brewva/brewva-runtime";
 import { writeMinimalConfig } from "../../helpers/config.js";
@@ -182,7 +184,7 @@ describe("system: scheduler daemon", () => {
     });
     mkdirSync(join(workspace, ".brewva"), { recursive: true });
 
-    const parentSessionId = "scheduler-parent-session";
+    const parentSessionId = asBrewvaSessionId("scheduler-parent-session");
     const parentTaskGoal = "Finish the release checklist";
     const truthSummary = "Release notes are waiting for final reviewer approval.";
 
@@ -204,7 +206,7 @@ describe("system: scheduler daemon", () => {
     });
     expect(setupRuntime.authority.skills.activate(parentSessionId, "self-improve").ok).toBe(true);
     const created = await setupRuntime.authority.schedule.createIntent(parentSessionId, {
-      intentId: "intent-scheduler-daemon",
+      intentId: asBrewvaIntentId("intent-scheduler-daemon"),
       reason: "nightly release follow-up",
       continuityMode: "inherit",
       runAt: Date.now() + 500,
@@ -356,7 +358,7 @@ describe("system: scheduler daemon", () => {
       const seededIntent = await waitForCondition(
         async () => {
           const intents = await observer.inspect.schedule.listIntents({
-            parentSessionId: "policy-self-improve-parent",
+            parentSessionId: asBrewvaSessionId("policy-self-improve-parent"),
           });
           return intents.find((intent) => intent.intentId === "policy-self-improve-intent");
         },
@@ -382,7 +384,7 @@ describe("system: scheduler daemon", () => {
       const intent = await waitForCondition(
         async () => {
           const intents = await observer.inspect.schedule.listIntents({
-            parentSessionId: "policy-self-improve-parent",
+            parentSessionId: asBrewvaSessionId("policy-self-improve-parent"),
           });
           return intents.length === 1 ? intents[0] : null;
         },

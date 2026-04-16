@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, type SessionWireFrame } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  asBrewvaToolCallId,
+  asBrewvaToolName,
+  type SessionWireFrame,
+} from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   buildBrewvaPromptText,
@@ -595,8 +600,8 @@ describe("gateway collect output", () => {
     expect(output.attemptId).toBe("attempt-2");
     expect(output.toolOutputs).toEqual([
       {
-        toolCallId: "tc-current-attempt-2",
-        toolName: "read",
+        toolCallId: asBrewvaToolCallId("tc-current-attempt-2"),
+        toolName: asBrewvaToolName("read"),
         verdict: "pass",
         isError: false,
         text: "current attempt output",
@@ -608,8 +613,8 @@ describe("gateway collect output", () => {
       })
       .map((frame) => ({ toolCallId: frame.toolCallId, attemptId: frame.attemptId }));
     expect(finishedToolCallIds).toEqual([
-      { toolCallId: "tc-stale-attempt-1", attemptId: "attempt-1" },
-      { toolCallId: "tc-current-attempt-2", attemptId: "attempt-2" },
+      { toolCallId: asBrewvaToolCallId("tc-stale-attempt-1"), attemptId: "attempt-1" },
+      { toolCallId: asBrewvaToolCallId("tc-current-attempt-2"), attemptId: "attempt-2" },
     ]);
   });
 

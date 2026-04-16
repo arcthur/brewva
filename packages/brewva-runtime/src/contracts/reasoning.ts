@@ -1,3 +1,5 @@
+import type { BrewvaSessionId } from "./identifiers.js";
+
 export const REASONING_CONTINUITY_SCHEMA = "brewva.reasoning.continuity.v1" as const;
 
 export const MAX_REASONING_CONTINUITY_BYTES = 1_200;
@@ -51,7 +53,7 @@ export interface ReasoningRevertRecord {
 }
 
 export interface ActiveReasoningBranchState {
-  sessionId: string;
+  sessionId: BrewvaSessionId;
   rootBranchId: string;
   activeBranchId: string;
   activeBranchSequence: number;

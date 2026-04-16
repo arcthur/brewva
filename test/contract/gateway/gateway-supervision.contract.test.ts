@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { ContextPressureView, SessionWireFrame } from "@brewva/brewva-runtime";
+import {
+  asBrewvaSessionId,
+  type ContextPressureView,
+  type SessionWireFrame,
+} from "@brewva/brewva-runtime";
 import type WebSocket from "ws";
 import {
   createDaemonHarness,
@@ -259,7 +263,7 @@ describe("gateway supervision and subscriptions", () => {
         querySessionWire: async () => [
           {
             schema: "brewva.session-wire.v2",
-            sessionId: "agent-session-replay",
+            sessionId: asBrewvaSessionId("agent-session-replay"),
             frameId: "replay:turn-input",
             ts: 1,
             source: "replay",
@@ -273,7 +277,7 @@ describe("gateway supervision and subscriptions", () => {
           },
           {
             schema: "brewva.session-wire.v2",
-            sessionId: "agent-session-replay",
+            sessionId: asBrewvaSessionId("agent-session-replay"),
             frameId: "replay:turn-committed",
             ts: 2,
             source: "replay",
@@ -473,7 +477,7 @@ describe("gateway supervision and subscriptions", () => {
     });
     const replayCommittedFrame: SessionWireFrame = {
       schema: "brewva.session-wire.v2",
-      sessionId: "agent-session-race",
+      sessionId: asBrewvaSessionId("agent-session-race"),
       frameId: "evt-2:turn.committed",
       ts: 2,
       source: "replay",
@@ -965,7 +969,7 @@ describe("gateway supervision and subscriptions", () => {
     });
     const replayFrames = Array.from({ length: 320 }, (_, index) => ({
       schema: "brewva.session-wire.v2" as const,
-      sessionId: "agent-session-large-replay",
+      sessionId: asBrewvaSessionId("agent-session-large-replay"),
       frameId: `evt-large-${index}:turn.input`,
       ts: index + 1,
       source: "replay" as const,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, asBrewvaSessionId } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   GAP_REMEDIATION_CONFIG_PATH,
@@ -14,7 +14,7 @@ describe("Gap remediation: structured replay events", () => {
     writeConfig(workspace, createConfig({}));
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
-    const sessionId = "replay-1";
+    const sessionId = asBrewvaSessionId("replay-1");
     recordRuntimeEvent(runtime, { sessionId, type: "session_start", payload: { cwd: workspace } });
     recordRuntimeEvent(runtime, {
       sessionId,

@@ -14,12 +14,18 @@ export type DeepReadonly<T> = T extends (...args: never[]) => unknown
       ? { readonly [TKey in keyof T]: DeepReadonly<T[TKey]> }
       : T;
 
-export interface RollbackOutcome<Reason extends string> {
-  ok: boolean;
-  restoredPaths: string[];
-  failedPaths: string[];
-  reason?: Reason;
-}
+export type RollbackOutcome<Reason extends string> =
+  | {
+      ok: true;
+      restoredPaths: string[];
+      failedPaths: string[];
+    }
+  | {
+      ok: false;
+      restoredPaths: string[];
+      failedPaths: string[];
+      reason: Reason;
+    };
 
 export type SecurityEnforcementMode = "off" | "warn" | "enforce";
 

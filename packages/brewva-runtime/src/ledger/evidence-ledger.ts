@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { EvidenceLedgerRow, EvidenceRecord, EvidenceQuery } from "../contracts/index.js";
+import { asBrewvaSessionId } from "../contracts/index.js";
 import { redactSecrets, redactUnknown } from "../security/redact.js";
 import { ensureDirForFile, writeFileAtomic } from "../utils/fs.js";
 import { sha256 } from "../utils/hash.js";
@@ -85,7 +86,7 @@ export class EvidenceLedger {
       outputSummary: summarizeText(outputSummary),
       outputHash,
       verdict: input.verdict,
-      sessionId: input.sessionId,
+      sessionId: asBrewvaSessionId(input.sessionId),
       metadata,
     };
 
@@ -154,7 +155,7 @@ export class EvidenceLedger {
       outputSummary: summarizeText(checkpointSummary),
       outputHash: sha256(checkpointSummary),
       verdict: "inconclusive",
-      sessionId,
+      sessionId: asBrewvaSessionId(sessionId),
       metadata: {
         compacted: compactedRows.length,
         kept: keptRows.length,

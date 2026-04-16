@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId, type BrewvaEventRecord } from "@brewva/brewva-runtime";
 import { RuntimeSessionStateStore } from "../../../packages/brewva-runtime/src/services/session-state.js";
 import {
   getSkillOutputContracts,
@@ -365,7 +365,7 @@ describe("skill validation pipeline", () => {
     });
     const registry = loadRegistry(workspace);
     const sessionState = new RuntimeSessionStateStore();
-    const sessionId = "builder-evidence-1";
+    const sessionId = asBrewvaSessionId("builder-evidence-1");
     sessionState.getCell(sessionId).activeSkill = "downstream";
 
     let events: BrewvaEventRecord[] = [

@@ -1,3 +1,4 @@
+import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import { formatISO } from "date-fns";
@@ -131,6 +132,10 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
           });
         }
 
+        const followUpIntentId = normalizeOptionalString(params.intentId);
+        const brandedFollowUpIntentId =
+          followUpIntentId !== undefined ? asBrewvaIntentId(followUpIntentId) : undefined;
+
         if (params.after !== undefined) {
           if (params.runs !== undefined) {
             return failTextResult("Follow-up rejected (runs_requires_every).", {
@@ -148,7 +153,7 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
           }
 
           const scheduleTarget = resolveScheduleTarget({ delayMs: after.ms });
-          if (scheduleTarget.error || scheduleTarget.runAt === undefined) {
+          if (!scheduleTarget.ok || scheduleTarget.runAt === undefined) {
             return failTextResult("Follow-up rejected (invalid_after).", {
               ok: false,
               error: "invalid_after",
@@ -157,7 +162,7 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
 
           const created = await options.runtime.authority.schedule.createIntent(sessionId, {
             reason,
-            intentId: normalizeOptionalString(params.intentId),
+            intentId: brandedFollowUpIntentId,
             continuityMode: "inherit",
             runAt: scheduleTarget.runAt,
             maxRuns: 1,
@@ -209,7 +214,7 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
 
         const created = await options.runtime.authority.schedule.createIntent(sessionId, {
           reason,
-          intentId: normalizeOptionalString(params.intentId),
+          intentId: brandedFollowUpIntentId,
           continuityMode: "inherit",
           cron,
           maxRuns: params.runs ?? 12,
@@ -248,7 +253,7 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
         }
 
         const cancelled = await options.runtime.authority.schedule.cancelIntent(sessionId, {
-          intentId,
+          intentId: asBrewvaIntentId(intentId),
           reason: normalizeOptionalString(params.reason),
         });
         if (!cancelled.ok) {
@@ -264,7 +269,7 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
       }
 
       const intents = await options.runtime.inspect.schedule.listIntents({
-        parentSessionId: sessionId,
+        parentSessionId: asBrewvaSessionId(sessionId),
       });
       const snapshot = await options.runtime.inspect.schedule.getProjectionSnapshot();
       const header = [

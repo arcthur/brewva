@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   BrewvaRuntime,
   SCHEDULE_EVENT_TYPE,
+  asBrewvaIntentId,
   buildScheduleIntentCancelledEvent,
   buildScheduleIntentCreatedEvent,
   parseScheduleIntentEvent,
@@ -90,7 +91,7 @@ describe("scheduler service projection contract", () => {
     await scheduler.recover();
 
     const created = scheduler.createIntent({
-      intentId: "intent-update-cron",
+      intentId: asBrewvaIntentId("intent-update-cron"),
       parentSessionId: "session-update",
       reason: "initial",
       continuityMode: "inherit",
@@ -105,7 +106,7 @@ describe("scheduler service projection contract", () => {
 
     const updated = scheduler.updateIntent({
       parentSessionId: "session-update",
-      intentId: "intent-update-cron",
+      intentId: asBrewvaIntentId("intent-update-cron"),
       reason: "updated",
       cron: "*/20 * * * *",
       timeZone: "Asia/Shanghai",
@@ -155,7 +156,7 @@ describe("scheduler service projection contract", () => {
     await scheduler.recover();
 
     const created = scheduler.createIntent({
-      intentId: "intent-update-timezone-only",
+      intentId: asBrewvaIntentId("intent-update-timezone-only"),
       parentSessionId: "session-update-timezone-only",
       reason: "timezone only",
       continuityMode: "inherit",
@@ -171,7 +172,7 @@ describe("scheduler service projection contract", () => {
 
     const updated = scheduler.updateIntent({
       parentSessionId: "session-update-timezone-only",
-      intentId: "intent-update-timezone-only",
+      intentId: asBrewvaIntentId("intent-update-timezone-only"),
       timeZone: "America/New_York",
     });
     scheduler.stop();

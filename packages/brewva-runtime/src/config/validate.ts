@@ -49,12 +49,22 @@ function getValidator():
   }
 }
 
-export interface BrewvaConfigFileValidationResult {
-  ok: boolean;
-  errors: string[];
-  schemaPath?: string;
-  error?: string;
-}
+export type BrewvaConfigFileValidationResult =
+  | {
+      ok: true;
+      errors: [];
+      schemaPath: string;
+    }
+  | {
+      ok: false;
+      errors: string[];
+      schemaPath: string;
+    }
+  | {
+      ok: false;
+      errors: [];
+      error: string;
+    };
 
 export function validateBrewvaConfigFile(value: unknown): BrewvaConfigFileValidationResult {
   const validator = getValidator();

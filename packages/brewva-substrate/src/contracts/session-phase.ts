@@ -26,6 +26,8 @@ export type SessionPhaseKind = (typeof SESSION_PHASE_KINDS)[number];
 export type SessionCrashPoint = (typeof SESSION_CRASH_POINTS)[number];
 export type SessionTerminationReason = (typeof SESSION_TERMINATION_REASONS)[number];
 
+export type SessionPhaseTransitionError = "invalid session phase transition";
+
 export type SessionPhase =
   | { kind: "idle" }
   | { kind: "model_streaming"; modelCallId: string; turn: number }
@@ -47,6 +49,10 @@ export type SessionPhase =
       recoveryAnchor?: string;
     }
   | { kind: "terminated"; reason: SessionTerminationReason };
+
+export type SessionPhaseTransitionResult =
+  | { ok: true; phase: SessionPhase }
+  | { ok: false; error: SessionPhaseTransitionError };
 
 export function isSessionPhaseActive(phase: SessionPhase): boolean {
   return phase.kind === "model_streaming" || phase.kind === "tool_executing";

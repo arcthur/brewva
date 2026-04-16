@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   BrewvaRuntime,
+  asBrewvaToolCallId,
+  asBrewvaToolName,
   createTrustedLocalGovernancePort,
   type EffectCommitmentRecord,
 } from "@brewva/brewva-runtime";
@@ -55,8 +57,8 @@ describe("runtime proposals API", () => {
     const listed = runtime.inspect.proposals.list(sessionId, {
       limit: 1,
     })[0] as EffectCommitmentRecord | undefined;
-    expect(listed?.proposal.payload.toolName).toBe("exec");
-    expect(listed?.proposal.payload.toolCallId).toBe("tc-exec-commitment");
+    expect(listed?.proposal.payload.toolName).toBe(asBrewvaToolName("exec"));
+    expect(listed?.proposal.payload.toolCallId).toBe(asBrewvaToolCallId("tc-exec-commitment"));
     expect(listed?.receipt.decision).toBe("accept");
     expect(listed?.receipt.committedEffects[0]?.kind).toBe("tool_commitment");
     expect(listed?.proposal.evidenceRefs[0]?.locator).toBe(`event://${effectGateEvent?.id}`);
@@ -80,8 +82,8 @@ describe("runtime proposals API", () => {
     expect(typeof started.effectCommitmentRequestId).toBe("string");
     const pending = runtime.inspect.proposals.listPendingEffectCommitments(sessionId);
     expect(pending).toHaveLength(1);
-    expect(pending[0]?.toolName).toBe("exec");
-    expect(pending[0]?.toolCallId).toBe("tc-exec-default-defer");
+    expect(pending[0]?.toolName).toBe(asBrewvaToolName("exec"));
+    expect(pending[0]?.toolCallId).toBe(asBrewvaToolCallId("tc-exec-default-defer"));
     expect(pending[0]?.requestId).toBe(started.effectCommitmentRequestId);
   });
 
@@ -102,7 +104,7 @@ describe("runtime proposals API", () => {
 
     const pending = runtime.inspect.proposals.listPendingEffectCommitments(sessionId);
     expect(pending).toHaveLength(1);
-    expect(pending[0]?.toolCallId).toBe("tc-exec-approval-pending");
+    expect(pending[0]?.toolCallId).toBe(asBrewvaToolCallId("tc-exec-approval-pending"));
 
     const decision = runtime.authority.proposals.decideEffectCommitment(
       sessionId,
@@ -172,7 +174,7 @@ describe("runtime proposals API", () => {
     const pendingAfterRestart = restarted.inspect.proposals.listPendingEffectCommitments(sessionId);
     expect(pendingAfterRestart).toHaveLength(1);
     expect(pendingAfterRestart[0]?.requestId).toBe(deferred.effectCommitmentRequestId);
-    expect(pendingAfterRestart[0]?.toolCallId).toBe("tc-exec-rehydrate");
+    expect(pendingAfterRestart[0]?.toolCallId).toBe(asBrewvaToolCallId("tc-exec-rehydrate"));
 
     const accepted = restarted.authority.proposals.decideEffectCommitment(
       sessionId,
@@ -560,7 +562,7 @@ describe("runtime proposals API", () => {
     const remainingPending = runtime.inspect.proposals.listPendingEffectCommitments(sessionId);
     expect(remainingPending).toHaveLength(1);
     expect(remainingPending[0]?.requestId).not.toBe(firstPending[0]!.requestId);
-    expect(remainingPending[0]?.toolCallId).toBe("tc-exec-reject-twice");
+    expect(remainingPending[0]?.toolCallId).toBe(asBrewvaToolCallId("tc-exec-reject-twice"));
   });
 
   test("custom approval-bound descriptors also fail closed without a governance port", () => {

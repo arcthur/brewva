@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  asBrewvaEventType,
+  asBrewvaSessionId,
   deriveWorkflowArtifacts,
   deriveWorkflowStatus,
   type BrewvaEventRecord,
@@ -14,8 +16,8 @@ function event(input: {
 }): BrewvaEventRecord {
   return {
     id: input.id,
-    sessionId: input.sessionId ?? "workflow-derivation-session",
-    type: input.type,
+    sessionId: asBrewvaSessionId(input.sessionId ?? "workflow-derivation-session"),
+    type: asBrewvaEventType(input.type),
     timestamp: input.timestamp,
     payload: input.payload as BrewvaEventRecord["payload"],
   };

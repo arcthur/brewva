@@ -34,11 +34,15 @@ export interface TurnEnvelope {
   meta?: Record<string, unknown>;
 }
 
-export interface TurnEnvelopeCoerceResult {
-  ok: boolean;
-  envelope?: TurnEnvelope;
-  error?: string;
-}
+export type TurnEnvelopeCoerceResult =
+  | {
+      ok: true;
+      envelope: TurnEnvelope;
+    }
+  | {
+      ok: false;
+      error: string;
+    };
 
 type TurnPartInput =
   | TurnPart
@@ -292,8 +296,8 @@ export function coerceTurnEnvelope(input: unknown): TurnEnvelopeCoerceResult {
 
 export function assertTurnEnvelope(value: unknown): TurnEnvelope {
   const result = coerceTurnEnvelope(value);
-  if (!result.ok || !result.envelope) {
-    throw new Error(result.error ?? "invalid_turn_envelope");
+  if (!result.ok) {
+    throw new Error(result.error);
   }
   return result.envelope;
 }

@@ -104,11 +104,18 @@ function buildRecoveredWorkerResult(
 
   if (event.type === SUBAGENT_COMPLETED_EVENT_TYPE) {
     const patches = manifestRef ? readPatchSetManifest(workspaceRoot, manifestRef) : undefined;
+    if (patches) {
+      return {
+        workerId,
+        status: "ok",
+        summary: readString(payload?.summary) ?? "Recovered delegated patch outcome.",
+        patches,
+      };
+    }
     return {
       workerId,
-      status: patches ? "ok" : "skipped",
+      status: "skipped",
       summary: readString(payload?.summary) ?? "Recovered delegated patch outcome.",
-      patches,
     };
   }
 
@@ -328,7 +335,7 @@ export class ParallelService {
         type: "worker_results_apply_failed",
         turn: this.getCurrentTurn(sessionId),
         payload: {
-          reason: applied.reason ?? "write_failed",
+          reason: applied.reason,
           workerIds: merged.workerIds,
           patchSetId: applied.patchSetId ?? null,
           failedPaths: applied.failedPaths,

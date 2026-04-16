@@ -559,45 +559,44 @@ export function createChannelControlRouter(input: {
       }
 
       if (match.kind === "new-agent") {
-        try {
-          const created = await input.registry.createAgent({
-            requestedAgentId: match.agentId,
-            model: match.model,
-          });
+        const created = await input.registry.createAgent({
+          requestedAgentId: match.agentId,
+          model: match.model,
+        });
+        if (!created.ok) {
+          await input.replyWriter.sendControllerReply(
+            turn,
+            scopeKey,
+            `Failed to create agent: ${created.error}`,
+          );
+        } else {
           recordRuntimeEvent(input.runtime, {
             sessionId: turn.sessionId,
             type: "channel_agent_created",
             payload: {
               scopeKey,
-              agentId: created.agentId,
-              model: created.model,
+              agentId: created.agent.agentId,
+              model: created.agent.model,
             },
           });
           await input.replyWriter.sendControllerReply(
             turn,
             scopeKey,
-            `Created agent @${created.agentId}${created.model ? ` (model=${created.model})` : ""}.`,
-          );
-        } catch (error) {
-          await input.replyWriter.sendControllerReply(
-            turn,
-            scopeKey,
-            `Failed to create agent: ${toErrorMessage(error)}`,
+            `Created agent @${created.agent.agentId}${created.agent.model ? ` (model=${created.agent.model})` : ""}.`,
           );
         }
         return { handled: true };
       }
 
       if (match.kind === "del-agent") {
-        try {
-          const existing = input.registry.get(match.agentId);
-          if (!existing || existing.status !== "active") {
-            throw new Error(`agent_not_found:${match.agentId}`);
-          }
-          if (existing.agentId === input.registry.defaultAgentId) {
-            throw new Error("cannot_delete_default");
-          }
-          await input.registry.softDeleteAgent(match.agentId);
+        const deleted = await input.registry.softDeleteAgent(match.agentId);
+        if (!deleted.ok) {
+          await input.replyWriter.sendControllerReply(
+            turn,
+            scopeKey,
+            `Failed to delete agent: ${deleted.error}`,
+          );
+        } else {
           await input.cleanupAgentSessions(match.agentId);
           input.disposeAgentRuntime(match.agentId);
           recordRuntimeEvent(input.runtime, {
@@ -613,34 +612,32 @@ export function createChannelControlRouter(input: {
             scopeKey,
             `Deleted agent @${match.agentId} (soft delete).`,
           );
-        } catch (error) {
-          await input.replyWriter.sendControllerReply(
-            turn,
-            scopeKey,
-            `Failed to delete agent: ${toErrorMessage(error)}`,
-          );
         }
         return { handled: true };
       }
 
       if (match.kind === "focus") {
-        try {
-          const focused = await input.registry.setFocus(scopeKey, match.agentId);
+        const focused = await input.registry.setFocus(scopeKey, match.agentId);
+        if (!focused.ok) {
+          await input.replyWriter.sendControllerReply(
+            turn,
+            scopeKey,
+            `Failed to set focus: ${focused.error}`,
+          );
+        } else {
           recordRuntimeEvent(input.runtime, {
             sessionId: turn.sessionId,
             type: "channel_focus_changed",
             payload: {
               scopeKey,
-              agentId: focused,
+              agentId: focused.agentId,
               source: "command",
             },
           });
-          await input.replyWriter.sendControllerReply(turn, scopeKey, `Focus set to @${focused}.`);
-        } catch (error) {
           await input.replyWriter.sendControllerReply(
             turn,
             scopeKey,
-            `Failed to set focus: ${toErrorMessage(error)}`,
+            `Focus set to @${focused.agentId}.`,
           );
         }
         return { handled: true };
@@ -661,11 +658,11 @@ export function createChannelControlRouter(input: {
           scopeKey,
         });
         const lines = [
-          result.ok ? "Fan-out completed." : `Fan-out failed: ${result.error ?? "unknown_error"}`,
+          result.ok ? "Fan-out completed." : `Fan-out failed: ${result.error}`,
           ...result.results.map((entry) =>
             entry.ok
               ? `- @${entry.agentId}: ${entry.responseText || "(empty)"}`
-              : `- @${entry.agentId}: ERROR ${entry.error ?? "unknown_error"}`,
+              : `- @${entry.agentId}: ERROR ${entry.error}`,
           ),
         ];
         recordRuntimeEvent(input.runtime, {
@@ -675,7 +672,7 @@ export function createChannelControlRouter(input: {
             scopeKey,
             targets: match.agentIds,
             ok: result.ok,
-            error: result.error,
+            error: result.ok ? undefined : result.error,
           },
         });
         await input.replyWriter.sendControllerReply(turn, scopeKey, lines.join("\n"));
@@ -692,7 +689,7 @@ export function createChannelControlRouter(input: {
         const lines = [
           discussion.ok
             ? `Discussion completed (stoppedEarly=${discussion.stoppedEarly}).`
-            : `Discussion failed: ${discussion.reason ?? "unknown_error"}`,
+            : `Discussion failed: ${discussion.reason}`,
         ];
         for (const round of discussion.rounds) {
           recordRuntimeEvent(input.runtime, {

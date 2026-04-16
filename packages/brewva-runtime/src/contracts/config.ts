@@ -1,3 +1,4 @@
+import type { BrewvaIntentId, BrewvaSessionId } from "./identifiers.js";
 import type { SecurityEnforcementPreference, VerificationLevel } from "./shared.js";
 import type { SkillContractOverride, SkillRoutingScope } from "./skill.js";
 
@@ -44,8 +45,8 @@ export interface BrewvaSecurityExactCallLoopConfig {
 
 export interface BrewvaScheduleSelfImproveConfig {
   enabled: boolean;
-  parentSessionId: string;
-  intentId: string;
+  parentSessionId: BrewvaSessionId;
+  intentId: BrewvaIntentId;
   reason: string;
   goalRef: string;
   continuityMode: "inherit" | "fresh";

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { appendFileSync, readFileSync } from "node:fs";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, asBrewvaWalId } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { RecoveryWalStore, createSchedulerIngressPort } from "@brewva/brewva-runtime/internal";
 import { createTestWorkspace } from "../../helpers/workspace.js";
@@ -110,7 +110,7 @@ describe("Recovery WAL store", () => {
       scope: "channel-telegram",
     });
 
-    expect(store.markDone("missing-wal-id")).toBeUndefined();
+    expect(store.markDone(asBrewvaWalId("missing-wal-id"))).toBeUndefined();
   });
 
   test("given a done record, when markInflight is called again, then transition is ignored", () => {

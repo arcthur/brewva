@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId, type BrewvaEventRecord } from "@brewva/brewva-runtime";
 import {
   MAX_REASONING_CONTINUITY_BYTES,
   REASONING_CHECKPOINT_EVENT_TYPE,
@@ -27,7 +27,7 @@ function checkpointEvent(input: {
 }): BrewvaEventRecord {
   return {
     id: input.id,
-    sessionId: input.sessionId,
+    sessionId: asBrewvaSessionId(input.sessionId),
     type: REASONING_CHECKPOINT_EVENT_TYPE,
     timestamp: input.timestamp,
     turn: input.turn,
@@ -61,7 +61,7 @@ function revertEvent(input: {
 }): BrewvaEventRecord {
   return {
     id: input.id,
-    sessionId: input.sessionId,
+    sessionId: asBrewvaSessionId(input.sessionId),
     type: REASONING_REVERT_EVENT_TYPE,
     timestamp: input.timestamp,
     turn: input.turn,

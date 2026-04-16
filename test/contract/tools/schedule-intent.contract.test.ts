@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseScheduleIntentEvent } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId, parseScheduleIntentEvent } from "@brewva/brewva-runtime";
 import { createScheduleIntentTool } from "@brewva/brewva-tools";
 import {
   createScheduleToolRuntime,
@@ -10,7 +10,7 @@ import {
 describe("schedule_intent contract", () => {
   test("supports create, list, and cancel", async () => {
     const runtime = createScheduleToolRuntime("brewva-schedule-intent-tool-");
-    const sessionId = "s14";
+    const sessionId = asBrewvaSessionId("s14");
     const tool = createScheduleIntentTool({ runtime });
 
     const createResult = await tool.execute(
@@ -73,7 +73,7 @@ describe("schedule_intent contract", () => {
 
   test("create accepts a structured convergenceCondition", async () => {
     const runtime = createScheduleToolRuntime("brewva-schedule-intent-predicate-tool-");
-    const sessionId = "s14-predicate";
+    const sessionId = asBrewvaSessionId("s14-predicate");
     const tool = createScheduleIntentTool({ runtime });
 
     const createResult = await tool.execute(
@@ -105,7 +105,7 @@ describe("schedule_intent contract", () => {
 
   test("create supports cron targets", async () => {
     const runtime = createScheduleToolRuntime("brewva-schedule-intent-cron-tool-");
-    const sessionId = "s14-cron";
+    const sessionId = asBrewvaSessionId("s14-cron");
     const tool = createScheduleIntentTool({ runtime });
 
     const createResult = await tool.execute(
@@ -137,7 +137,7 @@ describe("schedule_intent contract", () => {
 
   test("supports the update action", async () => {
     const runtime = createScheduleToolRuntime("brewva-schedule-intent-update-tool-");
-    const sessionId = "s14-update";
+    const sessionId = asBrewvaSessionId("s14-update");
     const tool = createScheduleIntentTool({ runtime });
 
     const createResult = await tool.execute(
@@ -197,7 +197,7 @@ describe("schedule_intent contract", () => {
 
   test("update rejects blank reason and goalRef", async () => {
     const runtime = createScheduleToolRuntime("brewva-schedule-intent-update-blank-tool-");
-    const sessionId = "s14-update-blank";
+    const sessionId = asBrewvaSessionId("s14-update-blank");
     const tool = createScheduleIntentTool({ runtime });
 
     const createResult = await tool.execute(
@@ -258,7 +258,7 @@ describe("schedule_intent contract", () => {
 
   test("update supports a timezone-only patch for cron intents", async () => {
     const runtime = createScheduleToolRuntime("brewva-schedule-intent-update-timezone-only-tool-");
-    const sessionId = "s14-update-timezone-only";
+    const sessionId = asBrewvaSessionId("s14-update-timezone-only");
     const tool = createScheduleIntentTool({ runtime });
 
     const createResult = await tool.execute(
@@ -306,7 +306,7 @@ describe("schedule_intent contract", () => {
 
   test("rejects timeZone without cron", async () => {
     const runtime = createScheduleToolRuntime("brewva-schedule-intent-timezone-guard-tool-");
-    const sessionId = "s14-timezone-guard";
+    const sessionId = asBrewvaSessionId("s14-timezone-guard");
     const tool = createScheduleIntentTool({ runtime });
 
     const createResult = await tool.execute(

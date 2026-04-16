@@ -167,7 +167,7 @@ export function commitSessionCompaction(
         turn,
         payload: {
           ok: result.ok,
-          reason: result.reason ?? null,
+          reason: result.ok ? null : result.reason,
           violationCount: governanceViolations.length,
         },
       });

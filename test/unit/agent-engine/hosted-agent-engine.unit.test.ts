@@ -341,6 +341,103 @@ describe("hosted agent engine", () => {
     ]);
   });
 
+  test("surfaces tool argument validation failures without entering authorize or execute", async () => {
+    const events: BrewvaAgentEngineEvent[] = [];
+    const observedPhases: ToolExecutionPhase[] = [];
+    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, context) => {
+      const lastMessage = context.messages[context.messages.length - 1] as
+        | BrewvaAgentEngineLlmMessage
+        | undefined;
+      if (lastMessage?.role === "toolResult") {
+        return createStream(createAssistantMessage([{ type: "text", text: "final" }]));
+      }
+      return createStream(
+        createAssistantMessage(
+          [
+            {
+              type: "toolCall",
+              id: "tool-invalid-1",
+              name: "echo",
+              arguments: {},
+            },
+          ],
+          "toolUse",
+        ),
+      );
+    };
+
+    const engine = createHostedAgentEngine({
+      initialModel: TEST_MODEL,
+      initialThinkingLevel: "off",
+      sessionId: "session-tool-validation",
+      steeringMode: "one-at-a-time",
+      followUpMode: "one-at-a-time",
+      transport: "sse",
+      thinkingBudgets: undefined,
+      maxRetryDelayMs: 1000,
+      beforeToolCall: async () => undefined,
+      afterToolCall: async () => undefined,
+      onPayload: async (payload) => payload,
+      transformContext: async (messages) => messages,
+      resolveRequestAuth: async () => ({ ok: true, apiKey: "tool-key" }),
+      streamFn,
+    });
+
+    const unsubscribe = engine.subscribe((event) => {
+      events.push(event);
+      if (event.type === "tool_execution_phase_change") {
+        observedPhases.push(event.phase);
+      }
+    });
+
+    engine.setTools([
+      {
+        name: "echo",
+        label: "Echo",
+        description: "Echoes text",
+        parameters: Type.Object({
+          text: Type.String(),
+        }),
+        async execute() {
+          throw new Error("execute should not run for invalid arguments");
+        },
+      },
+    ]);
+
+    await engine.prompt({
+      role: "user",
+      content: [{ type: "text", text: "call tool with invalid args" }],
+      timestamp: Date.now(),
+    });
+
+    unsubscribe();
+
+    expect(observedPhases).toEqual(["classify", "cleanup"]);
+
+    const toolEnd = events.find(
+      (event): event is Extract<BrewvaAgentEngineEvent, { type: "tool_execution_end" }> =>
+        event.type === "tool_execution_end",
+    );
+    expect(toolEnd?.isError).toBe(true);
+    expect(toolEnd?.result).toEqual(
+      expect.objectContaining({
+        content: [
+          expect.objectContaining({
+            type: "text",
+            text: expect.stringContaining('Validation failed for tool "echo"'),
+          }),
+        ],
+      }),
+    );
+
+    const firstTurnEnd = events.find(
+      (event): event is Extract<BrewvaAgentEngineEvent, { type: "turn_end" }> =>
+        event.type === "turn_end" && event.toolResults.length > 0,
+    );
+    expect(firstTurnEnd?.toolResults).toHaveLength(1);
+    expect(firstTurnEnd?.toolResults[0]?.isError).toBe(true);
+  });
+
   test("emits a durable failure message before agent_end when the stream function throws", async () => {
     const events: BrewvaAgentEngineEvent[] = [];
     const streamFn: BrewvaAgentEngineStreamFunction = async () => {

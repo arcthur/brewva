@@ -2,8 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { writeFileAtomic } from "./plane-substrate.js";
 import {
+  OPTIMIZATION_CONTINUITY_MODE_VALUES,
   OPTIMIZATION_CONTINUITY_STATE_SCHEMA,
   OPTIMIZATION_LINEAGE_STATUS_VALUES,
+  OPTIMIZATION_METRIC_DIRECTION_VALUES,
   type DeliberationMemorySessionDigest,
   type OptimizationContinuityState,
   type OptimizationConvergenceSnapshot,
@@ -12,6 +14,7 @@ import {
   type OptimizationEvidenceRef,
   type OptimizationGuardSnapshot,
   type OptimizationLineageArtifact,
+  type OptimizationLineageMetadata,
   type OptimizationMetricSnapshot,
 } from "./types.js";
 
@@ -31,6 +34,19 @@ function readNumber(value: unknown): number | undefined {
 
 function readBoolean(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
+}
+
+function readNullableString(value: unknown): string | null | undefined {
+  return value === null ? null : readString(value);
+}
+
+function readNullableNumber(value: unknown): number | null | undefined {
+  return value === null ? null : readNumber(value);
+}
+
+function readLiteral<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
+  const normalized = readString(value);
+  return normalized && allowed.includes(normalized as T) ? (normalized as T) : undefined;
 }
 
 function readStringArray(value: unknown): string[] {
@@ -80,7 +96,7 @@ function readMetric(value: unknown): OptimizationMetricSnapshot | undefined {
   }
   return {
     metricKey,
-    direction: readString(value.direction),
+    direction: readLiteral(value.direction, OPTIMIZATION_METRIC_DIRECTION_VALUES) ?? "unknown",
     unit: readString(value.unit),
     aggregation: readString(value.aggregation),
     minDelta: readNumber(value.minDelta),
@@ -94,6 +110,22 @@ function readMetric(value: unknown): OptimizationMetricSnapshot | undefined {
     observationCount,
     lastObservedAt: readNumber(value.lastObservedAt),
   };
+}
+
+function readLineageMetadata(value: unknown): OptimizationLineageMetadata | undefined {
+  if (!isRecord(value)) return undefined;
+  const metadata: OptimizationLineageMetadata = {
+    stuckSignalCount: readNumber(value.stuckSignalCount) ?? 0,
+  };
+  const latestIterationOutcome = readNullableString(value.latestIterationOutcome);
+  if (latestIterationOutcome !== undefined) {
+    metadata.latestIterationOutcome = latestIterationOutcome;
+  }
+  const nextRunAt = readNullableNumber(value.nextRunAt);
+  if (nextRunAt !== undefined) {
+    metadata.nextRunAt = nextRunAt;
+  }
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
 function readGuard(value: unknown): OptimizationGuardSnapshot | undefined {
@@ -164,7 +196,7 @@ function readLineage(value: unknown): OptimizationLineageArtifact | undefined {
   const goalRef = readString(value.goalRef);
   const rootSessionId = readString(value.rootSessionId);
   const summary = readString(value.summary);
-  const status = readString(value.status);
+  const status = readLiteral(value.status, OPTIMIZATION_LINEAGE_STATUS_VALUES);
   const runCount = readNumber(value.runCount);
   const firstObservedAt = readNumber(value.firstObservedAt);
   const lastObservedAt = readNumber(value.lastObservedAt);
@@ -181,13 +213,6 @@ function readLineage(value: unknown): OptimizationLineageArtifact | undefined {
   ) {
     return undefined;
   }
-  if (
-    !OPTIMIZATION_LINEAGE_STATUS_VALUES.includes(
-      status as (typeof OPTIMIZATION_LINEAGE_STATUS_VALUES)[number],
-    )
-  ) {
-    return undefined;
-  }
   const evidence = Array.isArray(value.evidence)
     ? value.evidence
         .map((entry) => readEvidence(entry))
@@ -201,8 +226,8 @@ function readLineage(value: unknown): OptimizationLineageArtifact | undefined {
     goal: readString(value.goal),
     summary,
     scope: readStringArray(value.scope),
-    continuityMode: readString(value.continuityMode),
-    status: status as OptimizationLineageArtifact["status"],
+    continuityMode: readLiteral(value.continuityMode, OPTIMIZATION_CONTINUITY_MODE_VALUES),
+    status,
     runCount,
     lineageSessionIds: readStringArray(value.lineageSessionIds),
     sourceSkillNames: readStringArray(value.sourceSkillNames),
@@ -216,7 +241,7 @@ function readLineage(value: unknown): OptimizationLineageArtifact | undefined {
     firstObservedAt,
     lastObservedAt,
     evidence,
-    metadata: isRecord(value.metadata) ? value.metadata : undefined,
+    metadata: readLineageMetadata(value.metadata),
   };
 }
 

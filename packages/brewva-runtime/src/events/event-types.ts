@@ -131,6 +131,20 @@ export const CONTEXT_COMPOSED_EVENT_TYPE = "context_composed" as const;
 export const TOOL_SURFACE_RESOLVED_EVENT_TYPE = "tool_surface_resolved" as const;
 export const IDENTITY_PARSE_WARNING_EVENT_TYPE = "identity_parse_warning" as const;
 
+export const CONTEXT_ARENA_SLO_ENFORCED_EVENT_TYPE = "context_arena_slo_enforced" as const;
+export const CONTEXT_INJECTED_EVENT_TYPE = "context_injected" as const;
+export const CONTEXT_INJECTION_DROPPED_EVENT_TYPE = "context_injection_dropped" as const;
+export const CONTEXT_USAGE_EVENT_TYPE = "context_usage" as const;
+export const PARALLEL_SLOT_REJECTED_EVENT_TYPE = "parallel_slot_rejected" as const;
+export const COMPACTION_INTEGRITY_VIOLATION_EVENT_TYPE = "compaction_integrity_violation" as const;
+export const RECOVERY_WAL_APPENDED_EVENT_TYPE = "recovery_wal_appended" as const;
+export const RECOVERY_WAL_STATUS_CHANGED_EVENT_TYPE = "recovery_wal_status_changed" as const;
+export const RECOVERY_WAL_RECOVERY_COMPLETED_EVENT_TYPE =
+  "recovery_wal_recovery_completed" as const;
+export const RECOVERY_WAL_COMPACTED_EVENT_TYPE = "recovery_wal_compacted" as const;
+export const SUBAGENT_SKILL_OUTPUT_VALIDATION_FAILED_EVENT_TYPE =
+  "subagent_skill_output_validation_failed" as const;
+
 export const SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE = "schedule_recovery_deferred" as const;
 export const SCHEDULE_RECOVERY_SUMMARY_EVENT_TYPE = "schedule_recovery_summary" as const;
 export const SCHEDULE_WAKEUP_EVENT_TYPE = "schedule_wakeup" as const;
@@ -294,6 +308,7 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   SUBAGENT_CANCELLED_EVENT_TYPE,
   SUBAGENT_OUTCOME_PARSE_FAILED_EVENT_TYPE,
   SUBAGENT_DELIVERY_SURFACED_EVENT_TYPE,
+  SUBAGENT_SKILL_OUTPUT_VALIDATION_FAILED_EVENT_TYPE,
   WORKER_RESULTS_APPLIED_EVENT_TYPE,
   WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
   GOVERNANCE_VERIFY_SPEC_PASSED_EVENT_TYPE,
@@ -306,6 +321,16 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   GOVERNANCE_COMPACTION_INTEGRITY_FAILED_EVENT_TYPE,
   GOVERNANCE_COMPACTION_INTEGRITY_ERROR_EVENT_TYPE,
   EVENT_LISTENER_ERROR_EVENT_TYPE,
+  CONTEXT_ARENA_SLO_ENFORCED_EVENT_TYPE,
+  CONTEXT_INJECTED_EVENT_TYPE,
+  CONTEXT_INJECTION_DROPPED_EVENT_TYPE,
+  CONTEXT_USAGE_EVENT_TYPE,
+  PARALLEL_SLOT_REJECTED_EVENT_TYPE,
+  COMPACTION_INTEGRITY_VIOLATION_EVENT_TYPE,
+  RECOVERY_WAL_APPENDED_EVENT_TYPE,
+  RECOVERY_WAL_STATUS_CHANGED_EVENT_TYPE,
+  RECOVERY_WAL_RECOVERY_COMPLETED_EVENT_TYPE,
+  RECOVERY_WAL_COMPACTED_EVENT_TYPE,
 ] as const;
 
 export type BrewvaRegisteredEventType = (typeof BREWVA_REGISTERED_EVENT_TYPES)[number];

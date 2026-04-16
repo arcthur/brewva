@@ -95,6 +95,16 @@ export type TaskBlockerRecordResult = RuntimeResult<{ blockerId: string }>;
 export type TaskBlockerResolveResult = RuntimeResult;
 export type TaskAcceptanceRecordResult = RuntimeResult;
 
+/**
+ * A TaskState that has been fully hydrated from the event ledger.
+ * Use `isHydratedTaskState` to narrow from the base `TaskState` (where spec/status are optional).
+ */
+export type HydratedTaskState = TaskState & { spec: TaskSpec; status: TaskStatus };
+
+export function isHydratedTaskState(state: TaskState): state is HydratedTaskState {
+  return state.spec !== undefined && state.status !== undefined;
+}
+
 export type TaskLedgerEventPayload =
   | {
       schema: "brewva.task.ledger.v1";

@@ -211,7 +211,7 @@ export interface ToolCall {
   type: "toolCall";
   id: string;
   name: string;
-  arguments: Record<string, any>;
+  arguments: Record<string, unknown>;
   thoughtSignature?: string; // Google-specific: opaque signature for reusing thought context
 }
 
@@ -251,7 +251,7 @@ export interface AssistantMessage {
   timestamp: number; // Unix timestamp in milliseconds
 }
 
-export interface ToolResultMessage<TDetails = any> {
+export interface ToolResultMessage<TDetails = unknown> {
   role: "toolResult";
   toolCallId: string;
   toolName: string;

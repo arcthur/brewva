@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime";
 import type { ReviewLaneName, SubagentOutcome } from "@brewva/brewva-tools";
 import {
   ALL_REVIEW_LANES,
@@ -252,7 +253,7 @@ describe("review ensemble protocol", () => {
         runId: "lane-clear",
         delegate: "review-boundaries",
         agentSpec: "review-boundaries",
-        parentSessionId: "parent-session",
+        parentSessionId: asBrewvaSessionId("parent-session"),
         status: "completed",
         createdAt: 100,
         updatedAt: 112,
@@ -274,7 +275,7 @@ describe("review ensemble protocol", () => {
         runId: "lane-failed",
         delegate: "review-concurrency",
         agentSpec: "review-concurrency",
-        parentSessionId: "parent-session",
+        parentSessionId: asBrewvaSessionId("parent-session"),
         status: "failed",
         createdAt: 120,
         updatedAt: 135,

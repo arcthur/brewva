@@ -28,14 +28,22 @@ export interface GatewayUninstallServiceOptions {
   dryRun?: boolean;
 }
 
-export interface ServiceCommandResult {
-  command: string;
-  ok: boolean;
-  status: number | null;
-  stdout: string;
-  stderr: string;
-  error?: string;
-}
+export type ServiceCommandResult =
+  | {
+      command: string;
+      ok: true;
+      status: number;
+      stdout: string;
+      stderr: string;
+    }
+  | {
+      command: string;
+      ok: false;
+      status: number | null;
+      stdout: string;
+      stderr: string;
+      error: string;
+    };
 
 export interface GatewayInstallServiceResult {
   kind: GatewaySupervisorKind;
@@ -54,6 +62,16 @@ export interface GatewayUninstallServiceResult {
   removed: boolean;
   commands: ServiceCommandResult[];
 }
+
+export type GatewaySupervisorKindResolution =
+  | {
+      ok: true;
+      kind: GatewaySupervisorKind;
+    }
+  | {
+      ok: false;
+      error: string;
+    };
 
 const DEFAULT_LAUNCHD_LABEL = "com.brewva.gateway";
 const DEFAULT_SYSTEMD_SERVICE_NAME = "brewva-gateway";
@@ -91,13 +109,28 @@ function runCommand(parts: string[]): ServiceCommandResult {
     encoding: "utf8",
   });
 
+  const commandText = formatCommand(parts);
+  const stdout = typeof result.stdout === "string" ? result.stdout.trim() : "";
+  const stderr = typeof result.stderr === "string" ? result.stderr.trim() : "";
+  if (result.status === 0) {
+    return {
+      command: commandText,
+      ok: true,
+      status: 0,
+      stdout,
+      stderr,
+    };
+  }
   return {
-    command: formatCommand(parts),
-    ok: result.status === 0,
+    command: commandText,
+    ok: false,
     status: result.status,
-    stdout: typeof result.stdout === "string" ? result.stdout.trim() : "",
-    stderr: typeof result.stderr === "string" ? result.stderr.trim() : "",
-    error: result.error ? result.error.message : undefined,
+    stdout,
+    stderr,
+    error:
+      result.error?.message ||
+      stderr ||
+      (result.status === null ? "command_failed" : `exit_status:${result.status}`),
   };
 }
 
@@ -383,9 +416,10 @@ export function resolveSupervisorKind(input: {
   launchd: boolean;
   systemd: boolean;
   platform: NodeJS.Platform;
-}): { kind?: GatewaySupervisorKind; error?: string } {
+}): GatewaySupervisorKindResolution {
   if (input.launchd && input.systemd) {
     return {
+      ok: false,
       error: "Error: --launchd and --systemd cannot be used together.",
     };
   }
@@ -393,29 +427,32 @@ export function resolveSupervisorKind(input: {
   if (input.launchd) {
     if (input.platform !== "darwin") {
       return {
+        ok: false,
         error: "Error: --launchd is only supported on macOS.",
       };
     }
-    return { kind: "launchd" };
+    return { ok: true, kind: "launchd" };
   }
 
   if (input.systemd) {
     if (input.platform !== "linux") {
       return {
+        ok: false,
         error: "Error: --systemd is only supported on Linux.",
       };
     }
-    return { kind: "systemd" };
+    return { ok: true, kind: "systemd" };
   }
 
   if (input.platform === "darwin") {
-    return { kind: "launchd" };
+    return { ok: true, kind: "launchd" };
   }
   if (input.platform === "linux") {
-    return { kind: "systemd" };
+    return { ok: true, kind: "systemd" };
   }
 
   return {
+    ok: false,
     error:
       "Error: unsupported platform for gateway supervisor install. Use macOS (launchd) or Linux (systemd).",
   };

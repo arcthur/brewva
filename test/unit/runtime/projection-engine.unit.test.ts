@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   TASK_EVENT_TYPE,
   TASK_LEDGER_SCHEMA,
+  asBrewvaSessionId,
   type BrewvaEventRecord,
 } from "@brewva/brewva-runtime";
 import { ProjectionEngine } from "../../../packages/brewva-runtime/src/projection/engine.js";
@@ -19,7 +20,7 @@ function taskSpecEvent(input: {
   const timestamp = input.timestamp ?? Date.now();
   return {
     id: input.id,
-    sessionId: input.sessionId,
+    sessionId: asBrewvaSessionId(input.sessionId),
     type: TASK_EVENT_TYPE,
     turn: input.turn,
     timestamp,
@@ -87,7 +88,7 @@ describe("projection engine", () => {
       maxWorkingChars: 2_000,
     });
 
-    const sessionId = "projection-engine-rebuild";
+    const sessionId = asBrewvaSessionId("projection-engine-rebuild");
     const events = [
       taskSpecEvent({
         id: "evt-task-spec-rebuild",
@@ -114,7 +115,7 @@ describe("projection engine", () => {
 
   test("refresh rebuilds snapshot from persisted units when cache is cold", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-projection-engine-cold-refresh-"));
-    const sessionId = "projection-engine-cold-refresh";
+    const sessionId = asBrewvaSessionId("projection-engine-cold-refresh");
 
     const firstEngine = new ProjectionEngine({
       enabled: true,
@@ -155,7 +156,7 @@ describe("projection engine", () => {
       maxWorkingChars: 2_000,
     });
 
-    const sessionId = "projection-engine-workflow";
+    const sessionId = asBrewvaSessionId("projection-engine-workflow");
     const events: BrewvaEventRecord[] = [
       {
         id: "evt-workflow-design",

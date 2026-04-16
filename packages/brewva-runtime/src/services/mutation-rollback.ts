@@ -1,4 +1,7 @@
-import type { ToolMutationRollbackResult } from "../contracts/index.js";
+import type {
+  ToolMutationRollbackFailureReason,
+  ToolMutationRollbackResult,
+} from "../contracts/index.js";
 import { REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE } from "../events/event-types.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type { FileChangeService } from "./file-change.js";
@@ -14,9 +17,9 @@ export interface MutationRollbackServiceOptions {
   fileChangeService: Pick<FileChangeService, "rollbackPatchSet">;
 }
 
-function buildBaseResult(
+function buildRollbackFailureResult(
   mutation: RecordedReversibleMutation,
-  overrides: Partial<ToolMutationRollbackResult> = {},
+  reason: ToolMutationRollbackFailureReason,
 ): ToolMutationRollbackResult {
   return {
     ok: false,
@@ -27,8 +30,24 @@ function buildBaseResult(
     rollbackKind: mutation.receipt.rollbackKind,
     restoredPaths: [],
     failedPaths: [],
-    reason: "no_patchset",
-    ...overrides,
+    reason,
+  };
+}
+
+function buildRollbackSuccessResult(
+  mutation: RecordedReversibleMutation,
+  restoredPaths: string[],
+  failedPaths: string[],
+): ToolMutationRollbackResult {
+  return {
+    ok: true,
+    receiptId: mutation.receipt.id,
+    patchSetId: mutation.patchSetId ?? undefined,
+    toolName: mutation.receipt.toolName,
+    strategy: mutation.receipt.strategy,
+    rollbackKind: mutation.receipt.rollbackKind,
+    restoredPaths,
+    failedPaths,
   };
 }
 
@@ -62,21 +81,21 @@ export class MutationRollbackService {
 
     let result: ToolMutationRollbackResult;
     if (!mutation.patchSetId) {
-      result = buildBaseResult(mutation, {
-        ok: false,
-        restoredPaths: [],
-        failedPaths: [],
-        reason: "no_patchset",
-      });
+      result = buildRollbackFailureResult(mutation, "no_patchset");
     } else {
       const rollback = this.rollbackPatchSet(sessionId, mutation.patchSetId);
-      result = buildBaseResult(mutation, {
-        ok: rollback.ok,
-        patchSetId: mutation.patchSetId ?? undefined,
-        restoredPaths: [...rollback.restoredPaths],
-        failedPaths: [...rollback.failedPaths],
-        reason: rollback.reason,
-      });
+      result = rollback.ok
+        ? buildRollbackSuccessResult(
+            mutation,
+            [...rollback.restoredPaths],
+            [...rollback.failedPaths],
+          )
+        : {
+            ...buildRollbackFailureResult(mutation, rollback.reason),
+            patchSetId: mutation.patchSetId ?? undefined,
+            restoredPaths: [...rollback.restoredPaths],
+            failedPaths: [...rollback.failedPaths],
+          };
     }
 
     if (result.ok) {
@@ -95,7 +114,7 @@ export class MutationRollbackService {
         ok: result.ok,
         restoredPaths: [...result.restoredPaths],
         failedPaths: [...result.failedPaths],
-        reason: result.reason ?? null,
+        reason: result.ok ? null : result.reason,
       },
     });
 

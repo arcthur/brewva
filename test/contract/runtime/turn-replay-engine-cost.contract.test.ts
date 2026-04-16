@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId, type BrewvaEventRecord } from "@brewva/brewva-runtime";
 import { TurnReplayEngine } from "@brewva/brewva-runtime/internal";
 import { anchorEvent, toolResultFailureEvent } from "./turn-replay-engine.helpers.js";
 
 describe("TurnReplayEngine cost and evidence folding", () => {
   test("folds cost, projection, and stale failures after anchor expiry", () => {
-    const sessionId = "replay-engine-folded-extended";
+    const sessionId = asBrewvaSessionId("replay-engine-folded-extended");
     const events: BrewvaEventRecord[] = [
       {
         id: "evt-cost-1",
@@ -77,7 +77,7 @@ describe("TurnReplayEngine cost and evidence folding", () => {
   });
 
   test("preserves failure class in recent tool failures", () => {
-    const sessionId = "replay-engine-failure-class";
+    const sessionId = asBrewvaSessionId("replay-engine-failure-class");
     const events: BrewvaEventRecord[] = [
       toolResultFailureEvent({
         sessionId,
@@ -103,7 +103,7 @@ describe("TurnReplayEngine cost and evidence folding", () => {
   });
 
   test("derives invocation validation counts from failure context when failureClass is missing", () => {
-    const sessionId = "replay-engine-derived-invocation-validation";
+    const sessionId = asBrewvaSessionId("replay-engine-derived-invocation-validation");
     const events: BrewvaEventRecord[] = [
       {
         id: "evt-tool-failure-derived-1",
@@ -141,7 +141,7 @@ describe("TurnReplayEngine cost and evidence folding", () => {
   });
 
   test("folded cost turns count is deduplicated by turn", () => {
-    const sessionId = "replay-engine-cost-turns";
+    const sessionId = asBrewvaSessionId("replay-engine-cost-turns");
     const events: BrewvaEventRecord[] = [
       {
         id: "evt-cost-same-turn-1",
@@ -221,7 +221,7 @@ describe("TurnReplayEngine cost and evidence folding", () => {
   });
 
   test("folds tool cost allocation from tool_call_marked plus cost_update", () => {
-    const sessionId = "replay-engine-cost-tools";
+    const sessionId = asBrewvaSessionId("replay-engine-cost-tools");
     const events: BrewvaEventRecord[] = [
       {
         id: "evt-tool-call-1",

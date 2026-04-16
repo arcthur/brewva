@@ -2,6 +2,8 @@ import { resolve } from "node:path";
 import { addMilliseconds, subMilliseconds } from "date-fns";
 import { buildTurnEnvelope, type TurnEnvelope } from "../channels/turn.js";
 import type {
+  BrewvaIntentId,
+  BrewvaWalId,
   BrewvaConfig,
   BrewvaEventQuery,
   BrewvaEventRecord,
@@ -22,6 +24,7 @@ import type {
   RecoveryWalRecord,
   TruthState,
 } from "../contracts/index.js";
+import { asBrewvaIntentId } from "../contracts/index.js";
 import {
   SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE,
   SCHEDULE_RECOVERY_SUMMARY_EVENT_TYPE,
@@ -54,8 +57,8 @@ function sortEventsByTime(left: BrewvaEventRecord, right: BrewvaEventRecord): nu
   return left.timestamp - right.timestamp;
 }
 
-function generateIntentId(now: number): string {
-  return `intent_${now.toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+function generateIntentId(now: number): BrewvaIntentId {
+  return asBrewvaIntentId(`intent_${now.toString(36)}_${Math.random().toString(36).slice(2, 10)}`);
 }
 
 function normalizeOptionalString(value: string | undefined): string | undefined {
@@ -64,7 +67,7 @@ function normalizeOptionalString(value: string | undefined): string | undefined 
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function buildScheduleWalDedupeKey(intentId: string, runIndex: number): string {
+function buildScheduleWalDedupeKey(intentId: BrewvaIntentId, runIndex: number): string {
   return `schedule:${intentId}:${runIndex}`;
 }
 
@@ -96,13 +99,13 @@ function buildScheduleTurnEnvelope(input: {
   });
 }
 
-function readIntentIdFromWal(record: RecoveryWalRecord): string | undefined {
+function readIntentIdFromWal(record: RecoveryWalRecord): BrewvaIntentId | undefined {
   const meta = record.envelope.meta;
   if (!meta || typeof meta !== "object") return undefined;
   const intentId = (meta as { intentId?: unknown }).intentId;
   if (typeof intentId !== "string") return undefined;
   const normalized = intentId.trim();
-  return normalized.length > 0 ? normalized : undefined;
+  return normalized.length > 0 ? asBrewvaIntentId(normalized) : undefined;
 }
 
 function detectDefaultCronTimeZone(): string {
@@ -182,10 +185,10 @@ export interface SchedulerRuntimePort {
       source: "schedule",
       options?: { ttlMs?: number; dedupeKey?: string },
     ): RecoveryWalRecord;
-    markInflight(walId: string): RecoveryWalRecord | undefined;
-    markDone(walId: string): RecoveryWalRecord | undefined;
-    markFailed(walId: string, error?: string): RecoveryWalRecord | undefined;
-    markExpired?(walId: string): RecoveryWalRecord | undefined;
+    markInflight(walId: BrewvaWalId): RecoveryWalRecord | undefined;
+    markDone(walId: BrewvaWalId): RecoveryWalRecord | undefined;
+    markFailed(walId: BrewvaWalId, error?: string): RecoveryWalRecord | undefined;
+    markExpired?(walId: BrewvaWalId): RecoveryWalRecord | undefined;
     listPending(): RecoveryWalRecord[];
   };
 }
@@ -229,9 +232,9 @@ export class SchedulerService {
   private readonly projectionStore: ScheduleProjectionStore;
   private readonly defaultCronTimeZone: string;
 
-  private readonly intentsById = new Map<string, ScheduleIntentProjectionRecord>();
-  private readonly timersByIntentId = new Map<string, TimerHandle>();
-  private readonly fireInProgress = new Set<string>();
+  private readonly intentsById = new Map<BrewvaIntentId, ScheduleIntentProjectionRecord>();
+  private readonly timersByIntentId = new Map<BrewvaIntentId, TimerHandle>();
+  private readonly fireInProgress = new Set<BrewvaIntentId>();
   private readonly parsedCronBySource = new Map<string, ParsedCronExpression>();
   private readonly selfEmittedEventIds = new Set<string>();
   private watermarkOffset = 0;
@@ -378,7 +381,9 @@ export class SchedulerService {
     let normalizedRunAt: number | undefined;
     let normalizedNextRunAt: number | undefined;
     let normalizedTimeZone: string | undefined;
-    const intentId = normalizeOptionalString(input.intentId) ?? generateIntentId(now);
+    const intentId = normalizeOptionalString(input.intentId)
+      ? asBrewvaIntentId(normalizeOptionalString(input.intentId)!)
+      : generateIntentId(now);
 
     if (this.intentsById.has(intentId)) {
       return { ok: false, error: "intent_id_already_exists" };
@@ -460,7 +465,8 @@ export class SchedulerService {
       return { ok: false, error: "events_store_disabled" };
     }
 
-    const intent = this.intentsById.get(intentId);
+    const intentKey = asBrewvaIntentId(intentId);
+    const intent = this.intentsById.get(intentKey);
     if (!intent) return { ok: false, error: "intent_persist_failed" };
     if (this.enableExecution) {
       this.armTimer(intent);
@@ -476,7 +482,8 @@ export class SchedulerService {
     const intentId = normalizeOptionalString(input.intentId);
     if (!intentId) return { ok: false, error: "missing_intent_id" };
 
-    const intent = this.intentsById.get(intentId);
+    const intentKey = asBrewvaIntentId(intentId);
+    const intent = this.intentsById.get(intentKey);
     if (!intent) return { ok: false, error: "intent_not_found" };
     if (intent.parentSessionId !== parentSessionId)
       return { ok: false, error: "intent_owner_mismatch" };
@@ -496,7 +503,7 @@ export class SchedulerService {
     });
     const appended = this.appendScheduleEvent(payload);
     if (!appended) return { ok: false, error: "events_store_disabled" };
-    this.clearTimerForIntent(intentId);
+    this.clearTimerForIntent(intentKey);
     return { ok: true };
   }
 
@@ -509,7 +516,8 @@ export class SchedulerService {
     const intentId = normalizeOptionalString(input.intentId);
     if (!intentId) return { ok: false, error: "missing_intent_id" };
 
-    const intent = this.intentsById.get(intentId);
+    const intentKey = asBrewvaIntentId(intentId);
+    const intent = this.intentsById.get(intentKey);
     if (!intent) return { ok: false, error: "intent_not_found" };
     if (intent.parentSessionId !== parentSessionId)
       return { ok: false, error: "intent_owner_mismatch" };
@@ -663,7 +671,7 @@ export class SchedulerService {
     const appended = this.appendScheduleEvent(payload);
     if (!appended) return { ok: false, error: "events_store_disabled" };
 
-    const updated = this.intentsById.get(intentId);
+    const updated = this.intentsById.get(intentKey);
     if (!updated) return { ok: false, error: "intent_persist_failed" };
     if (this.enableExecution) {
       this.armTimer(updated);
@@ -721,11 +729,11 @@ export class SchedulerService {
       ? (normalizeTimeZone(payload.timeZone ?? "") ?? this.defaultCronTimeZone)
       : undefined;
     const nextRunAtFromCreate = payload.nextRunAt;
-    const existing = this.intentsById.get(payload.intentId);
+    const existing = this.intentsById.get(asBrewvaIntentId(payload.intentId));
     const record =
       existing ??
       ({
-        intentId: payload.intentId,
+        intentId: asBrewvaIntentId(payload.intentId),
         parentSessionId: payload.parentSessionId,
         reason: payload.reason,
         goalRef: payload.goalRef,
@@ -852,7 +860,7 @@ export class SchedulerService {
       this.applyScheduleEvent(payload, event.timestamp, this.watermarkOffset);
       this.persistProjection(event.timestamp);
 
-      const updated = this.intentsById.get(payload.intentId);
+      const updated = this.intentsById.get(asBrewvaIntentId(payload.intentId));
       if (updated && this.enableExecution) {
         this.armTimer(updated);
       }
@@ -882,16 +890,16 @@ export class SchedulerService {
     this.timersByIntentId.set(intent.intentId, handle);
   }
 
-  private clearTimerForIntent(intentId: string): void {
+  private clearTimerForIntent(intentId: BrewvaIntentId): void {
     const timer = this.timersByIntentId.get(intentId);
     if (timer === undefined) return;
     this.clearTimer(timer);
     this.timersByIntentId.delete(intentId);
   }
 
-  private buildPendingScheduleWalIndex(now: number): Map<string, RecoveryWalRecord> {
+  private buildPendingScheduleWalIndex(now: number): Map<BrewvaIntentId, RecoveryWalRecord> {
     const rows = this.runtimePort.recoveryWal?.listPending() ?? [];
-    const byIntentId = new Map<string, RecoveryWalRecord>();
+    const byIntentId = new Map<BrewvaIntentId, RecoveryWalRecord>();
     for (const row of rows) {
       if (row.source !== "schedule") continue;
       const intentId = readIntentIdFromWal(row);
@@ -1170,7 +1178,7 @@ export class SchedulerService {
   }
 
   private computeRecurringCronNextRunAt(
-    intentId: string,
+    intentId: BrewvaIntentId,
     cronExpression: string,
     afterMs: number,
     timeZone?: string,
@@ -1225,7 +1233,7 @@ export class SchedulerService {
     }
   }
 
-  private async fireIntent(intentId: string): Promise<void> {
+  private async fireIntent(intentId: BrewvaIntentId): Promise<void> {
     if (!this.enableExecution) return;
     if (!this.canExecuteScheduledWork()) return;
     if (this.fireInProgress.has(intentId)) return;
@@ -1256,7 +1264,7 @@ export class SchedulerService {
 
       const runIndex = intent.runCount + 1;
       const walDedupeKey = buildScheduleWalDedupeKey(intent.intentId, runIndex);
-      let walId: string | undefined;
+      let walId: BrewvaWalId | undefined;
       if (this.runtimePort.recoveryWal) {
         const walEnvelope = buildScheduleTurnEnvelope({
           intent,

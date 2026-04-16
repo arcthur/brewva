@@ -12,6 +12,7 @@ import {
   type TurnInputRecordedPayload,
   type TurnRenderCommittedPayload,
 } from "../contracts/index.js";
+import { asBrewvaToolCallId, asBrewvaToolName } from "../contracts/index.js";
 import {
   EFFECT_COMMITMENT_APPROVAL_DECIDED_EVENT_TYPE,
   EFFECT_COMMITMENT_APPROVAL_REQUESTED_EVENT_TYPE,
@@ -120,8 +121,8 @@ function readToolOutputView(value: unknown): ToolOutputView | null {
     return null;
   }
   return {
-    toolCallId,
-    toolName,
+    toolCallId: asBrewvaToolCallId(toolCallId),
+    toolName: asBrewvaToolName(toolName),
     verdict,
     isError: readBoolean(record.isError),
     text: readString(record.text) ?? "",
@@ -384,8 +385,8 @@ function buildApprovalRequestedFrame(
       type: "approval.requested",
       turnId,
       requestId,
-      toolName,
-      toolCallId,
+      toolName: asBrewvaToolName(toolName),
+      toolCallId: asBrewvaToolCallId(toolCallId),
       subject,
       detail: readString(payload?.argsSummary),
     },

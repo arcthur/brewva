@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import {
+  DEFAULT_BREWVA_CONFIG,
+  asBrewvaEventType,
+  asBrewvaSessionId,
+} from "@brewva/brewva-runtime";
 import { BrewvaEventStore } from "@brewva/brewva-runtime/internal";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -13,8 +17,8 @@ describe("BrewvaEventStore session id file mapping", () => {
   test("encodes session ids into distinct files and lists true session ids", () => {
     const workspace = createTestWorkspace("event-store-encoded");
     const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
-    const sessionA = "heartbeat:rule-1";
-    const sessionB = "heartbeat_rule-1";
+    const sessionA = asBrewvaSessionId("heartbeat:rule-1");
+    const sessionB = asBrewvaSessionId("heartbeat_rule-1");
 
     store.append({ sessionId: sessionA, type: "a", timestamp: 100 });
     store.append({ sessionId: sessionB, type: "b", timestamp: 101 });
@@ -51,7 +55,7 @@ describe("BrewvaEventStore session id file mapping", () => {
   test("recreates the events directory when it disappears after initialization", () => {
     const workspace = createTestWorkspace("event-store-recreate-events-dir");
     const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
-    const sessionId = "heartbeat:rule-1";
+    const sessionId = asBrewvaSessionId("heartbeat:rule-1");
     const eventsRoot = join(workspace, DEFAULT_BREWVA_CONFIG.infrastructure.events.dir);
 
     store.append({ sessionId, type: "startup", timestamp: 100 });
@@ -63,6 +67,6 @@ describe("BrewvaEventStore session id file mapping", () => {
     store.append({ sessionId, type: "resume", timestamp: 101 });
 
     expect(existsSync(eventsRoot)).toBe(true);
-    expect(store.list(sessionId).map((row) => row.type)).toEqual(["resume"]);
+    expect(store.list(sessionId).map((row) => row.type)).toEqual([asBrewvaEventType("resume")]);
   });
 });

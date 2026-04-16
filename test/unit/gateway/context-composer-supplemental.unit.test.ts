@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime";
 import { buildCapabilityView } from "../../../packages/brewva-gateway/src/runtime-plugins/capability-view.js";
 import { resolveSupplementalContextBlocks } from "../../../packages/brewva-gateway/src/runtime-plugins/context-composer-supplemental.js";
 
@@ -22,7 +23,7 @@ describe("context composer supplemental", () => {
                   runId: "run-pending",
                   delegate: "worker",
                   label: "search",
-                  parentSessionId: "session-1",
+                  parentSessionId: asBrewvaSessionId("session-1"),
                   status: "pending",
                   createdAt: 1,
                   updatedAt: 1,
@@ -34,7 +35,7 @@ describe("context composer supplemental", () => {
                 runId: "run-done",
                 delegate: "worker",
                 label: "summarize",
-                parentSessionId: "session-1",
+                parentSessionId: asBrewvaSessionId("session-1"),
                 status: "completed",
                 createdAt: 2,
                 updatedAt: 2,
@@ -108,7 +109,7 @@ describe("context composer supplemental", () => {
                   runId: "run-z",
                   delegate: "worker",
                   label: "search",
-                  parentSessionId: "session-2",
+                  parentSessionId: asBrewvaSessionId("session-2"),
                   status: "running",
                   createdAt: 2,
                   updatedAt: 2,
@@ -117,7 +118,7 @@ describe("context composer supplemental", () => {
                   runId: "run-a",
                   delegate: "worker",
                   label: "review",
-                  parentSessionId: "session-2",
+                  parentSessionId: asBrewvaSessionId("session-2"),
                   status: "pending",
                   createdAt: 1,
                   updatedAt: 1,
@@ -129,7 +130,7 @@ describe("context composer supplemental", () => {
                 runId: "run-y",
                 delegate: "worker",
                 label: "summarize",
-                parentSessionId: "session-2",
+                parentSessionId: asBrewvaSessionId("session-2"),
                 status: "completed",
                 createdAt: 4,
                 updatedAt: 4,
@@ -145,7 +146,7 @@ describe("context composer supplemental", () => {
                 runId: "run-b",
                 delegate: "worker",
                 label: "patch",
-                parentSessionId: "session-2",
+                parentSessionId: asBrewvaSessionId("session-2"),
                 status: "completed",
                 createdAt: 3,
                 updatedAt: 3,

@@ -9,6 +9,7 @@ import type {
   SessionUncleanShutdownDiagnostic,
   TaskState,
 } from "../contracts/index.js";
+import { asBrewvaToolCallId, asBrewvaToolName } from "../contracts/index.js";
 import {
   SESSION_UNCLEAN_SHUTDOWN_RECONCILED_EVENT_TYPE,
   SESSION_SHUTDOWN_EVENT_TYPE,
@@ -31,12 +32,18 @@ function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
-function readToolCallId(payload: Record<string, unknown> | null): string | null {
-  return payload ? readString(payload.toolCallId) : null;
+function readToolCallId(
+  payload: Record<string, unknown> | null,
+): import("../contracts/index.js").BrewvaToolCallId | null {
+  const v = payload ? readString(payload.toolCallId) : null;
+  return v !== null ? asBrewvaToolCallId(v) : null;
 }
 
-function readToolName(payload: Record<string, unknown> | null): string | null {
-  return payload ? readString(payload.toolName) : null;
+function readToolName(
+  payload: Record<string, unknown> | null,
+): import("../contracts/index.js").BrewvaToolName | null {
+  const v = payload ? readString(payload.toolName) : null;
+  return v !== null ? asBrewvaToolName(v) : null;
 }
 
 function normalizeText(value: string | null | undefined): string | null {
@@ -85,8 +92,14 @@ function readOpenToolCallRecord(value: unknown): OpenToolCallRecord | null {
     return null;
   }
   const candidate = value as Record<string, unknown>;
-  const toolCallId = readString(candidate.toolCallId);
-  const toolName = readString(candidate.toolName);
+  const toolCallId =
+    readString(candidate.toolCallId) !== null
+      ? asBrewvaToolCallId(readString(candidate.toolCallId)!)
+      : null;
+  const toolName =
+    readString(candidate.toolName) !== null
+      ? asBrewvaToolName(readString(candidate.toolName)!)
+      : null;
   const openedAt =
     typeof candidate.openedAt === "number" && Number.isFinite(candidate.openedAt)
       ? candidate.openedAt

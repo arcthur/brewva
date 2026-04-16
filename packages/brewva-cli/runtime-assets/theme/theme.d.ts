@@ -74,8 +74,10 @@ export declare const theme: Theme;
 export declare function setRegisteredThemes(themes: Theme[]): void;
 export declare function initTheme(themeName?: string, enableWatcher?: boolean): void;
 export declare function setTheme(name: string, enableWatcher?: boolean): {
-    success: boolean;
-    error?: string;
+    success: true;
+} | {
+    success: false;
+    error: string;
 };
 export declare function setThemeInstance(themeInstance: Theme): void;
 export declare function onThemeChange(callback: () => void): void;

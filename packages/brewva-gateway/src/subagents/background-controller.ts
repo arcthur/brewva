@@ -9,7 +9,7 @@ import type {
   DelegationRunRecord,
   SkillRoutingScope,
 } from "@brewva/brewva-runtime";
-import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId, isDelegationRunTerminalStatus } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type {
   DelegationPacket,
@@ -351,7 +351,7 @@ export function createDetachedSubagentBackgroundController(
             agentSpec: input.target.agentSpecName,
             envelope: input.target.envelopeName,
             skillName: input.target.skillName,
-            parentSessionId: input.parentSessionId,
+            parentSessionId: asBrewvaSessionId(input.parentSessionId),
             status: "failed",
             createdAt,
             updatedAt: createdAt,
@@ -371,7 +371,7 @@ export function createDetachedSubagentBackgroundController(
         agentSpec: input.target.agentSpecName,
         envelope: input.target.envelopeName,
         skillName: input.target.skillName,
-        parentSessionId: input.parentSessionId,
+        parentSessionId: asBrewvaSessionId(input.parentSessionId),
         status: "pending",
         createdAt,
         updatedAt: createdAt,
@@ -569,14 +569,21 @@ export function createDetachedSubagentBackgroundController(
       );
       if (!liveState) {
         const reconciled = await reconcileLiveState(existing);
+        const run = {
+          ...cloneDelegationRunRecord(reconciled.record),
+          live: false,
+          cancelable: false,
+        };
+        if (reconciled.record.status === "cancelled") {
+          return {
+            ok: true,
+            run,
+          };
+        }
         return {
-          ok: reconciled.record.status === "cancelled",
-          error: reconciled.record.status === "cancelled" ? undefined : `not_live:${runId}`,
-          run: {
-            ...cloneDelegationRunRecord(reconciled.record),
-            live: false,
-            cancelable: false,
-          },
+          ok: false,
+          error: `not_live:${runId}`,
+          run,
         };
       }
 
@@ -609,18 +616,24 @@ export function createDetachedSubagentBackgroundController(
           const latest = delegationStore.getRun(parentSessionId, runId) ?? existing;
           const reconciled = await reconcileLiveState(latest);
           if (isDelegationRunTerminalStatus(reconciled.record.status)) {
+            const run = {
+              ...cloneDelegationRunRecord(reconciled.record),
+              live: false,
+              cancelable: false,
+            };
+            if (
+              reconciled.record.status === "cancelled" ||
+              reconciled.record.status === "timeout"
+            ) {
+              return {
+                ok: true,
+                run,
+              };
+            }
             return {
-              ok:
-                reconciled.record.status === "cancelled" || reconciled.record.status === "timeout",
-              error:
-                reconciled.record.status === "cancelled" || reconciled.record.status === "timeout"
-                  ? undefined
-                  : `cancel_not_observed:${reconciled.record.status}`,
-              run: {
-                ...cloneDelegationRunRecord(reconciled.record),
-                live: false,
-                cancelable: false,
-              },
+              ok: false,
+              error: `cancel_not_observed:${reconciled.record.status}`,
+              run,
             };
           }
         }
@@ -629,17 +642,21 @@ export function createDetachedSubagentBackgroundController(
       const latest = delegationStore.getRun(parentSessionId, runId) ?? existing;
       const reconciled = await reconcileLiveState(latest);
       if (isDelegationRunTerminalStatus(reconciled.record.status)) {
+        const run = {
+          ...cloneDelegationRunRecord(reconciled.record),
+          live: false,
+          cancelable: false,
+        };
+        if (reconciled.record.status === "cancelled" || reconciled.record.status === "timeout") {
+          return {
+            ok: true,
+            run,
+          };
+        }
         return {
-          ok: reconciled.record.status === "cancelled" || reconciled.record.status === "timeout",
-          error:
-            reconciled.record.status === "cancelled" || reconciled.record.status === "timeout"
-              ? undefined
-              : `cancel_not_observed:${reconciled.record.status}`,
-          run: {
-            ...cloneDelegationRunRecord(reconciled.record),
-            live: false,
-            cancelable: false,
-          },
+          ok: false,
+          error: `cancel_not_observed:${reconciled.record.status}`,
+          run,
         };
       }
       return {

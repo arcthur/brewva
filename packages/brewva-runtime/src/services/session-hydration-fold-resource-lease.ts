@@ -1,4 +1,5 @@
 import type { ResourceLeaseBudget, ResourceLeaseRecord } from "../contracts/index.js";
+import { asBrewvaSessionId } from "../contracts/index.js";
 import {
   RESOURCE_LEASE_CANCELLED_EVENT_TYPE,
   RESOURCE_LEASE_EXPIRED_EVENT_TYPE,
@@ -37,7 +38,7 @@ function readLeaseRecord(payload: Record<string, unknown> | null): ResourceLease
   }
   return {
     id: leaseId,
-    sessionId,
+    sessionId: asBrewvaSessionId(sessionId),
     skillName,
     reason,
     budget: readLeaseBudget(payload?.budget),

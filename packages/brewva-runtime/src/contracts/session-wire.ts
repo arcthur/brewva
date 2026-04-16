@@ -1,4 +1,5 @@
 import type { DelegationOutcomeKind } from "./delegation.js";
+import type { BrewvaSessionId, BrewvaToolCallId, BrewvaToolName } from "./identifiers.js";
 
 export const SESSION_WIRE_SCHEMA = "brewva.session-wire.v2" as const;
 
@@ -36,8 +37,8 @@ export interface ContextPressureView {
 }
 
 export interface ToolOutputView {
-  toolCallId: string;
-  toolName: string;
+  toolCallId: BrewvaToolCallId;
+  toolName: BrewvaToolName;
   verdict: "pass" | "fail" | "inconclusive";
   isError: boolean;
   text: string;
@@ -59,7 +60,7 @@ export interface TurnRenderCommittedPayload {
 
 export interface SessionWireFrameBase {
   schema: typeof SESSION_WIRE_SCHEMA;
-  sessionId: string;
+  sessionId: BrewvaSessionId;
   frameId: string;
   ts: number;
   source: SessionWireSource;
@@ -125,15 +126,15 @@ export type SessionWireFrame =
       type: "tool.started";
       turnId: string;
       attemptId: string;
-      toolCallId: string;
-      toolName: string;
+      toolCallId: BrewvaToolCallId;
+      toolName: BrewvaToolName;
     })
   | (SessionWireFrameBase & {
       type: "tool.progress";
       turnId: string;
       attemptId: string;
-      toolCallId: string;
-      toolName: string;
+      toolCallId: BrewvaToolCallId;
+      toolName: BrewvaToolName;
       verdict: ToolOutputView["verdict"];
       isError: boolean;
       text: string;
@@ -142,8 +143,8 @@ export type SessionWireFrame =
       type: "tool.finished";
       turnId: string;
       attemptId: string;
-      toolCallId: string;
-      toolName: string;
+      toolCallId: BrewvaToolCallId;
+      toolName: BrewvaToolName;
       verdict: ToolOutputView["verdict"];
       isError: boolean;
       text: string;
@@ -162,8 +163,8 @@ export type SessionWireFrame =
       type: "approval.requested";
       turnId: string;
       requestId: string;
-      toolName: string;
-      toolCallId: string;
+      toolName: BrewvaToolName;
+      toolCallId: BrewvaToolCallId;
       subject: string;
       detail?: string;
     })

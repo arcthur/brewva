@@ -39,7 +39,7 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
       });
       if (!result.ok) {
         return failTextResult(
-          `agent_send failed for ${result.toAgentId}: ${result.error ?? "unknown_error"}`,
+          `agent_send failed for ${result.toAgentId}: ${result.error}`,
           result as Record<string, unknown>,
         );
       }
@@ -79,11 +79,9 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
       const failCount = result.results.length - okCount;
       const lines = [
         `agent_broadcast completed: ok=${okCount} failed=${failCount}`,
-        ...(result.error ? [`error=${result.error}`] : []),
+        ...(!result.ok ? [`error=${result.error}`] : []),
         ...result.results.map((entry) =>
-          entry.ok
-            ? `- ${entry.toAgentId}: ok`
-            : `- ${entry.toAgentId}: ${entry.error ?? "unknown_error"}`,
+          entry.ok ? `- ${entry.toAgentId}: ok` : `- ${entry.toAgentId}: ${entry.error}`,
         ),
       ];
       return textResult(

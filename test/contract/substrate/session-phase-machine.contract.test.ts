@@ -1,10 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import {
-  advanceSessionPhase,
+  advanceSessionPhaseResult,
   canTransitionSessionPhase,
   type SessionPhase,
   type SessionPhaseEvent,
 } from "@brewva/brewva-substrate";
+
+function expectPhaseTransition(phase: SessionPhase, event: SessionPhaseEvent): SessionPhase {
+  const result = advanceSessionPhaseResult(phase, event);
+  expect(result.ok).toBe(true);
+  if (!result.ok) {
+    throw new Error(result.error);
+  }
+  return result.phase;
+}
 
 describe("substrate session phase machine", () => {
   test("advances through the execution-only lifecycle", () => {
@@ -17,7 +26,7 @@ describe("substrate session phase machine", () => {
     ];
 
     const finalPhase = lifecycle.reduce<SessionPhase>(
-      (phase, event) => advanceSessionPhase(phase, event),
+      (phase, event) => expectPhaseTransition(phase, event),
       { kind: "idle" },
     );
 
@@ -28,7 +37,7 @@ describe("substrate session phase machine", () => {
   });
 
   test("enters a steady recovering state before returning to idle", () => {
-    const crashed = advanceSessionPhase(
+    const crashed = expectPhaseTransition(
       { kind: "tool_executing", toolCallId: "tool_1", toolName: "write", turn: 2 },
       {
         type: "crash",
@@ -45,17 +54,19 @@ describe("substrate session phase machine", () => {
       recoveryAnchor: "wal:tool_1",
     });
     expect(canTransitionSessionPhase(crashed, { type: "resume" })).toBe(true);
-    const recovering = advanceSessionPhase(crashed, { type: "resume" });
+    const recovering = expectPhaseTransition(crashed, { type: "resume" });
     expect(recovering).toEqual({
       kind: "recovering",
       recoveryAnchor: "wal:tool_1",
       turn: 2,
     });
-    expect(advanceSessionPhase(recovering, { type: "finish_recovery" })).toEqual({ kind: "idle" });
+    expect(expectPhaseTransition(recovering, { type: "finish_recovery" })).toEqual({
+      kind: "idle",
+    });
   });
 
   test("tracks approval as an explicit steady state", () => {
-    const waitingApproval = advanceSessionPhase(
+    const waitingApproval = expectPhaseTransition(
       { kind: "tool_executing", toolCallId: "tool_1", toolName: "write", turn: 2 },
       {
         type: "wait_for_approval",
@@ -70,14 +81,15 @@ describe("substrate session phase machine", () => {
       toolName: "write",
       turn: 2,
     });
-    expect(advanceSessionPhase(waitingApproval, { type: "approval_resolved" })).toEqual({
+    expect(expectPhaseTransition(waitingApproval, { type: "approval_resolved" })).toEqual({
       kind: "idle",
     });
   });
 
   test("rejects invalid transitions", () => {
-    expect(() => advanceSessionPhase({ kind: "idle" }, { type: "finish_tool_execution" })).toThrow(
-      "invalid session phase transition",
-    );
+    expect(advanceSessionPhaseResult({ kind: "idle" }, { type: "finish_tool_execution" })).toEqual({
+      ok: false,
+      error: "invalid session phase transition",
+    });
   });
 });

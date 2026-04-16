@@ -3,6 +3,7 @@ import { relative } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   SUBAGENT_RUNNING_EVENT_TYPE,
+  asBrewvaSessionId,
   type DelegationRunRecord,
   type SkillRoutingScope,
 } from "@brewva/brewva-runtime";
@@ -146,6 +147,7 @@ async function main(): Promise<void> {
   }
 
   const spec = await loadSpec(specPath);
+  const specParentSessionId = asBrewvaSessionId(spec.parentSessionId);
   const parentRuntime = new BrewvaRuntime({
     cwd: spec.workspaceRoot,
     config: spec.config,
@@ -160,7 +162,7 @@ async function main(): Promise<void> {
       ...(existing ?? {
         runId: spec.runId,
         delegate: spec.delegate,
-        parentSessionId: spec.parentSessionId,
+        parentSessionId: specParentSessionId,
         status: "failed" as const,
         createdAt: spec.createdAt,
         updatedAt: Date.now(),
@@ -187,7 +189,7 @@ async function main(): Promise<void> {
       ...(existing ?? {
         runId: spec.runId,
         delegate: spec.delegate,
-        parentSessionId: spec.parentSessionId,
+        parentSessionId: specParentSessionId,
         status: "failed" as const,
         createdAt: spec.createdAt,
         updatedAt: Date.now(),
@@ -212,7 +214,7 @@ async function main(): Promise<void> {
   let isolatedWorkspace: IsolatedWorkspaceHandle | undefined;
   let cancellationReason: string | undefined;
   let timeoutTriggered = false;
-  let childSessionId: string | undefined;
+  let childSessionId: import("@brewva/brewva-runtime").BrewvaSessionId | undefined;
   let targetRecord: HostedDelegationTarget = delegationTarget;
   const modelRouting = createDelegationModelRoutingContextFromAgentDir();
   const executionPlan = resolveDelegationExecutionPlan({
@@ -259,7 +261,7 @@ async function main(): Promise<void> {
       contextProfile: executionPlan.contextProfile,
       routingScopes: normalizeRoutingScopes(spec.routingScopes),
     });
-    childSessionId = childSession.session.sessionManager.getSessionId();
+    childSessionId = asBrewvaSessionId(childSession.session.sessionManager.getSessionId());
 
     const runningRecord: DelegationRunRecord = {
       ...(delegationStore.getRun(spec.parentSessionId, spec.runId) ?? {
@@ -268,7 +270,7 @@ async function main(): Promise<void> {
         agentSpec: targetRecord.agentSpecName,
         envelope: targetRecord.envelopeName,
         skillName: targetRecord.skillName,
-        parentSessionId: spec.parentSessionId,
+        parentSessionId: specParentSessionId,
         createdAt: spec.createdAt,
         label: spec.label,
         parentSkill: parentRuntime.inspect.skills.getActive(spec.parentSessionId)?.name,
@@ -294,7 +296,7 @@ async function main(): Promise<void> {
     writeDetachedSubagentLiveState(spec.workspaceRoot, spec.runId, {
       schema: "brewva.subagent-run-live.v1",
       runId: spec.runId,
-      parentSessionId: spec.parentSessionId,
+      parentSessionId: specParentSessionId,
       delegate: spec.delegate,
       pid: process.pid,
       createdAt: spec.createdAt,
@@ -490,7 +492,7 @@ async function main(): Promise<void> {
         envelope: targetRecord.envelopeName,
         skillName: delegatedSkill,
         consultKind: targetRecord.consultKind,
-        parentSessionId: spec.parentSessionId,
+        parentSessionId: specParentSessionId,
         createdAt: spec.createdAt,
       }),
       status: "completed",
@@ -583,7 +585,7 @@ async function main(): Promise<void> {
         envelope: targetRecord.envelopeName,
         skillName: targetRecord.skillName,
         consultKind: targetRecord.consultKind,
-        parentSessionId: spec.parentSessionId,
+        parentSessionId: specParentSessionId,
         createdAt: spec.createdAt,
       }),
       status: terminalStatus,

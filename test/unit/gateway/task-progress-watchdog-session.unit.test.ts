@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime";
 import { createGatewaySession } from "../../../packages/brewva-gateway/src/session/create-session.js";
 import { TaskProgressWatchdog } from "../../../packages/brewva-gateway/src/session/task-progress-watchdog.js";
 import { patchDateNow } from "../../helpers/global-state.js";
@@ -20,7 +21,7 @@ describe("gateway session watchdog integration", () => {
     });
 
     try {
-      const sessionId = result.session.sessionManager.getSessionId();
+      const sessionId = asBrewvaSessionId(result.session.sessionManager.getSessionId());
 
       const bootstrap = result.runtime.inspect.events.query(sessionId, {
         type: "session_bootstrap",

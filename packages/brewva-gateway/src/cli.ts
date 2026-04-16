@@ -7,6 +7,7 @@ import {
   BrewvaConfigLoadError,
   resolveBrewvaAgentDir,
   type ManagedToolMode,
+  type RuntimeResult,
 } from "@brewva/brewva-runtime";
 import { readGatewayToken } from "./auth.js";
 import { connectGatewayClient } from "./client.js";
@@ -62,6 +63,28 @@ export interface RunGatewayCliOptions {
 export interface RunGatewayCliResult {
   handled: boolean;
   exitCode: number;
+}
+
+type GatewayCliValueResult<T> = RuntimeResult<{ value: T }>;
+
+function okGatewayCliValue<T>(value: T): GatewayCliValueResult<T> {
+  return { ok: true, value };
+}
+
+function gatewayCliValueError(error: string): GatewayCliValueResult<never> {
+  return { ok: false, error };
+}
+
+function hasGatewayCliValue<T>(
+  result: GatewayCliValueResult<T>,
+): result is Extract<GatewayCliValueResult<T>, { ok: true }> {
+  return result.ok;
+}
+
+function printGatewayCliValueError<T>(result: GatewayCliValueResult<T>): void {
+  if (!result.ok) {
+    console.error(result.error);
+  }
 }
 
 const START_PARSE_OPTIONS = {
@@ -218,26 +241,26 @@ function parseOptionalIntegerFlag(
     minimum?: number;
     maximum?: number;
   } = {},
-): { value?: number; error?: string } {
+): GatewayCliValueResult<number | undefined> {
   if (typeof raw !== "string") {
-    return {};
+    return okGatewayCliValue(undefined);
   }
   const trimmed = raw.trim();
   if (!trimmed) {
-    return { error: `Error: --${flag} must be an integer.` };
+    return gatewayCliValueError(`Error: --${flag} must be an integer.`);
   }
 
   const value = Number(trimmed);
   if (!Number.isInteger(value)) {
-    return { error: `Error: --${flag} must be an integer.` };
+    return gatewayCliValueError(`Error: --${flag} must be an integer.`);
   }
   if (options.minimum !== undefined && value < options.minimum) {
-    return { error: `Error: --${flag} must be >= ${options.minimum}.` };
+    return gatewayCliValueError(`Error: --${flag} must be >= ${options.minimum}.`);
   }
   if (options.maximum !== undefined && value > options.maximum) {
-    return { error: `Error: --${flag} must be <= ${options.maximum}.` };
+    return gatewayCliValueError(`Error: --${flag} must be <= ${options.maximum}.`);
   }
-  return { value };
+  return okGatewayCliValue(value);
 }
 
 function pushStringFlag(args: string[], name: string, value: unknown): void {
@@ -262,17 +285,16 @@ function describeFlagValue(raw: unknown): string {
   }
 }
 
-function resolveManagedToolModeFlag(raw: unknown): { value: ManagedToolMode; error?: string } {
+function resolveManagedToolModeFlag(raw: unknown): GatewayCliValueResult<ManagedToolMode> {
   if (raw === undefined) {
-    return { value: "runtime_plugin" };
+    return okGatewayCliValue("runtime_plugin");
   }
   if (raw === "runtime_plugin" || raw === "direct") {
-    return { value: raw };
+    return okGatewayCliValue(raw);
   }
-  return {
-    value: "runtime_plugin",
-    error: `Error: --managed-tools must be "runtime_plugin" or "direct" (received "${describeFlagValue(raw)}").`,
-  };
+  return gatewayCliValueError(
+    `Error: --managed-tools must be "runtime_plugin" or "direct" (received "${describeFlagValue(raw)}").`,
+  );
 }
 
 function resolveDetachedBootstrapPrefix(): string[] {
@@ -338,17 +360,18 @@ function buildDetachedStartArgs(values: Readonly<Record<string, unknown>>): stri
   return args;
 }
 
-function parseOptionalPathFlag(flag: string, raw: unknown): { value?: string; error?: string } {
+function parseOptionalPathFlag(
+  flag: string,
+  raw: unknown,
+): GatewayCliValueResult<string | undefined> {
   if (typeof raw !== "string") {
-    return {};
+    return okGatewayCliValue(undefined);
   }
   const trimmed = raw.trim();
   if (!trimmed) {
-    return { error: `Error: --${flag} must be a non-empty path.` };
+    return gatewayCliValueError(`Error: --${flag} must be a non-empty path.`);
   }
-  return {
-    value: trimmed.startsWith("/") ? trimmed : `/${trimmed}`,
-  };
+  return okGatewayCliValue(trimmed.startsWith("/") ? trimmed : `/${trimmed}`);
 }
 
 async function waitForGatewayReady(
@@ -588,8 +611,8 @@ async function handleStart(argv: string[]): Promise<number> {
     return 1;
   }
   const managedToolMode = resolveManagedToolModeFlag(parsed.values["managed-tools"]);
-  if (managedToolMode.error) {
-    console.error(managedToolMode.error);
+  if (!hasGatewayCliValue(managedToolMode)) {
+    printGatewayCliValueError(managedToolMode);
     return 1;
   }
 
@@ -597,8 +620,8 @@ async function handleStart(argv: string[]): Promise<number> {
     minimum: 1,
     maximum: 65535,
   });
-  if (portParsed.error) {
-    console.error(portParsed.error);
+  if (!hasGatewayCliValue(portParsed)) {
+    printGatewayCliValueError(portParsed);
     return 1;
   }
 
@@ -609,8 +632,8 @@ async function handleStart(argv: string[]): Promise<number> {
       minimum: 1000,
     },
   );
-  if (tickParsed.error) {
-    console.error(tickParsed.error);
+  if (!hasGatewayCliValue(tickParsed)) {
+    printGatewayCliValueError(tickParsed);
     return 1;
   }
 
@@ -619,8 +642,8 @@ async function handleStart(argv: string[]): Promise<number> {
     parsed.values["max-payload-bytes"],
     { minimum: 16 * 1024 },
   );
-  if (maxPayloadParsed.error) {
-    console.error(maxPayloadParsed.error);
+  if (!hasGatewayCliValue(maxPayloadParsed)) {
+    printGatewayCliValueError(maxPayloadParsed);
     return 1;
   }
   const sessionIdleParsed = parseOptionalIntegerFlag(
@@ -628,15 +651,15 @@ async function handleStart(argv: string[]): Promise<number> {
     parsed.values["session-idle-ms"],
     { minimum: 1_000 },
   );
-  if (sessionIdleParsed.error) {
-    console.error(sessionIdleParsed.error);
+  if (!hasGatewayCliValue(sessionIdleParsed)) {
+    printGatewayCliValueError(sessionIdleParsed);
     return 1;
   }
   const maxWorkersParsed = parseOptionalIntegerFlag("max-workers", parsed.values["max-workers"], {
     minimum: 1,
   });
-  if (maxWorkersParsed.error) {
-    console.error(maxWorkersParsed.error);
+  if (!hasGatewayCliValue(maxWorkersParsed)) {
+    printGatewayCliValueError(maxWorkersParsed);
     return 1;
   }
   const maxQueueParsed = parseOptionalIntegerFlag(
@@ -646,15 +669,15 @@ async function handleStart(argv: string[]): Promise<number> {
       minimum: 0,
     },
   );
-  if (maxQueueParsed.error) {
-    console.error(maxQueueParsed.error);
+  if (!hasGatewayCliValue(maxQueueParsed)) {
+    printGatewayCliValueError(maxQueueParsed);
     return 1;
   }
   const waitParsed = parseOptionalIntegerFlag("wait-ms", parsed.values["wait-ms"], {
     minimum: 200,
   });
-  if (waitParsed.error) {
-    console.error(waitParsed.error);
+  if (!hasGatewayCliValue(waitParsed)) {
+    printGatewayCliValueError(waitParsed);
     return 1;
   }
   const healthPortParsed = parseOptionalIntegerFlag(
@@ -665,16 +688,16 @@ async function handleStart(argv: string[]): Promise<number> {
       maximum: 65535,
     },
   );
-  if (healthPortParsed.error) {
-    console.error(healthPortParsed.error);
+  if (!hasGatewayCliValue(healthPortParsed)) {
+    printGatewayCliValueError(healthPortParsed);
     return 1;
   }
   const healthPathParsed = parseOptionalPathFlag(
     "health-http-path",
     parsed.values["health-http-path"],
   );
-  if (healthPathParsed.error) {
-    console.error(healthPathParsed.error);
+  if (!hasGatewayCliValue(healthPathParsed)) {
+    printGatewayCliValueError(healthPathParsed);
     return 1;
   }
 
@@ -863,16 +886,16 @@ async function handleStatus(argv: string[]): Promise<number> {
   const timeoutParsed = parseOptionalIntegerFlag("timeout-ms", parsed.values["timeout-ms"], {
     minimum: 100,
   });
-  if (timeoutParsed.error) {
-    console.error(timeoutParsed.error);
+  if (!hasGatewayCliValue(timeoutParsed)) {
+    printGatewayCliValueError(timeoutParsed);
     return 1;
   }
   const portParsed = parseOptionalIntegerFlag("port", parsed.values.port, {
     minimum: 1,
     maximum: 65535,
   });
-  if (portParsed.error) {
-    console.error(portParsed.error);
+  if (!hasGatewayCliValue(portParsed)) {
+    printGatewayCliValueError(portParsed);
     return 1;
   }
 
@@ -956,16 +979,16 @@ async function handleStop(argv: string[]): Promise<number> {
   const timeoutParsed = parseOptionalIntegerFlag("timeout-ms", parsed.values["timeout-ms"], {
     minimum: 100,
   });
-  if (timeoutParsed.error) {
-    console.error(timeoutParsed.error);
+  if (!hasGatewayCliValue(timeoutParsed)) {
+    printGatewayCliValueError(timeoutParsed);
     return 1;
   }
   const portParsed = parseOptionalIntegerFlag("port", parsed.values.port, {
     minimum: 1,
     maximum: 65535,
   });
-  if (portParsed.error) {
-    console.error(portParsed.error);
+  if (!hasGatewayCliValue(portParsed)) {
+    printGatewayCliValueError(portParsed);
     return 1;
   }
 
@@ -1121,16 +1144,16 @@ async function handleHeartbeatReload(argv: string[]): Promise<number> {
   const timeoutParsed = parseOptionalIntegerFlag("timeout-ms", parsed.values["timeout-ms"], {
     minimum: 100,
   });
-  if (timeoutParsed.error) {
-    console.error(timeoutParsed.error);
+  if (!hasGatewayCliValue(timeoutParsed)) {
+    printGatewayCliValueError(timeoutParsed);
     return 1;
   }
   const portParsed = parseOptionalIntegerFlag("port", parsed.values.port, {
     minimum: 1,
     maximum: 65535,
   });
-  if (portParsed.error) {
-    console.error(portParsed.error);
+  if (!hasGatewayCliValue(portParsed)) {
+    printGatewayCliValueError(portParsed);
     return 1;
   }
 
@@ -1223,16 +1246,16 @@ async function handleSchedulerPause(argv: string[]): Promise<number> {
   const timeoutParsed = parseOptionalIntegerFlag("timeout-ms", parsed.values["timeout-ms"], {
     minimum: 100,
   });
-  if (timeoutParsed.error) {
-    console.error(timeoutParsed.error);
+  if (!hasGatewayCliValue(timeoutParsed)) {
+    printGatewayCliValueError(timeoutParsed);
     return 1;
   }
   const portParsed = parseOptionalIntegerFlag("port", parsed.values.port, {
     minimum: 1,
     maximum: 65535,
   });
-  if (portParsed.error) {
-    console.error(portParsed.error);
+  if (!hasGatewayCliValue(portParsed)) {
+    printGatewayCliValueError(portParsed);
     return 1;
   }
 
@@ -1326,16 +1349,16 @@ async function handleSchedulerResume(argv: string[]): Promise<number> {
   const timeoutParsed = parseOptionalIntegerFlag("timeout-ms", parsed.values["timeout-ms"], {
     minimum: 100,
   });
-  if (timeoutParsed.error) {
-    console.error(timeoutParsed.error);
+  if (!hasGatewayCliValue(timeoutParsed)) {
+    printGatewayCliValueError(timeoutParsed);
     return 1;
   }
   const portParsed = parseOptionalIntegerFlag("port", parsed.values.port, {
     minimum: 1,
     maximum: 65535,
   });
-  if (portParsed.error) {
-    console.error(portParsed.error);
+  if (!hasGatewayCliValue(portParsed)) {
+    printGatewayCliValueError(portParsed);
     return 1;
   }
 
@@ -1427,16 +1450,14 @@ async function handleRotateToken(argv: string[]): Promise<number> {
   const timeoutParsed = parseOptionalIntegerFlag("timeout-ms", parsed.values["timeout-ms"], {
     minimum: 100,
   });
-  if (timeoutParsed.error) {
-    console.error(timeoutParsed.error);
+  if (!hasGatewayCliValue(timeoutParsed)) {
     return 1;
   }
   const portParsed = parseOptionalIntegerFlag("port", parsed.values.port, {
     minimum: 1,
     maximum: 65535,
   });
-  if (portParsed.error) {
-    console.error(portParsed.error);
+  if (!hasGatewayCliValue(portParsed)) {
     return 1;
   }
 
@@ -1532,8 +1553,8 @@ async function handleLogs(argv: string[]): Promise<number> {
   const tailParsed = parseOptionalIntegerFlag("tail", parsed.values.tail, {
     minimum: 1,
   });
-  if (tailParsed.error) {
-    console.error(tailParsed.error);
+  if (!hasGatewayCliValue(tailParsed)) {
+    printGatewayCliValueError(tailParsed);
     return 1;
   }
 
@@ -1607,8 +1628,8 @@ async function handleInstall(argv: string[]): Promise<number> {
     return 1;
   }
   const managedToolMode = resolveManagedToolModeFlag(parsed.values["managed-tools"]);
-  if (managedToolMode.error) {
-    console.error(managedToolMode.error);
+  if (!hasGatewayCliValue(managedToolMode)) {
+    printGatewayCliValueError(managedToolMode);
     return 1;
   }
 
@@ -1617,8 +1638,8 @@ async function handleInstall(argv: string[]): Promise<number> {
     systemd: parsed.values.systemd === true,
     platform: process.platform,
   });
-  if (supervisor.error || !supervisor.kind) {
-    console.error(supervisor.error ?? "Error: failed to resolve supervisor type.");
+  if (!supervisor.ok) {
+    console.error(supervisor.error);
     return 1;
   }
 
@@ -1626,8 +1647,8 @@ async function handleInstall(argv: string[]): Promise<number> {
     minimum: 1,
     maximum: 65535,
   });
-  if (portParsed.error) {
-    console.error(portParsed.error);
+  if (!hasGatewayCliValue(portParsed)) {
+    printGatewayCliValueError(portParsed);
     return 1;
   }
   const tickParsed = parseOptionalIntegerFlag(
@@ -1635,8 +1656,8 @@ async function handleInstall(argv: string[]): Promise<number> {
     parsed.values["tick-interval-ms"],
     { minimum: 1000 },
   );
-  if (tickParsed.error) {
-    console.error(tickParsed.error);
+  if (!hasGatewayCliValue(tickParsed)) {
+    printGatewayCliValueError(tickParsed);
     return 1;
   }
   const maxPayloadParsed = parseOptionalIntegerFlag(
@@ -1644,8 +1665,8 @@ async function handleInstall(argv: string[]): Promise<number> {
     parsed.values["max-payload-bytes"],
     { minimum: 16 * 1024 },
   );
-  if (maxPayloadParsed.error) {
-    console.error(maxPayloadParsed.error);
+  if (!hasGatewayCliValue(maxPayloadParsed)) {
+    printGatewayCliValueError(maxPayloadParsed);
     return 1;
   }
   const sessionIdleParsed = parseOptionalIntegerFlag(
@@ -1653,15 +1674,15 @@ async function handleInstall(argv: string[]): Promise<number> {
     parsed.values["session-idle-ms"],
     { minimum: 1_000 },
   );
-  if (sessionIdleParsed.error) {
-    console.error(sessionIdleParsed.error);
+  if (!hasGatewayCliValue(sessionIdleParsed)) {
+    printGatewayCliValueError(sessionIdleParsed);
     return 1;
   }
   const maxWorkersParsed = parseOptionalIntegerFlag("max-workers", parsed.values["max-workers"], {
     minimum: 1,
   });
-  if (maxWorkersParsed.error) {
-    console.error(maxWorkersParsed.error);
+  if (!hasGatewayCliValue(maxWorkersParsed)) {
+    printGatewayCliValueError(maxWorkersParsed);
     return 1;
   }
   const maxQueueParsed = parseOptionalIntegerFlag(
@@ -1669,8 +1690,8 @@ async function handleInstall(argv: string[]): Promise<number> {
     parsed.values["max-open-queue"],
     { minimum: 0 },
   );
-  if (maxQueueParsed.error) {
-    console.error(maxQueueParsed.error);
+  if (!hasGatewayCliValue(maxQueueParsed)) {
+    printGatewayCliValueError(maxQueueParsed);
     return 1;
   }
   const healthPortParsed = parseOptionalIntegerFlag(
@@ -1678,16 +1699,16 @@ async function handleInstall(argv: string[]): Promise<number> {
     parsed.values["health-http-port"],
     { minimum: 1, maximum: 65535 },
   );
-  if (healthPortParsed.error) {
-    console.error(healthPortParsed.error);
+  if (!hasGatewayCliValue(healthPortParsed)) {
+    printGatewayCliValueError(healthPortParsed);
     return 1;
   }
   const healthPathParsed = parseOptionalPathFlag(
     "health-http-path",
     parsed.values["health-http-path"],
   );
-  if (healthPathParsed.error) {
-    console.error(healthPathParsed.error);
+  if (!hasGatewayCliValue(healthPathParsed)) {
+    printGatewayCliValueError(healthPathParsed);
     return 1;
   }
 
@@ -1868,8 +1889,8 @@ async function handleUninstall(argv: string[]): Promise<number> {
     systemd: parsed.values.systemd === true,
     platform: process.platform,
   });
-  if (supervisor.error || !supervisor.kind) {
-    console.error(supervisor.error ?? "Error: failed to resolve supervisor type.");
+  if (!supervisor.ok) {
+    console.error(supervisor.error);
     return 1;
   }
 

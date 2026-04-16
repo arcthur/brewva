@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime";
 import { createFollowUpTool } from "@brewva/brewva-tools";
 import {
   createScheduleToolRuntime,
@@ -9,7 +10,7 @@ import {
 describe("follow_up contract", () => {
   test("supports create after, list, and cancel", async () => {
     const runtime = createScheduleToolRuntime("brewva-follow-up-after-tool-");
-    const sessionId = "follow-up-after-session";
+    const sessionId = asBrewvaSessionId("follow-up-after-session");
     const tool = createFollowUpTool({ runtime });
 
     const createResult = await tool.execute(
@@ -58,7 +59,7 @@ describe("follow_up contract", () => {
 
   test("create every compiles to recurring schedule_intent semantics with bounded default runs", async () => {
     const runtime = createScheduleToolRuntime("brewva-follow-up-every-tool-");
-    const sessionId = "follow-up-every-session";
+    const sessionId = asBrewvaSessionId("follow-up-every-session");
     const tool = createFollowUpTool({ runtime });
 
     const createResult = await tool.execute(

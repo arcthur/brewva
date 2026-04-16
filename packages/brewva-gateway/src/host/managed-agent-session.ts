@@ -4,7 +4,7 @@ import { basename, extname, resolve } from "node:path";
 import type { SessionWireFrame } from "@brewva/brewva-runtime";
 import {
   DEFAULT_CONTEXT_STATE,
-  advanceSessionPhase,
+  advanceSessionPhaseResult,
   buildBrewvaSystemPrompt,
   buildBrewvaPromptText,
   cloneBrewvaPromptContentParts,
@@ -1675,7 +1675,11 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
 
   private async transitionSessionPhase(event: SessionPhaseEvent): Promise<void> {
     const previousPhase = this.getSessionPhase();
-    const nextPhase = advanceSessionPhase(previousPhase, event);
+    const next = advanceSessionPhaseResult(previousPhase, event);
+    if (!next.ok) {
+      throw new Error(next.error);
+    }
+    const nextPhase = next.phase;
     if (sameSessionPhase(previousPhase, nextPhase)) {
       return;
     }

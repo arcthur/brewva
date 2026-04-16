@@ -1,5 +1,6 @@
 import type { JsonValue } from "../utils/json.js";
 import type { ToolExecutionBoundary } from "./governance.js";
+import type { BrewvaSessionId } from "./identifiers.js";
 
 export type DelegationRunStatus =
   | "pending"
@@ -83,12 +84,12 @@ export interface DelegationRunRecord {
   agentSpec?: string;
   envelope?: string;
   skillName?: string;
-  parentSessionId: string;
+  parentSessionId: BrewvaSessionId;
   status: DelegationRunStatus;
   createdAt: number;
   updatedAt: number;
   label?: string;
-  workerSessionId?: string;
+  workerSessionId?: BrewvaSessionId;
   parentSkill?: string;
   kind?: DelegationOutcomeKind;
   consultKind?: DelegationConsultKind;

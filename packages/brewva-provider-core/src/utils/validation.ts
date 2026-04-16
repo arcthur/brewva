@@ -1,16 +1,54 @@
 import AjvModule from "ajv";
 import addFormatsModule from "ajv-formats";
-
-// Handle both default and named exports
-const Ajv = (AjvModule as any).default || AjvModule;
-const addFormats = (addFormatsModule as any).default || addFormatsModule;
-
 import type { Tool, ToolCall } from "../types.js";
+
+declare const validatedProviderToolArgumentsBrand: unique symbol;
+
+export type ProviderValidatedToolArguments = Record<string, unknown> & {
+  readonly [validatedProviderToolArgumentsBrand]: "ProviderValidatedToolArguments";
+};
+
+export type ToolArgumentValidationResult =
+  | {
+      ok: true;
+      args: ProviderValidatedToolArguments;
+    }
+  | {
+      ok: false;
+      error: string;
+    };
+
+export type ToolCallValidationResult = ToolArgumentValidationResult;
+
+type ValidationError = {
+  instancePath: string;
+  message?: string;
+  params: {
+    missingProperty?: string;
+  };
+};
+
+type ValidationResult = ((args: unknown) => boolean) & {
+  errors?: ValidationError[];
+};
+
+type AjvLike = {
+  compile(schema: unknown): ValidationResult;
+};
+
+type AjvConstructor = new (options: {
+  allErrors: boolean;
+  strict: boolean;
+  coerceTypes: boolean;
+}) => AjvLike;
+
+type AddFormatsFunction = (ajv: AjvLike) => void;
 
 // Detect if we're in a browser extension environment with strict CSP
 // Chrome extensions with Manifest V3 don't allow eval/Function constructor
 const isBrowserExtension =
-  typeof globalThis !== "undefined" && (globalThis as any).chrome?.runtime?.id !== undefined;
+  typeof globalThis !== "undefined" &&
+  Boolean((globalThis as { chrome?: { runtime?: { id?: string } } }).chrome?.runtime?.id);
 
 function canUseRuntimeCodegen(): boolean {
   if (isBrowserExtension) {
@@ -25,18 +63,25 @@ function canUseRuntimeCodegen(): boolean {
   }
 }
 
-// Create a singleton AJV instance with formats only when runtime code generation is available.
-let ajv: any = null;
+let ajv: AjvLike | null = null;
 if (canUseRuntimeCodegen()) {
   try {
-    ajv = new Ajv({
+    const Ajv = AjvModule as unknown as { default?: AjvConstructor } | AjvConstructor;
+    const AjvCtor = (typeof Ajv === "function" ? Ajv : Ajv.default) as AjvConstructor;
+    const addFormats = addFormatsModule as unknown as
+      | { default?: AddFormatsFunction }
+      | AddFormatsFunction;
+    const addFormatsFn = (
+      typeof addFormats === "function" ? addFormats : addFormats.default
+    ) as AddFormatsFunction;
+    ajv = new AjvCtor({
       allErrors: true,
       strict: false,
       coerceTypes: true,
     });
-    addFormats(ajv);
-  } catch (_e) {
-    console.warn("AJV validation disabled due to CSP restrictions");
+    addFormatsFn(ajv);
+  } catch {
+    ajv = null;
   }
 }
 
@@ -44,53 +89,82 @@ if (canUseRuntimeCodegen()) {
  * Finds a tool by name and validates the tool call arguments against its TypeBox schema
  * @param tools Array of tool definitions
  * @param toolCall The tool call from the LLM
- * @returns The validated arguments
- * @throws Error if tool is not found or validation fails
+ * @returns The explicit validation result
  */
-export function validateToolCall(tools: Tool[], toolCall: ToolCall): any {
+export function validateToolCallResult(
+  tools: Tool[],
+  toolCall: ToolCall,
+): ToolCallValidationResult {
   const tool = tools.find((t) => t.name === toolCall.name);
   if (!tool) {
-    throw new Error(`Tool "${toolCall.name}" not found`);
+    return {
+      ok: false,
+      error: `Tool "${toolCall.name}" not found`,
+    };
   }
-  return validateToolArguments(tool, toolCall);
+  return validateToolArgumentsResult(tool, toolCall);
 }
 
 /**
  * Validates tool call arguments against the tool's TypeBox schema
  * @param tool The tool definition with TypeBox schema
  * @param toolCall The tool call from the LLM
- * @returns The validated (and potentially coerced) arguments
- * @throws Error with formatted message if validation fails
+ * @returns The explicit validation result
  */
-export function validateToolArguments(tool: Tool, toolCall: ToolCall): any {
-  // Skip validation in environments where runtime code generation is unavailable.
+export function validateToolArgumentsResult(
+  tool: Tool,
+  toolCall: ToolCall,
+): ToolArgumentValidationResult {
   if (!ajv || !canUseRuntimeCodegen()) {
-    return toolCall.arguments;
+    return {
+      ok: true,
+      args: toolCall.arguments as ProviderValidatedToolArguments,
+    };
   }
 
-  // Compile the schema.
   const validate = ajv.compile(tool.parameters);
-
-  // Clone arguments so AJV can safely mutate for type coercion
   const args = structuredClone(toolCall.arguments);
-
-  // Validate the arguments (AJV mutates args in-place for type coercion)
   if (validate(args)) {
-    return args;
+    return {
+      ok: true,
+      args: args as ProviderValidatedToolArguments,
+    };
   }
 
-  // Format validation errors nicely
   const errors =
     validate.errors
-      ?.map((err: any) => {
-        const path = err.instancePath
-          ? err.instancePath.substring(1)
-          : err.params.missingProperty || "root";
-        return `  - ${path}: ${err.message}`;
+      ?.map((error) => {
+        const path = error.instancePath
+          ? error.instancePath.substring(1)
+          : (error.params.missingProperty ?? "root");
+        return `  - ${path}: ${error.message}`;
       })
-      .join("\n") || "Unknown validation error";
+      .join("\n") ?? "Unknown validation error";
 
-  const errorMessage = `Validation failed for tool "${toolCall.name}":\n${errors}\n\nReceived arguments:\n${JSON.stringify(toolCall.arguments, null, 2)}`;
+  return {
+    ok: false,
+    error: `Validation failed for tool "${toolCall.name}":\n${errors}\n\nReceived arguments:\n${JSON.stringify(toolCall.arguments, null, 2)}`,
+  };
+}
 
-  throw new Error(errorMessage);
+export function validateToolCall(
+  tools: Tool[],
+  toolCall: ToolCall,
+): ProviderValidatedToolArguments {
+  const result = validateToolCallResult(tools, toolCall);
+  if (!result.ok) {
+    throw new Error(result.error);
+  }
+  return result.args;
+}
+
+export function validateToolArguments(
+  tool: Tool,
+  toolCall: ToolCall,
+): ProviderValidatedToolArguments {
+  const result = validateToolArgumentsResult(tool, toolCall);
+  if (!result.ok) {
+    throw new Error(result.error);
+  }
+  return result.args;
 }

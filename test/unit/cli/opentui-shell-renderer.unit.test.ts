@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { BrewvaReplaySession, SessionWireFrame } from "@brewva/brewva-runtime";
+import {
+  asBrewvaSessionId,
+  asBrewvaToolCallId,
+  asBrewvaToolName,
+  type BrewvaReplaySession,
+  type SessionWireFrame,
+} from "@brewva/brewva-runtime";
 import type {
   BrewvaPromptSessionEvent,
   BrewvaRenderableComponent,
@@ -617,8 +623,8 @@ describe("opentui solid shell runtime", () => {
           {
             requestId: "approval-1",
             proposalId: "proposal-1",
-            toolName: "write",
-            toolCallId: "tool-call-1",
+            toolName: asBrewvaToolName("write"),
+            toolCallId: asBrewvaToolCallId("tool-call-1"),
             subject: "Write /tmp/output.ts",
             boundary: "effectful",
             effects: ["workspace_write"],
@@ -717,7 +723,7 @@ describe("opentui solid shell runtime", () => {
         "worker-session-1": [
           {
             schema: "brewva.session-wire.v2",
-            sessionId: "worker-session-1",
+            sessionId: asBrewvaSessionId("worker-session-1"),
             frameId: "frame-1",
             ts: Date.now(),
             source: "replay",
@@ -729,8 +735,8 @@ describe("opentui solid shell runtime", () => {
             assistantText: "QA summary line\nFound stale contract drift.",
             toolOutputs: [
               {
-                toolCallId: "tool-1",
-                toolName: "exec_command",
+                toolCallId: asBrewvaToolCallId("tool-1"),
+                toolName: asBrewvaToolName("exec_command"),
                 verdict: "pass",
                 isError: false,
                 text: "bun test\n1775 pass",
@@ -758,12 +764,12 @@ describe("opentui solid shell runtime", () => {
           {
             runId: "run-1",
             delegate: "worker-1",
-            parentSessionId: "session-1",
+            parentSessionId: asBrewvaSessionId("session-1"),
             status: "completed",
             createdAt: Date.now(),
             updatedAt: Date.now(),
             label: "Review operator state",
-            workerSessionId: "worker-session-1",
+            workerSessionId: asBrewvaSessionId("worker-session-1"),
             summary: "Streaming output",
             resultData: {
               verdict: "pass",
@@ -1069,7 +1075,7 @@ describe("opentui solid shell runtime", () => {
   test("renders session browser details for the current session even before replay events exist", async () => {
     const replaySessions = [
       {
-        sessionId: "archived-session",
+        sessionId: asBrewvaSessionId("archived-session"),
         eventCount: 14,
         lastEventAt: 1_710_000_000_000,
       },

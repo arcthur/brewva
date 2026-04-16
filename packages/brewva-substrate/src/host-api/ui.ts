@@ -10,10 +10,12 @@ export interface BrewvaUiThemeEntry {
   path?: string;
 }
 
-export interface BrewvaThemeSelectionResult {
-  success: boolean;
-  error?: string;
-}
+export type BrewvaThemeSelectionResult =
+  | { success: true }
+  | {
+      success: false;
+      error: string;
+    };
 
 export interface BrewvaToolUiPort {
   select(

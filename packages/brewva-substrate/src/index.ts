@@ -152,7 +152,7 @@ export {
   type CreateFetchProviderCompletionDriverOptions,
 } from "./provider/fetch-provider-driver.js";
 export {
-  advanceSessionPhase,
+  advanceSessionPhaseResult,
   canTransitionSessionPhase,
   type SessionPhaseEvent,
 } from "./session/phase-machine.js";

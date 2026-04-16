@@ -9,6 +9,7 @@ import type {
 } from "@brewva/brewva-runtime";
 import {
   SUBAGENT_RUNNING_EVENT_TYPE,
+  asBrewvaSessionId,
   isDelegationRunTerminalStatus,
   type WorkerResult,
 } from "@brewva/brewva-runtime";
@@ -351,16 +352,29 @@ interface LiveHostedDelegationRun {
   };
 }
 
-function createLaunchErrorResult(input: {
+function createLaunchRunFailure(input: {
   mode: SubagentRunRequest["mode"];
   delegate: string;
   error: string;
-}): SubagentRunResult & SubagentStartResult {
+}): SubagentRunResult {
   return {
     ok: false,
     mode: input.mode,
     delegate: input.delegate,
     outcomes: [],
+    error: input.error,
+  };
+}
+
+function createLaunchStartFailure(input: {
+  mode: SubagentRunRequest["mode"];
+  delegate: string;
+  error: string;
+}): SubagentStartResult {
+  return {
+    ok: false,
+    mode: input.mode,
+    delegate: input.delegate,
     runs: [],
     error: input.error,
   };
@@ -514,7 +528,7 @@ export function createHostedSubagentAdapter(
 
     let child: HostedSubagentSessionResult | undefined;
     let isolatedWorkspace: IsolatedWorkspaceHandle | undefined;
-    let childSessionId: string | undefined;
+    let childSessionId: import("@brewva/brewva-runtime").BrewvaSessionId | undefined;
     let executionPlan: ReturnType<typeof resolveDelegationExecutionPlan> | undefined;
     let childCostAggregated = false;
     let parallelSlotReleased = false;
@@ -527,7 +541,7 @@ export function createHostedSubagentAdapter(
       const failedRecord: DelegationRunRecord = {
         runId,
         ...resolveDelegationRecordIdentity({ target: input.target }),
-        parentSessionId: input.parentSessionId,
+        parentSessionId: asBrewvaSessionId(input.parentSessionId),
         status: "failed",
         createdAt: startedAt,
         updatedAt: Date.now(),
@@ -611,7 +625,7 @@ export function createHostedSubagentAdapter(
     const initialRecord: DelegationRunRecord = {
       runId,
       ...resolveDelegationRecordIdentity({ target: input.target }),
-      parentSessionId: input.parentSessionId,
+      parentSessionId: asBrewvaSessionId(input.parentSessionId),
       status: "pending",
       createdAt: startedAt,
       updatedAt: startedAt,
@@ -730,7 +744,7 @@ export function createHostedSubagentAdapter(
           enableSubagents: false,
         });
 
-        childSessionId = child.session.sessionManager.getSessionId();
+        childSessionId = asBrewvaSessionId(child.session.sessionManager.getSessionId());
         if (timeoutTriggered && child.session.abort) {
           await child.session.abort().catch(() => undefined);
         }
@@ -1178,7 +1192,7 @@ export function createHostedSubagentAdapter(
     run: async ({ fromSessionId, request }): Promise<SubagentRunResult> => {
       const launchPlan = await resolveLaunchPlan({ fromSessionId, request });
       if (!launchPlan.ok) {
-        return createLaunchErrorResult({
+        return createLaunchRunFailure({
           mode: request.mode,
           delegate:
             request.agentSpec ??
@@ -1202,18 +1216,27 @@ export function createHostedSubagentAdapter(
         }),
       );
       const outcomes = await Promise.all(liveRuns.map((run) => run.outcomePromise));
+      const failures = outcomes.filter((outcome) => !outcome.ok);
+      if (failures.length > 0) {
+        return {
+          ok: false,
+          mode: request.mode,
+          delegate: launchPlan.delegate,
+          outcomes,
+          error: failures[0]?.error ?? "subagent_run_failed",
+        };
+      }
       return {
-        ok: outcomes.every((outcome) => outcome.ok),
+        ok: true,
         mode: request.mode,
         delegate: launchPlan.delegate,
-        outcomes,
-        error: outcomes.find((outcome) => !outcome.ok)?.error,
+        outcomes: outcomes.filter((outcome): outcome is SubagentOutcomeSuccess => outcome.ok),
       };
     },
     start: async ({ fromSessionId, request }): Promise<SubagentStartResult> => {
       const launchPlan = await resolveLaunchPlan({ fromSessionId, request });
       if (!launchPlan.ok) {
-        const failure = createLaunchErrorResult({
+        return createLaunchStartFailure({
           mode: request.mode,
           delegate:
             request.agentSpec ??
@@ -1223,13 +1246,6 @@ export function createHostedSubagentAdapter(
             "derived",
           error: launchPlan.error,
         });
-        return {
-          ok: failure.ok,
-          mode: failure.mode,
-          delegate: failure.delegate,
-          runs: failure.runs,
-          error: failure.error,
-        };
       }
 
       if (options.backgroundController) {
@@ -1247,12 +1263,21 @@ export function createHostedSubagentAdapter(
             }),
           ),
         );
+        const failedRun = runs.find((run) => run.status === "failed");
+        if (failedRun) {
+          return {
+            ok: false,
+            mode: request.mode,
+            delegate: launchPlan.delegate,
+            runs: runs.map((run) => cloneDelegationRunRecord(run)),
+            error: failedRun.error ?? `subagent_start_failed:${failedRun.runId}`,
+          };
+        }
         return {
-          ok: runs.every((run) => run.status !== "failed"),
+          ok: true,
           mode: request.mode,
           delegate: launchPlan.delegate,
           runs: runs.map((run) => cloneDelegationRunRecord(run)),
-          error: runs.find((run) => run.status === "failed")?.error,
         };
       }
 
@@ -1268,12 +1293,22 @@ export function createHostedSubagentAdapter(
           delivery: request.delivery,
         }),
       );
+      const failedLiveRun = liveRuns.find((run) => run.record.status === "failed");
+      if (failedLiveRun) {
+        return {
+          ok: false,
+          mode: request.mode,
+          delegate: launchPlan.delegate,
+          runs: liveRuns.map((run) => cloneDelegationRunRecord(run.record)),
+          error:
+            failedLiveRun.record.error ?? `subagent_start_failed:${failedLiveRun.record.runId}`,
+        };
+      }
       return {
-        ok: liveRuns.every((run) => run.record.status !== "failed"),
+        ok: true,
         mode: request.mode,
         delegate: launchPlan.delegate,
         runs: liveRuns.map((run) => cloneDelegationRunRecord(run.record)),
-        error: liveRuns.find((run) => run.record.status === "failed")?.record.error,
       };
     },
     status: async ({ fromSessionId, query }): Promise<SubagentStatusResult> => {
@@ -1380,17 +1415,21 @@ export function createHostedSubagentAdapter(
       }
 
       const record = await liveRun.cancel(reason);
+      const run = {
+        ...cloneDelegationRunRecord(record),
+        live: false,
+        cancelable: false,
+      };
+      if (record.status === "cancelled" || record.status === "timeout") {
+        return {
+          ok: true,
+          run,
+        };
+      }
       return {
-        ok: record.status === "cancelled" || record.status === "timeout",
-        run: {
-          ...cloneDelegationRunRecord(record),
-          live: false,
-          cancelable: false,
-        },
-        error:
-          record.status === "cancelled" || record.status === "timeout"
-            ? undefined
-            : `cancel_not_observed:${record.status}`,
+        ok: false,
+        error: `cancel_not_observed:${record.status}`,
+        run,
       };
     },
   };

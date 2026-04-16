@@ -24,11 +24,14 @@ import {
 import {
   OPTIMIZATION_CONTINUITY_STATE_SCHEMA,
   type DeliberationMemorySessionDigest,
+  type OptimizationContinuityMode,
   type OptimizationContinuityRetrieval,
   type OptimizationContinuityState,
   type OptimizationEvidenceRef,
   type OptimizationLineageArtifact,
+  type OptimizationLineageMetadata,
   type OptimizationLineageStatus,
+  type OptimizationMetricDirection,
   type OptimizationMetricSnapshot,
 } from "./types.js";
 
@@ -449,7 +452,7 @@ function branchKey(goalRef: string, rootSessionId: string): string {
   return `${goalRef}::${rootSessionId}`;
 }
 
-function inferDirection(rawDirection: string | undefined): "increase" | "decrease" | "unknown" {
+function inferDirection(rawDirection: string | undefined): OptimizationMetricDirection {
   const normalized = rawDirection?.trim().toLowerCase();
   if (!normalized) return "unknown";
   if (
@@ -472,9 +475,17 @@ function inferDirection(rawDirection: string | undefined): "increase" | "decreas
   return "unknown";
 }
 
+function normalizeContinuityMode(
+  rawContinuityMode: string | undefined,
+): OptimizationContinuityMode | undefined {
+  return rawContinuityMode === "inherit" || rawContinuityMode === "fresh"
+    ? rawContinuityMode
+    : undefined;
+}
+
 function deriveBestMetricValue(
   values: readonly number[],
-  direction: "increase" | "decrease" | "unknown",
+  direction: OptimizationMetricDirection,
 ): number | undefined {
   if (values.length === 0) return undefined;
   if (direction === "decrease") {
@@ -484,7 +495,7 @@ function deriveBestMetricValue(
 }
 
 function deriveMetricTrend(input: {
-  direction?: string;
+  direction: OptimizationMetricDirection;
   baselineValue?: number;
   latestValue?: number;
   previousValue?: number;
@@ -496,8 +507,7 @@ function deriveMetricTrend(input: {
   const delta = input.latestValue - reference;
   const minDelta = Math.max(0, input.minDelta ?? 0);
   if (Math.abs(delta) <= minDelta) return "flat";
-  const direction = inferDirection(input.direction);
-  if (direction === "decrease") {
+  if (input.direction === "decrease") {
     return delta < 0 ? "improving" : "regressing";
   }
   return delta > 0 ? "improving" : "regressing";
@@ -717,7 +727,7 @@ function buildMetricSnapshot(input: {
   const metricKey = readStringField(metricConfig, "key") ?? input.metrics.at(-1)?.metricKey;
   if (!metricKey) return undefined;
   const metricValues = input.metrics.map((entry) => entry.value);
-  const direction = readStringField(metricConfig, "direction");
+  const direction = inferDirection(readStringField(metricConfig, "direction"));
   const baselineValue = readNumberField(baselineConfig, "value") ?? input.metrics[0]?.value;
   const latestMetric = input.metrics.at(-1);
   const previousMetric = input.metrics.length > 1 ? input.metrics.at(-2) : undefined;
@@ -729,7 +739,7 @@ function buildMetricSnapshot(input: {
     minDelta: readNumberField(metricConfig, "min_delta"),
     baselineValue,
     latestValue: latestMetric?.value,
-    bestValue: deriveBestMetricValue(metricValues, inferDirection(direction)),
+    bestValue: deriveBestMetricValue(metricValues, direction),
     trend: deriveMetricTrend({
       direction,
       baselineValue,
@@ -1019,6 +1029,17 @@ function buildOptimizationLineages(
       scheduleRunCount,
       sortedMetrics.length > 0 || sortedCompletions.length > 0 ? 1 : 0,
     );
+    const metadata: OptimizationLineageMetadata = {
+      stuckSignalCount: recentOutcomes
+        .slice(-3)
+        .filter((entry) =>
+          ["no_improvement", "guard_regression", "below_noise_floor", "crash"].includes(
+            entry.trim().toLowerCase(),
+          ),
+        ).length,
+      latestIterationOutcome: recentOutcomes.at(-1) ?? null,
+      nextRunAt: continuation.nextRunAt ?? null,
+    };
     artifacts.push({
       id: `opt:${loopKey}:${group.rootSessionId}`,
       loopKey,
@@ -1036,7 +1057,7 @@ function buildOptimizationLineages(
       }),
       scope: readStringArray(latestContract?.scope),
       continuityMode:
-        readStringField(latestContract, "continuity_mode") ??
+        normalizeContinuityMode(readStringField(latestContract, "continuity_mode")) ??
         sortedSchedules.at(-1)?.payload.continuityMode,
       status,
       runCount,
@@ -1055,17 +1076,7 @@ function buildOptimizationLineages(
       firstObservedAt: Math.min(...timestamps),
       lastObservedAt: Math.max(...timestamps),
       evidence: evidence.slice(0, 24),
-      metadata: {
-        stuckSignalCount: recentOutcomes
-          .slice(-3)
-          .filter((entry) =>
-            ["no_improvement", "guard_regression", "below_noise_floor", "crash"].includes(
-              entry.trim().toLowerCase(),
-            ),
-          ).length,
-        latestIterationOutcome: recentOutcomes.at(-1) ?? null,
-        nextRunAt: continuation.nextRunAt ?? null,
-      },
+      metadata,
     });
   }
   return artifacts.toSorted(

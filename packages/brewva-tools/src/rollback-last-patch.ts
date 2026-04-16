@@ -48,7 +48,7 @@ export function createRollbackLastPatchTool(options: BrewvaToolOptions): ToolDef
         patchSetId: rollback.patchSetId,
         restoredPaths: rollback.restoredPaths,
         failedPaths: rollback.failedPaths,
-        reason: rollback.reason,
+        reason: rollback.ok ? undefined : rollback.reason,
       });
     },
   });

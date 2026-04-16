@@ -1,4 +1,5 @@
 import type { BrewvaEventRecord, ScheduleIntentEventPayload } from "../contracts/index.js";
+import { asBrewvaIntentId, asBrewvaSessionId } from "../contracts/index.js";
 
 export const SCHEDULE_EVENT_TYPE = "schedule_intent";
 
@@ -131,14 +132,14 @@ export function buildScheduleIntentCreatedEvent(
   return {
     schema: "brewva.schedule.v1",
     kind: "intent_created",
-    intentId: input.intentId,
+    intentId: asBrewvaIntentId(input.intentId),
     runAt: input.runAt,
     cron: input.cron,
     timeZone: input.timeZone,
     nextRunAt: input.nextRunAt,
     reason: input.reason,
     goalRef: input.goalRef,
-    parentSessionId: input.parentSessionId,
+    parentSessionId: asBrewvaSessionId(input.parentSessionId),
     continuityMode: input.continuityMode,
     maxRuns: input.maxRuns,
     convergenceCondition: input.convergenceCondition,
@@ -161,14 +162,14 @@ export function buildScheduleIntentUpdatedEvent(input: {
   return {
     schema: "brewva.schedule.v1",
     kind: "intent_updated",
-    intentId: input.intentId,
+    intentId: asBrewvaIntentId(input.intentId),
     runAt: input.runAt,
     cron: input.cron,
     timeZone: input.timeZone,
     nextRunAt: input.nextRunAt,
     reason: input.reason,
     goalRef: input.goalRef,
-    parentSessionId: input.parentSessionId,
+    parentSessionId: asBrewvaSessionId(input.parentSessionId),
     continuityMode: input.continuityMode,
     maxRuns: input.maxRuns,
     convergenceCondition: input.convergenceCondition,
@@ -191,13 +192,13 @@ export function buildScheduleIntentCancelledEvent(input: {
   return {
     schema: "brewva.schedule.v1",
     kind: "intent_cancelled",
-    intentId: input.intentId,
+    intentId: asBrewvaIntentId(input.intentId),
     runAt: input.runAt,
     cron: input.cron,
     timeZone: input.timeZone,
     reason: input.reason,
     goalRef: input.goalRef,
-    parentSessionId: input.parentSessionId,
+    parentSessionId: asBrewvaSessionId(input.parentSessionId),
     continuityMode: input.continuityMode,
     maxRuns: input.maxRuns,
     convergenceCondition: input.convergenceCondition,
@@ -225,20 +226,21 @@ export function buildScheduleIntentFiredEvent(input: {
   return {
     schema: "brewva.schedule.v1",
     kind: "intent_fired",
-    intentId: input.intentId,
+    intentId: asBrewvaIntentId(input.intentId),
     runAt: input.runAt,
     cron: input.cron,
     timeZone: input.timeZone,
     reason: input.reason,
     goalRef: input.goalRef,
-    parentSessionId: input.parentSessionId,
+    parentSessionId: asBrewvaSessionId(input.parentSessionId),
     continuityMode: input.continuityMode,
     maxRuns: input.maxRuns,
     convergenceCondition: input.convergenceCondition,
     runIndex: input.runIndex,
     firedAt: input.firedAt,
     nextRunAt: input.nextRunAt,
-    childSessionId: input.childSessionId,
+    childSessionId:
+      input.childSessionId !== undefined ? asBrewvaSessionId(input.childSessionId) : undefined,
     error: input.error,
   };
 }
@@ -258,13 +260,13 @@ export function buildScheduleIntentConvergedEvent(input: {
   return {
     schema: "brewva.schedule.v1",
     kind: "intent_converged",
-    intentId: input.intentId,
+    intentId: asBrewvaIntentId(input.intentId),
     runAt: input.runAt,
     cron: input.cron,
     timeZone: input.timeZone,
     reason: input.reason,
     goalRef: input.goalRef,
-    parentSessionId: input.parentSessionId,
+    parentSessionId: asBrewvaSessionId(input.parentSessionId),
     continuityMode: input.continuityMode,
     maxRuns: input.maxRuns,
     convergenceCondition: input.convergenceCondition,

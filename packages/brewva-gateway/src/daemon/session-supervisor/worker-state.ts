@@ -1,5 +1,5 @@
 import type { ChildProcess } from "node:child_process";
-import type { ManagedToolMode } from "@brewva/brewva-runtime";
+import type { BrewvaWalId, ManagedToolMode } from "@brewva/brewva-runtime";
 import type { RecoveryWalStore } from "@brewva/brewva-runtime/internal";
 import type {
   ParentToWorkerMessage,
@@ -25,7 +25,7 @@ export interface PendingTurn {
   resolve: (payload: SendPromptOutput) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
-  walId?: string;
+  walId?: BrewvaWalId;
 }
 
 export interface QueuedTurn {
@@ -35,7 +35,7 @@ export interface QueuedTurn {
   walReplayId?: string;
   trigger?: SendPromptTrigger;
   waitForCompletion: boolean;
-  walId?: string;
+  walId?: BrewvaWalId;
   resolve: (result: SendPromptResult) => void;
   reject: (error: Error) => void;
 }
@@ -55,7 +55,7 @@ export interface WorkerHandle {
   pendingTurns: Map<string, PendingTurn>;
   turnQueue: QueuedTurn[];
   activeTurnId: string | null;
-  activeRecoveryWalIds: Map<string, string>;
+  activeRecoveryWalIds: Map<string, BrewvaWalId>;
   readyRequestId?: string;
   readyResolve?: (payload: WorkerReadyPayload) => void;
   readyReject?: (error: Error) => void;
@@ -98,10 +98,10 @@ export interface TurnQueueControllerDeps {
   ): Promise<SendPromptOutput>;
   rejectPendingTurn(handle: WorkerHandle, turnId: string, error: unknown): void;
   rekeyPendingTurn(handle: WorkerHandle, fromTurnId: string, toTurnId: string): void;
-  trackRecoveryWalId(handle: WorkerHandle, turnId: string, walId: string): void;
-  untrackRecoveryWalId(handle: WorkerHandle, turnId: string): string | undefined;
+  trackRecoveryWalId(handle: WorkerHandle, turnId: string, walId: BrewvaWalId): void;
+  untrackRecoveryWalId(handle: WorkerHandle, turnId: string): BrewvaWalId | undefined;
   rekeyRecoveryWalId(handle: WorkerHandle, fromTurnId: string, toTurnId: string): void;
-  markQueuedTurnInflight(walId: string): void;
+  markQueuedTurnInflight(walId: BrewvaWalId): void;
   markRecoveryWalFailed(handle: WorkerHandle, turnId: string, error?: string): void;
 }
 

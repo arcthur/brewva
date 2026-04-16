@@ -6,6 +6,7 @@ import type {
   ToolMutationRollbackKind,
   ToolMutationStrategy,
 } from "../contracts/index.js";
+import { asBrewvaToolCallId, asBrewvaToolName } from "../contracts/index.js";
 import {
   REVERSIBLE_MUTATION_PREPARED_EVENT_TYPE,
   REVERSIBLE_MUTATION_RECORDED_EVENT_TYPE,
@@ -80,8 +81,8 @@ function buildReceipt(input: {
       input.toolCallId.trim() || randomUUID(),
       String(input.timestamp),
     ].join(":"),
-    toolCallId: input.toolCallId.trim(),
-    toolName: normalizeToolName(input.toolName),
+    toolCallId: asBrewvaToolCallId(input.toolCallId.trim() || randomUUID()),
+    toolName: asBrewvaToolName(normalizeToolName(input.toolName)),
     boundary: "effectful",
     strategy: input.strategy,
     rollbackKind: input.rollbackKind,
@@ -137,8 +138,8 @@ function readMutationReceipt(value: unknown): ToolMutationReceipt | null {
     : [];
   return {
     id: receipt.id.trim(),
-    toolCallId: receipt.toolCallId.trim(),
-    toolName,
+    toolCallId: asBrewvaToolCallId(receipt.toolCallId.trim()),
+    toolName: asBrewvaToolName(toolName),
     boundary: "effectful",
     strategy: "workspace_patchset",
     rollbackKind: "patchset",

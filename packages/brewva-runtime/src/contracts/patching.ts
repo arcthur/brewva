@@ -21,14 +21,31 @@ export interface PatchSet {
 
 export type WorkerStatus = "ok" | "error" | "skipped";
 
-export interface WorkerResult {
-  workerId: string;
-  status: WorkerStatus;
-  summary: string;
-  patches?: PatchSet;
-  evidenceIds?: string[];
-  errorMessage?: string;
-}
+export type WorkerResult =
+  | {
+      workerId: string;
+      status: "ok";
+      summary: string;
+      patches: PatchSet;
+      evidenceIds?: string[];
+      errorMessage?: undefined;
+    }
+  | {
+      workerId: string;
+      status: "error";
+      summary: string;
+      patches?: PatchSet;
+      evidenceIds?: undefined;
+      errorMessage: string;
+    }
+  | {
+      workerId: string;
+      status: "skipped";
+      summary: string;
+      patches?: undefined;
+      evidenceIds?: undefined;
+      errorMessage?: undefined;
+    };
 
 export interface PatchConflict {
   path: string;
@@ -51,25 +68,58 @@ export type PatchApplyFailureReason =
   | "after_hash_mismatch"
   | "write_failed";
 
-export interface PatchApplyResult {
-  ok: boolean;
-  patchSetId?: string;
-  appliedPaths: string[];
-  failedPaths: string[];
-  reason?: PatchApplyFailureReason;
-}
+export type PatchApplyResult =
+  | {
+      ok: true;
+      patchSetId: string;
+      appliedPaths: string[];
+      failedPaths: string[];
+    }
+  | {
+      ok: false;
+      patchSetId: string;
+      appliedPaths: string[];
+      failedPaths: string[];
+      reason: PatchApplyFailureReason;
+    };
 
-export interface WorkerApplyReport {
-  status: "empty" | "conflicts" | "applied" | "apply_failed";
-  workerIds: string[];
-  conflicts: PatchConflict[];
-  mergedPatchSet?: PatchSet;
-  appliedPatchSetId?: string;
-  appliedPaths: string[];
-  failedPaths: string[];
-  reason?: PatchApplyFailureReason;
-}
+export type WorkerApplyReport =
+  | {
+      status: "empty";
+      workerIds: string[];
+      conflicts: PatchConflict[];
+      appliedPaths: string[];
+      failedPaths: string[];
+      reason: "empty_patchset";
+    }
+  | {
+      status: "conflicts";
+      workerIds: string[];
+      conflicts: PatchConflict[];
+      mergedPatchSet?: PatchSet;
+      appliedPaths: string[];
+      failedPaths: string[];
+    }
+  | {
+      status: "applied";
+      workerIds: string[];
+      conflicts: PatchConflict[];
+      mergedPatchSet?: PatchSet;
+      appliedPatchSetId: string;
+      appliedPaths: string[];
+      failedPaths: string[];
+    }
+  | {
+      status: "apply_failed";
+      workerIds: string[];
+      conflicts: PatchConflict[];
+      mergedPatchSet?: PatchSet;
+      appliedPatchSetId: string;
+      appliedPaths: string[];
+      failedPaths: string[];
+      reason: PatchApplyFailureReason;
+    };
 
-export interface RollbackResult extends RollbackOutcome<PatchSetRollbackFailureReason> {
+export type RollbackResult = RollbackOutcome<PatchSetRollbackFailureReason> & {
   patchSetId?: string;
-}
+};

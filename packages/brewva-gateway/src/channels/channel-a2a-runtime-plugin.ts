@@ -1,4 +1,4 @@
-import { createA2ATools } from "@brewva/brewva-tools";
+import { createA2ATools, type A2ABroadcastResult, type A2ASendResult } from "@brewva/brewva-tools";
 import type { RuntimePlugin, RuntimePluginApi } from "../runtime-plugins/index.js";
 
 export interface ChannelA2AAdapter {
@@ -10,14 +10,7 @@ export interface ChannelA2AAdapter {
     correlationId?: string;
     depth?: number;
     hops?: number;
-  }): Promise<{
-    ok: boolean;
-    toAgentId: string;
-    responseText?: string;
-    error?: string;
-    depth?: number;
-    hops?: number;
-  }>;
+  }): Promise<A2ASendResult>;
   broadcast(input: {
     fromSessionId: string;
     fromAgentId?: string;
@@ -26,18 +19,7 @@ export interface ChannelA2AAdapter {
     correlationId?: string;
     depth?: number;
     hops?: number;
-  }): Promise<{
-    ok: boolean;
-    error?: string;
-    results: Array<{
-      toAgentId: string;
-      ok: boolean;
-      responseText?: string;
-      error?: string;
-      depth?: number;
-      hops?: number;
-    }>;
-  }>;
+  }): Promise<A2ABroadcastResult>;
   listAgents(input?: { includeDeleted?: boolean }): Promise<
     Array<{
       agentId: string;

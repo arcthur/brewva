@@ -19,7 +19,7 @@ export function createInstrumentedChannelA2AAdapter(input: {
           depth: result.depth,
           hops: result.hops,
           correlationId: request.correlationId,
-          error: result.error,
+          error: result.ok ? undefined : result.error,
         },
       });
       return result;
@@ -34,7 +34,7 @@ export function createInstrumentedChannelA2AAdapter(input: {
           toAgentIds: request.toAgentIds,
           correlationId: request.correlationId,
           ok: result.ok,
-          error: result.error,
+          error: result.ok ? undefined : result.error,
         },
       });
       return result;

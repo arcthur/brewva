@@ -1,4 +1,5 @@
 import type { JsonValue } from "../utils/json.js";
+import type { BrewvaSessionId } from "./identifiers.js";
 
 export interface EvidenceRecord {
   id: string;
@@ -13,7 +14,7 @@ export interface EvidenceRecord {
 }
 
 export interface EvidenceLedgerRow extends EvidenceRecord {
-  sessionId: string;
+  sessionId: BrewvaSessionId;
   metadata?: Record<string, JsonValue>;
 }
 
@@ -27,7 +28,7 @@ export interface EvidenceQuery {
 
 export interface LedgerDigest {
   generatedAt: number;
-  sessionId: string;
+  sessionId: BrewvaSessionId;
   records: Array<
     Pick<
       EvidenceLedgerRow,

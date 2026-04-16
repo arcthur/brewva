@@ -1,4 +1,5 @@
 import type { ToolEffectClass, ToolGovernanceRisk } from "./governance.js";
+import type { BrewvaToolCallId, BrewvaToolName } from "./identifiers.js";
 import type { RuntimeResult } from "./shared.js";
 
 export type ProposalDecision = "accept" | "reject" | "defer";
@@ -22,8 +23,8 @@ export interface EvidenceRef {
 }
 
 export interface EffectCommitmentProposalPayload {
-  toolName: string;
-  toolCallId: string;
+  toolName: BrewvaToolName;
+  toolCallId: BrewvaToolCallId;
   boundary: "effectful";
   effects: ToolEffectClass[];
   defaultRisk?: ToolGovernanceRisk;
@@ -74,8 +75,8 @@ export type EffectCommitmentRequestState = "pending" | "accepted" | "rejected" |
 export interface PendingEffectCommitmentRequest {
   requestId: string;
   proposalId: string;
-  toolName: string;
-  toolCallId: string;
+  toolName: BrewvaToolName;
+  toolCallId: BrewvaToolCallId;
   subject: string;
   boundary: "effectful";
   effects: ToolEffectClass[];

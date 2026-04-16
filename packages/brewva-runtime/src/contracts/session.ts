@@ -1,4 +1,5 @@
 import type { BrewvaConfig } from "./config.js";
+import type { BrewvaToolCallId, BrewvaToolName } from "./identifiers.js";
 import type { IntegrityIssue } from "./integrity.js";
 import type { ActiveSkillRuntimeState, SkillCompletionFailureRecord } from "./skill.js";
 import type { SkillRoutingScope } from "./skill.js";
@@ -24,8 +25,8 @@ export interface SessionHydrationState {
 }
 
 export interface OpenToolCallRecord {
-  toolCallId: string;
-  toolName: string;
+  toolCallId: BrewvaToolCallId;
+  toolName: BrewvaToolName;
   openedAt: number;
   turn?: number;
   attempt?: number | null;

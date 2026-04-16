@@ -176,10 +176,7 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
       }
 
       if (!resolved.ok) {
-        return failTextResult(
-          `subagent_status failed: ${resolved.error ?? "unknown_error"}`,
-          toolDetails(resolved),
-        );
+        return failTextResult(`subagent_status failed: ${resolved.error}`, toolDetails(resolved));
       }
 
       if (resolved.runs.length === 0) {
@@ -226,8 +223,8 @@ export function createSubagentCancelTool(options: BrewvaToolOptions): ToolDefini
 
       if (!cancelled.ok) {
         const text = cancelled.run
-          ? `subagent_cancel failed: ${cancelled.error ?? "unknown_error"}\n${summarizeRun(cancelled.run)}`
-          : `subagent_cancel failed: ${cancelled.error ?? "unknown_error"}`;
+          ? `subagent_cancel failed: ${cancelled.error}\n${summarizeRun(cancelled.run)}`
+          : `subagent_cancel failed: ${cancelled.error}`;
         return failTextResult(text, toolDetails(cancelled));
       }
 

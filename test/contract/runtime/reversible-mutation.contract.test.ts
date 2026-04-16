@@ -150,7 +150,9 @@ describe("reversible mutation receipts", () => {
 
     const rollback = runtime.authority.tools.rollbackLastMutation(sessionId);
     expect(rollback.ok).toBe(false);
-    expect(rollback.reason).toBe("no_mutation_receipt");
+    if (!rollback.ok) {
+      expect(rollback.reason).toBe("no_mutation_receipt");
+    }
     expect(runtime.inspect.task.getState(sessionId).spec?.goal).toBe(
       "Apply and rollback task state",
     );
@@ -345,6 +347,8 @@ describe("reversible mutation receipts", () => {
 
     const mutationRollback = runtime.authority.tools.rollbackLastMutation(sessionId);
     expect(mutationRollback.ok).toBe(false);
-    expect(mutationRollback.reason).toBe("no_mutation_receipt");
+    if (!mutationRollback.ok) {
+      expect(mutationRollback.reason).toBe("no_mutation_receipt");
+    }
   });
 });

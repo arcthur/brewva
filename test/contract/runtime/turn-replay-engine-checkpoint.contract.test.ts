@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   TAPE_CHECKPOINT_EVENT_TYPE,
+  asBrewvaSessionId,
   buildTapeCheckpointPayload,
   type BrewvaEventRecord,
 } from "@brewva/brewva-runtime";
@@ -9,7 +10,7 @@ import { checkpointEvent, taskEvent } from "./turn-replay-engine.helpers.js";
 
 describe("TurnReplayEngine checkpoint replay", () => {
   test("observeEvent applies checkpoint payload and resets folded slices", () => {
-    const sessionId = "replay-engine-observe-checkpoint";
+    const sessionId = asBrewvaSessionId("replay-engine-observe-checkpoint");
     const events: BrewvaEventRecord[] = [
       taskEvent({
         sessionId,
@@ -108,7 +109,7 @@ describe("TurnReplayEngine checkpoint replay", () => {
   });
 
   test("checkpoint skill turn map prevents same-turn double count after checkpoint", () => {
-    const sessionId = "replay-engine-checkpoint-cost-turn-map";
+    const sessionId = asBrewvaSessionId("replay-engine-checkpoint-cost-turn-map");
     const events: BrewvaEventRecord[] = [
       {
         id: "evt-checkpoint-cost",
@@ -219,7 +220,7 @@ describe("TurnReplayEngine checkpoint replay", () => {
   });
 
   test("uses event timestamp for budget alert replay", () => {
-    const sessionId = "replay-engine-budget-alert";
+    const sessionId = asBrewvaSessionId("replay-engine-budget-alert");
     const events: BrewvaEventRecord[] = [
       {
         id: "evt-budget-1",
@@ -267,7 +268,7 @@ describe("TurnReplayEngine checkpoint replay", () => {
   });
 
   test("ignores checkpoints that still use removed evidence-state fields", () => {
-    const sessionId = "replay-engine-invalid-checkpoint";
+    const sessionId = asBrewvaSessionId("replay-engine-invalid-checkpoint");
     const invalidCheckpoint = checkpointEvent({
       sessionId,
       id: "evt-checkpoint-invalid",

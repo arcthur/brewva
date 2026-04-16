@@ -1,4 +1,5 @@
 import type { TurnEnvelope } from "../channels/turn.js";
+import type { BrewvaIntentId, BrewvaSessionId, BrewvaWalId } from "./identifiers.js";
 import type { RuntimeResult } from "./shared.js";
 import type { TaskPhase } from "./task.js";
 
@@ -21,28 +22,28 @@ export type ScheduleIntentEventKind =
 export interface ScheduleIntentEventPayload {
   schema: "brewva.schedule.v1";
   kind: ScheduleIntentEventKind;
-  intentId: string;
+  intentId: BrewvaIntentId;
   cron?: string;
   timeZone?: string;
   runAt?: number;
   reason: string;
   goalRef?: string;
-  parentSessionId: string;
+  parentSessionId: BrewvaSessionId;
   continuityMode: ScheduleContinuityMode;
   maxRuns: number;
   convergenceCondition?: ConvergencePredicate;
   runIndex?: number;
   firedAt?: number;
   nextRunAt?: number;
-  childSessionId?: string;
+  childSessionId?: BrewvaSessionId;
   error?: string;
 }
 
 export type ScheduleIntentStatus = "active" | "cancelled" | "converged" | "error";
 
 export interface ScheduleIntentProjectionRecord {
-  intentId: string;
-  parentSessionId: string;
+  intentId: BrewvaIntentId;
+  parentSessionId: BrewvaSessionId;
   reason: string;
   goalRef?: string;
   continuityMode: ScheduleContinuityMode;
@@ -68,9 +69,9 @@ export type RecoveryWalSource = "channel" | "schedule" | "gateway" | "heartbeat"
 
 export interface RecoveryWalRecord {
   schema: "brewva.recovery-wal.v1";
-  walId: string;
+  walId: BrewvaWalId;
   turnId: string;
-  sessionId: string;
+  sessionId: BrewvaSessionId;
   channel: string;
   conversationId: string;
   status: RecoveryWalStatus;
@@ -126,21 +127,21 @@ export interface ScheduleIntentCreateInput {
   cron?: string;
   timeZone?: string;
   maxRuns?: number;
-  intentId?: string;
+  intentId?: BrewvaIntentId;
   convergenceCondition?: ConvergencePredicate;
 }
 
 export type ScheduleIntentCreateResult = RuntimeResult<{ intent: ScheduleIntentProjectionRecord }>;
 
 export interface ScheduleIntentCancelInput {
-  intentId: string;
+  intentId: BrewvaIntentId;
   reason?: string;
 }
 
 export type ScheduleIntentCancelResult = RuntimeResult;
 
 export interface ScheduleIntentUpdateInput {
-  intentId: string;
+  intentId: BrewvaIntentId;
   reason?: string;
   goalRef?: string;
   continuityMode?: ScheduleContinuityMode;
@@ -154,6 +155,6 @@ export interface ScheduleIntentUpdateInput {
 export type ScheduleIntentUpdateResult = RuntimeResult<{ intent: ScheduleIntentProjectionRecord }>;
 
 export interface ScheduleIntentListQuery {
-  parentSessionId?: string;
+  parentSessionId?: BrewvaSessionId;
   status?: ScheduleIntentStatus;
 }

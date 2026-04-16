@@ -236,6 +236,11 @@ describe("detached subagent background controller", () => {
       workerId: "worker-apply-1",
       status: "ok",
       summary: "Patch merged.",
+      patches: {
+        id: "ps-bg-worker-1",
+        createdAt: Date.now(),
+        changes: [{ path: "src/background.ts", action: "modify" }],
+      },
     });
     recordRuntimeEvent(runtime, {
       sessionId: "parent-bg-predicate-worker",

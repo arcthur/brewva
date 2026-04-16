@@ -135,17 +135,32 @@ export const RequestFrameSchema = Type.Object(
 
 export type RequestFrame = Static<typeof RequestFrameSchema>;
 
-export const ResponseFrameSchema = Type.Object(
+export const ResponseSuccessFrameSchema = Type.Object(
   {
     type: Type.Literal("res"),
     id: NonEmptyString,
     traceId: Type.Optional(NonEmptyString),
-    ok: Type.Boolean(),
+    ok: Type.Literal(true),
     payload: Type.Optional(Type.Unknown()),
-    error: Type.Optional(GatewayErrorShapeSchema),
   },
   { additionalProperties: false },
 );
+
+export const ResponseErrorFrameSchema = Type.Object(
+  {
+    type: Type.Literal("res"),
+    id: NonEmptyString,
+    traceId: Type.Optional(NonEmptyString),
+    ok: Type.Literal(false),
+    error: GatewayErrorShapeSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const ResponseFrameSchema = Type.Union([
+  ResponseSuccessFrameSchema,
+  ResponseErrorFrameSchema,
+]);
 
 export type ResponseFrame = Static<typeof ResponseFrameSchema>;
 

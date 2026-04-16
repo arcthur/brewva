@@ -252,6 +252,8 @@ export {
   type BrewvaToolSurface,
 } from "./surface.js";
 export type {
+  A2ABroadcastResult,
+  A2ASendResult,
   AdvisorConsultBrief,
   AdvisorConsultConfidence,
   AdvisorConsultKind,

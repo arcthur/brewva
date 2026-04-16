@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import {
   BrewvaRuntime,
   SCHEDULE_EVENT_TYPE,
+  asBrewvaIntentId,
   buildScheduleIntentCreatedEvent,
   parseScheduleIntentEvent,
 } from "@brewva/brewva-runtime";
@@ -609,7 +610,7 @@ describe("scheduler service recovery contract", () => {
     await scheduler.recover();
 
     const created = scheduler.createIntent({
-      intentId: "intent-cron-recover-1",
+      intentId: asBrewvaIntentId("intent-cron-recover-1"),
       parentSessionId: "session-cron-recover",
       reason: "cron recover",
       continuityMode: "inherit",

@@ -28,11 +28,18 @@ export interface PromptTurnOutputs {
 }
 
 export interface ChannelDispatchResult {
-  ok: boolean;
+  ok: true;
   agentId: string;
   responseText: string;
-  error?: string;
 }
+
+export interface ChannelDispatchFailure {
+  ok: false;
+  agentId: string;
+  error: string;
+}
+
+export type ChannelDispatchOutcome = ChannelDispatchResult | ChannelDispatchFailure;
 
 function normalizeText(value: string | undefined): string {
   return (value ?? "").trim();
@@ -178,11 +185,10 @@ function combineOutputsForInternalDispatch(outputs: PromptTurnOutputs): string {
     .join("\n\n");
 }
 
-function formatDispatchError(error: unknown): ChannelDispatchResult {
+function formatDispatchError(error: unknown): ChannelDispatchFailure {
   return {
     ok: false,
     agentId: "unknown",
-    responseText: "",
     error: toErrorMessage(error),
   };
 }
@@ -331,7 +337,7 @@ export function createChannelAgentDispatch(input: {
     fromSessionId?: string;
     depth?: number;
     hops?: number;
-  }): Promise<ChannelDispatchResult> => {
+  }): Promise<ChannelDispatchOutcome> => {
     try {
       const state = await input.sessionCoordinator.getOrCreateSession(
         dispatch.scopeKey,

@@ -39,7 +39,7 @@ function createHostContext(workspace: string, sessionId: string): BrewvaHostCont
       theme: {},
       getAllThemes: () => [],
       getTheme: () => undefined,
-      setTheme: () => ({ success: false }),
+      setTheme: () => ({ success: false, error: "unsupported" }),
       getToolsExpanded: () => false,
       setToolsExpanded: () => undefined,
     },

@@ -101,7 +101,6 @@ export class ParallelResultStore {
     const origins: PatchOrigin[] = [];
     for (const result of results) {
       if (result.status !== "ok") continue;
-      if (!result.patches) continue;
       for (const change of result.patches.changes) {
         origins.push({
           workerId: result.workerId,

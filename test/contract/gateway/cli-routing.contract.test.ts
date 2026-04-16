@@ -131,6 +131,22 @@ describe("gateway cli routing", () => {
     expect(errors.join("\n")).toContain("--health-http-port must be <= 65535");
   });
 
+  test("rejects invalid managed tools mode", async () => {
+    const originalError = console.error;
+    const errors: string[] = [];
+    console.error = (...args: unknown[]) => {
+      errors.push(args.map((value) => String(value)).join(" "));
+    };
+    try {
+      const result = await runGatewayCli(["start", "--managed-tools", "invalid-mode"]);
+      expect(result.handled).toBe(true);
+      expect(result.exitCode).toBe(1);
+    } finally {
+      console.error = originalError;
+    }
+    expect(errors.join("\n")).toContain('--managed-tools must be "runtime_plugin" or "direct"');
+  });
+
   test("rejects deprecated rotate-token grace flag", async () => {
     const originalError = console.error;
     const errors: string[] = [];

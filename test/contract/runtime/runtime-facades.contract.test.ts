@@ -82,6 +82,11 @@ describe("runtime facade coverage", () => {
       workerId: "worker-1",
       status: "ok",
       summary: "first worker result",
+      patches: {
+        id: "ps-worker-1",
+        createdAt: Date.now(),
+        changes: [{ path: "src/worker-1.ts", action: "modify" }],
+      },
     });
 
     runtime.maintain.session.clearState(sessionId);
@@ -96,6 +101,11 @@ describe("runtime facade coverage", () => {
       workerId: "worker-2",
       status: "ok",
       summary: "second worker result",
+      patches: {
+        id: "ps-worker-2",
+        createdAt: Date.now(),
+        changes: [{ path: "src/worker-2.ts", action: "modify" }],
+      },
     });
 
     runtime.maintain.session.clearState(sessionId);

@@ -1,3 +1,4 @@
+import type { BrewvaSessionId } from "./identifiers.js";
 import type { RuntimeResult } from "./shared.js";
 import type { ResourceBudgetLimits } from "./skill.js";
 
@@ -240,7 +241,7 @@ export type ResourceLeaseBudget = ResourceBudgetLimits;
 
 export interface ResourceLeaseRecord {
   id: string;
-  sessionId: string;
+  sessionId: BrewvaSessionId;
   skillName: string;
   reason: string;
   budget: ResourceLeaseBudget;

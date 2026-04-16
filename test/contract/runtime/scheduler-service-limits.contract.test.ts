@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   BrewvaRuntime,
   SCHEDULE_EVENT_TYPE,
+  asBrewvaIntentId,
   buildScheduleIntentCreatedEvent,
   getNextCronRunAt,
   parseCronExpression,
@@ -88,7 +89,7 @@ describe("scheduler service limit contract", () => {
     await scheduler.recover();
 
     const created = scheduler.createIntent({
-      intentId: "intent-cron-create",
+      intentId: asBrewvaIntentId("intent-cron-create"),
       parentSessionId: "session-cron-create",
       reason: "cron create",
       continuityMode: "inherit",
@@ -135,7 +136,7 @@ describe("scheduler service limit contract", () => {
     await scheduler.recover();
 
     const created = scheduler.createIntent({
-      intentId: "intent-cron-timezone",
+      intentId: asBrewvaIntentId("intent-cron-timezone"),
       parentSessionId: "session-cron-timezone",
       reason: "cron with timezone",
       continuityMode: "inherit",
@@ -178,7 +179,7 @@ describe("scheduler service limit contract", () => {
     await scheduler.recover();
 
     const createdA = scheduler.createIntent({
-      intentId: "intent-cron-anti-herd-a",
+      intentId: asBrewvaIntentId("intent-cron-anti-herd-a"),
       parentSessionId: "session-cron-anti-herd",
       reason: "cron anti-herd A",
       continuityMode: "inherit",
@@ -186,7 +187,7 @@ describe("scheduler service limit contract", () => {
       maxRuns: 5,
     });
     const createdB = scheduler.createIntent({
-      intentId: "intent-cron-anti-herd-b",
+      intentId: asBrewvaIntentId("intent-cron-anti-herd-b"),
       parentSessionId: "session-cron-anti-herd",
       reason: "cron anti-herd B",
       continuityMode: "inherit",
@@ -371,7 +372,7 @@ describe("scheduler service limit contract", () => {
 
     const updated = scheduler.updateIntent({
       parentSessionId: sessionId,
-      intentId: "intent-revive-1",
+      intentId: asBrewvaIntentId("intent-revive-1"),
       maxRuns: 5,
     });
     expect(updated.ok).toBe(true);

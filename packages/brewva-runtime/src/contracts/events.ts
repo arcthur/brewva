@@ -1,9 +1,14 @@
+import type { BrewvaRegisteredEventType } from "../events/event-types.js";
 import type { JsonValue } from "../utils/json.js";
+import type { BrewvaIdentifier, BrewvaSessionId } from "./identifiers.js";
+
+export type { BrewvaRegisteredEventType };
+export type BrewvaEventType = BrewvaRegisteredEventType | BrewvaIdentifier<"BrewvaCustomEventType">;
 
 export interface BrewvaEventRecord {
   id: string;
-  sessionId: string;
-  type: string;
+  sessionId: BrewvaSessionId;
+  type: BrewvaEventType;
   timestamp: number;
   turn?: number;
   payload?: Record<string, JsonValue>;
@@ -24,8 +29,8 @@ export type BrewvaEventCategory =
 export interface BrewvaStructuredEvent {
   schema: "brewva.event.v1";
   id: string;
-  sessionId: string;
-  type: string;
+  sessionId: BrewvaSessionId;
+  type: BrewvaEventType;
   category: BrewvaEventCategory;
   timestamp: number;
   isoTime: string;
@@ -43,7 +48,11 @@ export interface BrewvaEventQuery {
 }
 
 export interface BrewvaReplaySession {
-  sessionId: string;
+  sessionId: BrewvaSessionId;
   eventCount: number;
   lastEventAt: number;
+}
+
+export function asBrewvaEventType(value: string): BrewvaEventType {
+  return value as BrewvaEventType;
 }

@@ -188,7 +188,7 @@ export class FileChangeService {
         })),
         applyStatus: applied.ok ? "applied" : "failed",
         failedPaths: applied.failedPaths,
-        reason: applied.reason ?? null,
+        reason: applied.ok ? null : applied.reason,
       },
     });
     if (applied.ok) {
@@ -223,7 +223,7 @@ export class FileChangeService {
         source: "worker_merge_apply",
         patchSetId: applied.patchSetId ?? null,
         failedPaths: applied.failedPaths,
-        reason: applied.reason ?? null,
+        reason: applied.ok ? null : applied.reason,
       },
     });
     return applied;
@@ -253,7 +253,7 @@ export class FileChangeService {
         mutationReceiptId: mutationReceiptId ?? null,
         restoredPaths: rollback.restoredPaths,
         failedPaths: rollback.failedPaths,
-        reason: rollback.reason ?? null,
+        reason: rollback.ok ? null : rollback.reason,
       },
     });
 

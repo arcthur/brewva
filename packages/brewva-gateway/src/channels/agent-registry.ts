@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import type { RuntimeResult } from "@brewva/brewva-runtime";
 import { normalizeAgentId } from "@brewva/brewva-runtime";
 
 const REGISTRY_SCHEMA = "brewva.channel-agent-registry.v1";
@@ -45,6 +46,10 @@ export interface CreateAgentInput {
 export interface AgentRegistryOptions {
   workspaceRoot: string;
 }
+
+export type CreateAgentError = "invalid_agent_id" | "reserved_agent_id" | "agent_exists";
+export type SetFocusError = "agent_not_found";
+export type SoftDeleteAgentError = "cannot_delete_default" | "agent_not_found";
 
 function buildInitialState(now: number): PersistedRegistryState {
   return {
@@ -288,31 +293,38 @@ export class AgentRegistry {
     return DEFAULT_AGENT_ID;
   }
 
-  async setFocus(scopeKey: string, requestedAgentId: string): Promise<string> {
+  async setFocus(
+    scopeKey: string,
+    requestedAgentId: string,
+  ): Promise<RuntimeResult<{ agentId: string }, SetFocusError>> {
     const agentId = normalizeRequestedAgentId(requestedAgentId);
     if (!this.isActive(agentId)) {
-      throw new Error(`agent_not_found:${agentId}`);
+      return { ok: false, error: "agent_not_found" };
     }
     this.focusByScope.set(scopeKey, agentId);
     await this.persist();
-    return agentId;
+    return { ok: true, agentId };
   }
 
-  async createAgent(input: CreateAgentInput): Promise<ChannelAgentRecord> {
+  async createAgent(
+    input: CreateAgentInput,
+  ): Promise<RuntimeResult<{ agent: ChannelAgentRecord }, CreateAgentError>> {
     const createdAt = input.createdAt ?? Date.now();
     const agentId = normalizeRequestedAgentId(input.requestedAgentId);
     if (!agentId) {
-      throw new Error("invalid_agent_id");
+      return { ok: false, error: "invalid_agent_id" };
     }
     if (RESERVED_AGENT_IDS.has(agentId)) {
-      throw new Error(`reserved_agent_id:${agentId}`);
+      return { ok: false, error: "reserved_agent_id" };
     }
 
+    let createError: CreateAgentError | undefined;
     await this.withWriteLock(async () => {
       await this.ensureAgentScaffold(agentId);
       const existing = this.agents.get(agentId);
       if (existing && existing.status === "active") {
-        throw new Error(`agent_exists:${agentId}`);
+        createError = "agent_exists";
+        return;
       }
       const nextRecord: ChannelAgentRecord = existing
         ? {
@@ -333,18 +345,26 @@ export class AgentRegistry {
       await this.persistUnlocked();
     });
 
-    return { ...(this.agents.get(agentId) as ChannelAgentRecord) };
+    if (createError) {
+      return { ok: false, error: createError };
+    }
+    return { ok: true, agent: { ...(this.agents.get(agentId) as ChannelAgentRecord) } };
   }
 
-  async softDeleteAgent(requestedAgentId: string, deletedAt = Date.now()): Promise<void> {
+  async softDeleteAgent(
+    requestedAgentId: string,
+    deletedAt = Date.now(),
+  ): Promise<RuntimeResult<{}, SoftDeleteAgentError>> {
     const agentId = normalizeRequestedAgentId(requestedAgentId);
     if (agentId === DEFAULT_AGENT_ID) {
-      throw new Error("cannot_delete_default");
+      return { ok: false, error: "cannot_delete_default" };
     }
+    let deleteError: SoftDeleteAgentError | undefined;
     await this.withWriteLock(async () => {
       const existing = this.agents.get(agentId);
       if (!existing || existing.status === "deleted") {
-        throw new Error(`agent_not_found:${agentId}`);
+        deleteError = "agent_not_found";
+        return;
       }
       this.agents.set(agentId, {
         ...existing,
@@ -359,6 +379,10 @@ export class AgentRegistry {
       }
       await this.persistUnlocked();
     });
+    if (deleteError) {
+      return { ok: false, error: deleteError };
+    }
+    return { ok: true };
   }
 
   async touchAgent(

@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   BrewvaRuntime,
   SCHEDULE_EVENT_TYPE,
+  asBrewvaIntentId,
+  asBrewvaSessionId,
   buildScheduleIntentCreatedEvent,
   parseScheduleIntentEvent,
 } from "@brewva/brewva-runtime";
@@ -16,7 +18,7 @@ describe("scheduler service execution contract", () => {
   test("operates through SchedulerRuntimePort without direct BrewvaRuntime coupling", async () => {
     const workspace = createWorkspace("runtime-port");
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    const sessionId = "scheduler-runtime-port-session";
+    const sessionId = asBrewvaSessionId("scheduler-runtime-port-session");
     const now = Date.now();
 
     const runtimePort: SchedulerRuntimePort = {
@@ -60,7 +62,7 @@ describe("scheduler service execution contract", () => {
     const workspace = createWorkspace("no-executor");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const now = Date.now();
-    const sessionId = "scheduler-no-executor-session";
+    const sessionId = asBrewvaSessionId("scheduler-no-executor-session");
 
     recordRuntimeEvent(runtime, {
       sessionId,
@@ -105,7 +107,7 @@ describe("scheduler service execution contract", () => {
       reason: "first",
       continuityMode: "inherit",
       runAt,
-      intentId: "intent-fixed-id",
+      intentId: asBrewvaIntentId("intent-fixed-id"),
     });
     expect(first.ok).toBe(true);
 
@@ -114,7 +116,7 @@ describe("scheduler service execution contract", () => {
       reason: "second",
       continuityMode: "inherit",
       runAt: runAt + 1_000,
-      intentId: "intent-fixed-id",
+      intentId: asBrewvaIntentId("intent-fixed-id"),
     });
     expect(second.ok).toBe(false);
     if (!second.ok) {
@@ -176,7 +178,7 @@ describe("scheduler service execution contract", () => {
     const fired = events
       .map(parseScheduleIntentEvent)
       .find((event) => event?.kind === "intent_fired");
-    expect(fired?.childSessionId).toBe(`${sessionId}-child`);
+    expect(fired?.childSessionId).toBe(asBrewvaSessionId(`${sessionId}-child`));
 
     const state = scheduler
       .snapshot()
@@ -271,7 +273,7 @@ describe("scheduler service execution contract", () => {
     await scheduler.recover();
 
     const created = scheduler.createIntent({
-      intentId: "intent-sync-execution-state-1",
+      intentId: asBrewvaIntentId("intent-sync-execution-state-1"),
       parentSessionId: "session-sync-execution-state",
       reason: "future timer",
       continuityMode: "inherit",

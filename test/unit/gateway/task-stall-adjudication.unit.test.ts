@@ -29,6 +29,11 @@ describe("task stall adjudication", () => {
       workerId: "patch-worker-1",
       status: "ok",
       summary: "Patch result is ready for parent review.",
+      patches: {
+        id: "ps-task-stall-1",
+        createdAt: Date.now(),
+        changes: [{ path: "src/task-stall.ts", action: "modify" }],
+      },
     });
     recordRuntimeEvent(runtime, {
       sessionId,

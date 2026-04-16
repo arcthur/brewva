@@ -11,6 +11,8 @@ import {
   type SessionWireFrame,
   type SessionWireStatusState,
   type TaskSpec,
+  asBrewvaIntentId,
+  asBrewvaSessionId,
   createTrustedLocalGovernancePort,
   loadBrewvaConfig,
   normalizeTaskSpec,
@@ -33,6 +35,7 @@ import {
   type GatewayEvent,
   type GatewayMethod,
   type RequestFrame,
+  type ResponseFrame,
   GatewayEvents,
   GatewayMethods,
   PROTOCOL_VERSION,
@@ -76,6 +79,10 @@ const SELF_IMPROVE_SKILL_NAME = "self-improve";
 const SESSION_SCOPED_EVENTS = new Set<GatewayEvent>(["session.wire.frame"]);
 
 export type ConnectionPhase = "connected" | "authenticating" | "authenticated" | "closing";
+
+type GatewayResponsePayload =
+  | Omit<Extract<ResponseFrame, { ok: true }>, "type">
+  | Omit<Extract<ResponseFrame, { ok: false }>, "type">;
 
 interface ConnectionState {
   connId: string;
@@ -228,7 +235,7 @@ function buildSessionStatusFrame(input: {
 }): Extract<SessionWireFrame, { type: "session.status" }> {
   return {
     schema: SESSION_WIRE_SCHEMA,
-    sessionId: input.sessionId,
+    sessionId: asBrewvaSessionId(input.sessionId),
     frameId: `session.status:${input.sessionId}:${Date.now()}:${randomUUID()}`,
     ts: Date.now(),
     source: "live",
@@ -247,7 +254,7 @@ function projectSessionWireFrame(sessionId: string, frame: SessionWireFrame): Se
   }
   return {
     ...frame,
-    sessionId,
+    sessionId: asBrewvaSessionId(sessionId),
   };
 }
 
@@ -257,7 +264,7 @@ function buildReplayControlFrame(
 ): SessionWireFrame {
   return {
     schema: SESSION_WIRE_SCHEMA,
-    sessionId,
+    sessionId: asBrewvaSessionId(sessionId),
     frameId: `${type}:${sessionId}:${Date.now()}:${randomUUID()}`,
     ts: Date.now(),
     source: "replay",
@@ -846,16 +853,20 @@ export class GatewayDaemon {
       return;
     }
 
-    const policy = this.schedulerRuntime.config.schedule.selfImprove;
+    const rawPolicy = this.schedulerRuntime.config.schedule.selfImprove;
+    const policyParentSessionId = asBrewvaSessionId(String(rawPolicy.parentSessionId));
+    const policyIntentId = asBrewvaIntentId(String(rawPolicy.intentId));
+    // Cross-module unique symbol boundary: re-cast so typed helpers accept this object
+    const policy = rawPolicy as unknown as BrewvaScheduleSelfImproveConfig;
     const existing = this.scheduler
-      .listIntents({ parentSessionId: policy.parentSessionId })
-      .find((intent) => intent.intentId === policy.intentId);
+      .listIntents({ parentSessionId: policyParentSessionId })
+      .find((intent) => intent.intentId === policyIntentId);
 
     if (!policy.enabled) {
       if (existing?.status === "active") {
         const cancelled = this.scheduler.cancelIntent({
-          parentSessionId: policy.parentSessionId,
-          intentId: policy.intentId,
+          parentSessionId: policyParentSessionId,
+          intentId: policyIntentId,
           reason: "Disabled by schedule.selfImprove.enabled=false.",
         });
         if (!cancelled.ok) {
@@ -869,8 +880,8 @@ export class GatewayDaemon {
 
     if (!existing) {
       const created = this.scheduler.createIntent({
-        parentSessionId: policy.parentSessionId,
-        intentId: policy.intentId,
+        parentSessionId: policyParentSessionId,
+        intentId: policyIntentId,
         reason: policy.reason,
         goalRef: policy.goalRef,
         continuityMode: policy.continuityMode,
@@ -890,8 +901,8 @@ export class GatewayDaemon {
 
     const updated = this.scheduler.updateIntent(
       {
-        parentSessionId: policy.parentSessionId,
-        intentId: policy.intentId,
+        parentSessionId: policyParentSessionId,
+        intentId: policyIntentId,
         reason: policy.reason,
         goalRef: policy.goalRef,
         continuityMode: policy.continuityMode,
@@ -1421,7 +1432,7 @@ export class GatewayDaemon {
           agentId?: string;
           managedToolMode?: ManagedToolMode;
         };
-        const requestedSessionId = input.sessionId?.trim() || randomUUID();
+        const requestedSessionId = asBrewvaSessionId(input.sessionId?.trim() || randomUUID());
         if (input.cwd) {
           ensureDirectoryCwd(input.cwd);
         }
@@ -2203,28 +2214,26 @@ export class GatewayDaemon {
     }, 10).unref?.();
   }
 
-  private sendResponse(
-    state: ConnectionState,
-    payload: {
-      id: string;
-      ok: boolean;
-      traceId?: string;
-      payload?: unknown;
-      error?: GatewayErrorShape;
-    },
-  ): void {
+  private sendResponse(state: ConnectionState, payload: GatewayResponsePayload): void {
     if (state.socket.readyState !== state.socket.OPEN) {
       return;
     }
 
-    const frame = {
-      type: "res",
-      id: payload.id,
-      traceId: payload.traceId,
-      ok: payload.ok,
-      payload: payload.payload,
-      error: payload.error,
-    };
+    const frame: ResponseFrame = payload.ok
+      ? {
+          type: "res",
+          id: payload.id,
+          traceId: payload.traceId,
+          ok: true,
+          ...(payload.payload === undefined ? {} : { payload: payload.payload }),
+        }
+      : {
+          type: "res",
+          id: payload.id,
+          traceId: payload.traceId,
+          ok: false,
+          error: payload.error,
+        };
     state.socket.send(JSON.stringify(frame));
   }
 

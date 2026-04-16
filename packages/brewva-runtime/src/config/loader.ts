@@ -293,7 +293,7 @@ function validateConfigObject(parsed: unknown, configPath: string): Record<strin
 
   const validation = validateBrewvaConfigFile(parsed);
   if (!validation.ok) {
-    if (validation.error) {
+    if ("error" in validation) {
       throw new BrewvaConfigLoadError({
         code: "config_schema_unavailable",
         message: `Schema validation is unavailable: ${validation.error}`,
@@ -425,7 +425,9 @@ function readConfigFileForInspect(configPath: string): {
       message: `Skipped inspect config after forensic stripping because validation still failed: ${
         validation.errors.length > 0
           ? formatSchemaInvalidMessage(validation.errors)
-          : (validation.error ?? "schema validation unavailable")
+          : "error" in validation
+            ? validation.error
+            : "schema validation unavailable"
       }`,
     });
     return {

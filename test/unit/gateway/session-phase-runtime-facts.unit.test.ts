@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { SessionWireFrame } from "@brewva/brewva-runtime";
+import {
+  asBrewvaSessionId,
+  asBrewvaToolCallId,
+  asBrewvaToolName,
+  type SessionWireFrame,
+} from "@brewva/brewva-runtime";
 import {
   deriveSessionPhaseFromRuntimeFactFrame,
   deriveSessionPhaseFromRuntimeFactHistory,
@@ -9,7 +14,7 @@ describe("session phase runtime facts", () => {
   test("preserves tool identity when approval is requested", () => {
     const frame: SessionWireFrame = {
       schema: "brewva.session-wire.v2",
-      sessionId: "session-1",
+      sessionId: asBrewvaSessionId("session-1"),
       frameId: "frame-1",
       ts: Date.now(),
       source: "replay",
@@ -17,8 +22,8 @@ describe("session phase runtime facts", () => {
       type: "approval.requested",
       turnId: "turn-1",
       requestId: "approval-1",
-      toolCallId: "tool-1",
-      toolName: "exec_command",
+      toolCallId: asBrewvaToolCallId("tool-1"),
+      toolName: asBrewvaToolName("exec_command"),
       subject: "tool:exec_command",
     };
 
@@ -39,7 +44,7 @@ describe("session phase runtime facts", () => {
     const frames: SessionWireFrame[] = [
       {
         schema: "brewva.session-wire.v2",
-        sessionId: "session-1",
+        sessionId: asBrewvaSessionId("session-1"),
         frameId: "frame-input",
         ts: Date.now(),
         source: "replay",
@@ -51,7 +56,7 @@ describe("session phase runtime facts", () => {
       },
       {
         schema: "brewva.session-wire.v2",
-        sessionId: "session-1",
+        sessionId: asBrewvaSessionId("session-1"),
         frameId: "frame-approval",
         ts: Date.now() + 1,
         source: "replay",
@@ -59,8 +64,8 @@ describe("session phase runtime facts", () => {
         type: "approval.requested",
         turnId: "turn-1",
         requestId: "approval-1",
-        toolCallId: "tool-1",
-        toolName: "exec_command",
+        toolCallId: asBrewvaToolCallId("tool-1"),
+        toolName: asBrewvaToolName("exec_command"),
         subject: "tool:exec_command",
       },
     ];
