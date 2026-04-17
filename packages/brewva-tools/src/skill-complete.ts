@@ -293,7 +293,7 @@ function buildReviewEnsembleOutputs(input: {
   const consumedOutputs = input.runtime.inspect.skills.getConsumedOutputs(
     input.sessionId,
     activeSkill.name,
-  );
+  ).outputs;
   const consumedKeys = activeSkill.contract.consumes ?? [];
 
   const consultStatus = coercePrecedentConsultStatus(input.reviewEnsemble.precedentConsultStatus);
@@ -564,7 +564,7 @@ export function createSkillCompleteTool(options: BrewvaToolOptions): ToolDefinit
           consumedOutputs: options.runtime.inspect.skills.getConsumedOutputs(
             sessionId,
             activeSkill.name,
-          ),
+          ).outputs,
           searchRoots: scope.allowedRoots,
           params: learningResearch,
         });

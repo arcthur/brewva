@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
@@ -32,6 +34,70 @@ function buildImpactMap(summary: string) {
   };
 }
 
+type SkillFixtureInput = {
+  name: string;
+  outputs: string[];
+  semanticBindings?: Record<string, string>;
+};
+
+function writeSkill(filePath: string, input: SkillFixtureInput): void {
+  const unboundOutputs = input.outputs.filter(
+    (outputName) => !input.semanticBindings || !input.semanticBindings[outputName],
+  );
+  mkdirSync(dirname(filePath), { recursive: true });
+  writeFileSync(
+    filePath,
+    [
+      "---",
+      `name: ${input.name}`,
+      `description: ${input.name} skill`,
+      "selection:",
+      "  when_to_use: Use when the task needs the local registry skill.",
+      "  examples: [test skill]",
+      "  phases: [align]",
+      "intent:",
+      `  outputs: [${input.outputs.join(", ")}]`,
+      ...(input.semanticBindings && Object.keys(input.semanticBindings).length > 0
+        ? [
+            "  semantic_bindings:",
+            ...Object.entries(input.semanticBindings).map(
+              ([outputName, schemaId]) => `    ${outputName}: ${schemaId}`,
+            ),
+          ]
+        : []),
+      ...(unboundOutputs.length > 0
+        ? [
+            "  output_contracts:",
+            ...unboundOutputs.flatMap((outputName) => [
+              `    ${outputName}:`,
+              "      kind: text",
+              "      min_length: 1",
+            ]),
+          ]
+        : []),
+      "effects:",
+      "  allowed_effects: [workspace_read]",
+      "resources:",
+      "  default_lease:",
+      "    max_tool_calls: 10",
+      "    max_tokens: 10000",
+      "  hard_ceiling:",
+      "    max_tool_calls: 20",
+      "    max_tokens: 20000",
+      "execution_hints:",
+      "  preferred_tools: [read]",
+      "  fallback_tools: []",
+      "consumes: []",
+      "requires: []",
+      "---",
+      `# ${input.name}`,
+      "",
+      "Test skill.",
+    ].join("\n"),
+    "utf8",
+  );
+}
+
 describe("skill output registry", () => {
   test("completed skill outputs are queryable by subsequent skills", async () => {
     const runtime = createCleanRuntime();
@@ -47,7 +113,7 @@ describe("skill output registry", () => {
     runtime.authority.skills.complete(sessionId, outputs);
 
     const stored = requireDefined(
-      runtime.inspect.skills.getOutputs(sessionId, "repository-analysis"),
+      runtime.inspect.skills.getRawOutputs(sessionId, "repository-analysis"),
       "Expected stored repository-analysis outputs.",
     );
     expect(stored.repository_snapshot).toContain("monorepo");
@@ -66,8 +132,8 @@ describe("skill output registry", () => {
     });
 
     const debuggingAvailable = runtime.inspect.skills.getConsumedOutputs(sessionId, "debugging");
-    expect(debuggingAvailable.repository_snapshot).toBe("module map here");
-    expect(debuggingAvailable.impact_map).toMatchObject({
+    expect(debuggingAvailable.outputs.repository_snapshot).toBe("module map here");
+    expect(debuggingAvailable.outputs.impact_map).toMatchObject({
       summary: "routing and cascade",
       changed_file_classes: ["public_api"],
     });
@@ -97,14 +163,15 @@ describe("skill output registry", () => {
       sessionId,
       "implementation",
     );
-    expect(implementationAvailable.root_cause).toBe("continuity gate was missing");
-    expect(implementationAvailable.fix_strategy).toBe("add continuity-aware filtering");
+    expect(implementationAvailable.outputs.root_cause).toBe("continuity gate was missing");
+    expect(implementationAvailable.outputs.fix_strategy).toBe("add continuity-aware filtering");
   });
 
   test("getConsumedOutputs returns empty for unknown skill", async () => {
     const runtime = createCleanRuntime();
     const result = runtime.inspect.skills.getConsumedOutputs("any-session", "nonexistent");
-    expect(result).toEqual({});
+    expect(result.outputs).toEqual({});
+    expect(result.issues).toEqual([]);
   });
 
   test("replays skill outputs from skill_completed events after runtime restart", async () => {
@@ -121,18 +188,156 @@ describe("skill output registry", () => {
     const runtimeB = createCleanRuntime();
     runtimeB.maintain.context.onTurnStart(sessionId, 1);
     const replayed = runtimeB.inspect.skills.getConsumedOutputs(sessionId, "debugging");
-    expect(replayed.repository_snapshot).toBe("replayed module map");
+    expect(replayed.outputs.repository_snapshot).toBe("replayed module map");
+  });
+
+  test("replays normalized outputs using the recorded semantic bindings even after local skill drift", async () => {
+    const skillPath = join(workspace, ".brewva/skills/core/design-recorded/SKILL.md");
+    const consumerSkillPath = join(workspace, ".brewva/skills/core/planning-consumer/SKILL.md");
+    writeSkill(skillPath, {
+      name: "design-recorded",
+      outputs: [
+        "design_spec",
+        "execution_plan",
+        "execution_mode_hint",
+        "risk_register",
+        "implementation_targets",
+      ],
+      semanticBindings: {
+        design_spec: "planning.design_spec.v2",
+        execution_plan: "planning.execution_plan.v2",
+        execution_mode_hint: "planning.execution_mode_hint.v2",
+        risk_register: "planning.risk_register.v2",
+        implementation_targets: "planning.implementation_targets.v2",
+      },
+    });
+    mkdirSync(dirname(consumerSkillPath), { recursive: true });
+    writeFileSync(
+      consumerSkillPath,
+      [
+        "---",
+        "name: planning-consumer",
+        "description: planning-consumer skill",
+        "selection:",
+        "  when_to_use: Use when the task needs a downstream planning consumer.",
+        "  examples: [planning consumer]",
+        "  phases: [align]",
+        "intent:",
+        "  outputs: [summary]",
+        "  output_contracts:",
+        "    summary:",
+        "      kind: text",
+        "      min_length: 1",
+        "effects:",
+        "  allowed_effects: [workspace_read]",
+        "resources:",
+        "  default_lease:",
+        "    max_tool_calls: 10",
+        "    max_tokens: 10000",
+        "  hard_ceiling:",
+        "    max_tool_calls: 20",
+        "    max_tokens: 20000",
+        "execution_hints:",
+        "  preferred_tools: [read]",
+        "  fallback_tools: []",
+        "consumes: [execution_mode_hint]",
+        "requires: []",
+        "---",
+        "# planning-consumer",
+        "",
+        "Test skill.",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const sessionId = `skill-output-recorded-bindings-${Date.now()}`;
+    const runtimeA = createCleanRuntime();
+    runtimeA.authority.skills.activate(sessionId, "design-recorded");
+    runtimeA.authority.skills.complete(sessionId, {
+      design_spec: "Preserve producer bindings on the durable event so replay stays stable.",
+      execution_plan: [
+        {
+          step: "Persist semantic bindings alongside raw outputs.",
+          intent: "Keep normalized replay independent of future skill document drift.",
+          owner: "runtime.authority.skills",
+          exit_criteria: "Replayed normalized outputs still expose canonical planning artifacts.",
+          verification_intent:
+            "A replay contract test rewrites the local skill and keeps normalization stable.",
+        },
+      ],
+      execution_mode_hint: "Direct Patch",
+      risk_register: [
+        {
+          risk: "Replay could reinterpret old outputs using a newer skill contract.",
+          category: "public_api",
+          severity: "high",
+          mitigation: "Persist semantic bindings with the completion event and hydrated record.",
+          required_evidence: ["recorded_semantic_bindings"],
+          owner_lane: "review-correctness",
+        },
+      ],
+      implementation_targets: [
+        {
+          target: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+          kind: "module",
+          owner_boundary: "runtime.authority.skills",
+          reason: "The completion event is emitted here.",
+        },
+      ],
+    });
+
+    writeSkill(skillPath, {
+      name: "design-recorded",
+      outputs: [
+        "design_spec",
+        "execution_plan",
+        "execution_mode_hint",
+        "risk_register",
+        "implementation_targets",
+      ],
+    });
+
+    const runtimeB = createCleanRuntime();
+    runtimeB.maintain.context.onTurnStart(sessionId, 1);
+    const normalized = requireDefined(
+      runtimeB.inspect.skills.getNormalizedOutputs(sessionId, "design-recorded"),
+      "Expected replayed normalized outputs.",
+    );
+    expect(normalized.canonical.execution_plan).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          step: "Persist semantic bindings alongside raw outputs.",
+        }),
+      ]),
+    );
+    expect(normalized.canonical.execution_mode_hint).toBe("direct_patch");
+    expect(normalized.canonicalSchemaIds).toEqual(
+      expect.arrayContaining([
+        "planning.design_spec.v2",
+        "planning.execution_plan.v2",
+        "planning.execution_mode_hint.v2",
+        "planning.risk_register.v2",
+        "planning.implementation_targets.v2",
+      ]),
+    );
+    const consumed = runtimeB.inspect.skills.getConsumedOutputs(sessionId, "planning-consumer");
+    expect(consumed.outputs.execution_mode_hint).toBe("direct_patch");
   });
 
   test("emits skill_completed event with outputs and output keys", async () => {
+    writeSkill(join(workspace, ".brewva/skills/core/semantic-event/SKILL.md"), {
+      name: "semantic-event",
+      outputs: ["design_spec"],
+      semanticBindings: {
+        design_spec: "planning.design_spec.v2",
+      },
+    });
     const runtime = createCleanRuntime();
     const sessionId = `skill-complete-event-${Date.now()}`;
-    runtime.authority.skills.activate(sessionId, "repository-analysis");
+    runtime.authority.skills.activate(sessionId, "semantic-event");
     const outputs = {
-      repository_snapshot: "repository layout for runtime, tools, and gateway modules",
-      impact_map: buildImpactMap("routing flow and registry boundaries touched by the change"),
-      planning_posture: "moderate",
-      unknowns: ["No blocking repository blind spots remained after the analysis pass."],
+      design_spec:
+        "Emit semantic bindings on the completion event so replay stays self-describing.",
     };
     runtime.authority.skills.complete(sessionId, outputs);
 
@@ -144,15 +349,14 @@ describe("skill output registry", () => {
       skillName?: string;
       outputKeys?: string[];
       outputs?: Record<string, unknown>;
+      semanticBindings?: Record<string, string>;
     };
-    expect(payload.skillName).toBe("repository-analysis");
-    expect(payload.outputKeys).toEqual([
-      "impact_map",
-      "planning_posture",
-      "repository_snapshot",
-      "unknowns",
-    ]);
+    expect(payload.skillName).toBe("semantic-event");
+    expect(payload.outputKeys).toEqual(["design_spec"]);
     expect(payload.outputs).toEqual(outputs);
+    expect(payload.semanticBindings).toEqual({
+      design_spec: "planning.design_spec.v2",
+    });
   });
 
   test("emits skill_activated event when a skill is loaded", async () => {

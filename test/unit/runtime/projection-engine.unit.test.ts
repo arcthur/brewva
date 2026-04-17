@@ -9,6 +9,7 @@ import {
   type BrewvaEventRecord,
 } from "@brewva/brewva-runtime";
 import { ProjectionEngine } from "../../../packages/brewva-runtime/src/projection/engine.js";
+import { buildCanonicalReviewReport } from "../../helpers/semantic-artifacts.js";
 
 function taskSpecEvent(input: {
   id: string;
@@ -232,7 +233,7 @@ describe("projection engine", () => {
           skillName: "review",
           outputKeys: ["review_report", "review_findings", "merge_decision"],
           outputs: {
-            review_report: "Workflow chain is ready.",
+            review_report: buildCanonicalReviewReport("Workflow chain is ready."),
             review_findings: [],
             merge_decision: "ready",
           },

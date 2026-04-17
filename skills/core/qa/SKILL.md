@@ -21,13 +21,13 @@ intent:
     - qa_confidence_gaps
     - qa_environment_limits
   semantic_bindings:
-    qa_report: qa.qa_report.v1
-    qa_findings: qa.qa_findings.v1
-    qa_verdict: qa.qa_verdict.v1
-    qa_checks: qa.qa_checks.v1
-    qa_missing_evidence: qa.qa_missing_evidence.v1
-    qa_confidence_gaps: qa.qa_confidence_gaps.v1
-    qa_environment_limits: qa.qa_environment_limits.v1
+    qa_report: qa.qa_report.v2
+    qa_findings: qa.qa_findings.v2
+    qa_verdict: qa.qa_verdict.v2
+    qa_checks: qa.qa_checks.v2
+    qa_missing_evidence: qa.qa_missing_evidence.v2
+    qa_confidence_gaps: qa.qa_confidence_gaps.v2
+    qa_environment_limits: qa.qa_environment_limits.v2
 effects:
   allowed_effects:
     - workspace_read

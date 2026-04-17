@@ -370,6 +370,10 @@ Current behavior:
 - it runs on lifecycle `agentEnd`
 - when a skill is still active, it sends a follow-up `brewva-guard` message
   reminding the model to call `skill_complete`
+- when repair posture is active, the guard surfaces the minimum acceptable
+  contract state, unresolved Tier A/B fields, the next blocking consumer, and
+  the remaining repair budget instead of insisting on canonical full-schema
+  retry for advisory drift
 - after the per-prompt nudge budget is exhausted, it degrades to a UI warning
   instead of silently succeeding or writing a new durable authority receipt
 

@@ -241,6 +241,11 @@ Important distinctions:
   not share recall automatically by default
 - workflow artifacts/posture are derived working-state views, not new
   commitment-memory event families
+- `skill_completed` outputs are durable producer evidence, while normalized
+  semantic artifact views are derived consumer read models layered on top of
+  that evidence
+- advisory or taxonomy-only normalization drift does not become kernel truth
+  just because a normalized view exists
 - session-scoped workflow posture is not repository merge or release
   authority
 - iteration facts are durable event evidence for model-native optimization

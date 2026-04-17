@@ -10,6 +10,7 @@ import {
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { setStaticContextInjectionBudget } from "../../fixtures/config.js";
+import { buildCanonicalReviewReport } from "../../helpers/semantic-artifacts.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 type RuntimeWithInternals = {
@@ -211,7 +212,7 @@ describe("context source order integration", () => {
         skillName: "review",
         outputKeys: ["review_report", "review_findings", "merge_decision"],
         outputs: {
-          review_report: "Review is green.",
+          review_report: buildCanonicalReviewReport("Review is green."),
           review_findings: [],
           merge_decision: "ready",
         },

@@ -77,6 +77,8 @@ import type {
   SkillDocument,
   SkillActivationResult,
   SkillCompletionFailureRecord,
+  SkillConsumedOutputsView,
+  SkillNormalizedOutputsView,
   SkillOutputValidationResult,
   SkillRefreshInput,
   SkillRefreshResult,
@@ -309,8 +311,12 @@ interface BrewvaRuntimeMethodGroups {
       output: Record<string, unknown>,
       options?: { proof?: string; summary?: string; notes?: string },
     ): SkillOutputValidationResult;
-    getOutputs(sessionId: string, skillName: string): Record<string, unknown> | undefined;
-    getConsumedOutputs(sessionId: string, targetSkillName: string): Record<string, unknown>;
+    getRawOutputs(sessionId: string, skillName: string): Record<string, unknown> | undefined;
+    getNormalizedOutputs(
+      sessionId: string,
+      skillName: string,
+    ): SkillNormalizedOutputsView | undefined;
+    getConsumedOutputs(sessionId: string, targetSkillName: string): SkillConsumedOutputsView;
   };
   proposals: {
     submit(sessionId: string, proposal: EffectCommitmentProposal): DecisionReceipt;
@@ -730,7 +736,8 @@ export interface BrewvaInspectionPort {
     | "getActiveState"
     | "getLatestFailure"
     | "validateOutputs"
-    | "getOutputs"
+    | "getRawOutputs"
+    | "getNormalizedOutputs"
     | "getConsumedOutputs"
   >;
   readonly proposals: Pick<
@@ -1078,8 +1085,10 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           this.skillLifecycleService.recordCompletionFailure(sessionId, outputs, validation, usage),
         complete: (sessionId, output) =>
           this.skillLifecycleService.completeSkill(sessionId, output),
-        getOutputs: (sessionId, skillName) =>
-          this.skillLifecycleService.getSkillOutputs(sessionId, skillName),
+        getRawOutputs: (sessionId, skillName) =>
+          this.skillLifecycleService.getRawSkillOutputs(sessionId, skillName),
+        getNormalizedOutputs: (sessionId, skillName) =>
+          this.skillLifecycleService.getNormalizedSkillOutputs(sessionId, skillName),
         getConsumedOutputs: (sessionId, targetSkillName) =>
           this.skillLifecycleService.getAvailableConsumedOutputs(sessionId, targetSkillName),
       },
@@ -1455,7 +1464,8 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "getActiveState",
           "getLatestFailure",
           "validateOutputs",
-          "getOutputs",
+          "getRawOutputs",
+          "getNormalizedOutputs",
           "getConsumedOutputs",
         ] as const),
         proposals: bindMethods(methodGroups.proposals, [

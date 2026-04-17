@@ -6,6 +6,7 @@ import {
   deriveWorkflowStatus,
   type BrewvaEventRecord,
 } from "@brewva/brewva-runtime";
+import { buildCanonicalReviewReport } from "../../helpers/semantic-artifacts.js";
 
 function event(input: {
   id: string;
@@ -106,7 +107,7 @@ describe("workflow derivation", () => {
             skillName: "review",
             outputKeys: ["review_report", "review_findings", "merge_decision"],
             outputs: {
-              review_report: "Review is clean.",
+              review_report: buildCanonicalReviewReport("Review is clean."),
               review_findings: [],
               merge_decision: "ready",
             },
@@ -476,7 +477,7 @@ describe("workflow derivation", () => {
             skillName: "review",
             outputKeys: ["review_report", "review_findings", "merge_decision"],
             outputs: {
-              review_report: "Looks good.",
+              review_report: buildCanonicalReviewReport("Looks good."),
               review_findings: [],
               merge_decision: "ready",
             },
@@ -534,7 +535,7 @@ describe("workflow derivation", () => {
             skillName: "review",
             outputKeys: ["review_report", "review_findings", "merge_decision"],
             outputs: {
-              review_report: "Review is ready.",
+              review_report: buildCanonicalReviewReport("Review is ready."),
               review_findings: [],
               merge_decision: "ready",
             },
@@ -614,7 +615,7 @@ describe("workflow derivation", () => {
             skillName: "review",
             outputKeys: ["review_report", "review_findings", "merge_decision"],
             outputs: {
-              review_report: "Ready to merge.",
+              review_report: buildCanonicalReviewReport("Ready to merge."),
               review_findings: [],
               merge_decision: "ready",
             },
@@ -658,7 +659,7 @@ describe("workflow derivation", () => {
             skillName: "review",
             outputKeys: ["review_report", "review_findings", "merge_decision"],
             outputs: {
-              review_report: "Ready to merge.",
+              review_report: buildCanonicalReviewReport("Ready to merge."),
               review_findings: [],
               merge_decision: "ready",
             },
@@ -777,7 +778,7 @@ describe("workflow derivation", () => {
             skillName: "review",
             outputKeys: ["review_report", "review_findings", "merge_decision"],
             outputs: {
-              review_report: "Looks good.",
+              review_report: buildCanonicalReviewReport("Looks good."),
               review_findings: [],
               merge_decision: "ready",
             },
@@ -819,6 +820,184 @@ describe("workflow derivation", () => {
     );
     const shipArtifact = status.artifacts.find((artifact) => artifact.kind === "ship");
     expect(shipArtifact?.freshness).toBe("stale");
+  });
+
+  test("derives implementation posture from normalized outputs instead of raw files_changed shape", () => {
+    const status = deriveWorkflowStatus({
+      sessionId: "workflow-implementation-normalized",
+      events: [
+        event({
+          id: "evt-implementation-invalid",
+          type: "skill_completed",
+          sessionId: "workflow-implementation-normalized",
+          timestamp: 100,
+          payload: {
+            skillName: "implementation",
+            outputKeys: ["change_set", "files_changed"],
+            outputs: {
+              change_set: "Updated the runtime boundary for completion enforcement.",
+              files_changed: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(status.posture.implementation).toBe("blocked");
+    const implementationArtifact = status.artifacts.find(
+      (artifact) => artifact.kind === "implementation",
+    );
+    expect(implementationArtifact?.state).toBe("blocked");
+    expect(implementationArtifact?.metadata).toEqual(
+      expect.objectContaining({
+        raw_present: true,
+        normalized_present: true,
+        partial: true,
+        unresolved: ["files_changed"],
+        blockingConsumer: "implementation",
+      }),
+    );
+    expect(status.posture.blockers).toContain(
+      "Implementation artifact has unresolved normalized fields: files_changed.",
+    );
+  });
+
+  test("derives review and QA posture from normalized outputs instead of raw producer shape", () => {
+    const status = deriveWorkflowStatus({
+      sessionId: "workflow-review-qa-normalized",
+      events: [
+        event({
+          id: "evt-review-invalid",
+          type: "skill_completed",
+          sessionId: "workflow-review-qa-normalized",
+          timestamp: 100,
+          payload: {
+            skillName: "review",
+            outputKeys: ["review_report", "review_findings", "merge_decision"],
+            outputs: {
+              review_report: buildCanonicalReviewReport(
+                "Review draft without a canonical merge decision.",
+              ),
+              review_findings: [],
+              merge_decision: "ship_it",
+            },
+          },
+        }),
+        event({
+          id: "evt-qa-invalid",
+          type: "skill_completed",
+          sessionId: "workflow-review-qa-normalized",
+          timestamp: 110,
+          payload: {
+            skillName: "qa",
+            outputKeys: ["qa_report", "qa_findings", "qa_verdict", "qa_checks"],
+            outputs: {
+              qa_report: "QA ran but the verdict taxonomy drifted.",
+              qa_findings: [],
+              qa_verdict: "green",
+              qa_checks: [],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(status.posture.review).toBe("blocked");
+    expect(status.posture.qa).toBe("blocked");
+    const reviewArtifact = status.artifacts.find((artifact) => artifact.kind === "review");
+    expect(reviewArtifact?.state).toBe("blocked");
+    expect(reviewArtifact?.metadata).toEqual(
+      expect.objectContaining({
+        raw_present: true,
+        normalized_present: true,
+        partial: true,
+        unresolved: ["merge_decision"],
+        blockingConsumer: "ship",
+      }),
+    );
+    const qaArtifact = status.artifacts.find((artifact) => artifact.kind === "qa");
+    expect(qaArtifact?.state).toBe("blocked");
+    expect(qaArtifact?.metadata).toEqual(
+      expect.objectContaining({
+        raw_present: true,
+        normalized_present: true,
+        partial: true,
+        unresolved: ["qa_verdict"],
+        blockingConsumer: "ship",
+      }),
+    );
+    expect(status.posture.blockers).toContain(
+      "Review artifact has unresolved normalized fields: merge_decision.",
+    );
+    expect(status.posture.blockers).toContain(
+      "QA artifact has unresolved normalized fields: qa_verdict.",
+    );
+  });
+
+  test("derives ship posture from normalized outputs instead of raw ship_decision text", () => {
+    const status = deriveWorkflowStatus({
+      sessionId: "workflow-ship-normalized",
+      events: [
+        event({
+          id: "evt-review-ready",
+          type: "skill_completed",
+          sessionId: "workflow-ship-normalized",
+          timestamp: 90,
+          payload: {
+            skillName: "review",
+            outputKeys: ["review_report", "review_findings", "merge_decision"],
+            outputs: {
+              review_report: buildCanonicalReviewReport("Review is ready."),
+              review_findings: [],
+              merge_decision: "ready",
+            },
+          },
+        }),
+        event({
+          id: "evt-verify-ready",
+          type: "verification_outcome_recorded",
+          sessionId: "workflow-ship-normalized",
+          timestamp: 95,
+          payload: {
+            outcome: "pass",
+            level: "standard",
+            failedChecks: [],
+            evidenceFreshness: "fresh",
+          },
+        }),
+        event({
+          id: "evt-ship-invalid",
+          type: "skill_completed",
+          sessionId: "workflow-ship-normalized",
+          timestamp: 100,
+          payload: {
+            skillName: "ship",
+            outputKeys: ["ship_report", "release_checklist", "ship_decision"],
+            outputs: {
+              ship_report: "Ready for merge once the ship decision is canonical.",
+              release_checklist: ["Review ready", "Verification ready"],
+              ship_decision: "ship_it",
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(status.posture.ship).toBe("blocked");
+    const shipArtifact = status.artifacts.find((artifact) => artifact.kind === "ship");
+    expect(shipArtifact?.state).toBe("blocked");
+    expect(shipArtifact?.metadata).toEqual(
+      expect.objectContaining({
+        raw_present: true,
+        normalized_present: true,
+        partial: true,
+        unresolved: ["ship_decision"],
+        blockingConsumer: "ship",
+      }),
+    );
+    expect(status.posture.blockers).toContain(
+      "Ship artifact has unresolved normalized fields: ship_decision.",
+    );
   });
 
   test("derives iteration metric and guard artifacts from durable events", () => {

@@ -1,6 +1,7 @@
 import {
   getSemanticArtifactSchema,
   type ActiveSkillRuntimeState,
+  type BrewvaEventRecord,
   type ContextBudgetUsage,
   SKILL_REPAIR_ALLOWED_TOOL_NAMES,
   SKILL_REPAIR_MAX_ATTEMPTS,
@@ -24,6 +25,7 @@ import {
   getSkillSemanticBindings,
   listSkillOutputs,
 } from "../skills/facets.js";
+import { normalizeSkillOutputs } from "../skills/normalization.js";
 import type { SkillRegistry } from "../skills/registry.js";
 import type { SkillValidationContextBuilder } from "../skills/validation/builders/validation-context-builder.js";
 import type { SkillOutputValidationPipeline } from "../skills/validation/pipeline.js";
@@ -99,7 +101,7 @@ export interface SkillLifecycleServiceOptions {
         skipTapeCheckpoint?: boolean;
       },
     ],
-    unknown
+    BrewvaEventRecord | undefined
   >;
   setTaskSpec?: RuntimeCallback<[sessionId: string, spec: TaskSpec]>;
 }
@@ -198,6 +200,7 @@ export class SkillLifecycleService {
   completeSkill(sessionId: string, outputs: Record<string, unknown>): SkillOutputValidationResult {
     const state = this.sessionState.getCell(sessionId);
     const activeSkillName = state.activeSkillState?.skillName ?? state.activeSkill ?? null;
+    const activeSkill = activeSkillName ? this.skills.get(activeSkillName) : undefined;
     const validation = this.validateSkillOutputs(sessionId, outputs);
     if (!validation.ok) {
       return validation;
@@ -205,19 +208,15 @@ export class SkillLifecycleService {
 
     if (activeSkillName) {
       const completedAt = Date.now();
-      state.skillOutputs.set(activeSkillName, {
-        skillName: activeSkillName,
-        completedAt,
-        outputs,
-      });
       const outputKeys = Object.keys(outputs).toSorted();
+      const semanticBindings = getSkillSemanticBindings(activeSkill?.contract);
 
       state.activeSkill = undefined;
       state.activeSkillState = undefined;
       state.latestSkillFailure = undefined;
       state.toolCalls = 0;
 
-      this.recordEvent({
+      const completionEvent = this.recordEvent({
         sessionId,
         type: "skill_completed",
         turn: this.getCurrentTurn(sessionId),
@@ -226,7 +225,19 @@ export class SkillLifecycleService {
           outputKeys,
           outputs,
           completedAt,
+          ...(semanticBindings && Object.keys(semanticBindings).length > 0
+            ? { semanticBindings }
+            : {}),
         },
+      });
+      state.skillOutputs.set(activeSkillName, {
+        skillName: activeSkillName,
+        completedAt,
+        outputs,
+        sourceEventId: completionEvent?.id,
+        ...(semanticBindings && Object.keys(semanticBindings).length > 0
+          ? { semanticBindings }
+          : {}),
       });
 
       this.maybePromoteTaskSpec(sessionId, outputs);
@@ -273,6 +284,17 @@ export class SkillLifecycleService {
       ...(latestObservedTokens !== undefined ? { latestObservedTokens } : {}),
       ...(usedTokens !== undefined ? { usedTokens } : {}),
     };
+    const semanticBindings = getSkillSemanticBindings(skill.contract);
+    const normalizedOutputs = normalizeSkillOutputs({
+      outputs,
+      semanticBindings,
+    });
+    const unresolvedFields = normalizedOutputs.issues
+      .filter((issue) => issue.tier === "tier_a" || issue.tier === "tier_b")
+      .map((issue) => issue.path);
+    const nextBlockingConsumer = normalizedOutputs.issues.find(
+      (issue) => issue.tier === "tier_a" || issue.tier === "tier_b",
+    )?.blockingConsumer;
     const phase: SkillCompletionFailureRecord["phase"] =
       repairBudget.remainingAttempts > 0 ? "repair_required" : "failed_contract";
     const failure: SkillCompletionFailureRecord = {
@@ -283,6 +305,14 @@ export class SkillLifecycleService {
       missing: [...validation.missing],
       invalid: validation.invalid.map((issue) => ({ ...issue })),
       expectedOutputs: this.buildExpectedOutputs(skill, validation),
+      repairGuidance: {
+        unresolvedFields: [...new Set(unresolvedFields)],
+        ...(nextBlockingConsumer ? { nextBlockingConsumer } : {}),
+        minimumContractState:
+          validation.missing.length > 0
+            ? "Provide every required output with non-empty values."
+            : "Resolve Tier A blockers. Tier B fields may remain partial until the named consumer runs.",
+      },
       repairBudget,
     };
 
@@ -480,11 +510,25 @@ export class SkillLifecycleService {
     );
   }
 
-  getSkillOutputs(sessionId: string, skillName: string): Record<string, unknown> | undefined {
+  getRawSkillOutputs(sessionId: string, skillName: string): Record<string, unknown> | undefined {
     return this.sessionState.getExistingCell(sessionId)?.skillOutputs.get(skillName)?.outputs;
   }
 
-  getAvailableConsumedOutputs(sessionId: string, targetSkillName: string): Record<string, unknown> {
+  getNormalizedSkillOutputs(sessionId: string, skillName: string) {
+    const record = this.sessionState.getExistingCell(sessionId)?.skillOutputs.get(skillName);
+    if (!record) {
+      return undefined;
+    }
+    const semanticBindings =
+      record.semanticBindings ?? getSkillSemanticBindings(this.skills.get(skillName)?.contract);
+    return normalizeSkillOutputs({
+      outputs: record.outputs,
+      semanticBindings,
+      sourceEventId: record.sourceEventId,
+    });
+  }
+
+  getAvailableConsumedOutputs(sessionId: string, targetSkillName: string) {
     return this.validationContextBuilder.getConsumedOutputs(sessionId, targetSkillName);
   }
 

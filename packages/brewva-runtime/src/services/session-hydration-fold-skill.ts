@@ -3,9 +3,12 @@ import type {
   SemanticArtifactSchemaId,
   SkillCompletionFailureRecord,
   SkillOutputRecord,
+  SkillSemanticBindings,
   SkillOutputValidationIssue,
+  SkillRepairGuidance,
   SkillRepairBudgetState,
 } from "../contracts/index.js";
+import { isSemanticArtifactSchemaId } from "../contracts/index.js";
 import {
   SKILL_ACTIVATED_EVENT_TYPE,
   SKILL_BUDGET_WARNING_EVENT_TYPE,
@@ -43,6 +46,30 @@ function readStringArray(value: unknown): string[] {
     .filter((entry): entry is string => typeof entry === "string")
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
+}
+
+function readSkillSemanticBindings(
+  payload: Record<string, unknown> | null,
+): SkillSemanticBindings | undefined {
+  const candidate = payload?.semanticBindings;
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+    return undefined;
+  }
+  const entries = Object.entries(candidate).flatMap(([outputName, schemaId]) => {
+    const normalizedOutputName = outputName.trim();
+    if (!normalizedOutputName || typeof schemaId !== "string") {
+      return [];
+    }
+    const normalizedSchemaId = schemaId.trim();
+    if (!isSemanticArtifactSchemaId(normalizedSchemaId)) {
+      return [];
+    }
+    return [[normalizedOutputName, normalizedSchemaId] as const];
+  });
+  if (entries.length === 0) {
+    return undefined;
+  }
+  return Object.fromEntries(entries);
 }
 
 function readSkillOutputValidationIssue(value: unknown): SkillOutputValidationIssue | null {
@@ -117,6 +144,32 @@ function readExpectedOutputs(payload: Record<string, unknown> | null): Record<st
   return expectedOutputs as Record<string, unknown>;
 }
 
+function readRepairGuidance(value: unknown): SkillRepairGuidance | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const candidate = value as Record<string, unknown>;
+  const minimumContractState =
+    typeof candidate.minimumContractState === "string" &&
+    candidate.minimumContractState.trim().length > 0
+      ? candidate.minimumContractState.trim()
+      : undefined;
+  if (!minimumContractState) {
+    return undefined;
+  }
+  const unresolvedFields = readStringArray(candidate.unresolvedFields);
+  const nextBlockingConsumer =
+    typeof candidate.nextBlockingConsumer === "string" &&
+    candidate.nextBlockingConsumer.trim().length > 0
+      ? candidate.nextBlockingConsumer.trim()
+      : undefined;
+  return {
+    unresolvedFields,
+    minimumContractState,
+    ...(nextBlockingConsumer ? { nextBlockingConsumer } : {}),
+  };
+}
+
 function readCompletionFailure(
   payload: Record<string, unknown> | null,
   fallbackPhase: SkillCompletionFailureRecord["phase"],
@@ -144,6 +197,7 @@ function readCompletionFailure(
     missing: readStringArray(payload?.missing),
     invalid,
     expectedOutputs: readExpectedOutputs(payload),
+    repairGuidance: readRepairGuidance(payload?.repairGuidance),
     repairBudget,
   };
 }
@@ -201,11 +255,14 @@ export function createSkillHydrationFold(): SessionHydrationFold<SkillHydrationS
       if (event.type === SKILL_COMPLETED_EVENT_TYPE) {
         const skillName = readSkillName(payload);
         const outputs = readSkillOutputs(payload);
+        const semanticBindings = readSkillSemanticBindings(payload);
         if (skillName && outputs) {
           state.skillOutputs.set(skillName, {
             skillName,
             completedAt: readNonNegativeNumber(payload?.completedAt) ?? event.timestamp,
             outputs,
+            sourceEventId: event.id,
+            ...(semanticBindings ? { semanticBindings } : {}),
           });
         }
         state.activeSkill = undefined;

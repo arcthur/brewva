@@ -10,6 +10,7 @@ import {
   resolveSkillDefaultLease,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { buildCanonicalReviewReport } from "../../helpers/semantic-artifacts.js";
 
 describe("tape checkpoint automation", () => {
   test("uses session-local checkpoint counters instead of per-event tape rescans", async () => {
@@ -342,7 +343,7 @@ requires: []
         skillName: "review",
         outputKeys: ["review_report", "review_findings", "merge_decision"],
         outputs: {
-          review_report: "Workflow chain looks ready.",
+          review_report: buildCanonicalReviewReport("Workflow chain looks ready."),
           review_findings: [],
           merge_decision: "ready",
         },
@@ -399,7 +400,7 @@ requires: []
         skillName: "review",
         outputKeys: ["review_report", "review_findings", "merge_decision"],
         outputs: {
-          review_report: "Workflow chain looks ready.",
+          review_report: buildCanonicalReviewReport("Workflow chain looks ready."),
           review_findings: [],
           merge_decision: "ready",
         },

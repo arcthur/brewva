@@ -10,30 +10,30 @@ export type SkillCostHint = "low" | "medium" | "high";
 export type SkillEffectLevel = "read_only" | "execute" | "mutation";
 export type SkillRootSource = "system_root" | "global_root" | "project_root" | "config_root";
 export const SEMANTIC_ARTIFACT_SCHEMA_IDS = [
-  "planning.design_spec.v1",
-  "planning.execution_plan.v1",
-  "planning.execution_mode_hint.v1",
-  "planning.risk_register.v1",
-  "planning.implementation_targets.v1",
-  "planning.success_criteria.v1",
-  "planning.approach_simplicity_check.v1",
-  "planning.scope_declaration.v1",
-  "implementation.change_set.v1",
-  "implementation.files_changed.v1",
-  "implementation.verification_evidence.v1",
-  "review.review_report.v1",
-  "review.review_findings.v1",
-  "review.merge_decision.v1",
-  "qa.qa_report.v1",
-  "qa.qa_findings.v1",
-  "qa.qa_verdict.v1",
-  "qa.qa_checks.v1",
-  "qa.qa_missing_evidence.v1",
-  "qa.qa_confidence_gaps.v1",
-  "qa.qa_environment_limits.v1",
-  "ship.ship_report.v1",
-  "ship.release_checklist.v1",
-  "ship.ship_decision.v1",
+  "planning.design_spec.v2",
+  "planning.execution_plan.v2",
+  "planning.execution_mode_hint.v2",
+  "planning.risk_register.v2",
+  "planning.implementation_targets.v2",
+  "planning.success_criteria.v2",
+  "planning.approach_simplicity_check.v2",
+  "planning.scope_declaration.v2",
+  "implementation.change_set.v2",
+  "implementation.files_changed.v2",
+  "implementation.verification_evidence.v2",
+  "review.review_report.v2",
+  "review.review_findings.v2",
+  "review.merge_decision.v2",
+  "qa.qa_report.v2",
+  "qa.qa_findings.v2",
+  "qa.qa_verdict.v2",
+  "qa.qa_checks.v2",
+  "qa.qa_missing_evidence.v2",
+  "qa.qa_confidence_gaps.v2",
+  "qa.qa_environment_limits.v2",
+  "ship.ship_report.v2",
+  "ship.release_checklist.v2",
+  "ship.ship_decision.v2",
 ] as const;
 export type SemanticArtifactSchemaId = (typeof SEMANTIC_ARTIFACT_SCHEMA_IDS)[number];
 export type SkillSemanticBindings = Record<string, SemanticArtifactSchemaId>;
@@ -324,6 +324,8 @@ export interface SkillOutputRecord {
   skillName: string;
   completedAt: number;
   outputs: Record<string, unknown>;
+  sourceEventId?: string;
+  semanticBindings?: SkillSemanticBindings;
 }
 
 export interface SkillRepairBudgetState {
@@ -339,6 +341,12 @@ export interface SkillRepairBudgetState {
   usedTokens?: number;
 }
 
+export interface SkillRepairGuidance {
+  unresolvedFields: string[];
+  nextBlockingConsumer?: string;
+  minimumContractState: string;
+}
+
 export interface SkillCompletionFailureRecord {
   skillName: string;
   occurredAt: number;
@@ -347,6 +355,7 @@ export interface SkillCompletionFailureRecord {
   missing: string[];
   invalid: SkillOutputValidationIssue[];
   expectedOutputs: Record<string, unknown>;
+  repairGuidance?: SkillRepairGuidance;
   repairBudget: SkillRepairBudgetState;
 }
 

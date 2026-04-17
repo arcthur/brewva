@@ -1,4 +1,9 @@
-import type { SkillContract, SkillResourceSet, ToolEffectClass } from "@brewva/brewva-runtime";
+import type {
+  SkillConsumedOutputsView,
+  SkillContract,
+  SkillResourceSet,
+  ToolEffectClass,
+} from "@brewva/brewva-runtime";
 import {
   getSkillCostHint,
   getSkillOutputContracts,
@@ -25,7 +30,7 @@ function formatSkillOutput(input: {
   markdown: string;
   contract: SkillContract;
   resources?: SkillResourceSet;
-  availableConsumedOutputs?: Record<string, unknown>;
+  availableConsumedOutputs?: SkillConsumedOutputsView;
 }): string {
   const outputsList = listSkillOutputs(input.contract);
   const outputs = outputsList.length > 0 ? outputsList.join(", ") : "(none)";
@@ -80,13 +85,23 @@ function formatSkillOutput(input: {
     lines.push(`- invariants: ${input.resources.invariants.join(", ") || "(none)"}`);
   }
 
-  if (input.availableConsumedOutputs && Object.keys(input.availableConsumedOutputs).length > 0) {
+  const consumedOutputs = input.availableConsumedOutputs?.outputs ?? {};
+  if (Object.keys(consumedOutputs).length > 0) {
     lines.push("");
-    lines.push("## Available Data from Prior Skills");
-    for (const [key, value] of Object.entries(input.availableConsumedOutputs)) {
+    lines.push("## Normalized Data from Prior Skills");
+    for (const [key, value] of Object.entries(consumedOutputs)) {
       const valueStr = typeof value === "string" ? value : JSON.stringify(value);
       const truncated = valueStr.length > 500 ? `${valueStr.slice(0, 497)}...` : valueStr;
       lines.push(`- ${key}: ${truncated}`);
+    }
+  }
+
+  if (input.availableConsumedOutputs && input.availableConsumedOutputs.issues.length > 0) {
+    lines.push("");
+    lines.push("## Unresolved Normalization Issues");
+    for (const issue of input.availableConsumedOutputs.issues.slice(0, 8)) {
+      const blocking = issue.blockingConsumer ? ` -> ${issue.blockingConsumer}` : "";
+      lines.push(`- ${issue.path} [${issue.tier}]${blocking}: ${issue.reason}`);
     }
   }
 

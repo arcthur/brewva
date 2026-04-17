@@ -1,4 +1,5 @@
 import {
+  getSkillSemanticBindings,
   getSkillOutputContracts,
   listSkillOutputs,
   type SkillDocument,
@@ -72,6 +73,7 @@ function renderSkillOutputContract(
 function renderSkillContractSection(skill: SkillDocument): string[] {
   const outputNames = listSkillOutputs(skill.contract);
   const outputContracts = getSkillOutputContracts(skill.contract);
+  const semanticBindings = getSkillSemanticBindings(skill.contract);
   const lines = [
     "",
     "## Delegated Skill",
@@ -82,7 +84,11 @@ function renderSkillContractSection(skill: SkillDocument): string[] {
     lines.push(
       "",
       "### Required Skill Outputs",
-      ...outputNames.map((name) => renderSkillOutputContract(name, outputContracts[name])),
+      ...outputNames.map((name) => {
+        const schemaId = semanticBindings[name];
+        const contractLine = renderSkillOutputContract(name, outputContracts[name]);
+        return schemaId ? `${contractLine} Normalized consumer schema: ${schemaId}.` : contractLine;
+      }),
     );
   }
   lines.push("", "### Skill Body", skill.markdown.trim());

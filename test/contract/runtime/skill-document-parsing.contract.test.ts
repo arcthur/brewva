@@ -732,11 +732,11 @@ describe("skill document parsing", () => {
     const parsed = parseSkillDocument(`${repoRoot()}/skills/core/design/SKILL.md`, "core");
 
     expect(parsed.contract.intent?.semanticBindings).toEqual({
-      design_spec: "planning.design_spec.v1",
-      execution_plan: "planning.execution_plan.v1",
-      execution_mode_hint: "planning.execution_mode_hint.v1",
-      risk_register: "planning.risk_register.v1",
-      implementation_targets: "planning.implementation_targets.v1",
+      design_spec: "planning.design_spec.v2",
+      execution_plan: "planning.execution_plan.v2",
+      execution_mode_hint: "planning.execution_mode_hint.v2",
+      risk_register: "planning.risk_register.v2",
+      implementation_targets: "planning.implementation_targets.v2",
     });
     expect(listSkillOutputs(parsed.contract)).toEqual([
       "design_spec",
@@ -755,10 +755,10 @@ describe("skill document parsing", () => {
     );
 
     expect(parsed.contract.intent?.semanticBindings).toEqual({
-      implementation_targets: "planning.implementation_targets.v1",
-      success_criteria: "planning.success_criteria.v1",
-      approach_simplicity_check: "planning.approach_simplicity_check.v1",
-      scope_declaration: "planning.scope_declaration.v1",
+      implementation_targets: "planning.implementation_targets.v2",
+      success_criteria: "planning.success_criteria.v2",
+      approach_simplicity_check: "planning.approach_simplicity_check.v2",
+      scope_declaration: "planning.scope_declaration.v2",
     });
     expect(listSkillOutputs(parsed.contract)).toEqual([
       "implementation_targets",
@@ -786,7 +786,7 @@ describe("skill document parsing", () => {
         "      min_words: 4",
         "      min_length: 24",
         "  semantic_bindings:",
-        "    design_spec: planning.design_spec.v1",
+        "    design_spec: planning.design_spec.v2",
         "effects:",
         "  allowed_effects: [workspace_read]",
         "resources:",

@@ -17,10 +17,10 @@ intent:
     - approach_simplicity_check
     - scope_declaration
   semantic_bindings:
-    implementation_targets: planning.implementation_targets.v1
-    success_criteria: planning.success_criteria.v1
-    approach_simplicity_check: planning.approach_simplicity_check.v1
-    scope_declaration: planning.scope_declaration.v1
+    implementation_targets: planning.implementation_targets.v2
+    success_criteria: planning.success_criteria.v2
+    approach_simplicity_check: planning.approach_simplicity_check.v2
+    scope_declaration: planning.scope_declaration.v2
 effects:
   allowed_effects:
     - workspace_read

@@ -180,14 +180,25 @@ workflow or recovery semantics. Verification, finishing, recovery, and
 compose-style workflow assistance live in runtime/control-plane code today rather than
 structured `SKILL.md` documents.
 
-`intent.output_contracts` makes artifact quality explicit in the skill contract
-instead of hiding it inside runtime heuristics. For ordinary authored outputs,
-non-overlay skills with declared outputs must define a contract for every
-output. For semantic-bound outputs, authors must declare
-`intent.semantic_bindings` and let runtime derive the corresponding
-`output_contracts`; authored `intent.output_contracts` must not duplicate those
-bound outputs. Overlays may inherit base output contracts, but they cannot
-silently replace an existing base output contract.
+`intent.output_contracts` makes producer-boundary requirements explicit in the
+skill contract instead of hiding them inside runtime heuristics. For ordinary
+authored outputs, non-overlay skills with declared outputs must define a
+contract for every output. For semantic-bound outputs, authors must declare
+`intent.semantic_bindings`, but those bindings name canonical normalized
+consumer schemas rather than producer-side exact-shape obligations. Authored
+`intent.output_contracts` must not duplicate semantic-bound outputs. Overlays
+may inherit base output contracts, but they cannot silently replace an
+existing base output contract.
+
+Stable producer/consumer rule:
+
+- producer completion validates required output presence, authored non-semantic
+  `output_contracts`, and any Tier A safety or progression blockers
+- semantic bindings identify runtime-owned normalized read models used by
+  downstream consumers, `skill_load`, `workflow_status`, and inspect surfaces
+- advisory drift in semantic-bound outputs should surface as normalization
+  issues and blocking metadata, not as automatic producer-boundary contract
+  failure, unless a declared Tier A consumer boundary requires exactness
 
 Current output contract kinds are intentionally limited to `text`, `enum`, and
 `json`. `json` contracts may also declare `required_fields` plus recursive
@@ -436,9 +447,17 @@ posture:
   `design_spec`, `execution_plan`, `execution_mode_hint`, `risk_register`, and
   `implementation_targets`; advisor `design` consults inform this contract but
   do not replace parent-owned `design` completion
+- planning handoff precision is consumer-driven:
+  path-scoped implementation targets and required evidence stay blocking where
+  downstream consumers need them, while taxonomy-only fields such as
+  `risk_register.category` or `owner_lane` remain non-blocking normalization
+  metadata
 - `implementation` is expected to stay inside path-scoped
   `implementation_targets`; work that materially exceeds the planned boundary
   should hand control back to `design` instead of silently widening scope
+- `implementation` may consume partial normalized planning outputs, but it may
+  block explicitly when normalized `implementation_targets` do not resolve to a
+  safe path-scoped owner boundary
 - `review` treats fresh planning evidence as a first-class input; high-risk
   work cannot reach `merge_decision = "ready"` when that planning evidence is
   missing or stale after later workspace writes
@@ -454,6 +473,33 @@ posture:
 - `review-operability` is the internal evidence-audit lane for rollback posture,
   missing probes, stale evidence, and operator burden; it is not a second QA
   executor
+
+Precision tiers are stable contract vocabulary for semantic-bound outputs:
+
+- Tier A
+  - unresolved fields may block safe progression at the boundary where the
+    decision is made
+  - examples: path-scoped implementation ownership, approval-bearing artifacts,
+    rollback-critical state, verification freshness when ship or merge depends
+    on it
+- Tier B
+  - producer completion may accept the output, but a named downstream consumer
+    may block if normalization leaves required fields unresolved
+  - examples: `risk_register.required_evidence`,
+    `execution_plan.verification_intent` when QA or workflow posture derives
+    required checks from it
+- Tier C
+  - fields may improve summaries, metadata, or optional ranking, but they do
+    not block producer completion or workflow progression
+  - examples: fine-grained planning taxonomies such as `risk_register.category`
+    and `owner_lane` when they are not themselves a deterministic gate
+
+Consumer declaration rule:
+
+- any consumer that may block on normalized semantic output must declare that
+  requirement explicitly in runtime code
+- inspect and workflow surfaces may read advisory fields without upgrading them
+  into producer-side hard requirements
 
 ## Hidden-By-Default Skills
 

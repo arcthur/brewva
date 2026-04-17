@@ -6,6 +6,7 @@ import { HostedDelegationStore } from "@brewva/brewva-gateway";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { createWorkflowStatusTool } from "@brewva/brewva-tools";
+import { buildCanonicalReviewReport } from "../../helpers/semantic-artifacts.js";
 import { extractTextContent, mergeContext } from "./tools-flow.helpers.js";
 
 function withDelegationStatus(runtime: BrewvaRuntime, store: HostedDelegationStore) {
@@ -36,7 +37,7 @@ describe("workflow_status contract", () => {
         skillName: "review",
         outputKeys: ["review_report", "review_findings", "merge_decision"],
         outputs: {
-          review_report: "Review ready.",
+          review_report: buildCanonicalReviewReport("Review ready."),
           review_findings: [],
           merge_decision: "ready",
         },
@@ -113,7 +114,7 @@ describe("workflow_status contract", () => {
         skillName: "review",
         outputKeys: ["review_report", "review_findings", "merge_decision"],
         outputs: {
-          review_report: "Ready to merge.",
+          review_report: buildCanonicalReviewReport("Ready to merge."),
           review_findings: [],
           merge_decision: "ready",
         },
@@ -175,7 +176,7 @@ describe("workflow_status contract", () => {
         skillName: "review",
         outputKeys: ["review_report", "review_findings", "merge_decision"],
         outputs: {
-          review_report: "Ready to merge.",
+          review_report: buildCanonicalReviewReport("Ready to merge."),
           review_findings: [],
           merge_decision: "ready",
         },
@@ -444,7 +445,7 @@ describe("workflow_status contract", () => {
         skillName: "review",
         outputKeys: ["review_report", "review_findings", "merge_decision"],
         outputs: {
-          review_report: "Review ready.",
+          review_report: buildCanonicalReviewReport("Review ready."),
           review_findings: [],
           merge_decision: "ready",
         },
@@ -552,7 +553,7 @@ describe("workflow_status contract", () => {
         skillName: "review",
         outputKeys: ["review_report", "review_findings", "merge_decision"],
         outputs: {
-          review_report: "Ready to merge.",
+          review_report: buildCanonicalReviewReport("Ready to merge."),
           review_findings: [],
           merge_decision: "ready",
         },

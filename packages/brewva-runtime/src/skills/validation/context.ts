@@ -1,6 +1,8 @@
 import type {
   PlanningEvidenceKey,
   PlanningEvidenceState,
+  SkillConsumedOutputsView,
+  SkillNormalizedOutputsView,
   SemanticArtifactSchemaId,
   SkillDocument,
   SkillOutputContract,
@@ -25,6 +27,8 @@ export interface SkillValidationContext {
   skill: SkillDocument;
   outputs: Record<string, unknown>;
   consumedOutputs: Record<string, unknown>;
+  consumedOutputView: SkillConsumedOutputsView;
+  normalizedOutputs: SkillNormalizedOutputsView;
   outputContracts: Record<string, SkillOutputContract>;
   semanticBindings: SkillSemanticBindings | undefined;
   semanticSchemaIds: ReadonlySet<SemanticArtifactSchemaId>;

@@ -17,9 +17,9 @@ intent:
     - files_changed
     - verification_evidence
   semantic_bindings:
-    change_set: implementation.change_set.v1
-    files_changed: implementation.files_changed.v1
-    verification_evidence: implementation.verification_evidence.v1
+    change_set: implementation.change_set.v2
+    files_changed: implementation.files_changed.v2
+    verification_evidence: implementation.verification_evidence.v2
 effects:
   allowed_effects:
     - workspace_read

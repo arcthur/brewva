@@ -9,7 +9,6 @@ import type {
   SkillResourceBudget,
   ToolEffectClass,
 } from "../contracts/index.js";
-import { deriveSemanticBindingOutputContracts } from "../contracts/semantic-artifacts.js";
 
 const READ_ONLY_EFFECTS: ToolEffectClass[] = ["workspace_read", "runtime_observe"];
 const EXECUTE_EFFECTS = new Set<ToolEffectClass>(["local_exec", "external_network"]);
@@ -34,7 +33,6 @@ export function getSkillOutputContracts(
   const intent = resolveSkillIntent(contract);
   return {
     ...intent.outputContracts,
-    ...deriveSemanticBindingOutputContracts(intent.semanticBindings),
   };
 }
 

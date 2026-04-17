@@ -57,10 +57,21 @@ function formatGuardMessage(
             : "none"
         }`,
       );
-      if (Object.keys(latestFailure.expectedOutputs).length > 0) {
+      if (latestFailure.repairGuidance) {
         lines.push("");
-        lines.push("Expected skeleton:");
-        lines.push(JSON.stringify(latestFailure.expectedOutputs, null, 2));
+        lines.push(
+          `Minimum acceptable contract state: ${latestFailure.repairGuidance.minimumContractState}`,
+        );
+        lines.push(
+          `Unresolved Tier A/B fields: ${
+            latestFailure.repairGuidance.unresolvedFields.length > 0
+              ? latestFailure.repairGuidance.unresolvedFields.join(", ")
+              : "none"
+          }`,
+        );
+        lines.push(
+          `Next blocking consumer: ${latestFailure.repairGuidance.nextBlockingConsumer ?? "none"}`,
+        );
       }
     }
     return lines.join("\n");

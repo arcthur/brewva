@@ -674,6 +674,23 @@ There is no public skill-cascade or chain-control tool.
 It also requires an active skill; calling it without a loaded skill is a
 fail-closed contract error rather than a no-op success.
 
+Current semantic-output rule:
+
+- `skill_complete` records raw producer outputs as durable evidence
+- authored non-semantic contracts and Tier A blockers may still reject
+  completion
+- Tier B semantic fields may remain partial until the named downstream
+  consumer runs
+- Tier C normalization drift is accepted and surfaced through normalized
+  outputs, `skill_load`, and `workflow_status` rather than retried as a
+  producer-boundary contract error
+
+`skill_load` and `runtime.inspect.skills.getConsumedOutputs(...)` expose the
+normalized consumer view for prior outputs, including unresolved normalization
+issues and named blocking consumers where relevant. This keeps warm transitions
+consumer-driven instead of forcing every upstream producer to emit the final
+canonical read model directly.
+
 In the generic hosted path, when no skill is active yet and no TaskSpec is
 recorded, the hosted control plane first narrows the turn to bootstrap
 control-plane tools so the next semantic decision is `task_set_spec`. After
@@ -863,6 +880,9 @@ Derived workflow inspection surface.
 - exposes planning assurance posture such as `plan_complete`, `plan_fresh`,
   `review_required`, `qa_required`, and
   `unsatisfied_required_evidence`
+- distinguishes raw planning presence from normalized availability and may
+  report partial or blocked planning state together with unresolved fields,
+  named blocking consumers, and the normalizer version
 - implementation may be `pending` when delegated patch results still await
   parent merge/apply
 - surfaces the latest durable stall adjudication when the control plane has

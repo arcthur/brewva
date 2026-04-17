@@ -98,6 +98,15 @@ latest post-verification evidence before recording `skill_completed`. Both
 `validateOutputs(...)` and `complete(...)` fail closed when no active skill is
 loaded for the target session.
 
+Stable producer-boundary rule:
+
+- `skill_completed` stores the raw producer payload as durable evidence
+- authored non-semantic `outputContracts` and Tier A blockers may still reject
+  completion
+- semantic-bound normalization drift is carried forward as inspectable
+  normalized state unless a declared blocking consumer requires exactness at the
+  current boundary
+
 Current implementation note:
 
 - completion semantics are driven by the validated `outputs` payload
@@ -243,13 +252,28 @@ underlying replay-first contracts those operator products read from.
 - `getActiveState(sessionId)`
 - `getLatestFailure(sessionId)`
 - `validateOutputs(sessionId, outputs)`
-- `getOutputs(sessionId, skillName)`
+- `getRawOutputs(sessionId, skillName)`
+- `getNormalizedOutputs(sessionId, skillName)`
 - `getConsumedOutputs(sessionId, targetSkillName)`
 
 `validateOutputs(...)` is the preview surface for the same runtime-owned
 validator composition used by `authority.skills.complete(...)`. It does not
 cache commit decisions or transfer caller-owned validation state across the
 verification boundary, and it requires an active skill.
+
+`getRawOutputs(...)` returns the durable producer payload recorded by
+`skill_completed`. `getNormalizedOutputs(...)` returns the runtime-owned
+normalized consumer view with canonical data, field-level issues, blocking
+state, provenance, and the normalizer version used to derive it.
+
+Semantic schema ids such as `planning.execution_plan.v2` name this normalized
+consumer-facing view. They do not imply that the producer had to emit the same
+canonical shape at completion time.
+
+`getConsumedOutputs(...)` returns the normalized consumer-facing aggregate for a
+target skill, not the raw upstream output map. Operator and host surfaces
+should distinguish raw presence from normalized availability and partial or
+blocking states.
 
 ### `inspect.proposals`
 

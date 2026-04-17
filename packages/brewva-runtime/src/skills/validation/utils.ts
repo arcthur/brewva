@@ -3,6 +3,7 @@ import type {
   SemanticArtifactSchemaId,
   SkillDocument,
   SkillOutputContract,
+  SkillNormalizedOutputIssue,
   SkillOutputValidationIssue,
 } from "../../contracts/index.js";
 import { PLANNING_EVIDENCE_KEYS } from "../../contracts/index.js";
@@ -32,6 +33,12 @@ export const QA_SEMANTIC_OUTPUT_KEYS = [
   "qa_findings",
   "qa_verdict",
   "qa_checks",
+] as const;
+
+export const SHIP_SEMANTIC_OUTPUT_KEYS = [
+  "ship_report",
+  "release_checklist",
+  "ship_decision",
 ] as const;
 
 export const REVIEW_SEMANTIC_EVIDENCE_KEYS = [
@@ -120,7 +127,13 @@ export function isOutputPresent(
   contract: SkillOutputContract | undefined,
 ): boolean {
   if (!contract) {
-    return isSatisfied(value);
+    if (value === undefined || value === null) {
+      return false;
+    }
+    if (typeof value === "string") {
+      return value.trim().length > 0;
+    }
+    return true;
   }
   if (contract.kind !== "json") {
     return isSatisfied(value);
@@ -289,6 +302,16 @@ export function annotateSemanticIssues(
       ...(schemaId ? { schemaId } : {}),
     };
   });
+}
+
+export function normalizedIssuesToValidationIssues(
+  issues: readonly SkillNormalizedOutputIssue[],
+): SkillOutputValidationIssue[] {
+  return issues.map((issue) => ({
+    name: issue.path,
+    reason: issue.reason,
+    ...(issue.schemaId ? { schemaId: issue.schemaId } : {}),
+  }));
 }
 
 export function skillRequestsAnyInputs(

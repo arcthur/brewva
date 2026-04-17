@@ -7,6 +7,7 @@ import type {
   SessionUncleanShutdownDiagnostic,
   SkillCompletionFailureRecord,
   SkillOutputValidationIssue,
+  SkillRepairGuidance,
   SkillRepairBudgetState,
 } from "../contracts/index.js";
 import { asBrewvaToolCallId, asBrewvaToolName } from "../contracts/index.js";
@@ -160,7 +161,34 @@ function readLatestFailure(value: unknown): SkillCompletionFailureRecord | undef
       !Array.isArray(candidate.expectedOutputs)
         ? (candidate.expectedOutputs as Record<string, unknown>)
         : {},
+    repairGuidance: readRepairGuidance(candidate.repairGuidance),
     repairBudget,
+  };
+}
+
+function readRepairGuidance(value: unknown): SkillRepairGuidance | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const candidate = value as Record<string, unknown>;
+  const minimumContractState =
+    typeof candidate.minimumContractState === "string" &&
+    candidate.minimumContractState.trim().length > 0
+      ? candidate.minimumContractState.trim()
+      : undefined;
+  if (!minimumContractState) {
+    return undefined;
+  }
+  const unresolvedFields = readStringArray(candidate.unresolvedFields);
+  const nextBlockingConsumer =
+    typeof candidate.nextBlockingConsumer === "string" &&
+    candidate.nextBlockingConsumer.trim().length > 0
+      ? candidate.nextBlockingConsumer.trim()
+      : undefined;
+  return {
+    unresolvedFields,
+    minimumContractState,
+    ...(nextBlockingConsumer ? { nextBlockingConsumer } : {}),
   };
 }
 

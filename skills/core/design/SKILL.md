@@ -20,11 +20,11 @@ intent:
     - risk_register
     - implementation_targets
   semantic_bindings:
-    design_spec: planning.design_spec.v1
-    execution_plan: planning.execution_plan.v1
-    execution_mode_hint: planning.execution_mode_hint.v1
-    risk_register: planning.risk_register.v1
-    implementation_targets: planning.implementation_targets.v1
+    design_spec: planning.design_spec.v2
+    execution_plan: planning.execution_plan.v2
+    execution_mode_hint: planning.execution_mode_hint.v2
+    risk_register: planning.risk_register.v2
+    implementation_targets: planning.implementation_targets.v2
 effects:
   allowed_effects:
     - workspace_read
@@ -107,9 +107,9 @@ Every emitted plan names what was rejected and why.
 
 ### Phase 1: Classify planning posture
 
-Run `scripts/classify_planning_posture.py` with scope data. Use the returned
-posture to calibrate depth: `trivial` gets a lightweight plan, `high_risk`
-gets full trade-off analysis and risk register.
+Run `scripts/classify_planning_posture.py` with scope data. Use the returned posture
+to calibrate depth: `trivial` gets a lightweight plan, `high_risk` gets full
+trade-off analysis and risk register.
 
 If upstream `planning_posture` exists, reconcile it with script output. If they
 disagree, use the stricter posture and note the gap.
@@ -119,8 +119,8 @@ disagree, use the stricter posture and note the gap.
 ### Phase 2: Compare approaches
 
 Offer 1–3 materially different approaches with explicit trade-offs on boundary
-ownership, blast radius, migration/rollback cost, and verification strength.
-Choose one path explicitly.
+ownership, blast radius, migration/rollback cost, and verification strength. Choose
+one path explicitly.
 
 **If all approaches violate hard constraints**: Stop. Report the constraint
 conflict. Do not force a plan through broken constraints.
@@ -135,17 +135,17 @@ from a consulted precedent, explain why the current case is materially different
 ### Phase 4: Force key decisions into the open
 
 Make boundary ownership, migration posture, verification posture, rollback
-assumptions, and preventive checks explicit. Every deferred decision must be
-named as deferred and assigned to a downstream skill.
+assumptions, and preventive checks explicit. Every deferred decision must be named
+as deferred and assigned to a downstream skill.
 
 **If a key decision cannot be made**: Stop at that decision. Do not paper over
 it with optimistic assumptions.
 
 ### Phase 5: Emit bounded artifacts
 
-Produce `design_spec`, `execution_plan`, `execution_mode_hint`, `risk_register`,
-`implementation_targets`. Every artifact must reference concrete paths, not
-vague areas.
+Produce `design_spec`, `execution_plan`, `execution_mode_hint`, `risk_register`, and
+`implementation_targets`. Every artifact must reference concrete paths, not vague
+areas.
 
 ## Scripts
 
@@ -214,54 +214,92 @@ Input: "Refresh skill discovery so inspect and subagent workspace tooling can re
   "execution_plan": [
     {
       "step": 1,
-      "action": "Extend skill-index types for overlay provenance and routable metadata",
-      "verification": "`bun run check` stays clean"
+      "intent": "Extend skill-index types for overlay provenance and routable metadata",
+      "owner": "packages/brewva-runtime/src/skills/registry.ts",
+      "exit_criteria": "The serialized skill index carries overlay provenance and routable metadata without widening the runtime root surface",
+      "verification_intent": "`bun run check` stays clean"
     },
     {
       "step": 2,
-      "action": "Thread the new fields through `SkillRegistry.buildIndex()` and the write path",
-      "verification": "`test/contract/runtime/skills-discovery.contract.test.ts` covers the serialized artifact"
+      "intent": "Thread the new fields through `SkillRegistry.buildIndex()` and the write path",
+      "owner": "packages/brewva-runtime/src/skills/registry.ts",
+      "exit_criteria": "Registry load and write paths preserve the new metadata without changing authoritative discovery semantics",
+      "verification_intent": "`test/contract/runtime/skills-discovery.contract.test.ts` covers the serialized artifact"
     },
     {
       "step": 3,
-      "action": "Verify subagent workspace tooling still ignores `.brewva/skills_index.json` as generated state",
-      "verification": "`test/unit/gateway/subagent-workspace.unit.test.ts` still passes"
+      "intent": "Verify subagent workspace tooling still ignores `.brewva/skills_index.json` as generated state",
+      "owner": "packages/brewva-gateway/src/subagents/workspace.ts",
+      "exit_criteria": "Worker patch generation continues to exclude the generated index from durable patch scope",
+      "verification_intent": "`test/unit/gateway/subagent-workspace.unit.test.ts` still passes"
     }
   ],
   "execution_mode_hint": "coordinated_rollout",
   "risk_register": [
     {
       "risk": "Consumers may start treating the generated index as durable state instead of an inspect artifact",
+      "category": "cross_session_state",
+      "severity": "medium",
       "mitigation": "Keep contract docs and tests explicit that registry rebuild remains authoritative",
+      "required_evidence": ["test/contract/runtime/skills-discovery.contract.test.ts"],
       "owner_lane": "review-boundaries"
     },
     {
       "risk": "Generated skill-index diffs leak into worker patch sets",
+      "category": "patch_semantics",
+      "severity": "medium",
       "mitigation": "Retain `.brewva/skills_index.json` ignore handling and cover it in workspace patch tests",
+      "required_evidence": ["test/unit/gateway/subagent-workspace.unit.test.ts"],
       "owner_lane": "review-operability"
     }
   ],
   "implementation_targets": [
-    "packages/brewva-runtime/src/contracts/skill.ts",
-    "packages/brewva-runtime/src/skills/registry.ts",
-    "packages/brewva-gateway/src/subagents/workspace.ts",
-    "test/contract/runtime/skills-discovery.contract.test.ts",
-    "test/unit/gateway/subagent-workspace.unit.test.ts"
+    {
+      "target": "packages/brewva-runtime/src/contracts/skill.ts",
+      "kind": "source",
+      "owner_boundary": "runtime.skill-contract",
+      "reason": "Update skill-index contract fields without widening root exports"
+    },
+    {
+      "target": "packages/brewva-runtime/src/skills/registry.ts",
+      "kind": "source",
+      "owner_boundary": "runtime.skill-registry",
+      "reason": "Thread overlay provenance and routable metadata through the index build path"
+    },
+    {
+      "target": "packages/brewva-gateway/src/subagents/workspace.ts",
+      "kind": "source",
+      "owner_boundary": "gateway.subagent-workspace",
+      "reason": "Keep generated index files out of worker patch scopes"
+    },
+    {
+      "target": "test/contract/runtime/skills-discovery.contract.test.ts",
+      "kind": "test",
+      "owner_boundary": "runtime.skills-discovery-tests",
+      "reason": "Verify the serialized inspect artifact remains canonical"
+    },
+    {
+      "target": "test/unit/gateway/subagent-workspace.unit.test.ts",
+      "kind": "test",
+      "owner_boundary": "gateway.subagent-workspace-tests",
+      "reason": "Protect generated-state ignore behavior for worker patching"
+    }
   ]
 }
 ```
 
 ## Handoff Expectations
 
-- `design_spec`: what is changing, what is not, which modules own it, which
-  constraints are non-negotiable, which precedents were reused or rejected.
-- `execution_plan`: ordered, concrete, verification-aware. Implementation
-  executes without redesigning.
-- `execution_mode_hint`: evidence-based. `direct_patch` for local work,
-  `test_first` when behavior needs pinning, `coordinated_rollout` for
-  multi-boundary changes.
-- `risk_register`: change categories, required evidence, owner lane per risk.
-- `implementation_targets`: path-scoped files or directories, not vague areas.
+- `design_spec`: scope, owning modules, hard constraints, and reused or rejected
+  precedents.
+- `execution_plan`: ordered and verification-aware. Preserve `step`, `intent`,
+  `owner`, `exit_criteria`, and `verification_intent`.
+- `execution_mode_hint`: use `direct_patch` for local work, `test_first` for
+  behavior pinning, and `coordinated_rollout` for multi-boundary changes.
+- `risk_register`: every risk includes `risk`, `category`, `severity`,
+  `mitigation`, `required_evidence`, and `owner_lane`.
+- `implementation_targets`: path-scoped targets with `target`, `kind`,
+  `owner_boundary`, and `reason`; never string-only placeholders.
 
 ## Stop Conditions
 

@@ -13,7 +13,7 @@ import {
 import { emptyValidationDelta, type SkillOutputValidator } from "../validator.js";
 
 function validateReviewSemanticOutputs(
-  outputs: Record<string, unknown>,
+  context: SkillValidationContext,
   planningEvidenceState: Partial<Record<PlanningEvidenceKey, PlanningEvidenceState>>,
   verificationEvidenceState: VerificationEvidenceState,
   requiresVerificationEvidence: boolean,
@@ -23,9 +23,13 @@ function validateReviewSemanticOutputs(
     return state === "missing" || state === "stale";
   });
   const issues: Array<{ name: string; reason: string }> = [];
-  const reviewReport = coerceReviewReportArtifact(outputs.review_report);
+  const reviewReport = coerceReviewReportArtifact(
+    context.normalizedOutputs.canonical.review_report,
+  );
   const reviewReportMissingEvidence = reviewReport?.missing_evidence ?? [];
-  const mergeDecision = normalizeText(outputs.merge_decision)?.toLowerCase();
+  const mergeDecision = normalizeText(
+    context.normalizedOutputs.canonical.merge_decision,
+  )?.toLowerCase();
   for (const key of blockingPlanningEvidence) {
     const state = planningEvidenceState[key];
     if (!evidenceListMentionsKey(reviewReportMissingEvidence, key)) {
@@ -76,7 +80,7 @@ export class ReviewOutputValidator implements SkillOutputValidator {
   validate(context: SkillValidationContext) {
     const invalid = annotateSemanticIssues(
       validateReviewSemanticOutputs(
-        context.outputs,
+        context,
         context.evidence.getPlanningEvidenceState(),
         context.evidence.getVerificationEvidenceContext().state,
         context.skill.name === "review" ||

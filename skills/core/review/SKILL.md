@@ -18,9 +18,9 @@ intent:
     - review_findings
     - merge_decision
   semantic_bindings:
-    review_report: review.review_report.v1
-    review_findings: review.review_findings.v1
-    merge_decision: review.merge_decision.v1
+    review_report: review.review_report.v2
+    review_findings: review.review_findings.v2
+    merge_decision: review.merge_decision.v2
 effects:
   allowed_effects:
     - workspace_read

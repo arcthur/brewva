@@ -15,7 +15,13 @@ type ToolExecutionContext = Parameters<ReturnType<typeof createSkillLoadTool>["e
 
 function writeSkill(
   filePath: string,
-  input: { name: string; outputs: string[]; outputContracts?: string[]; consumes?: string[] },
+  input: {
+    name: string;
+    outputs: string[];
+    outputContracts?: string[];
+    semanticBindings?: Record<string, string>;
+    consumes?: string[];
+  },
 ): void {
   mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(
@@ -30,6 +36,14 @@ function writeSkill(
       "  phases: [align]",
       "intent:",
       `  outputs: [${input.outputs.join(", ")}]`,
+      ...(input.semanticBindings && Object.keys(input.semanticBindings).length > 0
+        ? [
+            "  semantic_bindings:",
+            ...Object.entries(input.semanticBindings).map(
+              ([outputName, schemaId]) => `    ${outputName}: ${schemaId}`,
+            ),
+          ]
+        : []),
       ...(input.outputContracts && input.outputContracts.length > 0
         ? ["  output_contracts:", ...input.outputContracts.map((line) => `  ${line}`)]
         : []),
@@ -427,7 +441,7 @@ describe("skill_complete tool", () => {
     });
   });
 
-  test("rejects non-canonical planning taxonomy even when a custom skill contract is looser", async () => {
+  test("records non-canonical planning taxonomy as advisory normalization drift for semantic-bound custom skills", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-complete-planning-taxonomy-"));
     writeSkill(join(workspace, ".brewva/skills/core/planning-loose/SKILL.md"), {
       name: "planning-loose",
@@ -438,34 +452,13 @@ describe("skill_complete tool", () => {
         "risk_register",
         "implementation_targets",
       ],
-      outputContracts: [
-        "  design_spec:",
-        "    kind: text",
-        "    min_words: 4",
-        "    min_length: 24",
-        "  execution_plan:",
-        "    kind: json",
-        "    min_items: 1",
-        "    item_contract:",
-        "      kind: json",
-        "      required_fields: [step, intent, owner, exit_criteria, verification_intent]",
-        "  execution_mode_hint:",
-        "    kind: text",
-        "    min_words: 1",
-        "    min_length: 8",
-        "  risk_register:",
-        "    kind: json",
-        "    min_items: 1",
-        "    item_contract:",
-        "      kind: json",
-        "      required_fields: [risk, category, severity, mitigation, required_evidence, owner_lane]",
-        "  implementation_targets:",
-        "    kind: json",
-        "    min_items: 1",
-        "    item_contract:",
-        "      kind: json",
-        "      required_fields: [target, kind, owner_boundary, reason]",
-      ],
+      semanticBindings: {
+        design_spec: "planning.design_spec.v2",
+        execution_plan: "planning.execution_plan.v2",
+        execution_mode_hint: "planning.execution_mode_hint.v2",
+        risk_register: "planning.risk_register.v2",
+        implementation_targets: "planning.implementation_targets.v2",
+      },
     });
 
     const runtime = new BrewvaRuntime({ cwd: workspace });
@@ -495,8 +488,10 @@ describe("skill_complete tool", () => {
               step: "Complete a planning skill with loose local schema checks.",
               intent: "Exercise runtime semantic validation instead of per-skill enum contracts.",
               owner: "runtime.authority.skills",
-              exit_criteria: "Non-canonical planning taxonomy is rejected at completion time.",
-              verification_intent: "Skill completion reports risk_register as invalid.",
+              exit_criteria:
+                "Producer completion succeeds while advisory taxonomy drift is preserved for inspect surfaces.",
+              verification_intent:
+                "Normalized outputs record risk_register taxonomy drift without rejecting completion.",
             },
           ],
           execution_mode_hint: "coordinated_rollout",
@@ -505,7 +500,8 @@ describe("skill_complete tool", () => {
               risk: "A custom skill could otherwise invent review taxonomy that downstream lanes do not understand.",
               category: "not_a_real_category",
               severity: "high",
-              mitigation: "Reject invalid planning taxonomy in the shared runtime contract.",
+              mitigation:
+                "Record normalization drift and keep downstream consumer precision explicit.",
               required_evidence: ["planning_taxonomy_contract_tests"],
               owner_lane: "review-ghost",
             },
@@ -526,9 +522,44 @@ describe("skill_complete tool", () => {
     );
 
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
-    expect(text).toContain("Skill completion rejected.");
-    expect(text).toContain("risk_register");
-    expect(runtime.inspect.skills.getActive(sessionId)?.name).toBe("planning-loose");
+    expect(text).toContain("Skill completed");
+    expect(runtime.inspect.skills.getActive(sessionId)).toBeUndefined();
+
+    const normalized = runtime.inspect.skills.getNormalizedOutputs(sessionId, "planning-loose");
+    expect(normalized).toBeDefined();
+    if (!normalized) {
+      throw new Error("Expected normalized planning outputs for semantic-bound custom skill.");
+    }
+    expect(normalized.canonical.risk_register).toEqual([
+      expect.objectContaining({
+        risk: expect.any(String),
+        category: "unknown",
+        mitigation: "Record normalization drift and keep downstream consumer precision explicit.",
+        required_evidence: ["planning_taxonomy_contract_tests"],
+        severity: "high",
+        owner_lane: "unknown",
+      }),
+    ]);
+    expect(normalized.blockingState).toEqual(
+      expect.objectContaining({
+        raw_present: true,
+        normalized_present: true,
+        partial: true,
+        status: "ready",
+      }),
+    );
+    expect(normalized.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "risk_register[0].category",
+          tier: "tier_c",
+        }),
+        expect.objectContaining({
+          path: "risk_register[0].owner_lane",
+          tier: "tier_c",
+        }),
+      ]),
+    );
   });
 
   test("synthesizes canonical learning-research outputs from repository precedent search", async () => {
@@ -636,17 +667,18 @@ The WAL boundary must keep replay ordering deterministic.
     expect(text).toContain("Skill completed");
     expect(runtime.inspect.skills.getActive(sessionId)).toBeUndefined();
     expect(
-      runtime.inspect.skills.getOutputs(sessionId, "learning-research-contract"),
+      runtime.inspect.skills.getRawOutputs(sessionId, "learning-research-contract"),
     ).toMatchObject({
       precedent_consult_status: "matched",
       precedent_refs: ["docs/solutions/runtime-errors/wal-recovery-race.md"],
     });
     expect(
-      runtime.inspect.skills.getOutputs(sessionId, "learning-research-contract")
+      runtime.inspect.skills.getRawOutputs(sessionId, "learning-research-contract")
         ?.precedent_query_summary,
     ).toContain("search_mode=solution_then_bootstrap");
     expect(
-      runtime.inspect.skills.getOutputs(sessionId, "learning-research-contract")?.preventive_checks,
+      runtime.inspect.skills.getRawOutputs(sessionId, "learning-research-contract")
+        ?.preventive_checks,
     ).toEqual(
       expect.arrayContaining([
         expect.stringContaining("Pin the WAL cursor before replay crosses an effectful boundary."),
@@ -1089,7 +1121,7 @@ The WAL boundary must keep replay ordering deterministic.
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toContain("Skill completed");
     expect(runtime.inspect.skills.getActive(sessionId)).toBeUndefined();
-    expect(runtime.inspect.skills.getOutputs(sessionId, "review-contract")).toMatchObject({
+    expect(runtime.inspect.skills.getRawOutputs(sessionId, "review-contract")).toMatchObject({
       merge_decision: "ready",
       review_findings: [],
       review_report: {
@@ -1664,7 +1696,7 @@ The WAL boundary must keep replay ordering deterministic.
 
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toContain("Skill completed");
-    expect(runtime.inspect.skills.getOutputs(sessionId, "review-contract")).toMatchObject({
+    expect(runtime.inspect.skills.getRawOutputs(sessionId, "review-contract")).toMatchObject({
       merge_decision: "ready",
       review_report: {
         activated_lanes: [
@@ -1995,7 +2027,7 @@ The WAL boundary must keep replay ordering deterministic.
 
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toContain("Skill completed");
-    expect(runtime.inspect.skills.getOutputs(sessionId, "review-contract")).toMatchObject({
+    expect(runtime.inspect.skills.getRawOutputs(sessionId, "review-contract")).toMatchObject({
       merge_decision: "blocked",
       review_report: expect.objectContaining({
         missing_evidence: expect.arrayContaining(["verification_evidence:stale"]),
@@ -2220,7 +2252,7 @@ The WAL boundary must keep replay ordering deterministic.
 
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toContain("Skill completed");
-    expect(runtime.inspect.skills.getOutputs(sessionId, "review-contract")).toMatchObject({
+    expect(runtime.inspect.skills.getRawOutputs(sessionId, "review-contract")).toMatchObject({
       merge_decision: "blocked",
       review_report: expect.objectContaining({
         missing_evidence: expect.arrayContaining(["verification_evidence:missing"]),
@@ -2638,7 +2670,7 @@ The WAL boundary must keep replay ordering deterministic.
 
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toContain("Skill completed");
-    expect(runtime.inspect.skills.getOutputs(sessionId, "review-contract")).toMatchObject({
+    expect(runtime.inspect.skills.getRawOutputs(sessionId, "review-contract")).toMatchObject({
       merge_decision: "blocked",
       review_report: expect.objectContaining({
         missing_evidence: expect.arrayContaining([
@@ -3159,7 +3191,7 @@ The WAL boundary must keep replay ordering deterministic.
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toContain("Skill completed");
     expect(runtime.inspect.skills.getActive(sessionId)).toBeUndefined();
-    expect(runtime.inspect.skills.getOutputs(sessionId, "implementation-contract")).toEqual(
+    expect(runtime.inspect.skills.getRawOutputs(sessionId, "implementation-contract")).toEqual(
       expect.objectContaining({
         change_set:
           "Implemented the contract-preserving fix and tightened the surrounding regression coverage.",

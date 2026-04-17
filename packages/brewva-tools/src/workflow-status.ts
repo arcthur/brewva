@@ -45,6 +45,35 @@ function formatTimestamp(timestamp: number): string {
   return new Date(timestamp).toISOString();
 }
 
+function readMetadataStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function readMetadataBoolean(value: unknown): string {
+  return typeof value === "boolean" ? String(value) : "unknown";
+}
+
+function readMetadataString(value: unknown, fallback = "none"): string {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function renderNormalizationLine(label: string, artifact: WorkflowArtifact | undefined): string {
+  const unresolved = readMetadataStringArray(artifact?.metadata?.unresolved);
+  const rawPresent = readMetadataBoolean(artifact?.metadata?.raw_present);
+  const normalizedPresent = readMetadataBoolean(artifact?.metadata?.normalized_present);
+  const partial = readMetadataBoolean(artifact?.metadata?.partial);
+  const blockingConsumer = readMetadataString(artifact?.metadata?.blockingConsumer);
+  return `${label}: raw_present=${rawPresent} normalized_present=${normalizedPresent} partial=${partial} unresolved=${
+    unresolved.length > 0 ? unresolved.join(", ") : "none"
+  } blocking_consumer=${blockingConsumer}`;
+}
+
 function laneVerdict(status: WorkflowLaneStatus): "pass" | "fail" | "inconclusive" {
   if (status === "ready") return "pass";
   if (status === "blocked") return "fail";
@@ -107,6 +136,13 @@ function readLatestStallAdjudication(events: BrewvaEventRecord[]) {
   return null;
 }
 
+function findLatestArtifactByKind(
+  artifacts: readonly WorkflowArtifact[],
+  kind: WorkflowArtifact["kind"],
+): WorkflowArtifact | undefined {
+  return artifacts.find((artifact) => artifact.kind === kind);
+}
+
 export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefinition {
   return defineBrewvaTool({
     name: "workflow_status",
@@ -153,6 +189,14 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
       });
 
       const posture = snapshot.posture;
+      const latestDesignArtifact = findLatestArtifactByKind(snapshot.artifacts, "design");
+      const latestImplementationArtifact = findLatestArtifactByKind(
+        snapshot.artifacts,
+        "implementation",
+      );
+      const latestReviewArtifact = findLatestArtifactByKind(snapshot.artifacts, "review");
+      const latestQaArtifact = findLatestArtifactByKind(snapshot.artifacts, "qa");
+      const latestShipArtifact = findLatestArtifactByKind(snapshot.artifacts, "ship");
       const verdict = overallVerdict({
         review: posture.review,
         qa: posture.qa,
@@ -172,11 +216,15 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         `planning: ${posture.planning}`,
         `plan_complete: ${posture.plan_complete}`,
         `plan_fresh: ${posture.plan_fresh}`,
+        renderNormalizationLine("planning_normalization", latestDesignArtifact),
         `implementation: ${posture.implementation}`,
+        renderNormalizationLine("implementation_normalization", latestImplementationArtifact),
         `review_required: ${posture.review_required}`,
         `review: ${posture.review}`,
+        renderNormalizationLine("review_normalization", latestReviewArtifact),
         `qa_required: ${posture.qa_required}`,
         `qa: ${posture.qa}`,
+        renderNormalizationLine("qa_normalization", latestQaArtifact),
         `unsatisfied_required_evidence: ${
           posture.unsatisfied_required_evidence.length > 0
             ? posture.unsatisfied_required_evidence.join(", ")
@@ -185,6 +233,7 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         `verification: ${posture.verification}`,
         `acceptance: ${posture.acceptance}`,
         `ship: ${posture.ship}`,
+        renderNormalizationLine("ship_normalization", latestShipArtifact),
         `retro: ${posture.retro}`,
         `pending_worker_results: ${snapshot.pendingWorkerResults}`,
         `pending_delegation_outcomes: ${snapshot.pendingDelegationOutcomes}`,

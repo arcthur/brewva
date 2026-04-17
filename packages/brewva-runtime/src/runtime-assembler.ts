@@ -61,11 +61,13 @@ import { VerificationService } from "./services/verification.js";
 import { SkillRegistry } from "./skills/registry.js";
 import { SkillValidationContextBuilder } from "./skills/validation/builders/validation-context-builder.js";
 import { SkillOutputValidationPipeline } from "./skills/validation/pipeline.js";
+import { ConsumedOutputBlockingValidator } from "./skills/validation/validators/consumed-output-blocking-validator.js";
 import { ContractValidator } from "./skills/validation/validators/contract-validator.js";
 import { ImplementationOutputValidator } from "./skills/validation/validators/implementation-validator.js";
 import { PlanningOutputValidator } from "./skills/validation/validators/planning-validator.js";
 import { QaOutputValidator } from "./skills/validation/validators/qa-validator.js";
 import { ReviewOutputValidator } from "./skills/validation/validators/review-validator.js";
+import { ShipOutputValidator } from "./skills/validation/validators/ship-validator.js";
 import { FileChangeTracker } from "./state/file-change-tracker.js";
 import { ReasoningReplayEngine } from "./tape/reasoning-replay.js";
 import { TurnReplayEngine } from "./tape/replay-engine.js";
@@ -356,9 +358,11 @@ export function createRuntimeServiceDependencies(
   const skillValidationPipeline = new SkillOutputValidationPipeline([
     new ContractValidator(),
     new PlanningOutputValidator(),
+    new ConsumedOutputBlockingValidator(),
     new ImplementationOutputValidator(),
     new ReviewOutputValidator(),
     new QaOutputValidator(),
+    new ShipOutputValidator(),
   ]);
   const skillLifecycleService = new SkillLifecycleService({
     skills: options.coreDependencies.skillRegistry,

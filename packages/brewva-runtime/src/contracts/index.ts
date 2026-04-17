@@ -1,6 +1,7 @@
 export * from "./shared.js";
 export * from "./identifiers.js";
 export * from "./skill.js";
+export * from "./skill-normalization.js";
 export * from "./governance.js";
 export * from "./proposal.js";
 export * from "./task.js";

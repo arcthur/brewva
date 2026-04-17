@@ -1,6 +1,7 @@
 import type { BrewvaEventRecord, SkillDocument } from "../../../contracts/index.js";
 import type { RuntimeSessionStateStore } from "../../../services/session-state.js";
 import { getSkillOutputContracts, getSkillSemanticBindings } from "../../facets.js";
+import { buildConsumedOutputsView, normalizeSkillOutputs } from "../../normalization.js";
 import type { SkillRegistry } from "../../registry.js";
 import type { SkillValidationContext, SkillValidationEvidenceProvider } from "../context.js";
 import {
@@ -40,28 +41,41 @@ export class SkillValidationContextBuilder {
     this.listEvents = options.listEvents;
   }
 
-  getConsumedOutputs(sessionId: string, targetSkillName: string): Record<string, unknown> {
+  getConsumedOutputs(sessionId: string, targetSkillName: string) {
     const targetSkill = this.skills.get(targetSkillName);
-    if (!targetSkill) return {};
+    if (!targetSkill) {
+      return buildConsumedOutputsView({
+        requestedInputs: [],
+        records: [],
+      });
+    }
     const requestedInputs = [
       ...(targetSkill.contract.requires ?? []),
       ...(targetSkill.contract.consumes ?? []),
     ];
-    if (requestedInputs.length === 0) return {};
-
-    const consumeSet = new Set(requestedInputs);
-    const result: Record<string, unknown> = {};
-    const sessionOutputs = this.sessionState.getExistingCell(sessionId)?.skillOutputs;
-    if (!sessionOutputs) return {};
-
-    for (const record of sessionOutputs.values()) {
-      for (const [key, value] of Object.entries(record.outputs)) {
-        if (consumeSet.has(key)) {
-          result[key] = value;
-        }
-      }
+    if (requestedInputs.length === 0) {
+      return buildConsumedOutputsView({
+        requestedInputs,
+        records: [],
+      });
     }
-    return result;
+    const sessionOutputs = this.sessionState.getExistingCell(sessionId)?.skillOutputs;
+    if (!sessionOutputs) {
+      return buildConsumedOutputsView({
+        requestedInputs,
+        records: [],
+      });
+    }
+
+    return buildConsumedOutputsView({
+      requestedInputs,
+      records: [...sessionOutputs.entries()].map(([skillName, record]) => ({
+        skillName,
+        semanticBindings:
+          record.semanticBindings ?? getSkillSemanticBindings(this.skills.get(skillName)?.contract),
+        record,
+      })),
+    });
   }
 
   build(sessionId: string, outputs: Record<string, unknown>): SkillValidationContext | undefined {
@@ -73,15 +87,21 @@ export class SkillValidationContextBuilder {
     const outputContracts = getSkillOutputContracts(skill.contract);
     const semanticBindings = getSkillSemanticBindings(skill.contract);
     const semanticSchemaIds = new Set(Object.values(semanticBindings ?? {}));
-    const consumedOutputs = this.getConsumedOutputs(sessionId, skill.name);
+    const consumedOutputView = this.getConsumedOutputs(sessionId, skill.name);
+    const normalizedOutputs = normalizeSkillOutputs({
+      outputs,
+      semanticBindings,
+    });
     const events = this.listEvents(sessionId);
-    const evidence = this.buildEvidenceProvider(events, consumedOutputs);
+    const evidence = this.buildEvidenceProvider(events, consumedOutputView.outputs);
 
     return {
       sessionId,
       skill,
       outputs,
-      consumedOutputs,
+      consumedOutputs: consumedOutputView.outputs,
+      consumedOutputView,
+      normalizedOutputs,
       outputContracts,
       semanticBindings,
       semanticSchemaIds,

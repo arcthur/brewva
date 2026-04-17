@@ -1,14 +1,20 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
-  coercePlanningArtifactSet,
   collectExecutionVerificationIntents,
   collectPlanningOwnerLanes,
   collectPlanningRequiredEvidence,
   collectPlanningRiskCategories,
   coerceReviewReportArtifact,
+  isSemanticArtifactSchemaId,
   isPlanningArtifactSetComplete,
+  normalizePlanningArtifactSet,
   type BrewvaEventRecord,
+  type SemanticArtifactSchemaId,
+  type SkillNormalizedBlockingState,
+  type SkillNormalizedOutputIssue,
+  type SkillNormalizedOutputsView,
+  type SkillSemanticBindings,
   type TaskState,
 } from "../contracts/index.js";
 import {
@@ -22,6 +28,7 @@ import {
   WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
 } from "../events/event-types.js";
 import { coerceGuardResultPayload, coerceMetricObservationPayload } from "../iteration/facts.js";
+import { normalizeSkillOutputs } from "../skills/normalization.js";
 import type { JsonValue } from "../utils/json.js";
 import {
   collectCoveredRequiredEvidence,
@@ -138,6 +145,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function hasOwn(record: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
 function readString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim();
@@ -190,11 +201,175 @@ function compactJsonValue(value: unknown, maxChars = 220): string | undefined {
 }
 
 function summarizeReviewReport(value: unknown, maxChars = 220): string | undefined {
+  if (isRecord(value)) {
+    const summary = readString(value.summary);
+    if (summary) {
+      return compactText(summary, maxChars);
+    }
+  }
   const structured = coerceReviewReportArtifact(value);
   if (structured) {
     return compactText(structured.summary, maxChars);
   }
   return compactJsonValue(value, maxChars);
+}
+
+const WORKFLOW_SEMANTIC_SCHEMA_BY_OUTPUT: Readonly<Record<string, SemanticArtifactSchemaId>> = {
+  design_spec: "planning.design_spec.v2",
+  execution_plan: "planning.execution_plan.v2",
+  execution_mode_hint: "planning.execution_mode_hint.v2",
+  risk_register: "planning.risk_register.v2",
+  implementation_targets: "planning.implementation_targets.v2",
+  change_set: "implementation.change_set.v2",
+  files_changed: "implementation.files_changed.v2",
+  verification_evidence: "implementation.verification_evidence.v2",
+  review_report: "review.review_report.v2",
+  review_findings: "review.review_findings.v2",
+  merge_decision: "review.merge_decision.v2",
+  qa_report: "qa.qa_report.v2",
+  qa_findings: "qa.qa_findings.v2",
+  qa_verdict: "qa.qa_verdict.v2",
+  qa_checks: "qa.qa_checks.v2",
+  qa_missing_evidence: "qa.qa_missing_evidence.v2",
+  qa_confidence_gaps: "qa.qa_confidence_gaps.v2",
+  qa_environment_limits: "qa.qa_environment_limits.v2",
+  ship_report: "ship.ship_report.v2",
+  release_checklist: "ship.release_checklist.v2",
+  ship_decision: "ship.ship_decision.v2",
+};
+
+function readWorkflowSemanticBindings(
+  payload: Record<string, unknown>,
+): SkillSemanticBindings | undefined {
+  const candidate = payload.semanticBindings;
+  if (!isRecord(candidate)) {
+    return undefined;
+  }
+  const entries = Object.entries(candidate).flatMap(([outputName, schemaId]) => {
+    const normalizedOutputName = outputName.trim();
+    if (!normalizedOutputName || typeof schemaId !== "string") {
+      return [];
+    }
+    const normalizedSchemaId = schemaId.trim();
+    if (!isSemanticArtifactSchemaId(normalizedSchemaId)) {
+      return [];
+    }
+    return [[normalizedOutputName, normalizedSchemaId] as const];
+  });
+  if (entries.length === 0) {
+    return undefined;
+  }
+  return Object.fromEntries(entries);
+}
+
+function deriveWorkflowSemanticBindings(
+  outputs: Record<string, unknown>,
+  payload: Record<string, unknown>,
+): SkillSemanticBindings | undefined {
+  const explicitBindings = readWorkflowSemanticBindings(payload);
+  const bindings: Record<string, SemanticArtifactSchemaId> = { ...explicitBindings };
+  for (const key of Object.keys(outputs)) {
+    const normalizedKey = key.trim();
+    if (!normalizedKey || hasOwn(bindings, normalizedKey)) {
+      continue;
+    }
+    const schemaId = WORKFLOW_SEMANTIC_SCHEMA_BY_OUTPUT[normalizedKey];
+    if (schemaId) {
+      bindings[normalizedKey] = schemaId;
+    }
+  }
+  return Object.keys(bindings).length > 0 ? bindings : undefined;
+}
+
+function buildBlockingStateForIssues(input: {
+  issues: readonly SkillNormalizedOutputIssue[];
+  rawPresent: boolean;
+  normalizedPresent: boolean;
+}): SkillNormalizedBlockingState {
+  const blockingIssue = input.issues.find(
+    (issue) => issue.tier === "tier_a" || issue.tier === "tier_b",
+  );
+  return {
+    status: blockingIssue ? (blockingIssue.tier === "tier_a" ? "blocked" : "partial") : "ready",
+    raw_present: input.rawPresent,
+    normalized_present: input.normalizedPresent,
+    partial: input.issues.length > 0,
+    unresolved: uniqueStrings(input.issues.map((issue) => issue.path)),
+    ...(blockingIssue?.blockingConsumer
+      ? { blocking_consumer: blockingIssue.blockingConsumer }
+      : {}),
+  };
+}
+
+function sliceNormalizedOutputs(input: {
+  normalized: SkillNormalizedOutputsView;
+  rawOutputs: Record<string, unknown>;
+  outputNames: readonly string[];
+}): {
+  canonical: Record<string, unknown>;
+  issues: SkillNormalizedOutputIssue[];
+  blockingState: SkillNormalizedBlockingState;
+} {
+  const keys = new Set(input.outputNames);
+  const canonical = Object.fromEntries(
+    Object.entries(input.normalized.canonical).filter(([key]) => keys.has(key)),
+  );
+  const issues = input.normalized.issues.filter((issue) => keys.has(issue.outputName));
+  return {
+    canonical,
+    issues,
+    blockingState: buildBlockingStateForIssues({
+      issues,
+      rawPresent: input.outputNames.some((key) => hasOwn(input.rawOutputs, key)),
+      normalizedPresent: Object.keys(canonical).length > 0,
+    }),
+  };
+}
+
+function mapBlockingStateToArtifactState(
+  blockingState: SkillNormalizedBlockingState,
+): WorkflowArtifactState {
+  if (blockingState.status === "blocked") {
+    return "blocked";
+  }
+  if (blockingState.status === "partial") {
+    return "pending";
+  }
+  return "ready";
+}
+
+function buildNormalizationMetadata(input: {
+  blockingState: SkillNormalizedBlockingState;
+  normalizerVersion: string;
+  sourceEventId: string;
+}): Record<string, JsonValue> {
+  return {
+    raw_present: input.blockingState.raw_present,
+    normalized_present: input.blockingState.normalized_present,
+    partial: input.blockingState.partial,
+    unresolved: input.blockingState.unresolved,
+    blockingConsumer: input.blockingState.blocking_consumer ?? null,
+    normalizerVersion: input.normalizerVersion,
+    sourceEventId: input.sourceEventId,
+  };
+}
+
+function buildNormalizationBlockerMessage(
+  label: string,
+  artifact: WorkflowArtifact | undefined,
+): string | undefined {
+  if (!artifact || !artifact.metadata) {
+    return undefined;
+  }
+  const unresolved = readStringArray(artifact.metadata.unresolved);
+  if (unresolved.length === 0) {
+    return undefined;
+  }
+  return artifact.state === "pending"
+    ? `${label} is partial and still needs normalized fields: ${formatPreviewList(unresolved)}.`
+    : artifact.state === "blocked"
+      ? `${label} has unresolved normalized fields: ${formatPreviewList(unresolved)}.`
+      : undefined;
 }
 
 function uniqueStrings(values: readonly string[]): string[] {
@@ -246,7 +421,13 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
     ...readStringArray(payload.outputKeys),
     ...Object.keys(outputs).map((key) => key.trim()),
   ]);
-  const planningArtifacts = coercePlanningArtifactSet(outputs);
+  const normalizedWorkflowOutputs = normalizeSkillOutputs({
+    outputs,
+    semanticBindings: deriveWorkflowSemanticBindings(outputs, payload),
+    sourceEventId: event.id,
+  });
+  const normalizedPlanning = normalizePlanningArtifactSet(outputs, { sourceEventId: event.id });
+  const planningArtifacts = normalizedPlanning.artifacts;
   const drafts: WorkflowDraftArtifact[] = [];
   const problemFrame = outputs.problem_frame;
   const userPains = outputs.user_pains;
@@ -414,10 +595,22 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
           "risk_register",
           "implementation_targets",
         ].filter((key) => outputs[key] !== undefined),
+        state:
+          normalizedPlanning.blockingState.status === "blocked"
+            ? "blocked"
+            : normalizedPlanning.blockingState.status === "partial"
+              ? "pending"
+              : "ready",
         metadata: {
           source: "skill_completed",
           sourceSkillName: skillName ?? null,
           outputKeys,
+          raw_present: normalizedPlanning.blockingState.raw_present,
+          normalized_present: normalizedPlanning.blockingState.normalized_present,
+          partial: normalizedPlanning.blockingState.partial,
+          unresolved: normalizedPlanning.blockingState.unresolved,
+          blockingConsumer: normalizedPlanning.blockingState.blocking_consumer ?? null,
+          normalizerVersion: normalizedPlanning.normalizerVersion,
           executionModeHint: planningArtifacts.executionModeHint ?? null,
           riskRegisterCount: planningArtifacts.riskRegister?.length ?? 0,
           implementationTargetCount: planningArtifacts.implementationTargets?.length ?? 0,
@@ -443,10 +636,26 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
         summary,
         sourceSkillNames: skillName ? [skillName] : [],
         outputKeys: ["execution_plan"],
+        state:
+          normalizedPlanning.blockingState.status === "blocked"
+            ? "blocked"
+            : normalizedPlanning.blockingState.status === "partial"
+              ? "pending"
+              : "ready",
         metadata: {
           source: "skill_completed",
           sourceSkillName: skillName ?? null,
           outputKeys,
+          raw_present: hasOwn(outputs, "execution_plan"),
+          normalized_present: Array.isArray(planningArtifacts.executionPlan),
+          partial: normalizedPlanning.blockingState.partial,
+          unresolved: normalizedPlanning.issues
+            .filter((issue) => issue.outputName === "execution_plan")
+            .map((issue) => issue.path),
+          blockingConsumer:
+            normalizedPlanning.issues.find((issue) => issue.outputName === "execution_plan")
+              ?.blockingConsumer ?? null,
+          normalizerVersion: normalizedPlanning.normalizerVersion,
           stepCount: planSteps.length,
           verificationIntents: collectExecutionVerificationIntents(planningArtifacts.executionPlan),
           planComplete: isPlanningArtifactSetComplete(planningArtifacts),
@@ -456,12 +665,19 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
   }
 
   const changeSet = outputs.change_set;
-  const filesChanged = readStringArray(outputs.files_changed);
-  if (changeSet !== undefined || filesChanged.length > 0) {
+  const normalizedImplementation = sliceNormalizedOutputs({
+    normalized: normalizedWorkflowOutputs,
+    rawOutputs: outputs,
+    outputNames: ["change_set", "files_changed"],
+  });
+  const filesChanged = readStringArray(normalizedImplementation.canonical.files_changed);
+  const normalizedChangeSet = normalizedImplementation.canonical.change_set;
+  if (changeSet !== undefined || hasOwn(outputs, "files_changed")) {
     const summary =
       filesChanged.length > 0
         ? `Implementation changed ${filesChanged.length} file(s): ${formatPreviewList(filesChanged)}.`
-        : (compactJsonValue(changeSet) ?? "Implementation artifact recorded.");
+        : (compactJsonValue(normalizedChangeSet ?? changeSet) ??
+          "Implementation artifact recorded.");
     drafts.push(
       createDraftArtifact({
         event,
@@ -470,21 +686,37 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
         sourceSkillNames: skillName ? [skillName] : [],
         outputKeys: ["change_set", "files_changed"].filter((key) => outputs[key] !== undefined),
         freshness: "fresh",
+        state: mapBlockingStateToArtifactState(normalizedImplementation.blockingState),
         metadata: {
           source: "skill_completed",
           sourceSkillName: skillName ?? null,
           outputKeys,
           filesChanged,
+          ...buildNormalizationMetadata({
+            blockingState: normalizedImplementation.blockingState,
+            normalizerVersion: normalizedWorkflowOutputs.normalizerVersion,
+            sourceEventId: event.id,
+          }),
         },
         writeSide: true,
       }),
     );
   }
 
-  const reviewReport = outputs.review_report;
-  const reviewFindings = outputs.review_findings;
-  const mergeDecision = readString(outputs.merge_decision);
-  if (reviewReport !== undefined || reviewFindings !== undefined || mergeDecision) {
+  const reviewOutputs = sliceNormalizedOutputs({
+    normalized: normalizedWorkflowOutputs,
+    rawOutputs: outputs,
+    outputNames: ["review_report", "review_findings", "merge_decision"],
+  });
+  const reviewReport = reviewOutputs.canonical.review_report ?? outputs.review_report;
+  const reviewFindings = reviewOutputs.canonical.review_findings ?? outputs.review_findings;
+  const mergeDecision = readString(reviewOutputs.canonical.merge_decision);
+  if (
+    reviewReport !== undefined ||
+    reviewFindings !== undefined ||
+    mergeDecision ||
+    hasOwn(outputs, "merge_decision")
+  ) {
     const structuredReviewReport = coerceReviewReportArtifact(reviewReport);
     const reviewSummaryParts = [];
     if (mergeDecision) {
@@ -505,12 +737,24 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
           (key) => outputs[key] !== undefined,
         ),
         freshness: "fresh",
-        state: mergeDecision && mergeDecision !== "ready" ? "blocked" : "ready",
+        state:
+          reviewOutputs.blockingState.status === "blocked"
+            ? "blocked"
+            : reviewOutputs.blockingState.status === "partial"
+              ? "pending"
+              : mergeDecision && mergeDecision !== "ready"
+                ? "blocked"
+                : "ready",
         metadata: {
           source: "skill_completed",
           sourceSkillName: skillName ?? null,
           outputKeys,
           mergeDecision: mergeDecision ?? null,
+          ...buildNormalizationMetadata({
+            blockingState: reviewOutputs.blockingState,
+            normalizerVersion: normalizedWorkflowOutputs.normalizerVersion,
+            sourceEventId: event.id,
+          }),
           ...(structuredReviewReport
             ? {
                 activatedLanes: structuredReviewReport.activated_lanes,
@@ -539,17 +783,32 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
     );
   }
 
-  const qaReport = outputs.qa_report;
-  const qaFindings = outputs.qa_findings;
-  const qaVerdict = readString(outputs.qa_verdict);
-  const qaChecks = outputs.qa_checks;
-  const qaMissingEvidence = outputs.qa_missing_evidence;
-  const qaConfidenceGaps = outputs.qa_confidence_gaps;
-  const qaEnvironmentLimits = outputs.qa_environment_limits;
+  const qaOutputs = sliceNormalizedOutputs({
+    normalized: normalizedWorkflowOutputs,
+    rawOutputs: outputs,
+    outputNames: [
+      "qa_report",
+      "qa_findings",
+      "qa_verdict",
+      "qa_checks",
+      "qa_missing_evidence",
+      "qa_confidence_gaps",
+      "qa_environment_limits",
+    ],
+  });
+  const qaReport = qaOutputs.canonical.qa_report ?? outputs.qa_report;
+  const qaFindings = qaOutputs.canonical.qa_findings ?? outputs.qa_findings;
+  const qaVerdict = readString(qaOutputs.canonical.qa_verdict);
+  const qaChecks = qaOutputs.canonical.qa_checks ?? outputs.qa_checks;
+  const qaMissingEvidence = qaOutputs.canonical.qa_missing_evidence ?? outputs.qa_missing_evidence;
+  const qaConfidenceGaps = qaOutputs.canonical.qa_confidence_gaps ?? outputs.qa_confidence_gaps;
+  const qaEnvironmentLimits =
+    qaOutputs.canonical.qa_environment_limits ?? outputs.qa_environment_limits;
   if (
     qaReport !== undefined ||
     qaFindings !== undefined ||
     qaVerdict ||
+    hasOwn(outputs, "qa_verdict") ||
     qaChecks !== undefined ||
     qaMissingEvidence !== undefined ||
     qaConfidenceGaps !== undefined ||
@@ -582,22 +841,46 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
           "qa_environment_limits",
         ].filter((key) => outputs[key] !== undefined),
         freshness: "fresh",
-        state: qaVerdict === "pass" ? "ready" : qaVerdict === "fail" ? "blocked" : "pending",
+        state:
+          qaOutputs.blockingState.status === "blocked"
+            ? "blocked"
+            : qaOutputs.blockingState.status === "partial"
+              ? "pending"
+              : qaVerdict === "pass"
+                ? "ready"
+                : qaVerdict === "fail"
+                  ? "blocked"
+                  : "pending",
         metadata: {
           source: "skill_completed",
           sourceSkillName: skillName ?? null,
           outputKeys,
           qaVerdict: qaVerdict ?? null,
-          coverageTexts: collectQaCoverageTexts(outputs),
+          coverageTexts: collectQaCoverageTexts(qaOutputs.canonical),
+          ...buildNormalizationMetadata({
+            blockingState: qaOutputs.blockingState,
+            normalizerVersion: normalizedWorkflowOutputs.normalizerVersion,
+            sourceEventId: event.id,
+          }),
         },
       }),
     );
   }
 
-  const shipReport = outputs.ship_report;
-  const releaseChecklist = outputs.release_checklist;
-  const shipDecision = readString(outputs.ship_decision);
-  if (shipReport !== undefined || releaseChecklist !== undefined || shipDecision) {
+  const shipOutputs = sliceNormalizedOutputs({
+    normalized: normalizedWorkflowOutputs,
+    rawOutputs: outputs,
+    outputNames: ["ship_report", "release_checklist", "ship_decision"],
+  });
+  const shipReport = shipOutputs.canonical.ship_report ?? outputs.ship_report;
+  const releaseChecklist = shipOutputs.canonical.release_checklist ?? outputs.release_checklist;
+  const shipDecision = readString(shipOutputs.canonical.ship_decision);
+  if (
+    shipReport !== undefined ||
+    releaseChecklist !== undefined ||
+    shipDecision ||
+    hasOwn(outputs, "ship_decision")
+  ) {
     const shipSummaryParts = [];
     if (shipDecision) {
       shipSummaryParts.push(`decision=${shipDecision}`);
@@ -618,16 +901,25 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
         ),
         freshness: "fresh",
         state:
-          shipDecision === "blocked"
+          shipOutputs.blockingState.status === "blocked"
             ? "blocked"
-            : shipDecision === "needs_follow_up"
+            : shipOutputs.blockingState.status === "partial"
               ? "pending"
-              : "ready",
+              : shipDecision === "blocked"
+                ? "blocked"
+                : shipDecision === "needs_follow_up"
+                  ? "pending"
+                  : "ready",
         metadata: {
           source: "skill_completed",
           sourceSkillName: skillName ?? null,
           outputKeys,
           shipDecision: shipDecision ?? null,
+          ...buildNormalizationMetadata({
+            blockingState: shipOutputs.blockingState,
+            normalizerVersion: normalizedWorkflowOutputs.normalizerVersion,
+            sourceEventId: event.id,
+          }),
         },
       }),
     );
@@ -1492,7 +1784,21 @@ export function deriveWorkflowStatus(input: DeriveWorkflowStatusInput): Workflow
     );
   }
 
-  if (latestArtifacts.review?.state === "blocked") {
+  const implementationNormalizationBlocker = buildNormalizationBlockerMessage(
+    "Implementation artifact",
+    latestArtifacts.implementation,
+  );
+  if (implementationNormalizationBlocker) {
+    blockers.push(implementationNormalizationBlocker);
+  }
+
+  const reviewNormalizationBlocker = buildNormalizationBlockerMessage(
+    "Review artifact",
+    latestArtifacts.review,
+  );
+  if (reviewNormalizationBlocker) {
+    blockers.push(reviewNormalizationBlocker);
+  } else if (latestArtifacts.review?.state === "blocked") {
     const mergeDecision = readString(latestArtifacts.review.metadata?.mergeDecision);
     blockers.push(
       mergeDecision === "needs_changes"
@@ -1522,7 +1828,13 @@ export function deriveWorkflowStatus(input: DeriveWorkflowStatusInput): Workflow
     blockers.push("Verification artifact is stale after later workspace mutations.");
   }
 
-  if (latestArtifacts.qa?.state === "blocked") {
+  const qaNormalizationBlocker = buildNormalizationBlockerMessage(
+    "QA artifact",
+    latestArtifacts.qa,
+  );
+  if (qaNormalizationBlocker) {
+    blockers.push(qaNormalizationBlocker);
+  } else if (latestArtifacts.qa?.state === "blocked") {
     const qaVerdict = readString(latestArtifacts.qa.metadata?.qaVerdict);
     blockers.push(
       qaVerdict === "fail" ? "QA reported failing checks before shipping." : "QA lane is blocked.",
@@ -1572,7 +1884,13 @@ export function deriveWorkflowStatus(input: DeriveWorkflowStatusInput): Workflow
     );
   }
 
-  if (latestArtifacts.ship?.state === "blocked") {
+  const shipNormalizationBlocker = buildNormalizationBlockerMessage(
+    "Ship artifact",
+    latestArtifacts.ship,
+  );
+  if (shipNormalizationBlocker) {
+    blockers.push(shipNormalizationBlocker);
+  } else if (latestArtifacts.ship?.state === "blocked") {
     blockers.push(compactText(latestArtifacts.ship.summary, 200));
   } else if (latestArtifacts.ship?.state === "pending") {
     blockers.push(compactText(latestArtifacts.ship.summary, 200));

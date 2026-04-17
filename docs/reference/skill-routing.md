@@ -83,6 +83,13 @@ the session and at least one of its `consumes` outputs exists.
 A skill is **consumption-blocked** when any of its `requires` outputs are
 missing.
 
+For semantic-bound artifacts, these checks run against normalized consumed
+outputs rather than raw producer payloads. A target skill may therefore see:
+
+- raw upstream output present but normalized data still partial
+- named blocking consumers for Tier B fields that remain unresolved
+- non-blocking Tier C drift that should inform judgment but not stop routing
+
 Runtime exposes the relevant warm-transition data through explicit surfaces:
 
 - `skill_load` previews `availableConsumedOutputs` for the chosen candidate skill

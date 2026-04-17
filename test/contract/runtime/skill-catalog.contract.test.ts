@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   BrewvaRuntime,
   REVIEW_REPORT_OUTPUT_CONTRACT,
+  getSemanticArtifactOutputContract,
   getSkillOutputContracts,
+  getSkillSemanticBindings,
   listSkillOutputs,
   parseSkillDocument,
   resolveSkillEffectLevel,
@@ -60,17 +62,18 @@ describe("repository catalog contracts", () => {
     expect(listSkillOutputs(review.contract)).toEqual(
       expect.arrayContaining(["review_report", "review_findings", "merge_decision"]),
     );
-    expect(Object.keys(getSkillOutputContracts(review.contract)).toSorted()).toEqual([
+    expect(Object.keys(getSkillSemanticBindings(review.contract) ?? {}).toSorted()).toEqual([
       "merge_decision",
       "review_findings",
       "review_report",
     ]);
-    expect(getSkillOutputContracts(review.contract).review_report).toMatchObject(
+    expect(getSkillOutputContracts(review.contract)).toEqual({});
+    expect(getSemanticArtifactOutputContract("review.review_report.v2")).toMatchObject(
       REVIEW_REPORT_OUTPUT_CONTRACT,
     );
   });
 
-  test("built-in base skills resolve output contracts for every declared output", () => {
+  test("built-in base skills cover declared outputs through authored contracts or semantic bindings", () => {
     const runtime = createCleanRuntime();
     const missing = runtime.inspect.skills.list().flatMap((skill) => {
       const outputs = listSkillOutputs(skill.contract);
@@ -78,8 +81,11 @@ describe("repository catalog contracts", () => {
         return [];
       }
       const contracts = getSkillOutputContracts(skill.contract);
+      const semanticBindings = getSkillSemanticBindings(skill.contract) ?? {};
       const uncovered = outputs.filter(
-        (name) => !Object.prototype.hasOwnProperty.call(contracts, name),
+        (name) =>
+          !Object.prototype.hasOwnProperty.call(contracts, name) &&
+          !Object.prototype.hasOwnProperty.call(semanticBindings, name),
       );
       return uncovered.length === 0 ? [] : [`${skill.name}:${uncovered.join(",")}`];
     });
@@ -87,7 +93,7 @@ describe("repository catalog contracts", () => {
     expect(missing).toEqual([]);
   });
 
-  test("semantic-bound base skills derive output contracts instead of hand-authoring them", () => {
+  test("semantic-bound base skills keep canonical schemas in semantic bindings instead of producer contracts", () => {
     const design = parseSkillDocument(`${repoRoot()}/skills/core/design/SKILL.md`, "core");
     const implementation = parseSkillDocument(
       `${repoRoot()}/skills/core/implementation/SKILL.md`,
@@ -100,7 +106,7 @@ describe("repository catalog contracts", () => {
     for (const parsed of [design, implementation, review, qa, ship]) {
       expect(parsed.contract.intent?.outputContracts).toBeUndefined();
       expect(Object.keys(parsed.contract.intent?.semanticBindings ?? {}).length).toBeGreaterThan(0);
-      expect(Object.keys(getSkillOutputContracts(parsed.contract)).length).toBeGreaterThan(0);
+      expect(getSkillOutputContracts(parsed.contract)).toEqual({});
     }
   });
 

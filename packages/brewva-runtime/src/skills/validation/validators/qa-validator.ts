@@ -1,7 +1,4 @@
-import {
-  collectPlanningRequiredEvidence,
-  coercePlanningArtifactSet,
-} from "../../../contracts/index.js";
+import { collectPlanningRequiredEvidence, type DesignRiskItem } from "../../../contracts/index.js";
 import {
   collectQaCoverageTexts,
   isRequiredEvidenceCovered,
@@ -22,6 +19,18 @@ import { emptyValidationDelta, type SkillOutputValidator } from "../validator.js
 function isQaCheckRecord(value: unknown): value is Record<string, unknown> {
   return (
     isRecord(value) && normalizeText(value.name) !== null && normalizeText(value.status) !== null
+  );
+}
+
+function isDesignRiskItem(value: unknown): value is DesignRiskItem {
+  return (
+    isRecord(value) &&
+    normalizeText(value.risk) !== null &&
+    normalizeText(value.category) !== null &&
+    normalizeText(value.severity) !== null &&
+    normalizeText(value.mitigation) !== null &&
+    readStringArray(value.required_evidence) !== null &&
+    normalizeText(value.owner_lane) !== null
   );
 }
 
@@ -60,19 +69,18 @@ function isAdversarialQaProbeType(value: unknown): boolean {
 }
 
 function validateQaSemanticOutputs(
-  outputs: Record<string, unknown>,
-  consumedOutputs: Record<string, unknown>,
+  context: SkillValidationContext,
   verificationCoverageTexts: readonly string[],
 ): Array<{ name: string; reason: string }> {
-  const verdict = normalizeText(outputs.qa_verdict)?.toLowerCase();
+  const verdict = normalizeText(context.normalizedOutputs.canonical.qa_verdict)?.toLowerCase();
   if (verdict !== "pass" && verdict !== "fail" && verdict !== "inconclusive") {
     return [];
   }
 
-  if (!Array.isArray(outputs.qa_checks)) {
+  if (!Array.isArray(context.normalizedOutputs.canonical.qa_checks)) {
     return [];
   }
-  const checks = outputs.qa_checks.filter(isQaCheckRecord);
+  const checks = context.normalizedOutputs.canonical.qa_checks.filter(isQaCheckRecord);
   if (checks.length === 0) {
     return [];
   }
@@ -107,14 +115,17 @@ function validateQaSemanticOutputs(
     }
     return issues;
   });
-  const missingEvidence = readStringArray(outputs.qa_missing_evidence);
-  const confidenceGaps = readStringArray(outputs.qa_confidence_gaps);
-  const environmentLimits = readStringArray(outputs.qa_environment_limits);
-  const requiredEvidence = collectPlanningRequiredEvidence(
-    coercePlanningArtifactSet(consumedOutputs).riskRegister,
+  const missingEvidence = readStringArray(context.normalizedOutputs.canonical.qa_missing_evidence);
+  const confidenceGaps = readStringArray(context.normalizedOutputs.canonical.qa_confidence_gaps);
+  const environmentLimits = readStringArray(
+    context.normalizedOutputs.canonical.qa_environment_limits,
   );
+  const riskRegister = Array.isArray(context.consumedOutputView.outputs.risk_register)
+    ? context.consumedOutputView.outputs.risk_register.filter(isDesignRiskItem)
+    : undefined;
+  const requiredEvidence = collectPlanningRequiredEvidence(riskRegister);
   const coverageTexts = uniqueStrings([
-    ...collectQaCoverageTexts(outputs),
+    ...collectQaCoverageTexts(context.normalizedOutputs.canonical),
     ...verificationCoverageTexts,
   ]);
   const uncoveredRequiredEvidence = requiredEvidence.filter(
@@ -209,11 +220,7 @@ export class QaOutputValidator implements SkillOutputValidator {
 
   validate(context: SkillValidationContext) {
     const invalid = annotateSemanticIssues(
-      validateQaSemanticOutputs(
-        context.outputs,
-        context.consumedOutputs,
-        context.evidence.getVerificationCoverageTexts(),
-      ),
+      validateQaSemanticOutputs(context, context.evidence.getVerificationCoverageTexts()),
       context.semanticBindings,
     );
     if (invalid.length === 0) {

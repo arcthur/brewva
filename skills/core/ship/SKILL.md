@@ -17,9 +17,9 @@ intent:
     - release_checklist
     - ship_decision
   semantic_bindings:
-    ship_report: ship.ship_report.v1
-    release_checklist: ship.release_checklist.v1
-    ship_decision: ship.ship_decision.v1
+    ship_report: ship.ship_report.v2
+    release_checklist: ship.release_checklist.v2
+    ship_decision: ship.ship_decision.v2
 effects:
   allowed_effects:
     - workspace_read

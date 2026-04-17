@@ -121,11 +121,11 @@ const RELEASE_CHECKLIST_OUTPUT_CONTRACT: SkillOutputContract = {
 
 const EXECUTION_PLAN_OUTPUT_CONTRACT: SkillOutputContract = {
   kind: "json",
-  minItems: 2,
+  minItems: 1,
   itemContract: {
     kind: "json",
-    minKeys: 5,
-    requiredFields: ["step", "intent", "owner", "exit_criteria", "verification_intent"],
+    minKeys: 1,
+    requiredFields: ["step"],
     fieldContracts: {
       step: {
         kind: "text",
@@ -161,15 +161,8 @@ const RISK_REGISTER_OUTPUT_CONTRACT: SkillOutputContract = {
   minItems: 1,
   itemContract: {
     kind: "json",
-    minKeys: 6,
-    requiredFields: [
-      "risk",
-      "category",
-      "severity",
-      "mitigation",
-      "required_evidence",
-      "owner_lane",
-    ],
+    minKeys: 1,
+    requiredFields: ["risk", "required_evidence"],
     fieldContracts: {
       risk: {
         kind: "text",
@@ -178,11 +171,11 @@ const RISK_REGISTER_OUTPUT_CONTRACT: SkillOutputContract = {
       },
       category: {
         kind: "enum",
-        values: [...REVIEW_CHANGE_CATEGORIES],
+        values: [...REVIEW_CHANGE_CATEGORIES, "unknown"],
       },
       severity: {
         kind: "enum",
-        values: ["critical", "high", "medium", "low"],
+        values: ["critical", "high", "medium", "low", "unknown"],
       },
       mitigation: {
         kind: "text",
@@ -191,7 +184,7 @@ const RISK_REGISTER_OUTPUT_CONTRACT: SkillOutputContract = {
       },
       required_evidence: {
         kind: "json",
-        minItems: 1,
+        minItems: 0,
         itemContract: {
           kind: "text",
           minWords: 1,
@@ -200,7 +193,7 @@ const RISK_REGISTER_OUTPUT_CONTRACT: SkillOutputContract = {
       },
       owner_lane: {
         kind: "enum",
-        values: [...PLANNING_OWNER_LANES],
+        values: [...PLANNING_OWNER_LANES, "unknown"],
       },
     },
   },
@@ -211,8 +204,8 @@ const IMPLEMENTATION_TARGETS_OUTPUT_CONTRACT: SkillOutputContract = {
   minItems: 1,
   itemContract: {
     kind: "json",
-    minKeys: 4,
-    requiredFields: ["target", "kind", "owner_boundary", "reason"],
+    minKeys: 1,
+    requiredFields: ["target"],
     fieldContracts: {
       target: {
         kind: "text",
@@ -263,28 +256,29 @@ const SCOPE_DECLARATION_OUTPUT_CONTRACT: SkillOutputContract = {
 };
 
 const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifactSchema> = {
-  "planning.design_spec.v1": {
-    id: "planning.design_spec.v1",
+  "planning.design_spec.v2": {
+    id: "planning.design_spec.v2",
     family: "planning",
     description: "Narrative design summary for downstream planning and review.",
     outputContract: TEXT_BRIEF,
     example:
       "Implement the hosted repair posture so invalid canonical outputs cannot escape completion and recovery remains inspectable.",
   },
-  "planning.execution_plan.v1": {
-    id: "planning.execution_plan.v1",
+  "planning.execution_plan.v2": {
+    id: "planning.execution_plan.v2",
     family: "planning",
     description: "Canonical ordered execution steps.",
     outputContract: EXECUTION_PLAN_OUTPUT_CONTRACT,
     example: [
       {
-        step: "Introduce semantic bindings in the skill contract layer.",
-        intent: "Make runtime-consumed artifacts resolve through a single canonical schema path.",
+        step: "Bind planning outputs to normalized consumer schemas.",
+        intent:
+          "Keep semantic schema ids consumer-facing without turning them into producer-side exact contracts.",
         owner: "runtime-contracts",
         exit_criteria:
-          "The active design skill resolves canonical output contracts from semantic bindings.",
+          "The active design skill emits raw planning outputs while runtime inspect surfaces derive the canonical view.",
         verification_intent:
-          "Skill parsing and contract tests prove derived contracts match the canonical registry.",
+          "Contract and normalization tests prove semantic bindings stay consumer-facing and producer validation remains narrow.",
       },
       {
         step: "Restrict repair posture to completion-only control-plane tools.",
@@ -297,8 +291,8 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifa
       },
     ],
   },
-  "planning.execution_mode_hint.v1": {
-    id: "planning.execution_mode_hint.v1",
+  "planning.execution_mode_hint.v2": {
+    id: "planning.execution_mode_hint.v2",
     family: "planning",
     description: "Canonical implementation mode hint.",
     outputContract: {
@@ -307,8 +301,8 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifa
     },
     example: "coordinated_rollout",
   },
-  "planning.risk_register.v1": {
-    id: "planning.risk_register.v1",
+  "planning.risk_register.v2": {
+    id: "planning.risk_register.v2",
     family: "planning",
     description: "Canonical planning-time risk register.",
     outputContract: RISK_REGISTER_OUTPUT_CONTRACT,
@@ -327,8 +321,8 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifa
       },
     ],
   },
-  "planning.implementation_targets.v1": {
-    id: "planning.implementation_targets.v1",
+  "planning.implementation_targets.v2": {
+    id: "planning.implementation_targets.v2",
     family: "planning",
     description: "Canonical path-scoped implementation targets.",
     outputContract: IMPLEMENTATION_TARGETS_OUTPUT_CONTRACT,
@@ -342,8 +336,8 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifa
       },
     ],
   },
-  "planning.success_criteria.v1": {
-    id: "planning.success_criteria.v1",
+  "planning.success_criteria.v2": {
+    id: "planning.success_criteria.v2",
     family: "planning",
     description: "Canonical verifiable success criteria for downstream implementation.",
     outputContract: STRING_ARRAY_REQUIRED,
@@ -351,8 +345,8 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifa
       "bun test test/unit/gateway/signup.unit.test.ts -- covers invalid email rejection and valid email acceptance",
     ],
   },
-  "planning.approach_simplicity_check.v1": {
-    id: "planning.approach_simplicity_check.v1",
+  "planning.approach_simplicity_check.v2": {
+    id: "planning.approach_simplicity_check.v2",
     family: "planning",
     description: "Canonical simplicity-gate verdict for the proposed implementation approach.",
     outputContract: APPROACH_SIMPLICITY_CHECK_OUTPUT_CONTRACT,
@@ -363,8 +357,8 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifa
       flags: [],
     },
   },
-  "planning.scope_declaration.v1": {
-    id: "planning.scope_declaration.v1",
+  "planning.scope_declaration.v2": {
+    id: "planning.scope_declaration.v2",
     family: "planning",
     description: "Canonical declaration of intended changes and explicit non-changes.",
     outputContract: SCOPE_DECLARATION_OUTPUT_CONTRACT,
@@ -373,30 +367,30 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifa
       will_not_change: ["auth flow", "session handling", "user model schema", "other form fields"],
     },
   },
-  "implementation.change_set.v1": {
-    id: "implementation.change_set.v1",
+  "implementation.change_set.v2": {
+    id: "implementation.change_set.v2",
     family: "implementation",
     description: "Narrative implementation summary.",
     outputContract: TEXT_LONG,
     example:
       "Added canonical semantic bindings, repair posture enforcement, and unclean shutdown reconciliation without widening generic skill authoring.",
   },
-  "implementation.files_changed.v1": {
-    id: "implementation.files_changed.v1",
+  "implementation.files_changed.v2": {
+    id: "implementation.files_changed.v2",
     family: "implementation",
     description: "Concrete changed file list.",
     outputContract: FILE_ARRAY_REQUIRED,
     example: ["packages/brewva-runtime/src/services/skill-lifecycle.ts"],
   },
-  "implementation.verification_evidence.v1": {
-    id: "implementation.verification_evidence.v1",
+  "implementation.verification_evidence.v2": {
+    id: "implementation.verification_evidence.v2",
     family: "implementation",
     description: "Verification evidence emitted by implementation.",
     outputContract: STRING_ARRAY_REQUIRED,
     example: ["bun test test/contract/tools/tools-skill-complete.contract.test.ts"],
   },
-  "review.review_report.v1": {
-    id: "review.review_report.v1",
+  "review.review_report.v2": {
+    id: "review.review_report.v2",
     family: "review",
     description: "Canonical structured review report.",
     outputContract: REVIEW_REPORT_OUTPUT_CONTRACT,
@@ -414,8 +408,8 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifa
       },
     },
   },
-  "review.review_findings.v1": {
-    id: "review.review_findings.v1",
+  "review.review_findings.v2": {
+    id: "review.review_findings.v2",
     family: "review",
     description: "Ranked review findings list.",
     outputContract: {
@@ -429,8 +423,8 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifa
       },
     ],
   },
-  "review.merge_decision.v1": {
-    id: "review.merge_decision.v1",
+  "review.merge_decision.v2": {
+    id: "review.merge_decision.v2",
     family: "review",
     description: "Canonical review merge decision.",
     outputContract: {
@@ -439,16 +433,16 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifa
     },
     example: "needs_changes",
   },
-  "qa.qa_report.v1": {
-    id: "qa.qa_report.v1",
+  "qa.qa_report.v2": {
+    id: "qa.qa_report.v2",
     family: "qa",
     description: "Narrative QA report.",
     outputContract: TEXT_LONG,
     example:
       "Exercised the repair posture with invalid planning outputs and confirmed the session stayed inside completion-only recovery.",
   },
-  "qa.qa_findings.v1": {
-    id: "qa.qa_findings.v1",
+  "qa.qa_findings.v2": {
+    id: "qa.qa_findings.v2",
     family: "qa",
     description: "QA findings list.",
     outputContract: {
@@ -457,8 +451,8 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifa
     },
     example: [],
   },
-  "qa.qa_verdict.v1": {
-    id: "qa.qa_verdict.v1",
+  "qa.qa_verdict.v2": {
+    id: "qa.qa_verdict.v2",
     family: "qa",
     description: "Canonical QA verdict.",
     outputContract: {
@@ -467,8 +461,8 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifa
     },
     example: "pass",
   },
-  "qa.qa_checks.v1": {
-    id: "qa.qa_checks.v1",
+  "qa.qa_checks.v2": {
+    id: "qa.qa_checks.v2",
     family: "qa",
     description: "Canonical executed QA checks.",
     outputContract: QA_CHECKS_OUTPUT_CONTRACT,
@@ -482,37 +476,37 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifa
       },
     ],
   },
-  "qa.qa_missing_evidence.v1": {
-    id: "qa.qa_missing_evidence.v1",
+  "qa.qa_missing_evidence.v2": {
+    id: "qa.qa_missing_evidence.v2",
     family: "qa",
     description: "Missing QA evidence list.",
     outputContract: STRING_ARRAY_OPTIONAL,
     example: [],
   },
-  "qa.qa_confidence_gaps.v1": {
-    id: "qa.qa_confidence_gaps.v1",
+  "qa.qa_confidence_gaps.v2": {
+    id: "qa.qa_confidence_gaps.v2",
     family: "qa",
     description: "Residual QA confidence gaps.",
     outputContract: STRING_ARRAY_OPTIONAL,
     example: [],
   },
-  "qa.qa_environment_limits.v1": {
-    id: "qa.qa_environment_limits.v1",
+  "qa.qa_environment_limits.v2": {
+    id: "qa.qa_environment_limits.v2",
     family: "qa",
     description: "QA environment limits.",
     outputContract: STRING_ARRAY_OPTIONAL,
     example: [],
   },
-  "ship.ship_report.v1": {
-    id: "ship.ship_report.v1",
+  "ship.ship_report.v2": {
+    id: "ship.ship_report.v2",
     family: "ship",
     description: "Narrative ship report.",
     outputContract: TEXT_LONG,
     example:
       "The runtime surface is ready for review, but release remains blocked until the new repair and reconciliation contract tests pass in CI.",
   },
-  "ship.release_checklist.v1": {
-    id: "ship.release_checklist.v1",
+  "ship.release_checklist.v2": {
+    id: "ship.release_checklist.v2",
     family: "ship",
     description: "Canonical release checklist.",
     outputContract: RELEASE_CHECKLIST_OUTPUT_CONTRACT,
@@ -524,8 +518,8 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifa
       },
     ],
   },
-  "ship.ship_decision.v1": {
-    id: "ship.ship_decision.v1",
+  "ship.ship_decision.v2": {
+    id: "ship.ship_decision.v2",
     family: "ship",
     description: "Canonical ship decision.",
     outputContract: {
